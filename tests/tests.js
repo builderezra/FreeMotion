@@ -44622,6 +44622,10 @@
          by design. The default From colour is red (hue 0°, a 30° window) and this fixture is orange (#e8a33d, hue 35.8°), so nothing is
          caught and the matte is black on a black ground; on a red layer it is white ('966 opts9 Replace Colour Show selection …'). */
       'replacecolor:view=max': 1,
+      /* #966 opts10 (hunt/966-opts10): COLOURIZE's Lightness −100 sinks the tint all the way to black — Photoshop's Colorize Lightness
+         at its bottom end, by design, brightness:amount=min's twin. At the default Tone blend and Amount 1 the layer becomes black on this
+         fixture's black ground; any Amount below 1, Screen or Overlay, or a lighter ground shows it ('966 opts10 Colourize Lightness …'). */
+      'colorize:light=min': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -143534,7 +143538,8 @@
     const bad = [];
     const r = _cgListed('splittone', ['split toning', 'split tone', 'tint', 'teal and orange', 'grade', 'cinematic'], bad);
     const keys = r.params.map(p => p.key).join();
-    if (keys !== 'shadows,highlights,balance,keep,mix,color,color2') bad.push('its controls are ' + keys + ', not shadows, highlights, balance, keep, mix, color, color2');
+    /* + blending: #966 opts10 (18 Oct) gave Split Toning a Blending row (100 % = today's look); '966 opts10' pins it */
+    if (keys !== 'shadows,highlights,balance,keep,mix,blending,color,color2') bad.push('its controls are ' + keys + ', not shadows, highlights, balance, keep, mix, blending, color, color2');
     const DEF = { shadows: 50, highlights: 50, balance: 0, keep: 100, mix: 100, color: '#1e90a0', color2: '#ffa04a' };
     const inst = FM.fxRegistry.makeInstance('splittone').params;
     Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
@@ -161485,5 +161490,933 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts9 ──
+
+  // ── 966 opts10 (hunt/966-opts10) ──
+  /* ═══ #966 (refers to #545): MORE CHOICE, ROUND TEN — seven more effects he already has: Heat Map, Page Curl, Bleach Bypass, Colourize,
+   * Soften Skin, Split Toning and Tiles (hunt/966-opts10; the twin check, the table of controls and the sheet plan are in
+   * tools/design/plans/966-opts10/NOTES.md). His words: "polish other effects just giving them more features … more choices always
+   * better". WRITTEN WITHOUT RUNNING (18 Oct, while a release shipped from the main checkout): nothing but `node --check`. Every number
+   * below is reasoned from the code it names, the reasoning beside it; the bounds only a run can set say MEASURE beside them. Every test
+   * fails on 143987b7 (round nine) on its first line by NAMING the missing control or seam, never with a TypeError. Each effect has four
+   * kinds: (a) its rows, ranges, choices, gates and what the load sanitiser keeps and clamps, (b) what the new controls do, on a fixture
+   * that holds what separates right from wrong, (c) at the defaults the kernel is today's picture (or call list) byte for byte, (d) a
+   * CONTROL — every new control moves the very fixtures (c) holds still, on the effect's own default settings. This block's helpers carry
+   * an _o10 prefix and are all its own; from the rest of the file it uses only `test`, `sleep` and E1 (frame, maxDiff, count, px). ═══ */
+  const _o10Need = (type, keys, seams) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts10 (hunt/966-opts10) is not built');
+    (seams || []).forEach(s => { if (typeof FM[s] !== 'function') throw new Error('FM.' + s + ' (the #966 opts10 seam) does not exist — #966 opts10 is not built'); });
+    return r;
+  };
+  const _O10_NEW = { thermal: ['blend', 'cycle'], pagecurl: ['back', 'color'], bleachbypass: ['skin', 'color'], colorize: ['sat', 'light'], softskin: ['brighten', 'view'], splittone: ['blending'], tiles: ['axis', 'fade'] };
+  // every new control off its default, on the effect's own default settings (a colour differs from its default in every channel)
+  const _O10_OFF = {
+    thermal: [{ blend: 4 }, { cycle: 1 }], pagecurl: [{ back: 1, color: '#3080c0' }, { back: 2 }], bleachbypass: [{ skin: 100 }, { color: '#4080c0' }],
+    colorize: [{ sat: 30 }, { light: 40 }], softskin: [{ brighten: 100 }, { view: 1 }], splittone: [{ blending: 20 }], tiles: [{ axis: 1 }, { fade: 60 }] };
+  const _o10P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o10Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  // the pixel kernel straight, with exactly these params (ps 1 unless given; no layer, so the project clock)
+  const _o10PX = (type, params, W, H, d, t, ps) => {
+    const f = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable');
+    f(d, W, H, params, t == null ? 0.5 : t, ps == null ? 1 : ps);
+    return d;
+  };
+  // …and through the dispatcher's own step (colours resolved, project px scaled to plate scale ps), as a layer runs it
+  const _o10Run = (type, params, W, H, d, t, ps) => {
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx is not reachable');
+    FM._applyPixelFx(d, { type: type, params: params }, t == null ? 0.5 : t, W, H, ps == null ? 1 : ps);
+    return d;
+  };
+  // a busy opaque picture (a colour ramp under a 12 px checker), an opaque block on clear, the grey levels 0–255 one to a column
+  const _o10Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  const _o10Blk = (W, H) => E1.frame(W, H, (x, y) => (x >= 20 && x < 70 && y >= 10 && y < 50) ? [200, 90, 40, 255] : [0, 0, 0, 0]);
+  const _o10Lv = () => E1.frame(256, 2, x => [x, x, x]);
+  // a busy SKIN-ish picture: skin tones under a seeded grain, a dark band and a blue patch (for Soften Skin's own kernel copy)
+  const _o10Skinish = (W, H) => { const n = E1.noise(11); return E1.frame(W, H, (x, y) => { const v = Math.round(n() * 36); if (y > H * 0.7) return [30 + v, 30 + v, 34 + v]; if (x > W * 0.75) return [40 + v, 80 + v, 200]; return [190 + (v >> 1), 140 + v, 110 + v]; }); };
+  // a saturated hue sweep across the plate (0° at the left edge, so red at both ends), lighter downward — every hue the wheel has
+  const _o10Hues = (W, H) => E1.frame(W, H, (x, y) => {
+    const h = (x / W) * 360, l = 0.3 + 0.45 * (y / H), c = (1 - Math.abs(2 * l - 1)) * 0.95, hp = h / 60, xx = c * (1 - Math.abs(hp % 2 - 1));
+    let r = 0, g = 0, b = 0;
+    if (hp < 1) { r = c; g = xx; } else if (hp < 2) { r = xx; g = c; } else if (hp < 3) { g = c; b = xx; } else if (hp < 4) { g = xx; b = c; } else if (hp < 5) { r = xx; b = c; } else { r = c; b = xx; }
+    const m = l - c / 2;
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  });
+  const _o10At = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  // a gradient rect, and the frame rendered through FM.renderScene (a reduced plate when rs is given)
+  const _o10Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#1040a0', c1: '#f0c060' }; L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o10shot = (layers, t, W, H, rs, bg) => {
+    const c = document.createElement('canvas'); c.width = Math.round(W * (rs || 1)); c.height = Math.round(H * (rs || 1));
+    if (rs) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: bg === undefined ? '#000000' : bg }, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return g.getImageData(0, 0, c.width, c.height).data;
+  };
+  // a new instance with `give` laid on it through the load sanitiser, on a shape layer: the params it keeps
+  const _o10San = (type, give) => {
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, give);
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    return got ? got.params : null;
+  };
+  /* Every new row as the panel gets it: its label; a slider's range, unit and keyframes, a choice's buttons and the values they store
+     (`vals`, when they are not 0, 1, 2…), or a colour row; its default and its gate (or that nothing greys it out); what a new instance
+     starts with, what a SAVED one with no such key is filled with at render time (FM._fillFxParams, queue 784, colours included) and what
+     the fill reads off the kernel (793); and that the load sanitiser keeps each key at a value off its default. */
+  const _o10Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.vals || s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else if (s.colour) {
+        if (p.type !== 'color') bad.push(s.key + ' is a ' + p.type + ' row, not a colour');
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      if (typeof s.def === 'number') { const fv = FM._fxFillValue(type, s.key); if (fv !== s.def) bad.push('the render-time fill reads ' + s.key + ' as ' + JSON.stringify(fv) + ' off the kernel, not ' + s.def + ' — 793 would say the panel lies'); }
+      if (s.gate) { if (p.overriddenBy !== s.gate[0] || JSON.stringify(p[s.gate[1]]) !== JSON.stringify(s.gate[2])) bad.push(s.key + ' is gated by ' + JSON.stringify([p.overriddenBy, p[s.gate[1]]]) + ', not ' + JSON.stringify([s.gate[0], s.gate[2]]) + ' (' + s.gate[1] + ')'); }
+      else if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const got = _o10San(type, keep);
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got[k])); });
+    return bad;
+  };
+  /* …and what the load sanitiser does with values off the rows: a number past either end is held at that end, a choice that is not one of
+     the buttons and a colour that is not a colour are left out (absent: the render-time fill then draws the default). `want[k]`
+     undefined means "left out". */
+  const _o10Clamp = (type, give, want) => {
+    const got = _o10San(type, give), bad = [];
+    if (!got) return ['the load sanitiser drops a ' + type + ' carrying ' + JSON.stringify(give)];
+    Object.keys(want).forEach(k => {
+      if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(give[k]) + ' into ' + JSON.stringify(got[k]) + ', not ' + (want[k] === undefined ? 'nothing (it is not a value the row has, so it is left out)' : JSON.stringify(want[k])));
+    });
+    return bad;
+  };
+  /* (c) for the pixel kernels: through the dispatcher's own step at plate scale ps, with every new key at its default (a new instance)
+     against the same with the new keys taken away (every saved project), each case on its own fixture, moment and plate. */
+  const _o10Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o10P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o10Pic;
+      const a = _o10Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o10Run(type, _o10Del(P, _O10_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O10_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  // (d): how many pixels the kernel moves when `over` is laid on a new instance, on that fixture at that moment
+  const _o10Moves = (type, over, W, H, pic, t) => E1.count(_o10PX(type, _o10P(type), W, H, pic(W, H), t), _o10PX(type, _o10P(type, over), W, H, pic(W, H), t), 0);
+  // the cropped readback (a zoomed preview reads only the layer's box) is the whole plate's picture, for a CROP_FX member
+  const _o10Crop = (type, over, bad) => { const r = FM._cropIdentity(type, _o10Blk(96, 72), 96, 72, _o10P(type, over), 0.3, 1); if (!r || r.same !== true) bad.push(type + ' ' + JSON.stringify(over) + ': the cropped readback differs from the whole plate in ' + (r ? r.diff : '?') + ' bytes'); };
+  // a real canvas, painted by `paint`
+  const _o10CV = (W, H, paint) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }); if (paint) paint(g, W, H); return c; };
+  /* A canvas kernel straight, as drawCanvasEffect calls it — (A, B, W, H, bb, params, t, tl, layer, ps, expand, scene) — on real canvases:
+     A painted by o.paint, B clear; the layer's alpha box o.bb; no layer, so no layer-space path. The bytes of A and of B. */
+  const _o10CFX = (type, params, o) => {
+    const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX[type];
+    if (typeof K !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable');
+    const W = o.W, H = o.H, A = _o10CV(W, H, o.paint), B = _o10CV(W, H);
+    K(A, B.getContext('2d', { willReadFrequently: true }), W, H, o.bb || { x: 0, y: 0, w: W, h: H }, JSON.parse(JSON.stringify(params)), o.t == null ? 0.5 : o.t, o.tl == null ? 0.5 : o.tl, null, o.ps == null ? 1 : o.ps, null, null);
+    return { A: A.getContext('2d').getImageData(0, 0, W, H).data, B: B.getContext('2d').getImageData(0, 0, W, H).data };
+  };
+  /* A RECORDING 2D CONTEXT: every call and every property set, numbers in full (`log`), and every drawImage with the compositing, alpha
+     and save depth it was drawn at (`draws`). Objects (canvases, gradients) are named obj0, obj1… in the order they first appear. It
+     paints nothing: it is for the call order and the arguments, which is what "call for call" is. */
+  const _o10Rec = (W, H) => {
+    const log = [], draws = [], stack = [], ids = new Map();
+    const st = { globalAlpha: 1, globalCompositeOperation: 'source-over', fillStyle: '#000000', strokeStyle: '#000000', lineWidth: 1, lineCap: 'butt', lineJoin: 'miter', miterLimit: 10, textAlign: 'start', textBaseline: 'alphabetic', filter: 'none', font: '10px sans-serif', imageSmoothingEnabled: true };
+    const tag = o => { if (!ids.has(o)) ids.set(o, 'obj' + ids.size); return ids.get(o); };
+    const fmt = v => typeof v === 'number' ? String(v) : typeof v === 'string' ? JSON.stringify(v) : typeof v === 'boolean' ? String(v) : Array.isArray(v) ? '[' + v.map(fmt).join(',') + ']' : (v && typeof v === 'object') ? tag(v) : String(v);
+    const rec = (n, a) => { log.push(n + '(' + Array.prototype.map.call(a, fmt).join(',') + ')'); };
+    const R = { canvas: { width: W, height: H }, log: log, draws: draws };
+    ['translate', 'rotate', 'scale', 'transform', 'setTransform', 'resetTransform', 'beginPath', 'moveTo', 'lineTo', 'closePath', 'rect', 'roundRect', 'arc', 'arcTo', 'ellipse', 'fill', 'stroke', 'clip', 'fillRect', 'clearRect', 'strokeRect', 'fillText', 'strokeText', 'setLineDash'].forEach(n => { R[n] = function () { rec(n, arguments); }; });
+    R.save = function () { rec('save', arguments); stack.push(Object.assign({}, st)); };
+    R.restore = function () { rec('restore', arguments); if (stack.length) Object.assign(st, stack.pop()); };
+    R.drawImage = function (img) { rec('drawImage', arguments); draws.push({ img: tag(img), op: st.globalCompositeOperation, alpha: st.globalAlpha, depth: stack.length, args: Array.prototype.slice.call(arguments, 1) }); };
+    const grad = n => function () { rec(n, arguments); const g = { addColorStop: function (o, c) { log.push(tag(g) + '.addColorStop(' + fmt(o) + ',' + fmt(c) + ')'); } }; tag(g); return g; };
+    R.createRadialGradient = grad('createRadialGradient'); R.createLinearGradient = grad('createLinearGradient');
+    R.measureText = function (s) { return { width: 10 * String(s).length }; };
+    R.getTransform = function () { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; };
+    Object.keys(st).forEach(k => Object.defineProperty(R, k, { get: () => st[k], set: v => { st[k] = v; log.push(k + '=' + fmt(v)); } }));
+    return R;
+  };
+  // a canvas kernel into the recorder (A a real canvas the size of the plate, painted by o.paint); the recorder
+  const _o10CRec = (type, params, o) => {
+    const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX[type];
+    if (typeof K !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable');
+    const W = o.W, H = o.H, A = _o10CV(W, H, o.paint), R = _o10Rec(W, H);
+    K(A, R, W, H, o.bb || { x: 0, y: 0, w: W, h: H }, JSON.parse(JSON.stringify(params)), o.t == null ? 0.5 : o.t, o.tl == null ? 0.5 : o.tl, null, o.ps == null ? 1 : o.ps, null, null);
+    return R;
+  };
+  // open a layer's (only) effect in the inspector and hand back the editor's body, or null; the caller restores the scene
+  const _o10Open = async (L) => {
+    FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+    let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    if (!body) {
+      const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+      if (!cat) return null;
+      cat.closest('[class*=cat]').click(); await sleep(140);
+      body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    }
+    return body || null;
+  };
+  /* a greyed row whose OWN label is `label`, read from the row's own <label> (round eight's fix, '966 opts8 Mosaic’s Gap shows greys
+     out…'): a colour row starts with its ◆ keyframe button, so "the row's text starts with the label" never matches one */
+  const _o10Greyed = (body, label) => Array.prototype.slice.call(body.querySelectorAll('.fx-overridden')).some(n => {
+    const own = n.querySelector(':scope > label');
+    return ((own || n).textContent || '').replace(/^\s*◆\s*/, '').trim().indexOf(label) === 0;
+  });
+  const _o10KF = (a, b, t1) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: t1 || 1, v: b, e: 'linear' }] });
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each of the
+     seven effects on a gradient rect over a grey ground. CONTROLS: each effect changes the picture against the rect with no effect (all
+     but Soften Skin — a smooth gradient has almost nothing to smooth, E1's own compositor test makes the same exception), and each new
+     control off its default moves the picture through the same compositor, at 1:1. */
+  test('966 opts10 every new control at its default draws what the effect drew without it — Heat Map, Page Curl, Bleach Bypass, Colourize, Soften Skin, Split Toning and Tiles through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O10_NEW);
+    TYPES.forEach(type => _o10Need(type, _O10_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const one = params => type => [_o10Rect({ type: type, enabled: true, params: params })];
+    TYPES.forEach(type => {
+      const P = _o10P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o10shot(one(Object.assign({}, P))(type), t, W, H, rs, BG);
+        const b = _o10shot(one(_o10Del(P, _O10_NEW[type]))(type), t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O10_NEW[type].join(' / '));
+        if (rs == null) { const off = _o10shot([_o10Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (type !== 'softskin' && moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+      const base = _o10shot(one(Object.assign({}, P))(type), 0.61, W, H, null, BG);
+      _O10_OFF[type].forEach(o => {
+        const n = E1.count(base, _o10shot(one(Object.assign({}, P, o))(type), 0.61, W, H, null, BG), 2);
+        if (n < 400) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* measured 18 Oct at 1280 and 380: the least is Page Curl Transparent's 872, most are thousands */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Heat Map: Blend and Cycle speed ---- */
+  test('966 opts10 Heat Map has Blend (Normal, Multiply, Screen, Overlay, Soft light, Colour or Luminosity — Gradient Map’s seven, storing its 0–4, 8 and 9, Normal by default) and Cycle speed (−2 to 2 /s, keyframable, 0 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Colour and −0.75, holds 5 at 2 and −9 at −2 and leaves out a Blend that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('thermal', _O10_NEW.thermal);
+    const bad = _o10Rows('thermal', [
+      { key: 'blend', label: 'Blend', options: ['Normal', 'Multiply', 'Screen', 'Overlay', 'Soft light', 'Colour', 'Luminosity'], vals: [0, 1, 2, 3, 4, 8, 9], def: 0 },
+      { key: 'cycle', label: 'Cycle speed', min: -2, max: 2, unit: '/s', def: 0 }], { blend: 8, cycle: -0.75 });
+    bad.push.apply(bad, _o10Clamp('thermal', { cycle: 5 }, { cycle: 2 }));
+    bad.push.apply(bad, _o10Clamp('thermal', { cycle: -9 }, { cycle: -2 }));
+    bad.push.apply(bad, _o10Clamp('thermal', { blend: 6 }, { blend: undefined }));
+    // one stored number, one meaning: the very choices Gradient Map's Blend stores, so a value means the same mode on both
+    const opt = type => JSON.stringify(((FM.fxRegistry.paramsOf(type) || []).filter(p => p.key === 'blend')[0] || {}).options);
+    if (opt('thermal') !== opt('gradientmap')) bad.push('Heat Map’s Blend is ' + opt('thermal') + ', not Gradient Map’s ' + opt('gradientmap'));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BLEND on the hue sweep (every hue, light to mid): N is the old map (Normal, Amount 1) — the heat colour each pixel gets. Each other
+     mode is fxBlendRGB's own, with the heat colour as the source and the picture as the backdrop (Gradient Map's order), so the kernel
+     reads within 2 of FM._fxBlendRGB(mode, N, picture) at every pixel (N is the map rounded to bytes, the kernel blends it unrounded:
+     half a level at most, at most doubled by Overlay's slope). What tells right from wrong on its own: Colour keeps every pixel's own
+     brightness (Lum 0.3 / 0.59 / 0.11 — the spec's ClipColor keeps it) within 2 levels, which Normal (CONTROL) moves by over 10 on most
+     of them; Multiply never brightens a channel and Screen never darkens one; Amount 0.5 lands half way between the picture and the
+     whole Soft light. */
+  test('966 opts10 Heat Map Blend: each mode lays the heat colours over the picture exactly as Gradient Map’s Blend does — Colour keeps every pixel’s own brightness where Normal (CONTROL) changes it, Multiply never brightens and Screen never darkens — and Amount still mixes the result in', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('thermal', ['blend']);
+    if (typeof FM._fxBlendRGB !== 'function') throw new Error('FM._fxBlendRGB is not reachable');
+    const W = 96, H = 72, bad = [], pic = _o10Hues(W, H);
+    const run = over => _o10PX('thermal', _o10P('thermal', over), W, H, _o10Hues(W, H), 0.5);
+    const N = run({});
+    const lum = (d, i) => 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
+    let movedN = 0;
+    for (let i = 0; i < pic.length; i += 4) if (Math.abs(lum(N, i) - lum(pic, i)) > 10) movedN++;
+    if (movedN < W * H * 0.3) throw new Error('CONTROL: Normal moves the brightness of only ' + movedN + ' of ' + (W * H) + ' pixels by over 10 — the hue sweep cannot show what Colour keeps');
+    [1, 2, 3, 4, 8, 9].forEach(m => {
+      const K = run({ blend: m });
+      let worst = 0, at = -1;
+      for (let i = 0; i < pic.length; i += 4) {
+        const o = FM._fxBlendRGB(m, N[i], N[i + 1], N[i + 2], pic[i], pic[i + 1], pic[i + 2]);
+        for (let c = 0; c < 3; c++) { const e = Math.abs(K[i + c] - o[c]); if (e > worst) { worst = e; at = i >> 2; } }
+      }
+      if (worst > 2) bad.push('Blend ' + m + ' is up to ' + worst.toFixed(1) + ' levels away from fxBlendRGB’s own mode ' + m + ' (pixel ' + at + ')');
+    });
+    const C = run({ blend: 8 });
+    let off = 0;
+    for (let i = 0; i < pic.length; i += 4) if (Math.abs(lum(C, i) - lum(pic, i)) > 2) off++;
+    if (off) bad.push('under Colour ' + off + ' pixels moved more than 2 levels off their own brightness');
+    const M = run({ blend: 1 }), S = run({ blend: 2 });
+    let br = 0, dk = 0;
+    for (let i = 0; i < pic.length; i += 4) for (let c = 0; c < 3; c++) { if (M[i + c] > pic[i + c] + 1) br++; if (S[i + c] < pic[i + c] - 1) dk++; }
+    if (br) bad.push('under Multiply ' + br + ' channels came out brighter than the picture');
+    if (dk) bad.push('under Screen ' + dk + ' channels came out darker than the picture');
+    const F = run({ blend: 4 }), Hf = run({ blend: 4, amount: 0.5 });
+    let worstH = 0;
+    for (let i = 0; i < pic.length; i++) { if ((i & 3) === 3) continue; const e = Math.abs(Hf[i] - (pic[i] + (F[i] - pic[i]) * 0.5)); if (e > worstH) worstH = e; }
+    if (worstH > 1.5) bad.push('Soft light at Amount 0.5 is up to ' + worstH.toFixed(1) + ' levels from half way between the picture and the whole Soft light');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* CYCLE SPEED on the grey levels, one to a column (level x at column x), the default Iron palette, Low 0 / High 100. The still map
+     (Cycle 0, CONTROL — it is the old picture and has well over a hundred colours along the ramp) gives each level its colour C[x]. At 0.4
+     palette lengths a second, half a second in, the palette has flowed 0.2 of its length — 51 levels — so level x takes C[x + 51]; past
+     the hot end it folds back, so a level above 204 takes C[459 − x] (no seam: 204 and 205 take C[255] and C[254]). Below 0 it flows the
+     other way (C[x − 51], folding at the cold end: C[51 − x]). A keyed speed, 0 → 1.6 over a second, has flowed ∫ 1.6u du = 0.2 by 0.5 s
+     — the steady 0.4's picture. The clock is the clip's: a clip that starts at 0.3 s has run half a second at 0.8 s, and one that starts
+     at 1 s has not begun at 0.5 s and has not flowed at all. The kernel holds 9 at 2, and at 2 a second half a second has flowed one
+     whole length — out and back — so level x takes C[255 − x]. ±1 for the float in l + phase. */
+  test('966 opts10 Heat Map Cycle speed: at 0.4 a second, half a second in, every grey takes the colour the still map gives the grey 51 levels hotter, and past the hot end the palette folds back with no seam — below 0 it flows the other way, a keyed speed is integrated, it runs on the clip’s own clock (nothing flows before the clip starts) and the kernel holds it to ±2 (CONTROL: Cycle 0 is the still map)', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('thermal', ['cycle'], ['_thermalPhase10']);
+    const W = 256, H = 2, bad = [];
+    const run = (over, t, lay) => E1.px('thermal', _o10P('thermal', over), W, H, _o10Lv(), t, lay);
+    const still = run({}, 0.5), C = x => [still[x * 4], still[x * 4 + 1], still[x * 4 + 2]];
+    if (E1.maxDiff(run({ cycle: 0 }, 0.5), still) !== 0) throw new Error('CONTROL: Cycle 0 is not the still map');
+    const seen = new Set(); for (let x = 0; x < 256; x++) seen.add(C(x).join());
+    if (seen.size < 100) throw new Error('CONTROL: the still map gives the ramp only ' + seen.size + ' colours — it cannot show the palette moving');
+    const want = (d, what, src) => {
+      let n = 0;
+      for (let x = 0; x < 256; x++) {
+        const s = src(x), c = C(s), e = Math.max(Math.abs(d[x * 4] - c[0]), Math.abs(d[x * 4 + 1] - c[1]), Math.abs(d[x * 4 + 2] - c[2]));
+        if (e > 1) { if (n++ < 3) bad.push(what + ': grey ' + x + ' reads (' + [d[x * 4], d[x * 4 + 1], d[x * 4 + 2]].join(', ') + '), not the still map’s grey ' + s + ' (' + c.join(', ') + ')'); }
+      }
+      if (n > 3) bad.push(what + ': ' + n + ' greys in all are off');
+    };
+    const f = run({ cycle: 0.4 }, 0.5);
+    want(f, 'Cycle 0.4 at 0.5 s', x => (x <= 204 ? x + 51 : 459 - x));
+    want(run({ cycle: -0.4 }, 0.5), 'Cycle −0.4 at 0.5 s', x => (x >= 51 ? x - 51 : 51 - x));
+    if (E1.maxDiff(run({ cycle: _o10KF(0, 1.6) }, 0.5), f) > 1) bad.push('a Cycle keyed 0 → 1.6 over a second draws, at 0.5 s, up to ' + E1.maxDiff(run({ cycle: _o10KF(0, 1.6) }, 0.5), f) + ' levels away from the steady 0.4 — the speed is not integrated');
+    const lay = s => ({ start: s, duration: 4 });
+    if (E1.maxDiff(run({ cycle: 0.4 }, 0.8, lay(0.3)), f) > 1) bad.push('a clip starting at 0.3 s has not flowed 0.2 of the palette by 0.8 s — it is not the clip’s own clock');
+    if (E1.maxDiff(run({ cycle: 0.4 }, 0.5, lay(1)), still) !== 0) bad.push('a clip that starts at 1 s has already flowed at 0.5 s');
+    const h2 = run({ cycle: 2 }, 0.5);
+    if (E1.maxDiff(run({ cycle: 9 }, 0.5), h2) !== 0) bad.push('the kernel does not hold Cycle 9 to 2');
+    want(h2, 'Cycle 2 at 0.5 s', x => 255 - x);
+    if (FM._thermalPhase10(0.4, 0.5, null) !== 0.2) bad.push('the phase seam reads ' + FM._thermalPhase10(0.4, 0.5, null) + ' at 0.4 a second and 0.5 s, not 0.2');
+    if (FM._thermalPhase10(0.4, 0.5, lay(1)) !== 0) bad.push('the phase seam flows before the clip starts');
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
+  });
+
+  test('966 opts10 Heat Map at Normal and Cycle 0 draws byte for byte what it drew without Blend and Cycle speed — all six palettes, a Low / High window, half Amount, a keyed Amount, a block on clear, a half-size plate, another moment — and the cropped readback of a blended, flowing map is the whole plate’s (CONTROL: Soft light and a Cycle speed each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('thermal', _O10_NEW.thermal, ['_thermalLoop10']);
+    const bad = _o10Ident('thermal', [{}, { over: { palette: 1 } }, { over: { palette: 2 } }, { over: { palette: 3 } }, { over: { palette: 4 } }, { over: { palette: 5 } },
+      { over: { low: 20, high: 70 } }, { over: { amount: 0.5 } }, { over: { amount: _o10KF(0.2, 1) } }, { pic: _o10Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    let n;
+    if ((n = _o10Moves('thermal', { blend: 4 }, 96, 72, _o10Pic, 0.5)) < 500) bad.push('CONTROL: Blend Soft light moves only ' + n + ' pixels');
+    if ((n = _o10Moves('thermal', { cycle: 0.5 }, 96, 72, _o10Pic, 0.5)) < 500) bad.push('CONTROL: Cycle speed 0.5 moves only ' + n + ' pixels');
+    [{ blend: 4 }, { cycle: 0.5 }, { blend: 8, cycle: -1, low: 10 }].forEach(o => _o10Crop('thermal', o, bad));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Page Curl: Back and its Back colour ---- */
+  /* Page Curl's page: a 120 x 120 block at (40, 40) on a 200 x 200 plate whose red climbs along the diagonal the default curl lifts (45°,
+     from the bottom-right corner), green and blue fixed — so the back of the page (the corner, reversed) never matches the front under
+     it, and no shading of it can come out the Back colour used below. */
+  const _o10PageTex = (x, y) => [Math.max(0, Math.min(255, Math.round(255 * (x - 40 + y - 40) / 238))), 40, 60];
+  const _o10Page = g => { const im = g.createImageData(200, 200); for (let y = 40; y < 160; y++) for (let x = 40; x < 160; x++) { const i = (y * 200 + x) * 4, c = _o10PageTex(x, y); im.data[i] = c[0]; im.data[i + 1] = c[1]; im.data[i + 2] = c[2]; im.data[i + 3] = 255; } g.putImageData(im, 0, 0); };
+  const _o10PageBB = { x: 40, y: 40, w: 120, h: 120 };
+
+  test('966 opts10 Page Curl has Back (Mirror, Solid colour or Transparent — Card Flip’s three, storing 0–2, Mirror by default) and a Back colour (white), greyed except under Solid colour: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Transparent and #3080c0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('pagecurl', _O10_NEW.pagecurl);
+    const bad = _o10Rows('pagecurl', [
+      { key: 'back', label: 'Back', options: ['Mirror', 'Solid colour', 'Transparent'], def: 0 },
+      { key: 'color', label: 'Back colour', colour: true, def: '#ffffff', gate: ['back', 'liveWhen', 1] }], { back: 2, color: '#3080c0' });
+    bad.push.apply(bad, _o10Clamp('pagecurl', { back: 3 }, { back: undefined }));
+    /* No "a colour that is not one is left out": the Back colour is a swatch PARAM (it needs the Back gate), not one of the effect's
+       colour rows, and the load sanitiser keeps a param's plain string as it is (measured 18 Oct: 'nope' stays 'nope'). Nothing breaks —
+       the mesh renderer sets white before the Back colour, so a string that is not a colour draws the white back. */
+    // the same words and the same stored numbers as Card Flip's Back, so the two read alike
+    const opt = (type, k) => JSON.stringify(((FM.fxRegistry.paramsOf(type) || []).filter(p => p.key === k)[0] || {}).options);
+    if (opt('pagecurl', 'back') !== opt('fliplayer', 'back')) bad.push('Page Curl’s Back is ' + opt('pagecurl', 'back') + ', not Card Flip’s ' + opt('fliplayer', 'back'));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BACK through the kernel itself, on the diagonal-ramp page at the default curl (0.45 at 45°, Radius 20 %), Shading 0 so every face
+     keeps the page's own colours. The page's unit square is 60 px a unit about (100, 100); the fold sits 0.141 units out along the curl's
+     direction (x + y ≈ 211) and the flap, the corner turned over, lies back across the flat page short of it. Solid colour #3080c0 paints
+     the flap and the far half of the roll in that colour — under Mirror (CONTROL) no pixel of the page is it (green is 40 everywhere and
+     no shade changes that). Transparent leaves the flap out, so the flat page under it shows: every block pixel at least 0.12 units short
+     of the fold (x + y ≤ 200, 4 px in from the block's edges) is the page's own colour at its own place, within 12 for the resampling —
+     where Mirror (CONTROL) covers hundreds of them with the reversed corner (its red well over 30 above the red beneath). The Back colour
+     counts only under Solid colour. */
+  test('966 opts10 Page Curl Back: Solid colour paints the curled-over part in the Back colour — none of the page is that colour under Mirror (CONTROL) — and Transparent leaves the flat page under it showing, every pixel the page’s own colour at its own place, where Mirror (CONTROL) covers hundreds of them with the reversed back; under Mirror and Transparent the Back colour counts for nothing', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('pagecurl', _O10_NEW.pagecurl);
+    const W = 200, H = 200, bad = [];
+    const run = over => _o10CFX('pagecurl', _o10P('pagecurl', Object.assign({ shading: 0 }, over)), { W: W, H: H, paint: _o10Page, bb: _o10PageBB, t: 0.5 }).B;
+    const mir = run({}), sol = run({ back: 1, color: '#3080c0' }), tra = run({ back: 2 });
+    // (a seam between two of the page's triangles can come out a few levels short of opaque — each is clipped with a 0.4 px overlap)
+    const near = (d, i, c, tol) => Math.abs(d[i] - c[0]) <= tol && Math.abs(d[i + 1] - c[1]) <= tol && Math.abs(d[i + 2] - c[2]) <= tol && d[i + 3] >= 235;
+    const BACK = [48, 128, 192];
+    let inM = 0, inS = 0;
+    for (let i = 0; i < mir.length; i += 4) { if (near(mir, i, BACK, 6)) inM++; if (near(sol, i, BACK, 6)) inS++; }
+    if (inM) throw new Error('CONTROL: under Mirror ' + inM + ' pixels are already the Back colour — the page cannot show what Solid colour paints');
+    if (inS < 1200) bad.push('under Solid colour only ' + inS + ' pixels are the Back colour (48, 128, 192)' /* measured 18 Oct at 1280 and 380: 2421 (reasoned about 2000) */);
+    /* Judged ONLY where Mirror's flap really lies (its red over 30 from the page beneath): there Transparent must show the page again.
+       Not every zone pixel within 12 — the flat page itself is drawn through the curl's mesh, and its resampling misses the stripes'
+       sharp edges by up to 41 levels all over the zone, flap or no flap (measured 18 Oct: 536 of 6439, spread over x + y 90..200). */
+    let zone = 0, coveredM = 0, stillT = 0;
+    for (let y = 44; y < 156; y++) for (let x = 44; x < 156; x++) {
+      if (x + y > 200) continue;
+      zone++;
+      const i = (y * W + x) * 4, c = _o10PageTex(x, y);
+      if (Math.abs(mir[i] - c[0]) > 30) { coveredM++; if (Math.abs(tra[i] - c[0]) > 30) stillT++; }
+    }
+    if (coveredM < 800) throw new Error('CONTROL: under Mirror only ' + coveredM + ' of the ' + zone + ' flat-page pixels short of the fold are covered by the reversed back — this fixture cannot show what Transparent uncovers' /* measured 18 Oct at 1280 and 380: 1325 (reasoned about 1300) */);
+    if (stillT > coveredM * 0.01) bad.push('under Transparent ' + stillT + ' of the ' + coveredM + ' pixels Mirror’s flap covers still are not the page beneath — the back is still drawn over them' /* measured 18 Oct at 1280 and 380: 0 of 1325 */);
+    if (E1.maxDiff(run({ color: '#ff00ff' }), mir) !== 0) bad.push('under Mirror a magenta Back colour changes the page');
+    if (E1.maxDiff(run({ back: 2, color: '#ff00ff' }), tra) !== 0) bad.push('under Transparent a magenta Back colour changes the page');
+    let n;
+    if ((n = E1.count(run({ back: 1, color: '#ff00ff' }), sol, 8)) < 300) bad.push('under Solid colour a magenta Back colour moves only ' + n + ' pixels against the blue one');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts10 Page Curl on Mirror makes the old calls, call for call, and draws byte for byte what it drew without Back and its colour — the default curl, a deep curl at 120°, a wide radius, full shading lit from another side, a shallow curl at 300° (CONTROL: Solid colour adds the Back colour’s fills, Transparent drops draws)', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('pagecurl', _O10_NEW.pagecurl);
+    const bad = [], o = { W: 200, H: 200, paint: _o10Page, bb: _o10PageBB, t: 0.5 };
+    [{}, { amount: 0.8, angle: 120 }, { radius: 40 }, { shading: 1, light: 200 }, { amount: 0.3, angle: 300 }].forEach(c => {
+      const P = _o10P('pagecurl', c), Q = _o10Del(P, _O10_NEW.pagecurl);
+      const a = _o10CRec('pagecurl', P, o).log.join('\n'), b = _o10CRec('pagecurl', Q, o).log.join('\n');
+      if (a !== b) bad.push(JSON.stringify(c) + ': a new one makes other calls than the same one without Back and its colour');
+      const m = E1.maxDiff(_o10CFX('pagecurl', P, o).B, _o10CFX('pagecurl', Q, o).B);
+      if (m !== 0) bad.push(JSON.stringify(c) + ': a new one draws up to ' + m + ' levels away from the same one without them');
+    });
+    const calls = over => _o10CRec('pagecurl', _o10P('pagecurl', over), o).log;
+    const fills = L => L.filter(s => s === 'fill()').length, draws = L => L.filter(s => s.indexOf('drawImage(') === 0).length;
+    const mL = calls({}), sL = calls({ back: 1, color: '#3080c0' }), tL = calls({ back: 2 });
+    if (fills(mL) !== 0) bad.push('CONTROL: Mirror already fills ' + fills(mL) + ' faces');
+    if (!(fills(sL) >= 150) || sL.indexOf('fillStyle="#3080c0"') < 0) bad.push('CONTROL: Solid colour fills ' + fills(sL) + ' faces, ' + (sL.indexOf('fillStyle="#3080c0"') < 0 ? 'never' : '') + ' in the Back colour' /* measured 18 Oct at 1280 and 380: 306 back faces of the 26 x 26 page */);
+    if (!(draws(tL) < draws(mL))) bad.push('CONTROL: Transparent draws ' + draws(tL) + ' faces, Mirror ' + draws(mL) + ' — the back is not left out');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Bleach Bypass: Silver tint and Protect skin ---- */
+  test('966 opts10 Bleach Bypass has Protect skin (0–100 %, keyframable, 0 by default) and a Silver tint colour (white), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 60 and #4080c0, holds 150 at 100 and −5 at 0 and leaves out a colour that is not one', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('bleachbypass', _O10_NEW.bleachbypass);
+    const bad = _o10Rows('bleachbypass', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'color', label: 'Silver tint', colour: true, def: '#ffffff' }], { skin: 60, color: '#4080c0' });
+    bad.push.apply(bad, _o10Clamp('bleachbypass', { skin: 150 }, { skin: 100 }));
+    bad.push.apply(bad, _o10Clamp('bleachbypass', { skin: -5 }, { skin: 0 }));
+    bad.push.apply(bad, _o10Clamp('bleachbypass', { color: 'zz' }, { color: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SILVER TINT on flat greys at the defaults (Amount 0.7, Colour loss 60 %, Harshness 100 %). A grey is its own brightness l and its own
+     desaturated base, so its pixel is l + (ov(l, s) − l) x 0.7, ov the kernel's overlay and s the silver: l itself under white (CONTROL:
+     grey 128 reads 128 there, 128 + 0.498 x 0.7), l x tint / 255 channel by channel under a tint. Tinted #4080c0, grey 128's silver is
+     (32.1, 64.3, 96.4), the overlay (b ≥ 128) gives 255 − 2 x 127 x (255 − s) / 255 = 33.0, 65.0 and 97.0, and the pixel reads
+     128 + (33.0 − 128) x 0.7 = 61.5, 83.9 and 106.3 — a cool cast, blue over green over red, as on every grey between; a warm #c08040
+     casts the other way. Black and white have no mid-tone to tint and stay exactly black and white. Every grey reads within 1 of the
+     formula (_o10Bleach copies it). A tint keyed white → #4080c0 over a second is #a0c0e0 at 0.5 s (resolveFxColors' channel lerp), and
+     draws exactly what that colour draws. */
+  const _o10Ov = (b, o) => (b < 128 ? (2 * b * o / 255) : (255 - 2 * (255 - b) * (255 - o) / 255));
+  const _o10Bleach = (r, g, b, tint) => { const l = r * 0.299 + g * 0.587 + b * 0.114, k = 0.6, a = 0.7, d = [r + (l - r) * k, g + (l - g) * k, b + (l - b) * k], s = [r, g, b]; return [0, 1, 2].map(c => s[c] + (_o10Ov(d[c], l * tint[c] / 255) - s[c]) * a); };
+  test('966 opts10 Bleach Bypass Silver tint: a steel-blue tint casts every grey blue — grey 128 reads (61.5, 83.9, 106.3) where white silver (CONTROL) leaves it at 128 — a warm tint casts the other way, black and white stay black and white, and a keyed tint draws its colour of the moment', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('bleachbypass', ['color']);
+    const bad = [], LV = [32, 64, 96, 128, 160, 192, 224];
+    const greys = () => E1.frame(LV.length + 2, 1, x => { const v = x < LV.length ? LV[x] : (x === LV.length ? 0 : 255); return [v, v, v]; });
+    const run = over => _o10Run('bleachbypass', _o10P('bleachbypass', over), LV.length + 2, 1, greys(), 0.5);
+    const w = run({}), cool = run({ color: '#4080c0' }), warm = run({ color: '#c08040' });
+    if (w[3 * 4] !== 128 || w[3 * 4 + 1] !== 128 || w[3 * 4 + 2] !== 128) throw new Error('CONTROL: under white silver grey 128 reads (' + Array.prototype.slice.call(w, 12, 15).join(', ') + '), not 128 — the formula below is not the kernel’s');
+    const g128 = Array.prototype.slice.call(cool, 12, 15), W128 = [61.5, 83.9, 106.3];
+    if (g128.some((v, c) => Math.abs(v - W128[c]) > 1)) bad.push('tinted #4080c0 grey 128 reads (' + g128.join(', ') + '), not (61.5, 83.9, 106.3)');
+    LV.forEach((v, x) => {
+      const c = [cool[x * 4], cool[x * 4 + 1], cool[x * 4 + 2]], f = _o10Bleach(v, v, v, [64, 128, 192]);
+      if (c.some((q, k) => Math.abs(q - f[k]) > 1)) bad.push('tinted grey ' + v + ' reads (' + c.join(', ') + '), not (' + f.map(q => q.toFixed(1)).join(', ') + ')');
+      if (v >= 64 && v <= 192 && !(c[2] > c[1] && c[1] > c[0])) bad.push('tinted #4080c0 grey ' + v + ' is not cool: (' + c.join(', ') + ')');
+      const m = [warm[x * 4], warm[x * 4 + 1], warm[x * 4 + 2]];
+      if (v >= 64 && v <= 192 && !(m[0] > m[1] && m[1] > m[2])) bad.push('tinted #c08040 grey ' + v + ' is not warm: (' + m.join(', ') + ')');
+    });
+    const B = LV.length * 4, Wt = B + 4;
+    if (cool[B] !== 0 || cool[B + 1] !== 0 || cool[B + 2] !== 0) bad.push('a tinted black reads (' + Array.prototype.slice.call(cool, B, B + 3).join(', ') + ')');
+    if (cool[Wt] !== 255 || cool[Wt + 1] !== 255 || cool[Wt + 2] !== 255) bad.push('a tinted white reads (' + Array.prototype.slice.call(cool, Wt, Wt + 3).join(', ') + ')');
+    if (E1.maxDiff(run({ color: _o10KF('#ffffff', '#4080c0') }), run({ color: '#a0c0e0' })) !== 0) bad.push('a tint keyed white → #4080c0 does not draw #a0c0e0 at 0.5 s');
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
+  });
+
+  /* PROTECT SKIN on three flat patches at the defaults: skin (205, 150, 120) — red the largest, blue the smallest, green (150 − 120) /
+     (205 − 120) = 0.353 of the way between them, so Vibrance's wedge is 1 − |0.353 − 0.45| / 0.55 = 0.824 — a blue (40, 80, 200) and a
+     grey (128), neither in the wedge (a grey has no hue). Unprotected (CONTROL) the skin patch moves to about (202, 174, 159), over 20
+     levels in green and blue. At 100 % it moves 1 − 0.824 of that way, at 50 % 1 − 0.412 of it (±1); the blue and the grey move exactly
+     as unprotected, byte for byte. A keyed Protect skin, 0 → 100 over a second, is 50 at 0.5 s. */
+  test('966 opts10 Bleach Bypass Protect skin: a skin-coloured patch is held back by the wedge’s 0.824 of Protect skin — it moves 0.18 of the way at 100 %, 0.59 at 50 % — while a blue and a grey move exactly as before, and a keyed Protect skin draws its value (CONTROL: unprotected, the skin patch moves over 20 levels)', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('bleachbypass', ['skin']);
+    const bad = [], PAT = [[205, 150, 120], [40, 80, 200], [128, 128, 128]];
+    const pats = () => E1.frame(3, 1, x => PAT[x]);
+    const run = over => _o10Run('bleachbypass', _o10P('bleachbypass', over), 3, 1, pats(), 0.5);
+    const U = run({}), sw = 1 - Math.abs(30 / 85 - 0.45) / 0.55;
+    const moved = Math.max(Math.abs(U[0] - 205), Math.abs(U[1] - 150), Math.abs(U[2] - 120));
+    if (moved < 20) throw new Error('CONTROL: unprotected the skin patch moves only ' + moved + ' levels — nothing below can be read');
+    [[100, 1 - sw], [50, 1 - 0.5 * sw]].forEach(([s, f]) => {
+      const P = run({ skin: s });
+      const want = [0, 1, 2].map(c => PAT[0][c] + (U[c] - PAT[0][c]) * f), got = [P[0], P[1], P[2]];
+      if (got.some((v, c) => Math.abs(v - want[c]) > 1)) bad.push('at Protect skin ' + s + ' % the skin patch reads (' + got.join(', ') + '), not (' + want.map(v => v.toFixed(1)).join(', ') + ') — ' + f.toFixed(3) + ' of the way');
+      for (let i = 4; i < 12; i++) if (P[i] !== U[i]) { bad.push('at Protect skin ' + s + ' % the ' + (i < 8 ? 'blue' : 'grey') + ' patch moved differently from unprotected — it is not skin'); break; }
+    });
+    if (E1.maxDiff(run({ skin: _o10KF(0, 100) }), run({ skin: 50 })) !== 0) bad.push('a Protect skin keyed 0 → 100 does not draw 50 at 0.5 s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts10 Bleach Bypass at white and Protect skin 0 % draws byte for byte what it drew without them — no colour loss, harsh, full Amount, a block on clear, a half-size plate, another moment — its copy of the loop is the loop itself there, and the cropped readback with both on is the whole plate’s (CONTROL: a tint and Protect skin each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('bleachbypass', _O10_NEW.bleachbypass, ['_bleach10']);
+    const bad = _o10Ident('bleachbypass', [{}, { over: { desat: 0 } }, { over: { contrast: 180 } }, { over: { amount: 1 } }, { pic: _o10Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    [{}, { contrast: 150, desat: 20 }].forEach(o => {
+      const P = _o10P('bleachbypass', o), old = _o10PX('bleachbypass', P, 96, 72, _o10Pic(96, 72)), seam = _o10Pic(96, 72);
+      FM._bleach10(seam, P.amount, P.desat / 100, P.contrast / 100, [255, 255, 255], 0);
+      if (E1.maxDiff(old, seam) !== 0) bad.push(JSON.stringify(o) + ': bleach10 at white and 0 % is up to ' + E1.maxDiff(old, seam) + ' levels away from the kernel’s own loop');
+    });
+    let n;
+    if ((n = _o10Moves('bleachbypass', { color: '#4080c0' }, 96, 72, _o10Pic, 0.5)) < 500) bad.push('CONTROL: a #4080c0 Silver tint moves only ' + n + ' pixels');
+    if ((n = _o10Moves('bleachbypass', { skin: 100 }, 96, 72, _o10Pic, 0.5)) < 600) bad.push('CONTROL: Protect skin 100 % moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 1240 */);
+    [{ color: '#4080c0' }, { skin: 100 }, { color: '#c08040', skin: 60 }].forEach(o => _o10Crop('bleachbypass', o, bad));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Colourize: Saturation and Lightness ---- */
+  test('966 opts10 Colourize has Saturation (0–200 %, keyframable, 100 by default) and Lightness (−100 to 100, keyframable, 0 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 30 and −40 and holds 300 at 200 and −150 at −100', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('colorize', _O10_NEW.colorize);
+    const bad = _o10Rows('colorize', [
+      { key: 'sat', label: 'Saturation', min: 0, max: 200, unit: '%', def: 100 },
+      { key: 'light', label: 'Lightness', min: -100, max: 100, unit: '', def: 0 }], { sat: 30, light: -40 });
+    bad.push.apply(bad, _o10Clamp('colorize', { sat: 300, light: -150 }, { sat: 200, light: -100 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SATURATION and LIGHTNESS on the grey levels (level x at column x), Tone, Amount 1, Shadow lift 25, the tint #8090c0 (128, 144, 192 —
+     under 255 even when doubled out from its grey). Each pixel's tint is the swatch x f, f = 0.25 + 0.75 x level / 255, and its grey is
+     Y = 144.688 x f (0.299 / 0.587 / 0.114). Saturation 0 paints every level that grey (r = g = b); 200 % twice as far out from it,
+     (111.31, 143.31, 239.31) x f; 100 % (CONTROL) the swatch, (128, 144, 192) x f. Lightness +50 lifts the tint half way to white, −50
+     halves it. Under Multiply a white tint (Lightness 100) leaves the picture as it is. ±1. A keyed Saturation 0 → 200 is 100 at 0.5 s
+     — the old picture, byte for byte; the kernel holds 300 at 200 and −150 at −100, which is black under Tone. */
+  test('966 opts10 Colourize Saturation and Lightness: at Saturation 0 every grey becomes the tint’s own grey, at 200 % twice as far out from it, at 100 % (CONTROL) the swatch; Lightness +50 lifts the tint half way to white and −50 halves it, a white tint under Multiply leaves the picture alone, a keyed Saturation draws its value and the kernel holds both to their ranges', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('colorize', _O10_NEW.colorize);
+    const bad = [];
+    const run = over => _o10PX('colorize', _o10P('colorize', Object.assign({ color: '#8090c0' }, over)), 256, 2, _o10Lv(), 0.5);
+    const Y = 0.299 * 128 + 0.587 * 144 + 0.114 * 192;
+    const check = (d, what, f) => {
+      let n = 0;
+      for (let x = 0; x < 256; x++) {
+        const L = (x * 0.299 + x * 0.587 + x * 0.114) / 255, fx = 0.25 + 0.75 * L, w = f(fx), got = [d[x * 4], d[x * 4 + 1], d[x * 4 + 2]];
+        if (got.some((v, c) => Math.abs(v - w[c]) > 1)) { if (n++ < 3) bad.push(what + ': grey ' + x + ' reads (' + got.join(', ') + '), not (' + w.map(v => v.toFixed(1)).join(', ') + ')'); }
+      }
+      if (n > 3) bad.push(what + ': ' + n + ' greys in all are off');
+      return n;
+    };
+    if (check(run({}), 'CONTROL at 100 %', f => [128 * f, 144 * f, 192 * f])) throw new Error('CONTROL: at Saturation 100 % the ramp is not the swatch x f — the formula is not the kernel’s, so nothing below can be read: ' + bad.join(' · '));
+    check(run({ sat: 0 }), 'Saturation 0', f => [Y * f, Y * f, Y * f]);
+    check(run({ sat: 200 }), 'Saturation 200 %', f => [(256 - Y) * f, (288 - Y) * f, (384 - Y) * f]);
+    check(run({ light: 50 }), 'Lightness +50', f => [128 * f, 144 * f, 192 * f].map(v => v + (255 - v) * 0.5));
+    check(run({ light: -50 }), 'Lightness −50', f => [64 * f, 72 * f, 96 * f]);
+    const mul = run({ blend: 1, light: 100 }), lv = _o10Lv();
+    if (E1.maxDiff(mul, lv) > 1) bad.push('under Multiply a white tint (Lightness 100) moves the picture by up to ' + E1.maxDiff(mul, lv) + ' levels');
+    if (E1.maxDiff(run({ sat: _o10KF(0, 200) }), run({})) !== 0) bad.push('a Saturation keyed 0 → 200 does not draw the old picture (100 %) at 0.5 s');
+    if (E1.maxDiff(run({ sat: 300 }), run({ sat: 200 })) !== 0) bad.push('the kernel does not hold Saturation 300 to 200');
+    const blk = run({ light: -150 });
+    for (let i = 0; i < blk.length; i += 4) if (blk[i] || blk[i + 1] || blk[i + 2]) { bad.push('Lightness −150 is not held to −100, black under Tone (grey ' + (i >> 2) % 256 + ' reads ' + blk[i] + ')'); break; }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts10 Colourize at Saturation 100 % and Lightness 0 draws byte for byte what it drew without them — all four Blends, no Shadow lift, half Amount, a block on clear, a half-size plate, another moment — its copy of the loop is the loop itself there in every Blend, and the cropped readback with both on is the whole plate’s (CONTROL: each moves the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('colorize', _O10_NEW.colorize, ['_colorize10']);
+    const bad = _o10Ident('colorize', [{}, { over: { blend: 1 } }, { over: { blend: 2 } }, { over: { blend: 3 } }, { over: { lift: 0 } }, { over: { amount: 0.5 } }, { pic: _o10Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    [0, 1, 2, 3].forEach(m => {
+      const P = _o10P('colorize', { blend: m, lift: 40, amount: 0.8 }), old = _o10PX('colorize', P, 96, 72, _o10Pic(96, 72)), seam = _o10Pic(96, 72);
+      FM._colorize10(seam, 0.8, 58, 160, 255, 0.4, 0.6, m, 100, 0);
+      if (E1.maxDiff(old, seam) !== 0) bad.push('Blend ' + m + ': colorize10 at 100 % and 0 is up to ' + E1.maxDiff(old, seam) + ' levels away from the kernel’s own loop');
+    });
+    let n;
+    if ((n = _o10Moves('colorize', { sat: 30 }, 96, 72, _o10Pic, 0.5)) < 500) bad.push('CONTROL: Saturation 30 % moves only ' + n + ' pixels');
+    if ((n = _o10Moves('colorize', { light: 40 }, 96, 72, _o10Pic, 0.5)) < 500) bad.push('CONTROL: Lightness 40 moves only ' + n + ' pixels');
+    [{ sat: 30 }, { light: -40 }, { sat: 180, light: 20, blend: 3 }].forEach(o => _o10Crop('colorize', o, bad));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Soften Skin: Brighten and Show selection ---- */
+  test('966 opts10 Soften Skin has Brighten (0–100 %, keyframable, 0 by default, greyed under Show selection) and Show selection (Off or On, storing 0 and 1, Off by default): a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 70 and On, holds 150 at 100 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('softskin', _O10_NEW.softskin);
+    const bad = _o10Rows('softskin', [
+      { key: 'brighten', label: 'Brighten', min: 0, max: 100, unit: '%', def: 0, gate: ['view', 'liveWhen', 0] },
+      { key: 'view', label: 'Show selection', options: ['Off', 'On'], def: 0 }], { brighten: 70, view: 1 });
+    bad.push.apply(bad, _o10Clamp('softskin', { brighten: 150 }, { brighten: 100 }));
+    bad.push.apply(bad, _o10Clamp('softskin', { view: 2 }, { view: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* Soften Skin's face: a 160 x 90 opaque plate, a dark ground (40, 40, 40), a skin patch (205, 150, 120) at x 15–84, y 15–74 and a blue
+     patch (40, 80, 200) at x 95–149, y 15–74. Both patches' middles, (50, 45) and (122, 45), sit 30 px and more from any edge, past the
+     blur's reach at the default 10 px (three boxes about sigma 5, about 15 px), so the blur there is the patch itself: no difference,
+     softening weight w = Amount (0.85). On a patch's edge the blur is half the ground, its brightness ~60 off the pixel's — past Keep
+     detail 50's threshold (4 + 45) — so w = 0 there and the edge is left exactly as it is. Under Skin tones the skin patch is all skin
+     (hue 21°, saturation 0.41, value 0.80: every one of the window's smooth steps is 1) and the blue patch none. */
+  const _o10Face = () => E1.frame(160, 90, (x, y) => (y >= 15 && y < 75 && x >= 15 && x < 85) ? [205, 150, 120] : (y >= 15 && y < 75 && x >= 95 && x < 150) ? [40, 80, 200] : [40, 40, 40]);
+  /* BRIGHTEN: each pixel lifts toward white by half of Brighten x w, so at 100 % the skin middle (w 0.85) reads 205 + 50 x 0.425 =
+     226.3, 194.6 and 177.4, at 50 % 215.6, 172.3 and 148.7, where without it (CONTROL) it stays (205, 150, 120). What separates right from
+     wrong everywhere at once: Show selection paints w itself (x 255), so EVERY pixel under Brighten 100 % reads the softened pixel
+     + (255 − it) x w / 2 within 1.5 — an edge (w 0) not at all, a patch's middle the most. Under Skin tones the blue patch does not lift
+     at all and the skin patch does. A keyed Brighten 0 → 100 is 50 at 0.5 s. */
+  test('966 opts10 Soften Skin Brighten: every pixel lifts toward white exactly as far as it is softened — the skin patch’s middle to (226, 195, 177) at 100 % and half that lift at 50 %, its edges not at all — under Skin tones a blue patch stays as it was, and a keyed Brighten draws its value (CONTROL: without it the middle stays (205, 150, 120))', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('softskin', _O10_NEW.softskin);
+    const W = 160, H = 90, bad = [];
+    const run = over => _o10PX('softskin', _o10P('softskin', over), W, H, _o10Face(), 0.5);
+    const plain = run({}), mid = (d, x, y) => _o10At(d, W, x, y).slice(0, 3);
+    if (mid(plain, 50, 45).join() !== '205,150,120') throw new Error('CONTROL: without Brighten the skin patch’s middle reads (' + mid(plain, 50, 45).join(', ') + '), not (205, 150, 120) — the blur reaches it, so the worked values below do not hold');
+    const near = (got, want, tol, what) => { if (got.some((v, c) => Math.abs(v - want[c]) > tol)) bad.push(what + ' reads (' + got.join(', ') + '), not (' + want.map(v => v.toFixed(1)).join(', ') + ')'); };
+    const b100 = run({ brighten: 100 }), b50 = run({ brighten: 50 });
+    near(mid(b100, 50, 45), [226.25, 194.625, 177.375], 1, 'at Brighten 100 % the skin middle');
+    near(mid(b50, 50, 45), [215.625, 172.3125, 148.6875], 1, 'at Brighten 50 % the skin middle');
+    const view = run({ view: 1 });
+    let off = 0, lifted = 0, edge = 0;
+    for (let i = 0; i < b100.length; i += 4) {
+      const w = view[i] / 255;
+      if (w === 0) edge++; else if (w > 0.8) lifted++;
+      for (let c = 0; c < 3; c++) { const want = plain[i + c] + (255 - plain[i + c]) * w / 2; if (Math.abs(b100[i + c] - want) > 1.5) { off++; break; } }
+    }
+    if (!(edge > 350 && lifted > 4000)) bad.push('CONTROL: Show selection reads ' + edge + ' untouched and ' + lifted + ' fully softened pixels — the face does not hold both' /* measured 18 Oct at 1280 and 380: 758 untouched (reasoned 500–800) and 8686 fully softened */);
+    if (off) bad.push('under Brighten 100 % ' + off + ' pixels did not lift by half of their own softening toward white');
+    const sk = run({ brighten: 100, only: 1 }), skPlain = run({ only: 1 });
+    if (mid(sk, 122, 45).join() !== mid(skPlain, 122, 45).join()) bad.push('under Skin tones the blue patch’s middle lifts (' + mid(sk, 122, 45).join(', ') + ') — it is not skin');
+    if (!(sk[(45 * W + 50) * 4] > 220)) bad.push('under Skin tones the skin patch’s middle does not lift (' + mid(sk, 50, 45).join(', ') + ')');
+    if (E1.maxDiff(run({ brighten: _o10KF(0, 100) }), b50) !== 0) bad.push('a Brighten keyed 0 → 100 does not draw 50 % at 0.5 s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SHOW SELECTION paints the softening weight as a grey, x 255: the skin and blue middles 0.85 x 255 = 216.75 (217 ±1), the patches'
+     edges 0 (black); under Skin tones the blue middle black and the skin middle 217; at Amount 0 nothing is softened and every pixel is
+     black. The alpha is never touched, and a clear pixel (the block-on-clear fixture) keeps all four of its bytes. Brighten counts for
+     nothing under it. CONTROL: Off draws the patch's colour. */
+  test('966 opts10 Soften Skin Show selection: what the softening takes turns white in proportion — a patch’s middle 217 at the default Amount, its edges black, a non-skin colour black under Skin tones, everything black at Amount 0 — the alpha and every clear pixel untouched, and Brighten ignored under it (CONTROL: Off draws colour)', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('softskin', ['view']);
+    const W = 160, H = 90, bad = [];
+    const run = over => _o10PX('softskin', _o10P('softskin', over), W, H, _o10Face(), 0.5);
+    const at = (d, x, y) => _o10At(d, W, x, y);
+    const v = run({ view: 1 }), off = run({});
+    if (at(off, 50, 45).slice(0, 3).join() !== '205,150,120') throw new Error('CONTROL: with Show selection Off the skin middle is not its own colour');
+    const grey = (p, want, what) => { if (!(Math.abs(p[0] - want) <= 1 && p[0] === p[1] && p[1] === p[2])) bad.push(what + ' reads (' + p.slice(0, 3).join(', ') + '), not the grey ' + want); };
+    grey(at(v, 50, 45), 217, 'the skin middle'); grey(at(v, 122, 45), 217, 'the blue middle');
+    grey(at(v, 15, 45), 0, 'the skin patch’s left edge');
+    const sk = run({ view: 1, only: 1 });
+    grey(at(sk, 122, 45), 0, 'under Skin tones the blue middle'); grey(at(sk, 50, 45), 217, 'under Skin tones the skin middle');
+    const z = run({ view: 1, amount: 0 });
+    for (let i = 0; i < z.length; i += 4) if (z[i] || z[i + 1] || z[i + 2]) { bad.push('at Amount 0 Show selection paints pixel ' + (i >> 2) + ' (' + z[i] + ') — nothing is softened'); break; }
+    for (let i = 3; i < v.length; i += 4) if (v[i] !== 255) { bad.push('Show selection touched the alpha'); break; }
+    const blk = _o10PX('softskin', _o10P('softskin', { view: 1 }), 96, 72, _o10Blk(96, 72), 0.5), src = _o10Blk(96, 72);
+    let moved = 0; for (let i = 0; i < src.length; i += 4) { if (src[i + 3] === 0 && (blk[i] || blk[i + 1] || blk[i + 2] || blk[i + 3])) moved++; if (blk[i + 3] !== src[i + 3]) moved++; }
+    if (moved) bad.push('on a block on clear Show selection touched ' + moved + ' clear pixels or alphas');
+    if (E1.maxDiff(run({ view: 1, brighten: 100 }), v) !== 0) bad.push('Brighten still counts under Show selection');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts10 Soften Skin at Brighten 0 and Show selection Off draws byte for byte what it drew without them — Skin tones, Keep detail 0 and 100, strong and small, a block on clear, a half-size plate, another moment — and its copy of the kernel is the kernel itself there (CONTROL: each moves the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('softskin', _O10_NEW.softskin, ['_softSkin10']);
+    const bad = _o10Ident('softskin', [{}, { over: { only: 1 } }, { over: { keep: 0 } }, { over: { keep: 100 } }, { over: { amount: 1, radius: 4 } }, { pic: _o10Skinish }, { pic: _o10Skinish, over: { only: 1 } }, { pic: _o10Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    [{}, { only: 1 }, { keep: 20, radius: 6 }].forEach(o => {
+      const P = _o10P('softskin', o), old = _o10PX('softskin', P, 96, 72, _o10Skinish(96, 72)), seam = _o10Skinish(96, 72);
+      FM._softSkin10(seam, 96, 72, P, 0.5, 0, false);
+      if (E1.maxDiff(old, seam) !== 0) bad.push(JSON.stringify(o) + ': softSkin10 at Brighten 0 and Off is up to ' + E1.maxDiff(old, seam) + ' levels away from the kernel itself');
+    });
+    let n;
+    if ((n = _o10Moves('softskin', { brighten: 100 }, 96, 72, _o10Skinish, 0.5)) < 500) bad.push('CONTROL: Brighten 100 % moves only ' + n + ' pixels');
+    if ((n = _o10Moves('softskin', { view: 1 }, 96, 72, _o10Skinish, 0.5)) < 500) bad.push('CONTROL: Show selection moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Split Toning: Blending ---- */
+  /* BLENDING on the grey levels (level x at column x), Shadows 0 and Highlights 100 — so only the highlight colour (#ffa04a) is pushed
+     in, by h, the share of a pixel that counts as highlight — Balance 0 (the split at level 127.5: x = level / 255, γ 1). At Blending
+     20 % the rise is squeezed into x 0.4–0.6: every level up to 100 (x ≤ 0.392) has h = 0 and is left byte for byte as it was, where
+     at 100 % (CONTROL) h is smoothstep(x) — 0.157 at level 64 — and most of them move; at the split point the two still meet (level
+     128: h 0.515 against 0.503, within 3 levels); and from level 155 up h is 1, exactly what Blending 0 gives there, so the two agree
+     byte for byte above it. Balance +50 moves the split to level 76.5 (q = 0.3, γ = ln ½ / ln 0.3): at Blending 20 every level up to
+     50 is left as it was. Blending 99 is within 2 levels of 100 everywhere (the narrowing runs on into the old table), a keyed Blending
+     20 → 100 is 60 at 0.5 s, and the kernel holds 150 at 100 and −10 at 0. */
+  test('966 opts10 Split Toning has Blending (0–100 %, keyframable, 100 by default): at 20 % the darks take none of the highlight colour (CONTROL: at 100 % they do) and the lights all of it — what a hard split gives — the colours still meeting at the Balance point, which Balance still moves; 99 % is within a level or two of 100 %, a keyed Blending draws its value, and the sanitiser and the kernel hold it to 0–100', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('splittone', _O10_NEW.splittone, ['_stSplit10']);
+    const bad = _o10Rows('splittone', [{ key: 'blending', label: 'Blending', min: 0, max: 100, unit: '%', def: 100 }], { blending: 30 });
+    bad.push.apply(bad, _o10Clamp('splittone', { blending: 150 }, { blending: 100 }));
+    bad.push.apply(bad, _o10Clamp('splittone', { blending: -10 }, { blending: 0 }));
+    const run = over => _o10PX('splittone', _o10P('splittone', Object.assign({ shadows: 0, highlights: 100 }, over)), 256, 2, _o10Lv(), 0.5);
+    const lv = _o10Lv(), b100 = run({}), b20 = run({ blending: 20 }), b0 = run({ blending: 0 });
+    const px = (d, x) => [d[x * 4], d[x * 4 + 1], d[x * 4 + 2]];
+    let movedC = 0;
+    for (let x = 30; x <= 100; x++) if (px(b100, x).join() !== px(lv, x).join()) movedC++;
+    if (movedC < 50) throw new Error('CONTROL: at Blending 100 % only ' + movedC + ' of levels 30–100 take any highlight colour — the ramp cannot show what Blending holds back');
+    for (let x = 0; x <= 100; x++) if (px(b20, x).join() !== px(lv, x).join()) { bad.push('at Blending 20 % level ' + x + ' moved to (' + px(b20, x).join(', ') + ') — the darks take none of the highlight colour'); break; }
+    for (let x = 155; x < 256; x++) if (px(b20, x).join() !== px(b0, x).join()) { bad.push('at Blending 20 % level ' + x + ' reads (' + px(b20, x).join(', ') + '), not the whole highlight push a hard split gives (' + px(b0, x).join(', ') + ')'); break; }
+    if (px(b20, 128).some((v, c) => Math.abs(v - px(b100, 128)[c]) > 3)) bad.push('at the split point (level 128) Blending 20 % reads (' + px(b20, 128).join(', ') + ') against (' + px(b100, 128).join(', ') + ') at 100 % — they should meet there');
+    const bal = run({ blending: 20, balance: 50 });
+    for (let x = 0; x <= 50; x++) if (px(bal, x).join() !== px(lv, x).join()) { bad.push('with Balance +50 at Blending 20 % level ' + x + ' moved — the split did not move down to 76.5'); break; }
+    if (px(bal, 90).join() === px(lv, 90).join()) bad.push('with Balance +50 at Blending 20 % level 90, past the moved split, takes no highlight colour');
+    if (E1.maxDiff(run({ blending: 99 }), b100) > 2) bad.push('Blending 99 % is up to ' + E1.maxDiff(run({ blending: 99 }), b100) + ' levels away from 100 % — the narrowing does not run on into the old table');
+    if (E1.maxDiff(run({ blending: _o10KF(20, 100) }), run({ blending: 60 })) !== 0) bad.push('a Blending keyed 20 → 100 does not draw 60 % at 0.5 s');
+    if (E1.maxDiff(run({ blending: 150 }), b100) !== 0) bad.push('the kernel does not hold Blending 150 to 100');
+    if (E1.maxDiff(run({ blending: -10 }), b0) !== 0) bad.push('the kernel does not hold Blending −10 to 0');
+    const T = Array.from(FM._stSplit10(0, 1)), T20 = Array.from(FM._stSplit10(0, 0.2));
+    if (Math.abs(T[64] - 0.1574) > 0.002 || T20[64] !== 0 || T20[200] !== 1 || Math.abs(T20[128] - 0.5147) > 0.002) bad.push('the table seam reads h(64) ' + T[64].toFixed(4) + ' at 100 % and h(64), h(128), h(200) ' + [T20[64], T20[128], T20[200]].map(v => v.toFixed(4)).join(', ') + ' at 20 % — not 0.1574 and 0, 0.5147, 1');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts10 Split Toning at Blending 100 % draws byte for byte what it drew without it — Balance, Keep brightness, Mix, the shadows alone, a block on clear, a half-size plate, another moment — and the cropped readback at a narrow Blending is the whole plate’s (CONTROL: Blending 20 % moves the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('splittone', _O10_NEW.splittone);
+    const bad = _o10Ident('splittone', [{}, { over: { balance: 60 } }, { over: { balance: -40, keep: 30 } }, { over: { mix: 50 } }, { over: { shadows: 100, highlights: 0 } }, { pic: _o10Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    let n;
+    if ((n = _o10Moves('splittone', { blending: 20 }, 96, 72, _o10Pic, 0.5)) < 500) bad.push('CONTROL: Blending 20 % moves only ' + n + ' pixels');
+    [{ blending: 30 }, { blending: 0, balance: 40 }].forEach(o => _o10Crop('splittone', o, bad));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Tiles: Fills and Fade copies ---- */
+  test('966 opts10 Tiles has Fills (All round, Sideways or Up and down, storing 0–2, All round by default) and Fade copies (0–100 %, keyframable, 0 by default), both live under Extend and greyed under Grid: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Up and down and 40, holds 150 at 100 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('tiles', _O10_NEW.tiles, ['_tilesExtend10']);
+    const bad = _o10Rows('tiles', [
+      { key: 'axis', label: 'Fills', options: ['All round', 'Sideways', 'Up and down'], def: 0, gate: ['mode', 'liveWhen', 0] },
+      { key: 'fade', label: 'Fade copies', min: 0, max: 100, unit: '%', def: 0, gate: ['mode', 'liveWhen', 0] }], { axis: 2, fade: 40 });
+    bad.push.apply(bad, _o10Clamp('tiles', { fade: 150 }, { fade: 100 }));
+    bad.push.apply(bad, _o10Clamp('tiles', { axis: 4 }, { axis: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* FILLS and FADE COPIES through the kernel itself (Extend, Gap 0, Mirror on — the defaults): a red 40 x 30 block at (130, 105) on a 300
+     x 240 plate, its own box handed over. Gap 0 steps the copies 38 px across and 28 down (each lies 2 px over its neighbour), so the copy
+     above has its middle at (150, 91), the one to the right at (188, 120), the one down and right at (188, 148) and the second to the
+     right at (226, 120), each covered by that copy alone. All round (CONTROL) fills all four; Sideways keeps (188, 120) and (226, 120)
+     and leaves (150, 91) and (188, 148) clear; Up and down keeps (150, 91) and leaves the other three clear. Fade 50 % draws a ring-1
+     copy at half the alpha (127.5) and the ring-2 one at a quarter (63.75), ±2, the block itself whole; Fade 100 % leaves only the
+     block. Under Grid neither control does anything. A keyed Fade 0 → 100 is 50 at 0.5 s; the kernel holds 150 at 100. */
+  const _o10TileO = { W: 300, H: 240, paint: g => { g.fillStyle = '#ff0000'; g.fillRect(130, 105, 40, 30); }, bb: { x: 130, y: 105, w: 40, h: 30 } };
+  test('966 opts10 Tiles Fills and Fade copies: Sideways keeps only the clip’s own row of copies and Up and down only its column, where All round (CONTROL) fills every way; Fade 50 % draws the first ring at half strength and the second at a quarter, Fade 100 % leaves the clip alone; Grid ignores both, a keyed Fade draws its value and the kernel holds it to 0–100', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('tiles', _O10_NEW.tiles);
+    const bad = [], W = 300;
+    const run = over => _o10CFX('tiles', _o10P('tiles', Object.assign({ mode: 0 }, over)), _o10TileO).B;
+    const a = (d, x, y) => d[(y * W + x) * 4 + 3];
+    const PTS = { above: [150, 91], right: [188, 120], diag: [188, 148], right2: [226, 120] };
+    const all = run({});
+    Object.keys(PTS).forEach(k => { if (a(all, PTS[k][0], PTS[k][1]) !== 255) throw new Error('CONTROL: under All round the copy ' + k + ' (' + PTS[k].join(', ') + ') has alpha ' + a(all, PTS[k][0], PTS[k][1]) + ', not 255 — the copies are not where this test looks'); });
+    const want = (d, what, on) => Object.keys(PTS).forEach(k => { const v = a(d, PTS[k][0], PTS[k][1]), lit = on.indexOf(k) >= 0; if (lit ? v !== 255 : v !== 0) bad.push(what + ': the copy ' + k + ' (' + PTS[k].join(', ') + ') has alpha ' + v + ', not ' + (lit ? 255 : 0)); });
+    want(run({ axis: 1 }), 'Sideways', ['right', 'right2']);
+    want(run({ axis: 2 }), 'Up and down', ['above']);
+    const f50 = run({ fade: 50 });
+    if (Math.abs(a(f50, 188, 120) - 127.5) > 2) bad.push('at Fade 50 % the copy to the right (ring 1) has alpha ' + a(f50, 188, 120) + ', not 127.5');
+    if (Math.abs(a(f50, 150, 91) - 127.5) > 2) bad.push('at Fade 50 % the copy above (ring 1) has alpha ' + a(f50, 150, 91) + ', not 127.5');
+    if (Math.abs(a(f50, 226, 120) - 63.75) > 2) bad.push('at Fade 50 % the second copy to the right (ring 2) has alpha ' + a(f50, 226, 120) + ', not 63.75');
+    if (a(f50, 150, 120) !== 255) bad.push('at Fade 50 % the clip itself has alpha ' + a(f50, 150, 120));
+    const f100 = run({ fade: 100 });
+    let stray = 0;
+    for (let y = 0; y < 240; y++) for (let x = 0; x < W; x++) { const inside = x >= 130 && x < 170 && y >= 105 && y < 135; if (!inside && a(f100, x, y) !== 0) stray++; }
+    if (stray) bad.push('at Fade 100 % ' + stray + ' pixels outside the clip are drawn');
+    if (a(f100, 150, 120) !== 255) bad.push('at Fade 100 % the clip itself is gone');
+    const grid = run({ mode: 1 });
+    if (E1.maxDiff(run({ mode: 1, axis: 1, fade: 50 }), grid) !== 0) bad.push('under Grid Fills and Fade copies still change the picture');
+    if (E1.maxDiff(run({ fade: _o10KF(0, 100) }), f50) !== 0) bad.push('a Fade keyed 0 → 100 does not draw 50 % at 0.5 s');
+    if (E1.maxDiff(run({ fade: 150 }), f100) !== 0) bad.push('the kernel does not hold Fade 150 to 100');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts10 Tiles at All round and Fade 0 % makes the old calls, call for call, and draws byte for byte what it drew without Fills and Fade copies — mirrored and not, with a gap, on screen only, a clip at the plate’s corner, Grid (CONTROL: All round makes 80 copy draws where Sideways and Up and down make 8 each, and a Fade draws each copy inside its own save at its ring’s alpha)', { item: '966', budgetMs: 60000 }, function () {
+    _o10Need('tiles', _O10_NEW.tiles);
+    const bad = [];
+    const corner = { W: 300, H: 240, paint: g => { g.fillStyle = '#20c060'; g.fillRect(0, 0, 50, 40); }, bb: { x: 0, y: 0, w: 50, h: 40 } };
+    [[{}, _o10TileO], [{ mirror: 0 }, _o10TileO], [{ gap: 20 }, _o10TileO], [{ source: 0 }, _o10TileO], [{}, corner], [{ mode: 1 }, _o10TileO], [{ mode: 1, count: 4, mirror: 0, gap: 10 }, _o10TileO]].forEach(([c, o]) => {
+      const P = _o10P('tiles', Object.assign({ mode: 0 }, c)), Q = _o10Del(P, _O10_NEW.tiles);
+      const la = _o10CRec('tiles', P, o).log.join('\n'), lb = _o10CRec('tiles', Q, o).log.join('\n');
+      if (la !== lb) bad.push(JSON.stringify(c) + (o === corner ? ' (clip at the corner)' : '') + ': a new one makes other calls than the same one without Fills and Fade copies');
+      const m = E1.maxDiff(_o10CFX('tiles', P, o).B, _o10CFX('tiles', Q, o).B);
+      if (m !== 0) bad.push(JSON.stringify(c) + ': a new one draws up to ' + m + ' levels away from the same one without them');
+    });
+    const draws = over => _o10CRec('tiles', _o10P('tiles', Object.assign({ mode: 0 }, over)), _o10TileO).draws;
+    const nAll = draws({}).length - 1, nSide = draws({ axis: 1 }).length - 1, nUp = draws({ axis: 2 }).length - 1;
+    if (nAll !== 80) bad.push('CONTROL: All round makes ' + nAll + ' copy draws, not 80 (nine rows of nine on the plate, less the clip)');
+    if (nSide !== 8 || nUp !== 8) bad.push('CONTROL: Sideways makes ' + nSide + ' and Up and down ' + nUp + ' copy draws, not 8 each');
+    const fd = draws({ fade: 50 }), copies = fd.slice(0, fd.length - 1), last = fd[fd.length - 1];
+    if (copies.length !== 80 || copies.some(d => !(d.depth >= 1) || !(Math.abs(d.alpha - 0.5) < 1e-9 || Math.abs(d.alpha - 0.25) < 1e-9 || d.alpha < 0.25))) bad.push('CONTROL: at Fade 50 % the copies are not each drawn inside a save at 0.5, 0.25 or less (' + copies.length + ' copies; alphas ' + Array.from(new Set(copies.map(d => d.alpha))).slice(0, 6).join(', ') + ')');
+    if (!(last && last.alpha === 1 && last.depth === 0)) bad.push('CONTROL: at Fade 50 % the clip itself is not drawn last at full strength');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- the panel ---- */
+  /* THE GATES, as the inspector draws them, each row read by its own <label> (_o10Greyed): Page Curl's Back colour is grey on a new one
+     (Mirror: there is no colour to pick) and wakes under Solid colour; Soften Skin's Brighten is live on a new one and greys out under Show
+     selection; Tiles' Fills and Fade copies are live on a new one (Extend) and grey out under Grid. CONTROL: each editor shows the row's
+     label, so its state was read. */
+  test('966 opts10 the gates in the inspector: Page Curl’s Back colour is greyed until Solid colour, Soften Skin’s Brighten greys out under Show selection, and Tiles’ Fills and Fade copies grey out under Grid — and each comes back', { item: '966', budgetMs: 60000 }, async function () {
+    ['pagecurl', 'softskin', 'tiles'].forEach(type => _o10Need(type, _O10_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    const CASES = [
+      ['pagecurl', 'Back colour', true, { back: 1 }, false],
+      ['softskin', 'Brighten', false, { view: 1 }, true],
+      ['tiles', 'Fills', false, { mode: 1 }, true],
+      ['tiles', 'Fade copies', false, { mode: 1 }, true]];
+    try {
+      for (const [type, label, ga, b, gb] of CASES) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type); fx._expanded = true; L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        let body = await _o10Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(label) < 0) { bad.push('CONTROL: the ' + type + ' editor has no “' + label + '”, so its gate was not measured'); continue; }
+        if (_o10Greyed(body, label) !== ga) bad.push(type + ': on a new one “' + label + '” is ' + (ga ? 'not greyed out' : 'greyed out'));
+        Object.assign(fx.params, b); FM.inspector.refresh(); await sleep(60);
+        body = document.querySelector('.fx-row.fx-open .fx-ed-body') || await _o10Open(L);
+        if (!body) { bad.push(type + ': the editor closed after ' + JSON.stringify(b) + ', so nothing more was measured'); continue; }
+        if (_o10Greyed(body, label) !== gb) bad.push(type + ': with ' + JSON.stringify(b) + ' “' + label + '” is ' + (gb ? 'still live' : 'still greyed out'));
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT A PHONE (the earlier rounds' check, for these seven). ship.sh runs the suite a second time at 380 px, so this is a
+     phone check on every release. Each editor, opened in the inspector, scrolls nothing sideways and keeps every control inside the panel
+     — Heat Map's seven Blend buttons, Page Curl's three Backs, Tiles' three Fills among them. CONTROL: each editor shows a label of its new
+     rows, so what is measured includes them. */
+  test('966 opts10 the seven effects’ editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    Object.keys(_O10_NEW).forEach(type => _o10Need(type, _O10_NEW[type]));
+    const NEW = { thermal: 'Cycle speed', pagecurl: 'Back colour', bleachbypass: 'Protect skin', colorize: 'Lightness', softskin: 'Show selection', splittone: 'Blending', tiles: 'Fade copies' };
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o10Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts10 ──
+
+  // ── bughunt 1 (hunt/bughunt1-fix) ──
+  /* ═══ BUGHUNT 1 — two defects a bug hunt found and a refuter confirmed (notes: tools/design/plans/bughunt1/NOTES.md). WRITTEN WITHOUT
+   * RUNNING (code only, `node --check`, while a release shipped): every number is reasoned from the code it names. Each test fails on
+   * 2d1f6067 for the reason it states. Helpers: the '966 scramble layout' block's _slNeed, _slSmall, _slScr, _slCtx and _slWatch, and
+   * the opts4 block's _o4PX and _o4P, with E1. ═══ */
+
+  /* (1) A DECODING SCRAMBLE UNDER ANIMATE BY LINE kept every run at its landed line's LEFT edge: drawAnimatedText called planRuns with no
+     alignment, while the still path (planPaint) aligns each run in its landed span under the caption's alignment (the PM, 17 Oct). With
+     no hidden letters (the base Scramble, Any, at 0.5) a scrambled line is one run, the whole line, so by Line it must be painted exactly
+     where the still caption paints it: the same string, the same left (L) and the same y, call for call — at 3.2 s, when every line has
+     come in (8 lines x 0.04 + 0.6 s), so nothing is offset by the entrance. On 2d1f6067 a centred scrambled line starts half its width
+     difference left of the still one, a right-aligned one its whole difference.
+     CONTROLS: some line's paint is more than a pixel wider or narrower than its layout (measured on the draw pass's context), so the
+     alignment really moves it; a LEFT-aligned caption is painted where the still one is (as it was); and by CHARACTER every scrambled
+     glyph keeps its landed glyph's left (the PM: Character units stay as they are), while some glyph differs in width from the landed
+     one by more than a pixel, so centring it would have shown. */
+  test('bughunt1 a decoding Scramble under Animate by Line keeps the caption’s alignment — on a centred and a right-aligned caption every scrambled line is painted exactly where the still caption paints it (CONTROLS: a scrambled line differs in width from its layout; a left-aligned caption, and Fade by character, keep their landed left edges)', { item: '966', budgetMs: 60000 }, function () {
+    _slNeed();
+    const W = 270, H = 480, T = 3.2, bad = [], scr = () => _slScr({ chars: 0, progress: 0.5 }), c = _slCtx(_slSmall(), null);
+    let wide = 0;
+    FM._textPaintLines(_slSmall(scr()), T).forEach(l => { if (Math.abs(c.measureText(l.paint).width - c.measureText(l.layout).width) > 1) wide++; });
+    if (!wide) bad.push('CONTROL: no scrambled line is more than a pixel wider or narrower than its layout, so its alignment could not move it');
+    ['center', 'right', 'left'].forEach(al => {
+      const still = _slWatch([_slSmall(scr(), { align: al })], T, W, H).calls;
+      const anim = _slWatch([_slSmall(scr(), { align: al, anim: { preset: 'fade', unit: 'line' } })], T, W, H).calls;
+      if (still.length < 6) { bad.push('CONTROL: ' + al + ': the still caption paints only ' + still.length + ' strings'); return; }
+      if (anim.length !== still.length) { bad.push(al + ': by Line the renderer paints ' + anim.length + ' strings (' + anim.map(g => '“' + g.s + '”').join(' ') + '), the still caption ' + still.length); return; }
+      let n = 0;
+      anim.forEach((g, i) => {
+        const s = still[i];
+        if ((g.s !== s.s || Math.abs(g.L - s.L) > 1e-3 || Math.abs(g.Y - s.Y) > 1e-3) && n++ < 3) bad.push(al + ': by Line, line ' + i + ' “' + g.s + '” is painted from (' + g.L.toFixed(3) + ', ' + g.Y.toFixed(3) + '), the still caption paints “' + s.s + '” from (' + s.L.toFixed(3) + ', ' + s.Y.toFixed(3) + ')' + (al === 'left' ? ' — a left-aligned caption moved' : ''));
+      });
+    });
+    // by Character: each glyph keeps its landed glyph's left (the landed caption is the same Scramble at Progress 1, the plain text)
+    const oc = { anim: { preset: 'fade', unit: 'char' } };
+    const fc = _slWatch([_slSmall(_slScr({ chars: 0, progress: 1 }), oc)], T, W, H).calls, gc = _slWatch([_slSmall(scr(), oc)], T, W, H).calls;
+    if (gc.length !== fc.length || fc.length < 40) bad.push('CONTROL: by Character the decoding caption paints ' + gc.length + ' glyphs and the landed one ' + fc.length + ' — one per letter each was expected');
+    else {
+      let off = 0, wider = 0;
+      gc.forEach((g, i) => {
+        if (Math.abs(g.L - fc[i].L) > 1e-3 || Math.abs(g.Y - fc[i].Y) > 1e-3) { if (off++ < 3) bad.push('by Character, glyph ' + i + ' “' + g.s + '” starts at ' + g.L.toFixed(3) + ', not at the landed “' + fc[i].s + '”’s left ' + fc[i].L.toFixed(3) + ' — Character units must stay as they were'); }
+        if (Math.abs(c.measureText(g.s).width - c.measureText(fc[i].s).width) > 1) wider++;
+      });
+      if (!wider) bad.push('CONTROL: by Character no scrambled glyph differs in width from its landed one by a pixel, so centring it could not have shown');
+    }
+    if (bad.length) throw new Error(bad.slice(0, 12).join(' · '));
+  });
+
+  /* (1, by WORD) the same call passes the alignment for a Word unit: each word is its own animated unit, so its scrambled run sits in
+     ITS landed word's span — centred on it, or ending at its end — where it was always painted from the word's left. The landed caption
+     (the same Scramble at Progress 1) under the same Fade by word gives each word's place: one call per word, the word itself. Decoding,
+     word i must be painted from that left plus (landed width − painted width) / 2 on a centred caption, plus the whole difference on a
+     right-aligned one, and from that left exactly on a left-aligned one (as before). Measured on the draw pass's context; at 3.2 s every
+     word has come in. (Not the still caption's place: a still line is ONE run, centred on the whole line, while a word unit can only
+     paint inside its own word — the place the PM's "align each run to its landed span" gives a run that is one word.)
+     CONTROL: some scrambled word differs in width from its landed word by more than a pixel, so on 2d1f6067 (every word from its left)
+     the centred and right-aligned checks fail. */
+  test('bughunt1 a decoding Scramble under Animate by Word keeps the caption’s alignment — each scrambled word is centred on its landed word on a centred caption and ends where it ends on a right-aligned one, and a left-aligned caption keeps every word’s left (CONTROL: some scrambled word differs in width from its landed word by more than a pixel)', { item: '966', budgetMs: 60000 }, function () {
+    _slNeed();
+    const W = 270, H = 480, T = 3.2, bad = [], c = _slCtx(_slSmall(), null);
+    let moved = 0;
+    ['center', 'right', 'left'].forEach(al => {
+      const o = { align: al, anim: { preset: 'fade', unit: 'word' } };
+      const fin = _slWatch([_slSmall(_slScr({ chars: 0, progress: 1 }), o)], T, W, H).calls;
+      const got = _slWatch([_slSmall(_slScr({ chars: 0, progress: 0.5 }), o)], T, W, H).calls;
+      if (fin.length < 10) { bad.push('CONTROL: ' + al + ': the landed caption by Word paints only ' + fin.length + ' words'); return; }
+      if (got.length !== fin.length) { bad.push(al + ': by Word the decoding caption paints ' + got.length + ' strings (' + got.map(g => '“' + g.s + '”').join(' ') + '), the landed one ' + fin.length + ' words'); return; }
+      let n = 0;
+      got.forEach((g, i) => {
+        const f = fin[i], wl = c.measureText(f.s).width, wp = c.measureText(g.s).width;
+        const want = f.L + (al === 'center' ? (wl - wp) / 2 : al === 'right' ? wl - wp : 0);
+        if (g.s.length !== f.s.length && n++ < 3) bad.push(al + ': by Word, string ' + i + ' “' + g.s + '” is painted over the landed word “' + f.s + '” — not the same length');
+        if ((Math.abs(g.L - want) > 1e-3 || Math.abs(g.Y - f.Y) > 1e-3) && n++ < 3) bad.push(al + ': by Word, “' + g.s + '” (over “' + f.s + '”) starts at ' + g.L.toFixed(3) + ', not ' + want.toFixed(3) + ' — its landed word spans ' + f.L.toFixed(3) + '–' + (f.L + wl).toFixed(3));
+        if (al !== 'left' && Math.abs(wl - wp) > 1) moved++;
+      });
+    });
+    if (!moved) bad.push('CONTROL: no scrambled word differs in width from its landed word by more than a pixel, so its alignment could not have moved it');
+    if (bad.length) throw new Error(bad.slice(0, 12).join(' · '));
+  });
+
+  /* (2) COLOUR CYCLE'S KEYFRAMED SPEED IS INTEGRATED. Speed is a keyframable °/s; the kernel turned the hue by speed(now) x the clip's
+     time, so a Speed keyed down from 360 to 0 over 2 s turned the colours BACKWARDS after the peak. The turn is ∫ speed = 360t − 90t²:
+     270° at 1 s, 337.5° at 1.5 s, 359.1° at 1.9 s (all under a turn, so the still Start colour is that number as it stands). Each must
+     draw a still Colour Cycle (Speed 0) at that Start colour within a level, on a solid red plate, and with Rainbow across 180° too
+     (hueSpread966 takes the kernel's angle). _o4PX hands the kernel no layer, so the clip's clock is t itself. On 2d1f6067 the keyed one
+     turns 180°, 135° and 17.1° — 90° off at 1 s.
+     CONTROLS: the still pictures at the old product's angle differ from the integrated one's by more than 8 levels, so the comparison can
+     see the bug; and a Speed keyed constant at 90 °/s draws exactly what a plain 90 °/s does (the integral of a constant is the product). */
+  test('bughunt1 Colour Cycle integrates a keyframed Speed — keyed from 360 °/s down to 0 over 2 s, the colours at 1, 1.5 and 1.9 s are a still Colour Cycle at the turn it has run (360t − 90t²), with and without Rainbow across (CONTROLS: the old speed-now × time picture differs; a Speed keyed constant at 90 °/s draws a plain 90 °/s)', { item: '966' }, function () {
+    const W = 8, H = 8, bad = [], red = () => E1.frame(W, H, () => [255, 0, 0]);
+    const down = { kf: [{ t: 0, v: 360, e: 'linear' }, { t: 2, v: 0, e: 'linear' }] };
+    const flat = { kf: [{ t: 0, v: 90, e: 'linear' }, { t: 2, v: 90, e: 'linear' }] };
+    const cc = (over, t) => _o4PX('huecycle', _o4P('huecycle', Object.assign({ boost: 0 }, over)), W, H, red(), t);
+    [1, 1.5, 1.9].forEach(t => {
+      const turn = 360 * t - 90 * t * t, old = (360 - 180 * t) * t;
+      [0, 180].forEach(spread => {
+        const want = cc({ speed: 0, phase: turn, spread: spread }, t);
+        const m = E1.maxDiff(cc({ speed: down, phase: 0, spread: spread }, t), want);
+        if (m > 1) bad.push('Speed keyed 360 → 0 °/s over 2 s, at ' + t + ' s' + (spread ? ', Rainbow across ' + spread + '°' : '') + ': up to ' + m + ' levels away from a still Colour Cycle at ' + turn.toFixed(1) + '°, the turn it has run');
+        const mo = E1.maxDiff(cc({ speed: 0, phase: old, spread: spread }, t), want);
+        if (mo <= 8) bad.push('CONTROL: at ' + t + ' s' + (spread ? ', Rainbow across ' + spread + '°' : '') + ' the old angle ' + old.toFixed(1) + '° draws within ' + mo + ' levels of ' + turn.toFixed(1) + '°, so the comparison cannot see the bug');
+      });
+      const mc = E1.maxDiff(cc({ speed: flat, phase: 0 }, t), cc({ speed: 90, phase: 0 }, t));
+      if (mc > 1) bad.push('CONTROL: at ' + t + ' s a Speed keyed constant at 90 °/s is up to ' + mc + ' levels away from a plain 90 °/s');
+    });
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
+  });
+  // ── end bughunt 1 ──
 
 })();
