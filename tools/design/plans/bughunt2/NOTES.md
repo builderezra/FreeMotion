@@ -125,3 +125,12 @@ already 232 on this branch (main 230) and was not bumped again.
   CONTROL throws rather than passing vacuously.
 - `followTarget`'s fallback when no half covers the moment goes beyond the brief's plain `FM.clipAt`. Without it, a follower past its
   target's end would still read the head's seam value.
+
+## HELD (18 Oct, after v17.72's first ship was refused): #4, #7 and #8 do not ship in v17.72
+Three of the fixes change lines the Full-unchanged lock (queue 980) anchors its self-test plants on — the `floor` plant on the
+split's 0.02 s edge (#7), and the `matte` and `follow` plants (#8, #4), which ARE DESIGN B4: the split-aware lookup is listed as a
+change "Full must never get", and simple-mode DESIGN.md ~1262 says B4 "waits for his own yes as its own item" (his 1 Oct rule:
+"i dont want the original editor changing in design and function"). Moving the plants is an instrument change
+(tools/_fu_gate.py rule 6): it ships alone, before any app change, with a ~3 h full-unchanged PASS — and the new anchors only
+exist after the app change. So v17.72 ships #1, #3, #2, #5 and #6 (none touches an anchored line); #4, #7 and #8 stay on
+hunt/bughunt2-fix (d64bc468, c3c64d89, 5932779a; plants re-anchored in 9fca4b3e / 038f341a) as one decision in #1176.
