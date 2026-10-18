@@ -44618,6 +44618,10 @@
          layer, so its whole footprint is in shadow too: black on black. On any other ground it is the shadow ('966 opts7 Lamp Shadow
          Shadow only …' proves the shadow is drawn, the footprint and all). */
       'radialshadow:shadowonly=max': 1,
+      /* #966 opts9 (hunt/966-opts9): REPLACE COLOUR's Show selection = On paints what the match catches as a matte, hslbands:view's twin,
+         by design. The default From colour is red (hue 0°, a 30° window) and this fixture is orange (#e8a33d, hue 35.8°), so nothing is
+         caught and the matte is black on a black ground; on a red layer it is white ('966 opts9 Replace Colour Show selection …'). */
+      'replacecolor:view=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -160622,5 +160626,864 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts8 ──
+
+  // ── 966 opts9 (hunt/966-opts9) ──
+  /* ═══ #966 (refers to #545): MORE CHOICE, ROUND NINE — six more effects he already has: Glitter, Replace Colour, Speed Lines, Trail,
+   * Letter Spread and CRT (hunt/966-opts9; the twin check, the table of controls and the sheet plan are in
+   * tools/design/plans/966-opts9/NOTES.md). His words: "polish other effects just giving them more features … more choices always
+   * better". WRITTEN WITHOUT RUNNING (18 Oct, while a release shipped from the main checkout): nothing but `node --check`. Every number
+   * below is reasoned from the code it names, the reasoning beside it; the bounds only a run can set say MEASURE beside them. Every test
+   * fails on 2d250808 (round eight) on its first line by NAMING the missing control or seam, never with a TypeError. Each effect has four
+   * kinds: (a) its rows, ranges, choices, gates and what the load sanitiser keeps and clamps, (b) what the new controls do, on a fixture
+   * that holds what separates right from wrong, (c) at the defaults the kernel is today's picture (or call list) byte for byte, (d) a
+   * CONTROL — every new control moves the very fixtures (c) holds still, on the effect's own default settings. This block's helpers carry
+   * an _o9 prefix and are all its own; from the rest of the file it uses only `test`, `sleep` and E1 (frame, maxDiff, count). ═══ */
+  const _o9Need = (type, keys, seams) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts9 (hunt/966-opts9) is not built');
+    (seams || []).forEach(s => { if (typeof FM[s] !== 'function') throw new Error('FM.' + s + ' (the #966 opts9 seam) does not exist — #966 opts9 is not built'); });
+    return r;
+  };
+  const _O9_NEW = { glitter: ['twinkle', 'from', 'seed'], replacecolor: ['strength', 'view'], speedlines: ['opacity', 'inkmode'], linearrepeat: ['blend', 'tint', 'color'], textspacing: ['speed'], crt: ['roll', 'rollspeed'] };
+  const _O9_TEXT = { textspacing: 1 };
+  // old controls moved so each effect visibly acts on the gradient rect of the compositor test (the new ones stay at their defaults)
+  const _O9_SHOW = { glitter: { spacing: 20, threshold: 30 }, replacecolor: { color: '#f0c060' }, speedlines: {}, linearrepeat: {}, crt: {} };
+  const _o9P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o9Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  // the pixel kernel straight, with exactly these params (ps 1 unless given)
+  const _o9PX = (type, params, W, H, d, t, ps) => {
+    const f = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable');
+    f(d, W, H, params, t == null ? 0.5 : t, ps == null ? 1 : ps);
+    return d;
+  };
+  // …and through the dispatcher's own step (colours resolved, project px scaled to plate scale ps), as a layer runs it
+  const _o9Run = (type, params, W, H, d, t, ps) => {
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx is not reachable');
+    FM._applyPixelFx(d, { type: type, params: params }, t == null ? 0.5 : t, W, H, ps == null ? 1 : ps);
+    return d;
+  };
+  // a busy opaque picture (a colour ramp under a 12 px checker), an opaque block on clear, a ramp block on clear, a flat colour
+  const _o9Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  const _o9Blk = (W, H) => E1.frame(W, H, (x, y) => (x >= 20 && x < 70 && y >= 10 && y < 50) ? [200, 90, 40, 255] : [0, 0, 0, 0]);
+  const _o9GBlk = (W, H) => E1.frame(W, H, (x, y) => (x >= 16 && x < 80 && y >= 8 && y < 60) ? [(x * 4) & 255, (y * 4) & 255, 128, 255] : [0, 0, 0, 0]);
+  const _o9Flat = (W, H, rgb) => E1.frame(W, H, () => rgb);
+  // a saturated hue sweep across the plate (0° at the left edge, so red at both ends), lighter downward — every hue the wheel has
+  const _o9Hues = (W, H) => E1.frame(W, H, (x, y) => {
+    const h = (x / W) * 360, l = 0.3 + 0.45 * (y / H), c = (1 - Math.abs(2 * l - 1)) * 0.95, hp = h / 60, xx = c * (1 - Math.abs(hp % 2 - 1));
+    let r = 0, g = 0, b = 0;
+    if (hp < 1) { r = c; g = xx; } else if (hp < 2) { r = xx; g = c; } else if (hp < 3) { g = c; b = xx; } else if (hp < 4) { g = xx; b = c; } else if (hp < 5) { r = xx; b = c; } else { r = c; b = xx; }
+    const m = l - c / 2;
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  });
+  const _o9At = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  // the hue of an RGB exactly as Replace Colour reads one (its rcHue, operation for operation; 0 for a grey)
+  const _o9Hue = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), df = mx - mn; if (df === 0) return 0; let h; if (mx === r) h = ((g - b) / df) % 6; else if (mx === g) h = (b - r) / df + 2; else h = (r - g) / df + 4; h *= 60; return h < 0 ? h + 360 : h; };
+  // a gradient rect, a text layer, and the frame rendered through FM.renderScene (a reduced plate when rs is given)
+  const _o9Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#1040a0', c1: '#f0c060' }; L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o9Text = (fx, o) => {
+    o = o || {};
+    const L = FM.makeLayer('text', { text: o.text || 'Hello brave', x: o.x || 80, y: o.y || 60, fontSize: o.fs || 22, fill: '#ffffff' });
+    L.start = 0; L.duration = 4; L.effects = fx ? [fx] : [];
+    L.textAnim = o.anim || { preset: 'none' };
+    return L;
+  };
+  const _o9shot = (layers, t, W, H, rs, bg) => {
+    const c = document.createElement('canvas'); c.width = Math.round(W * (rs || 1)); c.height = Math.round(H * (rs || 1));
+    if (rs) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: bg === undefined ? '#000000' : bg }, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return g.getImageData(0, 0, c.width, c.height).data;
+  };
+  // the kind of layer each effect is for, and a new instance with `give` laid on it through the load sanitiser: the params it keeps
+  const _o9Layer = type => _O9_TEXT[type] ? FM.makeLayer('text', { text: 'Hello world', x: 80, y: 60, fontSize: 28, fill: '#ffffff' }) : FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' });
+  const _o9San = (type, give) => {
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, give);
+    const L = _o9Layer(type); L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    return got ? got.params : null;
+  };
+  /* Every new row as the panel gets it: its label; a slider's range, unit and keyframes, a choice's buttons and the values they store, or
+     a colour row; its default and its gate (or that nothing greys it out); what it needs of the browser; what a new instance starts with,
+     what a SAVED one with no such key is filled with at render time (FM._fillFxParams, queue 784, colours included) and what the fill
+     reads off the kernel (793); and that the load sanitiser keeps each key at a value off its default. */
+  const _o9Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else if (s.colour) {
+        if (p.type !== 'color') bad.push(s.key + ' is a ' + p.type + ' row, not a colour');
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      if (typeof s.def === 'number') { const fv = FM._fxFillValue(type, s.key); if (fv !== s.def) bad.push('the render-time fill reads ' + s.key + ' as ' + JSON.stringify(fv) + ' off the kernel, not ' + s.def + ' — 793 would say the panel lies'); }
+      if (s.gate) { if (p.overriddenBy !== s.gate[0] || JSON.stringify(p[s.gate[1]]) !== JSON.stringify(s.gate[2])) bad.push(s.key + ' is gated by ' + JSON.stringify([p.overriddenBy, p[s.gate[1]]]) + ', not ' + JSON.stringify([s.gate[0], s.gate[2]]) + ' (' + s.gate[1] + ')'); }
+      else if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+      if (s.needs !== undefined && (p.needs || '') !== s.needs) bad.push(s.key + ' needs “' + (p.needs || '') + '” of the browser, not “' + s.needs + '”');
+    });
+    const got = _o9San(type, keep);
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got[k])); });
+    return bad;
+  };
+  /* …and what the load sanitiser does with values off the rows: a number past either end is held at that end, a choice that is not one of
+     the buttons and a colour that is not a colour are left out (absent: the render-time fill then draws the default). `want[k]`
+     undefined means "left out". */
+  const _o9Clamp = (type, give, want) => {
+    const got = _o9San(type, give), bad = [];
+    if (!got) return ['the load sanitiser drops a ' + type + ' carrying ' + JSON.stringify(give)];
+    Object.keys(want).forEach(k => {
+      if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(give[k]) + ' into ' + JSON.stringify(got[k]) + ', not ' + (want[k] === undefined ? 'nothing (it is not a value the row has, so it is left out)' : JSON.stringify(want[k])));
+    });
+    return bad;
+  };
+  /* (c) for the pixel kernels: through the dispatcher's own step at plate scale ps, with every new key at its default (a new instance)
+     against the same with the new keys taken away (every saved project), each case on its own fixture, moment and plate. */
+  const _o9Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o9P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o9Pic;
+      const a = _o9Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o9Run(type, _o9Del(P, _O9_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O9_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  // (d): how many pixels the kernel moves when `over` is laid on a new instance, on that fixture at that moment
+  const _o9Moves = (type, over, W, H, pic, t) => E1.count(_o9PX(type, _o9P(type), W, H, pic(W, H), t), _o9PX(type, _o9P(type, over), W, H, pic(W, H), t), 0);
+  // a real canvas, painted by `paint`
+  const _o9CV = (W, H, paint) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }); if (paint) paint(g, W, H); return c; };
+  /* A canvas kernel straight, as drawCanvasEffect calls it — (A, B, W, H, bb, params, t, tl, layer, ps, expand, scene) — on real canvases:
+     A painted by o.paint, B clear; the layer's alpha box o.bb; no layer, so no layer-space path. The bytes of A and of B. */
+  const _o9CFX = (type, params, o) => {
+    const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX[type];
+    if (typeof K !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable');
+    const W = o.W, H = o.H, A = _o9CV(W, H, o.paint), B = _o9CV(W, H);
+    K(A, B.getContext('2d', { willReadFrequently: true }), W, H, o.bb || { x: 0, y: 0, w: W, h: H }, JSON.parse(JSON.stringify(params)), o.t == null ? 0.5 : o.t, o.tl == null ? 0.5 : o.tl, null, o.ps == null ? 1 : o.ps, null, null);
+    return { A: A.getContext('2d').getImageData(0, 0, W, H).data, B: B.getContext('2d').getImageData(0, 0, W, H).data };
+  };
+  /* A RECORDING 2D CONTEXT: every call and every property set, numbers in full (`log`), and every drawImage with the compositing, alpha
+     and save depth it was drawn at (`draws`). Objects (canvases, gradients) are named obj0, obj1… in the order they first appear, and a
+     gradient's colour stops are logged too. It paints nothing: it is for the call order and the arguments, which is what "call for call"
+     is. */
+  const _o9Rec = (W, H) => {
+    const log = [], draws = [], stack = [], ids = new Map();
+    const st = { globalAlpha: 1, globalCompositeOperation: 'source-over', fillStyle: '#000000', strokeStyle: '#000000', lineWidth: 1, lineCap: 'butt', lineJoin: 'miter', miterLimit: 10, textAlign: 'start', textBaseline: 'alphabetic', filter: 'none', font: '10px sans-serif', imageSmoothingEnabled: true };
+    const tag = o => { if (!ids.has(o)) ids.set(o, 'obj' + ids.size); return ids.get(o); };
+    const fmt = v => typeof v === 'number' ? String(v) : typeof v === 'string' ? JSON.stringify(v) : typeof v === 'boolean' ? String(v) : Array.isArray(v) ? '[' + v.map(fmt).join(',') + ']' : (v && typeof v === 'object') ? tag(v) : String(v);
+    const rec = (n, a) => { log.push(n + '(' + Array.prototype.map.call(a, fmt).join(',') + ')'); };
+    const R = { canvas: { width: W, height: H }, log: log, draws: draws };
+    ['translate', 'rotate', 'scale', 'transform', 'setTransform', 'resetTransform', 'beginPath', 'moveTo', 'lineTo', 'closePath', 'rect', 'roundRect', 'arc', 'arcTo', 'ellipse', 'fill', 'stroke', 'clip', 'fillRect', 'clearRect', 'strokeRect', 'fillText', 'strokeText', 'setLineDash'].forEach(n => { R[n] = function () { rec(n, arguments); }; });
+    R.save = function () { rec('save', arguments); stack.push(Object.assign({}, st)); };
+    R.restore = function () { rec('restore', arguments); if (stack.length) Object.assign(st, stack.pop()); };
+    R.drawImage = function (img) { rec('drawImage', arguments); draws.push({ img: tag(img), op: st.globalCompositeOperation, alpha: st.globalAlpha, depth: stack.length }); };
+    const grad = n => function () { rec(n, arguments); const g = { addColorStop: function (o, c) { log.push(tag(g) + '.addColorStop(' + fmt(o) + ',' + fmt(c) + ')'); } }; tag(g); return g; };
+    R.createRadialGradient = grad('createRadialGradient'); R.createLinearGradient = grad('createLinearGradient');
+    R.measureText = function (s) { return { width: 10 * String(s).length }; };
+    R.getTransform = function () { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; };
+    Object.keys(st).forEach(k => Object.defineProperty(R, k, { get: () => st[k], set: v => { st[k] = v; log.push(k + '=' + fmt(v)); } }));
+    return R;
+  };
+  // a canvas kernel into the recorder (A a real canvas the size of the plate, painted by o.paint); the recorder
+  const _o9CRec = (type, params, o) => {
+    const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX[type];
+    if (typeof K !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable');
+    const W = o.W, H = o.H, A = _o9CV(W, H, o.paint), R = _o9Rec(W, H);
+    K(A, R, W, H, o.bb || { x: 0, y: 0, w: W, h: H }, JSON.parse(JSON.stringify(params)), o.t == null ? 0.5 : o.t, o.tl == null ? 0.5 : o.tl, null, o.ps == null ? 1 : o.ps, null, null);
+    return R;
+  };
+  /* GLITTER'S LATTICE as the kernel lays it on a whole-plate box: its integer hash (e1Hash, copied operation for operation), each cell's
+     key XORed with Pattern's (Math.imul(Pattern, 0x2c1b3c6d), 0 for Pattern 0), the star at ((ix + hash(k + 1)) x spacing, (iy +
+     hash(k + 2)) x spacing) rounded to the pixel, and only the ones that fall on the plate. A CONTROL in each test that uses it holds every
+     predicted place lit, so a copy that drifted from the kernel's would be caught there, not trusted. */
+  const _o9EH = k => { k = Math.imul(k ^ (k >>> 16), 0x85ebca6b); k = Math.imul(k ^ (k >>> 13), 0xc2b2ae35); return ((k ^ (k >>> 16)) >>> 0) / 4294967296; };
+  const _o9Stars = (W, H, sp, seed) => {
+    const s = Math.min(999, Math.round(seed || 0)), key = s > 0 ? (Math.imul(s, 0x2c1b3c6d) | 0) : 0, out = [];
+    const x0 = Math.floor(0 / sp) - 1, x1 = Math.ceil(W / sp) + 1, y0 = Math.floor(0 / sp) - 1, y1 = Math.ceil(H / sp) + 1;
+    for (let iy = y0; iy <= y1; iy++) for (let ix = x0; ix <= x1; ix++) {
+      const k = (Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663)) ^ key;
+      const xi = Math.round((ix + _o9EH(k + 1)) * sp), yi = Math.round((iy + _o9EH(k + 2)) * sp);
+      if (xi < 0 || yi < 0 || xi >= W || yi >= H) continue;
+      out.push([xi, yi]);
+    }
+    return out;
+  };
+  // open a layer's (only) effect in the inspector and hand back the editor's body, or null; the caller restores the scene
+  const _o9Open = async (L) => {
+    FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+    let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    if (!body) {
+      const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+      if (!cat) return null;
+      cat.closest('[class*=cat]').click(); await sleep(140);
+      body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    }
+    return body || null;
+  };
+  const _o9KF = (a, b, t1) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: t1 || 1, v: b, e: 'linear' }] });
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each of the
+     five picture effects on a gradient rect over a grey ground — with an old control moved where the effect would otherwise not act on
+     this rect (Glitter's spacing and bar, Replace Colour's From). Letter Spread's own is further down. */
+  test('966 opts9 every new control at its default draws what the effect drew without it — Glitter, Replace Colour, Speed Lines, Trail and CRT through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O9_NEW).filter(type => !_O9_TEXT[type]);
+    TYPES.forEach(type => _o9Need(type, _O9_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    TYPES.forEach(type => {
+      const P = _o9P(type, _O9_SHOW[type]);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o9shot([_o9Rect({ type: type, enabled: true, params: Object.assign({}, P) })], t, W, H, rs, BG);
+        const b = _o9shot([_o9Rect({ type: type, enabled: true, params: _o9Del(P, _O9_NEW[type]) })], t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O9_NEW[type].join(' / '));
+        if (rs == null) { const off = _o9shot([_o9Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Glitter: Twinkle, Star colour and Pattern ---- */
+  test('966 opts9 Glitter has Twinkle (0–100 %, keyframable, 100 by default), Star colour (Chosen colour or From the picture, storing 0 and 1, Chosen by default) and Pattern (0–999, 0 by default); Twinkle speed greys out at Twinkle 0 and the Colour row under From the picture: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40, From the picture and 77, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('glitter', _O9_NEW.glitter);
+    const bad = _o9Rows('glitter', [
+      { key: 'twinkle', label: 'Twinkle', min: 0, max: 100, unit: '%', def: 100 },
+      { key: 'from', label: 'Star colour', options: ['Chosen colour', 'From the picture'], def: 0 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, unit: '', def: 0 }], { twinkle: 40, from: 1, seed: 77 });
+    bad.push.apply(bad, _o9Clamp('glitter', { twinkle: 150, seed: -5 }, { twinkle: 100, seed: 0 }));
+    bad.push.apply(bad, _o9Clamp('glitter', { from: 3 }, { from: undefined }));
+    const row = k => (FM.fxRegistry.paramsOf('glitter') || []).filter(p => p.key === k)[0] || {};
+    const sp = row('speed'), col = row('color');
+    if (sp.overriddenBy !== 'twinkle' || sp.liveAbove !== 0) bad.push('Twinkle speed is gated by ' + JSON.stringify([sp.overriddenBy, sp.liveAbove]) + ', not by Twinkle above 0 — at Twinkle 0 there is nothing to time');
+    if (col.type !== 'color' || col.overriddenBy !== 'from' || JSON.stringify(col.liveWhen) !== '0') bad.push('the Colour row is ' + JSON.stringify({ type: col.type, by: col.overriddenBy, when: col.liveWhen }) + ', not a colour live only under Chosen colour');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* TWINKLE on a flat grey (150, opaque) 240 x 240 plate, Spacing 60 and Star size 30 (big enough to read), the default bar 55 % (grey 150
+     is 0.588 of white): the star places are the kernel's own lattice (_o9Stars — a CONTROL holds every one of them lit at Twinkle 0). A
+     lit star's centre reads ≥ 240: at full brightness its glow is ≥ 7.5 px in radius, so the centre pixel (within 0.71 px of the true
+     centre) takes ≥ 0.9 of white on top of the grey; at Twinkle 50 every star is at least half bright (br ≥ 0.5: a ≥ 5 px glow at ≥ 0.43
+     of white there, 150 + 110), so it is lit too. At 100 % a star is dark for most of each twinkle (br = sin³ under 0.02), so at one of four
+     moments some centre is not lit (CONTROL: the old twinkle). Twinkle 0 draws the very same picture at every moment; a keyed Twinkle
+     (0 → 100 over a second) at 0.5 s is Twinkle 50, and the kernel holds 150 to 100 and −20 to 0. */
+  test('966 opts9 Glitter Twinkle: at 0 % every star is lit at every moment and the picture holds still, at 50 % every star is still lit, at 100 % some go dark between twinkles as before (CONTROL) — every star in the very place the lattice puts it — a keyed Twinkle draws its value and the kernel holds it to 0–100', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('glitter', ['twinkle']);
+    const W = 240, H = 240, bad = [];
+    const grey = g => { g.fillStyle = 'rgb(150,150,150)'; g.fillRect(0, 0, W, H); };
+    const run = (over, tl) => _o9CFX('glitter', _o9P('glitter', Object.assign({ spacing: 60, size: 30 }, over)), { W: W, H: H, paint: grey, tl: tl }).B;
+    const stars = _o9Stars(W, H, 60, 0);
+    if (stars.length < 9) throw new Error('setup: only ' + stars.length + ' star places fall on the plate');
+    const lit = d => stars.filter(s => d[(s[1] * W + s[0]) * 4] >= 240).length;
+    const TL = [0.3, 0.55, 0.8, 1.1];
+    const z = TL.map(tl => run({ twinkle: 0 }, tl));
+    if (lit(z[0]) !== stars.length) throw new Error('CONTROL: at Twinkle 0 only ' + lit(z[0]) + ' of the ' + stars.length + ' places the lattice predicts are lit — the places are not the kernel’s, so nothing below can be read');
+    z.forEach((d, i) => { if (lit(d) !== stars.length) bad.push('at Twinkle 0 and ' + TL[i] + ' s only ' + lit(d) + ' of ' + stars.length + ' stars are lit'); });
+    if (E1.maxDiff(z[0], z[3]) !== 0) bad.push('at Twinkle 0 the picture at ' + TL[0] + ' s and at ' + TL[3] + ' s differs by up to ' + E1.maxDiff(z[0], z[3]) + ' levels — it should hold still');
+    TL.forEach(tl => { const n = lit(run({ twinkle: 50 }, tl)); if (n !== stars.length) bad.push('at Twinkle 50 and ' + tl + ' s only ' + n + ' of ' + stars.length + ' stars are lit — a half twinkle never goes dark'); });
+    const full = TL.map(tl => run({}, tl));
+    const fewest = Math.min.apply(null, full.map(lit));
+    if (!(fewest < stars.length)) bad.push('CONTROL: at Twinkle 100 every star is lit at all four moments — the old twinkle is gone');
+    if (E1.count(full[0], full[3], 2) < 20) bad.push('CONTROL: at Twinkle 100 the pictures at ' + TL[0] + ' s and ' + TL[3] + ' s are nearly the same — the stars are not twinkling');
+    const keyed = run({ twinkle: _o9KF(0, 100) }, 0.55), at50 = run({ twinkle: 50 }, 0.55);
+    if (E1.maxDiff(keyed, at50) !== 0) bad.push('Twinkle keyed 0 → 100 over a second draws, at 0.5 s, up to ' + E1.maxDiff(keyed, at50) + ' levels away from Twinkle 50');
+    if (E1.maxDiff(run({ twinkle: 150 }, 0.55), full[1]) !== 0) bad.push('the kernel does not hold Twinkle 150 to 100');
+    if (E1.maxDiff(run({ twinkle: -20 }, 0.55), z[1]) !== 0) bad.push('the kernel does not hold Twinkle −20 to 0');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* STAR COLOUR on a plate gold (250, 200, 30) on its left half and cyan (30, 220, 250) on its right, both over the default bar (0.77 and
+     0.65 of white), Twinkle 0 so every star is lit, Spacing 60, Star size 30. A star's rays reach at most 30 px, so a star whose centre
+     sits ≥ 32 px from the middle carries only its own half's light. Under the chosen white every such centre is white (CONTROL). From the
+     picture lights each star in the colour it sits on, added to its own pixel: a gold star's centre keeps red and green at 255 and its blue
+     low — 30 plus about 30 x (0.9 glow + 0.9 ray), about 84 (a neighbour's crossing ray adds 27 more) — and a cyan star's red likewise.
+     And the Colour row no longer counts: under From the picture a magenta Colour and the white draw the very same picture. */
+  test('966 opts9 Glitter Star colour From the picture: every star on the gold half shines gold — its blue stays low — and every star on the cyan half shines cyan, where the chosen white lights both white (CONTROL), and under it the Colour row no longer counts', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('glitter', ['from', 'twinkle']);
+    const W = 240, H = 240, bad = [];
+    const two = g => { g.fillStyle = 'rgb(250,200,30)'; g.fillRect(0, 0, W / 2, H); g.fillStyle = 'rgb(30,220,250)'; g.fillRect(W / 2, 0, W / 2, H); };
+    const run = over => _o9CFX('glitter', _o9P('glitter', Object.assign({ spacing: 60, size: 30, twinkle: 0 }, over)), { W: W, H: H, paint: two, tl: 0.55 }).B;
+    const far = _o9Stars(W, H, 60, 0).filter(s => Math.abs(s[0] + 0.5 - W / 2) >= 32);
+    const gold = far.filter(s => s[0] < W / 2), cyan = far.filter(s => s[0] >= W / 2);
+    if (gold.length < 3 || cyan.length < 3) throw new Error('setup: only ' + gold.length + ' gold and ' + cyan.length + ' cyan star places away from the middle');
+    const ch = (d, s, c) => d[(s[1] * W + s[0]) * 4 + c];
+    const rgb = (d, s) => [0, 1, 2].map(c => ch(d, s, c)).join(', ');
+    const white = run({}), pic = run({ from: 1 }), mag = run({ from: 1, color: '#ff00ff' });
+    const wOff = gold.filter(s => ch(white, s, 2) < 240).length + cyan.filter(s => ch(white, s, 0) < 240).length;
+    if (wOff) throw new Error('CONTROL: under the chosen white ' + wOff + ' star centres are not white — nothing below can be read');
+    gold.forEach(s => { if (!(ch(pic, s, 2) <= 110 && ch(pic, s, 0) >= 250 && ch(pic, s, 1) >= 250)) bad.push('the gold star at (' + s.join(', ') + ') reads (' + rgb(pic, s) + ') — not gold' /* measured 18 Oct at 1280 and 380: blue 77–85 (reasoned 84); a white star reads 255 */); });
+    cyan.forEach(s => { if (!(ch(pic, s, 0) <= 110 && ch(pic, s, 1) >= 250 && ch(pic, s, 2) >= 250)) bad.push('the cyan star at (' + s.join(', ') + ') reads (' + rgb(pic, s) + ') — not cyan' /* measured 18 Oct at 1280 and 380: red 80–87 (reasoned 84); a white star reads 255 */); });
+    if (E1.maxDiff(pic, mag) !== 0) bad.push('under From the picture a magenta Colour still changes the stars, by up to ' + E1.maxDiff(pic, mag) + ' levels');
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+
+  /* PATTERN on the grey plate at Twinkle 0: Pattern 7 keys the lattice's hash, so the stars sit in other places — every place the Pattern-7
+     lattice predicts is lit, and at most half of them land within 2 px of a Pattern-0 place — while Pattern 0 is the old lattice (CONTROL:
+     its places are all lit). The two pictures differ widely; the kernel holds 1500 to 999 and −3 to 0. */
+  test('966 opts9 Glitter Pattern: Pattern 7 lays the stars in other places — every place its lattice predicts is lit, few of them where Pattern 0 has one — and draws another picture, while Pattern 0 is the old lattice (CONTROL: its places are lit), and the kernel holds Pattern to 0–999', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('glitter', ['seed', 'twinkle']);
+    const W = 240, H = 240, bad = [];
+    const grey = g => { g.fillStyle = 'rgb(150,150,150)'; g.fillRect(0, 0, W, H); };
+    const run = over => _o9CFX('glitter', _o9P('glitter', Object.assign({ spacing: 60, size: 30, twinkle: 0 }, over)), { W: W, H: H, paint: grey, tl: 0.55 }).B;
+    const lit = (d, S) => S.filter(s => d[(s[1] * W + s[0]) * 4] >= 240).length;
+    const p0 = run({}), p7 = run({ seed: 7 }), s0 = _o9Stars(W, H, 60, 0), s7 = _o9Stars(W, H, 60, 7);
+    if (lit(p0, s0) !== s0.length) throw new Error('CONTROL: at Pattern 0 only ' + lit(p0, s0) + ' of the ' + s0.length + ' predicted places are lit — the lattice is not the kernel’s');
+    if (lit(p7, s7) !== s7.length) bad.push('at Pattern 7 only ' + lit(p7, s7) + ' of the ' + s7.length + ' places its lattice predicts are lit');
+    const same = s7.filter(a => s0.some(b => Math.abs(a[0] - b[0]) <= 2 && Math.abs(a[1] - b[1]) <= 2)).length;
+    if (same > s7.length / 2) bad.push(same + ' of Pattern 7’s ' + s7.length + ' stars sit where Pattern 0 has one — it is not another pattern');
+    let n;
+    if ((n = E1.count(p0, p7, 2)) < 6000) bad.push('Pattern 7 moves only ' + n + ' pixels against Pattern 0' /* measured 18 Oct at 1280 and 380: 13862 */);
+    if (E1.maxDiff(run({ seed: 1500 }), run({ seed: 999 })) !== 0) bad.push('the kernel does not hold Pattern 1500 to 999');
+    if (E1.maxDiff(run({ seed: -3 }), p0) !== 0) bad.push('the kernel does not hold Pattern −3 to 0');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts9 Glitter at Twinkle 100 %, Chosen colour and Pattern 0 makes the old calls, call for call, and draws byte for byte what it drew without them — four, six and eight points, dense, a low bar and big stars, four moments, a half-size plate (CONTROL: Twinkle 0, From the picture and Pattern 7 each move the picture on the default settings)', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('glitter', _O9_NEW.glitter);
+    const bad = [], W = 240, H = 240;
+    const two = g => { g.fillStyle = 'rgb(250,200,30)'; g.fillRect(0, 0, W / 2, H); g.fillStyle = 'rgb(30,220,250)'; g.fillRect(W / 2, 0, W / 2, H); };
+    [[{}, 0.5], [{ points: 1 }, 0.9], [{ points: 2, spacing: 20 }, 1.3], [{ threshold: 10, size: 40 }, 0.2], [{}, 0.5, 0.5]].forEach(([over, tl, ps]) => {
+      const P = _o9P('glitter', over), o = { W: W, H: H, paint: two, tl: tl, ps: ps }, Q = _o9Del(P, _O9_NEW.glitter);
+      const a = _o9CRec('glitter', P, o).log, b = _o9CRec('glitter', Q, o).log;
+      if (a.length < 10) bad.push('CONTROL: ' + JSON.stringify(over) + ' made only ' + a.length + ' calls — no stars were drawn to compare');
+      if (a.join('\n') !== b.join('\n')) bad.push(JSON.stringify(over) + ' at ' + tl + ' s' + (ps ? ', plate ' + ps : '') + ': a new one makes other calls than the same one without Twinkle, Star colour and Pattern');
+      const m = E1.maxDiff(_o9CFX('glitter', P, o).B, _o9CFX('glitter', Q, o).B);
+      if (m !== 0) bad.push(JSON.stringify(over) + ' at ' + tl + ' s' + (ps ? ', plate ' + ps : '') + ': up to ' + m + ' levels away from the same one without the new keys');
+    });
+    // CONTROL, on the default settings (Spacing 60, Star size 14, bar 55 %): the most each moves over four moments
+    const most = over => Math.max.apply(null, [0.2, 0.5, 0.9, 1.3].map(tl => E1.count(_o9CFX('glitter', _o9P('glitter'), { W: W, H: H, paint: two, tl: tl }).B, _o9CFX('glitter', _o9P('glitter', over), { W: W, H: H, paint: two, tl: tl }).B, 0)));
+    let n;
+    if ((n = most({ twinkle: 0 })) < 100) bad.push('CONTROL: Twinkle 0 moves only ' + n + ' pixels');
+    if ((n = most({ from: 1 })) < 400) bad.push('CONTROL: From the picture moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 843 */);
+    if ((n = most({ seed: 7 })) < 100) bad.push('CONTROL: Pattern 7 moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Replace Colour: Strength and Show selection ---- */
+  test('966 opts9 Replace Colour has Strength (0–100 %, keyframable, 100 by default) and Show selection (Off or On, storing 0 and 1, Off by default): a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and On, holds 250 at 100 and −3 at 0 and leaves out a choice that is not a button, and it still has no px controls', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('replacecolor', _O9_NEW.replacecolor, ['_replaceColour966']);
+    const bad = _o9Rows('replacecolor', [
+      { key: 'strength', label: 'Strength', min: 0, max: 100, unit: '%', def: 100 },
+      { key: 'view', label: 'Show selection', options: ['Off', 'On'], def: 0 }], { strength: 40, view: 1 });
+    bad.push.apply(bad, _o9Clamp('replacecolor', { strength: 250 }, { strength: 100 }));
+    bad.push.apply(bad, _o9Clamp('replacecolor', { strength: -3, view: 2 }, { strength: 0, view: undefined }));
+    const px = (FM._pxParamKeys('replacecolor') || []).join();
+    if (px !== '') bad.push('its px controls are [' + px + '] — Strength is a share, not px');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* STRENGTH on four pixels at the default From (#e03131, hue 0°), To (#3aa0ff, hue 208.93°), Tolerance 0.25 (a 30° window) and Hue only.
+     Pure red (255, 0, 0) is dead on: weight 1, its new hue 208.93° at full saturation and value — (0, 132.03, 255). (255, 64, 0) is 15.06°
+     off: weight 0.4980, new hue 223.99°, (0, 68.03, 255) — so it lands at (128.0, 66.0, 127.0). A grey (128) and a green are not caught.
+     Strength s takes each caught pixel s of the way: pure red at 50 % is (127.5, 66.0, 127.5), the other (191.5, 65.0, 63.5); at 0 %
+     nothing moves; at 25 and 75 % each channel is on the straight line between the picture and the full swap (±1.5, the bytes' rounding).
+     A keyed Strength (0 → 100 over a second) at 0.5 s is Strength 50; the kernel holds 250 to 100 and −3 to 0; and the helper at Strength 1
+     is the kernel's own loop byte for byte on the whole hue wheel, in all three Replaces modes (its From / To values worked as the kernel
+     works them: the hues, the 30° window, To's saturation 1 − 58/255 and value 1, From's value 224/255). */
+  test('966 opts9 Replace Colour Strength: pure red swaps to (0, 132, 255) at 100 % and half way at 50 %, a pixel 15° off lands half way at 100 % and a quarter of the way at 50 %, greys and greens never move, every strength is the straight line from the picture to the swap, a keyed Strength draws its value, the kernel holds it to 0–100, and the helper at 100 % is the kernel’s own loop in every mode', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('replacecolor', ['strength'], ['_replaceColour966']);
+    const bad = [], IN = [[255, 0, 0], [255, 64, 0], [128, 128, 128], [0, 255, 0]];
+    const run = (over, t) => _o9PX('replacecolor', _o9P('replacecolor', over), 4, 1, E1.frame(4, 1, x => IN[x]), t);
+    const px = (d, x) => [d[x * 4], d[x * 4 + 1], d[x * 4 + 2]];
+    const near = (what, got, want, tol) => { if (got.some((v, i) => Math.abs(v - want[i]) > tol)) bad.push(what + ' reads (' + got.join(', ') + '), not (' + want.map(v => v.toFixed(1)).join(', ') + ') ±' + tol); };
+    const full = run({});
+    near('CONTROL: pure red at the default 100 %', px(full, 0), [0, 132.03, 255], 1);
+    if (bad.length) throw new Error(bad[0] + ' — the swap is not the one reasoned here, so nothing below can be read');
+    near('(255, 64, 0) at 100 %', px(full, 1), [128.0, 66.0, 127.0], 1);
+    const half = run({ strength: 50 });
+    near('pure red at 50 %', px(half, 0), [127.5, 66.0, 127.5], 1);
+    near('(255, 64, 0) at 50 %', px(half, 1), [191.5, 65.0, 63.5], 1);
+    const none = run({ strength: 0 });
+    for (let x = 0; x < 4; x++) if (px(none, x).join() !== IN[x].join()) bad.push('at 0 % pixel ' + x + ' (' + IN[x].join(', ') + ') moved to (' + px(none, x).join(', ') + ')');
+    [half, full].forEach((d, k) => { for (let x = 2; x < 4; x++) if (px(d, x).join() !== IN[x].join()) bad.push((k ? 100 : 50) + ' %: the ' + (x === 2 ? 'grey' : 'green') + ' moved to (' + px(d, x).join(', ') + ')'); });
+    const SW = [px(full, 0), px(full, 1)];
+    [25, 75].forEach(s => { const d = run({ strength: s }); [0, 1].forEach(x => near('pixel ' + x + ' at ' + s + ' %', px(d, x), IN[x].map((v, c) => v + (SW[x][c] - v) * s / 100), 1.5)); });
+    const keyed = run({ strength: _o9KF(0, 100) }, 0.5);
+    if (E1.maxDiff(keyed, half) !== 0) bad.push('Strength keyed 0 → 100 over a second draws, at 0.5 s, up to ' + E1.maxDiff(keyed, half) + ' levels away from Strength 50');
+    if (E1.maxDiff(run({ strength: 250 }), full) !== 0) bad.push('the kernel does not hold Strength 250 to 100');
+    if (E1.maxDiff(run({ strength: -3 }), none) !== 0) bad.push('the kernel does not hold Strength −3 to 0');
+    const FH = _o9Hue(224, 49, 49), TH = _o9Hue(58, 160, 255), TV = 255 / 255, TS = (TV - 58 / 255) / TV, FV = 224 / 255;
+    [0, 1, 2].forEach(mode => {
+      const k = _o9PX('replacecolor', _o9P('replacecolor', { mode: mode }), 96, 72, _o9Hues(96, 72)), h = _o9Hues(96, 72);
+      FM._replaceColour966(h, FH, 0.25 * 120, TH - FH, mode, TS, TV, FV, 1, false);
+      if (E1.maxDiff(k, h) !== 0) bad.push('replaceColour966 at Strength 1 in mode ' + mode + ' is up to ' + E1.maxDiff(k, h) + ' levels away from the kernel’s own loop');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SHOW SELECTION on six pixels at the defaults: pure red (weight 1) turns white, (255, 64, 0) (weight 0.4980) a mid grey 127, a grey and a
+     green black (the match skips them), a half-clear red (alpha 128) white with its alpha kept, and a clear pixel stays clear; with Strength
+     50 the red reads 127.5 and the other 63.5. CONTROL: Off swaps the red to blue instead. On the whole hue wheel the selection is a grey,
+     every pixel it lights sits within the 30° window of red, and every saturated pixel within 25° of red is lit — the selection IS the
+     match. */
+  test('966 opts9 Replace Colour Show selection: what the match catches turns white and what it does not black — a pixel half caught mid grey, a half-clear one keeps its alpha, Strength scales it — and on the whole hue wheel it lights exactly the hues within the window (CONTROL: Off swaps instead)', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('replacecolor', ['view', 'strength']);
+    const bad = [], IN = [[255, 0, 0, 255], [255, 64, 0, 255], [128, 128, 128, 255], [0, 255, 0, 255], [255, 0, 0, 128], [0, 0, 0, 0]];
+    const run = over => _o9PX('replacecolor', _o9P('replacecolor', over), 6, 1, E1.frame(6, 1, x => IN[x]));
+    const px = (d, x) => [d[x * 4], d[x * 4 + 1], d[x * 4 + 2], d[x * 4 + 3]];
+    const off = run({});
+    if (!(px(off, 0)[2] >= 250 && px(off, 0)[0] <= 2)) throw new Error('CONTROL: with Show selection Off pure red reads (' + px(off, 0).join(', ') + '), not swapped to blue');
+    const sel = run({ view: 1 }), want = [[255, 255, 255, 255], [127, 127, 127, 255], [0, 0, 0, 255], [0, 0, 0, 255], [255, 255, 255, 128], [0, 0, 0, 0]];
+    want.forEach((w, x) => { if (px(sel, x).some((v, c) => Math.abs(v - w[c]) > 1)) bad.push('Show selection: pixel ' + x + ' (' + IN[x].join(', ') + ') reads (' + px(sel, x).join(', ') + '), not (' + w.join(', ') + ')'); });
+    const sel50 = run({ view: 1, strength: 50 });
+    if (Math.abs(px(sel50, 0)[0] - 127.5) > 1) bad.push('with Strength 50 the selected red reads ' + px(sel50, 0)[0] + ', not 127.5');
+    if (Math.abs(px(sel50, 1)[0] - 63.5) > 1) bad.push('with Strength 50 the half-caught pixel reads ' + px(sel50, 1)[0] + ', not 63.5');
+    const W = 96, H = 72, h0 = _o9Hues(W, H), wheel = _o9PX('replacecolor', _o9P('replacecolor', { view: 1 }), W, H, _o9Hues(W, H));
+    let litOut = 0, darkIn = 0, lit = 0, notGrey = 0;
+    for (let i = 0; i < wheel.length; i += 4) {
+      const r = h0[i], g = h0[i + 1], b = h0[i + 2], sat = Math.max(r, g, b) - Math.min(r, g, b);
+      let dd = _o9Hue(r, g, b); if (dd > 180) dd = 360 - dd;
+      if (wheel[i] !== wheel[i + 1] || wheel[i] !== wheel[i + 2]) notGrey++;
+      if (wheel[i] > 0) { lit++; if (dd > 30.5) litOut++; }
+      else if (dd < 25 && sat >= 8) darkIn++;
+    }
+    if (lit < 300) bad.push('CONTROL: the selection lights only ' + lit + ' pixels of the hue wheel' /* reasoned: the 60° round red of a 360° sweep, about 1150 */);
+    if (notGrey) bad.push(notGrey + ' selection pixels are not a grey');
+    if (litOut) bad.push(litOut + ' lit pixels lie more than 30° from red — the selection is not the match');
+    if (darkIn) bad.push(darkIn + ' pixels within 25° of red are black — the selection misses what the match catches');
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+
+  test('966 opts9 Replace Colour at Strength 100 % and Show selection Off draws byte for byte what it draws without them — each Replaces mode, a wide and a narrow window, other colours, a busy picture, a half-size plate, another moment — and part-way and showing the selection it still crops exactly as it draws whole (CROP_FX) (CONTROL: Strength 50 and Show selection each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('replacecolor', _O9_NEW.replacecolor, ['_replaceColour966']);
+    const bad = _o9Ident('replacecolor', [{ pic: _o9Hues }, { over: { mode: 1 }, pic: _o9Hues }, { over: { mode: 2, tolerance: 0.6 }, pic: _o9Hues }, { over: { softness: 250, tolerance: 0.1 }, pic: _o9Hues },
+      { over: { color: '#30c060', color2: '#ff2080' }, pic: _o9Hues }, { pic: _o9Pic }, { pic: _o9Hues, ps: 0.5 }, { pic: _o9Hues, t: 2.7 }]);
+    [{ strength: 50 }, { view: 1 }].forEach(over => {
+      const ci = FM._cropIdentity && FM._cropIdentity('replacecolor', _o9GBlk(96, 72), 96, 72, _o9P('replacecolor', Object.assign({ color: '#ff8000' }, over)), 0.5, 1);
+      if (!ci || ci.same !== true) bad.push(JSON.stringify(over) + ': the crop path draws a different picture from the whole plate (' + JSON.stringify(ci && { same: ci.same, why: ci.why }) + ')');
+    });
+    let n;
+    if ((n = _o9Moves('replacecolor', { strength: 50 }, 96, 72, _o9Hues, 0.5)) < 300) bad.push('CONTROL: Strength 50 moves only ' + n + ' pixels of the hue wheel');
+    if ((n = _o9Moves('replacecolor', { view: 1 }, 96, 72, _o9Hues, 0.5)) < 1000) bad.push('CONTROL: Show selection moves only ' + n + ' pixels of the hue wheel');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Speed Lines: Ink opacity and Line colours ---- */
+  test('966 opts9 Speed Lines has Ink opacity (0–100 %, keyframable, 100 by default) and Line colours (Ink or Rainbow, storing 0 and 1, Ink by default), and its Ink row greys out under Rainbow: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and Rainbow, holds 300 at 100 and −10 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('speedlines', _O9_NEW.speedlines, ['_slHue966']);
+    const bad = _o9Rows('speedlines', [
+      { key: 'opacity', label: 'Ink opacity', min: 0, max: 100, unit: '%', def: 100 },
+      { key: 'inkmode', label: 'Line colours', options: ['Ink', 'Rainbow'], def: 0 },
+      { key: 'color', label: 'Ink', colour: true, def: '#0d0d12', gate: ['inkmode', 'liveWhen', 0] }], { opacity: 40, inkmode: 1 });
+    bad.push.apply(bad, _o9Clamp('speedlines', { opacity: 300 }, { opacity: 100 }));
+    bad.push.apply(bad, _o9Clamp('speedlines', { opacity: -10, inkmode: 2 }, { opacity: 0, inkmode: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* INK OPACITY on a clear 160 x 160 plate (the ink alone): wherever the default ink is solid (alpha 255 — inside a line, past the clear
+     zone's feather) Ink opacity 40 leaves 0.4 of it, alpha 102, and 0 leaves nothing at all. Over a grey (128) picture an ink-covered pixel
+     reads the ink's 13 at 100 % and 128 + (13 − 128) x 0.4 = 82 at 40 %: the lines let the picture through. The composite is the old one with
+     an alpha: on the recorder the default sets no globalAlpha anywhere, Ink opacity 40 draws the picture at 1 and the ink at 0.4. A keyed
+     Ink opacity (0 → 100 over a second) at 0.5 s is Ink opacity 50; the kernel holds 150 to 100 and −5 to 0. */
+  test('966 opts9 Speed Lines Ink opacity: where the ink was solid it is 40 % there at Ink opacity 40 and gone at 0, over a picture the lines let 60 % of it through, the picture itself is drawn at full strength and the default sets no alpha at all, a keyed Ink opacity draws its value and the kernel holds it to 0–100', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('speedlines', ['opacity']);
+    const W = 160, H = 160, bad = [];
+    const grey = g => { g.fillStyle = 'rgb(128,128,128)'; g.fillRect(0, 0, W, H); };
+    const run = (over, paint) => _o9CFX('speedlines', _o9P('speedlines', over), { W: W, H: H, paint: paint }).B;
+    const solid = run({}), part = run({ opacity: 40 }), none = run({ opacity: 0 });
+    let full = 0, off = 0, left = 0;
+    for (let i = 0; i < solid.length; i += 4) { if (none[i + 3] !== 0) left++; if (solid[i + 3] !== 255) continue; full++; if (Math.abs(part[i + 3] - 102) > 1) off++; }
+    if (full < 500) throw new Error('CONTROL: the default ink is solid on only ' + full + ' pixels — nothing below can be read');
+    if (off) bad.push(off + ' of the ' + full + ' solid ink pixels are not at 40 % (alpha 102) under Ink opacity 40');
+    if (left) bad.push('at Ink opacity 0, ' + left + ' pixels still carry ink');
+    const g100 = run({}, grey), g40 = run({ opacity: 40 }, grey);
+    let wrong = 0;
+    for (let i = 0; i < solid.length; i += 4) { if (solid[i + 3] !== 255) continue; if (Math.abs(g100[i] - 13) > 1 || Math.abs(g40[i] - 82) > 2) wrong++; }
+    if (wrong > full * 0.001 /* measured 18 Oct at 1280 and 380: 1 of 9131 (an anti-aliased edge pixel solid in one render, not the other); a wrong opacity misses thousands */) bad.push(wrong + ' of ' + full + ' ink pixels over the grey do not read 13 at 100 % and 82 at 40 %');
+    const R0 = _o9CRec('speedlines', _o9P('speedlines'), { W: W, H: H, paint: grey }), R = _o9CRec('speedlines', _o9P('speedlines', { opacity: 40 }), { W: W, H: H, paint: grey });
+    if (R0.log.some(s => /^globalAlpha=/.test(s))) bad.push('the default sets a globalAlpha (' + R0.log.filter(s => /^globalAlpha=/.test(s)).join(' ') + ')');
+    if (!(R.draws.length === 2 && R.draws[0].alpha === 1 && Math.abs(R.draws[1].alpha - 0.4) < 1e-9)) bad.push('at Ink opacity 40 the composite draws ' + JSON.stringify(R.draws) + ' — the picture at 1, then the ink at 0.4');
+    const keyed = run({ opacity: _o9KF(0, 100) }), at50 = run({ opacity: 50 });
+    if (E1.maxDiff(keyed, at50) !== 0) bad.push('Ink opacity keyed 0 → 100 over a second draws, at 0.5 s, up to ' + E1.maxDiff(keyed, at50) + ' levels away from Ink opacity 50');
+    if (E1.maxDiff(run({ opacity: 150 }), solid) !== 0) bad.push('the kernel does not hold Ink opacity 150 to 100');
+    if (E1.maxDiff(run({ opacity: -5 }), none) !== 0) bad.push('the kernel does not hold Ink opacity −5 to 0');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* LINE COLOURS RAINBOW on a clear 160 x 160 plate, 24 lines and no Scatter, so line i points exactly at i x 15° round the focus (80, 80).
+     Rainbow gives line i the hue i / 24 of the wheel, i x 15°: so every solid pixel's hue IS its own angle round the focus, within the
+     line's half-width — at most hw / base = 7.2 / 61 px, 6.8° — and fully saturated (hsl 100 %, 55 %: a spread of about 230). CONTROL: under
+     Ink every solid pixel is the dark ink (a spread ≤ 8). Under Rainbow a red Ink changes nothing. Across the panel (Parallel at Angle 0,
+     24 lines 4 px wide — half-widths ≤ 2.4 px, under half the 6.67 px gap) line i lies at y = (i + 0.5) x 160 / 24 and takes the hue
+     i x 15°, so a solid pixel's hue is that of the line its row belongs to (±4°). */
+  test('966 opts9 Speed Lines Line colours Rainbow: round the fan every line takes the hue of its own angle and across the panel the hue of its own place, fully saturated, where Ink is the dark ink (CONTROL), and under Rainbow the Ink colour no longer counts', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('speedlines', ['inkmode'], ['_slHue966']);
+    const W = 160, H = 160, bad = [], cx = 80, cy = 80;
+    const run = over => _o9CFX('speedlines', _o9P('speedlines', Object.assign({ count: 24, jitter: 0 }, over)), { W: W, H: H }).B;
+    const spread = (d, i) => Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
+    const ink = run({});
+    let n = 0, notInk = 0;
+    for (let i = 0; i < ink.length; i += 4) { if (ink[i + 3] !== 255) continue; n++; if (spread(ink, i) > 8) notInk++; }
+    if (n < 500) throw new Error('CONTROL: the 24 ink lines are solid on only ' + n + ' pixels — nothing below can be read');
+    if (notInk) throw new Error('CONTROL: ' + notInk + ' solid pixels of the Ink lines are not the dark ink');
+    const rad = run({ inkmode: 1 }), radRed = run({ inkmode: 1, color: '#ff0000' });
+    let ok = 0, offA = 0, flat = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4; if (rad[i + 3] !== 255) continue;
+      if (spread(rad, i) < 150) { flat++; continue; }
+      let th = Math.atan2(y + 0.5 - cy, x + 0.5 - cx) * 180 / Math.PI; if (th < 0) th += 360;
+      let dd = Math.abs(_o9Hue(rad[i], rad[i + 1], rad[i + 2]) - th); if (dd > 180) dd = 360 - dd;
+      if (dd <= 10) ok++; else offA++;
+    }
+    if (ok < 500) bad.push('only ' + ok + ' rainbow pixels take the hue of their own angle round the focus');
+    if (offA > ok * 0.005) bad.push(offA + ' rainbow pixels (against ' + ok + ') are more than 10° off the hue of their own angle' /* measured 18 Oct at 1280 and 380: 0 of 3577, as reasoned */);
+    if (flat) bad.push(flat + ' solid rainbow pixels are not fully saturated');
+    if (E1.maxDiff(rad, radRed) !== 0) bad.push('under Rainbow a red Ink still changes the lines, by up to ' + E1.maxDiff(rad, radRed) + ' levels');
+    const par = run({ inkmode: 1, mode: 1, angle: 0, width: 4 }), gap = H / 24;
+    let pok = 0, poff = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4; if (par[i + 3] !== 255 || spread(par, i) < 150) continue;
+      const k = Math.round((y + 0.5) / gap - 0.5);
+      let dd = Math.abs(_o9Hue(par[i], par[i + 1], par[i + 2]) - k * 15); if (dd > 180) dd = 360 - dd;
+      if (dd <= 4) pok++; else poff++;
+    }
+    if (pok < 400) bad.push('across the panel only ' + pok + ' rainbow pixels take the hue of the line their row belongs to' /* measured 18 Oct at 1280 and 380: 832 */);
+    if (poff > pok * 0.02) bad.push('across the panel ' + poff + ' rainbow pixels (against ' + pok + ') are off the hue of their own line');
+    if (FM._slHue966(6, 24) !== 'hsl(90.00,100%,55%)') bad.push('line 6 of 24 is ' + FM._slHue966(6, 24) + ', not a quarter of the wheel round');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts9 Speed Lines at Ink opacity 100 % and Ink makes the old calls, call for call, and draws byte for byte what it drew without them — radial and parallel, an oval clear zone, boil, Add in white, a spin, a half-size plate (CONTROL: Ink opacity 40 and Rainbow each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('speedlines', _O9_NEW.speedlines);
+    const bad = [], W = 160, H = 120;
+    const pic = g => { const gr = g.createLinearGradient(0, 0, W, 0); gr.addColorStop(0, '#2060c0'); gr.addColorStop(1, '#f0c040'); g.fillStyle = gr; g.fillRect(20, 15, 120, 90); };
+    [[{}, 0.5], [{ mode: 1, angle: -35 }, 0.5], [{ aspect: 250 }, 0.9], [{ boil: 12 }, 1.3], [{ blend: 1, color: '#ffffff' }, 0.5], [{ spin: 90 }, 1.7], [{}, 0.5, 0.5]].forEach(([over, tl, ps]) => {
+      const P = _o9P('speedlines', over), Q = _o9Del(P, _O9_NEW.speedlines), o = { W: W, H: H, paint: pic, tl: tl, ps: ps };
+      if (_o9CRec('speedlines', P, o).log.join('\n') !== _o9CRec('speedlines', Q, o).log.join('\n')) bad.push(JSON.stringify(over) + ': a new one makes other calls than the same one without Ink opacity and Line colours');
+      const m = E1.maxDiff(_o9CFX('speedlines', P, o).B, _o9CFX('speedlines', Q, o).B);
+      if (m !== 0) bad.push(JSON.stringify(over) + ' at ' + tl + ' s' + (ps ? ', plate ' + ps : '') + ': up to ' + m + ' levels away from the same one without the new keys');
+    });
+    const o = { W: W, H: H, paint: pic }, base = _o9CFX('speedlines', _o9P('speedlines'), o).B;
+    let n;
+    if ((n = E1.count(base, _o9CFX('speedlines', _o9P('speedlines', { opacity: 40 }), o).B, 0)) < 500) bad.push('CONTROL: Ink opacity 40 moves only ' + n + ' pixels');
+    if ((n = E1.count(base, _o9CFX('speedlines', _o9P('speedlines', { inkmode: 1 }), o).B, 0)) < 500) bad.push('CONTROL: Rainbow moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Trail: Blend and Copy tint ---- */
+  test('966 opts9 Trail has Blend (Normal, Add or Screen, storing 0–2, Normal by default), Copy tint (0–100 %, keyframable, 0 by default) and a Tint colour (#3dc8ff) greyed while Copy tint is 0: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Screen, 60 and #ff8000, holds 150 at 100 and leaves out a choice that is not a button and a colour that is not one', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('linearrepeat', _O9_NEW.linearrepeat, ['_trailTint966']);
+    const bad = _o9Rows('linearrepeat', [
+      { key: 'blend', label: 'Blend', options: ['Normal', 'Add', 'Screen'], def: 0 },
+      { key: 'tint', label: 'Copy tint', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'color', label: 'Tint colour', colour: true, def: '#3dc8ff', gate: ['tint', 'deadAt', 0] }], { blend: 2, tint: 60, color: '#ff8000' });
+    bad.push.apply(bad, _o9Clamp('linearrepeat', { tint: 150 }, { tint: 100 }));
+    bad.push.apply(bad, _o9Clamp('linearrepeat', { blend: 3, color: 'url(x)' }, { blend: undefined, color: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BLEND, call by call and pixel by pixel. A dark grey (60) block 40 x 30 at (20, 45) on a clear 160 x 120 plate, four copies at Spacing 50
+     (20 px apart, each overlapping the one before). Normal (today): the layer is drawn first, outside any save, its three copies straight
+     after — the same grey everywhere, 60. Add draws each copy 'lighter' inside its own save, the layer still 'source-over': where the layer
+     and copy 1 overlap (x 40–60) and where two copies overlap (60–100) it reads 120, where one is alone (20–40, 100–120) 60. Screen: 255 −
+     195 x 195 / 255 = 105.9 there. Behind with Add draws the copies first and the layer last on top: its own pixels stay 60, while two
+     copies still add (x 70). */
+  test('966 opts9 Trail Blend: Add and Screen draw every copy as light — never the layer — so a grey 60 reads 120 under Add and 106 under Screen where two overlap and 60 where one is alone, and under Behind the layer stays itself on top (CONTROL: Normal draws them all the same grey, straight)', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('linearrepeat', ['blend']);
+    const bad = [], W = 160, H = 120, bb = { x: 20, y: 45, w: 40, h: 30 };
+    const grey = g => { g.fillStyle = 'rgb(60,60,60)'; g.fillRect(20, 45, 40, 30); };
+    const base = { count: 4, spacing: 50, angle: 0 };
+    const rec = over => _o9CRec('linearrepeat', _o9P('linearrepeat', Object.assign({}, base, over)), { W: W, H: H, bb: bb, paint: grey });
+    const nor = rec({}), add = rec({ blend: 1 }), scr = rec({ blend: 2 }), bAdd = rec({ blend: 1, order: 1 });
+    if (!(nor.draws.length === 4 && nor.draws.every(q => q.op === 'source-over' && q.depth === 0))) throw new Error('CONTROL: a plain Trail did not draw the layer and its three copies straight, source-over (' + JSON.stringify(nor.draws) + ')');
+    if (!(add.draws.length === 4 && add.draws[0].op === 'source-over' && add.draws[0].depth === 0 && add.draws.slice(1).every(q => q.op === 'lighter' && q.depth === 1))) bad.push('Add draws ' + JSON.stringify(add.draws) + ' — the layer source-over, then every copy lighter in its own save');
+    if (!(scr.draws.length === 4 && scr.draws[0].op === 'source-over' && scr.draws.slice(1).every(q => q.op === 'screen' && q.depth === 1))) bad.push('Screen draws ' + JSON.stringify(scr.draws) + ' — the layer source-over, then every copy screen in its own save');
+    if (!(bAdd.draws.length === 4 && bAdd.draws[3].op === 'source-over' && bAdd.draws[3].depth === 0 && bAdd.draws.slice(0, 3).every(q => q.op === 'lighter'))) bad.push('Behind with Add draws ' + JSON.stringify(bAdd.draws) + ' — the copies lighter first, the layer source-over last');
+    const px = over => _o9CFX('linearrepeat', _o9P('linearrepeat', Object.assign({}, base, over)), { W: W, H: H, bb: bb, paint: grey }).B;
+    const at = (d, x) => d[(60 * W + x) * 4];
+    const N = px({}), A = px({ blend: 1 }), S = px({ blend: 2 }), BA = px({ blend: 1, order: 1 });
+    [30, 50, 70, 90, 110].forEach(x => { if (at(N, x) !== 60) bad.push('CONTROL: Normal reads ' + at(N, x) + ' at x ' + x + ', not the grey 60'); });
+    const near = (what, got, want) => { if (Math.abs(got - want) > 1) bad.push(what + ' reads ' + got + ', not ' + want); };
+    near('Add where the layer and copy 1 overlap (x 50)', at(A, 50), 120); near('Add where copies 1 and 2 overlap (x 70)', at(A, 70), 120);
+    near('Add where the layer is alone (x 30)', at(A, 30), 60); near('Add where copy 3 is alone (x 110)', at(A, 110), 60);
+    near('Screen at x 50', at(S, 50), 106); near('Screen at x 70', at(S, 70), 106); near('Screen at x 30', at(S, 30), 60);
+    near('Behind with Add on the layer’s own pixels (x 50)', at(BA, 50), 60); near('Behind with Add where copies 1 and 2 overlap (x 70)', at(BA, 70), 120);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* COPY TINT on a red (200, 0, 0) block 40 x 30 at (20, 45) on a clear 200 x 120 plate, four copies at Spacing 100 (40 px apart, side by
+     side: copy 1 at x 60–100, 2 at 100–140, 3 at 140–180), Tint colour blue. Copy k of 3 takes Copy tint x k / 3 of the way to the tint,
+     so at 90 % they read (140, 0, 76.5), (80, 0, 153) and (20, 0, 229.5); the layer itself stays (200, 0, 0); outside the block nothing
+     is painted; at 100 % the furthest is pure blue. A half-clear block's copies keep their alpha (128). A keyed tint (0 → 100 over a
+     second) at 0.5 s is 50 %, and under Behind the layer still sits on top, red. CONTROL: at 0 % every copy is the red block. */
+  test('966 opts9 Trail Copy tint: at 90 % blue the three copies of a red block go 30 %, 60 % and 90 % of the way to blue — (140, 0, 77), (80, 0, 153), (20, 0, 230) — the layer itself stays red, the copies keep its shape and its alpha, 100 % makes the furthest pure blue, and a keyed tint draws its value (CONTROL: at 0 % every copy is the red)', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('linearrepeat', ['tint', 'color'], ['_trailTint966']);
+    const bad = [], W = 200, H = 120, bb = { x: 20, y: 45, w: 40, h: 30 };
+    const red = g => { g.fillStyle = 'rgb(200,0,0)'; g.fillRect(20, 45, 40, 30); };
+    const base = { count: 4, spacing: 100, angle: 0, color: '#0000ff' };
+    const run = (over, paint, t) => _o9CFX('linearrepeat', _o9P('linearrepeat', Object.assign({}, base, over)), { W: W, H: H, bb: bb, paint: paint || red, t: t }).B;
+    const px = (d, x, y) => _o9At(d, W, x, y == null ? 60 : y);
+    const zero = run({ tint: 0 });
+    [40, 80, 120, 160].forEach(x => { if (px(zero, x).join() !== '200,0,0,255') throw new Error('CONTROL: at Copy tint 0 the trail at x ' + x + ' reads (' + px(zero, x).join(', ') + '), not the red block'); });
+    const want = (what, got, w) => { if (got.some((v, i) => Math.abs(v - w[i]) > 2)) bad.push(what + ' reads (' + got.join(', ') + '), not (' + w.join(', ') + ')'); };
+    const t90 = run({ tint: 90 });
+    want('the layer itself (x 40) at 90 %', px(t90, 40), [200, 0, 0, 255]);
+    want('copy 1 (x 80) at 90 %', px(t90, 80), [140, 0, 76.5, 255]);
+    want('copy 2 (x 120) at 90 %', px(t90, 120), [80, 0, 153, 255]);
+    want('copy 3 (x 160) at 90 %', px(t90, 160), [20, 0, 229.5, 255]);
+    if (px(t90, 80, 30)[3] !== 0 || px(t90, 120, 90)[3] !== 0) bad.push('a tinted copy paints outside the block’s shape');
+    want('copy 3 at 100 %', px(run({ tint: 100 }), 160), [0, 0, 255, 255]);
+    const halfA = g => { g.fillStyle = 'rgba(200,0,0,0.5)'; g.fillRect(20, 45, 40, 30); };
+    const ha = run({ tint: 90 }, halfA);
+    if (Math.abs(px(ha, 120)[3] - 128) > 2) bad.push('a half-clear copy has alpha ' + px(ha, 120)[3] + ' under the tint, not about 128 — the tint is painting the clear part');
+    const keyed = run({ tint: _o9KF(0, 100) }, null, 0.5), at50 = run({ tint: 50 }, null, 0.5);
+    if (E1.maxDiff(keyed, at50) !== 0) bad.push('Copy tint keyed 0 → 100 over a second draws, at 0.5 s, up to ' + E1.maxDiff(keyed, at50) + ' levels away from 50 %');
+    const bh = run({ tint: 90, order: 1 });
+    want('under Behind the layer itself (x 40)', px(bh, 40), [200, 0, 0, 255]); want('under Behind copy 2 (x 120)', px(bh, 120), [80, 0, 153, 255]);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts9 Trail at Normal and Copy tint 0 % makes the old calls, call for call, and draws byte for byte what it drew without them — faded, grown and turned, behind, many copies close together, on a slant (CONTROL: Add and a 50 % tint each move the picture on the default settings)', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('linearrepeat', _O9_NEW.linearrepeat, ['_trailTint966']);
+    const bad = [], o = { W: 160, H: 120, bb: { x: 20, y: 45, w: 40, h: 30 }, paint: g => { g.fillStyle = '#ff6020'; g.fillRect(20, 45, 40, 30); } };
+    [{}, { fade: 50 }, { scale: 80, rotate: 10 }, { order: 1 }, { count: 12, spacing: 20 }, { angle: 135 }].forEach(over => {
+      const P = _o9P('linearrepeat', over), Q = _o9Del(P, _O9_NEW.linearrepeat);
+      const a = _o9CRec('linearrepeat', P, o).log, b = _o9CRec('linearrepeat', Q, o).log;
+      if (a.length < 2) bad.push('CONTROL: ' + JSON.stringify(over) + ' made only ' + a.length + ' calls');
+      if (a.join('\n') !== b.join('\n')) bad.push(JSON.stringify(over) + ': a new one makes other calls than the same one without Blend, Copy tint and its colour');
+      const m = E1.maxDiff(_o9CFX('linearrepeat', P, o).B, _o9CFX('linearrepeat', Q, o).B);
+      if (m !== 0) bad.push(JSON.stringify(over) + ': up to ' + m + ' levels away from the same one without the new keys');
+    });
+    const base = _o9CFX('linearrepeat', _o9P('linearrepeat'), o).B;
+    let n;
+    if ((n = E1.count(base, _o9CFX('linearrepeat', _o9P('linearrepeat', { blend: 1 }), o).B, 2)) < 100) bad.push('CONTROL: Add moves only ' + n + ' pixels');
+    if ((n = E1.count(base, _o9CFX('linearrepeat', _o9P('linearrepeat', { tint: 50 }), o).B, 2)) < 100) bad.push('CONTROL: a 50 % tint moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Letter Spread: Spread speed ---- */
+  test('966 opts9 Letter Spread has Spread speed (−50 to 50 px/s, keyframable, 0 by default, needing a browser that can space letters, as Letter spacing does): a new one starts there, a saved one without it is filled with the same, and the load sanitiser keeps 12.5 and holds 80 at 50 and −90 at −50', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('textspacing', _O9_NEW.textspacing, ['_letterSpread966']);
+    const bad = _o9Rows('textspacing', [{ key: 'speed', label: 'Spread speed', min: -50, max: 50, unit: 'px/s', def: 0, needs: 'letter' }], { speed: 12.5 });
+    bad.push.apply(bad, _o9Clamp('textspacing', { speed: 80 }, { speed: 50 }));
+    bad.push.apply(bad, _o9Clamp('textspacing', { speed: -90 }, { speed: -50 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SPREAD SPEED at the text effect itself (TEXT_FX.textspacing, the state the painters read), Letter spacing 24: at 10 px a second the
+     spacing is 24 + 10 x the CLIP's own seconds — 44 two seconds in, whatever the timeline time (5 s for a clip that starts at 3 s) — and 24
+     at or before the clip's start. Closing at −10 px a second reads −6 after 3 s and stops at −20 (the slider's own floor) after 10 s; a
+     spacing already at −30 is never pulled back up by closing. Under Adds to layer the grown spacing is added to the layer's own (10 + 44).
+     The speed is held to ±50 (80 reads 50: 74 after a second), one that is not a number adds nothing; a keyed speed (0 → 20 over 2 s) is
+     integrated — 20 px after 2 s, 40 after 3 s. Word spacing and line height are untouched. And through FM.applyTextEffects, a clip that
+     starts at 1 s reads 24 + 20 x 2 = 64 at 3 s. */
+  test('966 opts9 Letter Spread Spread speed: at 10 px a second the spacing is 24 + 10 x the clip’s own seconds (44 after 2 s, whatever the timeline time), nothing before the clip starts, closing never past −20 px and never pulling a tighter spacing up, added to the layer’s own under Adds to layer, a keyed speed integrated, the speed held to ±50, word spacing and line height untouched — and through FM.applyTextEffects', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('textspacing', ['speed'], ['_letterSpread966']);
+    const T = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX && FM._FX_TABLES.TEXT_FX.textspacing;
+    if (typeof T !== 'function') throw new Error('TEXT_FX.textspacing is not reachable');
+    const bad = [];
+    const run = (p, t, lt, st0) => { const st = Object.assign({ text: 'Hello', letterSpacing: 0, wordSpacing: 0, lineHeight: 1.15 }, st0 || {}); T(st, p, t, { localT: lt, fps: 30 }); return st; };
+    const ls = (what, st, want, tol) => { if (!(Math.abs(st.letterSpacing - want) <= (tol || 1e-9))) bad.push(what + ': letter spacing ' + st.letterSpacing + ', not ' + want); };
+    const P = over => _o9P('textspacing', over);
+    ls('CONTROL: no speed, 2 s in', run(P({}), 2, 2), 24);
+    if (bad.length) throw new Error(bad[0] + ' — the effect is not the one reasoned here');
+    ls('10 px/s, 2 s in', run(P({ speed: 10 }), 2, 2), 44);
+    ls('10 px/s at the clip’s start', run(P({ speed: 10 }), 2, 0), 24);
+    ls('10 px/s before the clip starts', run(P({ speed: 10 }), 2, -1), 24);
+    ls('10 px/s, 2 s into a clip that starts at 3 s (timeline 5 s)', run(P({ speed: 10 }), 5, 2), 44);
+    ls('−10 px/s, 3 s in', run(P({ speed: -10 }), 3, 3), -6);
+    ls('−10 px/s, 10 s in (held at −20)', run(P({ speed: -10 }), 10, 10), -20);
+    ls('a spacing of −30 closing at −5 px/s', run(P({ spacing: -30, speed: -5 }), 2, 2), -30);
+    ls('Adds to layer: 10 on the layer, 10 px/s, 2 s in', run(P({ speed: 10, mode: 1 }), 2, 2, { letterSpacing: 10 }), 54);
+    ls('80 px/s (held at 50), 1 s in', run(P({ speed: 80 }), 1, 1), 74);
+    ls('a speed that is not a number', run(P({ speed: NaN }), 2, 2), 24);
+    ls('a speed keyed 0 → 20 over 2 s, 2 s in', run(P({ speed: _o9KF(0, 20, 2) }), 2, 2), 44, 0.01);
+    ls('the same keyed speed, 3 s in (20 a second after the last key)', run(P({ speed: _o9KF(0, 20, 2) }), 3, 3), 64, 0.01);
+    const w = run(P({ speed: 10, word: 15, line: 1.5 }), 2, 2);
+    if (w.wordSpacing !== 15 || Math.abs(w.lineHeight - 1.15 * 1.5) > 1e-9) bad.push('Spread speed moved the word spacing or the line height (' + JSON.stringify({ word: w.wordSpacing, line: w.lineHeight }) + ')');
+    if (FM._letterSpread966(10, 2, 2, 24) !== 44) bad.push('the seam reads ' + FM._letterSpread966(10, 2, 2, 24) + ' for 10 px/s after 2 s on 24, not 44');
+    const L = _o9Text({ type: 'textspacing', enabled: true, params: P({ speed: 20 }) }); L.start = 1;
+    const eff = FM.applyTextEffects(L, 'Hello', 0, 3, { project: { fps: 30 } });
+    if (!eff || Math.abs(eff.letterSpacing - 64) > 1e-9) bad.push('through FM.applyTextEffects a clip starting at 1 s reads letter spacing ' + (eff && eff.letterSpacing) + ' at 3 s, not 24 + 20 x 2 = 64');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* …and through the compositor: “Hello brave” at 22 px on a 480 x 120 frame. At Spread speed 0 a new Letter Spread draws byte for byte what
+     one without the key draws — replacing, adding to the layer's spacing, tight, with word spacing, at 1:1 and on a half-size plate. With
+     Letter spacing 0 and 10 px a second the line of text is wider at 0.5 s (5 px between letters) than with no speed, and wider again at
+     1.5 s (15 px) — about 10 gaps x 10 px more; with no speed its width holds (CONTROL). */
+  test('966 opts9 Letter Spread at Spread speed 0 draws byte for byte what it draws without it — replacing and adding, tight, with word spacing, at 1:1 and on a half-size plate — and at 10 px a second the line of text grows wider as the clip plays (CONTROL: with no speed it keeps its width)', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('textspacing', _O9_NEW.textspacing, ['_letterSpread966']);
+    const bad = [], W = 480, H = 120;
+    [{}, { mode: 1 }, { spacing: -10 }, { spacing: 60, word: 20 }].forEach(over => [null, 0.5].forEach(rs => {
+      const P = _o9P('textspacing', over);
+      const a = _o9shot([_o9Text({ type: 'textspacing', enabled: true, params: Object.assign({}, P) }, { x: 160 })], 1.73, W, H, rs);
+      const b = _o9shot([_o9Text({ type: 'textspacing', enabled: true, params: _o9Del(P, _O9_NEW.textspacing) }, { x: 160 })], 1.73, W, H, rs);
+      const m = E1.maxDiff(a, b); if (m !== 0) bad.push(JSON.stringify(over) + (rs ? ' on a half-size plate' : '') + ': up to ' + m + ' levels away from the same one without Spread speed');
+    }));
+    const ok = typeof FM.textSpacingOK === 'function' ? FM.textSpacingOK() : null;
+    if (ok && ok.letter === false) throw new Error('setup: this browser cannot space letters, so the spread cannot be seen here');
+    const span = d => { let lo = W, hi = -1; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4] > 128) { if (x < lo) lo = x; if (x > hi) hi = x; } return hi < lo ? 0 : hi - lo + 1; };
+    const shot = (speed, t) => _o9shot([_o9Text({ type: 'textspacing', enabled: true, params: _o9P('textspacing', { spacing: 0, speed: speed }) }, { x: 160 })], t, W, H);
+    const s0a = span(shot(0, 0.5)), s0b = span(shot(0, 1.5));
+    if (s0a < 40 || s0a !== s0b) throw new Error('CONTROL: with no speed the text spans ' + s0a + ' px at 0.5 s and ' + s0b + ' px at 1.5 s — it should be the same line of text');
+    const g1 = span(shot(10, 0.5)), g2 = span(shot(10, 1.5));
+    if (!(g1 > s0a + 35)) bad.push('at 10 px a second the text spans ' + g1 + ' px at 0.5 s against ' + s0a + ' with no speed — it has not spread' /* measured 18 Oct at 1280 and 380: 158 against 109 (+49; reasoned 10 gaps x 5 px) */);
+    if (!(g2 > g1 + 80)) bad.push('at 10 px a second the text spans ' + g1 + ' px at 0.5 s and ' + g2 + ' at 1.5 s — it is not spreading as the clip plays' /* measured 18 Oct at 1280 and 380: 258 against 158 (+100) */);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- CRT: Roll bar and Roll speed ---- */
+  test('966 opts9 CRT has Roll bar (0–1, keyframable, 0 by default) and Roll speed (−2 to 2 /s, keyframable, 0.25 by default, greyed while Roll bar is 0): a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 0.5 and −1, holds 3 at 1, 9 at 2 and −7 at −2, and Cell size is still its only px control', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('crt', _O9_NEW.crt, ['_crtRoll966', '_crtRollPhase966']);
+    const bad = _o9Rows('crt', [
+      { key: 'roll', label: 'Roll bar', min: 0, max: 1, unit: '', def: 0 },
+      { key: 'rollspeed', label: 'Roll speed', min: -2, max: 2, unit: '/s', def: 0.25, gate: ['roll', 'liveAbove', 0] }], { roll: 0.5, rollspeed: -1 });
+    bad.push.apply(bad, _o9Clamp('crt', { roll: 3, rollspeed: 9 }, { roll: 1, rollspeed: 2 }));
+    bad.push.apply(bad, _o9Clamp('crt', { rollspeed: -7 }, { rollspeed: -2 }));
+    const px = (FM._pxParamKeys('crt') || []).join();
+    if (px !== 'scale') bad.push('its px controls are [' + px + '], not [scale]');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ROLL BAR on a flat grey (200) 40 x 60 plate at Amount 0 — the scanlines, mask and vignette all scale with Amount, so at 0 the kernel's
+     loops leave the grey as it is and only the bar shows (CONTROL). The bar's middle is at H x (1 − phase), phase = Roll speed x t
+     screens, and it is a raised cosine H / 6 = 10 rows either side: at Roll bar 1 the two rows round its middle read 200 x (1 − 0.35 x (1 +
+     cos(π / 20))) = 60.9 → 61, nine and a half rows off 199.1 → 199, ten and a half and beyond 200. At 0.25 /s and 2 s (phase 0.5) the middle
+     is row 30: rows 29 and 30 read 61, rows 20 and 39 199, rows 19 and 40 and both edges 200; at 1 s it is row 45 (it has climbed 15 rows);
+     at 0 s it sits on the bottom edge and wraps — rows 59 and 0 read 61, rows 9 and 50 199; at −0.25 /s and 1 s it has rolled DOWN to row 15.
+     Roll bar 0.5 reads 130.4 → 130 at the middle; every row is one grey across. A keyed Roll speed (0 → 0.5 over 2 s) has climbed 0.5 by
+     2 s, as 0.25 /s has (the integral, ±1 for its float); the kernel holds Roll bar 5 to 1 and Roll speed 9 to 2. On a half-size plate
+     (20 x 30) the band keeps its share: rows 14 and 15 at 2 s, 200 x (1 − 0.35 x (1 + cos(π / 10))) = 63.4 → 63. After the whole CRT
+     (Amount 0.7, or a curved tube) the bar is exactly crtRoll966 laid over the screen the loops drew; and a Roll speed with no bar is the
+     old picture. */
+  test('966 opts9 CRT Roll bar: a soft dark band across the screen, darkest at its middle — 61 of 200 at Roll bar 1, 130 at 0.5 — that climbs Roll speed screens a second (row 45 at 1 s, row 30 at 2 s, wrapping at the edge), rolls down below 0, keyframes, holds its ranges, keeps its share on a half-size plate, lies over the whole CRT exactly, and does nothing while Roll bar is 0 (CONTROL: at Amount 0 the grey is untouched)', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('crt', ['roll', 'rollspeed'], ['_crtRoll966', '_crtRollPhase966']);
+    const bad = [];
+    const run = (over, t, W, H) => _o9PX('crt', _o9P('crt', Object.assign({ amount: 0 }, over)), W || 40, H || 60, _o9Flat(W || 40, H || 60, [200, 200, 200]), t);
+    const row = (d, y, W) => d[(y * (W || 40) + 5) * 4];
+    const want = (what, got, w) => { if (Math.abs(got - w) > 1) bad.push(what + ' reads ' + got + ', not ' + w); };
+    const plain = run({}, 2);
+    for (let y = 0; y < 60; y++) if (row(plain, y) !== 200) throw new Error('CONTROL: at Amount 0 with no bar row ' + y + ' reads ' + row(plain, y) + ', not the grey 200 — nothing below can be read');
+    const at2 = run({ roll: 1 }, 2);
+    want('row 29 at 2 s', row(at2, 29), 61); want('row 30 at 2 s', row(at2, 30), 61); want('row 20 at 2 s', row(at2, 20), 199); want('row 39 at 2 s', row(at2, 39), 199);
+    [19, 40, 0, 59].forEach(y => want('row ' + y + ' at 2 s', row(at2, y), 200));
+    const at1 = run({ roll: 1 }, 1);
+    want('row 44 at 1 s', row(at1, 44), 61); want('row 45 at 1 s', row(at1, 45), 61); want('row 30 at 1 s', row(at1, 30), 200);
+    const at0 = run({ roll: 1 }, 0);
+    want('row 59 at 0 s', row(at0, 59), 61); want('row 0 at 0 s (wrapped round)', row(at0, 0), 61); want('row 9 at 0 s', row(at0, 9), 199); want('row 10 at 0 s', row(at0, 10), 200);
+    want('row 50 at 0 s', row(at0, 50), 199); want('row 30 at 0 s', row(at0, 30), 200);
+    const down = run({ roll: 1, rollspeed: -0.25 }, 1);
+    want('rolling down, row 14 at 1 s', row(down, 14), 61); want('rolling down, row 15 at 1 s', row(down, 15), 61); want('rolling down, row 45 at 1 s', row(down, 45), 200);
+    want('Roll bar 0.5, row 30 at 2 s', row(run({ roll: 0.5 }, 2), 30), 130);
+    let uneven = 0;
+    for (let y = 0; y < 60; y++) for (let x = 0; x < 40; x++) { const i = (y * 40 + x) * 4; if (at2[i] !== at2[y * 160] || at2[i + 1] !== at2[i] || at2[i + 2] !== at2[i]) uneven++; }
+    if (uneven) bad.push(uneven + ' pixels of the bar are not their row’s one grey');
+    const keyed = run({ roll: 1, rollspeed: _o9KF(0, 0.5, 2) }, 2);
+    if (E1.maxDiff(keyed, at2) > 1) bad.push('Roll speed keyed 0 → 0.5 over 2 s draws, at 2 s, up to ' + E1.maxDiff(keyed, at2) + ' levels away from 0.25 /s (both have climbed half a screen)');
+    if (E1.maxDiff(run({ roll: 5 }, 2), at2) !== 0) bad.push('the kernel does not hold Roll bar 5 to 1');
+    if (E1.maxDiff(run({ roll: 1, rollspeed: 9 }, 0.7), run({ roll: 1, rollspeed: 2 }, 0.7)) !== 0) bad.push('the kernel does not hold Roll speed 9 to 2');
+    const hp = run({ roll: 1 }, 2, 20, 30);
+    want('on a half-size plate row 14 at 2 s', row(hp, 14, 20), 63); want('on a half-size plate row 15 at 2 s', row(hp, 15, 20), 63);
+    want('on a half-size plate row 9 at 2 s', row(hp, 9, 20), 200); want('on a half-size plate row 20 at 2 s', row(hp, 20, 20), 200);
+    [{}, { curve: 30 }].forEach(over => {
+      const a = _o9PX('crt', _o9P('crt', Object.assign({ roll: 0.8 }, over)), 96, 72, _o9Pic(96, 72), 1.3), b = _o9PX('crt', _o9P('crt', over), 96, 72, _o9Pic(96, 72), 1.3);
+      FM._crtRoll966(b, 96, 72, 0.8, FM._crtRollPhase966(0.25, 1.3));
+      if (E1.maxDiff(a, b) !== 0) bad.push(JSON.stringify(over) + ': with Roll bar 0.8 the CRT is up to ' + E1.maxDiff(a, b) + ' levels away from crtRoll966 laid over the screen without it');
+    });
+    if (E1.maxDiff(run({ rollspeed: 1.5 }, 1.3), run({}, 1.3)) !== 0) bad.push('a Roll speed with no bar changes the picture');
+    if (FM._crtRollPhase966(0.25, 2) !== 0.5 || FM._crtRollPhase966(null, 2) !== 0.5) bad.push('the phase seam reads ' + FM._crtRollPhase966(0.25, 2) + ' and ' + FM._crtRollPhase966(null, 2) + ' at 2 s, not half a screen');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts9 CRT at Roll bar 0 draws byte for byte what it draws without Roll bar and Roll speed — strong, coarse cells, a curved tube, the dot mask, bloom, flicker, a block on clear, a half-size plate, another moment (CONTROL: a Roll bar moves the picture, and so does its speed)', { item: '966', budgetMs: 60000 }, function () {
+    _o9Need('crt', _O9_NEW.crt, ['_crtRoll966']);
+    const bad = _o9Ident('crt', [{}, { over: { amount: 1, scale: 3 } }, { over: { curve: 40 } }, { over: { masktype: 2 } }, { over: { bloom: 0.5 } }, { over: { flicker: 0.6 } }, { pic: _o9Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    let n;
+    if ((n = _o9Moves('crt', { roll: 0.6 }, 96, 72, _o9Pic, 0.5)) < 500) bad.push('CONTROL: Roll bar 0.6 moves only ' + n + ' pixels');
+    const a = _o9PX('crt', _o9P('crt', { roll: 0.6 }), 96, 72, _o9Pic(96, 72), 0.5), b = _o9PX('crt', _o9P('crt', { roll: 0.6, rollspeed: 1 }), 96, 72, _o9Pic(96, 72), 0.5);
+    if ((n = E1.count(a, b, 0)) < 500) bad.push('CONTROL: Roll speed 1 against 0.25 moves the bar over only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- the panel ---- */
+  /* THE GATES, as the inspector draws them: each row greys out where it does nothing and wakes where it does — Glitter's Twinkle speed at
+     Twinkle 0 and its Colour under From the picture, Speed Lines' Ink under Rainbow, Trail's Tint colour while Copy tint is 0 (so a new
+     Trail starts with it greyed: there is no tint to colour), CRT's Roll speed while Roll bar is 0 (likewise). CONTROL: each editor shows the
+     row's label, so its state was read. */
+  test('966 opts9 the gates in the inspector: Glitter’s Twinkle speed greys out at Twinkle 0 and its Colour under From the picture, Speed Lines’ Ink under Rainbow, Trail’s Tint colour while Copy tint is 0 and CRT’s Roll speed while Roll bar is 0 — and each wakes again', { item: '966', budgetMs: 60000 }, async function () {
+    Object.keys(_O9_NEW).forEach(type => _o9Need(type, _O9_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    /* a greyed row whose own label is `label`, read from the row's own <label>: a colour or slider row starts with its ◆ keyframe button,
+       so "the row's text starts with the label" never matched it and every gate below read as live (measured 18 Oct — round eight's
+       Mosaic test had the same blind spot) */
+    const grey = (body, label) => Array.prototype.slice.call(body.querySelectorAll('.fx-overridden')).some(n => {
+      const own = n.querySelector(':scope > label');
+      return ((own || n).textContent || '').replace(/^\s*◆\s*/, '').trim().indexOf(label) === 0;
+    });
+    const CASES = [
+      ['glitter', 'Twinkle speed', false, { twinkle: 0 }, true],
+      ['glitter', 'Colour', false, { from: 1 }, true],
+      ['speedlines', 'Ink', false, { inkmode: 1 }, true],
+      ['linearrepeat', 'Tint colour', true, { tint: 40 }, false],
+      ['crt', 'Roll speed', true, { roll: 0.5 }, false]];
+    try {
+      for (const [type, label, ga, b, gb] of CASES) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type); fx._expanded = true; L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        let body = await _o9Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(label) < 0) { bad.push('CONTROL: the ' + type + ' editor has no “' + label + '”, so its gate was not measured'); continue; }
+        if (grey(body, label) !== ga) bad.push(type + ': on a new one “' + label + '” is ' + (ga ? 'not greyed out' : 'greyed out'));
+        Object.assign(fx.params, b); FM.inspector.refresh(); await sleep(60);
+        body = document.querySelector('.fx-row.fx-open .fx-ed-body') || await _o9Open(L);
+        if (!body) { bad.push(type + ': the editor closed after ' + JSON.stringify(b) + ', so nothing more was measured'); continue; }
+        if (grey(body, label) !== gb) bad.push(type + ': with ' + JSON.stringify(b) + ' “' + label + '” is ' + (gb ? 'still live' : 'still greyed out'));
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT A PHONE (the earlier rounds' check, for these six). ship.sh runs the suite a second time at 380 px, so this is a phone
+     check on every release. Each editor, opened in the inspector on the kind of layer it is for, scrolls nothing sideways and keeps every
+     control inside the panel. CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
+  test('966 opts9 the six effects’ editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    Object.keys(_O9_NEW).forEach(type => _o9Need(type, _O9_NEW[type]));
+    const NEW = { glitter: 'Star colour', replacecolor: 'Show selection', speedlines: 'Line colours', linearrepeat: 'Copy tint', textspacing: 'Spread speed', crt: 'Roll bar' };
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = _O9_TEXT[type] ? FM.makeLayer('text', { text: 'Hello world', x: 60, y: 45, fontSize: 24, fill: '#ffffff', start: 0, duration: 5 })
+          : FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o9Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts9 ──
 
 })();

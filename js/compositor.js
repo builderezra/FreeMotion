@@ -409,6 +409,13 @@ window.FM = window.FM || {};
       { key: 'masktype', label: 'Mask type', def: 0, options: [[0, 'Stripes'], [1, 'Slot'], [2, 'Dots']] },
       { key: 'bloom', label: 'Bloom', min: 0, max: 1, step: 0.02, def: 0 },
       { key: 'flicker', label: 'Flicker', min: 0, max: 1, step: 0.02, def: 0 },
+      /* #966 opts9 (hunt/966-opts9, his "more choices always better"): the screen never showed the one thing everybody knows from a TV
+         filmed on a camera — the dark band that rolls slowly up the picture. ROLL BAR lays that soft band across the screen (its middle
+         darkened to 1 − 0.7 x Roll bar, a raised cosine a third of the screen tall, wrapping round top to bottom); ROLL SPEED is how
+         many screens a second it climbs (below 0 it rolls down; a keyframed speed is integrated, so slowing it holds the band where it
+         got to), and greys out while there is no bar to move. 0 runs the kernel's loops untouched (crtRoll966 is a pass after them). */
+      { key: 'roll', label: 'Roll bar', min: 0, max: 1, step: 0.02, def: 0, note: 'The dark band that rolls up a TV filmed on a camera' },
+      { key: 'rollspeed', label: 'Roll speed', min: -2, max: 2, step: 0.05, def: 0.25, unit: '/s', overriddenBy: 'roll', liveAbove: 0, note: 'Screens a second the bar climbs · below 0 it rolls down · it needs a Roll bar above 0' },
     ] },
     // ---- batch 6 ----
     { type: 'boxblur', label: 'Box Blur', params: [
@@ -1033,7 +1040,13 @@ window.FM = window.FM || {};
       { key: 'rotate', label: 'Copy turn', min: -45, max: 45, step: 1, def: 0, unit: '°', note: 'Each copy turned this much more' },
       { key: 'order', label: 'Copies', def: 0, options: [[0, 'In front'], [1, 'Behind']] },
       { key: 'delay', label: 'Time offset', min: -1, max: 1, step: 0.05, def: 0, unit: 's', note: 'Per copy. Below 0 the copies trail where it was' },
-    ] },
+      /* #966 opts9 (hunt/966-opts9, his "more choices always better"): every copy was the layer itself, painted normally. BLEND Add and
+         Screen lay each copy on as light, so where copies cross they glow (Scatter Array's Blend, for the trail); COPY TINT fades the
+         copies into the Tint colour, a step more each copy — the furthest takes all of it — the coloured motion trail of a title
+         (Time Echo's Tint, for Trail). The layer itself is always drawn as it is. Normal and 0 % run the old loop untouched. */
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Add'], [2, 'Screen']], note: 'Add and Screen lay each copy on as light, so crossing copies glow' },
+      { key: 'tint', label: 'Copy tint', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'The copies fade into the Tint colour, the furthest the most · the Tint colour row wakes above 0' },
+    ], color: true, defColor: '#3dc8ff', colorLabel: 'Tint colour', colorGate: { by: 'tint', deadAt: 0, deadAtText: '0%' } },
     // ---- Scatter Array (queue 484: AM's Scatter Repeat, our name) — copies that are NOT on a grid ----
     { type: 'scatterarray', label: 'Scatter Array', params: [
       { key: 'count', label: 'Copies', min: 1, max: 24, step: 1, def: 8 },
@@ -1333,6 +1346,12 @@ window.FM = window.FM || {};
       { key: 'word', label: 'Word spacing', min: -40, max: 200, step: 1, def: 0, unit: 'px', needs: 'word' },
       { key: 'line', label: 'Line height', min: 0.25, max: 4, step: 0.05, def: 1, unit: '\u00d7' },
       { key: 'mode', label: 'Applies', def: 0, options: [[0, 'Replaces'], [1, 'Adds to layer']] },
+      /* #966 opts9 (hunt/966-opts9, his "more choices always better"): the spacing could only move if it was keyframed by hand. SPREAD
+         SPEED keeps the letters drifting apart on their own, that many px a second from the clip's start — the slow tracking-out of a
+         film title (below 0 they close up, never past the slider's own −20 px) — on the clip's own clock, a keyframed speed integrated
+         so slowing it holds the spacing it reached. Like Letter spacing it needs a browser that can space letters (FM.textSpacingOK).
+         0 adds nothing: the line is not reached (letterSpread966). */
+      { key: 'speed', label: 'Spread speed', min: -50, max: 50, step: 0.5, def: 0, unit: 'px/s', needs: 'letter', note: 'The letters keep spreading this many px a second from the clip’s start · below 0 they close up' },
     ] },
     /* #966 opts4: two more cases, each button spelled the way it writes — aLtErNaTiNg (lower, upper, lower… counting letters only, so a
        space or a digit does not break the beat: the mocking caption) and sWAP cASE (every letter flipped). The four cases before them
@@ -1669,6 +1688,13 @@ window.FM = window.FM || {};
       { key: 'tolerance', label: 'Tolerance', min: 0.02, max: 1, step: 0.02, def: 0.25 },
       { key: 'mode', label: 'Replaces', def: 0, options: [[0, 'Hue only'], [1, 'Hue + saturation'], [2, 'Full colour']] },
       { key: 'softness', label: 'Match width', min: 10, max: 300, step: 5, def: 100, unit: '%' },
+      /* #966 opts9 (hunt/966-opts9, his "more choices always better"): the swap was all or nothing, and there was no way to see which
+         pixels it had caught while Tolerance was being set. STRENGTH takes the matched colour only part of the way to the new one (50 %
+         is half way — a shirt nudged toward blue rather than dyed); SHOW SELECTION paints what the match catches, white = all of the
+         swap, black = none (HSL Bands' Show selection, for this effect), and shows in the export too. 100 % and Off run the old loop
+         untouched (replaceColour966 is it, with the two laid in). */
+      { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%', note: 'How far the matched colour goes toward the new one' },
+      { key: 'view', label: 'Show selection', def: 0, options: [[0, 'Off'], [1, 'On']], note: 'It shows in the export too — turn it off when done' },
     ] },
     /* #966 opts2: the rest of the picture could only go grey. DARKEN THE REST sinks it too, so the kept colour pops harder (the
        Sin City look); REST COLOUR drains it to that colour instead of grey — a black-to-colour-to-white ramp at each pixel's own
@@ -1993,7 +2019,7 @@ window.FM = window.FM || {};
     // Speed Lines — tapered ink strokes driving in from the edge toward a clear disc around the
     // subject. Radial Rays is a per-pixel cosine wash; this is drawn geometry, and the TAPER is
     // what makes it read as ink rather than as light.
-    { type: 'speedlines', label: 'Speed Lines', desc: 'Tapered manga impact lines driving in from the frame edge or laid side by side, with a clear space left around your subject.', params: [
+    { type: 'speedlines', label: 'Speed Lines', desc: 'Tapered manga impact lines driving in from the frame edge or laid side by side, with a clear space left around your subject. Ink opacity lets the picture show through; Line colours Rainbow runs them through the colours.', params: [
       { key: 'count', label: 'Lines', min: 4, max: 200, step: 1, def: 64 },
       /* #482 polish 2.5 (#966 "more customisation"). The lines could only drive in to a point, the clear zone was always a
          circle, and the ink was frozen apart from Spin. Style Parallel lays them side by side at Angle — the across-the-
@@ -2011,7 +2037,13 @@ window.FM = window.FM || {};
       { key: 'x', label: 'Focus X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Focus Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Add']], def: 0 },
-    ], color: true, defColor: '#0d0d12', colorLabel: 'Ink' },
+      /* #966 opts9 (hunt/966-opts9, his "more choices always better"): the ink was always solid and always one colour. INK OPACITY lets
+         the picture show through the lines (a light touch of speed over a face rather than a panel of black); LINE COLOURS Rainbow runs
+         each line through the colours — round the fan for Radial, across the panel for Parallel — the bright anime burst, and the Ink
+         row greys out there. 100 % and Ink run the old lines untouched (the fill and the composite are the very calls they were). */
+      { key: 'opacity', label: 'Ink opacity', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'inkmode', label: 'Line colours', def: 0, options: [[0, 'Ink'], [1, 'Rainbow']], note: 'Rainbow runs the lines through the colours, round the fan or across the panel' },
+    ], color: true, defColor: '#0d0d12', colorLabel: 'Ink', colorGate: { by: 'inkmode', when: 0 } },
     // Snow & Rain (queue 911, his pick) — full-frame weather over the clip. Particles emits from one point;
     // this fills the frame. Flake count is independent of plate size, so the phone preview and the export
     // show the same weather; sizes scale with the plate.
@@ -3591,8 +3623,12 @@ window.FM = window.FM || {};
         return side === 1 ? ln + pad : pad + ln;
       }).join('\n');
     },
-    textspacing: function (st, p, t) {
+    textspacing: function (st, p, t, info) {
       var sp = fparam(p, 'spacing', 24, t);
+      /* #966 opts9: SPREAD SPEED — the spacing grows by that many px a second of the clip's own clock (a keyframed speed integrated),
+         never closing past −20 px (letterSpread966). 0 — and every saved Letter Spread, which has no key — never reaches the line. */
+      var sps = p.speed == null ? 0 : p.speed;
+      if (sps !== 0) sp = letterSpread966(sps, t, (info && info.localT != null) ? info.localT : t, sp);
       // It always OVERRODE the layer's own spacing, so an effect meant to nudge tracking silently threw
       // away whatever the layer was already set to — and stacking two of them, or animating one on a
       // layer that already had spacing, could not do the obvious thing. Absolute stays the default so
@@ -8993,7 +9029,10 @@ window.FM = window.FM || {};
       let curve = p.curve == null ? 0 : FM.evalProp(p.curve, t); curve = !(curve > 0) ? 0 : (curve > 100 ? 100 : curve);
       const masktype = p.masktype == null ? 0 : (Math.round(FM.evalProp(p.masktype, t)) | 0);
       const bloom = clamp01(p.bloom == null ? 0 : FM.evalProp(p.bloom, t)), flicker = clamp01(p.flicker == null ? 0 : FM.evalProp(p.flicker, t));
-      if (curve > 0 || masktype !== 0 || bloom > 0 || flicker > 0) { crt13(d, W, H, t, amt, sc, sl, mk, vgS, curve, masktype, bloom, flicker); return; }
+      /* #966 opts9: ROLL BAR and ROLL SPEED — a pass after either loop (crtRoll966), so the screen under the bar is exactly the screen
+         the loops drew. 0 (and below, and NaN) never reaches it. */
+      let roll = p.roll == null ? 0 : FM.evalProp(p.roll, t); roll = roll > 0 ? (roll < 1 ? roll : 1) : 0;
+      if (curve > 0 || masktype !== 0 || bloom > 0 || flicker > 0) { crt13(d, W, H, t, amt, sc, sl, mk, vgS, curve, masktype, bloom, flicker); if (roll > 0) crtRoll966(d, W, H, roll, crtRollPhase966(p.rollspeed, t)); return; }
       const one = sc === 1;
       for (let y = 0; y < H; y++) {
         const gy = one ? y : Math.floor(y / sc);
@@ -9006,6 +9045,7 @@ window.FM = window.FM || {};
           d[i] *= kr * vg; d[i + 1] *= kg * vg; d[i + 2] *= kb * vg;
         }
       }
+      if (roll > 0) crtRoll966(d, W, H, roll, crtRollPhase966(p.rollspeed, t));   // #966 opts9: the Roll bar, over the screen above
     },
     // ---- batch 6 ----
     /* ⚠️ `bb` IS READ OFF `arguments`, DELIBERATELY, AND MUST STAY THAT WAY. The dispatcher hands the
@@ -11631,7 +11671,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var rcMode=p.mode==null?0:(Math.round(FM.evalProp(p.mode,t))|0);
       var rcTmx=Math.max(rcT[0],rcT[1],rcT[2])/255, rcTmn=Math.min(rcT[0],rcT[1],rcT[2])/255;
       var rcTV=rcTmx, rcTS=rcTmx===0?0:(rcTmx-rcTmn)/rcTmx;
-      var rcFV=Math.max(rcF[0],rcF[1],rcF[2])/255; if(rcFV<=0)rcFV=1; for(var rci=0;rci<d.length;rci+=4){ if(d[rci+3]===0)continue; var rcR=d[rci], rcG=d[rci+1], rcB=d[rci+2]; var rcMx=Math.max(rcR,rcG,rcB), rcMn=Math.min(rcR,rcG,rcB), rcDf=rcMx-rcMn; if(rcDf<8)continue; var rcH; if(rcMx===rcR)rcH=((rcG-rcB)/rcDf)%6; else if(rcMx===rcG)rcH=(rcB-rcR)/rcDf+2; else rcH=(rcR-rcG)/rcDf+4; rcH*=60; if(rcH<0)rcH+=360; var rcD=Math.abs(rcH-rcFH); if(rcD>180)rcD=360-rcD; if(rcD>rcWin)continue; var rcW2=1-rcD/rcWin; var rcNH=(rcH+rcSh)%360; if(rcNH<0)rcNH+=360; var rcV=rcMx/255, rcS=rcMx===0?0:rcDf/rcMx; if(rcMode>0){ rcS=rcTS; if(rcMode>1){ rcV=rcTV*(rcV/rcFV); if(rcV>1)rcV=1; } } var rcC=rcV*rcS, rcX=rcC*(1-Math.abs((rcNH/60)%2-1)), rcM=rcV-rcC, rcNr, rcNg, rcNb; if(rcNH<60){rcNr=rcC;rcNg=rcX;rcNb=0;} else if(rcNH<120){rcNr=rcX;rcNg=rcC;rcNb=0;} else if(rcNH<180){rcNr=0;rcNg=rcC;rcNb=rcX;} else if(rcNH<240){rcNr=0;rcNg=rcX;rcNb=rcC;} else if(rcNH<300){rcNr=rcX;rcNg=0;rcNb=rcC;} else {rcNr=rcC;rcNg=0;rcNb=rcX;} rcNr=(rcNr+rcM)*255; rcNg=(rcNg+rcM)*255; rcNb=(rcNb+rcM)*255; d[rci]=rcR+(rcNr-rcR)*rcW2; d[rci+1]=rcG+(rcNg-rcG)*rcW2; d[rci+2]=rcB+(rcNb-rcB)*rcW2; } },
+      /* #966 opts9: STRENGTH (100 % the whole swap; NaN reads 100) and SHOW SELECTION go through replaceColour966, the loop below to the
+         bit with the two laid in. 100 % and Off run the loop below untouched. */
+      var rcSt=p.strength==null?100:+FM.evalProp(p.strength,t); if(!isFinite(rcSt))rcSt=100; if(rcSt<0)rcSt=0; if(rcSt>100)rcSt=100;
+      var rcView=p.view==null?0:(Math.round(FM.evalProp(p.view,t))|0);
+      var rcFV=Math.max(rcF[0],rcF[1],rcF[2])/255; if(rcFV<=0)rcFV=1; if(rcSt!==100||rcView===1){ replaceColour966(d,rcFH,rcWin,rcSh,rcMode,rcTS,rcTV,rcFV,rcSt/100,rcView===1); return; } for(var rci=0;rci<d.length;rci+=4){ if(d[rci+3]===0)continue; var rcR=d[rci], rcG=d[rci+1], rcB=d[rci+2]; var rcMx=Math.max(rcR,rcG,rcB), rcMn=Math.min(rcR,rcG,rcB), rcDf=rcMx-rcMn; if(rcDf<8)continue; var rcH; if(rcMx===rcR)rcH=((rcG-rcB)/rcDf)%6; else if(rcMx===rcG)rcH=(rcB-rcR)/rcDf+2; else rcH=(rcR-rcG)/rcDf+4; rcH*=60; if(rcH<0)rcH+=360; var rcD=Math.abs(rcH-rcFH); if(rcD>180)rcD=360-rcD; if(rcD>rcWin)continue; var rcW2=1-rcD/rcWin; var rcNH=(rcH+rcSh)%360; if(rcNH<0)rcNH+=360; var rcV=rcMx/255, rcS=rcMx===0?0:rcDf/rcMx; if(rcMode>0){ rcS=rcTS; if(rcMode>1){ rcV=rcTV*(rcV/rcFV); if(rcV>1)rcV=1; } } var rcC=rcV*rcS, rcX=rcC*(1-Math.abs((rcNH/60)%2-1)), rcM=rcV-rcC, rcNr, rcNg, rcNb; if(rcNH<60){rcNr=rcC;rcNg=rcX;rcNb=0;} else if(rcNH<120){rcNr=rcX;rcNg=rcC;rcNb=0;} else if(rcNH<180){rcNr=0;rcNg=rcC;rcNb=rcX;} else if(rcNH<240){rcNr=0;rcNg=rcX;rcNb=rcC;} else if(rcNH<300){rcNr=rcX;rcNg=0;rcNb=rcC;} else {rcNr=rcC;rcNg=0;rcNb=rcX;} rcNr=(rcNr+rcM)*255; rcNg=(rcNg+rcM)*255; rcNb=(rcNb+rcM)*255; d[rci]=rcR+(rcNr-rcR)*rcW2; d[rci+1]=rcG+(rcNg-rcG)*rcW2; d[rci+2]=rcB+(rcNb-rcB)*rcW2; } },
     // Spot Color: keep the chosen hue, desaturate everything else (sin-city look). Soft quadratic edge
     // inside the tolerance window so the kept colour doesn't cut out harshly.
     spotcolor: function(d,W,H,p,t){
@@ -13304,6 +13348,103 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     B.closePath();
   }
   FM._cornerPath966 = cornerPath966;   // suite seam (#966 opts8)
+  /* ═══ #966 opts9 (hunt/966-opts9): helpers behind the ninth round — CRT's Roll bar and Roll speed, Replace Colour's Strength and Show
+   * selection, Speed Lines' Rainbow, Glitter's Star colour From the picture, Trail's Copy tint, Letter Spread's Spread speed. (Speed
+   * Lines' Ink opacity, Glitter's Twinkle and Pattern and Trail's Blend are inline.) Each runs only off its control's default, so a
+   * default kernel never calls one. ═══ */
+  /* CRT'S ROLL BAR: a soft dark band across the screen, a raised cosine a third of the screen tall (H / 6 either side of its middle),
+     its middle multiplied by 1 − 0.7 x Roll bar. `phase` is how many screens it has climbed: at 0 its middle sits on the bottom edge
+     (half of it wrapped round to the top), at 0.5 across the middle; it wraps, so it never runs out. Rows are measured at their centres
+     as a share of H, so a reduced plate puts the band where the export does. */
+  function crtRoll966(d, W, H, roll, phase) {
+    let f = phase - Math.floor(phase); if (!(f >= 0 && f < 1)) f = 0;
+    const cy = H * (1 - f), hb = H / 6, k = 0.7 * (roll > 1 ? 1 : roll), W4 = W * 4;
+    for (let y = 0; y < H; y++) {
+      let dy = (y + 0.5) - cy;
+      dy -= H * Math.round(dy / H);
+      if (!(dy > -hb && dy < hb)) continue;
+      const m = 1 - k * 0.5 * (1 + Math.cos(Math.PI * dy / hb)), row = y * W4;
+      for (let x = 0; x < W; x++) { const i = row + x * 4; d[i] *= m; d[i + 1] *= m; d[i + 2] *= m; }
+    }
+  }
+  FM._crtRoll966 = crtRoll966;   // suite seam (#966 opts9)
+  /* …and how far it has climbed by t: Roll speed x t, or its integral from 0 when keyframed (as the pattern scrolls are), the speed held
+     to ±2 screens a second; NaN — and an absent key — reads the row's default 0.25. */
+  function crtRollPhase966(v, t) {
+    const cl = s => (isFinite(s) ? (s < -2 ? -2 : (s > 2 ? 2 : s)) : 0.25);
+    if (v == null) return 0.25 * t;
+    const o = FM.isAnimated(v) ? FM.integrateProp(v, 0, t, u => cl(+FM.evalProp(v, u))) : cl(+FM.evalProp(v, t)) * t;
+    return isFinite(o) ? o : 0;
+  }
+  FM._crtRollPhase966 = crtRollPhase966;   // suite seam (#966 opts9)
+  /* REPLACE COLOUR'S STRENGTH AND SHOW SELECTION: the kernel's loop to the letter (the same grey skip, hue, window, weight, new hue and
+     the three modes' saturation and value), with the weight taken Strength of the way — st = 1 multiplies by one, which is exact — and,
+     under Show selection, the weight painted as a grey instead of the swap: white where all of it lands, black where none does (a pixel
+     the match skips, a grey or one outside the window, is black too). The alpha is never touched; a clear pixel is left as it is. */
+  function replaceColour966(d, FH, win, sh, mode, TS, TV, FV, st, view) {
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const R = d[i], G = d[i + 1], B = d[i + 2];
+      const mx = Math.max(R, G, B), mn = Math.min(R, G, B), df = mx - mn;
+      if (df < 8) { if (view) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; } continue; }
+      let h;
+      if (mx === R) h = ((G - B) / df) % 6; else if (mx === G) h = (B - R) / df + 2; else h = (R - G) / df + 4;
+      h *= 60; if (h < 0) h += 360;
+      let dd = Math.abs(h - FH); if (dd > 180) dd = 360 - dd;
+      if (dd > win) { if (view) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; } continue; }
+      const w2 = (1 - dd / win) * st;
+      if (view) { const g = w2 * 255; d[i] = g; d[i + 1] = g; d[i + 2] = g; continue; }
+      let NH = (h + sh) % 360; if (NH < 0) NH += 360;
+      let V = mx / 255, S = mx === 0 ? 0 : df / mx;
+      if (mode > 0) { S = TS; if (mode > 1) { V = TV * (V / FV); if (V > 1) V = 1; } }
+      const C = V * S, X = C * (1 - Math.abs((NH / 60) % 2 - 1)), M = V - C;
+      let nr, ng, nb;
+      if (NH < 60) { nr = C; ng = X; nb = 0; } else if (NH < 120) { nr = X; ng = C; nb = 0; } else if (NH < 180) { nr = 0; ng = C; nb = X; }
+      else if (NH < 240) { nr = 0; ng = X; nb = C; } else if (NH < 300) { nr = X; ng = 0; nb = C; } else { nr = C; ng = 0; nb = X; }
+      nr = (nr + M) * 255; ng = (ng + M) * 255; nb = (nb + M) * 255;
+      d[i] = R + (nr - R) * w2; d[i + 1] = G + (ng - G) * w2; d[i + 2] = B + (nb - B) * w2;
+    }
+  }
+  FM._replaceColour966 = replaceColour966;   // suite seam (#966 opts9)
+  /* SPEED LINES' RAINBOW: line i of n takes the hue i / n of the way round the wheel, at full saturation and 55 % lightness — so the radial
+     fan turns through every colour once as it goes round, and the parallel panel once across. */
+  function slHue966(i, n) { return 'hsl(' + ((i / (n > 0 ? n : 1)) * 360).toFixed(2) + ',100%,55%)'; }
+  FM._slHue966 = slHue966;   // suite seam (#966 opts9)
+  /* GLITTER'S STAR COLOUR FROM THE PICTURE: the kernel's `col`, in the colour of the pixel the star sits on. */
+  function glitterCol966(r, g, b) { return a => 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')'; }
+  /* TRAIL'S COPY TINT: the copy's own plate on a scratch plate of the same size, the Tint colour laid over what it covers at `a`
+     (source-atop: the copy's alpha is untouched, each colour moved `a` of the way to the tint). The kernel draws it at once, before the
+     next copy asks for the scratch again. */
+  let _trTint966 = null;
+  function trailTint966(cv, rgb, a) {
+    if (!(a > 0)) return cv;
+    if (!_trTint966) _trTint966 = document.createElement('canvas');
+    const T = _trTint966, w = cv.width, h = cv.height;
+    if (T.width !== w || T.height !== h) { T.width = w; T.height = h; }
+    const g = T.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.filter = 'none';
+    g.clearRect(0, 0, w, h); g.drawImage(cv, 0, 0);
+    g.globalCompositeOperation = 'source-atop'; g.globalAlpha = a > 1 ? 1 : a;
+    g.fillStyle = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')'; g.fillRect(0, 0, w, h);
+    g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+    return T;
+  }
+  FM._trailTint966 = trailTint966;   // suite seam (#966 opts9)
+  /* LETTER SPREAD'S SPREAD SPEED: the letter spacing `sp` grown by speed x the clip's own seconds `lt`, or the speed's integral over them
+     when keyframed (on the project's clock, where the keys are stored), the speed held to ±50 px a second (NaN adds nothing). Closing
+     never takes it past −20 px, the Letter spacing slider's own floor (a spacing already below that is left where it is), and growing
+     stops at +4000 px. No growth — before the clip starts, or a speed of 0 all the way — hands `sp` back untouched. */
+  function letterSpread966(v, t, lt, sp) {
+    if (!(lt > 0)) return sp;
+    const cl = s => (isFinite(s) ? (s < -50 ? -50 : (s > 50 ? 50 : s)) : 0);
+    let o = FM.isAnimated(v) ? FM.integrateProp(v, t - lt, t, u => cl(+FM.evalProp(v, u))) : cl(+FM.evalProp(v, t)) * lt;
+    if (!isFinite(o) || o === 0) return sp;
+    if (o > 4000) o = 4000;
+    let r = sp + o;
+    if (o < 0 && r < -20) r = Math.min(sp, -20);
+    return r;
+  }
+  FM._letterSpread966 = letterSpread966;   // suite seam (#966 opts9)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -17743,6 +17884,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const cy = H * (p.y == null ? 50 : FM.evalProp(p.y, t)) / 100;
       const add = Math.round(FM.evalProp(p.blend, t) || 0) === 1;
       const rgb = hexToRGB(p.color || '#0d0d12');
+      /* #966 opts9: INK OPACITY (100 % solid ink; NaN reads 100) and LINE COLOURS Rainbow (each line its own hue, slHue966). At 100 % and
+         Ink neither is read again: the fill below is the one Ink fill and the composite at the end sets no alpha. */
+      let slOp = p.opacity == null ? 100 : +FM.evalProp(p.opacity, t); if (!isFinite(slOp)) slOp = 100; slOp = slOp < 0 ? 0 : (slOp > 100 ? 100 : slOp);
+      const slRain = Math.round(p.inkmode == null ? 0 : FM.evalProp(p.inkmode, t)) === 1;
       const hash0 = function (n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15); return (n >>> 0) / 4294967296; };
       /* BOIL (#482 polish 2.5): the lines are redrawn `boil` times a second — a hand-drawn panel's shimmer. The redraw number
          salts every hash, so it is a pure function of the layer's own clock and the preview, the export and a scrub agree. A
@@ -17797,6 +17942,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (len < 1) continue;
           const hw = wid * (0.35 + 0.85 * h2) * 0.5;
           const bx = cx + ux * ub + vx * v, by = cy + uy * ub + vy * v;
+          if (slRain) B2.fillStyle = slHue966(i, count);   // #966 opts9: Rainbow, across the panel
           B2.beginPath();
           B2.moveTo(bx + vx * hw, by + vy * hw);
           B2.lineTo(bx - vx * hw, by - vy * hw);
@@ -17816,6 +17962,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (base - tip < 1) continue;
           const hw = wid * (0.35 + 0.85 * h2) * 0.5;
           const nx = -sa * hw, ny = ca * hw;
+          if (slRain) B2.fillStyle = slHue966(i, count);   // #966 opts9: Rainbow, round the fan
           B2.beginPath();
           B2.moveTo(cx + ca * base + nx, cy + sa * base + ny);
           B2.lineTo(cx + ca * base - nx, cy + sa * base - ny);
@@ -17847,6 +17994,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.drawImage(A, 0, 0);                          // the picture...
       B.save();
       if (add) B.globalCompositeOperation = 'lighter';
+      if (slOp !== 100) B.globalAlpha = slOp / 100;  // #966 opts9: Ink opacity
       B.drawImage(_slC, 0, 0);                       // ...then the ink over it
       B.restore();
     },
@@ -18752,6 +18900,33 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          past its start or end. The plate is drawn before the next is asked for, so one pooled plate serves them all. */
       const life0 = (layer && layer.start) || 0, life1 = life0 + Math.max(0, (layer && layer.duration) || 0);
       const at = k => { let t2 = t + k * delay; if (life1 > life0) t2 = Math.max(life0, Math.min(life1 - 1e-3, t2)); return expand.at(t2); };
+      /* #966 opts9: BLEND (each copy laid on as light) and COPY TINT (copy k of the n − 1 faded into the Tint colour by Copy tint x k /
+         (n − 1), so the furthest takes all of it) — the loop below, copy for copy, with each copy tinted on a scratch plate of its own
+         (trailTint966) and drawn inside its own save at that compositing. Normal and 0 % never come here: the old loop runs. */
+      const trBl = Math.round(fparam(p, 'blend', 0, t)), trOp = trBl === 1 ? 'lighter' : (trBl === 2 ? 'screen' : null);
+      let trTn = fparam(p, 'tint', 0, t); trTn = trTn > 0 ? (trTn < 100 ? trTn : 100) / 100 : 0;
+      if (trOp || trTn > 0) {
+        const tc = trTn > 0 ? hexToRGB(p.color || '#3dc8ff') : null;
+        for (const q of (behind ? offs.slice().reverse() : offs)) {
+          let cv = timed ? at(q[3]) : src.cv;
+          if (tc) cv = trailTint966(cv, tc, trTn * q[3] / (n - 1));
+          B.save();
+          if (trOp) B.globalCompositeOperation = trOp;
+          if (fade) B.globalAlpha = q[2];
+          if (!shaped) B.drawImage(cv, q[0] + src.x, q[1] + src.y);
+          else {
+            const s = Math.pow(sizeStep, q[3]);
+            B.translate(tcx + q[0], tcy + q[1]);
+            if (turnStep) B.rotate(q[3] * turnStep);
+            if (s !== 1) B.scale(s, s);
+            B.translate(-tcx, -tcy);
+            B.drawImage(cv, src.x, src.y);
+          }
+          B.restore();
+        }
+        if (behind) B.drawImage(A, 0, 0);                             // under Behind the original goes on top
+        return;
+      }
       for (const q of (behind ? offs.slice().reverse() : offs)) {
         const cv = timed ? at(q[3]) : src.cv;
         if (!shaped) {
@@ -23092,13 +23267,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'detail', label: 'Detail', min: 0, max: 1, step: 0.02, def: 0 },
       { key: 'punch', label: 'Richer colour', min: 0, max: 1, step: 0.02, def: 0.3 },
     ] },
-    { type: 'glitter', label: 'Glitter', desc: 'Little stars that twinkle on the bright parts of the picture. On a dark shot, lower the Brightness bar.', params: [
+    /* #966 opts9 (hunt/966-opts9, his "more choices always better"): every star twinkled all the way out and back, in the one chosen
+       colour, on the one lattice every Glitter shares. TWINKLE is how much each star fades — 0 keeps every star lit, a still glitter
+       texture (Twinkle speed greys out there, with nothing to time); STAR COLOUR From the picture lights each star in the colour of the
+       pixel it sits on, so a gold dress sparkles gold (the Colour row greys out there); PATTERN scatters the stars another way, so two
+       Glitter layers stop sparkling alike. 100 %, Chosen colour and 0 run the old loop untouched (each is the old expression there). */
+    { type: 'glitter', label: 'Glitter', desc: 'Little stars that twinkle on the bright parts of the picture. On a dark shot, lower the Brightness bar. Twinkle 0 keeps them lit; Star colour From the picture lights each one in the colour under it.', params: [
       { key: 'spacing', label: 'Spacing', min: 20, max: 200, step: 1, def: 60, unit: 'px' },
       { key: 'size', label: 'Star size', min: 4, max: 60, step: 1, def: 14, unit: 'px' },
       { key: 'threshold', label: 'Brightness bar', min: 0, max: 100, step: 1, def: 55, unit: '%' },
-      { key: 'speed', label: 'Twinkle speed', min: 0.2, max: 6, step: 0.1, def: 1.5, unit: 'Hz' },
+      { key: 'speed', label: 'Twinkle speed', min: 0.2, max: 6, step: 0.1, def: 1.5, unit: 'Hz', overriddenBy: 'twinkle', liveAbove: 0 },
       { key: 'points', label: 'Points', def: 0, options: [[0, 'Four'], [1, 'Six'], [2, 'Eight']] },
-    ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
+      { key: 'twinkle', label: 'Twinkle', min: 0, max: 100, step: 1, def: 100, unit: '%', note: 'How much each star fades in and out · 0 keeps every star lit' },
+      { key: 'from', label: 'Star colour', def: 0, options: [[0, 'Chosen colour'], [1, 'From the picture']], note: 'From the picture lights each star in the colour it sits on' },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Colour', colorGate: { by: 'from', when: 0 } },
     /* #966 opts5: the box could only stand square, and the bar could only be black. ANGLE turns the box or the oval about its centre
        (+ clockwise) — a number plate on a slope, a head on one side; keyframe it with X and Y to follow one. BAR COLOUR paints the
        bar any colour (a white or a brand-coloured bar), and greys out under Pixelate and Blur, where it does nothing. 0° and
@@ -23302,25 +23485,33 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const thr = clamp01(fparam(p, 'threshold', 55, t) / 100), speed = Math.max(0, fparam(p, 'speed', 1.5, t));
     const points = [4, 6, 8][Math.max(0, Math.min(2, Math.round(fparam(p, 'points', 0, t))))];
     const rgb = hexToRGB(p.color || '#ffffff'), time = tl == null ? t : tl;
+    /* #966 opts9: TWINKLE (how much each star fades: 100 % the old pulse, 0 every star lit — NaN reads 100), STAR COLOUR From the picture
+       (each star the colour of the pixel it sits on) and PATTERN (a key XORed into the star's hash — Pattern 0's key is 0, and k ^ 0 is
+       k). At 100 %, Chosen colour and 0 each line below is the old one: br is the old br, pc is col, gKey is 0. */
+    let gTw = p.twinkle == null ? 100 : +FM.evalProp(p.twinkle, t); if (!isFinite(gTw)) gTw = 100; gTw = gTw < 0 ? 0 : (gTw > 100 ? 100 : gTw);
+    const gFrom = Math.round(fparam(p, 'from', 0, t)) === 1;
+    let gSd = p.seed == null ? 0 : Math.round(+FM.evalProp(p.seed, t)); if (!(gSd > 0)) gSd = 0; if (gSd > 999) gSd = 999;
+    const gKey = gSd ? (Math.imul(gSd, 0x2c1b3c6d) | 0) : 0;
     B.drawImage(A, 0, 0);
     let img; try { img = A.getContext('2d').getImageData(0, 0, W, H).data; } catch (e) { return; }
     const x0 = Math.floor(bb.x / spacing) - 1, x1 = Math.ceil((bb.x + bb.w) / spacing) + 1, y0 = Math.floor(bb.y / spacing) - 1, y1 = Math.ceil((bb.y + bb.h) / spacing) + 1;
     B.save(); B.globalCompositeOperation = 'lighter'; B.lineCap = 'round';
     const col = (a) => 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + a + ')';
     for (let iy = y0; iy <= y1; iy++) for (let ix = x0; ix <= x1; ix++) {
-      const k = Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663);
+      const k = (Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663)) ^ gKey;
       const px = (ix + e1Hash(k + 1)) * spacing, py = (iy + e1Hash(k + 2)) * spacing;
       const xi = Math.round(px), yi = Math.round(py);
       if (xi < 0 || yi < 0 || xi >= W || yi >= H) continue;
       const o = (yi * W + xi) * 4; if (img[o + 3] < 40) continue;
       if ((0.299 * img[o] + 0.587 * img[o + 1] + 0.114 * img[o + 2]) / 255 < thr) continue;
       const tw = Math.sin(2 * Math.PI * (speed * time + e1Hash(k + 3)));
-      const br = tw > 0 ? tw * tw * tw : 0; if (br < 0.02) continue;
+      const br0 = tw > 0 ? tw * tw * tw : 0, br = gTw === 100 ? br0 : (1 - gTw / 100) + (gTw / 100) * br0; if (br < 0.02) continue;
+      const pc = gFrom ? glitterCol966(img[o], img[o + 1], img[o + 2]) : col;
       const R = size * (0.5 + 0.5 * e1Hash(k + 4)) * (0.35 + 0.65 * br);
       const gr = B.createRadialGradient(px, py, 0, px, py, R * 0.5);
-      gr.addColorStop(0, col(Math.min(1, br))); gr.addColorStop(1, col(0));
+      gr.addColorStop(0, pc(Math.min(1, br))); gr.addColorStop(1, pc(0));
       B.fillStyle = gr; B.beginPath(); B.arc(px, py, R * 0.5, 0, Math.PI * 2); B.fill();
-      B.strokeStyle = col(Math.min(1, br * 0.9)); B.lineWidth = Math.max(1, R * 0.07);
+      B.strokeStyle = pc(Math.min(1, br * 0.9)); B.lineWidth = Math.max(1, R * 0.07);
       B.beginPath();
       for (let s = 0; s < points / 2; s++) { const ang = Math.PI * s / (points / 2) + (points === 6 ? Math.PI / 12 : 0), dx = Math.cos(ang) * R * (s % 2 ? 0.7 : 1), dy = Math.sin(ang) * R * (s % 2 ? 0.7 : 1); B.moveTo(px - dx, py - dy); B.lineTo(px + dx, py + dy); }
       B.stroke();
