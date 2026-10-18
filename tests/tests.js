@@ -162305,4 +162305,113 @@
   });
   // ── end 966 opts10 ──
 
+  // ── bughunt 1 (hunt/bughunt1-fix) ──
+  /* ═══ BUGHUNT 1 — two defects a bug hunt found and a refuter confirmed (notes: tools/design/plans/bughunt1/NOTES.md). WRITTEN WITHOUT
+   * RUNNING (code only, `node --check`, while a release shipped): every number is reasoned from the code it names. Each test fails on
+   * 2d1f6067 for the reason it states. Helpers: the '966 scramble layout' block's _slNeed, _slSmall, _slScr, _slCtx and _slWatch, and
+   * the opts4 block's _o4PX and _o4P, with E1. ═══ */
+
+  /* (1) A DECODING SCRAMBLE UNDER ANIMATE BY LINE kept every run at its landed line's LEFT edge: drawAnimatedText called planRuns with no
+     alignment, while the still path (planPaint) aligns each run in its landed span under the caption's alignment (the PM, 17 Oct). With
+     no hidden letters (the base Scramble, Any, at 0.5) a scrambled line is one run, the whole line, so by Line it must be painted exactly
+     where the still caption paints it: the same string, the same left (L) and the same y, call for call — at 3.2 s, when every line has
+     come in (8 lines x 0.04 + 0.6 s), so nothing is offset by the entrance. On 2d1f6067 a centred scrambled line starts half its width
+     difference left of the still one, a right-aligned one its whole difference.
+     CONTROLS: some line's paint is more than a pixel wider or narrower than its layout (measured on the draw pass's context), so the
+     alignment really moves it; a LEFT-aligned caption is painted where the still one is (as it was); and by CHARACTER every scrambled
+     glyph keeps its landed glyph's left (the PM: Character units stay as they are), while some glyph differs in width from the landed
+     one by more than a pixel, so centring it would have shown. */
+  test('bughunt1 a decoding Scramble under Animate by Line keeps the caption’s alignment — on a centred and a right-aligned caption every scrambled line is painted exactly where the still caption paints it (CONTROLS: a scrambled line differs in width from its layout; a left-aligned caption, and Fade by character, keep their landed left edges)', { item: '966', budgetMs: 60000 }, function () {
+    _slNeed();
+    const W = 270, H = 480, T = 3.2, bad = [], scr = () => _slScr({ chars: 0, progress: 0.5 }), c = _slCtx(_slSmall(), null);
+    let wide = 0;
+    FM._textPaintLines(_slSmall(scr()), T).forEach(l => { if (Math.abs(c.measureText(l.paint).width - c.measureText(l.layout).width) > 1) wide++; });
+    if (!wide) bad.push('CONTROL: no scrambled line is more than a pixel wider or narrower than its layout, so its alignment could not move it');
+    ['center', 'right', 'left'].forEach(al => {
+      const still = _slWatch([_slSmall(scr(), { align: al })], T, W, H).calls;
+      const anim = _slWatch([_slSmall(scr(), { align: al, anim: { preset: 'fade', unit: 'line' } })], T, W, H).calls;
+      if (still.length < 6) { bad.push('CONTROL: ' + al + ': the still caption paints only ' + still.length + ' strings'); return; }
+      if (anim.length !== still.length) { bad.push(al + ': by Line the renderer paints ' + anim.length + ' strings (' + anim.map(g => '“' + g.s + '”').join(' ') + '), the still caption ' + still.length); return; }
+      let n = 0;
+      anim.forEach((g, i) => {
+        const s = still[i];
+        if ((g.s !== s.s || Math.abs(g.L - s.L) > 1e-3 || Math.abs(g.Y - s.Y) > 1e-3) && n++ < 3) bad.push(al + ': by Line, line ' + i + ' “' + g.s + '” is painted from (' + g.L.toFixed(3) + ', ' + g.Y.toFixed(3) + '), the still caption paints “' + s.s + '” from (' + s.L.toFixed(3) + ', ' + s.Y.toFixed(3) + ')' + (al === 'left' ? ' — a left-aligned caption moved' : ''));
+      });
+    });
+    // by Character: each glyph keeps its landed glyph's left (the landed caption is the same Scramble at Progress 1, the plain text)
+    const oc = { anim: { preset: 'fade', unit: 'char' } };
+    const fc = _slWatch([_slSmall(_slScr({ chars: 0, progress: 1 }), oc)], T, W, H).calls, gc = _slWatch([_slSmall(scr(), oc)], T, W, H).calls;
+    if (gc.length !== fc.length || fc.length < 40) bad.push('CONTROL: by Character the decoding caption paints ' + gc.length + ' glyphs and the landed one ' + fc.length + ' — one per letter each was expected');
+    else {
+      let off = 0, wider = 0;
+      gc.forEach((g, i) => {
+        if (Math.abs(g.L - fc[i].L) > 1e-3 || Math.abs(g.Y - fc[i].Y) > 1e-3) { if (off++ < 3) bad.push('by Character, glyph ' + i + ' “' + g.s + '” starts at ' + g.L.toFixed(3) + ', not at the landed “' + fc[i].s + '”’s left ' + fc[i].L.toFixed(3) + ' — Character units must stay as they were'); }
+        if (Math.abs(c.measureText(g.s).width - c.measureText(fc[i].s).width) > 1) wider++;
+      });
+      if (!wider) bad.push('CONTROL: by Character no scrambled glyph differs in width from its landed one by a pixel, so centring it could not have shown');
+    }
+    if (bad.length) throw new Error(bad.slice(0, 12).join(' · '));
+  });
+
+  /* (1, by WORD) the same call passes the alignment for a Word unit: each word is its own animated unit, so its scrambled run sits in
+     ITS landed word's span — centred on it, or ending at its end — where it was always painted from the word's left. The landed caption
+     (the same Scramble at Progress 1) under the same Fade by word gives each word's place: one call per word, the word itself. Decoding,
+     word i must be painted from that left plus (landed width − painted width) / 2 on a centred caption, plus the whole difference on a
+     right-aligned one, and from that left exactly on a left-aligned one (as before). Measured on the draw pass's context; at 3.2 s every
+     word has come in. (Not the still caption's place: a still line is ONE run, centred on the whole line, while a word unit can only
+     paint inside its own word — the place the PM's "align each run to its landed span" gives a run that is one word.)
+     CONTROL: some scrambled word differs in width from its landed word by more than a pixel, so on 2d1f6067 (every word from its left)
+     the centred and right-aligned checks fail. */
+  test('bughunt1 a decoding Scramble under Animate by Word keeps the caption’s alignment — each scrambled word is centred on its landed word on a centred caption and ends where it ends on a right-aligned one, and a left-aligned caption keeps every word’s left (CONTROL: some scrambled word differs in width from its landed word by more than a pixel)', { item: '966', budgetMs: 60000 }, function () {
+    _slNeed();
+    const W = 270, H = 480, T = 3.2, bad = [], c = _slCtx(_slSmall(), null);
+    let moved = 0;
+    ['center', 'right', 'left'].forEach(al => {
+      const o = { align: al, anim: { preset: 'fade', unit: 'word' } };
+      const fin = _slWatch([_slSmall(_slScr({ chars: 0, progress: 1 }), o)], T, W, H).calls;
+      const got = _slWatch([_slSmall(_slScr({ chars: 0, progress: 0.5 }), o)], T, W, H).calls;
+      if (fin.length < 10) { bad.push('CONTROL: ' + al + ': the landed caption by Word paints only ' + fin.length + ' words'); return; }
+      if (got.length !== fin.length) { bad.push(al + ': by Word the decoding caption paints ' + got.length + ' strings (' + got.map(g => '“' + g.s + '”').join(' ') + '), the landed one ' + fin.length + ' words'); return; }
+      let n = 0;
+      got.forEach((g, i) => {
+        const f = fin[i], wl = c.measureText(f.s).width, wp = c.measureText(g.s).width;
+        const want = f.L + (al === 'center' ? (wl - wp) / 2 : al === 'right' ? wl - wp : 0);
+        if (g.s.length !== f.s.length && n++ < 3) bad.push(al + ': by Word, string ' + i + ' “' + g.s + '” is painted over the landed word “' + f.s + '” — not the same length');
+        if ((Math.abs(g.L - want) > 1e-3 || Math.abs(g.Y - f.Y) > 1e-3) && n++ < 3) bad.push(al + ': by Word, “' + g.s + '” (over “' + f.s + '”) starts at ' + g.L.toFixed(3) + ', not ' + want.toFixed(3) + ' — its landed word spans ' + f.L.toFixed(3) + '–' + (f.L + wl).toFixed(3));
+        if (al !== 'left' && Math.abs(wl - wp) > 1) moved++;
+      });
+    });
+    if (!moved) bad.push('CONTROL: no scrambled word differs in width from its landed word by more than a pixel, so its alignment could not have moved it');
+    if (bad.length) throw new Error(bad.slice(0, 12).join(' · '));
+  });
+
+  /* (2) COLOUR CYCLE'S KEYFRAMED SPEED IS INTEGRATED. Speed is a keyframable °/s; the kernel turned the hue by speed(now) x the clip's
+     time, so a Speed keyed down from 360 to 0 over 2 s turned the colours BACKWARDS after the peak. The turn is ∫ speed = 360t − 90t²:
+     270° at 1 s, 337.5° at 1.5 s, 359.1° at 1.9 s (all under a turn, so the still Start colour is that number as it stands). Each must
+     draw a still Colour Cycle (Speed 0) at that Start colour within a level, on a solid red plate, and with Rainbow across 180° too
+     (hueSpread966 takes the kernel's angle). _o4PX hands the kernel no layer, so the clip's clock is t itself. On 2d1f6067 the keyed one
+     turns 180°, 135° and 17.1° — 90° off at 1 s.
+     CONTROLS: the still pictures at the old product's angle differ from the integrated one's by more than 8 levels, so the comparison can
+     see the bug; and a Speed keyed constant at 90 °/s draws exactly what a plain 90 °/s does (the integral of a constant is the product). */
+  test('bughunt1 Colour Cycle integrates a keyframed Speed — keyed from 360 °/s down to 0 over 2 s, the colours at 1, 1.5 and 1.9 s are a still Colour Cycle at the turn it has run (360t − 90t²), with and without Rainbow across (CONTROLS: the old speed-now × time picture differs; a Speed keyed constant at 90 °/s draws a plain 90 °/s)', { item: '966' }, function () {
+    const W = 8, H = 8, bad = [], red = () => E1.frame(W, H, () => [255, 0, 0]);
+    const down = { kf: [{ t: 0, v: 360, e: 'linear' }, { t: 2, v: 0, e: 'linear' }] };
+    const flat = { kf: [{ t: 0, v: 90, e: 'linear' }, { t: 2, v: 90, e: 'linear' }] };
+    const cc = (over, t) => _o4PX('huecycle', _o4P('huecycle', Object.assign({ boost: 0 }, over)), W, H, red(), t);
+    [1, 1.5, 1.9].forEach(t => {
+      const turn = 360 * t - 90 * t * t, old = (360 - 180 * t) * t;
+      [0, 180].forEach(spread => {
+        const want = cc({ speed: 0, phase: turn, spread: spread }, t);
+        const m = E1.maxDiff(cc({ speed: down, phase: 0, spread: spread }, t), want);
+        if (m > 1) bad.push('Speed keyed 360 → 0 °/s over 2 s, at ' + t + ' s' + (spread ? ', Rainbow across ' + spread + '°' : '') + ': up to ' + m + ' levels away from a still Colour Cycle at ' + turn.toFixed(1) + '°, the turn it has run');
+        const mo = E1.maxDiff(cc({ speed: 0, phase: old, spread: spread }, t), want);
+        if (mo <= 8) bad.push('CONTROL: at ' + t + ' s' + (spread ? ', Rainbow across ' + spread + '°' : '') + ' the old angle ' + old.toFixed(1) + '° draws within ' + mo + ' levels of ' + turn.toFixed(1) + '°, so the comparison cannot see the bug');
+      });
+      const mc = E1.maxDiff(cc({ speed: flat, phase: 0 }, t), cc({ speed: 90, phase: 0 }, t));
+      if (mc > 1) bad.push('CONTROL: at ' + t + ' s a Speed keyed constant at 90 °/s is up to ' + mc + ' levels away from a plain 90 °/s');
+    });
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
+  });
+  // ── end bughunt 1 ──
+
 })();

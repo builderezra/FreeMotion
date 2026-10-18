@@ -4375,14 +4375,19 @@ window.FM = window.FM || {};
         const wDraw = Math.max(0, w - sp);   // visual width = measured minus the over-counted trailing gap; advance still uses w (= inter-unit gap) (#5)
         const { alpha, dx, dy, sc, scx, scy, rot, outA } = animFor(ck.n++, ck);
         /* #966 scramble layout: the unit is the LAYOUT's — measured, placed and animated as the landed text's — and paints the plan's
-           characters in it, in runs from its own left edge (planRuns). A unit with nothing left to paint keeps its place and its
-           turn in the stagger. runs null: the unit paints as it always did. */
+           characters in it, in runs placed inside the unit (planRuns). A unit with nothing left to paint keeps its place and its
+           turn in the stagger. runs null: the unit paints as it always did.
+           bughunt1 (the PM, 18 Oct): by LINE and by WORD each run sits in its landed letters' span under the caption's alignment, as
+           the still path's planPaint puts it — centred on it, or ending at its end — so a decoding line or word on a centred or a
+           right-aligned caption no longer hangs off its landed left edge (by Line the run lands exactly where the still path puts it).
+           By CHARACTER a unit is one glyph and keeps its landed glyph's left, as before ('966 scramble layout' pins those origins);
+           a left-aligned caption takes the very same left as before, whatever the unit. */
         const uo = uoff;
         uoff += u.length;
         let runs = null;
         if (pl) {
           const sub = { p: pl.p.slice(uo, uo + u.length), h: pl.h ? pl.h.subarray(uo, uo + u.length) : null };
-          if (sub.p !== u || (sub.h && sub.h.indexOf(1) >= 0)) runs = planRuns(ctx, u, sub);
+          if (sub.p !== u || (sub.h && sub.h.indexOf(1) >= 0)) runs = planRuns(ctx, u, sub, (unit === 'line' || unit === 'word') ? align : 'left');
         }
         if (runs && !runs.length) { x += w; return; }
         let paint = u, px = -wDraw / 2;
@@ -23494,13 +23499,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             0.213 - 0.213 * a + 0.143 * b, 0.715 + 0.285 * a + 0.140 * b, 0.072 - 0.072 * a - 0.283 * b,
             0.213 - 0.213 * a - 0.787 * b, 0.715 - 0.715 * a + 0.715 * b, 0.072 + 0.928 * a + 0.072 * b]; };
 
-  /* ---- Colour Cycle: the hue turns with the clip's clock; Stepped jumps `steps` times a turn ---- */
+  /* ---- Colour Cycle: the hue turns with the clip's clock; Stepped jumps `steps` times a turn ----
+     bughunt1: a KEYFRAMED Speed is integrated over the clip's own clock (queue 913's rule, as wClipIntegral and popSwap966 do) —
+     speed(now) x time rescaled the whole turn on every frame, so a Speed keyed down from 360 to 0 turned the colours BACKWARDS after
+     the peak instead of holding them. Each instant's speed takes the same floor of 0 the plain path gives it. An unkeyed Speed is the
+     old product, literally, so every saved Colour Cycle draws byte for byte; Rainbow across (hueSpread966) is handed this same angle. */
   PIXEL_FX.huecycle = function (d, W, H, p, t) {
     const lay = arguments[7], tl = lay ? FM.fxLocalTime(lay, t) : t;
     const speed = Math.max(0, fparam(p, 'speed', 90, t)), phase = fparam(p, 'phase', 60, t);
     const stepped = Math.round(fparam(p, 'style', 0, t)) === 1, steps = Math.max(2, Math.min(12, Math.round(fparam(p, 'steps', 6, t))));
     const boost = clamp01(fparam(p, 'boost', 0.2, t));
-    let deg = phase + speed * (tl > 0 ? tl : 0);
+    let deg;
+    if (FM.isAnimated(p.speed) && tl > 0) {
+      const turned = FM.integrateProp(p.speed, t - tl, t, u => Math.max(0, FM.evalProp(p.speed, u)));
+      deg = phase + (isFinite(turned) ? turned : 0);
+    } else deg = phase + speed * (tl > 0 ? tl : 0);
     if (stepped) { const q = 360 / steps; deg = Math.floor(deg / q + 1e-9) * q; }
     deg = ((deg % 360) + 360) % 360;
     const m = e1HueM(deg), s = 1 + boost;
