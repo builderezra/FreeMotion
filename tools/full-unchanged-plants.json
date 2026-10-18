@@ -32,9 +32,9 @@
     },
     {
       "name": "floor",
-      "kind": "the split floor moved to 0.1 s (DESIGN; the withdrawn step 1.1.5)",
+      "kind": "the split floor moved to 0.1 s (DESIGN; the withdrawn step 1.1.5) — re-anchored 18 Oct on #1176's half-frame edge (v17.72)",
       "file": "js/app.js",
-      "old": "if (t <= layer.start + 0.02 || t >= end - 0.02) {",
+      "old": "if (t <= layer.start + edge || t >= end - edge) {",
       "new": "if (t <= layer.start + 0.1 || t >= end - 0.1) {",
       "widths": [
         "380"
