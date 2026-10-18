@@ -32,10 +32,10 @@
     },
     {
       "name": "floor",
-      "kind": "the split floor moved to 0.1 s (DESIGN; the withdrawn step 1.1.5)",
+      "kind": "the split floor moved to 0.1 s (DESIGN; the withdrawn step 1.1.5). Re-anchored 18 Oct: #1176 #7 rewrites the floor line itself (to half a frame), so the plant is its own 0.1 s early return on the line above it, which is the same before and after that fix",
       "file": "js/app.js",
-      "old": "if (t <= layer.start + 0.02 || t >= end - 0.02) {",
-      "new": "if (t <= layer.start + 0.1 || t >= end - 0.1) {",
+      "old": "    const t = FM.time, end = layer.start + layer.duration;",
+      "new": "    const t = FM.time, end = layer.start + layer.duration; if (t <= layer.start + 0.1 || t >= end - 0.1) { if (FM.toast) FM.toast('Park the playhead inside the clip to split it', 1800); return; }   // full-unchanged self-test plant: never shipped",
       "widths": [
         "380"
       ],
@@ -344,10 +344,10 @@
     },
     {
       "name": "matte",
-      "kind": "a layer-reference source resolved through the split lineage (DESIGN B4, dropped: the luma matte past the cut uses the second half)",
+      "kind": "a luma matte whose source is a split layer dropped (the matted layer draws unmatted on both sides of the cut). Re-anchored 18 Oct: this plant was DESIGN B4's split-lineage lookup, which #1176 #8 ships to Full (decided under his 11 Oct rule, PM 18 Oct), so it now plants a change that differs from Full before AND after that fix, on two lines the fix leaves alone",
       "file": "js/compositor.js",
-      "old": "    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });\n    const srcId = fx.params && fx.params.source;\n    const mLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;",
-      "new": "    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });\n    const srcId = fx.params && fx.params.source;\n    const mLayer = (srcId && scene && scene.layers) ? (function () { const s0 = scene.layers.find(l => l.id === srcId && l.id !== layer.id); const live = s0 && scene.layers.find(l => l.name === s0.name && l.id !== layer.id && t >= l.start && t < l.start + l.duration); return live || s0; })() : null;   // full-unchanged self-test plant: never shipped",
+      "old": "    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });\n    const srcId = fx.params && fx.params.source;",
+      "new": "    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });\n    const srcId = (function () { const s0 = fx.params && fx.params.source; const L0 = s0 && scene && scene.layers && scene.layers.find(l => l.id === s0); return (L0 && L0.splitOf) ? null : s0; })();   // full-unchanged self-test plant: never shipped",
       "widths": [
         "380"
       ],
@@ -359,10 +359,10 @@
     },
     {
       "name": "follow",
-      "kind": "a Follow resolved through the split lineage (DESIGN B4, dropped: past the cut it follows the second half)",
+      "kind": "a Follow whose target is a split layer dropped (the follower keeps its own value on both sides of the cut). Re-anchored 18 Oct: this plant was DESIGN B4's split-lineage lookup, which #1176 #4 ships to Full (decided under his 11 Oct rule, PM 18 Oct), so it now plants a change that differs from Full before AND after that fix, on a line the fix leaves alone",
       "file": "js/behaviors.js",
-      "old": "    const target = FM.layerById(scene, targetId);",
-      "new": "    const target = (function () { const t0 = FM.layerById(scene, targetId); const live = t0 && scene.layers.find(l => l.name === t0.name && t >= l.start && t < l.start + l.duration); return live || t0; })();   // full-unchanged self-test plant: never shipped",
+      "old": "    const raw = FM.evalProp(target.transform[key], t - delay);",
+      "new": "    if (target.splitOf) return base;   // full-unchanged self-test plant: never shipped\n    const raw = FM.evalProp(target.transform[key], t - delay);",
       "widths": [
         "380"
       ],
