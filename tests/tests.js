@@ -164376,6 +164376,90 @@
     });
   });
 
+  /* (#5) OUTLINE CENTER DREW AS OUTSIDE ON THREE OF THE FOUR TEXT PATHS. A white "H H", 100 px in the system sans-serif (an H is a
+     plain H in any of them), centred at 160,120 over a grey (#808080) backdrop that fills the frame, with a black Outline of Size 8,
+     rendered at 1 s on four paths: still and flat (one strokeText per line, the still branch of the text draw), under Fade by
+     character (drawAnimatedText's flat units), on a 30° Curve (drawArcLine) and under Fade by character on that Curve
+     (drawAnimatedText's curved units). Every glyph is stroked first and filled on top, so the black that shows is the half of the
+     stroke outside the glyph: Outside strokes at twice the Size, a band of 8 px; Center at the Size, a band of 4.
+     On 698b5dd0 only the still flat path read the Position (`bpos === 'center' ? bw : bw * 2`). drawAnimatedText stroked every unit
+     at `sbw * 2` whatever it was, and so did drawArcLine, whose caller passed no Position at all. So on those three paths Center and
+     Outside make the very same strokes, the frames are identical, and Center / Outside is exactly 1.000.
+     THE BAND, from the geometry: the outer offset band of width d round a glyph outline of perimeter P is P·d + k·d², k about 2.3
+     for an H (2π for its eight convex corners, less 4 for its four concave ones). Two H's at 100 px have P near 770 px, so
+     Center / Outside = (4P + 16k) / (8P + 64k), about 0.49. Counting near black (every channel under 50) loses about 0.4 px of each
+     band at its two anti-aliased edges, the same 0.4 from both, which takes the ratio to about 0.47. So 0.38..0.62: wide of the
+     geometry, and nowhere near the bug's 1.000.
+     CONTROLS: with the Outline off nothing on any path is near black (the backdrop covers the frame, so every black pixel counted is
+     the outline's); the still flat path halves it already (this passes on 698b5dd0, so the measure can see the difference); Outside
+     shows the same black on every path within 12 % (the same glyphs, turned at most about 9° on the Curve and placed one at a time,
+     which moves only the anti-aliased fringe); Inside stands in for Outside, and an outline with no Position stored is Outside, byte
+     for byte on every path, before the fix and after it; the Fade is really on (FM.textHasAnim) and long finished at 1 s (the last
+     of the three units is in by 2 × 0.05 + 0.3 = 0.4 s); the Curve really bends the text (its frame differs from the flat one).
+     Then each path's Center black must be within 15 % of the still flat path's, the same outline everywhere (on 698b5dd0 the three
+     show about twice it). The gap between the two H's (a space and two side bearings, 40 px or more) is far wider than the 16 px
+     Outside stroke, so one glyph's stroke never lands on its neighbour's fill. */
+  test('bughunt4 #5 Outline Center is the same width on every text path: still and flat, under Fade by character, on a 30° Curve and under Fade by character on that Curve, a Center outline shows about half the black an Outside one does, and the same black on all four (CONTROLS: with the Outline off nothing is near black; the still flat path already halves it; Outside shows the same black on all four; Inside and an unset Position draw as Outside byte for byte; the Fade is on and finished; the Curve bends)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim are not reachable');
+    await _bh2With(async function () {
+      const T = 1, N = 8, LO = 0.38, HI = 0.62, SAME_OUT = 0.12, SAME_CEN = 0.15;
+      const bg = _bh2Bar('bh4 #5 grey backdrop', 160, 320, '#808080');
+      const L = FM.makeLayer('text', { name: 'bh4 #5 title', text: 'H H', x: 160, y: 120, fontSize: 100, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L, bg];
+      const FADE = { preset: 'fade', unit: 'char', durIn: 0.3, durOut: 0, stagger: 0.05 };
+      const NONE = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      const PATHS = [
+        { name: 'still and flat', curve: 0, anim: NONE },
+        { name: 'under Fade by character', curve: 0, anim: FADE },
+        { name: 'on a 30° Curve', curve: 30, anim: NONE },
+        { name: 'under Fade by character on a 30° Curve', curve: 30, anim: FADE }
+      ];
+      /* The frame on path p with the Outline at Position pos (undefined: no Position stored at all), or with it off. */
+      const shot = (p, pos, off) => {
+        L.textCurve = p.curve;
+        L.textAnim = Object.assign({}, p.anim);
+        L.stroke = { enabled: !off, width: N, color: '#000000' };
+        if (pos !== undefined) L.stroke.position = pos;
+        return _bh2Frame(T);
+      };
+      const black = f => { let n = 0; for (let i = 0; i < f.d.length; i += 4) if (f.d[i] < 50 && f.d[i + 1] < 50 && f.d[i + 2] < 50) n++; return n; };
+      const differ = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) > 40 || Math.abs(a[i + 1] - b[i + 1]) > 40 || Math.abs(a[i + 2] - b[i + 2]) > 40) n++; return n; };
+      const pc = v => (v >= 0 ? '+' : '') + (Math.round(v * 1000) / 10) + ' %';
+      const got = PATHS.map(p => {
+        const fOut = shot(p, 'outside'), fCen = shot(p, 'center'), fIns = shot(p, 'inside'), fUnset = shot(p, undefined), fOff = shot(p, 'outside', true);
+        return { p: p, fOut: fOut, out: black(fOut), cen: black(fCen), off: black(fOff), mIns: _bh2MaxDiff(fIns.d, fOut.d), mUnset: _bh2MaxDiff(fUnset.d, fOut.d), anim: !!FM.textHasAnim(L) };
+      });
+      const flat = got[0], bad = [];
+
+      /* ── CONTROLS (all pass on 698b5dd0). */
+      got.forEach(g => {
+        if (g.off > 5) bad.push('CONTROL: ' + g.p.name + ', with the Outline off ' + g.off + ' pixels are near black — the backdrop does not cover the frame, so the counts below are not the outline’s');
+        if (g.out < 1500) bad.push('CONTROL: ' + g.p.name + ', an Outside outline of Size ' + N + ' shows only ' + g.out + ' near-black pixels — the text or its outline is not being drawn');
+        if (g.anim !== (g.p.anim === FADE)) bad.push('CONTROL: ' + g.p.name + ', FM.textHasAnim says ' + g.anim + ', so this frame did not take the path it is named for');
+        if (g.mIns !== 0) bad.push('CONTROL: ' + g.p.name + ', Inside draws up to ' + g.mIns + ' levels off Outside — on text it has always stood in for Outside');
+        if (g.mUnset !== 0) bad.push('CONTROL: ' + g.p.name + ', an outline with no Position stored draws up to ' + g.mUnset + ' levels off Outside — the default moved');
+      });
+      const bends = differ(flat.fOut.d, got[2].fOut.d);
+      if (bends < 300) bad.push('CONTROL: the 30° Curve’s frame differs from the flat one in only ' + bends + ' pixels, so the curved paths were not taken');
+      const r0 = flat.cen / flat.out;
+      if (!(r0 >= LO && r0 <= HI)) bad.push('CONTROL: still and flat, Center shows ' + flat.cen + ' near-black pixels to Outside’s ' + flat.out + ' (' + r0.toFixed(3) + '), not about half — the path that always read the Position does not halve it, so this measure cannot see the bug');
+      got.forEach(g => {
+        if (g !== flat && Math.abs(g.out - flat.out) > SAME_OUT * flat.out) bad.push('CONTROL: ' + g.p.name + ', Outside shows ' + g.out + ' near-black pixels where still and flat it shows ' + flat.out + ' (' + pc(g.out / flat.out - 1) + ') — the paths do not draw comparable outlines, so their Center counts cannot be compared');
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── Center is half of Outside, and the same outline, on every path. */
+      got.forEach(g => {
+        if (g === flat) return;
+        const r = g.cen / g.out;
+        if (!(r >= LO && r <= HI)) bad.push(g.p.name + ': Center shows ' + g.cen + ' near-black pixels to Outside’s ' + g.out + ', a ratio of ' + r.toFixed(3) + ' where still and flat it is ' + r0.toFixed(3) + (Math.abs(r - 1) < 0.02 ? ' — Center draws exactly as Outside: this painter strokes at twice the Size whatever the Position' : ''));
+        if (Math.abs(g.cen - flat.cen) > SAME_CEN * flat.cen) bad.push(g.p.name + ': a Center outline shows ' + g.cen + ' near-black pixels where still and flat the same outline shows ' + flat.cen + ' (' + pc(g.cen / flat.cen - 1) + ') — not the same outline on every path');
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#4) AN ADJUSTMENT LAYER'S BLEND MODE DID NOTHING. Red footage fills the frame, (255, 0, 0); above it an adjustment layer with
      Invert (amount 1), whose graded plate over red is cyan, (0, 255, 255). On cedde93f both blits of the graded plate (applyAdjustment's
      and applyAdjustmentFilters') are hard-wired to source-over and never read layer.blendMode, so every mode the Mixing card offers

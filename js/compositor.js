@@ -4288,6 +4288,11 @@ window.FM = window.FM || {};
     const fillA = textFillAlpha(layer);                 // the Colouring card's Opacity — see fillTextA (queue 690)
     const baseAlpha = ctx.globalAlpha;                 // layer opacity already applied
     const stk = layer.stroke, sbw = stk ? (FM.evalProp(stk.width, t) || 0) : 0, scol = stk ? (FM.evalProp(stk.color, t) || '#000') : '#000', drawStroke = stk && stk.enabled && sbw > 0;
+    /* bughunt4 #5: the Outline's Position, read exactly as the still flat path reads it. Center strokes at the Size itself, Outside
+       (the default) and Inside (which a glyph cannot clip, so it stands in for Outside there too) at twice it, and the fill goes on
+       top in both, so Center shows half the band. Every stroke below used to be twice the Size whatever the Position, so Center drew
+       as Outside the moment the text had an Animate preset. Outside's width is the very number it was. */
+    const swid = ((stk && stk.position) || 'outside') === 'center' ? sbw : sbw * 2;
     const prevAlign = ctx.textAlign;
     ctx.textAlign = 'left';
     /* THE REAL GRADIENT, NOT ONE FLAT COLOUR PER LETTER (queue 690, fourth hunt). This used to paint each unit ONE
@@ -4424,7 +4429,7 @@ window.FM = window.FM || {};
           /* #966 opts8: Stay upright turns the letter back by the unit's own turn, so it stands straight (its animation's spin, laid on
              the unit, still turns it); following, it takes the arc's turn at its own place, as it always did. */
           ctx.rotate(upright ? -sign * U.a : sign * (C.a - U.a));
-          if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(pc, 0, 0); }
+          if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = swid; ctx.strokeStyle = scol; ctx.strokeText(pc, 0, 0); }
           fillTextA(ctx, pc, 0, 0, fillA);
           ctx.restore();
         }
@@ -4477,7 +4482,7 @@ window.FM = window.FM || {};
         if (ui === gU && (ghost.at === 'start' ? u.charAt(0) : u.slice(-1)) === ghost.ch) { paint = ghost.at === 'start' ? u.slice(1) : u.slice(0, -1); if (ghost.at === 'start') px += w - ctx.measureText(paint).width; }
         if (ui === gU && !paint) { x += w; return; }
         const paintRuns = () => runs.forEach(r => {
-          if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(r.s, -wDraw / 2 + r.x, 0); }
+          if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = swid; ctx.strokeStyle = scol; ctx.strokeText(r.s, -wDraw / 2 + r.x, 0); }
           fillTextA(ctx, r.s, -wDraw / 2 + r.x, 0, fillA);
         });
         ctx.save();
@@ -4492,12 +4497,12 @@ window.FM = window.FM || {};
           hlAnimPiece(ctx, hlo, ui, x, w, wDraw, (fill) => {
             ctx.fillStyle = fill;
             if (runs) { paintRuns(); return; }
-            if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
+            if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = swid; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
             fillTextA(ctx, paint, px, 0, fillA);
           });
         } else if (runs) paintRuns();
         else {
-        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
+        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = swid; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
         fillTextA(ctx, paint, px, 0, fillA);
         }
         ctx.restore();
@@ -4975,9 +4980,13 @@ window.FM = window.FM || {};
   FM.textHasAnim = function (layer) { return layer.textAnim && layer.textAnim.preset && layer.textAnim.preset !== 'none'; };
 
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
-  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol, ghost, pj, upright) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
+  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol, ghost, pj, upright, bpos) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
     // pj: planJoin of the lines, or null (#966 scramble layout)
     // upright: Text Curve's Stay upright (#966 opts8) — each glyph keeps its place on the arc and is not turned to it
+    /* bpos (bughunt4 #5): the Outline's Position, as the still flat path has it. Center strokes at the Size, anything else (Outside,
+       the default, and an unset one) at twice it, the fill on top either way; it used to be twice the Size always, so curved text
+       drew Center as Outside. A caller that passes nothing gets the old width. */
+    const swid = bpos === 'center' ? sbw : sbw * 2;
     const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
     // #482 12.4 review: Type-On's dark caret keeps its place on the arc (it is measured with the rest) and is not painted
     const gskip = ghostIndex(chars, ghost);
@@ -5022,7 +5031,7 @@ window.FM = window.FM || {};
       ctx.save();
       ctx.translate(R * Math.sin(a), sign * (R - R * Math.cos(a)));
       if (!upright) ctx.rotate(sign * a);
-      if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(pc, 0, 0); }
+      if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = swid; ctx.strokeStyle = scol; ctx.strokeText(pc, 0, 0); }
       fillTextA(ctx, pc, 0, 0, textFillAlpha(layer));   // the Colouring card's Opacity (queue 690)
       ctx.restore();
       s += w + sp;
@@ -23222,7 +23231,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
         // `curve` is resolved above the branch (queue 664, 904). Identical when no curve effect is present,
         // because applyTextEffects seeds it from exactly the layer's own field.
-        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost, planJoin(lines, _plan), _cUp);   // text on a curve
+        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost, planJoin(lines, _plan), _cUp, bpos);   // text on a curve
         else if (_hlLit) drawHighlightLines(ctx, layer, lines, lh, total, _hl, drawStroke, bw, bpos, bcol, ghost, _plan);   // #966 B9: something is lit
         // #966 B41: an Odometer Roll wheel is turning
         else if (_odo) drawOdometerLines(ctx, layer, lines, lh, _odo, drawStroke, bw, bpos, bcol, ghost);
