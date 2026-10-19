@@ -1162,7 +1162,10 @@
     try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
     for (const id of made) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await FM.projects.remove(id); } catch (e) {} }
     for (const k of libs || []) { try { await q915aDel(k); } catch (e) {} }   // raw: the app itself will not delete a lib: key any more
-    try { if (wasOpen) FM.home.open(); } catch (e) {}
+    /* isolation (20 Oct): restores Home SHUT as well as open — a test that found it shut and opened it on the way (921 S7
+       review's “Earlier versions…” from a card's ⋯) left it open for every later test. Only for a found state passed as a
+       boolean, which every caller passes (FM.home.isOpen()). */
+    try { if (wasOpen) FM.home.open(); else if (wasOpen === false && FM.home.isOpen()) FM.home.close(); } catch (e) {}
   }
 
   test('915.5A a clip stored as a pointer opens, duplicates, packs and backs up WITH its footage', { item: '915', budgetMs: 45000 }, async function () {
@@ -5820,6 +5823,8 @@
   });
 
   test('576: the text editor options open BELOW the box showing what you typed', { item: '576' }, async function () {
+    /* isolation (20 Oct): it left Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* Queue 576. Ezra: "All of the text edit options now get blocked by the part that shows you what you
      * typed, fix this so they push it down or go below it, whatever's best."
      * MEASURED at 380px: the options panel opened at y 63 (`bar.bottom + 6`) while `.te-dock` — the box
@@ -5869,6 +5874,7 @@
       layers0.forEach(function (l) { FM.scene.layers.push(l); });
       FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   test('575: a caption cue can be DRAGGED longer', { item: '575' }, async function () {
@@ -13973,6 +13979,8 @@
   });
 
   test('Select all on a non-project tab ticks THAT tab, never the projects', { item: 'select-cross-tab' }, async function () {
+    /* isolation (20 Oct): it left Home open — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     // v5.04. Select used to be projects-only, and every part of it was hardwired to FM.projects —
     // including a `shownIds.length ? shownIds : FM.projects.list()` fallback in Select all. Opening
     // Select on the Templates tab without also filling shownIds for that tab would therefore have
@@ -14032,6 +14040,7 @@
       const pt = [].find.call(document.querySelectorAll('.hm-tab'), b => b.dataset.tab === 'projects');
       if (pt) pt.click();
     }
+    } finally { _isoK.put(); }
   });
 
   /* ---- the restroom-pictogram pair: person + woman ------------------------------------------
@@ -16720,6 +16729,8 @@
   });
 
   test('PC: canvas settings opens UPWARD and fits without scrolling', { item: 'cv-upward' }, async function () {
+    /* isolation (20 Oct): it left Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* queue 252. "you dont have to follow the sizing strictly as i want it to all fit on screen
        nicely" / "so you dont have to scroll through the menu". It used to hang DOWNWARD from a cog
        that sits low on the transport row, so it got the scraps underneath: measured at 1440x900 the
@@ -16752,6 +16763,7 @@
       // Leave nothing open behind us — a stray scrim fails whatever runs next, several tests away.
       document.querySelectorAll('.set-scrim.open').forEach(function (e) { e.classList.remove('open'); });
     }
+    } finally { _isoK.put(); }
   });
 
   test('PC: tapping outside the canvas settings closes it WITHOUT applying', { item: 'cv-upward' }, async function () {
@@ -26838,6 +26850,8 @@
   // decoration), and it is actually VISIBLE — a red glyph that lands 0x0, transparent, or outside
   // its thumbnail is indistinguishable in the DOM from one that works.
   test('timeline: a locked layer wears a red lock on its preview, an unlocked one does not', { item: 'lock-badge' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     try {
@@ -26902,6 +26916,7 @@
     } finally {
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   // #136 — Ezra: "I can't do anything like drag the timeline or layer when you have a captions layer
@@ -26910,6 +26925,8 @@
   // real synthetic touch through the chip and requires BOTH halves to still work — a drag reaches the
   // clip underneath, and a press-and-hold still grabs the cue.
   test('timeline: caption cues do not swallow the row — a touch drag over one still scrubs', { item: 'captions-gestures' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     const t0 = FM.time;
@@ -26981,6 +26998,7 @@
       FM.time = t0;
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   // #127 — Ezra: "Paste style menu needs to reflect the current icons that have since changed."
@@ -26989,6 +27007,8 @@
   // delete the second table, not to re-copy it — so what this guards is that no second table has
   // grown back: every Paste Style tile has to render the SAME markup the inspector card renders.
   test('paste style: every tile draws the inspector\'s own category icon, not a private copy', { item: 'paste-style-icons' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     try {
@@ -27038,6 +27058,7 @@
       FM.clipboard = null;
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #152 — Ezra: "im pretty sure the auto detect speaking and auto make the captions doesnt work…
@@ -27280,6 +27301,8 @@
      name would satisfy "there is one field" while quietly losing layer renaming, which is exactly the
      failure the old compromise existed to prevent. */
   test('studio: one name field, in the inspector header, and it does both jobs', { item: 'studio-projname' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const pn = document.getElementById('proj-name');
     if (!pn) throw new Error('#proj-name is missing');
     const hadSel = FM.scene.selectedId, hadIds = (FM.scene.selectedIds || []).slice();
@@ -27316,6 +27339,7 @@
     } finally {
       FM.scene.selectedIds = hadIds; FM.selectLayer(hadSel || null);
     }
+    } finally { _isoK.put(); }
   });
 
   /* #149 — Ezra: "when dragging the cue length for captions it should show it changing live not just
@@ -27328,6 +27352,8 @@
      So this test measures the RENDERED width, not the data and not the style property — those were
      both correct the whole time. */
   test('captions: dragging a cue edge moves the chip during the drag, not on release', { item: 'cue-live-drag' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     const mouse = (type, x, y) => new PointerEvent(type, { pointerType: 'mouse', pointerId: 77, clientX: x, clientY: y, bubbles: true, cancelable: true, button: 0, buttons: type === 'pointerup' ? 0 : 1 });
@@ -27368,6 +27394,7 @@
     } finally {
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #147 — Ezra: "this pop up menu on pc is so shit, it literally covers up the text while you edit
@@ -27378,6 +27405,8 @@
      The assertion is geometric overlap with the CANVAS, because "is it in the right parent" would pass
      on a popover that still happened to sit over the picture. */
   test('desktop text editor: the Aa options do not cover the canvas you are typing on', { item: 'text-editor-cover' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (window.innerWidth <= 700) throw new Error('this test needs a desktop-width frame; got ' + window.innerWidth);
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
@@ -27421,6 +27450,7 @@
       document.body.classList.remove('text-editing');
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #116 — Ezra, for the second time: "The sliders we have for everything like effects and what not
@@ -27456,6 +27486,8 @@
      copied — the point is one door, so the test asserts the old ones are gone as firmly as it asserts
      the new one exists. */
   test('onion skin has exactly one door, and it is the layer menu', { item: 'onion-scope' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     const was = FM.onionSkin;
@@ -27497,6 +27529,7 @@
       document.querySelectorAll('.set-scrim').forEach(n => n.remove());
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #123 — Ezra: "Linear repeat effect is shit and needs work, currently it just squishes
@@ -27588,6 +27621,8 @@
      duplicate in the app. The keyframe half matters as much as the static half — a nudged path is a
      whole animation moved 30px, which is far harder to notice and to undo. */
   test('duplicate: the copy lands exactly on the original, animated paths included', { item: 'duplicate-exact' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     try {
@@ -27620,6 +27655,7 @@
     } finally {
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #154, and the third time this family has bitten. The document CANVAS — what <html> paints — covers
@@ -27716,6 +27752,8 @@
      strokes at lw. Measured as RENDERED THICKNESS, because the bug is a factor of two in pixels and
      nothing about the stored numbers looked wrong. */
   test('freehand: the committed stroke is the width you drew, not double it', { item: 'freehand-width' }, function () {
+    /* isolation (20 Oct): it left its stroke selected — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const W = 400, H = 200, WANT = 12;
     // A straight horizontal stroke across the middle, exactly as the tool would hand it over.
     const pts = [[60, 100], [140, 100], [220, 100], [300, 100], [340, 100]];
@@ -27745,6 +27783,7 @@
     } finally {
       const i = FM.scene.layers.indexOf(layer); if (i >= 0) FM.scene.layers.splice(i, 1);
     }
+    } finally { _isoK.put(); }
   });
 
   /* #167 — Ezra: "when you draw with free hand drawing it creates multiple layers, it should all be
@@ -27754,6 +27793,8 @@
      The renderer always supported this — layer.subs is a multi-subpath field — and nothing was ever
      writing more than one into it. */
   test('freehand: a drawing session is ONE layer holding every stroke', { item: 'freehand-one-layer' }, function () {
+    /* isolation (20 Oct): it left its drawing selected — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.refitPathLayer) throw new Error('FM.refitPathLayer is missing — strokes cannot be merged into one layer');
     const before = FM.scene.layers.length;
     // Stroke one builds the layer; stroke two must land in the same one.
@@ -27776,6 +27817,7 @@
     } finally {
       const i = FM.scene.layers.indexOf(a); if (i >= 0) FM.scene.layers.splice(i, 1);
     }
+    } finally { _isoK.put(); }
   });
 
   /* #141 (part 2) — Ezra: "if you made a custom fps or other things etc there's no way to export at
@@ -27948,6 +27990,8 @@
      the thing you just called off. Driven with real pointer events, because the whole feature is the
      event handling. */
   test('pulling back up cancels the faves gesture, and the cancel sticks', { item: 'faves-cancel' }, async function () {
+    /* isolation (20 Oct): it left a different layer selected — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // the gesture is deliberately not armed there
@@ -28031,6 +28075,7 @@
       document.querySelectorAll('.fxb-favview').forEach(n => n.remove());
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #176 — Ezra: "When you press export and the notes show up, put an option in that menu to tick off
@@ -28198,6 +28243,8 @@
      Driven with real pointer events on a clip, with enough rows to overflow, because the whole bug is
      in which branch the move handler takes. */
   test('a vertical swipe that starts ON a clip scrolls the timeline', { item: 'tl-vswipe' }, async function () {
+    /* isolation (20 Oct): it left the selection cleared — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     const savedScene = FM.scene, savedTime = FM.time;
@@ -28254,6 +28301,7 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await sleep(60);
     }
+    } finally { _isoK.put(); }
   });
 
   /* #179 — Ezra: "When you finish adding a vector drawing it does this and you have to swipe down",
@@ -43899,6 +43947,8 @@
    * So these measure the painted geometry (getBBox for the glyph) against the button's centre. */
 
   test('the effects header x and search glyphs are centred in their circles', { item: 'fxb-head' }, async function () {
+    /* isolation (20 Oct): it left its layer selected — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const frame = () => new Promise(r => setTimeout(r, 100));
     const layers0 = FM.scene.layers.slice();
     try {
@@ -43933,9 +43983,12 @@
       if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
     }
+    } finally { _isoK.put(); }
   });
 
   test('the x reads red and the search reads blue', { item: 'fxb-head' }, async function () {
+    /* isolation (20 Oct): it left its layer selected — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const frame = () => new Promise(r => setTimeout(r, 100));
     const layers0 = FM.scene.layers.slice();
     function rgb(s) { const m = String(s).match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/); return m ? [+m[1], +m[2], +m[3]] : null; }
@@ -43956,6 +44009,7 @@
       if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
     }
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 208: the add sheet's wasted band ----------------
@@ -44134,6 +44188,8 @@
    * drift apart — and the box must come BACK, which is the half that is easy to forget. */
 
   test('Move & Transform hides the outline and shows the anchor instead', { item: 'canvas-owner' }, async function () {
+    /* isolation (20 Oct): it left the selection cleared — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const frame = () => new Promise(r => setTimeout(r, 90));
     const layers0 = FM.scene.layers.slice();
     try {
@@ -44158,6 +44214,7 @@
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
       FM.inspector.openCategory('home');
     }
+    } finally { _isoK.put(); }
   });
 
   test('the anchor follows the layer through rotation and scale', { item: 'canvas-owner' }, async function () {
@@ -44334,6 +44391,8 @@
   });
 
   test('the phone bin is red, and it is the SAME red the PC uses', { item: 'bin-red' }, async function () {
+    /* isolation (20 Oct): it left the selection cleared — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* queue 259. "Make the trash icon red." The PC transport row has done this since v7.79, so this
        is the phone catching up. The second assertion is the one that stops a slow drift: two reds for
        one action across two layouts becomes a "why are these different" message later. */
@@ -44418,6 +44477,7 @@
         if (FM.refreshAll) FM.refreshAll();
       }
     }, 380);
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 257 + 258: correcting v8.20's add-menu colour ----------------
@@ -45444,6 +45504,8 @@
    * stack. The safety half is tested first, because breaking it is far worse than the leak. */
 
   test('an undone delete still has its media — freeing must never beat undo', { item: 'media-gc' }, function () {
+    /* isolation (20 Oct): it left a selectedIds entry behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId;
     try {
       const L = FM.makeLayer('image', { x: 270, y: 480 });
@@ -45457,6 +45519,7 @@
       if (!FM.media.get(L.id)) throw new Error('the layer came back but its media did not — this is the data loss the deferral was protecting against');
       FM.releaseMediaFor(L.id);
     } finally { S.layers = keep; S.selectedId = keepSel; }
+    } finally { _isoK.put(); }
   });
 
   test('a clip no undo or redo can reach is released (media leak)', { item: 'media-gc' }, function () {
@@ -46698,6 +46761,8 @@
   });
 
   test('Shift+Home / Shift+End fling the Add marker to the top and bottom (queue 294 clause 12)', { item: 'add-row' }, async function () {
+    /* isolation (20 Oct): it left Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* "we could add shortcuts on the keyboard to quickly push it up to the top… push it up to the bottom
      * so that you don't have to go and find it and then drag it up or down."
      * The pairing is the point: Home/End already jump the PLAYHEAD to the start/end, so the shifted pair
@@ -46806,6 +46871,7 @@
       FM.addAt = at0; FM.groupContext = gc0; FM.setTime(t0); FM.selectLayer(null); FM.refreshAll();
       await sleep(150);
     }
+    } finally { _isoK.put(); }
   });
 
   test('on PC the Add marker is a thin line: click opens the menu, drag moves it (queue 294)', { item: 'add-row' }, async function () {
@@ -58301,6 +58367,8 @@
   });
 
   test('the volume control is a scrub ruler that reaches 1000%', { item: 'vol-boost' }, async function () {
+    /* isolation (20 Oct): it left its clip selected — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const frame = () => new Promise(r => setTimeout(r, 90));
     const layers0 = FM.scene.layers.slice();
     try {
@@ -58337,9 +58405,12 @@
     } finally {
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
     }
+    } finally { _isoK.put(); }
   });
 
   test('keyboard can edit numeric Volume and Position values and effect inputs have names (batch2 1b.4)', { item: '1016', budgetMs: 60000 }, async function () {
+    /* isolation (20 Oct): it left the selection cleared — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const layers0 = FM.scene.layers.slice(), selected0 = FM.scene.selectedId;
     try {
@@ -58390,6 +58461,7 @@
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
       FM.selectLayer(selected0 || null); FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 184: speed to the playhead ----------------
@@ -58413,6 +58485,8 @@
   }
 
   test('speed-to-playhead lands the clip END exactly on the playhead', { item: 'speed-solve' }, async function () {
+    /* isolation (20 Oct): it left its clip selected (spdPanel) — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
     var layers0 = FM.scene.layers.slice(), t0 = FM.time;
     try {
@@ -58429,9 +58503,12 @@
       if (Math.abs(L.speed - 2) > 0.001) throw new Error('speed solved to ' + L.speed + ', expected 2');
       if (Math.abs(L.duration * L.speed - 4) > 0.001) throw new Error('the source span changed — re-timing must not add or drop footage');
     } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); FM.time = t0; }
+    } finally { _isoK.put(); }
   });
 
   test('speed-to-playhead lands the clip START exactly, holding the end', { item: 'speed-solve' }, async function () {
+    /* isolation (20 Oct): it left its clip selected (spdPanel) — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
     var layers0 = FM.scene.layers.slice(), t0 = FM.time;
     try {
@@ -58465,9 +58542,12 @@
       var cEnd = C.start + C.duration;
       if (Math.abs(cEnd - 5) > 0.002) throw new Error('the end moved to ' + cEnd.toFixed(3) + 's — with the duration clamped, the held edge must STILL land on 5s');
     } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); FM.time = t0; }
+    } finally { _isoK.put(); }
   });
 
   test('speed-to-playhead refuses the cases where there is no answer', { item: 'speed-solve' }, async function () {
+    /* isolation (20 Oct): it left its clip selected (spdPanel) — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
     var layers0 = FM.scene.layers.slice(), t0 = FM.time;
     try {
@@ -58495,9 +58575,12 @@
       FM.time = 3; if (rb[1]) rb[1].click(); await frame();
       if (JSON.stringify(R.speed) !== before) throw new Error('solving a speed destroyed an existing speed ramp');
     } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); FM.time = t0; }
+    } finally { _isoK.put(); }
   });
 
   test('the speed range reaches the 1000x he asked for', { item: 'speed-solve' }, async function () {
+    /* isolation (20 Oct): it left its clip selected (spdPanel) — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
     var layers0 = FM.scene.layers.slice();
     try {
@@ -58523,6 +58606,7 @@
       await frame();
       if (!(L.speed <= 0.011)) throw new Error('0.01x was refused — speed came out as ' + L.speed);
     } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); }
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 183: "save project as preset" ----------------
@@ -58698,6 +58782,8 @@
   });
 
   test('effect walker: copying a keyframe from inside a filter pastes back into the same slot', { item: 'fx-walker' }, function () {
+    /* isolation (20 Oct): it left the selection cleared — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10 });
     L.effects = [FM.fxRegistry.makeInstance('sepia'), fxContainer()];
     var p = L.effects[1].effects[0].params.amount;
@@ -58722,6 +58808,7 @@
       if (!FM.isAnimated(landed)) throw new Error('pasting an effect.1.0.amount keyframe did not reach the child inside the filter');
       if (FM.isAnimated(T2.effects[0].params.amount)) throw new Error('the paste landed on the TOP-LEVEL effect instead of the child — the exact silent mis-address this step exists to stop');
     } finally { FM.scene.layers = FM.scene.layers.filter(function (x) { return x !== L; }); FM.selectLayer(null); }
+    } finally { _isoK.put(); }
   });
 
   test('effect walker: a save/load keeps a filter and its children, and refuses a filter inside one', { item: 'fx-walker' }, function () {
@@ -63469,6 +63556,8 @@
   });
 
   test('simple P2.4b · S7 the camera’s hull after Do it anyway holds its REST pose over every stretch the old window did not cover, so those frames still render exactly as camera-less; a camera with a dolly refuses instead', { item: '980', budgetMs: 120000 }, async function () {
+    /* isolation (20 Oct): it left the selection cleared — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     smNeedP2();
     for (const dolly of [false, true]) {
       await smP2((W, H) => smThree(W, H, [(() => { const c = smCam([[2, 1], [9, 2]], { start: 2, duration: 8 }); c.transform.x = 200; c.transform.rotation = 5; if (dolly) c.transform.z = 120; return c; })(), smT('Over', 0, 12, W, H, { sm: { stay: true } })]), async function (v) {
@@ -63495,6 +63584,7 @@
         if (v.doc() !== d0) throw new Error('Undo did not restore the document');
       });
     }
+    } finally { _isoK.put(); }
   });
 
   test('simple P2.4b · S7 LOCK the key sanitiser keeps the boundary marks Simple writes (sb, split) on transform and volume keys, so a reload, an Undo or a host fix op cannot turn a boundary pair back into authored keys', { item: '980', budgetMs: 20000 }, function () {
@@ -74298,6 +74388,8 @@
    * So the case that matters here is the MIDDLE one: a pointerup with no click behind it. On the old
    * code that selected nothing at all. */
   test('#648: a tap selects even when no click follows the pointerup', { item: '648' }, async function () {
+    /* isolation (20 Oct): it left Home open — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.home || !FM.home.open) throw new Error('FM.home is missing');
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     return await atPhoneWidth(async function () {
@@ -74343,6 +74435,7 @@
       const again = await tap(true);
       if (again === noClick) throw new Error('a tap with both pointerup and click flipped the selection twice, so it landed back where it started');
     });
+    } finally { _isoK.put(); }
   });
 
   /* ═══ QUEUE 612 — THE HINGE, AND THE MEASUREMENT IT NEARLY BROKE ══════════════════════════════
@@ -84408,6 +84501,8 @@
   }
 
   test('582: the canvases the effects read every frame are declared read-heavy', { item: '582' }, async function () {
+    /* isolation (20 Oct): it left Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const keep = FM.scene.layers.slice();
     try {
       _fx582Scene(); _fx582Render();
@@ -84420,6 +84515,7 @@
       FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
       FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   /* 620 — "when you turn off the magnet button it should stop snapping … like in the position / scale
@@ -84879,6 +84975,8 @@
      could fail silently: a draft is a PROJECT wearing an Elements-tab card, so bulk delete must not
      hand it to that tab's store. */
   test('617: element drafts take part in Select, and bulk delete actually removes them', { item: '617' }, async function () {
+    /* isolation (20 Oct): it left Home open — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const made = [];
     const realConfirm = window.confirm;
     try {
@@ -84925,6 +85023,7 @@
       for (const id of made) { try { await FM.projects.discardDraftAnyway(id); } catch (e) {} }
       try { const sb = document.getElementById('hm-select-btn'); if (sb && sb.textContent.trim() === 'Done') sb.click(); } catch (e) {}
     }
+    } finally { _isoK.put(); }
   });
 
   /* 617 clause 4 — "as long as there's one left I can't delete it".
@@ -85353,6 +85452,8 @@
      447px tall, unbounded, sitting straight on the canvas. Both DESKTOP branches of positionPop have
      capped it for months (#147, queue 249); the phone branch never did. This asserts the phone one. */
   test('602: the Aa sheet does not cover the canvas on a phone', { item: '602' }, async function () {
+    /* isolation (20 Oct): it left Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const keep = FM.scene.layers.slice();
     try {
       return await atPhoneWidth(async function () {
@@ -85399,6 +85500,7 @@
       FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
       FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   test('582: no effect reads back a big chunk of a GPU-backed canvas per frame', { item: '582' }, async function () {
@@ -93788,6 +93890,8 @@
   });
 
   test('930 the Assistant and the Director never stack, and the API key is entered in Settings, reached from a button in each', { item: '930', budgetMs: 60000 }, async function () {
+    /* isolation (20 Oct): it left Home open — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* Queue 930 — his clauses: one AI panel at a time; the key entered in App Settings in its own section; a button in both
        panels that opens Settings there; nothing he already entered is lost. And, because it is his real key: the full key
        is never written into the page, and the field is cleared once it is saved. */
@@ -93915,9 +94019,12 @@
       try { FM.aiPanel.hide(); FM.aiChat.hide(); if (FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
       if (had) FM.aiKey.set(had, hadRem); else FM.aiKey.forget();
     }
+    } finally { _isoK.put(); }
   });
 
   test('931 swiping the New effects strip pauses its auto-scroll well past the old 3 s, and it resumes from where he left it — real touch and a real wheel', { item: '931', budgetMs: 90000 }, async function () {
+    /* isolation (20 Oct): it left Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* Queue 931: "it's annoying when you try to slide it to see something at the start, but then it instantly starts
        scrolling. So you can't see the first effect that shows up." Real input (see 924): a swipe is a native pan whose events
        a script cannot fake, and a PC scroll is a wheel or trackpad, which never presses a pointer at all. */
@@ -93961,6 +94068,7 @@
         await atPhoneWidth(function () { return run('phone (360)', 'touch'); }, 360);
       });
     } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
+    } finally { _isoK.put(); }
   });
 
 
@@ -147412,6 +147520,8 @@
      40: the 30 px ▶ and ★ plus 5 px padding each side). NEEDS A DOM: on 85b71929 it fails on its first line, naming the six,
      like the others; on this build, in the node harness (no DOM), it fails too — it is judged in Chrome only. */
   test('966 B36 Foley on the sound sheet - a Foley heading holding its six rows in order, each row at least 32 px tall at this width with its play button and Add', { item: '966', budgetMs: 60000 }, async function () {
+    /* isolation (20 Oct): it leaves Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     folNeedSfx966('The Everyday Foley pack (#966 B36)', folSfx966);
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     FM.sfx.open(); await sleep(400);
@@ -147432,6 +147542,7 @@
       try { FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {}
       await sleep(150);
     }
+    } finally { _isoK.put(); }
   });
   // ── end 966 B36 ──
 
@@ -152202,6 +152313,8 @@
      "Could not load that file" and "Media was not replaced…" — was painted UNDER it (#toast z 60, #tpl-fill z 165), so a failed swap
      said nothing at all. Read as stacking order, since a plain toast takes no pointer events and elementFromPoint looks through it. */
   test('1174 a toast raised while Insert your Media is open is painted over the sheet, not under it', { item: '1174' }, async function () {
+    /* isolation (20 Oct): it leaves Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.templateFill || !FM.templateFill.open) throw new Error('FM.templateFill missing');
     const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration;
     try {
@@ -152225,6 +152338,7 @@
       try { FM.templateFill.close(); } catch (e) {}
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l)); FM.scene.project.duration = dur0;
     }
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 929: the heart (clauses 2 and 3) ----------------
