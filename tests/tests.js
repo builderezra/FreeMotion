@@ -165429,6 +165429,183 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* (#3) AN UNDO WITH AN EDITOR OPEN THREW THE REDO HISTORY AWAY. history.restore() (js/history.js) cleared its `suppress` flag
+     BEFORE the repairs and the refresh that follow the swap, and three editors close and COMMIT inside them when the undo took
+     their layer: the text editor (FM.refreshAll → FM.textEdit.syncToSelection → its commit), Edit Points (FM.inspector.refresh
+     with nothing selected → FM.pointEdit.stop) and the mask tool (restore's FM.maskTool.resync → stop, whose `dirty` stays set
+     after any edit until a reseed). Each commit ran before restore re-stamps stack[index], so the scene differed from that
+     entry by the selection alone (the snapshot names whatever was selected at the commit before it; the restore selects
+     nothing once his layer is gone), and commit() cut the redo tail and pushed. So: B selected at the last commit, add S, open
+     an editor on S, ↶ — S goes, ↷ is grey, and the step is gone for good. With the text editor that includes the words he
+     typed: undo's own flush (queue 690) makes the typing a step, the first ↶ takes it back, and the second ↶ used to cut it.
+     Undo and redo are called directly, so every case reproduces at any width (on the phone the text editor's tap-off commits
+     before a tap on ↶ lands, which is why the hunt calls that case PC-only by hand; the code path is the same).
+     The mask case adds the layer and its mask without a step of their own, so the nudge's commit is the step that adds them
+     and the very next ↶ takes the layer away while the tool is still dirty. In the app the same state comes from a nudge put
+     back where it was (its commit pushes nothing, `dirty` stays set) before ↶ of the step that added the mask or the layer.
+     On 9ca3c100: canRedo() is false after the ↶ in all three editor cases.
+     CONTROL (the same before and after): with no editor open the same ↶ keeps ↷ (restore's re-stamp alone does that), which
+     is what proves the editors' commits are the difference.
+     BUDGET: the default 45 s: four small scenes, a handful of undo and redo calls and under 2 s of sleeps. */
+  test('bughunt5 #3 An Undo with an editor open keeps Redo: with Edit Points, the text editor (after typing) or the mask tool (after a nudge) open on a layer that one Undo takes away, ↷ stays live and brings the layer back as it was, his typed words and the nudged mask point included (CONTROL: with no editor open the same Undo keeps ↷)', { item: '1176' }, async function () {
+    if (!FM.history || !FM.history.reset || !FM.history._steps || !FM.history.canRedo) throw new Error('setup: FM.history (reset, _steps, canRedo) is not reachable');
+    if (!FM.pointEdit || !FM.pointEdit.start || !FM.textEdit || !FM.textEdit.start || !FM.textEdit.layerId || !FM.addTextLayer) throw new Error('setup: FM.pointEdit or FM.textEdit / FM.addTextLayer is not reachable');
+    if (!FM.maskTool || !FM.maskTool.open || !FM.maskTool._select || !FM.maskTool._points || !FM.maskTool.layerId) throw new Error('setup: FM.maskTool (open, _select, _points, layerId) is not reachable');
+    const bad = [];
+    const steps = () => JSON.stringify(FM.history._steps());
+    const closeEditors = () => {
+      try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+      try { if (FM.pointEdit.isActive()) FM.pointEdit.stop(); } catch (e) {}
+      try { if (FM.maskTool.isActive()) FM.maskTool.stop(); } catch (e) {}
+    };
+    const shape = name => {
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: Math.round((P.width || 64) / 2), y: Math.round((P.height || 48) / 2), shapeW: 20, shapeH: 16, fill: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      return L;
+    };
+    /* One undo step, with B selected: the snapshot every case undoes back to. */
+    const startOnB = () => {
+      closeEditors();
+      const B = shape('bh5 #3 B');
+      FM.scene.layers = [B];
+      FM.scene.selectedId = B.id; FM.scene.selectedIds = [B.id];
+      FM.refreshAll();
+      FM.history.reset();
+      if (FM.history._steps().len !== 1) throw new Error('setup: the reset did not leave exactly one undo step (' + steps() + ')');
+    };
+    const addAndCommit = name => {
+      const S = shape(name);
+      FM.scene.layers.push(S);
+      FM.scene.selectedId = S.id; FM.scene.selectedIds = [S.id];
+      FM.refreshAll();
+      FM.history.commit();
+      const st = FM.history._steps();
+      if (st.len !== 2 || st.index !== 1) throw new Error('setup: adding ' + name + ' did not make exactly one undo step on top of the reset (' + JSON.stringify(st) + ')');
+      return S;
+    };
+    /* After the ↶: the layer must be gone (or nothing is measured), and ↷ must still be live. */
+    const redoLive = (what, id) => {
+      if (FM.layerById(FM.scene, id)) throw new Error('setup: ' + what + ': the Undo did not take the layer away (' + steps() + '), so nothing below is measured');
+      if (FM.history.canRedo()) return true;
+      bad.push(what + ': one ↶ took the layer away and left ↷ grey (' + steps() + ') — the editor closed and committed inside the undo, and that commit cut the redo history');
+      return false;
+    };
+
+    /* ── EDIT POINTS open on the new shape (embedded, as the Edit Shape panel opens it). */
+    await _bh2With(async function () {
+      startOnB();
+      const S = addAndCommit('bh5 #3 points');
+      FM.pointEdit.start(S.id, { embedded: true });
+      if (!FM.pointEdit.isActive() || FM.pointEdit.layerId() !== S.id) throw new Error('setup: Edit Points did not open on the new shape');
+      FM.history.undo();
+      await sleep(60);
+      if (redoLive('Edit Points open', S.id)) {
+        FM.history.redo();
+        await sleep(60);
+        if (!FM.layerById(FM.scene, S.id)) bad.push('Edit Points open: ↷ is live after the ↶ but does not bring the shape back (' + steps() + ')');
+      }
+    }, closeEditors);
+
+    /* ── THE TEXT EDITOR open on a text just added, with words typed into it. */
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      await _bh2With(async function () {
+        startOnB();
+        FM.addTextLayer();
+        await sleep(250);
+        const id = FM.textEdit.isActive() ? FM.textEdit.layerId() : null;
+        if (!id) throw new Error('setup: Add text did not open the text editor');
+        const st = FM.history._steps();
+        if (st.len !== 2 || st.index !== 1) throw new Error('setup: Add text did not make exactly one undo step on top of the reset (' + JSON.stringify(st) + ')');
+        const T0 = FM.layerById(FM.scene, id), was = T0 ? T0.text : null;
+        const ta = document.getElementById('te-input');
+        if (!ta) throw new Error('setup: the text editor has no field (#te-input)');
+        const WORDS = 'bh5 three typed words';
+        ta.value = WORDS;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        if (!T0 || T0.text !== WORDS) throw new Error('setup: typing did not reach the new text layer');
+        /* ↶ #1 takes back only the typing (undo's flush makes it a step first); the layer and the editor stay. */
+        FM.history.undo();
+        await sleep(60);
+        const T1 = FM.layerById(FM.scene, id);
+        if (!T1 || T1.text !== was || !FM.textEdit.isActive()) throw new Error('setup: the first ↶ did not take back only the typing (the layer ' + (T1 ? 'reads ' + JSON.stringify(T1.text) : 'is gone') + ', the editor is ' + (FM.textEdit.isActive() ? 'open' : 'closed') + ', ' + steps() + ')');
+        /* ↶ #2 takes the layer away with the editor still open on it. */
+        FM.history.undo();
+        await sleep(60);
+        if (redoLive('the text editor open after typing', id)) {
+          FM.history.redo();
+          await sleep(60);
+          if (!FM.layerById(FM.scene, id)) bad.push('the text editor open after typing: the first ↷ did not bring the text layer back (' + steps() + ')');
+          else {
+            FM.history.redo();
+            await sleep(60);
+            const T3 = FM.layerById(FM.scene, id);
+            if (!T3 || T3.text !== WORDS) bad.push('the text editor open after typing: the second ↷ brought the layer back reading ' + (T3 ? JSON.stringify(T3.text) : '(gone)') + ', not the words he typed, ' + JSON.stringify(WORDS));
+          }
+        }
+      }, closeEditors);
+    } finally {
+      try { if (wasHome && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open(); } catch (e) {}
+    }
+
+    /* ── THE MASK TOOL open on the new layer's mask, a point nudged on its precision pad. */
+    await _bh2With(async function () {
+      startOnB();
+      const P = FM.scene.project, w = P.width || 64, h = P.height || 48;
+      const M = shape('bh5 #3 masked');
+      M.masks = [{ id: 'bh5m3', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true,
+                   path: [[w * 0.2, h * 0.2], [w * 0.5, h * 0.2], [w * 0.5, h * 0.6], [w * 0.2, h * 0.6]] }];
+      FM.scene.layers.push(M);
+      FM.maskTool.open(M.id, 'bh5m3');
+      await sleep(200);
+      if (!FM.maskTool.isActive() || FM.maskTool.layerId() !== M.id) throw new Error('setup: the mask tool did not open on the new layer’s mask');
+      FM.maskTool._select(1);
+      await sleep(120);
+      const pad = (document.getElementById('mask-bar') || document.body).querySelector('.mk-pad');
+      if (!pad) throw new Error('setup: selecting a mask point did not offer the precision pad');
+      const p0 = FM.maskTool._points()[1].slice(0, 2);
+      const send = (t, x, y, b) => pad.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'touch', buttons: b }));
+      send('pointerdown', 100, 100, 1);
+      send('pointermove', 70, 130, 1);
+      send('pointerup', 70, 130, 0);
+      await sleep(120);
+      const p1 = FM.maskTool._points()[1].slice(0, 2);
+      if (p1[0] === p0[0] && p1[1] === p0[1]) throw new Error('setup: the precision pad did not move the mask point');
+      const st = FM.history._steps();
+      if (st.len !== 2 || st.index !== 1) throw new Error('setup: the nudge did not make exactly one undo step on top of the reset (' + JSON.stringify(st) + ')');
+      if (!FM.maskTool.isActive()) throw new Error('setup: the mask tool closed after the nudge');
+      FM.history.undo();
+      await sleep(60);
+      if (redoLive('the mask tool open after a nudge', M.id)) {
+        FM.history.redo();
+        await sleep(60);
+        const M2 = FM.layerById(FM.scene, M.id);
+        const m2 = M2 && Array.isArray(M2.masks) ? M2.masks.find(m => m && m.id === 'bh5m3') : null;
+        const q = m2 && Array.isArray(m2.path) ? m2.path[1] : null;
+        if (!M2) bad.push('the mask tool open after a nudge: ↷ is live after the ↶ but does not bring the layer back (' + steps() + ')');
+        else if (!q || Math.abs(q[0] - p1[0]) > 0.01 || Math.abs(q[1] - p1[1]) > 0.01) bad.push('the mask tool open after a nudge: ↷ brought the layer back with its mask point at ' + (q ? q.slice(0, 2).join(', ') : 'nothing') + ', not where the nudge put it (' + p1.join(', ') + ')');
+      }
+    }, closeEditors);
+
+    /* ── CONTROL: the same ↶ with no editor open. */
+    await _bh2With(async function () {
+      startOnB();
+      const S = addAndCommit('bh5 #3 control');
+      FM.history.undo();
+      await sleep(60);
+      if (FM.layerById(FM.scene, S.id)) throw new Error('setup: CONTROL: the Undo did not take the layer away (' + steps() + ')');
+      if (!FM.history.canRedo()) bad.push('CONTROL: with no editor open, one ↶ left ↷ grey (' + steps() + ') — restore’s re-stamp no longer keeps it, so the cases above cannot single out the editors');
+      else {
+        FM.history.redo();
+        await sleep(60);
+        if (!FM.layerById(FM.scene, S.id)) bad.push('CONTROL: with no editor open, ↷ did not bring the layer back (' + steps() + ')');
+      }
+    }, closeEditors);
+
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();

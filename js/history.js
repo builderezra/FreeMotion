@@ -116,14 +116,28 @@ window.FM = window.FM || {};
       FM.scene.selectedId = null;   // the 629 rule in _afterExternalChange says the same; set here so no
       FM.scene.selectedIds = [];    // snapshot selection is ever installed, even for a moment
     }
-    suppress = false;
     /* The block that used to stand here — the 629 rule, restoreReplacedMedia, the groupContext exit, the
        mask resync and the time clamp — is now _afterExternalChange below, WORD FOR WORD. See it for why
        (queue 921 S0). `pause:true` is what restore has always done; nothing else moved. */
-    FM.history._afterExternalChange(wasSelected, { pause: true });
-    if (FM.resizeCanvas) FM.resizeCanvas();
-    FM.refreshAll();
-    if (FM.seekVideosToTime) FM.seekVideosToTime();
+    /* ═══ bughunt5 #3: THE REPAIRS AND THE REFRESH RUN MUTED ═══════════════════════════════════════════════════════
+     * `suppress` used to be cleared HERE, before them, and three editors close and COMMIT inside them when the undo
+     * took their layer: the text editor (refreshAll → syncToSelection → its commit), Edit Points (inspector.refresh
+     * with nothing selected → pointEdit.stop) and the mask tool (the resync below → stop, whose `dirty` outlives every
+     * edit). Each commit compared the scene with stack[index] BEFORE the re-stamp below, so a selection-only
+     * difference read as a new step and cut the whole redo tail: ↶ with one of them open left ↷ grey, and the step
+     * just undone (his typing too, which undo's flush had made a step of) could never come back.
+     * Muting them loses nothing. They run after the swap, so all they could record is the restored scene itself,
+     * and with their layer gone none of them writes to it (each resolves its layer or mask by id and finds none).
+     * Typing not yet committed is already its own step: undo() and redo() flush the text editor before restoring.
+     * `finally`, so a throw in a refresh cannot leave every later commit (and autosave with it) muted for good. */
+    try {
+      FM.history._afterExternalChange(wasSelected, { pause: true });
+      if (FM.resizeCanvas) FM.resizeCanvas();
+      FM.refreshAll();
+      if (FM.seekVideosToTime) FM.seekVideosToTime();
+    } finally {
+      suppress = false;
+    }
     /* The stack entry we are now standing on still names the OLD selection. commit() treats a snapshot
        identical to stack[index] as a no-op, and one that differs only by selection as a real step — so
        without this, the first no-op commit after an undo (a panel that commits on close, a slider let go
