@@ -28243,7 +28243,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   FM.groupNeedsUnit = groupNeedsUnit;   // Simple mode P1: a group that composites as ONE piece is a block (§2.5) — one rule, shared
   /* bughunt2 #8: is L (a half of) this unit's mask? The id test it always was, and for a split mask any half of its lineage. */
-  function isUnitMask(u, L) { return L.id === u.maskId || (u.maskLin != null && L.splitOf === u.maskLin); }
+  /* bughunt4 #7: …and for a top member that is a group, anything in that group's subtree (u.maskSet). */
+  function isUnitMask(u, L) { return L.id === u.maskId || (u.maskLin != null && L.splitOf === u.maskLin) || (u.maskSet != null && u.maskSet.has(L.id)); }
   function collectGroupUnits(scene, t) {
     let map = null;
     const units = [];
@@ -28270,21 +28271,43 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const pass = !tilts && !groupOwnLook(g) && members.some(readsBelow);
       if (!drawable.length && !(pass && members.some(l => l.type === 'adjustment'))) continue;
       // masking needs a mask + at least one clipped member; effects-only units work from 1 member
-      let maskId = null, maskLin = null;
+      let maskId = null, maskLin = null, maskSet = null;
       if (g.maskGroup && drawable.length >= 2) {
         let mask = drawable[0], mi = scene.layers.indexOf(drawable[0]);
         drawable.forEach(l => { const idx = scene.layers.indexOf(l); if (idx < mi) { mi = idx; mask = l; } });
-        /* bughunt2 #8: A SPLIT MASK IS STILL THE MASK, BOTH HALVES OF IT. The mask is the top member, and a split puts the
-           tail half just under the head (FM.splitLayer), so by id alone the head stayed the mask and the TAIL was drawn as
-           an ordinary member: past the cut the head was off screen ("hidden mask"), every member showed unclipped and the
-           mask's own picture was drawn on top of them. Every half of the top member's lineage is the mask (isUnitMask), and
-           the one drawn is the half on screen at t (FM.refLayerAt, drawGroupUnit). It still needs a member to clip that is
-           not part of it, the same "mask + at least one member" rule: a group holding only one split clip is not masked,
-           as it was not before the split. A mask never split: maskLin stays null and nothing below changes. */
-        const lin = mask.splitOf || null;
-        if (!lin || drawable.some(l => l.splitOf !== lin)) { maskId = mask.id; maskLin = lin; }
+        /* bughunt4 #7: THE MASK IS THE TOP MEMBER, AND THAT MEMBER MAY BE A GROUP. `members` is the recursive walk and `drawable`
+           drops every group, so the top-most LEAF above was the mask even when it sat inside a nested group: that group's other
+           pieces were drawn as clipped content (a three-piece mask revealed the photo through its first piece only), and a styled
+           inner group, drawn whole as a unit, painted the mask's own colour inside the mask. Now the masking group's DIRECT child
+           that holds that top-most leaf is the mask. A plain layer is exactly the leaf it always was (the bughunt2 #8 branch below,
+           unchanged). A group is the mask with its whole subtree (maskSet): none of it is drawn as content, and buildGroupUnit draws
+           all of it, nested units whole, into the mask plate (drawGroupMask). It still needs a member to clip outside the mask. */
+        const inG = {};
+        members.forEach(l => { inG[l.id] = l; });
+        let top = mask, hops = 0;
+        while (top && top.parent !== g.id && hops++ < 64) top = inG[top.parent];
+        if (top && top !== mask && top.parent === g.id && top.type === 'group') {
+          const sub = new Set([top.id]);
+          let grew = true;
+          while (grew) {   // the top group's subtree, out of the walk above; a set that only grows, so a cycle cannot spin it
+            grew = false;
+            members.forEach(l => { if (!sub.has(l.id) && sub.has(l.parent)) { sub.add(l.id); grew = true; } });
+          }
+          if (drawable.some(l => !sub.has(l.id))) { maskId = top.id; maskSet = sub; }
+        } else {
+          /* bughunt2 #8: A SPLIT MASK IS STILL THE MASK, BOTH HALVES OF IT. The mask is the top member, and a split puts the
+             tail half just under the head (FM.splitLayer), so by id alone the head stayed the mask and the TAIL was drawn as
+             an ordinary member: past the cut the head was off screen ("hidden mask"), every member showed unclipped and the
+             mask's own picture was drawn on top of them. Every half of the top member's lineage is the mask (isUnitMask), and
+             the one drawn is the half on screen at t (FM.refLayerAt, drawGroupUnit). It still needs a member to clip that is
+             not part of it, the same "mask + at least one member" rule: a group holding only one split clip is not masked,
+             as it was not before the split. A mask never split: maskLin stays null and nothing below changes.
+             (bughunt4 #7: a split piece INSIDE a top group shares that group, so it is in maskSet and needs none of this.) */
+          const lin = mask.splitOf || null;
+          if (!lin || drawable.some(l => l.splitOf !== lin)) { maskId = mask.id; maskLin = lin; }
+        }
       }
-      units.push({ group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, maskLin: maskLin, drawn: false, depth: 0, pass: pass });
+      units.push({ group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, maskLin: maskLin, maskSet: maskSet, drawn: false, depth: 0, pass: pass });
     }
     if (!units.length) return null;
     /* NESTING. A group inside another group is a unit in its own right, and both of them own the same
@@ -28396,13 +28419,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       drawLayer(a, L, t, scene);
     }
     // bughunt2 #8: the half of a split mask on screen at t (a mask never split: the old find by id, through FM.layerById)
-    const maskLayer = u.maskId ? (FM.refLayerAt ? FM.refLayerAt(scene, u.maskId, t) : scene.layers.find(l => l.id === u.maskId)) : null;
-    if (maskLayer && FM.isLayerVisibleAt(maskLayer, t)) {   // hidden mask → members show unclipped
+    const maskLayer = (u.maskId && !u.maskSet) ? (FM.refLayerAt ? FM.refLayerAt(scene, u.maskId, t) : scene.layers.find(l => l.id === u.maskId)) : null;
+    // bughunt4 #7: a top member that is a group is the mask whole, and it is on screen while any piece of it is
+    const maskOn = u.maskSet ? groupMaskOn(u, t, scene) : !!(maskLayer && FM.isLayerVisibleAt(maskLayer, t));
+    if (maskOn) {   // hidden mask → members show unclipped
       const b = _mgB.getContext('2d');
       if (R) { b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, GW, GH); }
       baseT(b); b.clearRect(0, 0, P.width, P.height);
       b.globalAlpha = 1; b.globalCompositeOperation = 'source-over'; b.filter = 'none';
-      drawLayer(b, maskLayer, t, scene);
+      if (u.maskSet) drawGroupMask(b, u, t, scene);
+      else drawLayer(b, maskLayer, t, scene);
       a.globalCompositeOperation = 'destination-in';
       a.drawImage(_mgB, RX, RY, RW, RH);   // `a` is in PROJECT units (baseT), the plate is in target px
       a.globalCompositeOperation = 'source-over';
@@ -28468,6 +28494,36 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   function drawGroupUnit(ctx, u, t, scene) {
     if (u.pass) { drawPassUnit(ctx, u, t, scene); return; }   // bughunt4 #2: an opacity-only group, see below
     drawLayer(ctx, buildGroupUnit(ctx, u, t, scene), t, scene);
+  }
+  /* ═══ bughunt4 #7 — A GROUP ON TOP OF A MASKING GROUP IS THE MASK, ALL OF IT ═══
+   * collectGroupUnits names it (u.maskId, with its subtree in u.maskSet), buildGroupUnit has skipped every piece of it as content,
+   * and drawGroupMask draws it into the mask plate B before the destination-in step, exactly as buildGroupUnit draws members:
+   * bottom to top, an adjustment grading the plate at its slot, and a styled group inside it (a unit of its own, childOwner)
+   * composited WHOLE by drawGroupUnit, with its opacity and effects, so a 99 % inner group masks at 99 % and none of its pieces
+   * is drawn twice. That unit is one nesting depth deeper, so it builds on its own pool plates (_mgPool[depth + 1]); this unit's
+   * A (the content) and B (the plate being drawn into) are never touched by it. groupMaskOn is the single mask's "hidden mask →
+   * members show unclipped" rule for the whole group: the mask is on while any piece of it is on screen at t. */
+  function groupMaskOn(u, t, scene) {
+    for (let i = 0; i < scene.layers.length; i++) {
+      const L = scene.layers[i];
+      if (u.maskSet.has(L.id) && L.type !== 'group' && L.type !== 'camera' && L.type !== 'adjustment' && L.type !== 'null' && FM.isLayerVisibleAt(L, t)) return true;
+    }
+    return false;
+  }
+  function drawGroupMask(b, u, t, scene) {
+    const drawnHere = new Set();
+    for (let i = scene.layers.length - 1; i >= 0; i--) {   // the mask's pieces bottom to top, as buildGroupUnit walks members
+      const L = scene.layers[i];
+      if (!u.maskSet.has(L.id)) continue;
+      const own = u.childOwner && u.childOwner[L.id];
+      if (own && own !== u) {
+        if (!drawnHere.has(own.group.id)) { drawnHere.add(own.group.id); drawGroupUnit(b, own, t, scene); }
+        continue;
+      }
+      if (L.type === 'group') continue;   // a plain group rasterises nothing; its pieces are drawn one by one
+      if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(b, L, t, scene); continue; }
+      drawLayer(b, L, t, scene);
+    }
   }
 
   /* ═══ bughunt4 #2 — A GROUP'S OPACITY NO LONGER CHANGES HOW ITS MEMBERS BLEND ════════════════════════════════════════════

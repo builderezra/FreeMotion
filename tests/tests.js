@@ -164774,6 +164774,91 @@
       }
     });
   });
+
+  /* (#7) A MASKING GROUP WHOSE TOP LAYER IS A GROUP. A masking group G at 0,0 holds, top first: an inner group G2 at 0,0 with two
+     white 60 × 60 squares centred at 80,120 and 240,120 (columns 50..109 and 210..269, rows 90..149), then a red bar filling the
+     320 × 240 frame, the photo. "Its top layer clips the rest": the top layer is G2, so the photo should show through BOTH squares,
+     2 × 3600 = 7200 red px, and nothing white (G2 is the mask, never drawn itself).
+     On 698b5dd0 collectGroupUnits walks G's members recursively, drops every group (`drawable`) and takes the top-most LEAF, the
+     first square, as the mask; the second square is drawn as ordinary content and the first square's destination-in cuts it away:
+       A  plain G2: red in the first square only, 3600 px, and 0 in the second.
+       B  G2 at opacity 0.99 (a unit of its own): buildGroupUnit skips the first square as the mask, but the second square's slot
+          draws G2 WHOLE (drawGroupUnit), both squares white at 0.99, and the first square's mask keeps that: the first square
+          reads white (255, 252, 252), the second nothing, so 0 red px where 7200 should be, and 3600 white.
+     Now the masking group's direct child that holds the top-most leaf is the mask, and when it is a group its whole subtree is:
+     none of it is drawn as content, and all of it (a styled group as its one flattened picture) is drawn into the mask plate. In B
+     the mask is G2's picture at 0.99, so the photo shows at 0.99 over the black frame, (252, 0, 0): still red.
+     CONTROLS (the same before and after): a top layer that is a single square, with the second square directly in G below it,
+     clips to the first square alone (3600 red, the second clipped away, nothing white), the known rule, and proof the fix did not
+     make every leaf the mask; G2 holding only the first square masks exactly as that square does.
+     TOL: every square edge sits on a whole pixel, so a square is exactly 3600 px; 3400..3700 and 30 stray px are slack, not a
+     measurement. The faults are a whole square (3600 px) missing in A, and 3600 white px with no red in B. */
+  test('bughunt4 #7 A masking group whose top layer is a group: every piece of that group is the mask, so the photo below shows through both of its squares, plain or with the inner group at 99 % (not through the first square alone, and not the squares’ own white) (CONTROLS: a single square on top clips to that square alone and a second square below it is clipped away; an inner group holding one square masks exactly as that square)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    await _bh2With(async function () {
+      const SQ = [80, 240], LO = 3400, HI = 3700, STRAY = 30;
+      const grp = (name, parent) => {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        if (parent) g.parent = parent.id;
+        return g;
+      };
+      const square = (name, cx, parent) => {
+        const s = FM.makeLayer('shape', { name: name, shape: 'rect', x: cx, y: 120, shapeW: 60, shapeH: 60, fill: '#ffffff', start: 0, duration: 4 });
+        s.start = 0; s.duration = 4; s.parent = parent.id;
+        return s;
+      };
+      /* red px inside the square centred at cx (columns cx - 30 .. cx + 29, rows 90..149), by _bh2Frame's own red test */
+      const redIn = (f, cx) => {
+        let n = 0;
+        for (let y = 90; y < 150; y++) {
+          for (let x = cx - 30; x < cx + 30; x++) {
+            const i = (y * 320 + x) * 4;
+            if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) n++;
+          }
+        }
+        return n;
+      };
+      /* 'direct': [G, square 1, square 2, photo]; 'one': [G, G2, square 1, photo]; 'nested': [G, G2, square 1, square 2, photo] */
+      const frame = (layout, innerOp) => {
+        const G = grp('bh4 #7 masking group', null);
+        G.maskGroup = true;
+        const photo = _bh2Bar('bh4 #7 photo', 160, 320, '#ff0000');
+        photo.parent = G.id;
+        if (layout === 'direct') {
+          FM.scene.layers = [G, square('bh4 #7 square 1', SQ[0], G), square('bh4 #7 square 2', SQ[1], G), photo];
+        } else {
+          const G2 = grp('bh4 #7 inner group', G);
+          if (innerOp != null) G2.transform.opacity = innerOp;
+          const pieces = [square('bh4 #7 square 1', SQ[0], G2)];
+          if (layout === 'nested') pieces.push(square('bh4 #7 square 2', SQ[1], G2));
+          FM.scene.layers = [G, G2].concat(pieces, [photo]);
+        }
+        const f = _bh2Frame(1);
+        return { f: f, a: redIn(f, SQ[0]), b: redIn(f, SQ[1]) };
+      };
+      const say = r => r.a + ' red px in the first square, ' + r.b + ' in the second, ' + (r.f.red - r.a - r.b) + ' elsewhere, ' + r.f.white + ' white';
+
+      /* ── CONTROLS: a plain layer on top is the mask it always was; a group of one square masks as that square. */
+      const c1 = frame('direct');
+      if (c1.a < LO || c1.a > HI || c1.b > STRAY || c1.f.white > STRAY || c1.f.red - c1.a - c1.b > STRAY) throw new Error('CONTROL: a masking group whose top layer is a single square, with a second square directly below it, should show the photo in the first square alone (3600 red px, the second square clipped away, nothing white): ' + say(c1));
+      const c2 = frame('one');
+      if (c2.a < LO || c2.a > HI || c2.b > STRAY || c2.f.white > STRAY || c2.f.red - c2.a - c2.b > STRAY) throw new Error('CONTROL: a masking group whose top layer is a group holding one square should mask exactly as that square does (3600 red px in it, nothing else): ' + say(c2));
+
+      const bad = [];
+      /* ── A: the inner group holds both squares. */
+      const A = frame('nested');
+      if (A.a < LO || A.a > HI || A.b < LO || A.b > HI || A.f.white > STRAY || A.f.red - A.a - A.b > STRAY) {
+        bad.push('A: with the top layer a group of two squares the photo should show through both (about 3600 red px in each, nothing white, nothing outside): ' + say(A) + ((A.a >= LO && A.b < LO) ? ' (only the group’s first square is the mask; the second is drawn as content and cut away by it)' : ''));
+      }
+      /* ── B: the same, with the inner group at 99 %. */
+      const B = frame('nested', 0.99);
+      if (B.a < LO || B.a > HI || B.b < LO || B.b > HI || B.f.white > STRAY || B.f.red - B.a - B.b > STRAY) {
+        bad.push('B: with the inner group at 99 % the photo should show through both squares (about 3600 red px in each, nothing white): ' + say(B) + ((B.f.white > STRAY) ? ' (the inner group was drawn whole as content, so the mask’s own white shows where the photo should be)' : ''));
+      }
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
   // ── end bughunt 4 ──
 
 })();
