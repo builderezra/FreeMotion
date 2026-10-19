@@ -16660,11 +16660,23 @@
      * on the thing that should have lit, and scrubbing away and back was the only way to make the app
      * look again. The test therefore never moves the playhead, because moving it is the bug's own
      * workaround and would hide the defect completely. */
+    /* isolation (20 Oct, full-order red): it inherited a timeline at least 1 s long, and the editor. It parks the playhead
+       at 1 s with a bare `FM.time = 1` and never made anything that long: in the full order the 20x20 shape 'undo / redo
+       grey out when there is nothing behind or ahead' used to leave did, and 'drawing: opening a project ends any sketch in
+       progress' shut Home. Both sources put things back now, so a full run met the seeded empty project (a 0 s timeline,
+       on which a playhead at 1 s is a state the app cannot hold: setTime, scrubTime and autoFitDuration all clamp it to
+       0) with Home over the editor, and the benchmark added at the playhead did not light the chip. It now sets up its
+       own 3 s shape in the editor (isoOwnLayer, below the 330s), with two CONTROLs: the timeline is longer than 1 s, and
+       the playhead is still on 1 s after the benchmark goes in, so a playhead moved by something else cannot read as the
+       reported staleness. The finally puts the markers back, then the scene, selection, length, playhead and Home
+       (iso.put), and resets the history the two toggles committed to. */
+    const iso = isoOwnLayer();
     const P = FM.scene.project;
     const marks0 = (P.markers || []).slice(), t0 = FM.time;
     const chip = document.getElementById('time-readout');
-    if (!chip) throw new Error('the timecode chip is not in the DOM');
     try {
+      if (!chip) throw new Error('the timecode chip is not in the DOM');
+      if (!(P.duration > 1)) throw new Error('CONTROL: the timeline is ' + P.duration + ' s long, so the playhead cannot stand at 1 s');
       P.markers = [];
       FM.time = 1;
       if (FM.updateReadout) FM.updateReadout();
@@ -16675,6 +16687,7 @@
       FM.toggleMarkerAtPlayhead();
       await sleep(20);
       if (!P.markers.length) throw new Error('the benchmark was not added, so there is nothing to light for');
+      if (Math.abs(FM.time - 1) > 0.5 / (P.fps || 30)) throw new Error('CONTROL: the playhead left 1 s (it reads ' + FM.time + ') while the benchmark went in, so an unlit chip below would not be the reported staleness');
       // NOT moving the playhead is the whole point: that is the workaround, not the fix.
       if (!chip.classList.contains('on-mark')) throw new Error('a benchmark was added at the playhead and the chip is still not lit — you would have to scrub away and back, which is exactly the report');
 
@@ -16686,6 +16699,8 @@
       P.markers = marks0; FM.time = t0;
       if (FM.updateReadout) FM.updateReadout();
       if (FM.timeline) FM.timeline.rebuild();
+      iso.put();
+      if (FM.updateReadout) FM.updateReadout();
     }
   });
 
