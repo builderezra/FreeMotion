@@ -9374,7 +9374,10 @@ window.FM = window.FM || {};
         return;
       }
       if (inEdit) return;
-      if (e.code === 'Space') { e.preventDefault(); FM.togglePlay(); }
+      /* bughunt6 #10: A HELD SPACE IS ONE PRESS. The key's auto-repeat flipped play and pause at the repeat rate for as
+         long as it was held; M and A / S / D already ignore e.repeat. Still taken from the browser on every repeat, so a
+         held Space never presses the button that had the focus. */
+      if (e.code === 'Space') { e.preventDefault(); if (e.repeat) return; FM.togglePlay(); }
       else if (e.key === '?') { e.preventDefault(); if (FM.shortcuts) FM.shortcuts.toggle(); }
       else if (e.code.indexOf('Arrow') === 0) {
         /* ⚠️ queue 823: A MEMBER OF A SELECTED GROUP IS ALREADY BEING MOVED BY THAT GROUP. Select All and

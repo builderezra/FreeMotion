@@ -168493,6 +168493,55 @@
     });
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* (#10) bughunt6 #10: A HELD SPACE FLIPPED PLAY AND PAUSE. Space went to FM.togglePlay on every keydown, auto-repeat included,
+     so holding it a little long (past the system's repeat delay) started, stopped and started playback at the repeat rate;
+     M and A / S / D already return on e.repeat. Pressed on the page, as a real key is, in the test's own scene (one shape,
+     nothing to decode, so FM.requestPlay starts the transport inside the keydown). The transport is stopped on the way out.
+     FAILS ON bc67b146: after one Space and three repeats it is paused (play, pause, play, pause).
+     CONTROLS, which hold before and after: the first Space starts playback (the key reaches the editor at all), and a second
+     real Space, not a repeat, still toggles it (after the fix that is the pause). Each repeat is still taken from the browser
+     (its default prevented), so a held Space cannot press a focused button instead. */
+  test('bughunt6 #10 Holding Space does not flicker play and pause: one Space and then three auto-repeat Spaces leave it playing, each repeat still taken from the browser (CONTROLS: the first Space starts playback, and a second real Space still toggles it)', { item: '1176' }, async function () {
+    if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
+    const space = rep => {
+      const ev = new KeyboardEvent('keydown', { key: ' ', code: 'Space', repeat: !!rep, bubbles: true, cancelable: true });
+      document.body.dispatchEvent(ev);
+      return ev;
+    };
+    const bad = [];
+    await _bh2With(async function () {
+      try {
+        if (FM.playing) FM.pause();
+        const A = FM.makeLayer('shape', { name: 'bh6 #10 A', shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#e9c46a' });
+        A.start = 0; A.duration = 20; FM.scene.layers.push(A);
+        FM.scene.project.duration = 20; FM.time = 0;
+        FM.refreshAll();
+        if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+
+        /* CONTROL: the first Space starts playback */
+        space(false);
+        if (!FM.playing) throw new Error('setup: a Space on the page did not start playback, so no key here reaches the editor and nothing below would mean anything');
+
+        /* the hold: three auto-repeats */
+        const seen = [];
+        for (let i = 0; i < 3; i++) {
+          const ev = space(true);
+          seen.push(FM.playing ? 'playing' : 'paused');
+          if (!ev.defaultPrevented) bad.push('auto-repeat Space ' + (i + 1) + ' was not taken from the browser, so a held Space presses whatever button had the focus');
+        }
+        if (seen.some(s => s !== 'playing')) bad.push('holding Space (one press, then three auto-repeats) went ' + seen.join(', ') + ': each repeat flipped play and pause, where a held key is one press');
+
+        /* CONTROL: a second real press (not a repeat) still toggles: it pauses here, once the hold left it playing */
+        const before = FM.playing;
+        space(false);
+        if (FM.playing === before) bad.push('CONTROL: a second real Space (not a repeat) did not toggle playback (it stayed ' + (before ? 'playing' : 'paused') + ')');
+      } finally {
+        if (FM.playing && FM.pause) FM.pause();
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 6 ──
 
 })();
