@@ -165606,6 +165606,262 @@
 
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* (#8) FM.loadImageFile or FM.loadVideoFile (`key`) held on a gate the test releases by hand, from the `nth` load on (the first when
+     omitted); the loads before it pass at once. `entered` counts the loads that reached the stub. Restored with its own descriptor. */
+  function _bh5HoldLoads(key, nth) {
+    const d0 = Object.getOwnPropertyDescriptor(FM, key);
+    let open = null;
+    const gate = new Promise(r => { open = r; });
+    const h = { entered: 0, release: () => open(), restore: () => { open(); if (d0) Object.defineProperty(FM, key, d0); else delete FM[key]; } };
+    FM[key] = async function (f) {
+      const n = ++h.entered;
+      if (n >= (nth || 1)) await gate;
+      if (key === 'loadVideoFile') return _bh5VidRec(f);
+      const cv = document.createElement('canvas'); cv.width = 2; cv.height = 2;
+      return { kind: 'image', el: cv, width: 2, height: 2 };
+    };
+    return h;
+  }
+  /* A record like the video loader's with no src, as bughunt3 #2's: _repaintWired so wireVideoRepaint arms no "no picture" timer on it,
+     and an empty waveform so no timeline row decodes its 64 bytes. */
+  function _bh5VidRec(file) {
+    return { kind: 'video', el: document.createElement('video'), url: '', file: file, width: 0, height: 0, duration: 6, waveform: [], _repaintWired: true };
+  }
+  /* A video clip whose media record holds a FILE, so FM.duplicateLayer's reloadMediaTo really awaits FM.loadVideoFile for the copy. */
+  function _bh5Vid(name, media) {
+    const L = FM.makeLayer('video', { name: name, x: 100, y: 100, start: 0, duration: 6 });
+    L.start = 0; L.duration = 6; L.trimStart = 0; L.speed = 1; L.volume = 1; L.visible = true; L.muted = false;
+    FM.media.set(L.id, _bh5VidRec(new File([new Uint8Array(64)], 'bh5-8.mp4', { type: 'video/mp4' })));
+    media.push(L.id);
+    return L;
+  }
+
+  /* (#8) AN UNDO PRESSED WHILE A DUPLICATE, A PASTE OR AN EXTRACT AUDIO IS STILL LOADING THE COPY'S MEDIA. FM.duplicateLayer clones the
+     source and THEN awaits the copy's media load (for a song that is loadVideoFile with an 8 kHz decode: seconds on a phone); Duplicate
+     selection awaits it once per clip, Paste once per clipboard entry, and Extract audio awaits the duplicate. history.undo is not
+     blocked meanwhile and swaps FM.scene.layers and FM.scene.project for fresh objects parsed from the snapshot. bughunt2 #1 made Split
+     notice; these four did not. The Duplicate, Duplicate selection and Paste cases move a clip from x 100 to x 500 (one step), start
+     the copy, press ↶ inside the held load (the clip is back at x 100, ↷ live), then let the load go; Extract audio's ↶ takes back a
+     Delete instead.
+     On d9bdc64b:
+       · Duplicate: the copy lands beside the restored clip at x 500 (cloned before the Undo), and its commit throws ↷ away.
+       · Duplicate selection (three clips, ↶ inside the SECOND load): the second copy lands in the restored scene, the third clip is
+         copied after it, the batch commits (↷ gone), and the first copy's record is left behind with the scene the Undo replaced.
+       · Paste: the pasted copy is spliced into the restored scene and committed: two layers, ↷ gone.
+       · Extract audio (D, deleted just before, sat ABOVE the clip): the twin is "the first id not in a list taken before the load",
+         and the Undo brought D back, so D is renamed "… (audio)", hidden and made audio-only; the mute goes to the clip the Undo
+         replaced, so the clip on screen stays unmuted beside an audio-only layer (the sound twice); a visible copy lands; ↷ gone.
+     Now each abandons, as Split does: nothing inserted or committed, the records minted for the copies given back, ↷ kept.
+     CONTROLS (the same before and after): each load was reached before the Undo, and the Undo swapped in fresh objects; with no Undo,
+     Duplicate still makes one copy at the clip's place with its own record, returns its id, in one step, and Extract audio still makes
+     one invisible audio-only "(audio)" twin with its own record, mutes the clip, returns nothing, in one step; and a Delete of ANOTHER
+     layer during a paste's load does not stop the paste (a Delete hands FM.scene.layers a fresh array too, so the paste watches the
+     project object, which only a restore or an open replaces).
+     BUDGET: the default 45 s: seven small scenes, no real media, well under 2 s of sleeps. */
+  test('bughunt5 #8 An Undo during a Duplicate\'s media load: Duplicate, Duplicate selection, Paste and Extract audio make no copy when ↶ lands while the copy’s media loads — ↷ stays live and brings back the move he undid, no media record is left for the copy, and Extract audio leaves the layer the Undo brought back as it was (CONTROLS: each load was reached and the Undo swapped in fresh layers; with no Undo, Duplicate and Extract audio still make one copy in one step; a Delete of another layer during a paste’s load does not stop the paste)', { item: '1176' }, async function () {
+    if (!FM.history || !FM.history.reset || !FM.history._steps || !FM.history.canRedo) throw new Error('setup: FM.history (reset, _steps, canRedo) is not reachable');
+    if (!FM.duplicateLayer || !FM.duplicateSelection || !FM.pasteClipboard || !FM.copySelection || !FM.extractAudio || !FM.deleteLayer) throw new Error('setup: FM.duplicateLayer / duplicateSelection / pasteClipboard / copySelection / extractAudio / deleteLayer is not reachable');
+    const bad = [];
+    const clip0 = FM.clipboard;
+    const steps = () => JSON.stringify(FM.history._steps());
+    const at = (len, index) => { const s = FM.history._steps(); return s.len === len && s.index === index; };
+    const xOf = L => (L && L.transform && typeof L.transform.x === 'number') ? L.transform.x : NaN;
+    const list = () => FM.scene.layers.map(l => '“' + l.name + '” x ' + xOf(l) + (l.muted ? ' muted' : '') + (l.audioOnly ? ' audio-only' : '')).join(', ');
+    /* One case on its own scene (_bh2With) with its own held loader, both put back whatever the body does. `job.p` is the job the body
+       started: the way out releases the gate and waits for it (and for any save it started) before the scene goes back, then gives
+       back every record minted after `job.keys0`, so a red run leaks nothing into the next case. */
+    const kase = async (key, nth, body) => {
+      const hold = _bh5HoldLoads(key, nth);
+      const job = { p: null, keys0: null };
+      try {
+        await _bh2With(media => body(media, hold, job), async function () {
+          hold.release();
+          if (job.p) await Promise.race([job.p.catch(() => {}), sleep(5000)]);
+          if (FM.storage && FM.storage.settled) await Promise.race([FM.storage.settled(), sleep(3000)]);
+          if (job.keys0) _bh2NewMedia(job.keys0).forEach(k => { try { FM.media.remove(k); } catch (e) {} });
+        });
+      } finally {
+        hold.restore();
+      }
+    };
+    /* An image clip at x 100 (plus `more` below it), selected, then moved to x 500: one step on top of the reset. That move is what the
+       Undo inside the load takes back. */
+    const movedClip = (name, media, more) => {
+      const A = _bh2Img(name, media);
+      FM.scene.layers.push(A);
+      (more || []).forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = A.id; FM.scene.selectedIds = [A.id];
+      FM.history.reset();
+      A.transform.x = 500; FM.history.commit();
+      if (!at(2, 1)) throw new Error('setup: moving “' + name + '” to x 500 did not make one undo step on top of the reset (' + steps() + ')');
+      return A;
+    };
+    /* ↶ inside the held load: A must come back at x 100 as a FRESH object with ↷ live, or this is not the case the bug is about. */
+    const undoInside = (what, A) => {
+      FM.history.undo();
+      const back = FM.layerById(FM.scene, A.id);
+      if (!back || back === A || xOf(back) !== 100) throw new Error('CONTROL: ' + what + ': the Undo did not swap in a fresh “' + A.name + '” back at x 100 (' + list() + ', ' + steps() + ')');
+      if (!FM.history.canRedo()) throw new Error('CONTROL: ' + what + ': ↷ was not live straight after the Undo (' + steps() + ')');
+    };
+    /* After the release: exactly the layers `ids`, no record minted for a copy, ↷ live, and ↷ brings back just the move. */
+    const noCopy = (what, job, ids, A) => {
+      const ls = FM.scene.layers;
+      if (ls.length !== ids.length || ids.some(id => !FM.layerById(FM.scene, id))) bad.push(what + ': a copy landed after the Undo: ' + ls.length + ' layers (' + list() + '), carrying the move he had just undone');
+      const stray = _bh2NewMedia(job.keys0);
+      if (stray.length) bad.push(what + ': a media record was left under ' + stray.join(', ') + ', the id of a copy that never landed');
+      if (!FM.history.canRedo()) { bad.push(what + ': the copy committed after the Undo and threw ↷ away (' + steps() + '), so the move to x 500 can never come back'); return; }
+      FM.history.redo();
+      const R = FM.layerById(FM.scene, A.id);
+      if (FM.scene.layers.length !== ids.length || !R || xOf(R) !== 500) bad.push(what + ': ↷ did not bring back just his move (“' + A.name + '” at x 500): ' + list());
+    };
+    try {
+      /* ── DUPLICATE. */
+      await kase('loadImageFile', 1, async function (media, hold, job) {
+        const A = movedClip('bh5 #8 dup', media);
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.duplicateLayer(A.id);
+        if (hold.entered !== 1) throw new Error('CONTROL: Duplicate never reached the copy’s media load (' + hold.entered + ' loads), so an Undo cannot land inside it');
+        undoInside('Duplicate', A);
+        hold.release();
+        const r = await job.p;
+        if (r !== undefined) bad.push('Duplicate: after the Undo the duplicate still answered ' + JSON.stringify(r) + ', so a caller counts a copy as made');
+        noCopy('Duplicate', job, [A.id], A);
+      });
+
+      /* ── DUPLICATE SELECTION of three clips, ↶ inside the SECOND load: the first copy has landed already (in the scene the Undo
+         replaces), and the third clip must not be copied after it. */
+      await kase('loadImageFile', 2, async function (media, hold, job) {
+        const A2 = _bh2Img('bh5 #8 sel 2', media), A3 = _bh2Img('bh5 #8 sel 3', media);
+        const A1 = movedClip('bh5 #8 sel 1', media, [A2, A3]);
+        FM.scene.selectedId = A1.id; FM.scene.selectedIds = [A1.id, A2.id, A3.id];
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.duplicateSelection();
+        for (let i = 0; i < 100 && hold.entered < 2; i++) await sleep(10);
+        if (hold.entered !== 2) throw new Error('CONTROL: Duplicate selection did not reach the second clip’s media load (' + hold.entered + ' loads)');
+        if (FM.scene.layers.length !== 4) throw new Error('CONTROL: Duplicate selection: the first clip’s copy had not landed when the second load was held (' + list() + ')');
+        undoInside('Duplicate selection', A1);
+        if (FM.scene.layers.length !== 3) throw new Error('CONTROL: Duplicate selection: the Undo did not put back the three clips alone (' + list() + ')');
+        hold.release();
+        await job.p;
+        noCopy('Duplicate selection', job, [A1.id, A2.id, A3.id], A1);
+      });
+
+      /* ── PASTE of the clip, copied after the move. */
+      await kase('loadImageFile', 1, async function (media, hold, job) {
+        const A = movedClip('bh5 #8 paste', media);
+        if (FM.copySelection() !== 1) throw new Error('setup: Paste: Copy did not put the clip on the clipboard');
+        FM.time = 0;
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.pasteClipboard();
+        if (hold.entered !== 1) throw new Error('CONTROL: Paste never reached the copy’s media load (' + hold.entered + ' loads)');
+        undoInside('Paste', A);
+        hold.release();
+        await job.p;
+        noCopy('Paste', job, [A.id], A);
+      });
+
+      /* ── CONTROL: a Delete of ANOTHER layer during a paste's load. It hands FM.scene.layers a fresh array (as an Undo does) and
+         commits a step of its own; the paste still lands after it, with its own record and its own step, as it always has. */
+      await kase('loadImageFile', 1, async function (media, hold, job) {
+        const B = _bh2Shape('bh5 #8 B', { duration: 6 });
+        const A = movedClip('bh5 #8 paste ctl', media, [B]);
+        if (FM.copySelection() !== 1) throw new Error('setup: CONTROL (paste): Copy did not put the clip on the clipboard');
+        FM.time = 0;
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.pasteClipboard();
+        if (hold.entered !== 1) throw new Error('CONTROL: the paste never reached the copy’s media load (' + hold.entered + ' loads)');
+        const arr0 = FM.scene.layers;
+        FM.deleteLayer(B.id);
+        if (FM.layerById(FM.scene, B.id) || FM.scene.layers === arr0 || !at(3, 2)) throw new Error('setup: CONTROL (paste): the Delete did not take B away in a fresh layers array and a step of its own (' + list() + ', ' + steps() + ')');
+        hold.release();
+        await job.p;
+        const cp = FM.scene.layers.filter(l => l.id !== A.id);
+        cp.forEach(l => media.push(l.id));
+        if (cp.length !== 1 || FM.layerById(FM.scene, A.id) !== A) bad.push('CONTROL: a Delete of another layer during a paste’s load stopped the paste (' + list() + ')');
+        else if (!FM.media.get(cp[0].id)) bad.push('CONTROL: the paste after the Delete landed without a media record of its own');
+        if (!at(4, 3)) bad.push('CONTROL: the paste after the Delete did not add its own step (' + steps() + ')');
+      });
+
+      /* ── CONTROL: Duplicate with no Undo: one copy where the clip is, with its own record, its id returned, one step. */
+      await kase('loadImageFile', 1, async function (media, hold, job) {
+        const A = movedClip('bh5 #8 dup ctl', media);
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.duplicateLayer(A.id);
+        if (hold.entered !== 1) throw new Error('CONTROL: Duplicate (no Undo) never reached the copy’s media load (' + hold.entered + ' loads)');
+        hold.release();
+        const id = await job.p;
+        const C = id ? FM.layerById(FM.scene, id) : null;
+        if (C) media.push(C.id);
+        if (!C || FM.scene.layers.length !== 2 || FM.layerById(FM.scene, A.id) !== A) bad.push('CONTROL: with no Undo, Duplicate did not make one copy beside the clip and return its id (returned ' + JSON.stringify(id) + '; ' + list() + ')');
+        else {
+          if (xOf(C) !== 500) bad.push('CONTROL: with no Undo, the copy is not where the clip is (x ' + xOf(C) + ')');
+          if (!FM.media.get(C.id)) bad.push('CONTROL: with no Undo, the copy has no media record of its own');
+        }
+        if (!at(3, 2)) bad.push('CONTROL: with no Undo, Duplicate did not add exactly one step (' + steps() + ')');
+      });
+
+      /* ── EXTRACT AUDIO. D, deleted just before, sat ABOVE the clip V; the Undo inside the load brings D back above a fresh V. */
+      await kase('loadVideoFile', 1, async function (media, hold, job) {
+        const D = _bh2Shape('bh5 #8 D', { duration: 6 });
+        const V = _bh5Vid('bh5 #8 V', media);
+        FM.scene.layers.push(D, V);
+        FM.scene.selectedId = V.id; FM.scene.selectedIds = [V.id];
+        FM.history.reset();
+        FM.deleteLayer(D.id);
+        if (FM.layerById(FM.scene, D.id) || !at(2, 1)) throw new Error('setup: Extract audio: deleting D did not make one undo step (' + list() + ', ' + steps() + ')');
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.extractAudio(V);
+        if (hold.entered !== 1) throw new Error('CONTROL: Extract audio never reached the copy’s media load (' + hold.entered + ' loads)');
+        FM.history.undo();
+        const D1 = FM.layerById(FM.scene, D.id), V1 = FM.layerById(FM.scene, V.id);
+        if (!D1 || !V1 || V1 === V || FM.scene.layers.indexOf(D1) !== 0 || V1.muted || !FM.history.canRedo()) throw new Error('CONTROL: Extract audio: the Undo did not bring D back above a fresh, unmuted V with ↷ live (' + list() + ', ' + steps() + ')');
+        hold.release();
+        await job.p;
+        const D2 = FM.layerById(FM.scene, D.id), V2 = FM.layerById(FM.scene, V.id);
+        if (!D2 || D2.name !== 'bh5 #8 D' || D2.audioOnly || D2.transform.opacity !== 1) bad.push('Extract audio: D, which the Undo brought back, was ' + (D2 ? 'renamed “' + D2.name + '” at opacity ' + D2.transform.opacity + (D2.audioOnly ? ' and made audio-only' : '') : 'lost') + ': the extract took it for the twin it made');
+        const twin = FM.scene.layers.find(l => l.audioOnly);
+        if (twin && !(V2 && V2.muted)) bad.push('Extract audio: “' + twin.name + '” is audio-only while the clip on screen is not muted: the mute went to the clip the Undo replaced, so the sound plays twice');
+        if (FM.scene.layers.length !== 2) bad.push('Extract audio: a copy landed after the Undo: ' + FM.scene.layers.length + ' layers (' + list() + ')');
+        const stray = _bh2NewMedia(job.keys0);
+        if (stray.length) bad.push('Extract audio: a media record was left under ' + stray.join(', ') + ', the id of a twin that never landed');
+        if (!FM.history.canRedo()) bad.push('Extract audio: the extract committed after the Undo and threw ↷ away (' + steps() + '), so deleting D can never be redone');
+        else {
+          FM.history.redo();
+          const R = FM.scene.layers;
+          if (R.length !== 1 || R[0].id !== V.id || R[0].muted || R[0].audioOnly) bad.push('Extract audio: ↷ did not bring back just the Delete (V alone, unmuted): ' + list());
+        }
+      });
+
+      /* ── CONTROL: Extract audio with no Undo: one invisible audio-only "(audio)" twin with its own record, the clip muted, one step,
+         and nothing returned (its callers find the twin by the ids around the call). */
+      await kase('loadVideoFile', 1, async function (media, hold, job) {
+        const V = _bh5Vid('bh5 #8 V ctl', media);
+        FM.scene.layers.push(V);
+        FM.scene.selectedId = V.id; FM.scene.selectedIds = [V.id];
+        FM.history.reset();
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.extractAudio(V);
+        if (hold.entered !== 1) throw new Error('CONTROL: Extract audio (no Undo) never reached the copy’s media load (' + hold.entered + ' loads)');
+        hold.release();
+        const r = await job.p;
+        const twin = FM.scene.layers.find(l => l.id !== V.id);
+        if (twin) media.push(twin.id);
+        if (FM.scene.layers.length !== 2 || !twin || FM.layerById(FM.scene, V.id) !== V) bad.push('CONTROL: with no Undo, Extract audio did not make one twin beside the clip (' + list() + ')');
+        else {
+          if (!twin.audioOnly || twin.name !== V.name + ' (audio)' || twin.transform.opacity !== 0) bad.push('CONTROL: with no Undo, the twin is not the invisible, audio-only “' + V.name + ' (audio)” (' + list() + ', opacity ' + twin.transform.opacity + ')');
+          if (!V.muted) bad.push('CONTROL: with no Undo, Extract audio left the clip unmuted');
+          if (!FM.media.get(twin.id)) bad.push('CONTROL: with no Undo, the twin has no media record of its own');
+        }
+        if (r !== undefined) bad.push('CONTROL: Extract audio returned ' + JSON.stringify(r) + ', where it returns nothing');
+        if (!at(2, 1)) bad.push('CONTROL: with no Undo, Extract audio did not make exactly one step (' + steps() + ')');
+      });
+    } finally {
+      FM.clipboard = clip0;
+    }
+
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();

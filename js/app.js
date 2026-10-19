@@ -1071,16 +1071,20 @@ window.FM = window.FM || {};
     FM.requestRender(); if (FM.history) FM.history.commit();
   };
   FM.extractAudio = async function (layer) {   // audio-only twin of a video clip
-    const before = new Set(FM.scene.layers.map(l => l.id));
     /* ⚠️ queue 914.9: ONE PRESS, ONE UNDO. duplicateLayer commits history itself, so Extract Audio left TWO
        steps, and the first Undo landed on a state he never made: two identical visible, UNMUTED clips, the
        sound playing twice (#912 audit). Muted like duplicateSelection and clipSplit, released in a finally so a
        throw cannot leave history muted for the session; the single commit is the one at the end. */
     const hist = FM.history;
     if (hist && hist.mute) hist.mute();
-    try { await FM.duplicateLayer(layer.id, true); }
+    let dupId;
+    try { dupId = await FM.duplicateLayer(layer.id, true); }
     finally { if (hist && hist.unmute) hist.unmute(); }
-    const dup = FM.scene.layers.find(l => !before.has(l.id));
+    /* bughunt5 #8: THE TWIN IS THE ID duplicateLayer RETURNED, not the first id missing from a list taken before its load. An Undo
+       inside that load brought back a layer the list never had (one deleted just before), which was renamed "(audio)" and hidden,
+       while `layer`, no longer in the scene, took the mute. duplicateLayer now abandons when its source was replaced and returns
+       nothing, and so does this: nothing named, hidden, muted or committed. */
+    const dup = dupId ? FM.layerById(FM.scene, dupId) : null;
     if (!dup) return;
     dup.name = (layer.name || 'Clip') + ' (audio)';
     dup.transform.opacity = 0;      // picture invisible; the tick still plays its sound
@@ -4500,6 +4504,15 @@ window.FM = window.FM || {};
         if (l.karaokeOf && idMap[l.karaokeOf]) l.karaokeOf = idMap[l.karaokeOf];
       });
     }
+    /* bughunt5 #8: THE SOURCE MUST STILL BE THE OBJECT THE COPY WAS CLONED FROM, the test bughunt2 #1 gave Split. An Undo in the
+       load above (seconds for a song on a phone) swaps in fresh layers: the copy carried the edit just undone and its commit threw
+       ↷ away, or, with the source undone away (idx −1), an undone clip came back on top as "copy". Abandoned instead: nothing
+       inserted, committed or saved, the records minted for the copies' fresh ids given back, undefined returned as for a refusal. */
+    if (FM.layerById(FM.scene, id) !== src) {
+      inserts.forEach(c => { if (FM.media.get(c.id)) FM.media.remove(c.id); });
+      FM._lastDupMap = null;
+      return;
+    }
     if (FM.spine && FM.spine.onCopy) FM.spine.onCopy(inserts, 'duplicate');   // Simple mode P1: a copy is not a second main clip
     const idx = FM.scene.layers.findIndex(l => l.id === id);
     FM.scene.layers.splice(Math.max(0, idx), 0, ...inserts);
@@ -4535,9 +4548,15 @@ window.FM = window.FM || {};
        work — and the old form had the second capture the first's no-op as "the real commit" and restore
        THAT, leaving history and autosave dead for the rest of the session. A depth counter cannot be lost. */
     const hist = FM.history;
+    /* bughunt5 #8: AN UNDO OR REDO DURING THE BATCH ENDS IT, as clipSplit's (bughunt2 #1). While muted only an undo, redo or reset
+       can move the stack, so a change in its position or length means one happened: copy nothing more, commit nothing. */
+    const steps = () => (hist && hist._steps) ? hist._steps() : null;
+    const at = steps();
+    const moved = () => { const s = steps(); return !!(at && s && (s.index !== at.index || s.len !== at.len)); };
     if (hist && hist.mute) hist.mute();
     try {
       for (const id of todo) {
+        if (moved()) break;
         /* ⚠️ queue 914.14: COUNT WHAT WAS MADE, NOT WHAT IS SELECTED. A camera is refused (one per scene) and
            leaves the selection alone — and Select All puts the camera first, so the selection it left was the
            CAMERA ITSELF. It was pushed as a "copy": the toast said 3 for 2, and the original camera stayed in
@@ -4548,6 +4567,11 @@ window.FM = window.FM || {};
         made.push(made1);
       }
     } finally { if (hist && hist.unmute) hist.unmute(); }
+    /* bughunt5 #8: the copies made before it went with the scene the undo replaced; the records minted for them are given back. */
+    if (moved()) {
+      Object.keys(batch).forEach(k => { const c = batch[k]; if (!FM.layerById(FM.scene, c) && FM.media.get(c)) FM.media.remove(c); });
+      return;
+    }
     /* THE WHOLE BATCH AT ONCE, once every copy exists. A per-layer pass cannot do this: when layer A is
      * duplicated, layer B's copy does not exist yet, so a link from A to B has nothing to point at.
      * Idempotent over the per-subtree remap duplicateLayer already did — those refs are copy ids now,
@@ -4623,6 +4647,7 @@ window.FM = window.FM || {};
     const _dflt = FM.groupContext ? 0 : (FM.clampAddAt ? FM.clampAddAt() : 0);
     let insertAt = (typeof insertIndex === 'number' && insertIndex >= 0) ? Math.min(insertIndex, FM.scene.layers.length) : _dflt;
     const batchIds = new Set(copies.map(c => c.copy.id));
+    const scene0 = FM.scene, project0 = FM.scene.project;   // bughunt5 #8: what an Undo replaces (see the check after the load below)
     for (const { copy, entry } of copies) {
       // Remap parent: a parent copied in the same batch → its new clone; else keep if still present, else drop.
       if (copy.parent) {
@@ -4675,6 +4700,15 @@ window.FM = window.FM || {};
           FM.media.set(copy.id, nrec);
           if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; FM.requestRender(); });   // coalesced AND measured — see the note at the first of these (queue 125)
         }
+      }
+      /* bughunt5 #8: AN UNDO DURING THAT LOAD ENDS THE PASTE, as bughunt2 #1 ended Split. Spliced into the restored scene, the copy
+         landed on a state he had just stepped back to and its commit threw ↷ away. Nothing more lands, nothing is committed or
+         saved, and the records minted for this paste's copies (those already in went with the old scene) are given back. The
+         PROJECT object is watched, not the layers array: restore() installs a fresh one of each, but a Delete or a reorder also
+         refilters the array, and a paste must not stop because he deleted another layer meanwhile. */
+      if (FM.scene !== scene0 || FM.scene.project !== project0) {
+        copies.forEach(c => { if (!FM.layerById(FM.scene, c.copy.id) && FM.media.get(c.copy.id)) FM.media.remove(c.copy.id); });
+        return;
       }
       // Single-camera invariant. FM.duplicateLayer enforces it; paste did not, so Cmd-C then Cmd-V
       // on the camera made a SECOND one, and the composite takes the first it finds — the view was
