@@ -73,9 +73,12 @@ window.FM = window.FM || {};
   /* WHAT MAKES TWO EXPORTS THE SAME EXPORT. Everything that can change a single output byte has to be
    * in here, because a mismatch that slips through does not fail loudly — it splices frames of one
    * project into the middle of another. Cheap to over-include, ruinous to under-include. */
+  /* bughunt3 #1: the scene AS IT IS RENDERED, so FM.jsonReplacerLive and not FM.jsonReplacer, which now writes a layer's ORIGINAL
+     solo while an "Export only this layer" holds it (so a save mid-export cannot keep it). Here the export's own solo IS the render:
+     with the saved value a killed one-layer export and a whole-project one of the same scene would sign alike and splice. */
   function signature(o) {
     let doc = '';
-    try { doc = JSON.stringify({ project: o.project, layers: o.layers }, FM.jsonReplacer); }
+    try { doc = JSON.stringify({ project: o.project, layers: o.layers }, FM.jsonReplacerLive || FM.jsonReplacer); }
     catch (e) { doc = String(Math.random()); }   // unserialisable scene → never matches, so never resumes
     return [FORMAT, appVersion(), o.w, o.h, o.fps, o.bitrate, o.codec, round6(o.from), round6(o.to), o.frames,
             o.audio ? 1 : 0, hash(doc)].join('|');

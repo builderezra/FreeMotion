@@ -184,7 +184,13 @@ window.FM = window.FM || {};
       // now-unmuted vocals.
       const twinIds = FM.scene.layers.filter(l => isVocalTwin(l) && l.karaokeOf === srcId).map(l => l.id);
       if (twinId && twinIds.indexOf(twinId) < 0) twinIds.push(twinId);
-      twinIds.forEach(tid => { if (FM.deleteLayer) FM.deleteLayer(tid); });   // keeps the media blobs (undo-safe); prune reaps them later
+      /* bughunt3 #4: deleteLayer commits on its own, one undo step per twin, so with two twins (a split or a duplicate) one Undo
+         after "Vocals restored" brought neither back, and the next brought ONE back over the unmuted song. Held, as Reduce noise
+         holds its restore, so the commit below is the only step. deleteLayer keeps the media blobs (undo-safe); prune reaps them
+         later. */
+      if (FM.history && FM.history.mute) FM.history.mute();
+      try { twinIds.forEach(tid => { if (FM.deleteLayer) FM.deleteLayer(tid); }); }
+      finally { if (FM.history && FM.history.unmute) FM.history.unmute(); }
       if (src) { FM.scene.selectedId = src.id; FM.scene.selectedIds = [src.id]; }
       if (FM.refreshAll) FM.refreshAll();
       if (FM.history) FM.history.commit();
@@ -236,28 +242,51 @@ window.FM = window.FM || {};
       if (FM.toast) FM.toast('Not added — you switched projects while the vocals were being removed', 4000);
       return;
     }
-    FM.addMediaLayer(rec);   // selects the new layer + commits
-    const nl = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
-    if (nl) {
-      nl.name = (layer.name || 'Audio') + ' (no vocals)';
-      nl.karaokeOf = layer.id;   // the link that makes this a toggle (and survives save/reload)
-      nl.start = layer.start;
-      nl.duration = layer.duration;
+    /* ═══ bughunt3 #4: REMOVE VOCALS IS ONE UNDO STEP, AND IT WRITES TO THE LIVE CLIP ═══════════════════════════════════════
+     * FM.addMediaLayer commits on its own, so the add used to be an undo step of its own ahead of the commit below. One Undo after
+     * "Vocals removed" went back to the half-made add: an UNLINKED instrumental at the playhead, its whole length at full volume,
+     * beside a song that was no longer muted, so he heard the song twice, offset, and the button read Remove vocals again.
+     * history.commit does not merge the two (its karaoke sync finds the source's clock unchanged and returns). The add is held
+     * now, as Reduce noise holds its own (js/noise-reduction.js apply), so the commit below is the only step.
+     * And the clip is looked up again by id after the awaits. An Undo while the vocals were being removed (seconds on a long
+     * song) swaps the scene's layer objects (history restore), and the mute and the mix used to go to and come from the clip as
+     * it was BEFORE that Undo: the live clip stayed unmuted under its new instrumental. A clip that has gone, or that has a copy
+     * of its sound by now, gets no track, and he is told, as Reduce noise does. */
+    const src = FM.layerById ? FM.layerById(FM.scene, layer.id) : layer;
+    const drop = msg => {
+      if (FM.letGoMedia) FM.letGoMedia(rec);
+      if (FM.hideToast) FM.hideToast();
+      if (FM.toast) FM.toast(msg, 4000);
+    };
+    if (!src) return drop('Not added — the clip was deleted while its vocals were being removed');
+    if (FM.karaokeTwinOf(src) || (FM.noiseReduction && FM.noiseReduction.twinOf(src))) return drop('Not added — the clip changed while its vocals were being removed');
+    if (FM.history && FM.history.mute) FM.history.mute();
+    let nl = null;
+    try { FM.addMediaLayer(rec); nl = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null; }
+    finally { if (FM.history && FM.history.unmute) FM.history.unmute(); }
+    if (nl && nl !== src) {
+      nl.name = (src.name || 'Audio') + ' (no vocals)';
+      nl.karaokeOf = src.id;   // the link that makes this a toggle (and survives save/reload)
+      nl.start = src.start;
+      nl.duration = src.duration;
       // The WAV is the FULL source track, so the twin must share the original's source→timeline mapping
       // (trim / speed / reverse) or the instrumental drifts out of sync with the muted picture.
-      nl.trimStart = layer.trimStart || 0;
-      nl.reversed = !!layer.reversed;
-      nl.speed = FM.isAnimated(layer.speed) ? JSON.parse(JSON.stringify(layer.speed)) : layer.speed;   // deep-clone the ramp so the two layers don't share one {kf} array
+      nl.trimStart = src.trimStart || 0;
+      nl.reversed = !!src.reversed;
+      nl.speed = FM.isAnimated(src.speed) ? JSON.parse(JSON.stringify(src.speed)) : src.speed;   // deep-clone the ramp so the two layers don't share one {kf} array
       // The toggle must be a transparent vocals-off swap, so the twin inherits the source's MIX too —
       // volume (incl. keyframed), fades, and the audio-effect chain. Without these the instrumental
       // jumped to full level, lost its fade-out, and dropped the user's EQ/reverb.
-      nl.volume = FM.isAnimated(layer.volume) ? JSON.parse(JSON.stringify(layer.volume)) : (layer.volume == null ? 1 : layer.volume);
-      nl.fadeIn = layer.fadeIn || 0;
-      nl.fadeOut = layer.fadeOut || 0;
-      if (Array.isArray(layer.audioFx) && layer.audioFx.length) nl.audioFx = JSON.parse(JSON.stringify(layer.audioFx, FM.jsonReplacer));
+      nl.volume = FM.isAnimated(src.volume) ? JSON.parse(JSON.stringify(src.volume)) : (src.volume == null ? 1 : src.volume);
+      nl.fadeIn = src.fadeIn || 0;
+      nl.fadeOut = src.fadeOut || 0;
+      /* bughunt3 #3: …with the span a split half's fades are measured over, or the copy's fade would start at its own edge. */
+      if (src.fadeInLead != null) nl.fadeInLead = src.fadeInLead;
+      if (src.fadeOutTail != null) nl.fadeOutTail = src.fadeOutTail;
+      if (Array.isArray(src.audioFx) && src.audioFx.length) nl.audioFx = JSON.parse(JSON.stringify(src.audioFx, FM.jsonReplacer));
       if (nl.transform) nl.transform.opacity = 0;   // audio-only twin — no picture
     }
-    layer.muted = true;   // hear the karaoke, not the original
+    src.muted = true;   // hear the karaoke, not the original
     if (FM.refreshAll) FM.refreshAll();
     if (FM.history) FM.history.commit();
     if (FM.hideToast) FM.hideToast();

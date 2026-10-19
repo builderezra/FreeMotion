@@ -3789,8 +3789,10 @@ window.FM = window.FM || {};
       // pasted level of 1 onto a muted layer would otherwise read as "the paste did nothing".
       if ('volume' in src) target.volume = clone(src.volume);
       if ('muted' in src) target.muted = src.muted;
-      if ('fadeIn' in src) target.fadeIn = src.fadeIn;
-      if ('fadeOut' in src) target.fadeOut = src.fadeOut;
+      /* bughunt3 #3: each fade with the span it is measured over (a split half's fadeInLead / fadeOutTail), so the pasted fade
+         sounds as the source's does; a source with none clears the target's. */
+      if ('fadeIn' in src) { target.fadeIn = src.fadeIn; if ('fadeInLead' in src) target.fadeInLead = src.fadeInLead; else delete target.fadeInLead; }
+      if ('fadeOut' in src) { target.fadeOut = src.fadeOut; if ('fadeOutTail' in src) target.fadeOutTail = src.fadeOutTail; else delete target.fadeOutTail; }
     }
     if (cats.effects) {
       const fx = clone(src.effects) || [];
@@ -6187,8 +6189,10 @@ window.FM = window.FM || {};
     const fmax = Math.max(1, Math.min(10, round(layer.duration, 1)));
     // reconcileFades, NOT reconcileAudio: these fire on every pointermove, and the full reconcile restarts every
     // reversed clip's audio each time — a buzz while dragging (queue 894). See FM.reconcileFades in js/app.js.
-    control.appendChild(rangeRow('Fade in (s)', () => round(layer.fadeIn, 1), v => { layer.fadeIn = Math.max(0, v); if (FM.reconcileFades) FM.reconcileFades(); }, 0, fmax, 0.1));
-    control.appendChild(rangeRow('Fade out (s)', () => round(layer.fadeOut, 1), v => { layer.fadeOut = Math.max(0, v); if (FM.reconcileFades) FM.reconcileFades(); }, 0, fmax, 0.1));
+    /* bughunt3 #3: a half of a split carries the span its fades were measured over (fadeInLead / fadeOutTail, js/scene.js). A fade
+       set here is his own, from this clip's edge, so setting one clears that side's span: Fade in 2 s starts from silence. */
+    control.appendChild(rangeRow('Fade in (s)', () => round(layer.fadeIn, 1), v => { layer.fadeIn = Math.max(0, v); delete layer.fadeInLead; if (FM.reconcileFades) FM.reconcileFades(); }, 0, fmax, 0.1));
+    control.appendChild(rangeRow('Fade out (s)', () => round(layer.fadeOut, 1), v => { layer.fadeOut = Math.max(0, v); delete layer.fadeOutTail; if (FM.reconcileFades) FM.reconcileFades(); }, 0, fmax, 0.1));
 
     // Audio tools live WITH the Volume section (the ⋯ menu path was easy to miss on PC).
     const tools = el('div', 'vol-tools');

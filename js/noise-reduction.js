@@ -465,6 +465,9 @@ window.FM = window.FM || {};
       nl.volume = FM.isAnimated && FM.isAnimated(src.volume) ? JSON.parse(JSON.stringify(src.volume)) : (src.volume == null ? 1 : src.volume);
       nl.fadeIn = src.fadeIn || 0;
       nl.fadeOut = src.fadeOut || 0;
+      /* bughunt3 #3: …with the span a split half's fades are measured over, or the copy's fade would start at its own edge. */
+      if (src.fadeInLead != null) nl.fadeInLead = src.fadeInLead;
+      if (src.fadeOutTail != null) nl.fadeOutTail = src.fadeOutTail;
       if (Array.isArray(src.audioFx) && src.audioFx.length) nl.audioFx = JSON.parse(JSON.stringify(src.audioFx, FM.jsonReplacer));
       nl.muted = !!src.muted;
       if (src.visible === false) nl.visible = false;

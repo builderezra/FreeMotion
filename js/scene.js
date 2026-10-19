@@ -805,7 +805,24 @@ window.FM = window.FM || {};
   // JSON replacer: DROP runtime-only fields (canvas snapshots, decode caches — keys starting with
   // '_'). A live <canvas> serialises to {} and comes back methodless, which crashed the compositor
   // (Copy Background's _bgSnap, motion-blur plates, media _lastFrame, group _canvas, …).
-  FM.jsonReplacer = function (k, v) { return (typeof k === 'string' && k.charCodeAt(0) === 95) ? undefined : v; };
+  /* ⚠️ bughunt3 #1: …AND WHILE AN EXPORT HOLDS A LAYER'S SOLO, ITS ORIGINAL. "Export only this layer" isolates by setting `solo`
+   * on the LIVE layers (exportSoloPrep, js/app.js) and puts them back only when the export is over, which for an MP4 is after the
+   * Export ready card is closed. `solo` is a saved key, so every save in between (flushSync on pagehide and on an app switch, the
+   * autosave after an edit on the audio-only path, whose editor stays live) wrote the soloed doc, and the undo snapshots kept it
+   * too. A kill, or a reload at the Export ready card, then reopened the project showing one layer for good: nothing in the app can
+   * clear solo (js/ai-ops.js). exportSoloPrep now holds each layer's original in FM._exportSoloHeld (layer → { solo, n }) until its
+   * restore, and this writes that one instead, so every save, undo snapshot and copy sees the project as it was. The compositor and
+   * the mixer read the live flag, not a serialised copy, so the export itself still renders just that layer. One string compare per
+   * key when no export holds anything. */
+  FM.jsonReplacer = function (k, v) {
+    if (typeof k === 'string' && k.charCodeAt(0) === 95) return undefined;
+    if (k === 'solo' && FM._exportSoloHeld) { const h = FM._exportSoloHeld.get(this); if (h) return h.solo; }
+    return v;
+  };
+  /* …and the scene AS IT IS DRAWN, for the few serialisations that describe a render rather than save one: the export's crash-resume
+     signature (js/export-resume.js), which must tell a one-layer export from a whole one, and the effect thumbnails' scene stamp
+     (js/fx-thumbs.js). These keep the export's live solo. */
+  FM.jsonReplacerLive = function (k, v) { return (typeof k === 'string' && k.charCodeAt(0) === 95) ? undefined : v; };
   /* THE EFFECT-PHASE CLOCK, in ONE place (bug hunt, 21 Aug). Every time-driven canvas effect — Drift,
    * Spin, Orbit, Wiggle, Shake and the rest — is driven by "seconds since THIS CLIP began", so a split
    * handed the tail half a fresh clock and the picture SNAPPED at a cut that is meant to be invisible:
@@ -1178,17 +1195,38 @@ window.FM = window.FM || {};
      * next one will not know. */
     const num = v => { const n = (typeof v === 'number') ? v : parseFloat(v); return (isFinite(n) && n > 0) ? n : 0; };
     let fi = num(layer.fadeIn), fo = num(layer.fadeOut);
-    if (clipDur > 0 && fi + fo > clipDur) { const k = clipDur / (fi + fo); fi *= k; fo *= k; }
-    return { fi: fi, fo: fo };
+    /* ═══ bughunt3 #3: A HALF OF A SPLIT MEASURES ITS FADES OVER THE WHOLE CLIP IT CAME FROM ═══════════════════════════════════════
+     * WHAT WAS WRONG. A split handed the head half the fade-in and the tail half the fade-out, and every fade was measured from the
+     * half's OWN edges. That reproduces the clip only when the cut is outside both fades. Inside one, the line below squeezed the
+     * head's fade-in into the head's own length and the tail had none: a 10 s song with Fade in 3, cut at 1 s, read 1.0 at the cut
+     * instead of 0.333 (0.5 at 0.5 s, full level from the cut on). The fade-out mirrors it. You HEARD the cut, in the preview and
+     * in the file alike. Audio only: these fades never reach the picture.
+     * THE MODEL. Two optional numbers say how far the span the fades are measured over reaches past the layer's own edges:
+     * `fadeInLead` (the fade-in began this many seconds before the layer's start) and `fadeOutTail` (the fade-out ends this many
+     * seconds after its end). The clip [S, E] had mult(t) = min(1, (t - S) / Fi, (E - t) / Fo), its two fades squeezed together
+     * when they overlap. A half carries the same span: the head's tail reaches on to E, the tail half's lead reaches back to S, so
+     * each moment gets the number it had before the cut, the squeeze included. A half cut again adds to them (FM.splitLayer).
+     * Absent, 0, or not a finite positive number means exactly what it always meant: every expression below reduces to the old one.
+     * Capped at an hour, the longest clip storage keeps, so no schedule built from them can overflow to a non-finite time (the
+     * reversed preview divides by the preview rate). A trim moves an edge and the span with it, exactly as a trim always moved a
+     * fade with its edge; a fade set by hand (the volume panel, an AI edit) clears its own side's span, so it starts at the edge. */
+    const span = v => Math.min(3600, num(v));
+    const lead = span(layer.fadeInLead), tail = span(layer.fadeOutTail);
+    if (clipDur > 0 && fi + fo > clipDur + lead + tail) { const k = (clipDur + lead + tail) / (fi + fo); fi *= k; fo *= k; }
+    return { fi: fi, fo: fo, lead: lead, tail: tail };
   };
 
   // Audio fade multiplier (0..1): given seconds INTO the clip (timeline-local) and the clip's
   // timeline duration, ramps up over fadeIn at the head and down over fadeOut at the tail.
+  /* bughunt3 #3: both measured over the span FM.fadeWindows describes: the fade-in from `lead` seconds before the clip's start,
+     the fade-out to `tail` seconds after its end (`end`, in the clip's own time). With neither, `into + 0` and `clipDur + 0` are
+     the old numbers exactly. */
   FM.fadeMul = function (layer, into, clipDur) {
     const win = FM.fadeWindows(layer, clipDur), fi = win.fi, fo = win.fo;
+    const lead = win.lead || 0, end = clipDur + (win.tail || 0);
     let g = 1;
-    if (fi > 0 && into < fi) g = Math.max(0, into / fi);
-    if (fo > 0 && clipDur && into > clipDur - fo) g = Math.min(g, Math.max(0, (clipDur - into) / fo));
+    if (fi > 0 && into + lead < fi) g = Math.max(0, (into + lead) / fi);
+    if (fo > 0 && clipDur && into > end - fo) g = Math.min(g, Math.max(0, (end - into) / fo));
     return Math.max(0, Math.min(1, g));
   };
 

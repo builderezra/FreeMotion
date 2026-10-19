@@ -1401,7 +1401,8 @@ window.FM = window.FM || {};
     if (_rev != null) return _rev;
     const P = FM.scene.project;
     let s = P.width + 'x' + P.height + ':' + (P.background || '-') + ':' + (P.fps || 0) + ':' + Math.round((FM.time || 0) * 30);
-    s += JSON.stringify(FM.scene.layers, FM.jsonReplacer);
+    /* bughunt3 #1: the layers as DRAWN (jsonReplacerLive), so a thumbnail drawn while an export holds a solo is not reused after it. */
+    s += JSON.stringify(FM.scene.layers, FM.jsonReplacerLive || FM.jsonReplacer);
     FM.scene.layers.forEach(function (l) {
       const m = FM.media && FM.media.get(l.id);
       if (!m) return;

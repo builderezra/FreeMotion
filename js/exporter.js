@@ -514,7 +514,7 @@ window.FM = window.FM || {};
     return m.audioBuffer || null;
   }
 
-  async function buildAudioMix(scene, from, to) {
+  async function buildAudioMix(scene, from, to, onStatus) {
     const P = scene.project;
     const sampleRate = 48000, channels = 2;
     from = from || 0; to = (to == null) ? P.duration : to;
@@ -522,6 +522,11 @@ window.FM = window.FM || {};
     const length = Math.ceil(dur * sampleRate);
     const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!OAC) return null;
+    /* bughunt3 #2: a clip still loading back from Home has no record yet, and the loop below would drop its sound from the whole
+       file. Cancel counts only inside an export, as in the loop: the WAV / M4A path never resets the flag. `onStatus` is
+       optional (the WAV / M4A path passes a toast); run() has already waited in prepareCaches, so this is a no-op there. */
+    const back = mediaBack(scene, onStatus, () => FM._exporting && FM._exportCancel);
+    if (back) await back;
     const oac = new OAC(channels, length, sampleRate);
     const soloActive = scene.layers.some(l => l.solo);   // mirror the compositor's solo gate so the exported soundtrack matches the soloed picture (#14)
     let any = false;
@@ -546,6 +551,19 @@ window.FM = window.FM || {};
     const suppressed = [];   // has audio, but hidden or solo-suppressed — see the skip below
     const suppressedHere = [];   // …and would have been IN this export: its window overlaps [from, to] (queue 892)
     const nameOf = l => l.name || l.type || l.id;
+    /* bughunt3 #7 (found while fixing #2): A PHOTO IS NOT A LOST SOUND. Both skips below asked "could this layer carry sound?"
+     * as `file || audioBuffer`, and a photo's record has a file too: FM.loadImageFile keeps it (js/media.js), and every route
+     * that loads one back (Home, a paste, a Replace, a friend's edit) goes through it again. So every photo was filed as a
+     * dropped audio clip, "the mixer only takes "video" layers": with a song, "1 clip had no usable audio — the rest are in
+     * the file" on a file with every sound in it; with photos and no sound, "Exporting with NO SOUND — 1 audio clip could not
+     * be read" and `all-unreadable` on a file that is exactly right; and a hidden photo, or the photos a solo leaves out, were
+     * counted as audio clips "hidden or muted by solo". `drops` and `dropped` are the lines the silent-export hunt (#604)
+     * reads, so every false one sends it after a picture.
+     * A record can carry sound if it holds decoded audio, or a file that is not a picture. A picture is the record's own
+     * kind ('image', every photo and GIF, from loadImageFile) or an image/* file. Anything else with a file is reported
+     * exactly as before, a typeless Blob included: a MIME type is often empty, and a lost sound must not go quiet to spare
+     * a photo. */
+    const couldSound = r => !!r && (!!r.audioBuffer || (!!r.file && r.kind !== 'image' && !/^image\//i.test(r.file.type || '')));
     // Is this the whole project, or a sub-range the user deliberately chose? Decides whether a clip
     // outside the range is a surprise worth reporting or the user's own instruction. See below.
     const wholeProject = (from <= 0.001) && (to >= (P.duration || 0) - 0.001);
@@ -568,7 +586,7 @@ window.FM = window.FM || {};
          * the whole export is silent — see the report block below. A warning that fires while the file
          * still has sound would be exactly the noise this was avoiding. */
         const sm = FM.media.get(layer.id);
-        if (sm && (sm.file || sm.audioBuffer)) {
+        if (couldSound(sm)) {   /* not a photo: bughunt3 #7, above */
           suppressed.push(nameOf(layer) + (layer.visible === false ? ' (hidden)'
                           : (soloActive && !layer.solo) ? ' (another layer is soloed)' : ' (inside a hidden group)'));
           /* Would it have been in THIS export? A suppressed clip is never decoded, so its real audio length is
@@ -584,9 +602,9 @@ window.FM = window.FM || {};
         // Imported audio rides the video path (an mp3 is a 'video' layer with a 0x0 picture), so a
         // NON-video layer here either genuinely has no sound, or is an audio layer built by some other
         // route that this mixer has never handled. Only the second is worth saying out loud, and the
-        // honest test for it is whether it has decodable media attached.
+        // honest test for it is whether it has decodable media attached — and a photo's file is not (bughunt3 #7, above).
         const mm = FM.media.get(layer.id);
-        if (mm && (mm.file || mm.audioBuffer)) dropped.push(nameOf(layer) + ' (type "' + layer.type + '" — the mixer only takes "video" layers)');
+        if (couldSound(mm)) dropped.push(nameOf(layer) + ' (type "' + layer.type + '" — the mixer only takes "video" layers)');
         continue;
       }
       const m = FM.media.get(layer.id);
@@ -668,6 +686,10 @@ window.FM = window.FM || {};
       const clipDur = layer.duration;                     // fade timing uses VISUAL duration (matches preview), not audio-limited
       const win = FM.fadeWindows(layer, clipDur);         // scaled so fades never overlap (no pop)
       const fi = win.fi, fo = win.fo;
+      /* bughunt3 #3: a half of a split measures its fades over the clip it came from: the fade-in began `fLead` before this clip's
+         start and the fade-out ends `fTail` after its end (FM.fadeWindows, js/scene.js), so the ramps below are laid from there, as
+         FM.fadeMul reads them. With neither, `csOut - 0` and `ceOut + 0` are the old times exactly. */
+      const fLead = win.lead || 0, fTail = win.tail || 0;
       if (animVol) {
         // Keyframed volume: schedule the combined volume×fade envelope sampled across the clip in
         // output time (30 Hz, linear-ramped) so the export matches the animated preview. (#6,#14)
@@ -684,11 +706,11 @@ window.FM = window.FM || {};
         const csOut = layer.start - from, ceOut = (layer.start + layer.duration) - from;
         const at = tm => Math.max(0, tm);
         gain.gain.setValueAtTime(FM.fadeMul(layer, oStart - layer.start, clipDur) * vol, at(startOut));
-        if (fi > 0 && csOut + fi > startOut) gain.gain.linearRampToValueAtTime(vol, at(csOut + fi));
+        if (fi > 0 && csOut - fLead + fi > startOut) gain.gain.linearRampToValueAtTime(vol, at(csOut - fLead + fi));
         if (fo > 0) {
-          const foStart = ceOut - fo;
+          const foEnd = ceOut + fTail, foStart = foEnd - fo;
           if (foStart > startOut) gain.gain.setValueAtTime(vol, at(foStart));
-          gain.gain.linearRampToValueAtTime(0, at(ceOut));
+          gain.gain.linearRampToValueAtTime(0, at(foEnd));
         }
       } else {
         gain.gain.value = vol;
@@ -1089,7 +1111,64 @@ window.FM = window.FM || {};
     try { if (FM.audioFxLive && FM.audioFxLive.stopAudition) FM.audioFxLive.stopAudition(); } catch (e) {}
   }
 
+  /* ═══ bughunt3 #2: THE EXPORT WAITS FOR THE CLIPS HOME LET GO OF ═══════════════════════════════════════════════════════
+   * WHAT WAS WRONG. Home frees the open project's media once its card is drawn (FM.storage.releaseSceneMedia). Going back into
+   * the SAME project loads nothing up front: openProject's same-project branch and close() (js/home.js) start
+   * FM.storage.hydrateSceneMedia({ onlyMissing: true }) and do not wait for it, so the editor is there at once and the clips
+   * come back one by one behind it. Nothing in the export waited for that. Export pressed straight away (Home's ⋯ → Export
+   * video… opens the dialog 260 ms after the tap; Simple's one tap has no dialog at all) read FM.media while a clip still had
+   * no record: the mixer filed it "(no media record at all)" and left its sound out of the WHOLE file, decided once before
+   * frame 1, and the frame loop drew nothing for it until the record landed partway through. On a phone with songs in the
+   * project (each one is decoded at 8 kHz again on the way back, js/media.js) that window can outlast his tap.
+   * WHY HERE. Every export reads FM.media first in one of two places: prepareCaches, the pre-flight of the MP4, the GIF and the
+   * PNG frames, and buildAudioMix, the mixer of the MP4 and of the WAV / M4A. Both wait through this, and so does
+   * FM.snapshotPNG (js/app.js), the still. It waits on the re-load's own shared promise (FM.storage.hydrateRun), so with
+   * nothing re-loading it returns null and the caller does not await at all: an ordinary export gets no delay and no new words.
+   * BOUNDED BY PROGRESS, NOT BY A TOTAL. The loader's own limit is 20 s per file (loadVideoFile's metadata timer, js/media.js;
+   * it then rejects and the re-load goes on to the next clip), and the loading pill stops claiming "loading" at 25 s
+   * (js/loading.js). So the wait gives up once NO clip has come back for 30 s, past both: by then the re-load is stuck in a
+   * step with no timeout of its own (the 8 kHz decode, a GIF's frames). Every clip that does come back restarts that clock, so
+   * a long project that is still arriving is waited for in full. Giving up exports as before, with the mixer's drop line
+   * naming any clip still missing, and that run is not waited on again. Cancel ends the wait at the next 100 ms poll. */
+  const MEDIA_BACK_STALL_MS = 30000;
+  let _mediaBackGaveUp = null;
+  function mediaBack(scene, onStatus, cancelled) {
+    const run = (FM.storage && FM.storage.hydrateRun) ? FM.storage.hydrateRun() : null;
+    if (!run || run === _mediaBackGaveUp) return null;
+    return (async function () {
+      const settled = Promise.resolve(run).then(() => true, () => true);
+      const seen = new Map();
+      const moved = () => {
+        let any = false;
+        for (const l of ((scene && scene.layers) || [])) {
+          if (!l || l.type === 'text') continue;
+          const m = FM.media.get(l.id) || null;
+          if (seen.get(l.id) !== m) { seen.set(l.id, m); any = true; }
+        }
+        return any;
+      };
+      moved();
+      let quietSince = Date.now(), said = false;
+      for (;;) {
+        if (cancelled && cancelled()) return;
+        const back = await Promise.race([settled, new Promise(r => setTimeout(() => r(false), 100))]);
+        if (back) return;
+        if (cancelled && cancelled()) return;
+        // said only once it is really waiting: a run that settles inside the first poll shows nothing
+        if (!said && onStatus) { said = true; onStatus('Loading clips…'); }
+        if (moved()) quietSince = Date.now();
+        else if (Date.now() - quietSince >= MEDIA_BACK_STALL_MS) {
+          _mediaBackGaveUp = run;
+          console.warn('[export] no clip came back from the device in ' + (MEDIA_BACK_STALL_MS / 1000) + ' s — exporting with the clips that are here');
+          return;
+        }
+      }
+    })();
+  }
+
   async function prepareCaches(scene, fps, onStatus) {
+    const back = mediaBack(scene, onStatus, () => FM._exportCancel);   // bughunt3 #2 — see mediaBack
+    if (back) await back;
     const built = [];   // media whose full-res export cache we (re)built — freed after export so it doesn't sit in memory (#3)
     const mgFrames = FM.matchGradeFrameLayers ? FM.matchGradeFrameLayers(scene) : {};   // #482 15.6: clips a Match Grade measures at other moments
     for (const layer of scene.layers) {
@@ -1276,6 +1355,7 @@ window.FM = window.FM || {};
   FM.exporter = {
     prepareCaches,
     buildAudioMix,
+    mediaBack,   // bughunt3 #2: FM.snapshotPNG (js/app.js) waits through it too
     encodeM4A,
     aacSupported,
     async run(opts) {

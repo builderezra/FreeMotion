@@ -329,8 +329,9 @@ window.FM = window.FM || {};
     _quiet: function () { lastLocalChangeAt = 0; pointers = 0; keyHeld = false; pointerInInspector = false; }
   };
 
-  /* Any of these on an audio-bearing layer changes what should be coming out of the speakers. */
-  const AUDIO_KEYS = ['volume', 'fadeIn', 'fadeOut', 'audioFx', 'muted', 'solo', 'speed', 'start', 'trimStart', 'duration', 'reversed'];
+  /* Any of these on an audio-bearing layer changes what should be coming out of the speakers.
+     fadeInLead / fadeOutTail (bughunt3 #3): the span a split half's fades are measured over, read by FM.fadeMul like the fades. */
+  const AUDIO_KEYS = ['volume', 'fadeIn', 'fadeOut', 'fadeInLead', 'fadeOutTail', 'audioFx', 'muted', 'solo', 'speed', 'start', 'trimStart', 'duration', 'reversed'];
   function audioTouched(sum) {
     if (sum.structural) return true;                    // a layer arrived or left: it may carry audio
     const keys = sum.paths || [];

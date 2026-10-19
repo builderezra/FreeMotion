@@ -1821,6 +1821,9 @@ window.FM = window.FM || {};
   /* Simple mode P1 (DESIGN.md §5.2 media state): is this project's media still being read back from the device? While
      it is, a clip with no record is 'arriving' (drawn in place, never classified as sound), not 'missing'. */
   FM.storage.hydrating = function () { return !!_hydrating; };
+  /* bughunt3 #2: …and the run itself, so an export can wait for the clips Home let go of (js/exporter.js mediaBack). null when
+     nothing is being read back. The same promise every caller shares, cleared by the run's own settle handler. */
+  FM.storage.hydrateRun = function () { return _hydrating; };
   FM.storage._reIdLayers = reIdLayers;
   /* queue 921 S2: the host runs the project clamp on a CLONE as one of its three invariants (§7.1 step
      8), and until now it could not reach this one — so S1's suite carried a hand-written copy of the

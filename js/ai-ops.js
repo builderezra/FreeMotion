@@ -109,8 +109,10 @@ window.FM = window.FM || {};
       case 'reversed': { if (layer.type === 'video') layer.reversed = bool(value, false); return layer.type === 'video'; }
       case 'frameBlend': { layer.frameBlend = bool(value, false); return true; }
       case 'volume': { var v = clampNum(value, 0, 1); if (v == null) return false; if (FM.isAnimated && FM.isAnimated(layer.volume)) setAnimatedLevel(layer.volume, v, [0, 10], at); else layer.volume = v; return true; }   // queue 690 (hunt d): a keyed fade survives
-      case 'fadeIn': { var fi = clampNum(value, 0, 60); if (fi == null) return false; layer.fadeIn = fi; return true; }
-      case 'fadeOut': { var fo = clampNum(value, 0, 60); if (fo == null) return false; layer.fadeOut = fo; return true; }
+      /* bughunt3 #3: a fade set here starts at this clip's own edge, as one set in the volume panel does, so it clears the span a
+         split half's fade was measured over (fadeInLead / fadeOutTail, js/scene.js). */
+      case 'fadeIn': { var fi = clampNum(value, 0, 60); if (fi == null) return false; layer.fadeIn = fi; delete layer.fadeInLead; return true; }
+      case 'fadeOut': { var fo = clampNum(value, 0, 60); if (fo == null) return false; layer.fadeOut = fo; delete layer.fadeOutTail; return true; }
       case 'speed': { var sp = clampNum(value, 0.0625, 16); if (sp == null) return false; layer.speed = sp; return true; }
       case 'trimStart': { var ts = clampNum(value, 0, 600); if (ts == null) return false; layer.trimStart = ts; return true; }
       case 'start': { var st = clampNum(value, 0, 600); if (st == null) return false; layer.start = st; growProject(layer); return true; }

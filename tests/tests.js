@@ -163022,4 +163022,789 @@
   });
   // ── end bughunt 2 ──
 
+  // ── bughunt 3 (hunt/bh3-fix) ──
+  /* ═══ BUGHUNT 3 — defects a bug hunt found and a refuter confirmed on the unreleased v17.74 (the hunt's HUNT.md and REFUTE.md).
+   * WRITTEN WITHOUT RUNNING (code only, `node --check`): every number is reasoned from the code it names, and each test says why it
+   * fails on f7dfd171. Helpers are the suite's own: test, sleep, and hcCleanup (the 690 HUNT-c block), which opens his project again
+   * and removes the ones a test made. ═══ */
+
+  /* (#1) EXPORT ONLY THIS LAYER SAVED ITS TEMPORARY SOLO INTO THE PROJECT. runExport isolates the picked layer by setting `solo` on the
+     LIVE layers (exportSoloPrep: every other one false, the target true) and puts them back only in its finally, after FM.exporter.run
+     resolves, which for an MP4 is after the Export ready card is closed. `solo` is a saved key, FM.jsonReplacer dropped only `_` keys,
+     and flushSync, which pagehide and visibilitychange → hidden run, has no export check. So on f7dfd171 the flush below writes the
+     soloed doc and the doc on disk has bh3 Title with solo: true. An app switch mid-export and then a kill (or F5 at the Export ready
+     card on a PC, answered Leave) reopened the project showing one layer, for good: nothing in the app can clear solo (js/ai-ops.js).
+     The export is held on a gate: FM.exporter.run stands in for the render and waits, and its own descriptor is put back. The project
+     is a fresh one of the test's own (FM.projects.create, removed by hcCleanup), so the flush writes a doc nobody else owns.
+     CONTROLS: the flush landed: it answered true AND the doc on disk under the open project's key holds bh3 Title's id (writeScene
+     answers true WITHOUT writing when no project is open, and false when the tab is stale); the live bh3 Title IS soloed and bh3
+     Backdrop is not while the export holds them, so the export still renders just that layer; after the gate opens both are back to
+     what they were; and with the export over, a solo set on a layer is saved again, so the fix is the export's hold, not a filter that
+     hides solo for ever. */
+  test('bughunt3 #1 Export only this layer: an app switch in the middle of the export saves the project without the export’s temporary solo, so a kill cannot reopen it showing one layer (CONTROLS: the flush wrote the open project’s doc; the live layer is soloed while the export runs; solo is back after it, and saved again once the export is over)', { item: '1176' }, async function () {
+    if (typeof FM._runExport !== 'function' || typeof FM._setExportSoloId !== 'function' || typeof FM._exportSoloId !== 'function') throw new Error('setup: FM._runExport / FM._setExportSoloId (the export the Export button runs) are not reachable');
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('setup: FM.exporter.run is not reachable');
+    if (!FM.projects || typeof FM.projects.create !== 'function' || !FM.storage || typeof FM.storage.flushSync !== 'function') throw new Error('setup: FM.projects.create / FM.storage.flushSync are not reachable');
+    const fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range');
+    if (!fmtEl || !rangeEl) throw new Error('setup: the export dialog is missing from this build');
+    const PK = 'fm.exportPrefs';
+    let prefs0 = null;
+    try { prefs0 = localStorage.getItem(PK); } catch (e) {}
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const fmt0 = fmtEl.value, range0 = rangeEl.value, solo0 = FM._exportSoloId();
+    const d0 = Object.getOwnPropertyDescriptor(FM.exporter, 'run');
+    let open = null, entered = 0, running = null;
+    const gate = new Promise(r => { open = r; });
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const id = await FM.projects.create({ name: 'bh3 solo export', width: 320, height: 240 });
+      if (!id) throw new Error('setup: no project could be made to export from');
+      made.push(id);
+      if (FM.storage.openProjectId() !== id) throw new Error('setup: the new project is not the one this tab has open (' + FM.storage.openProjectId() + ')');
+      const mk = (n, x, fill) => {
+        const L = FM.makeLayer('shape', { name: n, shape: 'rect', x: x, y: 120, shapeW: 60, shapeH: 60, fill: fill });
+        L.start = 0; L.duration = 2;
+        FM.scene.layers.push(L);
+        return L;
+      };
+      const A = mk('bh3 Title', 80, '#f4a261'), B = mk('bh3 Backdrop', 240, '#2a9d8f');
+      FM.selectLayer(null); FM.refreshAll();
+      const a0 = A.solo, b0 = B.solo;
+      if (a0 || b0) throw new Error('setup: a new layer starts soloed (bh3 Title ' + a0 + ', bh3 Backdrop ' + b0 + ')');
+      const key = 'fm.proj.' + id;
+      fmtEl.value = 'mp4'; rangeEl.value = 'whole';
+      FM._setExportSoloId(A.id);
+      if (FM._exportSoloId() !== A.id) throw new Error('setup: the layer picker did not take bh3 Title');
+      FM.exporter.run = async function () { entered++; await gate; };
+      running = FM._runExport();
+      await sleep(30);
+      if (entered !== 1) throw new Error('CONTROL: the export reached the render ' + entered + ' times, not once, so nothing below is inside an export');
+      /* The export is rendering, and it must render just bh3 Title: the compositor and the mixer read the LIVE solo. */
+      if (A.solo !== true || B.solo) throw new Error('CONTROL: the export is running but the live layers are not isolated (bh3 Title solo ' + A.solo + ', bh3 Backdrop solo ' + B.solo + ') — the file would not be just the one layer he picked');
+      /* What visibilitychange → hidden does when he switches apps in the middle of the export. */
+      const wrote = FM.storage.flushSync();
+      if (wrote !== true) throw new Error('CONTROL: the flush in the middle of the export answered ' + wrote + ', so nothing reached the disk to check');
+      let doc = null;
+      try { doc = JSON.parse(localStorage.getItem(key)); } catch (e) { doc = null; }
+      const onDisk = (doc && Array.isArray(doc.layers)) ? doc.layers : [];
+      if (!onDisk.some(l => l && l.id === A.id)) throw new Error('CONTROL: the doc on disk under ' + key + ' does not hold bh3 Title (' + onDisk.length + ' layers there), so the flush wrote nothing of this project and “no solo on disk” would prove nothing');
+      const soloed = onDisk.filter(l => l && l.solo === true).map(l => l.name || l.id);
+      if (soloed.length) throw new Error('an app switch in the middle of “Export only this layer” saved the project with ' + soloed.join(', ') + ' soloed — the export’s temporary isolation. If the phone then kills the app (or he reloads at the Export ready card), the project reopens showing only that layer, every later export holds only it, and nothing in the app can clear solo');
+      open();
+      await running;
+      if (A.solo !== a0 || B.solo !== b0) throw new Error('CONTROL: the export is over and solo was not put back (bh3 Title ' + A.solo + ', bh3 Backdrop ' + B.solo + ', were ' + a0 + ' and ' + b0 + ')');
+      /* …and with the export over, a solo on a layer is saved like any other key again: the hold was the export's. */
+      A.solo = true;
+      if (FM.storage.flushSync() !== true) throw new Error('CONTROL: the flush after the export was refused');
+      let after = null;
+      try { after = JSON.parse(localStorage.getItem(key)); } catch (e) { after = null; }
+      const A2 = after && Array.isArray(after.layers) ? after.layers.find(l => l && l.id === A.id) : null;
+      A.solo = a0;
+      if (!A2 || A2.solo !== true) throw new Error('CONTROL: with the export over, a solo set on bh3 Title was not saved (' + (A2 ? A2.solo : 'no such layer on disk') + ') — the fix filters solo out of every save, not just the export’s temporary one');
+    } finally {
+      if (open) open();
+      if (running) { try { await Promise.race([running, sleep(5000)]); } catch (e) {} }
+      if (d0) Object.defineProperty(FM.exporter, 'run', d0); else delete FM.exporter.run;
+      fmtEl.value = fmt0; rangeEl.value = range0;
+      try { if (prefs0 == null) localStorage.removeItem(PK); else localStorage.setItem(PK, prefs0); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+      try { FM._setExportSoloId(solo0); } catch (e) {}
+    }
+  });
+  /* (#5) HEAR IN AUDIO EFFECTS PLAYED AT A STALE LEVEL. An audio effect row's Hear (js/audio-fx-live.js audition) plays the clip's
+     element on its own frame loop, while FM.playing stays false. A clip's level reaches the speakers in two halves: el.volume up to
+     100 %, and the level/boost stage (m._boost, written only by setBoost) above it, or ALL of it on an iPhone, where a page cannot
+     set el.volume (volumeLocked; it always reads 1). On c1c37741 the audition wrote el.volume once and never the stage: its sync()
+     returns early on a chain that is current (`if (chainIsCurrent(m, layer)) return;`, before either of sync's setBoost calls), and
+     neither its frame loop nor stopAudition calls setBoost. So the stage kept its last value: sync's seed at the PLAYHEAD, which is 0
+     past a fade-out's end or at a fade-in's start (where adding a clip leaves the playhead), or the playback tick's last write. On his
+     phone Hear was silent for the whole loop; on a PC a 300 % clip auditioned at el.volume 1 x stage 1 = 100 %.
+     The rig is the 886 test's: a recording stage fed through the real setBoost, on a stand-in element that holds still (the 916
+     audition tests' kind). A stand-in is not a media element, so sync cannot route it and cannot rebuild the stage under the test.
+     Each case is seeded where the bug leaves it: the phone clip (0-3 s, Fade out 1 s, m._volLocked = true, its element's volume
+     always reading 1) with the playhead at 5 s, past its end, so sync's seed is 0; the PC clip (300 %) with the playback tick's last
+     write as a clip ends (the de-click takes the level under 1, and setBoost floors the stage at 1 there). The audition starts at the
+     clip's own start (trimStart), where the phone clip's level is 1 and the PC clip's 3; 2.4 s in, the phone clip's fade has it at 0.6.
+     Fails on c1c37741 at the first claim: after audition() the phone stage has no write at all and still holds 0, so it is heard at 0.
+     CONTROLS: setBoost reaches the recording stage (each seed lands there); the audition is running and its element playing when the
+     stage is read, so a silent stage is not an audition that never started. */
+  test('bughunt3 #5 Hear in audio effects: the audition sets the clip’s level stage the way playback does, so on an iPhone a clip with the playhead past its fade-out is heard at its level (1 at its start, 0.6 inside the fade) instead of silent, Stop puts the stage back to the playhead’s level, and on a PC a 300 % clip is heard at 3x, not 1x (CONTROLS: setBoost reaches the stage; the audition is running)', { item: '1176', budgetMs: 20000 }, async function () {
+    const A = FM.audioFxLive;
+    if (!A || typeof A.audition !== 'function' || typeof A.setBoost !== 'function' || typeof A.stopAudition !== 'function' || typeof A.auditioning !== 'function') throw new Error('setup: FM.audioFxLive.audition / setBoost / stopAudition / auditioning are not reachable');
+    const frames = n => new Promise(r => { let k = 0; (function f() { if (++k > n) return r(); requestAnimationFrame(f); })(); });
+    /* Every gain written, through both of setBoost's paths (the ramp, and the bare assignment it falls back to), and what it holds now. */
+    const stage = () => {
+      const w = [];
+      const g = { _v: 1, setTargetAtTime: function (v) { w.push(v); g._v = v; } };
+      Object.defineProperty(g, 'value', { get: function () { return g._v; }, set: function (v) { w.push(v); g._v = v; } });
+      return { node: { gain: { gain: g } }, writes: w, now: () => g._v, last: () => (w.length ? w[w.length - 1] : null) };
+    };
+    /* currentTime moves only when the test moves it, so what the audition's frame loop reads is exactly what the test set. */
+    const stand = () => ({ currentTime: 0, duration: 10, muted: true, volume: 1, playbackRate: 1, paused: true, ended: false,
+      play: function () { this.paused = false; return Promise.resolve(); }, pause: function () { this.paused = true; },
+      removeAttribute: function () {}, load: function () {} });
+    const f2 = v => (v == null ? 'nothing' : Number(v).toFixed(2));
+    const saved = { scene: FM.scene, time: FM.time };
+    const ids = [];
+    try {
+      if (FM.playing && FM.pause) FM.pause();
+      A.stopAudition();
+      const mk = (name, volume, fadeOut) => {
+        const L = FM.makeLayer('video', { name: name, start: 0, duration: 3 });
+        L.start = 0; L.duration = 3; L.trimStart = 0; L.speed = 1; L.volume = volume; L.fadeIn = 0; L.fadeOut = fadeOut; L.visible = true;
+        return L;
+      };
+      const P = mk('bh3 Hear phone', 1, 1), D = mk('bh3 Hear PC', 3, 0);
+      const SP = stage(), SD = stage(), elP = stand(), elD = stand();
+      /* WebKit on an iPhone: a page cannot set the element's volume, and it always reads 1 (the 690 tests' stand-in). */
+      Object.defineProperty(elP, 'volume', { configurable: true, get: function () { return 1; }, set: function () {} });
+      FM.scene = scene([P, D], { project: { width: 64, height: 64, fps: 30, duration: 6, background: '#000000' } });
+      FM.media.set(P.id, { kind: 'video', el: elP, width: 0, height: 0, duration: 10, _volLocked: true, _boost: SP.node }); ids.push(P.id);
+      FM.media.set(D.id, { kind: 'video', el: elD, width: 0, height: 0, duration: 10, _volLocked: false, _boost: SD.node }); ids.push(D.id);
+      FM.time = 5;
+
+      /* ── THE PHONE. sync's seed with the playhead past the fade-out's end: layerVolume 1 x fadeMul 0 = 0. */
+      A.setBoost(P);
+      if (SP.last() == null || SP.last() > 0.001) throw new Error('CONTROL: setBoost seeded the phone clip’s stage with ' + f2(SP.last()) + ', not 0, so the stage under test is not the one setBoost writes, or the playhead is not past the fade-out');
+      SP.writes.length = 0;
+      const r1 = A.audition(P);
+      if (r1 !== true) throw new Error('setup: the audition refused the phone clip (' + r1 + ')');
+      await frames(3);
+      if (!A.auditioning(P) || elP.paused) throw new Error('CONTROL: the phone clip’s audition is not running (auditioning ' + A.auditioning(P) + ', element paused ' + elP.paused + '), so nothing below is measured');
+      const heardP = elP.volume * SP.now();
+      if (Math.abs(heardP - 1) > 0.02) throw new Error('on an iPhone, Hear on a clip with a 1 s fade-out and the playhead past its end plays the clip’s start at ' + f2(heardP) + 'x where the clip is at 1x there: the audition wrote ' + SP.writes.length + ' gain(s) to its level stage (last ' + f2(SP.last()) + '), which still holds sync’s seed at the playhead, ' + f2(SP.now()) + ' — el.volume, the only level the audition sets, does nothing on an iPhone, so the whole 2.5 s loop is silent');
+      /* …and it follows the clip while it plays: 2.4 s in, the fade-out has the level at (3 - 2.4) / 1 = 0.6. */
+      elP.currentTime = 2.4;
+      await frames(3);
+      if (!A.auditioning(P)) throw new Error('CONTROL: the phone clip’s audition stopped at 2.4 s, so the fade was not measured');
+      if (Math.abs(elP.volume * SP.now() - 0.6) > 0.02) throw new Error('on an iPhone, 2.4 s into a 3 s clip with a 1 s fade-out Hear plays at ' + f2(elP.volume * SP.now()) + 'x where the fade has it at 0.60x — the audition set the level stage once and did not follow the clip frame by frame, as playback and the export do');
+      /* Stop puts the stage back where sync leaves it: the level at the playhead, 0 past the fade-out. */
+      SP.writes.length = 0;
+      A.stopAudition();
+      if (!SP.writes.length || SP.now() > 0.001) throw new Error('after Stop the phone clip’s level stage holds ' + f2(SP.now()) + ' (' + SP.writes.length + ' write(s) at Stop), not the level at the playhead (0, past the fade-out) — the audition’s level is left behind in the stage');
+
+      /* ── THE PC. The playback tick's last write as a clip ends: under 1, floored at 1 by setBoost. */
+      A.setBoost(D, 0.2);
+      if (SD.last() !== 1) throw new Error('CONTROL: setBoost wrote ' + f2(SD.last()) + ' to the PC clip’s stage for a level of 0.2, not 1 (the floor where el.volume carries everything up to 100 %), so the stage under test is not the one setBoost writes');
+      SD.writes.length = 0;
+      const r2 = A.audition(D);
+      if (r2 !== true) throw new Error('setup: the audition refused the PC clip (' + r2 + ')');
+      await frames(3);
+      if (!A.auditioning(D) || elD.paused) throw new Error('CONTROL: the PC clip’s audition is not running (auditioning ' + A.auditioning(D) + ', element paused ' + elD.paused + '), so nothing below is measured');
+      const heardD = elD.volume * SD.now();
+      if (Math.abs(heardD - 3) > 0.05) throw new Error('on a PC, Hear on a 300 % clip plays at ' + f2(heardD) + 'x (el.volume ' + f2(elD.volume) + ' x stage ' + f2(SD.now()) + ', ' + SD.writes.length + ' stage write(s) by the audition) where the clip is at 3x — the stage keeps the playback tick’s last write');
+    } finally {
+      try { A.stopAudition(); } catch (e) {}
+      ids.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene = saved.scene; FM.time = saved.time;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+  /* (#4) REMOVE VOCALS WAS TWO UNDO STEPS. FM.toggleKaraoke's OFF → ON adds the instrumental through FM.addMediaLayer, which commits
+     on its own (js/app.js), and only then links it (karaokeOf), gives it the clip's clock and mix, mutes the clip and commits again:
+     two steps, and history.commit does not merge them (its karaoke sync finds the clip's clock unchanged and returns). So on 5c757f67
+     one Undo after "Vocals removed" went back to the first: an UNLINKED instrumental at the playhead, its whole length at full volume,
+     beside a song that is no longer muted (the song twice, offset), and the button read Remove vocals again. The first claim reads
+     +2 steps there, not +1, and the second finds that extra layer after the Undo. Two more halves of the same fault, each its own claim:
+     · the song was written to as it was BEFORE the awaits. An Undo while the vocals are being removed swaps the scene's layer objects
+       (history restore), and on 5c757f67 the mute and the mix were taken from and written to the OLD object, so the live song stayed
+       unmuted under its instrumental, and the instrumental took the volume the Undo had just taken back. The decode is held so the
+       Undo lands inside it, as the 690 HUNT-d test holds it;
+     · Restore deletes each twin through FM.deleteLayer, which commits per call: with two twins (a split or a duplicate makes the
+       second) it was three steps on 5c757f67, and one Undo brought back no twin at all, where it must bring back both and the mute.
+     The decode is the suite's stand-in (a short silent stereo buffer, as the 834 and 690 tests use) and the file load returns a record
+     with no file, so nothing reaches the library. Each part starts from its own song with the history reset, and steps are counted by
+     the stack's index (at its 120-step cap the length stays flat).
+     CONTROLS: the instrumental was added, linked and the song muted, so a missing step is not a Remove vocals that did nothing; the
+     Undo during the decode really replaced the song's object and put its volume back; both twins were there before Restore. */
+  test('bughunt3 #4 Remove vocals: adding the instrumental is one undo step, so one Undo takes it away whole instead of leaving an unlinked full-volume copy playing over the unmuted song; an Undo in the middle of the decode still mutes the live song and gives the instrumental its live mix; and Restore with two twins is one step that one Undo brings back whole (CONTROLS: the instrumental was added and linked and the song muted; the Undo really replaced the song’s layer object; both twins were there before Restore)', { item: '1176' }, async function () {
+    if (typeof FM.toggleKaraoke !== 'function' || typeof FM.karaokeTwinOf !== 'function' || !FM.history || typeof FM.history._steps !== 'function') throw new Error('setup: FM.toggleKaraoke / FM.karaokeTwinOf / FM.history._steps are not reachable');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('setup: this browser has no OfflineAudioContext, so Remove vocals cannot run here');
+    const bad = [], said = [];
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration, time0 = FM.time;
+    const realDecode = FM.decodeAudio, realLoad = FM.loadVideoFile, realToast = FM.toast;
+    let release = null, job = null;
+    const stereo = () => new OAC(2, 4410, 44100).createBuffer(2, 4410, 44100);
+    const fakeRec = () => ({ kind: 'video', el: document.createElement('video'), width: 0, height: 0, duration: 4 });
+    const at = () => FM.history._steps().index;
+    const live = id => FM.layerById(FM.scene, id);
+    const twinsOf = id => FM.scene.layers.filter(l => l && l.karaokeOf === id && l.twinKind !== 'denoise');
+    const vol = l => (l && l.volume != null ? l.volume : 1);
+    const song = name => {
+      const L = FM.makeLayer('video', { name: name });
+      L.start = 0; L.duration = 4; L.trimStart = 0; L.volume = 1;
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.media.set(L.id, { kind: 'video', el: document.createElement('video'), width: 0, height: 0, duration: 4, file: new File([new Uint8Array(8)], name + '.wav', { type: 'audio/wav' }) });
+      FM.selectLayer(null); FM.refreshAll();
+      FM.history.reset();
+      return L;
+    };
+    try {
+      FM.toast = function (m) { said.push(String(m)); };
+      FM.decodeAudio = async function () { return stereo(); };
+      FM.loadVideoFile = async function () { return fakeRec(); };
+
+      /* ── ONE STEP, AND ONE UNDO TAKES IT AWAY WHOLE. */
+      const S = song('bh3 song');
+      const n0 = at();
+      await FM.toggleKaraoke(S);
+      const s0 = live(S.id);
+      if (twinsOf(S.id).length !== 1 || !s0 || !s0.muted) throw new Error('CONTROL: Remove vocals did not add one linked instrumental and mute the song (' + twinsOf(S.id).length + ' twin(s), song muted ' + !!(s0 && s0.muted) + ', toasts: ' + said.join(' | ') + '), so nothing below is measured');
+      if (at() !== n0 + 1) bad.push('Remove vocals took ' + (at() - n0) + ' undo steps, not one');
+      FM.history.undo();
+      const s1 = live(S.id);
+      const stray = FM.scene.layers.filter(l => l && l.id !== S.id);
+      if (stray.length || !s1 || s1.muted) bad.push('one Undo after “Vocals removed” left ' + stray.length + ' other layer(s) (' + stray.map(l => '“' + l.name + '”, ' + (l.karaokeOf ? 'linked' : 'unlinked') + ', volume ' + vol(l)).join('; ') + ') with the song ' + (s1 ? (s1.muted ? 'muted' : 'not muted') : 'gone') + ': the instrumental plays over the song he just took it off, and the button reads Remove vocals again');
+      FM.history.redo();
+      const s2 = live(S.id);
+      if (twinsOf(S.id).length !== 1 || !s2 || !s2.muted) bad.push('Redo did not bring the linked instrumental and the mute back (' + twinsOf(S.id).length + ' twin(s), song muted ' + !!(s2 && s2.muted) + ')');
+
+      /* ── RESTORE WITH TWO TWINS IS ONE STEP, AND ONE UNDO BRINGS BOTH BACK. The second twin is what a split or a duplicate
+         leaves (both clone the karaokeOf link), made here directly and committed as its own step. */
+      const R = song('bh3 song two twins');
+      await FM.toggleKaraoke(R);
+      const T1 = twinsOf(R.id)[0];
+      if (!T1) throw new Error('CONTROL: Remove vocals added no instrumental to the second song (toasts: ' + said.join(' | ') + ')');
+      const T2 = FM.makeLayer('video', { name: (T1.name || 'bh3 song two twins (no vocals)') + ' 2' });
+      T2.karaokeOf = R.id; T2.start = T1.start; T2.duration = T1.duration; T2.trimStart = T1.trimStart || 0; T2.volume = 1;
+      if (T2.transform) T2.transform.opacity = 0;
+      FM.media.set(T2.id, fakeRec());
+      FM.scene.layers.push(T2);
+      FM.refreshAll(); FM.history.commit();
+      const r0 = live(R.id);
+      if (twinsOf(R.id).length !== 2 || !r0 || !r0.muted) throw new Error('CONTROL: the second song does not have two twins and a mute before Restore (' + twinsOf(R.id).length + ' twin(s), song muted ' + !!(r0 && r0.muted) + ')');
+      const n2 = at();
+      await FM.toggleKaraoke(r0);
+      const r1 = live(R.id);
+      if (twinsOf(R.id).length || !r1 || r1.muted) bad.push('Restore with two twins left ' + twinsOf(R.id).length + ' twin(s) and the song ' + (r1 ? (r1.muted ? 'muted' : 'not muted') : 'gone'));
+      if (at() !== n2 + 1) bad.push('Restore with two twins took ' + (at() - n2) + ' undo steps, not one');
+      FM.history.undo();
+      const r2 = live(R.id);
+      if (twinsOf(R.id).length !== 2 || !r2 || !r2.muted) bad.push('one Undo after “Vocals restored” brought back ' + twinsOf(R.id).length + ' of the two twins with the song ' + (r2 ? (r2.muted ? 'muted' : 'not muted') : 'gone') + ', where it must put back exactly what Restore took away');
+
+      /* ── AN UNDO IN THE MIDDLE OF THE DECODE. The song's volume is turned down and committed, Remove vocals is pressed, and while
+         the decode is held an Undo puts the volume back, which replaces every layer object in the scene. */
+      const U = song('bh3 song undo mid-decode');
+      U.volume = 0.5;
+      FM.refreshAll(); FM.history.commit();
+      const held = new Promise(r => { release = r; });
+      FM.decodeAudio = async function () { await held; return stereo(); };
+      said.length = 0;
+      job = FM.toggleKaraoke(U);
+      await sleep(30);
+      FM.history.undo();
+      const u0 = live(U.id);
+      if (!u0 || u0 === U || vol(u0) !== 1) throw new Error('CONTROL: the Undo during the decode did not replace the song’s layer object and put its volume back (' + (!u0 ? 'no song' : u0 === U ? 'the same object' : 'volume ' + vol(u0)) + '), so a write to the old object cannot be seen');
+      release();
+      await job;
+      job = null;
+      const u1 = live(U.id), ut = twinsOf(U.id);
+      if (!u1 || ut.length !== 1) bad.push('after an Undo during the decode the song has ' + ut.length + ' instrumental(s), not one (toasts: ' + said.join(' | ') + ')');
+      else {
+        if (!u1.muted) bad.push('an Undo while the vocals were being removed left the song NOT muted under its new instrumental: the mute went to the layer object from before the Undo, which is no longer in the scene, so he hears the song and the instrumental together');
+        if (vol(ut[0]) !== vol(u1)) bad.push('after an Undo during the decode the instrumental is at volume ' + vol(ut[0]) + ', the song’s level from before the Undo, where the song is at ' + vol(u1));
+      }
+    } finally {
+      if (release) release();
+      if (job) { try { await Promise.race([job, sleep(5000)]); } catch (e) {} }
+      FM.decodeAudio = realDecode; FM.loadVideoFile = realLoad; FM.toast = realToast;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.scene.project.duration = dur0; FM.time = time0;
+      FM.selectLayer(null);
+      FM.history.reset();
+      FM.refreshAll();
+    }
+    if (bad.length) throw new Error('Remove vocals: ' + bad.join(' · '));
+  });
+  /* (#2) AN EXPORT STARTED WHILE THE PROJECT'S MEDIA WAS STILL LOADING BACK FROM HOME LEFT THOSE CLIPS OUT. Home frees the open
+     project's media once its card is drawn (FM.storage.releaseSceneMedia), and going back into the SAME project loads nothing up
+     front: openProject's same-project branch and close() (js/home.js) start FM.storage.hydrateSceneMedia({ onlyMissing: true }) and
+     do not wait for it, and nothing in the export waited for it either. On 02d944b7 buildAudioMix (the mixer of the MP4 and of the
+     WAV / M4A) and prepareCaches (the pre-flight of the MP4, the GIF and the PNG frames) read FM.media at once: the mixer files a clip
+     with no record "(no media record at all)" and leaves its sound out of the WHOLE file, and the frame loop draws nothing for it
+     until its record lands partway through. Home's ⋯ → Export video… opens the dialog 260 ms after the tap.
+     The re-load is the app's own, started unawaited the way close() starts it, over a record the test writes to IndexedDB under the
+     clip's id; Home's release is the app's own too (releaseSceneMedia, under the 385 tests' q385AsIfHome). Only the clip's loader
+     (FM.loadVideoFile) is held on a gate, which is where a phone spends that time (a song is decoded at 8 kHz again on the way
+     back). FM.decodeAudio hands the mixer a 1 s 48 kHz buffer at 0.25, so the clip is mixed whenever it is there. The scene is the
+     test's own, one 1 s song, so the re-load and the mix touch nothing else.
+     Fails on 02d944b7 at the first claim: buildAudioMix has no await before its loop, so it is finished long before the 300 ms the
+     gate is held, with FM._lastAudioDrops ["bh3 song back from Home (no media record at all)"] and no mix (it was the only sound).
+     CONTROLS: with nothing re-loading the pre-flight finishes and never says "Loading clips…", so the fix adds no wait and no words to
+     an ordinary export; each round, Home really let the clip go (releaseSceneMedia freed it), the re-load is in flight and has reached
+     the clip's loader, and the clip is out of FM.media while it is held; and Cancel is measured with the clip still out, so an early
+     finish there is the Cancel and not the re-load landing. */
+  test('bughunt3 #2 Export straight after coming back from Home: the export waits for the clips Home let go of to load back before it reads them, so a song still loading is mixed into the file instead of dropped from all of it as “(no media record at all)”, the pre-flight of the MP4 / GIF / PNG frames waits too and says “Loading clips…”, and Cancel still ends the wait (CONTROLS: with nothing re-loading the pre-flight neither waits nor says anything; Home really let the clip go, and it was out of FM.media while the re-load was held)', { item: '1176' }, async function () {
+    const X = FM.exporter, S = FM.storage;
+    if (!X || typeof X.prepareCaches !== 'function' || typeof X.buildAudioMix !== 'function') throw new Error('setup: FM.exporter.prepareCaches / buildAudioMix are not reachable');
+    if (!S || typeof S.hydrateSceneMedia !== 'function' || typeof S.releaseSceneMedia !== 'function' || typeof S.writeMedia !== 'function' || typeof S.removeMedia !== 'function' || typeof S.hydrating !== 'function') throw new Error('setup: FM.storage.hydrateSceneMedia / releaseSceneMedia / writeMedia / removeMedia / hydrating are not reachable');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('setup: this browser has no OfflineAudioContext, so the export cannot mix here');
+    /* An earlier test's re-load must not be the one measured. */
+    for (let i = 0; i < 100 && S.hydrating(); i++) await sleep(50);
+    if (S.hydrating()) throw new Error('setup: a re-load from an earlier test is still running after 5 s');
+    if (FM._exporting || FM._mediaBusy) throw new Error('setup: an export or a media write is in flight (FM._exporting ' + FM._exporting + ', FM._mediaBusy ' + FM._mediaBusy + '), so Home would not let the clip go');
+    const note = document.getElementById('export-note');
+    const saved = {
+      scene: FM.scene, time: FM.time, load: FM.loadVideoFile, decode: FM.decodeAudio, toast: FM.toast, cancel: FM._exportCancel,
+      drops: FM._lastAudioDrops, sup: FM._lastAudioSuppressed, dropped: FM._audioTrackDropped,
+      peak: FM._lastMixPeak, raw: FM._lastMixRawPeak, gain: FM._lastMixGain,
+      noteText: note ? note.textContent : null, noteCls: note ? note.className : null,
+    };
+    const said = [];
+    const V = FM.makeLayer('video', { name: 'bh3 song back from Home' });
+    V.start = 0; V.duration = 1; V.trimStart = 0; V.speed = 1; V.volume = 1; V.fadeIn = 0; V.fadeOut = 0; V.visible = true;
+    const file = new File([new Uint8Array(64)], 'bh3-song.wav', { type: 'audio/wav' });
+    /* A record like the loader's, with no src. _repaintWired: wireVideoRepaint would otherwise arm its 15 s "no picture" timer on it. */
+    const rec = () => ({ kind: 'video', el: document.createElement('video'), url: '', file: file, width: 0, height: 0, duration: 1, _repaintWired: true });
+    let open = null, entered = 0, back = null, job = null, wrote = false;
+    /* The clip's loader held on a gate, as a slow decode on his phone holds it. */
+    const hold = () => {
+      entered = 0;
+      const gate = new Promise(r => { open = r; });
+      FM.loadVideoFile = async function () { entered++; await gate; return rec(); };
+    };
+    /* Home lets the media go, and he comes straight back into the same project: the re-load starts and nobody waits for it. */
+    const homeAndBack = async (what) => {
+      /* The clip is resident and nothing is re-loading at the moment Home lets go. Measured 19 Oct, the bughunt3 slice at 380: one
+         run in about five found the clip already out of FM.media here (released 0, still in FM.media false) although the setup
+         had just put it in; three runs straight after passed. What removes it in between is not this test's subject (an export
+         that waits for a re-load), so the setup is re-made right before the release, and the control below still proves Home
+         really let it go. Who removed it is #1176's to find. */
+      for (let i = 0; i < 100 && S.hydrating(); i++) await sleep(50);
+      FM.media.set(V.id, rec());
+      const freed = await q385AsIfHome(() => S.releaseSceneMedia());
+      if (freed !== 1 || FM.media.get(V.id)) throw new Error('CONTROL (' + what + '): Home did not let the clip go (released ' + freed + ', still in FM.media ' + !!FM.media.get(V.id) + '), so there is nothing to load back');
+      hold();
+      back = S.hydrateSceneMedia({ onlyMissing: true });
+      /* the re-load opens IndexedDB and reads the record before it reaches the loader: wait for it to get there */
+      for (let i = 0; i < 100 && !entered; i++) await sleep(20);
+      if (!S.hydrating() || entered !== 1) throw new Error('CONTROL (' + what + '): the re-load is not held at the clip’s loader (in flight ' + S.hydrating() + ', loader reached ' + entered + ' time(s))');
+      if (FM.media.get(V.id)) throw new Error('CONTROL (' + what + '): the clip is back in FM.media while its loader is held');
+    };
+    /* Let the held loader go and wait for the re-load to finish. */
+    const settle = async () => {
+      if (open) open();
+      if (back) { const b = back; back = null; await Promise.race([b.catch(() => {}), sleep(5000)]); }
+    };
+    const watch = p => {
+      const w = { done: false, value: undefined, error: null };
+      job = p.then(v => { w.done = true; w.value = v; }, e => { w.done = true; w.error = e; });
+      return w;
+    };
+    try {
+      if (FM.playing && FM.pause) FM.pause();
+      FM.toast = function (m) { said.push(String(m)); };
+      FM.decodeAudio = async function () {
+        const b = new OAC(2, 48000, 48000).createBuffer(2, 48000, 48000);
+        b.getChannelData(0).fill(0.25); b.getChannelData(1).fill(0.25);
+        return b;
+      };
+      FM._exportCancel = false;
+      FM.scene = scene([V], { project: { width: 64, height: 64, fps: 30, duration: 1, background: '#000000' } });
+      wrote = await S.writeMedia(V.id, { file: file, kind: 'video' });
+      if (!wrote) throw new Error('setup: the clip’s file could not be written to IndexedDB, so Home cannot let it go');
+      FM.media.set(V.id, rec());
+
+      /* ── CONTROL: nothing re-loading. The pre-flight finishes, and says nothing it did not say before. */
+      const st0 = [];
+      const w0 = watch(X.prepareCaches(FM.scene, 30, s => st0.push(String(s))));
+      await Promise.race([job, sleep(2000)]);
+      if (!w0.done) throw new Error('CONTROL: with nothing re-loading the pre-flight did not finish within 2 s');
+      if (w0.error) throw w0.error;
+      if (st0.some(s => /Loading clips/.test(s))) throw new Error('CONTROL: with nothing re-loading the pre-flight still said ' + JSON.stringify(st0) + ', where an ordinary export must not wait or say anything new');
+
+      /* ── THE MIX: the MP4's soundtrack, and the whole of a WAV or M4A. */
+      await homeAndBack('the mix');
+      const w1 = watch(X.buildAudioMix(FM.scene, 0, 1));
+      await sleep(300);
+      if (w1.done) throw new Error('pressing Export straight after coming back from Home: the soundtrack was mixed while “' + V.name + '” was still loading back, so its sound is left out of the WHOLE file (drops ' + JSON.stringify(FM._lastAudioDrops || []) + ', ' + (w1.value ? 'a mix without it' : 'no mix at all') + ') — the mixer reads FM.media at once and nothing makes it wait for the re-load');
+      if (FM.media.get(V.id)) throw new Error('CONTROL: the clip came back while its loader was held');
+      await settle();
+      await Promise.race([job, sleep(5000)]);
+      if (!w1.done) throw new Error('the mix did not finish within 5 s of the clip loading back');
+      if (w1.error) throw w1.error;
+      if (!FM.media.get(V.id)) throw new Error('CONTROL: the re-load finished without putting the clip back in FM.media');
+      const lost = (FM._lastAudioDrops || []).filter(d => String(d).indexOf(V.name) === 0);
+      if (lost.length) throw new Error('the mix waited for the re-load and still dropped the clip: ' + JSON.stringify(lost));
+      if (!w1.value) throw new Error('the mix waited for the clip and built no soundtrack (drops ' + JSON.stringify(FM._lastAudioDrops || []) + ', toasts: ' + said.join(' | ') + ')');
+
+      /* ── THE PRE-FLIGHT: the MP4, the GIF and the PNG frames read FM.media here first. And it says why it is waiting. */
+      await homeAndBack('the pre-flight');
+      const st2 = [];
+      const w2 = watch(X.prepareCaches(FM.scene, 30, s => st2.push(String(s))));
+      await sleep(300);
+      if (w2.done) throw new Error('pressing Export straight after coming back from Home: the pre-flight of the MP4 / GIF / PNG frames finished while “' + V.name + '” was still loading back, so the frame loop starts with that clip missing and it pops in partway through the file');
+      if (!st2.some(s => /Loading clips/.test(s))) throw new Error('the export waits for the clips to load back, but its status line said ' + JSON.stringify(st2) + ', not “Loading clips…”, so the overlay sits on its last words for as long as the re-load takes');
+      await settle();
+      await Promise.race([job, sleep(5000)]);
+      if (!w2.done) throw new Error('the pre-flight did not finish within 5 s of the clip loading back');
+      if (w2.error) throw w2.error;
+      if (!FM.media.get(V.id)) throw new Error('CONTROL: the second re-load finished without putting the clip back');
+
+      /* ── CANCEL ENDS THE WAIT, with the clip still out. */
+      await homeAndBack('Cancel');
+      const w3 = watch(X.prepareCaches(FM.scene, 30, () => {}));
+      await sleep(150);
+      if (w3.done) throw new Error('CONTROL: the pre-flight finished before Cancel, with the clip still loading back, so Cancel cannot be what ends it');
+      FM._exportCancel = true;
+      await Promise.race([job, sleep(1500)]);
+      if (!w3.done) throw new Error('Cancel while the export waited for the clips to load back did nothing for 1.5 s — the button is ignored for as long as the re-load takes');
+      if (FM.media.get(V.id)) throw new Error('CONTROL: the clip came back before Cancel was measured, so the early finish is the re-load landing and not Cancel');
+      FM._exportCancel = false;
+    } finally {
+      try { await settle(); } catch (e) {}
+      if (job) { try { await Promise.race([job, sleep(3000)]); } catch (e) {} }
+      FM.loadVideoFile = saved.load; FM.decodeAudio = saved.decode; FM.toast = saved.toast;
+      FM._exportCancel = saved.cancel;
+      FM._lastAudioDrops = saved.drops; FM._lastAudioSuppressed = saved.sup; FM._audioTrackDropped = saved.dropped;
+      FM._lastMixPeak = saved.peak; FM._lastMixRawPeak = saved.raw; FM._lastMixGain = saved.gain;
+      if (note) { note.textContent = saved.noteText; note.className = saved.noteCls; }
+      try { FM.media.remove(V.id); } catch (e) {}
+      if (wrote) { try { await S.removeMedia(V.id); } catch (e) {} }
+      FM.scene = saved.scene; FM.time = saved.time;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+  /* (#3) A SPLIT INSIDE A FADE CHANGED WHAT YOU HEAR. FM.splitLayer gave the head half the fade-in and the tail half the fade-out
+     (`B.fadeIn = 0; layer.fadeOut = 0;`), which reproduces the clip only when the cut falls outside both fades. FM.fadeMul measures each
+     fade from the half's OWN edges, and FM.fadeWindows squeezes fades longer than the clip into it (`fi + fo > clipDur` scales both by
+     clipDur / (fi + fo)). So on 98c3dedd a 10 s clip with Fade in 3 and Fade out 3, cut at 1 s, left a 1 s head whose 3 s fade-in was
+     squeezed to 1 s and a tail with no fade-in at all: 0.5 at t = 0.5 (was 0.167), 1.0 at the cut (was 0.333), 1.0 at t = 2 (was
+     0.667). Claim A fails there, by 0.667 at t = 1, against the split-fade test's own 0.01. Cut at 9.5 s (claim B), the head played at
+     full level up to 9.5 and the 0.5 s tail squeezed its 3 s fade-out into 0.5 s: 1.0 at 9.5 where the clip read 0.167. Audio only:
+     fadeIn / fadeOut never reach the picture.
+     The claims, each against the unsplit clip's own FM.fadeMul (the multiplier the split-fade test reads) on a 0.05 s grid, within 0.01:
+     A. a cut at 1 s, inside the fade-in; B. a cut at 9.5 s, inside the fade-out; C. halves split again: the tail at 2 s (still inside
+     the fade-in, so the span it carries grows), the piece after that at 9.5 s (a fade-out cut on a piece that already carries one) and
+     the head at 0.5 s (a head of a head). The five pieces of C keep their fade fields through FM.storage._sanitizeLayers (save, undo
+     and a collaborator's copy all run it). Then the same five pieces, copied onto audio clips, through the two schedules that do NOT go
+     through FM.fadeMul: the export's mix (FM.exporter.buildAudioMix renders a steady 0.5 level, read sample by sample against the
+     unsplit clip's own render, clear of the cuts and of the 45 ms edge de-click) and the reversed preview (FM.audioPlay.start, with
+     every setValueAtTime / linearRampToValueAtTime on the voice's gain recorded and the envelope evaluated from them the way Web Audio
+     orders them). Last, a fade typed into the volume panel on a piece is measured from that piece's own edges again.
+     The split writes the document and an undo step; both are held for the test (FM.storage.save, FM.history.commit) and put back by
+     descriptor, as is the context's createGain.
+     CONTROLS: a cut at 5 s with 1 s fades (the split-fade case) writes exactly today's fields (head 1 / 0, tail 0 / 1) and neither new
+     field; the unsplit clip's own render and its own recorded preview schedule follow its fade (so neither reader is blind); each
+     preview start built exactly one gain. */
+  test('bughunt3 #3 A split inside a fade: cutting a clip inside its fade-in or fade-out leaves what you hear exactly as it was, for the halves, for a half split again, in the export’s mix and in the reversed preview, and a fade typed on a piece starts at its own edge (CONTROLS: a cut outside the fades writes today’s fields and no new ones; the unsplit clip’s own render and preview schedule follow its fade; one gain per preview start)', { item: '1176' }, async function () {
+    if (typeof FM.fadeMul !== 'function' || typeof FM.splitLayer !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.fadeMul / FM.splitLayer / FM.makeLayer are not reachable');
+    if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('setup: FM.exporter.buildAudioMix is not reachable');
+    if (!FM.audioPlay || typeof FM.audioPlay.start !== 'function' || typeof FM.audioPlay.stop !== 'function') throw new Error('setup: FM.audioPlay is not reachable');
+    if (!FM.storage || typeof FM.storage._sanitizeLayers !== 'function') throw new Error('setup: FM.storage._sanitizeLayers is not reachable');
+    if (!FM.inspector || typeof FM.inspector.openCategory !== 'function' || typeof FM.selectLayer !== 'function') throw new Error('setup: the volume panel cannot be opened (FM.inspector.openCategory / FM.selectLayer)');
+    const AC = FM.audioCtx && FM.audioCtx();
+    if (!AC) throw new Error('setup: no AudioContext here, so the reversed preview builds nothing to measure');
+    const pause = ms => new Promise(r => setTimeout(r, ms));
+    const P = { width: 64, height: 64, fps: 30, duration: 10, background: '#000000' };
+    const SR = 48000, NEAR = 0.01;
+    const saved = { scene: FM.scene, time: FM.time, playing: FM.playing,
+      peak: FM._lastMixPeak, raw: FM._lastMixRawPeak, gain: FM._lastMixGain,
+      drops: FM._lastAudioDrops, sup: FM._lastAudioSuppressed, dropped: FM._audioTrackDropped };
+    const dSave = FM.storage ? Object.getOwnPropertyDescriptor(FM.storage, 'save') : undefined;
+    const dCommit = FM.history ? Object.getOwnPropertyDescriptor(FM.history, 'commit') : undefined;
+    const dGain = Object.getOwnPropertyDescriptor(AC, 'createGain');
+    const cg0 = AC.createGain;
+    const putGainBack = () => { if (dGain) Object.defineProperty(AC, 'createGain', dGain); else delete AC.createGain; };
+    const ids = [];
+    try {
+      if (dSave) FM.storage.save = function () { return Promise.resolve(true); };
+      if (dCommit) FM.history.commit = function () {};
+      const mkShape = (fi, fo) => {
+        const A = FM.makeLayer('shape', { name: 'bh3 #3 clip', shape: 'rect', x: 10, y: 10, shapeW: 40, shapeH: 40, fill: '#fff' });
+        A.start = 0; A.duration = 10; A.fadeIn = fi; A.fadeOut = fo;
+        return A;
+      };
+      const times = []; for (let k = 0; k <= 200; k++) times.push(+(k * 0.05).toFixed(3));
+      /* What you hear at t: the largest multiplier among the clips that cover t (at a cut both halves do), as split-fade reads it. */
+      const gainAt = t => {
+        let g = null;
+        FM.scene.layers.forEach(l => {
+          if (t >= l.start - 1e-9 && t <= l.start + l.duration + 1e-9) {
+            const v = FM.fadeMul(l, t - l.start, l.duration);
+            g = (g === null) ? v : Math.max(g, v);
+          }
+        });
+        return g === null ? 0 : g;
+      };
+      const cut = async (layer, at) => {
+        const had = new Set(FM.scene.layers.map(l => l.id));
+        FM.time = at;
+        await FM.splitLayer(layer.id);
+        const B = FM.scene.layers.find(l => !had.has(l.id));
+        if (!B) throw new Error('setup: cutting the piece at ' + layer.start + ' s at ' + at + ' s made no tail half');
+        return B;
+      };
+      const same = (tag, before) => {
+        const after = times.map(gainAt);
+        let worst = 0, wi = 0;
+        times.forEach((t, i) => { const d = Math.abs(after[i] - before[i]); if (d > worst) { worst = d; wi = i; } });
+        if (worst > NEAR) throw new Error(tag + ': the split changed what you hear by ' + worst.toFixed(3) + ' at t = ' + times[wi] + ' s — the unsplit clip read ' +
+          before[wi].toFixed(3) + ' there and the pieces read ' + after[wi].toFixed(3) + ' (pieces: ' + JSON.stringify(FM.scene.layers.map(l => [l.start, l.duration, l.fadeIn, l.fadeOut, l.fadeInLead, l.fadeOutTail])) + ')');
+      };
+      const fresh = (fi, fo) => { const A = mkShape(fi, fo); FM.scene = scene([A], { project: Object.assign({}, P) }); return A; };
+
+      /* ── A. a cut at 1 s, inside the 3 s fade-in. */
+      let A = fresh(3, 3);
+      const ref = times.map(gainAt);
+      if (!(Math.abs(ref[times.indexOf(1)] - 1 / 3) < 1e-9 && ref[times.indexOf(5)] === 1 && Math.abs(ref[times.indexOf(9.5)] - 1 / 6) < 1e-9)) throw new Error('setup: the unsplit clip does not read 0.333 / 1 / 0.167 at 1 / 5 / 9.5 s, so it is not the fade this test is about');
+      await cut(A, 1);
+      same('A (a 3 s fade-in cut at 1 s)', ref);
+
+      /* ── B. a cut at 9.5 s, inside the 3 s fade-out. */
+      A = fresh(3, 3);
+      await cut(A, 9.5);
+      same('B (a 3 s fade-out cut at 9.5 s)', ref);
+
+      /* ── C. halves split again: [0,1] [1,10] → the tail at 2, that piece at 9.5, the head at 0.5. */
+      A = fresh(3, 3);
+      const B1 = await cut(A, 1);
+      const B2 = await cut(B1, 2);
+      await cut(B2, 9.5);
+      await cut(A, 0.5);
+      if (FM.scene.layers.length !== 5) throw new Error('setup: four cuts made ' + FM.scene.layers.length + ' pieces, not 5');
+      same('C (the tail cut again at 2 s, that piece at 9.5 s and the head at 0.5 s)', ref);
+      const pieces = FM.scene.layers.slice().sort((x, y) => x.start - y.start);
+      const FADE_KEYS = ['fadeIn', 'fadeOut', 'fadeInLead', 'fadeOutTail'];
+      pieces.forEach(l => {
+        const c = JSON.parse(JSON.stringify(l, FM.jsonReplacer));
+        FM.storage._sanitizeLayers([c]);
+        FADE_KEYS.forEach(k => {
+          if (JSON.stringify(c[k]) !== JSON.stringify(l[k])) throw new Error('the piece at ' + l.start + ' s came out of the sanitiser (save, undo, a collaborator’s copy) with ' + k + ' ' + JSON.stringify(c[k]) + ' where it held ' + JSON.stringify(l[k]) + ', so its fade changes the next time the project opens');
+        });
+      });
+
+      /* ── CONTROL: a cut outside both fades (the split-fade case) writes exactly what it always did, and neither new field. */
+      A = fresh(1, 1);
+      const refC = times.map(gainAt);
+      const T = await cut(A, 5);
+      same('CONTROL (1 s fades cut at 5 s)', refC);
+      const fields = l => JSON.stringify([l.fadeIn, l.fadeOut, 'fadeInLead' in l, 'fadeOutTail' in l]);
+      if (fields(A) !== JSON.stringify([1, 0, false, false]) || fields(T) !== JSON.stringify([0, 1, false, false])) throw new Error('CONTROL: a cut outside both fades wrote head ' + fields(A) + ' and tail ' + fields(T) + ' ([fade in, fade out, has fadeInLead, has fadeOutTail]); it has always written [1,0,false,false] and [0,1,false,false]');
+
+      /* ── THE EXPORT'S MIX: the five pieces of C on audio clips over a steady 0.5 level (a 48 kHz buffer, so nothing is decoded). */
+      const whole = { start: 0, duration: 10, fadeIn: 3, fadeOut: 3 };
+      const asAudio = (src, buf, reversed) => {
+        const L = FM.makeLayer('video', { name: 'bh3 #3 ' + src.start, start: src.start, duration: src.duration, trimStart: src.start });
+        L.start = src.start; L.duration = src.duration; L.trimStart = src.start; L.speed = 1; L.volume = 1; L.reversed = !!reversed; L.visible = true;
+        FADE_KEYS.forEach(k => { if (k in src) L[k] = src[k]; else delete L[k]; });
+        if (src.splitOf) L.splitOf = src.splitOf;
+        FM.media.set(L.id, { kind: 'video', file: new Blob(['x'], { type: 'audio/wav' }), audioBuffer: buf, duration: 10, width: 0, height: 0 });
+        ids.push(L.id);
+        return L;
+      };
+      const dc = new AudioBuffer({ numberOfChannels: 1, length: 10 * SR, sampleRate: SR });
+      dc.getChannelData(0).fill(0.5);
+      const mixOf = async ls => {
+        FM.scene = scene(ls, { project: Object.assign({}, P) });
+        const mx = await FM.exporter.buildAudioMix(FM.scene, 0, 10);
+        if (!mx || !mx.audioBuffer) throw new Error('setup: the export built no mix for ' + ls.length + ' clip(s) (dropped: ' + JSON.stringify(FM._lastAudioDrops) + ')');
+        return mx.audioBuffer.getChannelData(0);
+      };
+      const lvl = (d, t) => d[Math.round(t * SR)] / 0.5;
+      const xt = []; for (let k = 0; k < 40; k++) xt.push(0.125 + 0.25 * k);
+      const mOne = await mixOf([asAudio(whole, dc, false)]);
+      [[1.125, 0.375], [5.125, 1], [8.875, 0.375]].forEach(p => {
+        if (Math.abs(lvl(mOne, p[0]) - p[1]) > NEAR) throw new Error('CONTROL: the unsplit clip exported ' + lvl(mOne, p[0]).toFixed(3) + ' of its level at ' + p[0] + ' s, not ' + p[1] + ', so the export is not applying the fade this test compares against');
+      });
+      const mCut = await mixOf(pieces.map(l => asAudio(l, dc, false)));
+      let xw = 0, xwt = 0;
+      xt.forEach(t => { const d = Math.abs(lvl(mCut, t) - lvl(mOne, t)); if (d > xw) { xw = d; xwt = t; } });
+      if (xw > NEAR) throw new Error('the EXPORT of the five pieces differs from the unsplit clip’s by ' + xw.toFixed(3) + ' at ' + xwt + ' s (' + lvl(mOne, xwt).toFixed(3) + ' unsplit, ' + lvl(mCut, xwt).toFixed(3) + ' in pieces): the mix schedules its fade ramps from each piece’s own edges');
+
+      /* ── THE REVERSED PREVIEW: one reversed voice per start, the schedule laid onto its gain recorded and evaluated in time order. */
+      const silent = AC.createBuffer(1, 10 * SR, SR);
+      const pr = FM.previewRate || 1;
+      const evalAt = (ev, t) => {
+        const s = ev.map((e, i) => ({ k: e.k, v: e.v, t: e.t, i: i })).sort((a, b) => (a.t - b.t) || (a.i - b.i));
+        let pv = 1, pt = -Infinity;
+        for (let i = 0; i < s.length; i++) {
+          const e = s[i];
+          if (t < e.t) return (e.k === 'linearRampToValueAtTime' && pt > -Infinity && e.t > pt) ? pv + (e.v - pv) * (t - pt) / (e.t - pt) : pv;
+          pv = e.v; pt = e.t;
+        }
+        return pv;
+      };
+      const scheduleOf = src => {
+        const L = asAudio(src, silent, true);
+        FM.scene = scene([L], { project: Object.assign({}, P) });
+        const made = [];
+        AC.createGain = function () {
+          const g = cg0.apply(AC, arguments), p = g.gain, ev = [];
+          ['setValueAtTime', 'linearRampToValueAtTime'].forEach(k => {
+            const f = p[k];
+            p[k] = function (v, t) { ev.push({ k: k, v: v, t: t }); return f.apply(p, arguments); };
+          });
+          made.push(ev);
+          return g;
+        };
+        FM.time = 0; FM.playing = true;
+        try { FM.audioPlay.start(); } finally { try { FM.audioPlay.stop(); } catch (e) {} FM.playing = saved.playing; putGainBack(); }
+        if (made.length !== 1) throw new Error('CONTROL: starting the reversed preview of the piece at ' + src.start + ' s built ' + made.length + ' gains, not one, so its schedule cannot be read');
+        const ev = made[0];
+        if (!ev.length || ev[0].k !== 'setValueAtTime') throw new Error('CONTROL: the reversed voice of the piece at ' + src.start + ' s got no fade schedule (' + JSON.stringify(ev) + ')');
+        /* The playhead is at 0, so the voice reaches its buffer position 0 (the clip's start) start / rate after its first event. */
+        const base = ev[0].t + L.start / pr, vol = FM.layerVolume(L, FM.time);
+        return b => evalAt(ev, base + b / pr) / vol;
+      };
+      const refAt = t => FM.fadeMul(whole, t - whole.start, whole.duration);
+      const one = scheduleOf(whole);
+      [1.125, 5.125, 8.875].forEach(t => {
+        if (Math.abs(one(t) - refAt(t)) > NEAR) throw new Error('CONTROL: the unsplit reversed clip’s recorded schedule reads ' + one(t).toFixed(3) + ' at ' + t + ' s where its fade is ' + refAt(t).toFixed(3) + ', so the reader is wrong, not the fix');
+      });
+      let pw = 0, pwt = null;
+      pieces.forEach(l => {
+        const f = scheduleOf(l);
+        for (let k = 0; k < 8; k++) {
+          const b = l.duration * (k + 0.5) / 8, t = l.start + b, d = Math.abs(f(b) - refAt(t));
+          if (d > pw) { pw = d; pwt = { t: t, got: f(b), want: refAt(t) }; }
+        }
+      });
+      if (pw > NEAR) throw new Error('the REVERSED PREVIEW of the five pieces differs from the unsplit clip’s fade by ' + pw.toFixed(3) + ' at ' + pwt.t.toFixed(3) + ' s (' + pwt.want.toFixed(3) + ' unsplit, ' + pwt.got.toFixed(3) + ' in pieces): its ramps are scheduled from each piece’s own edges');
+
+      /* ── A FADE TYPED ON A PIECE starts at the piece's own edge: the 2–9.5 s piece carries the fade from both sides. */
+      const src = pieces.find(l => Math.abs(l.start - 2) < 1e-9);
+      const H = asAudio(src, silent, false);
+      if (!(H.fadeInLead > 0 && H.fadeOutTail > 0)) throw new Error('setup: the 2–9.5 s piece carries fadeInLead ' + H.fadeInLead + ' and fadeOutTail ' + H.fadeOutTail + ', so it does not carry the fade from both sides');
+      FM.scene = scene([H], { project: Object.assign({}, P) });
+      FM.selectLayer(H.id);
+      FM.inspector.openCategory('volume');
+      await pause(90);
+      const field = label => {
+        const r = Array.prototype.slice.call(document.querySelectorAll('.vol-panel .prop-row')).filter(x => { const lb = x.querySelector('label'); return lb && lb.textContent.trim() === label; })[0];
+        return r ? r.querySelector('.fx-scrub-val') : null;
+      };
+      const fin = field('Fade in (s)');
+      if (!fin) throw new Error('setup: the volume panel has no Fade in (s) field to drive');
+      fin.value = '2'; fin.dispatchEvent(new Event('change', { bubbles: true }));
+      const fout = field('Fade out (s)');
+      if (!fout) throw new Error('setup: the volume panel has no Fade out (s) field to drive');
+      fout.value = '1.5'; fout.dispatchEvent(new Event('change', { bubbles: true }));
+      if (H.fadeIn !== 2 || H.fadeOut !== 1.5) throw new Error('setup: driving the two fields left the piece at Fade in ' + H.fadeIn + ' / Fade out ' + H.fadeOut + ', not 2 / 1.5');
+      if ('fadeInLead' in H || 'fadeOutTail' in H) throw new Error('a fade typed into the volume panel kept the span the split carried (fadeInLead ' + H.fadeInLead + ', fadeOutTail ' + H.fadeOutTail + '), so it is still measured from beyond the clip: Fade in 2 s does not start from silence');
+      if (FM.fadeMul(H, 0, H.duration) > 1e-9 || FM.fadeMul(H, H.duration, H.duration) > 1e-9) throw new Error('after typing Fade in 2 / Fade out 1.5 the piece reads ' + FM.fadeMul(H, 0, H.duration).toFixed(3) + ' at its start and ' + FM.fadeMul(H, H.duration, H.duration).toFixed(3) + ' at its end, not silence');
+    } finally {
+      try { FM.audioPlay.stop(); } catch (e) {}
+      putGainBack();
+      if (dSave) Object.defineProperty(FM.storage, 'save', dSave);
+      if (dCommit) Object.defineProperty(FM.history, 'commit', dCommit);
+      ids.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM.playing = saved.playing;
+      FM._lastMixPeak = saved.peak; FM._lastMixRawPeak = saved.raw; FM._lastMixGain = saved.gain;
+      FM._lastAudioDrops = saved.drops; FM._lastAudioSuppressed = saved.sup; FM._audioTrackDropped = saved.dropped;
+      FM.scene = saved.scene; FM.time = saved.time;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+  /* bughunt3 #7 (found while fixing #2). A photo's media record keeps its File (FM.loadImageFile, js/media.js, and every route that
+     loads one back goes through it again), and buildAudioMix asked only `file || audioBuffer` before filing a layer as a lost sound.
+     So every photo in a project was reported as a dropped audio clip, “(type "image" — the mixer only takes "video" layers)”:
+     with a song, “1 clip had no usable audio — the rest are in the file” on a file with every sound in it; photos alone,
+     “Exporting with NO SOUND — 1 audio clip could not be read” and `all-unreadable` on the pasteable report, on a file that is
+     exactly right; and a hidden photo was counted among the audio clips “hidden or muted by solo”. That report is what the
+     silent-export hunt (#604) reads. The mixer is driven directly on the test's own scene; the song is #2's record, with
+     FM.decodeAudio handing back a 1 s 48 kHz buffer at 0.25, so nothing is decoded for real.
+     Fails on 51044cb2 at the first claim: drops ["bh3 photo with a song (type "image" — the mixer only takes "video" layers)"].
+     CONTROLS: the song is in the mix; a non-video layer holding decoded audio, and one holding a file of no stated type (a MIME
+     type is often empty), are still reported, as before; and a hidden song is still given as the reason for a silent file. */
+  test('bughunt3 #7 A photo in the project: the export no longer reports it as a dropped audio clip, so a photo with a song does not say “1 clip had no usable audio”, photos alone do not say “Exporting with NO SOUND — 1 audio clip could not be read”, and a hidden photo is not counted as an audio clip “hidden or muted by solo” (CONTROLS: the song is mixed; a non-video layer holding decoded audio or a file of no stated type is still reported; a hidden song is still the reason given, counted alone)', { item: '1176' }, async function () {
+    const X = FM.exporter;
+    if (!X || typeof X.buildAudioMix !== 'function') throw new Error('setup: FM.exporter.buildAudioMix is not reachable');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC) throw new Error('setup: this browser has no OfflineAudioContext, so the export cannot mix here');
+    if (FM._exporting) throw new Error('setup: an export is in flight');
+    const note = document.getElementById('export-note');
+    const saved = {
+      scene: FM.scene, time: FM.time, decode: FM.decodeAudio, toast: FM.toast,
+      drops: FM._lastAudioDrops, sup: FM._lastAudioSuppressed, dropped: FM._audioTrackDropped,
+      peak: FM._lastMixPeak, raw: FM._lastMixRawPeak, gain: FM._lastMixGain,
+      noteText: note ? note.textContent : null, noteCls: note ? note.className : null,
+    };
+    const ids = [], said = [];
+    const layerOf = (type, name, extra) => {
+      const L = FM.makeLayer(type, extra || {});
+      L.name = name; L.start = 0; L.duration = 1; L.visible = true;
+      if (type === 'video') { L.trimStart = 0; L.speed = 1; L.volume = 1; L.fadeIn = 0; L.fadeOut = 0; }
+      ids.push(L.id);
+      return L;
+    };
+    const box = { shape: 'rect', x: 32, y: 32, shapeW: 8, shapeH: 8, fill: '#446688' };
+    /* A photo's record as FM.loadImageFile resolves it: the File stays on it. */
+    const photoRec = () => ({ kind: 'image', el: new Image(), url: '', file: new File([new Uint8Array(64)], 'p.png', { type: 'image/png' }), width: 64, height: 64 });
+    /* #2's song record, with no src. _repaintWired: wireVideoRepaint would otherwise arm its 15 s "no picture" timer on it. */
+    const songFile = new File([new Uint8Array(64)], 'bh3-song.wav', { type: 'audio/wav' });
+    const songRec = () => ({ kind: 'video', el: document.createElement('video'), url: '', file: songFile, width: 0, height: 0, duration: 1, _repaintWired: true });
+    const buf = () => {
+      const b = new OAC(2, 48000, 48000).createBuffer(2, 48000, 48000);
+      b.getChannelData(0).fill(0.25); b.getChannelData(1).fill(0.25);
+      return b;
+    };
+    const ALARM = /no usable audio|NO SOUND|could not be read|hidden or muted/;
+    const mix = async (layers, recs) => {
+      FM.scene = scene(layers, { project: { width: 64, height: 64, fps: 30, duration: 1, background: '#000000' } });
+      layers.forEach((L, i) => { if (recs[i]) FM.media.set(L.id, recs[i]); });
+      said.length = 0;
+      if (note) note.textContent = '';
+      FM._lastAudioDrops = null; FM._lastAudioSuppressed = null; FM._audioTrackDropped = null;
+      const m = await X.buildAudioMix(FM.scene, 0, 1);
+      const card = note ? String(note.textContent || '').split('\n').filter(Boolean) : [];
+      return {
+        mix: m, drops: (FM._lastAudioDrops || []).map(String), sup: (FM._lastAudioSuppressed || []).map(String),
+        flag: FM._audioTrackDropped || null, toasts: said.slice(), alarms: said.concat(card).filter(s => ALARM.test(s)),
+      };
+    };
+    const named = (list, name) => list.filter(d => d.indexOf(name) === 0);
+    try {
+      if (FM.playing && FM.pause) FM.pause();
+      FM.toast = function (m) { said.push(String(m)); };
+      FM.decodeAudio = async function () { return buf(); };
+
+      /* ── (a) A PHOTO AND A SONG: every sound is in the file. */
+      const aP = layerOf('image', 'bh3 photo with a song'), aS = layerOf('video', 'bh3 song under the photo');
+      const a = await mix([aP, aS], [photoRec(), songRec()]);
+      if (named(a.drops, aP.name).length) throw new Error('a photo with a song: the export reported the PHOTO as a dropped audio clip ' + JSON.stringify(named(a.drops, aP.name)) + ', and said ' + JSON.stringify(a.alarms) + ' — on a file with every sound in it, and the report blames a picture');
+      if (!a.mix) throw new Error('CONTROL: the song was not mixed (drops ' + JSON.stringify(a.drops) + ', toasts ' + JSON.stringify(a.toasts) + '), so nothing here is measured');
+      if (named(a.drops, aS.name).length) throw new Error('CONTROL: the song itself was dropped: ' + JSON.stringify(a.drops));
+      if (a.alarms.length) throw new Error('a photo with a song: the export still said ' + JSON.stringify(a.alarms));
+      if (a.flag) throw new Error('a photo with a song: the report says dropped "' + a.flag + '"');
+
+      /* ── (b) PHOTOS ONLY: a slideshow that never had a sound in it. */
+      const bP = layerOf('image', 'bh3 photo alone');
+      const b = await mix([bP], [photoRec()]);
+      if (named(b.drops, bP.name).length) throw new Error('photos and no sound: the export reported the photo as an audio clip that could not be read ' + JSON.stringify(b.drops) + ', and said ' + JSON.stringify(b.alarms));
+      if (b.alarms.length) throw new Error('photos and no sound: the export still said ' + JSON.stringify(b.alarms) + ' on a file that is exactly right');
+      if (b.flag) throw new Error('photos and no sound: the report says dropped "' + b.flag + '" — the words for a lost soundtrack, on a project that never had one');
+      if (b.mix) throw new Error('CONTROL: photos alone built a soundtrack');
+
+      /* ── (c) A HIDDEN PHOTO beside a hidden song: the song alone is why the file is silent. */
+      const cP = layerOf('image', 'bh3 hidden photo'), cS = layerOf('video', 'bh3 hidden song');
+      cP.visible = false; cS.visible = false;
+      const c = await mix([cP, cS], [photoRec(), songRec()]);
+      if (named(c.sup, cP.name).length) throw new Error('a hidden photo was counted as an audio clip hidden or muted by solo: ' + JSON.stringify(c.sup) + ', and the export said ' + JSON.stringify(c.alarms));
+      if (c.flag !== 'all-suppressed' || !named(c.sup, cS.name).length) throw new Error('CONTROL: the hidden song is no longer given as the reason for the silent file (flag ' + JSON.stringify(c.flag) + ', suppressed ' + JSON.stringify(c.sup) + ')');
+      const cSaid = c.toasts.filter(s => /hidden or muted by solo/.test(s));
+      if (cSaid.length !== 1 || !/— 1 audio clip is hidden/.test(cSaid[0])) throw new Error('a hidden photo beside a hidden song: the warning did not count the song alone — ' + JSON.stringify(c.toasts));
+
+      /* ── CONTROLS: a non-video layer that could carry sound is still reported, as it always was. */
+      const dB = layerOf('shape', 'bh3 sound by another route', box), dF = layerOf('shape', 'bh3 file of no stated type', box);
+      const d = await mix([dB, dF], [{ audioBuffer: buf() }, { file: new Blob([new Uint8Array(64)]) }]);
+      if (!named(d.drops, dB.name).length) throw new Error('CONTROL: a non-video layer holding decoded audio is no longer reported as left out of the mix (drops ' + JSON.stringify(d.drops) + ') — the fix silenced a real lost sound');
+      if (!named(d.drops, dF.name).length) throw new Error('CONTROL: a non-video layer holding a file of no stated type is no longer reported (drops ' + JSON.stringify(d.drops) + ') — a MIME type is often empty, and a lost sound must not go quiet to spare a photo');
+      if (d.flag !== 'all-unreadable' || !d.toasts.some(s => /NO SOUND — 2 audio clips could not be read/.test(s))) throw new Error('CONTROL: the two lost sounds were not said out loud (flag ' + JSON.stringify(d.flag) + ', toasts ' + JSON.stringify(d.toasts) + ')');
+    } finally {
+      FM.decodeAudio = saved.decode; FM.toast = saved.toast;
+      FM._lastAudioDrops = saved.drops; FM._lastAudioSuppressed = saved.sup; FM._audioTrackDropped = saved.dropped;
+      FM._lastMixPeak = saved.peak; FM._lastMixRawPeak = saved.raw; FM._lastMixGain = saved.gain;
+      if (note) { note.textContent = saved.noteText; note.className = saved.noteCls; }
+      ids.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene = saved.scene; FM.time = saved.time;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+  // ── end bughunt 3 ──
+
 })();

@@ -384,17 +384,37 @@ window.FM = window.FM || {};
       /* Volume and mute are reconciled inside the playback tick, which is not running — so they are set
          by hand here, and put back on stop. Without this the element is still muted from the last frame
          of playback and the audition is silent for a reason nothing on screen would explain. */
+      /* ═══ THE LEVEL, BOTH HALVES OF IT, THE WAY PLAYBACK SETS IT (bughunt3 #5) ═══════════════════════════
+       * A clip's level reaches the speakers in two halves, and the playback tick writes both on every frame:
+       * el.volume up to 100 %, and the level/boost stage (m._boost, through setBoost) for the rest — or for ALL
+       * of it on an iPhone, where a page cannot set el.volume (volumeLocked). The audition used to write only
+       * el.volume, once, from the layer's volume at the PLAYHEAD with no fade, and never the stage: sync() above
+       * returns early when the chain is current, before either of its setBoost calls, and nothing below wrote
+       * it. So the stage kept whatever it last held — sync's seed at the playhead, which is 0 at a fade-in's
+       * start (where adding a clip parks the playhead) and past a fade-out's end, or the playback tick's last
+       * write (0 at every Play start on an iPhone, under 1 on the de-click as a clip ends). On his phone that
+       * made Hear silent for the whole loop in the ordinary flow; on a PC a 300 % clip auditioned at 100 %.
+       * Now both halves are written exactly as the tick writes them, from the same two functions the tick and
+       * the export read (FM.layerVolume x FM.fadeMul), at the timeline moment being HEARD (auditionSceneTime),
+       * here and on every frame of the loop below. stopAudition puts the stage back where sync leaves it. */
+      const self = this;
+      const holdLevel = function (sc) {
+        const v = FM.layerVolume ? FM.layerVolume(layer, sc) : 1;
+        const f = FM.fadeMul ? FM.fadeMul(layer, sc - (layer.start || 0), layer.duration) : 1;
+        const raw = (v == null ? 1 : v) * f;
+        const lvl = isFinite(raw) ? Math.max(0, raw) : 1;
+        try { m.el.volume = Math.min(1, lvl); } catch (e) {}
+        self.setBoost(layer, lvl);
+      };
       try {
         m.el.muted = false;
-        const v = FM.layerVolume ? FM.layerVolume(layer, FM.time) : 1;
-        m.el.volume = Math.max(0, Math.min(1, v == null ? 1 : v));
+        holdLevel(auditionSceneTime(layer, t0));
         m.el.currentTime = t0;
         if (FM.pitchFollowsSpeed) FM.pitchFollowsSpeed(m.el);
         try { m.el.playbackRate = rateAt(t0); } catch (e) {}
         const pr = m.el.play();
         if (pr && pr.catch) pr.catch(() => {});
       } catch (e) { return false; }
-      const self = this;
       _aud = {
         layer: layer, m: m, t0: t0, wasMuted: wasMuted, wasTime: wasTime, wasVol: wasVol, wasRate: wasRate, raf: 0,
       };
@@ -443,6 +463,8 @@ window.FM = window.FM || {};
              Scene time through the clip's SPEED (queue 916, clause 10) — see auditionSceneTime. */
           const scene = auditionSceneTime(layer, m.el.currentTime);
           if (m._afxChain) m._afxChain.applyAt(scene);
+          /* …and the level, both halves, at the same moment (bughunt3 #5): a fade or a volume keyframe is heard as it plays. */
+          holdLevel(scene);
           if (FM.isAnimated && FM.isAnimated(layer.speed)) {   // a ramp: follow the curve, as the playback tick does
             const r = rateAt(m.el.currentTime);
             if (Math.abs((m.el.playbackRate || 1) - r) > 1e-3) m.el.playbackRate = r;
@@ -467,6 +489,10 @@ window.FM = window.FM || {};
         // its seeks are the truth and a restore here would be one more jump backwards (queue 916).
         if (!FM._exporting) a.m.el.currentTime = a.wasTime;
       } catch (e) {}
+      /* …and the level stage back where sync() leaves a paused clip's, its level at the PLAYHEAD (bughunt3 #5): the
+         audition drove it to the moment being heard. Not when the transport or an export has taken over: their own
+         writes are the truth then, and a seed written under the transport's opening de-click would be a blip. */
+      if (!FM.playing && !FM._exporting) { try { FM.audioFxLive.setBoost(a.layer); } catch (e) {} }
       if (FM.requestRender) FM.requestRender();
       return true;
     },

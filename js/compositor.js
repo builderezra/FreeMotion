@@ -24964,7 +24964,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     for (let i = 0; i < ready.length; i++) {
       const l = ready[i].l;
       s += l.id + ',' + specBufId(ready[i].ab) + ',' + (+l.start || 0) + ',' + (+l.duration || 0) + ',' + (+l.trimStart || 0) + ',' + (l.reversed ? 1 : 0) + ','
-        + specPropSig(l.speed) + ',' + specPropSig(l.volume) + ',' + (l.muted ? 1 : 0) + ',' + specPropSig(l.fadeIn) + ',' + specPropSig(l.fadeOut) + ';';
+        + specPropSig(l.speed) + ',' + specPropSig(l.volume) + ',' + (l.muted ? 1 : 0) + ',' + specPropSig(l.fadeIn) + ',' + specPropSig(l.fadeOut)
+        /* bughunt3 #3: the span a split half's fades are measured over moves its gain as much as the fades do */
+        + ',' + specPropSig(l.fadeInLead) + ',' + specPropSig(l.fadeOutTail) + ';';
     }
     return s;
   }

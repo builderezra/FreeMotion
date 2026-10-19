@@ -4279,7 +4279,15 @@ window.FM = window.FM || {};
    * The scale is applied by rendering at full size and drawing down, rather than rendering into a
    * smaller canvas: `renderScene` reads the project's dimensions in several places, and a still is not
    * worth the risk of teaching it a second meaning for them. */
+  /* bughunt3 #2: A STILL TAKEN STRAIGHT AFTER COMING BACK FROM HOME waits for the clips Home let go of, like every other export
+     (js/exporter.js mediaBack says why). With nothing re-loading it runs at once, synchronously, exactly as before; while a
+     re-load is in flight it toasts "Loading clips…" and renders when the clips are back (or the wait gives up). */
   FM.snapshotPNG = function (opts) {
+    const back = (FM.exporter && FM.exporter.mediaBack) ? FM.exporter.mediaBack(FM.scene, s => { if (FM.toast) FM.toast(s, 2500); }) : null;
+    if (back) return back.then(() => snapshotNow(opts));
+    return snapshotNow(opts);
+  };
+  function snapshotNow(opts) {
     const P = FM.scene.project;
     const t = FM.frameExportTime(FM.time);
     const o = opts || {};
@@ -4310,7 +4318,7 @@ window.FM = window.FM || {};
     try { FM.renderScene(full.getContext('2d'), FM.scene, t); }
     finally {
       FM.isolate = isoWas; cropHeld.forEach(l => { l._cropEditing = true; });
-      if (soloRestore) soloRestore.forEach(([l, v]) => { l.solo = v; });
+      exportSoloRestore(soloRestore);
     }
     const c = document.createElement('canvas');
     c.width = Math.max(1, Math.round(P.width * sc));
@@ -4327,7 +4335,7 @@ window.FM = window.FM || {};
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }, 'image/png');
-  };
+  }
 
   // Trim (or grow) the project duration to end exactly at the last clip.
   FM.fitToContent = function () {
@@ -5029,6 +5037,33 @@ window.FM = window.FM || {};
      * Unconditional on `reversed`: reversal swaps which part of the SOURCE each half plays, but the
      * fades are timeline-local, and A is still the half at the head of the timeline. */
     B.fadeIn = 0; layer.fadeOut = 0;
+    /* bughunt3 #3: …EXACTLY ONLY FOR A CUT OUTSIDE BOTH FADES. Inside one, FM.fadeWindows squeezed the head's fade-in into the
+       head's own length and the tail half had none, so a 3 s fade-in cut at 1 s read 1.0 at the cut where it read 0.333 (and the
+       mirror at a fade-out): the split was HEARD. So a cut inside a fade carries the fade across it. Each half keeps the original's
+       span (js/scene.js, FM.fadeWindows): the head's `fadeOutTail` reaches on to the original's end and the tail's `fadeInLead`
+       back to its start, so FM.fadeMul gives every moment the number it gave before the cut, and a half cut again adds to both.
+       The fade a half no longer reaches is dropped, as above, and each half keeps the fades' effective length (already squeezed
+       when the two overlapped), because a half's own squeeze would differ. A cut outside both fades writes exactly what the line
+       above always wrote, and no new field. Read off the ORIGINAL clip: FM.fadeWindows reads no duration but the one it is given. */
+    {
+      /* …read off the ORIGINAL fades: the line above has already zeroed the head's fade-out (and the tail's fade-in), so the head
+         alone read a fade-out of 0 and the tail lost its own (slice-caught 19 Oct, the bughunt3 #3 test). The clone still holds the
+         original fade-out; the head still holds the original fade-in and both spans. */
+      const fw = FM.fadeWindows ? FM.fadeWindows(Object.assign({}, layer, { fadeOut: B.fadeOut }), origDur) : null;
+      const fLead = fw ? (fw.lead || 0) : 0, fTail = fw ? (fw.tail || 0) : 0;
+      const vCut = into + fLead, vEnd = origDur + fLead + fTail;
+      const inFadeIn = !!fw && fw.fi > 0 && vCut < fw.fi - 1e-9;
+      const inFadeOut = !!fw && fw.fo > 0 && vCut > vEnd - fw.fo + 1e-9;
+      if (inFadeIn || inFadeOut) {
+        layer.fadeIn = fw.fi; layer.fadeOut = inFadeOut ? fw.fo : 0;
+        layer.fadeOutTail = fTail + (origDur - into);
+        B.fadeIn = inFadeIn ? fw.fi : 0; B.fadeOut = fw.fo;
+        B.fadeInLead = fLead + into;
+      } else {
+        /* A span is meaningless beside a fade of 0, and it would still change how the other fade is squeezed. */
+        delete B.fadeInLead; delete layer.fadeOutTail;
+      }
+    }
     /* A text layer's in/out animation is timed the SAME edge-anchored way (`t - layer.start` and
      * `layer.start + layer.duration - t` in drawAnimatedText), so it divides for the same reason —
      * and it is the louder of the two: measured, the title VANISHED for 1.2s across the cut, not
@@ -6086,7 +6121,9 @@ window.FM = window.FM || {};
     if (!(to > from)) { if (FM.toast) FM.toast('Nothing to export — the range is empty'); return; }
     if (FM.toast) FM.toast('Mixing audio…', 1500);
     let mix = null;
-    try { mix = await FM.exporter.buildAudioMix(FM.scene, from, to); }
+    /* bughunt3 #2: the mixer waits for clips still loading back from Home, and this path has no overlay to say so, so it toasts. */
+    const sayWait = s => { if (FM.toast) FM.toast(s, 2500); };
+    try { mix = await FM.exporter.buildAudioMix(FM.scene, from, to, sayWait); }
     catch (e) { console.warn('audio-only mix failed', e); mix = null; }
     if (!mix) {
       // buildAudioMix already toasts WHY when it drops clips (v7.90); this covers "there was no audio
@@ -6143,15 +6180,37 @@ window.FM = window.FM || {};
    * handler, so the invariant — "after prep, exactly the target and its descendants are soloed" — was
    * not reachable from a test. Exposing the seam is this file's own idiom (FM._tlHeadW, FM._exportSay)
    * and is cheaper than a source-text assertion, which could only ever check that a line is present
-   * rather than that it works. */
+   * rather than that it works.
+   * ⚠️ bughunt3 #1: THE SOLO SET HERE WAS SAVED. These are the LIVE layers and `solo` is a saved key, and the restore runs only when
+   * the export is over (for an MP4, after the Export ready card is closed). flushSync (pagehide, an app switch) and the autosave had
+   * no export check, so a kill or a reload in that window reopened the project showing one layer, with nothing in the app able to
+   * clear solo; on the audio-only path, whose editor stays live, any edit saved it and put it in the undo stack. So each layer's
+   * ORIGINAL solo is held in FM._exportSoloHeld until exportSoloRestore, and FM.jsonReplacer (js/scene.js) writes the held value:
+   * saves, undo snapshots and copies see the project as it was, while the render reads the live flag. Counted per layer, so an
+   * export started while another holds (a still, or a WAV while the editor is live) keeps the outer one's originals and does not
+   * lift its hold. */
   function exportSoloPrep(target) {
     const restore = FM.scene.layers.map(l => [l, l.solo]);
+    const held = FM._exportSoloHeld || (FM._exportSoloHeld = new Map());
+    restore.forEach(([l, v]) => { const h = held.get(l); if (h) h.n++; else held.set(l, { solo: v, n: 1 }); });
     FM.scene.layers.forEach(l => { l.solo = false; });
     target.solo = true;
     if (target.type === 'group' && FM.groupDescendants) FM.groupDescendants(target.id).forEach(l => { l.solo = true; });
     return restore;
   }
   FM._exportSoloPrep = exportSoloPrep;   // suite seam
+  /* The ONE way back from exportSoloPrep, for every caller (the still, the audio-only export and runExport's finally, which a
+     finished file, a Cancel and a failure all reach): put each solo back and let go of that layer's hold. */
+  function exportSoloRestore(restore) {
+    if (!restore) return;
+    const held = FM._exportSoloHeld;
+    restore.forEach(([l, v]) => {
+      l.solo = v;
+      const h = held && held.get(l);
+      if (h && --h.n <= 0) held.delete(l);
+    });
+    if (held && !held.size && FM._exportSoloHeld === held) FM._exportSoloHeld = null;
+  }
 
   /* ⚠️ THE SCREEN STAYS ON WHILE AN EXPORT RENDERS (queue 690). An export renders frame by frame, and on
    * his iPhone a long one takes minutes. He waits without touching the screen, so iOS auto-lock (30 s in
@@ -6239,7 +6298,7 @@ window.FM = window.FM || {};
       const _soloR = _soloT ? exportSoloPrep(_soloT) : null;
       expWakeHold();   // the mix of a long project is minutes of work on a phone too (queue 690)
       try { await runAudioOnlyExport(); }
-      finally { expWakeDrop(); if (_soloR) { _soloR.forEach(([l, v]) => { l.solo = v; }); FM.requestRender(); } }
+      finally { expWakeDrop(); if (_soloR) { exportSoloRestore(_soloR); FM.requestRender(); } }
       return;
     }
     /* Custom size hands the exporter explicit dimensions; every other rung is a uniform scale of the
@@ -6346,7 +6405,7 @@ window.FM = window.FM || {};
       else FM.reportError('exporting a video', e, 'The export stopped before it finished, and the file was not made.\n\nWorth trying: a shorter range, a lower resolution, or closing other tabs — most export failures are the browser running out of memory.');
     } finally {
       expWakeDrop();   // on a finished file, a Cancel and a failure alike — a lock that outlived the export would keep his screen on for nothing
-      if (soloRestore) { soloRestore.forEach(([l, v]) => { l.solo = v; }); FM.requestRender(); }
+      if (soloRestore) { exportSoloRestore(soloRestore); FM.requestRender(); }
       bar.style.width = '0%';
       FM.seekVideosToTime();
     }

@@ -113,6 +113,10 @@ window.FM = window.FM || {};
     const vol = FM.layerVolume(layer, FM.time);   // static level for non-animated clips
     const clipDur = layer.duration;
     const win = FM.fadeWindows(layer, clipDur), fi = win.fi, fo = win.fo;   // scaled so fades never overlap
+    /* bughunt3 #3: a half of a split measures its fades over the clip it came from: the fade-in began `fLead` before this clip's
+       start and the fade-out ends `fTail` after its end (FM.fadeWindows, js/scene.js). The ramps below land there; with neither,
+       `fi - 0` and `audibleDur + 0` are the old times exactly. */
+    const fLead = win.lead || 0, fTail = win.tail || 0;
     const animVol = FM.isAnimated(layer.volume);
     if (animVol) {
       // Keyframed volume: schedule the volume×fade envelope along the reversed buffer's scaled
@@ -153,8 +157,8 @@ window.FM = window.FM || {};
        * oversight rather than a decision. At into >= 0, base <= when and this is a no-op. */
       const fadeT0 = Math.max(when, base);
       if (fadeT0 > when) gain.gain.setValueAtTime(FM.fadeMul(layer, 0, clipDur) * vol, fadeT0);
-      if (fi > 0 && base + fi / pr > fadeT0) gain.gain.linearRampToValueAtTime(vol, base + fi / pr);
-      if (fo > 0) { const fs = base + (audibleDur - fo) / pr; if (fs > when) gain.gain.setValueAtTime(vol, fs); gain.gain.linearRampToValueAtTime(0, base + audibleDur / pr); }
+      if (fi > 0 && base + (fi - fLead) / pr > fadeT0) gain.gain.linearRampToValueAtTime(vol, base + (fi - fLead) / pr);
+      if (fo > 0) { const fs = base + (audibleDur + fTail - fo) / pr; if (fs > when) gain.gain.setValueAtTime(vol, fs); gain.gain.linearRampToValueAtTime(0, base + (audibleDur + fTail) / pr); }
     } else {
       gain.gain.value = vol;
     }
