@@ -4447,7 +4447,14 @@ window.FM = window.FM || {};
       if (unit === 'line') units = [line];
       else if (unit === 'word') units = line.split(/(\s+)/).filter(s => s.length);
       else units = graphemes(line);   // a flag or a skin-toned thumb is ONE unit, not two (queue 690)
-      const widths = units.map(u => ctx.measureText(u).width);
+      /* bughunt4 #8: by Character and by Word every space is a unit of its own, and a LONE space measures the same whatever the
+         word spacing (drawArcLine says why), so Letter Spread's Word spacing vanished under these presets. Their units are measured
+         with it neutralised and given it back once per space, as the curved path above does. By Line measures the whole line,
+         which keeps the word spacing, so it is measured as it always was. */
+      const wsPrev = (unit !== 'line' && ('wordSpacing' in ctx)) ? ctx.wordSpacing : null, wsp = parseFloat(wsPrev) || 0;
+      if (wsp) ctx.wordSpacing = '0px';
+      const widths = units.map(u => ctx.measureText(u).width + (wsp ? wsp * (u.split(' ').length - 1) : 0));
+      if (wsp) ctx.wordSpacing = wsPrev;
       const sp = parseFloat(ctx.letterSpacing) || 0;   // global spacing is active; measureText over-counts one trailing gap per unit (#5)
       const lineW = widths.reduce((a, b) => a + b, 0) - (units.length ? sp : 0);
       let x = align === 'center' ? -lineW / 2 : align === 'right' ? -lineW : 0;

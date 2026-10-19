@@ -164460,6 +164460,72 @@
     });
   });
 
+  /* (#8) WORD SPACING VANISHED UNDER AN ANIMATE PRESET BY CHARACTER OR BY WORD. "ab cd", 40 px, white on the block's black frame, with
+     Letter Spread at Letter spacing 0 and Word spacing 60. Still, the line is one fillText with ctx.wordSpacing at 60px, so the one
+     space between the words is about 60 px wider than plain. drawAnimatedText's flat path lays out unit by unit: By Line the unit is
+     the whole line (it keeps the 60), but By Character and By Word the space is a unit of its own, and on 2dd02831 it is measured ALONE
+     (`units.map(u => ctx.measureText(u).width)`), and a lone space measures the same whatever the word spacing (drawArcLine's own
+     measurement). So "ab" and "cd" sit one plain space apart and the ink is about 60 px narrower than the still text's.
+     Now those units are measured with the word spacing neutralised and given it back once per space, as the curved paths do.
+     CONTROLS: the Word spacing really widens the still text, by 60 ± 15 px (so this browser draws canvas word spacing); By Line
+     matches the still width (it measured the whole line all along); with Word spacing 0 every mode matches; the Fade is on (and off
+     for the still one) by FM.textHasAnim, and long finished at 1 s (By Character the last of five units is in by 4 × 0.05 + 0.3 =
+     0.5 s); the still text is 30..250 px wide, so the ink measured is the glyphs, not the frame.
+     TOL: 3 px. Each glyph is placed alone By Character, which drops any kerning between a-b and c-d and moves the anti-aliased edge
+     by a fraction of a pixel; the bug is about 60. */
+  test('bughunt4 #8 Word spacing under Animate by Character and by Word: "ab cd" with 60 px of Word spacing draws as wide under Fade by character and Fade by word as it does still, within 3 px (CONTROLS: the Word spacing widens the still text by about 60 px; Fade by line already matches; with Word spacing 0 every mode matches; the Fade is on and finished)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim are not reachable');
+    if (typeof FM.textSpacingOK !== 'function' || !FM.textSpacingOK().word) throw new Error('setup: FM.textSpacingOK().word is false, so this browser draws no canvas word spacing and there is none to lose');
+    await _bh2With(async function () {
+      const T = 1, WS = 60, TOL = 3;
+      const L = FM.makeLayer('text', { name: 'bh4 #8 title', text: 'ab cd', x: 160, y: 120, fontSize: 40, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L];
+      const fade = unit => ({ preset: 'fade', unit: unit, durIn: 0.3, durOut: 0, stagger: 0.05 });
+      const MODES = [
+        { name: 'still', anim: { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 } },
+        { name: 'Fade by character', anim: fade('char') },
+        { name: 'Fade by word', anim: fade('word') },
+        { name: 'Fade by line', anim: fade('line') }
+      ];
+      /* The ink's leftmost and rightmost columns at T in mode m with Word spacing ws: any pixel brighter than 150 summed over its
+         channels, on the black frame. */
+      const ink = (m, ws) => {
+        L.textAnim = Object.assign({}, m.anim);
+        L.effects = [{ type: 'textspacing', enabled: true, params: { spacing: 0, word: ws, line: 1, mode: 0 } }];
+        delete L._wrapCache;
+        const f = _bh2Frame(T);
+        let x0 = -1, x1 = -1;
+        for (let i = 0, n = 0; i < f.d.length; i += 4, n++) {
+          if (f.d[i] + f.d[i + 1] + f.d[i + 2] > 150) { const x = n % 320; if (x0 < 0 || x < x0) x0 = x; if (x > x1) x1 = x; }
+        }
+        return { w: x0 < 0 ? 0 : x1 - x0 + 1, x0: x0, x1: x1, anim: !!FM.textHasAnim(L) };
+      };
+      const say = r => r.w + ' px (columns ' + r.x0 + '..' + r.x1 + ')';
+      const got = MODES.map(m => ({ m: m, plain: ink(m, 0), wide: ink(m, WS) }));
+      const still = got[0], byLine = got[3], bad = [];
+
+      /* ── CONTROLS (all pass on 2dd02831). */
+      if (!(still.plain.w >= 30 && still.plain.w <= 250)) bad.push('CONTROL: the still text with Word spacing 0 measured ' + say(still.plain) + ' in a 320 px frame, so the ink measured is not the glyphs');
+      const gain = still.wide.w - still.plain.w;
+      if (Math.abs(gain - WS) > 15) bad.push('CONTROL: ' + WS + ' px of Word spacing widened the still text by ' + gain + ' px (' + say(still.plain) + ' to ' + say(still.wide) + '), not about ' + WS + ', so the still path is not drawing the word spacing this test compares against');
+      got.forEach(g => {
+        const want = g !== still;
+        if (g.plain.anim !== want || g.wide.anim !== want) bad.push('CONTROL: ' + g.m.name + ', FM.textHasAnim says ' + g.wide.anim + ', so this frame did not take the path it is named for');
+        if (Math.abs(g.plain.w - still.plain.w) > TOL) bad.push('CONTROL: ' + g.m.name + ' with Word spacing 0 is ' + say(g.plain) + ' wide where still it is ' + say(still.plain) + ', so the modes do not draw the same text even with no word spacing');
+      });
+      if (Math.abs(byLine.wide.w - still.wide.w) > TOL) bad.push('CONTROL: Fade by line with Word spacing ' + WS + ' is ' + say(byLine.wide) + ' wide where still it is ' + say(still.wide) + ', so a unit that is the whole line does not keep the word spacing either');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── By Character and By Word keep the Word spacing. */
+      [got[1], got[2]].forEach(g => {
+        const d = g.wide.w - still.wide.w;
+        if (Math.abs(d) > TOL) bad.push(g.m.name + ' with Word spacing ' + WS + ' is ' + say(g.wide) + ' wide where still it is ' + say(still.wide) + ' (' + (d >= 0 ? '+' : '') + d + ' px)' + (Math.abs(d + WS) <= 15 ? ' — the space is measured alone, and a lone space drops the word spacing' : ''));
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#4) AN ADJUSTMENT LAYER'S BLEND MODE DID NOTHING. Red footage fills the frame, (255, 0, 0); above it an adjustment layer with
      Invert (amount 1), whose graded plate over red is cyan, (0, 255, 255). On cedde93f both blits of the graded plate (applyAdjustment's
      and applyAdjustmentFilters') are hard-wired to source-over and never read layer.blendMode, so every mode the Mixing card offers
