@@ -5021,7 +5021,14 @@ window.FM = window.FM || {};
     const B = FM.cloneLayer(layer, true);                       // identical copy (new id)
     B.start = t;
     B.duration = end - t;
-    if (layer.reversed) {
+    /* ⚠️ bughunt3 #9: …EXCEPT ON A SHAPE, WHICH HAS NO SOURCE. On an open path `trimStart` is Draw from, a PERCENT (FM.trimSubs,
+       js/compositor.js, and the inspector's Draw-on rows), and every shape starts with 0 (FM.makeLayer). Adding the seconds the head
+       played made the tail of a drawing cut N s in draw from N % further on, so a piece of the line vanished at the cut, and a
+       keyframed Draw from became the string "[object Object]N", which FM.animatedProps does not see and so is never divided. B is a
+       deep clone, so it keeps the original's Draw from, and a keyframed one is divided at the cut below like every other track. */
+    if (layer.type === 'shape') {
+      /* nothing to advance: see above */
+    } else if (layer.reversed) {
       // reversed plays source end→start: A keeps the END span, B keeps the START span
       B.trimStart = origTrim;
       layer.trimStart = origTrim + (advTotal - advInto);

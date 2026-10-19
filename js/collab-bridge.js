@@ -104,6 +104,29 @@ window.FM = window.FM || {};
      moves and let go 250 ms after it stops, rather than for as long as it keeps focus (queue 690, sixth hunt). */
   const onInput = function (e) { if (e && adjustable(e.target)) lastLocalChangeAt = Date.now(); };
 
+  /* ⚠️ bughunt3 #8: A LAYER'S SOLO AS SAVED, NOT AS AN EXPORT HOLDS IT. "Export only this layer" isolates by setting `solo` on the
+     LIVE layers (exportSoloPrep, js/app.js) and holds each one's original in FM._exportSoloHeld until the export is over, and
+     FM.jsonReplacer writes the original, so the saved document never carries the export's flag. The diff read the live flag, and
+     the session stands down only while FM._exporting is set, which the WAV / M4A export never sets and the video exports set only
+     after their frame caches are built. So the next tick sent every layer's solo to the room (a friend's screen showed only the
+     exported layer, and the host saved it so), and the restore went out as a second edit. A held layer is diffed and hashed as a
+     shallow copy carrying its held solo, so the export's flag is never part of D. Looked up per layer, like FM.jsonReplacer, so a
+     hold on layers no longer in the scene changes nothing; and nothing is copied while no export holds anything. */
+  function savedSoloLayers(ls) {
+    const held = FM._exportSoloHeld;
+    if (!held || !held.size || !Array.isArray(ls)) return ls;
+    let out = null;
+    for (let i = 0; i < ls.length; i++) {
+      const h = ls[i] && held.get(ls[i]);
+      if (!h || ls[i].solo === h.solo) continue;
+      if (!out) out = ls.slice();
+      const c = Object.assign({}, ls[i]);
+      if (h.solo === undefined) delete c.solo; else c.solo = h.solo;
+      out[i] = c;
+    }
+    return out || ls;
+  }
+
   const bridge = {
     /* ── the document ─────────────────────────────────────────────────────────────────────────── */
     /* The tree ops are APPLIED to. FM.scene itself, never a copy: the inspector, the mask tool and
@@ -112,8 +135,9 @@ window.FM = window.FM || {};
     doc: function () { return FM.scene; },
     /* The tree that is DIFFED and HASHED: D, i.e. the project minus the owner's workspace pointers,
        plus the real layer array. The project copy is shallow and rebuilt per call — it is a handful of
-       scalars — and the layer array is the live one, so the diff reads exactly what the app holds. */
-    view: function () { return { project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers }; },
+       scalars — and the layer array is the live one, so the diff reads exactly what the app holds
+       (except a solo an export is holding: savedSoloLayers, bughunt3 #8). */
+    view: function () { return { project: C._viewOfProject(FM.scene.project), layers: savedSoloLayers(FM.scene.layers) }; },
     selected: function () { return FM.scene.selectedId; },
     selectedIds: function () {
       const out = [];

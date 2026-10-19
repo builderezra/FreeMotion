@@ -163805,6 +163805,188 @@
       try { FM.refreshAll(); } catch (e) {}
     }
   });
+  /* (#8) A LIVE SESSION SENT THE ROOM THE EXPORT'S TEMPORARY SOLO. #1 holds each layer's original solo in FM._exportSoloHeld, so the
+     SAVED document never carries "Export only this layer"'s isolation. The session does not read the saved document: it diffs the
+     live layers (js/collab-bridge.js view(), "the layer array is the live one") and stands down only while FM._exporting is set
+     (frozen(), §8.9). The WAV / M4A export never sets it (runAudioOnlyExport awaits FM.exporter.buildAudioMix while the editor stays
+     live), and the video exports set it only after their frame caches are built. So on 69a337e2 the next tick sent `solo` for every
+     layer: a friend's screen showed only the exported layer, the host autosaved that, and the restore went out as a second edit.
+     Driven through the real Export (FM._runExport, Audio only, the layer picker on bh3 #8 A) in withCollab921's room with one guest.
+     The mix is held on a gate: FM.exporter.buildAudioMix stands in, waits, and answers no mix; its own descriptor is put back. The
+     session's ticks are the test's (withCollab921 shares with autoTick off).
+     Fails on 69a337e2 at the first claim: the tick inside the export sends `solo` true for bh3 #8 A, and false for bh3 #8 B.
+     CONTROLS: the export reached the mix once and isolated the live layer (A soloed, B not), so the render is still just A; a rename
+     of B made during the export IS sent and reaches the guest, so the room was live and "no solo sent" is not "nothing sent"; after
+     the export a solo set on A IS sent and reaches the guest, so the fix is the export's hold, not a filter on solo. */
+  test('bughunt3 #8 A live session during Export only this layer: the room is never sent the export’s temporary solo, neither while the export runs nor when it puts the solo back, so a friend’s screen keeps every layer (CONTROLS: the export isolated the live layer; a rename made during the export is still sent; a solo set after the export is sent and reaches the guest)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (typeof FM._runExport !== 'function' || typeof FM._setExportSoloId !== 'function' || typeof FM._exportSoloId !== 'function') throw new Error('setup: FM._runExport / FM._setExportSoloId (the export the Export button runs) are not reachable');
+    if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('setup: FM.exporter.buildAudioMix is not reachable');
+    const fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range');
+    if (!fmtEl || !rangeEl) throw new Error('setup: the export dialog is missing from this build');
+    if (FM._exporting) throw new Error('setup: an export is in flight');
+    const PK = 'fm.exportPrefs';
+    let prefs0 = null;
+    try { prefs0 = localStorage.getItem(PK); } catch (e) {}
+    const fmt0 = fmtEl.value, range0 = rangeEl.value, solo0 = FM._exportSoloId();
+    const d0 = Object.getOwnPropertyDescriptor(FM.exporter, 'buildAudioMix');
+    const RENAMED = 'bh3 #8 B renamed during the export';
+    try {
+      await withCollab921([layer921('bh3 #8 A'), layer921('bh3 #8 B')], async function (c) {
+        const g = c.addGuest();
+        const A = FM.scene.layers[0], B = FM.scene.layers[1];
+        const gl = id => g.doc.layers.find(l => l && l.id === id) || {};
+        const guestSoloed = () => g.doc.layers.filter(l => l && l.solo === true).map(l => l.name || l.id);
+        if (A.solo || B.solo || guestSoloed().length) throw new Error('setup: a layer starts soloed (bh3 #8 A ' + A.solo + ', bh3 #8 B ' + B.solo + ', the guest ' + JSON.stringify(guestSoloed()) + ')');
+        const sent = c.sentTo(g.loop);
+        /* Every `key` op the host broadcast to the guest, as { o, id, v }. */
+        const opsAt = key => {
+          const out = [];
+          sent.forEach(m => {
+            if (m.t !== 'b' || !m.msg) return;
+            [].concat(m.msg.ops || [], m.msg.fix || []).forEach(op => {
+              const p = op && (Array.isArray(op.p) ? op.p : (typeof op.p === 'string' && c.P.fromWire ? c.P.fromWire(op.p) : null));
+              if (p && p[p.length - 1] === key) out.push({ o: op.o, id: p[1], v: op.v });
+            });
+          });
+          return out;
+        };
+        let open = null, entered = 0, running = null;
+        const gate = new Promise(r => { open = r; });
+        try {
+          fmtEl.value = 'audio'; rangeEl.value = 'whole';
+          FM._setExportSoloId(A.id);
+          if (FM._exportSoloId() !== A.id) throw new Error('setup: the layer picker did not take bh3 #8 A');
+          FM.exporter.buildAudioMix = async function () { entered++; await gate; return null; };
+          running = FM._runExport();
+          await sleep(30);
+          if (entered !== 1) throw new Error('CONTROL: the export reached the mix ' + entered + ' times, not once, so nothing below is inside an export');
+          if (A.solo !== true || B.solo) throw new Error('CONTROL: the export is running but the live layers are not isolated (bh3 #8 A solo ' + A.solo + ', bh3 #8 B solo ' + B.solo + '), so the file would not be just the one layer he picked');
+          /* He renames B while the mix is built (the editor stays live on this path), and the session ticks. */
+          B.name = RENAMED;
+          c.S.tick('full');
+          g.loop.settle();
+          const during = opsAt('solo');
+          if (during.length) throw new Error('a live session sent the room the export’s temporary solo while “Export only this layer” was running: ' + JSON.stringify(during) + ', and the guest now has ' + JSON.stringify(guestSoloed()) + ' soloed — a friend’s screen shows only the layer being exported, and the host saves it that way');
+          if (guestSoloed().length) throw new Error('the guest has ' + JSON.stringify(guestSoloed()) + ' soloed while the export runs, though no solo op was counted');
+          if (!opsAt('name').some(o => o.id === B.id && o.v === RENAMED) || gl(B.id).name !== RENAMED) throw new Error('CONTROL: the rename of bh3 #8 B made during the export was not sent (name ops ' + JSON.stringify(opsAt('name')) + ', the guest has “' + gl(B.id).name + '”), so the room was not live and “no solo sent” proves nothing');
+          open();
+          await running;
+          if (A.solo || B.solo) throw new Error('CONTROL: the export is over and solo was not put back (bh3 #8 A ' + A.solo + ', bh3 #8 B ' + B.solo + ')');
+          c.S.tick('full');
+          g.loop.settle();
+          const after = opsAt('solo');
+          if (after.length) throw new Error('putting the solo back after the export went out to the room as an edit: ' + JSON.stringify(after) + ' — the export’s isolation and its undoing were both sent to every device');
+          /* …and with the export over, a solo he sets reaches the room like any other edit. */
+          A.solo = true;
+          c.S.tick('full');
+          g.loop.settle();
+          if (!opsAt('solo').some(o => o.id === A.id && o.v === true) || gl(A.id).solo !== true) throw new Error('CONTROL: with the export over, a solo set on bh3 #8 A was not sent (solo ops ' + JSON.stringify(opsAt('solo')) + ', the guest has ' + gl(A.id).solo + ') — the fix hides solo from the room for good, not just the export’s');
+        } finally {
+          if (open) open();
+          if (running) { try { await Promise.race([running, sleep(5000)]); } catch (e) {} }
+        }
+      });
+    } finally {
+      if (d0) Object.defineProperty(FM.exporter, 'buildAudioMix', d0); else delete FM.exporter.buildAudioMix;
+      fmtEl.value = fmt0; rangeEl.value = range0;
+      try { if (prefs0 == null) localStorage.removeItem(PK); else localStorage.setItem(PK, prefs0); } catch (e) {}
+      try { FM._setExportSoloId(solo0); } catch (e) {}
+    }
+  });
+  /* (#9) SPLITTING A DRAWING MOVED ITS DRAW FROM. FM.splitLayer gives the tail half `B.trimStart = origTrim + advInto`, the SOURCE
+     seconds the head played, for every type it splits. On a shape there is no source: on an open path `trimStart` is Draw from, a
+     PERCENT (FM.trimSubs, js/compositor.js, read through FM.evalProp; the inspector's Draw-on rows), and every shape starts with
+     trimStart 0 (FM.makeLayer). So on 69a337e2 a drawing with Draw from 20 %, cut 3 s in, drew its tail from 23 %: 9 of the line's
+     300 units gone at the cut. Any drawing cut N seconds in lost N % of its line, and a keyframed Draw from became the string
+     "[object Object]3", which FM.animatedProps does not see, so it is not divided at the cut. The path is 300 units long (two straight
+     strokes, 200 + 100), the clip 0-6 s, the cut at 3 s; the split's save and undo step are held for the test (FM.storage.save,
+     FM.history.commit) and put back by descriptor. Each claim is against the unsplit drawing's own FM.trimSubs(FM.evalShapeSubs(…))
+     at the same moment, within 1e-6 units: the drawn length is the quantity a 3 % shift moves.
+     Fails on 69a337e2 at the first claim: the tail half's Draw from is 23, not 20.
+     CONTROLS: the probe sees a 3 % shift (9 units); the keyframed Draw from moves across the tail (so matching it is not matching a
+     constant); the head half draws as before; and a video's trimStart still advances by the 3 s it played (1.25 → 4.25). */
+  test('bughunt3 #9 Splitting a shape: the tail half of a drawing keeps its Draw from, plain or keyframed, so after the cut it draws exactly the part of the line the unsplit drawing drew (CONTROLS: the probe sees a 3 % shift; the keyframed Draw from moves across the tail; the head half is unchanged; a video’s trimStart still advances by the time it played)', { item: '1176' }, async function () {
+    if (typeof FM.splitLayer !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.trimSubs !== 'function' || typeof FM.evalShapeSubs !== 'function' || typeof FM.isAnimated !== 'function') throw new Error('setup: FM.splitLayer / FM.makeLayer / FM.trimSubs / FM.evalShapeSubs / FM.isAnimated are not reachable');
+    const P = { width: 320, height: 240, fps: 30, duration: 6, background: '#000000' };
+    const CUT = 3, NEAR = 1e-6, HEAD_T = [0.1, 1.5, 2.9], TAIL_T = [3.05, 4.5, 5.9];
+    const saved = { scene: FM.scene, time: FM.time };
+    const dSave = FM.storage ? Object.getOwnPropertyDescriptor(FM.storage, 'save') : undefined;
+    const dCommit = FM.history ? Object.getOwnPropertyDescriptor(FM.history, 'commit') : undefined;
+    const ids = [];
+    const len = subs => { let n = 0; (subs || []).forEach(pts => { for (let i = 1; i < pts.length; i++) n += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); }); return n; };
+    /* What the compositor draws of a path at t (js/compositor.js: FM.trimSubs(FM.evalShapeSubs(layer, t), layer, t)), as a length. */
+    const drawn = (L, t) => len(FM.trimSubs(FM.evalShapeSubs(L, t), L, t));
+    const mkPath = (name, from) => {
+      const L = FM.makeLayer('shape', { name: name, shape: 'path', start: 0, duration: 6 });
+      L.start = 0; L.duration = 6;
+      L.points = [[0, 0], [200, 0], [200, 100]];
+      L.stroke = { enabled: true, width: 6, color: '#ffffff' };
+      L.trimStart = from; L.trimEnd = 100;
+      ids.push(L.id);
+      return L;
+    };
+    const cut = async (L) => {
+      FM.scene = scene([L], { project: Object.assign({}, P) });
+      const before = JSON.parse(JSON.stringify(L, FM.jsonReplacer));
+      FM.time = CUT;
+      await FM.splitLayer(L.id);
+      const B = FM.scene.layers.find(l => l && l.id !== L.id);
+      if (!B) throw new Error('setup: cutting ' + L.name + ' at ' + CUT + ' s made no tail half');
+      ids.push(B.id);
+      if (Math.abs(B.start - CUT) > 1e-9 || Math.abs(L.duration - CUT) > 1e-9) throw new Error('setup: the cut did not land at ' + CUT + ' s (head ' + L.start + '+' + L.duration + ', tail from ' + B.start + ')');
+      return { before: before, A: L, B: B };
+    };
+    /* Each half against the unsplit drawing at the same moment. */
+    const same = (tag, r) => {
+      const bad = [];
+      HEAD_T.forEach(t => { const d = drawn(r.A, t) - drawn(r.before, t); if (Math.abs(d) > NEAR) bad.push('the head at ' + t + ' s draws ' + drawn(r.A, t).toFixed(3) + ' units where the drawing drew ' + drawn(r.before, t).toFixed(3)); });
+      TAIL_T.forEach(t => { const d = drawn(r.B, t) - drawn(r.before, t); if (Math.abs(d) > NEAR) bad.push('the tail at ' + t + ' s draws ' + drawn(r.B, t).toFixed(3) + ' units where the drawing drew ' + drawn(r.before, t).toFixed(3)); });
+      if (bad.length) throw new Error(tag + ': splitting the drawing changed what it draws — ' + bad.join('; ') + ' (tail Draw from ' + JSON.stringify(r.B.trimStart) + ')');
+    };
+    try {
+      if (FM.playing && FM.pause) FM.pause();
+      if (dSave) FM.storage.save = function () { return Promise.resolve(true); };
+      if (dCommit) FM.history.commit = function () {};
+
+      /* ── CONTROL: the probe can see a 3 % shift of Draw from on this path. */
+      const probe = mkPath('bh3 #9 probe', 20);
+      if (Math.abs(len(FM.evalShapeSubs(probe, 0)) - 300) > NEAR) throw new Error('setup: the path is ' + len(FM.evalShapeSubs(probe, 0)) + ' units long, not 300');
+      const p20 = drawn(probe, 4.5);
+      probe.trimStart = 23;
+      const p23 = drawn(probe, 4.5);
+      if (!(Math.abs(p20 - 240) < 0.01 && Math.abs(p20 - p23 - 9) < 0.01)) throw new Error('CONTROL: Draw from 20 % draws ' + p20.toFixed(3) + ' units and 23 % draws ' + p23.toFixed(3) + ' (240 and 231 expected), so this probe cannot see a 3 % shift');
+
+      /* ── 1. A plain Draw from, 20 %. */
+      const r1 = await cut(mkPath('bh3 #9 drawing', 20));
+      if (JSON.stringify(r1.B.trimStart) !== JSON.stringify(r1.before.trimStart)) throw new Error('splitting a drawing 3 s in gave its tail half Draw from ' + JSON.stringify(r1.B.trimStart) + ' % where the drawing has ' + JSON.stringify(r1.before.trimStart) + ' % — the split added the seconds it played, as if a shape had a source to resume, so the line loses a piece at the cut');
+      if (JSON.stringify(r1.A.trimStart) !== JSON.stringify(r1.before.trimStart)) throw new Error('the head half’s Draw from is ' + JSON.stringify(r1.A.trimStart) + ', not ' + JSON.stringify(r1.before.trimStart));
+      same('a Draw from of 20 %', r1);
+
+      /* ── 2. A keyframed Draw from, 0 % at 0 s to 60 % at 6 s (the line erasing itself from the start). */
+      const r2 = await cut(mkPath('bh3 #9 drawing on', { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 6, v: 60, e: 'linear' }] }));
+      if (!(drawn(r2.before, TAIL_T[0]) - drawn(r2.before, TAIL_T[2]) > 50)) throw new Error('CONTROL: the keyframed Draw from does not move across the tail (' + drawn(r2.before, TAIL_T[0]).toFixed(3) + ' → ' + drawn(r2.before, TAIL_T[2]).toFixed(3) + ' units), so matching it would be matching a constant');
+      if (!FM.isAnimated(r2.B.trimStart)) throw new Error('splitting a drawing with a keyframed Draw from left its tail half’s Draw from as ' + JSON.stringify(r2.B.trimStart) + ', not a keyframe track — the keyframes plus the seconds it played');
+      same('a keyframed Draw from', r2);
+
+      /* ── CONTROL: a video's trimStart is source time, and still advances by the 3 s the head plays. */
+      const V = FM.makeLayer('video', { name: 'bh3 #9 video', start: 0, duration: 6 });
+      V.start = 0; V.duration = 6; V.trimStart = 1.25; V.speed = 1; V.reversed = false;
+      ids.push(V.id);
+      FM.scene = scene([V], { project: Object.assign({}, P) });
+      FM.time = CUT;
+      await FM.splitLayer(V.id);
+      const VB = FM.scene.layers.find(l => l && l.id !== V.id);
+      if (!VB) throw new Error('setup: cutting the video at ' + CUT + ' s made no tail half');
+      ids.push(VB.id);
+      if (Math.abs(VB.trimStart - 4.25) > 1e-9 || Math.abs(V.trimStart - 1.25) > 1e-9) throw new Error('CONTROL: cutting a video with trimStart 1.25 at 3 s gave head ' + V.trimStart + ' and tail ' + VB.trimStart + ' (1.25 and 4.25 expected) — the fix stopped a video resuming where its head left off');
+    } finally {
+      if (dSave) Object.defineProperty(FM.storage, 'save', dSave);
+      if (dCommit) Object.defineProperty(FM.history, 'commit', dCommit);
+      ids.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene = saved.scene; FM.time = saved.time;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
   // ── end bughunt 3 ──
 
 })();
