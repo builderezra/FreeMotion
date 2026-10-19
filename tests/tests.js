@@ -30206,11 +30206,13 @@
     const layerRef = host.base.layers[0];
     const effectsRef = layerRef.effects, maskPathRef = layerRef.masks[0].path, fxRef = layerRef.effects[0];
 
-    /* An out-of-range duration: something the sanitiser has an opinion about. */
-    const r = host.receive('g1', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'duration'], v: 99999 }] });
+    /* An out-of-range duration: something the sanitiser has an opinion about.
+       (hunt5 later A: the ceiling is FM.LIMITS.duration now, 360,000 s, the longest clip the Speed card makes; it was 3600, and
+       99999 was out of range then. 1e9 is out of range under either.) */
+    const r = host.receive('g1', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'duration'], v: 1e9 }] });
     if (!r.b) throw new Error('nothing was sequenced');
-    if (!r.b.fix.length) throw new Error('the host accepted a duration of 99999 with no fix — the sanitiser clamps it to 3600, so without a fix op every guest would hold a different number from the host forever: ' + JSON.stringify(r.b));
-    if (host.base.layers[0].duration !== 3600) throw new Error('base was not repaired, it is ' + host.base.layers[0].duration);
+    if (!r.b.fix.length) throw new Error('the host accepted a duration of 1e9 with no fix — the sanitiser clamps it to FM.LIMITS.duration, so without a fix op every guest would hold a different number from the host forever: ' + JSON.stringify(r.b));
+    if (host.base.layers[0].duration !== FM.LIMITS.duration) throw new Error('base was not repaired to FM.LIMITS.duration (' + FM.LIMITS.duration + '), it is ' + host.base.layers[0].duration);
 
     if (host.base.layers[0] !== layerRef) throw new Error('the LAYER object was replaced — every closure in the inspector now edits a detached copy');
     if (host.base.layers[0].effects !== effectsRef) throw new Error('the effects ARRAY was replaced — this is exactly what storage.js\'s sanitizeEffects does, and why it must only ever run on a clone');
@@ -166579,6 +166581,82 @@
       if (!near(at('none')(1.5), last)) bad.push('CONTROL: ' + what + ' with Loop: off shows ' + say(at('none')(1.5)) + ' at 1.5 s, not its last key');
       if (!near(cyc(0.5), mid)) bad.push('CONTROL: ' + what + ' with Loop: cycle shows ' + say(cyc(0.5)) + ' between its keys, not what a still one shows (' + say(mid) + ')');
     });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* hunt5 later A — ONE UNDO CUT A SLOWED CLIP TO AN HOUR. sanitizeTiming (js/storage.js), which history.restore runs over every layer
+     of the snapshot it puts back, held a plain duration to 0.05..3600 s, the longest project. But the Speed card re-times a clip about
+     its source with no ceiling (FM.setClipSpeed, js/inspector.js: the span is kept and divided by the new speed), so a 60 s clip at
+     1 % is 6000 s long. Rename a title, ↶: the clip came back 3600 s long at 1 %, which is 36 s of its 60 s of footage, and set back
+     to 1x it was a 36 s clip. Undo autosaves on its next line and redo sanitises the same way. The class of bughunt5 #1.
+     Now the ceiling is FM.LIMITS.duration (js/scene.js): the longest project at the slowest speed, 3600 / speed[0] = 360,000 s.
+     Driven through the app's own speed path (FM.setClipSpeed, which the Speed card's slider and typed box call) on a plain shape clip,
+     so no media record decides the length: 60 s × 1 / 0.01 = 6000 s.
+     On 03ae2e94: 3600 after the Undo and again after the Redo, and FM.LIMITS has no duration.
+     CONTROLS (the same before and after): the slowed clip really is past an hour before the Undo (else the case measures nothing); a
+     NaN, a word, a negative and an absurd 1e12 plain duration are still repaired or brought into range.
+     BUDGET: the default 45 s: one speed change, one undo and one redo over two small layers. */
+  test('hunt5 later A: a slow clip keeps its length through an Undo: a 60 s clip set to 1 % by the Speed card’s own path (FM.setClipSpeed) is 6000 s long, and one Undo of an unrelated edit and its Redo bring it back 6000 s long at 1 %, not cut to 3600 s, which is 36 s of its footage (CONTROLS: the clip is past an hour before the Undo; a NaN, a word, a negative and an absurd plain duration are still repaired into range; the ceiling is FM.LIMITS.duration, the longest project at the slowest speed)', { item: '1176' }, async function () {
+    if (!FM.history || !FM.history.reset || !FM.history._steps || typeof FM.setClipSpeed !== 'function' || !FM.storage || typeof FM.storage._sanitizeLayers !== 'function' || !FM.LIMITS || !Array.isArray(FM.LIMITS.speed)) throw new Error('setup: FM.history (reset, _steps), FM.setClipSpeed, FM.storage._sanitizeLayers or FM.LIMITS.speed is not reachable');
+    const SLOW = FM.LIMITS.speed[0], LEN = 60;
+    const bad = [];
+    const mk = (name, dur) => {
+      const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: dur });
+      L.start = 0; L.duration = dur; L.speed = 1;
+      return L;
+    };
+
+    /* ── THE SPEED CARD'S PATH, THEN ONE UNDO OF AN UNRELATED EDIT AND ITS REDO. */
+    await _bh2With(async function () {
+      const C = mk('hunt5 later A slow', LEN), T = mk('hunt5 later A title', 4);
+      FM.scene.layers = [T, C];
+      FM.scene.project.duration = LEN;
+      FM.scene.selectedId = T.id; FM.scene.selectedIds = [T.id];
+      FM.refreshAll();
+      FM.setClipSpeed(C, SLOW);
+      const D = C.duration;
+      if (!(D > 3600)) throw new Error('setup: the Speed card’s path made a ' + LEN + ' s clip at ' + SLOW + 'x ' + D + ' s long, not past an hour, so the old 3600 s cap could not cut it and nothing here is measured');
+      if (C.speed !== SLOW) throw new Error('setup: FM.setClipSpeed left the clip at speed ' + C.speed + ', not ' + SLOW);
+      FM.refreshAll();
+      FM.history.reset();
+      T.name = 'hunt5 later A title renamed';
+      FM.history.commit();
+      if (FM.history._steps().len !== 2) throw new Error('setup: renaming the title did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+      const check = where => {
+        const c = FM.layerById(FM.scene, C.id);
+        if (!c) { bad.push(where + ': the slowed clip is gone'); return; }
+        if (c.duration !== D) bad.push(where + ': the ' + LEN + ' s clip at ' + (SLOW * 100) + ' % came back ' + c.duration + ' s long, not ' + D + ' s, so ' + (c.duration * SLOW).toFixed(1) + ' s of its ' + LEN + ' s of footage are left' + (c.duration === 3600 ? ' (cut to the longest project)' : ''));
+        if (c.speed !== SLOW) bad.push(where + ': the slowed clip came back at speed ' + c.speed + ', not ' + SLOW);
+      };
+      FM.history.undo();
+      await sleep(60);
+      const T1 = FM.layerById(FM.scene, T.id);
+      if (!T1 || T1.name !== 'hunt5 later A title') throw new Error('setup: the Undo did not take the rename back (' + (T1 ? T1.name : 'the title is gone') + '), so nothing below is measured');
+      check('after one Undo of a rename');
+      FM.history.redo();
+      await sleep(60);
+      check('after its Redo');
+    });
+
+    /* ── CONTROLS: the protection the clamp exists for. */
+    const ab = [
+      { id: 'h5lA1', type: 'shape', start: 0, duration: NaN },
+      { id: 'h5lA2', type: 'shape', start: 0, duration: 1e12 },
+      { id: 'h5lA3', type: 'shape', start: 0, duration: -5 },
+      { id: 'h5lA4', type: 'shape', start: 0, duration: 'long' },
+    ];
+    FM.storage._sanitizeLayers(ab);
+    ab.forEach(l => { if (typeof l.duration !== 'number' || !isFinite(l.duration) || l.duration <= 0 || l.duration >= 1e12) bad.push('CONTROL: layer ' + l.id + '’s plain duration came out of the sanitiser as ' + l.duration + ', not a usable length in range'); });
+    if (ab[0].duration !== 1 || ab[3].duration !== 1) bad.push('CONTROL: a NaN duration and a duration of a word came back as ' + ab[0].duration + ' and ' + ab[3].duration + ', not repaired to 1 s');
+    if (ab[2].duration !== 0.05) bad.push('CONTROL: a negative duration came back as ' + ab[2].duration + ', not the 0.05 s floor');
+
+    /* ── AND THE CEILING IS THE SHARED ONE (after the fix): FM.LIMITS.duration, written as the longest project at the slowest speed. */
+    const CAP = FM.LIMITS.duration;
+    if (typeof CAP !== 'number' || !isFinite(CAP)) bad.push('FM.LIMITS (js/scene.js) holds no duration ceiling (' + CAP + '), so the sanitiser keeps its own copy of the longest clip');
+    else {
+      if (CAP !== 3600 / SLOW) bad.push('FM.LIMITS.duration is ' + CAP + ', not the longest project (3600 s) at the slowest speed (' + SLOW + '): ' + (3600 / SLOW));
+      if (ab[1].duration !== CAP) bad.push('the sanitiser brings an absurd plain duration to ' + ab[1].duration + ', not to FM.LIMITS.duration (' + CAP + ')');
+    }
     if (bad.length) throw new Error(bad.join(' · '));
   });
   // ── end bughunt 5 ──
