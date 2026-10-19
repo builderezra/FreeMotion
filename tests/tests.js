@@ -15611,9 +15611,20 @@
       el.dispatchEvent(new PointerEvent('pointerup', o));
       el.dispatchEvent(new MouseEvent('click', o));
     };
-    const hadSel = FM.scene.selectedId;
-    if (!hadSel && FM.scene.layers.length) FM.selectLayer(FM.scene.layers[0].id);   // both triggers need a selection
+    /* isolation (20 Oct, full-order red): it inherited the layer it selects (FM.scene.layers[0]), the 20x20 shape
+       'undo / redo grey out when there is nothing behind or ahead' used to leave in the scene. That source puts the
+       scene back now, so a full run met an empty scene, selected nothing, and #btn-parent's click handler returns at
+       once with no selection (js/app.js, `if (!sel) return;`), which read as "a different trigger closed everything".
+       Not an app bug. It now sets up its own two shapes in the editor (isoOwnLayer, below the 330s, plus one more,
+       because the PC transport shows #btn-parent only with a selection AND two or more layers, pcTransportSync) and
+       selects its own; the finally puts the scene, selection and Home back as found. */
+    const iso = isoOwnLayer();
     try {
+      const L2 = FM.makeLayer('shape', { name: 'iso layer 2', shape: 'rect', x: 220, y: 220, shapeW: 60, shapeH: 60, fill: '#3a7bd5', start: 0, duration: 3 });
+      FM.scene.layers.push(L2);
+      FM.refreshAll();
+      FM.selectLayer(iso.L.id);   // both triggers need a selection
+      if (FM.scene.selectedId !== iso.L.id) throw new Error('CONTROL: its own layer did not become the selection, so neither trigger has anything to open a menu for');
       FM.contextMenu.hide();
       tap(a);
       if (!FM.contextMenu.isOpen()) throw new Error('the first tap did not open a menu at all');
@@ -15628,7 +15639,7 @@
       if (!FM.contextMenu.isOpen()) throw new Error('with no menu showing, tapping the last-used trigger toggled a stale opener shut instead of opening');
     } finally {
       FM.contextMenu.hide();
-      if (!hadSel) FM.selectLayer(null); else FM.selectLayer(hadSel);
+      iso.put();
     }
   });
 
