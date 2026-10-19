@@ -167402,6 +167402,115 @@
       try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
     }
   });
+
+  /* (#9) ⌘/CTRL SHORTCUTS ON A RUSSIAN KEYBOARD. He is learning Russian. With a Russian layout on a PC, Ctrl+Z types я, and
+     every ⌘ letter in Full's keydown handler matched the letter TYPED (e.key), so Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, Ctrl+A, Ctrl+C
+     and Ctrl+V did nothing at all, while the plain A / S / D / M (read by e.code) kept working. The fix reads the key's place
+     (e.code) only when the key types a letter of another script. Each event here carries what Chrome on Windows sends: the
+     Russian letter as `key` (written as \u escapes, because с and c, or а and a, look the same on screen and a Latin one
+     would pass on any build), the key's place as `code`. Pressed on the page (document.body), as a real key is, in the test's
+     own scene with its own history.
+     FAILS ON 0ab3bdbf: Ctrl+я leaves the history where it was, Ctrl+Shift+Я and Ctrl+н redo nothing, Ctrl+ф selects nothing,
+     Ctrl+с copies nothing and Ctrl+м pastes nothing.
+     CONTROLS, which hold before and after: a Latin Ctrl+Z undoes (the keys reach the handler at all); an AZERTY z on the W key
+     undoes and its w on the Z key does not (the letter typed wins over the key's place); Dvorak's ; on the Z key does not undo
+     (punctuation is not read by its place); and Ctrl+в on the D key duplicates nothing and is left to the browser, because ⌘D
+     is out of this fix: Simple's own ⌘D reads the typed letter too, and the two editors must agree on it. */
+  test('bughunt6 #9 Shortcuts work on a Russian keyboard layout: Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, Ctrl+A, Ctrl+C and Ctrl+V pressed with the Russian letters on those keys undo, redo, select everything, copy and paste (CONTROLS: a Latin Ctrl+Z, an AZERTY z on the W key and its w on the Z key, Dvorak’s ; on the Z key, and Ctrl+D with a Russian letter, which is left as it was)', { item: '1176' }, async function () {
+    if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
+    /* The Russian letters on the Z, Y, A, C, V and D keys (ЙЦУКЕН) */
+    const RU = { z: 'я', Z: 'Я', y: 'н', a: 'ф', c: 'с', v: 'м', d: 'в' };
+    if (Object.keys(RU).some(k => /^[\x00-\x7f]$/.test(RU[k]))) throw new Error('setup: a Russian letter here is ASCII, so this would test nothing');
+    const press = (key, code, extra) => {
+      const ev = new KeyboardEvent('keydown', Object.assign({ key: key, code: code, ctrlKey: true, bubbles: true, cancelable: true }, extra || {}));
+      document.body.dispatchEvent(ev);
+      return ev;
+    };
+    const at = () => FM.history._steps().index;
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(40); return ok(); };
+    const idle = () => until(() => !FM.jobDepth || FM.jobDepth() === 0, 3000);
+    const clip0 = FM.clipboard;
+    const bad = [];
+    let ids = [], n = 0;
+    /* One real step to undo (a rename of A, committed); returns the history's index after it */
+    const step = () => { const a = FM.layerById(FM.scene, ids[0]); a.name = 'bh6 #9 A ' + (++n); FM.history.commit(); return at(); };
+    try {
+      await _bh2With(async function () {
+        const A = FM.makeLayer('shape', { name: 'bh6 #9 A', shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#e63946' });
+        const B = FM.makeLayer('shape', { name: 'bh6 #9 B', shape: 'rect', x: 200, y: 120, shapeW: 60, shapeH: 60, fill: '#457b9d' });
+        [A, B].forEach(l => { l.start = 0; l.duration = 3; FM.scene.layers.push(l); });
+        ids = [A.id, B.id];
+        FM.refreshAll();
+        FM.history.reset();
+        if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+        if (window.getSelection) window.getSelection().removeAllRanges();
+
+        /* CONTROL: a Latin Ctrl+Z undoes */
+        let i0 = step();
+        press('z', 'KeyZ');
+        if (at() !== i0 - 1) throw new Error('setup: a Latin Ctrl+Z did not undo (history ' + i0 + ' → ' + at() + '), so no key here reaches the editor and nothing below would mean anything');
+
+        /* Ctrl+Z: я on the Z key */
+        i0 = step();
+        press(RU.z, 'KeyZ');
+        if (at() !== i0 - 1) bad.push('Ctrl+Z on the Russian layout (я on the Z key) did not undo (history ' + i0 + ' → ' + at() + ')');
+
+        /* Ctrl+Shift+Z: Я on the Z key; Ctrl+Y: н on the Y key. Each redoes a step undone by hand just before. */
+        step(); FM.history.undo(); i0 = at();
+        if (!FM.history.canRedo()) throw new Error('setup: nothing to redo straight after an undo');
+        press(RU.Z, 'KeyZ', { shiftKey: true });
+        if (at() !== i0 + 1) bad.push('Ctrl+Shift+Z on the Russian layout (Я on the Z key) did not redo (history ' + i0 + ' → ' + at() + ')');
+        step(); FM.history.undo(); i0 = at();
+        press(RU.y, 'KeyY');
+        if (at() !== i0 + 1) bad.push('Ctrl+Y on the Russian layout (н on the Y key) did not redo (history ' + i0 + ' → ' + at() + ')');
+
+        /* CONTROLS: the Latin letter typed wins over the key's place, and a key that types punctuation is not read by place */
+        i0 = step();
+        press('z', 'KeyW');
+        if (at() !== i0 - 1) bad.push('CONTROL: an AZERTY Ctrl+Z (z typed on the W key) did not undo (history ' + i0 + ' → ' + at() + '), so a Latin layout no longer matches by the letter it types');
+        i0 = step();
+        press('w', 'KeyZ');
+        if (at() !== i0) bad.push('CONTROL: an AZERTY Ctrl+W (w typed on the Z key) undid (history ' + i0 + ' → ' + at() + '), so the key’s place beat the Latin letter it typed');
+        i0 = step();
+        press(';', 'KeyZ');
+        if (at() !== i0) bad.push('CONTROL: Dvorak’s Ctrl+; (on the Z key) undid (history ' + i0 + ' → ' + at() + '), so a key that types punctuation was read by its place');
+
+        /* Ctrl+A: ф on the A key selects both layers */
+        FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.refreshAll();
+        press(RU.a, 'KeyA');
+        const sel = FM.selectionIds();
+        if (!(sel.length === 2 && ids.every(id => sel.indexOf(id) >= 0))) bad.push('Ctrl+A on the Russian layout (ф on the A key) did not select everything (' + sel.length + ' of 2 selected)');
+
+        /* Ctrl+C: с on the C key copies the selected layer */
+        FM.selectLayer(ids[0]);
+        FM.clipboard = [];
+        if (window.getSelection) window.getSelection().removeAllRanges();
+        press(RU.c, 'KeyC');
+        const cb = FM.clipboard || [];
+        if (!(cb.length === 1 && cb[0].snapshot && cb[0].snapshot.id === ids[0])) bad.push('Ctrl+C on the Russian layout (с on the C key) copied nothing (' + cb.length + ' on the clipboard)');
+
+        /* Ctrl+V: м on the V key pastes it. The clipboard is filled by hand if the copy above failed, so this is judged alone. */
+        if (!(FM.clipboard && FM.clipboard.length)) FM.copySelection();
+        if (!(FM.clipboard && FM.clipboard.length)) throw new Error('setup: FM.copySelection copied nothing with layer A selected');
+        const n0 = FM.scene.layers.length;
+        press(RU.v, 'KeyV');
+        if (!(await until(() => FM.scene.layers.length === n0 + 1, 3000))) bad.push('Ctrl+V on the Russian layout (м on the V key) pasted nothing (' + n0 + ' → ' + FM.scene.layers.length + ' layers)');
+        await idle();
+
+        /* CONTROL: Ctrl+D with в on the D key is left as it was */
+        FM.selectLayer(ids[0]);
+        const n1 = FM.scene.layers.length;
+        const ev = press(RU.d, 'KeyD');
+        await sleep(300);
+        await idle();
+        if (FM.scene.layers.length !== n1) bad.push('CONTROL: Ctrl+D on the Russian layout (в on the D key) duplicated a layer (' + n1 + ' → ' + FM.scene.layers.length + '), but ⌘D was left out of this fix on purpose: Simple’s own ⌘D reads the typed letter too, and the two editors must agree');
+        else if (ev.defaultPrevented) bad.push('CONTROL: Ctrl+D on the Russian layout (в on the D key) was taken from the browser, but ⌘D was left out of this fix on purpose');
+      }, idle);
+    } finally {
+      FM.clipboard = clip0;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 6 ──
 
 })();

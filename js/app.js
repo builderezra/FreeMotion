@@ -9212,6 +9212,15 @@ window.FM = window.FM || {};
 
     // keyboard
     let _nudged = false;
+    /* bughunt6 #9: ⌘/CTRL LETTERS ON A NON-LATIN KEYBOARD. The ⌘ shortcuts in the handler below match the letter TYPED
+       (e.key), and with a Russian layout on a PC Ctrl+Z types я, Ctrl+A ф, Ctrl+C с, Ctrl+V м: nothing matched, so undo,
+       redo, copy, paste and select all did nothing at all, while the plain A / S / D / M beside them (read by e.code) kept
+       working. When the key types a letter of ANOTHER script (Cyrillic, Greek, Hebrew, Thai…) this is the Latin letter of
+       the key it sits on (e.code KeyZ gives z); for anything else it is '', so a Latin letter always wins (AZERTY's z on
+       the W key still undoes, its w on the Z key does not) and a key that types punctuation (Dvorak's ; on the Z key) is
+       not read by its position either. ⌘D stays on e.key alone, as Simple's own ⌘D does, so the two editors agree on it. */
+    const otherScriptLetter = e => ((typeof e.key === 'string' && /^[\p{L}\p{M}]$/u.test(e.key) && !/\p{Script=Latin}/u.test(e.key) &&
+      typeof e.code === 'string' && /^Key[A-Z]$/.test(e.code)) ? e.code.slice(3).toLowerCase() : '');
     window.addEventListener('keydown', e => {
       const mod = e.metaKey || e.ctrlKey;
       // Editable target = native <input>/<select>/<textarea> OR any contentEditable element
@@ -9279,20 +9288,20 @@ window.FM = window.FM || {};
       /* SIMPLE MODE P1: in Simple, the arranging keys with no Simple command yet say so rather than do Full's thing to a
          main clip (DESIGN.md §15.1). In Full it answers NOTHING: there is no E key (DESIGN.md §0.4 B14). */
       if (!inEdit && FM.editor && FM.editor.onKey && FM.editor.onKey(e)) return;
-      if (mod && (e.key === 'z' || e.key === 'Z')) {
+      if (mod && (e.key === 'z' || e.key === 'Z' || otherScriptLetter(e) === 'z')) {
         if (inEdit) return; // let field text-undo
         e.preventDefault();
         if (e.shiftKey) { if (FM.history) FM.history.redo(); } else { if (FM.history) FM.history.undo(); }
         return;
       }
-      if (mod && (e.key === 'y' || e.key === 'Y')) { if (inEdit) return; e.preventDefault(); if (FM.history) FM.history.redo(); return; }
+      if (mod && (e.key === 'y' || e.key === 'Y' || otherScriptLetter(e) === 'y')) { if (inEdit) return; e.preventDefault(); if (FM.history) FM.history.redo(); return; }
       if (mod && (e.key === 'd' || e.key === 'D')) {
         if (inEdit) return;
         e.preventDefault();
         if (FM.scene.selectedId) FM.duplicateSelection();
         return;
       }
-      if (mod && (e.key === 'c' || e.key === 'C')) {
+      if (mod && (e.key === 'c' || e.key === 'C' || otherScriptLetter(e) === 'c')) {
         if (inEdit) return;
         const sel = window.getSelection && window.getSelection();
         if (sel && String(sel).length) return;   // don't hijack a real text-selection copy
@@ -9300,13 +9309,13 @@ window.FM = window.FM || {};
         if (FM.copySelection) FM.copySelection();
         return;
       }
-      if (mod && (e.key === 'v' || e.key === 'V')) {
+      if (mod && (e.key === 'v' || e.key === 'V' || otherScriptLetter(e) === 'v')) {
         if (inEdit) return;
         e.preventDefault();
         if (FM.pasteClipboard) FM.pasteClipboard();
         return;
       }
-      if (mod && (e.key === 'a' || e.key === 'A')) {
+      if (mod && (e.key === 'a' || e.key === 'A' || otherScriptLetter(e) === 'a')) {
         if (inEdit) return;
         e.preventDefault();
         if (FM.selectAll) FM.selectAll();
