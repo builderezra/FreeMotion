@@ -166659,6 +166659,80 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* hunt5 later B — TWO VOLUME CEILINGS WERE STILL WRITTEN OUT BY HAND. bughunt5 #1 put the volume range in FM.LIMITS (js/scene.js),
+     which the Volume card and the undo sanitiser read, and left two literal 10s behind: the Assistant's volume edit on a keyed fade
+     held the keys to [0, 10] (js/ai-ops.js, setAnimatedLevel), and the live boost stage capped its gain at Math.min(10, …)
+     (js/audio-fx-live.js, setBoost). They agree with FM.LIMITS today only because nobody has moved it; widen the range and those two
+     would cut what the card offers, the next time the Assistant touched a fade or a boosted clip played.
+     The test stands a narrower FM.LIMITS in (volume 0..7, every other limit the real one's) by its descriptor, for the few synchronous
+     lines that drive both paths, and puts the real one back in a finally.
+     The Assistant: a keyed fade 1 → 9 → 12 at 0 / 1 / 2 s, setProp volume 1 at 0 s, where the fade reads 1, so the ratio is 1 and only
+     the clamp can move a key. The boost stage: setBoost at a level of 9 into a recording stage (the 886 test's rig).
+     On 34da7ac2: with the stand-in both still stop at 10, so the fade keeps its 9 and the stage is written 9.
+     CONTROLS (the same before and after): with the real FM.LIMITS, before the stand-in and after it is put back, the fade's 12 comes out
+     10 and its 9 stays 9, and the stage is written 10 for a level of 12 and 9 for a level of 9; the stand-in is what the page reads
+     while it is in place. */
+  test('hunt5 later B: every volume range reads one source: with FM.LIMITS.volume narrowed to 0..7 for the test, the Assistant’s volume edit on a keyed fade holds its keys to 7 and the live boost stage (FM.audioFxLive.setBoost) is written 7 for a level of 9, not held to a 10 of their own (CONTROLS: with the real FM.LIMITS, before and after, both stop at 10 and leave a 9 alone; the stand-in is the FM.LIMITS the page reads)', { item: '1176' }, async function () {
+    if (!FM.aiOps || typeof FM.aiOps.applyOps !== 'function' || !FM.audioFxLive || typeof FM.audioFxLive.setBoost !== 'function' || !FM.media || typeof FM.media.set !== 'function' || !FM.LIMITS || !Array.isArray(FM.LIMITS.volume)) throw new Error('setup: FM.aiOps.applyOps, FM.audioFxLive.setBoost, FM.media.set or FM.LIMITS.volume is not reachable');
+    const d0 = Object.getOwnPropertyDescriptor(FM, 'LIMITS'), L0 = FM.LIMITS;
+    if (!d0 || !d0.configurable) throw new Error('setup: FM.LIMITS is not a configurable own property of FM, so it cannot be stood in for and put back');
+    if (L0.volume[1] !== 10) throw new Error('setup: FM.LIMITS.volume tops out at ' + L0.volume[1] + ', not 10, so the controls below (which expect 10) do not describe this build');
+    const NARROW = 7;
+    const bad = [];
+    /* A recording boost stage, through both of setBoost's writes (the ramp, and the bare assignment it falls back to). */
+    const w = [];
+    const g = { _v: 1, setTargetAtTime: function (v) { w.push(v); g._v = v; } };
+    Object.defineProperty(g, 'value', { get: function () { return g._v; }, set: function (v) { w.push(v); g._v = v; } });
+    const boostId = 'h5lB_' + Math.random().toString(36).slice(2, 8);
+    const boostLayer = { id: boostId, type: 'video', start: 0, duration: 4 };
+    const fadeKeys = () => ({ kf: [{ t: 0, v: 1, e: 'linear' }, { t: 1, v: 9, e: 'linear' }, { t: 2, v: 12, e: 'linear' }] });
+    let stood = false;
+    await _bh2With(async function (media) {
+      const F = FM.makeLayer('shape', { name: 'hunt5 later B fade', shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 4 });
+      F.start = 0; F.duration = 4;
+      FM.scene.layers = [F];
+      FM.media.set(boostId, { kind: 'video', width: 2, height: 2, duration: 4, _boost: { gain: { gain: g } } });
+      media.push(boostId);
+      /* The Assistant's volume edit on a fresh keyed fade, and the keys it leaves. */
+      const assistant = () => {
+        F.volume = fadeKeys();
+        const r = FM.aiOps.applyOps([{ op: 'setProp', ref: F.id, path: 'volume', value: 1 }], {}, { at: 0 });
+        if (!r || r.appliedCount !== 1) throw new Error('setup: the Assistant’s volume edit did not apply (' + JSON.stringify(r && r.dropped).replace(/"/g, "'") + ')');
+        if (!FM.isAnimated(F.volume) || F.volume.kf.length !== 3) throw new Error('setup: the Assistant’s volume edit flattened the fade: ' + JSON.stringify(F.volume).replace(/"/g, "'"));
+        return F.volume.kf.map(k => k.v);
+      };
+      const boost = level => { w.length = 0; FM.audioFxLive.setBoost(boostLayer, level); return w.length ? w[w.length - 1] : null; };
+      const controls = when => {
+        const c = assistant();
+        if (c[0] !== 1 || c[1] !== 9 || c[2] !== 10) bad.push('CONTROL (' + when + '): with the real FM.LIMITS the Assistant’s edit left the fade at ' + JSON.stringify(c) + ', not [1, 9, 10]');
+        const c12 = boost(12), c9 = boost(9);
+        if (c12 !== 10 || c9 !== 9) bad.push('CONTROL (' + when + '): with the real FM.LIMITS the boost stage was written ' + c12 + ' for a level of 12 and ' + c9 + ' for 9, not 10 and 9');
+      };
+      try {
+        controls('before the stand-in');
+
+        /* ── THE STAND-IN: volume 0..7, every other limit the real one's. */
+        const S = Object.freeze(Object.assign({}, L0, { volume: Object.freeze([0, NARROW]) }));
+        Object.defineProperty(FM, 'LIMITS', { value: S, writable: true, enumerable: d0.enumerable, configurable: true });
+        stood = true;
+        if (FM.LIMITS !== S || FM.LIMITS.volume[1] !== NARROW) throw new Error('setup: the stand-in FM.LIMITS is not what the page reads');
+        const k = assistant();
+        if (k[1] !== NARROW || k[2] !== NARROW) bad.push('with FM.LIMITS.volume at 0..' + NARROW + ' the Assistant’s volume edit left the fade at ' + JSON.stringify(k) + ', not [1, ' + NARROW + ', ' + NARROW + ']: it holds the keys to a range of its own (js/ai-ops.js)');
+        if (k[0] !== 1) bad.push('with FM.LIMITS.volume at 0..' + NARROW + ' the fade’s first key moved from 1 to ' + k[0]);
+        const g9 = boost(9);
+        if (g9 !== NARROW) bad.push('with FM.LIMITS.volume at 0..' + NARROW + ' the boost stage was written ' + g9 + ' for a level of 9, not ' + NARROW + ': it caps at a number of its own (js/audio-fx-live.js setBoost)');
+        Object.defineProperty(FM, 'LIMITS', d0);
+        stood = false;
+
+        if (FM.LIMITS !== L0) bad.push('CONTROL: the real FM.LIMITS was not put back');
+        controls('after the real FM.LIMITS is put back');
+      } finally {
+        if (stood) { Object.defineProperty(FM, 'LIMITS', d0); stood = false; }
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();
