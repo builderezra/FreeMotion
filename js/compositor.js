@@ -21906,6 +21906,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (!isAnimatedProp(raw)) return [];
     const kf = raw.kf;
     if (!kf.length) return [];
+    /* bughunt5 #13: Loop. The keyframe menu's Loop writes loopMode on the point set too (FM.animatedProps lists it), and only
+       evalProp read it, so the morph froze on its last key while the layer's movement kept looping. evalProp's wrap, from the
+       one copy in js/scene.js. */
+    if (FM.loopKfTime) t = FM.loopKfTime(raw, t);
     const vOf = (k) => (k && Array.isArray(k.v)) ? k.v : [];
     if (t <= kf[0].t) return vOf(kf[0]);
     const last = kf[kf.length - 1];

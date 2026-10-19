@@ -166464,6 +166464,56 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* bughunt5 #13 — LOOP DID NOT LOOP A MASK PATH OR A DRAWING'S POINTS. The keyframe menu's Loop (js/timeline.js) writes loopMode on
+     every prop FM.animatedProps lists, and that list has the mask paths and a shape's keyframed point set; inheritLoopModes puts it
+     back on every rebuild. But only FM.evalProp read it. FM.evalMaskPath (js/masks.js) and FM.evalShapeSubs (js/compositor.js)
+     held the last key, so on a roto'd or morphing layer set to Loop: cycle the movement repeated past the last key while the mask
+     or the shape froze. Both now wrap the time exactly as evalProp does, through the one copy (FM.loopKfTime, js/scene.js).
+     (#9's test checks the other half: loopMode surviving the open and undo sanitiser.) Pure calls, so they hold at any width.
+     On 6acd49a5: both evaluators give the last key's points at 1.5 s (cycle) and 1.25 s (ping-pong).
+     CONTROLS (the same before and after): a keyframed number with the same keys and loopMode repeats (the rule being copied); with
+     no loopMode, or Loop: off, both hold the last key; between the keys a looping path is what a still one is. */
+  test('bughunt5 #13 A looping mask and a looping drawing repeat: with Loop: cycle a roto mask path and an Edit Points shape keyed at 0 s and 1 s show at 1.5 s and 2.5 s what they show at 0.5 s, and with Loop: ping-pong at 1.25 s what they show at 0.75 s, as a keyed number with the same loop does, not freeze on the last key (CONTROLS: the keyed number repeats; with no loop or Loop: off both hold the last key; between the keys nothing changes)', { item: '1176' }, function () {
+    if (typeof FM.evalMaskPath !== 'function' || typeof FM.evalShapeSubs !== 'function' || typeof FM.evalProp !== 'function') throw new Error('setup: FM.evalMaskPath, FM.evalShapeSubs or FM.evalProp is not reachable');
+    const bad = [];
+    const A = [[0, 0], [100, 0], [100, 100], [0, 100]];
+    const B = [[50, 20], [150, 20], [150, 120], [50, 120]];
+    const keys = (a, b) => [{ t: 0, v: JSON.parse(JSON.stringify(a)), e: 'linear' }, { t: 1, v: JSON.parse(JSON.stringify(b)), e: 'linear' }];
+    const withLoop = (o, mode) => (mode === undefined ? o : Object.assign(o, { loopMode: mode }));
+    const kinds = {
+      'a roto mask path': mode => (t => FM.evalMaskPath({ path: withLoop({ kf: keys(A, B) }, mode) }, t)),
+      'an Edit Points shape': mode => (t => FM.evalShapeSubs({ type: 'shape', shape: 'path', subs: withLoop({ kf: keys([A], [B]) }, mode) }, t)),
+    };
+    const near = (a, b) => {
+      if (Array.isArray(a) !== Array.isArray(b)) return false;
+      if (!Array.isArray(a)) return typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < 1e-9;
+      return a.length === b.length && a.every((x, i) => near(x, b[i]));
+    };
+    const say = v => JSON.stringify(v);
+
+    /* CONTROL: the rule being copied — a keyed number with the same keys and loop. */
+    const num = mode => withLoop({ kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 100, e: 'linear' }] }, mode);
+    if (Math.abs(FM.evalProp(num('cycle'), 1.5) - 50) > 1e-9 || Math.abs(FM.evalProp(num('pingpong'), 1.25) - 75) > 1e-9) throw new Error('setup: a keyed number with Loop does not repeat as this test assumes (cycle at 1.5 s gives ' + FM.evalProp(num('cycle'), 1.5) + ', ping-pong at 1.25 s gives ' + FM.evalProp(num('pingpong'), 1.25) + ')');
+
+    Object.keys(kinds).forEach(what => {
+      const at = kinds[what];
+      const still = at(undefined);
+      const mid = still(0.5), threeQ = still(0.75), last = still(1);
+      if (near(mid, last)) throw new Error('setup: ' + what + ' shows the same points at 0.5 s as at its last key, so a freeze could not be told from a loop');
+      /* ── Loop: cycle. */
+      const cyc = at('cycle');
+      [1.5, 2.5].forEach(t => { if (!near(cyc(t), mid)) bad.push(what + ' with Loop: cycle shows ' + say(cyc(t)) + ' at ' + t + ' s, not what it shows at 0.5 s (' + say(mid) + ')' + (near(cyc(t), last) ? ': it froze on its last key while the rest of the layer loops' : '')); });
+      /* ── Loop: ping-pong, on its way back. */
+      const pp = at('pingpong');
+      if (!near(pp(1.25), threeQ)) bad.push(what + ' with Loop: ping-pong shows ' + say(pp(1.25)) + ' at 1.25 s, not what it shows at 0.75 s (' + say(threeQ) + ')' + (near(pp(1.25), last) ? ': it froze on its last key' : ''));
+      /* ── CONTROLS. */
+      if (!near(still(1.5), last)) bad.push('CONTROL: ' + what + ' with no loop shows ' + say(still(1.5)) + ' at 1.5 s, not its last key');
+      if (!near(at('none')(1.5), last)) bad.push('CONTROL: ' + what + ' with Loop: off shows ' + say(at('none')(1.5)) + ' at 1.5 s, not its last key');
+      if (!near(cyc(0.5), mid)) bad.push('CONTROL: ' + what + ' with Loop: cycle shows ' + say(cyc(0.5)) + ' between its keys, not what a still one shows (' + say(mid) + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();

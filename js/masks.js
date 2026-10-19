@@ -69,6 +69,10 @@ window.FM = window.FM || {};
     if (!isAnimated(path)) return [];
     const kf = path.kf;
     if (!kf.length) return [];
+    /* bughunt5 #13: Loop. The keyframe menu's Loop writes loopMode on every animated prop of the layer, this path included, and
+       only evalProp read it, so a roto mask froze on its last key while the layer it cuts out kept looping. The same wrap as
+       evalProp's, from the one copy in js/scene.js. */
+    if (FM.loopKfTime) t = FM.loopKfTime(path, t);
     if (t <= kf[0].t) return kfPts(kf[0]);
     const last = kf[kf.length - 1];
     if (t >= last.t) return kfPts(last);
