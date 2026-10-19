@@ -28313,7 +28313,13 @@
   test('the group crumb is gone and back still leaves the group', { item: 'group-crumb' }, async function () {
     if (document.getElementById('group-crumb')) throw new Error('the floating "Editing group" pill is back');
     const savedScene = FM.scene;
+    /* isolation (20 Oct): it inherited the EDITOR being on screen from 'drawing: opening a project ends any sketch in
+       progress', whose finally closes Home and never reopens it; it now closes Home itself and puts it back. Alone the
+       suite starts on Home (the boot opens it), so Home was already open before back was pressed, and the check below
+       read that as back leaving the project. Back from inside a group never opens Home (app.js, #btn-back). */
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     try {
+      if (hadHome) FM.home.close();
       FM.scene = scene([
         FM.makeLayer('shape', { name: 'A', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 }),
         FM.makeLayer('shape', { name: 'B', shape: 'rect', x: 90, y: 90, shapeW: 40, shapeH: 40, fill: '#0f0', start: 0, duration: 2 }),
@@ -28325,6 +28331,7 @@
       FM.enterGroup(grp.id);
       if (FM.groupContext !== grp.id) throw new Error('enterGroup did not put us inside the group');
       if (!document.body.classList.contains('group-editing')) throw new Error('body.group-editing is gone — the + FAB hides on that class, so it must survive the pill');
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) throw new Error('CONTROL: Home is already open before back is pressed, so Home open afterwards could not tell a working back button from one that left the project');
       document.getElementById('btn-back').click();
       await sleep(60);
       if (FM.groupContext) throw new Error('the back button no longer leaves the group — with the pill removed there would be no way out but leaving the project');
@@ -28340,6 +28347,11 @@
       if (FM.exitGroup) FM.exitGroup(true);
       FM.scene = savedScene;
       FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
+      // Home back as it was found: reopened if it was open, shut if a broken back button opened it
+      if (FM.home && FM.home.isOpen) {
+        if (hadHome && !FM.home.isOpen()) FM.home.open();
+        else if (!hadHome && FM.home.isOpen()) FM.home.close();
+      }
       await sleep(40);
     }
   });
