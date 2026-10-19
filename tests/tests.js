@@ -165964,6 +165964,100 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* bughunt5 #7 — THE TRACKER IGNORED FLIP. Its own geometry (js/tracker.js geom, used by the seed tap, the seed box and the key
+     write) rebuilt the layer's placement from x, y, scale, rotation and anchor with no flip, while the renderer mirrors a flipped layer
+     innermost (compositor.js applyLayerTransform; FM.layerUVToCanvas). So on a clip with ⋯ → Flip Horizontally:
+       · the keys moved the layer the wrong way. The fixture's square drifts RIGHT in the source, so flipped it drifts LEFT on screen,
+         and to keep it pinned the layer must move RIGHT; it moved left, and the pinned point drifted at twice the feature's speed;
+       · a tap seeded the MIRROR spot about the anchor, so the template came from the wrong place (and the seed box, drawn through the
+         same wrong inverse, sat under his finger, so nothing looked wrong).
+     The tap is driven through the real pick overlay with FM.eventToProject answering the square's on-screen centre (from
+     FM.layerUVToCanvas, which carries the flip), and the seed is read from the Track button's call with FM.tracker.track stubbed.
+     On afb548a4: flipped, x moves about −91 px from 0.1 s to 3.9 s (as unflipped), and the tap seeds content x 50, not the 78 the
+     square's centre is at (the mirror about the anchor at 64).
+     CONTROLS (the same before and after): unflipped, x moves about −91 px; an unflipped tap seeds the square's centre.
+     BUDGET: the default 45 s: two tracks of the 120-frame fixture and two taps. */
+  test('bughunt5 #7 Tracking a flipped clip moves the layer the right way: on a clip flipped horizontally the tracked x keys move the layer RIGHT as the picture moves left (about +91 px from 0.1 s to 3.9 s, not −91), and a tap on the feature seeds that feature, not its mirror image (CONTROLS: unflipped, the keys still move the layer left about 91 px and a tap seeds the feature)', { item: '1176' }, async function () {
+    if (!FM.tracker || typeof FM.tracker.track !== 'function' || typeof FM.tracker.pick !== 'function' || typeof FM.buildFrameCache !== 'function' || typeof FM.eventToProject !== 'function' || typeof FM.layerUVToCanvas !== 'function') throw new Error('setup: FM.tracker (track, pick), FM.buildFrameCache, FM.eventToProject or FM.layerUVToCanvas is not reachable');
+    const bad = [];
+    const dBuild = Object.getOwnPropertyDescriptor(FM, 'buildFrameCache');
+    const dEvt = Object.getOwnPropertyDescriptor(FM, 'eventToProject');
+    const dTrack = Object.getOwnPropertyDescriptor(FM.tracker, 'track');
+    const putBack = () => {
+      if (dEvt) Object.defineProperty(FM, 'eventToProject', dEvt); else delete FM.eventToProject;
+      if (dTrack) Object.defineProperty(FM.tracker, 'track', dTrack); else delete FM.tracker.track;
+    };
+    /* The fixture on its own scene, flipped or not. */
+    const onScene = async (flip, body) => {
+      await _bh2With(async function (media) {
+        FM.scene.project.fps = 30;
+        const f = trackerFixture();
+        if (flip) f.layer.flipH = true;
+        FM.scene.layers.push(f.layer); media.push(f.layer.id);
+        await body(f);
+      });
+    };
+    /* How far the written x keys move the layer from 0.1 s to 3.9 s. */
+    const drift = async (flip) => {
+      let dx = NaN;
+      await onScene(flip, async function (f) {
+        const n = await FM.tracker.track(f.layer, f.seed, f.seedT, f.box);
+        const X = f.layer.transform.x;
+        if (!n || !X || !Array.isArray(X.kf) || X.kf.length < 2) throw new Error('setup: the ' + (flip ? 'flipped' : 'unflipped') + ' track wrote no x keyframes (it returned ' + n + ')');
+        dx = FM.evalProp(X, 3.9) - FM.evalProp(X, 0.1);
+      });
+      return dx;
+    };
+    /* The content point a tap on the square's on-screen centre seeds, read from the Track button's call. */
+    const seedOf = async (flip) => {
+      let got = null, f0 = null;
+      await onScene(flip, async function (f) {
+        f0 = f;
+        FM.time = f.seedT;
+        const on = FM.layerUVToCanvas(f.layer, f.seed.x / f.W, f.seed.y / f.H, f.W, f.H);
+        if (!on || !isFinite(on.x) || !isFinite(on.y)) throw new Error('setup: FM.layerUVToCanvas gave no on-screen point for the square (' + JSON.stringify(on) + ')');
+        try {
+          FM.eventToProject = function () { return { x: on.x, y: on.y }; };
+          FM.tracker.track = async function (L, seed) { got = seed ? { x: seed.x, y: seed.y } : null; return 0; };
+          FM.tracker.pick(f.layer);
+          const ov = document.getElementById('trk-overlay');
+          if (!ov) throw new Error('setup: pick() made no #trk-overlay');
+          ov.dispatchEvent(new PointerEvent('pointerdown', { bubbles: false, cancelable: true, pointerId: 41, pointerType: 'touch', isPrimary: true, clientX: 10, clientY: 10, buttons: 1 }));
+          const go = document.querySelector('#trk-bar .btn-accent');
+          if (!go) throw new Error('setup: the tap set no seed (the bar has no Track button)');
+          go.click();
+          await sleep(30);
+        } finally {
+          putBack();
+          try { FM.tracker.cancel(); } catch (e) {}
+          try { if (FM.hideToast) FM.hideToast(); } catch (e) {}
+        }
+      });
+      if (!got) throw new Error('setup: Track did not hand a seed to FM.tracker.track (' + (flip ? 'flipped' : 'unflipped') + ')');
+      return { got: got, want: f0.seed };
+    };
+    try {
+      FM.buildFrameCache = async function () { return true; };   // the fixture supplies the cache, as the three tracker tests do
+
+      /* ── THE KEYS. */
+      const plain = await drift(false);
+      if (!(plain < -80)) bad.push('CONTROL: unflipped, the keys move the layer ' + plain.toFixed(1) + ' px from 0.1 s to 3.9 s, not about −91 (left, as the square moves right)');
+      const flipped = await drift(true);
+      if (!(flipped > 80)) bad.push('flipped horizontally, the keys move the layer ' + flipped.toFixed(1) + ' px from 0.1 s to 3.9 s, not about +91: the picture moves LEFT on a flipped clip, so the layer must move right to keep the point pinned, and the tracker moved it the wrong way');
+
+      /* ── THE SEED TAP. */
+      const s0 = await seedOf(false);
+      if (Math.abs(s0.got.x - s0.want.x) > 2 || Math.abs(s0.got.y - s0.want.y) > 2) bad.push('CONTROL: unflipped, a tap on the square’s on-screen centre seeded content (' + s0.got.x.toFixed(1) + ', ' + s0.got.y.toFixed(1) + '), not its centre (' + s0.want.x + ', ' + s0.want.y + ')');
+      const s1 = await seedOf(true);
+      if (Math.abs(s1.got.x - s1.want.x) > 2 || Math.abs(s1.got.y - s1.want.y) > 2) bad.push('flipped horizontally, a tap on the square’s on-screen centre seeded content (' + s1.got.x.toFixed(1) + ', ' + s1.got.y.toFixed(1) + '), not its centre (' + s1.want.x + ', ' + s1.want.y + '): the mirror spot about the anchor, so the template is grabbed from the wrong part of the picture');
+    } finally {
+      putBack();
+      if (dBuild) Object.defineProperty(FM, 'buildFrameCache', dBuild); else delete FM.buildFrameCache;
+      try { FM.tracker.cancel(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();

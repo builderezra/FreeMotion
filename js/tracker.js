@@ -18,10 +18,15 @@ window.FM = window.FM || {};
   function geom(layer, t) {
     const tr = layer.transform, sc = FM.evalProp(tr.scale, t) || 1e-6;
     const sz = FM.layerSize(layer);
+    /* bughunt5 #7: THE FLIP, folded into the scale. The renderer mirrors a flipped layer innermost (compositor.js
+       applyLayerTransform: `ctx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1)` after the scale, and FM.layerUVToCanvas the
+       same), and with no skew a mirror and a scale are both diagonal, so they commute: a sign on scX / scY is that exact map.
+       Without it a tap on a flipped clip seeded the mirror spot about the anchor (the seed box drawn through the same wrong
+       inverse, so it sat under his finger) and the keys moved the layer the wrong way. Every use below reads scX / scY. */
     return {
       x: FM.evalProp(tr.x, t), y: FM.evalProp(tr.y, t),
-      scX: (sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1)) || 1e-6,
-      scY: (sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1)) || 1e-6,
+      scX: ((sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1)) || 1e-6) * (layer.flipH ? -1 : 1),
+      scY: ((sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1)) || 1e-6) * (layer.flipV ? -1 : 1),
       rot: (FM.evalProp(tr.rotation, t) || 0) * Math.PI / 180,
       ax: (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5,
       ay: (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5,
