@@ -1065,6 +1065,8 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
   FM.flipLayer = function (layer, axis) {   // mirror without touching scale keyframes
+    // bughunt4 #1: a group mirrors its members about its pivot now, so the pivot is pinned first, as for a scale or a turn
+    if (layer && layer.type === 'group' && FM.settleGroupPivot) FM.settleGroupPivot(layer, FM.scene, FM.time);
     if (axis === 'h') layer.flipH = !layer.flipH; else layer.flipV = !layer.flipV;
     FM.requestRender(); if (FM.history) FM.history.commit();
   };
@@ -3867,20 +3869,37 @@ window.FM = window.FM || {};
   // Degrees, UNWRAPPED, summed exactly as applyParentChain sums them — a weighted child keeps a FRACTION of
   // this, so 370° and 10° are different answers there even though the matrix cannot tell them apart.
   function chainTurn(pid, t) {
-    let deg = 0; const seen = new Set();
+    let deg = 0; const seen = new Set(), turns = [];
     while (pid && !seen.has(pid)) {
       seen.add(pid);
       const pl = FM.clipAt(FM.scene, pid, t); if (!pl) break;
       const v = FM.evalProp((pl.transform || {}).rotation, t);
-      deg += (FM.behaviorValue ? FM.behaviorValue(pl, 'rotation', v, t) : v) || 0;
+      const r = (FM.behaviorValue ? FM.behaviorValue(pl, 'rotation', v, t) : v) || 0;
+      deg += r;
+      turns.push({ r: r, keep: pl.parent ? linkKeeps(pl) : 1 });
       pid = pl.parent;
     }
-    return deg;
+    /* bughunt4 #1: applyParentChain now applies each parent's OWN link mode, so a 'locked' / 'weighted' parent keeps only part
+       of what it inherits and hands down that net turn. With every link 'normal' (keep 1) the sum above is the very same
+       number, added in the same order as before. */
+    if (turns.every(o => o.keep === 1)) return deg;
+    let net = 0;
+    for (let i = turns.length - 1; i >= 0; i--) net = net * turns[i].keep + turns[i].r;
+    return net;
+  }
+  // The share of its inherited turn a parented layer keeps — applyParentRotMode's own rule (compositor.js), as a factor.
+  function linkKeeps(pl) {
+    const mode = pl.parentMode || 'normal';
+    if (mode === 'normal') return 1;
+    if (mode !== 'weighted') return 0;
+    const w = pl.parentWeight != null ? pl.parentWeight : 0.5;
+    return w < 0 ? 0 : w > 1 ? 1 : w;
   }
   // Does anything between the old parent and the new frame move over time? Then the bake is exact at the
   // playhead only — where he is looking when he groups — and the layer stops following that motion.
   function chainMoves(fromId, toId) {
-    const moving = pl => ['x', 'y', 'rotation', 'scale'].some(k => FM.isAnimated((pl.transform || {})[k]))
+    // bughunt4 #1: a parent's keyed Width / Height, skew and depth move its children too now (applyParentChain)
+    const moving = pl => ['x', 'y', 'rotation', 'scale', 'scaleX', 'scaleY', 'skewX', 'skewY', 'z'].some(k => FM.isAnimated((pl.transform || {})[k]))
       || !!pl.splitOf || (Array.isArray(pl.behaviors) && pl.behaviors.some(b => b && b.enabled !== false && ['x', 'y', 'rotation', 'scale'].indexOf(b.prop) >= 0));
     const walk = (pid, stop) => {
       const seen = new Set();
@@ -4110,11 +4129,15 @@ window.FM = window.FM || {};
    * behaviour and SAY it, which is the one thing the old behaviour never did. */
   function bakeGroupTransform(g) {
     const gt = g.transform || {};
-    const anim = ['x', 'y', 'rotation', 'scale'].some(k => FM.isAnimated && FM.isAnimated(gt[k]));
+    // bughunt4 #1: a group's depth reaches its members now and is a uniform scale (a similarity), so it is baked like the rest
+    const anim = ['x', 'y', 'rotation', 'scale', 'z'].some(k => FM.isAnimated && FM.isAnimated(gt[k]));
     const gx = FM.evalProp(gt.x, 0) || 0, gy = FM.evalProp(gt.y, 0) || 0;
     const grot = FM.evalProp(gt.rotation, 0) || 0, gsc = FM.evalProp(gt.scale, 0);
     const sc = (typeof gsc === 'number' && isFinite(gsc) && gsc !== 0) ? gsc : 1;
-    const identity = !gx && !gy && !grot && sc === 1;
+    const gz = gt.z != null ? (FM.evalProp(gt.z, 0) || 0) : 0;
+    // …and so does its own link mode ('locked' / 'weighted' under a parent), which is a turn: baked too
+    const linked = !!g.parent && (g.parentMode || 'normal') !== 'normal';
+    const identity = !gx && !gy && !grot && sc === 1 && !gz && !linked;
     // ANIMATED FIRST (queue 739, hunt MEDIUM #22): identity is judged at t = 0, so a group keyed at rest and then moving
     // read as identity, returned 0, and its keyframes were dropped without a word.
     if (anim) return { baked: 0, skipped: -1 };            // -1 = "there was something, and it is animated"
@@ -4186,12 +4209,29 @@ window.FM = window.FM || {};
     return lost;
   }
 
+  /* bughunt4 #1: WHAT A GROUP CARRIES THAT DOES NOT FOLD ONTO ITS LAYERS. Its Flip, unlinked Width / Height and Skew reach the
+     members now (compositor.js applyParentChain), but none of them folds into a member's own numbers the way a move, a turn, a
+     size and a depth do — planParentBake carries a similarity — and its X / Y tilt leans the group's picture as one plate. So,
+     like its effects, they are NAMED rather than half-kept: the flip, stretch and skew come off the group BEFORE the bake plans,
+     so the bake carries exactly the rest (a mirrored arrangement of un-mirrored layers would be neither the picture before nor
+     the one he asked for). One undo brings the group back with all of them. */
+  function dropUnfoldable(g) {
+    const gt = g.transform || {}, lost = [];
+    const off = (k, d) => gt[k] != null && (!!(FM.isAnimated && FM.isAnimated(gt[k])) || FM.evalProp(gt[k], 0) !== d);
+    if (g.flipH || g.flipV) { lost.push('its flip'); g.flipH = false; g.flipV = false; }
+    if (off('scaleX', 1) || off('scaleY', 1)) { lost.push('its stretch'); gt.scaleX = 1; gt.scaleY = 1; }
+    if (off('skewX', 0) || off('skewY', 0)) { lost.push('its skew'); gt.skewX = 0; gt.skewY = 0; }
+    if (off('rotationX', 0) || off('rotationY', 0)) lost.push('its tilt');
+    return lost;
+  }
+
   FM.ungroup = function (id) {
     const g = FM.scene.layers.find(l => l.id === id);
     if (!g || g.type !== 'group') return;
     if (FM.groupContext === id) FM.exitGroup(true);
+    const dropped = dropUnfoldable(g);                      // bughunt4 #1: BEFORE the bake plans, so it carries exactly the rest
     const bake = bakeGroupTransform(g);                     // BEFORE the members are re-parented
-    const lost = bakeGroupLook(g);                          // …and so is everything that is not position
+    const lost = dropped.concat(bakeGroupLook(g));          // …and so is everything that is not position
     // BOTH losses are said (queue 739): the animated-position note used to hide the effects/look note behind an else.
     const animMsg = 'This group’s position is animated — ungrouping cannot carry that onto the layers, so they go back to their own positions';
     const lostMsg = lost.length ? 'Ungrouped — but ' + lost.join(' and ') + ' belonged to the group itself and cannot be carried onto the layers individually' : '';

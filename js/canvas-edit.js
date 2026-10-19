@@ -160,46 +160,54 @@ window.FM = window.FM || {};
     return a === 'left' ? w / 2 : a === 'right' ? -w / 2 : 0;
   }
 
-  // Accumulated PARENT transform of a layer (same root→leaf walk as the compositor's applyParentChain):
-  // world = T + R(rot)·s·(parent-local). Without this, a parented layer's hit region / selection box /
-  // drag mapping all sat at its raw local coords — detached from where the compositor actually drew it.
+  /* Accumulated PARENT transform of a layer: where its parent space sits in the plate. Without this, a parented layer's hit
+     region / selection box / drag mapping all sat at its raw local coords — detached from where the compositor drew it.
+     ═══ bughunt4 #1b — IT IS THE RENDERER'S OWN MATRIX NOW, NOT A WALK THAT COPIES IT ═══════════════════════════════════════
+     This used to walk the chain itself as world = T + R(rot)·s·(parent-local): each parent's x, y, turn and uniform scale, and
+     (queue 832) a group's pivot sandwich, taught to it separately after #630 taught the renderer. bughunt4 #1 then made the
+     renderer apply a group's (and a Controller's) Flip, unlinked Width / Height, Skew, Depth and each ancestor's own link mode
+     too, and this copy learned none of it. So under a flipped group the box, the five handles and the tap region sat where the
+     member is NOT drawn (a tap on it deselected it), a drag to the right moved it LEFT, and the rotate knob turned it against
+     the finger. The third time this walk drifted from the renderer is the last: it reads FM.parentChainMatrix
+     (compositor.js), which runs applyParentChain itself, so the two cannot disagree.
+       x, y        where the parent space's origin lands (e, f)
+       a, b, c, d  its linear part — the whole of it: a flip makes det < 0, a stretch or a skew makes it no similarity
+       det, sim    its determinant; sim = a turn and a positive uniform scale only, exactly the old walk's world
+       rot, s      the turn (radians; the chain's own unwrapped sum, unless the matrix says it is half a turn more, which
+                   is what a double flip is) and the scale (the similarity's; the area's root otherwise) — only meaningful
+                   as such when sim, and every caller below that needs more than a similarity reads a..d instead.
+     No parent, or no matrix to be had: the identity, which is where an unparented layer already lives. */
   function parentXform(layer, t) {
-    const out = { x: 0, y: 0, rot: 0, s: 1 };
+    const out = { x: 0, y: 0, rot: 0, s: 1, a: 1, b: 0, c: 0, d: 1, det: 1, sim: true };
     if (!layer.parent) return out;
-    const chain = [], seen = new Set([layer.id]);
-    let pid = layer.parent;
-    while (pid && !seen.has(pid)) { seen.add(pid); const pl = FM.scene.layers.find(l => l.id === pid); if (!pl) break; chain.push(pl); pid = pl.parent; }
-    for (let i = chain.length - 1; i >= 0; i--) {
-      const tr = chain[i].transform;
-      const px = FM.evalProp(tr.x, t) || 0, py = FM.evalProp(tr.y, t) || 0;
-      const pr = (FM.evalProp(tr.rotation, t) || 0) * Math.PI / 180;
-      const ps = FM.evalProp(tr.scale, t) || 1;
-      const c = Math.cos(out.rot), si = Math.sin(out.rot);
-      out.x += out.s * (c * px - si * py);
-      out.y += out.s * (si * px + c * py);
-      /* ⚠️ queue 832: THE GROUP PIVOT, exactly as the renderer applies it. A group is created at (0,0) on
-         purpose, so scaling or rotating one about the origin would fling every member — queue 630 fixed
-         that in the compositor with a pivot sandwich (translate to the members' bbox centre, transform,
-         translate back) and this walk was never taught it. So a member of a scaled or rotated group had
-         its selection box, its five handles and its tap region drawn where the layer ISN'T: measured
-         ~460px away at 1.5x. Tapping the layer then missed and DESELECTED it, and the rotate knob
-         measured its angle from a centre that was not the layer's, so it spun non-linearly under the
-         finger. Same condition as the renderer's, so an untransformed group still costs nothing. */
-      const needsPivot = (pr !== 0 || ps !== 1) && chain[i].type === 'group';
-      const piv = needsPivot && FM.groupPivot ? FM.groupPivot(chain[i], FM.scene, t) : null;
-      if (piv) { out.x += out.s * (c * piv.x - si * piv.y); out.y += out.s * (si * piv.x + c * piv.y); }
-      out.rot += pr; out.s *= ps;
-      if (piv) {
-        const c2 = Math.cos(out.rot), s2 = Math.sin(out.rot);
-        out.x += out.s * (c2 * -piv.x - s2 * -piv.y);
-        out.y += out.s * (s2 * -piv.x + c2 * -piv.y);
-      }
-    }
-    return out;
+    const M = FM.parentChainMatrix ? FM.parentChainMatrix(layer, t, FM.scene) : null;
+    if (!M) return out;
+    const a = M.a, b = M.b, c = M.c, d = M.d, det = a * d - b * c;
+    const sx = Math.hypot(a, b), eps = 1e-9 * Math.max(1, sx, Math.hypot(c, d));
+    const sim = det > 0 && Math.abs(a - d) <= eps && Math.abs(b + c) <= eps;
+    let rot = M.rot;
+    const dr = Math.atan2(b, a) - rot, wr = dr - 2 * Math.PI * Math.round(dr / (2 * Math.PI));
+    if (Math.abs(wr) > 1e-9) rot += wr;
+    return { x: M.e, y: M.f, rot: rot, s: sim ? sx : Math.sqrt(Math.abs(det)), a: a, b: b, c: c, d: d, det: det, sim: sim };
+  }
+  // A point in the parent space → the plate, through parentXform's whole matrix (bughunt4 #1b).
+  function parentApply(pt, x, y) { return { x: pt.x + pt.a * x + pt.c * y, y: pt.y + pt.b * x + pt.d * y }; }
+  /* A plate-space DISTANCE (a finger's delta, a handle's arm) → the parent space: the inverse of the linear part only, no
+     translation, so a drag under a horizontally flipped group runs the member's x the other way and it follows the finger.
+     null when the parent squashes everything onto a line (the matrix has no inverse): each caller falls back. */
+  function parentUnapply(pt, dx, dy) {
+    if (!(Math.abs(pt.det) > 1e-12)) return null;
+    return { x: (pt.d * dx - pt.c * dy) / pt.det, y: (-pt.b * dx + pt.a * dy) / pt.det };
+  }
+  /* A handle's arm, from the centre the gesture turns or scales about to the finger, back in the parent's space (bughunt4 #1b;
+     see startHandle). No parent, or one with no inverse: the arm as it is on screen, as before. */
+  function handleArm(pw, p, cx, cy) {
+    const dx = p.x - cx, dy = p.y - cy;
+    return (pw && parentUnapply(pw, dx, dy)) || { x: dx, y: dy };
   }
   function worldToParentLocal(pt, px, py) {   // invert parentXform for a point
-    const dx = px - pt.x, dy = py - pt.y, c = Math.cos(-pt.rot), si = Math.sin(-pt.rot);
-    return { x: (dx * c - dy * si) / pt.s, y: (dx * si + dy * c) / pt.s };
+    // a parent with no inverse draws its children as a line: nothing in it can be tapped (NaN fails every comparison)
+    return parentUnapply(pt, px - pt.x, py - pt.y) || { x: NaN, y: NaN };
   }
 
   function hitTest(layer, px, py, t) {
@@ -334,6 +342,9 @@ window.FM = window.FM || {};
       vpPinch.layer = sel;
       vpPinch.startScale = s0;
       vpPinch.startRot = FM.evalProp(sel.transform.rotation, FM.time) || 0;
+      // bughunt4 #1b: under a mirrored parent (a flipped group) a turn of the layer's own shows on screen the other way round,
+      // so the twist is applied reversed and the layer turns WITH the fingers
+      vpPinch.twistSign = (sel.parent && parentXform(sel, FM.time).det < 0) ? -1 : 1;
       // a group scales about its visible bounds centre, so its members don't fly off-frame —
       // same pivot the corner handle builds in startHandle
       if (sel.type === 'group' && FM.groupBounds) {
@@ -458,7 +469,14 @@ window.FM = window.FM || {};
       const p = eventToProject(e);
       let cx = FM.evalProp(layer.transform.x, FM.time), cy = FM.evalProp(layer.transform.y, FM.time);
       let pivot = null;
-      if (layer.parent) { const w = parentXform(layer, FM.time); const c = Math.cos(w.rot), si = Math.sin(w.rot); const wx = w.x + w.s * (c * cx - si * cy), wy = w.y + w.s * (si * cx + c * cy); cx = wx; cy = wy; }   // measure the gesture about the layer's WORLD position
+      /* Measure the gesture about the layer's WORLD position — and (bughunt4 #1b) measure it IN THE PARENT'S SPACE: every arm
+         from that centre to the finger goes back through the parent's linear part (handleArm) before its angle or its length
+         is read. Under a turned and uniformly scaled parent that changes nothing (the angle moves by the same amount and the
+         ratio of two lengths is the same); under a FLIPPED one it is the difference between the knob turning the layer with
+         the finger and against it, because the layer's own clockwise is the screen's anticlockwise there; and under a
+         stretched or skewed one the corner and the knob follow the finger in the space the layer's scale and turn act in. */
+      const pw = layer.parent ? parentXform(layer, FM.time) : null;
+      if (pw) { const q = parentApply(pw, cx, cy); cx = q.x; cy = q.y; }
       if (layer.type === 'group' && FM.groupBounds) {
         // GROUPS: pivot about the visible BOUNDS CENTRE, not the group's transform origin — the
         // origin is (0,0) = the project's top-left corner, so rotating/scaling about it flung the
@@ -488,11 +506,13 @@ window.FM = window.FM || {};
          * through parentXform; the angle and the scale were not, so the finger distance was measured
          * in world pixels and then divided by the layer's own scale alone. Inside a group at 2x that
          * stored a column twice the width dragged, and inside a rotated group it walked off the axis
-         * entirely. Same walk, same numbers — it just was not being asked. (#686) */
-        const pw = layer.parent ? parentXform(layer, FM.time) : null;
-        const rad = ((FM.evalProp(layer.transform.rotation, FM.time) || 0) * Math.PI / 180) + (pw ? pw.rot : 0);
-        const sc0 = (((FM.evalProp(layer.transform.scale, FM.time) || 1) *
-                    (layer.transform.scaleX != null ? FM.evalProp(layer.transform.scaleX, FM.time) : 1)) || 1) * (pw ? pw.s : 1);
+         * entirely. Same walk, same numbers — it just was not being asked. (#686)
+         * bughunt4 #1b: the finger's arm now comes back into the parent's space first (handleArm), so the axis and the scale
+         * here are the layer's OWN — the same answer under a turned, scaled parent (the parent's turn and scale were exactly
+         * what was added to them), and the right one under a flipped, stretched or skewed one, which no turn and scale can say. */
+        const rad = (FM.evalProp(layer.transform.rotation, FM.time) || 0) * Math.PI / 180;
+        const sc0 = ((FM.evalProp(layer.transform.scale, FM.time) || 1) *
+                    (layer.transform.scaleX != null ? FM.evalProp(layer.transform.scaleX, FM.time) : 1)) || 1;
         /* WHERE THE BORDER ACTUALLY IS. The old maths halved on the way in and doubled on the way out,
          * which is right only for a centred anchor on centred text. drawLayer puts the column's centre
          * at (0.5 - anchorX)*W from the anchor and then shifts it again by the alignment, so the two
@@ -511,7 +531,7 @@ window.FM = window.FM || {};
         if (Math.abs(k) < 0.08) k = 0.5;
         const cur = Number(layer.wrapWidth);
         drag = {
-          mode: 'wrap', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, rad: rad, sc: sc0, k: k
+          mode: 'wrap', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, rad: rad, sc: sc0, k: k, pw: pw
         };
         // The handle already SITS on the border, so the column simply follows the finger — no offset
         // to carry. With no wrap set yet the handle sits at the text's natural width, so the first
@@ -538,9 +558,11 @@ window.FM = window.FM || {};
           if (FM.toast) FM.toast('This layer is scaled to nothing at the playhead — move to a frame where you can see it, or set Scale in Move & Transform');
           return;
         }
-        drag = { mode: 'scale', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startScale: s0, startDist: Math.hypot(p.x - cx, p.y - cy) || 1 };
+        const arm = handleArm(pw, p, cx, cy);
+        drag = { mode: 'scale', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, pw: pw, startScale: s0, startDist: Math.hypot(arm.x, arm.y) || 1 };
       } else {
-        drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(p.y - cy, p.x - cx) };
+        const arm = handleArm(pw, p, cx, cy);
+        drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, pw: pw, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(arm.y, arm.x) };
       }
     };
   }
@@ -583,7 +605,7 @@ window.FM = window.FM || {};
           const DEAD = 7;
           if (!vpPinch.twisting && Math.abs(dDeg) > DEAD) vpPinch.twisting = true;
           if (vpPinch.twisting) {
-            const eff = dDeg - Math.sign(dDeg) * DEAD;
+            const eff = (dDeg - Math.sign(dDeg) * DEAD) * (vpPinch.twistSign || 1);
             FM.shiftTransform(L, 'rotation', Math.round((vpPinch.startRot + eff) * 10) / 10, FM.time);
           }
           vpPinch.moved = true;
@@ -647,10 +669,14 @@ window.FM = window.FM || {};
     }
     if (drag.mode === 'move') {
       let ddx = p.x - drag.startP.x, ddy = p.y - drag.startP.y;
-      if (drag.pxf) {   // parented layer: a world-space finger delta lands in the PARENT's frame (un-rotate, un-scale)
-        const c = Math.cos(-drag.pxf.rot), si = Math.sin(-drag.pxf.rot);
-        const rx = (ddx * c - ddy * si) / drag.pxf.s, ry = (ddx * si + ddy * c) / drag.pxf.s;
-        ddx = rx; ddy = ry;
+      if (drag.pxf) {
+        /* Parented layer: a world-space finger delta lands in the PARENT's frame.
+           bughunt4 #1b: through the inverse of the parent's WHOLE linear part (parentUnapply), not just its turn and scale —
+           under a flipped group a drag to the right must run the member's x the other way for it to go right on screen, and
+           under a stretched or skewed one the member must cover the finger's distance in the frame, not in its own space.
+           A parent with no inverse (squashed flat) keeps the raw delta, as an unparented layer would. */
+        const q = parentUnapply(drag.pxf, ddx, ddy);
+        if (q) { ddx = q.x; ddy = q.y; }
       }
       let nx = drag.startX + ddx;
       let ny = drag.startY + ddy;
@@ -674,11 +700,12 @@ window.FM = window.FM || {};
       // the border being dragged (worked out at grab time, above — it is 0.5 for the ordinary centred
       // case, which is the old "double it"). Not a keyframable transform — wrapWidth is layout, so it
       // is set directly and committed on pointer-up like any other one-shot edit.
-      const dx = p.x - drag.cx, dy = p.y - drag.cy;
-      const local = Math.abs(dx * Math.cos(drag.rad) + dy * Math.sin(drag.rad)) / (Math.abs(drag.sc) || 1);
+      const arm = handleArm(drag.pw, p, drag.cx, drag.cy);   // bughunt4 #1b: in the parent's space, so rad / sc are the layer's own
+      const local = Math.abs(arm.x * Math.cos(drag.rad) + arm.y * Math.sin(drag.rad)) / (Math.abs(drag.sc) || 1);
       L.wrapWidth = Math.max(20, Math.round(local / Math.abs(drag.k || 0.5)));
     } else if (drag.mode === 'scale') {
-      const s = Math.max(0.02, Math.round(drag.startScale * (Math.hypot(p.x - drag.cx, p.y - drag.cy) / drag.startDist) * 1000) / 1000);
+      const arm = handleArm(drag.pw, p, drag.cx, drag.cy);   // bughunt4 #1b: the arm's length in the parent's space
+      const s = Math.max(0.02, Math.round(drag.startScale * (Math.hypot(arm.x, arm.y) / drag.startDist) * 1000) / 1000);
       if (drag.pivot && !drag.pivot.sandwich) {
         // scale about the bounds centre C: members sit at G + s·m, so G' = C + (s/s0)·(G0 − C)
         // (queue 831: only when the RENDERER is not pivoting — see the note where `pivot` is built)
@@ -688,7 +715,8 @@ window.FM = window.FM || {};
       }
       FM.shiftTransform(L, 'scale', s, FM.time);
     } else if (drag.mode === 'rotate') {
-      const deg = drag.startRot + (Math.atan2(p.y - drag.cy, p.x - drag.cx) - drag.startAngle) * 180 / Math.PI;
+      const arm = handleArm(drag.pw, p, drag.cx, drag.cy);   // bughunt4 #1b: the angle in the parent's space — mirrored under a flip
+      const deg = drag.startRot + (Math.atan2(arm.y, arm.x) - drag.startAngle) * 180 / Math.PI;
       if (drag.pivot && !drag.pivot.sandwich) {
         // rotate about the bounds centre C: G' = C + R(Δ)·(G0 − C), so the visible box turns in place
         // (queue 831: only when the RENDERER is not pivoting — see the note where `pivot` is built)
@@ -844,25 +872,58 @@ window.FM = window.FM || {};
      * `g + P` — no rotation, no scale, nothing to undo. That is the whole calculation. */
     const gpiv = (layer.type === 'group' && FM.groupPivot) ? FM.groupPivot(layer, FM.scene, t) : null;
     let apx = cx + (gpiv ? gpiv.x : 0), apy = cy + (gpiv ? gpiv.y : 0);
+    let general = null;   // bughunt4 #1b: a parent that is no turn-and-scale (see below)
     if (layer.parent) {   // parented: the box must sit where the COMPOSITOR draws the layer (world), not at its raw local coords
       const w = parentXform(layer, t);
-      const c = Math.cos(w.rot), si = Math.sin(w.rot);
-      const wx = w.x + w.s * (c * cx - si * cy), wy = w.y + w.s * (si * cx + c * cy);
-      const ax2 = w.x + w.s * (c * apx - si * apy), ay2 = w.y + w.s * (si * apx + c * apy);
-      cx = wx; cy = wy; apx = ax2; apy = ay2; rot += w.rot * 180 / Math.PI; sc *= w.s;
+      const q = parentApply(w, cx, cy), qa = parentApply(w, apx, apy);
+      cx = q.x; cy = q.y; apx = qa.x; apy = qa.y;
+      if (w.sim || layer.type === 'group') { rot += w.rot * 180 / Math.PI; sc *= w.s; }
+      else general = w;
     }
     const s = layerSize(layer), ds = localScale();
     // Match the compositor's effective non-uniform scale + skew so the box and its corner handles hug
     // the rendered layer (was a uniform-scale, skew-less box that drifted off stretched/skewed layers). (#9,#12)
-    const scX = sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1);
-    const scY = sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1);
-    const skX = tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0;
-    const skY = tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0;
+    let scX = sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1);
+    let scY = sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1);
+    let skX = tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0;
+    let skY = tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0;
+    let ax = (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5;
+    let ay = (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5;
+    /* ═══ bughunt4 #1b — A MEMBER OF A FLIPPED, STRETCHED OR SKEWED GROUP IS BOXED WHERE IT IS DRAWN ═══════════════════════
+     * Under a parent that only turns and scales, the box is the layer's own turn + the parent's, its own scale × the parent's,
+     * its own skew — the lines above, unchanged. A flip, an unlinked Width / Height or a skew on a parent (bughunt4 #1 made
+     * them reach the members) is none of those: the box is then the parents' linear part times the layer's own R·S·K, and
+     * that whole map is written back in the box's own vocabulary — a turn, a width and a height, an X skew — by the QR
+     * split M = R(θ)·[[sx, sx·tan k], [0, sy]] (first column → θ and sx; the rest → sx·tan k and sy), which is exactly
+     * what update() and the 921 S0 outline rebuild (rotate, then the shear on the scaled box). A map with a mirror in it
+     * (det < 0) is split as M·Fx, Fx the x-mirror: the box is the same rectangle reflected about its anchor, so the anchor
+     * fraction and the text-alignment shift go to the other side (ax → 1 − ax, shift → −shift) and a pure ⋯ → Flip
+     * Horizontally comes out as no turn at all, rotate knob on top. Groups keep their own box (FM.groupBounds), as before. */
+    let mirrored = false;
+    if (general) {
+      const g = general, r = rot * Math.PI / 180, cr = Math.cos(r), sr = Math.sin(r);
+      const tX = Math.tan(skX * Math.PI / 180), tY = Math.tan(skY * Math.PI / 180);
+      // the layer's own R·S·K …
+      const o11 = cr * scX - sr * scY * tY, o12 = cr * scX * tX - sr * scY;
+      const o21 = sr * scX + cr * scY * tY, o22 = sr * scX * tX + cr * scY;
+      // … under the parents' linear part
+      let m11 = g.a * o11 + g.c * o21, m21 = g.b * o11 + g.d * o21;
+      const m12 = g.a * o12 + g.c * o22, m22 = g.b * o12 + g.d * o22;
+      if (m11 * m22 - m12 * m21 < 0) { mirrored = true; m11 = -m11; m21 = -m21; ax = 1 - ax; }
+      const ux = Math.hypot(m11, m21);
+      if (ux > 1e-9) {
+        rot = Math.atan2(m21, m11) * 180 / Math.PI;
+        scX = ux; scY = (m11 * m22 - m12 * m21) / ux;
+        skX = Math.atan((m11 * m12 + m21 * m22) / (ux * ux)) * 180 / Math.PI; skY = 0;
+      } else {
+        // the layer's own x axis squashed to nothing: no shape to split, so the old turn-and-scale box
+        if (mirrored) { mirrored = false; ax = 1 - ax; }
+        rot += g.rot * 180 / Math.PI; scX *= g.s; scY *= g.s;
+      }
+    }
     // GROUPS: box hugs the members' world bounds (bounds already include the group's own offset/scale)
     // instead of a meaningless 100px square at the group's 0,0 origin. Centre-anchored by construction.
     let bw = s.w * scX * ds, bh = s.h * scY * ds, bcx = cx, bcy = cy;
-    let ax = (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5;
-    let ay = (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5;
     if (layer.type === 'group' && FM.groupBounds) {
       const gb = FM.groupBounds(layer, FM.scene, t);
       if (gb) { bw = gb.w * ds; bh = gb.h * ds; bcx = gb.x; bcy = gb.y; ax = 0.5; ay = 0.5; }
@@ -883,7 +944,8 @@ window.FM = window.FM || {};
       wrapLocal: true,
       cx: bcx * ds, cy: bcy * ds, w: bw, h: bh, ax: ax, ay: ay,
       rot: rot, skewX: skX, skewY: skY, scaleX: scX, scaleY: scY,
-      shift: alignShift(layer, bw),
+      /* bughunt4 #1b: a mirrored box takes the shift to the other side */
+      shift: (mirrored ? -1 : 1) * alignShift(layer, bw),
       anchorX: apx * ds, anchorY: apy * ds, hasPivot: !!gpiv,
     };
   }

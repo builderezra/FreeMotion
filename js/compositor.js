@@ -3913,11 +3913,12 @@ window.FM = window.FM || {};
       // keyframe path (the standard null-drives-a-rig setup silently detached). behaviorValue is a
       // cheap pass-through for layers without behaviors, so the no-behaviors chain is unchanged.
       const bv = FM.behaviorValue;
-      const px = bv ? bv(pl, 'x', FM.evalProp(ptr.x, t), t) : FM.evalProp(ptr.x, t);
-      const py = bv ? bv(pl, 'y', FM.evalProp(ptr.y, t), t) : FM.evalProp(ptr.y, t);
-      ctx.translate(px, py);
+      let px = bv ? bv(pl, 'x', FM.evalProp(ptr.x, t), t) : FM.evalProp(ptr.x, t);
+      let py = bv ? bv(pl, 'y', FM.evalProp(ptr.y, t), t) : FM.evalProp(ptr.y, t);
       const prot = (bv ? bv(pl, 'rotation', FM.evalProp(ptr.rotation, t), t) : FM.evalProp(ptr.rotation, t)) * Math.PI / 180;
       const ps = bv ? bv(pl, 'scale', FM.evalProp(ptr.scale, t), t) : FM.evalProp(ptr.scale, t);
+      // bughunt4 #1: the rest of what this parent passes on (flip, unlinked W/H, skew, depth, its own link mode); null = none of it
+      const ex = chainExtras(pl, ptr, t, accumRot, scene, ctx);
       /* ═══ A GROUP ROTATES AND SCALES ABOUT ITS ANCHOR, NOT ABOUT THE ORIGIN (queue 630) ═══════════
        * Ezra: *"when I try and zoom groups in they just zoom into the corners and not the middle and
        * I can't find where the anchor even is."*
@@ -3932,15 +3933,97 @@ window.FM = window.FM || {};
        * measurement cost is not paid on every child of every group on every frame.
        * ⚠️ `groupPivot` returns null for an empty group or a non-group, and then this behaves exactly
        * as it always did — a null parent must never move anything. */
-      const needsPivot = (prot !== 0 || ps !== 1) && pl.type === 'group';
+      const needsPivot = (prot !== 0 || ps !== 1 || ex !== null) && pl.type === 'group';
       const piv = needsPivot && FM.groupPivot ? FM.groupPivot(pl, scene, t) : null;
+      // bughunt4 #1: an UNPARENTED parent's depth is the planar perspective an unparented layer's own Z is (applyLayerTransform)
+      if (ex && ex.pz !== 1 && !pl.parent) {
+        const vx = (ex.P.width || 0) / 2, vy = (ex.P.height || 0) / 2;
+        const ax = px + (piv ? piv.x : 0), ay = py + (piv ? piv.y : 0);
+        px += (vx + (ax - vx) * ex.pz) - ax;
+        py += (vy + (ay - vy) * ex.pz) - ay;
+        if (_camParallax) {
+          const camZ = _camParallax.z || 0;
+          const pDepth = camZ ? ex.F / Math.max(ex.F * 0.05, ex.F + ex.zz - camZ) : ex.pz;
+          const pf = 1 - pDepth;
+          if (isFinite(pf)) {
+            if (isFinite(_camParallax.x)) px += _camParallax.x * pf;
+            if (isFinite(_camParallax.y)) py += _camParallax.y * pf;
+          }
+        }
+      }
+      ctx.translate(px, py);
       if (piv) ctx.translate(piv.x, piv.y);
+      // bughunt4 #1: this parent's OWN link mode, exactly as applyParentRotMode applies it when the parent draws itself
+      if (ex && ex.turn) { ctx.rotate(ex.turn); accumRot += ex.turn; }
       if (prot) ctx.rotate(prot);
       accumRot += prot;
-      if (ps !== 1) { const cps = Math.max(0.001, ps); ctx.scale(cps, cps); }   // clamp like the layer's own scale — an overshoot ease through 0/negative flipped every child for a frame
+      if (ex) {
+        // the single layer's order after its turn: non-uniform scale (× depth), skew, then the mirror
+        const csx = Math.max(0.001, ps * ex.sx * ex.pz), csy = Math.max(0.001, ps * ex.sy * ex.pz);
+        if (csx !== 1 || csy !== 1) ctx.scale(csx, csy);
+        if (ex.kx || ex.ky) ctx.transform(1, Math.tan(ex.ky * Math.PI / 180), Math.tan(ex.kx * Math.PI / 180), 1, 0, 0);
+        if (ex.fh || ex.fv) ctx.scale(ex.fh ? -1 : 1, ex.fv ? -1 : 1);
+      } else if (ps !== 1) { const cps = Math.max(0.001, ps); ctx.scale(cps, cps); }   // clamp like the layer's own scale — an overshoot ease through 0/negative flipped every child for a frame
       if (piv) ctx.translate(-piv.x, -piv.y);
     }
     return accumRot;
+  }
+  /* ═══ bughunt4 #1 — A GROUP'S FLIP, WIDTH / HEIGHT, SKEW, TILT AND DEPTH REACH ITS MEMBERS ═══════════════════════════════════
+   * What was wrong. applyParentChain passed on only four channels of each parent: x, y, the turn and the uniform scale. Every
+   * other channel a layer has (flipH / flipV, the unlinked scaleX / scaleY, skewX / skewY, z, rotationX / rotationY) was read only
+   * when that layer drew ITSELF (applyLayerTransform, the tilt plate). A group draws nothing itself (drawLayer returns for it) and
+   * a styled group's '_flat' proxy is built with a fresh, static transform, so on a group — and on a Controller (null) driving a
+   * rig — ⋯ → Flip, unlinked Width / Height, Skew, X / Y tilt and Depth were all offered and all changed nothing, in the preview
+   * and in the export. The chain also never applied a parent's OWN link mode: a grandchild under a 'locked' middle layer still
+   * turned with the grandparent while the middle layer itself stayed upright.
+   * The model now (the PM's decision, 19 Oct: make them reach the members, do not hide them): a group behaves like a layer whose
+   * content is its members, its anchor being its pivot (FM.groupPivot).
+   *   · 2D — each parent composes as the FULL affine a single layer applies to itself, in the same order: position → its own
+   *     link mode → turn → non-uniform scale (× depth) → skew → mirror, a group's about its pivot (the #630 sandwich), a null's
+   *     about its own origin, as before. A parent with none of these extras (chainExtras returns null) takes the old path,
+   *     call for call, so an untouched group, and one with only x / y / turn / uniform scale, draws exactly as it did.
+   *   · DEPTH (z) is not 3D here: a single layer's Z is a planar perspective, i.e. 2D. An unparented parent's depth scales its
+   *     whole flat picture about the frame's centre and takes the camera's parallax, exactly as an unparented layer's own Z;
+   *     a parented one's is a scale about its own anchor, as a parented layer's. (The camera's focus blur and fog still read
+   *     each member's own depth, not the group's.)
+   *   · X / Y TILT cannot be put on each member: it is a plate leant in 3D. A group with a tilt (or a keyframed one) is
+   *     composited as ONE unit and its flat picture is leant exactly as a single tilted layer's plate (groupTilts,
+   *     collectGroupUnits, buildGroupUnit → draw3DTiltLayer). A Controller (null) has no plate, so its tilt still does nothing.
+   *   · LINK MODE — each parent's own 'locked' / 'weighted' keeps only part of what IT inherits, about its anchor, and the turn
+   *     handed down is that net turn, so a 'locked' child of it stays upright in the world (applyParentRotMode, unchanged).
+   * Preview and export share this: every render path is FM.renderScene → drawLayer → applyLayerTransform → here, and the
+   * renderer's matrix (FM._layerCTM: motion blur, Edit Points, planParentBake's frames) follows by construction. FM.groupBounds
+   * (the group's own selection box) takes the 2D extras; and since bughunt4 #1b the editor's own maths for a member (canvas-edit's
+   * parentXform: its box, its tap test, its drag and its handles; inspector's padFrame) reads this very chain through
+   * FM.parentChainMatrix instead of walking a copy of the old one. */
+  function chainExtras(pl, ptr, t, accumRot, scene, ctx) {
+    const sx = ptr.scaleX != null ? FM.evalProp(ptr.scaleX, t) : 1;
+    const sy = ptr.scaleY != null ? FM.evalProp(ptr.scaleY, t) : 1;
+    const kx = ptr.skewX != null ? FM.evalProp(ptr.skewX, t) : 0;
+    const ky = ptr.skewY != null ? FM.evalProp(ptr.skewY, t) : 0;
+    const zz = ptr.z != null ? FM.evalProp(ptr.z, t) : 0;
+    const fh = !!pl.flipH, fv = !!pl.flipV;
+    let turn = 0;
+    if (pl.parent && accumRot) {
+      const mode = pl.parentMode || 'normal';
+      if (mode !== 'normal') {
+        const wt = mode === 'weighted' ? clamp01(pl.parentWeight != null ? pl.parentWeight : 0.5) : 0;
+        turn = -accumRot * (1 - wt);
+      }
+    }
+    if (sx === 1 && sy === 1 && !kx && !ky && !zz && !fh && !fv && !turn) return null;
+    let pz = 1, F = 0, P = null;
+    if (zz) {
+      P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+      F = (_camLens && _camLens.F) || Math.max(1, (P.height || 1080) * 2);
+      pz = F / Math.max(F * 0.05, F + zz);
+    }
+    return { sx: sx, sy: sy, kx: kx, ky: ky, zz: zz, pz: pz, F: F, P: P, fh: fh, fv: fv, turn: turn };
+  }
+  /* A group whose X / Y tilt is on (or keyframed, so the route does not switch as it passes 0°) is composited as one unit. */
+  function groupTilts(g, t) {
+    const tr = g.transform;
+    return !!tr && (!!tilt3D(g, t) || !!isAnimatedProp(tr.rotationX) || !!isAnimatedProp(tr.rotationY));
   }
   // AM parenting rotation modes: 'locked' keeps the child world-upright while it still orbits the
   // parent; 'weighted' keeps a fraction of the parent's rotation. Call after translate(x,y), before
@@ -20799,6 +20882,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return c.getTransform();
   }
   FM._layerCTM = layerCTM;   // exposed for the motion-blur tests
+  /* ═══ bughunt4 #1b — THE PARENT CHAIN AS THE ONE MATRIX THE RENDERER DRAWS IT WITH, FOR THE EDITOR ═══════════════════════
+   * bughunt4 #1 (cedde93f) made applyParentChain compose each parent as the full affine a single layer applies: its flip, its
+   * unlinked Width / Height, its skew, its depth and its own link mode, a group's about its pivot. The editor's maths kept a
+   * copy of the OLD walk, turn and uniform scale only (canvas-edit parentXform: a member's selection box, the tap test, the
+   * drag and the handles; inspector padFrame: the trackpad's frame snap). So under a flipped, stretched or skewed group a
+   * member was boxed and tapped where it is not drawn, and a drag to the right moved it left.
+   * This hands them the renderer's own chain rather than a second copy of it: applyParentChain run from identity into the
+   * probe layerCTM uses, so it is whatever the renderer composes, by construction, now and after the next term it gains.
+   * Returns null for an unparented layer (its parent space IS the plate) or where the canvas has no getTransform.
+   *   a, b, c, d, e, f   parent space → plate (project) px: x' = a·x + c·y + e, y' = b·x + d·y + f (the canvas convention)
+   *   rot                the net turn the chain hands down, in radians and unwrapped (the sum applyParentChain returns) */
+  FM.parentChainMatrix = function (layer, t, scene) {
+    if (!_CTM_OK || !layer || !layer.parent) return null;
+    if (!_ctmProbe) { _ctmProbe = document.createElement('canvas'); _ctmProbe.width = _ctmProbe.height = 1; }
+    const c = _ctmProbe.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    let rot = 0;
+    try { rot = applyParentChain(c, layer, t, scene || FM.scene); } catch (e) { return null; }
+    const M = c.getTransform();
+    return { a: M.a, b: M.b, c: M.c, d: M.d, e: M.e, f: M.f, rot: rot || 0 };
+  };
   /* FM.layerSize answers for the PLAYHEAD: a cropped clip's frame is its crop at FM.time, which is right for the
      selection box and wrong for a render at any other t. The exporter renders frame t without moving FM.time, so
      anything that sizes a clip while RENDERING asks here instead — the crop at the frame being drawn, the rule
@@ -27661,12 +27765,48 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const M = adjFilterPlate(ctx, layer, t, scene, own, 0);
+    adjBlit(ctx, layer, M, opacity, 'none');   // bughunt4 #4: at the layer's opacity AND with its blend mode
+  }
+  /* ═══ bughunt4 #4 — AN ADJUSTMENT LAYER'S BLEND MODE ════════════════════════════════════════════════════════════════════
+   * The Mixing card offers an adjustment layer every blend mode, but both blits of its graded plate (applyAdjustment's and the
+   * cross-fade's above) were hard-wired to source-over: Multiply, Screen, Soft Light… drew the plain grade at its opacity. Now the
+   * plate is blended onto the UNGRADED frame below with the layer's mode (After Effects' rule; opacity already mixed it so):
+   *   · a mode Canvas has — BLEND, the map every ordinary layer's blit reads — is the blit's composite op, same alpha and filter;
+   *   · a per-pixel mode (FM.BLEND_MANUAL, js/blend-modes.js) goes drawManualBlendLayer's way: the plate is laid on a clear
+   *     scratch at the opacity (baked into its alpha, as the blender expects) with the CSS filter, blended per pixel against the
+   *     frame below read back from the target, and written straight back; a tainted frame falls back to the plain blit, as there;
+   *   · Stencil and Punch Out (mask-include / mask-exclude) are not blends, and on a full-frame plate would keep or cut the whole
+   *     frame: they keep today's behaviour, the plain grade (source-over) at the layer's opacity.
+   * Normal, and an absent or unknown mode, is the old blit byte for byte. */
+  let _adjBlendCv = null;
+  function adjBlit(ctx, layer, src, opacity, css) {
+    const mode = layer && layer.blendMode;
+    const nat = typeof BLEND[mode] === 'string' ? BLEND[mode] : 'source-over';
+    const op = (nat === 'destination-in' || nat === 'destination-out') ? 'source-over' : nat;
+    if (mode && FM.BLEND_MANUAL && FM.BLEND_MANUAL[mode]) {
+      const cw = ctx.canvas.width, ch = ctx.canvas.height;
+      if (!_adjBlendCv) _adjBlendCv = document.createElement('canvas');
+      if (_adjBlendCv.width !== cw || _adjBlendCv.height !== ch) { _adjBlendCv.width = cw; _adjBlendCv.height = ch; }
+      const s = _adjBlendCv.getContext('2d', { willReadFrequently: true });
+      s.setTransform(1, 0, 0, 1, 0, 0); s.globalCompositeOperation = 'source-over'; s.globalAlpha = 1; s.filter = 'none';
+      s.clearRect(0, 0, cw, ch);
+      s.globalAlpha = opacity; s.filter = css;
+      s.drawImage(src, 0, 0);
+      s.globalAlpha = 1; s.filter = 'none';
+      let bd = null, sd = null;
+      try { bd = ctx.getImageData(0, 0, cw, ch); sd = s.getImageData(0, 0, cw, ch); } catch (e) { bd = null; }
+      if (bd && sd) {
+        FM.BLEND_MANUAL[mode](bd.data, sd.data, cw, ch);
+        ctx.putImageData(bd, 0, 0);   // ignores transform, alpha and composite op: the blend did all of that
+        return;
+      }
+    }
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);             // the plate is already on the target's pixel grid
     ctx.globalAlpha = opacity;
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.filter = 'none';
-    ctx.drawImage(M, 0, 0);
+    ctx.globalCompositeOperation = op;
+    ctx.filter = css;
+    ctx.drawImage(src, 0, 0);                       // (optionally CSS-filtered) graded snapshot, by opacity and blend mode
     ctx.restore();
   }
   /* The adjustment grade's CSS half through the shader (#986 batch 2) — see the call in applyAdjustment. The same op
@@ -27874,13 +28014,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       m.filter = 'none';
       return;
     }
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);             // the plate is already on the target's pixel grid
-    ctx.globalAlpha = opacity;
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.filter = css;
-    ctx.drawImage(src, 0, 0);                       // (optionally CSS-filtered) graded snapshot, blended by opacity
-    ctx.restore();
+    adjBlit(ctx, layer, src, opacity, css);         // bughunt4 #4: the graded snapshot, by opacity AND the layer's blend mode
   }
   // When a camera layer is active, the whole scene is drawn to this offscreen first, then composited
   // onto the real canvas through the camera's (inverse) transform — so EVERY layer, including
@@ -28021,7 +28155,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // ---- group units: a group with anything VISUAL of its own (masking, effects, opacity, blend,
   // shadow) is composited as ONE flattened unit, so all 152 effects / blending / presets act on the
   // group exactly like on a single layer. Plain transform-only groups keep the cheap per-member path.
-  function groupNeedsUnit(g, t) {
+  // (bughunt4 #2: a group whose ONLY look is its opacity is still a unit, but one whose members read the frame below
+  // goes pass-through — drawPassUnit. groupOwnLook is the rest of the list; groupNeedsUnit answers exactly as before.)
+  function groupOwnLook(g) {
     if (g.maskGroup) return true;
     if (g.fillMode && g.fillMode !== 'none') return true;   // fill recolours the flattened silhouette
     if (g.effects && g.effects.some(e => e.enabled !== false)) return true;
@@ -28030,6 +28166,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (g.stroke && g.stroke.enabled && (FM.isAnimated(g.stroke.width) || (g.stroke.width || 0) > 0)) return true;   // border around the silhouette
     const cg = g.colorGrade;
     if (cg && ((cg.hue || 0) !== 0 || (cg.sat != null && Math.abs(cg.sat - 1) > 1e-3) || (cg.lift || 0) !== 0 || (cg.gamma != null && Math.abs(cg.gamma - 1) > 1e-3) || (cg.gain != null && Math.abs(cg.gain - 1) > 1e-3))) return true;
+    return false;
+  }
+  function groupNeedsUnit(g, t) {
+    if (groupOwnLook(g)) return true;
     const op = g.transform ? FM.evalProp(g.transform.opacity, t) : 1;
     if (op < 0.999 || (FM.isAnimated && FM.isAnimated(g.transform && g.transform.opacity))) return true;
     return false;
@@ -28041,7 +28181,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let map = null;
     const units = [];
     for (const g of scene.layers) {
-      if (g.type !== 'group' || !g.visible || !groupNeedsUnit(g, t)) continue;
+      // bughunt4 #1: a tilted group is a unit too, so its flat picture can be leant (the exported unit test the other editor reads is unchanged)
+      const tilts = g.type === 'group' && groupTilts(g, t);
+      if (g.type !== 'group' || !g.visible || !(tilts || groupNeedsUnit(g, t))) continue;
       const members = [];
       const seen = new Set();
       (function walk(gid) {
@@ -28055,7 +28197,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         scene.layers.forEach(l => { if (l.parent === gid) { members.push(l); if (l.type === 'group') walk(l.id); } });
       })(g.id);
       const drawable = members.filter(l => l.type !== 'group' && l.type !== 'camera' && l.type !== 'adjustment' && l.type !== 'null');
-      if (!drawable.length) continue;
+      // bughunt4 #2: opacity is the group's only look and a member reads the frame below → pass-through (drawPassUnit).
+      // Such a unit may hold nothing but adjustment layers: their grade is what the group's opacity fades.
+      // bughunt4 #1: a tilted group needs its isolated plate to lean, so it never passes through
+      const pass = !tilts && !groupOwnLook(g) && members.some(readsBelow);
+      if (!drawable.length && !(pass && members.some(l => l.type === 'adjustment'))) continue;
       // masking needs a mask + at least one clipped member; effects-only units work from 1 member
       let maskId = null, maskLin = null;
       if (g.maskGroup && drawable.length >= 2) {
@@ -28071,7 +28217,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const lin = mask.splitOf || null;
         if (!lin || drawable.some(l => l.splitOf !== lin)) { maskId = mask.id; maskLin = lin; }
       }
-      units.push({ group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, maskLin: maskLin, drawn: false, depth: 0 });
+      units.push({ group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, maskLin: maskLin, drawn: false, depth: 0, pass: pass });
     }
     if (!units.length) return null;
     /* NESTING. A group inside another group is a unit in its own right, and both of them own the same
@@ -28237,6 +28383,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (g.colorGrade && gFill === 'none') tmp.colorGrade = g.colorGrade;   // grade never shifts a picked fill colour
     tmp.transform.anchorX = 0; tmp.transform.anchorY = 0;
     tmp.transform.opacity = (g.transform && g.transform.opacity != null) ? g.transform.opacity : 1;
+    /* bughunt4 #1: the group's X / Y tilt leans this flat picture, exactly as a single tilted layer's plate is leant (drawLayer →
+       draw3DTiltLayer). Only the tilt: the 2D channels and the depth already reached the members through applyParentChain. */
+    if (g.transform && g.transform.rotationX != null) tmp.transform.rotationX = g.transform.rotationX;
+    if (g.transform && g.transform.rotationY != null) tmp.transform.rotationY = g.transform.rotationY;
     return tmp;
   }
   /* Suite seam: what the two target-scaled plates actually got allocated at. There is no other way to
@@ -28249,7 +28399,112 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     };
   };
   function drawGroupUnit(ctx, u, t, scene) {
+    if (u.pass) { drawPassUnit(ctx, u, t, scene); return; }   // bughunt4 #2: an opacity-only group, see below
     drawLayer(ctx, buildGroupUnit(ctx, u, t, scene), t, scene);
+  }
+
+  /* ═══ bughunt4 #2 — A GROUP'S OPACITY NO LONGER CHANGES HOW ITS MEMBERS BLEND ════════════════════════════════════════════
+   * What was wrong. A plain group draws its members straight onto the frame (renderScene's loop), so a member set to Screen,
+   * Multiply or any other blend mixes with EVERYTHING below it, an adjustment member grades the whole frame below it, and a
+   * Stencil / Punch Out member (mask-include / mask-exclude) cuts the whole frame. The moment the group had any look of its
+   * own — opacity 99 %, an opacity fade, an effect — groupNeedsUnit made it a unit and buildGroupUnit drew those very members
+   * onto a CLEARED plate, so they blended with, graded and cut nothing but the group's own lower members. Nudging a group from
+   * 100 % to 99 %, or giving it a fade-in, changed the picture completely: a Screen light leak in a faded group screened
+   * against nothing and its dark parts came out as a black box over the footage, in the preview and in the export.
+   * The model now (the PM's decision, 19 Oct, under his rule that a control doing the wrong thing is a bug):
+   *   · OPACITY IS THE GROUP'S ONLY LOOK (a value, a fade, any opacity keyframes; no effect, blend, fill, shadow, border,
+   *     grade or mask) → PASS-THROUGH, then the opacity as a mix. The members are drawn exactly as a plain group draws them,
+   *     onto a COPY of the frame as it stands below the group, and that copy is laid over the frame with the group's opacity:
+   *     result = lerp(below, below-with-the-members, opacity), done premultiplied (destination-out by the opacity, then the
+   *     copy added at the opacity), so a member's cut is faded too. At opacity 1 the result IS the copy — the plain group's
+   *     picture — and at 0.99 it is within 1 % of it.
+   *     When no member reads the frame below (no blend mode, no adjustment member, no Copy Background / Light Wrap /
+   *     Magnify Background) the two routes are the same picture — (members over below) mixed at a, with every member
+   *     source-over, is exactly (members at a) over below — so such a group keeps today's plate, byte for byte, and costs
+   *     no extra full-frame copy. Only a group that holds a reader takes this route (u.pass, collectGroupUnits).
+   *   · AN EFFECT OR A BLEND MODE ON THE GROUP ITSELF (and a fill, shadow, border or grade) → the ISOLATED plate, exactly as
+   *     before: an effect must not blur or tint the footage outside the group, and a group's blend mode means "blend this
+   *     group's picture" with what is below it. Those groups were units at 100 % too, so their members never switched.
+   *   · A MASKING GROUP (maskGroup) → the ISOLATED plate, exactly as before. Its mask means "show the group only inside the
+   *     mask", and only an isolated plate holds just the group to cut: a copy of the frame holds the footage too, and the
+   *     mask would cut that. A masking group was a unit at every opacity, so it never switched either.
+   * The frame below is the canvas the unit is drawn INTO: renderScene's target at the top level, and inside another unit that
+   * unit's plate (an isolated parent) or its copy (a pass-through parent), so a nested group passes through to what is below
+   * it within its parent — exactly what a plain group nested there sees. The copy is one more canvas per nesting depth in
+   * _mgPool (C beside A and B), on the target's own pixel grid with its stamps, so every member pass sizes its plates as it
+   * would on the frame. Two units at the same depth are never alive at once (collectGroupUnits), and a nested unit is one
+   * depth deeper, so no copy is ever drawn into while it is being read — the mistake bughunt4 #12 is about.
+   * Preview and export share this: every render path is FM.renderScene, and the group route is decided here, not by caller. */
+  function readsBelow(l) {
+    if (!l || l.visible === false || l.type === 'camera' || l.type === 'null') return false;
+    if (l.type === 'adjustment') return true;                       // grades the frame below it
+    if (l.blendMode && l.blendMode !== 'normal') return true;       // a blend, or a Stencil / Punch Out cut
+    return !!(FM.needsBgSnap && FM.needsBgSnap(l));                 // Copy Background / Light Wrap / Magnify Background
+  }
+  /* The backdrop-so-far for a layer that reads it (Copy Background / Light Wrap), on the target's pixel grid. renderScene's loop
+     and the pass-through unit both take it here, so the member of a faded group reads the same backdrop as a plain one. */
+  function snapBackdrop(target, L) {
+    if (!L._bgSnap || typeof L._bgSnap.getContext !== 'function') L._bgSnap = document.createElement('canvas');
+    const _tw = target.canvas.width, _th = target.canvas.height;   // match the TARGET's pixels (may be supersampled), else the snapshot is a downscale
+    if (L._bgSnap.width !== _tw || L._bgSnap.height !== _th) { L._bgSnap.width = _tw; L._bgSnap.height = _th; }
+    const bs = L._bgSnap.getContext('2d');
+    bs.setTransform(1, 0, 0, 1, 0, 0); bs.clearRect(0, 0, _tw, _th);
+    try { bs.drawImage(target.canvas, 0, 0); } catch (e) {}
+    // …and where in the scene it came from, for a reader whose plate covers somewhere else (snapRegionDiffers)
+    L._bgSnap.__fmRS = target.canvas.__fmRS || 1; L._bgSnap.__fmOX = target.canvas.__fmOX || 0; L._bgSnap.__fmOY = target.canvas.__fmOY || 0;
+    L._bgSnap.__fmCamExt = !!target.canvas.__fmCamExt;
+  }
+  function drawPassUnit(ctx, u, t, scene) {
+    const g = u.group;
+    // the very number the '_flat' proxy carried (FM.layerOpacity of a layer with no behaviors); a NaN drew at full there too
+    const op0 = clamp01(g.transform ? FM.evalProp(g.transform.opacity, t) : 1);
+    const op = isFinite(op0) ? op0 : 1;
+    if (op <= 0) return;                   // lerp(below, anything, 0) is the frame below, untouched
+    const _d = u.depth || 0;
+    if (!_mgPool[_d]) _mgPool[_d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+    if (!_mgPool[_d].C) _mgPool[_d].C = document.createElement('canvas');
+    const C = _mgPool[_d].C, src = ctx.canvas, W = src.width, H = src.height;
+    if (C.width !== W || C.height !== H) { C.width = W; C.height = H; }
+    // the frame's own grid and stamps: baseT and every member pass (nestedPlate, plateScale) read the copy as they read the frame
+    C.__fmRS = src.__fmRS; C.__fmOX = src.__fmOX; C.__fmOY = src.__fmOY; C.__fmCamExt = src.__fmCamExt;
+    const c = C.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.filter = 'none';
+    c.clearRect(0, 0, W, H);
+    try { c.drawImage(src, 0, 0); } catch (e) {}   // the frame below the group, pixel for pixel
+    baseT(c);
+    /* A cut on the scene's own frame puts the project background back under it (relayBackground). Drawn onto the copy of
+       that frame, the member's cut must do the same, or the background would turn transparent there. */
+    const rw = _bgRelay;
+    if (rw && rw.canvas === src) _bgRelay = Object.assign({}, rw, { canvas: C });
+    try {
+      const drawnHere = new Set();
+      for (let i = scene.layers.length - 1; i >= 0; i--) {   // members bottom→top, as buildGroupUnit walks them
+        const L = scene.layers[i];
+        if (!u.memberIds.has(L.id)) continue;
+        const own = u.childOwner && u.childOwner[L.id];
+        if (own && own !== u) {               // a nested unit goes down whole, at its bottom member's slot, onto THIS copy
+          if (!drawnHere.has(own.group.id)) { drawnHere.add(own.group.id); drawGroupUnit(c, own, t, scene); }
+          continue;
+        }
+        if (L.type === 'group') continue;     // a plain nested group rasterises nothing; its members are ours
+        if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(c, L, t, scene); continue; }
+        if (FM.needsBgSnap(L) && FM.isLayerVisibleAt(L, t)) snapBackdrop(c, L);
+        drawLayer(c, L, t, scene);
+      }
+    } finally {
+      _bgRelay = rw;
+    }
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);       // the copy is on the frame's own pixel grid
+    ctx.filter = 'none'; ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+    ctx.globalAlpha = op;
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);                 // below × (1 − opacity) …
+    ctx.globalCompositeOperation = 'lighter';
+    try { ctx.drawImage(C, 0, 0); } catch (e) {}   // … + below-with-the-members × opacity: the mix, premultiplied
+    ctx.restore();
   }
 
   /* ═══ THE CAMERA, AS ONE MAP THE EDITOR CAN ASK FOR (queue 690, third hunt) ═══════════════════════════════════
@@ -28612,17 +28867,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (unit) { if (!unit.drawn) { unit.drawn = true; drawGroupUnit(target, unit, t, scene); } continue; }
       if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(target, L, t, scene); }
       else {
-        if (FM.needsBgSnap(L) && FM.isLayerVisibleAt(L, t)) {   // grab the backdrop-so-far for Copy Background / Light Wrap
-          if (!L._bgSnap || typeof L._bgSnap.getContext !== 'function') L._bgSnap = document.createElement('canvas');
-          const _tw = target.canvas.width, _th = target.canvas.height;   // match the TARGET's pixels (may be supersampled), else the snapshot is a downscale
-          if (L._bgSnap.width !== _tw || L._bgSnap.height !== _th) { L._bgSnap.width = _tw; L._bgSnap.height = _th; }
-          const bs = L._bgSnap.getContext('2d');
-          bs.setTransform(1, 0, 0, 1, 0, 0); bs.clearRect(0, 0, _tw, _th);
-          try { bs.drawImage(target.canvas, 0, 0); } catch (e) {}
-          // …and where in the scene it came from, for a reader whose plate covers somewhere else (snapRegionDiffers)
-          L._bgSnap.__fmRS = target.canvas.__fmRS || 1; L._bgSnap.__fmOX = target.canvas.__fmOX || 0; L._bgSnap.__fmOY = target.canvas.__fmOY || 0;
-          L._bgSnap.__fmCamExt = !!target.canvas.__fmCamExt;
-        }
+        if (FM.needsBgSnap(L) && FM.isLayerVisibleAt(L, t)) snapBackdrop(target, L);   // grab the backdrop-so-far for Copy Background / Light Wrap
         drawLayer(target, L, t, scene);
       }
     }
@@ -29012,6 +29257,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const tr = group.transform || {}, anim = FM.isAnimated;
     if (Array.isArray(group.behaviors) && group.behaviors.some(b => b && b.enabled !== false && (b.prop === 'scale' || b.prop === 'rotation'))) return false;
     if (anim && (anim(tr.scale) || anim(tr.rotation))) return false;
+    /* bughunt4 #1: a mirror, an unlinked Width / Height, a skew, a depth or a link mode is drawn about the pivot too
+       (applyParentChain), so a group carrying one keeps its pivot as a place, exactly as a scaled or turned one does. */
+    if (group.flipH || group.flipV) return false;
+    if (group.parent && group.parentMode && group.parentMode !== 'normal') return false;
+    const off = (k, d) => tr[k] != null && (!!isAnimatedProp(tr[k]) || FM.evalProp(tr[k], 0) !== d);
+    if (off('scaleX', 1) || off('scaleY', 1) || off('skewX', 0) || off('skewY', 0) || off('z', 0)) return false;
     const sc = FM.evalProp(tr.scale, 0);
     return (sc == null || sc === 1) && !(FM.evalProp(tr.rotation, 0) || 0);
   }
@@ -29078,6 +29329,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // would slide about exactly the way the picture used to (queue 690, third hunt).
     const p = FM.groupPivot(group, scene, t) || pivotIn(group, b);
     const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+    /* bughunt4 #1: the renderer now mirrors, stretches and shears the members about the pivot too (applyParentChain), so the
+       box's centre goes through the same S·K·F about P and its size takes the stretch. The shear of the box itself is drawn
+       by canvas-edit's boxFor from the group's own skew, as for any layer. The turn stays out of the centre, as before, and
+       depth stays out, as it does for a single layer's box. None of these set: the old numbers, sum for sum. */
+    const gt = group.transform;
+    const sx = gt.scaleX != null ? FM.evalProp(gt.scaleX, t) : 1, sy = gt.scaleY != null ? FM.evalProp(gt.scaleY, t) : 1;
+    const kx = gt.skewX != null ? FM.evalProp(gt.skewX, t) : 0, ky = gt.skewY != null ? FM.evalProp(gt.skewY, t) : 0;
+    if (sx !== 1 || sy !== 1 || kx || ky || group.flipH || group.flipV) {
+      const dx = (cx - p.x) * (group.flipH ? -1 : 1), dy = (cy - p.y) * (group.flipV ? -1 : 1);
+      const tx = kx ? Math.tan(kx * Math.PI / 180) : 0, ty = ky ? Math.tan(ky * Math.PI / 180) : 0;
+      return { x: gx + p.x + (dx + tx * dy) * gs * sx, y: gy + p.y + (ty * dx + dy) * gs * sy, w: b.w * gs * sx, h: b.h * gs * sy };
+    }
     return { x: gx + p.x + (cx - p.x) * gs, y: gy + p.y + (cy - p.y) * gs, w: b.w * gs, h: b.h * gs };
   };
 

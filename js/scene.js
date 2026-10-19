@@ -333,8 +333,10 @@ window.FM = window.FM || {};
      canvas handles, the pinch and Move & Transform alike. At 100% and 0° it re-measures the members' middle
      (free — nothing on screen depends on it yet); otherwise it only makes sure one is stored, so nothing the
      group contains can drag it about afterwards. */
+  /* bughunt4 #1: an unlinked Width / Height, a skew and a depth are drawn about that point too now (compositor.js applyParentChain). */
+  const PIVOT_KEYS = ['scale', 'rotation', 'scaleX', 'scaleY', 'skewX', 'skewY', 'z'];
   function settlePivotBefore(layer, key, time) {
-    if (layer && layer.type === 'group' && (key === 'scale' || key === 'rotation') && FM.settleGroupPivot) FM.settleGroupPivot(layer, FM.scene, time);
+    if (layer && layer.type === 'group' && PIVOT_KEYS.indexOf(key) >= 0 && FM.settleGroupPivot) FM.settleGroupPivot(layer, FM.scene, time);
   }
   /* Set a transform value at the given time. If the prop is already keyframed, this
    * inserts/updates a keyframe at `time`; otherwise it sets the static value. */

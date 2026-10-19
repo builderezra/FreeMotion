@@ -5651,45 +5651,52 @@ window.FM = window.FM || {};
          The snap is judged, named and drawn in the frame, and written back through the inverse. A parent that is
          TURNED has no such per-axis map — a frame edge is a slanted line in its space — so, like the canvas drag,
          that layer gets no frame targets at all rather than wrong ones. Its own earlier keyframes are still
-         mapped the same way, so "put it back where it was" keeps working wherever the frame map exists. */
+         mapped the same way, so "put it back where it was" keeps working wherever the frame map exists.
+         bughunt4 #1b: the map is read off the parent chain's WHOLE matrix (canvas-edit's parentXform, which is the renderer's
+         FM.parentChainMatrix), one factor per axis: seen = a + sx·value across, a + sy·value down. A flipped parent is still such
+         a map (a negative factor) and so is a stretched one (two factors); before, both read as an untouched parent, so a
+         member of a flipped group had its targets judged on the wrong side of the frame. A turn or a skew mixes the axes — a
+         frame edge is a slanted line in the parent's space — and gets no frame targets, as a turned parent always has. */
       const padFrame = () => {
         const t = FM.time;
-        let ax = 0, ay = 0, s = 1;
+        let ax = 0, ay = 0, sx = 1, sy = 1;
         if (layer.parent) {
           const pt = FM.canvasEdit && FM.canvasEdit._parentXform ? FM.canvasEdit._parentXform(layer, t) : null;
-          const turned = !pt || Math.abs(Math.sin(pt.rot)) > 1e-6 || Math.cos(pt.rot) < 0 || !(pt.s > 1e-6);
+          const k = pt ? 1e-6 * Math.max(Math.abs(pt.a), Math.abs(pt.d)) : 0;
+          const turned = !pt || !(pt.a != null) || Math.abs(pt.b) > k || Math.abs(pt.c) > k || !(Math.abs(pt.a) > 1e-6) || !(Math.abs(pt.d) > 1e-6);
           if (turned) return null;
-          ax = pt.x; ay = pt.y; s = pt.s;
+          ax = pt.x; ay = pt.y; sx = pt.a; sy = pt.d;
         }
         if (layer.type === 'group' && FM.groupBounds) {
           const gb = FM.groupBounds(layer, FM.scene, t);   // in the group's PARENT space, the same space as its x/y
-          if (gb) { ax += s * (gb.x - mtEval(layer, 'x')); ay += s * (gb.y - mtEval(layer, 'y')); }
+          if (gb) { ax += sx * (gb.x - mtEval(layer, 'x')); ay += sy * (gb.y - mtEval(layer, 'y')); }
         }
-        return { ax: ax, ay: ay, s: s };
+        return { ax: ax, ay: ay, sx: sx, sy: sy };
       };
       const padTargets = (fr, axis) => {
         const P = FM.scene.project, out = axis === 'x' ? [P.width / 2, 0, P.width] : [P.height / 2, 0, P.height];
-        const p = layer.transform && layer.transform[axis], a = axis === 'x' ? fr.ax : fr.ay;
+        const p = layer.transform && layer.transform[axis], a = axis === 'x' ? fr.ax : fr.ay, s = axis === 'x' ? fr.sx : fr.sy;
         // this layer's own earlier keyframes, carried into the frame by the same map (de-duped, like FM.alignTargets)
-        if (p && p.kf) p.kf.forEach(k => { const w = a + fr.s * k.v; if (out.indexOf(w) < 0) out.push(w); });
+        if (p && p.kf) p.kf.forEach(k => { const w = a + s * k.v; if (out.indexOf(w) < 0) out.push(w); });
         return out;
       };
       let pd = null;
       pad.addEventListener('pointerdown', e => {
         const fr = padFrame();
         pd = { x: e.clientX, y: e.clientY, ix: mtEval(layer, 'x'), iy: mtEval(layer, 'y'),
-               fr: fr || { ax: 0, ay: 0, s: 1 },
+               fr: fr || { ax: 0, ay: 0, sx: 1, sy: 1 },
                tx: fr ? padTargets(fr, 'x') : [], ty: fr ? padTargets(fr, 'y') : [] };
         try { pad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault();
       });
       pad.addEventListener('pointermove', e => {
         if (!pd) return;
         if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; commitH(); return; }
-        const fr = pd.fr, thr = 9 * sens * fr.s;   // ~9 finger px of stickiness, expressed in FRAME units
+        // ~9 finger px of stickiness, expressed in FRAME units — per axis, since a stretched parent scales them apart (bughunt4 #1b)
+        const fr = pd.fr, thrX = 9 * sens * Math.abs(fr.sx), thrY = 9 * sens * Math.abs(fr.sy);
         const rx = pd.ix + (e.clientX - pd.x) * sens, ry = pd.iy + (e.clientY - pd.y) * sens;
         // judged where the layer is SEEN (see padFrame); hx/hy are frame positions — what the hint names and the guide draws
-        const hx = snapT(fr.ax + fr.s * rx, pd.tx, thr), hy = snapT(fr.ay + fr.s * ry, pd.ty, thr);
-        mtSet(layer, 'x', Math.round(hx == null ? rx : (hx - fr.ax) / fr.s)); mtSet(layer, 'y', Math.round(hy == null ? ry : (hy - fr.ay) / fr.s));
+        const hx = snapT(fr.ax + fr.sx * rx, pd.tx, thrX), hy = snapT(fr.ay + fr.sy * ry, pd.ty, thrY);
+        mtSet(layer, 'x', Math.round(hx == null ? rx : (hx - fr.ax) / fr.sx)); mtSet(layer, 'y', Math.round(hy == null ? ry : (hy - fr.ay) / fr.sy));
         showPadSnap(hx, hy);
         if (FM.showAlignGuide) FM.showAlignGuide(hx, hy);   // the line on the CANVAS — what did I line up with?
         refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update();

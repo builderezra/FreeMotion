@@ -163989,4 +163989,529 @@
   });
   // ── end bughunt 3 ──
 
+  // ── bughunt 4 (hunt/bh4-fix) ──
+  /* ═══ BUGHUNT 4 — defects a bug hunt found and a refuter confirmed (findings #2 and #1 here). WRITTEN WITHOUT RUNNING (code only,
+   * `node --check`, while a release shipped): every number is reasoned from the code it names, and each test says why it fails on
+   * the commit before it (#2: cce7f239, #1: dfc4f2b2). They use bughunt 2's helpers (_bh2With, _bh2Frame, _bh2Bar, _bh2MaxDiff);
+   * everything else is the suite's. ═══ */
+
+  /* (#2) A GROUP'S LOOK SWITCHED HOW ITS MEMBERS BLEND. Red footage fills the frame, (255, 0, 0). Above it a group holds one 100×100
+     grey (#808080) light leak set to Screen, centred at 160,120. Screen is 1 − (1 − a)(1 − b) per channel, so over red the leak reads
+     (255, 128, 128): red stays 255, green and blue become the grey's 128.
+     On cce7f239 a group at 100 % is plain: renderScene draws the leak straight onto the frame and it screens over the footage,
+     (255, 128, 128). At 99 % groupNeedsUnit makes the group a unit (op < 0.999), buildGroupUnit draws the leak onto a CLEARED plate
+     (Screen over nothing is the grey itself) and the '_flat' proxy lays that plate over red at 0.99: 0.99·128 + 0.01·255 → (129, 127,
+     127). Red falls by 126 levels for a 1 % change (A). An opacity keyframe makes it a unit for the whole clip, so mid-fade at 0.5 the
+     plate gives 0.5·128 + 0.5·255 = 191.5 in red where the frame below mixed half-way with the plain picture is 255 (B). Nested, two
+     99 % groups give 0.98·128 + 0.02·255 ≈ 130 in red (E).
+     Now a group whose only look is its opacity passes through and then mixes: lerp(below, the plain picture, opacity) — 255 in red at
+     every opacity, green and blue 128 × opacity (E: × 0.99 × 0.99).
+     CONTROLS: the plain group's pixel IS the Screen formula's and the footage outside the leak is red (D); the frame below the leak is
+     red; 100 %, 99 % and the fade really take different routes in groupNeedsUnit, and the fade really reads 0.5 at 1 s; a Blur ON the
+     group keeps the isolated plate, at 100 % and at 99 % (C): the leak screens over the group's own empty plate, so it is its grey,
+     about (128, 128, 128), and the blur leaves the footage outside the group red. */
+  test('bughunt4 #2 A group\'s opacity no longer changes how its members blend: a Screen light leak in a group at 99 %, mid-fade, or nested in another 99 % group screens over the footage below as it does at 100 %, mixed by the opacity (CONTROLS: the plain group’s pixel is the Screen formula’s; the opacities really take different routes; a Blur on the group keeps it isolated)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.groupNeedsUnit !== 'function' || typeof FM.evalProp !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.groupNeedsUnit / FM.evalProp are not reachable');
+    await _bh2With(async function () {
+      const IN = [160, 120], OUT = [20, 20], TOL = 3;
+      const grp = (name) => {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        return g;
+      };
+      /* The footage at the bottom, the group above it holding the leak; `nested` puts an inner group between the group and the leak. */
+      const build = (nested) => {
+        const foot = _bh2Bar('bh4 #2 footage', 160, 320, '#ff0000');
+        const G = grp('bh4 #2 group');
+        const leak = FM.makeLayer('shape', { name: 'bh4 #2 light leak', shape: 'rect', x: 160, y: 120, shapeW: 100, shapeH: 100, fill: '#808080', start: 0, duration: 4 });
+        leak.start = 0; leak.duration = 4; leak.blendMode = 'screen';
+        const inner = nested ? grp('bh4 #2 inner group') : null;
+        if (inner) { inner.parent = G.id; leak.parent = inner.id; FM.scene.layers = [G, inner, leak, foot]; }
+        else { leak.parent = G.id; FM.scene.layers = [G, leak, foot]; }
+        return { G: G, inner: inner, leak: leak };
+      };
+      const px = (t, p) => { const d = _bh2Frame(t).d, i = (p[1] * 320 + p[0]) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+      const off = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+      const say = p => '(' + p.map(v => (Math.round(v * 10) / 10)).join(', ') + ')';
+      const mix = (below, plain, k) => below.map((v, i) => v + (plain[i] - v) * k);
+
+      /* ── D (CONTROL): the plain group, and the frame below the leak. */
+      const s = build(false);
+      if (FM.groupNeedsUnit(s.G, 0.5)) throw new Error('CONTROL: a group at 100 % with no look of its own is already a unit, so there is no plain picture to compare with');
+      const plain = px(0.5, IN), plainOut = px(0.5, OUT);
+      if (off(plain, [255, 128, 128]) > 2) throw new Error('CONTROL: the plain group’s leak reads ' + say(plain) + ' where Screen of #808080 over red is (255, 128, 128) — the blend did not run, so nothing below can be trusted');
+      if (off(plainOut, [255, 0, 0]) > 2) throw new Error('CONTROL: the footage outside the leak reads ' + say(plainOut) + ', not red');
+      s.leak.visible = false;
+      const below = px(0.5, IN);
+      s.leak.visible = true;
+      if (off(below, [255, 0, 0]) > 2) throw new Error('CONTROL: with the leak hidden the frame below it reads ' + say(below) + ', not the red footage');
+
+      /* ── A: the same group at 99 %. */
+      s.G.transform.opacity = 0.99;
+      if (!FM.groupNeedsUnit(s.G, 0.5)) throw new Error('CONTROL: a group at 99 % is not a unit, so 100 % and 99 % take the same route and this case proves nothing');
+      const a99 = px(0.5, IN), a99Out = px(0.5, OUT);
+      if (off(a99, plain) > TOL) throw new Error('A: at 99 % opacity the light leak reads ' + say(a99) + ' where at 100 % it reads ' + say(plain) + ' (the mix at 0.99 is ' + say(mix(below, plain, 0.99)) + ') — a 1 % opacity change switched the leak from screening over the footage to screening over nothing, so it is drawn as its own grey');
+      if (off(a99Out, plainOut) > 2) throw new Error('A: at 99 % the footage outside the leak reads ' + say(a99Out) + ' where it is ' + say(plainOut) + ' at 100 % — the mix moved the frame below the group');
+
+      /* ── B: a fade-in, 0 → 1 over 0..2 s, read at 1 s (0.5). */
+      s.G.transform.opacity = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 1, e: 'linear' }] };
+      const k = FM.evalProp(s.G.transform.opacity, 1);
+      if (!(Math.abs(k - 0.5) < 1e-6)) throw new Error('CONTROL: the fade reads ' + k + ' at 1 s, not 0.5');
+      if (!FM.groupNeedsUnit(s.G, 1)) throw new Error('CONTROL: a group with an opacity fade is not a unit, so this case proves nothing');
+      const want = mix(below, plain, 0.5), b = px(1, IN);
+      if (off(b, want) > TOL) throw new Error('B: mid-fade (0.5) the light leak reads ' + say(b) + ' where the frame below mixed half-way with the plain picture is ' + say(want) + ' — the fade turned the group into its own plate, and the leak screens over nothing for the whole clip');
+
+      /* ── C (CONTROL): a Blur ON the group keeps the isolated plate, at 100 % and at 99 %. */
+      s.G.effects = [{ type: 'blur', enabled: true, params: { radius: 4 } }];
+      [1, 0.99].forEach(op => {
+        s.G.transform.opacity = op;
+        const c = px(0.5, IN), cOut = px(0.5, OUT);
+        if (off(c, [128, 128, 128]) > 6) throw new Error('CONTROL C: with a Blur on the group at ' + Math.round(op * 100) + ' % the leak reads ' + say(c) + ' where the isolated group (the leak screened over the group’s own empty plate: its grey) reads about (128, 128, 128) — an effect on the group must keep it isolated');
+        if (off(cOut, [255, 0, 0]) > 3) throw new Error('CONTROL C: with a Blur on the group at ' + Math.round(op * 100) + ' % the footage outside the group reads ' + say(cOut) + ', not red — the group’s effect reached the footage');
+      });
+      s.G.effects = [];
+
+      /* ── E: nested, the leak in a 99 % group inside another 99 % group. */
+      const n = build(true);
+      n.G.transform.opacity = 0.99; n.inner.transform.opacity = 0.99;
+      if (!FM.groupNeedsUnit(n.G, 0.5) || !FM.groupNeedsUnit(n.inner, 0.5)) throw new Error('CONTROL: the nested 99 % groups are not both units');
+      const wantN = mix(below, plain, 0.99 * 0.99), e = px(0.5, IN);
+      if (off(e, wantN) > TOL) throw new Error('E: nested in another 99 % group, the leak in a 99 % group reads ' + say(e) + ' where the frame below mixed with the plain picture at 0.99 × 0.99 is ' + say(wantN) + ' — the inner group did not pass through to the frame below it inside its parent');
+    });
+  });
+
+  /* (#1) A GROUP'S FLIP, WIDTH / HEIGHT, SKEW, TILT AND DEPTH DID NOTHING TO ITS MEMBERS. A group G at 0,0 holds a red 40 × 40 block
+     centred at 80,100 (columns 60..99, rows 80..119) and a white one at 240,140; the members' box is 60..260 × 80..160, so G's
+     pivot (anchor 0.5) is 160,120. On dfc4f2b2 applyParentChain passes on only G's x, y, turn and uniform scale: flipH / flipV,
+     scaleX / scaleY, skewX / skewY and z are read only by applyLayerTransform when a layer draws ITSELF, a group never does
+     (drawLayer returns for it), and X / Y tilt is read only by draw3DTiltLayer for the layer being drawn. So in A..E the red block
+     is drawn exactly where the untouched group draws it, 60..99 × 80..119, and in F the chain never reads N2's own link mode.
+     Now a group composes like a layer whose content is its members, about its pivot, in the single layer's order:
+       A  ⋯ → Flip Horizontally (FM.flipLayer): mirrored about x = 160 the red block is at 220..259, still on rows 80..119 (a
+          half-turn would have put it on 120..159).
+       B  unlinked Width 150 % (scaleX 1.5, scaleY 1): centre 160 + 1.5·(80 − 160) = 40, 60 wide: 10..69, the same rows, 2400 px;
+          and the group's own selection box (FM.groupBounds) is 300 wide, not 200.
+       C  X Skew 30°: x' = x + tan 30°·(y − 120). Row 85's first red column (red over half) is 40 (the edge at about 40.1) and row
+          115's is 57 (about 57.4): about 17 apart, tan 30°·30 = 17.3. On row 100 it is 49 (about 48.7), a shear about the pivot;
+          about the origin it would be past 110. The rows stay 80..119.
+       D  Y tilt 60° on a group holding only the red block draws as that block alone tilted 60°: the group is one unit and its flat
+          picture is leant by draw3DTiltLayer, the very plate a single tilted layer gets, so the same pixels, narrower than 40.
+       E  Depth 320 on that group draws as the block alone at depth 320, an unparented layer's planar perspective about the frame
+          centre (480 / (480 + 320) = 0.6): 24 × 24 at 100..123 × 96..119.
+       F  a 'locked' middle link: a Controller N1 at 160,120 turned 90°, a Controller N2 hung on it at 0,0 set to 'locked', and a
+          red 40 × 20 bar hung on N2 at 60,0. N2 itself stays upright, so its bar does too: 200..239 × 110..129. On dfc4f2b2 the bar
+          turns with N1, to 150..169 × 160..199.
+     CONTROLS: the untouched group draws byte for byte as its two members alone, the red block at 60..99 × 80..119; moved to 10,40,
+     scaled to 125 % and turned 90° it draws where the old chain put it: centre (10, 40) + (160, 120) + 1.25·R90·(−80, −20) =
+     (195, 60), 50 × 50 at 170..219 × 35..84; the tilt really narrows the single layer; with N2 'normal' the bar does turn with N1.
+     TOL: every edge here sits on a whole pixel except the skew's and the tilt's, so 1 column of slack on a span, 2 levels on a
+     frame compare (the two routes build the same matrix in a different order), and 2 columns on the skew's measured lean. */
+  test('bughunt4 #1 A group\'s Flip, Width / Height and Skew reach its members: ⋯ → Flip mirrors them about the group\'s pivot, an unlinked Width of 150 % stretches them from it, a Skew shears them about it, a Y tilt leans the group as one picture exactly as a single tilted layer, a Depth draws it as a single layer\'s depth, and a locked middle link keeps its children upright (CONTROLS: an untouched group draws byte for byte as its members alone; a moved, scaled and turned group draws where the old chain put it; the tilt narrows a single layer; a normal middle link turns its children)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.flipLayer !== 'function' || typeof FM.setTransform !== 'function' || typeof FM.groupBounds !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.flipLayer / FM.setTransform / FM.groupBounds are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5;
+      FM.time = T;
+      const grp = (name) => {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        return g;
+      };
+      const block = (name, x, y, w, h, fill, parent) => {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: y, shapeW: w, shapeH: h, fill: fill, start: 0, duration: 4 });
+        L.start = 0; L.duration = 4;
+        if (parent) L.parent = parent;
+        return L;
+      };
+      /* The red pixels' count and span, and the first column on row y that is more than half red. */
+      const reds = (f) => {
+        let n = 0, x0 = -1, x1 = -1, y0 = -1, y1 = -1;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            n++;
+            const x = k % 320, y = (k - x) / 320;
+            if (x0 < 0 || x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y0 < 0 || y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+        return { n: n, x0: x0, x1: x1, y0: y0, y1: y1 };
+      };
+      const rowLeft = (f, y) => {
+        for (let x = 0; x < 320; x++) { const i = (y * 320 + x) * 4; if (f.d[i] > 127 && f.d[i + 1] < 70 && f.d[i + 2] < 70) return x; }
+        return -1;
+      };
+      const say = r => r.n + ' red px at columns ' + r.x0 + '..' + r.x1 + ', rows ' + r.y0 + '..' + r.y1;
+      const at = (r, x0, x1, y0, y1) => Math.abs(r.x0 - x0) <= 1 && Math.abs(r.x1 - x1) <= 1 && Math.abs(r.y0 - y0) <= 1 && Math.abs(r.y1 - y1) <= 1;
+
+      const G = grp('bh4 #1 group');
+      const R = block('bh4 #1 red', 80, 100, 40, 40, '#ff0000', G.id);
+      const W = block('bh4 #1 white', 240, 140, 40, 40, '#ffffff', G.id);
+      const withG = [G, R, W];
+      FM.scene.layers = withG;
+
+      /* ── CONTROL: the untouched group is its two members alone, byte for byte. */
+      const f0 = _bh2Frame(T), r0 = reds(f0);
+      R.parent = null; W.parent = null; FM.scene.layers = [R, W];
+      const bare = _bh2Frame(T);
+      R.parent = G.id; W.parent = G.id; FM.scene.layers = withG;
+      const m0 = _bh2MaxDiff(f0.d, bare.d);
+      if (m0 !== 0) throw new Error('CONTROL: an untouched group draws up to ' + m0 + ' levels off its two members drawn alone — the old path was not kept byte for byte');
+      if (r0.n !== 1600 || !at(r0, 60, 99, 80, 119)) throw new Error('CONTROL: the untouched group’s red block is ' + say(r0) + ', not 1600 px at 60..99 × 80..119');
+
+      /* ── CONTROL: moved, scaled and turned, the old four channels — where the old chain put it. */
+      G.transform.x = 10; G.transform.y = 40; G.transform.scale = 1.25; G.transform.rotation = 90;
+      const rc = reds(_bh2Frame(T));
+      G.transform.x = 0; G.transform.y = 0; G.transform.scale = 1; G.transform.rotation = 0;
+      if (Math.abs(rc.n - 2500) > 110 || !at(rc, 170, 219, 35, 84)) throw new Error('CONTROL: moved to 10,40, scaled to 125 % and turned 90° the group’s red block is ' + say(rc) + ', not about 2500 px at 170..219 × 35..84 — the x / y / turn / uniform scale every group already had moved');
+
+      /* ── A: ⋯ → Flip Horizontally. */
+      FM.flipLayer(G, 'h');
+      if (!G.flipH) throw new Error('CONTROL: FM.flipLayer did not set the group’s flipH');
+      const ra = reds(_bh2Frame(T));
+      G.flipH = false;
+      if (!at(ra, 220, 259, 80, 119)) throw new Error('A: with the group flipped horizontally its red block is ' + say(ra) + ', not mirrored about the group’s pivot (x 160) to 220..259 on the same rows 80..119' + (at(ra, 60, 99, 80, 119) ? ' — it did not move at all: the flip never reached the members' : ''));
+
+      /* ── B: unlinked Width 150 % (scaleX 1.5, scaleY 1). */
+      FM.setTransform(G, 'scaleX', 1.5, T);
+      const rb = reds(_bh2Frame(T)), gb = FM.groupBounds(G, FM.scene, T);
+      G.transform.scaleX = 1;
+      if (Math.abs(rb.n - 2400) > 60 || !at(rb, 10, 69, 80, 119)) throw new Error('B: with the group’s Width at 150 % (unlinked) its red block is ' + say(rb) + ', not 2400 px at 10..69 × 80..119 — 1.5× as wide about the pivot and just as tall' + (at(rb, 60, 99, 80, 119) ? ' — it did not change at all: the Width never reached the members' : ''));
+      if (!gb || Math.abs(gb.w - 300) > 0.5 || Math.abs(gb.h - 80) > 0.5 || Math.abs(gb.x - 160) > 0.5) throw new Error('B: with the group’s Width at 150 % its selection box (FM.groupBounds) is ' + (gb ? gb.w + ' × ' + gb.h + ' centred at x ' + gb.x : 'null') + ', not 300 × 80 centred at x 160 — the box no longer matches the picture');
+
+      /* ── C: X Skew 30°. */
+      FM.setTransform(G, 'skewX', 30, T);
+      const fc = _bh2Frame(T), rcs = reds(fc), l85 = rowLeft(fc, 85), l115 = rowLeft(fc, 115), l100 = rowLeft(fc, 100);
+      G.transform.skewX = 0;
+      const lean = l115 - l85;
+      if (l85 < 0 || l115 < 0 || Math.abs(lean - 17.3) > 2) throw new Error('C: with the group skewed 30° its red block’s left edge is at column ' + l85 + ' on row 85 and ' + l115 + ' on row 115, a lean of ' + lean + ' where tan 30° × 30 rows is 17.3' + (lean === 0 ? ' — no shear at all: the skew never reached the members' : ''));
+      if (Math.abs(l100 - 48.7) > 2.5) throw new Error('C: skewed 30°, the red block’s left edge on row 100 is at ' + l100 + ', not about 48.7 — the shear is not about the group’s pivot (y 120)');
+      if (Math.abs(rcs.y0 - 80) > 1 || Math.abs(rcs.y1 - 119) > 1) throw new Error('C: an X skew moved the red block’s rows to ' + rcs.y0 + '..' + rcs.y1 + ', not 80..119');
+
+      /* ── D: Y tilt 60° on a group holding only the red block, against that block alone tilted 60°. */
+      const G2 = grp('bh4 #1 tilted group');
+      const R2 = block('bh4 #1 red in the tilted group', 80, 100, 40, 40, '#ff0000', G2.id);
+      G2.transform.rotationY = 60;
+      FM.scene.layers = [G2, R2];
+      const fd = _bh2Frame(T), rd = reds(fd);
+      const R3 = block('bh4 #1 red tilted alone', 80, 100, 40, 40, '#ff0000', null);
+      R3.transform.rotationY = 60;
+      FM.scene.layers = [R3];
+      const fs = _bh2Frame(T), rs = reds(fs);
+      if (rs.n < 100 || rs.x1 - rs.x0 + 1 > 32) throw new Error('CONTROL: a single red block tilted 60° about Y is ' + say(rs) + ' — not narrower than its 40 px, so the tilt route this compares against did not run');
+      const md = _bh2MaxDiff(fd.d, fs.d);
+      if (md > 2) throw new Error('D: a group holding the red block, tilted 60° about Y, draws ' + say(rd) + ' where the block alone tilted 60° draws ' + say(rs) + ' (up to ' + md + ' levels apart)' + (rd.x1 - rd.x0 + 1 >= 39 ? ' — the group did not lean at all: its tilt never reached the picture' : ''));
+
+      /* ── E: Depth 320 on that group, against the block alone at depth 320. */
+      const G3 = grp('bh4 #1 deep group');
+      const R4 = block('bh4 #1 red in the deep group', 80, 100, 40, 40, '#ff0000', G3.id);
+      G3.transform.z = 320;
+      FM.scene.layers = [G3, R4];
+      const fe = _bh2Frame(T), re = reds(fe);
+      const R5 = block('bh4 #1 red deep alone', 80, 100, 40, 40, '#ff0000', null);
+      R5.transform.z = 320;
+      FM.scene.layers = [R5];
+      const fz = _bh2Frame(T), rz = reds(fz);
+      if (!at(rz, 100, 123, 96, 119)) throw new Error('CONTROL: a single red block at depth 320 is ' + say(rz) + ', not 24 × 24 at 100..123 × 96..119 — the depth this compares against is not the one worked out above');
+      const me = _bh2MaxDiff(fe.d, fz.d);
+      if (me > 2 || !at(re, 100, 123, 96, 119)) throw new Error('E: a group holding the red block at depth 320 draws ' + say(re) + ' where the block alone at depth 320 draws ' + say(rz) + ' (up to ' + me + ' levels apart)' + (at(re, 60, 99, 80, 119) ? ' — it did not change at all: the depth never reached the members' : ''));
+
+      /* ── F: a 'locked' middle link keeps its children upright. */
+      const N1 = FM.makeLayer('null', { name: 'bh4 #1 turned controller', x: 160, y: 120, start: 0, duration: 4 });
+      N1.start = 0; N1.duration = 4; N1.transform.rotation = 90;
+      const N2 = FM.makeLayer('null', { name: 'bh4 #1 middle controller', x: 0, y: 0, start: 0, duration: 4 });
+      N2.start = 0; N2.duration = 4; N2.parent = N1.id;
+      const bar = block('bh4 #1 red bar', 60, 0, 40, 20, '#ff0000', N2.id);
+      FM.scene.layers = [bar, N2, N1];
+      N2.parentMode = 'normal';
+      const rn = reds(_bh2Frame(T));
+      if (Math.abs(rn.n - 800) > 60 || !at(rn, 150, 169, 160, 199)) throw new Error('CONTROL: under a normal middle link the bar is ' + say(rn) + ', not turned with N1 to 150..169 × 160..199 — the rig does not turn, so a lock cannot be seen');
+      N2.parentMode = 'locked';
+      const rl = reds(_bh2Frame(T));
+      if (Math.abs(rl.n - 800) > 60 || !at(rl, 200, 239, 110, 129)) throw new Error('F: under a middle Controller set to locked (upright) the bar is ' + say(rl) + ', not upright beside it at 200..239 × 110..129' + (at(rl, 150, 169, 160, 199) ? ' — it still turns with the top Controller: the chain ignores the middle link’s own mode' : ''));
+    });
+  });
+
+  /* (#4) AN ADJUSTMENT LAYER'S BLEND MODE DID NOTHING. Red footage fills the frame, (255, 0, 0); above it an adjustment layer with
+     Invert (amount 1), whose graded plate over red is cyan, (0, 255, 255). On cedde93f both blits of the graded plate (applyAdjustment's
+     and applyAdjustmentFilters') are hard-wired to source-over and never read layer.blendMode, so every mode the Mixing card offers
+     draws the plain grade: (0, 255, 255) at 100 %, and half-way to red, (127.5, 127.5, 127.5), at 50 %.
+     Now the plate is blended onto the ungraded frame with the layer's mode, and the opacity mixes that with the frame below:
+       Multiply   red × cyan = (0, 0, 0); at 50 % half-way from red, (127.5, 0, 0)
+       Screen     1 − (1 − red)(1 − cyan) = (255, 255, 255)
+       Add        'linear-dodge', a per-pixel mode (js/blend-modes.js): min(1, red + cyan) = (255, 255, 255); at 50 % (255, 127.5, 127.5)
+     CONTROLS: hidden, the frame is the red footage; Normal is the plain grade (the Invert ran) and at 50 % half-way to red, as before;
+     Stencil and Punch Out keep the plain grade, (0, 255, 255) — on a full-frame plate a destination-in would leave the red frame and a
+     destination-out would cut it to nothing.
+     TOL: 3 levels — the 50 % cases round 127.5 either way, and the per-pixel blender reads the plate's alpha rounded (128 / 255). */
+  test('bughunt4 #4 An adjustment layer\'s blend mode: an Invert adjustment over red footage reads black on Multiply, white on Screen and white on Add (a per-pixel mode), and its opacity still mixes the blend with the frame below (CONTROLS: hidden, the frame is red; Normal is the plain grade, cyan, as before; Stencil and Punch Out keep the plain grade)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    if (!FM.BLEND_MANUAL || typeof FM.BLEND_MANUAL['linear-dodge'] !== 'function') throw new Error('setup: Add (linear-dodge) is not a per-pixel mode in js/blend-modes.js, so this does not test the per-pixel route');
+    await _bh2With(async function () {
+      const T = 0.5, P = [160, 120], TOL = 3, RED = [255, 0, 0], CYAN = [0, 255, 255];
+      const foot = _bh2Bar('bh4 #4 footage', 160, 320, '#ff0000');
+      const A = FM.makeLayer('adjustment', { name: 'bh4 #4 invert grade' });
+      A.start = 0; A.duration = 4;
+      A.effects = [{ type: 'invert', enabled: true, params: { amount: 1 } }];
+      FM.scene.layers = [A, foot];
+      const px = () => { const d = _bh2Frame(T).d, i = (P[1] * 320 + P[0]) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+      const off = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+      const say = p => '(' + p.map(v => (Math.round(v * 10) / 10)).join(', ') + ')';
+      const at = (mode, op) => { A.blendMode = mode; A.transform.opacity = op; return px(); };
+
+      /* ── CONTROLS: the frame below, Normal at 100 % and 50 %, and the two cut-outs. */
+      A.visible = false;
+      const below = px();
+      A.visible = true;
+      if (off(below, RED) > 2) throw new Error('CONTROL: with the adjustment hidden the frame reads ' + say(below) + ', not the red footage');
+      const nrm = at('normal', 1), nrm50 = at('normal', 0.5), HALF = [127.5, 127.5, 127.5];
+      if (off(nrm, CYAN) > TOL) throw new Error('CONTROL: on Normal the Invert adjustment reads ' + say(nrm) + ' where the plain grade of red is (0, 255, 255) — the grade did not run, so nothing below can be trusted');
+      if (off(nrm50, HALF) > TOL) throw new Error('CONTROL: on Normal at 50 % the adjustment reads ' + say(nrm50) + ', not half-way from red to cyan, (127.5, 127.5, 127.5) — the opacity no longer mixes the grade as it did');
+      [['mask-include', 'Stencil'], ['mask-exclude', 'Punch Out']].forEach(m => {
+        const p = at(m[0], 1);
+        if (off(p, CYAN) > TOL) throw new Error('CONTROL: on ' + m[1] + ' the adjustment reads ' + say(p) + ' where it keeps today’s plain grade, (0, 255, 255)' + (off(p, RED) <= TOL ? ' — it kept the frame below as a stencil instead' : (off(p, [0, 0, 0]) <= TOL ? ' — it cut the frame to nothing instead' : '')));
+      });
+
+      /* ── the modes. */
+      const cases = [
+        ['multiply', 'Multiply', 1, [0, 0, 0], 'red × cyan'],
+        ['multiply', 'Multiply', 0.5, [127.5, 0, 0], 'half-way from red to red × cyan'],
+        ['screen', 'Screen', 1, [255, 255, 255], '1 − (1 − red)(1 − cyan)'],
+        ['linear-dodge', 'Add (per pixel)', 1, [255, 255, 255], 'min(1, red + cyan)'],
+        ['linear-dodge', 'Add (per pixel)', 0.5, [255, 127.5, 127.5], 'half-way from red to min(1, red + cyan)'],
+      ];
+      const bad = [];
+      cases.forEach(c => {
+        const p = at(c[0], c[2]);
+        if (off(p, c[3]) > TOL) bad.push('on ' + c[1] + ' at ' + Math.round(c[2] * 100) + ' % the Invert adjustment reads ' + say(p) + ' where ' + c[4] + ' is ' + say(c[3]) + (off(p, c[2] === 1 ? CYAN : HALF) <= TOL ? ' — the plain grade: the blend mode was ignored' : ''));
+      });
+      A.blendMode = 'normal'; A.transform.opacity = 1;
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
+  /* (#1b) THE EDITOR STILL HANDLED A MEMBER WITH THE OLD CHAIN. bughunt4 #1 (cedde93f) made a group's Flip, unlinked Width / Height,
+     Skew, depth and link mode reach its members when they are DRAWN (compositor.js applyParentChain), but canvas-edit's parentXform —
+     the walk behind a member's selection box, the tap that keeps or drops its selection, the drag and the handles — still composed only
+     each parent's x, y, turn and uniform scale (and the #630 pivot, only when the group is turned or scaled). The fixture is #1's: a
+     group G at 0,0 holding a red 40 × 40 block R centred at 80,100 and a white one at 240,140, so G's pivot is 160,120. The project is
+     320 × 240 here, so a frame px is a project px and _bh2Frame's pixels are where the editor's numbers must land.
+     On f7fb5165 (#1 in, this not):
+       FLIP (⋯ → Flip Horizontally): R is drawn at 220..260. parentXform sees no turn and no scale, so it is the identity: (a) the box
+       sits at 60..100, where nothing is red; (b) a tap on the red block, about 240,100, is tested against 60..100 and DESELECTS R,
+       while a tap on the empty 80,100 keeps it; (c) a drag of +20 px to the right writes x + 20, which the mirror draws 20 px to the
+       LEFT; (d) the rotate knob measures its angle from 80,100, 160 px off the block, so a quarter turn clockwise about the block
+       writes about +14° and R's top ends up ~104° away from the finger.
+       WIDTH 150 % (unlinked scaleX 1.5): R is drawn 60 wide at 10..70; (a) the box is 40 wide at 60..100; (b) a tap at its middle,
+       40,100, deselects it and one on the empty 80,100 keeps it; (c) +20 px writes x + 20, drawn 1.5 × 20 = 30 px on.
+       SKEW 30°: R is drawn as a parallelogram, x' = x + tan 30°·(y − 120) about the pivot, 36.9..100 across; (a) the box is the
+       unsheared 60..100; (b) a tap on its leaning top-left (8 px in from its left edge on row 85, about 48,85) misses 60..100 and
+       deselects it — its middle, 68.5,100, is inside both, so that tap cannot tell; (c) a right drag cannot tell either (a shear
+       along x moves nothing sideways), so the drag is +20 right AND +20 down: written as (+20, +20), the shear draws it (+31.5, +20).
+     Now parentXform IS the renderer's matrix (FM.parentChainMatrix runs applyParentChain), so the box, the taps and the drag go through
+     the same mirror, stretch and shear as the picture: the box covers the red pixels, a tap on red keeps R and one on the empty place it
+     is no longer drawn drops it, the drag moves the drawn block by exactly the frame distance the pointer moved (up to the whole pixel
+     shiftTransform writes: under the stretch 13 for 13.3, so 19.5 px drawn), and under the flip the knob turns R so that its top
+     follows the finger (its own turn is the mirror image: 270°, i.e. −90°).
+     CONTROLS: the untouched group's box, taps and drag are a plain layer's (60..100; +20 → +20); moved to 10,40, scaled to 125 % and
+     turned 90° — everything the old walk knew — the block is drawn at 170..220 × 35..85 and is boxed, tapped, dragged and turned
+     there exactly as before; every case's picture is checked FIRST, so a red is the editor's and not the renderer's; a control's drag
+     and knob must really move the block (the canvas is reaching the gesture), and the pointer's own frame distance is measured, not
+     assumed (client points are whole pixels).
+     TOL: 2.5 px on a box edge (a sheared edge's pixels are within a pixel of it), 2 px on a drag, 5° on the knob. The faults are 23 px
+     and more on a box edge, 10 px and more on a drag, and ~100° on the knob. */
+  test('bughunt4 #1b Under a flipped, stretched or skewed group, a member is selected, boxed and dragged where it is drawn: its selection box covers its red pixels, a tap on them keeps it selected and a tap where it is no longer drawn lets it go, a drag moves the drawn block exactly as far as the pointer, and under the flip the rotate knob turns it with the finger (CONTROLS: an untouched group and one moved, scaled to 125 % and turned 90° box, tap, drag and turn as before; every picture is checked first; the drags and the knob really move)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.flipLayer !== 'function' || typeof FM.setTransform !== 'function' || typeof FM.selectLayer !== 'function' || typeof FM.resizeCanvas !== 'function' || typeof FM._layerCTM !== 'function' || !FM.canvasEdit || typeof FM.canvasEdit.boxFor !== 'function') throw new Error('setup: FM.renderScene / makeLayer / flipLayer / setTransform / selectLayer / resizeCanvas / _layerCTM / canvasEdit.boxFor are not reachable');
+    await _bh2With(async function () {
+      const P = FM.scene.project, W0 = P.width, H0 = P.height;
+      const vp0 = FM.viewport ? { x: FM.viewport.x, y: FM.viewport.y, scale: FM.viewport.scale } : null;
+      const hadEditing = document.body.classList.contains('text-editing');
+      const T = 0.5, ID = 71;
+      try {
+        document.body.classList.remove('text-editing');
+        if (FM.viewport) FM.viewport.reset();
+        P.width = 320; P.height = 240;
+        FM.resizeCanvas();
+        FM.time = T;
+        await sleep(200);
+
+        /* The preview, re-read for every gesture (never a stale element); project px ↔ client px exactly as canvas-edit's eventToFrame
+           reads a pointer. No camera in this scene, so the frame IS the layers' space. Client points are whole pixels. */
+        const cvs = () => {
+          const cv = document.getElementById('preview');
+          if (!cv || !document.contains(cv)) throw new Error('setup: there is no #preview in the document');
+          return cv;
+        };
+        const toClient = (px, py) => {
+          const cv = cvs(), r = cv.getBoundingClientRect(), sc = cv.__fmRS || 1;
+          return { x: Math.round(r.left + ((px - (cv.__fmOX || 0)) / (cv.width / sc)) * r.width),
+                   y: Math.round(r.top + ((py - (cv.__fmOY || 0)) / (cv.height / sc)) * r.height) };
+        };
+        const toProj = (c) => {
+          const cv = cvs(), r = cv.getBoundingClientRect(), sc = cv.__fmRS || 1;
+          return { x: (cv.__fmOX || 0) + ((c.x - r.left) / r.width) * (cv.width / sc),
+                   y: (cv.__fmOY || 0) + ((c.y - r.top) / r.height) * (cv.height / sc) };
+        };
+        const r0 = cvs().getBoundingClientRect();
+        if (!(r0.width > 60 && r0.height > 40)) throw new Error('setup: the preview is ' + Math.round(r0.width) + ' × ' + Math.round(r0.height) + ' css px, too small to aim a pointer at');
+        const fire = (target, type, c) => target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: ID, pointerType: 'mouse', isPrimary: true, clientX: c.x, clientY: c.y, button: 0, buttons: type === 'pointerup' ? 0 : 1 }));
+        const tap = (px, py) => { const c = toClient(px, py); fire(cvs(), 'pointerdown', c); fire(window, 'pointerup', c); };
+        /* A drag on the canvas from (px, py) by (dx, dy) project px; returns the frame distance the pointer really moved. */
+        const dragBy = (px, py, dx, dy) => {
+          const c0 = toClient(px, py), c1 = toClient(px + dx, py + dy);
+          const p0 = toProj(c0), p1 = toProj(c1);
+          fire(cvs(), 'pointerdown', c0);
+          for (let k = 1; k <= 5; k++) fire(window, 'pointermove', { x: c0.x + (c1.x - c0.x) * k / 5, y: c0.y + (c1.y - c0.y) * k / 5 });
+          fire(window, 'pointerup', c1);
+          return { x: p1.x - p0.x, y: p1.y - p0.y };
+        };
+
+        /* The red pixels' box (l..r × t..b, edges, so a block on columns 60..99 is 60..100) and the frame they came from. */
+        const isRed = (f, x, y) => { const i = (Math.round(y) * 320 + Math.round(x)) * 4; return f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70; };
+        const redBox = () => {
+          const f = _bh2Frame(T);
+          let n = 0, x0 = -1, x1 = -1, y0 = -1, y1 = -1;
+          for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+            if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+              n++;
+              const x = k % 320, y = (k - x) / 320;
+              if (x0 < 0 || x < x0) x0 = x;
+              if (x > x1) x1 = x;
+              if (y0 < 0 || y < y0) y0 = y;
+              if (y > y1) y1 = y;
+            }
+          }
+          return { n: n, l: x0, r: x1 + 1, t: y0, b: y1 + 1, cx: (x0 + x1 + 1) / 2, cy: (y0 + y1 + 1) / 2, f: f };
+        };
+        const rowLeft = (f, y) => { for (let x = 0; x < 320; x++) if (isRed(f, x, y)) return x; return -1; };
+        /* The selection box canvas-edit draws, from boxFor's numbers alone (the corners 921 S0 proves equal #select-box), in project px. */
+        const boxOf = (L) => {
+          const cv = cvs(), r = cv.getBoundingClientRect();
+          const ds = (r.width / (cv.width / (cv.__fmRS || 1))) / ((FM.viewport && FM.viewport.scale) || 1);
+          const g = FM.canvasEdit.boxFor(L, FM.time);
+          if (!g) return null;
+          const rad = g.rot * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
+          const sh = !!(g.skewX || g.skewY), sX = g.scaleX || 1e-6, sY = g.scaleY || 1e-6;
+          const kb = sh ? sY * Math.tan(g.skewY * Math.PI / 180) / sX : 0, kc = sh ? sX * Math.tan(g.skewX * Math.PI / 180) / sY : 0;
+          const xs = [], ys = [];
+          [[0, 0], [g.w, 0], [g.w, g.h], [0, g.h]].forEach(function (p) {
+            const x = p[0] - g.w * g.ax + (g.shift || 0), y = p[1] - g.h * g.ay;
+            const qx = x + kc * y, qy = kb * x + y;
+            xs.push((g.cx + cos * qx - sin * qy) / ds);
+            ys.push((g.cy + sin * qx + cos * qy) / ds);
+          });
+          return { l: Math.min.apply(null, xs), r: Math.max.apply(null, xs), t: Math.min.apply(null, ys), b: Math.max.apply(null, ys) };
+        };
+        const offBy = (B, A) => Math.max(Math.abs(B.l - A.l), Math.abs(B.r - A.r), Math.abs(B.t - A.t), Math.abs(B.b - A.b));
+        const r1 = v => Math.round(v * 10) / 10;
+        const sayB = b => r1(b.l) + '..' + r1(b.r) + ' × ' + r1(b.t) + '..' + r1(b.b);
+        const UNTOUCHED = { l: 60, r: 100, t: 80, b: 120 };
+
+        const G = FM.makeLayer('group', { name: 'bh4 #1b group', x: 0, y: 0, start: 0, duration: 4 });
+        G.start = 0; G.duration = 4;
+        const block = (name, x, y, fill) => {
+          const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: y, shapeW: 40, shapeH: 40, fill: fill, start: 0, duration: 4 });
+          L.start = 0; L.duration = 4; L.parent = G.id;
+          return L;
+        };
+        const R = block('bh4 #1b red', 80, 100, '#ff0000'), Wb = block('bh4 #1b white', 240, 140, '#ffffff');
+        FM.scene.layers = [G, R, Wb];
+        /* Every case starts from the untouched group and R where it began; the pivot is let go so the case's own first write stores it. */
+        const reset = () => {
+          if (FM._resetVpPointers) FM._resetVpPointers();
+          G.flipH = false; G.flipV = false; delete G.pivot;
+          const gt = G.transform;
+          gt.x = 0; gt.y = 0; gt.scale = 1; gt.rotation = 0;
+          ['scaleX', 'scaleY', 'skewX', 'skewY'].forEach(k => { delete gt[k]; });
+          R.transform.x = 80; R.transform.y = 100; R.transform.rotation = 0;
+          FM.time = T;
+        };
+        const select = async () => {
+          FM.selectLayer(R.id);
+          FM.canvasEdit.update();
+          await sleep(60);
+          if (FM.scene.selectedId !== R.id) throw new Error('setup: FM.selectLayer did not select the red block');
+        };
+        /* The direction R's own top points on screen, from the renderer's matrix: local (0, −1) through FM._layerCTM. */
+        const upOf = () => { const M = FM._layerCTM(R, T, FM.scene); const l = Math.hypot(M.c, M.d) || 1; return { cx: M.e, cy: M.f, x: -M.c / l, y: -M.d / l }; };
+
+        const cases = [
+          { name: 'untouched (CONTROL)', control: true, set: function () {}, want: [60, 100, 80, 120], drag: [20, 0] },
+          { name: 'moved to 10,40, scaled to 125 % and turned 90° (CONTROL)', control: true, knob: true,
+            set: function () { FM.setTransform(G, 'scale', 1.25, T); FM.setTransform(G, 'rotation', 90, T); G.transform.x = 10; G.transform.y = 40; },
+            want: [170, 220, 35, 85], drag: [20, 0] },
+          { name: 'flipped horizontally (⋯ → Flip)', what: 'flip', knob: true, set: function () { FM.flipLayer(G, 'h'); }, want: [220, 260, 80, 120], drag: [20, 0], empty: [80, 100] },
+          { name: 'at an unlinked Width of 150 %', what: 'Width', set: function () { FM.setTransform(G, 'scaleX', 1.5, T); }, want: [10, 70, 80, 120], drag: [20, 0], empty: [80, 100] },
+          { name: 'skewed 30°', what: 'skew', set: function () { FM.setTransform(G, 'skewX', 30, T); }, want: [36.9, 100, 80, 120], drag: [20, 20], lean: true },
+        ];
+        const bad = [];
+        for (const k of cases) {
+          const tag = 'with the group ' + k.name;
+          reset();
+          k.set();
+          const A = redBox(), want = { l: k.want[0], r: k.want[1], t: k.want[2], b: k.want[3] };
+          if (A.n < 400 || offBy(A, want) > 2) throw new Error('CONTROL: ' + tag + ' the red block is drawn at ' + sayB(A) + ' (' + A.n + ' px), not at about ' + sayB(want) + ' — the picture the editor is compared with is not the one worked out above');
+          await select();
+
+          /* (a) the selection box covers the drawn pixels */
+          const B = boxOf(R);
+          if (!B) bad.push(tag + ': (a) the selected block has no selection box at all');
+          else if (offBy(B, A) > 2.5) bad.push((k.control ? 'CONTROL ' : '') + tag + ': (a) the selection box spans ' + sayB(B) + ' where the block is drawn at ' + sayB(A) + (!k.control && offBy(B, UNTOUCHED) <= 2.5 ? ' — the untouched group’s box: the editor never applied the group’s ' + k.what : ''));
+
+          /* (b) a tap on the drawn block keeps it selected … */
+          tap(A.cx, A.cy);
+          if (FM.scene.selectedId !== R.id) { bad.push((k.control ? 'CONTROL ' : '') + tag + ': (b) a tap on the middle of the red block (' + r1(A.cx) + ', ' + r1(A.cy) + ') deselected it — the tap is tested where the block is not drawn'); await select(); }
+          if (k.lean) {
+            const y = A.t + 5, lx = rowLeft(A.f, y);
+            if (lx < 0 || !isRed(A.f, lx + 8, y) || lx + 8 >= 60) throw new Error('CONTROL: ' + tag + ' the block’s leaning top-left is not where it was worked out (row ' + y + ' starts at column ' + lx + ')');
+            tap(lx + 8, y);
+            if (FM.scene.selectedId !== R.id) { bad.push(tag + ': (b) a tap on the red block’s leaning top-left (' + (lx + 8) + ', ' + y + ') deselected it — the tap is tested against the unsheared box 60..100'); await select(); }
+          }
+          /* … and a tap where it is no longer drawn lets it go */
+          if (k.empty) {
+            if (isRed(A.f, k.empty[0], k.empty[1])) throw new Error('CONTROL: ' + tag + ' ' + k.empty.join(',') + ' is red, so it is not the empty place it was worked out to be');
+            tap(k.empty[0], k.empty[1]);
+            if (FM.scene.selectedId === R.id) bad.push(tag + ': (b) a tap on the empty canvas at ' + k.empty.join(',') + ' — where the block would be with the group untouched — kept it selected');
+            await select();
+          }
+
+          /* (c) a drag moves the drawn block exactly as far as the pointer went */
+          const seen = dragBy(A.cx, A.cy, k.drag[0], k.drag[1]);
+          if (!(Math.hypot(seen.x, seen.y) > 10)) throw new Error('setup: the pointer moved only ' + r1(seen.x) + ', ' + r1(seen.y) + ' frame px, so the drag measures nothing');
+          const A2 = redBox(), mx = A2.cx - A.cx, my = A2.cy - A.cy;
+          if (k.control && !(Math.hypot(mx, my) > 5)) throw new Error('CONTROL: ' + tag + ' a ' + r1(seen.x) + ', ' + r1(seen.y) + ' px drag did not move the red block at all (' + sayB(A) + ' → ' + sayB(A2) + ') — the drag is not reaching the canvas');
+          if (Math.abs(mx - seen.x) > 2 || Math.abs(my - seen.y) > 2) bad.push((k.control ? 'CONTROL ' : '') + tag + ': (c) a drag of ' + r1(seen.x) + ', ' + r1(seen.y) + ' px moved the drawn block ' + r1(mx) + ', ' + r1(my) + ' px (' + sayB(A) + ' → ' + sayB(A2) + ')' + (mx * seen.x < 0 ? ' — the other way: the delta went into the member unmirrored' : ''));
+
+          /* (d) the rotate knob: a quarter turn clockwise about the block, from its top; afterwards its top points at the finger */
+          if (k.knob) {
+            reset();
+            k.set();
+            await select();
+            const u = upOf(), rad = 40;
+            const along = a => toClient(u.cx + rad * (Math.cos(a) * u.x - Math.sin(a) * u.y), u.cy + rad * (Math.cos(a) * u.y + Math.sin(a) * u.x));
+            const knob = document.querySelector('#select-box .sb-rot');
+            if (!knob || !document.contains(knob)) throw new Error('setup: there is no rotate knob in #select-box');
+            const c0 = along(0), c1 = along(Math.PI / 2);
+            fire(knob, 'pointerdown', c0);
+            for (let i = 1; i <= 6; i++) fire(window, 'pointermove', along((Math.PI / 2) * i / 6));
+            fire(window, 'pointerup', c1);
+            const turned = FM.evalProp(R.transform.rotation, T) || 0;
+            if (k.control && !turned) throw new Error('CONTROL: ' + tag + ' the rotate knob did not turn the block at all — the press is not reaching the handle');
+            const u1 = upOf(), fp = toProj(c1), fx = fp.x - u.cx, fy = fp.y - u.cy, fl = Math.hypot(fx, fy) || 1;
+            const off = Math.acos(Math.max(-1, Math.min(1, (u1.x * fx + u1.y * fy) / fl))) * 180 / Math.PI;
+            if (off > 5) bad.push((k.control ? 'CONTROL ' : '') + tag + ': (d) a quarter turn clockwise on the rotate knob wrote a turn of ' + r1(turned) + '° and left the block’s top ' + Math.round(off) + '° away from the finger' + (off > 150 ? ' — it turned against the finger' : ''));
+          }
+        }
+        if (bad.length) throw new Error(bad.join(' · '));
+      } finally {
+        if (FM._resetVpPointers) { try { FM._resetVpPointers(); } catch (e) {} }
+        P.width = W0; P.height = H0;
+        if (hadEditing) document.body.classList.add('text-editing');
+        if (vp0 && FM.viewport) { FM.viewport.x = vp0.x; FM.viewport.y = vp0.y; FM.viewport.scale = vp0.scale; FM.viewport.apply(); }
+        try { FM.resizeCanvas(); } catch (e) {}
+      }
+    });
+  });
+  // ── end bughunt 4 ──
+
 })();
