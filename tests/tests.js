@@ -164322,7 +164322,10 @@
       const wm = { x: 10.3 + 80, y: 40.7 + 100 }, dm = drawn(E), bm = count(births(E));
       G.transform.x = 0; G.transform.y = 0;
       if (!near(dm, wm, TOL)) throw new Error('CONTROL: in a group moved to 10.3,40.7 the emitter layer is drawn at ' + say(dm) + ', not ' + say(wm));
-      if (bm.some(m => m.x !== wm.x || m.y !== wm.y)) throw new Error('CONTROL: in a group moved to 10.3,40.7 a particle is born at ' + say(bm.filter(m => m.x !== wm.x || m.y !== wm.y)[0]) + ' - not on today’s sum ' + say(wm) + ' bit for bit');
+      /* Within 1e-9, not bit for bit: measured 19 Oct (the v17.79 slices), the matrix route gives the moved group's sum one
+         float bit off (printed (90.3, 140.7) both ways), as the turned Controller's control below already allows. */
+      const offM = m => Math.abs(m.x - wm.x) > 1e-9 || Math.abs(m.y - wm.y) > 1e-9;
+      if (bm.some(offM)) throw new Error('CONTROL: in a group moved to 10.3,40.7 a particle is born at ' + say(bm.filter(offM)[0]) + ' - not within 1e-9 px of today’s sum ' + say(wm));
 
       /* ── CONTROL: under a Controller moved to 200,20, turned 90° and scaled to 125 %: today's turn-and-scale walk. */
       const N = ctl('bh4 #1e controller', 200, 20);
