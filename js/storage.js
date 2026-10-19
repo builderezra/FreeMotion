@@ -1373,11 +1373,22 @@ window.FM = window.FM || {};
         if (!isFinite(t)) return;          // queue 827: negative is legal — a clip dragged before zero takes its roto with it
         const pts = safeMaskPts(k.v);
         if (!pts || !pts.length) return;   // a keyframe with no valid vertices contributes nothing → drop it
-        kf.push({ t: Math.max(-3600, Math.min(3600, t)), v: pts, e: easeOk(k.e) ? k.e : 'linear' });
+        const o = { t: Math.max(-3600, Math.min(3600, t)), v: pts, e: easeOk(k.e) ? k.e : 'linear' };
+        /* bughunt5 #9: `bez` and `ez` are kept, validated exactly as safeKfProp keeps them. They were dropped here, and this
+           runs on every open and every undo. The keyframe diamond's ease menu writes `bez` with the name on a mask key as on any
+           other, and FM.evalMaskPath eases by `bez` first, so a roto key set to Ease In came back as the quadratic of the same
+           name (t², not bezier(.42,0,1,1)): about 6.5 % of the move off at mid-segment, under a diamond still saying Ease In. */
+        if (Array.isArray(k.bez) && k.bez.length === 4 && k.bez.every(n => isFinite(+n))) o.bez = k.bez.map(Number);
+        const ez = safeEz(k.ez); if (ez) o.ez = ez;
+        kf.push(o);
       });
       if (!kf.length) return null;
       kf.sort((a, b) => a.t - b.t);
-      return { kf: kf };
+      /* bughunt5 #9 / #13: and the Loop menu's loopMode, on the same whitelist as safeKfProp's. The menu writes it on every
+         animated prop of the layer, the mask path included, and FM.evalMaskPath now reads it. */
+      const out = { kf: kf };
+      if (['cycle', 'pingpong'].indexOf(path.loopMode) >= 0 && kf.length >= 2) out.loopMode = path.loopMode;
+      return out;
     }
     return safeMaskPts(path);   // static path (possibly []); null when not an array
   }

@@ -166165,6 +166165,68 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* bughunt5 #9 — EVERY OPEN AND EVERY UNDO STRIPPED THE EASING CURVE FROM A ROTO MASK'S KEYFRAMES. safeMaskPath (js/storage.js), run
+     by sanitizeMasks on every project open and, through FM.storage._sanitizeLayers, on every undo, redo and import, rebuilt each mask
+     keyframe as { t, v, e }: `bez` and `ez` were dropped, and the path came back as { kf } without the Loop menu's loopMode. The
+     keyframe diamond's ease menu writes `bez` with the name (js/timeline.js), and FM.evalMaskPath eases by `bez` first, then falls back
+     to FM.EASES[e], which for easeIn is the quadratic t², not the cubic bezier(.42,0,1,1). So a mask moving 600 px with Ease In on its
+     second key sat about 39 px back at mid-segment after a reopen or any undo, under a diamond still saying Ease In.
+     Driven through the two real doors: the seam FM.storage._safeMaskPath (what the open path runs) and FM.storage._sanitizeLayers
+     (what history.restore runs). Both REPLACE the mask and path objects, so everything is re-read afterwards.
+     On 9ba7f4b4: no `bez` after either, the mask at x 150.0 at mid-segment where Ease In puts it at about 189.4, and no ez or loopMode.
+     CONTROLS (the same before and after): the fixture's own path, before any sanitiser, is on the Ease In curve; an Overshoot key (a
+     name only FM.EASE_PRESETS has, so the fallback is the same curve) agrees either way. */
+  test('bughunt5 #9 A mask keyframe keeps its easing through a reopen and an undo: a roto mask moving 600 px with Ease In on its second keyframe sits where the Ease In curve puts it at mid-segment (within 0.5 px) after the open path’s sanitiser and after the undo path’s, with its bez still on the key, not about 39 px back on the quadratic of the same name; a Steps ease and Loop: cycle survive too (CONTROLS: the path before any sanitiser is on the curve; an Overshoot key agrees either way)', { item: '1176' }, function () {
+    if (!FM.storage || typeof FM.storage._safeMaskPath !== 'function' || typeof FM.storage._sanitizeLayers !== 'function' || typeof FM.evalMaskPath !== 'function' || typeof FM.bezierAt !== 'function' || !FM.EASE_PRESETS) throw new Error('setup: FM.storage._safeMaskPath / _sanitizeLayers, FM.evalMaskPath, FM.bezierAt or FM.EASE_PRESETS is not reachable');
+    const bad = [];
+    const SQ = [[0, 0], [40, 0], [40, 40], [0, 40]];
+    const MOVED = SQ.map(p => [p[0] + 600, p[1]]);
+    const EASE_IN = [0.42, 0, 1, 1];
+    /* A path keyed at 0 s and 2 s; the second key carries the ease (the segment ENTERING a key takes that key's ease). */
+    const path = (e, bez, extra) => ({ kf: [{ t: 0, v: SQ.map(p => p.slice()), e: 'linear' },
+      Object.assign({ t: 2, v: MOVED.map(p => p.slice()), e: e }, bez ? { bez: bez.slice() } : {}, extra || {})] });
+    const copy = o => JSON.parse(JSON.stringify(o));
+    const xAt = (p, t) => { const pts = FM.evalMaskPath({ path: p }, t); return (Array.isArray(pts) && Array.isArray(pts[0])) ? pts[0][0] : NaN; };
+    const want = 600 * FM.bezierAt(0.42, 0, 1, 1, 0.5);   // about 189.4; the quadratic easeIn gives 150
+
+    const raw = path('easeIn', EASE_IN);
+    if (!(Math.abs(xAt(raw, 1) - want) <= 0.5)) throw new Error('setup: before any sanitiser the fixture is at x ' + xAt(raw, 1) + ' at mid-segment, not on the Ease In curve at ' + want.toFixed(1));
+    if (!(Math.abs(want - 150) > 30)) throw new Error('setup: the Ease In curve and the quadratic are within 30 px at mid-segment (' + want.toFixed(1) + ' against 150), so this cannot see the curve being dropped');
+
+    const check = (where, p) => {
+      const k = (p && Array.isArray(p.kf)) ? p.kf[1] : null;
+      if (!k) { bad.push(where + ': the mask path came back with no second keyframe'); return; }
+      if (!Array.isArray(k.bez) || k.bez.length !== 4 || k.bez.some((n, i) => Math.abs(n - EASE_IN[i]) > 1e-12)) bad.push(where + ': the Ease In key came back with bez ' + JSON.stringify(k.bez) + ', not ' + JSON.stringify(EASE_IN));
+      const x = xAt(p, 1);
+      if (!(Math.abs(x - want) <= 0.5)) bad.push(where + ': at mid-segment the mask is at x ' + x.toFixed(1) + ', not ' + want.toFixed(1) + ' where Ease In puts it, ' + Math.abs(x - want).toFixed(1) + ' px off (' + (100 * Math.abs(x - want) / 600).toFixed(1) + ' % of the move): it runs on the quadratic of the same name while the diamond still says Ease In');
+    };
+
+    /* ── THE OPEN PATH: sanitizeMasks → safeMaskPath. */
+    check('after a reopen (the open path’s sanitiser)', FM.storage._safeMaskPath(copy(raw)));
+
+    /* ── THE UNDO PATH: history.restore → FM.storage._sanitizeLayers, which REPLACES the mask objects, so the mask is re-read. */
+    const L = FM.makeLayer('shape', { name: 'bh5 #9 roto', shape: 'rect', x: 160, y: 120, shapeW: 100, shapeH: 100, fill: '#ffffff', start: 0, duration: 4 });
+    L.masks = [{ id: 'bh5m9', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: copy(raw) }];
+    FM.storage._sanitizeLayers([L]);
+    const m = Array.isArray(L.masks) ? L.masks[0] : null;
+    if (!m) bad.push('after an undo (the undo path’s sanitiser): the mask is gone');
+    else check('after an undo (the undo path’s sanitiser)', m.path);
+
+    /* ── A STEPS EASE (ez) AND LOOP: CYCLE, kept on the same whitelists as every other keyframed prop's. */
+    const EZ = { fam: 'steps', preset: 'steps', p: { n: 4 } };
+    const lp = path('linear', null, { ez: EZ }); lp.loopMode = 'cycle';
+    const lo = FM.storage._safeMaskPath(copy(lp));
+    const kz = (lo && Array.isArray(lo.kf)) ? lo.kf[1] : null;
+    if (!kz || !kz.ez || kz.ez.fam !== 'steps' || kz.ez.preset !== 'steps' || !kz.ez.p || kz.ez.p.n !== 4) bad.push('a key eased from the Steps rail came back with ez ' + JSON.stringify(kz && kz.ez) + ', not ' + JSON.stringify(EZ));
+    if (!lo || lo.loopMode !== 'cycle') bad.push('a mask path set to Loop: cycle came back with loopMode ' + (lo ? lo.loopMode : '(no path)') + ', so it stops looping after any reopen or undo');
+
+    /* ── CONTROL: Overshoot lives only in FM.EASE_PRESETS, so with or without its bez the curve is the same one. */
+    const ov = path('overshoot', FM.EASE_PRESETS.overshoot);
+    const ovWant = xAt(ov, 1), ovGot = xAt(FM.storage._safeMaskPath(copy(ov)), 1);
+    if (!(Math.abs(ovGot - ovWant) <= 0.5)) bad.push('CONTROL: an Overshoot key is at x ' + ovGot.toFixed(1) + ' at mid-segment after the sanitiser, not ' + ovWant.toFixed(1));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();
