@@ -17517,33 +17517,37 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { vx: sx, vy: sy, df: df, gw: gw, gh: gh, FW: FW, FH: FH, BS: BS };
   }
 
-  // The emitter's WORLD position at time bt: the layer's own x/y (behavior-resolved) pushed through the
-  // parent chain's translate→rotate→scale, matching applyLayerTransform — so particles spray from where
-  // the picture actually renders. Reading raw transform.x/y left a grouped/parented or behavior-driven
-  // emitter's cloud detached at its local coordinates. Cycle- and depth-guarded like applyParentChain.
-  function emitterWorldPos(layer, bt, cx, cy) {
+  // The emitter's WORLD position at time bt: the layer's own x/y (behavior-resolved) carried through its
+  // parent chain, matching applyLayerTransform — so particles spray from where the picture actually
+  // renders. Reading raw transform.x/y left a grouped/parented or behavior-driven emitter's cloud
+  // detached at its local coordinates.
+  /* ═══ bughunt4 #1 follow-up (emitter) — THE CHAIN IS THE RENDERER'S OWN MATRIX, NOT A WALK THAT COPIES IT ═══════════════
+   * This used to walk the chain by hand: each parent's x, y, turn and uniform scale, about the parent's own origin. The
+   * renderer (applyParentChain) turns and scales a GROUP about its pivot (#630), and since bughunt4 #1 also applies each
+   * parent's flip, unlinked Width / Height, skew, depth and its own link mode. So inside a flipped, stretched, skewed, turned
+   * or depth-scaled group, or under a locked / weighted Controller link, the emitter LAYER was drawn in one place and its
+   * particles were born in another.
+   * Now the emitter's point (x, y, in its parent's space) goes through FM.parentChainMatrix at the birth time: applyParentChain
+   * itself, run into a probe, in the scene the layer was drawn with, so the cloud starts where the layer is drawn, by
+   * construction. Nothing else in Particles reads the chain: Direction, Spread, Gravity, Turbulence and the Line / Box /
+   * Circle shapes are frame-space settings that the emitter's own turn and flip do not touch either, so a parent's turn or
+   * mirror is not put on them.
+   * No parent: the layer's own x / y, as before. A parent that only moves: x + e, the very sum the old walk made. A turned or
+   * scaled Controller: the same numbers, composed in the matrix's order, so the last bit can differ (about 1e-14 px; the canvas
+   * draws in single precision). No matrix to be had: the layer's own x / y, which is where an unparented layer already lives
+   * (canvas-edit's parentXform falls back the same way). */
+  function emitterWorldPos(layer, bt, cx, cy, scene) {
     const bv = FM.behaviorValue;
-    const ev = (l, key, def) => {
-      let v = FM.evalProp(l.transform ? l.transform[key] : null, bt);
-      if (bv) v = bv(l, key, v, bt);
+    const ev = (key, def) => {
+      let v = FM.evalProp(layer.transform ? layer.transform[key] : null, bt);
+      if (bv) v = bv(layer, key, v, bt);
       return isFinite(v) ? v : def;
     };
-    let x = ev(layer, 'x', cx), y = ev(layer, 'y', cy);
-    const scene = FM.scene, seen = new Set([layer.id]);
-    let pid = layer.parent, depth = 0;
-    while (pid && scene && !seen.has(pid) && depth++ < 16) {
-      seen.add(pid);
-      const pl = FM.clipAt(scene, pid, bt);   // the half that actually covers bt, if this parent was split
-      if (!pl || !pl.transform) break;
-      const pr = ev(pl, 'rotation', 0) * Math.PI / 180;
-      const ps = Math.max(0.001, ev(pl, 'scale', 1));
-      const c = Math.cos(pr), s = Math.sin(pr);
-      const nx = ev(pl, 'x', 0) + (x * c - y * s) * ps;
-      const ny = ev(pl, 'y', 0) + (x * s + y * c) * ps;
-      x = nx; y = ny;
-      pid = pl.parent;
-    }
-    return { x: x, y: y };
+    const x = ev('x', cx), y = ev('y', cy);
+    if (!layer.parent) return { x: x, y: y };
+    const M = typeof FM.parentChainMatrix === 'function' ? FM.parentChainMatrix(layer, bt, scene || FM.scene) : null;
+    if (!M) return { x: x, y: y };
+    return { x: M.a * x + M.c * y + M.e, y: M.b * x + M.d * y + M.f };
   }
 
   /* ═══ A MOVED COPY OF THE LAYER SHOWS WHAT WAS REALLY PAST THE EDGE (#986 C27, hunt — queue 228's fix, finished) ════
@@ -19784,7 +19788,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * You saw nothing while editing and then found them in the exported video.
      *
      * At ps === 1 every multiplication below is a no-op, so exports and 1:1 previews are unchanged. */
-    particles: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+    particles: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const pk = ps || 1;   // PROJECT units -> PLATE px
       /* BEHIND LAYER (#482 polish 11.1): Off draws the layer and then the particles over it, as it always has; On lays the
          particles down first and draws the layer over them, so a logo sheds sparks from behind itself. */
@@ -19905,7 +19909,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         let ox = ox0, oy = oy0, ex = 0, ey = 0;
         if (emitter === 4) { ox = hx(i, 2) * W; oy = hx(i, 3) * H; }   // Whole frame: born anywhere on the plate, wherever the layer is
         else if (needsWorld) {   // parented / behavior-driven emitter: full world-position resolve at birth
-          const wp = emitterWorldPos(layer, start + bornT, cx / pk, cy / pk);   /* it works in PROJECT units, so hand it the fallback in those too */
+          const wp = emitterWorldPos(layer, start + bornT, cx / pk, cy / pk, scene);   /* it works in PROJECT units, so hand it the fallback in those too; `scene` is the one the layer was drawn in (bughunt4 #1 follow-up) */
           ox = wp.x * pk; oy = wp.y * pk;
         } else if (!statX || !statY) {
           const bt = start + bornT;

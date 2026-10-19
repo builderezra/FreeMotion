@@ -164080,6 +164080,150 @@
     });
   });
 
+  /* (#1e) PARTICLES WERE BORN WHERE THE OLD CHAIN PUT THEIR EMITTER, NOT WHERE THE EMITTER IS DRAWN. bughunt4 #1 made applyParentChain
+     carry a group's flip, unlinked Width / Height, skew, depth and each parent's own link mode to its members, and #1b handed the
+     editor that very matrix (FM.parentChainMatrix). Particles' emitterWorldPos (compositor.js) kept its own walk of the chain: each
+     parent's x, y, turn and uniform scale, about the parent's ORIGIN, so no group pivot (#630), no flip, no Width / Height, no skew,
+     no depth and no link mode. The emitter LAYER was drawn in one place and its particles were born in another.
+     The fixture is #1's: a group G at 0,0 holding the emitter E, a 40 × 40 block at 80,100 carrying Particles, and a white block at
+     240,140, so G's pivot is 160,120. Speed and Gravity are 0, so every particle stays where it was born; the kernel runs into the
+     suite's recording context (b11Draw), whose marks are where each particle is painted: 21 alive half a second in at 40 a second.
+     On 698b5dd0 (#1 and #1b in, this not) every particle is born where the old walk puts E:
+       A  ⋯ → Flip Horizontally: E is drawn mirrored about x = 160, at 240,100 (#1 measured its pixels at 220..259); its particles are
+          born at 80,100.
+       B  unlinked Width 150 % (scaleX 1.5): E is drawn at 160 + 1.5·(80 − 160) = 40, on row 100 (#1: 10..69); born at 80,100.
+       C  moved to 10,40, scaled to 125 % and turned 90°, about the pivot: E is drawn at (10, 40) + (160, 120) + 1.25·R90·(−80, −20)
+          = 195,60 (#1: 170..219 × 35..84); born where a turn about the project's corner puts it, (10, 40) + 1.25·R90·(80, 100) =
+          −115,140.
+       D  a Controller N1 at 160,120 turned 90°, a Controller N2 hung on it at 0,0 set to 'locked', and an emitter hung on N2 at 60,0:
+          N2 stays upright, so the emitter is drawn beside it at 220,120 (#1 F: 200..239 × 110..129); born at 160,180, turned with N1.
+     Now emitterWorldPos maps the emitter's point through FM.parentChainMatrix at each birth time, so every particle is born exactly
+     where the matrix the layer is drawn with (FM._layerCTM) puts the layer's origin.
+     CONTROLS: unparented, E's particles are born on its own 80,100, bit for bit (the plain path); in the untouched group, and in one
+     that only moves to 10.3,40.7, they are born on today's sums, bit for bit; under a Controller at 200,20 turned 90° and scaled to
+     125 % they are born on today's turn-and-scale walk, 75,120, within 1e-9 px (the matrix composes the same numbers in its own
+     order, so the last bit can differ: worked by hand, the 120 comes back 1.4e-14 high); under a normal middle link they turn with N1 to 160,180,
+     as before. In every case the place the layer is drawn is checked FIRST against its worked-out number, and against
+     FM.parentChainMatrix's own mapping of the emitter's point, so a red is the particles' and not the fixture's.
+     TOL: 1e-6 px between a birth and the drawn place (one matrix, read two ways); the faults are 40 px and more. */
+  test('bughunt4 #1e Particles spray from where their emitter is drawn: inside a group flipped horizontally they are born mirrored about the group\'s pivot, under an unlinked Width of 150 % stretched from it, in a moved, scaled and turned group turned about it, and under a locked middle Controller beside it, upright, each exactly where the emitter layer itself is drawn (CONTROLS: unparented, in an untouched group and in a group that only moves they are born where they were, bit for bit; under a turned and scaled Controller within 1e-9 px of where they were; under a normal middle link they turn with the top Controller; every drawn place is checked first)', { item: '1176' }, async function () {
+    const CFX = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!CFX || typeof CFX.particles !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.parentChainMatrix !== 'function' || typeof FM._layerCTM !== 'function' || typeof FM.flipLayer !== 'function' || typeof FM.setTransform !== 'function' || typeof FM.groupPivot !== 'function' || !FM.fxRegistry || typeof FM.fxRegistry.makeInstance !== 'function') throw new Error('setup: CANVAS_FX.particles / FM.makeLayer / parentChainMatrix / _layerCTM / flipLayer / setTransform / groupPivot / fxRegistry.makeInstance are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5, TOL = 1e-6;
+      FM.time = T;
+      const PT = Object.assign(b11Base('particles', {}), { rate: 40, lifetime: 4, speed: 0, gravity: 0 });
+      const grp = (name) => {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        return g;
+      };
+      const ctl = (name, x, y) => {
+        const n = FM.makeLayer('null', { name: name, x: x, y: y, start: 0, duration: 4 });
+        n.start = 0; n.duration = 4; n.transform.x = x; n.transform.y = y;
+        return n;
+      };
+      const block = (name, x, y, fill, parent) => {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: y, shapeW: 40, shapeH: 40, fill: fill, start: 0, duration: 4 });
+        L.start = 0; L.duration = 4; L.transform.x = x; L.transform.y = y;
+        L.parent = parent || null;
+        return L;
+      };
+      const emitter = (name, x, y, parent) => {
+        const L = block(name, x, y, '#ff0000', parent);
+        L.effects = [{ type: 'particles', enabled: true, params: b11Copy(PT) }];
+        return L;
+      };
+      /* Every particle alive at T, where it is painted: the kernel on a 1:1 plate on the clip's own clock, as drawCanvasEffect runs it. */
+      const births = (L) => b11Draw('particles', PT, 320, 240, T, T - L.start, L, 1).marks.filter(m => m.m === 'fill');
+      /* Where the renderer draws the layer's origin (its own x, y) at T: the layer's whole matrix, and the chain matrix's mapping. */
+      const drawn = (L) => { const M = FM._layerCTM(L, T, FM.scene); return M ? { x: M.e, y: M.f } : null; };
+      const chained = (L) => {
+        const M = FM.parentChainMatrix(L, T, FM.scene), x = FM.evalProp(L.transform.x, T), y = FM.evalProp(L.transform.y, T);
+        return M ? { x: M.a * x + M.c * y + M.e, y: M.b * x + M.d * y + M.f } : { x: x, y: y };
+      };
+      const say = p => p ? '(' + (Math.round(p.x * 1000) / 1000) + ', ' + (Math.round(p.y * 1000) / 1000) + ')' : 'nowhere';
+      const near = (p, q, tol) => !!p && !!q && Math.abs(p.x - q.x) <= tol && Math.abs(p.y - q.y) <= tol;
+      const count = (bs) => { if (bs.length < 15) throw new Error('CONTROL: the kernel painted ' + bs.length + ' particles half a second in at 40 a second, not 21 - it did not run as worked out above'); return bs; };
+      const bad = [];
+      /* One case: the layer is drawn at `want` (CONTROL, first), the chain matrix agrees, and every particle is born there. `old` is
+         where the old walk bore them; a birth found there says so, with `why`. */
+      const check = (label, L, want, old, why) => {
+        const d = drawn(L), c = chained(L);
+        if (!near(d, want, TOL)) throw new Error('CONTROL ' + label + ': the emitter layer is drawn at ' + say(d) + ', not ' + say(want) + ' - the fixture is not the one worked out above, so nothing here can be trusted');
+        if (!near(c, d, TOL)) throw new Error('CONTROL ' + label + ': FM.parentChainMatrix maps the emitter’s point to ' + say(c) + ' where the layer’s own matrix draws it at ' + say(d));
+        const bs = count(births(L)), off = bs.filter(m => !near(m, d, TOL));
+        if (off.length) bad.push(label + ': ' + off.length + ' of ' + bs.length + ' particles are born at ' + say(off[0]) + ' where the emitter layer is drawn at ' + say(d) + (near(off[0], old, 1e-6) ? ' - exactly where the old turn-and-scale walk puts it: ' + why : ''));
+      };
+
+      /* ── CONTROL: unparented, the plain path, bit for bit. */
+      const E = emitter('bh4 #1e emitter', 80, 100, null);
+      const W = block('bh4 #1e white', 240, 140, '#ffffff', null);
+      FM.scene.layers = [E, W];
+      const b0 = count(births(E));
+      if (b0.some(m => m.x !== 80 || m.y !== 100)) throw new Error('CONTROL: an unparented emitter at 80,100 bears a particle at ' + say(b0.filter(m => m.x !== 80 || m.y !== 100)[0]) + ' - not every one on 80,100 bit for bit, where they always were');
+
+      /* ── CONTROL: in the untouched group, and in one that only moves, today's sums, bit for bit. */
+      const G = grp('bh4 #1e group');
+      E.parent = G.id; W.parent = G.id;
+      FM.scene.layers = [G, E, W];
+      const bu = count(births(E));
+      if (bu.some(m => m.x !== 80 || m.y !== 100)) throw new Error('CONTROL: in the untouched group the emitter bears a particle at ' + say(bu.filter(m => m.x !== 80 || m.y !== 100)[0]) + ' - not every one on 80,100 bit for bit, where they always were');
+      G.transform.x = 10.3; G.transform.y = 40.7;
+      const wm = { x: 10.3 + 80, y: 40.7 + 100 }, dm = drawn(E), bm = count(births(E));
+      G.transform.x = 0; G.transform.y = 0;
+      if (!near(dm, wm, TOL)) throw new Error('CONTROL: in a group moved to 10.3,40.7 the emitter layer is drawn at ' + say(dm) + ', not ' + say(wm));
+      if (bm.some(m => m.x !== wm.x || m.y !== wm.y)) throw new Error('CONTROL: in a group moved to 10.3,40.7 a particle is born at ' + say(bm.filter(m => m.x !== wm.x || m.y !== wm.y)[0]) + ' - not on today’s sum ' + say(wm) + ' bit for bit');
+
+      /* ── CONTROL: under a Controller moved to 200,20, turned 90° and scaled to 125 %: today's turn-and-scale walk. */
+      const N = ctl('bh4 #1e controller', 200, 20);
+      N.transform.rotation = 90; N.transform.scale = 1.25;
+      E.parent = N.id;
+      FM.scene.layers = [N, E];
+      const r = 90 * Math.PI / 180, co = Math.cos(r), si = Math.sin(r);
+      const wn = { x: 200 + (80 * co - 100 * si) * 1.25, y: 20 + (80 * si + 100 * co) * 1.25 }, dn = drawn(E), bn = count(births(E));
+      if (!near(dn, { x: 75, y: 120 }, TOL) || !near(wn, dn, TOL)) throw new Error('CONTROL: under the turned, scaled Controller the emitter layer is drawn at ' + say(dn) + ' and today’s walk puts it at ' + say(wn) + ', not both at (75, 120)');
+      const bnOff = bn.filter(m => !near(m, wn, 1e-9));
+      if (bnOff.length) throw new Error('CONTROL: under the turned, scaled Controller ' + bnOff.length + ' particles are born at ' + say(bnOff[0]) + ', more than 1e-9 px from today’s ' + say(wn) + ' - a Controller’s turn and scale the old walk already had right moved');
+
+      /* ── A: ⋯ → Flip Horizontally. */
+      E.parent = G.id;
+      FM.scene.layers = [G, E, W];
+      FM.flipLayer(G, 'h');
+      if (!G.flipH) throw new Error('CONTROL: FM.flipLayer did not set the group’s flipH');
+      const pv = FM.groupPivot(G, FM.scene, T);
+      if (!pv || Math.abs(pv.x - 160) > TOL || Math.abs(pv.y - 120) > TOL) throw new Error('CONTROL: the flipped group’s pivot is ' + say(pv) + ', not (160, 120), the middle of its members’ box');
+      check('A (the group flipped horizontally)', E, { x: 240, y: 100 }, { x: 80, y: 100 }, 'the flip never reached the particles');
+      G.flipH = false;
+
+      /* ── B: unlinked Width 150 % (scaleX 1.5, scaleY 1). */
+      FM.setTransform(G, 'scaleX', 1.5, T);
+      check('B (the group’s Width at 150 %, unlinked)', E, { x: 40, y: 100 }, { x: 80, y: 100 }, 'the Width never reached the particles');
+      G.transform.scaleX = 1;
+
+      /* ── C: moved, scaled and turned, about the pivot. */
+      G.transform.x = 10; G.transform.y = 40; G.transform.scale = 1.25; G.transform.rotation = 90;
+      check('C (the group moved to 10,40, scaled to 125 % and turned 90°)', E, { x: 195, y: 60 }, { x: -115, y: 140 }, 'turned and scaled about the project’s corner, not the group’s pivot');
+      G.transform.x = 0; G.transform.y = 0; G.transform.scale = 1; G.transform.rotation = 0;
+
+      /* ── D: a 'locked' middle Controller. CONTROL first: under a normal one the births turn with N1, as they always did. */
+      const N1 = ctl('bh4 #1e turned controller', 160, 120);
+      N1.transform.rotation = 90;
+      const N2 = ctl('bh4 #1e middle controller', 0, 0);
+      N2.parent = N1.id;
+      const E2 = emitter('bh4 #1e emitter on the middle controller', 60, 0, N2.id);
+      FM.scene.layers = [E2, N2, N1];
+      N2.parentMode = 'normal';
+      const turned = { x: 160, y: 180 }, dt = drawn(E2), bt = count(births(E2));
+      if (!near(dt, turned, TOL)) throw new Error('CONTROL: under a normal middle link the emitter layer is drawn at ' + say(dt) + ', not turned with N1 to (160, 180) - the rig does not turn, so a lock cannot be seen');
+      if (bt.some(m => !near(m, turned, TOL))) throw new Error('CONTROL: under a normal middle link a particle is born at ' + say(bt.filter(m => !near(m, turned, TOL))[0]) + ', not turned with N1 to (160, 180)');
+      N2.parentMode = 'locked';
+      check('D (a locked middle Controller)', E2, { x: 220, y: 120 }, turned, 'it still turns with the top Controller, so the middle link’s own mode never reached the particles');
+
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#1) A GROUP'S FLIP, WIDTH / HEIGHT, SKEW, TILT AND DEPTH DID NOTHING TO ITS MEMBERS. A group G at 0,0 holds a red 40 × 40 block
      centred at 80,100 (columns 60..99, rows 80..119) and a white one at 240,140; the members' box is 60..260 × 80..160, so G's
      pivot (anchor 0.5) is 160,120. On dfc4f2b2 applyParentChain passes on only G's x, y, turn and uniform scale: flipH / flipV,
