@@ -167684,8 +167684,13 @@
   /* The real sw.js as if registered at `base` on `origin` ('/' is a site root, '/FreeMotion/' the live site). `seed` is
      [url, body] pairs; a string key such as 'index-fallback' resolves against the worker's own URL, as Cache Storage does.
      nav(page) dispatches one navigation to the folder, answered from the fake network with `page`, and waits for the answer AND
-     for the clean-up it hands to waitUntil; activate() dispatches the activate event an update delivers and waits for it. */
-  async function _bh6Worker(origin, base, seed) {
+     for the clean-up it hands to waitUntil; activate() dispatches the activate event an update delivers and waits for it.
+     (#2) `opts` is optional: opts.fetch(req, init) stands in for the network instead of answering with `page`, and
+     opts.navTimeoutMs is put in the stub scope as self.FM_NAV_TIMEOUT_MS, the navigation budget sw.js reads (8000 when it
+     is absent, as in a real worker). launch() dispatches one navigation and waits for NOTHING: it hands back the answer's
+     promise and the list of what was given to waitUntil, so a test can race an answer that may never come. */
+  async function _bh6Worker(origin, base, seed, opts) {
+    const o = opts || {};
     const src = await fetch('../sw.js?probe=bughunt6-' + Date.now()).then(r => r.text());
     if (src.length < 500 || src.indexOf('pruneSuperseded') < 0) throw new Error('setup: ../sw.js came back as ' + src.length + ' chars with no pruneSuperseded in it, so this would test nothing');
     const swUrl = origin + base + 'sw.js';
@@ -167706,9 +167711,10 @@
       location: { origin: origin, href: swUrl },
       registration: { scope: origin + base },
     };
+    if (o.navTimeoutMs != null) scope.FM_NAV_TIMEOUT_MS = o.navTimeoutMs;
     const cachesStub = { open: () => Promise.resolve(cache), keys: () => Promise.resolve(['freemotion-v1']), delete: () => Promise.resolve(true) };
     let page = '';
-    const net = () => Promise.resolve(new Response(page, { status: 200 }));
+    const net = o.fetch || (() => Promise.resolve(new Response(page, { status: 200 })));
     // eslint-disable-next-line no-new-func
     new Function('self', 'caches', 'fetch', 'Response', 'URL', src)(scope, cachesStub, net, Response, URL);
     const activate = async () => {
@@ -167730,7 +167736,16 @@
       await Promise.all(held);
       return res;
     };
-    return { store: store, key: key, has: u => store.has(key(u)), activate: activate, nav: nav };
+    const launch = () => {
+      if (!handlers.fetch || !handlers.fetch.length) throw new Error('setup: sw.js registered no fetch handler');
+      const url = origin + base;
+      let answered = null;
+      const held = [];
+      handlers.fetch[0]({ request: { method: 'GET', url: url, mode: 'navigate' }, respondWith: p => { answered = p; }, waitUntil: p => { held.push(p); } });
+      if (!answered) throw new Error('setup: sw.js did not answer the navigation to ' + url);
+      return { answer: answered, held: held };
+    };
+    return { store: store, key: key, has: u => store.has(key(u)), activate: activate, nav: nav, launch: launch };
   }
 
   /* (#1) THE PRUNE ITSELF. A launch of a page naming js/app.js?v=9 and styles.css?v=775 must delete the ?v=8 and ?v=774 copies an
@@ -168042,6 +168057,139 @@
       if (!FM.drawTool.active) bad.push('the drawing ended during the keys, so the ones after it reached nothing');
     }, endDrawing);
     if (FM.drawTool.active) throw new Error('the drawing was still up after the test put the scene back');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#2) THE INSTALLED APP OPENS FROM ITS OFFLINE COPY WHEN THE NETWORK HANGS. Opening the app is a navigation, and sw.js
+     fetched the page with no time limit, retrying once on a throw: on one bar, or on Wi-Fi that reaches nothing, he saw a
+     blank screen until the platform gave up (about a minute on iOS) and then as long again for the retry, while a
+     complete offline copy (index-fallback) sat in the cache. The fix gives the page fetch one budget for both tries (8 s,
+     the app's own number) and, past it, serves the offline copy by the ordinary offline path, stale marker and all, while
+     the fetch carries on under waitUntil to refresh the copy for next time.
+     THE SEAM: sw.js reads its budget from self.FM_NAV_TIMEOUT_MS, 8000 when it is absent (always, in a real worker).
+     _bh6Worker's opts.navTimeoutMs puts a number there in the stub scope, so these run in tenths of a second, and the
+     last control gives no number, to hold the real default above a slow network's 2.5 s (#306: a short timer would
+     serve an older build on a connection that was only slow).
+     Every answer is raced against DEADLINE (4 s), so a launch that never answers fails by name instead of hanging.
+     THE RETRY'S NUMBERS: a 0.6 s budget and a first try that fails at 0.5 s. One budget for both answers at about 0.6 s;
+     a budget per try cannot answer before 1.1 s (0.5 + 0.6). The bar is 1.0 s: 0.4 s of room for a busy machine, and a
+     per-try budget can never come in under it.
+     FAILS ON 8b8cf793: the fetch that never answers leaves the launch with no answer at all, and so does the retry that
+     never answers, so neither gets the offline copy and nothing refreshes it.
+     CONTROLS, which hold before and after: a network answering in 50 ms is served and refreshes the copy and clears the
+     marker; one that fails at once gets the copy, marked, after two tries; with nothing cached a network slower than the
+     budget is still waited for; and with no budget given a network answering in 2.5 s is served. Each worker is a stub
+     scope of its own (_bh6Worker), so no global is replaced and there is nothing to restore. */
+  test('bughunt6 #2 The installed app opens from its offline copy when the network hangs: a launch whose page fetch never answers gets the cached page within its time budget, marked as the offline copy, a retry after a dropped first try fits in the same budget, and the answer that lands late refreshes the offline copy for next time unless it names scripts the phone does not hold (CONTROLS: a network that answers in 50 ms, one that fails at once, nothing cached, and the default budget waiting out a 2.5 s network)', { item: '1176' }, async function () {
+    const O = 'https://builderezra.github.io', base = '/FreeMotion/', P = O + base;
+    const DEADLINE = 4000;
+    const PAGE = v => '<span class="ver" title="Tap">' + v + '</span>';
+    const later = () => { const d = {}; d.p = new Promise((ok, no) => { d.ok = ok; d.no = no; }); return d; };
+    const within = (p, ms) => Promise.race([Promise.resolve(p).then(r => ({ r: r })), sleep(ms).then(() => null)]);
+    const text = async r => (r && typeof r.clone === 'function' ? await r.clone().text() : '');
+    const stamp = async w => { const n = w.store.get(w.key('served-stale-shell')); return n ? await n.clone().text() : null; };
+    const copy = w => text(w.store.get(w.key('index-fallback')));
+    const fails = () => Promise.reject(new TypeError('Failed to fetch'));
+    const bad = [];
+
+    /* 1. THE BUG: a page fetch that never answers, a 0.3 s budget, and an offline copy of v9.42 in the cache. Then the
+       late answer lands (v9.53, naming js/app.js?v=490, which the phone holds) and must become the offline copy, while the
+       marker keeps saying this launch opened v9.42. */
+    {
+      const slow = later();
+      const w = await _bh6Worker(O, base, [['index-fallback', PAGE('v9.42')], [P + 'js/app.js?v=490', 'bytes of js/app.js?v=490']], { navTimeoutMs: 300, fetch: () => slow.p });
+      const L = w.launch();
+      const got = await within(L.answer, DEADLINE);
+      if (!got) {
+        bad.push('a launch whose page fetch never answers had no answer ' + (DEADLINE / 1000) + ' s in, with a 0.3 s budget and an offline copy in the cache, so the installed app shows a blank screen until the network gives up, and then again for the retry');
+        slow.ok(new Response(PAGE('v9.53'), { status: 200 }));
+      } else {
+        const body = await text(got.r);
+        if (!/v9\.42/.test(body)) bad.push('past the budget the launch was not answered with the offline copy (v9.42) but with ' + JSON.stringify(body.slice(0, 80)));
+        if ((await stamp(w)) !== 'v9.42') bad.push('the launch opened the offline copy without the stale marker naming v9.42, so the app cannot say it opened an older copy (#306)');
+        if (!L.held.length) bad.push('the launch that stopped waiting handed nothing to waitUntil, so the browser may stop the worker and the slow answer is thrown away');
+        slow.ok(new Response('<script src="js/app.js?v=490"></script>' + PAGE('v9.53'), { status: 200 }));
+        if (!(await within(Promise.all(L.held), DEADLINE))) bad.push('the work kept alive for the late answer had not finished ' + (DEADLINE / 1000) + ' s after it landed');
+        const now = await copy(w);
+        if (!/v9\.53/.test(now)) bad.push('the answer that landed after the budget did not refresh the offline copy (it holds ' + JSON.stringify(now.slice(0, 80)) + '), so the next launch on a bad connection opens the older copy again');
+        if ((await stamp(w)) !== 'v9.42') bad.push('the late answer cleared or changed the stale marker, so the app would not say this launch opened its offline copy (v9.42)');
+      }
+    }
+
+    /* 1b. A late answer that names js/app.js?v=491, which the phone has never fetched (a release it has not opened yet),
+       leaves the offline copy alone: that page never ran here, so its new files are not cached, and an offline copy naming
+       them would hang on them next time instead of opening. Only judged when the launch was answered (1 says why not). */
+    {
+      const slow = later();
+      const w = await _bh6Worker(O, base, [['index-fallback', PAGE('v9.42')], [P + 'js/app.js?v=490', 'bytes of js/app.js?v=490']], { navTimeoutMs: 300, fetch: () => slow.p });
+      const L = w.launch();
+      if (await within(L.answer, DEADLINE)) {
+        slow.ok(new Response('<script src="js/app.js?v=491"></script>' + PAGE('v9.54'), { status: 200 }));
+        await within(Promise.all(L.held), DEADLINE);
+        const now = await copy(w);
+        if (!/v9\.42/.test(now)) bad.push('a late answer naming js/app.js?v=491, which the phone has never fetched, replaced the offline copy (it holds ' + JSON.stringify(now.slice(0, 80)) + '), so the next launch on a bad connection would open a page whose scripts are not there');
+      } else {
+        slow.ok(new Response(PAGE('v9.54'), { status: 200 }));
+      }
+    }
+
+    /* 2. THE RETRY FITS IN THE SAME BUDGET: 0.6 s, the first try fails at 0.5 s, the retry never answers. */
+    {
+      let tries = 0;
+      const w = await _bh6Worker(O, base, [['index-fallback', PAGE('v9.42')]], { navTimeoutMs: 600, fetch: () => { tries++; return tries === 1 ? sleep(500).then(fails) : new Promise(() => {}); } });
+      const t0 = performance.now();
+      const got = await within(w.launch().answer, DEADLINE);
+      const ms = performance.now() - t0;
+      if (!got) bad.push('a first try that failed at 0.5 s and a retry that never answers left the launch with no answer ' + (DEADLINE / 1000) + ' s in (budget 0.6 s), so the retry waits on the network with no limit');
+      else {
+        if (!/v9\.42/.test(await text(got.r))) bad.push('after a dropped first try and a hung retry the launch was not answered with the offline copy (v9.42)');
+        if (tries !== 2) bad.push('the first try failed at 0.5 s, inside the 0.6 s budget, and the page was fetched ' + tries + ' time(s), not twice, so the blip retry ' + (tries < 2 ? 'did not run' : 'ran more than once'));
+        if (ms >= 1000) bad.push('with a 0.6 s budget and the first try failing at 0.5 s the offline copy came ' + (ms / 1000).toFixed(2) + ' s in, not about 0.6 s: the retry got a budget of its own, so the wait doubles');
+      }
+    }
+
+    /* CONTROL: a network that answers in 50 ms is served, refreshes the offline copy and clears an old marker, as before */
+    {
+      const w = await _bh6Worker(O, base, [['index-fallback', PAGE('v9.42')], ['served-stale-shell', 'v9.42']], { navTimeoutMs: 300, fetch: () => sleep(50).then(() => new Response(PAGE('v9.53'), { status: 200 })) });
+      const L = w.launch();
+      const got = await within(L.answer, DEADLINE);
+      const body = got ? await text(got.r) : '';
+      if (!/v9\.53/.test(body)) bad.push('CONTROL: a network answering in 50 ms (budget 0.3 s) was not served: ' + (got ? JSON.stringify(body.slice(0, 80)) : 'no answer at all'));
+      else {
+        await within(Promise.all(L.held), DEADLINE);
+        if (!/v9\.53/.test(await copy(w))) bad.push('CONTROL: a launch answered by the network in 50 ms did not refresh the offline copy');
+        if ((await stamp(w)) !== null) bad.push('CONTROL: a launch answered by the network in 50 ms left the stale marker behind, so the app would warn about a load that was fine');
+      }
+    }
+
+    /* CONTROL: a network that fails at once gets the offline copy, marked, after two tries, as before */
+    {
+      let tries = 0;
+      const w = await _bh6Worker(O, base, [['index-fallback', PAGE('v9.42')]], { navTimeoutMs: 300, fetch: () => { tries++; return fails(); } });
+      const got = await within(w.launch().answer, DEADLINE);
+      if (!got || !/v9\.42/.test(await text(got.r))) bad.push('CONTROL: with a network that fails at once the launch was not answered with the offline copy (v9.42)');
+      else {
+        if (tries !== 2) bad.push('CONTROL: with a network that fails at once the page was fetched ' + tries + ' time(s), not twice (the blip retry)');
+        if ((await stamp(w)) !== 'v9.42') bad.push('CONTROL: with a network that fails at once the offline copy was served without the stale marker naming v9.42');
+      }
+    }
+
+    /* CONTROL: with nothing cached there is nothing better to show, so a network slower than the budget is waited for */
+    {
+      const w = await _bh6Worker(O, base, [], { navTimeoutMs: 300, fetch: () => sleep(600).then(() => new Response(PAGE('v9.53'), { status: 200 })) });
+      const got = await within(w.launch().answer, DEADLINE);
+      const ok = got && got.r && got.r.ok;
+      if (!ok || !/v9\.53/.test(await text(got.r))) bad.push('CONTROL: with nothing cached, a network answering in 0.6 s (budget 0.3 s) was not waited for: ' + (got ? (got.r && got.r.type === 'error' ? 'the launch failed at the budget' : 'the answer was not the page') : 'no answer at all'));
+    }
+
+    /* CONTROL: with no budget given (a real worker's 8 s), a network answering in 2.5 s is served, not the offline copy */
+    {
+      const w = await _bh6Worker(O, base, [['index-fallback', PAGE('v9.42')]], { fetch: () => sleep(2500).then(() => new Response(PAGE('v9.53'), { status: 200 })) });
+      const got = await within(w.launch().answer, DEADLINE + 2500);
+      const body = got ? await text(got.r) : '';
+      if (!/v9\.53/.test(body)) bad.push('CONTROL: with the default budget, a network answering in 2.5 s was not served (' + (got ? JSON.stringify(body.slice(0, 80)) : 'no answer at all') + '), so the budget is short enough to bring back #306: an older build on a connection that was only slow');
+    }
+
     if (bad.length) throw new Error(bad.join(' · '));
   });
   // ── end bughunt 6 ──
