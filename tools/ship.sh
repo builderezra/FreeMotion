@@ -1023,6 +1023,7 @@ if ! grep -q '"ok": true' <<<"$OUT"; then
   if grep -q 'FAIL' <<<"$OUT"; then
     echo "❌ SUITE IS RED — not committing, not pushing."
     printf '%s' "$OUT" | _fails
+    leaks_report "$OUT" desktop   # what earlier tests left changed (report only; tools/_testfloor.sh) — a red deep in a run is often one
     alone_diag .claude/ship/suite-desktop.out 1280
   elif [ -n "$SUM" ]; then
     # …and a run that FINISHED with the runner's own Error summary (the app frame reloaded, the page navigated, the run
@@ -1044,6 +1045,7 @@ test_floor_check "$OUT" || { echo "   Not committing, not pushing."; exit 1; }
 notrun_report "$OUT" desktop || { _WHY="a test is NOT RUN HERE on the Mac"; exit 1; }
 NOTRUN_ALL="$(notrun_list "$OUT")"
 font_report "$OUT" desktop   # a different font than the Mac's is said, never refused (tools/_testfloor.sh)
+leaks_report "$OUT" desktop  # tests that left shared state changed for the next one — said, never refused (tools/_testfloor.sh)
 echo "✅ $SUM  (${_suite_secs}s)  $(printf "%s" "$OUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"   # which browser ran (the PM review)
 # PC SPEED BESIDE PHONE SPEED (#1098 clause 2): one line per metric the speed tests recorded — reported, never refused
 python3 tools/perf_report.py .claude/ship/suite-desktop.out "desktop pass"
@@ -1169,6 +1171,7 @@ if grep -qE '^(styles\.css|index\.html|js/)' <<<"$PHONE_RELEVANT"; then
     echo "   It is GREEN at 1280px, so this is a layout that only breaks on a phone — which is the"
     echo "   one shape of bug this app can least afford, and exactly how queue 431 shipped."
     printf '%s' "$POUT" | _fails
+    leaks_report "$POUT" phone   # what earlier tests left changed (report only; tools/_testfloor.sh)
     alone_diag .claude/ship/suite-phone.out 380
     exit 1
   fi
@@ -1179,6 +1182,7 @@ if grep -qE '^(styles\.css|index\.html|js/)' <<<"$PHONE_RELEVANT"; then
   win_pass 380 phone || { _WHY="an AAC test was red in Windows Chrome at 380px"; exit 1; }
   NOTRUN_ALL="$(printf '%s\n%s\n' "$NOTRUN_ALL" "$NOTRUN_PASS" | sed '/^$/d' | sort -u)"
   font_report "$POUT" phone
+  leaks_report "$POUT" phone   # tests that left shared state changed for the next one — said, never refused (tools/_testfloor.sh)
   echo "✅ phone $PSUM  $(printf "%s" "$POUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"
   python3 tools/perf_report.py .claude/ship/suite-phone.out "phone pass"   # #1098 clause 2: PC speed beside phone speed (reported only)
 else

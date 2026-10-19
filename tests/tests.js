@@ -64737,8 +64737,67 @@
     } finally { FM.scene = saved; FM.scene.selectedId = savedSel; try { FM.refreshAll(); } catch (e) {} if (hadHome && FM.home && FM.home.open) FM.home.open(); }
   });
 
+  /* ═══ THE LEAK CHECK (20 Oct, the isolation pass) ═══════════════════════════════════════════════════════════════════
+     A test that changes shared app state and does not put it back hands it to every test after it, and those tests then
+     pass in the full order on what they inherited and fail alone (the 20 Oct pass found six such sources and eleven
+     inheritors, one at a time). Nothing named them. So the runner takes a small FINGERPRINT of that state before and after
+     EVERY test, and a difference is recorded against the test that made it: window.__fmLeaks = [{ test, what }], where
+     `what` reads "<part> <before> → <after>" for each part that moved. tests/_cdp.py hands it on as "leaks" in its JSON,
+     run.html lists it under the results, and ship.sh prints it after each pass (tools/_testfloor.sh leaks_report).
+     The parts: the open project's id, Home open or shut, FM.scene still the same object, the layer count and ids, the
+     selection, the quality ladder's tier and latches, the open project's notes, FM.playing, and the media records that
+     belong to no module (pinned ones, the effect thumbnails' cache, are the app's own and are left out).
+     CHEAP AND READ-ONLY: plain reads and three read-only app calls (FM.storage.openProjectId, FM.home.isOpen,
+     FM._perfState), no rendering, no await. NO EXEMPTIONS: a test that changes one of these on purpose for the test after
+     it is exactly the coupling this exists to remove — it should put it back, and the next test should set it up.
+     ONE THING IT CANNOT DO: a cleanup a test did not await (a remove() or a project open still running when it returned)
+     lands during the NEXT test, and is charged to that one. A test named for a change it never makes is the clue. */
+  function leakPrint() {
+    var f = { project: '?', home: '?', scene: null, layers: '?', ids: '', sel: '?', quality: '?', notes: '?', playing: '?', media: '?' };
+    try { f.project = (FM.storage && FM.storage.openProjectId) ? String(FM.storage.openProjectId() || 'none') : '?'; } catch (e) {}
+    try { f.home = (FM.home && FM.home.isOpen) ? (FM.home.isOpen() ? 'open' : 'shut') : '?'; } catch (e) {}
+    try {
+      var S = FM.scene; f.scene = S || null;
+      var ls = (S && S.layers) || [];
+      f.layers = String(ls.length);
+      f.ids = ls.map(function (l) { return l && l.id; }).join(',');
+      var n = (S && S.selectedIds && S.selectedIds.length) || ((S && S.selectedId) ? 1 : 0);
+      f.sel = ((S && S.selectedId) || 'none') + ' (' + n + ')';
+      f.notes = String(((S && S.project && S.project.notes) || []).length);
+    } catch (e) {}
+    try {
+      var st = FM._perfState ? FM._perfState() : null;
+      if (st) f.quality = 'tier ' + st.tier + (st.locked ? ' latched' : '') + (st.climbLockAt ? ' climb-latched' : '');
+    } catch (e) {}
+    try { f.playing = String(!!FM.playing); } catch (e) {}
+    try {
+      var all = (FM.media && FM.media.all) ? FM.media.all() : null, k = 0;
+      if (all) { for (var id in all) { if (!(FM.media.isPinned && FM.media.isPinned(id))) k++; } f.media = String(k); }
+    } catch (e) {}
+    return f;
+  }
+  function leakDiff(a, b) {
+    var out = [];
+    if (a.project !== b.project) out.push('open project ' + a.project + ' → ' + b.project);
+    if (a.home !== b.home) out.push('Home ' + a.home + ' → ' + b.home);
+    if (a.scene !== b.scene) out.push('FM.scene is another object than the one it found');
+    if (a.layers !== b.layers) out.push('layers ' + a.layers + ' → ' + b.layers);
+    else if (a.ids !== b.ids) out.push('layers ' + a.layers + ', but not the same ones');
+    if (a.sel !== b.sel) out.push('selection ' + a.sel + ' → ' + b.sel);
+    if (a.quality !== b.quality) out.push('quality ladder ' + a.quality + ' → ' + b.quality);
+    if (a.notes !== b.notes) out.push('project notes ' + a.notes + ' → ' + b.notes);
+    if (a.playing !== b.playing) out.push('FM.playing ' + a.playing + ' → ' + b.playing);
+    if (a.media !== b.media) out.push('media records ' + a.media + ' → ' + b.media);
+    return out.join('; ');
+  }
+
   async function run() {
     var results = [];
+    /* REPORT ONLY while this is false: a leak is listed, and no test turns red for it. THE PM'S PLAN (20 Oct): once a full
+       run lists no LEAKS on both passes, flip this to true, so a test that leaves state behind FAILS by name from then on,
+       instead of failing whichever test inherits it, alone or deep in a run. One constant; nothing else changes. */
+    var LEAKS_ARE_RED = false, LEAK_CAP = 400, leaksMore = 0;
+    window.__fmLeaks = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
     var WIN_KEYS = ['innerHeight', 'innerWidth', 'outerHeight', 'outerWidth', 'devicePixelRatio', 'visualViewport', 'matchMedia'];
     var winD0 = {}; WIN_KEYS.forEach(function (k) { try { winD0[k] = Object.getOwnPropertyDescriptor(window, k); } catch (e) {} });
@@ -64802,6 +64861,7 @@
       var _sbIds = ['opt-bar', 'view-bar'], _sb0 = _sbIds.map(function (id) { var el = document.getElementById(id); return !!(el && FM.sideBarOpen && FM.sideBarOpen(el)); });
       var _z0 = (FM.timeline && FM.timeline.getZoom) ? FM.timeline.getZoom() : null;
       try { _lk0 = { scene: FM.scene, ids: (FM.scene && FM.scene.layers || []).map(function (l) { return l.id; }), pv: FM._fxPreview || null, iso: FM.isolate || null }; } catch (e) {}
+      var _fp0 = leakPrint();   // the leak check's BEFORE (see leakPrint, above run)
       var _t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       /* A HUNG TEST IS A NAMED FAILURE, NOT A SILENT STALL (2 Sep). A throw inside a callback a test does not
        * await — a timer, a rAF, a dropped promise — used to leave its outer promise pending for ever; the
@@ -64888,12 +64948,27 @@
           }
         }
       } catch (e) {}
+      // the leak check's AFTER (see leakPrint, above run): what this test left changed for the next one
+      try {
+        var _leak = leakDiff(_fp0, leakPrint());
+        if (_leak) {
+          if (window.__fmLeaks.length < LEAK_CAP) window.__fmLeaks.push({ test: t.name, what: _leak });
+          else leaksMore++;
+          if (LEAKS_ARE_RED) {
+            var _lmsg = 'LEAKS: ' + _leak + ' — left for the next test; put it back in this test\'s own finally';
+            if (ok || notRun) { ok = false; notRun = ''; err = _lmsg; }
+            else err += ' [also ' + _lmsg + ']';
+          }
+        }
+      } catch (e) {}
       results.push({ name: t.name, item: t.item, pending: t.pending, ok: ok, error: err, notRun: notRun });   // a NOT RUN that leaked state above is a FAIL, not a NOT RUN
     }
     undoFakes();
     var reg = results.filter(function (r) { return !r.pending; });
     if (window.__fmFiltered) results.__filtered = window.__fmFiltered;
     results.__slowest = window.__fmSlow || [];   // the eight slowest tests of this run (ms, name)
+    // the leak check's list is capped; past the cap it says how many more, so a long list is never read as the whole one
+    if (leaksMore) window.__fmLeaks.push({ test: '(not listed)', what: leaksMore + ' more test(s) left state changed; the list stops at ' + LEAK_CAP });
     var pend = results.filter(function (r) { return r.pending; });
     // NOT RUN HERE: counted in the total (so the test floor still sees every registered test), never in the passes, and
     // green only means "nothing that RAN failed" — run.html prints the count beside the summary and lists every one.
@@ -64914,7 +64989,8 @@
       notRun: notRunList,
       pendingPass: pend.filter(function (r) { return r.ok; }).length,
       pendingTotal: pend.length,
-      results: results
+      results: results,
+      leaks: window.__fmLeaks   // the leak check (leakPrint, above run): report only unless LEAKS_ARE_RED
     };
   }
 

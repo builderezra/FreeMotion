@@ -914,6 +914,20 @@ def main():
             data["sceneLeaks"] = json.loads(leaks or "[]")
         except Exception:
             pass
+        # the leak check (20 Oct, tests.js leakPrint): what each test left changed for the next one — the open project, Home,
+        # the layers, the selection, the quality ladder, playback, media records — as [{test, what}]. Report only: it never
+        # touches "ok", "summary" or "failures". null when the page published no list (a suite older than the check), so a
+        # reader can tell "none" from "not reported". "FAIL" inside a title is lowered, as the NOT RUN lines below do: ship.sh
+        # tells a red run from one that did not finish by grepping this output for FAIL, and a leak line is neither.
+        leaks_out = None
+        try:
+            lk_raw = json.loads(cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
+                                         "return JSON.stringify((w&&w.__fmLeaks)||null);})()") or "null")
+            if isinstance(lk_raw, list):
+                leaks_out = [{"test": str(l.get("test", "")).replace("FAIL", "fail"),
+                              "what": str(l.get("what", "")).replace("FAIL", "fail")} for l in lk_raw if isinstance(l, dict)]
+        except Exception:
+            leaks_out = None
         try:
             data["slowest"] = cdp.eval("(function(){var f=document.querySelector('iframe');"
                                        "return (f&&f.contentWindow&&f.contentWindow.__fmSlow)||[];})()") or []
@@ -960,6 +974,8 @@ def main():
                 print("   FAIL: " + row.replace("\n", " ")[:300])
             for r in not_run:
                 print("   NOT RUN HERE: " + str(r.get("name", ""))[:160] + " — " + str(r.get("reason", "")).replace("FAIL", "fail")[:200])
+            for lk in (leaks_out or []):   # the leak check (above): report only
+                print("   LEAKS: " + lk["test"][:160] + " — " + lk["what"][:300])
             for dg in cdp.dialogs:
                 print("   DIALOG PRESSED OK: " + dg["type"] + " — " + dg["message"].replace("FAIL", "fail").replace("\n", " ")[:200])
             if font and font.get("same") is False:
@@ -969,6 +985,7 @@ def main():
             out = {"ok": green, "summary": data["sum"], "failures": data["fails"], "notRun": not_run, "browser": _browser(),
                    "fontParity": font, "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])}
             out["perf"] = _perf_records(cdp)   # #1098: PC speed beside phone speed — always present, [] when none (above)
+            out["leaks"] = leaks_out           # the leak check (above): [] when no test leaked, null when the page could not say
             if a.names:
                 out["ran"] = ran          # null when the runner page published no list — a reader must then say so, not guess
             if cdp.dialogs:

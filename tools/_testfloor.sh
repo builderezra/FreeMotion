@@ -157,3 +157,33 @@ for i in [0] + [k + 1 for k, c in enumerate(raw) if c == "\n"]:
   return 0
 }
 
+# leaks_report — THE LEAK CHECK (20 Oct, tests/tests.js leakPrint): the tests that left shared app state changed for the
+# next one (the open project, Home, the layers, the selection, the quality ladder, playback, media records), one line each,
+# from the driver's "leaks" (tests/_cdp.py). Reported, never refused: tests.js has one constant, LEAKS_ARE_RED, that turns a
+# leak into a red test, and the PM's plan is to flip it once a full run lists none. "none" is said out loud, because a quiet
+# pass is the thing being waited for; a driver result with no list says so rather than reading as none.
+# $1 = the driver output, $2 = which pass.
+leaks_report() {
+  printf '%s' "$1" | python3 -c '
+import json, sys
+raw = sys.stdin.read(); dec = json.JSONDecoder(); d = None
+for i in [0] + [k + 1 for k, c in enumerate(raw) if c == "\n"]:
+    if raw.startswith("{", i):
+        try: o, _ = dec.raw_decode(raw, i)
+        except ValueError: continue
+        if isinstance(o, dict) and "ok" in o: d = o; break
+flat = lambda s: " ".join(str(s).split())
+which = sys.argv[1]
+if d is None: sys.exit()
+lk = d.get("leaks")
+if not isinstance(lk, list):
+    print("· LEAKS (%s pass): the driver result carries no leak list (a suite older than the leak check?)" % which); sys.exit()
+if not lk:
+    print("✅ LEAKS (%s pass): none — every test put back what it changed" % which); sys.exit()
+print("⚠️  LEAKS (%s pass, report only): %d line(s) — tests that left shared state changed for the next one:" % (which, len(lk)))
+for l in lk[:30]: print("     · %s — %s" % (flat(l.get("test", ""))[:110], flat(l.get("what", ""))[:220]))
+if len(lk) > 30: print("     … and %d more (the whole list is in the driver output, under \"leaks\")" % (len(lk) - 30))
+' "${2:-a}" 2>/dev/null
+  return 0
+}
+

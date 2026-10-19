@@ -14,6 +14,8 @@
   .row { padding: 7px 11px; border-radius: 7px; margin: 4px 0; display: flex; gap: 10px; align-items: baseline; }
   .row.ok { background: #11251a; } .row.fail { background: #2a1416; } .row.pend { opacity: .8; }
   .row.notrun { background: #2a2614; } .notrun .tag { color: #e6c35c; flex-basis: 70px; } .pill.notrun { background: #3a3315; color: #e6c35c; }
+  /* the leak check (tests.js leakPrint): its own class, NEVER .fail — tests/_cdp.py reads every .row.fail as a failure */
+  .row.leak { background: #2a1f14; } .leak .tag { color: #e6a35c; } .leakhead { margin: 16px 0 6px; font-weight: 700; color: #e6a35c; }
   .tag { font-weight: 700; flex: 0 0 46px; }
   .ok .tag { color: #57d98a; } .fail .tag { color: #ff7a85; }
   .err { color: #c98; font-size: 12px; }
@@ -148,6 +150,22 @@
             '<span>' + r.name + (r.pending ? ' <em style="opacity:.6">(pending)</em>' : '') +
             (r.error ? ' <span class="err">— ' + r.error + '</span>' : '') + '</span></div>';
         }).join('');
+        /* THE LEAK CHECK (20 Oct, tests.js leakPrint): what each test left changed for the next one, listed under the
+           results. Report only: rows of their own class (never .row.fail), and never in #sum, whose text is the summary
+           tests/_cdp.py and ship.sh read. window.__fmLeaks in the app frame is the same list, which the driver hands on.
+           Its own try: a slip here must never reach the .catch below, which would turn a finished run into an Error. */
+        try {
+          var leaks = Array.isArray(res.leaks) ? res.leaks : [];
+          if (leaks.length) {
+            var lbox = document.createElement('div');
+            lbox.id = 'leaks';
+            lbox.innerHTML = '<div class="leakhead">LEAKS — tests that left shared state changed for the next one (report only)</div>' +
+              leaks.map(function (l) {
+                return '<div class="row leak"><span class="tag">LEAK</span><span>' + esc((l && l.test) || '') + ' <span class="err">— ' + esc((l && l.what) || '') + '</span></span></div>';
+              }).join('');
+            document.getElementById('list').appendChild(lbox);
+          }
+        } catch (x) {}
       }).catch(function (e) {
         try { sessionStorage.removeItem(RUN_KEY); } catch (x) {}
         document.getElementById('sum').innerHTML = '<span class="pill red">Error</span>' + (e && e.message || e);
