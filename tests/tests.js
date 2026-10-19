@@ -64892,7 +64892,10 @@
     } catch (e) {}
     try {
       var st = FM._perfState ? FM._perfState() : null;
-      if (st) f.quality = 'tier ' + st.tier + (st.locked ? ' latched' : '') + (st.climbLockAt ? ' climb-latched' : '');
+      /* The TIER is left out (the PM, 20 Oct): the ladder moves it on its own during any playback, so it read as a leak in about
+         300 of the first full run's 401 lines without any test having left anything behind. The LATCHES are kept: they are state a
+         test sets and must put back. */
+      if (st) f.quality = (st.locked ? 'latched' : 'unlatched') + (st.climbLockAt ? ', climb-latched' : '');
     } catch (e) {}
     try { f.playing = String(!!FM.playing); } catch (e) {}
     try {
