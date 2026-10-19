@@ -63508,6 +63508,8 @@
   });
 
   test('simple P2.4b · S7 FM.remapCommentPins: an anchored pin follows its layer to the new id on import and on project duplicate; a pin whose layer did not travel is baked to where it sat; a plain pin is not touched', { item: '980', budgetMs: 90000 }, async function () {
+    /* isolation (20 Oct): FM.storage.applyScene put the test's document (its project, two layers, a pin list) INTO the open project and nothing put it back — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     smNeedP2();
     if (!FM.remapCommentPins) throw new Error('FM.remapCommentPins does not exist');
     const mkDoc = () => {
@@ -63535,6 +63537,7 @@
         if (!k1 || ids.indexOf(k1.lid) < 0 || k1.lid === d.a.id) throw new Error('in a duplicated project the anchored pin points at ' + (k1 && k1.lid) + ', not at one of its layers');
         if (doc.project.comments.filter(c => c.id === 'k2')[0].lid !== d.a.id) throw new Error('a plain pin was remapped');
       } finally { try { await FM.projects.remove(nid); } catch (e) {} } }
+    } finally { _isoK.put(); }
   });
 
   test('simple P2.4b · S7 an identity camera (scale 1, rotation 0, x and y at the project centre) draws exactly what no camera draws, depth layers and a fractional position included (the rest-pose hold of §3.10 rule 3g rests on this)', { item: '980', budgetMs: 60000 }, function () {
@@ -69103,18 +69106,18 @@
     return k;
   }
   function isoKeepPut(k) {
-    var S = k.S, moved = false, pid;
+    var S = k.S, moved = false, sized = false, pid;
     var idsOf = function (ls) { return (ls || []).map(function (l) { return l && l.id; }).join(','); };
     try {
       pid = (FM.storage && FM.storage.openProjectId) ? FM.storage.openProjectId() : null;
       /* only while the project it found is still open: a project opened since loaded INTO whatever FM.scene was, and putting
          the old object back under it would let the next autosave write one project's scene into the other */
-      if (S && pid === k.pid && FM.scene !== S) { FM.scene = S; moved = true; }
+      if (S && pid === k.pid && FM.scene !== S) { FM.scene = S; moved = true; sized = true; }
       if (S && k.layers && pid === k.pid) {
         if (idsOf(S.layers) !== idsOf(k.copy)) {
           k.layers.length = 0; k.copy.forEach(function (l) { k.layers.push(l); });
           S.layers = k.layers;
-          if (k.project && S.project !== k.project) S.project = k.project;
+          if (k.project && S.project !== k.project) { S.project = k.project; sized = true; }
           moved = true;
         }
         var ids = S.selectedIds || [];
@@ -69125,6 +69128,9 @@
     try { if (!k.playing && FM.playing && FM.pause) FM.pause(); } catch (e) {}
     try { if (k.seq != null && FM.history._commitSeq() !== k.seq) { FM.history.reset(); moved = true; } } catch (e) {}
     if (moved) {
+      /* a scene or project object put back may be another size than the one the test left (FM.storage.applyScene sizes the
+         canvas to the document it applies; refreshAll does not size it) */
+      try { if (sized && FM.resizeCanvas) FM.resizeCanvas(); } catch (e) {}
       try { FM.refreshAll(); } catch (e) {}
       /* after refreshAll, whose autoFitDuration would otherwise re-fit the length to the scene it arrived with */
       try { if (S && k.project && S.project === k.project && k.dur !== undefined && S.project.duration !== k.dur) S.project.duration = k.dur; } catch (e) {}
@@ -70772,6 +70778,11 @@
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const made = [];
     const layers0 = FM.scene.layers.slice();
+    /* isolation (20 Oct): useAsNew OPENS the forked project, and the finally used to write layers0 into it and stay there —
+       every later test ran on that fork. It now goes back to the project it found (as 915.3 does), puts its layers back,
+       saves them over the probe the switch saved, and only then removes the fork (removing the OPEN one opens another). */
+    const orig = FM.projects.currentId();
+    let pid = null;
     try {
       FM.scene.layers.length = 0;
       const L = FM.makeLayer('shape', { name: 'TplProbe', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
@@ -70783,7 +70794,7 @@
       if (!before || (before.layers || []).length !== 1) throw new Error('the probe template did not capture the scene');
 
       // …open it: this forks a project, which is clause 1
-      const pid = await FM.templates.useAsNew(t0.id);
+      pid = await FM.templates.useAsNew(t0.id);
       if (!pid) throw new Error('useAsNew did not produce a project — a template cannot be opened at all');
       await sleep(120);
       const entry = FM.projects.list().find(x => x.id === pid);
@@ -70808,9 +70819,15 @@
       if (p2 && p2.fromTemplate !== now.id) throw new Error('the project still points at the OLD template id, so its Update button would vanish after one use');
     } finally {
       for (const id of made) { try { await FM.templates.remove(id); } catch (e) {} }
-      FM.scene.layers = layers0;
-      if (FM.refreshAll) FM.refreshAll();
-      if (FM.timeline) FM.timeline.rebuild();
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
+      if (!orig || FM.projects.currentId() === orig) {
+        FM.scene.layers = layers0;
+        try { if (FM.history && FM.history.reset) FM.history.reset(); } catch (e) {}
+        if (FM.refreshAll) FM.refreshAll();
+        if (FM.timeline) FM.timeline.rebuild();
+        try { if (FM.storage && FM.storage.flushSync) FM.storage.flushSync(); } catch (e) {}
+      }
+      if (pid && pid !== orig) { try { if (FM.projects.list().some(p => p.id === pid)) await FM.projects.remove(pid); } catch (e) {} }
     }
   });
 
@@ -91293,6 +91310,10 @@
     var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
     var limit0 = FM.storage._backupEmbedLimit;
     var made = [];
+    /* isolation (20 Oct): create() and open() switch the open project, and the finally only removed what it made — so the
+       app was left on whichever project remove() opened next, and every later test ran there. It now goes back to the
+       project it found BEFORE removing anything (removing a project that is not open opens nothing), as 915.3 does. */
+    var orig = FM.projects.currentId();
     try {
       // a project with content worth losing
       await FM.projects.create({ name: 'FX869 ROUNDTRIP', width: 720, height: 1280 });
@@ -91368,6 +91389,7 @@
       if (!miss.some(function (m) { return String(m.file).indexOf('huge-clip') >= 0; })) throw new Error('something was reported as not included, but not the file that was actually dropped: ' + JSON.stringify(miss).slice(0, 120));
     } finally {
       FM.storage._backupEmbedLimit = limit0;
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
       for (var i = 0; i < made.length; i++) { try { await FM.projects.remove(made[i]); } catch (e) {} }
       try { var strays = FM.projects.list().filter(function (p) { return /FX869/.test(p.name); }); for (var j = 0; j < strays.length; j++) await FM.projects.remove(strays[j].id); } catch (e) {}
     }
@@ -127517,7 +127539,9 @@
       try { if (FM.cropTool.isActive()) FM.cropTool.stop(); } catch (e) {}
       try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
       try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
-      const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
+      /* isolation (20 Oct): removes its layer BY ID — an undo inside fn() (T3's) swaps in parsed copies, so indexOf(L) found
+         nothing and SM_CROP stayed in the scene for every later test */
+      for (let i = FM.scene.layers.length - 1; i >= 0; i--) if (FM.scene.layers[i] && FM.scene.layers[i].id === L.id) FM.scene.layers.splice(i, 1);
       try { FM.media.remove(L.id); } catch (e) {}
       FM.selectLayer(null); FM.refreshAll();
       await sleep(80);
@@ -127691,7 +127715,9 @@
       try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
       try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
       try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
-      const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
+      /* isolation (20 Oct): removes SM_REDO BY ID — the undo above swapped in parsed copies, so indexOf(L) found nothing and
+         the layer stayed in the scene for every later test */
+      for (let i = FM.scene.layers.length - 1; i >= 0; i--) if (FM.scene.layers[i] && FM.scene.layers[i].id === L.id) FM.scene.layers.splice(i, 1);
       FM.selectLayer(null); FM.refreshAll();
       await sleep(60);
     }
@@ -127829,7 +127855,9 @@
       try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
       try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
       try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
-      const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
+      /* isolation (20 Oct): removes SM_R3 BY ID — the undos above swapped in parsed copies, so indexOf(L) found nothing and
+         the layer stayed in the scene for every later test */
+      for (let i = FM.scene.layers.length - 1; i >= 0; i--) if (FM.scene.layers[i] && FM.scene.layers[i].id === L.id) FM.scene.layers.splice(i, 1);
       FM.selectLayer(null); FM.refreshAll(); await sleep(60);
     }
   });
