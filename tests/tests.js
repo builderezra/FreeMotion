@@ -164140,7 +164140,8 @@
         if (!all(m2.red, AREA_R) || m2.blue !== 0) throw new Error('C2: the red block inside the styled group "on top" reads ' + say(m2) + ' where it is ' + AREA_R + ' red px over the white bar with the blue one still under it — a member of a unit was never lifted, so nothing changed');
       } finally {
         FM.isolate = iso0;
-      }    });
+      }
+    });
   });
 
   /* (#2) A GROUP'S LOOK SWITCHED HOW ITS MEMBERS BLEND. Red footage fills the frame, (255, 0, 0). Above it a group holds one 100×100
