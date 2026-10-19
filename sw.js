@@ -64,7 +64,28 @@ self.addEventListener('activate', (e) => {
  * differs — a superseded copy of a file still in use. Anything whose path the page never mentions is
  * left alone, because this cannot know who needs it.
  * Parsing nothing deletes nothing, so a surprise in the HTML is a no-op rather than a wipe. */
-async function pruneSuperseded(res, c) {
+/* bughunt6 #1 — RESOLVED AGAINST THE PAGE, NOT THE ORIGIN. The live app is a GitHub Pages project site: the worker's
+ * scope is /FreeMotion/, index.html names its files relatively (`js/app.js?v=490`), and the cache keys are what the page
+ * fetched, /FreeMotion/js/app.js?v=490. The names used to be resolved against `self.location.origin`, so `live` held
+ * /js/app.js, matched no key, and from v10.69 on nothing but old lessons was ever deleted on his phone. Every check of
+ * queue 430 ran at a site root, where the origin and the page's folder are the same place.
+ * What that left behind, measured from git (each path?v=N sized as it first shipped): about 170 MB for opening the app
+ * once a day since v10.69, 605 MB for opening it after every release, 768 MB as the ceiling since v7.19 (compositor.js
+ * alone: 197 versions, 249 MB). The refuter's estimate for his iPhone is 0.2 to 0.4 GB, in the one storage budget his
+ * projects' media shares in IndexedDB.
+ * THE BASE IS THE NAVIGATION'S OWN URL (`req.url`), the address the browser resolves the page's links against. A
+ * redirect never gets here: a navigation is fetched with redirect 'manual', so its answer is not `ok`. Not
+ * `registration.scope` or `location.href`: the test stubs carry only `location.origin`. At a site root this resolves
+ * every name exactly as before, and a missing base throws inside the try, which parses nothing and deletes nothing.
+ * THE BACKLOG GOES IN ONE PASS, BY THE SAME RULE. This walks EVERY key in the cache, not only the ones added since the
+ * last load, so the first good navigation under this worker (the reload index.html makes on `controllerchange`, right
+ * after it activates) deletes every superseded copy already on the phone. Nothing is added to `activate`: a fetch waits
+ * for activation to finish, so a sweep there would hold up that reload, and activate has no page of its own to read.
+ * A second pass deletes nothing; a pass the browser cuts short is finished by the next launch. It keeps what it always
+ * kept: the version the page names, every path the page does not name (the CSS wordmark, the fx-art thumbnails), this
+ * release's lessons and index-fallback. What that rule cannot reach: files index.html stopped naming altogether
+ * (js/statusbar.js in 4 versions, js/tts.js in 2, brand-wordmark.png?v=2), about 0.1 MB together. */
+async function pruneSuperseded(res, c, pageUrl) {
   let html = '';
   try { html = await res.text(); } catch (_) { return; }
   const live = new Map();                      // path -> the v= this build uses
@@ -72,7 +93,7 @@ async function pruneSuperseded(res, c) {
   let m;
   while ((m = re.exec(html))) {
     try {
-      const u = new URL(m[1], self.location.origin);
+      const u = new URL(m[1], pageUrl);
       live.set(u.pathname, u.searchParams.get('v'));
     } catch (_) {}
   }
@@ -164,7 +185,7 @@ self.addEventListener('fetch', (e) => {
         keepCacheWorkAlive(e, [
           c.put('index-fallback', fresh.clone()),
           c.delete(STALE_KEY),         // this load is current — nothing to warn about
-          pruneSuperseded(fresh.clone(), c),
+          pruneSuperseded(fresh.clone(), c, req.url),
         ]);
         return fresh;
       }

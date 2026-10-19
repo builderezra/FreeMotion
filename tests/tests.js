@@ -167190,5 +167190,148 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
   // ── end bughunt 5 ──
+  // ── bughunt 6 ──
+  /* ═══ BUGHUNT 6 — #1: the offline cache's clean-up (queue 430) never deleted anything on the live site. sw.js resolved the
+   * names index.html gives its files (`js/app.js?v=490`) against the bare ORIGIN, so on https://builderezra.github.io/FreeMotion/
+   * it looked for /js/app.js while every cache key is /FreeMotion/js/app.js?v=N, and every version of every file his phone ever
+   * loaded stayed (the refuter's estimate: 0.2 to 0.4 GB on his iPhone, 768 MB at most, in the storage budget his projects' media
+   * shares). Every earlier worker test (runSW, the 690 lifetime test, the 1082 lesson test) ran at the site root, where the origin
+   * and the page's folder are the same place. WRITTEN WITHOUT RUNNING (code only, `node --check`): each test says why it fails on
+   * 0d2a3f45.
+   * The worker is run, not installed, as runSW (queue 306) and the 1082 test do: sw.js is evaluated in a private stub scope whose
+   * cache, caches, network and self are passed in as parameters, so no global is replaced and there is nothing to restore. ═══ */
+
+  /* The real sw.js as if registered at `base` on `origin` ('/' is a site root, '/FreeMotion/' the live site). `seed` is
+     [url, body] pairs; a string key such as 'index-fallback' resolves against the worker's own URL, as Cache Storage does.
+     nav(page) dispatches one navigation to the folder, answered from the fake network with `page`, and waits for the answer AND
+     for the clean-up it hands to waitUntil; activate() dispatches the activate event an update delivers and waits for it. */
+  async function _bh6Worker(origin, base, seed) {
+    const src = await fetch('../sw.js?probe=bughunt6-' + Date.now()).then(r => r.text());
+    if (src.length < 500 || src.indexOf('pruneSuperseded') < 0) throw new Error('setup: ../sw.js came back as ' + src.length + ' chars with no pruneSuperseded in it, so this would test nothing');
+    const swUrl = origin + base + 'sw.js';
+    const key = k => new URL(typeof k === 'string' ? k : k.url, swUrl).href;
+    const store = new Map();
+    seed.forEach(([k, v]) => store.set(key(k), new Response(v)));
+    const cache = {
+      match: k => Promise.resolve(store.get(key(k))),
+      put: (k, v) => { store.set(key(k), v); return Promise.resolve(); },
+      delete: k => Promise.resolve(store.delete(key(k))),
+      keys: () => Promise.resolve([...store.keys()].map(u => ({ url: u }))),
+    };
+    const handlers = {};
+    const scope = {
+      addEventListener: (t, fn) => { (handlers[t] = handlers[t] || []).push(fn); },
+      skipWaiting: () => {},
+      clients: { claim: () => Promise.resolve() },
+      location: { origin: origin, href: swUrl },
+      registration: { scope: origin + base },
+    };
+    const cachesStub = { open: () => Promise.resolve(cache), keys: () => Promise.resolve(['freemotion-v1']), delete: () => Promise.resolve(true) };
+    let page = '';
+    const net = () => Promise.resolve(new Response(page, { status: 200 }));
+    // eslint-disable-next-line no-new-func
+    new Function('self', 'caches', 'fetch', 'Response', 'URL', src)(scope, cachesStub, net, Response, URL);
+    const activate = async () => {
+      if (!handlers.activate || !handlers.activate.length) throw new Error('setup: sw.js registered no activate handler');
+      const held = [];
+      handlers.activate.forEach(fn => fn({ waitUntil: p => { held.push(p); } }));
+      await Promise.all(held);
+    };
+    const nav = async (html) => {
+      if (!handlers.fetch || !handlers.fetch.length) throw new Error('setup: sw.js registered no fetch handler');
+      page = html;
+      const url = origin + base;
+      let answered = null;
+      const held = [];
+      handlers.fetch[0]({ request: { method: 'GET', url: url, mode: 'navigate' }, respondWith: p => { answered = p; }, waitUntil: p => { held.push(p); } });
+      if (!answered) throw new Error('setup: sw.js did not answer the navigation to ' + url);
+      const res = await answered;
+      if (!held.length) throw new Error('a good launch of ' + url + ' started no clean-up at all (nothing was handed to waitUntil)');
+      await Promise.all(held);
+      return res;
+    };
+    return { store: store, key: key, has: u => store.has(key(u)), activate: activate, nav: nav };
+  }
+
+  /* (#1) THE PRUNE ITSELF. A launch of a page naming js/app.js?v=9 and styles.css?v=775 must delete the ?v=8 and ?v=774 copies an
+     older release cached, and keep this release's files, the paths the page does not name (the CSS wordmark, an fx-art
+     thumbnail: this cannot know who needs them, queue 430's own rule) and this release's lesson; an older release's lesson goes
+     either way (#1082, judged by the version label, which never used the broken map).
+     FAILS ON 0d2a3f45 at /FreeMotion/ only: `new URL('js/app.js?v=9', self.location.origin)` is /js/app.js, so `live` holds
+     /js/app.js and /styles.css, no key under /FreeMotion/ matches, and js/app.js?v=8 and styles.css?v=774 survive.
+     CONTROL: the same cache and page at a site root, the shape every earlier test used, where the old code deletes them too, so
+     the fixture can delete and only the folder differs. */
+  test('bughunt6 #1 The offline cache drops old releases on the live site: on https://builderezra.github.io/FreeMotion/ a good launch deletes the js/app.js and styles.css copies an older release cached and keeps this release’s files, the CSS wordmark, an fx-art thumbnail and this release’s lesson (CONTROL: the same cache at a site root deletes them too)', { item: '1176' }, async function () {
+    const O = 'https://builderezra.github.io';
+    const PAGE = '<link rel="stylesheet" href="styles.css?v=775"><script src="js/app.js?v=9"></script><span class="ver" title="Tap">v17.82</span>';
+    const bad = [];
+    for (const base of ['/', '/FreeMotion/']) {
+      const P = O + base;
+      const who = base === '/' ? 'CONTROL (a site root, ' + P + '): ' : 'on the live site (' + P + '): ';
+      const old = [
+        [P + 'js/app.js?v=8', 'the page names js/app.js?v=9'],
+        [P + 'styles.css?v=774', 'the page names styles.css?v=775'],
+        [P + 'tutorials/01-first-video.md?v=17.81', 'the page is v17.82'],
+      ];
+      const kept = [P + 'js/app.js?v=9', P + 'styles.css?v=775', P + 'brand-wordmark.png?v=2', P + 'fx-art/blur.jpg?v=1', P + 'tutorials/01-first-video.md?v=17.82'];
+      const w = await _bh6Worker(O, base, old.map(o => [o[0], 'bytes of ' + o[0]]).concat(kept.map(u => [u, 'bytes of ' + u])));
+      const res = await w.nav(PAGE);
+      if (!res || !res.ok || !/v17\.82/.test(await res.clone().text())) { bad.push(who + 'the launch was not answered with the page from the network, so nothing below means anything'); continue; }
+      old.forEach(o => {
+        if (w.has(o[0])) bad.push(who + o[0].slice(P.length) + ' survived a good launch although ' + o[1] + ', so every release leaves its copy on the phone for good');
+      });
+      kept.forEach(u => {
+        if (!w.has(u)) bad.push(who + 'the clean-up deleted ' + u.slice(P.length) + ', which this release still uses, so offline it would be gone');
+      });
+      if (!w.has('index-fallback')) bad.push(who + 'a good launch left no offline copy of the page (index-fallback)');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#1) THE BACKLOG ALREADY ON HIS PHONE. The PM's ask: the copies older releases left must go on the next update, not only
+     future ones. Twenty stale copies across three files under /FreeMotion/, plus this release's three files, the kept assets and
+     the previous release's offline page. Activation alone must not touch what the open page uses; after activation and the one
+     reload index.html makes on controllerchange, exactly this release's files, the kept assets and the new index-fallback must
+     remain; a second launch must delete nothing more (one pass, by the same rule, so it cannot keep finding work).
+     FAILS ON 0d2a3f45: the same resolve against the bare origin matches no key under /FreeMotion/, so all twenty survive. */
+  test('bughunt6 #1 The offline cache drops old releases on the live site: twenty copies older releases left under /FreeMotion/ (8 of js/compositor.js, 7 of styles.css, 5 of js/app.js) are gone once the update activates and the app reloads, only this release’s files and the kept assets remain, and a second launch deletes nothing more', { item: '1176' }, async function () {
+    const O = 'https://builderezra.github.io', base = '/FreeMotion/', P = O + base;
+    const PAGE = '<link rel="stylesheet" href="styles.css?v=775"><script src="js/compositor.js?v=242"></script><script src="js/app.js?v=490"></script><span class="ver" title="Tap">v17.82</span>';
+    const OLD_PAGE = '<link rel="stylesheet" href="styles.css?v=774"><script src="js/compositor.js?v=237"></script><script src="js/app.js?v=489"></script><span class="ver" title="Tap">v17.81</span>';
+    const stale = [];
+    for (let v = 230; v < 238; v++) stale.push(P + 'js/compositor.js?v=' + v);
+    for (let v = 768; v < 775; v++) stale.push(P + 'styles.css?v=' + v);
+    for (let v = 485; v < 490; v++) stale.push(P + 'js/app.js?v=' + v);
+    if (stale.length !== 20) throw new Error('setup: ' + stale.length + ' stale copies were seeded, not 20');
+    const current = [P + 'js/compositor.js?v=242', P + 'styles.css?v=775', P + 'js/app.js?v=490'];
+    const assets = [P + 'brand-wordmark.png?v=2', P + 'fx-art/blur.jpg?v=1', P + 'tutorials/index.json?v=17.82', P + 'tutorials/01-first-video.md?v=17.82'];
+    const seed = stale.concat(current, assets).map(u => [u, 'bytes of ' + u]).concat([['index-fallback', OLD_PAGE]]);
+    const w = await _bh6Worker(O, base, seed);
+    const short = k => (k.indexOf(P) === 0 ? k.slice(P.length) : k);
+    const bad = [];
+
+    await w.activate();
+    const lostAtActivate = current.concat(assets).filter(u => !w.has(u));
+    if (lostAtActivate.length) throw new Error('activating the new worker deleted ' + lostAtActivate.map(short).join(', ') + ', which the open page still uses');
+
+    const res = await w.nav(PAGE);
+    if (!res || !res.ok || !/v17\.82/.test(await res.clone().text())) throw new Error('setup: the reload after activation was not answered with the page from the network');
+    const survived = stale.filter(u => w.has(u));
+    if (survived.length) bad.push(survived.length + ' of the 20 copies older releases left survived the first launch after the update (' + survived.map(short).join(', ') + '), so what is already on his phone stays for good');
+    const want = current.concat(assets).map(w.key).concat([w.key('index-fallback')]);
+    const lost = want.filter(k => !w.store.has(k));
+    if (lost.length) bad.push('the clean-up deleted ' + lost.map(short).join(', ') + ', which this release still uses or keeps on purpose');
+    const extra = [...w.store.keys()].filter(k => want.indexOf(k) < 0 && stale.map(w.key).indexOf(k) < 0);
+    if (extra.length) bad.push('the cache holds entries nobody seeded: ' + extra.map(short).join(', '));
+    const fb = w.store.get(w.key('index-fallback'));
+    if (!fb || !/v17\.82/.test(await fb.clone().text())) bad.push('the offline copy of the page is not this release’s page after the launch, so offline it would open the old build');
+
+    const before = [...w.store.keys()].sort().join(' | ');
+    await w.nav(PAGE);
+    const after = [...w.store.keys()].sort().join(' | ');
+    if (after !== before) bad.push('a second launch of the same page changed the cache again (before: ' + before + '; after: ' + after + '), so the clean-up is not one pass');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  // ── end bughunt 6 ──
 
 })();
