@@ -19257,31 +19257,73 @@
       for (var i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) > 2) return false;
       return true;
     }
-    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
-    FM.scene.layers.length = 0; FM.scene.layers.push(L.A); FM.scene.layers.push(L.B);
-    FM.selectLayer(L.A.id);
+    /* isolation (20 Oct, full-order red): it inherited the playhead, the editor and the fx-art photographs. Its siblings
+       above set FM.time = 0 through withLayers; this one read whatever an earlier test left (windowFor anchors the strip
+       at the playhead, sceneRev keys on its frame), on a project whose length still said the scene it found (no refresh),
+       with Home over the editor since 'drawing: opening a project ends any sketch in progress' stopped shutting it. It
+       now sets up its own: the two layers in the editor (isoOwnLayer, below the 330s, then A and B in its place,
+       refreshed), the playhead at 0 as its siblings have it, and the photographs in BEFORE the first tile.
+       THE PHOTOGRAPHS ARE THE LIKELY CULPRIT, and that path is the app's, so it is named here: the first request for them
+       in a full run is FM.fxThumbs.previewScene in the sample-tile tests just above (the browser test far earlier stubs
+       its mounts), and when they decode, photosChanged() waits 80 ms and calls remountLive(), which clears the cache and
+       regenerates every tile on the page under its OLD key from the LIVE layer (layerStep finds the layer by id; the
+       recipe's `rev` is not consulted). Landing after the rotation, it repaints t1 with the rotated layer, so t1 and t3
+       match: exactly "the tile came back from the cache unchanged". So it waits for the photographs and that remount
+       first, counts any remount that still lands during the test (named in the failures it could cause), and checks
+       each tile is a picture of the layer (the TW x TH box), not the sample fallback (PX square), so a refused
+       preview can never pass or fail the key checks by its size alone. The finally puts the scene, selection,
+       length, playhead and Home back (iso.put). */
+    var tsz = FM.fxThumbs._tileSize ? FM.fxThumbs._tileSize() : null;
+    function layerTile(c, what) {
+      if (tsz && (c.width !== tsz.w || c.height !== tsz.h)) throw new Error('CONTROL: ' + what + ' is ' + c.width + 'x' + c.height + ', the sample fallback, not a ' + tsz.w + 'x' + tsz.h + ' picture of the layer, so it says nothing about the cache key');
+    }
+    async function artSettled() {
+      try { if (FM.fxThumbs.previewScene) FM.fxThumbs.previewScene(preset.fx); } catch (e) {}   // starts the module's own preload, mounts nothing
+      var keys = (FM.fxThumbs._photoKeys && FM.fxThumbs._photoKeys()) || [];
+      await Promise.all(keys.map(function (k) {
+        return new Promise(function (res) {
+          var im = new Image(), done = function () { res(); };
+          im.onload = done; im.onerror = done; setTimeout(done, 4000);
+          im.src = 'fx-art/' + k + '.jpg?v=1';
+        });
+      }));
+      // past photosChanged's 80 ms settle, so its remount has run before the first tile of this test exists
+      await new Promise(function (r) { setTimeout(r, 250); });
+    }
+    var remounts = 0, realRemount = FM.fxThumbs.remountLive;
+    function remountNote() { return remounts ? ' (remountLive ran ' + remounts + ' time(s) during the test, regenerating every tile from the live layer under its old key)' : ''; }
+    var iso = isoOwnLayer();
     try {
+      FM.scene.layers.length = 0; FM.scene.layers.push(L.A); FM.scene.layers.push(L.B);
+      FM.refreshAll();
+      FM.time = 0;
+      FM.selectLayer(L.A.id);
+      await artSettled();
+      FM.fxThumbs.remountLive = function () { remounts++; return realRemount.apply(this, arguments); };
       var t1 = tile(); FM.fxThumbs.mountPreset(t1, preset, L.A); await ready(t1);
+      layerTile(t1, 'the first tile of layer A');
       // the same layer again: same key, same entry, same pixels — the control for everything below
       var t1b = tile(); FM.fxThumbs.mountPreset(t1b, preset, L.A); await ready(t1b);
-      if (!same(pix(t1), pix(t1b))) throw new Error('two tiles of the same layer and preset disagree — the cache key is not stable');
+      if (!same(pix(t1), pix(t1b))) throw new Error('two tiles of the same layer and preset disagree — the cache key is not stable' + remountNote());
       // a DIFFERENT layer must not be served the first one's picture
       var t2 = tile(); FM.fxThumbs.mountPreset(t2, preset, L.B); await ready(t2);
+      layerTile(t2, 'the tile of layer B');
       if (same(pix(t1), pix(t2))) throw new Error('layer B was served layer A’s cached tile');
       // an EDIT to the same layer must not be served the pre-edit picture
       L.A.transform.rotation = 33;
       var t3 = tile(); FM.fxThumbs.mountPreset(t3, preset, L.A); await ready(t3);
-      if (same(pix(t1), pix(t3))) throw new Error('after rotating the layer the tile came back from the cache unchanged — the key ignores the layer’s content');
+      layerTile(t3, 'the tile of the rotated layer A');
+      if (same(pix(t1), pix(t3))) throw new Error('after rotating the layer the tile came back from the cache unchanged — the key ignores the layer’s content' + remountNote());
       // …and undoing it must bring the original entry back (content-keyed, not a counter)
       L.A.transform.rotation = 0;
       var t4 = tile(); FM.fxThumbs.mountPreset(t4, preset, L.A); await ready(t4);
-      if (!same(pix(t1), pix(t4))) throw new Error('undoing the edit did not return the original cached tile');
+      layerTile(t4, 'the tile of layer A turned back');
+      if (!same(pix(t1), pix(t4))) throw new Error('undoing the edit did not return the original cached tile' + remountNote());
     } finally {
+      FM.fxThumbs.remountLive = realRemount;
       FM.fxThumbs.stopAll();
       host.remove();
-      FM.scene.layers.length = 0;
-      layers0.forEach(function (l) { FM.scene.layers.push(l); });
-      FM.selectLayer(sel0);
+      iso.put();
     }
   });
 
