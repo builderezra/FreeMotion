@@ -16989,6 +16989,60 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (rx === 0 && ry === 0) return null;
     return { rx: rx * Math.PI / 180, ry: ry * Math.PI / 180 };
   }
+  /* ═══ bughunt4 #3 — THE TILT TURNS ABOUT THE ANCHOR, NOT ABOUT WHAT HAPPENS TO BE VISIBLE ══════════════════════════════════
+   * What was wrong. The plate's quad was centred on the plate's alpha bbox (cx, cy its centre, R half its longer side) and the
+   * anchor was never read, though the Anchor placer says "Scaling and rotation happen around this point" and X / Y tilt live
+   * in its Rotate mode. So a door hinged on its left edge (anchor 0) swung about its middle, and a card flip with the anchor at
+   * the top flipped about its centre. And because the plate is the frame, a tilted layer leaving the frame edge was cropped
+   * BEFORE it was measured: the box shrank, the pivot slid toward what was left and R shrank with it, so the lean and the
+   * perspective changed while only X was animated (a Shadow widening the box, or a Type-On revealing letters, did the same).
+   * Now, tiltPivot:
+   *   · the pivot is the layer's anchor, its CTM's (0, 0) — the very point its 2D turn and scale go about — mapped into plate
+   *     px by (p − OX)·ps;
+   *   · R is half the longer side of the layer's OWN box (layerSizeAt) through that CTM's axes, so its scale, its Width /
+   *     Height, its depth and every parent's scale count, and nothing the frame edge or an effect does to its pixels;
+   *   · the quad's vertices sit at the bbox's REAL offset from the pivot (draw3DTiltLayer), so what the frame edge crops is
+   *     simply missing while everything else stays where it was;
+   *   · a GROUP (its '_flat' proxy, bughunt4 #1) is a layer whose content is its members and whose anchor is its pivot: it
+   *     turns about FM.groupPivot carried through the matrix its members are drawn with, and R is half its members' box;
+   *   · the old quad never reached further than R from its centre; this one can (a hinge's far edge is 2 R away), so R is
+   *     raised until the leant quad's nearest corner comes no closer to the eye than 2.5 R (renderMesh's F is 3.2, and a
+   *     vertex level with the eye would be drawn at 16 x). Only an anchor far from the middle of its box with a big tilt gets
+   *     there (an anchor outside the box, which the Anchor boxes allow from −400 to 500 %, or a corner at X and Y 45°), and
+   *     its perspective is then a little gentler instead of folding over.
+   * A default-anchor layer fully on screen keeps its picture to within a third of a pixel across: the old centre and R were
+   * the PADDED alpha bbox's (alphaBBox reads every 2nd pixel and adds 2), so for a 100 px square half a pixel up and left of
+   * its middle, with R 51.5 for 50. No CTM (no getTransform) or no box: null, and the old bbox maths runs unchanged. */
+  function tiltPivot(flat, t, scene, ps, OX, OY, bb, tilt) {
+    let px, py, bw, bh;
+    if (flat.type === '_flat') {
+      const g = flat._ofGroup;
+      if (!g || g.type !== 'group' || !FM.groupPivot || !FM.parentChainMatrix || !FM.groupBoundsLocal) return null;
+      const piv = FM.groupPivot(g, scene, t);
+      const b = FM.groupBoundsLocal(g, scene, t) || (FM.groupRestBoundsLocal ? FM.groupRestBoundsLocal(g, scene) : null);
+      // the matrix a member is drawn with: the group's own pivot sandwich, its position and everything above it
+      const M = FM.parentChainMatrix({ id: g.id + ':tilt', parent: g.id }, t, scene);
+      if (!piv || !b || !M) return null;
+      px = M.a * piv.x + M.c * piv.y + M.e;
+      py = M.b * piv.x + M.d * piv.y + M.f;
+      bw = b.w * Math.hypot(M.a, M.b);
+      bh = b.h * Math.hypot(M.c, M.d);
+    } else {
+      const M = layerCTM(flat, t, scene), sz = layerSizeAt(flat, t);
+      if (!M || !sz) return null;
+      px = M.e; py = M.f;   /* M.transformPoint(0, 0): the anchor */
+      bw = (sz.w || 0) * Math.hypot(M.a, M.b);
+      bh = (sz.h || 0) * Math.hypot(M.c, M.d);
+    }
+    const x = (px - OX) * ps, y = (py - OY) * ps;
+    let R = Math.max(bw, bh) * ps / 2;
+    if (!isFinite(x) || !isFinite(y) || !isFinite(R) || !(R > 0.5)) return null;
+    /* how far toward the eye each bbox corner comes once leant: renderMesh turns X, then Y, so z' = −x·sin ry + y·sin rx·cos ry */
+    const kx = -Math.sin(tilt.ry), ky = Math.sin(tilt.rx) * Math.cos(tilt.ry);
+    const zx = Math.max(kx * (bb.x - x), kx * (bb.x + bb.w - x)), zy = Math.max(ky * (bb.y - y), ky * (bb.y + bb.h - y));
+    if (zx + zy > 2.5 * R) R = (zx + zy) / 2.5;
+    return { x: x, y: y, R: R };
+  }
   function draw3DTiltLayer(ctx, layer, t, scene) {
     const tilt = tilt3D(layer, t);
     if (!tilt) return;
@@ -17025,10 +17079,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);   // PLATE pixels — bb/renderMesh below are in them (identity at scale 1, i.e. exactly what baseT gave)
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
     if (bb && bb.w > 1 && bb.h > 1) {
-      const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;   // unit half-extents preserve the plate's aspect (pagecurl trick)
       const tex = extractTex(_t3A, bb);
-      const mesh = bParam((u, v) => [(u * 2 - 1) * ax, (v * 2 - 1) * ay, 0], 8, 8);   // 8×8 flat quad, uv 0..1 (cheap; rebuilt per frame)
-      renderMesh(bctx, tex, bb.w, bb.h, mesh.v, mesh.t, { cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: S / 2, rx: tilt.rx, ry: tilt.ry, rz: 0, shading: 0 });
+      // bughunt4 #3: about the anchor (a group's pivot), at the layer's own box; null keeps the old bbox centre and size below
+      const pv = tiltPivot(tmp, t, scene, ps, OX, OY, bb, tilt);
+      if (pv) {
+        // the quad is the bbox where it really is, in units of R from the pivot, so a crop at the frame edge moves nothing else
+        const qx = (bb.x - pv.x) / pv.R, qy = (bb.y - pv.y) / pv.R, qw = bb.w / pv.R, qh = bb.h / pv.R;
+        const mesh = bParam((u, v) => [qx + u * qw, qy + v * qh, 0], 8, 8);
+        renderMesh(bctx, tex, bb.w, bb.h, mesh.v, mesh.t, { cx: pv.x, cy: pv.y, R: pv.R, rx: tilt.rx, ry: tilt.ry, rz: 0, shading: 0 });
+      } else {
+        const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;   // unit half-extents preserve the plate's aspect (pagecurl trick)
+        const mesh = bParam((u, v) => [(u * 2 - 1) * ax, (v * 2 - 1) * ay, 0], 8, 8);   // 8×8 flat quad, uv 0..1 (cheap; rebuilt per frame)
+        renderMesh(bctx, tex, bb.w, bb.h, mesh.v, mesh.t, { cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: S / 2, rx: tilt.rx, ry: tilt.ry, rz: 0, shading: 0 });
+      }
     } else {
       bctx.drawImage(_t3A, 0, 0);   // nothing visible / tainted → pass the flat plate through (never blank the layer)
     }

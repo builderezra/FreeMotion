@@ -164434,6 +164434,124 @@
     });
   });
 
+  /* (#3) 3D TILT TURNED ABOUT THE MIDDLE OF WHAT WAS VISIBLE, NOT ABOUT THE ANCHOR. On 698b5dd0 draw3DTiltLayer (compositor.js) drew the
+     layer flat on a frame-sized plate, took the plate's alpha bbox (alphaBBox: every 2nd pixel, padded 2) and leant a quad centred on
+     that bbox, R half its longer side; anchorX / anchorY were never read. Every square here is red, 100 × 100, at y 120 (rows 70..169),
+     leant 60° about Y, renderMesh's F 3.2, on _bh2Frame's 320 × 240 frame. A Y tilt of 60° sends unit x to x' = x / 2, z' = −0.866 x.
+       (a) THE HINGE. anchorX 0 at x 160: the square covers 160..260. On 698b5dd0 its bbox is 158..261 (103 wide), centre 209.5, R 51.5;
+           its left edge, unit −0.961, comes toward the eye (z' +0.832, f 3.2 / 2.368 = 1.352) and lands at 209.5 − 0.481 · 1.352 · 51.5
+           = 176.0: the leftmost red column is 176. About the anchor (R 50, the box's) the left edge has z 0 and stays at 160, and the far
+           edge, 2 R out, recedes (x' 1, z' −1.732, f 0.649) to 160 + 32.4 = 192.4.
+       (b) THE FRAME EDGE. Default anchor at x 120 (70..170), then at x 20 (−30..70, cut at 0). On 698b5dd0 the cut bbox 0..71 moved the
+           pivot to 35.5 and shrank the quad's half-width to 0.689 of R: the right edge sat at 139.45, then 50.1 (last red columns 138 and
+           49), 89 px apart for a 100 px move. About the anchor at R 50 it is 19.7 px right of the pivot both times: 139.7 and 39.7.
+       (c) CONTROL, the default case: centred on 160 (110..210), fully on screen. The old maths (pivot 159.5, 119.5, the padded bbox's,
+           R 51.5) put the near left edge at 126.05, its rows 52.6..187.75, and the far right edge at 179.45; the new (160, 120, R 50) at
+           125.72, 51.45..188.55 and 179.68. The same picture to a third of a pixel across, 1.2 px at the near edge's top.
+       (d) CONTROL, a group (bughunt4 #1's D): a group at 0,0 holding a red 40 × 40 block at 80,100, leant 60° about Y, draws as the
+           block alone leant 60° (both turn about 80,100 at R 20). And with the group at x 30 and its anchor on its box's left edge, it
+           turns about that edge, 60 + 30 = 90, exactly as a block at x 90 hinged on its own left edge (on 698b5dd0 both turned about the
+           bbox centre 109.5 and the hinge drew at 96.6, column 97).
+     TOL: 3 px on the hinge (the fault is 16), 2.5 on its far edge (the fault is 37), 2 on the 100 px move (the fault is 11), 1.5 on each
+     of the control's edges (the two maths differ by at most 1.15 there), 2 px on the group's hinge (the fault is 7), and 2 levels on the
+     group compares (the same quad from the same plate). */
+  test('bughunt4 #3 3D tilt turns about the anchor: a square hinged on its left edge (anchor 0) and leant 60° about Y keeps that edge where it was and leans away from it, and a leant square sliding off the frame edge keeps its lean, its right edge moving exactly as far as the square (CONTROLS: untilted, the hinged square covers 160..259 and the sliding one is really cut by the frame; a centred square fully on screen leans as before; a leant group draws exactly as a single leant layer, its anchor included)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5;
+      FM.time = T;
+      const block = (name, x, y, w, h, parent) => {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: y, shapeW: w, shapeH: h, fill: '#ff0000', start: 0, duration: 4 });
+        L.start = 0; L.duration = 4;
+        if (parent) L.parent = parent;
+        return L;
+      };
+      const grp = (name) => {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        return g;
+      };
+      /* The red pixels' count and span (columns x0..x1, rows y0..y1). */
+      const reds = (f) => {
+        let n = 0, x0 = -1, x1 = -1, y0 = -1, y1 = -1;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            n++;
+            const x = k % 320, y = (k - x) / 320;
+            if (x0 < 0 || x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y0 < 0 || y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+        return { n: n, x0: x0, x1: x1, y0: y0, y1: y1 };
+      };
+      const say = r => r.n + ' red px at columns ' + r.x0 + '..' + r.x1 + ', rows ' + r.y0 + '..' + r.y1;
+      const at = (r, x0, x1, y0, y1) => Math.abs(r.x0 - x0) <= 1 && Math.abs(r.x1 - x1) <= 1 && Math.abs(r.y0 - y0) <= 1 && Math.abs(r.y1 - y1) <= 1;
+
+      /* ── (a) the hinge: anchor on the left edge. */
+      const Hn = block('bh4 #3 hinged square', 160, 120, 100, 100);
+      Hn.transform.anchorX = 0;
+      FM.scene.layers = [Hn];
+      const ha0 = reds(_bh2Frame(T));
+      if (!at(ha0, 160, 259, 70, 169)) throw new Error('CONTROL: untilted, the square with its anchor on its left edge at x 160 is ' + say(ha0) + ', not 160..259 × 70..169 — the fixture is not the one worked out above');
+      Hn.transform.rotationY = 60;
+      const ha = reds(_bh2Frame(T));
+      if (ha.n < 1000 || ha.x1 - ha.x0 + 1 > 60) throw new Error('CONTROL: leant 60° about Y, the hinged square is ' + say(ha) + ' — not narrowed from its 100 px, so the tilt route did not run');
+      if (Math.abs(ha.x0 - 160) > 3) throw new Error('(a) a square hinged on its left edge (anchor 0, x 160) and leant 60° about Y has its leftmost red column at ' + ha.x0 + ', not within 3 px of 160 where its anchor is (' + say(ha) + ')' + (Math.abs(ha.x0 - 176) <= 2 ? ' — it turned about the middle of its visible pixels (209.5), not about its anchor' : ''));
+      if (Math.abs(ha.x1 + 1 - 192.4) > 2.5) throw new Error('(a) hinged on its left edge and leant 60° about Y, the square ends at column ' + ha.x1 + ', not about 192 (its far edge 2 R from the hinge, receding) — ' + say(ha));
+
+      /* ── (b) the frame edge: a leant default-anchor square at x 120, then at x 20 (partly off the left edge). */
+      const Sl = block('bh4 #3 sliding square', 20, 120, 100, 100);
+      FM.scene.layers = [Sl];
+      const cut0 = reds(_bh2Frame(T));
+      if (!at(cut0, 0, 69, 70, 169)) throw new Error('CONTROL: untilted at x 20 the square is ' + say(cut0) + ', not cut by the frame’s left edge to 0..69 × 70..169 — this would not test the frame edge');
+      Sl.transform.rotationY = 60;
+      Sl.transform.x = 120;
+      const s120 = reds(_bh2Frame(T));
+      Sl.transform.x = 20;
+      const s20 = reds(_bh2Frame(T));
+      if (s120.n < 1000 || s120.x1 - s120.x0 + 1 > 80) throw new Error('CONTROL: leant 60° about Y at x 120 the square is ' + say(s120) + ' — not narrowed from its 100 px, so the tilt route did not run');
+      const moved = s120.x1 - s20.x1;
+      if (s20.x1 < 0 || Math.abs(moved - 100) > 2) throw new Error('(b) a square leant 60° about Y, moved from x 120 to x 20 (partly off the frame’s left edge), moved its right edge by ' + moved + ' px (column ' + s120.x1 + ' to ' + s20.x1 + '), not 100' + (Math.abs(moved - 89) <= 2 ? ' — the pivot and the perspective followed the part the frame left visible' : ''));
+
+      /* ── (c) CONTROL: the default case leans as before. */
+      const Cn = block('bh4 #3 centred square', 160, 120, 100, 100);
+      Cn.transform.rotationY = 60;
+      FM.scene.layers = [Cn];
+      const rc = reds(_bh2Frame(T));
+      const near = (v, w) => Math.abs(v - w) <= 1.5;
+      if (!(near(rc.x0, 126.05) && near(rc.x1 + 1, 179.45) && near(rc.y0, 52.6) && near(rc.y1 + 1, 187.75))) throw new Error('CONTROL: a centred square fully on screen, leant 60° about Y, is ' + say(rc) + ', not about columns 126..179 and rows 53..187 as it was drawn before (near edge at 126.05, rows 52.6..187.75, far edge at 179.45) — the default case changed');
+
+      /* ── (d) CONTROL: a leant group draws exactly as a single leant layer, its anchor included. */
+      const G2 = grp('bh4 #3 leant group');
+      const R2 = block('bh4 #3 red in the leant group', 80, 100, 40, 40, G2.id);
+      G2.transform.rotationY = 60;
+      FM.scene.layers = [G2, R2];
+      const fd = _bh2Frame(T), rd = reds(fd);
+      const R3 = block('bh4 #3 red leant alone', 80, 100, 40, 40, null);
+      R3.transform.rotationY = 60;
+      FM.scene.layers = [R3];
+      const fs = _bh2Frame(T), rs = reds(fs);
+      if (rs.n < 100 || rs.x1 - rs.x0 + 1 > 32) throw new Error('CONTROL: a single red block leant 60° about Y is ' + say(rs) + ' — not narrower than its 40 px, so the tilt route this compares against did not run');
+      const md = _bh2MaxDiff(fd.d, fs.d);
+      if (md > 2) throw new Error('CONTROL: a group holding the red block, leant 60° about Y, draws ' + say(rd) + ' where the block alone leant 60° draws ' + say(rs) + ' (up to ' + md + ' levels apart) — the group no longer leans as a single layer');
+      const Gh = grp('bh4 #3 hinged group');
+      Gh.transform.x = 30; Gh.transform.anchorX = 0; Gh.transform.rotationY = 60;
+      const Rh = block('bh4 #3 red in the hinged group', 80, 100, 40, 40, Gh.id);
+      FM.scene.layers = [Gh, Rh];
+      const fg = _bh2Frame(T), rg = reds(fg);
+      const Ra = block('bh4 #3 red hinged alone', 90, 100, 40, 40, null);
+      Ra.transform.anchorX = 0; Ra.transform.rotationY = 60;
+      FM.scene.layers = [Ra];
+      const fa = _bh2Frame(T), ra = reds(fa);
+      if (ra.n < 100 || ra.x1 - ra.x0 + 1 > 32) throw new Error('CONTROL: a single red block hinged on its left edge and leant 60° about Y is ' + say(ra) + ' — not narrower than its 40 px, so the tilt route this compares against did not run');
+      if (Math.abs(rg.x0 - 90) > 2) throw new Error('(d) a group at x 30 with its anchor on its box’s left edge, leant 60° about Y, draws its block from column ' + rg.x0 + ', not from about 90 where that anchor is (' + say(rg) + ')' + (Math.abs(rg.x0 - 97) <= 1 ? ' — it turned about the middle of its visible pixels, not about its anchor' : ''));
+      const mg = _bh2MaxDiff(fg.d, fa.d);
+      if (mg > 2) throw new Error('(d) a group at x 30 with its anchor on its box’s left edge, leant 60° about Y, draws ' + say(rg) + ' where a block hinged on its left edge at x 90 and leant 60° draws ' + say(ra) + ' (up to ' + mg + ' levels apart) — the group does not turn about its own anchor as a single layer does');
+    });
+  });
+
   /* (#1b) THE EDITOR STILL HANDLED A MEMBER WITH THE OLD CHAIN. bughunt4 #1 (cedde93f) made a group's Flip, unlinked Width / Height,
      Skew, depth and link mode reach its members when they are DRAWN (compositor.js applyParentChain), but canvas-edit's parentXform —
      the walk behind a member's selection box, the tap that keeps or drops its selection, the drag and the handles — still composed only
