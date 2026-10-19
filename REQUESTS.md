@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 19 Oct at v17.78
+> ## 📌 WHAT I NEED FROM YOU — updated 19 Oct at v17.79
 >
-> **State:** v17.78 — **tools only, nothing in the app changes** (#1176): the lock that keeps the Full editor unchanged stops treating a code comment as a change to the Simple editor. Nothing to do on your side.
+> **State:** v17.79 — **seven more fixes in how the picture and text are drawn** (#1176): 3D tilt turns about the anchor; a masking group whose top layer is a group masks with all of it; particles spray from where their emitter is drawn; Outline Center, Word spacing and the ⧉ isolate button work everywhere; a group is boxed around its layers as drawn. Nothing to do on your side.
+>
+> v17.78 — **tools only, nothing in the app changes** (#1176): the lock that keeps the Full editor unchanged stops treating a code comment as a change to the Simple editor. Nothing to do on your side.
 >
 > v17.77 — **three fixes in how the picture is drawn** (#1176, a fourth bug hunt): a group's opacity or fade no longer changes how the layers in it blend; a group's Flip, Width / Height, Skew, Depth and tilt now reach the layers inside it (and the canvas drags them where they are drawn); and an adjustment layer's blend mode works. Nothing to do on your side.
 >
@@ -37657,6 +37659,7 @@ re-opened #480, which I had marked done and had not fixed.
       > 3. Then v17.73: #4, #7 and #8.
       📍 **Next week, the gate itself (the PM, 19 Oct):** `tools/_fu_gate.py`'s hook rule matched a Simple identifier (`FM.groupNeedsUnit`) inside a COMMENT that v17.77's #1 added, so a comment alone could have forced an impossible full-unchanged PASS on a Full release (caught by `why` before the ship; the comment was reworded). Teach the identifier hooks to strip `//` and `/* */` before matching — but NOT the "Simple mode" marker hook, which is meant to be read from comments — with a self-test case each way. It changes the instrument, so it ships alone (INSTRUMENT CHANGE + its own PASS).
       📍 **v17.78 (19 Oct): done** — the gate's identifier hooks read a line's code (comments out, strings kept, a block comment carried down the file); the "Simple mode" marker is still read from comments. Self-test cases each way; with the change reverted its comment cases fail. Its own full-unchanged PASS on the release tree (sources e4c905b3c748658d9d9d84ab).
+      📍 **v17.79 (19 Oct): bug hunt 4, the rest** (the PM's week pace, 16:07) — #3 3D tilt about the anchor (tiltPivot), #7 a masking group whose top member is a group (maskSet / drawGroupMask), #1e particles born through FM.parentChainMatrix, #5 Outline Center on the animated and curved painters, #8 Word spacing under Animate by Character / Word, #9 the ⧉ isolate on a group (a set: the group and its descendants), #10 a group's box and pivot follow members' anchors and text alignment (FM.textAlignShift, shared with the single-layer box). Dropped: #12 (unreachable). Logged: #6 (RTL under an animator). From #3, for later: pivotFree does not count tilt, and the tilt plate is still frame-sized; from #10: a member's own flip and unlinked scale are still ignored by the group box.
       📍 **Also logged 19 Oct (bug hunt 4, not built):** #12 the old feathered layer mask's shared canvas is UNREACHABLE today — that mask is the innermost pass in drawLayer, so nothing can nest inside it (its fixer had to force nesting by wrapping FM.isLayerVisibleAt to get a red test); pool it only if the dispatch order ever changes. #6 right-to-left text under an animator stays logged (not cheap).
       ✅ **DONE in v17.74 (bughunt2 #10; was: STILL OPEN — the next agent job when the PM says go, ~22:00, 18 Oct):** the exporter warms Audio Drive's sound data for the HEAD half of a split clip only (`js/exporter.js` ~1148), so in an export the tail half's audio-driven motion is dead. A real export bug in the same family; red-first, then its own release.
 

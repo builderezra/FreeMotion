@@ -153,11 +153,11 @@ window.FM = window.FM || {};
    * The selection box, its five handles and the tap region all assumed 'center' unconditionally, so
    * on a left- or right-aligned text layer the outline sat HALF A TEXT-WIDTH away from the text it
    * was outlining — and, worse than looking wrong, the tap target went with it: you pressed the
-   * letters and selected whatever was behind them. Only text has an align, so everything else is 0. */
+   * letters and selected whatever was behind them. Only text has an align, so everything else is 0.
+   * bughunt4 #10: the rule lives in compositor.js now (FM.textAlignShift), because a group's box has to give each member the
+   * same span this box gives it alone; one rule, read by both, so the two cannot drift apart. */
   function alignShift(layer, w) {
-    if (layer.type !== 'text') return 0;
-    const a = layer.align || 'center';
-    return a === 'left' ? w / 2 : a === 'right' ? -w / 2 : 0;
+    return FM.textAlignShift(layer, w);
   }
 
   /* Accumulated PARENT transform of a layer: where its parent space sits in the plate. Without this, a parented layer's hit

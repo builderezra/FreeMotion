@@ -4288,6 +4288,11 @@ window.FM = window.FM || {};
     const fillA = textFillAlpha(layer);                 // the Colouring card's Opacity — see fillTextA (queue 690)
     const baseAlpha = ctx.globalAlpha;                 // layer opacity already applied
     const stk = layer.stroke, sbw = stk ? (FM.evalProp(stk.width, t) || 0) : 0, scol = stk ? (FM.evalProp(stk.color, t) || '#000') : '#000', drawStroke = stk && stk.enabled && sbw > 0;
+    /* bughunt4 #5: the Outline's Position, read exactly as the still flat path reads it. Center strokes at the Size itself, Outside
+       (the default) and Inside (which a glyph cannot clip, so it stands in for Outside there too) at twice it, and the fill goes on
+       top in both, so Center shows half the band. Every stroke below used to be twice the Size whatever the Position, so Center drew
+       as Outside the moment the text had an Animate preset. Outside's width is the very number it was. */
+    const swid = ((stk && stk.position) || 'outside') === 'center' ? sbw : sbw * 2;
     const prevAlign = ctx.textAlign;
     ctx.textAlign = 'left';
     /* THE REAL GRADIENT, NOT ONE FLAT COLOUR PER LETTER (queue 690, fourth hunt). This used to paint each unit ONE
@@ -4424,7 +4429,7 @@ window.FM = window.FM || {};
           /* #966 opts8: Stay upright turns the letter back by the unit's own turn, so it stands straight (its animation's spin, laid on
              the unit, still turns it); following, it takes the arc's turn at its own place, as it always did. */
           ctx.rotate(upright ? -sign * U.a : sign * (C.a - U.a));
-          if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(pc, 0, 0); }
+          if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = swid; ctx.strokeStyle = scol; ctx.strokeText(pc, 0, 0); }
           fillTextA(ctx, pc, 0, 0, fillA);
           ctx.restore();
         }
@@ -4442,7 +4447,14 @@ window.FM = window.FM || {};
       if (unit === 'line') units = [line];
       else if (unit === 'word') units = line.split(/(\s+)/).filter(s => s.length);
       else units = graphemes(line);   // a flag or a skin-toned thumb is ONE unit, not two (queue 690)
-      const widths = units.map(u => ctx.measureText(u).width);
+      /* bughunt4 #8: by Character and by Word every space is a unit of its own, and a LONE space measures the same whatever the
+         word spacing (drawArcLine says why), so Letter Spread's Word spacing vanished under these presets. Their units are measured
+         with it neutralised and given it back once per space, as the curved path above does. By Line measures the whole line,
+         which keeps the word spacing, so it is measured as it always was. */
+      const wsPrev = (unit !== 'line' && ('wordSpacing' in ctx)) ? ctx.wordSpacing : null, wsp = parseFloat(wsPrev) || 0;
+      if (wsp) ctx.wordSpacing = '0px';
+      const widths = units.map(u => ctx.measureText(u).width + (wsp ? wsp * (u.split(' ').length - 1) : 0));
+      if (wsp) ctx.wordSpacing = wsPrev;
       const sp = parseFloat(ctx.letterSpacing) || 0;   // global spacing is active; measureText over-counts one trailing gap per unit (#5)
       const lineW = widths.reduce((a, b) => a + b, 0) - (units.length ? sp : 0);
       let x = align === 'center' ? -lineW / 2 : align === 'right' ? -lineW : 0;
@@ -4477,7 +4489,7 @@ window.FM = window.FM || {};
         if (ui === gU && (ghost.at === 'start' ? u.charAt(0) : u.slice(-1)) === ghost.ch) { paint = ghost.at === 'start' ? u.slice(1) : u.slice(0, -1); if (ghost.at === 'start') px += w - ctx.measureText(paint).width; }
         if (ui === gU && !paint) { x += w; return; }
         const paintRuns = () => runs.forEach(r => {
-          if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(r.s, -wDraw / 2 + r.x, 0); }
+          if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = swid; ctx.strokeStyle = scol; ctx.strokeText(r.s, -wDraw / 2 + r.x, 0); }
           fillTextA(ctx, r.s, -wDraw / 2 + r.x, 0, fillA);
         });
         ctx.save();
@@ -4492,12 +4504,12 @@ window.FM = window.FM || {};
           hlAnimPiece(ctx, hlo, ui, x, w, wDraw, (fill) => {
             ctx.fillStyle = fill;
             if (runs) { paintRuns(); return; }
-            if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
+            if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = swid; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
             fillTextA(ctx, paint, px, 0, fillA);
           });
         } else if (runs) paintRuns();
         else {
-        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
+        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = swid; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
         fillTextA(ctx, paint, px, 0, fillA);
         }
         ctx.restore();
@@ -4975,9 +4987,13 @@ window.FM = window.FM || {};
   FM.textHasAnim = function (layer) { return layer.textAnim && layer.textAnim.preset && layer.textAnim.preset !== 'none'; };
 
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
-  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol, ghost, pj, upright) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
+  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol, ghost, pj, upright, bpos) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
     // pj: planJoin of the lines, or null (#966 scramble layout)
     // upright: Text Curve's Stay upright (#966 opts8) — each glyph keeps its place on the arc and is not turned to it
+    /* bpos (bughunt4 #5): the Outline's Position, as the still flat path has it. Center strokes at the Size, anything else (Outside,
+       the default, and an unset one) at twice it, the fill on top either way; it used to be twice the Size always, so curved text
+       drew Center as Outside. A caller that passes nothing gets the old width. */
+    const swid = bpos === 'center' ? sbw : sbw * 2;
     const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
     // #482 12.4 review: Type-On's dark caret keeps its place on the arc (it is measured with the rest) and is not painted
     const gskip = ghostIndex(chars, ghost);
@@ -5022,7 +5038,7 @@ window.FM = window.FM || {};
       ctx.save();
       ctx.translate(R * Math.sin(a), sign * (R - R * Math.cos(a)));
       if (!upright) ctx.rotate(sign * a);
-      if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(pc, 0, 0); }
+      if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = swid; ctx.strokeStyle = scol; ctx.strokeText(pc, 0, 0); }
       fillTextA(ctx, pc, 0, 0, textFillAlpha(layer));   // the Colouring card's Opacity (queue 690)
       ctx.restore();
       s += w + sp;
@@ -16989,6 +17005,60 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (rx === 0 && ry === 0) return null;
     return { rx: rx * Math.PI / 180, ry: ry * Math.PI / 180 };
   }
+  /* ═══ bughunt4 #3 — THE TILT TURNS ABOUT THE ANCHOR, NOT ABOUT WHAT HAPPENS TO BE VISIBLE ══════════════════════════════════
+   * What was wrong. The plate's quad was centred on the plate's alpha bbox (cx, cy its centre, R half its longer side) and the
+   * anchor was never read, though the Anchor placer says "Scaling and rotation happen around this point" and X / Y tilt live
+   * in its Rotate mode. So a door hinged on its left edge (anchor 0) swung about its middle, and a card flip with the anchor at
+   * the top flipped about its centre. And because the plate is the frame, a tilted layer leaving the frame edge was cropped
+   * BEFORE it was measured: the box shrank, the pivot slid toward what was left and R shrank with it, so the lean and the
+   * perspective changed while only X was animated (a Shadow widening the box, or a Type-On revealing letters, did the same).
+   * Now, tiltPivot:
+   *   · the pivot is the layer's anchor, its CTM's (0, 0) — the very point its 2D turn and scale go about — mapped into plate
+   *     px by (p − OX)·ps;
+   *   · R is half the longer side of the layer's OWN box (layerSizeAt) through that CTM's axes, so its scale, its Width /
+   *     Height, its depth and every parent's scale count, and nothing the frame edge or an effect does to its pixels;
+   *   · the quad's vertices sit at the bbox's REAL offset from the pivot (draw3DTiltLayer), so what the frame edge crops is
+   *     simply missing while everything else stays where it was;
+   *   · a GROUP (its '_flat' proxy, bughunt4 #1) is a layer whose content is its members and whose anchor is its pivot: it
+   *     turns about FM.groupPivot carried through the matrix its members are drawn with, and R is half its members' box;
+   *   · the old quad never reached further than R from its centre; this one can (a hinge's far edge is 2 R away), so R is
+   *     raised until the leant quad's nearest corner comes no closer to the eye than 2.5 R (renderMesh's F is 3.2, and a
+   *     vertex level with the eye would be drawn at 16 x). Only an anchor far from the middle of its box with a big tilt gets
+   *     there (an anchor outside the box, which the Anchor boxes allow from −400 to 500 %, or a corner at X and Y 45°), and
+   *     its perspective is then a little gentler instead of folding over.
+   * A default-anchor layer fully on screen keeps its picture to within a third of a pixel across: the old centre and R were
+   * the PADDED alpha bbox's (alphaBBox reads every 2nd pixel and adds 2), so for a 100 px square half a pixel up and left of
+   * its middle, with R 51.5 for 50. No CTM (no getTransform) or no box: null, and the old bbox maths runs unchanged. */
+  function tiltPivot(flat, t, scene, ps, OX, OY, bb, tilt) {
+    let px, py, bw, bh;
+    if (flat.type === '_flat') {
+      const g = flat._ofGroup;
+      if (!g || g.type !== 'group' || !FM.groupPivot || !FM.parentChainMatrix || !FM.groupBoundsLocal) return null;
+      const piv = FM.groupPivot(g, scene, t);
+      const b = FM.groupBoundsLocal(g, scene, t) || (FM.groupRestBoundsLocal ? FM.groupRestBoundsLocal(g, scene) : null);
+      // the matrix a member is drawn with: the group's own pivot sandwich, its position and everything above it
+      const M = FM.parentChainMatrix({ id: g.id + ':tilt', parent: g.id }, t, scene);
+      if (!piv || !b || !M) return null;
+      px = M.a * piv.x + M.c * piv.y + M.e;
+      py = M.b * piv.x + M.d * piv.y + M.f;
+      bw = b.w * Math.hypot(M.a, M.b);
+      bh = b.h * Math.hypot(M.c, M.d);
+    } else {
+      const M = layerCTM(flat, t, scene), sz = layerSizeAt(flat, t);
+      if (!M || !sz) return null;
+      px = M.e; py = M.f;   /* M.transformPoint(0, 0): the anchor */
+      bw = (sz.w || 0) * Math.hypot(M.a, M.b);
+      bh = (sz.h || 0) * Math.hypot(M.c, M.d);
+    }
+    const x = (px - OX) * ps, y = (py - OY) * ps;
+    let R = Math.max(bw, bh) * ps / 2;
+    if (!isFinite(x) || !isFinite(y) || !isFinite(R) || !(R > 0.5)) return null;
+    /* how far toward the eye each bbox corner comes once leant: renderMesh turns X, then Y, so z' = −x·sin ry + y·sin rx·cos ry */
+    const kx = -Math.sin(tilt.ry), ky = Math.sin(tilt.rx) * Math.cos(tilt.ry);
+    const zx = Math.max(kx * (bb.x - x), kx * (bb.x + bb.w - x)), zy = Math.max(ky * (bb.y - y), ky * (bb.y + bb.h - y));
+    if (zx + zy > 2.5 * R) R = (zx + zy) / 2.5;
+    return { x: x, y: y, R: R };
+  }
   function draw3DTiltLayer(ctx, layer, t, scene) {
     const tilt = tilt3D(layer, t);
     if (!tilt) return;
@@ -17025,10 +17095,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, W, H);   // PLATE pixels — bb/renderMesh below are in them (identity at scale 1, i.e. exactly what baseT gave)
     bctx.globalAlpha = 1; bctx.globalCompositeOperation = 'source-over'; bctx.filter = 'none';
     if (bb && bb.w > 1 && bb.h > 1) {
-      const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;   // unit half-extents preserve the plate's aspect (pagecurl trick)
       const tex = extractTex(_t3A, bb);
-      const mesh = bParam((u, v) => [(u * 2 - 1) * ax, (v * 2 - 1) * ay, 0], 8, 8);   // 8×8 flat quad, uv 0..1 (cheap; rebuilt per frame)
-      renderMesh(bctx, tex, bb.w, bb.h, mesh.v, mesh.t, { cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: S / 2, rx: tilt.rx, ry: tilt.ry, rz: 0, shading: 0 });
+      // bughunt4 #3: about the anchor (a group's pivot), at the layer's own box; null keeps the old bbox centre and size below
+      const pv = tiltPivot(tmp, t, scene, ps, OX, OY, bb, tilt);
+      if (pv) {
+        // the quad is the bbox where it really is, in units of R from the pivot, so a crop at the frame edge moves nothing else
+        const qx = (bb.x - pv.x) / pv.R, qy = (bb.y - pv.y) / pv.R, qw = bb.w / pv.R, qh = bb.h / pv.R;
+        const mesh = bParam((u, v) => [qx + u * qw, qy + v * qh, 0], 8, 8);
+        renderMesh(bctx, tex, bb.w, bb.h, mesh.v, mesh.t, { cx: pv.x, cy: pv.y, R: pv.R, rx: tilt.rx, ry: tilt.ry, rz: 0, shading: 0 });
+      } else {
+        const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;   // unit half-extents preserve the plate's aspect (pagecurl trick)
+        const mesh = bParam((u, v) => [(u * 2 - 1) * ax, (v * 2 - 1) * ay, 0], 8, 8);   // 8×8 flat quad, uv 0..1 (cheap; rebuilt per frame)
+        renderMesh(bctx, tex, bb.w, bb.h, mesh.v, mesh.t, { cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: S / 2, rx: tilt.rx, ry: tilt.ry, rz: 0, shading: 0 });
+      }
     } else {
       bctx.drawImage(_t3A, 0, 0);   // nothing visible / tainted → pass the flat plate through (never blank the layer)
     }
@@ -17517,33 +17596,37 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { vx: sx, vy: sy, df: df, gw: gw, gh: gh, FW: FW, FH: FH, BS: BS };
   }
 
-  // The emitter's WORLD position at time bt: the layer's own x/y (behavior-resolved) pushed through the
-  // parent chain's translate→rotate→scale, matching applyLayerTransform — so particles spray from where
-  // the picture actually renders. Reading raw transform.x/y left a grouped/parented or behavior-driven
-  // emitter's cloud detached at its local coordinates. Cycle- and depth-guarded like applyParentChain.
-  function emitterWorldPos(layer, bt, cx, cy) {
+  // The emitter's WORLD position at time bt: the layer's own x/y (behavior-resolved) carried through its
+  // parent chain, matching applyLayerTransform — so particles spray from where the picture actually
+  // renders. Reading raw transform.x/y left a grouped/parented or behavior-driven emitter's cloud
+  // detached at its local coordinates.
+  /* ═══ bughunt4 #1 follow-up (emitter) — THE CHAIN IS THE RENDERER'S OWN MATRIX, NOT A WALK THAT COPIES IT ═══════════════
+   * This used to walk the chain by hand: each parent's x, y, turn and uniform scale, about the parent's own origin. The
+   * renderer (applyParentChain) turns and scales a GROUP about its pivot (#630), and since bughunt4 #1 also applies each
+   * parent's flip, unlinked Width / Height, skew, depth and its own link mode. So inside a flipped, stretched, skewed, turned
+   * or depth-scaled group, or under a locked / weighted Controller link, the emitter LAYER was drawn in one place and its
+   * particles were born in another.
+   * Now the emitter's point (x, y, in its parent's space) goes through FM.parentChainMatrix at the birth time: applyParentChain
+   * itself, run into a probe, in the scene the layer was drawn with, so the cloud starts where the layer is drawn, by
+   * construction. Nothing else in Particles reads the chain: Direction, Spread, Gravity, Turbulence and the Line / Box /
+   * Circle shapes are frame-space settings that the emitter's own turn and flip do not touch either, so a parent's turn or
+   * mirror is not put on them.
+   * No parent: the layer's own x / y, as before. A parent that only moves: x + e, the very sum the old walk made. A turned or
+   * scaled Controller: the same numbers, composed in the matrix's order, so the last bit can differ (about 1e-14 px; the canvas
+   * draws in single precision). No matrix to be had: the layer's own x / y, which is where an unparented layer already lives
+   * (canvas-edit's parentXform falls back the same way). */
+  function emitterWorldPos(layer, bt, cx, cy, scene) {
     const bv = FM.behaviorValue;
-    const ev = (l, key, def) => {
-      let v = FM.evalProp(l.transform ? l.transform[key] : null, bt);
-      if (bv) v = bv(l, key, v, bt);
+    const ev = (key, def) => {
+      let v = FM.evalProp(layer.transform ? layer.transform[key] : null, bt);
+      if (bv) v = bv(layer, key, v, bt);
       return isFinite(v) ? v : def;
     };
-    let x = ev(layer, 'x', cx), y = ev(layer, 'y', cy);
-    const scene = FM.scene, seen = new Set([layer.id]);
-    let pid = layer.parent, depth = 0;
-    while (pid && scene && !seen.has(pid) && depth++ < 16) {
-      seen.add(pid);
-      const pl = FM.clipAt(scene, pid, bt);   // the half that actually covers bt, if this parent was split
-      if (!pl || !pl.transform) break;
-      const pr = ev(pl, 'rotation', 0) * Math.PI / 180;
-      const ps = Math.max(0.001, ev(pl, 'scale', 1));
-      const c = Math.cos(pr), s = Math.sin(pr);
-      const nx = ev(pl, 'x', 0) + (x * c - y * s) * ps;
-      const ny = ev(pl, 'y', 0) + (x * s + y * c) * ps;
-      x = nx; y = ny;
-      pid = pl.parent;
-    }
-    return { x: x, y: y };
+    const x = ev('x', cx), y = ev('y', cy);
+    if (!layer.parent) return { x: x, y: y };
+    const M = typeof FM.parentChainMatrix === 'function' ? FM.parentChainMatrix(layer, bt, scene || FM.scene) : null;
+    if (!M) return { x: x, y: y };
+    return { x: M.a * x + M.c * y + M.e, y: M.b * x + M.d * y + M.f };
   }
 
   /* ═══ A MOVED COPY OF THE LAYER SHOWS WHAT WAS REALLY PAST THE EDGE (#986 C27, hunt — queue 228's fix, finished) ════
@@ -19784,7 +19867,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * You saw nothing while editing and then found them in the exported video.
      *
      * At ps === 1 every multiplication below is a no-op, so exports and 1:1 previews are unchanged. */
-    particles: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+    particles: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const pk = ps || 1;   // PROJECT units -> PLATE px
       /* BEHIND LAYER (#482 polish 11.1): Off draws the layer and then the particles over it, as it always has; On lays the
          particles down first and draws the layer over them, so a logo sheds sparks from behind itself. */
@@ -19905,7 +19988,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         let ox = ox0, oy = oy0, ex = 0, ey = 0;
         if (emitter === 4) { ox = hx(i, 2) * W; oy = hx(i, 3) * H; }   // Whole frame: born anywhere on the plate, wherever the layer is
         else if (needsWorld) {   // parented / behavior-driven emitter: full world-position resolve at birth
-          const wp = emitterWorldPos(layer, start + bornT, cx / pk, cy / pk);   /* it works in PROJECT units, so hand it the fallback in those too */
+          const wp = emitterWorldPos(layer, start + bornT, cx / pk, cy / pk, scene);   /* it works in PROJECT units, so hand it the fallback in those too; `scene` is the one the layer was drawn in (bughunt4 #1 follow-up) */
           ox = wp.x * pk; oy = wp.y * pk;
         } else if (!statX || !statY) {
           const bt = start + bornT;
@@ -23155,7 +23238,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
         // `curve` is resolved above the branch (queue 664, 904). Identical when no curve effect is present,
         // because applyTextEffects seeds it from exactly the layer's own field.
-        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost, planJoin(lines, _plan), _cUp);   // text on a curve
+        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost, planJoin(lines, _plan), _cUp, bpos);   // text on a curve
         else if (_hlLit) drawHighlightLines(ctx, layer, lines, lh, total, _hl, drawStroke, bw, bpos, bcol, ghost, _plan);   // #966 B9: something is lit
         // #966 B41: an Odometer Roll wheel is turning
         else if (_odo) drawOdometerLines(ctx, layer, lines, lh, _odo, drawStroke, bw, bpos, bcol, ghost);
@@ -28176,7 +28259,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   FM.groupNeedsUnit = groupNeedsUnit;   // Simple mode P1: a group that composites as ONE piece is a block (§2.5) — one rule, shared
   /* bughunt2 #8: is L (a half of) this unit's mask? The id test it always was, and for a split mask any half of its lineage. */
-  function isUnitMask(u, L) { return L.id === u.maskId || (u.maskLin != null && L.splitOf === u.maskLin); }
+  /* bughunt4 #7: …and for a top member that is a group, anything in that group's subtree (u.maskSet). */
+  function isUnitMask(u, L) { return L.id === u.maskId || (u.maskLin != null && L.splitOf === u.maskLin) || (u.maskSet != null && u.maskSet.has(L.id)); }
   function collectGroupUnits(scene, t) {
     let map = null;
     const units = [];
@@ -28203,21 +28287,43 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const pass = !tilts && !groupOwnLook(g) && members.some(readsBelow);
       if (!drawable.length && !(pass && members.some(l => l.type === 'adjustment'))) continue;
       // masking needs a mask + at least one clipped member; effects-only units work from 1 member
-      let maskId = null, maskLin = null;
+      let maskId = null, maskLin = null, maskSet = null;
       if (g.maskGroup && drawable.length >= 2) {
         let mask = drawable[0], mi = scene.layers.indexOf(drawable[0]);
         drawable.forEach(l => { const idx = scene.layers.indexOf(l); if (idx < mi) { mi = idx; mask = l; } });
-        /* bughunt2 #8: A SPLIT MASK IS STILL THE MASK, BOTH HALVES OF IT. The mask is the top member, and a split puts the
-           tail half just under the head (FM.splitLayer), so by id alone the head stayed the mask and the TAIL was drawn as
-           an ordinary member: past the cut the head was off screen ("hidden mask"), every member showed unclipped and the
-           mask's own picture was drawn on top of them. Every half of the top member's lineage is the mask (isUnitMask), and
-           the one drawn is the half on screen at t (FM.refLayerAt, drawGroupUnit). It still needs a member to clip that is
-           not part of it, the same "mask + at least one member" rule: a group holding only one split clip is not masked,
-           as it was not before the split. A mask never split: maskLin stays null and nothing below changes. */
-        const lin = mask.splitOf || null;
-        if (!lin || drawable.some(l => l.splitOf !== lin)) { maskId = mask.id; maskLin = lin; }
+        /* bughunt4 #7: THE MASK IS THE TOP MEMBER, AND THAT MEMBER MAY BE A GROUP. `members` is the recursive walk and `drawable`
+           drops every group, so the top-most LEAF above was the mask even when it sat inside a nested group: that group's other
+           pieces were drawn as clipped content (a three-piece mask revealed the photo through its first piece only), and a styled
+           inner group, drawn whole as a unit, painted the mask's own colour inside the mask. Now the masking group's DIRECT child
+           that holds that top-most leaf is the mask. A plain layer is exactly the leaf it always was (the bughunt2 #8 branch below,
+           unchanged). A group is the mask with its whole subtree (maskSet): none of it is drawn as content, and buildGroupUnit draws
+           all of it, nested units whole, into the mask plate (drawGroupMask). It still needs a member to clip outside the mask. */
+        const inG = {};
+        members.forEach(l => { inG[l.id] = l; });
+        let top = mask, hops = 0;
+        while (top && top.parent !== g.id && hops++ < 64) top = inG[top.parent];
+        if (top && top !== mask && top.parent === g.id && top.type === 'group') {
+          const sub = new Set([top.id]);
+          let grew = true;
+          while (grew) {   // the top group's subtree, out of the walk above; a set that only grows, so a cycle cannot spin it
+            grew = false;
+            members.forEach(l => { if (!sub.has(l.id) && sub.has(l.parent)) { sub.add(l.id); grew = true; } });
+          }
+          if (drawable.some(l => !sub.has(l.id))) { maskId = top.id; maskSet = sub; }
+        } else {
+          /* bughunt2 #8: A SPLIT MASK IS STILL THE MASK, BOTH HALVES OF IT. The mask is the top member, and a split puts the
+             tail half just under the head (FM.splitLayer), so by id alone the head stayed the mask and the TAIL was drawn as
+             an ordinary member: past the cut the head was off screen ("hidden mask"), every member showed unclipped and the
+             mask's own picture was drawn on top of them. Every half of the top member's lineage is the mask (isUnitMask), and
+             the one drawn is the half on screen at t (FM.refLayerAt, drawGroupUnit). It still needs a member to clip that is
+             not part of it, the same "mask + at least one member" rule: a group holding only one split clip is not masked,
+             as it was not before the split. A mask never split: maskLin stays null and nothing below changes.
+             (bughunt4 #7: a split piece INSIDE a top group shares that group, so it is in maskSet and needs none of this.) */
+          const lin = mask.splitOf || null;
+          if (!lin || drawable.some(l => l.splitOf !== lin)) { maskId = mask.id; maskLin = lin; }
+        }
       }
-      units.push({ group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, maskLin: maskLin, drawn: false, depth: 0, pass: pass });
+      units.push({ group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, maskLin: maskLin, maskSet: maskSet, drawn: false, depth: 0, pass: pass });
     }
     if (!units.length) return null;
     /* NESTING. A group inside another group is a unit in its own right, and both of them own the same
@@ -28329,13 +28435,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       drawLayer(a, L, t, scene);
     }
     // bughunt2 #8: the half of a split mask on screen at t (a mask never split: the old find by id, through FM.layerById)
-    const maskLayer = u.maskId ? (FM.refLayerAt ? FM.refLayerAt(scene, u.maskId, t) : scene.layers.find(l => l.id === u.maskId)) : null;
-    if (maskLayer && FM.isLayerVisibleAt(maskLayer, t)) {   // hidden mask → members show unclipped
+    const maskLayer = (u.maskId && !u.maskSet) ? (FM.refLayerAt ? FM.refLayerAt(scene, u.maskId, t) : scene.layers.find(l => l.id === u.maskId)) : null;
+    // bughunt4 #7: a top member that is a group is the mask whole, and it is on screen while any piece of it is
+    const maskOn = u.maskSet ? groupMaskOn(u, t, scene) : !!(maskLayer && FM.isLayerVisibleAt(maskLayer, t));
+    if (maskOn) {   // hidden mask → members show unclipped
       const b = _mgB.getContext('2d');
       if (R) { b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, GW, GH); }
       baseT(b); b.clearRect(0, 0, P.width, P.height);
       b.globalAlpha = 1; b.globalCompositeOperation = 'source-over'; b.filter = 'none';
-      drawLayer(b, maskLayer, t, scene);
+      if (u.maskSet) drawGroupMask(b, u, t, scene);
+      else drawLayer(b, maskLayer, t, scene);
       a.globalCompositeOperation = 'destination-in';
       a.drawImage(_mgB, RX, RY, RW, RH);   // `a` is in PROJECT units (baseT), the plate is in target px
       a.globalCompositeOperation = 'source-over';
@@ -28401,6 +28510,36 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   function drawGroupUnit(ctx, u, t, scene) {
     if (u.pass) { drawPassUnit(ctx, u, t, scene); return; }   // bughunt4 #2: an opacity-only group, see below
     drawLayer(ctx, buildGroupUnit(ctx, u, t, scene), t, scene);
+  }
+  /* ═══ bughunt4 #7 — A GROUP ON TOP OF A MASKING GROUP IS THE MASK, ALL OF IT ═══
+   * collectGroupUnits names it (u.maskId, with its subtree in u.maskSet), buildGroupUnit has skipped every piece of it as content,
+   * and drawGroupMask draws it into the mask plate B before the destination-in step, exactly as buildGroupUnit draws members:
+   * bottom to top, an adjustment grading the plate at its slot, and a styled group inside it (a unit of its own, childOwner)
+   * composited WHOLE by drawGroupUnit, with its opacity and effects, so a 99 % inner group masks at 99 % and none of its pieces
+   * is drawn twice. That unit is one nesting depth deeper, so it builds on its own pool plates (_mgPool[depth + 1]); this unit's
+   * A (the content) and B (the plate being drawn into) are never touched by it. groupMaskOn is the single mask's "hidden mask →
+   * members show unclipped" rule for the whole group: the mask is on while any piece of it is on screen at t. */
+  function groupMaskOn(u, t, scene) {
+    for (let i = 0; i < scene.layers.length; i++) {
+      const L = scene.layers[i];
+      if (u.maskSet.has(L.id) && L.type !== 'group' && L.type !== 'camera' && L.type !== 'adjustment' && L.type !== 'null' && FM.isLayerVisibleAt(L, t)) return true;
+    }
+    return false;
+  }
+  function drawGroupMask(b, u, t, scene) {
+    const drawnHere = new Set();
+    for (let i = scene.layers.length - 1; i >= 0; i--) {   // the mask's pieces bottom to top, as buildGroupUnit walks members
+      const L = scene.layers[i];
+      if (!u.maskSet.has(L.id)) continue;
+      const own = u.childOwner && u.childOwner[L.id];
+      if (own && own !== u) {
+        if (!drawnHere.has(own.group.id)) { drawnHere.add(own.group.id); drawGroupUnit(b, own, t, scene); }
+        continue;
+      }
+      if (L.type === 'group') continue;   // a plain group rasterises nothing; its pieces are drawn one by one
+      if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(b, L, t, scene); continue; }
+      drawLayer(b, L, t, scene);
+    }
   }
 
   /* ═══ bughunt4 #2 — A GROUP'S OPACITY NO LONGER CHANGES HOW ITS MEMBERS BLEND ════════════════════════════════════════════
@@ -28811,9 +28950,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        scene: no layer.visible, no reordering, no history, no autosave. Two modes:
          1 — draw only this layer (everything else hidden)
          2 — draw everything, but draw THIS one last so it sits on top
-       Mode 2 is skipped for a layer inside a group unit: those members composite as one flattened
-       unit at the group's z-slot, so lifting one member out of it would change what the group IS,
-       not just what order it draws in.
+       A layer inside a group unit is not lifted OUT of it in mode 2: those members composite as one
+       flattened unit at the group's z-slot, so taking one member away would change what the group IS,
+       not just what order it draws in. Since bughunt4 #9 it is drawn AGAIN on top instead (see below).
        ⚠️ AND NEVER IN AN EXPORT (queue 690, HUNT-d). "View only" was true of the scene and false of the FILE: the exporter
        renders through this same function, and nothing on the way to an export cleared the isolate — so a clip left isolated
        on PC (the Export button stays up while it is selected, and clicking it keeps the selection) exported ALONE, every
@@ -28822,8 +28961,38 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        isolate is simply not read while an export is rendering, exactly like FM.fxPreviewListFor above — and the still
        (FM.snapshotPNG) holds it aside for its one render, because it renders without FM._exporting. */
     const _iso = (!FM._exporting && FM.isolate && FM.isolate.id && FM.isolate.mode && scene.layers.some(l => l.id === FM.isolate.id)) ? FM.isolate : null;
-    const _isoTop = (_iso && _iso.mode === 2 && !(memberToUnit && memberToUnit[_iso.id]))
-      ? scene.layers.find(l => l.id === _iso.id) : null;
+    /* bughunt4 #9 — THE ⧉ ISOLATE ON A GROUP, AND ON A MEMBER OF A STYLED GROUP. A group row rasterises nothing (drawLayer returns
+       for it): its picture is its members, drawn one by one below or flattened as a unit. The isolate tested ONE id, before the unit
+       dispatch, so on a selected group (the usual canvas selection) mode 1 skipped every member and the frame went blank, and mode 2
+       lifted the group row, which draws nothing, while its members stayed under whatever is above them. And a member of a styled
+       group reached its unit, which draws every member, so isolating one member showed the whole group.
+       Now the isolate is a SET: the layer, plus every descendant when it is a group (the parent walk collectGroupUnits makes, guarded
+       against a cycle the same way). A layer in it draws through the shallowest unit WHOLLY inside the set (_isoUnit: down the
+       childOwner chain from the unit the frame would dispatch), else on its own. So an isolated styled group draws as its unit, a
+       plain one as its members, and a member of a styled group alone, without its group's look. Mode 2 lifts out of the loop only
+       what the loop would itself draw as part of the isolate; a layer inside a unit that is NOT isolated stays in it (the group is
+       still what it is) and is drawn again on top. An ordinary layer in no unit: the set is its id and no unit is found, so every
+       draw is the one it was. */
+    let _isoSet = null;
+    if (_iso) {
+      _isoSet = new Set([_iso.id]);
+      const _isoL = scene.layers.find(l => l.id === _iso.id);
+      if (_isoL && _isoL.type === 'group') {
+        (function walk(gid) {
+          scene.layers.forEach(l => { if (l.parent === gid && !_isoSet.has(l.id)) { _isoSet.add(l.id); if (l.type === 'group') walk(l.id); } });
+        })(_iso.id);
+      }
+    }
+    const _isoUnit = function (id) {
+      let u = memberToUnit && memberToUnit[id], n = 0;
+      while (u && !_isoSet.has(u.group.id) && n++ < 64) u = u.childOwner && u.childOwner[id];
+      return (u && _isoSet.has(u.group.id)) ? u : null;
+    };
+    const _isoLift = function (L) {
+      const own = memberToUnit && memberToUnit[L.id];
+      return _isoSet.has(L.id) && !(own && !_isoSet.has(own.group.id));
+    };
+    const _isoTop = (_iso && _iso.mode === 2) ? scene.layers.find(l => l.id === _iso.id) : null;
     /* FILL BEHIND goes down HERE — on the background, under every layer in the stack. See
      * fillBehindPass and paintFillBehind: the fill is the layer's own blurred, blown-up copy, and
      * blitting it at the layer's own z is what erased everything below it. The filter below mirrors
@@ -28835,9 +29004,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _fbUnits = new Set();
     fillBehindPass(target, scene, t, function (L) {
       if (soloActive && !L.solo) return null;
-      if (_iso && _iso.mode === 1 && L.id !== _iso.id) return null;
+      if (_iso && _iso.mode === 1 && !_isoSet.has(L.id)) return null;
       if (L.type === 'camera' || L.type === 'adjustment' || L.type === 'null') return null;
-      const unit = memberToUnit && memberToUnit[L.id];
+      const unit = memberToUnit && ((_iso && _iso.mode === 1) ? _isoUnit(L.id) : memberToUnit[L.id]);   // bughunt4 #9: as the loop dispatches
       if (unit) {
         /* A unit draws as ONE flattened plate, so there are two fills to find here and they are
          * built from different pixels: the GROUP's own, which needs the unit flattened first, and
@@ -28860,10 +29029,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     for (let i = scene.layers.length - 1; i >= 0; i--) {
       const L = scene.layers[i];
       if (soloActive && !L.solo) continue;
-      if (_iso && _iso.mode === 1 && L.id !== _iso.id) continue;   // isolate: this layer alone
-      if (_isoTop && L.id === _isoTop.id) continue;                // …drawn after the loop instead
+      if (_iso && _iso.mode === 1 && !_isoSet.has(L.id)) continue;   // isolate: this layer alone (a group: with its members)
+      if (_isoTop && _isoLift(L)) continue;                          // …drawn after the loop instead
       if (L.type === 'camera') continue;   // the camera drives the composite; it is never rasterized
-      const unit = memberToUnit && memberToUnit[L.id];
+      const unit = memberToUnit && ((_iso && _iso.mode === 1) ? _isoUnit(L.id) : memberToUnit[L.id]);
       if (unit) { if (!unit.drawn) { unit.drawn = true; drawGroupUnit(target, unit, t, scene); } continue; }
       if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(target, L, t, scene); }
       else {
@@ -28873,7 +29042,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
     // Isolate mode 2: the chosen layer goes on last, so it reads above everything without its real
     // position in FM.scene.layers changing by one index.
-    if (_isoTop && FM.isLayerVisibleAt(_isoTop, t)) {
+    if (_isoTop && _isoTop.type === 'group') {
+      /* bughunt4 #9: a group on top is its descendants (or its unit), dispatched exactly as the loop above dispatches them */
+      const _isoDone = new Set();
+      for (let i = scene.layers.length - 1; i >= 0; i--) {
+        const L = scene.layers[i];
+        if (!_isoSet.has(L.id) || L.type === 'camera') continue;
+        const u = _isoUnit(L.id);
+        if (u) { if (!_isoDone.has(u.group.id)) { _isoDone.add(u.group.id); drawGroupUnit(target, u, t, scene); } continue; }
+        if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(target, L, t, scene); }
+        else {
+          if (FM.needsBgSnap(L) && FM.isLayerVisibleAt(L, t)) snapBackdrop(target, L);
+          drawLayer(target, L, t, scene);
+        }
+      }
+    } else if (_isoTop && FM.isLayerVisibleAt(_isoTop, t)) {
       if (_isoTop.type === 'adjustment') applyAdjustment(target, _isoTop, t, scene);
       else drawLayer(target, _isoTop, t, scene);
     }
@@ -29137,6 +29320,33 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { w: m ? m.width : 100, h: m ? m.height : 100 };
   };
 
+  /* ═══ bughunt4 #10 — A MEMBER'S SHARE OF ITS GROUP'S BOX IS WHERE THE MEMBER IS DRAWN ═══════════════════════════════════
+   * Both walks below took every member as CENTRED on its x/y: x ± w·sc/2. The renderer does not draw it there. A shape or a
+   * clip is drawn from −w·anchorX to w·(1 − anchorX) about its x (and the same down y with anchorY), and a text layer is moved
+   * by (0.5 − anchorX)·w and then laid out by its alignment, so a left-aligned title spans x .. x + w. So a group holding a
+   * left-aligned title, or a layer whose anchor had been moved to a corner, measured its box half a width off the content: a
+   * pinch scaled it toward the title's left edge, the selection box sat off the text, and a tap on the title's right half fell
+   * outside the group's box and picked the title itself.
+   * Each member now spans what that layer's own box spans (canvas-edit's hitTest and boxFor): its anchor, read by the
+   * renderer's own anchorX / anchorY, plus the alignment shift from FM.textAlignShift — ONE rule, which canvas-edit's
+   * alignShift now calls, so a single layer's box and its share of a group's box cannot disagree. At the default anchor (0.5)
+   * with no alignment the span is x ± w·sc/2, today's box sum for sum.
+   * ⚠️ This also moves the MEASURED pivot of a group that has none stored: an older project's scaled or turned group whose
+   * members carry a moved anchor or a left / right-aligned text is now drawn about the middle of what is really there. */
+  /* TEXT ALIGNMENT MOVES THE GLYPHS (#686): relative to the box a centred text spans [−w/2, +w/2]; 'left' moves it right by
+     w/2 and 'right' moves it left by w/2. Only text has an align, so everything else is 0. Moved here from canvas-edit. */
+  FM.textAlignShift = function (layer, w) {
+    if (!layer || layer.type !== 'text') return 0;
+    const a = layer.align || 'center';
+    return a === 'left' ? w / 2 : a === 'right' ? -w / 2 : 0;
+  };
+  // One member's extent in its group's child space: size `sz` at scale `sc`, its x/y already offset by any nested group.
+  function groupMemberSpan(l, sz, sc, x, y) {
+    const tr = l.transform || {}, ax = anchorX(tr), ay = anchorY(tr);
+    const w = sz.w * sc, h = sz.h * sc, sh = FM.textAlignShift(l, w);
+    return { x0: x - w * ax + sh, x1: x + w * (1 - ax) + sh, y0: y - h * ay, y1: y + h * (1 - ay) };
+  }
+
   // Approximate world bbox of a group's members (ignores rotations — good enough for the canvas
   // selection box + hit-test, which previously showed a meaningless 100px box at the group's 0,0).
   /* The members' extent in the group's OWN child space — before the group's x/y/scale are applied.
@@ -29160,10 +29370,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const sz = FM.layerSize(l);
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
-        const w = sz.w * sc / 2, h = sz.h * sc / 2;
+        // bughunt4 #10: the member's anchor and text alignment, not x ± w·sc/2 (groupMemberSpan)
+        const m = groupMemberSpan(l, sz, sc, x, y);
         any = true;
-        minX = Math.min(minX, x - w); maxX = Math.max(maxX, x + w);
-        minY = Math.min(minY, y - h); maxY = Math.max(maxY, y + h);
+        minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
+        minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
       });
     })(group.id, 0, 0);
     if (!any) return null;
@@ -29231,10 +29442,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const sz = FM.layerSize(l);
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
-        const w = sz.w * sc / 2, h = sz.h * sc / 2;
+        // bughunt4 #10: the same member span as groupBoundsLocal
+        const m = groupMemberSpan(l, sz, sc, x, y);
         any = true;
-        minX = Math.min(minX, x - w); maxX = Math.max(maxX, x + w);
-        minY = Math.min(minY, y - h); maxY = Math.max(maxY, y + h);
+        minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
+        minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
       });
     })(group.id, 0, 0);
     if (!any) return null;

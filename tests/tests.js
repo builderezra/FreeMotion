@@ -163995,6 +163995,155 @@
    * the commit before it (#2: cce7f239, #1: dfc4f2b2). They use bughunt 2's helpers (_bh2With, _bh2Frame, _bh2Bar, _bh2MaxDiff);
    * everything else is the suite's. ═══ */
 
+  /* (#10) A GROUP'S BOX TOOK EVERY MEMBER AS CENTRED ON ITS X/Y. A group G at 0,0 holds ONE member, at x 100, y 200. On 698b5dd0
+     groupBoundsLocal and groupRestBoundsLocal span each member x ± w·sc/2, y ± h·sc/2 whatever its anchor or text alignment, while
+     the renderer draws a shape from −w·anchorX about its x and a left-aligned text from its x rightwards. So, on 698b5dd0:
+       A  a left-aligned text of measured width W is boxed 100 − W/2 .. 100 + W/2 where it is drawn 100 .. 100 + W; the pivot a pinch
+          would scale it about (FM.groupPivotMeasured, the group's anchor 0.5) is 100, the title's LEFT EDGE, not 100 + W/2; and
+          FM.groupBounds, which the canvas hit-test reads, ends at 100 + W/2, so a tap at 100 + 0.75·W on the title's right half
+          misses the group.
+       B  a right-aligned text is boxed 100 − W/2 .. 100 + W/2 where it is drawn 100 − W .. 100.
+       C  a 40 × 30 shape with anchorX 0 and anchorY 1 is boxed 80 .. 120 × 185 .. 215 where it is drawn 100 .. 140 × 170 .. 200,
+          and at scale 2 60 .. 140 × 170 .. 230 where it is drawn 100 .. 180 × 140 .. 200.
+     CONTROLS (pass on both commits): a default-anchor 40 × 30 shape is 80 .. 120 × 185 .. 215 and a centred text 100 ± W/2 — today's
+     box, sum for sum; and the text really measures wider than layerSize's 10 px floor, so A and B can tell the spans apart. */
+  test('bughunt4 #10 A group\'s box follows its members\' anchors and text alignment: a left-aligned title alone in a group is boxed from its x to x + its width and the group pivots about the title\'s middle, a right-aligned one from x − width to x, a shape anchored at its left edge from x to x + width (CONTROLS: a default-anchor shape and a centred title keep today\'s centred box)', { item: '1176' }, async function () {
+    if (typeof FM.groupBoundsLocal !== 'function' || typeof FM.groupRestBoundsLocal !== 'function' || typeof FM.groupPivotMeasured !== 'function' || typeof FM.groupBounds !== 'function' || typeof FM.layerSize !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.groupBoundsLocal / groupRestBoundsLocal / groupPivotMeasured / groupBounds / layerSize / makeLayer are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5, EPS = 1e-6, X = 100, Y = 200;
+      /* A fresh group at 0,0 holding only L: the live box at T, the rest box, the pivot a pinch at T would use, the box in the parent's space. */
+      const measure = (L) => {
+        const G = FM.makeLayer('group', { name: 'bh4 #10 group', x: 0, y: 0, start: 0, duration: 4 });
+        G.start = 0; G.duration = 4; G.transform.x = 0; G.transform.y = 0;
+        L.start = 0; L.duration = 4; L.parent = G.id;
+        FM.scene.layers = [G, L];
+        const live = FM.groupBoundsLocal(G, FM.scene, T), rest = FM.groupRestBoundsLocal(G, FM.scene);
+        if (!live || !rest) throw new Error('setup: the group holding ' + L.name + ' measured no box (live ' + JSON.stringify(live) + ', rest ' + JSON.stringify(rest) + ')');
+        return { live: live, rest: rest, pivot: FM.groupPivotMeasured(G, FM.scene, T), gb: FM.groupBounds(G, FM.scene, T) };
+      };
+      const shape = (name) => FM.makeLayer('shape', { name: name, shape: 'rect', x: X, y: Y, shapeW: 40, shapeH: 30, fill: '#ff0000', start: 0, duration: 4 });
+      const text = (name, align) => { const L = FM.makeLayer('text', { name: name, text: 'bh4 title', x: X, y: Y, fontSize: 40, start: 0, duration: 4 }); L.align = align; return L; };
+      const r1 = v => Math.round(v * 10) / 10;
+      const say = b => r1(b.minX) + ' .. ' + r1(b.maxX) + ' × ' + r1(b.minY) + ' .. ' + r1(b.maxY);
+      const bad = [];
+      /* Both walks must give [x0, x1] × [y0, y1]. */
+      const span = (what, m, x0, x1, y0, y1) => {
+        [['live', m.live], ['rest', m.rest]].forEach(([k, b]) => {
+          if (Math.abs(b.minX - x0) > EPS || Math.abs(b.maxX - x1) > EPS || Math.abs(b.minY - y0) > EPS || Math.abs(b.maxY - y1) > EPS) bad.push(what + ': the group’s ' + k + ' box is ' + say(b) + ' where the member is drawn ' + r1(x0) + ' .. ' + r1(x1) + ' × ' + r1(y0) + ' .. ' + r1(y1));
+        });
+      };
+
+      /* ── CONTROLS: a default-anchor shape, and a centred text, keep today's centred box; the text is wider than the floor. */
+      span('CONTROL: a default-anchor 40 × 30 shape', measure(shape('bh4 #10 centred shape')), X - 20, X + 20, Y - 15, Y + 15);
+      const tc = text('bh4 #10 centred title', 'center'), sz = FM.layerSize(tc), W = sz.w, H = sz.h;
+      if (!(W > 40)) throw new Error('CONTROL: the title measures ' + W + ' px wide, too close to layerSize’s 10 px floor for its span to say anything');
+      const mc = measure(tc);
+      span('CONTROL: a centred title', mc, X - W / 2, X + W / 2, Y - H / 2, Y + H / 2);
+      if (!mc.pivot || Math.abs(mc.pivot.x - X) > EPS) bad.push('CONTROL: the group of a centred title pivots at x ' + (mc.pivot && r1(mc.pivot.x)) + ', not at the title’s middle ' + X);
+
+      /* ── A: a left-aligned title — its box, the pivot a pinch would use, and a tap on its right half. */
+      const tl = text('bh4 #10 left title', 'left');
+      if (Math.abs(FM.layerSize(tl).w - W) > EPS) throw new Error('setup: the left-aligned title measures ' + FM.layerSize(tl).w + ' px, not the centred one’s ' + W);
+      const ma = measure(tl);
+      span('A: a left-aligned title of width ' + r1(W), ma, X, X + W, Y - H / 2, Y + H / 2);
+      if (!ma.pivot || Math.abs(ma.pivot.x - (X + W / 2)) > EPS) bad.push('A: the group of a left-aligned title pivots at x ' + (ma.pivot && r1(ma.pivot.x)) + ' where the title’s middle is ' + r1(X + W / 2) + ' — a pinch scales it toward the title’s left edge');
+      const tapX = X + 0.75 * W, g = ma.gb;
+      if (!g || !(tapX >= g.x - g.w / 2 && tapX <= g.x + g.w / 2)) bad.push('A: a tap at x ' + r1(tapX) + ', on the title’s right half, falls outside the group’s box ' + (g ? r1(g.x - g.w / 2) + ' .. ' + r1(g.x + g.w / 2) : '(none)') + ', so it picks the title instead of the group');
+
+      /* ── B: a right-aligned title. */
+      span('B: a right-aligned title of width ' + r1(W), measure(text('bh4 #10 right title', 'right')), X - W, X, Y - H / 2, Y + H / 2);
+
+      /* ── C: a shape anchored at its left edge and its bottom, at 100 % and at 200 %. */
+      const s1 = shape('bh4 #10 corner-anchored shape');
+      s1.transform.anchorX = 0; s1.transform.anchorY = 1;
+      span('C: a 40 × 30 shape with anchorX 0, anchorY 1', measure(s1), X, X + 40, Y - 30, Y);
+      const s2 = shape('bh4 #10 corner-anchored shape at 200 %');
+      s2.transform.anchorX = 0; s2.transform.anchorY = 1; s2.transform.scale = 2;
+      span('C: the same shape at 200 %', measure(s2), X, X + 80, Y - 60, Y);
+
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
+  /* (#9) THE ⧉ ISOLATE ON A GROUP SHOWED NOTHING. A full-frame white bar sits ABOVE a group G holding a red 100 × 100 block centred
+     at 200,120 (10000 px) and a blue 60 × 60 one at 60,120 (3600 px); with nothing isolated the bar covers both. FM.isolate is what
+     the ⧉ button sets: mode 1 "only this layer", mode 2 "this layer on top".
+     On 698b5dd0 renderScene tested the isolate against ONE id, before the unit dispatch. Isolating G in mode 1 skipped every member
+     and the group row draws nothing (drawLayer returns for a group), so the frame was the black background: 0 red (A1). Mode 2
+     lifted the group row, which draws nothing, and left the members under the white bar: 0 red (A2). With G styled (99 % opacity,
+     so it composites as one flattened unit) the same two read 0 red (B1, B2); and isolating the red MEMBER drew its whole unit in
+     mode 1, the blue block too (C1), and nothing on top in mode 2, since a unit's member was never lifted: 0 red (C2).
+     Now an isolated group counts every descendant as isolated: mode 1 draws only them (its unit when it is styled), mode 2 draws
+     them again on top; a member of a styled group draws alone in mode 1 and on top in mode 2.
+     CONTROLS: nothing isolated, the bar covers the group; the red block in the plain group isolates alone and lifts on top exactly
+     as it always did; at 99 % the group's opacity really reaches the red block (it reads about 252, not 255). */
+  test('bughunt4 #9 The isolate button on a group: “Only this layer” on a selected group shows its members (its unit when styled) and nothing else, “on top” lifts them over a white bar above the group, and a member of a styled group isolates alone, not with its whole group (CONTROLS: the bar covers the group; isolating the red block in a plain group works both ways as before; the 99 % really reaches the block)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    const iso0 = FM.isolate || null;
+    await _bh2With(async function () {
+      try {
+        const AREA_R = 100 * 100, AREA_B = 60 * 60, T = 1;
+        const white = _bh2Bar('bh4 #9 white bar', 160, 320, '#ffffff');
+        const G = FM.makeLayer('group', { name: 'bh4 #9 group', x: 0, y: 0, start: 0, duration: 4 });
+        G.start = 0; G.duration = 4; G.transform.x = 0; G.transform.y = 0;
+        const block = (name, x, s, fill) => {
+          const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 120, shapeW: s, shapeH: s, fill: fill, start: 0, duration: 4 });
+          L.start = 0; L.duration = 4; L.parent = G.id;
+          return L;
+        };
+        const red = block('bh4 #9 red block', 200, 100, '#ff0000');
+        const blue = block('bh4 #9 blue block', 60, 60, '#0000ff');
+        FM.scene.layers = [white, G, red, blue];
+        /* The frame at T with `iso` as the ⧉ isolate, plus a count of the blue pixels. */
+        const frame = (iso) => {
+          FM.isolate = iso;
+          const f = _bh2Frame(T);
+          let b = 0;
+          for (let i = 0; i < f.d.length; i += 4) { if (f.d[i] < 70 && f.d[i + 1] < 70 && f.d[i + 2] > 180) b++; }
+          f.blue = b;
+          return f;
+        };
+        const say = f => _bh2Say(f) + ', ' + f.blue + ' blue';
+        const all = (n, area) => n >= area * 0.9;
+
+        /* ── CONTROL: nothing isolated, the full-frame bar covers the whole group. */
+        const f0 = frame(null);
+        if (f0.red !== 0 || f0.blue !== 0 || f0.white < 320 * 240 * 0.95) throw new Error('CONTROL: with nothing isolated the frame reads ' + say(f0) + ' where the full-frame white bar above the group covers it, so "on top" could not be told from the plain stack');
+
+        /* ── CONTROL: the red block itself, in the plain group, isolates alone and lifts on top, as it always did. */
+        const c1 = frame({ id: red.id, mode: 1 });
+        if (!all(c1.red, AREA_R) || c1.blue !== 0 || c1.white !== 0) throw new Error('CONTROL: isolating the red block ("Only this layer") reads ' + say(c1) + ', not the ' + AREA_R + ' px block alone');
+        const c2 = frame({ id: red.id, mode: 2 });
+        if (!all(c2.red, AREA_R) || c2.blue !== 0) throw new Error('CONTROL: the red block "on top" reads ' + say(c2) + ', not the ' + AREA_R + ' px block over the white bar with the blue one still under it');
+
+        /* ── A: the plain group (100 %), the usual canvas selection. */
+        const a1 = frame({ id: G.id, mode: 1 });
+        if (!all(a1.red, AREA_R) || !all(a1.blue, AREA_B) || a1.white !== 0) throw new Error('A1: isolating the group ("Only this layer") reads ' + say(a1) + ' where its two blocks alone are ' + AREA_R + ' red and ' + AREA_B + ' blue px and no white — the isolate matched the group row’s id alone, so every member was skipped and the row draws nothing: a blank frame');
+        const a2 = frame({ id: G.id, mode: 2 });
+        if (!all(a2.red, AREA_R) || !all(a2.blue, AREA_B)) throw new Error('A2: the group "on top" reads ' + say(a2) + ' where its blocks over the white bar are ' + AREA_R + ' red and ' + AREA_B + ' blue px — mode 2 lifted the group row, which draws nothing, and left its members under the bar');
+
+        /* ── B: the group styled — 99 % opacity, so it composites as one flattened unit. */
+        G.transform.opacity = 0.99;
+        white.visible = false;
+        const look = frame(null).d, at = (120 * 320 + 200) * 4;
+        white.visible = true;
+        if (!(look[at] >= 245 && look[at] <= 253 && look[at + 1] < 10)) throw new Error('CONTROL: at 99 % the red block reads (' + look[at] + ', ' + look[at + 1] + ', ' + look[at + 2] + ') where 0.99 × 255 is about 252 — the group’s look did not reach it, so this case does not take the unit route');
+        const b1 = frame({ id: G.id, mode: 1 });
+        if (!all(b1.red, AREA_R) || !all(b1.blue, AREA_B) || b1.white !== 0) throw new Error('B1: isolating the styled group ("Only this layer") reads ' + say(b1) + ' where its unit alone is ' + AREA_R + ' red and ' + AREA_B + ' blue px and no white — every member was skipped before the unit was reached');
+        const b2 = frame({ id: G.id, mode: 2 });
+        if (!all(b2.red, AREA_R) || !all(b2.blue, AREA_B)) throw new Error('B2: the styled group "on top" reads ' + say(b2) + ' where its unit over the white bar is ' + AREA_R + ' red and ' + AREA_B + ' blue px — the group row was lifted and its unit stayed under the bar');
+
+        /* ── C: a MEMBER of the styled group. */
+        const m1 = frame({ id: red.id, mode: 1 });
+        if (!all(m1.red, AREA_R) || m1.blue !== 0 || m1.white !== 0) throw new Error('C1: isolating the red block inside the styled group reads ' + say(m1) + ' where the block alone is ' + AREA_R + ' red px and nothing else — the block reached its group’s unit, which draws every member, so the whole group showed');
+        const m2 = frame({ id: red.id, mode: 2 });
+        if (!all(m2.red, AREA_R) || m2.blue !== 0) throw new Error('C2: the red block inside the styled group "on top" reads ' + say(m2) + ' where it is ' + AREA_R + ' red px over the white bar with the blue one still under it — a member of a unit was never lifted, so nothing changed');
+      } finally {
+        FM.isolate = iso0;
+      }
+    });
+  });
+
   /* (#2) A GROUP'S LOOK SWITCHED HOW ITS MEMBERS BLEND. Red footage fills the frame, (255, 0, 0). Above it a group holds one 100×100
      grey (#808080) light leak set to Screen, centred at 160,120. Screen is 1 − (1 − a)(1 − b) per channel, so over red the leak reads
      (255, 128, 128): red stays 255, green and blue become the grey's 128.
@@ -164077,6 +164226,153 @@
       if (!FM.groupNeedsUnit(n.G, 0.5) || !FM.groupNeedsUnit(n.inner, 0.5)) throw new Error('CONTROL: the nested 99 % groups are not both units');
       const wantN = mix(below, plain, 0.99 * 0.99), e = px(0.5, IN);
       if (off(e, wantN) > TOL) throw new Error('E: nested in another 99 % group, the leak in a 99 % group reads ' + say(e) + ' where the frame below mixed with the plain picture at 0.99 × 0.99 is ' + say(wantN) + ' — the inner group did not pass through to the frame below it inside its parent');
+    });
+  });
+
+  /* (#1e) PARTICLES WERE BORN WHERE THE OLD CHAIN PUT THEIR EMITTER, NOT WHERE THE EMITTER IS DRAWN. bughunt4 #1 made applyParentChain
+     carry a group's flip, unlinked Width / Height, skew, depth and each parent's own link mode to its members, and #1b handed the
+     editor that very matrix (FM.parentChainMatrix). Particles' emitterWorldPos (compositor.js) kept its own walk of the chain: each
+     parent's x, y, turn and uniform scale, about the parent's ORIGIN, so no group pivot (#630), no flip, no Width / Height, no skew,
+     no depth and no link mode. The emitter LAYER was drawn in one place and its particles were born in another.
+     The fixture is #1's: a group G at 0,0 holding the emitter E, a 40 × 40 block at 80,100 carrying Particles, and a white block at
+     240,140, so G's pivot is 160,120. Speed and Gravity are 0, so every particle stays where it was born; the kernel runs into the
+     suite's recording context (b11Draw), whose marks are where each particle is painted: 21 alive half a second in at 40 a second.
+     On 698b5dd0 (#1 and #1b in, this not) every particle is born where the old walk puts E:
+       A  ⋯ → Flip Horizontally: E is drawn mirrored about x = 160, at 240,100 (#1 measured its pixels at 220..259); its particles are
+          born at 80,100.
+       B  unlinked Width 150 % (scaleX 1.5): E is drawn at 160 + 1.5·(80 − 160) = 40, on row 100 (#1: 10..69); born at 80,100.
+       C  moved to 10,40, scaled to 125 % and turned 90°, about the pivot: E is drawn at (10, 40) + (160, 120) + 1.25·R90·(−80, −20)
+          = 195,60 (#1: 170..219 × 35..84); born where a turn about the project's corner puts it, (10, 40) + 1.25·R90·(80, 100) =
+          −115,140.
+       D  a Controller N1 at 160,120 turned 90°, a Controller N2 hung on it at 0,0 set to 'locked', and an emitter hung on N2 at 60,0:
+          N2 stays upright, so the emitter is drawn beside it at 220,120 (#1 F: 200..239 × 110..129); born at 160,180, turned with N1.
+     Now emitterWorldPos maps the emitter's point through FM.parentChainMatrix at each birth time, so every particle is born exactly
+     where the matrix the layer is drawn with (FM._layerCTM) puts the layer's origin.
+     CONTROLS: unparented, E's particles are born on its own 80,100, bit for bit (the plain path); in the untouched group, and in one
+     that only moves to 10.3,40.7, they are born on today's sums, bit for bit; under a Controller at 200,20 turned 90° and scaled to
+     125 % they are born on today's turn-and-scale walk, 75,120, within 1e-9 px (the matrix composes the same numbers in its own
+     order, so the last bit can differ: worked by hand, the 120 comes back 1.4e-14 high); under a normal middle link they turn with N1 to 160,180,
+     as before. In every case the place the layer is drawn is checked FIRST against its worked-out number, and against
+     FM.parentChainMatrix's own mapping of the emitter's point, so a red is the particles' and not the fixture's.
+     TOL: 1e-6 px between a birth and the drawn place (one matrix, read two ways); the faults are 40 px and more. */
+  test('bughunt4 #1e Particles spray from where their emitter is drawn: inside a group flipped horizontally they are born mirrored about the group\'s pivot, under an unlinked Width of 150 % stretched from it, in a moved, scaled and turned group turned about it, and under a locked middle Controller beside it, upright, each exactly where the emitter layer itself is drawn (CONTROLS: unparented, in an untouched group and in a group that only moves they are born where they were, bit for bit; under a turned and scaled Controller within 1e-5 px of where they were; under a normal middle link they turn with the top Controller; every drawn place is checked first)', { item: '1176' }, async function () {
+    const CFX = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!CFX || typeof CFX.particles !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.parentChainMatrix !== 'function' || typeof FM._layerCTM !== 'function' || typeof FM.flipLayer !== 'function' || typeof FM.setTransform !== 'function' || typeof FM.groupPivot !== 'function' || !FM.fxRegistry || typeof FM.fxRegistry.makeInstance !== 'function') throw new Error('setup: CANVAS_FX.particles / FM.makeLayer / parentChainMatrix / _layerCTM / flipLayer / setTransform / groupPivot / fxRegistry.makeInstance are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5, TOL = 1e-5;   /* measured 19 Oct (v17.79 slices): the matrix route lands 1.9e-7 / 7.6e-7 px off a float64 sum — the probe canvas holds its transform in single precision. 1e-5 is 13x that; the faults this test catches are 40 px and more. */
+      FM.time = T;
+      const PT = Object.assign(b11Base('particles', {}), { rate: 40, lifetime: 4, speed: 0, gravity: 0 });
+      const grp = (name) => {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        return g;
+      };
+      const ctl = (name, x, y) => {
+        const n = FM.makeLayer('null', { name: name, x: x, y: y, start: 0, duration: 4 });
+        n.start = 0; n.duration = 4; n.transform.x = x; n.transform.y = y;
+        return n;
+      };
+      const block = (name, x, y, fill, parent) => {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: y, shapeW: 40, shapeH: 40, fill: fill, start: 0, duration: 4 });
+        L.start = 0; L.duration = 4; L.transform.x = x; L.transform.y = y;
+        L.parent = parent || null;
+        return L;
+      };
+      const emitter = (name, x, y, parent) => {
+        const L = block(name, x, y, '#ff0000', parent);
+        L.effects = [{ type: 'particles', enabled: true, params: b11Copy(PT) }];
+        return L;
+      };
+      /* Every particle alive at T, where it is painted: the kernel on a 1:1 plate on the clip's own clock, as drawCanvasEffect runs it. */
+      const births = (L) => b11Draw('particles', PT, 320, 240, T, T - L.start, L, 1).marks.filter(m => m.m === 'fill');
+      /* Where the renderer draws the layer's origin (its own x, y) at T: the layer's whole matrix, and the chain matrix's mapping. */
+      const drawn = (L) => { const M = FM._layerCTM(L, T, FM.scene); return M ? { x: M.e, y: M.f } : null; };
+      const chained = (L) => {
+        const M = FM.parentChainMatrix(L, T, FM.scene), x = FM.evalProp(L.transform.x, T), y = FM.evalProp(L.transform.y, T);
+        return M ? { x: M.a * x + M.c * y + M.e, y: M.b * x + M.d * y + M.f } : { x: x, y: y };
+      };
+      const say = p => p ? '(' + (Math.round(p.x * 1000) / 1000) + ', ' + (Math.round(p.y * 1000) / 1000) + ')' : 'nowhere';
+      const near = (p, q, tol) => !!p && !!q && Math.abs(p.x - q.x) <= tol && Math.abs(p.y - q.y) <= tol;
+      const count = (bs) => { if (bs.length < 15) throw new Error('CONTROL: the kernel painted ' + bs.length + ' particles half a second in at 40 a second, not 21 - it did not run as worked out above'); return bs; };
+      const bad = [];
+      /* One case: the layer is drawn at `want` (CONTROL, first), the chain matrix agrees, and every particle is born there. `old` is
+         where the old walk bore them; a birth found there says so, with `why`. */
+      const check = (label, L, want, old, why) => {
+        const d = drawn(L), c = chained(L);
+        if (!near(d, want, TOL)) throw new Error('CONTROL ' + label + ': the emitter layer is drawn at ' + say(d) + ', not ' + say(want) + ' - the fixture is not the one worked out above, so nothing here can be trusted');
+        if (!near(c, d, TOL)) throw new Error('CONTROL ' + label + ': FM.parentChainMatrix maps the emitter’s point to ' + say(c) + ' where the layer’s own matrix draws it at ' + say(d));
+        const bs = count(births(L)), off = bs.filter(m => !near(m, d, TOL));
+        if (off.length) bad.push(label + ': ' + off.length + ' of ' + bs.length + ' particles are born at ' + say(off[0]) + ' where the emitter layer is drawn at ' + say(d) + (near(off[0], old, 1e-6) ? ' - exactly where the old turn-and-scale walk puts it: ' + why : ''));
+      };
+
+      /* ── CONTROL: unparented, the plain path, bit for bit. */
+      const E = emitter('bh4 #1e emitter', 80, 100, null);
+      const W = block('bh4 #1e white', 240, 140, '#ffffff', null);
+      FM.scene.layers = [E, W];
+      const b0 = count(births(E));
+      if (b0.some(m => m.x !== 80 || m.y !== 100)) throw new Error('CONTROL: an unparented emitter at 80,100 bears a particle at ' + say(b0.filter(m => m.x !== 80 || m.y !== 100)[0]) + ' - not every one on 80,100 bit for bit, where they always were');
+
+      /* ── CONTROL: in the untouched group, and in one that only moves, today's sums, bit for bit. */
+      const G = grp('bh4 #1e group');
+      E.parent = G.id; W.parent = G.id;
+      FM.scene.layers = [G, E, W];
+      const bu = count(births(E));
+      if (bu.some(m => m.x !== 80 || m.y !== 100)) throw new Error('CONTROL: in the untouched group the emitter bears a particle at ' + say(bu.filter(m => m.x !== 80 || m.y !== 100)[0]) + ' - not every one on 80,100 bit for bit, where they always were');
+      G.transform.x = 10.3; G.transform.y = 40.7;
+      const wm = { x: 10.3 + 80, y: 40.7 + 100 }, dm = drawn(E), bm = count(births(E));
+      G.transform.x = 0; G.transform.y = 0;
+      if (!near(dm, wm, TOL)) throw new Error('CONTROL: in a group moved to 10.3,40.7 the emitter layer is drawn at ' + say(dm) + ', not ' + say(wm));
+      /* Within TOL, not bit for bit: measured 19 Oct (the v17.79 slices), the matrix route gives the moved group's sum one
+         float bit off (printed (90.3, 140.7) both ways), as the turned Controller's control below already allows. */
+      const offM = m => Math.abs(m.x - wm.x) > TOL || Math.abs(m.y - wm.y) > TOL;
+      if (bm.some(offM)) throw new Error('CONTROL: in a group moved to 10.3,40.7 a particle is born at ' + say(bm.filter(offM)[0]) + ' - not within 1e-5 px of today’s sum ' + say(wm));
+
+      /* ── CONTROL: under a Controller moved to 200,20, turned 90° and scaled to 125 %: today's turn-and-scale walk. */
+      const N = ctl('bh4 #1e controller', 200, 20);
+      N.transform.rotation = 90; N.transform.scale = 1.25;
+      E.parent = N.id;
+      FM.scene.layers = [N, E];
+      const r = 90 * Math.PI / 180, co = Math.cos(r), si = Math.sin(r);
+      const wn = { x: 200 + (80 * co - 100 * si) * 1.25, y: 20 + (80 * si + 100 * co) * 1.25 }, dn = drawn(E), bn = count(births(E));
+      if (!near(dn, { x: 75, y: 120 }, TOL) || !near(wn, dn, TOL)) throw new Error('CONTROL: under the turned, scaled Controller the emitter layer is drawn at ' + say(dn) + ' and today’s walk puts it at ' + say(wn) + ', not both at (75, 120)');
+      const bnOff = bn.filter(m => !near(m, wn, TOL));
+      if (bnOff.length) throw new Error('CONTROL: under the turned, scaled Controller ' + bnOff.length + ' particles are born at ' + say(bnOff[0]) + ', more than 1e-5 px from today’s ' + say(wn) + ' - a Controller’s turn and scale the old walk already had right moved');
+
+      /* ── A: ⋯ → Flip Horizontally. */
+      E.parent = G.id;
+      FM.scene.layers = [G, E, W];
+      FM.flipLayer(G, 'h');
+      if (!G.flipH) throw new Error('CONTROL: FM.flipLayer did not set the group’s flipH');
+      const pv = FM.groupPivot(G, FM.scene, T);
+      if (!pv || Math.abs(pv.x - 160) > TOL || Math.abs(pv.y - 120) > TOL) throw new Error('CONTROL: the flipped group’s pivot is ' + say(pv) + ', not (160, 120), the middle of its members’ box');
+      check('A (the group flipped horizontally)', E, { x: 240, y: 100 }, { x: 80, y: 100 }, 'the flip never reached the particles');
+      G.flipH = false;
+
+      /* ── B: unlinked Width 150 % (scaleX 1.5, scaleY 1). */
+      FM.setTransform(G, 'scaleX', 1.5, T);
+      check('B (the group’s Width at 150 %, unlinked)', E, { x: 40, y: 100 }, { x: 80, y: 100 }, 'the Width never reached the particles');
+      G.transform.scaleX = 1;
+
+      /* ── C: moved, scaled and turned, about the pivot. */
+      G.transform.x = 10; G.transform.y = 40; G.transform.scale = 1.25; G.transform.rotation = 90;
+      check('C (the group moved to 10,40, scaled to 125 % and turned 90°)', E, { x: 195, y: 60 }, { x: -115, y: 140 }, 'turned and scaled about the project’s corner, not the group’s pivot');
+      G.transform.x = 0; G.transform.y = 0; G.transform.scale = 1; G.transform.rotation = 0;
+
+      /* ── D: a 'locked' middle Controller. CONTROL first: under a normal one the births turn with N1, as they always did. */
+      const N1 = ctl('bh4 #1e turned controller', 160, 120);
+      N1.transform.rotation = 90;
+      const N2 = ctl('bh4 #1e middle controller', 0, 0);
+      N2.parent = N1.id;
+      const E2 = emitter('bh4 #1e emitter on the middle controller', 60, 0, N2.id);
+      FM.scene.layers = [E2, N2, N1];
+      N2.parentMode = 'normal';
+      const turned = { x: 160, y: 180 }, dt = drawn(E2), bt = count(births(E2));
+      if (!near(dt, turned, TOL)) throw new Error('CONTROL: under a normal middle link the emitter layer is drawn at ' + say(dt) + ', not turned with N1 to (160, 180) - the rig does not turn, so a lock cannot be seen');
+      if (bt.some(m => !near(m, turned, TOL))) throw new Error('CONTROL: under a normal middle link a particle is born at ' + say(bt.filter(m => !near(m, turned, TOL))[0]) + ', not turned with N1 to (160, 180)');
+      N2.parentMode = 'locked';
+      check('D (a locked middle Controller)', E2, { x: 220, y: 120 }, turned, 'it still turns with the top Controller, so the middle link’s own mode never reached the particles');
+
+      if (bad.length) throw new Error(bad.join(' · '));
     });
   });
 
@@ -164232,6 +164528,156 @@
     });
   });
 
+  /* (#5) OUTLINE CENTER DREW AS OUTSIDE ON THREE OF THE FOUR TEXT PATHS. A white "H H", 100 px in the system sans-serif (an H is a
+     plain H in any of them), centred at 160,120 over a grey (#808080) backdrop that fills the frame, with a black Outline of Size 8,
+     rendered at 1 s on four paths: still and flat (one strokeText per line, the still branch of the text draw), under Fade by
+     character (drawAnimatedText's flat units), on a 30° Curve (drawArcLine) and under Fade by character on that Curve
+     (drawAnimatedText's curved units). Every glyph is stroked first and filled on top, so the black that shows is the half of the
+     stroke outside the glyph: Outside strokes at twice the Size, a band of 8 px; Center at the Size, a band of 4.
+     On 698b5dd0 only the still flat path read the Position (`bpos === 'center' ? bw : bw * 2`). drawAnimatedText stroked every unit
+     at `sbw * 2` whatever it was, and so did drawArcLine, whose caller passed no Position at all. So on those three paths Center and
+     Outside make the very same strokes, the frames are identical, and Center / Outside is exactly 1.000.
+     THE BAND, from the geometry: the outer offset band of width d round a glyph outline of perimeter P is P·d + k·d², k about 2.3
+     for an H (2π for its eight convex corners, less 4 for its four concave ones). Two H's at 100 px have P near 770 px, so
+     Center / Outside = (4P + 16k) / (8P + 64k), about 0.49. Counting near black (every channel under 50) loses about 0.4 px of each
+     band at its two anti-aliased edges, the same 0.4 from both, which takes the ratio to about 0.47. So 0.38..0.62: wide of the
+     geometry, and nowhere near the bug's 1.000.
+     CONTROLS: with the Outline off nothing on any path is near black (the backdrop covers the frame, so every black pixel counted is
+     the outline's); the still flat path halves it already (this passes on 698b5dd0, so the measure can see the difference); Outside
+     shows the same black on every path within 12 % (the same glyphs, turned at most about 9° on the Curve and placed one at a time,
+     which moves only the anti-aliased fringe); Inside stands in for Outside, and an outline with no Position stored is Outside, byte
+     for byte on every path, before the fix and after it; the Fade is really on (FM.textHasAnim) and long finished at 1 s (the last
+     of the three units is in by 2 × 0.05 + 0.3 = 0.4 s); the Curve really bends the text (its frame differs from the flat one).
+     Then each path's Center black must be within 15 % of the still flat path's, the same outline everywhere (on 698b5dd0 the three
+     show about twice it). The gap between the two H's (a space and two side bearings, 40 px or more) is far wider than the 16 px
+     Outside stroke, so one glyph's stroke never lands on its neighbour's fill. */
+  test('bughunt4 #5 Outline Center is the same width on every text path: still and flat, under Fade by character, on a 30° Curve and under Fade by character on that Curve, a Center outline shows about half the black an Outside one does, and the same black on all four (CONTROLS: with the Outline off nothing is near black; the still flat path already halves it; Outside shows the same black on all four; Inside and an unset Position draw as Outside byte for byte; the Fade is on and finished; the Curve bends)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim are not reachable');
+    await _bh2With(async function () {
+      const T = 1, N = 8, LO = 0.38, HI = 0.62, SAME_OUT = 0.12, SAME_CEN = 0.15;
+      const bg = _bh2Bar('bh4 #5 grey backdrop', 160, 320, '#808080');
+      const L = FM.makeLayer('text', { name: 'bh4 #5 title', text: 'H H', x: 160, y: 120, fontSize: 100, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L, bg];
+      const FADE = { preset: 'fade', unit: 'char', durIn: 0.3, durOut: 0, stagger: 0.05 };
+      const NONE = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      const PATHS = [
+        { name: 'still and flat', curve: 0, anim: NONE },
+        { name: 'under Fade by character', curve: 0, anim: FADE },
+        { name: 'on a 30° Curve', curve: 30, anim: NONE },
+        { name: 'under Fade by character on a 30° Curve', curve: 30, anim: FADE }
+      ];
+      /* The frame on path p with the Outline at Position pos (undefined: no Position stored at all), or with it off. */
+      const shot = (p, pos, off) => {
+        L.textCurve = p.curve;
+        L.textAnim = Object.assign({}, p.anim);
+        L.stroke = { enabled: !off, width: N, color: '#000000' };
+        if (pos !== undefined) L.stroke.position = pos;
+        return _bh2Frame(T);
+      };
+      const black = f => { let n = 0; for (let i = 0; i < f.d.length; i += 4) if (f.d[i] < 50 && f.d[i + 1] < 50 && f.d[i + 2] < 50) n++; return n; };
+      const differ = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) > 40 || Math.abs(a[i + 1] - b[i + 1]) > 40 || Math.abs(a[i + 2] - b[i + 2]) > 40) n++; return n; };
+      const pc = v => (v >= 0 ? '+' : '') + (Math.round(v * 1000) / 10) + ' %';
+      const got = PATHS.map(p => {
+        const fOut = shot(p, 'outside'), fCen = shot(p, 'center'), fIns = shot(p, 'inside'), fUnset = shot(p, undefined), fOff = shot(p, 'outside', true);
+        return { p: p, fOut: fOut, out: black(fOut), cen: black(fCen), off: black(fOff), mIns: _bh2MaxDiff(fIns.d, fOut.d), mUnset: _bh2MaxDiff(fUnset.d, fOut.d), anim: !!FM.textHasAnim(L) };
+      });
+      const flat = got[0], bad = [];
+
+      /* ── CONTROLS (all pass on 698b5dd0). */
+      got.forEach(g => {
+        if (g.off > 5) bad.push('CONTROL: ' + g.p.name + ', with the Outline off ' + g.off + ' pixels are near black — the backdrop does not cover the frame, so the counts below are not the outline’s');
+        if (g.out < 1500) bad.push('CONTROL: ' + g.p.name + ', an Outside outline of Size ' + N + ' shows only ' + g.out + ' near-black pixels — the text or its outline is not being drawn');
+        if (g.anim !== (g.p.anim === FADE)) bad.push('CONTROL: ' + g.p.name + ', FM.textHasAnim says ' + g.anim + ', so this frame did not take the path it is named for');
+        if (g.mIns !== 0) bad.push('CONTROL: ' + g.p.name + ', Inside draws up to ' + g.mIns + ' levels off Outside — on text it has always stood in for Outside');
+        if (g.mUnset !== 0) bad.push('CONTROL: ' + g.p.name + ', an outline with no Position stored draws up to ' + g.mUnset + ' levels off Outside — the default moved');
+      });
+      const bends = differ(flat.fOut.d, got[2].fOut.d);
+      if (bends < 300) bad.push('CONTROL: the 30° Curve’s frame differs from the flat one in only ' + bends + ' pixels, so the curved paths were not taken');
+      const r0 = flat.cen / flat.out;
+      if (!(r0 >= LO && r0 <= HI)) bad.push('CONTROL: still and flat, Center shows ' + flat.cen + ' near-black pixels to Outside’s ' + flat.out + ' (' + r0.toFixed(3) + '), not about half — the path that always read the Position does not halve it, so this measure cannot see the bug');
+      got.forEach(g => {
+        if (g !== flat && Math.abs(g.out - flat.out) > SAME_OUT * flat.out) bad.push('CONTROL: ' + g.p.name + ', Outside shows ' + g.out + ' near-black pixels where still and flat it shows ' + flat.out + ' (' + pc(g.out / flat.out - 1) + ') — the paths do not draw comparable outlines, so their Center counts cannot be compared');
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── Center is half of Outside, and the same outline, on every path. */
+      got.forEach(g => {
+        if (g === flat) return;
+        const r = g.cen / g.out;
+        if (!(r >= LO && r <= HI)) bad.push(g.p.name + ': Center shows ' + g.cen + ' near-black pixels to Outside’s ' + g.out + ', a ratio of ' + r.toFixed(3) + ' where still and flat it is ' + r0.toFixed(3) + (Math.abs(r - 1) < 0.02 ? ' — Center draws exactly as Outside: this painter strokes at twice the Size whatever the Position' : ''));
+        if (Math.abs(g.cen - flat.cen) > SAME_CEN * flat.cen) bad.push(g.p.name + ': a Center outline shows ' + g.cen + ' near-black pixels where still and flat the same outline shows ' + flat.cen + ' (' + pc(g.cen / flat.cen - 1) + ') — not the same outline on every path');
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
+  /* (#8) WORD SPACING VANISHED UNDER AN ANIMATE PRESET BY CHARACTER OR BY WORD. "ab cd", 40 px, white on the block's black frame, with
+     Letter Spread at Letter spacing 0 and Word spacing 60. Still, the line is one fillText with ctx.wordSpacing at 60px, so the one
+     space between the words is about 60 px wider than plain. drawAnimatedText's flat path lays out unit by unit: By Line the unit is
+     the whole line (it keeps the 60), but By Character and By Word the space is a unit of its own, and on 2dd02831 it is measured ALONE
+     (`units.map(u => ctx.measureText(u).width)`), and a lone space measures the same whatever the word spacing (drawArcLine's own
+     measurement). So "ab" and "cd" sit one plain space apart and the ink is about 60 px narrower than the still text's.
+     Now those units are measured with the word spacing neutralised and given it back once per space, as the curved paths do.
+     CONTROLS: the Word spacing really widens the still text, by 60 ± 15 px (so this browser draws canvas word spacing); By Line
+     matches the still width (it measured the whole line all along); with Word spacing 0 every mode matches; the Fade is on (and off
+     for the still one) by FM.textHasAnim, and long finished at 1 s (By Character the last of five units is in by 4 × 0.05 + 0.3 =
+     0.5 s); the still text is 30..250 px wide, so the ink measured is the glyphs, not the frame.
+     TOL: 3 px. Each glyph is placed alone By Character, which drops any kerning between a-b and c-d and moves the anti-aliased edge
+     by a fraction of a pixel; the bug is about 60. */
+  test('bughunt4 #8 Word spacing under Animate by Character and by Word: “ab cd” with 60 px of Word spacing draws as wide under Fade by character and Fade by word as it does still, within 3 px (CONTROLS: the Word spacing widens the still text by about 60 px; Fade by line already matches; with Word spacing 0 every mode matches; the Fade is on and finished)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim are not reachable');
+    if (typeof FM.textSpacingOK !== 'function' || !FM.textSpacingOK().word) throw new Error('setup: FM.textSpacingOK().word is false, so this browser draws no canvas word spacing and there is none to lose');
+    await _bh2With(async function () {
+      const T = 1, WS = 60, TOL = 3;
+      const L = FM.makeLayer('text', { name: 'bh4 #8 title', text: 'ab cd', x: 160, y: 120, fontSize: 40, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L];
+      const fade = unit => ({ preset: 'fade', unit: unit, durIn: 0.3, durOut: 0, stagger: 0.05 });
+      const MODES = [
+        { name: 'still', anim: { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 } },
+        { name: 'Fade by character', anim: fade('char') },
+        { name: 'Fade by word', anim: fade('word') },
+        { name: 'Fade by line', anim: fade('line') }
+      ];
+      /* The ink's leftmost and rightmost columns at T in mode m with Word spacing ws: any pixel brighter than 150 summed over its
+         channels, on the black frame. */
+      const ink = (m, ws) => {
+        L.textAnim = Object.assign({}, m.anim);
+        L.effects = [{ type: 'textspacing', enabled: true, params: { spacing: 0, word: ws, line: 1, mode: 0 } }];
+        delete L._wrapCache;
+        const f = _bh2Frame(T);
+        let x0 = -1, x1 = -1;
+        for (let i = 0, n = 0; i < f.d.length; i += 4, n++) {
+          if (f.d[i] + f.d[i + 1] + f.d[i + 2] > 150) { const x = n % 320; if (x0 < 0 || x < x0) x0 = x; if (x > x1) x1 = x; }
+        }
+        return { w: x0 < 0 ? 0 : x1 - x0 + 1, x0: x0, x1: x1, anim: !!FM.textHasAnim(L) };
+      };
+      const say = r => r.w + ' px (columns ' + r.x0 + '..' + r.x1 + ')';
+      const got = MODES.map(m => ({ m: m, plain: ink(m, 0), wide: ink(m, WS) }));
+      const still = got[0], byLine = got[3], bad = [];
+
+      /* ── CONTROLS (all pass on 2dd02831). */
+      if (!(still.plain.w >= 30 && still.plain.w <= 250)) bad.push('CONTROL: the still text with Word spacing 0 measured ' + say(still.plain) + ' in a 320 px frame, so the ink measured is not the glyphs');
+      const gain = still.wide.w - still.plain.w;
+      if (Math.abs(gain - WS) > 15) bad.push('CONTROL: ' + WS + ' px of Word spacing widened the still text by ' + gain + ' px (' + say(still.plain) + ' to ' + say(still.wide) + '), not about ' + WS + ', so the still path is not drawing the word spacing this test compares against');
+      got.forEach(g => {
+        const want = g !== still;
+        if (g.plain.anim !== want || g.wide.anim !== want) bad.push('CONTROL: ' + g.m.name + ', FM.textHasAnim says ' + g.wide.anim + ', so this frame did not take the path it is named for');
+        if (Math.abs(g.plain.w - still.plain.w) > TOL) bad.push('CONTROL: ' + g.m.name + ' with Word spacing 0 is ' + say(g.plain) + ' wide where still it is ' + say(still.plain) + ', so the modes do not draw the same text even with no word spacing');
+      });
+      if (Math.abs(byLine.wide.w - still.wide.w) > TOL) bad.push('CONTROL: Fade by line with Word spacing ' + WS + ' is ' + say(byLine.wide) + ' wide where still it is ' + say(still.wide) + ', so a unit that is the whole line does not keep the word spacing either');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── By Character and By Word keep the Word spacing. */
+      [got[1], got[2]].forEach(g => {
+        const d = g.wide.w - still.wide.w;
+        if (Math.abs(d) > TOL) bad.push(g.m.name + ' with Word spacing ' + WS + ' is ' + say(g.wide) + ' wide where still it is ' + say(still.wide) + ' (' + (d >= 0 ? '+' : '') + d + ' px)' + (Math.abs(d + WS) <= 15 ? ' — the space is measured alone, and a lone space drops the word spacing' : ''));
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#4) AN ADJUSTMENT LAYER'S BLEND MODE DID NOTHING. Red footage fills the frame, (255, 0, 0); above it an adjustment layer with
      Invert (amount 1), whose graded plate over red is cyan, (0, 255, 255). On cedde93f both blits of the graded plate (applyAdjustment's
      and applyAdjustmentFilters') are hard-wired to source-over and never read layer.blendMode, so every mode the Mixing card offers
@@ -164287,6 +164733,124 @@
       });
       A.blendMode = 'normal'; A.transform.opacity = 1;
       if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
+  /* (#3) 3D TILT TURNED ABOUT THE MIDDLE OF WHAT WAS VISIBLE, NOT ABOUT THE ANCHOR. On 698b5dd0 draw3DTiltLayer (compositor.js) drew the
+     layer flat on a frame-sized plate, took the plate's alpha bbox (alphaBBox: every 2nd pixel, padded 2) and leant a quad centred on
+     that bbox, R half its longer side; anchorX / anchorY were never read. Every square here is red, 100 × 100, at y 120 (rows 70..169),
+     leant 60° about Y, renderMesh's F 3.2, on _bh2Frame's 320 × 240 frame. A Y tilt of 60° sends unit x to x' = x / 2, z' = −0.866 x.
+       (a) THE HINGE. anchorX 0 at x 160: the square covers 160..260. On 698b5dd0 its bbox is 158..261 (103 wide), centre 209.5, R 51.5;
+           its left edge, unit −0.961, comes toward the eye (z' +0.832, f 3.2 / 2.368 = 1.352) and lands at 209.5 − 0.481 · 1.352 · 51.5
+           = 176.0: the leftmost red column is 176. About the anchor (R 50, the box's) the left edge has z 0 and stays at 160, and the far
+           edge, 2 R out, recedes (x' 1, z' −1.732, f 0.649) to 160 + 32.4 = 192.4.
+       (b) THE FRAME EDGE. Default anchor at x 120 (70..170), then at x 20 (−30..70, cut at 0). On 698b5dd0 the cut bbox 0..71 moved the
+           pivot to 35.5 and shrank the quad's half-width to 0.689 of R: the right edge sat at 139.45, then 50.1 (last red columns 138 and
+           49), 89 px apart for a 100 px move. About the anchor at R 50 it is 19.7 px right of the pivot both times: 139.7 and 39.7.
+       (c) CONTROL, the default case: centred on 160 (110..210), fully on screen. The old maths (pivot 159.5, 119.5, the padded bbox's,
+           R 51.5) put the near left edge at 126.05, its rows 52.6..187.75, and the far right edge at 179.45; the new (160, 120, R 50) at
+           125.72, 51.45..188.55 and 179.68. The same picture to a third of a pixel across, 1.2 px at the near edge's top.
+       (d) CONTROL, a group (bughunt4 #1's D): a group at 0,0 holding a red 40 × 40 block at 80,100, leant 60° about Y, draws as the
+           block alone leant 60° (both turn about 80,100 at R 20). And with the group at x 30 and its anchor on its box's left edge, it
+           turns about that edge, 60 + 30 = 90, exactly as a block at x 90 hinged on its own left edge (on 698b5dd0 both turned about the
+           bbox centre 109.5 and the hinge drew at 96.6, column 97).
+     TOL: 3 px on the hinge (the fault is 16), 2.5 on its far edge (the fault is 37), 2 on the 100 px move (the fault is 11), 1.5 on each
+     of the control's edges (the two maths differ by at most 1.15 there), 2 px on the group's hinge (the fault is 7), and 2 levels on the
+     group compares (the same quad from the same plate). */
+  test('bughunt4 #3 3D tilt turns about the anchor: a square hinged on its left edge (anchor 0) and leant 60° about Y keeps that edge where it was and leans away from it, and a leant square sliding off the frame edge keeps its lean, its right edge moving exactly as far as the square (CONTROLS: untilted, the hinged square covers 160..259 and the sliding one is really cut by the frame; a centred square fully on screen leans as before; a leant group draws exactly as a single leant layer, its anchor included)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5;
+      FM.time = T;
+      const block = (name, x, y, w, h, parent) => {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: y, shapeW: w, shapeH: h, fill: '#ff0000', start: 0, duration: 4 });
+        L.start = 0; L.duration = 4;
+        if (parent) L.parent = parent;
+        return L;
+      };
+      const grp = (name) => {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        return g;
+      };
+      /* The red pixels' count and span (columns x0..x1, rows y0..y1). */
+      const reds = (f) => {
+        let n = 0, x0 = -1, x1 = -1, y0 = -1, y1 = -1;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            n++;
+            const x = k % 320, y = (k - x) / 320;
+            if (x0 < 0 || x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y0 < 0 || y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+        return { n: n, x0: x0, x1: x1, y0: y0, y1: y1 };
+      };
+      const say = r => r.n + ' red px at columns ' + r.x0 + '..' + r.x1 + ', rows ' + r.y0 + '..' + r.y1;
+      const at = (r, x0, x1, y0, y1) => Math.abs(r.x0 - x0) <= 1 && Math.abs(r.x1 - x1) <= 1 && Math.abs(r.y0 - y0) <= 1 && Math.abs(r.y1 - y1) <= 1;
+
+      /* ── (a) the hinge: anchor on the left edge. */
+      const Hn = block('bh4 #3 hinged square', 160, 120, 100, 100);
+      Hn.transform.anchorX = 0;
+      FM.scene.layers = [Hn];
+      const ha0 = reds(_bh2Frame(T));
+      if (!at(ha0, 160, 259, 70, 169)) throw new Error('CONTROL: untilted, the square with its anchor on its left edge at x 160 is ' + say(ha0) + ', not 160..259 × 70..169 — the fixture is not the one worked out above');
+      Hn.transform.rotationY = 60;
+      const ha = reds(_bh2Frame(T));
+      if (ha.n < 1000 || ha.x1 - ha.x0 + 1 > 60) throw new Error('CONTROL: leant 60° about Y, the hinged square is ' + say(ha) + ' — not narrowed from its 100 px, so the tilt route did not run');
+      if (Math.abs(ha.x0 - 160) > 3) throw new Error('(a) a square hinged on its left edge (anchor 0, x 160) and leant 60° about Y has its leftmost red column at ' + ha.x0 + ', not within 3 px of 160 where its anchor is (' + say(ha) + ')' + (Math.abs(ha.x0 - 176) <= 2 ? ' — it turned about the middle of its visible pixels (209.5), not about its anchor' : ''));
+      if (Math.abs(ha.x1 + 1 - 192.4) > 2.5) throw new Error('(a) hinged on its left edge and leant 60° about Y, the square ends at column ' + ha.x1 + ', not about 192 (its far edge 2 R from the hinge, receding) — ' + say(ha));
+
+      /* ── (b) the frame edge: a leant default-anchor square at x 120, then at x 20 (partly off the left edge). */
+      const Sl = block('bh4 #3 sliding square', 20, 120, 100, 100);
+      FM.scene.layers = [Sl];
+      const cut0 = reds(_bh2Frame(T));
+      if (!at(cut0, 0, 69, 70, 169)) throw new Error('CONTROL: untilted at x 20 the square is ' + say(cut0) + ', not cut by the frame’s left edge to 0..69 × 70..169 — this would not test the frame edge');
+      Sl.transform.rotationY = 60;
+      Sl.transform.x = 120;
+      const s120 = reds(_bh2Frame(T));
+      Sl.transform.x = 20;
+      const s20 = reds(_bh2Frame(T));
+      if (s120.n < 1000 || s120.x1 - s120.x0 + 1 > 80) throw new Error('CONTROL: leant 60° about Y at x 120 the square is ' + say(s120) + ' — not narrowed from its 100 px, so the tilt route did not run');
+      const moved = s120.x1 - s20.x1;
+      if (s20.x1 < 0 || Math.abs(moved - 100) > 2) throw new Error('(b) a square leant 60° about Y, moved from x 120 to x 20 (partly off the frame’s left edge), moved its right edge by ' + moved + ' px (column ' + s120.x1 + ' to ' + s20.x1 + '), not 100' + (Math.abs(moved - 89) <= 2 ? ' — the pivot and the perspective followed the part the frame left visible' : ''));
+
+      /* ── (c) CONTROL: the default case leans as before. */
+      const Cn = block('bh4 #3 centred square', 160, 120, 100, 100);
+      Cn.transform.rotationY = 60;
+      FM.scene.layers = [Cn];
+      const rc = reds(_bh2Frame(T));
+      const near = (v, w) => Math.abs(v - w) <= 1.5;
+      if (!(near(rc.x0, 126.05) && near(rc.x1 + 1, 179.45) && near(rc.y0, 52.6) && near(rc.y1 + 1, 187.75))) throw new Error('CONTROL: a centred square fully on screen, leant 60° about Y, is ' + say(rc) + ', not about columns 126..179 and rows 53..187 as it was drawn before (near edge at 126.05, rows 52.6..187.75, far edge at 179.45) — the default case changed');
+
+      /* ── (d) CONTROL: a leant group draws exactly as a single leant layer, its anchor included. */
+      const G2 = grp('bh4 #3 leant group');
+      const R2 = block('bh4 #3 red in the leant group', 80, 100, 40, 40, G2.id);
+      G2.transform.rotationY = 60;
+      FM.scene.layers = [G2, R2];
+      const fd = _bh2Frame(T), rd = reds(fd);
+      const R3 = block('bh4 #3 red leant alone', 80, 100, 40, 40, null);
+      R3.transform.rotationY = 60;
+      FM.scene.layers = [R3];
+      const fs = _bh2Frame(T), rs = reds(fs);
+      if (rs.n < 100 || rs.x1 - rs.x0 + 1 > 32) throw new Error('CONTROL: a single red block leant 60° about Y is ' + say(rs) + ' — not narrower than its 40 px, so the tilt route this compares against did not run');
+      const md = _bh2MaxDiff(fd.d, fs.d);
+      if (md > 2) throw new Error('CONTROL: a group holding the red block, leant 60° about Y, draws ' + say(rd) + ' where the block alone leant 60° draws ' + say(rs) + ' (up to ' + md + ' levels apart) — the group no longer leans as a single layer');
+      const Gh = grp('bh4 #3 hinged group');
+      Gh.transform.x = 30; Gh.transform.anchorX = 0; Gh.transform.rotationY = 60;
+      const Rh = block('bh4 #3 red in the hinged group', 80, 100, 40, 40, Gh.id);
+      FM.scene.layers = [Gh, Rh];
+      const fg = _bh2Frame(T), rg = reds(fg);
+      const Ra = block('bh4 #3 red hinged alone', 90, 100, 40, 40, null);
+      Ra.transform.anchorX = 0; Ra.transform.rotationY = 60;
+      FM.scene.layers = [Ra];
+      const fa = _bh2Frame(T), ra = reds(fa);
+      if (ra.n < 100 || ra.x1 - ra.x0 + 1 > 32) throw new Error('CONTROL: a single red block hinged on its left edge and leant 60° about Y is ' + say(ra) + ' — not narrower than its 40 px, so the tilt route this compares against did not run');
+      if (Math.abs(rg.x0 - 90) > 2) throw new Error('(d) a group at x 30 with its anchor on its box’s left edge, leant 60° about Y, draws its block from column ' + rg.x0 + ', not from about 90 where that anchor is (' + say(rg) + ')' + (Math.abs(rg.x0 - 97) <= 1 ? ' — it turned about the middle of its visible pixels, not about its anchor' : ''));
+      const mg = _bh2MaxDiff(fg.d, fa.d);
+      if (mg > 2) throw new Error('(d) a group at x 30 with its anchor on its box’s left edge, leant 60° about Y, draws ' + say(rg) + ' where a block hinged on its left edge at x 90 and leant 60° draws ' + say(ra) + ' (up to ' + mg + ' levels apart) — the group does not turn about its own anchor as a single layer does');
     });
   });
 
@@ -164510,6 +165074,91 @@
         if (vp0 && FM.viewport) { FM.viewport.x = vp0.x; FM.viewport.y = vp0.y; FM.viewport.scale = vp0.scale; FM.viewport.apply(); }
         try { FM.resizeCanvas(); } catch (e) {}
       }
+    });
+  });
+
+  /* (#7) A MASKING GROUP WHOSE TOP LAYER IS A GROUP. A masking group G at 0,0 holds, top first: an inner group G2 at 0,0 with two
+     white 60 × 60 squares centred at 80,120 and 240,120 (columns 50..109 and 210..269, rows 90..149), then a red bar filling the
+     320 × 240 frame, the photo. "Its top layer clips the rest": the top layer is G2, so the photo should show through BOTH squares,
+     2 × 3600 = 7200 red px, and nothing white (G2 is the mask, never drawn itself).
+     On 698b5dd0 collectGroupUnits walks G's members recursively, drops every group (`drawable`) and takes the top-most LEAF, the
+     first square, as the mask; the second square is drawn as ordinary content and the first square's destination-in cuts it away:
+       A  plain G2: red in the first square only, 3600 px, and 0 in the second.
+       B  G2 at opacity 0.99 (a unit of its own): buildGroupUnit skips the first square as the mask, but the second square's slot
+          draws G2 WHOLE (drawGroupUnit), both squares white at 0.99, and the first square's mask keeps that: the first square
+          reads white (255, 252, 252), the second nothing, so 0 red px where 7200 should be, and 3600 white.
+     Now the masking group's direct child that holds the top-most leaf is the mask, and when it is a group its whole subtree is:
+     none of it is drawn as content, and all of it (a styled group as its one flattened picture) is drawn into the mask plate. In B
+     the mask is G2's picture at 0.99, so the photo shows at 0.99 over the black frame, (252, 0, 0): still red.
+     CONTROLS (the same before and after): a top layer that is a single square, with the second square directly in G below it,
+     clips to the first square alone (3600 red, the second clipped away, nothing white), the known rule, and proof the fix did not
+     make every leaf the mask; G2 holding only the first square masks exactly as that square does.
+     TOL: every square edge sits on a whole pixel, so a square is exactly 3600 px; 3400..3700 and 30 stray px are slack, not a
+     measurement. The faults are a whole square (3600 px) missing in A, and 3600 white px with no red in B. */
+  test('bughunt4 #7 A masking group whose top layer is a group: every piece of that group is the mask, so the photo below shows through both of its squares, plain or with the inner group at 99 % (not through the first square alone, and not the squares’ own white) (CONTROLS: a single square on top clips to that square alone and a second square below it is clipped away; an inner group holding one square masks exactly as that square)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    await _bh2With(async function () {
+      const SQ = [80, 240], LO = 3400, HI = 3700, STRAY = 30;
+      const grp = (name, parent) => {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        if (parent) g.parent = parent.id;
+        return g;
+      };
+      const square = (name, cx, parent) => {
+        const s = FM.makeLayer('shape', { name: name, shape: 'rect', x: cx, y: 120, shapeW: 60, shapeH: 60, fill: '#ffffff', start: 0, duration: 4 });
+        s.start = 0; s.duration = 4; s.parent = parent.id;
+        return s;
+      };
+      /* red px inside the square centred at cx (columns cx - 30 .. cx + 29, rows 90..149), by _bh2Frame's own red test */
+      const redIn = (f, cx) => {
+        let n = 0;
+        for (let y = 90; y < 150; y++) {
+          for (let x = cx - 30; x < cx + 30; x++) {
+            const i = (y * 320 + x) * 4;
+            if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) n++;
+          }
+        }
+        return n;
+      };
+      /* 'direct': [G, square 1, square 2, photo]; 'one': [G, G2, square 1, photo]; 'nested': [G, G2, square 1, square 2, photo] */
+      const frame = (layout, innerOp) => {
+        const G = grp('bh4 #7 masking group', null);
+        G.maskGroup = true;
+        const photo = _bh2Bar('bh4 #7 photo', 160, 320, '#ff0000');
+        photo.parent = G.id;
+        if (layout === 'direct') {
+          FM.scene.layers = [G, square('bh4 #7 square 1', SQ[0], G), square('bh4 #7 square 2', SQ[1], G), photo];
+        } else {
+          const G2 = grp('bh4 #7 inner group', G);
+          if (innerOp != null) G2.transform.opacity = innerOp;
+          const pieces = [square('bh4 #7 square 1', SQ[0], G2)];
+          if (layout === 'nested') pieces.push(square('bh4 #7 square 2', SQ[1], G2));
+          FM.scene.layers = [G, G2].concat(pieces, [photo]);
+        }
+        const f = _bh2Frame(1);
+        return { f: f, a: redIn(f, SQ[0]), b: redIn(f, SQ[1]) };
+      };
+      const say = r => r.a + ' red px in the first square, ' + r.b + ' in the second, ' + (r.f.red - r.a - r.b) + ' elsewhere, ' + r.f.white + ' white';
+
+      /* ── CONTROLS: a plain layer on top is the mask it always was; a group of one square masks as that square. */
+      const c1 = frame('direct');
+      if (c1.a < LO || c1.a > HI || c1.b > STRAY || c1.f.white > STRAY || c1.f.red - c1.a - c1.b > STRAY) throw new Error('CONTROL: a masking group whose top layer is a single square, with a second square directly below it, should show the photo in the first square alone (3600 red px, the second square clipped away, nothing white): ' + say(c1));
+      const c2 = frame('one');
+      if (c2.a < LO || c2.a > HI || c2.b > STRAY || c2.f.white > STRAY || c2.f.red - c2.a - c2.b > STRAY) throw new Error('CONTROL: a masking group whose top layer is a group holding one square should mask exactly as that square does (3600 red px in it, nothing else): ' + say(c2));
+
+      const bad = [];
+      /* ── A: the inner group holds both squares. */
+      const A = frame('nested');
+      if (A.a < LO || A.a > HI || A.b < LO || A.b > HI || A.f.white > STRAY || A.f.red - A.a - A.b > STRAY) {
+        bad.push('A: with the top layer a group of two squares the photo should show through both (about 3600 red px in each, nothing white, nothing outside): ' + say(A) + ((A.a >= LO && A.b < LO) ? ' (only the group’s first square is the mask; the second is drawn as content and cut away by it)' : ''));
+      }
+      /* ── B: the same, with the inner group at 99 %. */
+      const B = frame('nested', 0.99);
+      if (B.a < LO || B.a > HI || B.b < LO || B.b > HI || B.f.white > STRAY || B.f.red - B.a - B.b > STRAY) {
+        bad.push('B: with the inner group at 99 % the photo should show through both squares (about 3600 red px in each, nothing white): ' + say(B) + ((B.f.white > STRAY) ? ' (the inner group was drawn whole as content, so the mask’s own white shows where the photo should be)' : ''));
+      }
+      if (bad.length) throw new Error(bad.join(' · '));
     });
   });
   // ── end bughunt 4 ──
