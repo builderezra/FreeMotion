@@ -71242,6 +71242,16 @@
       FM.settings.set('playbackQuality', 'auto');
 
       build();
+      /* isolation (20 Oct): it inherited a comp whose 'detail' canvas is (nearly) the size of its 'auto' one — a comp
+         shown at or above its own pixel size, such as the 640x640 projects the two 'notes …' tests leave open — and it now
+         sizes the canvas itself. px0 used to be read off the canvas the pause() above left, which was sized while the
+         mode was still 'detail' (floor 1x); nothing resizes it when the setting changes, and FM.play() then resizes into
+         'auto'. Alone, on the seeded 1080x1920 project, that 'auto' canvas is a small fraction of the 'detail' one (by
+         previewScale, about a tenth in the runner's frame), so each frame burned a fraction of costMs and the struggle
+         control read 36 ms, the 30 fps frame interval. Not an app bug: the preview is meant to be smaller in 'auto'.
+         Resized here, so px0 is the canvas playback starts on (checked after FM.play below), and before.canvasPx, which
+         the shrink check compares with, is that canvas too. */
+      if (FM.resizeCanvas) FM.resizeCanvas();
       /* Normalised against THIS canvas's own starting size, not a fixed pixel count. A hardcoded
          reference makes the burn depend on whatever resolution the harness happens to run at — the
          first version used 500k and produced a 33 ms frame here, so the test tripped its own
@@ -71254,6 +71264,8 @@
       };
       const before = FM._perfState();
       FM.play();
+      const pxStart = cv ? cv.width * cv.height : px0;
+      if (pxStart !== px0) throw new Error('CONTROL: playback started on a ' + pxStart + ' px canvas but the load was scaled to a ' + px0 + ' px one, so a frame did not cost the ' + o.costMs + ' ms this run asked for');
       const trace = [];
       for (let i = 0; i < (o.samples || 12); i++) { await sleep(250); const st = FM._perfState(); trace.push(st); }
       const last = FM._perfState();
