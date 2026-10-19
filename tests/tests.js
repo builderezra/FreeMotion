@@ -68659,6 +68659,51 @@
     }
   });
 
+  /* ISOLATION (20 Oct): A LAYER OF ITS OWN, IN THE EDITOR, PUT BACK AS FOUND.
+     The queue 330-339 tests below took FM.scene.layers[0] and the editor as earlier tests left them: the 20x20 shape
+     'undo / redo grey out when there is nothing behind or ahead' left (autosaved into the open project), whichever
+     project the two 'notes …' tests left open, and the editor 'drawing: opening a project ends any sketch in progress'
+     left on screen. Run alone they met the seeded empty project on Home and stopped at 'no layer to work from'. Those
+     sources put everything back now, so a full run would meet the same thing. So each sets it up itself: isoOwnLayer()
+     makes the open scene hold ONLY the test's own shape (the same layers array, emptied in place, as the hold-Play test
+     does), with nothing selected, and shuts Home if it was open; put(), called in the test's own finally, puts back the
+     array's contents, the selection, select mode, project length, playhead and Home exactly as found. Nothing inherited
+     is touched, so nothing inherited needs restoring (queue 333 used to wipe an inherited layer's effects).
+     Two quieter carriers go back too. THE HISTORY: a test that committed (333's Done adds effects) left steps whose
+     snapshots hold its own shape, so a later undo could bring that scene back; when the commit counter moved, the history
+     is reset over the restored scene, as a project open does. THE SAVED PROJECT: an autosave fires 600 ms after an edit,
+     so a long test (333 runs for minutes) writes its own one-layer scene into the open project's document; put() flushes
+     the restored scene, and writeScene writes nothing when the document already matches. */
+  function isoOwnLayer(props) {
+    var S = FM.scene, layers0 = S.layers, copy0 = layers0.slice(), dur0 = S.project.duration, t0 = FM.time;
+    var sel0 = S.selectedId, ids0 = (S.selectedIds || []).slice(), mode0 = FM.selectMode;
+    var seq0 = (FM.history && FM.history._commitSeq) ? FM.history._commitSeq() : null;
+    var hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    var L = FM.makeLayer('shape', Object.assign({ name: 'iso layer', shape: 'rect', x: 120, y: 120, shapeW: 80, shapeH: 80, fill: '#c04070' }, props || {}));
+    L.start = 0; L.duration = 3;
+    layers0.length = 0; layers0.push(L);
+    S.selectedId = null; S.selectedIds = [];
+    FM.refreshAll();
+    return {
+      L: L,
+      put: function () {
+        if (FM.scene !== S) FM.scene = S;
+        layers0.length = 0; copy0.forEach(function (l) { layers0.push(l); }); S.layers = layers0;
+        S.selectedId = sel0; S.selectedIds = ids0.slice(); FM.selectMode = mode0;
+        if (seq0 != null && FM.history._commitSeq() !== seq0) FM.history.reset();
+        FM.refreshAll();
+        // after refreshAll, whose autoFitDuration would otherwise re-fit a length the scene arrived with
+        S.project.duration = dur0; FM.time = t0;
+        try { if (FM.storage && FM.storage.flushSync) FM.storage.flushSync(); } catch (e) {}
+        if (FM.home && FM.home.isOpen) {
+          if (hadHome && !FM.home.isOpen()) FM.home.open();
+          else if (!hadHome && FM.home.isOpen()) FM.home.close();
+        }
+      }
+    };
+  }
+
   /* Queue 330 — *"Also when you save a preset you have to exit and go back into the menu, make it auto
    * update the menu"*.
    * Four things change the two preset lists (two save buttons, two ✕) and each had to remember to
@@ -68671,19 +68716,21 @@
    * calling refresh() by hand, which is the whole complaint. Both lists are covered, because a fix in
    * one store says nothing about the other. */
   test('saving a preset updates the open Presets card by itself (queue 330)', { item: 'preset-live' }, async function () {
-    var L = FM.scene.layers[0];
-    if (!L) throw new Error('no layer to work from');
-    var id0 = FM.selectedLayer(FM.scene) && FM.selectedLayer(FM.scene).id;
+    /* isolation (20 Oct): it inherited its layer (FM.scene.layers[0]) and the editor from earlier tests; alone it stopped
+       at 'no layer to work from'. It now saves from its own shape in the editor (isoOwnLayer, above), and the finally
+       puts the scene, selection and Home back as found. The selection and the Presets card moved inside the try, so a
+       throw there is cleaned up too. */
+    var iso = isoOwnLayer(), L = iso.L;
     var NAME_L = '__qa layer preset', NAME_F = '__qa fx preset';
-    FM.selectLayer(L.id);
-    FM.inspector.openCategory('presets');
-    await sleep(120);
     var rows = function () {
       return [].slice.call(document.querySelectorAll('#inspector .insp-preset-row'))
                .map(function (r) { return r.textContent || ''; }).join(' | ');
     };
-    if (rows().indexOf(NAME_L) >= 0 || rows().indexOf(NAME_F) >= 0) throw new Error('test names already present — stale state');
     try {
+      FM.selectLayer(L.id);
+      FM.inspector.openCategory('presets');
+      await sleep(120);
+      if (rows().indexOf(NAME_L) >= 0 || rows().indexOf(NAME_F) >= 0) throw new Error('test names already present — stale state');
       // No refresh() here on purpose. If the panel does not update on its own, that IS the defect.
       FM.layerPresets.save(NAME_L, L);
       await sleep(120);
@@ -68703,9 +68750,9 @@
     } finally {
       FM.layerPresets.remove(NAME_L);
       FM.fxPresets.remove(NAME_F);
-      if (id0) FM.selectLayer(id0);
       FM.inspector.openCategory('home');
       await sleep(80);
+      iso.put();
     }
   });
 
@@ -68718,15 +68765,17 @@
    * method as queue 209 and 296, because the button was ALREADY a centred flex box and measuring the
    * box is exactly what makes a mis-set glyph look correct. */
   test('the Presets card leads with its save button and its ✕ is drawn, not typed (queue 331)', { item: 'preset-card' }, async function () {
-    var L = FM.scene.layers[0];
-    if (!L) throw new Error('no layer to work from');
-    var id0 = FM.selectedLayer(FM.scene) && FM.selectedLayer(FM.scene).id;
+    /* isolation (20 Oct): it inherited its layer (FM.scene.layers[0]) and the editor from earlier tests; alone it stopped
+       at 'no layer to work from', and with Home over the editor the ✕ it measures would have no box. It now saves from
+       its own shape in the editor (isoOwnLayer, above), and the finally puts the scene, selection and Home back as found.
+       The setup moved inside the try, so a throw there is cleaned up too. */
+    var iso = isoOwnLayer(), L = iso.L;
     var NAME = '__qa card preset';
-    FM.selectLayer(L.id);
-    FM.layerPresets.save(NAME, L);
-    FM.inspector.openCategory('presets');
-    await sleep(160);
     try {
+      FM.selectLayer(L.id);
+      FM.layerPresets.save(NAME, L);
+      FM.inspector.openCategory('presets');
+      await sleep(160);
       var wrap = document.querySelector('#inspector .preset-wrap');
       if (!wrap) throw new Error('no Presets card on screen');
 
@@ -68769,9 +68818,9 @@
       }
     } finally {
       FM.layerPresets.remove(NAME);
-      if (id0) FM.selectLayer(id0);
       FM.inspector.openCategory('home');
       await sleep(80);
+      iso.put();
     }
   });
 
@@ -68978,12 +69027,16 @@
      * ⚠️ THIS TEST IS THE SINGLE BIGGEST COST IN THE PHONE PASS. The pass sits around 20 minutes against a 30-minute
      * ceiling in ship.sh; this raise spends ~3 more of the 10 minutes of headroom left. The next thing to grow past
      * its budget should be looked at as a suite-wide problem rather than given another raise. */
+    /* isolation (20 Oct): it took FM.scene.layers[0] when an earlier test had left one, WIPED ITS EFFECTS and never put
+       them back (L.effects = [] in the finally), and made its own shape only when there was none, which it then left
+       in the scene; Home was whatever it found. It now always works on its own shape (the one its stand-alone branch
+       made, the same size and place) in the editor (isoOwnLayer, above), and the finally puts the scene, selection and
+       Home back as found, so no inherited layer is touched at all. */
+    var iso = isoOwnLayer({ x: 200, y: 300, shapeW: 120, shapeH: 90, fill: '#c05030' });
+    try {
     await atPhoneWidth(async function () {
-      var L = FM.scene.layers[0];
-      if (!L) {   // stand alone: this test used to depend on whatever an earlier test had left (2 Sep)
-        L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 90, fill: '#c05030' }); L.start = 0; L.duration = 3;
-        FM.scene.layers.push(L); FM.refreshAll(); await sleep(150);
-      }
+      var L = iso.L;
+      await sleep(150);
       FM.selectLayer(L.id);
       L.effects = [];
       window.__fmStep = 'open browser'; FM.fxBrowser.open(L);
@@ -69068,6 +69121,12 @@
         await sleep(120);
       }
     });
+    } finally {
+      // the browser is shut by the inner finally once it opened; a throw before that cannot leave it over the editor either
+      if (FM.fxBrowser && FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()) FM.fxBrowser.close();
+      iso.put();
+      await sleep(60);
+    }
   });
 
   /* Queue 335 — *"Motion blur doesn't even act as an effect and is pretty poorly designed"*, then
@@ -69223,9 +69282,13 @@
    * wait at all — a hold forced on the desktop would be an annoyance guarding against nothing, since a
    * mouse-down on a 13px target cannot happen by accident mid-scroll. */
   test('a trim grip needs a hold on touch, arms visibly, and is instant on mouse (queue 336)', { item: 'trim-hold' }, async function () {
+    /* isolation (20 Oct): it inherited its layer (FM.scene.layers[0]) and the editor from earlier tests, RETIMED that
+       layer (start 1, length 3) and never put it back; alone it stopped at 'no layer to work from'. It now trims its own
+       shape in the editor (isoOwnLayer, above), and the finally puts the scene, selection and Home back as found. */
+    var iso = isoOwnLayer();
+    try {
     await atPhoneWidth(async function () {
-      var L = FM.scene.layers[0];
-      if (!L) throw new Error('no layer to work from');
+      var L = iso.L;
       L.start = 1; L.duration = 3;
       FM.selectLayer(L.id); FM.refreshAll(); FM.timeline.rebuild();
       await sleep(160);
@@ -69276,6 +69339,10 @@
       if (!armedNow) throw new Error('a mouse press did not start a trim straight away');
       await sleep(60);
     });
+    } finally {
+      iso.put();
+      await sleep(60);
+    }
   });
 
   /* Queue 378 / 379 — *"Get rid of motion blur explanation, and make a note to get rid of all
@@ -69285,8 +69352,11 @@
    * while the renderer still clamps internally would leave the crank turning further and doing nothing
    * — which is the exact complaint, made worse by looking fixed. */
   test('effect panels carry no explanation block, and motion blur cranks past one frame (queue 378/379)', { item: 'fx-desc-crank' }, async function () {
-    var L = FM.scene.layers[0];
-    if (!L) throw new Error('no layer to work from');
+    /* isolation (20 Oct): it inherited its layer (FM.scene.layers[0]) and the editor from earlier tests, and selected
+       that layer without putting the selection back; alone it stopped at 'no layer to work from'. It now opens the
+       effects panel on its own shape in the editor (isoOwnLayer, above), and the finally puts the scene, selection and
+       Home back as found. */
+    var iso = isoOwnLayer(), L = iso.L;
     var fx0 = L.effects ? L.effects.slice() : [];
     try {
       L.effects = [{ type: 'objectblur', enabled: true, params: { shutter: 0.5, samples: 8 } }];
@@ -69325,6 +69395,7 @@
       L.effects = fx0;
       FM.inspector.openCategory('home'); FM.refreshAll();
       await sleep(80);
+      iso.put();
     }
   });
 
@@ -69409,9 +69480,15 @@
    * them apart" is the entire request. Fill-vs-outline is the cue that carries at 15px, so that is what
    * is checked, plus a plain not-identical guard so a copy-paste slip cannot pass. */
   test('the phone move/extend buttons are not the same drawing (queue 338)', { item: 'extend-icons' }, async function () {
+    /* isolation (20 Oct): it inherited its layer (FM.scene.layers[0]) and the editor from earlier tests, RETIMED that
+       layer (start 0, length 2), moved the playhead past it and put neither back; alone it stopped at 'no layer to work
+       from'. It now works on its own shape in the editor (isoOwnLayer, above), and the finally puts the scene, selection,
+       playhead and Home back as found. A playhead the 2 s timeline clamps to the clip's end still reads as past it
+       (FM.clipPlayheadSide: t >= end is +1), so the pair renders as it did in the longer inherited comp. */
+    var iso = isoOwnLayer();
+    try {
     await atPhoneWidth(async function () {
-      var L = FM.scene.layers[0];
-      if (!L) throw new Error('no layer to work from');
+      var L = iso.L;
       L.start = 0; L.duration = 2;
       FM.selectLayer(L.id);
       FM.setTime(L.start + L.duration + 1);        // playhead PAST the clip → the move/extend pair renders
@@ -69428,6 +69505,10 @@
       }
       if (!/stroke-dasharray/.test(a + b)) throw new Error('neither icon shows the dashed span that says "this edge stretches"');
     });
+    } finally {
+      iso.put();
+      await sleep(60);
+    }
   });
 
   /* Queue 339 — *"make it so each buttons background is the same but the line around it is a unique colour
@@ -69438,9 +69519,14 @@
    * likely to rot — a later refactor that drops the per-card phase would leave the grid pulsing in unison
    * and nothing else would notice. */
   test('every category card has its own gradient ring, out of step with the others (queue 339)', { item: 'cat-rings' }, async function () {
+    /* isolation (20 Oct): it inherited its layer (FM.scene.layers[0]) and the editor from earlier tests, and selected
+       that layer without putting the selection back; alone it stopped at 'no layer to work from'. It now reads the cards
+       of its own shape in the editor (isoOwnLayer, above), and the finally puts the scene, selection and Home back as
+       found. A shape is what it most likely had in the full order (the shape the undo test left). */
+    var iso = isoOwnLayer();
+    try {
     await atPhoneWidth(async function () {
-      var L = FM.scene.layers[0];
-      if (!L) throw new Error('no layer to work from');
+      var L = iso.L;
       FM.selectLayer(L.id); FM.inspector.openCategory('home'); FM.refreshAll();
       await sleep(200);
       var cards = [].slice.call(document.querySelectorAll('#inspector .cat-card'));
@@ -69487,6 +69573,10 @@
       if (dupDelay.length) throw new Error(delays[dupDelay[0]] + ' cards share the animation delay ' + dupDelay[0] + ' — they will move in lockstep');
       if (Object.keys(durs).length < 2) throw new Error('every card animates at the same speed, so they read as one pattern');
     });
+    } finally {
+      iso.put();
+      await sleep(60);
+    }
   });
 
   /* Queue 341 — *"Film grain background isn't even moving on mobile, and honestly I prefer it, maybe pc
