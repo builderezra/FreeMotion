@@ -43,7 +43,7 @@ window.FM = window.FM || {};
     speed: Object.freeze([0.01, 1000]),
     keyframes: 3600 * 120 + 1,
     /* hunt5 later A: duration is the longest PLAIN clip length the sanitiser keeps (sanitizeTiming, js/storage.js). It was 3600 s,
-       the longest project, but a clip is not held to the project: the Speed card re-times a clip about its source (FM.setClipSpeed,
+       the longest project, but a clip is not held to the project: the Speed card re-times a clip about its source (the clip speed setter,
        js/inspector.js: the span is kept and divided by the new speed, with no ceiling), so a 60 s clip at 1 % is 6000 s long. One
        Undo of anything then cut it to 3600 s at 1 %, 36 s of its 60 s of footage, and putting it back to 1x gave a 36 s clip; the
        undo autosaved it and redo, which sanitises the same way, could not bring it back. The class of #1 above.
