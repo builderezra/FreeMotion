@@ -166354,6 +166354,116 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* bughunt5 #12 — DETECT SPEECH WROTE TO THE LAYER IT CAPTURED BEFORE ITS AWAITS. FM.captions.detect (js/captions.js) awaits the
+     audio decode and the detector, which take seconds on a long clip, then wrote start / duration / captions / text onto the caption
+     layer object it was handed at the press. ↶ in that window installs FRESH layer objects (history.restore), so the cues went onto
+     an orphan: the caller's commit found nothing changed and the toast still said “1 cue from …”, with nothing on the track.
+     Now both layers are re-read by id after the awaits: one the Undo took away ends the run with { count: 0, gone: true } and
+     nothing written (the caller toasts that), and one that is still there is written in its live form. Layers that were never in
+     the open scene (the 916.7 test hands detect its own) are written as before.
+     Driven through the real FM.captions.detect, with FM.decodeAudio held on a gate the test opens after the Undo and
+     FM.detectSpeech answering one stretch of speech at 1–2 s, as the 916.7 test stubs it.
+     On 706d3583: the run reports count 1 in both Undo cases; the cue goes onto the caption layer the Undo took away, and after an
+     Undo of an unrelated edit the live caption layer has none.
+     CONTROLS (the same before and after): with no Undo, one cue lands on the caption layer; layers never in the scene get theirs.
+     BUDGET: the default 45 s: four stubbed runs, two undos and under 1 s of sleeps. */
+  test('bughunt5 #12 Detect speech after an Undo writes no cues to a layer that is gone: with ↶ pressed while the clip’s audio decodes, a caption layer the Undo took away gets no cue and the run reports nothing added (count 0, gone), and when the Undo only replaced the layers the cue lands on the live caption layer, not on the object the Undo threw away (CONTROLS: with no Undo one cue lands as before; layers never in the scene are written as before)', { item: '1176' }, async function () {
+    if (!FM.captions || typeof FM.captions.detect !== 'function' || !FM.history || !FM.history.reset || !FM.history._steps || typeof FM.layerById !== 'function' || !FM.media || !FM.media.set) throw new Error('setup: FM.captions.detect, FM.history (reset, _steps), FM.layerById or FM.media.set is not reachable');
+    const bad = [];
+    const dDec = Object.getOwnPropertyDescriptor(FM, 'decodeAudio'), dDet = Object.getOwnPropertyDescriptor(FM, 'detectSpeech');
+    let open = null, entered = 0, pending = null;
+    /* FM.decodeAudio held until open() — a fresh gate per run. */
+    const hold = () => {
+      entered = 0;
+      const gate = new Promise(r => { open = r; });
+      FM.decodeAudio = async function () { entered++; await gate; return { sampleRate: 8000, length: 80000, duration: 10, numberOfChannels: 1 }; };
+    };
+    const settle = async () => { if (open) open(); if (pending) { try { await pending; } catch (e) {} pending = null; } };
+    const voice = media => {
+      const V = FM.makeLayer('video', { name: 'bh5 #12 voice' });
+      Object.assign(V, { start: 0, duration: 10, trimStart: 0, speed: 1, reversed: false });
+      FM.media.set(V.id, { kind: 'video', file: new Blob(['x'], { type: 'audio/wav' }), duration: 10, width: 0, height: 0 });
+      if (media) media.push(V.id);
+      return V;
+    };
+    const capOf = name => { const L = FM.makeLayer('text', { name: name, text: '' }); Object.assign(L, { start: 0, duration: 10, text: '' }); L.captions = []; return L; };
+    const cuesOn = l => (l && Array.isArray(l.captions)) ? l.captions.length : 0;
+    /* Start Detect speech, check it is parked on the decode, run `mid` there, then let it finish. */
+    const detectAround = async (C, V, mid) => {
+      hold();
+      pending = FM.captions.detect(C, V, null, 'clip');
+      await sleep(20);
+      if (entered !== 1) throw new Error('setup: Detect speech did not reach the audio decode (' + entered + ' calls), so nothing lands mid-run');
+      if (mid) { await mid(); await sleep(60); }
+      open();
+      const r = await pending; pending = null;
+      return r;
+    };
+    const say = r => JSON.stringify(r ? { count: r.count, gone: r.gone } : r);
+    let detached = null;
+    try {
+      FM.detectSpeech = async function () { return { segments: [{ start: 1, end: 2 }], stats: {} }; };
+
+      /* ── 1. THE UNDO TAKES THE CAPTION LAYER AWAY while the clip's audio decodes. */
+      await _bh2With(async function (media) {
+        const V = voice(media);
+        FM.scene.layers.push(V);
+        FM.history.reset();
+        const C = capOf('bh5 #12 captions');
+        FM.scene.layers.push(C);
+        FM.history.commit();
+        if (FM.history._steps().len !== 2) throw new Error('setup: adding the caption layer did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+        const r = await detectAround(C, V, () => {
+          FM.history.undo();
+          if (FM.layerById(FM.scene, C.id)) throw new Error('setup: the Undo did not take the caption layer away, so nothing below is measured');
+        });
+        if (!r || r.count !== 0 || r.gone !== true) bad.push('with the caption layer taken away by an Undo mid-run, Detect speech reported ' + say(r) + ', not count 0 and gone: the caller commits nothing and still toasts a cue count');
+        if (cuesOn(C) !== 0) bad.push('it wrote ' + cuesOn(C) + ' cue(s) onto the caption layer the Undo had already taken away');
+        const stray = FM.scene.layers.filter(l => cuesOn(l) > 0);
+        if (stray.length) bad.push('after it, a layer in the open scene carries cues: ' + stray.map(l => l.name).join(', '));
+      }, settle);
+
+      /* ── 2. AN UNDO OF AN UNRELATED EDIT: both layers survive the Undo as FRESH objects, so the cue belongs on the live one. */
+      await _bh2With(async function (media) {
+        const V = voice(media), C = capOf('bh5 #12 captions'), T = FM.makeLayer('shape', { name: 'bh5 #12 title', shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 10 });
+        FM.scene.layers.push(V, C, T);
+        FM.history.reset();
+        T.name = 'bh5 #12 title renamed';
+        FM.history.commit();
+        if (FM.history._steps().len !== 2) throw new Error('setup: renaming the title did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+        const r = await detectAround(C, V, () => {
+          FM.history.undo();
+          const C1 = FM.layerById(FM.scene, C.id);
+          if (!C1 || C1 === C) throw new Error('setup: after the Undo the caption layer is ' + (C1 ? 'still the same object' : 'gone') + ', so this case measures nothing');
+        });
+        const live = FM.layerById(FM.scene, C.id);
+        if (!r || r.count !== 1 || r.gone) bad.push('after an Undo of an unrelated edit mid-run, Detect speech reported ' + say(r) + ', not one cue');
+        if (cuesOn(live) !== 1) bad.push('after an Undo of an unrelated edit mid-run, the live caption layer carries ' + cuesOn(live) + ' cue(s), not the one detected: it went onto the object the Undo replaced, which ' + (cuesOn(C) ? 'now holds it' : 'holds none either'));
+      }, settle);
+
+      /* ── CONTROL: no Undo — one cue on the caption layer, exactly as before. */
+      await _bh2With(async function (media) {
+        const V = voice(media), C = capOf('bh5 #12 captions');
+        FM.scene.layers.push(V, C);
+        FM.history.reset();
+        const r = await detectAround(C, V, null);
+        if (!r || r.count !== 1 || r.gone || cuesOn(FM.layerById(FM.scene, C.id)) !== 1) bad.push('CONTROL: with no Undo, Detect speech reported ' + say(r) + ' and the caption layer carries ' + cuesOn(FM.layerById(FM.scene, C.id)) + ' cue(s), not one');
+      }, settle);
+
+      /* ── CONTROL: layers that were never in the open scene (as the 916.7 test hands them) are written as before. */
+      const dC = capOf('bh5 #12 detached captions');
+      detached = voice(null);
+      const rd = await detectAround(dC, detached, null);
+      if (!rd || rd.count !== 1 || rd.gone || cuesOn(dC) !== 1) bad.push('CONTROL: on layers that were never in the scene Detect speech reported ' + say(rd) + ' and wrote ' + cuesOn(dC) + ' cue(s), not one');
+    } finally {
+      await settle();
+      if (detached) { try { FM.media.remove(detached.id); } catch (e) {} }
+      if (dDec) Object.defineProperty(FM, 'decodeAudio', dDec); else delete FM.decodeAudio;
+      if (dDet) Object.defineProperty(FM, 'detectSpeech', dDet); else delete FM.detectSpeech;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();
