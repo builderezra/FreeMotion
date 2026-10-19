@@ -115,7 +115,8 @@ window.FM = window.FM || {};
     if (!isAnimated(p)) return (typeof p === 'number' || typeof p === 'string') ? p : (p || 0);
     const kf = p.kf;
     if (!kf.length) return 0;
-    t = loopTime(p, t);
+    /* The fast path (19 Oct, the PM's perf check on #13): only a looping prop pays the call; every other prop reads `t` as before. */
+    if (p.loopMode && p.loopMode !== 'none') t = loopTime(p, t);
     if (t <= kf[0].t) return kf[0].v;
     const last = kf[kf.length - 1];
     if (t >= last.t) return last.v;
