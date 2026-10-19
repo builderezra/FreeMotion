@@ -164336,7 +164336,7 @@
       const wn = { x: 200 + (80 * co - 100 * si) * 1.25, y: 20 + (80 * si + 100 * co) * 1.25 }, dn = drawn(E), bn = count(births(E));
       if (!near(dn, { x: 75, y: 120 }, TOL) || !near(wn, dn, TOL)) throw new Error('CONTROL: under the turned, scaled Controller the emitter layer is drawn at ' + say(dn) + ' and today’s walk puts it at ' + say(wn) + ', not both at (75, 120)');
       const bnOff = bn.filter(m => !near(m, wn, TOL));
-      if (bnOff.length) throw new Error('CONTROL: under the turned, scaled Controller ' + bnOff.length + ' particles are born at ' + say(bnOff[0]) + ', more than TOL px from today’s ' + say(wn) + ' - a Controller’s turn and scale the old walk already had right moved');
+      if (bnOff.length) throw new Error('CONTROL: under the turned, scaled Controller ' + bnOff.length + ' particles are born at ' + say(bnOff[0]) + ', more than 1e-5 px from today’s ' + say(wn) + ' - a Controller’s turn and scale the old walk already had right moved');
 
       /* ── A: ⋯ → Flip Horizontally. */
       E.parent = G.id;
