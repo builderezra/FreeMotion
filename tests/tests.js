@@ -165862,6 +165862,55 @@
 
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* bughunt5 #4 — A KEYFRAMED SHAPE DREW THE KEYFRAME BEFORE, AT A KEYFRAME'S OWN TIME. FM.evalShapeSubs (js/compositor.js), the
+     evaluator for Edit Points' keyframed points (queue 254), takes the segment (a, b) while t <= b.t, and when b was a hold or held a
+     different number of points it returned a's points. So AT b's time it drew a. Queue 720 fixed the same off-by-one in masks.js
+     (evalMaskPath) and scene.js has it fixed for evalProp; this copy (v8.34) was missed. Edit Points makes its key at exactly FM.time
+     when a point is deleted or inserted, so the paused preview drew the old shape on that frame and the delete looked like it did
+     nothing, while the overlay showed the edited key. A pure call, so it reproduces at any width.
+     On 3d91aa8e: 4 points at t = 1 where the key at 1 holds 3, and the hold key's own time gives the first key's points.
+     CONTROLS (the same before and after): at 0.999 the earlier shape still holds; at 1.5 the next segment runs; an ordinary same-shape
+     key lands exactly on its own points at its time; the mask evaluator (queue 720) already answers the later key at its time. */
+  test('bughunt5 #4 A drawing\'s keyframe shows its own shape at its own time: a point-count keyframe and a hold keyframe on an Edit Points shape draw their own points AT their time, not the keyframe before (CONTROLS: just before the key the earlier shape holds; past it the next segment runs; a same-shape key lands exactly on its points; the mask evaluator already agrees)', { item: '1176' }, function () {
+    if (typeof FM.evalShapeSubs !== 'function') throw new Error('setup: FM.evalShapeSubs is not reachable');
+    const bad = [];
+    const SQ = [[[0, 0], [100, 0], [100, 100], [0, 100]]];
+    const TRI = [[[0, 0], [100, 0], [50, 100]]];
+    const TRI2 = [[[20, 20], [80, 20], [50, 80]]];
+    const A = [[[0, 0], [100, 0], [100, 100]]];
+    const B = [[[10, 30], [90, 30], [60, 90]]];
+    const C = [[[40, 40], [60, 40], [50, 60]]];
+    const shapeL = kf => ({ type: 'shape', shape: 'path', subs: { kf: kf } });
+    const same = (got, want) => Array.isArray(got) && got.length === want.length && want.every((s, i) => Array.isArray(got[i]) && got[i].length === s.length &&
+      s.every((p, k) => Array.isArray(got[i][k]) && Math.abs(got[i][k][0] - p[0]) < 1e-9 && Math.abs(got[i][k][1] - p[1]) < 1e-9));
+    const say = subs => Array.isArray(subs) ? JSON.stringify(subs) : String(subs);
+    const want = (what, L, t, w) => { const got = FM.evalShapeSubs(L, t); if (!same(got, w)) bad.push(what + ' at t = ' + t + ' drew ' + say(got) + ', not ' + say(w)); };
+
+    /* ── A POINT-COUNT KEY: 4 points at 0, 3 at 1, 3 at 2 (the key at 1 is what deleting a point at the playhead makes). */
+    const P = shapeL([{ t: 0, v: SQ, e: 'linear' }, { t: 1, v: TRI, e: 'linear' }, { t: 2, v: TRI2, e: 'linear' }]);
+    const at1 = FM.evalShapeSubs(P, 1);
+    if (!Array.isArray(at1) || !Array.isArray(at1[0]) || at1[0].length !== 3) bad.push('a point-count key: at its own time (1 s) the shape has ' + (Array.isArray(at1) && Array.isArray(at1[0]) ? at1[0].length : '?') + ' points, not the key’s 3: the key before is drawn on that frame, so a point deleted at the playhead looks like it is still there');
+    want('a point-count key', P, 1, TRI);
+    want('CONTROL: a point-count key, just before it,', P, 0.999, SQ);
+    want('CONTROL: a point-count key, half way to the next key,', P, 1.5, [[[10, 10], [90, 10], [50, 90]]]);
+
+    /* ── A HOLD KEY: the same counts, different points; the key at 1 is a hold. */
+    const H = shapeL([{ t: 0, v: A, e: 'linear' }, { t: 1, v: B, e: 'hold' }, { t: 2, v: C, e: 'linear' }]);
+    want('a hold key', H, 1, B);
+    want('CONTROL: a hold key, just before it,', H, 0.999, A);
+    want('CONTROL: a hold key, half way to the next key,', H, 1.5, [[[25, 35], [75, 35], [55, 75]]]);
+
+    /* ── CONTROL: an ordinary same-shape key interpolates onto exactly its own points at its time. */
+    want('CONTROL: an interpolating key', shapeL([{ t: 0, v: A, e: 'linear' }, { t: 1, v: B, e: 'linear' }, { t: 2, v: C, e: 'linear' }]), 1, B);
+
+    /* ── CONTROL: the mask evaluator, fixed by queue 720, answers the later key at its time — the rule this copy now follows. */
+    if (typeof FM.evalMaskPath === 'function') {
+      const m = FM.evalMaskPath({ path: { kf: [{ t: 0, v: SQ[0], e: 'linear' }, { t: 1, v: TRI[0], e: 'linear' }, { t: 2, v: TRI2[0], e: 'linear' }] } }, 1);
+      if (!Array.isArray(m) || m.length !== 3) bad.push('CONTROL: the mask evaluator gives ' + (Array.isArray(m) ? m.length : '?') + ' points at a point-count key’s own time, not 3: the rule queue 720 set is not what this test assumes');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();
