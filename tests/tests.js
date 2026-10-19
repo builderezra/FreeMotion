@@ -165911,6 +165911,59 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* bughunt5 #6 — TRACKED KEYS WERE THINNED FOR STRAIGHT LINES AND WRITTEN AS EASE IN-OUT. FM.tracker.track (js/tracker.js) thins the
+     per-frame track with Ramer–Douglas–Peucker against the STRAIGHT line between two kept frames (1.6 px), then wrote every kept key
+     'easeInOut'. evalProp eases the segment arriving at a key, so between two keys the layer ran on 2f² instead of f: up to 12.5 % of
+     the segment's travel off the path the tracker measured (at its quarter points), with a dead stop at every key. The tracker's own
+     fixture (trackerFixture: a square drifting 0.8 px a frame for 4 s) thins to about one straight segment of ~95 px.
+     The check compares each segment with the straight line between ITS OWN two keys, so it does not depend on the fixture's
+     placement or scale.
+     On 8ac0dade: about 12 px off that line at the long segment's quarter points.
+     CONTROLS (the same before and after): the track wrote at least two x keys, and one segment travels at least 24 px, so an Ease
+     In-Out would be at least 3 px off at its quarter points (a pass cannot come from segments too short to show it); the layer
+     sits exactly on each key at its time.
+     BUDGET: the default 45 s: one track of the 120-frame fixture, which the three tracker tests run in well under a second. */
+  test('bughunt5 #6 A tracked layer follows the tracked path between its keyframes: between every two keys the tracker writes, the layer\'s x and y stay within 1 px of the straight line between them (the line the track was thinned against), not eased off it by up to 12 px (CONTROLS: the track wrote keys with a segment long enough to show an ease; the layer sits on each key at its time)', { item: '1176' }, async function () {
+    if (!FM.tracker || typeof FM.tracker.track !== 'function' || typeof FM.buildFrameCache !== 'function') throw new Error('setup: FM.tracker.track or FM.buildFrameCache is not reachable');
+    const bad = [];
+    const dBuild = Object.getOwnPropertyDescriptor(FM, 'buildFrameCache');
+    try {
+      FM.buildFrameCache = async function () { return true; };   // the fixture supplies the cache, as the three tracker tests do
+      await _bh2With(async function (media) {
+        FM.scene.project.fps = 30;
+        const f = trackerFixture();
+        FM.scene.layers.push(f.layer); media.push(f.layer.id);
+        const n = await FM.tracker.track(f.layer, f.seed, f.seedT, f.box);
+        const tr = f.layer.transform;
+        const kfOf = ch => (tr[ch] && Array.isArray(tr[ch].kf)) ? tr[ch].kf : null;
+        if (!n || !kfOf('x') || kfOf('x').length < 2 || !kfOf('y')) throw new Error('setup: the track wrote no x / y keyframes (it returned ' + n + '), so nothing below is measured');
+        let longest = 0;
+        ['x', 'y'].forEach(ch => {
+          const kf = kfOf(ch);
+          let worst = null;
+          kf.forEach(k => {
+            const v = FM.evalProp(tr[ch], k.t);
+            if (Math.abs(v - k.v) > 1e-6) bad.push('CONTROL: ' + ch + ' is ' + v + ' at its own key (' + k.t.toFixed(3) + ' s), not the key’s ' + k.v);
+          });
+          for (let i = 0; i + 1 < kf.length; i++) {
+            const a = kf[i], b = kf[i + 1];
+            if (ch === 'x') longest = Math.max(longest, Math.abs(b.v - a.v));
+            for (let j = 1; j < 16; j++) {
+              const t = a.t + (b.t - a.t) * j / 16, line = a.v + (b.v - a.v) * j / 16, got = FM.evalProp(tr[ch], t);
+              const d = Math.abs(got - line);
+              if (!worst || d > worst.d) worst = { d: d, t: t, got: got, line: line, a: a, b: b };
+            }
+          }
+          if (worst && !(worst.d <= 1)) bad.push(ch + ' is ' + worst.got.toFixed(1) + ' at ' + worst.t.toFixed(3) + ' s, ' + worst.d.toFixed(1) + ' px off the straight line (' + worst.line.toFixed(1) + ') between its keys ' + worst.a.v + ' at ' + worst.a.t.toFixed(3) + ' s and ' + worst.b.v + ' at ' + worst.b.t.toFixed(3) + ' s (written “' + worst.b.e + '”): the track was thinned against that line, so the pinned graphic swims off the tracked point between keys and stops at each one');
+        });
+        if (longest < 24) throw new Error('CONTROL: no x segment of the track travels 24 px (the longest is ' + longest + ' px over ' + kfOf('x').length + ' keys), so an Ease In-Out would sit under 3 px off and this test could not see it');
+      });
+    } finally {
+      if (dBuild) Object.defineProperty(FM, 'buildFrameCache', dBuild); else delete FM.buildFrameCache;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();

@@ -346,10 +346,14 @@ window.FM = window.FM || {};
       keep[0] = keep[frames.length - 1] = 1;
       rdpKeep(times, xs, keep, 0, frames.length - 1, 1.6);
       rdpKeep(times, ys, keep, 0, frames.length - 1, 1.6);
+      /* bughunt5 #6: LINEAR, because the thinning above is. rdpKeep drops every frame within 1.6 px of the STRAIGHT line between
+         two kept frames, so the keys only reproduce the track if the layer moves in a straight line between them. Ease In-Out ran
+         each segment on 2f² instead: up to 12.5 % of its travel off the tracked point at its quarter points, and a dead stop at
+         every key. Audio → keyframes thins with its own copy of this RDP (audio-react.js) and writes 'linear' for the same reason. */
       const kfX = [], kfY = [];
       for (let k = 0; k < frames.length; k++) if (keep[k]) {
-        kfX.push({ t: times[k], v: xs[k], e: 'easeInOut' });
-        kfY.push({ t: times[k], v: ys[k], e: 'easeInOut' });
+        kfX.push({ t: times[k], v: xs[k], e: 'linear' });
+        kfY.push({ t: times[k], v: ys[k], e: 'linear' });
       }
       if (kfX.length < 2) return false;
       /* THE LAYER MUST STILL BE THE ONE IN THE SCENE. This function captures `layer` before awaiting
