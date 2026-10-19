@@ -1761,7 +1761,7 @@ window.FM = window.FM || {};
      * The protection that mattered is kept: still finite, still bounded, just bounded symmetrically. */
     l.start = num(l.start, -3600, 3600, 0);
     /* hunt5 later A: the ceiling is FM.LIMITS.duration (js/scene.js), the longest clip the Speed card makes: the longest project
-       at 1 %. It was 3600, and FM.setClipSpeed has no ceiling, so a 60 s clip slowed to 1 % (6000 s) came back from one Undo of
+       at 1 %. It was 3600, and the clip speed setter has no ceiling, so a 60 s clip slowed to 1 % (6000 s) came back from one Undo of
        anything 3600 s long at 1 %: 24 s of its footage gone, autosaved, and redo could not bring it back. NaN, a word, a negative
        or an absurd length is still repaired or brought into range. */
     l.duration = num(l.duration, 0.05, FM.LIMITS.duration, 1);       // 0 would be a clip that cannot be selected or seen
