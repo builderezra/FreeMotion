@@ -68734,9 +68734,16 @@
    * The rename-clash check is the one that matters most and is the least visible: the stores are keyed
    * by NAME, so renaming onto a name in use would merge two saved looks and destroy one without a word. */
   test('presets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9)', { item: 'preset-tags' }, async function () {
-    var L = FM.scene.layers[0];
-    if (!L) throw new Error('no layer to work from');
-    var id0 = FM.selectedLayer(FM.scene) && FM.selectedLayer(FM.scene).id;
+    /* isolation (20 Oct): it inherited a layer to save presets from (FM.scene.layers[0]) from earlier tests: the shape
+       'undo / redo grey out when there is nothing behind or ahead' leaves in the scene, then whichever project the two
+       'notes …' tests leave open (they delete theirs without reopening the original). It now sets that up itself: its
+       own shape, pushed onto the same layers array, selected, and taken out again in the finally with the selection put
+       back exactly as it was found. Alone the seeded project is empty, so it stopped at 'no layer to work from'. */
+    var S = FM.scene, layers0 = S.layers;
+    var sel0 = S.selectedId, ids0 = (S.selectedIds || []).slice(), mode0 = FM.selectMode;
+    var L = FM.makeLayer('shape', { name: 'iso preset layer', shape: 'rect', x: 120, y: 120, shapeW: 80, shapeH: 80, fill: '#c04070' });
+    L.start = 0; L.duration = 3;
+    layers0.push(L);
     var A = '__qa alpha', B = '__qa bravo', A2 = '__qa alpha renamed';
     var names = function () {
       return [].slice.call(document.querySelectorAll('#inspector .insp-preset-name'))
@@ -68747,8 +68754,8 @@
       return [].slice.call(document.querySelectorAll('#inspector .preset-chip'))
                .map(function (c) { return c.textContent; });
     };
-    FM.selectLayer(L.id);
     try {
+      FM.selectLayer(L.id);
       /* SAVED IN THE ORDER THAT MAKES THE "UNTAGGED LAST" CHECK MEAN SOMETHING. The first version saved
          A then B, and save() UNSHIFTS — so the store already listed the tagged one first and the
          assertion passed with the ordering code deleted. The mutation check caught it; nothing else
@@ -68808,7 +68815,13 @@
       FM.presetTags.set('lp:' + A, []); FM.presetTags.set('lp:' + A2, []); FM.presetTags.set('lp:' + B, []);
       var bx = document.querySelector('#inspector .preset-search');
       if (bx) { bx.value = ''; bx.dispatchEvent(new Event('input', { bubbles: true })); }
-      if (id0) FM.selectLayer(id0);
+      // its own layer out of the same array it went into, wherever it sits now; then the selection as it was found
+      var at = layers0.indexOf(L);
+      if (at >= 0) layers0.splice(at, 1);
+      S.layers = layers0;
+      FM.selectLayer(sel0 || null);
+      S.selectedIds = ids0; FM.selectMode = mode0;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
       FM.inspector.openCategory('home');
       await sleep(80);
     }
