@@ -3351,7 +3351,9 @@ window.FM = window.FM || {};
        A keyframed path takes the new shape at the PLAYHEAD, where he is drawing, and the other keyframes
        are left alone; a keyframed position is SHIFTED by the same delta the flat assignment would have
        applied, which is what FM.shiftTransform exists for and what every other mover on the canvas does. */
-    writePathSubs(layer, flat);
+    /* bughunt5 #5: the new box's corner in the OLD box's own px, so writePathSubs can carry the other keyframes across. */
+    const o0 = (sp && sp.toBox) ? sp.toBox([minX, minY]) : null;
+    writePathSubs(layer, flat, o0 ? { oldW: sp.w, oldH: sp.h, minX: o0[0], minY: o0[1], w: w, h: h, W: Math.round(w), H: Math.round(h) } : null);
     layer.points = null;                       // subs win in traceShapePath; don't leave a stale single path
     layer.shapeW = Math.round(w); layer.shapeH = Math.round(h);
     const nx = minX + w / 2, ny = minY + h / 2;
@@ -3386,7 +3388,7 @@ window.FM = window.FM || {};
     const flat = boxSubs.map(sub => sub.map(p => (p.length > 2
       ? [(p[0] - minX) / w, (p[1] - minY) / h, p[2]]
       : [(p[0] - minX) / w, (p[1] - minY) / h])));
-    writePathSubs(layer, flat);
+    writePathSubs(layer, flat, { oldW: sp.w, oldH: sp.h, minX: minX, minY: minY, w: w, h: h, W: W, H: H });   // bughunt5 #5: minX/minY are already box px here
     layer.points = null;
     layer.shapeW = W; layer.shapeH = H;
     if (FM.shiftTransform) { FM.shiftTransform(layer, 'x', pos[0], FM.time); FM.shiftTransform(layer, 'y', pos[1], FM.time); }
@@ -3394,11 +3396,38 @@ window.FM = window.FM || {};
     return layer;
   }
   // The new point set goes in at the PLAYHEAD on a keyframed path and replaces a still one — queue 833, above.
-  function writePathSubs(layer, flat) {
+  /* bughunt5 #5 — THE OTHER KEYFRAMES FOLLOW THE NEW BOX. The re-fit writes shapeW / shapeH and moves x / y for the WHOLE layer,
+     but only the playhead's key was re-normalised into the new box; every other key stayed in [0,1] of the OLD box, so Draw more
+     or the eraser at 2 s stretched and shifted the 0 s shape by the new box (a stroke outside it scaled the 0 s shape up, a
+     shrinking morph squashed it). `box` is the re-fit in the old box's own px (minX / minY, w × h, drawn as W × H = the rounded
+     shapeW / shapeH). Every other key is carried from the box as it was drawn (oldW × oldH) to the box as it will be drawn, whose
+     corner is at minX + (w − W) / 2: u' = (u·oldW − minX − (w − W) / 2) / W, and the same for v. That is the playhead strokes'
+     own map, (u·oldW − minX) / w, read through the rounding the renderer applies, so what a key drew before the re-fit it draws
+     after, exactly. (Without the rounding term every re-fit would pull the other keys W / w towards the box's middle, and the
+     eraser re-fits on every move of a rub.) Points are [u, v], [u, v, 1] (smooth) or [u, v, 1, hx, hy] (a manual handle, an
+     offset in u/v — FM.pointCtrl): the offset scales and does not move, anything else on a point is kept. No box, or a still
+     path: exactly as before. */
+  function reboxKeySubs(v, box) {
+    const ox = box.minX + (box.w - box.W) / 2, oy = box.minY + (box.h - box.H) / 2;
+    const sx = box.oldW / box.W, sy = box.oldH / box.H;
+    const pt = p => {
+      if (!Array.isArray(p)) return p;
+      const q = p.slice();
+      q[0] = (p[0] * box.oldW - ox) / box.W;
+      q[1] = (p[1] * box.oldH - oy) / box.H;
+      if (q.length >= 5 && typeof p[3] === 'number' && typeof p[4] === 'number') { q[3] = p[3] * sx; q[4] = p[4] * sy; }
+      return q;
+    };
+    return v.map(sub => (Array.isArray(sub) ? sub.map(pt) : sub));
+  }
+  function writePathSubs(layer, flat, box) {
     if (layer.subs && !Array.isArray(layer.subs) && Array.isArray(layer.subs.kf) && layer.subs.kf.length) {
       const t = FM.time || 0;
       let hit = null, best = Infinity;
       layer.subs.kf.forEach(k => { const d = Math.abs((+k.t || 0) - t); if (d < best) { best = d; hit = k; } });
+      const okBox = !!(box && box.W > 0 && box.H > 0 && [box.oldW, box.oldH, box.minX, box.minY, box.w, box.h, box.W, box.H].every(n => typeof n === 'number' && isFinite(n)));
+      const own = (best <= 1e-3 && hit) ? hit : null;
+      if (okBox) layer.subs.kf.forEach(k => { if (k && k !== own && Array.isArray(k.v)) k.v = reboxKeySubs(k.v, box); });
       if (best <= 1e-3 && hit) hit.v = flat;
       else { layer.subs.kf.push({ t: t, v: flat, e: 'linear' }); layer.subs.kf.sort((a, b) => (+a.t) - (+b.t)); }
     } else {

@@ -166058,6 +166058,113 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* bughunt5 #5 — DRAW MORE ON AN ANIMATED DRAWING MOVED ITS OTHER KEYFRAMES. Draw more and the eraser re-fit the drawing's box
+     around the session's strokes (FM.refitPathLayer / refitPlaced, js/app.js), and that box is the WHOLE layer's: shapeW / shapeH and
+     x / y apply at every time. writePathSubs re-normalised only the keyframe at the playhead into it, so every other keyframe's points,
+     still in [0,1] of the OLD box, were drawn stretched and shifted by the new one. Queue 833 stopped the flattening, not this.
+     Driven through the real door: FM.startDraw('freehand', { layerId }) is what ⋯ → ✎ Draw more calls, the stroke goes in through the
+     commit the finger calls (FM.drawTool._commit, as the 690 tests do), and the eraser through FM.drawTool._eraseAt.
+     The fixture: a 100 × 100 box at (100, 100); the 0 s key is a corner (200, 100) → (200, 200) whose middle point carries a manual
+     handle (tip at (210, 120)), the 1 s key a corner half that size. At 1 s, one stroke out to (320, 320) grows the box to 220 × 220;
+     then the eraser takes that stroke away again and the box shrinks to the 1 s corner, 50 × 50.
+     What is measured is the 0 s key's OWN stored points (FM.evalShapeSubs at 0), mapped through the box the layer has at that moment
+     (FM.layerUVToCanvas with its shapeW / shapeH, the renderer's map): a fixed re-fit rewrites those points, so a literal UV would stay
+     wrong after a correct fix (the refuter's correction).
+     On 446438e5: after Draw more the 0 s corner (200, 200) is drawn at (320, 320), about 170 px off ((200, 100) at (320, 100), the
+     handle tip at (342, 144)); after the eraser it is at (150, 150), about 71 px off.
+     CONTROLS (the same before and after): the fixture sits where it says before anything; the stroke grew the box and kept both keys;
+     the 1 s key is its own corner plus the new stroke under the finger, and after the eraser just its corner; a drawing with NO
+     keyframes, given the same Draw more, keeps its old stroke where it was, stays a still path and takes the stroke under the finger.
+     BUDGET: the default 45 s: two Draw more sessions and one erase, no renders. */
+  test('bughunt5 #5 Drawing more on an animated drawing leaves its other keyframes where they were: Draw more at the 1 s keyframe of a drawing whose points are keyframed, with a stroke outside it, leaves the 0 s keyframe’s points and its handle within 1 px of where they were on the canvas, not stretched into the bigger box (about 170 px off), and so does the eraser taking that stroke away again (CONTROLS: the stroke lands under the finger and the 1 s keyframe keeps its own shape; a drawing with no keyframes behaves as before)', { item: '1176' }, async function () {
+    if (typeof FM.startDraw !== 'function' || !FM.drawTool || typeof FM.drawTool._commit !== 'function' || typeof FM.drawTool.finish !== 'function' || typeof FM.drawTool._eraseAt !== 'function' || !FM.drawTools || typeof FM.drawTools.layerId !== 'function' || typeof FM.evalShapeSubs !== 'function' || typeof FM.layerUVToCanvas !== 'function') throw new Error('setup: FM.startDraw, the draw tool seams (_commit, finish, _eraseAt, FM.drawTools.layerId), FM.evalShapeSubs or FM.layerUVToCanvas is not reachable');
+    const saved = FM.scene, savedT = FM.time, bad = [];
+    const P = { width: 640, height: 480, fps: 30, duration: 3, background: '#000000' };
+    /* A drawing on its own scene: a 100 × 100 box centred on (150, 150), so its box starts at (100, 100). */
+    const mk = (name, subs) => {
+      const L = FM.makeLayer('shape', { name: name, shape: 'path', x: 150, y: 150, shapeW: 100, shapeH: 100, fill: '#ff0000', start: 0, duration: 3, extra: { closed: false, points: null, subs: subs } });
+      FM.scene = scene([L], { project: Object.assign({}, P) });
+      return L;
+    };
+    /* Every point of the shape the drawing shows at `t`, and the tip of any manual handle, on the canvas through the layer's box. */
+    const marks = (L, t) => {
+      const keep = FM.time, out = [];
+      try {
+        FM.time = t;
+        FM.evalShapeSubs(L, t).forEach((sub, si) => sub.forEach((p, k) => {
+          const at = (u, v, what) => { const q = FM.layerUVToCanvas(L, u, v, L.shapeW, L.shapeH); out.push({ what: what, x: q.x, y: q.y }); };
+          at(p[0], p[1], 'point ' + (k + 1) + ' of stroke ' + (si + 1));
+          if (p.length >= 5) at(p[0] + p[3], p[1] + p[4], 'the handle tip of point ' + (k + 1) + ' of stroke ' + (si + 1));
+        }));
+      } finally {
+        FM.time = keep;
+      }
+      return out;
+    };
+    /* The worst miss between those marks and the canvas points they should be at. */
+    const worst = (got, want) => {
+      if (got.length !== want.length) return { d: Infinity, say: 'it has ' + got.length + ' points and handle tips, not ' + want.length };
+      let w = { d: 0, say: '' };
+      got.forEach((g, i) => {
+        const d = Math.hypot(g.x - want[i][0], g.y - want[i][1]);
+        if (!(d <= w.d)) w = { d: d, say: g.what + ' is at (' + g.x.toFixed(1) + ', ' + g.y.toFixed(1) + '), not (' + (+want[i][0]).toFixed(1) + ', ' + (+want[i][1]).toFixed(1) + '), ' + d.toFixed(1) + ' px off' };
+      });
+      return w;
+    };
+    /* ⋯ → ✎ Draw more at `t`, then one stroke through the commit the finger calls. */
+    const drawMore = async (L, t, stroke) => {
+      FM.time = t; FM.selectLayer(null); FM.refreshAll(); await sleep(60);
+      FM.startDraw('freehand', { layerId: L.id }); await sleep(200);
+      if (!FM.drawTool.active || FM.drawTools.layerId() !== L.id) throw new Error('setup: Draw more did not re-open “' + L.name + '”');
+      FM.drawTool.points = stroke.map(p => p.slice()); FM.drawTool._commit(); await sleep(150);
+    };
+    const STROKE = [[300, 300], [310, 310], [320, 320]];
+    try {
+      /* ── A DRAWING WHOSE POINTS ARE KEYFRAMED. */
+      const K0 = [[[0, 0], [1, 0, 1, 0.1, 0.2], [1, 1]]];
+      const K1 = [[[0, 0], [0.5, 0], [0.5, 0.5]]];
+      const L = mk('bh5 #5 animated drawing', { kf: [{ t: 0, v: K0, e: 'linear' }, { t: 1, v: K1, e: 'linear' }] });
+      const was0 = marks(L, 0);
+      const s0 = worst(was0, [[100, 100], [200, 100], [210, 120], [200, 200]]);
+      if (s0.d > 1e-6) throw new Error('setup: before anything, the 0 s keyframe is not where the fixture puts it: ' + s0.say);
+      const want0 = was0.map(m => [m.x, m.y]);
+
+      /* Draw more at 1 s, with a stroke outside the drawing. */
+      await drawMore(L, 1, STROKE);
+      const kfN = (L.subs && !Array.isArray(L.subs) && Array.isArray(L.subs.kf)) ? L.subs.kf.length : 0;
+      if (kfN !== 2) throw new Error('CONTROL: after Draw more the points have ' + kfN + ' keyframes, not the two they had (queue 833)');
+      if (!(L.shapeW >= 200 && L.shapeH >= 200)) throw new Error('CONTROL: a stroke out to (320, 320) did not grow the drawing’s box (it is ' + L.shapeW + ' × ' + L.shapeH + '), so this test cannot see the other keyframe being stretched by it');
+      const c1 = worst(marks(L, 1), [[100, 100], [150, 100], [150, 150], [300, 300], [310, 310], [320, 320]]);
+      if (c1.d > 1) bad.push('CONTROL: after Draw more at 1 s, the 1 s keyframe is not its own corner plus the new stroke under the finger: ' + c1.say);
+      const d1 = worst(marks(L, 0), want0);
+      if (d1.d > 1) bad.push('after Draw more at 1 s with a stroke out to (320, 320), the 0 s keyframe moved: ' + d1.say + ' — the box grew to ' + L.shapeW + ' × ' + L.shapeH + ' and only the 1 s keyframe was re-fitted into it, so the 0 s shape is stretched and shifted by it');
+
+      /* The eraser, in the same session at 1 s: rubbing that stroke out shrinks the box back to the 1 s corner. */
+      if (!FM.drawTool._eraseAt([310, 310])) throw new Error('setup: the eraser found nothing at (310, 310), on the stroke just drawn');
+      await sleep(150);
+      const n1 = FM.evalShapeSubs(L, 1).length;
+      if (n1 !== 1 || !(L.shapeW <= 60 && L.shapeH <= 60)) throw new Error('CONTROL: the eraser did not take the stroke away (the 1 s keyframe has ' + n1 + ' strokes and the box is ' + L.shapeW + ' × ' + L.shapeH + '), so the second re-fit is not measured');
+      const c2 = worst(marks(L, 1), [[100, 100], [150, 100], [150, 150]]);
+      if (c2.d > 1) bad.push('CONTROL: after the eraser, the 1 s keyframe is not its own corner: ' + c2.say);
+      const d2 = worst(marks(L, 0), want0);
+      if (d2.d > 1) bad.push('after the eraser took that stroke away again at 1 s, the 0 s keyframe moved: ' + d2.say + ' — the box shrank to ' + L.shapeW + ' × ' + L.shapeH + ' and only the 1 s keyframe followed it');
+      FM.drawTool.finish(); await sleep(150);
+
+      /* ── CONTROL: a drawing with NO keyframes, the same Draw more. */
+      const S = mk('bh5 #5 still drawing', [[[0, 0], [1, 0], [1, 1]]]);
+      await drawMore(S, 1, STROKE);
+      FM.drawTool.finish(); await sleep(150);
+      if (!Array.isArray(S.subs)) bad.push('CONTROL: Draw more on a drawing with no keyframes gave its points keyframes');
+      else {
+        const c3 = worst(marks(S, 1), [[100, 100], [200, 100], [200, 200], [300, 300], [310, 310], [320, 320]]);
+        if (c3.d > 1) bad.push('CONTROL: Draw more on a drawing with no keyframes moved its old stroke or missed the finger: ' + c3.say);
+      }
+    } finally {
+      hunt5cCleanup(saved, savedT);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();
