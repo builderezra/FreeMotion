@@ -168345,6 +168345,97 @@
       _isoK.put();
     }
   });
+
+  /* (#7) ⌘Z / ⌘Y AFTER A SLIDER OR A TICK BOX. The editor's keydown treated any focused <input> as typing and returned before
+     undo and redo, and on a PC a range or a checkbox keeps the focus after he drags or ticks it (the Opacity slider,
+     inspector.js's range row, refreshes nothing unless opacity is animated; a checkRow never refreshes), so Ctrl+Z after
+     moving Opacity did nothing until he clicked somewhere else. The fix asks the drawing tool's question at those two keys
+     only: is the focus a box he types in? The handler reads nothing but the key's target, so the inputs here are the test's
+     own, appended to the page, focused and pressed on, as a real key is; they are removed and the focus put back on the way
+     out. One real step to undo each time (a rename, committed), in the test's own scene with its own history.
+     FAILS ON 03a9eb51: Ctrl+Z on the focused slider and on the focused tick box leaves the history where it was, and Ctrl+Y
+     on the slider redoes nothing.
+     CONTROLS, which hold before and after: Ctrl+Z on the page undoes (the keys reach the handler at all), and Ctrl+Z and
+     Ctrl+Y in a focused text box move no project step and are not taken from the box, whose own undo is what they mean there. */
+  test('bughunt6 #7 Undo works after using a slider or a checkbox: Ctrl+Z pressed while a range slider or a tick box has the focus undoes, and Ctrl+Y on the slider redoes (CONTROLS: Ctrl+Z on the page undoes, and Ctrl+Z and Ctrl+Y in a focused text box are left to the box’s own undo)', { item: '1176' }, async function () {
+    if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
+    const press = (target, key, code) => {
+      const ev = new KeyboardEvent('keydown', { key: key, code: code, ctrlKey: true, bubbles: true, cancelable: true });
+      attached(target, 'key target').dispatchEvent(ev);
+      return ev;
+    };
+    const at = () => FM.history._steps().index;
+    const focus0 = document.activeElement;
+    const made = [];
+    /* A native input of `type` on the page, small, in a corner (not over the middle, where FM.overlayOwnsScreen looks), focused */
+    const field = (type) => {
+      const el = document.createElement('input');
+      el.type = type;
+      if (type === 'range') { el.min = '0'; el.max = '1'; el.step = '0.01'; el.value = '0.5'; }
+      el.style.cssText = 'position:fixed;left:2px;top:2px;width:40px;height:16px;opacity:0.01;z-index:0;';
+      document.body.appendChild(el);
+      made.push(el);
+      el.focus({ preventScroll: true });
+      return el;
+    };
+    const bad = [];
+    let id = null, n = 0;
+    const step = () => { const a = FM.layerById(FM.scene, id); a.name = 'bh6 #7 A ' + (++n); FM.history.commit(); return at(); };
+    try {
+      await _bh2With(async function () {
+        const A = FM.makeLayer('shape', { name: 'bh6 #7 A', shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#e63946' });
+        A.start = 0; A.duration = 3; FM.scene.layers.push(A);
+        id = A.id;
+        FM.refreshAll();
+        FM.history.reset();
+        if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+
+        /* CONTROL: Ctrl+Z on the page undoes */
+        let i0 = step();
+        press(document.body, 'z', 'KeyZ');
+        if (at() !== i0 - 1) throw new Error('setup: Ctrl+Z on the page did not undo (history ' + i0 + ' → ' + at() + '), so no key here reaches the editor and nothing below would mean anything');
+
+        /* Ctrl+Z with a slider focused, as after dragging Opacity */
+        const range = field('range');
+        if (range.type !== 'range') throw new Error('setup: the slider came out as type ' + range.type);
+        i0 = step();
+        press(range, 'z', 'KeyZ');
+        if (at() !== i0 - 1) bad.push('Ctrl+Z with a slider focused did not undo (history ' + i0 + ' → ' + at() + ')');
+
+        /* Ctrl+Y with the slider still focused redoes a step undone by hand just before */
+        step(); FM.history.undo(); i0 = at();
+        if (!FM.history.canRedo()) throw new Error('setup: nothing to redo straight after an undo');
+        press(range, 'y', 'KeyY');
+        if (at() !== i0 + 1) bad.push('Ctrl+Y with a slider focused did not redo (history ' + i0 + ' → ' + at() + ')');
+
+        /* Ctrl+Z with a tick box focused, as after ticking Invert */
+        const box = field('checkbox');
+        i0 = step();
+        press(box, 'z', 'KeyZ');
+        if (at() !== i0 - 1) bad.push('Ctrl+Z with a tick box focused did not undo (history ' + i0 + ' → ' + at() + ')');
+
+        /* CONTROLS: a text box keeps Ctrl+Z and Ctrl+Y for its own undo */
+        const text = field('text');
+        text.value = 'bh6 #7';
+        i0 = step();
+        let ev = press(text, 'z', 'KeyZ');
+        if (at() !== i0) bad.push('CONTROL: Ctrl+Z in a focused text box undid a project step (history ' + i0 + ' → ' + at() + '), where the box’s own undo should have had it');
+        else if (ev.defaultPrevented) bad.push('CONTROL: Ctrl+Z in a focused text box was taken from the box (its default was prevented), so its own undo could not run');
+        FM.history.undo(); i0 = at();
+        if (!FM.history.canRedo()) throw new Error('setup: nothing to redo straight after an undo (text box control)');
+        ev = press(text, 'y', 'KeyY');
+        if (at() !== i0) bad.push('CONTROL: Ctrl+Y in a focused text box redid a project step (history ' + i0 + ' → ' + at() + '), where the box’s own redo should have had it');
+        else if (ev.defaultPrevented) bad.push('CONTROL: Ctrl+Y in a focused text box was taken from the box (its default was prevented)');
+      });
+    } finally {
+      made.forEach(el => { try { el.remove(); } catch (e) {} });
+      try {
+        if (focus0 && focus0 !== document.body && document.contains(focus0) && focus0.focus) focus0.focus({ preventScroll: true });
+        else if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+      } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 6 ──
 
 })();

@@ -9252,6 +9252,14 @@ window.FM = window.FM || {};
     /* …and the drawing tool's own ⌘Z / ⌘Y (js/draw-tool.js) asks the same question, so undo works the same wherever he
        presses it. That script loads before this one, so it reads this when a key arrives, never at load. */
     FM._otherScriptLetter = otherScriptLetter;
+    /* bughunt6 #7: A FOCUSED SLIDER OR TICK BOX SWALLOWED ⌘Z / ⌘Y. The handler below treats any focused <input> as typing
+       (`inEdit`), and on a PC a range or a checkbox keeps the focus after he drags or ticks it (the Opacity slider refreshes
+       nothing unless opacity is animated), so Ctrl+Z after moving Opacity did nothing until he clicked somewhere else. A
+       slider, a tick box, a colour well or a list has no text undo of its own. This is the drawing tool's rule (its ⌘Z in
+       js/draw-tool.js): only a box he TYPES in keeps ⌘Z / ⌘Y for itself. It is asked by those two keys ONLY; every other key
+       still treats any focused field as typing, so Space still ticks a focused box and the arrows still move a slider. */
+    const typingText = t => !!(t && (t.tagName === 'TEXTAREA' || t.isContentEditable ||
+      (t.tagName === 'INPUT' && !/^(range|color|checkbox|radio|button|submit)$/i.test(t.type || ''))));
     window.addEventListener('keydown', e => {
       const mod = e.metaKey || e.ctrlKey;
       // Editable target = native <input>/<select>/<textarea> OR any contentEditable element
@@ -9320,12 +9328,12 @@ window.FM = window.FM || {};
          main clip (DESIGN.md §15.1). In Full it answers NOTHING: there is no E key (DESIGN.md §0.4 B14). */
       if (!inEdit && FM.editor && FM.editor.onKey && FM.editor.onKey(e)) return;
       if (mod && (e.key === 'z' || e.key === 'Z' || otherScriptLetter(e) === 'z')) {
-        if (inEdit) return; // let field text-undo
+        if (inEdit && typingText(tgt)) return; // let field text-undo (bughunt6 #7: a text box only)
         e.preventDefault();
         if (e.shiftKey) { if (FM.history) FM.history.redo(); } else { if (FM.history) FM.history.undo(); }
         return;
       }
-      if (mod && (e.key === 'y' || e.key === 'Y' || otherScriptLetter(e) === 'y')) { if (inEdit) return; e.preventDefault(); if (FM.history) FM.history.redo(); return; }
+      if (mod && (e.key === 'y' || e.key === 'Y' || otherScriptLetter(e) === 'y')) { if (inEdit && typingText(tgt)) return; e.preventDefault(); if (FM.history) FM.history.redo(); return; }
       if (mod && (e.key === 'd' || e.key === 'D')) {
         if (inEdit) return;
         e.preventDefault();
