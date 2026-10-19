@@ -197,23 +197,33 @@ def changed_files(root):
     return sorted(x for x in out if x)
 
 
-def hook_of(path, text):
-    """The name of the first hook `text` (one line of `path`) matches, or None."""
+MARKER_HOOK = 'a "Simple mode" marker'
+
+
+def hook_of(path, text, code=None):
+    """The name of the first hook `text` (one line of `path`) matches, or None. `code` is the same line with its COMMENTS
+    taken out (code_lines, below; strings kept): every identifier hook reads that, and only the "Simple mode" marker reads
+    the whole line — the marker is a comment by design. Measured 19 Oct: v17.77's bughunt4 #1 added a comment saying
+    "(FM.groupNeedsUnit, shared with Simple, is unchanged)" to an ordinary Full fix, the 'shared helper' hook read it, and
+    the release would have needed a full-unchanged PASS that a release changing Full on purpose can never get — caught by
+    `why` before its ship, and the comment reworded by hand. A comment cannot make a release Simple's any more; a code line
+    that names the helper still does, and so does every line that carries the marker."""
     for name, rx, files in HOOKS_RE:
         if files == 'js':
             if not path.endswith('.js'):
                 continue
         elif files is not None and path not in files:
             continue
-        if rx.search(text):
+        if rx.search(text if (code is None or name == MARKER_HOOK) else code):
             return name
     return None
 
 
 # ─── REGIONS: Simple's own functions inside a shared file ───────────────────────────────────────────────────────────────
-def strip_js(line, in_comment):
+def strip_js(line, in_comment, keep_strings=False):
     """`line` with its string literals and comments removed (enough to count braces), and whether a /* comment is still
-    open at its end."""
+    open at its end. keep_strings: take out only the comments (what the identifier hooks read — a class name or a script's
+    name is written in a string)."""
     out, i, n = [], 0, len(line)
     while i < n:
         if in_comment:
@@ -232,11 +242,23 @@ def strip_js(line, in_comment):
             j = i + 1
             while j < n and line[j] != c:
                 j += 2 if line[j] == '\\' else 1
+            if keep_strings:
+                out.append(line[i:j + 1])
             i = j + 1
             continue
         out.append(c)
         i += 1
     return ''.join(out), in_comment
+
+
+def code_lines(text):
+    """Every line of a JS `text` with its comments taken out and its strings kept — a /* comment's later lines are found by
+    carrying its open state down the file, so a line in the middle of one reads as no code at all."""
+    out, inc = [], False
+    for line in text.split('\n'):
+        code, inc = strip_js(line, inc, keep_strings=True)
+        out.append(code)
+    return out
 
 
 def simple_regions(text):
@@ -282,24 +304,44 @@ def hook_lines(root, files):
     shared = [f for f in files if SHARED.match(f) and f not in SIMPLE_FILES]
     untracked = set(sh(['git', 'ls-files', '--others', '--exclude-standard'], root).splitlines())
     for f in shared:
+        js = f.endswith('.js')
         if f in untracked:
             try:
-                for t in io.open(os.path.join(root, f), encoding='utf-8', errors='replace'):
-                    h = hook_of(f, t)
+                text = io.open(os.path.join(root, f), encoding='utf-8', errors='replace').read()
+                codes = code_lines(text) if js else None
+                for i, t in enumerate(text.split('\n')):
+                    h = hook_of(f, t, codes[i] if codes else None)
                     if h:
-                        hits.append((f, '+', t.rstrip('\n'), h))
+                        hits.append((f, '+', t, h))
             except Exception:
                 pass
             continue
         diff = sh(['git', 'diff', '-U0', 'HEAD', '--', f], root)
+        head_text = sh(['git', 'show', 'HEAD:' + f], root)
+        new_codes = old_codes = None
+        if js:
+            try:
+                new_codes = code_lines(io.open(os.path.join(root, f), encoding='utf-8', errors='replace').read())
+            except OSError:
+                new_codes = None
+            old_codes = code_lines(head_text) if head_text else None
+        a_ln = b_ln = 0
         for t in diff.splitlines():
+            m = HUNK.match(t)
+            if m:
+                a_ln, b_ln = int(m.group(1)), int(m.group(3))
+                continue
             if (t.startswith('+') and not t.startswith('+++')) or (t.startswith('-') and not t.startswith('---')):
+                if t[0] == '+':
+                    ln, codes, b_ln = b_ln, new_codes, b_ln + 1
+                else:
+                    ln, codes, a_ln = a_ln, old_codes, a_ln + 1
                 if t[0] == '-' and f == 'js/collab-core.js' and SCHEMA_STAMP.match(t[1:]):
                     continue   # a schema stamp being replaced is nobody's (SCHEMA_STAMP above)
-                h = hook_of(f, t[1:])
+                code = codes[ln - 1] if (codes and 0 < ln <= len(codes)) else (strip_js(t[1:], False, keep_strings=True)[0] if js else None)
+                h = hook_of(f, t[1:], code)
                 if h:
                     hits.append((f, t[0], t[1:], h))
-        head_text = sh(['git', 'show', 'HEAD:' + f], root)
         if head_text and REGION_HEAD.search(head_text):
             for (s, e, hunk) in hunks_in_regions(diff, simple_regions(head_text)):
                 hits.append((f, '~', '%s inside lines %d–%d of HEAD' % (hunk, s, e), 'a line of one of Simple’s own functions'))
@@ -1056,7 +1098,7 @@ def selftest():
     for hunk, f, line in STEP_1_2:
         if not SHARED.match(f):
             fails.append('step %s’s file %s is not a shared file — SHARED misses it' % (hunk, f))
-        by_hunk.setdefault(hunk, []).append(hook_of(f, line))
+        by_hunk.setdefault(hunk, []).append(hook_of(f, line, code_lines(line)[0] if f.endswith('.js') else None))
     for hunk, got in sorted(by_hunk.items(), key=lambda kv: [int(x) for x in kv[0].split('.')]):
         if not any(got):
             fails.append('step %s of BUILD-PLAN §4.1 has no line any hook matches — a later fix there would skip the lock' % hunk)
@@ -1068,6 +1110,20 @@ def selftest():
               "document.getElementById('ed-live')", 'layer.sm.twin = true;', 'l.pick = { b: pickB, i: pickI++ };']:
         if not hook_of('js/app.js', s):
             fails.append('the hooks miss %r' % s)
+    # …and a COMMENT that names a Simple identifier no longer fires (19 Oct, v17.77), while code that names it, a string that
+    # carries `//`, a comment closed before the code, and the "Simple mode" marker in a comment all still do
+    _snip = ['      // bughunt4 #1: a tilted group is a unit too (FM.groupNeedsUnit, shared with Simple, is unchanged)',
+             '  /* FM.editor reads this when the', '     editor is switched, and FM.spine too */',
+             '  if (FM.groupNeedsUnit(g, t)) return;   // FM.editor',
+             "  const u = 'https://example.com/' + FM.editor.mode;",
+             '  /* closed */ FM.spine.shiftKeys();',
+             '  // Simple mode P1: the marker is read from a comment by design',
+             "  el.className = 'sm-chip';   // a Simple class, in a string"]
+    _codes = code_lines('\n'.join(_snip))
+    for i, want in enumerate([False, False, False, True, True, True, True, True]):
+        got = hook_of('js/compositor.js', _snip[i], _codes[i])
+        if bool(got) != want:
+            fails.append('comment rule: %r should %s, got %r' % (_snip[i].strip()[:70], 'FIRE' if want else 'be quiet', got))
     for f, s in QUIET:
         h = hook_of(f, s)
         if h:
