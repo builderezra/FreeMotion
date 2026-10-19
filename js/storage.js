@@ -1143,7 +1143,14 @@ window.FM = window.FM || {};
   // FM.buildAudioFxChain as a builder key, and .params reach AudioParams. Nothing from the file is
   // trusted: the type is whitelisted against the registry and the params are REBUILT from the registry
   // schema (file values are only ever adopted after a range check), so an unknown key can't survive.
-  const AFX_MAX = 16, AFX_MAX_KF = 200;
+  /* bughunt5 #2: AFX_MAX_KF WAS 200, and it is not only the audio params' cap. safeKfProp below is the keyframe gate for every
+     effect control too (safeFxParam), and for trim path / repeater values (numOrKf); sanitizeEffects runs it on every project
+     open and, with the rest, on every undo and redo. Audio → keyframes writes one key per project frame that its 2 % RDP keeps, so
+     a song's bake onto an effect control is hundreds of keys a minute, and everything after the 200th was cut: the effect stopped
+     pulsing partway through the song, and the next autosave wrote that. The cap is now FM.LIMITS.keyframes (js/scene.js, which
+     says how it is derived): one key per frame of the longest project at the highest frame rate, so no writer reaches it and a
+     hostile file is still bounded. */
+  const AFX_MAX = 16, AFX_MAX_KF = FM.LIMITS.keyframes;
   // own-property only: EASES/EASE_PRESETS are plain literals, so a bare [e] lookup lets 'toString' /
   // 'constructor' pass the whitelist — scene.js then calls it unbound and every eval goes NaN.
   const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
@@ -1325,7 +1332,10 @@ window.FM = window.FM || {};
   // runaway point/keyframe count would throw or hang the render. Rebuild each mask from the CONTRACT
   // schema, keeping ONLY known keys — same untrusted-file discipline as audioFx/trimPath/behaviors above.
   // COORDINATE SPACE: points are project/canvas pixels (0..width, 0..height), clamped to a sane range.
-  const MASK_MAX = 24, MASK_MAX_PTS = 2000, MASK_MAX_KF = 200;
+  /* bughunt5 #2: MASK_MAX_KF was 200 as well, and sanitizeMasks runs on every open and every undo. The mask tool keys the path
+     at the playhead on every edit, so a roto done frame by frame passes 200 in under seven seconds at 30 fps, and the mask then
+     stopped following the shot. Same ceiling as AFX_MAX_KF (FM.LIMITS.keyframes). The per-key point cap is unchanged. */
+  const MASK_MAX = 24, MASK_MAX_PTS = 2000, MASK_MAX_KF = FM.LIMITS.keyframes;
   // own-property whitelist: a bare MASK_MODES[m.mode] lookup would let 'constructor'/'toString' pass.
   const MASK_MODES = { add: 1, subtract: 1, intersect: 1 };
   // A point list -> a clean pts array ([x,y] corner or [x,y,1] smooth). null only when v is not an array
@@ -1736,8 +1746,15 @@ window.FM = window.FM || {};
        this over every layer, so ONE UNDO OF ANYTHING left the drawing fully revealed, redo could not bring it back
        (it sanitises identically) and the next autosave wrote the loss to disk. Queue 680, one line down. */
     if (l.trimStart != null && !(FM.isAnimated && FM.isAnimated(l.trimStart))) l.trimStart = num(l.trimStart, 0, 3600, 0);
-    if (l.speed != null && !(FM.isAnimated && FM.isAnimated(l.speed))) l.speed = num(l.speed, 0.05, 100, 1);
-    if (l.volume != null && !(FM.isAnimated && FM.isAnimated(l.volume))) l.volume = num(l.volume, 0, 4, 1);
+    /* bughunt5 #1: SPEED AND VOLUME ARE CLAMPED TO WHAT THE PANELS OFFER, read from FM.LIMITS (js/scene.js), which the Speed
+       and Volume cards read too. These two lines held a plain speed to 0.05..100 and a plain volume to 0..4 while the cards
+       offer 0.01..1000 and 0..10, so one undo of anything (restore runs this over every layer) cut a 200x time-lapse to 100x, a
+       2 % slow motion to 5 % and a song at 600 % to 400 %; the undo autosaved it and redo, which sanitises the same way, could
+       not bring it back. Importing a project file, a template or an element did the same. The same class as queue 680 and 718
+       above. Non-finite is still repaired to 1, and anything outside the panels' range is still brought into it. */
+    const SPD = FM.LIMITS.speed, VOL = FM.LIMITS.volume;
+    if (l.speed != null && !(FM.isAnimated && FM.isAnimated(l.speed))) l.speed = num(l.speed, SPD[0], SPD[1], 1);
+    if (l.volume != null && !(FM.isAnimated && FM.isAnimated(l.volume))) l.volume = num(l.volume, VOL[0], VOL[1], 1);
   }
   FM.storage._sanitizeTiming = sanitizeTiming;   // seam: the suite drives the real function
 

@@ -165162,5 +165162,259 @@
     });
   });
   // ── end bughunt 4 ──
+  // ── bughunt 5 ──
+  /* ═══ BUGHUNT 5 — two data-loss defects in the sanitiser that history.restore runs on every undo and redo (the hunt's write-up:
+   * findings #1 and #2). WRITTEN WITHOUT RUNNING (code only, `node --check`): every number is reasoned from the code it names, and
+   * each test says why it fails on e5dfa537. Helpers are the suite's and bughunt 2's: test, sleep, _bh2With, hfCleanup. ═══ */
+
+  /* A project file holding `layers`, imported as a NEW project (the import runs the same sanitiser as undo), saved, and reopened (the
+     open path runs the effect and mask sanitisers). `check(where)` reads FM.scene after each. The temporary project is removed and
+     the one that was open before is reopened, as the 1040 import/save/reopen test does. */
+  async function _bh5RoundTrip(name, layers, check) {
+    if (!FM.projects || !FM.storage || !FM.storage.importObject || !FM.storage.load || !FM.storage.save) throw new Error('setup: FM.projects or FM.storage import / save / load is not reachable, so the file round trip cannot be driven');
+    const prior = FM.projects.currentId(), wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()), made = [];
+    try {
+      const file = { app: 'freemotion', project: { name: name, width: 180, height: 140, duration: 4, fps: 30 }, layers: JSON.parse(JSON.stringify(layers)), media: {} };
+      if (!(await FM.storage.importObject(file, null, { quiet: true, confirmed: true }))) throw new Error('setup: the project file “' + name + '” was refused');
+      made.push(FM.projects.currentId());
+      check('after importing a project file');
+      await FM.storage.save();
+      if (FM.storage.settled) await FM.storage.settled();
+      if (!(await FM.storage.load())) throw new Error('setup: the imported project “' + name + '” did not reopen');
+      check('after saving that project and reopening it');
+    } finally {
+      await hfCleanup(made, prior, wasHome);
+    }
+  }
+
+  /* (#1) ONE UNDO CUT EVERY LOUD CLIP TO 400 % AND EVERY EXTREME SPEED TO 5 % OR 100×. history.restore() runs the import sanitiser
+     over every layer of the snapshot it puts back (js/history.js restore → FM.storage._sanitizeLayers), and its sanitizeTiming held a
+     PLAIN volume to 0..4 and a plain speed to 0.05..100 (js/storage.js). The Volume card offers 0 to 1000 % (VOL_MAX = 10, queue 195)
+     and the Speed card 1 % to 1000× (SPD_MIN / SPD_MAX = 0.01 / 1000, queue 184; its typed box clamps to exactly that). So: a song at
+     600 %, a long screen recording at 200×, a clip at 2 % for extreme slow motion; rename a title; ↶. The song plays at 400 %, the
+     time-lapse at 100× (half its footage, then it freezes), the slow-mo at 5 % (2.5× too fast). Undo autosaves on its next line and
+     redo sanitises the same way, so nothing brings the values back. A project file, a template, an element and a collaborator's
+     layer come in through the same sanitiser (the ordinary open does NOT run it, which is why the values survive a reload).
+     Now the panels and the sanitiser read one range each from FM.LIMITS (js/scene.js).
+     On e5dfa537: volume 4, speed 100 and speed 0.05 after the Undo, again after the Redo, and after the import.
+     CONTROLS (the same before and after): an ordinary 300 % / 2× clip comes back unchanged; and what the clamp is FOR still holds — a
+     plain volume or speed of 1e9 is brought down into range, a negative one up to the floor, NaN / Infinity / a word repaired to 1. */
+  test('bughunt5 #1 An Undo keeps a loud song and a fast clip as they were: a song at 600 %, a 200× time-lapse and a 2 % slow motion come back from one Undo of an unrelated edit, from its Redo and from a project file imported, saved and reopened exactly as they were, not cut to 400 %, 100× and 5 % (CONTROLS: an ordinary 300 % / 2× clip is untouched; an absurd, negative or broken plain volume or speed is still brought into range)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.history || !FM.history.reset || !FM.history._steps || !FM.storage || typeof FM.storage._sanitizeLayers !== 'function') throw new Error('setup: FM.history (reset, _steps) or FM.storage._sanitizeLayers is not reachable');
+    const WANT = { loud: { volume: 6 }, fast: { speed: 200 }, slow: { speed: 0.02 }, ctl: { volume: 3, speed: 2 } };
+    const SAY = { loud: 'song at 600 %', fast: '200× time-lapse', slow: '2 % slow motion', ctl: 'ordinary 300 % / 2× clip (CONTROL)' };
+    const mk = (name, set) => {
+      const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      return Object.assign(L, set || {});
+    };
+    const bad = [];
+    const check = (where, find) => {
+      Object.keys(WANT).forEach(k => {
+        const l = find(k), w = WANT[k];
+        if (!l) { bad.push(where + ': the ' + SAY[k] + ' is gone'); return; }
+        Object.keys(w).forEach(p => { if (l[p] !== w[p]) bad.push(where + ': the ' + SAY[k] + ' came back with ' + p + ' ' + l[p] + ', not ' + w[p]); });
+      });
+    };
+
+    /* ── ONE UNDO OF AN UNRELATED EDIT, THEN ITS REDO. */
+    await _bh2With(async function () {
+      const L = {};
+      Object.keys(WANT).forEach(k => { L[k] = mk('bh5 #1 ' + k, WANT[k]); });
+      const T = mk('bh5 #1 title');
+      FM.scene.layers = [T, L.loud, L.fast, L.slow, L.ctl];
+      FM.scene.selectedId = T.id; FM.scene.selectedIds = [T.id];
+      FM.refreshAll();
+      FM.history.reset();
+      T.name = 'bh5 #1 title renamed';
+      FM.history.commit();
+      if (FM.history._steps().len !== 2) throw new Error('setup: renaming the title did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+      FM.history.undo();
+      await sleep(60);
+      const T1 = FM.layerById(FM.scene, T.id);
+      if (!T1 || T1.name !== 'bh5 #1 title') throw new Error('setup: the Undo did not take the rename back (' + (T1 ? T1.name : 'the title is gone') + '), so nothing below is measured');
+      check('after one Undo of a rename', k => FM.layerById(FM.scene, L[k].id));
+      FM.history.redo();
+      await sleep(60);
+      check('after its Redo', k => FM.layerById(FM.scene, L[k].id));
+    });
+
+    /* ── THE SAME CLIPS IN A PROJECT FILE: imported (the import sanitiser), saved and reopened. */
+    await _bh5RoundTrip('bughunt5 #1 round trip', Object.keys(WANT).map(k => mk('bh5 #1 file ' + k, WANT[k])),
+      where => check(where, k => FM.scene.layers.find(l => l && l.name === 'bh5 #1 file ' + k)));
+
+    /* ── CONTROLS: the protection the clamp exists for. */
+    const ab = [
+      { id: 'bh5a1', type: 'shape', start: 0, duration: 4, volume: 1e9, speed: 1e9 },
+      { id: 'bh5a2', type: 'shape', start: 0, duration: 4, volume: -3, speed: -3 },
+      { id: 'bh5a3', type: 'shape', start: 0, duration: 4, volume: NaN, speed: 'fast' },
+      { id: 'bh5a4', type: 'shape', start: 0, duration: 4, volume: Infinity, speed: 0 },
+    ];
+    FM.storage._sanitizeLayers(ab);
+    ab.forEach(l => {
+      if (typeof l.volume !== 'number' || !isFinite(l.volume) || l.volume < 0 || l.volume > 10) bad.push('CONTROL: layer ' + l.id + '’s plain volume came out of the sanitiser as ' + l.volume + ', outside 0 to 1000 %');
+      if (typeof l.speed !== 'number' || !isFinite(l.speed) || l.speed < 0.01 || l.speed > 1000) bad.push('CONTROL: layer ' + l.id + '’s plain speed came out of the sanitiser as ' + l.speed + ', outside 1 % to 1000×');
+    });
+    if (ab[2].volume !== 1 || ab[2].speed !== 1 || ab[3].volume !== 1) bad.push('CONTROL: a NaN volume, a speed of "fast" and an Infinite volume came back as ' + ab[2].volume + ', ' + ab[2].speed + ' and ' + ab[3].volume + ', not repaired to 1');
+
+    /* ── AND THE RANGE IS THE SHARED ONE (after the fix): the sanitiser's bounds are FM.LIMITS', the numbers the panels read. */
+    const LIM = FM.LIMITS;
+    if (!LIM || !Array.isArray(LIM.volume) || !Array.isArray(LIM.speed)) bad.push('FM.LIMITS (js/scene.js) does not hold the volume and speed ranges, so the panels and the sanitiser still keep a copy each');
+    else if (ab[0].volume !== LIM.volume[1] || ab[1].volume !== LIM.volume[0] || ab[0].speed !== LIM.speed[1] || ab[1].speed !== LIM.speed[0]) {
+      bad.push('the sanitiser clamps a plain volume to ' + ab[1].volume + '..' + ab[0].volume + ' and a plain speed to ' + ab[1].speed + '..' + ab[0].speed + ', not to FM.LIMITS’ ' + LIM.volume.join('..') + ' and ' + LIM.speed.join('..'));
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#2) AN EFFECT CONTROL KEPT ONLY ITS FIRST 200 KEYFRAMES ON EVERY OPEN AND EVERY UNDO. safeKfProp (js/storage.js) is the keyframe
+     gate every effect parameter goes through (safeFxParam, from sanitizeEffects), and it sliced the list to AFX_MAX_KF = 200, a cap
+     written for audio parameters (v3.36) that came along when effect parameters were routed through it. sanitizeEffects runs on every
+     project open (FM.storage.load) and, through _sanitizeLayers, on every undo and redo. Audio → keyframes (js/audio-react.js bake)
+     writes every key its RDP keeps onto an effect control, with no cap: one envelope sample per project frame, thinned at 2 % of the
+     range. A beat rises in a frame or two and falls on the follower's release (0.178 s at the default smoothing), which a straight
+     line follows within 2 % for only about three frames, so a song keeps several keys per beat: hundreds a minute (a minute is 1801
+     samples at 30 fps). Everything after key 200 was cut, in time order: the effect pulses for the first stretch of the song and sits
+     still after it, in the preview and the export, and the next autosave writes the loss. A roto mask keyed frame by frame had the
+     same 200 (MASK_MAX_KF, also run on every open and undo): seven seconds of roto at 30 fps passes it.
+     Now both caps are FM.LIMITS.keyframes (js/scene.js): one key per frame for the longest project at the highest frame rate.
+     The test: 1500 keys at 1/30 s on a Gaussian Blur's Radius (fifty seconds of a bake that kept most frames), 300 roto keys at
+     1/30 s, and a real FM.audioReact.bake of a minute of a 120 BPM beat (its envelope stubbed, the follower's default release).
+     On e5dfa537: 200 keys after the open path, the Undo, the Redo and the import, and the bake's keys cut to 200 by the next Undo.
+     CONTROLS: the bake writes more than 200 keys (else the case measures nothing); 150 good keys and two broken ones keep the 150 good
+     ones (the same before and after); a list longer than FM.LIMITS.keyframes is still cut to it (after the fix). */
+  test('bughunt5 #2 A long Audio bake keeps all its keyframes: 1500 keys on an effect control, 300 frame-by-frame roto keys on a mask and a minute of a real Audio → keyframes bake survive a project open, one Undo of an unrelated edit, its Redo and a project file imported, saved and reopened, not cut to their first 200 (CONTROLS: the bake writes more than 200; 150 good keys and two broken ones keep the 150; a list longer than FM.LIMITS.keyframes is still cut to it)', { item: '1176', budgetMs: 90000 }, async function () {
+    if (!FM.storage || typeof FM.storage._sanitizeEffects !== 'function' || typeof FM.storage._sanitizeLayers !== 'function') throw new Error('setup: FM.storage._sanitizeEffects / _sanitizeLayers is not reachable');
+    if (!FM.history || !FM.history.reset || !FM.history._steps) throw new Error('setup: FM.history (reset, _steps) is not reachable');
+    if (!FM.audioReact || typeof FM.audioReact.bake !== 'function') throw new Error('setup: FM.audioReact.bake is not reachable');
+    const N = 1500, R = 300, FPS = 30;
+    /* Values inside the Radius' own 0..50, so the sanitiser's value clamp changes nothing and only the count can move. */
+    const bakeKf = n => { const kf = []; for (let i = 0; i < n; i++) kf.push({ t: i / FPS, v: 4 + 30 * Math.abs(Math.sin(i * 0.7)), e: 'linear' }); return { kf: kf }; };
+    const rotoKf = n => { const kf = []; for (let i = 0; i < n; i++) { const x = 20 + i * 0.2; kf.push({ t: i / FPS, v: [[x, 20], [x + 30, 20], [x + 30, 50], [x, 50]], e: 'linear' }); } return { kf: kf }; };
+    const fxKf = l => { const fx = l && Array.isArray(l.effects) ? l.effects[0] : null; const p = fx && fx.params ? fx.params.radius : null; return p && Array.isArray(p.kf) ? p.kf : null; };
+    const maskKf = l => { const m = l && Array.isArray(l.masks) ? l.masks[0] : null; return m && m.path && Array.isArray(m.path.kf) ? m.path.kf : null; };
+    const bad = [];
+    const checkFx = (where, l, n) => {
+      const kf = fxKf(l), last = (n - 1) / FPS;
+      if (!kf) { bad.push(where + ': the effect control is no longer keyframed at all'); return; }
+      if (kf.length !== n) bad.push(where + ': the effect control kept ' + kf.length + ' of its ' + n + ' keyframes, the last now at ' + (kf.length ? (+kf[kf.length - 1].t).toFixed(2) : '?') + ' s where it was at ' + last.toFixed(2) + ' s, so the effect stops moving there');
+      else if (Math.abs(kf[n - 1].t - last) > 1e-9) bad.push(where + ': the effect control’s last keyframe moved from ' + last + ' s to ' + kf[n - 1].t + ' s');
+    };
+    const checkMask = (where, l) => {
+      const kf = maskKf(l);
+      if (!kf) { bad.push(where + ': the roto mask’s path is no longer keyframed at all'); return; }
+      if (kf.length !== R) bad.push(where + ': the roto mask kept ' + kf.length + ' of its ' + R + ' keyframes, so it stops following the shot at ' + (kf.length ? (+kf[kf.length - 1].t).toFixed(2) : '?') + ' s');
+    };
+
+    /* ── THE OPEN PATH: the effect sanitiser FM.storage.load runs on every layer, and the mask sanitiser (the same function the open
+       runs, here through _sanitizeLayers, the undo's). */
+    const opened = { id: 'bh5fx', type: 'shape', effects: [{ type: 'blur', enabled: true, params: { radius: bakeKf(N) } }] };
+    FM.storage._sanitizeEffects(opened);
+    checkFx('through the effect sanitiser every project open runs', opened, N);
+    const roto = [{ id: 'bh5mk', type: 'shape', start: 0, duration: 60, masks: [{ id: 'bh5m1', mode: 'add', path: rotoKf(R) }] }];
+    FM.storage._sanitizeLayers(roto);
+    checkMask('through the mask sanitiser every open and every undo runs', roto[0]);
+
+    /* ── ONE UNDO OF AN UNRELATED EDIT, ITS REDO, AND A REAL BAKE FOLLOWED BY ANOTHER UNDO. */
+    const envD = Object.getOwnPropertyDescriptor(FM, 'audioEnvelope'), toastD = Object.getOwnPropertyDescriptor(FM, 'toast');
+    try {
+      await _bh2With(async function () {
+        const shape = (name, dur) => {
+          const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: dur });
+          L.start = 0; L.duration = dur;
+          return L;
+        };
+        const P = shape('bh5 #2 pulsing', 60), B = shape('bh5 #2 bake target', 60), T = shape('bh5 #2 title', 4);
+        P.effects = [{ type: 'blur', enabled: true, params: { radius: bakeKf(N) } }];
+        P.masks = [{ id: 'bh5m2', mode: 'add', path: rotoKf(R) }];
+        B.effects = [{ type: 'blur', enabled: true, params: { radius: 6 } }];
+        FM.scene.layers = [T, P, B];
+        FM.scene.selectedId = T.id; FM.scene.selectedIds = [T.id];
+        FM.refreshAll();
+        FM.history.reset();
+        T.name = 'bh5 #2 title renamed';
+        FM.history.commit();
+        if (FM.history._steps().len !== 2) throw new Error('setup: renaming the title did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+        FM.history.undo();
+        await sleep(60);
+        const T1 = FM.layerById(FM.scene, T.id);
+        if (!T1 || T1.name !== 'bh5 #2 title') throw new Error('setup: the Undo did not take the rename back (' + (T1 ? T1.name : 'the title is gone') + '), so nothing below is measured');
+        checkFx('after one Undo of a rename', FM.layerById(FM.scene, P.id), N);
+        checkMask('after one Undo of a rename', FM.layerById(FM.scene, P.id));
+        FM.history.redo();
+        await sleep(60);
+        checkFx('after its Redo', FM.layerById(FM.scene, P.id), N);
+        checkMask('after its Redo', FM.layerById(FM.scene, P.id));
+
+        /* The real bake. Its envelope is a minute of a 120 BPM beat at 30 fps (a beat every 15 frames, over a 0.25 floor) through the
+           follower's own release at the default 40 % smoothing (js/audio-react.js: release = 0.03 + 0.4 × 0.37 s), so the RDP it runs
+           is the shipped one on the kind of curve a song gives it. Target: B's Gaussian Blur Radius, 4 → 34. */
+        FM.toast = function () {};
+        FM.audioEnvelope = async function (layer) {
+          const fps = 30, n = 60 * fps, rC = Math.exp(-1 / ((0.03 + 0.4 * 0.37) * fps)), times = [], values = [];
+          let e = 0;
+          for (let i = 0; i <= n; i++) {
+            const target = (i % 15 === 0) ? 1 : 0.25;
+            e = target > e ? target : target + (e - target) * rC;
+            times.push((layer.start || 0) + i / fps);
+            values.push(e);
+          }
+          return { fps: fps, band: 'overall', times: times, values: values, clipStart: layer.start || 0, clipDur: 60 };
+        };
+        const B1 = FM.layerById(FM.scene, B.id);
+        if (!B1) throw new Error('setup: the bake target is gone after the Redo');
+        const baked = await FM.audioReact.bake(B1, { targetLayerId: B1.id, prop: 'fx:0:radius', outMin: 4, outMax: 34 });
+        const B2 = FM.layerById(FM.scene, B.id), kfB = fxKf(B2);
+        if (!(baked > 200) || !kfB || kfB.length !== baked) throw new Error('CONTROL: Audio → keyframes wrote ' + baked + ' keyframes (' + (kfB ? kfB.length : 'none') + ' on the Radius) for a minute of a 120 BPM beat; it must write more than 200 for this case to measure the cap');
+        const lastT = kfB[kfB.length - 1].t;
+        const T2 = FM.layerById(FM.scene, T.id);
+        T2.name = 'bh5 #2 title renamed again';
+        FM.history.commit();
+        FM.history.undo();
+        await sleep(60);
+        const T3 = FM.layerById(FM.scene, T.id);
+        if (!T3 || T3.name !== 'bh5 #2 title renamed') throw new Error('setup: the second Undo did not take the second rename back (' + (T3 ? T3.name : 'the title is gone') + ')');
+        const kfB3 = fxKf(FM.layerById(FM.scene, B.id));
+        if (!kfB3 || kfB3.length !== baked || Math.abs(kfB3[kfB3.length - 1].t - lastT) > 1e-9) bad.push('a real Audio → keyframes bake of ' + baked + ' keyframes came back from one Undo of a rename with ' + (kfB3 ? kfB3.length + ', the last at ' + (+kfB3[kfB3.length - 1].t).toFixed(2) + ' s where it was at ' + lastT.toFixed(2) + ' s' : 'none'));
+      });
+    } finally {
+      if (envD) Object.defineProperty(FM, 'audioEnvelope', envD); else delete FM.audioEnvelope;
+      if (toastD) Object.defineProperty(FM, 'toast', toastD); else delete FM.toast;
+    }
+
+    /* ── A PROJECT FILE CARRYING BOTH: imported (the import sanitiser), saved and reopened (the open path's sanitisers). */
+    const F = FM.makeLayer('shape', { name: 'bh5 #2 file', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: 60 });
+    F.start = 0; F.duration = 60;
+    F.effects = [{ type: 'blur', enabled: true, params: { radius: bakeKf(N) } }];
+    F.masks = [{ id: 'bh5m3', mode: 'add', path: rotoKf(R) }];
+    await _bh5RoundTrip('bughunt5 #2 round trip', [F], where => {
+      const l = FM.scene.layers.find(x => x && x.name === 'bh5 #2 file');
+      if (!l) { bad.push(where + ': the layer is gone'); return; }
+      checkFx(where, l, N);
+      checkMask(where, l);
+    });
+
+    /* ── CONTROL (the same before and after): 150 good keys with two broken ones among them keep exactly the 150. */
+    const small = bakeKf(150);
+    small.kf.splice(75, 0, { t: NaN, v: 5, e: 'linear' }, { t: 3, v: Infinity, e: 'linear' });
+    const few = { id: 'bh5few', type: 'shape', effects: [{ type: 'blur', enabled: true, params: { radius: small } }] };
+    FM.storage._sanitizeEffects(few);
+    const kfFew = fxKf(few);
+    if (!kfFew || kfFew.length !== 150) bad.push('CONTROL: 150 good keyframes and two broken ones came back as ' + (kfFew ? kfFew.length : 'no') + ' keyframes, not the 150 good ones');
+
+    /* ── CONTROL (after the fix): the cap still exists for a file no writer could make. It is one key per frame of the longest
+       project (3600 s) at the highest frame rate (120 fps), so it must be at least that; one list 10 past it is cut to it. The keys
+       share one object so the input costs one array, not half a million objects. */
+    const CAP = FM.LIMITS && FM.LIMITS.keyframes;
+    if (!(CAP >= 3600 * 120 + 1)) bad.push('FM.LIMITS.keyframes (js/scene.js) is ' + CAP + ', below one key per frame of the longest project at the highest frame rate (3600 s × 120 fps + 1), so a writer can still make more keys than the sanitiser keeps');
+    else {
+      const one = { t: 1, v: 5, e: 'linear' };
+      const huge = { id: 'bh5huge', type: 'shape', effects: [{ type: 'blur', enabled: true, params: { radius: { kf: new Array(CAP + 10).fill(one) } } }] };
+      FM.storage._sanitizeEffects(huge);
+      const kfHuge = fxKf(huge);
+      if (!kfHuge || kfHuge.length !== CAP) bad.push('CONTROL: a list of ' + (CAP + 10) + ' keyframes came back with ' + (kfHuge ? kfHuge.length : 'none') + ', not cut to FM.LIMITS.keyframes (' + CAP + ') — the cap that bounds a hostile file is gone');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  // ── end bughunt 5 ──
 
 })();

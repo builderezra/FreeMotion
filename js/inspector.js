@@ -4826,7 +4826,9 @@ window.FM = window.FM || {};
    * for at most 16×), so live preview playback of a 900× clip cannot keep up. Rendering and export
    * seek per frame and are unaffected — the picture is right, it is only the live element that
    * cannot run that fast. */
-  const SPD_MIN = 0.01, SPD_MAX = 1000;
+  /* bughunt5 #1: the range lives in FM.LIMITS.speed (js/scene.js), which the undo sanitiser clamps to as well. It was a literal
+     here and another literal there (0.05..100), so one undo cut a 200x clip to 100x. */
+  const SPD_MIN = FM.LIMITS.speed[0], SPD_MAX = FM.LIMITS.speed[1];
 
   const MT_ICONS = {
     track: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
@@ -6117,7 +6119,9 @@ window.FM = window.FM || {};
   /* Volume ceiling (queue 195). Ezra: "I want to be able adjust the volume up to like 1000%." Above
    * unity is Web Audio only — `el.volume` cannot exceed 1 — and the boost stage in audio-fx-live.js
    * clamps to the same number, so the UI cannot ask for a gain the audio path will not honour. */
-  const VOL_MAX = 10;
+  /* bughunt5 #1: the range lives in FM.LIMITS.volume (js/scene.js), which the undo sanitiser clamps to as well. It was 10 here
+     and 4 there, so one undo cut a song at 600 % to 400 %. */
+  const VOL_MIN = FM.LIMITS.volume[0], VOL_MAX = FM.LIMITS.volume[1];
 
   function volumePanel(layer) {
     if (layer.volume == null) layer.volume = 1;
@@ -6131,7 +6135,7 @@ window.FM = window.FM || {};
      * `el.volume` still carries everything UP TO unity — fades, solo, mute and the de-click all live
      * there and are untouched — and the two multiply back to the value asked for. */
     const setPct = pct => {
-      const f = Math.max(0, Math.min(VOL_MAX, pct / 100));
+      const f = Math.max(VOL_MIN, Math.min(VOL_MAX, pct / 100));
       const wasBoosted = FM.audioFxLive && FM.audioFxLive.needsBoost && FM.audioFxLive.needsBoost(layer);
       FM.setProp(layer, 'volume', f, FM.time);            // keyframe-aware (writes a kf when animated)
       const m = FM.media.get(layer.id); if (m && m.el) m.el.volume = Math.min(1, f);
@@ -6164,7 +6168,7 @@ window.FM = window.FM || {};
     const values = el('div', 'mt-values');
     const control = el('div', 'mt-control vol-control');
     center.append(values, control);
-    const vbox = mtVBox('Volume', volPct, v => setPct(Math.round(v)), { dp: 0, unit: '%', scrub: 1, min: 0, max: VOL_MAX * 100 });
+    const vbox = mtVBox('Volume', volPct, v => setPct(Math.round(v)), { dp: 0, unit: '%', scrub: 1, min: VOL_MIN * 100, max: VOL_MAX * 100 });
     values.appendChild(vbox);
 
     const srow = el('div', 'vol-slider-row');
@@ -6178,7 +6182,7 @@ window.FM = window.FM || {};
        the first tenth of the bar and 100% would be a few pixels from the left. A scrub ruler has no
        ends to run out of — the same control the effect params use, and the reason he asked for it. */
     const slider = tickStrip({
-      min: 0, max: VOL_MAX * 100, step: 1, unit: '%', dflt: 100, read: volPct,
+      min: VOL_MIN * 100, max: VOL_MAX * 100, step: 1, unit: '%', dflt: 100, read: volPct,
       apply: v => { setPct(Math.round(v)); if (vbox._refresh) vbox._refresh(); muteIcon(); },
       release: () => commitH(),
     });
