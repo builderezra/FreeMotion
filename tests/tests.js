@@ -166733,6 +166733,65 @@
     });
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* hunt5 later C — A MASK KEY EASED FROM THE STEPS OR BOUNCE RAIL MOVED ON A STRAIGHT LINE. easeF (js/masks.js), the ease FM.evalMaskPath
+     gives a roto mask's keyed path, read a key's `bez` and its named `e` only. A key eased from the graph editor's Bounce or Steps rail
+     carries `ez` ({ fam, preset, p }, js/eases.js), which evalProp resolves first for every other keyed value (js/scene.js, through
+     FM.easeApply), and since bughunt5 #9 the sanitiser keeps it on a mask key too. So a roto mask set to Steps glided while the layer it
+     cuts out stepped, and one set to Bounce slid in with no bounce. easeF now asks FM.easeApply first, the same call evalProp makes.
+     The test: a mask path and a keyed number, both keyed 0 → 600 over 0 s → 2 s with the SECOND key eased (the segment entering a key
+     takes that key's ease, as in evalProp), by Steps (4 treads) and by Bounce. At 0.6 s, 1 s and 1.6 s the mask's first point must be
+     where FM.evalProp puts the number, on the path as built and on the path the undo path's sanitiser (FM.storage._sanitizeLayers)
+     hands back. Both lerp 0 + 600 × f, so they agree exactly; 0.01 px is slack, not a measurement.
+     On 74fed5dd: the mask is on the straight line, 180 / 300 / 480, where Steps puts the number at 200 / 400 / 600.
+     CONTROLS (the same before and after): the eased number is more than 15 px off the straight line at one of the three times (else a
+     mask on the straight line could not be told apart); the sanitiser kept each key's ez; an Ease In key with no ez agrees either way. */
+  test('hunt5 later C: a mask key eased by name moves by that ease: a roto mask moving 600 px into a key eased from the Steps rail (4 treads) or the Bounce rail is, at 0.6 s, 1 s and 1.6 s of its 2 s move, where FM.evalProp puts a number keyed the same way, as built and after the undo path’s sanitiser, not on the straight line (CONTROLS: the eased number is off the straight line; the sanitiser keeps the ez; an Ease In key with no ez agrees either way)', { item: '1176' }, function () {
+    if (typeof FM.evalMaskPath !== 'function' || typeof FM.evalProp !== 'function' || typeof FM.easeApply !== 'function' || !FM.storage || typeof FM.storage._sanitizeLayers !== 'function') throw new Error('setup: FM.evalMaskPath, FM.evalProp, FM.easeApply or FM.storage._sanitizeLayers is not reachable');
+    const bad = [];
+    const SQ = [[0, 0], [40, 0], [40, 40], [0, 40]];
+    const MOVED = SQ.map(p => [p[0] + 600, p[1]]);
+    const TIMES = [0.6, 1, 1.6];
+    const copy = o => JSON.parse(JSON.stringify(o));
+    const second = ease => Object.assign({ t: 2, e: 'linear' }, copy(ease));
+    const maskPath = ease => ({ kf: [{ t: 0, v: copy(SQ), e: 'linear' }, Object.assign(second(ease), { v: copy(MOVED) })] });
+    const number = ease => ({ kf: [{ t: 0, v: 0, e: 'linear' }, Object.assign(second(ease), { v: 600 })] });
+    const xAt = (p, t) => { const pts = FM.evalMaskPath({ path: p }, t); return (Array.isArray(pts) && Array.isArray(pts[0])) ? pts[0][0] : NaN; };
+    const line = t => 600 * t / 2;
+    /* The undo path: _sanitizeLayers rebuilds the mask and its path, so the path is re-read from the layer. */
+    const viaUndo = p => {
+      const L = [{ id: 'h5lC', type: 'shape', start: 0, duration: 4, masks: [{ id: 'h5lCm', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: copy(p) }] }];
+      FM.storage._sanitizeLayers(L);
+      return (Array.isArray(L[0].masks) && L[0].masks[0]) ? L[0].masks[0].path : null;
+    };
+    const cases = [
+      { say: 'Steps (4 treads)', ease: { ez: { fam: 'steps', preset: 'steps', p: { n: 4 } } } },
+      { say: 'Bounce', ease: { ez: { fam: 'bounce', preset: 'bounce', p: { n: 3, d: 0.5 } } } },
+    ];
+    cases.forEach(c => {
+      const num = number(c.ease), raw = maskPath(c.ease);
+      const want = TIMES.map(t => FM.evalProp(num, t));
+      if (!want.some((v, i) => Math.abs(v - line(TIMES[i])) > 15)) throw new Error('setup: a number keyed with ' + c.say + ' is within 15 px of the straight line at ' + TIMES.join(', ') + ' s (' + want.map(v => v.toFixed(1)).join(', ') + '), so a mask on the straight line could not be told apart');
+      const san = viaUndo(raw);
+      const k = (san && Array.isArray(san.kf)) ? san.kf[1] : null;
+      if (!k || !k.ez || k.ez.fam !== c.ease.ez.fam || k.ez.preset !== c.ease.ez.preset) bad.push('CONTROL: the undo path’s sanitiser gave the ' + c.say + ' key back with ez ' + JSON.stringify(k && k.ez) + ', so its half below cannot see the ease');
+      [['as built', raw], ['after the undo path’s sanitiser', san]].forEach(pair => {
+        const where = pair[0], p = pair[1];
+        if (!p) { bad.push(c.say + ', ' + where + ': the mask path is gone'); return; }
+        TIMES.forEach((t, i) => {
+          const x = xAt(p, t);
+          if (!(Math.abs(x - want[i]) <= 0.01)) bad.push('a mask eased by ' + c.say + ', ' + where + ', is at x ' + (isFinite(x) ? x.toFixed(1) : x) + ' at ' + t + ' s, not ' + want[i].toFixed(1) + ' where FM.evalProp puts a number keyed the same way' + (Math.abs(x - line(t)) < 0.01 ? ': it moves on the straight line, its ez ignored' : ''));
+        });
+      });
+    });
+    /* ── CONTROL: an Ease In key with no ez is the same curve either way (easeF has always read a named e). */
+    const ei = { e: 'easeIn' };
+    TIMES.forEach(t => {
+      const v = FM.evalProp(number(ei), t), x = xAt(maskPath(ei), t);
+      if (!(Math.abs(x - v) <= 0.01)) bad.push('CONTROL: a mask keyed with Ease In and no ez is at x ' + x + ' at ' + t + ' s, not ' + v + ' where FM.evalProp puts the number');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();

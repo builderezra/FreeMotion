@@ -46,9 +46,16 @@ window.FM = window.FM || {};
   };
   FM.masks = masks;
 
-  // Resolve a keyframe's easing to an eased progress f — mirrors scene.js evalProp (custom bez, then a
-  // named EASES fn, then a named EASE_PRESETS bezier) so a keyframed PATH eases like every other prop.
+  // Resolve a keyframe's easing to an eased progress f — mirrors scene.js evalProp (a parameterised ez, then a
+  // custom bez, then a named EASES fn, then a named EASE_PRESETS bezier) so a keyframed PATH eases like every other prop.
   function easeF(kf, f) {
+    /* hunt5 later C: a key eased from the graph editor's Bounce or Steps rail carries `ez` ({ fam, preset, p }, js/eases.js),
+       and evalProp resolves it ahead of everything else. This read `bez` and `e` only, so a roto mask set to Steps glided and one
+       set to Bounce slid in with no bounce while the layer it cuts out stepped and bounced; since bughunt5 #9 the sanitiser keeps
+       `ez` on a mask key, so it reaches here. The same call evalProp makes, FM.easeApply, which answers null for an absent or
+       unknown `ez`, so every other key falls through to the chain below exactly as before. */
+    const ez = FM.easeApply ? FM.easeApply(kf.ez, f) : null;
+    if (ez != null) return ez;
     if (kf.bez && FM.bezierAt) return FM.bezierAt(kf.bez[0], kf.bez[1], kf.bez[2], kf.bez[3], f);
     if (FM.EASES && hasOwn(FM.EASES, kf.e)) return FM.EASES[kf.e](f);
     if (FM.EASE_PRESETS && hasOwn(FM.EASE_PRESETS, kf.e) && FM.bezierAt) { const z = FM.EASE_PRESETS[kf.e]; return FM.bezierAt(z[0], z[1], z[2], z[3], f); }
