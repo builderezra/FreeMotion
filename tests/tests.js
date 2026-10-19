@@ -13688,20 +13688,41 @@
       if (grey(u) === FM.history.canUndo()) throw new Error(where + ': undo button greyed=' + grey(u) + ' but canUndo=' + FM.history.canUndo());
       if (grey(r) === FM.history.canRedo()) throw new Error(where + ': redo button greyed=' + grey(r) + ' but canRedo=' + FM.history.canRedo());
     };
-    FM.history.reset();
-    if (FM.history.canUndo()) throw new Error('a freshly reset history should have nothing to undo');
-    agree('fresh');
-    var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
-    FM.scene.layers.unshift(L);
-    FM.history.commit();
-    if (!FM.history.canUndo()) throw new Error('after an edit there should be something to undo');
-    if (FM.history.canRedo()) throw new Error('a fresh edit must leave nothing to redo');
-    agree('after edit');
-    FM.history.undo();
-    if (!FM.history.canRedo()) throw new Error('after undo there should be something to redo');
-    agree('after undo');
-    FM.history.redo();
-    agree('after redo');
+    /* isolation (20 Oct): this test used to LEAVE its 20x20 shape in the scene (the redo below puts it back, last thing)
+       on top of a history whose newest step was that shape, so every later test found a layer to work from that a test
+       run alone never has: the hold-Play test, the preset tags test and the queue 330-339 tests all leaned on it. Undo
+       and redo swap in PARSED COPIES of the project and the layers (history.js restore), so the finally puts back the
+       very objects it found: the project, the same layers array with the same contents, the selection, select mode,
+       the project length and the playhead, then resets the history over that scene so its steps cannot be undone into
+       the next test. The stack it found cannot be put back (no setter, and its first act below is reset()), so a fresh
+       stack over the restored scene is as close to "as found" as the history gets. */
+    var S = FM.scene, layers0 = S.layers, copy0 = layers0.slice(), project0 = S.project, dur0 = project0.duration;
+    var sel0 = S.selectedId, ids0 = (S.selectedIds || []).slice(), mode0 = FM.selectMode, t0 = FM.time;
+    try {
+      FM.history.reset();
+      if (FM.history.canUndo()) throw new Error('a freshly reset history should have nothing to undo');
+      agree('fresh');
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
+      FM.scene.layers.unshift(L);
+      FM.history.commit();
+      if (!FM.history.canUndo()) throw new Error('after an edit there should be something to undo');
+      if (FM.history.canRedo()) throw new Error('a fresh edit must leave nothing to redo');
+      agree('after edit');
+      FM.history.undo();
+      if (!FM.history.canRedo()) throw new Error('after undo there should be something to redo');
+      agree('after undo');
+      FM.history.redo();
+      agree('after redo');
+    } finally {
+      if (FM.scene !== S) FM.scene = S;
+      S.project = project0;
+      layers0.length = 0; copy0.forEach(function (l) { layers0.push(l); }); S.layers = layers0;
+      S.selectedId = sel0; S.selectedIds = ids0; FM.selectMode = mode0;
+      FM.history.reset();
+      FM.refreshAll();
+      // after refreshAll, whose autoFitDuration would otherwise re-fit a length the scene arrived with
+      S.project.duration = dur0; FM.time = t0;
+    }
   });
 
   /* ---------------- runner ---------------- */
@@ -16432,6 +16453,11 @@
     if (!FM.startDraw) throw new Error('FM.startDraw is not reachable');
     if (!FM.home || !FM.home._openProject) throw new Error('FM.home._openProject is not reachable');
     const bodyHas = c => document.body.classList.contains(c);
+    /* isolation (20 Oct): the finally used to CLOSE Home whatever it found, and never reopen it, so every test after this
+       one ran on the editor while the same test run alone starts on Home (the boot opens it): the group crumb test
+       leaned on that. It now puts Home back as it found it (open or shut), with the selection and playhead. */
+    const hadHome = !!(FM.home.isOpen && FM.home.isOpen());
+    const S0 = FM.scene, sel0 = S0.selectedId, ids0 = (S0.selectedIds || []).slice(), mode0 = FM.selectMode, t0 = FM.time;
     try {
       FM.startDraw('vector');
       await sleep(60);
@@ -16466,7 +16492,17 @@
       if (seen) throw new Error('the drawing overlay is still painted over the home screen');
     } finally {
       try { FM.drawTool._stop(); } catch (e) {}
-      try { if (FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      // the selection and playhead back on the same scene (reopening the open project does not load a new one)
+      try {
+        if (FM.scene === S0) { S0.selectedId = sel0; S0.selectedIds = ids0; FM.selectMode = mode0; FM.time = t0; FM.refreshAll(); }
+      } catch (e) {}
+      // Home back as it was found: shut if it was shut (the old behaviour), reopened if it was open
+      try {
+        if (FM.home.isOpen) {
+          if (hadHome && !FM.home.isOpen()) FM.home.open();
+          else if (!hadHome && FM.home.isOpen()) FM.home.close();
+        }
+      } catch (e) {}
       await sleep(80);
     }
   });
@@ -43420,9 +43456,44 @@
    * symptom is a TEMPLATE, which packs the whole project object and handed its notes to every new
    * project made from it. So the tests pin the boundary, not just the fix. */
 
+  /* isolation (20 Oct): both notes tests below used to delete their projects WITHOUT awaiting remove() and without going
+     back to the project they started in, and remove() of the open project then opens some other one (storage.js: the
+     first left in the list, often one of theirs, half deleted). So every later test ran in a 640x640 comp it never asked
+     for, with whatever layers that project held: the hold-Play, preset tags, quality ladder and queue 330-339 tests all
+     leaned on it. This is their shared finally: back to the project that was open (by id, loaded as storage has it, since
+     create() and open() flush it first), then each made project removed, awaited, and each template, then the selection,
+     playhead and Home as they were found. */
+  async function notesIsoRestore(iso, made, tplName) {
+    try {
+      if (FM.storage.openProjectId() !== iso.id0) await FM.projects.open(iso.id0 || null, { confirmed: true });
+    } catch (e) {}
+    for (const id of made) { try { if (id && id !== iso.id0) await FM.projects.remove(id); } catch (e) {} }
+    if (tplName && FM.templates && FM.templates.list && FM.templates.remove) {
+      // matched the way the test finds it (a name CONTAINING it), so a decorated name is removed too
+      const tpls = (FM.templates.list() || []).filter(function (x) { return x && String(x.name || '').indexOf(tplName) >= 0; });
+      for (const t of tpls) { try { await FM.templates.remove(t.id); } catch (e) {} }
+    }
+    try {
+      const S = FM.scene, has = function (id) { return !!(id && FM.layerById(S, id)); };
+      if (has(iso.sel0)) { S.selectedId = iso.sel0; S.selectedIds = iso.ids0.filter(has); FM.selectMode = iso.mode0; }
+      FM.time = iso.t0;
+      FM.refreshAll();
+    } catch (e) {}
+    if (FM.home && FM.home.isOpen) {
+      if (iso.hadHome && !FM.home.isOpen()) FM.home.open();
+      else if (!iso.hadHome && FM.home.isOpen()) FM.home.close();
+    }
+  }
+  function notesIsoTake() {
+    return { id0: FM.storage.openProjectId(), sel0: FM.scene.selectedId, ids0: (FM.scene.selectedIds || []).slice(),
+             mode0: FM.selectMode, t0: FM.time, hadHome: !!(FM.home && FM.home.isOpen && FM.home.isOpen()) };
+  }
+
   test('a template does not carry its notes into a new project', { item: 'notes-scope' }, async function () {
     if (!FM.templates || !FM.templates.save || !FM.templates.useAsNew) throw new Error('the templates API is missing');
     const made = [];
+    // isolation (20 Oct): what it found, put back by notesIsoRestore (above) in the finally
+    const iso = notesIsoTake();
     try {
       const a = await FM.projects.create({ name: 'ZZ-notes-src', width: 640, height: 640 });
       made.push(a);
@@ -43442,14 +43513,16 @@
       await FM.projects.open(a);
       const still = (FM.scene.project.notes || []).map(function (n) { return n.text; });
       if (still.length !== 1) throw new Error('the source project lost its notes when it was templatised: ' + JSON.stringify(still));
-      FM.templates.remove && FM.templates.remove(t.id);
     } finally {
-      for (const id of made) { try { FM.projects.remove && FM.projects.remove(id); } catch (e) {} }
+      // the template goes in the finally now too, so a failure above cannot leave it on the Templates tab
+      await notesIsoRestore(iso, made, 'ZZ-notes-tpl');
     }
   });
 
   test('notes stay with their own project, and travel in the saved file', { item: 'notes-scope' }, async function () {
     const made = [];
+    // isolation (20 Oct): what it found, put back by notesIsoRestore (above) in the finally
+    const iso = notesIsoTake();
     try {
       const a = await FM.projects.create({ name: 'ZZ-notes-A', width: 640, height: 640 });
       made.push(a);
@@ -43468,7 +43541,7 @@
       const back = ((FM.scene.project.notes) || []).map(function (n) { return n.text; });
       if (back.join() !== 'only for A') throw new Error('A lost its own notes: ' + JSON.stringify(back));
     } finally {
-      for (const id of made) { try { FM.projects.remove && FM.projects.remove(id); } catch (e) {} }
+      await notesIsoRestore(iso, made, null);
     }
   });
 
@@ -43523,7 +43596,12 @@
         if (diag > axis * 1.25) throw new Error('the hit area reaches ' + diag + 'px diagonally against ' + axis + 'px on the axis — it is a square, and the corners steal taps meant for cards');
         // and it must not run past the bottom of the screen, over the home indicator
         if (r.bottom + 12 > window.innerHeight + 1) throw new Error('the hit ring extends past the bottom of the viewport, over the home indicator');
-      } finally { if (!(FM.home && FM.home.isOpen && FM.home.isOpen())) { /* left as found */ } }
+      } finally {
+        /* isolation (20 Oct): this finally used to be EMPTY (its comment said "left as found", and nothing did it), so
+           when it found the editor it left Home open over it for every later test. Shut again if it was shut; a close
+           with no push option is instant (home.js close), so nothing is still animating when the next test starts. */
+        if (!wasOpen && FM.home && FM.home.isOpen && FM.home.isOpen()) { FM.home.close(); await frame(); }
+      }
     }, 375);
   });
 
@@ -44900,7 +44978,8 @@
       if (drift) bad.push(key + ': an instance without the control differs from soft 0 in ' + drift + ' bytes — the legacy render is not pinned');
       const dOld = mad(plain, b);
       if (dOld >= fDef) bad.push(key + ': soft 0 reads ' + dOld.toFixed(2) + ', so the legacy render is not the faint one and this floor proves nothing');
-      try { FM.media.unpin && FM.media.unpin(mid); } catch (e) {}
+      // isolation (20 Oct): FM.media has no unpin() (remove() drops the pin with the record, js/media.js), so this was a no-op and the pinned record outlived the test
+      try { FM.media.remove(mid); } catch (e) {}
     }
     if (bad.length) throw new Error(bad.join(' · ') + ' (queue 799)');
   });
@@ -45007,7 +45086,8 @@
       const pinned = R.makeInstance('halation'); pinned.params.threshold = 0.68; pinned.params.knee = 2.4;
       const drift = mad(shot(old), shot(pinned));
       if (drift !== 0) bad.push(key + ': an instance without the new keys drifted by ' + drift.toFixed(3) + ' from the 0.68 / 2.4 render it used to be');
-      try { FM.media.unpin && FM.media.unpin(mid); } catch (e) {}
+      // isolation (20 Oct): FM.media has no unpin() (remove() drops the pin with the record, js/media.js), so this was a no-op and the pinned record outlived the test
+      try { FM.media.remove(mid); } catch (e) {}
     }
     if (bad.length) throw new Error(bad.join(' · ') + ' (queue 482)');
   });
@@ -60637,7 +60717,8 @@
       if (!nullChecked) { nullChecked = true; if (mad(plain, shot(false)) !== 0) throw new Error('a filterless render differs from itself, so nothing below means anything'); }
       const moved = mad(plain, shot(true));
       if (moved < 1.5) dead.push(id + ' moved its photograph by only ' + moved.toFixed(2));
-      try { FM.media.unpin && FM.media.unpin(mid); } catch (e) {}
+      // isolation (20 Oct): FM.media has no unpin() (remove() drops the pin with the record, js/media.js), so this was a no-op and the pinned record outlived the test
+      try { FM.media.remove(mid); } catch (e) {}
     }
     if (dead.length) throw new Error(dead.join(' · ') + ' (queue 778)');
   });
@@ -71227,8 +71308,16 @@
   async function q202Ladder(opts) {
     const cv = document.getElementById('canvas') || document.querySelector('canvas');
     const o = opts || {};
+    /* isolation (20 Oct): the finally used to put the layers back as a COPY of the array, leave the selection to whatever
+       refreshAll made of it, and leave the quality LADDER wherever this run drove it — down a few tiers, often latched —
+       for every later test that plays or drags. There is no API to read the ladder back in (FM._perfState is a read-only
+       snapshot), so it is put back the way a fresh boot and every project open start it: FM._resetPlayQuality(), the
+       same call FM.projects.open makes. Then the canvas is sized for the restored mode. If the leak check names this test
+       for a ladder that was NOT fresh when it started, that tier was left by an earlier test. */
+    const S0 = FM.scene, layers0 = S0.layers;
     const saved = { render: FM.renderScene, layers: FM.scene.layers.slice(),
-                    dur: FM.scene.project.duration, mode: FM.settings.get('playbackQuality'), t: FM.time };
+                    dur: FM.scene.project.duration, mode: FM.settings.get('playbackQuality'), t: FM.time,
+                    sel: S0.selectedId, ids: (S0.selectedIds || []).slice(), selMode: FM.selectMode };
     const build = () => {
       FM.scene.layers.length = 0;
       const L = FM.makeLayer('shape', { shape: 'rect', name: 'box', start: 0, duration: 12, x: 120, y: 120, shapeW: 80, shapeH: 80, fill: '#f00' });
@@ -71277,11 +71366,20 @@
                firstGap: trace[0].gapAvg, lastGap: last.gapAvg };
     } finally {
       try { FM.pause(); } catch (e) {}
-      FM.renderScene = saved.render; FM.scene.layers = saved.layers;
+      FM.renderScene = saved.render;
+      if (FM.scene !== S0) FM.scene = S0;
+      // the same array it found, with the same contents (build() emptied it in place)
+      layers0.length = 0; saved.layers.forEach(function (l) { layers0.push(l); }); S0.layers = layers0;
+      S0.selectedId = saved.sel; S0.selectedIds = saved.ids; FM.selectMode = saved.selMode;
       FM.scene.project.duration = saved.dur;
       FM.settings.set('playbackQuality', saved.mode || 'auto');
+      // the ladder as a fresh boot or a project open leaves it (see the isolation note at the top)
+      if (FM._resetPlayQuality) FM._resetPlayQuality();
       FM.setTime(saved.t);
       if (FM.refreshAll) FM.refreshAll();
+      // after refreshAll, whose autoFitDuration would otherwise re-fit a length the scene arrived with
+      FM.scene.project.duration = saved.dur;
+      if (FM.resizeCanvas) FM.resizeCanvas();
       if (FM.timeline) FM.timeline.rebuild();
     }
   }
@@ -72291,7 +72389,9 @@
       FM.audioHealth.note = realNote;
       try { FM.pause(); } catch (e) {}
       FM.audioHealth.reset();
-      FM.scene.layers.forEach(l => { try { FM.media.delete && FM.media.delete(l.id); } catch (e) {} });
+      /* isolation (20 Oct): FM.media has no delete() (it is remove(), js/media.js), and the guard made this a silent no-op,
+         so the fake element's record outlived the test. The layers here are only this test's own. */
+      FM.scene.layers.forEach(l => { try { FM.media.remove(l.id); } catch (e) {} });
       FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
       FM.scene.project.duration = saved.dur;
       FM.setTime(saved.t);
@@ -76651,7 +76751,8 @@
       snd.muted = true;
       if (FM.projectHasAudio() !== false) throw new Error('a MUTED layer was counted as sound the export would lose');
     } finally {
-      made.forEach(id => { try { FM.media.del ? FM.media.del(id) : FM.media.delete(id); } catch (e) {} });
+      // isolation (20 Oct): FM.media has neither del() nor delete() (it is remove()), so the throw was caught and the record stayed
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
       FM.scene.layers.length = 0;
       saved.forEach(l => FM.scene.layers.push(l));
       if (FM.refreshAll) FM.refreshAll();
@@ -81603,7 +81704,8 @@
       if (Li < 0.9) throw new Error('the image clip\'s name is inked ' + getComputedStyle(li).color + ' over its frames — chosen from the bar colour, the 1.10:1 the QA pass measured');
       if (Ls > 0.5) throw new Error('the shape clip on a light bar is inked ' + getComputedStyle(ls).color + ' — the tinted ink on a solid bar was lost (the control)');
     } finally {
-      try { if (I && FM.media.delete) FM.media.delete(I.id); } catch (e) {}
+      // isolation (20 Oct): FM.media has no delete() (it is remove()), so the guard made this a no-op and the record stayed
+      try { if (I) FM.media.remove(I.id); } catch (e) {}
       FM.scene = saved; FM.scene.selectedId = savedSel;
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();
@@ -82009,7 +82111,8 @@
       rb2.click(); await sleep(120);
       if (L.crop.x !== 0 || L.crop.y !== 0 || L.crop.w !== 400 || L.crop.h !== 300) throw new Error('control: Reset on a plain crop did not set the full frame: ' + JSON.stringify(L.crop));
     } finally {
-      try { made.forEach(id => { if (FM.media.delete) FM.media.delete(id); }); } catch (e) {}
+      // isolation (20 Oct): FM.media has no delete() (it is remove()), so the guard made this a no-op and three records stayed
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
       FM.scene = saved; FM.scene.selectedId = savedSel;
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();
@@ -91065,7 +91168,8 @@
       FM.audioFxLive.setBoost(L);
       if (Math.abs(B.last() - 3) > 0.01) throw new Error('outside any fade the seed is ' + B.last().toFixed(2) + 'x where the layer asks for 3x — the fade fix has killed the ordinary boost');
     } finally {
-      try { if (L) FM.media.delete(L.id); } catch (e) {}
+      // isolation (20 Oct): FM.media has no delete() (it is remove(), js/media.js), so this threw, was caught, and the record stayed
+      try { if (L) FM.media.remove(L.id); } catch (e) {}
       FM.playing = saved.playing; FM.scene.layers = saved.layers;
       FM.scene.project.duration = saved.dur; FM.setTime(saved.t);
       if (FM.refreshAll) FM.refreshAll();
@@ -91199,7 +91303,8 @@
       if (outside.flag === 'all-suppressed') throw new Error('the song sits at 6–10s and the export is 1–4s, so the RANGE left it out — blaming the solo for it is a false alarm');
       if (/solo/.test(outside.card)) throw new Error('the card blamed a solo for a clip the range had already excluded: ' + JSON.stringify(outside.card));
     } finally {
-      made.forEach(function (id) { try { FM.media.delete(id); } catch (e) {} });
+      // isolation (20 Oct): FM.media has no delete() (it is remove()), so this threw, was caught, and both records stayed
+      made.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
       FM.scene.layers = saved.layers; P.duration = saved.dur;
       FM._audioTrackDropped = null; clearNote();
       if (FM.refreshAll) FM.refreshAll();
@@ -91391,7 +91496,8 @@
       AC.createBufferSource = cbs0; AC.createGain = cg0;
       try { FM.audioPlay.stop(); } catch (e) {}
       FM.playing = saved.playing;
-      if (L) { try { FM.media.delete(L.id); } catch (e) {} }
+      // isolation (20 Oct): FM.media has no delete() (it is remove()), so this threw, was caught, and the record stayed
+      if (L) { try { FM.media.remove(L.id); } catch (e) {} }
       FM.scene.layers = saved.layers; FM.scene.project.duration = saved.dur;
       FM.scene.selectedId = saved.sel; FM.scene.selectedIds = saved.sel ? [saved.sel] : [];
       FM.setTime(saved.t);
