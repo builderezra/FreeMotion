@@ -28950,9 +28950,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        scene: no layer.visible, no reordering, no history, no autosave. Two modes:
          1 — draw only this layer (everything else hidden)
          2 — draw everything, but draw THIS one last so it sits on top
-       Mode 2 is skipped for a layer inside a group unit: those members composite as one flattened
-       unit at the group's z-slot, so lifting one member out of it would change what the group IS,
-       not just what order it draws in.
+       A layer inside a group unit is not lifted OUT of it in mode 2: those members composite as one
+       flattened unit at the group's z-slot, so taking one member away would change what the group IS,
+       not just what order it draws in. Since bughunt4 #9 it is drawn AGAIN on top instead (see below).
        ⚠️ AND NEVER IN AN EXPORT (queue 690, HUNT-d). "View only" was true of the scene and false of the FILE: the exporter
        renders through this same function, and nothing on the way to an export cleared the isolate — so a clip left isolated
        on PC (the Export button stays up while it is selected, and clicking it keeps the selection) exported ALONE, every
@@ -28961,8 +28961,38 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        isolate is simply not read while an export is rendering, exactly like FM.fxPreviewListFor above — and the still
        (FM.snapshotPNG) holds it aside for its one render, because it renders without FM._exporting. */
     const _iso = (!FM._exporting && FM.isolate && FM.isolate.id && FM.isolate.mode && scene.layers.some(l => l.id === FM.isolate.id)) ? FM.isolate : null;
-    const _isoTop = (_iso && _iso.mode === 2 && !(memberToUnit && memberToUnit[_iso.id]))
-      ? scene.layers.find(l => l.id === _iso.id) : null;
+    /* bughunt4 #9 — THE ⧉ ISOLATE ON A GROUP, AND ON A MEMBER OF A STYLED GROUP. A group row rasterises nothing (drawLayer returns
+       for it): its picture is its members, drawn one by one below or flattened as a unit. The isolate tested ONE id, before the unit
+       dispatch, so on a selected group (the usual canvas selection) mode 1 skipped every member and the frame went blank, and mode 2
+       lifted the group row, which draws nothing, while its members stayed under whatever is above them. And a member of a styled
+       group reached its unit, which draws every member, so isolating one member showed the whole group.
+       Now the isolate is a SET: the layer, plus every descendant when it is a group (the parent walk collectGroupUnits makes, guarded
+       against a cycle the same way). A layer in it draws through the shallowest unit WHOLLY inside the set (_isoUnit: down the
+       childOwner chain from the unit the frame would dispatch), else on its own. So an isolated styled group draws as its unit, a
+       plain one as its members, and a member of a styled group alone, without its group's look. Mode 2 lifts out of the loop only
+       what the loop would itself draw as part of the isolate; a layer inside a unit that is NOT isolated stays in it (the group is
+       still what it is) and is drawn again on top. An ordinary layer in no unit: the set is its id and no unit is found, so every
+       draw is the one it was. */
+    let _isoSet = null;
+    if (_iso) {
+      _isoSet = new Set([_iso.id]);
+      const _isoL = scene.layers.find(l => l.id === _iso.id);
+      if (_isoL && _isoL.type === 'group') {
+        (function walk(gid) {
+          scene.layers.forEach(l => { if (l.parent === gid && !_isoSet.has(l.id)) { _isoSet.add(l.id); if (l.type === 'group') walk(l.id); } });
+        })(_iso.id);
+      }
+    }
+    const _isoUnit = function (id) {
+      let u = memberToUnit && memberToUnit[id], n = 0;
+      while (u && !_isoSet.has(u.group.id) && n++ < 64) u = u.childOwner && u.childOwner[id];
+      return (u && _isoSet.has(u.group.id)) ? u : null;
+    };
+    const _isoLift = function (L) {
+      const own = memberToUnit && memberToUnit[L.id];
+      return _isoSet.has(L.id) && !(own && !_isoSet.has(own.group.id));
+    };
+    const _isoTop = (_iso && _iso.mode === 2) ? scene.layers.find(l => l.id === _iso.id) : null;
     /* FILL BEHIND goes down HERE — on the background, under every layer in the stack. See
      * fillBehindPass and paintFillBehind: the fill is the layer's own blurred, blown-up copy, and
      * blitting it at the layer's own z is what erased everything below it. The filter below mirrors
@@ -28974,9 +29004,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _fbUnits = new Set();
     fillBehindPass(target, scene, t, function (L) {
       if (soloActive && !L.solo) return null;
-      if (_iso && _iso.mode === 1 && L.id !== _iso.id) return null;
+      if (_iso && _iso.mode === 1 && !_isoSet.has(L.id)) return null;
       if (L.type === 'camera' || L.type === 'adjustment' || L.type === 'null') return null;
-      const unit = memberToUnit && memberToUnit[L.id];
+      const unit = memberToUnit && ((_iso && _iso.mode === 1) ? _isoUnit(L.id) : memberToUnit[L.id]);   // bughunt4 #9: as the loop dispatches
       if (unit) {
         /* A unit draws as ONE flattened plate, so there are two fills to find here and they are
          * built from different pixels: the GROUP's own, which needs the unit flattened first, and
@@ -28999,10 +29029,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     for (let i = scene.layers.length - 1; i >= 0; i--) {
       const L = scene.layers[i];
       if (soloActive && !L.solo) continue;
-      if (_iso && _iso.mode === 1 && L.id !== _iso.id) continue;   // isolate: this layer alone
-      if (_isoTop && L.id === _isoTop.id) continue;                // …drawn after the loop instead
+      if (_iso && _iso.mode === 1 && !_isoSet.has(L.id)) continue;   // isolate: this layer alone (a group: with its members)
+      if (_isoTop && _isoLift(L)) continue;                          // …drawn after the loop instead
       if (L.type === 'camera') continue;   // the camera drives the composite; it is never rasterized
-      const unit = memberToUnit && memberToUnit[L.id];
+      const unit = memberToUnit && ((_iso && _iso.mode === 1) ? _isoUnit(L.id) : memberToUnit[L.id]);
       if (unit) { if (!unit.drawn) { unit.drawn = true; drawGroupUnit(target, unit, t, scene); } continue; }
       if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(target, L, t, scene); }
       else {
@@ -29012,7 +29042,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
     // Isolate mode 2: the chosen layer goes on last, so it reads above everything without its real
     // position in FM.scene.layers changing by one index.
-    if (_isoTop && FM.isLayerVisibleAt(_isoTop, t)) {
+    if (_isoTop && _isoTop.type === 'group') {
+      /* bughunt4 #9: a group on top is its descendants (or its unit), dispatched exactly as the loop above dispatches them */
+      const _isoDone = new Set();
+      for (let i = scene.layers.length - 1; i >= 0; i--) {
+        const L = scene.layers[i];
+        if (!_isoSet.has(L.id) || L.type === 'camera') continue;
+        const u = _isoUnit(L.id);
+        if (u) { if (!_isoDone.has(u.group.id)) { _isoDone.add(u.group.id); drawGroupUnit(target, u, t, scene); } continue; }
+        if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(target, L, t, scene); }
+        else {
+          if (FM.needsBgSnap(L) && FM.isLayerVisibleAt(L, t)) snapBackdrop(target, L);
+          drawLayer(target, L, t, scene);
+        }
+      }
+    } else if (_isoTop && FM.isLayerVisibleAt(_isoTop, t)) {
       if (_isoTop.type === 'adjustment') applyAdjustment(target, _isoTop, t, scene);
       else drawLayer(target, _isoTop, t, scene);
     }

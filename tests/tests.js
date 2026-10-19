@@ -163995,6 +163995,85 @@
    * the commit before it (#2: cce7f239, #1: dfc4f2b2). They use bughunt 2's helpers (_bh2With, _bh2Frame, _bh2Bar, _bh2MaxDiff);
    * everything else is the suite's. ═══ */
 
+  /* (#9) THE ⧉ ISOLATE ON A GROUP SHOWED NOTHING. A full-frame white bar sits ABOVE a group G holding a red 100 × 100 block centred
+     at 200,120 (10000 px) and a blue 60 × 60 one at 60,120 (3600 px); with nothing isolated the bar covers both. FM.isolate is what
+     the ⧉ button sets: mode 1 "only this layer", mode 2 "this layer on top".
+     On 698b5dd0 renderScene tested the isolate against ONE id, before the unit dispatch. Isolating G in mode 1 skipped every member
+     and the group row draws nothing (drawLayer returns for a group), so the frame was the black background: 0 red (A1). Mode 2
+     lifted the group row, which draws nothing, and left the members under the white bar: 0 red (A2). With G styled (99 % opacity,
+     so it composites as one flattened unit) the same two read 0 red (B1, B2); and isolating the red MEMBER drew its whole unit in
+     mode 1, the blue block too (C1), and nothing on top in mode 2, since a unit's member was never lifted: 0 red (C2).
+     Now an isolated group counts every descendant as isolated: mode 1 draws only them (its unit when it is styled), mode 2 draws
+     them again on top; a member of a styled group draws alone in mode 1 and on top in mode 2.
+     CONTROLS: nothing isolated, the bar covers the group; the red block in the plain group isolates alone and lifts on top exactly
+     as it always did; at 99 % the group's opacity really reaches the red block (it reads about 252, not 255). */
+  test('bughunt4 #9 The isolate button on a group: “Only this layer” on a selected group shows its members (its unit when styled) and nothing else, “on top” lifts them over a white bar above the group, and a member of a styled group isolates alone, not with its whole group (CONTROLS: the bar covers the group; isolating the red block in a plain group works both ways as before; the 99 % really reaches the block)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    const iso0 = FM.isolate || null;
+    await _bh2With(async function () {
+      try {
+        const AREA_R = 100 * 100, AREA_B = 60 * 60, T = 1;
+        const white = _bh2Bar('bh4 #9 white bar', 160, 320, '#ffffff');
+        const G = FM.makeLayer('group', { name: 'bh4 #9 group', x: 0, y: 0, start: 0, duration: 4 });
+        G.start = 0; G.duration = 4; G.transform.x = 0; G.transform.y = 0;
+        const block = (name, x, s, fill) => {
+          const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 120, shapeW: s, shapeH: s, fill: fill, start: 0, duration: 4 });
+          L.start = 0; L.duration = 4; L.parent = G.id;
+          return L;
+        };
+        const red = block('bh4 #9 red block', 200, 100, '#ff0000');
+        const blue = block('bh4 #9 blue block', 60, 60, '#0000ff');
+        FM.scene.layers = [white, G, red, blue];
+        /* The frame at T with `iso` as the ⧉ isolate, plus a count of the blue pixels. */
+        const frame = (iso) => {
+          FM.isolate = iso;
+          const f = _bh2Frame(T);
+          let b = 0;
+          for (let i = 0; i < f.d.length; i += 4) { if (f.d[i] < 70 && f.d[i + 1] < 70 && f.d[i + 2] > 180) b++; }
+          f.blue = b;
+          return f;
+        };
+        const say = f => _bh2Say(f) + ', ' + f.blue + ' blue';
+        const all = (n, area) => n >= area * 0.9;
+
+        /* ── CONTROL: nothing isolated, the full-frame bar covers the whole group. */
+        const f0 = frame(null);
+        if (f0.red !== 0 || f0.blue !== 0 || f0.white < 320 * 240 * 0.95) throw new Error('CONTROL: with nothing isolated the frame reads ' + say(f0) + ' where the full-frame white bar above the group covers it, so "on top" could not be told from the plain stack');
+
+        /* ── CONTROL: the red block itself, in the plain group, isolates alone and lifts on top, as it always did. */
+        const c1 = frame({ id: red.id, mode: 1 });
+        if (!all(c1.red, AREA_R) || c1.blue !== 0 || c1.white !== 0) throw new Error('CONTROL: isolating the red block ("Only this layer") reads ' + say(c1) + ', not the ' + AREA_R + ' px block alone');
+        const c2 = frame({ id: red.id, mode: 2 });
+        if (!all(c2.red, AREA_R) || c2.blue !== 0) throw new Error('CONTROL: the red block "on top" reads ' + say(c2) + ', not the ' + AREA_R + ' px block over the white bar with the blue one still under it');
+
+        /* ── A: the plain group (100 %), the usual canvas selection. */
+        const a1 = frame({ id: G.id, mode: 1 });
+        if (!all(a1.red, AREA_R) || !all(a1.blue, AREA_B) || a1.white !== 0) throw new Error('A1: isolating the group ("Only this layer") reads ' + say(a1) + ' where its two blocks alone are ' + AREA_R + ' red and ' + AREA_B + ' blue px and no white — the isolate matched the group row’s id alone, so every member was skipped and the row draws nothing: a blank frame');
+        const a2 = frame({ id: G.id, mode: 2 });
+        if (!all(a2.red, AREA_R) || !all(a2.blue, AREA_B)) throw new Error('A2: the group "on top" reads ' + say(a2) + ' where its blocks over the white bar are ' + AREA_R + ' red and ' + AREA_B + ' blue px — mode 2 lifted the group row, which draws nothing, and left its members under the bar');
+
+        /* ── B: the group styled — 99 % opacity, so it composites as one flattened unit. */
+        G.transform.opacity = 0.99;
+        white.visible = false;
+        const look = frame(null).d, at = (120 * 320 + 200) * 4;
+        white.visible = true;
+        if (!(look[at] >= 245 && look[at] <= 253 && look[at + 1] < 10)) throw new Error('CONTROL: at 99 % the red block reads (' + look[at] + ', ' + look[at + 1] + ', ' + look[at + 2] + ') where 0.99 × 255 is about 252 — the group’s look did not reach it, so this case does not take the unit route');
+        const b1 = frame({ id: G.id, mode: 1 });
+        if (!all(b1.red, AREA_R) || !all(b1.blue, AREA_B) || b1.white !== 0) throw new Error('B1: isolating the styled group ("Only this layer") reads ' + say(b1) + ' where its unit alone is ' + AREA_R + ' red and ' + AREA_B + ' blue px and no white — every member was skipped before the unit was reached');
+        const b2 = frame({ id: G.id, mode: 2 });
+        if (!all(b2.red, AREA_R) || !all(b2.blue, AREA_B)) throw new Error('B2: the styled group "on top" reads ' + say(b2) + ' where its unit over the white bar is ' + AREA_R + ' red and ' + AREA_B + ' blue px — the group row was lifted and its unit stayed under the bar');
+
+        /* ── C: a MEMBER of the styled group. */
+        const m1 = frame({ id: red.id, mode: 1 });
+        if (!all(m1.red, AREA_R) || m1.blue !== 0 || m1.white !== 0) throw new Error('C1: isolating the red block inside the styled group reads ' + say(m1) + ' where the block alone is ' + AREA_R + ' red px and nothing else — the block reached its group’s unit, which draws every member, so the whole group showed');
+        const m2 = frame({ id: red.id, mode: 2 });
+        if (!all(m2.red, AREA_R) || m2.blue !== 0) throw new Error('C2: the red block inside the styled group "on top" reads ' + say(m2) + ' where it is ' + AREA_R + ' red px over the white bar with the blue one still under it — a member of a unit was never lifted, so nothing changed');
+      } finally {
+        FM.isolate = iso0;
+      }
+    });
+  });
+
   /* (#2) A GROUP'S LOOK SWITCHED HOW ITS MEMBERS BLEND. Red footage fills the frame, (255, 0, 0). Above it a group holds one 100×100
      grey (#808080) light leak set to Screen, centred at 160,120. Screen is 1 − (1 − a)(1 − b) per channel, so over red the leak reads
      (255, 128, 128): red stays 255, green and blue become the grey's 128.
