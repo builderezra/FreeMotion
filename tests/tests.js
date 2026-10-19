@@ -164625,7 +164625,7 @@
      0.5 s); the still text is 30..250 px wide, so the ink measured is the glyphs, not the frame.
      TOL: 3 px. Each glyph is placed alone By Character, which drops any kerning between a-b and c-d and moves the anti-aliased edge
      by a fraction of a pixel; the bug is about 60. */
-  test('bughunt4 #8 Word spacing under Animate by Character and by Word: "ab cd" with 60 px of Word spacing draws as wide under Fade by character and Fade by word as it does still, within 3 px (CONTROLS: the Word spacing widens the still text by about 60 px; Fade by line already matches; with Word spacing 0 every mode matches; the Fade is on and finished)', { item: '1176' }, async function () {
+  test('bughunt4 #8 Word spacing under Animate by Character and by Word: “ab cd” with 60 px of Word spacing draws as wide under Fade by character and Fade by word as it does still, within 3 px (CONTROLS: the Word spacing widens the still text by about 60 px; Fade by line already matches; with Word spacing 0 every mode matches; the Fade is on and finished)', { item: '1176' }, async function () {
     if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim are not reachable');
     if (typeof FM.textSpacingOK !== 'function' || !FM.textSpacingOK().word) throw new Error('setup: FM.textSpacingOK().word is false, so this browser draws no canvas word spacing and there is none to lose');
     await _bh2With(async function () {
