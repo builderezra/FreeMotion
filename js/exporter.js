@@ -1087,6 +1087,26 @@ window.FM = window.FM || {};
     throw new Error('NO_VIDEO_CODEC');
   }
 
+  /* bughunt6 #3: A FRAME TOO BIG FOR THE ENCODER IS REFUSED BY ITS SIZE, AT ONCE, WITH A SIZE THAT WORKS. An H.264 level caps
+   * the frame's area: High 5.2, the best candidate above, stops near 9.4 MP (36,864 macroblocks), and Chrome refuses a bigger
+   * frame outright. A panorama's 7680×1440 canvas, a typed 3840×3840 one or an Exact size up to 7680 came out as NO_VIDEO_CODEC,
+   * after the decode and the mix, under an alert saying the browser had no H.264 at all. run() now picks the codec before
+   * either, and when the frame is refused this asks the same probe for the size list's own rungs (short side 2160, 1440, 1080,
+   * 720, 480, 360, below this frame's, same shape) and hands back the largest one the encoder takes. None at all is a browser
+   * with no usable H.264, which keeps its own message. Only a refused frame reaches this. */
+  const MP4_RUNGS = [2160, 1440, 1080, 720, 480, 360];
+  async function largestMp4Size(w, h, fps, bitrate) {
+    const short = Math.min(w, h);
+    for (const t of MP4_RUNGS) {
+      if (!(t < short - 1)) continue;
+      const s = t / short;
+      const fw = Math.max(2, Math.round(w * s / 2) * 2), fh = Math.max(2, Math.round(h * s / 2) * 2);
+      const br = Math.max(1, Math.round(bitrate * (fw * fh) / (w * h)));
+      try { await pickVideoCodec(fw, fh, fps, br); return { w: fw, h: fh }; } catch (e) { /* refused as well: the next rung down */ }
+    }
+    return null;
+  }
+
   // Reverse + frame-blend slow-mo render from the frame cache; the preview cache (if any)
   // may be at a lower fps, so (re)build at the EXACT export fps before the frame loop so the
   // exported file actually contains the smooth/reversed motion seen in preview.
@@ -1428,6 +1448,20 @@ window.FM = window.FM || {};
         if (_n) { _n.textContent = ''; _n.classList.add('hidden'); _n.classList.remove('export-note-warn'); }
       } catch (e) {}
 
+      /* bughunt6 #3: THE CODEC IS PICKED HERE, before the decode and the mix, so a frame the encoder refuses stops the export
+       * at once and says its size (largestMp4Size). It used to be picked after both. The same single probe as before, moved:
+       * `codec` below is this one. */
+      let codec = null;
+      try { codec = await pickVideoCodec(outW, outH, fps, bitrate); }
+      catch (e) {
+        if (!e || e.message !== 'NO_VIDEO_CODEC') throw e;
+        const fits = await largestMp4Size(outW, outH, fps, bitrate);
+        if (!fits) throw e;
+        const big = new Error('VIDEO_TOO_BIG');
+        big.fmSize = { w: outW, h: outH, fitW: fits.w, fitH: fits.h, custom: custom };
+        throw big;
+      }
+
       const projCanvas = document.createElement('canvas');
       projCanvas.width = P.width; projCanvas.height = P.height;
       const projCtx = projCanvas.getContext('2d');
@@ -1518,7 +1552,7 @@ window.FM = window.FM || {};
       /* CRASH-RESUME (#47, the second half). The codec has to be picked BEFORE the muxer now, because
        * it is part of the signature that decides whether a saved job belongs to THIS export. Nothing
        * else about the move matters — pickVideoCodec only probes the encoder. */
-      const codec = await pickVideoCodec(outW, outH, fps, bitrate);
+      // bughunt6 #3: `codec` was picked at the top of run(), before the decode and the mix: the same probe, made once
       const frameDurUs = 1e6 / fps;
       const XR = FM.exportResume;
       let sig = null, saved = null;

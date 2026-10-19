@@ -168192,6 +168192,159 @@
 
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ BUGHUNT 6 — #3: AN MP4 FRAME BIGGER THAN H.264 LEVEL 5.2 FAILED LATE, AND BLAMED THE BROWSER. pickVideoCodec
+   * (js/exporter.js) asks for High 5.2 at best, whose frame limit is 36,864 macroblocks (about 9.4 MP), and Chrome's
+   * isConfigSupported refuses a bigger frame for every candidate. A panorama photo as the first clip of a Custom project makes
+   * a 7680×1440 canvas (43,200 macroblocks) that nothing warns about, and the size list opens on Same as project. On 0eab51c5 the
+   * codec was picked after prepareCaches, holdVideoElements, the soundtrack mix and the AAC probe, so he waited through the
+   * decode and the mix, and then js/app.js said the browser does not support any of the H.264 settings: Chrome, which does.
+   * The encoder is stood in for (VideoEncoder.isConfigSupported, put back by its descriptor) by the level rule the refuter
+   * checked: a device whose encoder goes no higher than level 5.2, refusing a config when ceil(w/16)·ceil(h/16) is over the
+   * MaxFS of the level in its codec string (3.0: 1,620, 4.0: 8,192, 5.1 and 5.2: 36,864).
+   * The stages are closures inside exporter.js, so each is counted at a witness only it reaches: the pre-flight at
+   * FM.matchGradeFrameLayers (only prepareCaches calls it) and the mix at each OfflineAudioContext built at 2 channels and
+   * 48 kHz (buildAudioMix's). Export at that size is recorded at FM.exporter.run, not rendered.
+   * FAILS ON 0eab51c5: the refusal is an alert with the any-of-the-H.264-settings text, names no size, offers nothing, and comes
+   * after one pre-flight and one mix.
+   * CONTROL, run first: a 1080×1920 project under the same rule (and the real encoder's own answer as well) exports to its
+   * Export ready card with nothing said; both witnesses count its pre-flight and its mix, so the zeros below are real; and
+   * no setting is probed twice (the pick moved, it is not made again). WRITTEN WITHOUT RUNNING (code only, `node --check`). ═══ */
+  test('bughunt6 #3 An export too big for MP4 says so at once and offers a size that works: a 7680×1440 project the encoder refuses (an encoder that stops at H.264 level 5.2, stood in for) is named with 5760×1080 offered before any frame is decoded or the soundtrack mixed, never as a browser with no H.264; Not now exports nothing, and Export at that size exports 5760×1080 (CONTROL: a 1080×1920 project exports to its Export ready card, its pre-flight and mix are counted, and no setting is probed twice)', { item: '1176', budgetMs: 150000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no MP4 export to refuse');
+    if (typeof FM._runExport !== 'function' || typeof FM.showExportDialog !== 'function' || typeof FM._setExportSoloId !== 'function') throw new Error('setup: FM._runExport / FM.showExportDialog (the Export dialog and the entry its button calls) are not reachable');
+    if (!FM.exporter || typeof FM.exporter.run !== 'function' || typeof FM.ask !== 'function') throw new Error('setup: FM.exporter.run / FM.ask are not reachable');
+    if (typeof window.OfflineAudioContext !== 'function') throw new Error('setup: no OfflineAudioContext here, so the mix witness could not count anything');
+    const $ = id => document.getElementById(id);
+    const ready = $('export-ready'), discard = $('xr-discard'), dlg = $('export-dialog');
+    const fmtEl = $('exp-format'), rangeEl = $('exp-range'), resEl = $('exp-res'), fpsEl = $('exp-fps'), cwEl = $('exp-cw'), chEl = $('exp-ch');
+    if (!ready || !discard || !dlg || !fmtEl || !rangeEl || !resEl || !fpsEl || !cwEl || !chEl) throw new Error('setup: the Export dialog or the Export ready card is missing from this build');
+    const own = (o, k) => Object.getOwnPropertyDescriptor(o, k);
+    const put = (o, k, d) => { try { if (d) Object.defineProperty(o, k, d); else delete o[k]; } catch (e) {} };
+    const d0 = { probe: own(VideoEncoder, 'isConfigSupported'), mg: own(FM, 'matchGradeFrameLayers'), oac: own(window, 'OfflineAudioContext'),
+                 ask: own(FM, 'ask'), alert: own(window, 'alert'), run: own(FM.exporter, 'run') };
+    const keep = { fmt: fmtEl.value, range: rangeEl.value, fps: fpsEl.value, cw: cwEl.value, ch: chEl.value,
+                   solo: FM._exportSoloId ? FM._exportSoloId() : null, prefs: null, rep: null };
+    try { keep.prefs = localStorage.getItem('fm.exportPrefs'); keep.rep = localStorage.getItem('fm.lastExportReport'); } catch (e) {}
+    const realProbe = VideoEncoder.isConfigSupported, realMG = FM.matchGradeFrameLayers, ROAC = window.OfflineAudioContext, realRun = FM.exporter.run;
+    // the level rule: nothing above 5.2 on this device, and each level's frame limit in macroblocks
+    const MAXFS = lv => lv > 0x34 ? 0 : lv >= 0x33 ? 36864 : lv >= 0x32 ? 22080 : lv >= 0x2a ? 8704 : lv >= 0x28 ? 8192 : lv >= 0x20 ? 5120 : lv >= 0x1f ? 3600 : 1620;
+    const levelOk = c => {
+      const m = /^avc1\.[0-9a-f]{4}([0-9a-f]{2})$/i.exec(String(c && c.codec));
+      return !m || Math.ceil(c.width / 16) * Math.ceil(c.height / 16) <= MAXFS(parseInt(m[1], 16));
+    };
+    const X = '×';
+    let realToo = true, preps = 0, mixes = 0, answer = null, cardSeen = 0, closer = 0, running = null;
+    const probes = [], said = [], runs = [];
+    const _isoK = isoKeep();
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      Object.defineProperty(VideoEncoder, 'isConfigSupported', { configurable: true, writable: true, value: function (c) {
+        probes.push(c.width + X + c.height + ' ' + c.codec);
+        if (!levelOk(c)) return Promise.resolve({ supported: false, config: c });
+        return realToo ? realProbe.call(VideoEncoder, c) : Promise.resolve({ supported: true, config: c });
+      } });
+      Object.defineProperty(FM, 'matchGradeFrameLayers', { configurable: true, writable: true, value: function () {
+        preps++;
+        return realMG ? realMG.apply(this, arguments) : {};
+      } });
+      class MixWitness extends ROAC {
+        constructor(...a) { if (a[0] === 2 && a[2] === 48000) mixes++; super(...a); }
+      }
+      Object.defineProperty(window, 'OfflineAudioContext', { configurable: true, writable: true, value: MixWitness });
+      const askStub = function (o) {
+        said.push({ via: 'ask', text: [o && o.title, o && o.message, o && o.ok].filter(Boolean).join(' | '), preps: preps, mixes: mixes });
+        return Promise.resolve(answer);
+      };
+      askStub.isOpen = () => false;
+      Object.defineProperty(FM, 'ask', { configurable: true, writable: true, value: askStub });
+      Object.defineProperty(window, 'alert', { configurable: true, writable: true, value: function (m) {
+        said.push({ via: 'alert', text: String(m), preps: preps, mixes: mixes });
+      } });
+      Object.defineProperty(FM.exporter, 'run', { configurable: true, writable: true, value: function (o) {
+        const P = FM.scene.project, k = (o && o.scale) || 1;
+        runs.push((o.outW > 0 && o.outH > 0) ? o.outW + X + o.outH : Math.max(2, Math.round(P.width * k / 2) * 2) + X + Math.max(2, Math.round(P.height * k / 2) * 2));
+        if (runs.length > 1) return Promise.resolve();
+        return realRun.apply(this, arguments);
+      } });
+      // the MP4 ends on the Export ready card: put it away so the export can finish, and count that it came up
+      closer = setInterval(() => { if (!ready.classList.contains('hidden')) { cardSeen++; discard.click(); } }, 60);
+      const project = (w, h, name) => {
+        const S = FM.makeLayer('shape', { name: name, shape: 'rect', x: Math.round(w / 2), y: Math.round(h / 2), shapeW: Math.round(w / 4), shapeH: Math.round(h / 4), fill: '#e76f51', start: 0, duration: 0.2 });
+        FM.scene = scene([S], { project: { width: w, height: h, fps: 10, duration: 0.2, background: '#102030' } });
+        FM.selectLayer(null); FM.refreshAll();
+        FM.scene.project.duration = 0.2;
+      };
+      const openDialog = async () => {
+        await FM.showExportDialog(); await sleep(80);
+        if (dlg.classList.contains('hidden')) throw new Error('setup: the Export dialog did not open for the ' + FM.scene.project.width + X + FM.scene.project.height + ' project');
+        fmtEl.value = 'mp4'; rangeEl.value = 'whole'; fpsEl.value = 'project'; resEl.value = '1'; FM._setExportSoloId(null);
+        if (resEl.value !== '1') throw new Error('setup: the size list has no Same as project rung');
+      };
+      const exportNow = async what => {
+        preps = 0; mixes = 0; cardSeen = 0; probes.length = 0; said.length = 0; runs.length = 0;
+        running = FM._runExport();
+        const end = await Promise.race([running.then(() => 'done'), sleep(60000).then(() => 'hung')]);
+        if (end !== 'done') throw new Error(what + ' had neither finished nor stopped 60 s in');
+      };
+      const told = () => said.map(s => s.via + ' ' + JSON.stringify(s.text.slice(0, 160))).join(' / ') || 'nothing';
+
+      /* CONTROL: an ordinary portrait project, under the same rule and the real encoder's answer */
+      project(1080, 1920, 'bh6 #3 portrait');
+      await openDialog();
+      realToo = true;
+      await exportNow('CONTROL: a 1080' + X + '1920 MP4 export');
+      if (said.length) throw new Error('CONTROL: an ordinary 1080' + X + '1920 MP4 export was refused or failed: ' + told());
+      if (!cardSeen) throw new Error('CONTROL: the 1080' + X + '1920 MP4 export never reached its Export ready card, so it made no file');
+      if (!preps || !mixes) throw new Error('CONTROL: the 1080' + X + '1920 export counted ' + preps + ' pre-flight(s) at FM.matchGradeFrameLayers and ' + mixes + ' mix(es) at OfflineAudioContext, so these witnesses cannot see the stages and the zeros below would prove nothing');
+      const elsewhere = probes.filter(p => p.indexOf('1080' + X + '1920 ') !== 0);
+      if (elsewhere.length) throw new Error('CONTROL: an ordinary 1080' + X + '1920 export probed the encoder at other sizes as well (' + elsewhere.join(', ') + '): a frame the encoder takes must not go looking for a smaller one');
+      const twice = probes.filter((p, i) => probes.indexOf(p) !== i);
+      if (!probes.length || twice.length) throw new Error('CONTROL: the 1080' + X + '1920 export asked the encoder ' + (probes.join(', ') || 'nothing') + ': the codec pick is one probe per setting, made once (' + (twice.length ? twice.join(', ') + ' was asked twice' : 'it was never asked') + ')');
+
+      /* THE BUG: a panorama's canvas, 7680×1440, refused by the level 5.2 limit. Answered Not now. */
+      project(7680, 1440, 'bh6 #3 panorama');
+      await openDialog();
+      realToo = false; answer = null;
+      await exportNow('a 7680' + X + '1440 MP4 export');
+      const bad = [];
+      const generic = said.filter(s => /does not support any of the H\.264 settings/.test(s.text));
+      if (generic.length) bad.push('the 7680' + X + '1440 export was refused as a browser with no H.264 at all (' + JSON.stringify(generic[0].text.slice(0, 120)) + '): this Chrome encodes H.264, only not a frame this big, and nothing says the size');
+      const named = said.filter(s => s.text.indexOf('7680' + X + '1440') >= 0 && s.text.indexOf('5760' + X + '1080') >= 0);
+      if (!named.length) bad.push('nothing said named the frame (7680' + X + '1440) and offered the largest same-shape size the encoder takes (5760' + X + '1080, the 1080p rung of the size list); what was said: ' + told());
+      else {
+        if (named[0].preps || named[0].mixes) bad.push('the refusal came after ' + named[0].preps + ' pre-flight(s) and ' + named[0].mixes + ' mix(es): he waits through Decoding frames and the soundtrack for an export that was never going to be made');
+        if (named[0].via !== 'ask') bad.push('the size was said in an alert, with nothing to tap that exports at 5760' + X + '1080');
+      }
+      if (preps || mixes) bad.push('the refused export ran ' + preps + ' pre-flight(s) and ' + mixes + ' mix(es) in all, where it should run none');
+      if (cardSeen) bad.push('a refused export reached the Export ready card');
+      if (runs.length !== 1) bad.push('answered Not now, the export ran ' + runs.length + ' time(s) (' + runs.join(', ') + '), not once');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* …and Export at that size exports again at 5760×1080, through the same entry, with nothing more said */
+      await openDialog();
+      realToo = false; answer = true;
+      await exportNow('a 7680' + X + '1440 MP4 export answered Export at that size');
+      if (!said.some(s => s.via === 'ask')) throw new Error('the second 7680' + X + '1440 export was not offered a size at all: ' + told());
+      if (said.length !== 1) throw new Error('answered Export at that size, more was said: ' + told());
+      if (runs.join(',') !== '7680' + X + '1440,5760' + X + '1080') throw new Error('answered Export at that size, the export ran at ' + (runs.join(', ') || 'nothing') + ', not 7680' + X + '1440 and then 5760' + X + '1080');
+    } finally {
+      clearInterval(closer);
+      try { if (!ready.classList.contains('hidden')) discard.click(); } catch (e) {}
+      if (running) { try { await Promise.race([running, sleep(10000)]); } catch (e) {} }
+      put(FM.exporter, 'run', d0.run); put(window, 'alert', d0.alert); put(FM, 'ask', d0.ask);
+      put(window, 'OfflineAudioContext', d0.oac); put(FM, 'matchGradeFrameLayers', d0.mg); put(VideoEncoder, 'isConfigSupported', d0.probe);
+      try { if (!dlg.classList.contains('hidden')) { const x = $('exp-cancel'); if (x) x.click(); else dlg.classList.add('hidden'); } } catch (e) {}
+      try { const ov = $('export-overlay'); if (ov) ov.classList.add('hidden'); } catch (e) {}
+      fmtEl.value = keep.fmt; rangeEl.value = keep.range; fpsEl.value = keep.fps; cwEl.value = keep.cw; chEl.value = keep.ch;
+      try { FM._setExportSoloId(keep.solo); } catch (e) {}
+      try {
+        if (keep.prefs == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', keep.prefs);
+        if (keep.rep == null) localStorage.removeItem('fm.lastExportReport'); else localStorage.setItem('fm.lastExportReport', keep.rep);
+      } catch (e) {}
+      _isoK.put();
+    }
+  });
   // ── end bughunt 6 ──
 
 })();

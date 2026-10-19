@@ -6452,6 +6452,7 @@ window.FM = window.FM || {};
     const fmt = sx ? 'mp4' : ((document.getElementById('exp-format') || {}).value || 'mp4');
     const tCb = document.getElementById('exp-transparent');
     const transparent = !!(tCb && tCb.checked && (fmt === 'gif' || fmt === 'frames'));
+    let tooBig = null;   // bughunt6 #3: an MP4 frame the encoder refused, answered once this export has been put away
     try {
       const expName = (FM.scene.project.name || 'freemotion-export').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'freemotion-export';
       /* ⚠️ `verbatim` EXISTS BECAUSE THIS LINE HAS BEEN MANGLING WHOLE SENTENCES (queue 47, v14.34).
@@ -6507,6 +6508,8 @@ window.FM = window.FM || {};
       /* queue 671: the encoder exists but supports none of the H.264 profiles we can write. Named
          rather than left to throw at configure(), where the message named the symptom and not this. */
       else if (e.message === 'NO_VIDEO_CODEC') alert('This browser\u2019s video encoder does not support any of the H.264 settings FreeMotion can write, so an MP4 cannot be made here.\n\nChrome, Edge and Safari all work. If you are on Firefox or an older Android browser, try one of those \u2014 or export a GIF or a PNG sequence instead, which do not need the video encoder.');
+      /* bughunt6 #3: the encoder takes H.264, only not a frame this big. Said after the finally (offerSmallerMp4). */
+      else if (e.message === 'VIDEO_TOO_BIG' && e.fmSize) tooBig = e.fmSize;
       else if (e.message === 'CANCELLED') { /* silent */ }
       else if (e.message === 'FRAMES_TOO_BIG') alert('That PNG sequence is too large to build in memory. Shorten the range, lower the frame rate, or drop the resolution and try again.');
       else if (e.message === 'NO_ZIP_WRITER') alert('The frame-sequence exporter failed to load. Please hard-refresh and try again.');
@@ -6519,6 +6522,31 @@ window.FM = window.FM || {};
       bar.style.width = '0%';
       FM.seekVideosToTime();
     }
+    if (tooBig) await offerSmallerMp4(tooBig, sx);
+  }
+
+  /* bughunt6 #3: AN MP4 TOO BIG FOR THIS DEVICE NAMES ITS SIZE AND OFFERS THE LARGEST THAT WORKS. js/exporter.js refuses the
+   * frame before it decodes or mixes anything, with the largest same-shape rung the encoder took (VIDEO_TOO_BIG). Asked after
+   * runExport's finally, so the solo and the wake lock are already put back. Yes sets the size list to that rung (or Exact size
+   * to those numbers, for an exact size or a rung the list does not hold) and exports again, the same way the Export button
+   * does; Not now changes nothing. The one-tap export (`sx`) has no size list here, so it is told the size only. */
+  async function offerSmallerMp4(t, sx) {
+    const was = t.w + '×' + t.h, fits = t.fitW + '×' + t.fitH;
+    const say = was + ' is too big for an MP4 on this device. The largest it can make is ' + fits + ' (same shape).';
+    if (sx || !FM.ask) { alert(say + '\n\nPick a smaller size and export again.'); return; }
+    const go = await FM.ask({ title: 'Too big for an MP4', message: say + ' Export at that size?', ok: 'Export at ' + fits, cancel: 'Not now' });
+    if (go !== true) return;
+    const P = FM.scene.project, sel = document.getElementById('exp-res');
+    const cw = document.getElementById('exp-cw'), ch = document.getElementById('exp-ch');
+    const sized = v => Math.max(2, Math.round(v / 2) * 2);
+    const rung = (sel && !t.custom) ? [].find.call(sel.options, o => {
+      const s = parseFloat(o.value);
+      return o.value !== 'custom' && s > 0 && sized(P.width * s) === t.fitW && sized(P.height * s) === t.fitH;
+    }) : null;
+    if (rung) sel.value = rung.value;
+    else if (sel && cw && ch && [].some.call(sel.options, o => o.value === 'custom')) { sel.value = 'custom'; cw.value = t.fitW; ch.value = t.fitH; }
+    else { alert(say + '\n\nPick a smaller size and export again.'); return; }
+    return runExport();
   }
 
   /* "Export ready" — our card in front of the OS save sheet (queue 141 part 4).
