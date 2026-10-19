@@ -168436,6 +168436,63 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* (#6) bughunt6 #6: TAB WALKS ONLY THE ROWS THE TIMELINE SHOWS. Tab selected the next layer of the WHOLE project, so inside
+     Edit Group it walked out to a layer the open group's timeline does not draw, and past a collapsed group it walked into
+     members with no row on screen; a Delete after it deleted that layer. FM.selectAll was scoped against exactly this.
+     Keys are pressed on the page, as a real key is, in the test's own scene: X, then group G holding A and B.
+     FAILS ON bc67b146: inside G, the second Tab from A selects X; with G collapsed, the second Tab from X selects A.
+     CONTROL, which holds before and after: outside any group with nothing collapsed, Tab from X walks G, A, B and back to X,
+     the project's order, as it always did. The group is left on the way out. */
+  test('bughunt6 #6 Tab stays inside the group you are editing: inside Edit Group three Tabs and a Shift+Tab from A select only the group’s own A and B, and with the group collapsed Tab skips its members (CONTROL: outside any group with nothing collapsed, Tab walks every layer in order)', { item: '1176' }, async function () {
+    if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
+    if (typeof FM.enterGroup !== 'function' || typeof FM.exitGroup !== 'function' || typeof FM.groupDescendants !== 'function') throw new Error('setup: Edit Group (FM.enterGroup / FM.exitGroup / FM.groupDescendants) is not reachable');
+    const tab = shift => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', shiftKey: !!shift, bubbles: true, cancelable: true }));
+      return FM.scene.selectedId;
+    };
+    const bad = [];
+    await _bh2With(async function () {
+      const shape = (name, x) => { const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 200, shapeW: 60, shapeH: 60, fill: '#2a9d8f' }); L.start = 0; L.duration = 3; return L; };
+      const X = shape('bh6 #6 X', 80), A = shape('bh6 #6 A', 200), B = shape('bh6 #6 B', 320);
+      const G = FM.makeLayer('group', { name: 'bh6 #6 G' });
+      G.start = 0; G.duration = 3; G.collapsed = false;
+      A.parent = G.id; B.parent = G.id;
+      FM.scene.layers.push(X, G, A, B);
+      const nm = id => { const l = FM.layerById(FM.scene, id); return l ? String(l.name).replace('bh6 #6 ', '') : String(id); };
+      try {
+        FM.refreshAll();
+        if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+
+        /* CONTROL: outside any group, nothing collapsed — every layer, in the project's order */
+        FM.selectLayer(X.id);
+        const walk = [tab(), tab(), tab(), tab()].map(nm);
+        if (walk[0] === 'X') throw new Error('setup: Tab did not move the selection at all, so no key here reaches the editor and nothing below would mean anything');
+        if (walk.join(',') !== 'G,A,B,X') throw new Error('CONTROL: outside any group with nothing collapsed, Tab from X walked ' + walk.join(', ') + ', not G, A, B, X (the project order Tab has always walked)');
+
+        /* inside Edit Group on G */
+        FM.enterGroup(G.id);
+        if (FM.groupContext !== G.id) throw new Error('setup: FM.enterGroup did not open the group');
+        FM.selectLayer(A.id);
+        const inside = [tab(), tab(), tab(), tab(true)].map(nm);
+        const out = inside.filter(n => n !== 'A' && n !== 'B');
+        if (out.length) bad.push('inside Edit Group on G (A and B), three Tabs and a Shift+Tab from A selected ' + inside.join(', ') + ': ' + out.join(', ') + ' has no row on the open group’s timeline, so a Delete there deletes a layer he cannot see');
+        else if (inside.join(',') !== 'B,A,B,A') bad.push('inside Edit Group the walk from A was ' + inside.join(', ') + ', not B, A, B, A');
+        FM.exitGroup(true);
+
+        /* G collapsed: its members have no rows */
+        G.collapsed = true; FM.refreshAll();
+        FM.selectLayer(X.id);
+        const folded = [tab(), tab(), tab()].map(nm);
+        const hid = folded.filter(n => n === 'A' || n === 'B');
+        if (hid.length) bad.push('with G collapsed, three Tabs from X selected ' + folded.join(', ') + ': ' + hid.join(', ') + ' is a member of the collapsed group, with no row on screen');
+        else if (folded.join(',') !== 'G,X,G') bad.push('with G collapsed, the walk from X was ' + folded.join(', ') + ', not G, X, G');
+      } finally {
+        if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 6 ──
 
 })();

@@ -9430,7 +9430,23 @@ window.FM = window.FM || {};
       else if (e.code === 'BracketRight') { e.preventDefault(); markRegionOut(); }
       else if (e.code === 'Backslash') { e.preventDefault(); clearRegion(); }
       else if (e.code === 'KeyM') { e.preventDefault(); if (e.repeat) return; if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead(); }   // toggle (dedups within 0.12s) + ignore OS autorepeat → no stacked duplicates / undo spam
-      else if (e.code === 'Tab') { e.preventDefault(); const ls = FM.scene.layers; if (ls.length) { const i = ls.findIndex(l => l.id === FM.scene.selectedId); const n = ((i < 0 ? 0 : i + (e.shiftKey ? -1 : 1)) + ls.length) % ls.length; FM.selectLayer(ls[n].id); } }
+      else if (e.code === 'Tab') {
+        e.preventDefault();
+        /* bughunt6 #6: TAB WALKS THE ROWS THE TIMELINE SHOWS. It walked every layer in the project, so inside Edit Group,
+           or past the members of a collapsed group, it selected a layer with no row on screen, and a Delete after it
+           deleted that layer. FM.selectAll is scoped against exactly this; this is its rule with the timeline's own two
+           (js/timeline.js, rebuild): inside a group, every member of that group (it is drawn fully open); outside one,
+           every layer but the members of a collapsed group. In the project's order, which is the rows' order. */
+        const gctx = FM._liveGroupCtx ? FM._liveGroupCtx() : FM.groupContext;
+        const inGroup = gctx ? new Set(FM.groupDescendants(gctx).map(l => l.id)) : null;
+        const folded = l => {
+          let pid = l.parent, hops = 0;
+          while (pid && hops++ < 64) { const p = FM.layerById(FM.scene, pid); if (!p) return false; if (p.type === 'group' && p.collapsed) return true; pid = p.parent; }
+          return false;
+        };
+        const ls = FM.scene.layers.filter(l => inGroup ? inGroup.has(l.id) : !folded(l));
+        if (ls.length) { const i = ls.findIndex(l => l.id === FM.scene.selectedId); const n = ((i < 0 ? 0 : i + (e.shiftKey ? -1 : 1)) + ls.length) % ls.length; FM.selectLayer(ls[n].id); }
+      }
       else if ((e.code === 'Equal' || e.code === 'NumpadAdd') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1.5); }
       else if ((e.code === 'Minus' || e.code === 'NumpadSubtract') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1 / 1.5); }
       // Number keys. With a layer SELECTED: 1..N open its category cards (Color & Fill, Border,
