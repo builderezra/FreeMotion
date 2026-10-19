@@ -16615,11 +16615,23 @@
      * running through that would keep the exact thing he is complaining about, just behind one more
      * sheet. The test drives the real `showExportDialog`, so it covers both. */
     if (!FM.showExportDialog) throw new Error('FM.showExportDialog is not reachable');
-    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    /* isolation (20 Oct, full-order red): it inherited a timeline longer than 0 s. It swapped in its own 8 s box but never
+       refreshed, so project.duration stayed whatever the scene had: the 20x20 shape 'undo / redo grey out when there is
+       nothing behind or ahead' used to leave made it a few seconds. That source puts the scene back now, so a full run
+       met the seeded empty project, a 0 s timeline, where play() starts and its first tick stops it (app.js tick:
+       nt >= P.duration pauses) — "the transport would not start". The app was right; the hold-Play test (e8cac75d) met
+       the same. It now sets up its own 8 s box in the editor (isoOwnLayer, below the 330s), refreshes so the timeline
+       really is 8 s long (CONTROL), and the finally puts the scene, selection, length, playhead and Home back, and the
+       transport running again if it found it running. */
+    const played0 = !!FM.playing;
+    if (played0 && FM.pause) FM.pause();
+    const iso = isoOwnLayer({ name: 'Box', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00' });
     try {
-      FM.scene.layers.length = 0;
-      FM.scene.layers.push(FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 8 }));
+      iso.L.duration = 8;
+      FM.refreshAll();
       FM.time = 0;
+      if (!(FM.scene.project.duration >= 8)) throw new Error('CONTROL: the one-clip timeline is ' + FM.scene.project.duration + ' s long, so Play has nothing to play');
+      if (FM.playing) throw new Error('CONTROL: playback is already running before Play is pressed');
       await FM.requestPlay();
       await sleep(140);
       // CONTROL: it must really be playing, or "it is paused afterwards" is true of a transport that
@@ -16633,10 +16645,8 @@
       if (FM.playing) FM.pause();
       const d = document.getElementById('export-dialog'); if (d) d.classList.add('hidden');
       const o = document.getElementById('export-overlay'); if (o) o.classList.add('hidden');
-      FM.scene.layers.length = 0;
-      layers0.forEach(l => FM.scene.layers.push(l));
-      FM.time = t0;
-      FM.refreshAll();
+      iso.put();
+      if (played0 && !FM.playing && FM.togglePlay) FM.togglePlay();
     }
   });
 
