@@ -165198,8 +165198,10 @@
      Now the panels and the sanitiser read one range each from FM.LIMITS (js/scene.js).
      On e5dfa537: volume 4, speed 100 and speed 0.05 after the Undo, again after the Redo, and after the import.
      CONTROLS (the same before and after): an ordinary 300 % / 2× clip comes back unchanged; and what the clamp is FOR still holds — a
-     plain volume or speed of 1e9 is brought down into range, a negative one up to the floor, NaN / Infinity / a word repaired to 1. */
-  test('bughunt5 #1 An Undo keeps a loud song and a fast clip as they were: a song at 600 %, a 200× time-lapse and a 2 % slow motion come back from one Undo of an unrelated edit, from its Redo and from a project file imported, saved and reopened exactly as they were, not cut to 400 %, 100× and 5 % (CONTROLS: an ordinary 300 % / 2× clip is untouched; an absurd, negative or broken plain volume or speed is still brought into range)', { item: '1176', budgetMs: 60000 }, async function () {
+     plain volume or speed of 1e9 is brought down into range, a negative one up to the floor, NaN / Infinity / a word repaired to 1.
+     BUDGET: the default 45 s: one undo and redo over five small layers and one import / save / reopen round trip (the 1040 test
+     fits two round trips in 30 s). */
+  test('bughunt5 #1 An Undo keeps a loud song and a fast clip as they were: a song at 600 %, a 200× time-lapse and a 2 % slow motion come back from one Undo of an unrelated edit, from its Redo and from a project file imported, saved and reopened exactly as they were, not cut to 400 %, 100× and 5 % (CONTROLS: an ordinary 300 % / 2× clip is untouched; an absurd, negative or broken plain volume or speed is still brought into range)', { item: '1176' }, async function () {
     if (!FM.history || !FM.history.reset || !FM.history._steps || !FM.storage || typeof FM.storage._sanitizeLayers !== 'function') throw new Error('setup: FM.history (reset, _steps) or FM.storage._sanitizeLayers is not reachable');
     const WANT = { loud: { volume: 6 }, fast: { speed: 200 }, slow: { speed: 0.02 }, ctl: { volume: 3, speed: 2 } };
     const SAY = { loud: 'song at 600 %', fast: '200× time-lapse', slow: '2 % slow motion', ctl: 'ordinary 300 % / 2× clip (CONTROL)' };
@@ -165281,8 +165283,11 @@
      1/30 s, and a real FM.audioReact.bake of a minute of a 120 BPM beat (its envelope stubbed, the follower's default release).
      On e5dfa537: 200 keys after the open path, the Undo, the Redo and the import, and the bake's keys cut to 200 by the next Undo.
      CONTROLS: the bake writes more than 200 keys (else the case measures nothing); 150 good keys and two broken ones keep the 150 good
-     ones (the same before and after); a list longer than FM.LIMITS.keyframes is still cut to it (after the fix). */
-  test('bughunt5 #2 A long Audio bake keeps all its keyframes: 1500 keys on an effect control, 300 frame-by-frame roto keys on a mask and a minute of a real Audio → keyframes bake survive a project open, one Undo of an unrelated edit, its Redo and a project file imported, saved and reopened, not cut to their first 200 (CONTROLS: the bake writes more than 200; 150 good keys and two broken ones keep the 150; a list longer than FM.LIMITS.keyframes is still cut to it)', { item: '1176', budgetMs: 90000 }, async function () {
+     ones (the same before and after); and after the fix, FM.LIMITS.keyframes is 3600 × 120 + 1 and the cap still cuts, shown through
+     the seams with a cap of 500 on a 600-key list (no list here is longer than the bake's 1801 samples).
+     BUDGET: the default 45 s. The longest parts are one import / save / reopen round trip (the 1040 test fits two in 30 s) and a
+     handful of undo, redo and refreshAll calls over a few thousand keys. */
+  test('bughunt5 #2 A long Audio bake keeps all its keyframes: 1500 keys on an effect control, 300 frame-by-frame roto keys on a mask and a minute of a real Audio → keyframes bake survive a project open, one Undo of an unrelated edit, its Redo and a project file imported, saved and reopened, not cut to their first 200 (CONTROLS: the bake writes more than 200; 150 good keys and two broken ones keep the 150; the cap is 3600 s × 120 fps + 1 and still cuts: given a cap of 500, a 600-key effect control and a 600-key roto path keep their first 500)', { item: '1176' }, async function () {
     if (!FM.storage || typeof FM.storage._sanitizeEffects !== 'function' || typeof FM.storage._sanitizeLayers !== 'function') throw new Error('setup: FM.storage._sanitizeEffects / _sanitizeLayers is not reachable');
     if (!FM.history || !FM.history.reset || !FM.history._steps) throw new Error('setup: FM.history (reset, _steps) is not reachable');
     if (!FM.audioReact || typeof FM.audioReact.bake !== 'function') throw new Error('setup: FM.audioReact.bake is not reachable');
@@ -165401,17 +165406,26 @@
     const kfFew = fxKf(few);
     if (!kfFew || kfFew.length !== 150) bad.push('CONTROL: 150 good keyframes and two broken ones came back as ' + (kfFew ? kfFew.length : 'no') + ' keyframes, not the 150 good ones');
 
-    /* ── CONTROL (after the fix): the cap still exists for a file no writer could make. It is one key per frame of the longest
-       project (3600 s) at the highest frame rate (120 fps), so it must be at least that; one list 10 past it is cut to it. The keys
-       share one object so the input costs one array, not half a million objects. */
+    /* ── CONTROL (after the fix): the cap still exists for a file no writer could make, and it is the number js/scene.js says.
+       The constant is pinned in one cheap comparison: one key per frame of the longest project (3600 s) at the highest frame rate
+       (120 fps). The cutting itself is proved through the seams with a small cap (FM.storage._safeKfProp / _safeMaskPath take one
+       as their last argument; the app passes none), so no list in this test is longer than the bake's 1801 samples: a 600-key
+       list and a cap of 500. The cap keeps the first 500 in the LIST's order and then sorts them by time; this list is in time
+       order, so they are its first 500 times. */
     const CAP = FM.LIMITS && FM.LIMITS.keyframes;
-    if (!(CAP >= 3600 * 120 + 1)) bad.push('FM.LIMITS.keyframes (js/scene.js) is ' + CAP + ', below one key per frame of the longest project at the highest frame rate (3600 s × 120 fps + 1), so a writer can still make more keys than the sanitiser keeps');
+    if (CAP !== 3600 * 120 + 1) bad.push('FM.LIMITS.keyframes (js/scene.js) is ' + CAP + ', not one key per frame of the longest project at the highest frame rate (3600 s × 120 fps + 1 = 432001)');
+    if (typeof FM.storage._safeKfProp !== 'function' || typeof FM.storage._safeMaskPath !== 'function') bad.push('FM.storage._safeKfProp / _safeMaskPath (the keyframe caps’ seams) are not reachable, so the cap cannot be shown to cut');
     else {
-      const one = { t: 1, v: 5, e: 'linear' };
-      const huge = { id: 'bh5huge', type: 'shape', effects: [{ type: 'blur', enabled: true, params: { radius: { kf: new Array(CAP + 10).fill(one) } } }] };
-      FM.storage._sanitizeEffects(huge);
-      const kfHuge = fxKf(huge);
-      if (!kfHuge || kfHuge.length !== CAP) bad.push('CONTROL: a list of ' + (CAP + 10) + ' keyframes came back with ' + (kfHuge ? kfHuge.length : 'none') + ', not cut to FM.LIMITS.keyframes (' + CAP + ') — the cap that bounds a hostile file is gone');
+      const firstTimes = (kf, n) => Array.isArray(kf) && kf.length === n && kf.every((k, i) => Math.abs(k.t - i / FPS) < 1e-9);
+      const lastOf = kf => (Array.isArray(kf) && kf.length ? (+kf[kf.length - 1].t).toFixed(3) + ' s' : 'none');
+      const cutFx = FM.storage._safeKfProp(bakeKf(600), 0, 50, 500);
+      if (!cutFx || !firstTimes(cutFx.kf, 500)) bad.push('CONTROL: with a cap of 500, a 600-key effect control came back with ' + (cutFx ? cutFx.kf.length + ' keys, the last at ' + lastOf(cutFx.kf) : 'nothing') + ', not its first 500 (0 to ' + (499 / FPS).toFixed(3) + ' s) — the cap that bounds a hostile file does not cut');
+      const keepFx = FM.storage._safeKfProp(bakeKf(600), 0, 50);
+      if (!keepFx || !firstTimes(keepFx.kf, 600)) bad.push('with no cap given (as every caller in the app calls it), a 600-key effect control came back with ' + (keepFx ? keepFx.kf.length : 'no') + ' keys, not all 600');
+      const cutMask = FM.storage._safeMaskPath(rotoKf(600), 500);
+      if (!cutMask || !firstTimes(cutMask.kf, 500)) bad.push('CONTROL: with a cap of 500, a 600-key roto path came back with ' + (cutMask && Array.isArray(cutMask.kf) ? cutMask.kf.length + ' keys, the last at ' + lastOf(cutMask.kf) : 'no keys') + ', not its first 500 — the mask cap does not cut');
+      const keepMask = FM.storage._safeMaskPath(rotoKf(600));
+      if (!keepMask || !firstTimes(keepMask.kf, 600)) bad.push('with no cap given (as sanitizeMasks calls it), a 600-key roto path came back with ' + (keepMask && Array.isArray(keepMask.kf) ? keepMask.kf.length : 'no') + ' keys, not all 600');
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });

@@ -1171,10 +1171,14 @@ window.FM = window.FM || {};
     }
     return out;
   }
-  function safeKfProp(p, min, max) {
+  /* bughunt5 #2: `cap` is the suite's, through FM.storage._safeKfProp below. Every caller in the app passes three arguments
+     and gets AFX_MAX_KF (FM.LIMITS.keyframes), so nothing here behaves differently; a test can prove the cut still happens with
+     a 600-key list and a cap of 500 instead of allocating a list longer than 432,001. The cap keeps the first `cap` entries in
+     the LIST's order and then sorts them by time; a list the app wrote is already in time order. */
+  function safeKfProp(p, min, max, cap = AFX_MAX_KF) {
     if (!p || typeof p !== 'object' || !Array.isArray(p.kf)) return null;
     const kf = [];
-    p.kf.slice(0, AFX_MAX_KF).forEach(k => {
+    p.kf.slice(0, cap).forEach(k => {
       if (!k || typeof k !== 'object') return;
       const t = +k.t, v = +k.v;
       /* ⚠️ queue 827: A NEGATIVE KEYFRAME TIME IS LEGAL. A clip can be dragged PAST 0 into a negative start
@@ -1204,6 +1208,8 @@ window.FM = window.FM || {};
     if (['cycle', 'pingpong'].indexOf(p.loopMode) >= 0 && kf.length >= 2) out.loopMode = p.loopMode;
     return out;
   }
+  /* bughunt5 #2 suite seam: the real function, so a test can pass a small cap (above). */
+  FM.storage._safeKfProp = safeKfProp;
   /* ═══ A STABLE `uid` SURVIVES THE REBUILD (queue 921 S0, spec D16) ════════════════════════════════
    * Every sanitiser below REBUILDS its entries from the registry schema, keeping only known keys — which
    * is what makes an untrusted file safe, and which also deletes any identity an entry carries. Live
@@ -1356,10 +1362,12 @@ window.FM = window.FM || {};
   }
   // path is EITHER a static pts array OR an animated prop { kf:[{t,v:ptsArray,e}] } so the WHOLE path can
   // be keyframed. Returns null (drop the mask) when neither shape validates.
-  function safeMaskPath(path) {
+  /* bughunt5 #2: `cap` is the suite's, through FM.storage._safeMaskPath below, exactly as safeKfProp's: sanitizeMasks passes one
+     argument and gets MASK_MAX_KF (FM.LIMITS.keyframes). The first `cap` keys in the list's order are kept, then sorted by time. */
+  function safeMaskPath(path, cap = MASK_MAX_KF) {
     if (path && typeof path === 'object' && !Array.isArray(path) && Array.isArray(path.kf)) {
       const kf = [];
-      path.kf.slice(0, MASK_MAX_KF).forEach(k => {
+      path.kf.slice(0, cap).forEach(k => {
         if (!k || typeof k !== 'object') return;
         const t = +k.t;
         if (!isFinite(t)) return;          // queue 827: negative is legal — a clip dragged before zero takes its roto with it
@@ -1373,6 +1381,8 @@ window.FM = window.FM || {};
     }
     return safeMaskPts(path);   // static path (possibly []); null when not an array
   }
+  /* bughunt5 #2 suite seam: the real function, so a test can pass a small cap (above). */
+  FM.storage._safeMaskPath = safeMaskPath;
   function sanitizeMasks(l) {
     if (l.masks == null) return;
     if (!Array.isArray(l.masks)) { delete l.masks; return; }
