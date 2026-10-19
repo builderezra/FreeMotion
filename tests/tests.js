@@ -166265,6 +166265,95 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* bughunt5 #11 — TAPPING A POINT TO SELECT IT INSERTED A KEYFRAME. Edit Points (js/point-edit.js) ran ensureKfHere on every
+     pointerdown that hit a point, before it could know whether the finger would move, and onUp commits. So on a shape whose points
+     are keyframed, a tap just to select a point between two keys (to read its X and Y, switch it to a Curve or use the nudge pad:
+     queue 690's own list) wrote a third, LINEAR key at the playhead. The Ease In on the next key then ran over half the time, the
+     morph changed shape, and the undo stack gained a step he never made. Now only the ring insert keys on the press; a point or
+     handle drag keys once it has passed the touch slop.
+     Driven through the real overlay: a touch pointerdown and pointerup on #pe-overlay at the point's screen spot (the inverse of
+     FM.eventToProject, which the overlay reads, checked against it first), with Edit Points open embedded, as the Edit Shape panel
+     opens it.
+     On d2b38386: three keyframes after the tap, the third a linear key at 1 s, and the morph at 1.5 s moved by about 0.009 of the
+     shape's width.
+     CONTROLS (the same before and after): the tap really hit the point (it is selected afterwards); a real drag, 40 px past the 6 px
+     slop, keys the playhead and moves the point in that key, and leaves the 0 s and 2 s keys as they were.
+     BUDGET: the default 45 s: one shape, two gestures and under 1.5 s of sleeps. */
+  test('bughunt5 #11 Tapping a point to select it adds no keyframe: on an Edit Points shape keyed at 0 s and 2 s with Ease In on the second key, a finger tap on a point at 1 s (down and up, no move) selects it and leaves two keyframes and the eased morph exactly as they were, not a third, linear key at 1 s (CONTROLS: the tap selected the point; a real drag past the touch slop keys the playhead, moves the point there and leaves the other keys alone)', { item: '1176' }, async function () {
+    if (!FM.pointEdit || !FM.pointEdit.start || !FM.pointEdit.getSel || !FM.pointEdit._toCanvas || !FM.pointEdit._toLocal || typeof FM.evalShapeSubs !== 'function' || typeof FM.eventToProject !== 'function') throw new Error('setup: FM.pointEdit (start, getSel, _toCanvas, _toLocal), FM.evalShapeSubs or FM.eventToProject is not reachable');
+    const bad = [];
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const closePE = () => { try { if (FM.pointEdit.isActive()) FM.pointEdit.stop(); } catch (e) {} };
+    try {
+      if (hadHome && FM.home.close) FM.home.close();
+      await _bh2With(async function () {
+        const P = FM.scene.project, W = P.width || 320, H = P.height || 240;
+        const K0 = [[[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]]];
+        const K2 = [[[0.3, 0.3], [0.9, 0.3], [0.9, 0.9], [0.3, 0.9]]];
+        const L = FM.makeLayer('shape', { name: 'bh5 #11 morph', shape: 'path', x: Math.round(W / 2), y: Math.round(H / 2), shapeW: Math.round(W * 0.6), shapeH: Math.round(H * 0.6), fill: '#29d9bb', start: 0, duration: 4,
+          extra: { closed: true, points: null, subs: { kf: [{ t: 0, v: JSON.parse(JSON.stringify(K0)), e: 'linear' }, { t: 2, v: JSON.parse(JSON.stringify(K2)), e: 'easeIn', bez: [0.42, 0, 1, 1] }] } } });
+        L.start = 0; L.duration = 4;
+        FM.scene.layers.push(L);
+        FM.time = 1;
+        FM.selectLayer(L.id); FM.refreshAll(); await sleep(150);
+        FM.pointEdit.start(L.id, { embedded: true }); await sleep(150);
+        if (!FM.pointEdit.isActive() || FM.pointEdit.layerId() !== L.id) throw new Error('setup: Edit Points did not open on the keyframed shape');
+        const kfs = () => (L.subs && !Array.isArray(L.subs) && Array.isArray(L.subs.kf)) ? L.subs.kf : [];
+        if (kfs().length !== 2) throw new Error('setup: the shape has ' + kfs().length + ' keyframes before anything, not 2');
+        FM.time = 1;
+
+        /* A project point → the client spot FM.eventToProject reads back as that point. */
+        const cv = document.getElementById('preview');
+        const r0 = cv ? cv.getBoundingClientRect() : null;
+        if (!r0 || !(r0.width > 0 && r0.height > 0)) throw new Error('setup: the preview has no size to aim at');
+        const client = q => {
+          const r = cv.getBoundingClientRect(), sc = cv.__fmRS || 1;
+          return { x: r.left + ((q.x - (cv.__fmOX || 0)) / (cv.width / sc)) * r.width, y: r.top + ((q.y - (cv.__fmOY || 0)) / (cv.height / sc)) * r.height };
+        };
+        const spotOf = pi => {
+          const p = FM.evalShapeSubs(L, 1)[0][pi], q = FM.pointEdit._toCanvas(L, p[0], p[1]), c = client(q);
+          const back = FM.eventToProject({ clientX: c.x, clientY: c.y });
+          if (Math.hypot(back.x - q.x, back.y - q.y) > 0.5) throw new Error('setup: the client spot for point ' + pi + ' reads back ' + Math.hypot(back.x - q.x, back.y - q.y).toFixed(2) + ' project px off, so the gesture would not land on it');
+          return c;
+        };
+        const send = (type, c, buttons) => attached(document.getElementById('pe-overlay'), 'Edit Points overlay').dispatchEvent(new PointerEvent(type, {
+          bubbles: true, cancelable: true, pointerId: 61, isPrimary: true, pointerType: 'touch', clientX: c.x, clientY: c.y, buttons: buttons }));
+        const morph = t => JSON.stringify(FM.evalShapeSubs(L, t));
+
+        /* ── A TAP on point 3 (start() has point 1 selected), down and up with no move. */
+        const before15 = morph(1.5);
+        const tap = spotOf(2);
+        send('pointerdown', tap, 1);
+        send('pointerup', tap, 0);
+        await sleep(80);
+        const sel = FM.pointEdit.getSel();
+        if (!sel || sel.si !== 0 || sel.pi !== 2) throw new Error('CONTROL: the tap did not select point 3 (the selection is ' + JSON.stringify(sel) + '), so it never reached the point and nothing below is measured');
+        if (kfs().length !== 2) bad.push('a tap that only selected a point left the shape with ' + kfs().length + ' keyframes, not 2: a ' + JSON.stringify(kfs().map(k => k.t + ' s ' + k.e)) + ' set, with a new key at the playhead');
+        if (morph(1.5) !== before15) bad.push('after that tap the morph at 1.5 s is no longer what it was: the new key at 1 s cut the Ease In segment in half');
+
+        /* ── CONTROL: a real drag of point 1, 40 px across, well past the 6 px touch slop. */
+        await sleep(400);
+        const was = FM.evalShapeSubs(L, 1)[0][0].slice();
+        const grab = spotOf(0);
+        send('pointerdown', grab, 1);
+        send('pointermove', { x: grab.x + 40, y: grab.y }, 1);
+        send('pointerup', { x: grab.x + 40, y: grab.y }, 0);
+        await sleep(80);
+        const at1 = kfs().filter(k => Math.abs(k.t - 1) < 1e-3)[0];
+        if (kfs().length !== 3 || !at1) bad.push('CONTROL: a real drag at 1 s left ' + kfs().length + ' keyframes (' + JSON.stringify(kfs().map(k => k.t)) + '), not three with one at the playhead');
+        else {
+          const p = at1.v && at1.v[0] && at1.v[0][0];
+          if (!p || !(Math.abs(p[0] - was[0]) > 1e-3)) bad.push('CONTROL: the drag keyed 1 s but did not move point 1 in that key (u ' + (p ? p[0] : '?') + ', was ' + was[0] + ')');
+        }
+        const k0 = kfs().filter(k => Math.abs(k.t) < 1e-3)[0], k2 = kfs().filter(k => Math.abs(k.t - 2) < 1e-3)[0];
+        if (!k0 || JSON.stringify(k0.v) !== JSON.stringify(K0) || !k2 || JSON.stringify(k2.v) !== JSON.stringify(K2)) bad.push('CONTROL: the drag at 1 s changed the 0 s or 2 s keyframe');
+      }, closePE);
+    } finally {
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();
