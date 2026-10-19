@@ -304,11 +304,23 @@ window.FM = window.FM || {};
       if (!FM.decodeAudio || !FM.detectSpeech) throw new Error('speech detection unavailable');
       const m = FM.media.get(srcLayer.id);
       if (!m || !m.file) throw new Error('that clip has no media file');
+      /* bughunt5 #12: which of the two layers are in the open scene at the press. Only those are re-read after the awaits below
+         (a caller may hand in layers of its own that were never in the scene; they are written as before). */
+      const live0 = l => !!(l && FM.scene && Array.isArray(FM.scene.layers) && FM.layerById(FM.scene, l.id) === l);
+      const capWasLive = live0(capLayer), srcWasLive = live0(srcLayer);
       // 8 kHz: ample for voice activity, and ~6x smaller than a device-rate decode. Full-rate decoding
       // measured 439 MB for 20 minutes (js/media.js) and killed the tab.
       const buf = await FM.decodeAudio(m.file, { rate: 8000 });
       if (!buf) throw new Error('no decodable audio in that clip');
       const res = await FM.detectSpeech(buf, { onProgress: onProgress });
+      /* bughunt5 #12: the decode and the detector take seconds on a long clip, and ↶ can land meanwhile. An undo installs FRESH
+         layer objects (history.restore), so the two captured here are orphans: the cues were written to a detached object, the
+         caller's commit found nothing changed, and the toast still said "N cues". So both are re-read by id (the tracker's guard,
+         js/tracker.js): a layer still there is written in its live form, and one the undo took away ends the run with nothing
+         written and `gone`, which the caller reports instead of a count. */
+      const reread = l => (FM.scene && Array.isArray(FM.scene.layers)) ? FM.layerById(FM.scene, l.id) : null;
+      if (capWasLive) { const c = reread(capLayer); if (!c) return { count: 0, gone: true, stats: res.stats }; capLayer = c; }
+      if (srcWasLive) { const s = reread(srcLayer); if (!s) return { count: 0, gone: true, stats: res.stats }; srcLayer = s; }
 
       const dur = capLayer.duration > 0 ? capLayer.duration : Infinity;
       const wasTrack = C.isTrack(capLayer);
@@ -576,7 +588,7 @@ window.FM = window.FM || {};
             try {
               const found = await C.detect(layer, cand, p => { btn.textContent = 'Listening…' + tag + ' ' + Math.round(p * 100) + '%'; }, mode);
               r = found; used = cand;
-              if (r.count) break;
+              if (r.count || r.gone) break;   // bughunt5 #12: an Undo took the caption or its clip away mid-run: stop, below says so
             } catch (err) {
               if (!firstError) firstError = { err: err, clip: cand };
             }
@@ -589,6 +601,12 @@ window.FM = window.FM || {};
             if (FM.toast) FM.toast((noAudio ? 'No sound in “' : 'Could not detect speech in “') +
               ((failed && failed.name) || 'that clip') + '” — ' +
               (noAudio ? 'choose a clip with sound' : 'see Settings → Last error for details'), 6000);
+            return;
+          }
+          /* bughunt5 #12: the caption layer or the clip it was listening to was taken away (an Undo) while it listened. Nothing
+             was written, so nothing is committed, and the toast says that rather than a cue count or "no speech". */
+          if (r.gone) {
+            if (FM.toast) FM.toast('Nothing added — the captions or their clip changed while it was listening. Try again', 5000);
             return;
           }
           const src2 = used;

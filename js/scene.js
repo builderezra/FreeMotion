@@ -21,6 +21,29 @@ window.FM = window.FM || {};
   const CLIP_COLORS = ['#2bbfa8', '#e0913f', '#df5b5b', '#9b6dff', '#46c98a', '#4d8bf0', '#e85f9e', '#d9b13f'];
   let _colorIdx = 0;
 
+  /* ═══ THE APP'S OWN RANGES, IN ONE PLACE (bughunt5 #1, #2) ═════════════════════════════════════════════════════════════
+   * bughunt5 #1: the panels that OFFER a range and the sanitiser that history.restore runs on every undo and redo (js/storage.js
+   * sanitizeTiming) each kept their own copy of it, and the copies drifted. The Volume card offered 0 to 1000 % (queue 195) and
+   * the Speed card 1 % to 1000x (queue 184), while the sanitiser held a plain volume to 0..4 and a plain speed to 0.05..100. So
+   * ONE undo of anything cut a song at 600 % to 400 % and a 200x time-lapse to 100x (a 2 % slow motion to 5 %), the undo
+   * autosaved it, and redo could not bring it back (it sanitises the same way). Now both read these: js/inspector.js takes
+   * SPD_MIN / SPD_MAX and VOL_MIN / VOL_MAX from here, and sanitizeTiming clamps to the same pair. Widen a range here and the
+   * control and the sanitiser move together; there is no second number to forget.
+   *   volume: a plain clip level, 0 to 10 (1000 %). Above 1 is the Web Audio boost stage (js/audio-fx-live.js).
+   *   speed:  a plain clip speed, 0.01 to 1000 (1 % to 1000x). A ramp ({kf}) is never clamped by the sanitiser.
+   * bughunt5 #2: keyframes is the most keys the keyframe sanitisers keep on ONE animated value (an effect or audio-effect
+   * control, a trim path / repeater value, a mask path). It was 200, a cap written for audio params, and Audio → keyframes
+   * (js/audio-react.js) writes one envelope sample per project frame, thinned only at 2 % of the range: a song keeps hundreds of
+   * keys a minute, so every open and every undo cut the effect's animation off partway through the song. No writer in the app
+   * makes more than one key per frame, so the ceiling is one per frame of the longest project (3600 s, clampProjectDims in js/storage.js)
+   * at the highest frame rate it allows (120 fps): 432,001. That is also more than the ~5 MB autosave can hold for one value (a
+   * key is at least 13 characters of JSON), so no project this app saved can reach it, and a hostile file is still bounded. */
+  FM.LIMITS = Object.freeze({
+    volume: Object.freeze([0, 10]),
+    speed: Object.freeze([0.01, 1000]),
+    keyframes: 3600 * 120 + 1,
+  });
+
   /* ---- animatable properties ----
    * A property is either a plain number (static) or { kf: [{t, v, e}] } (keyframed),
    * where t = seconds, v = value, e = easing name applied on the segment ENTERING this kf.
@@ -69,11 +92,13 @@ window.FM = window.FM || {};
   FM.bezierAt = bezierAt;
   FM.EASE_PRESETS = { linear: [0, 0, 1, 1], easeIn: [.42, 0, 1, 1], easeOut: [0, 0, .58, 1], easeInOut: [.42, 0, .58, 1], overshoot: [.34, 1.56, .64, 1], anticipate: [.36, 0, .66, -.56] };
 
-  function evalProp(p, t) {
-    if (!isAnimated(p)) return (typeof p === 'number' || typeof p === 'string') ? p : (p || 0);
+  // Loop a keyframed property past its last keyframe (AM: cycle repeats, pingpong reverses each pass): the time `p` is read
+  // at. `t` unchanged unless `p` loops and `t` is past its last key.
+  /* bughunt5 #13: this was inline in evalProp, so nothing else could use it, and the mask path (FM.evalMaskPath, js/masks.js)
+     and a drawing's keyframed points (FM.evalShapeSubs, js/compositor.js) froze on their last key while the Loop menu, which
+     writes loopMode on both, looped everything else on the layer. ONE copy now, read by all three. */
+  function loopTime(p, t) {
     const kf = p.kf;
-    if (!kf.length) return 0;
-    // Loop a keyframed property past its last keyframe (AM: cycle repeats, pingpong reverses each pass).
     if (p.loopMode && p.loopMode !== 'none' && kf.length >= 2) {
       const lo = kf[0].t, hi = kf[kf.length - 1].t, span = hi - lo;
       if (span > 0 && t > hi) {
@@ -82,6 +107,16 @@ window.FM = window.FM || {};
         t = lo + off;
       }
     }
+    return t;
+  }
+  FM.loopKfTime = loopTime;
+
+  function evalProp(p, t) {
+    if (!isAnimated(p)) return (typeof p === 'number' || typeof p === 'string') ? p : (p || 0);
+    const kf = p.kf;
+    if (!kf.length) return 0;
+    /* The fast path (19 Oct, the PM's perf check on #13): only a looping prop pays the call; every other prop reads `t` as before. */
+    if (p.loopMode && p.loopMode !== 'none') t = loopTime(p, t);
     if (t <= kf[0].t) return kf[0].v;
     const last = kf[kf.length - 1];
     if (t >= last.t) return last.v;

@@ -21906,6 +21906,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (!isAnimatedProp(raw)) return [];
     const kf = raw.kf;
     if (!kf.length) return [];
+    /* bughunt5 #13: Loop. The keyframe menu's Loop writes loopMode on the point set too (FM.animatedProps lists it), and only
+       evalProp read it, so the morph froze on its last key while the layer's movement kept looping. evalProp's wrap, from the
+       one copy in js/scene.js. */
+    if (FM.loopKfTime) t = FM.loopKfTime(raw, t);
     const vOf = (k) => (k && Array.isArray(k.v)) ? k.v : [];
     if (t <= kf[0].t) return vOf(kf[0]);
     const last = kf[kf.length - 1];
@@ -21914,8 +21918,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const a = kf[i], b = kf[i + 1];
       if (t >= a.t && t <= b.t) {
         const av = vOf(a), bv = vOf(b);
-        if (b.e === 'hold') return av;                   // step: hold until b
-        if (!subsSameShape(av, bv)) return av;           // a point was added or removed — SNAP
+        /* bughunt5 #4: AT the later keyframe the step has happened. The loop matches `t <= b.t`, so at t === b.t this returned
+           the EARLIER points: the off-by-one queue 720 fixed in masks.js (evalMaskPath) and scene.js fixed for evalProp. A hold
+           key, or the key Edit Points makes at the playhead when a point is deleted or inserted, drew the shape before it on
+           that very frame, while the overlay showed the edited key. */
+        if (b.e === 'hold') return (t >= b.t) ? bv : av;                   // step: hold until b, then b
+        if (!subsSameShape(av, bv)) return (t >= b.t) ? bv : av;           // a point was added or removed: SNAP, and at b it IS b
         const span = b.t - a.t;
         let f = span <= 0 ? 1 : (t - a.t) / span;
         if (b.bez && FM.bezierAt) f = FM.bezierAt(b.bez[0], b.bez[1], b.bez[2], b.bez[3], f);

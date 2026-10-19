@@ -165162,5 +165162,1358 @@
     });
   });
   // ── end bughunt 4 ──
+  // ── bughunt 5 ──
+  /* ═══ BUGHUNT 5 — two data-loss defects in the sanitiser that history.restore runs on every undo and redo (the hunt's write-up:
+   * findings #1 and #2). WRITTEN WITHOUT RUNNING (code only, `node --check`): every number is reasoned from the code it names, and
+   * each test says why it fails on e5dfa537. Helpers are the suite's and bughunt 2's: test, sleep, _bh2With, hfCleanup. ═══ */
+
+  /* A project file holding `layers`, imported as a NEW project (the import runs the same sanitiser as undo), saved, and reopened (the
+     open path runs the effect and mask sanitisers). `check(where)` reads FM.scene after each. The temporary project is removed and
+     the one that was open before is reopened, as the 1040 import/save/reopen test does. */
+  async function _bh5RoundTrip(name, layers, check) {
+    if (!FM.projects || !FM.storage || !FM.storage.importObject || !FM.storage.load || !FM.storage.save) throw new Error('setup: FM.projects or FM.storage import / save / load is not reachable, so the file round trip cannot be driven');
+    const prior = FM.projects.currentId(), wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()), made = [];
+    try {
+      const file = { app: 'freemotion', project: { name: name, width: 180, height: 140, duration: 4, fps: 30 }, layers: JSON.parse(JSON.stringify(layers)), media: {} };
+      if (!(await FM.storage.importObject(file, null, { quiet: true, confirmed: true }))) throw new Error('setup: the project file “' + name + '” was refused');
+      made.push(FM.projects.currentId());
+      check('after importing a project file');
+      await FM.storage.save();
+      if (FM.storage.settled) await FM.storage.settled();
+      if (!(await FM.storage.load())) throw new Error('setup: the imported project “' + name + '” did not reopen');
+      check('after saving that project and reopening it');
+    } finally {
+      await hfCleanup(made, prior, wasHome);
+    }
+  }
+
+  /* (#1) ONE UNDO CUT EVERY LOUD CLIP TO 400 % AND EVERY EXTREME SPEED TO 5 % OR 100×. history.restore() runs the import sanitiser
+     over every layer of the snapshot it puts back (js/history.js restore → FM.storage._sanitizeLayers), and its sanitizeTiming held a
+     PLAIN volume to 0..4 and a plain speed to 0.05..100 (js/storage.js). The Volume card offers 0 to 1000 % (VOL_MAX = 10, queue 195)
+     and the Speed card 1 % to 1000× (SPD_MIN / SPD_MAX = 0.01 / 1000, queue 184; its typed box clamps to exactly that). So: a song at
+     600 %, a long screen recording at 200×, a clip at 2 % for extreme slow motion; rename a title; ↶. The song plays at 400 %, the
+     time-lapse at 100× (half its footage, then it freezes), the slow-mo at 5 % (2.5× too fast). Undo autosaves on its next line and
+     redo sanitises the same way, so nothing brings the values back. A project file, a template, an element and a collaborator's
+     layer come in through the same sanitiser (the ordinary open does NOT run it, which is why the values survive a reload).
+     Now the panels and the sanitiser read one range each from FM.LIMITS (js/scene.js).
+     On e5dfa537: volume 4, speed 100 and speed 0.05 after the Undo, again after the Redo, and after the import.
+     CONTROLS (the same before and after): an ordinary 300 % / 2× clip comes back unchanged; and what the clamp is FOR still holds — a
+     plain volume or speed of 1e9 is brought down into range, a negative one up to the floor, NaN / Infinity / a word repaired to 1.
+     BUDGET: the default 45 s: one undo and redo over five small layers and one import / save / reopen round trip (the 1040 test
+     fits two round trips in 30 s). */
+  test('bughunt5 #1 An Undo keeps a loud song and a fast clip as they were: a song at 600 %, a 200× time-lapse and a 2 % slow motion come back from one Undo of an unrelated edit, from its Redo and from a project file imported, saved and reopened exactly as they were, not cut to 400 %, 100× and 5 % (CONTROLS: an ordinary 300 % / 2× clip is untouched; an absurd, negative or broken plain volume or speed is still brought into range)', { item: '1176' }, async function () {
+    if (!FM.history || !FM.history.reset || !FM.history._steps || !FM.storage || typeof FM.storage._sanitizeLayers !== 'function') throw new Error('setup: FM.history (reset, _steps) or FM.storage._sanitizeLayers is not reachable');
+    const WANT = { loud: { volume: 6 }, fast: { speed: 200 }, slow: { speed: 0.02 }, ctl: { volume: 3, speed: 2 } };
+    const SAY = { loud: 'song at 600 %', fast: '200× time-lapse', slow: '2 % slow motion', ctl: 'ordinary 300 % / 2× clip (CONTROL)' };
+    const mk = (name, set) => {
+      const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      return Object.assign(L, set || {});
+    };
+    const bad = [];
+    const check = (where, find) => {
+      Object.keys(WANT).forEach(k => {
+        const l = find(k), w = WANT[k];
+        if (!l) { bad.push(where + ': the ' + SAY[k] + ' is gone'); return; }
+        Object.keys(w).forEach(p => { if (l[p] !== w[p]) bad.push(where + ': the ' + SAY[k] + ' came back with ' + p + ' ' + l[p] + ', not ' + w[p]); });
+      });
+    };
+
+    /* ── ONE UNDO OF AN UNRELATED EDIT, THEN ITS REDO. */
+    await _bh2With(async function () {
+      const L = {};
+      Object.keys(WANT).forEach(k => { L[k] = mk('bh5 #1 ' + k, WANT[k]); });
+      const T = mk('bh5 #1 title');
+      FM.scene.layers = [T, L.loud, L.fast, L.slow, L.ctl];
+      FM.scene.selectedId = T.id; FM.scene.selectedIds = [T.id];
+      FM.refreshAll();
+      FM.history.reset();
+      T.name = 'bh5 #1 title renamed';
+      FM.history.commit();
+      if (FM.history._steps().len !== 2) throw new Error('setup: renaming the title did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+      FM.history.undo();
+      await sleep(60);
+      const T1 = FM.layerById(FM.scene, T.id);
+      if (!T1 || T1.name !== 'bh5 #1 title') throw new Error('setup: the Undo did not take the rename back (' + (T1 ? T1.name : 'the title is gone') + '), so nothing below is measured');
+      check('after one Undo of a rename', k => FM.layerById(FM.scene, L[k].id));
+      FM.history.redo();
+      await sleep(60);
+      check('after its Redo', k => FM.layerById(FM.scene, L[k].id));
+    });
+
+    /* ── THE SAME CLIPS IN A PROJECT FILE: imported (the import sanitiser), saved and reopened. */
+    await _bh5RoundTrip('bughunt5 #1 round trip', Object.keys(WANT).map(k => mk('bh5 #1 file ' + k, WANT[k])),
+      where => check(where, k => FM.scene.layers.find(l => l && l.name === 'bh5 #1 file ' + k)));
+
+    /* ── CONTROLS: the protection the clamp exists for. */
+    const ab = [
+      { id: 'bh5a1', type: 'shape', start: 0, duration: 4, volume: 1e9, speed: 1e9 },
+      { id: 'bh5a2', type: 'shape', start: 0, duration: 4, volume: -3, speed: -3 },
+      { id: 'bh5a3', type: 'shape', start: 0, duration: 4, volume: NaN, speed: 'fast' },
+      { id: 'bh5a4', type: 'shape', start: 0, duration: 4, volume: Infinity, speed: 0 },
+    ];
+    FM.storage._sanitizeLayers(ab);
+    ab.forEach(l => {
+      if (typeof l.volume !== 'number' || !isFinite(l.volume) || l.volume < 0 || l.volume > 10) bad.push('CONTROL: layer ' + l.id + '’s plain volume came out of the sanitiser as ' + l.volume + ', outside 0 to 1000 %');
+      if (typeof l.speed !== 'number' || !isFinite(l.speed) || l.speed < 0.01 || l.speed > 1000) bad.push('CONTROL: layer ' + l.id + '’s plain speed came out of the sanitiser as ' + l.speed + ', outside 1 % to 1000×');
+    });
+    if (ab[2].volume !== 1 || ab[2].speed !== 1 || ab[3].volume !== 1) bad.push('CONTROL: a NaN volume, a speed of "fast" and an Infinite volume came back as ' + ab[2].volume + ', ' + ab[2].speed + ' and ' + ab[3].volume + ', not repaired to 1');
+
+    /* ── AND THE RANGE IS THE SHARED ONE (after the fix): the sanitiser's bounds are FM.LIMITS', the numbers the panels read. */
+    const LIM = FM.LIMITS;
+    if (!LIM || !Array.isArray(LIM.volume) || !Array.isArray(LIM.speed)) bad.push('FM.LIMITS (js/scene.js) does not hold the volume and speed ranges, so the panels and the sanitiser still keep a copy each');
+    else if (ab[0].volume !== LIM.volume[1] || ab[1].volume !== LIM.volume[0] || ab[0].speed !== LIM.speed[1] || ab[1].speed !== LIM.speed[0]) {
+      bad.push('the sanitiser clamps a plain volume to ' + ab[1].volume + '..' + ab[0].volume + ' and a plain speed to ' + ab[1].speed + '..' + ab[0].speed + ', not to FM.LIMITS’ ' + LIM.volume.join('..') + ' and ' + LIM.speed.join('..'));
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#2) AN EFFECT CONTROL KEPT ONLY ITS FIRST 200 KEYFRAMES ON EVERY OPEN AND EVERY UNDO. safeKfProp (js/storage.js) is the keyframe
+     gate every effect parameter goes through (safeFxParam, from sanitizeEffects), and it sliced the list to AFX_MAX_KF = 200, a cap
+     written for audio parameters (v3.36) that came along when effect parameters were routed through it. sanitizeEffects runs on every
+     project open (FM.storage.load) and, through _sanitizeLayers, on every undo and redo. Audio → keyframes (js/audio-react.js bake)
+     writes every key its RDP keeps onto an effect control, with no cap: one envelope sample per project frame, thinned at 2 % of the
+     range. A beat rises in a frame or two and falls on the follower's release (0.178 s at the default smoothing), which a straight
+     line follows within 2 % for only about three frames, so a song keeps several keys per beat: hundreds a minute (a minute is 1801
+     samples at 30 fps). Everything after key 200 was cut, in time order: the effect pulses for the first stretch of the song and sits
+     still after it, in the preview and the export, and the next autosave writes the loss. A roto mask keyed frame by frame had the
+     same 200 (MASK_MAX_KF, also run on every open and undo): seven seconds of roto at 30 fps passes it.
+     Now both caps are FM.LIMITS.keyframes (js/scene.js): one key per frame for the longest project at the highest frame rate.
+     The test: 1500 keys at 1/30 s on a Gaussian Blur's Radius (fifty seconds of a bake that kept most frames), 300 roto keys at
+     1/30 s, and a real FM.audioReact.bake of a minute of a 120 BPM beat (its envelope stubbed, the follower's default release).
+     On e5dfa537: 200 keys after the open path, the Undo, the Redo and the import, and the bake's keys cut to 200 by the next Undo.
+     CONTROLS: the bake writes more than 200 keys (else the case measures nothing); 150 good keys and two broken ones keep the 150 good
+     ones (the same before and after); and after the fix, FM.LIMITS.keyframes is 3600 × 120 + 1 and the cap still cuts, shown through
+     the seams with a cap of 500 on a 600-key list (no list here is longer than the bake's 1801 samples).
+     BUDGET: the default 45 s. The longest parts are one import / save / reopen round trip (the 1040 test fits two in 30 s) and a
+     handful of undo, redo and refreshAll calls over a few thousand keys. */
+  test('bughunt5 #2 A long Audio bake keeps all its keyframes: 1500 keys on an effect control, 300 frame-by-frame roto keys on a mask and a minute of a real Audio → keyframes bake survive a project open, one Undo of an unrelated edit, its Redo and a project file imported, saved and reopened, not cut to their first 200 (CONTROLS: the bake writes more than 200; 150 good keys and two broken ones keep the 150; the cap is 3600 s × 120 fps + 1 and still cuts: given a cap of 500, a 600-key effect control and a 600-key roto path keep their first 500)', { item: '1176' }, async function () {
+    if (!FM.storage || typeof FM.storage._sanitizeEffects !== 'function' || typeof FM.storage._sanitizeLayers !== 'function') throw new Error('setup: FM.storage._sanitizeEffects / _sanitizeLayers is not reachable');
+    if (!FM.history || !FM.history.reset || !FM.history._steps) throw new Error('setup: FM.history (reset, _steps) is not reachable');
+    if (!FM.audioReact || typeof FM.audioReact.bake !== 'function') throw new Error('setup: FM.audioReact.bake is not reachable');
+    const N = 1500, R = 300, FPS = 30;
+    /* Values inside the Radius' own 0..50, so the sanitiser's value clamp changes nothing and only the count can move. */
+    const bakeKf = n => { const kf = []; for (let i = 0; i < n; i++) kf.push({ t: i / FPS, v: 4 + 30 * Math.abs(Math.sin(i * 0.7)), e: 'linear' }); return { kf: kf }; };
+    const rotoKf = n => { const kf = []; for (let i = 0; i < n; i++) { const x = 20 + i * 0.2; kf.push({ t: i / FPS, v: [[x, 20], [x + 30, 20], [x + 30, 50], [x, 50]], e: 'linear' }); } return { kf: kf }; };
+    const fxKf = l => { const fx = l && Array.isArray(l.effects) ? l.effects[0] : null; const p = fx && fx.params ? fx.params.radius : null; return p && Array.isArray(p.kf) ? p.kf : null; };
+    const maskKf = l => { const m = l && Array.isArray(l.masks) ? l.masks[0] : null; return m && m.path && Array.isArray(m.path.kf) ? m.path.kf : null; };
+    const bad = [];
+    const checkFx = (where, l, n) => {
+      const kf = fxKf(l), last = (n - 1) / FPS;
+      if (!kf) { bad.push(where + ': the effect control is no longer keyframed at all'); return; }
+      if (kf.length !== n) bad.push(where + ': the effect control kept ' + kf.length + ' of its ' + n + ' keyframes, the last now at ' + (kf.length ? (+kf[kf.length - 1].t).toFixed(2) : '?') + ' s where it was at ' + last.toFixed(2) + ' s, so the effect stops moving there');
+      else if (Math.abs(kf[n - 1].t - last) > 1e-9) bad.push(where + ': the effect control’s last keyframe moved from ' + last + ' s to ' + kf[n - 1].t + ' s');
+    };
+    const checkMask = (where, l) => {
+      const kf = maskKf(l);
+      if (!kf) { bad.push(where + ': the roto mask’s path is no longer keyframed at all'); return; }
+      if (kf.length !== R) bad.push(where + ': the roto mask kept ' + kf.length + ' of its ' + R + ' keyframes, so it stops following the shot at ' + (kf.length ? (+kf[kf.length - 1].t).toFixed(2) : '?') + ' s');
+    };
+
+    /* ── THE OPEN PATH: the effect sanitiser FM.storage.load runs on every layer, and the mask sanitiser (the same function the open
+       runs, here through _sanitizeLayers, the undo's). */
+    const opened = { id: 'bh5fx', type: 'shape', effects: [{ type: 'blur', enabled: true, params: { radius: bakeKf(N) } }] };
+    FM.storage._sanitizeEffects(opened);
+    checkFx('through the effect sanitiser every project open runs', opened, N);
+    const roto = [{ id: 'bh5mk', type: 'shape', start: 0, duration: 60, masks: [{ id: 'bh5m1', mode: 'add', path: rotoKf(R) }] }];
+    FM.storage._sanitizeLayers(roto);
+    checkMask('through the mask sanitiser every open and every undo runs', roto[0]);
+
+    /* ── ONE UNDO OF AN UNRELATED EDIT, ITS REDO, AND A REAL BAKE FOLLOWED BY ANOTHER UNDO. */
+    const envD = Object.getOwnPropertyDescriptor(FM, 'audioEnvelope'), toastD = Object.getOwnPropertyDescriptor(FM, 'toast');
+    try {
+      await _bh2With(async function () {
+        const shape = (name, dur) => {
+          const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: dur });
+          L.start = 0; L.duration = dur;
+          return L;
+        };
+        const P = shape('bh5 #2 pulsing', 60), B = shape('bh5 #2 bake target', 60), T = shape('bh5 #2 title', 4);
+        P.effects = [{ type: 'blur', enabled: true, params: { radius: bakeKf(N) } }];
+        P.masks = [{ id: 'bh5m2', mode: 'add', path: rotoKf(R) }];
+        B.effects = [{ type: 'blur', enabled: true, params: { radius: 6 } }];
+        FM.scene.layers = [T, P, B];
+        FM.scene.selectedId = T.id; FM.scene.selectedIds = [T.id];
+        FM.refreshAll();
+        FM.history.reset();
+        T.name = 'bh5 #2 title renamed';
+        FM.history.commit();
+        if (FM.history._steps().len !== 2) throw new Error('setup: renaming the title did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+        FM.history.undo();
+        await sleep(60);
+        const T1 = FM.layerById(FM.scene, T.id);
+        if (!T1 || T1.name !== 'bh5 #2 title') throw new Error('setup: the Undo did not take the rename back (' + (T1 ? T1.name : 'the title is gone') + '), so nothing below is measured');
+        checkFx('after one Undo of a rename', FM.layerById(FM.scene, P.id), N);
+        checkMask('after one Undo of a rename', FM.layerById(FM.scene, P.id));
+        FM.history.redo();
+        await sleep(60);
+        checkFx('after its Redo', FM.layerById(FM.scene, P.id), N);
+        checkMask('after its Redo', FM.layerById(FM.scene, P.id));
+
+        /* The real bake. Its envelope is a minute of a 120 BPM beat at 30 fps (a beat every 15 frames, over a 0.25 floor) through the
+           follower's own release at the default 40 % smoothing (js/audio-react.js: release = 0.03 + 0.4 × 0.37 s), so the RDP it runs
+           is the shipped one on the kind of curve a song gives it. Target: B's Gaussian Blur Radius, 4 → 34. */
+        FM.toast = function () {};
+        FM.audioEnvelope = async function (layer) {
+          const fps = 30, n = 60 * fps, rC = Math.exp(-1 / ((0.03 + 0.4 * 0.37) * fps)), times = [], values = [];
+          let e = 0;
+          for (let i = 0; i <= n; i++) {
+            const target = (i % 15 === 0) ? 1 : 0.25;
+            e = target > e ? target : target + (e - target) * rC;
+            times.push((layer.start || 0) + i / fps);
+            values.push(e);
+          }
+          return { fps: fps, band: 'overall', times: times, values: values, clipStart: layer.start || 0, clipDur: 60 };
+        };
+        const B1 = FM.layerById(FM.scene, B.id);
+        if (!B1) throw new Error('setup: the bake target is gone after the Redo');
+        const baked = await FM.audioReact.bake(B1, { targetLayerId: B1.id, prop: 'fx:0:radius', outMin: 4, outMax: 34 });
+        const B2 = FM.layerById(FM.scene, B.id), kfB = fxKf(B2);
+        if (!(baked > 200) || !kfB || kfB.length !== baked) throw new Error('CONTROL: Audio → keyframes wrote ' + baked + ' keyframes (' + (kfB ? kfB.length : 'none') + ' on the Radius) for a minute of a 120 BPM beat; it must write more than 200 for this case to measure the cap');
+        const lastT = kfB[kfB.length - 1].t;
+        const T2 = FM.layerById(FM.scene, T.id);
+        T2.name = 'bh5 #2 title renamed again';
+        FM.history.commit();
+        FM.history.undo();
+        await sleep(60);
+        const T3 = FM.layerById(FM.scene, T.id);
+        if (!T3 || T3.name !== 'bh5 #2 title renamed') throw new Error('setup: the second Undo did not take the second rename back (' + (T3 ? T3.name : 'the title is gone') + ')');
+        const kfB3 = fxKf(FM.layerById(FM.scene, B.id));
+        if (!kfB3 || kfB3.length !== baked || Math.abs(kfB3[kfB3.length - 1].t - lastT) > 1e-9) bad.push('a real Audio → keyframes bake of ' + baked + ' keyframes came back from one Undo of a rename with ' + (kfB3 ? kfB3.length + ', the last at ' + (+kfB3[kfB3.length - 1].t).toFixed(2) + ' s where it was at ' + lastT.toFixed(2) + ' s' : 'none'));
+      });
+    } finally {
+      if (envD) Object.defineProperty(FM, 'audioEnvelope', envD); else delete FM.audioEnvelope;
+      if (toastD) Object.defineProperty(FM, 'toast', toastD); else delete FM.toast;
+    }
+
+    /* ── A PROJECT FILE CARRYING BOTH: imported (the import sanitiser), saved and reopened (the open path's sanitisers). */
+    const F = FM.makeLayer('shape', { name: 'bh5 #2 file', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#ffffff', start: 0, duration: 60 });
+    F.start = 0; F.duration = 60;
+    F.effects = [{ type: 'blur', enabled: true, params: { radius: bakeKf(N) } }];
+    F.masks = [{ id: 'bh5m3', mode: 'add', path: rotoKf(R) }];
+    await _bh5RoundTrip('bughunt5 #2 round trip', [F], where => {
+      const l = FM.scene.layers.find(x => x && x.name === 'bh5 #2 file');
+      if (!l) { bad.push(where + ': the layer is gone'); return; }
+      checkFx(where, l, N);
+      checkMask(where, l);
+    });
+
+    /* ── CONTROL (the same before and after): 150 good keys with two broken ones among them keep exactly the 150. */
+    const small = bakeKf(150);
+    small.kf.splice(75, 0, { t: NaN, v: 5, e: 'linear' }, { t: 3, v: Infinity, e: 'linear' });
+    const few = { id: 'bh5few', type: 'shape', effects: [{ type: 'blur', enabled: true, params: { radius: small } }] };
+    FM.storage._sanitizeEffects(few);
+    const kfFew = fxKf(few);
+    if (!kfFew || kfFew.length !== 150) bad.push('CONTROL: 150 good keyframes and two broken ones came back as ' + (kfFew ? kfFew.length : 'no') + ' keyframes, not the 150 good ones');
+
+    /* ── CONTROL (after the fix): the cap still exists for a file no writer could make, and it is the number js/scene.js says.
+       The constant is pinned in one cheap comparison: one key per frame of the longest project (3600 s) at the highest frame rate
+       (120 fps). The cutting itself is proved through the seams with a small cap (FM.storage._safeKfProp / _safeMaskPath take one
+       as their last argument; the app passes none), so no list in this test is longer than the bake's 1801 samples: a 600-key
+       list and a cap of 500. The cap keeps the first 500 in the LIST's order and then sorts them by time; this list is in time
+       order, so they are its first 500 times. */
+    const CAP = FM.LIMITS && FM.LIMITS.keyframes;
+    if (CAP !== 3600 * 120 + 1) bad.push('FM.LIMITS.keyframes (js/scene.js) is ' + CAP + ', not one key per frame of the longest project at the highest frame rate (3600 s × 120 fps + 1 = 432001)');
+    if (typeof FM.storage._safeKfProp !== 'function' || typeof FM.storage._safeMaskPath !== 'function') bad.push('FM.storage._safeKfProp / _safeMaskPath (the keyframe caps’ seams) are not reachable, so the cap cannot be shown to cut');
+    else {
+      const firstTimes = (kf, n) => Array.isArray(kf) && kf.length === n && kf.every((k, i) => Math.abs(k.t - i / FPS) < 1e-9);
+      const lastOf = kf => (Array.isArray(kf) && kf.length ? (+kf[kf.length - 1].t).toFixed(3) + ' s' : 'none');
+      const cutFx = FM.storage._safeKfProp(bakeKf(600), 0, 50, 500);
+      if (!cutFx || !firstTimes(cutFx.kf, 500)) bad.push('CONTROL: with a cap of 500, a 600-key effect control came back with ' + (cutFx ? cutFx.kf.length + ' keys, the last at ' + lastOf(cutFx.kf) : 'nothing') + ', not its first 500 (0 to ' + (499 / FPS).toFixed(3) + ' s) — the cap that bounds a hostile file does not cut');
+      const keepFx = FM.storage._safeKfProp(bakeKf(600), 0, 50);
+      if (!keepFx || !firstTimes(keepFx.kf, 600)) bad.push('with no cap given (as every caller in the app calls it), a 600-key effect control came back with ' + (keepFx ? keepFx.kf.length : 'no') + ' keys, not all 600');
+      const cutMask = FM.storage._safeMaskPath(rotoKf(600), 500);
+      if (!cutMask || !firstTimes(cutMask.kf, 500)) bad.push('CONTROL: with a cap of 500, a 600-key roto path came back with ' + (cutMask && Array.isArray(cutMask.kf) ? cutMask.kf.length + ' keys, the last at ' + lastOf(cutMask.kf) : 'no keys') + ', not its first 500 — the mask cap does not cut');
+      const keepMask = FM.storage._safeMaskPath(rotoKf(600));
+      if (!keepMask || !firstTimes(keepMask.kf, 600)) bad.push('with no cap given (as sanitizeMasks calls it), a 600-key roto path came back with ' + (keepMask && Array.isArray(keepMask.kf) ? keepMask.kf.length : 'no') + ' keys, not all 600');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#3) AN UNDO WITH AN EDITOR OPEN THREW THE REDO HISTORY AWAY. history.restore() (js/history.js) cleared its `suppress` flag
+     BEFORE the repairs and the refresh that follow the swap, and three editors close and COMMIT inside them when the undo took
+     their layer: the text editor (FM.refreshAll → FM.textEdit.syncToSelection → its commit), Edit Points (FM.inspector.refresh
+     with nothing selected → FM.pointEdit.stop) and the mask tool (restore's FM.maskTool.resync → stop, whose `dirty` stays set
+     after any edit until a reseed). Each commit ran before restore re-stamps stack[index], so the scene differed from that
+     entry by the selection alone (the snapshot names whatever was selected at the commit before it; the restore selects
+     nothing once his layer is gone), and commit() cut the redo tail and pushed. So: B selected at the last commit, add S, open
+     an editor on S, ↶ — S goes, ↷ is grey, and the step is gone for good. With the text editor that includes the words he
+     typed: undo's own flush (queue 690) makes the typing a step, the first ↶ takes it back, and the second ↶ used to cut it.
+     Undo and redo are called directly, so every case reproduces at any width (on the phone the text editor's tap-off commits
+     before a tap on ↶ lands, which is why the hunt calls that case PC-only by hand; the code path is the same).
+     The mask case adds the layer and its mask without a step of their own, so the nudge's commit is the step that adds them
+     and the very next ↶ takes the layer away while the tool is still dirty. In the app the same state comes from a nudge put
+     back where it was (its commit pushes nothing, `dirty` stays set) before ↶ of the step that added the mask or the layer.
+     On 9ca3c100: canRedo() is false after the ↶ in all three editor cases.
+     CONTROL (the same before and after): with no editor open the same ↶ keeps ↷ (restore's re-stamp alone does that), which
+     is what proves the editors' commits are the difference.
+     BUDGET: the default 45 s: four small scenes, a handful of undo and redo calls and under 2 s of sleeps. */
+  test('bughunt5 #3 An Undo with an editor open keeps Redo: with Edit Points, the text editor (after typing) or the mask tool (after a nudge) open on a layer that one Undo takes away, ↷ stays live and brings the layer back as it was, his typed words and the nudged mask point included (CONTROL: with no editor open the same Undo keeps ↷)', { item: '1176' }, async function () {
+    if (!FM.history || !FM.history.reset || !FM.history._steps || !FM.history.canRedo) throw new Error('setup: FM.history (reset, _steps, canRedo) is not reachable');
+    if (!FM.pointEdit || !FM.pointEdit.start || !FM.textEdit || !FM.textEdit.start || !FM.textEdit.layerId || !FM.addTextLayer) throw new Error('setup: FM.pointEdit or FM.textEdit / FM.addTextLayer is not reachable');
+    if (!FM.maskTool || !FM.maskTool.open || !FM.maskTool._select || !FM.maskTool._points || !FM.maskTool.layerId) throw new Error('setup: FM.maskTool (open, _select, _points, layerId) is not reachable');
+    const bad = [];
+    const steps = () => JSON.stringify(FM.history._steps());
+    const closeEditors = () => {
+      try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+      try { if (FM.pointEdit.isActive()) FM.pointEdit.stop(); } catch (e) {}
+      try { if (FM.maskTool.isActive()) FM.maskTool.stop(); } catch (e) {}
+    };
+    const shape = name => {
+      const P = FM.scene.project;
+      const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: Math.round((P.width || 64) / 2), y: Math.round((P.height || 48) / 2), shapeW: 20, shapeH: 16, fill: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      return L;
+    };
+    /* One undo step, with B selected: the snapshot every case undoes back to. */
+    const startOnB = () => {
+      closeEditors();
+      const B = shape('bh5 #3 B');
+      FM.scene.layers = [B];
+      FM.scene.selectedId = B.id; FM.scene.selectedIds = [B.id];
+      FM.refreshAll();
+      FM.history.reset();
+      if (FM.history._steps().len !== 1) throw new Error('setup: the reset did not leave exactly one undo step (' + steps() + ')');
+    };
+    const addAndCommit = name => {
+      const S = shape(name);
+      FM.scene.layers.push(S);
+      FM.scene.selectedId = S.id; FM.scene.selectedIds = [S.id];
+      FM.refreshAll();
+      FM.history.commit();
+      const st = FM.history._steps();
+      if (st.len !== 2 || st.index !== 1) throw new Error('setup: adding ' + name + ' did not make exactly one undo step on top of the reset (' + JSON.stringify(st) + ')');
+      return S;
+    };
+    /* After the ↶: the layer must be gone (or nothing is measured), and ↷ must still be live. */
+    const redoLive = (what, id) => {
+      if (FM.layerById(FM.scene, id)) throw new Error('setup: ' + what + ': the Undo did not take the layer away (' + steps() + '), so nothing below is measured');
+      if (FM.history.canRedo()) return true;
+      bad.push(what + ': one ↶ took the layer away and left ↷ grey (' + steps() + ') — the editor closed and committed inside the undo, and that commit cut the redo history');
+      return false;
+    };
+
+    /* ── EDIT POINTS open on the new shape (embedded, as the Edit Shape panel opens it). */
+    await _bh2With(async function () {
+      startOnB();
+      const S = addAndCommit('bh5 #3 points');
+      FM.pointEdit.start(S.id, { embedded: true });
+      if (!FM.pointEdit.isActive() || FM.pointEdit.layerId() !== S.id) throw new Error('setup: Edit Points did not open on the new shape');
+      FM.history.undo();
+      await sleep(60);
+      if (redoLive('Edit Points open', S.id)) {
+        FM.history.redo();
+        await sleep(60);
+        if (!FM.layerById(FM.scene, S.id)) bad.push('Edit Points open: ↷ is live after the ↶ but does not bring the shape back (' + steps() + ')');
+      }
+    }, closeEditors);
+
+    /* ── THE TEXT EDITOR open on a text just added, with words typed into it. */
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      await _bh2With(async function () {
+        startOnB();
+        FM.addTextLayer();
+        await sleep(250);
+        const id = FM.textEdit.isActive() ? FM.textEdit.layerId() : null;
+        if (!id) throw new Error('setup: Add text did not open the text editor');
+        const st = FM.history._steps();
+        if (st.len !== 2 || st.index !== 1) throw new Error('setup: Add text did not make exactly one undo step on top of the reset (' + JSON.stringify(st) + ')');
+        const T0 = FM.layerById(FM.scene, id), was = T0 ? T0.text : null;
+        const ta = document.getElementById('te-input');
+        if (!ta) throw new Error('setup: the text editor has no field (#te-input)');
+        const WORDS = 'bh5 three typed words';
+        ta.value = WORDS;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        if (!T0 || T0.text !== WORDS) throw new Error('setup: typing did not reach the new text layer');
+        /* ↶ #1 takes back only the typing (undo's flush makes it a step first); the layer and the editor stay. */
+        FM.history.undo();
+        await sleep(60);
+        const T1 = FM.layerById(FM.scene, id);
+        if (!T1 || T1.text !== was || !FM.textEdit.isActive()) throw new Error('setup: the first ↶ did not take back only the typing (the layer ' + (T1 ? 'reads ' + JSON.stringify(T1.text) : 'is gone') + ', the editor is ' + (FM.textEdit.isActive() ? 'open' : 'closed') + ', ' + steps() + ')');
+        /* ↶ #2 takes the layer away with the editor still open on it. */
+        FM.history.undo();
+        await sleep(60);
+        if (redoLive('the text editor open after typing', id)) {
+          FM.history.redo();
+          await sleep(60);
+          if (!FM.layerById(FM.scene, id)) bad.push('the text editor open after typing: the first ↷ did not bring the text layer back (' + steps() + ')');
+          else {
+            FM.history.redo();
+            await sleep(60);
+            const T3 = FM.layerById(FM.scene, id);
+            if (!T3 || T3.text !== WORDS) bad.push('the text editor open after typing: the second ↷ brought the layer back reading ' + (T3 ? JSON.stringify(T3.text) : '(gone)') + ', not the words he typed, ' + JSON.stringify(WORDS));
+          }
+        }
+      }, closeEditors);
+    } finally {
+      try { if (wasHome && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open(); } catch (e) {}
+    }
+
+    /* ── THE MASK TOOL open on the new layer's mask, a point nudged on its precision pad. */
+    await _bh2With(async function () {
+      startOnB();
+      const P = FM.scene.project, w = P.width || 64, h = P.height || 48;
+      const M = shape('bh5 #3 masked');
+      M.masks = [{ id: 'bh5m3', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true,
+                   path: [[w * 0.2, h * 0.2], [w * 0.5, h * 0.2], [w * 0.5, h * 0.6], [w * 0.2, h * 0.6]] }];
+      FM.scene.layers.push(M);
+      FM.maskTool.open(M.id, 'bh5m3');
+      await sleep(200);
+      if (!FM.maskTool.isActive() || FM.maskTool.layerId() !== M.id) throw new Error('setup: the mask tool did not open on the new layer’s mask');
+      FM.maskTool._select(1);
+      await sleep(120);
+      const pad = (document.getElementById('mask-bar') || document.body).querySelector('.mk-pad');
+      if (!pad) throw new Error('setup: selecting a mask point did not offer the precision pad');
+      const p0 = FM.maskTool._points()[1].slice(0, 2);
+      const send = (t, x, y, b) => pad.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'touch', buttons: b }));
+      send('pointerdown', 100, 100, 1);
+      send('pointermove', 70, 130, 1);
+      send('pointerup', 70, 130, 0);
+      await sleep(120);
+      const p1 = FM.maskTool._points()[1].slice(0, 2);
+      if (p1[0] === p0[0] && p1[1] === p0[1]) throw new Error('setup: the precision pad did not move the mask point');
+      const st = FM.history._steps();
+      if (st.len !== 2 || st.index !== 1) throw new Error('setup: the nudge did not make exactly one undo step on top of the reset (' + JSON.stringify(st) + ')');
+      if (!FM.maskTool.isActive()) throw new Error('setup: the mask tool closed after the nudge');
+      FM.history.undo();
+      await sleep(60);
+      if (redoLive('the mask tool open after a nudge', M.id)) {
+        FM.history.redo();
+        await sleep(60);
+        const M2 = FM.layerById(FM.scene, M.id);
+        const m2 = M2 && Array.isArray(M2.masks) ? M2.masks.find(m => m && m.id === 'bh5m3') : null;
+        const q = m2 && Array.isArray(m2.path) ? m2.path[1] : null;
+        if (!M2) bad.push('the mask tool open after a nudge: ↷ is live after the ↶ but does not bring the layer back (' + steps() + ')');
+        else if (!q || Math.abs(q[0] - p1[0]) > 0.01 || Math.abs(q[1] - p1[1]) > 0.01) bad.push('the mask tool open after a nudge: ↷ brought the layer back with its mask point at ' + (q ? q.slice(0, 2).join(', ') : 'nothing') + ', not where the nudge put it (' + p1.join(', ') + ')');
+      }
+    }, closeEditors);
+
+    /* ── CONTROL: the same ↶ with no editor open. */
+    await _bh2With(async function () {
+      startOnB();
+      const S = addAndCommit('bh5 #3 control');
+      FM.history.undo();
+      await sleep(60);
+      if (FM.layerById(FM.scene, S.id)) throw new Error('setup: CONTROL: the Undo did not take the layer away (' + steps() + ')');
+      if (!FM.history.canRedo()) bad.push('CONTROL: with no editor open, one ↶ left ↷ grey (' + steps() + ') — restore’s re-stamp no longer keeps it, so the cases above cannot single out the editors');
+      else {
+        FM.history.redo();
+        await sleep(60);
+        if (!FM.layerById(FM.scene, S.id)) bad.push('CONTROL: with no editor open, ↷ did not bring the layer back (' + steps() + ')');
+      }
+    }, closeEditors);
+
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#8) FM.loadImageFile or FM.loadVideoFile (`key`) held on a gate the test releases by hand, from the `nth` load on (the first when
+     omitted); the loads before it pass at once. `entered` counts the loads that reached the stub. Restored with its own descriptor. */
+  function _bh5HoldLoads(key, nth) {
+    const d0 = Object.getOwnPropertyDescriptor(FM, key);
+    let open = null;
+    const gate = new Promise(r => { open = r; });
+    const h = { entered: 0, release: () => open(), restore: () => { open(); if (d0) Object.defineProperty(FM, key, d0); else delete FM[key]; } };
+    FM[key] = async function (f) {
+      const n = ++h.entered;
+      if (n >= (nth || 1)) await gate;
+      if (key === 'loadVideoFile') return _bh5VidRec(f);
+      const cv = document.createElement('canvas'); cv.width = 2; cv.height = 2;
+      return { kind: 'image', el: cv, width: 2, height: 2 };
+    };
+    return h;
+  }
+  /* A record like the video loader's with no src, as bughunt3 #2's: _repaintWired so wireVideoRepaint arms no "no picture" timer on it,
+     and an empty waveform so no timeline row decodes its 64 bytes. */
+  function _bh5VidRec(file) {
+    return { kind: 'video', el: document.createElement('video'), url: '', file: file, width: 0, height: 0, duration: 6, waveform: [], _repaintWired: true };
+  }
+  /* A video clip whose media record holds a FILE, so FM.duplicateLayer's reloadMediaTo really awaits FM.loadVideoFile for the copy. */
+  function _bh5Vid(name, media) {
+    const L = FM.makeLayer('video', { name: name, x: 100, y: 100, start: 0, duration: 6 });
+    L.start = 0; L.duration = 6; L.trimStart = 0; L.speed = 1; L.volume = 1; L.visible = true; L.muted = false;
+    FM.media.set(L.id, _bh5VidRec(new File([new Uint8Array(64)], 'bh5-8.mp4', { type: 'video/mp4' })));
+    media.push(L.id);
+    return L;
+  }
+
+  /* (#8) AN UNDO PRESSED WHILE A DUPLICATE, A PASTE OR AN EXTRACT AUDIO IS STILL LOADING THE COPY'S MEDIA. FM.duplicateLayer clones the
+     source and THEN awaits the copy's media load (for a song that is loadVideoFile with an 8 kHz decode: seconds on a phone); Duplicate
+     selection awaits it once per clip, Paste once per clipboard entry, and Extract audio awaits the duplicate. history.undo is not
+     blocked meanwhile and swaps FM.scene.layers and FM.scene.project for fresh objects parsed from the snapshot. bughunt2 #1 made Split
+     notice; these four did not. The Duplicate, Duplicate selection and Paste cases move a clip from x 100 to x 500 (one step), start
+     the copy, press ↶ inside the held load (the clip is back at x 100, ↷ live), then let the load go; Extract audio's ↶ takes back a
+     Delete instead.
+     On d9bdc64b:
+       · Duplicate: the copy lands beside the restored clip at x 500 (cloned before the Undo), and its commit throws ↷ away.
+       · Duplicate selection (three clips, ↶ inside the SECOND load): the second copy lands in the restored scene, the third clip is
+         copied after it, the batch commits (↷ gone), and the first copy's record is left behind with the scene the Undo replaced.
+       · Paste: the pasted copy is spliced into the restored scene and committed: two layers, ↷ gone.
+       · Extract audio (D, deleted just before, sat ABOVE the clip): the twin is "the first id not in a list taken before the load",
+         and the Undo brought D back, so D is renamed "… (audio)", hidden and made audio-only; the mute goes to the clip the Undo
+         replaced, so the clip on screen stays unmuted beside an audio-only layer (the sound twice); a visible copy lands; ↷ gone.
+     Now each abandons, as Split does: nothing inserted or committed, the records minted for the copies given back, ↷ kept.
+     CONTROLS (the same before and after): each load was reached before the Undo, and the Undo swapped in fresh objects; with no Undo,
+     Duplicate still makes one copy at the clip's place with its own record, returns its id, in one step, and Extract audio still makes
+     one invisible audio-only "(audio)" twin with its own record, mutes the clip, returns nothing, in one step; and a Delete of ANOTHER
+     layer during a paste's load does not stop the paste (a Delete hands FM.scene.layers a fresh array too, so the paste watches the
+     project object, which only a restore or an open replaces).
+     BUDGET: the default 45 s: seven small scenes, no real media, well under 2 s of sleeps. */
+  test('bughunt5 #8 An Undo during a Duplicate\'s media load: Duplicate, Duplicate selection, Paste and Extract audio make no copy when ↶ lands while the copy’s media loads — ↷ stays live and brings back the move he undid, no media record is left for the copy, and Extract audio leaves the layer the Undo brought back as it was (CONTROLS: each load was reached and the Undo swapped in fresh layers; with no Undo, Duplicate and Extract audio still make one copy in one step; a Delete of another layer during a paste’s load does not stop the paste)', { item: '1176' }, async function () {
+    if (!FM.history || !FM.history.reset || !FM.history._steps || !FM.history.canRedo) throw new Error('setup: FM.history (reset, _steps, canRedo) is not reachable');
+    if (!FM.duplicateLayer || !FM.duplicateSelection || !FM.pasteClipboard || !FM.copySelection || !FM.extractAudio || !FM.deleteLayer) throw new Error('setup: FM.duplicateLayer / duplicateSelection / pasteClipboard / copySelection / extractAudio / deleteLayer is not reachable');
+    const bad = [];
+    const clip0 = FM.clipboard;
+    const steps = () => JSON.stringify(FM.history._steps());
+    const at = (len, index) => { const s = FM.history._steps(); return s.len === len && s.index === index; };
+    const xOf = L => (L && L.transform && typeof L.transform.x === 'number') ? L.transform.x : NaN;
+    const list = () => FM.scene.layers.map(l => '“' + l.name + '” x ' + xOf(l) + (l.muted ? ' muted' : '') + (l.audioOnly ? ' audio-only' : '')).join(', ');
+    /* One case on its own scene (_bh2With) with its own held loader, both put back whatever the body does. `job.p` is the job the body
+       started: the way out releases the gate and waits for it (and for any save it started) before the scene goes back, then gives
+       back every record minted after `job.keys0`, so a red run leaks nothing into the next case. */
+    const kase = async (key, nth, body) => {
+      const hold = _bh5HoldLoads(key, nth);
+      const job = { p: null, keys0: null };
+      try {
+        await _bh2With(media => body(media, hold, job), async function () {
+          hold.release();
+          if (job.p) await Promise.race([job.p.catch(() => {}), sleep(5000)]);
+          if (FM.storage && FM.storage.settled) await Promise.race([FM.storage.settled(), sleep(3000)]);
+          if (job.keys0) _bh2NewMedia(job.keys0).forEach(k => { try { FM.media.remove(k); } catch (e) {} });
+        });
+      } finally {
+        hold.restore();
+      }
+    };
+    /* An image clip at x 100 (plus `more` below it), selected, then moved to x 500: one step on top of the reset. That move is what the
+       Undo inside the load takes back. */
+    const movedClip = (name, media, more) => {
+      const A = _bh2Img(name, media);
+      FM.scene.layers.push(A);
+      (more || []).forEach(l => FM.scene.layers.push(l));
+      FM.scene.selectedId = A.id; FM.scene.selectedIds = [A.id];
+      FM.history.reset();
+      A.transform.x = 500; FM.history.commit();
+      if (!at(2, 1)) throw new Error('setup: moving “' + name + '” to x 500 did not make one undo step on top of the reset (' + steps() + ')');
+      return A;
+    };
+    /* ↶ inside the held load: A must come back at x 100 as a FRESH object with ↷ live, or this is not the case the bug is about. */
+    const undoInside = (what, A) => {
+      FM.history.undo();
+      const back = FM.layerById(FM.scene, A.id);
+      if (!back || back === A || xOf(back) !== 100) throw new Error('CONTROL: ' + what + ': the Undo did not swap in a fresh “' + A.name + '” back at x 100 (' + list() + ', ' + steps() + ')');
+      if (!FM.history.canRedo()) throw new Error('CONTROL: ' + what + ': ↷ was not live straight after the Undo (' + steps() + ')');
+    };
+    /* After the release: exactly the layers `ids`, no record minted for a copy, ↷ live, and ↷ brings back just the move. */
+    const noCopy = (what, job, ids, A) => {
+      const ls = FM.scene.layers;
+      if (ls.length !== ids.length || ids.some(id => !FM.layerById(FM.scene, id))) bad.push(what + ': a copy landed after the Undo: ' + ls.length + ' layers (' + list() + '), carrying the move he had just undone');
+      const stray = _bh2NewMedia(job.keys0);
+      if (stray.length) bad.push(what + ': a media record was left under ' + stray.join(', ') + ', the id of a copy that never landed');
+      if (!FM.history.canRedo()) { bad.push(what + ': the copy committed after the Undo and threw ↷ away (' + steps() + '), so the move to x 500 can never come back'); return; }
+      FM.history.redo();
+      const R = FM.layerById(FM.scene, A.id);
+      if (FM.scene.layers.length !== ids.length || !R || xOf(R) !== 500) bad.push(what + ': ↷ did not bring back just his move (“' + A.name + '” at x 500): ' + list());
+    };
+    try {
+      /* ── DUPLICATE. */
+      await kase('loadImageFile', 1, async function (media, hold, job) {
+        const A = movedClip('bh5 #8 dup', media);
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.duplicateLayer(A.id);
+        if (hold.entered !== 1) throw new Error('CONTROL: Duplicate never reached the copy’s media load (' + hold.entered + ' loads), so an Undo cannot land inside it');
+        undoInside('Duplicate', A);
+        hold.release();
+        const r = await job.p;
+        if (r !== undefined) bad.push('Duplicate: after the Undo the duplicate still answered ' + JSON.stringify(r) + ', so a caller counts a copy as made');
+        noCopy('Duplicate', job, [A.id], A);
+      });
+
+      /* ── DUPLICATE SELECTION of three clips, ↶ inside the SECOND load: the first copy has landed already (in the scene the Undo
+         replaces), and the third clip must not be copied after it. */
+      await kase('loadImageFile', 2, async function (media, hold, job) {
+        const A2 = _bh2Img('bh5 #8 sel 2', media), A3 = _bh2Img('bh5 #8 sel 3', media);
+        const A1 = movedClip('bh5 #8 sel 1', media, [A2, A3]);
+        FM.scene.selectedId = A1.id; FM.scene.selectedIds = [A1.id, A2.id, A3.id];
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.duplicateSelection();
+        for (let i = 0; i < 100 && hold.entered < 2; i++) await sleep(10);
+        if (hold.entered !== 2) throw new Error('CONTROL: Duplicate selection did not reach the second clip’s media load (' + hold.entered + ' loads)');
+        if (FM.scene.layers.length !== 4) throw new Error('CONTROL: Duplicate selection: the first clip’s copy had not landed when the second load was held (' + list() + ')');
+        undoInside('Duplicate selection', A1);
+        if (FM.scene.layers.length !== 3) throw new Error('CONTROL: Duplicate selection: the Undo did not put back the three clips alone (' + list() + ')');
+        hold.release();
+        await job.p;
+        noCopy('Duplicate selection', job, [A1.id, A2.id, A3.id], A1);
+      });
+
+      /* ── PASTE of the clip, copied after the move. */
+      await kase('loadImageFile', 1, async function (media, hold, job) {
+        const A = movedClip('bh5 #8 paste', media);
+        if (FM.copySelection() !== 1) throw new Error('setup: Paste: Copy did not put the clip on the clipboard');
+        FM.time = 0;
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.pasteClipboard();
+        if (hold.entered !== 1) throw new Error('CONTROL: Paste never reached the copy’s media load (' + hold.entered + ' loads)');
+        undoInside('Paste', A);
+        hold.release();
+        await job.p;
+        noCopy('Paste', job, [A.id], A);
+      });
+
+      /* ── CONTROL: a Delete of ANOTHER layer during a paste's load. It hands FM.scene.layers a fresh array (as an Undo does) and
+         commits a step of its own; the paste still lands after it, with its own record and its own step, as it always has. */
+      await kase('loadImageFile', 1, async function (media, hold, job) {
+        const B = _bh2Shape('bh5 #8 B', { duration: 6 });
+        const A = movedClip('bh5 #8 paste ctl', media, [B]);
+        if (FM.copySelection() !== 1) throw new Error('setup: CONTROL (paste): Copy did not put the clip on the clipboard');
+        FM.time = 0;
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.pasteClipboard();
+        if (hold.entered !== 1) throw new Error('CONTROL: the paste never reached the copy’s media load (' + hold.entered + ' loads)');
+        const arr0 = FM.scene.layers;
+        FM.deleteLayer(B.id);
+        if (FM.layerById(FM.scene, B.id) || FM.scene.layers === arr0 || !at(3, 2)) throw new Error('setup: CONTROL (paste): the Delete did not take B away in a fresh layers array and a step of its own (' + list() + ', ' + steps() + ')');
+        hold.release();
+        await job.p;
+        const cp = FM.scene.layers.filter(l => l.id !== A.id);
+        cp.forEach(l => media.push(l.id));
+        if (cp.length !== 1 || FM.layerById(FM.scene, A.id) !== A) bad.push('CONTROL: a Delete of another layer during a paste’s load stopped the paste (' + list() + ')');
+        else if (!FM.media.get(cp[0].id)) bad.push('CONTROL: the paste after the Delete landed without a media record of its own');
+        if (!at(4, 3)) bad.push('CONTROL: the paste after the Delete did not add its own step (' + steps() + ')');
+      });
+
+      /* ── CONTROL: Duplicate with no Undo: one copy where the clip is, with its own record, its id returned, one step. */
+      await kase('loadImageFile', 1, async function (media, hold, job) {
+        const A = movedClip('bh5 #8 dup ctl', media);
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.duplicateLayer(A.id);
+        if (hold.entered !== 1) throw new Error('CONTROL: Duplicate (no Undo) never reached the copy’s media load (' + hold.entered + ' loads)');
+        hold.release();
+        const id = await job.p;
+        const C = id ? FM.layerById(FM.scene, id) : null;
+        if (C) media.push(C.id);
+        if (!C || FM.scene.layers.length !== 2 || FM.layerById(FM.scene, A.id) !== A) bad.push('CONTROL: with no Undo, Duplicate did not make one copy beside the clip and return its id (returned ' + JSON.stringify(id) + '; ' + list() + ')');
+        else {
+          if (xOf(C) !== 500) bad.push('CONTROL: with no Undo, the copy is not where the clip is (x ' + xOf(C) + ')');
+          if (!FM.media.get(C.id)) bad.push('CONTROL: with no Undo, the copy has no media record of its own');
+        }
+        if (!at(3, 2)) bad.push('CONTROL: with no Undo, Duplicate did not add exactly one step (' + steps() + ')');
+      });
+
+      /* ── EXTRACT AUDIO. D, deleted just before, sat ABOVE the clip V; the Undo inside the load brings D back above a fresh V. */
+      await kase('loadVideoFile', 1, async function (media, hold, job) {
+        const D = _bh2Shape('bh5 #8 D', { duration: 6 });
+        const V = _bh5Vid('bh5 #8 V', media);
+        FM.scene.layers.push(D, V);
+        FM.scene.selectedId = V.id; FM.scene.selectedIds = [V.id];
+        FM.history.reset();
+        FM.deleteLayer(D.id);
+        if (FM.layerById(FM.scene, D.id) || !at(2, 1)) throw new Error('setup: Extract audio: deleting D did not make one undo step (' + list() + ', ' + steps() + ')');
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.extractAudio(V);
+        if (hold.entered !== 1) throw new Error('CONTROL: Extract audio never reached the copy’s media load (' + hold.entered + ' loads)');
+        FM.history.undo();
+        const D1 = FM.layerById(FM.scene, D.id), V1 = FM.layerById(FM.scene, V.id);
+        if (!D1 || !V1 || V1 === V || FM.scene.layers.indexOf(D1) !== 0 || V1.muted || !FM.history.canRedo()) throw new Error('CONTROL: Extract audio: the Undo did not bring D back above a fresh, unmuted V with ↷ live (' + list() + ', ' + steps() + ')');
+        hold.release();
+        await job.p;
+        const D2 = FM.layerById(FM.scene, D.id), V2 = FM.layerById(FM.scene, V.id);
+        if (!D2 || D2.name !== 'bh5 #8 D' || D2.audioOnly || D2.transform.opacity !== 1) bad.push('Extract audio: D, which the Undo brought back, was ' + (D2 ? 'renamed “' + D2.name + '” at opacity ' + D2.transform.opacity + (D2.audioOnly ? ' and made audio-only' : '') : 'lost') + ': the extract took it for the twin it made');
+        const twin = FM.scene.layers.find(l => l.audioOnly);
+        if (twin && !(V2 && V2.muted)) bad.push('Extract audio: “' + twin.name + '” is audio-only while the clip on screen is not muted: the mute went to the clip the Undo replaced, so the sound plays twice');
+        if (FM.scene.layers.length !== 2) bad.push('Extract audio: a copy landed after the Undo: ' + FM.scene.layers.length + ' layers (' + list() + ')');
+        const stray = _bh2NewMedia(job.keys0);
+        if (stray.length) bad.push('Extract audio: a media record was left under ' + stray.join(', ') + ', the id of a twin that never landed');
+        if (!FM.history.canRedo()) bad.push('Extract audio: the extract committed after the Undo and threw ↷ away (' + steps() + '), so deleting D can never be redone');
+        else {
+          FM.history.redo();
+          const R = FM.scene.layers;
+          if (R.length !== 1 || R[0].id !== V.id || R[0].muted || R[0].audioOnly) bad.push('Extract audio: ↷ did not bring back just the Delete (V alone, unmuted): ' + list());
+        }
+      });
+
+      /* ── CONTROL: Extract audio with no Undo: one invisible audio-only "(audio)" twin with its own record, the clip muted, one step,
+         and nothing returned (its callers find the twin by the ids around the call). */
+      await kase('loadVideoFile', 1, async function (media, hold, job) {
+        const V = _bh5Vid('bh5 #8 V ctl', media);
+        FM.scene.layers.push(V);
+        FM.scene.selectedId = V.id; FM.scene.selectedIds = [V.id];
+        FM.history.reset();
+        job.keys0 = new Set(Object.keys(FM.media.all()));
+        job.p = FM.extractAudio(V);
+        if (hold.entered !== 1) throw new Error('CONTROL: Extract audio (no Undo) never reached the copy’s media load (' + hold.entered + ' loads)');
+        hold.release();
+        const r = await job.p;
+        const twin = FM.scene.layers.find(l => l.id !== V.id);
+        if (twin) media.push(twin.id);
+        if (FM.scene.layers.length !== 2 || !twin || FM.layerById(FM.scene, V.id) !== V) bad.push('CONTROL: with no Undo, Extract audio did not make one twin beside the clip (' + list() + ')');
+        else {
+          if (!twin.audioOnly || twin.name !== V.name + ' (audio)' || twin.transform.opacity !== 0) bad.push('CONTROL: with no Undo, the twin is not the invisible, audio-only “' + V.name + ' (audio)” (' + list() + ', opacity ' + twin.transform.opacity + ')');
+          if (!V.muted) bad.push('CONTROL: with no Undo, Extract audio left the clip unmuted');
+          if (!FM.media.get(twin.id)) bad.push('CONTROL: with no Undo, the twin has no media record of its own');
+        }
+        if (r !== undefined) bad.push('CONTROL: Extract audio returned ' + JSON.stringify(r) + ', where it returns nothing');
+        if (!at(2, 1)) bad.push('CONTROL: with no Undo, Extract audio did not make exactly one step (' + steps() + ')');
+      });
+    } finally {
+      FM.clipboard = clip0;
+    }
+
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* bughunt5 #4 — A KEYFRAMED SHAPE DREW THE KEYFRAME BEFORE, AT A KEYFRAME'S OWN TIME. FM.evalShapeSubs (js/compositor.js), the
+     evaluator for Edit Points' keyframed points (queue 254), takes the segment (a, b) while t <= b.t, and when b was a hold or held a
+     different number of points it returned a's points. So AT b's time it drew a. Queue 720 fixed the same off-by-one in masks.js
+     (evalMaskPath) and scene.js has it fixed for evalProp; this copy (v8.34) was missed. Edit Points makes its key at exactly FM.time
+     when a point is deleted or inserted, so the paused preview drew the old shape on that frame and the delete looked like it did
+     nothing, while the overlay showed the edited key. A pure call, so it reproduces at any width.
+     On 3d91aa8e: 4 points at t = 1 where the key at 1 holds 3, and the hold key's own time gives the first key's points.
+     CONTROLS (the same before and after): at 0.999 the earlier shape still holds; at 1.5 the next segment runs; an ordinary same-shape
+     key lands exactly on its own points at its time; the mask evaluator (queue 720) already answers the later key at its time. */
+  test('bughunt5 #4 A drawing\'s keyframe shows its own shape at its own time: a point-count keyframe and a hold keyframe on an Edit Points shape draw their own points AT their time, not the keyframe before (CONTROLS: just before the key the earlier shape holds; past it the next segment runs; a same-shape key lands exactly on its points; the mask evaluator already agrees)', { item: '1176' }, function () {
+    if (typeof FM.evalShapeSubs !== 'function') throw new Error('setup: FM.evalShapeSubs is not reachable');
+    const bad = [];
+    const SQ = [[[0, 0], [100, 0], [100, 100], [0, 100]]];
+    const TRI = [[[0, 0], [100, 0], [50, 100]]];
+    const TRI2 = [[[20, 20], [80, 20], [50, 80]]];
+    const A = [[[0, 0], [100, 0], [100, 100]]];
+    const B = [[[10, 30], [90, 30], [60, 90]]];
+    const C = [[[40, 40], [60, 40], [50, 60]]];
+    const shapeL = kf => ({ type: 'shape', shape: 'path', subs: { kf: kf } });
+    const same = (got, want) => Array.isArray(got) && got.length === want.length && want.every((s, i) => Array.isArray(got[i]) && got[i].length === s.length &&
+      s.every((p, k) => Array.isArray(got[i][k]) && Math.abs(got[i][k][0] - p[0]) < 1e-9 && Math.abs(got[i][k][1] - p[1]) < 1e-9));
+    const say = subs => Array.isArray(subs) ? JSON.stringify(subs) : String(subs);
+    const want = (what, L, t, w) => { const got = FM.evalShapeSubs(L, t); if (!same(got, w)) bad.push(what + ' at t = ' + t + ' drew ' + say(got) + ', not ' + say(w)); };
+
+    /* ── A POINT-COUNT KEY: 4 points at 0, 3 at 1, 3 at 2 (the key at 1 is what deleting a point at the playhead makes). */
+    const P = shapeL([{ t: 0, v: SQ, e: 'linear' }, { t: 1, v: TRI, e: 'linear' }, { t: 2, v: TRI2, e: 'linear' }]);
+    const at1 = FM.evalShapeSubs(P, 1);
+    if (!Array.isArray(at1) || !Array.isArray(at1[0]) || at1[0].length !== 3) bad.push('a point-count key: at its own time (1 s) the shape has ' + (Array.isArray(at1) && Array.isArray(at1[0]) ? at1[0].length : '?') + ' points, not the key’s 3: the key before is drawn on that frame, so a point deleted at the playhead looks like it is still there');
+    want('a point-count key', P, 1, TRI);
+    want('CONTROL: a point-count key, just before it,', P, 0.999, SQ);
+    want('CONTROL: a point-count key, half way to the next key,', P, 1.5, [[[10, 10], [90, 10], [50, 90]]]);
+
+    /* ── A HOLD KEY: the same counts, different points; the key at 1 is a hold. */
+    const H = shapeL([{ t: 0, v: A, e: 'linear' }, { t: 1, v: B, e: 'hold' }, { t: 2, v: C, e: 'linear' }]);
+    want('a hold key', H, 1, B);
+    want('CONTROL: a hold key, just before it,', H, 0.999, A);
+    want('CONTROL: a hold key, half way to the next key,', H, 1.5, [[[25, 35], [75, 35], [55, 75]]]);
+
+    /* ── CONTROL: an ordinary same-shape key interpolates onto exactly its own points at its time. */
+    want('CONTROL: an interpolating key', shapeL([{ t: 0, v: A, e: 'linear' }, { t: 1, v: B, e: 'linear' }, { t: 2, v: C, e: 'linear' }]), 1, B);
+
+    /* ── CONTROL: the mask evaluator, fixed by queue 720, answers the later key at its time — the rule this copy now follows. */
+    if (typeof FM.evalMaskPath === 'function') {
+      const m = FM.evalMaskPath({ path: { kf: [{ t: 0, v: SQ[0], e: 'linear' }, { t: 1, v: TRI[0], e: 'linear' }, { t: 2, v: TRI2[0], e: 'linear' }] } }, 1);
+      if (!Array.isArray(m) || m.length !== 3) bad.push('CONTROL: the mask evaluator gives ' + (Array.isArray(m) ? m.length : '?') + ' points at a point-count key’s own time, not 3: the rule queue 720 set is not what this test assumes');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* bughunt5 #6 — TRACKED KEYS WERE THINNED FOR STRAIGHT LINES AND WRITTEN AS EASE IN-OUT. FM.tracker.track (js/tracker.js) thins the
+     per-frame track with Ramer–Douglas–Peucker against the STRAIGHT line between two kept frames (1.6 px), then wrote every kept key
+     'easeInOut'. evalProp eases the segment arriving at a key, so between two keys the layer ran on 2f² instead of f: up to 12.5 % of
+     the segment's travel off the path the tracker measured (at its quarter points), with a dead stop at every key. The tracker's own
+     fixture (trackerFixture: a square drifting 0.8 px a frame for 4 s) thins to about one straight segment of ~95 px.
+     The check compares each segment with the straight line between ITS OWN two keys, so it does not depend on the fixture's
+     placement or scale.
+     On 8ac0dade: about 12 px off that line at the long segment's quarter points.
+     CONTROLS (the same before and after): the track wrote at least two x keys, and one segment travels at least 24 px, so an Ease
+     In-Out would be at least 3 px off at its quarter points (a pass cannot come from segments too short to show it); the layer
+     sits exactly on each key at its time.
+     BUDGET: the default 45 s: one track of the 120-frame fixture, which the three tracker tests run in well under a second. */
+  test('bughunt5 #6 A tracked layer follows the tracked path between its keyframes: between every two keys the tracker writes, the layer\'s x and y stay within 1 px of the straight line between them (the line the track was thinned against), not eased off it by up to 12 px (CONTROLS: the track wrote keys with a segment long enough to show an ease; the layer sits on each key at its time)', { item: '1176' }, async function () {
+    if (!FM.tracker || typeof FM.tracker.track !== 'function' || typeof FM.buildFrameCache !== 'function') throw new Error('setup: FM.tracker.track or FM.buildFrameCache is not reachable');
+    const bad = [];
+    const dBuild = Object.getOwnPropertyDescriptor(FM, 'buildFrameCache');
+    try {
+      FM.buildFrameCache = async function () { return true; };   // the fixture supplies the cache, as the three tracker tests do
+      await _bh2With(async function (media) {
+        FM.scene.project.fps = 30;
+        const f = trackerFixture();
+        FM.scene.layers.push(f.layer); media.push(f.layer.id);
+        const n = await FM.tracker.track(f.layer, f.seed, f.seedT, f.box);
+        const tr = f.layer.transform;
+        const kfOf = ch => (tr[ch] && Array.isArray(tr[ch].kf)) ? tr[ch].kf : null;
+        if (!n || !kfOf('x') || kfOf('x').length < 2 || !kfOf('y')) throw new Error('setup: the track wrote no x / y keyframes (it returned ' + n + '), so nothing below is measured');
+        let longest = 0;
+        ['x', 'y'].forEach(ch => {
+          const kf = kfOf(ch);
+          let worst = null;
+          kf.forEach(k => {
+            const v = FM.evalProp(tr[ch], k.t);
+            if (Math.abs(v - k.v) > 1e-6) bad.push('CONTROL: ' + ch + ' is ' + v + ' at its own key (' + k.t.toFixed(3) + ' s), not the key’s ' + k.v);
+          });
+          for (let i = 0; i + 1 < kf.length; i++) {
+            const a = kf[i], b = kf[i + 1];
+            if (ch === 'x') longest = Math.max(longest, Math.abs(b.v - a.v));
+            for (let j = 1; j < 16; j++) {
+              const t = a.t + (b.t - a.t) * j / 16, line = a.v + (b.v - a.v) * j / 16, got = FM.evalProp(tr[ch], t);
+              const d = Math.abs(got - line);
+              if (!worst || d > worst.d) worst = { d: d, t: t, got: got, line: line, a: a, b: b };
+            }
+          }
+          if (worst && !(worst.d <= 1)) bad.push(ch + ' is ' + worst.got.toFixed(1) + ' at ' + worst.t.toFixed(3) + ' s, ' + worst.d.toFixed(1) + ' px off the straight line (' + worst.line.toFixed(1) + ') between its keys ' + worst.a.v + ' at ' + worst.a.t.toFixed(3) + ' s and ' + worst.b.v + ' at ' + worst.b.t.toFixed(3) + ' s (written “' + worst.b.e + '”): the track was thinned against that line, so the pinned graphic swims off the tracked point between keys and stops at each one');
+        });
+        if (longest < 24) throw new Error('CONTROL: no x segment of the track travels 24 px (the longest is ' + longest + ' px over ' + kfOf('x').length + ' keys), so an Ease In-Out would sit under 3 px off and this test could not see it');
+      });
+    } finally {
+      if (dBuild) Object.defineProperty(FM, 'buildFrameCache', dBuild); else delete FM.buildFrameCache;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* bughunt5 #7 — THE TRACKER IGNORED FLIP. Its own geometry (js/tracker.js geom, used by the seed tap, the seed box and the key
+     write) rebuilt the layer's placement from x, y, scale, rotation and anchor with no flip, while the renderer mirrors a flipped layer
+     innermost (compositor.js applyLayerTransform; FM.layerUVToCanvas). So on a clip with ⋯ → Flip Horizontally:
+       · the keys moved the layer the wrong way. The fixture's square drifts RIGHT in the source, so flipped it drifts LEFT on screen,
+         and to keep it pinned the layer must move RIGHT; it moved left, and the pinned point drifted at twice the feature's speed;
+       · a tap seeded the MIRROR spot about the anchor, so the template came from the wrong place (and the seed box, drawn through the
+         same wrong inverse, sat under his finger, so nothing looked wrong).
+     The tap is driven through the real pick overlay with FM.eventToProject answering the square's on-screen centre (from
+     FM.layerUVToCanvas, which carries the flip), and the seed is read from the Track button's call with FM.tracker.track stubbed.
+     On afb548a4: flipped, x moves about −91 px from 0.1 s to 3.9 s (as unflipped), and the tap seeds content x 50, not the 78 the
+     square's centre is at (the mirror about the anchor at 64).
+     CONTROLS (the same before and after): unflipped, x moves about −91 px; an unflipped tap seeds the square's centre.
+     BUDGET: the default 45 s: two tracks of the 120-frame fixture and two taps. */
+  test('bughunt5 #7 Tracking a flipped clip moves the layer the right way: on a clip flipped horizontally the tracked x keys move the layer RIGHT as the picture moves left (about +91 px from 0.1 s to 3.9 s, not −91), and a tap on the feature seeds that feature, not its mirror image (CONTROLS: unflipped, the keys still move the layer left about 91 px and a tap seeds the feature)', { item: '1176' }, async function () {
+    if (!FM.tracker || typeof FM.tracker.track !== 'function' || typeof FM.tracker.pick !== 'function' || typeof FM.buildFrameCache !== 'function' || typeof FM.eventToProject !== 'function' || typeof FM.layerUVToCanvas !== 'function') throw new Error('setup: FM.tracker (track, pick), FM.buildFrameCache, FM.eventToProject or FM.layerUVToCanvas is not reachable');
+    const bad = [];
+    const dBuild = Object.getOwnPropertyDescriptor(FM, 'buildFrameCache');
+    const dEvt = Object.getOwnPropertyDescriptor(FM, 'eventToProject');
+    const dTrack = Object.getOwnPropertyDescriptor(FM.tracker, 'track');
+    const putBack = () => {
+      if (dEvt) Object.defineProperty(FM, 'eventToProject', dEvt); else delete FM.eventToProject;
+      if (dTrack) Object.defineProperty(FM.tracker, 'track', dTrack); else delete FM.tracker.track;
+    };
+    /* The fixture on its own scene, flipped or not. */
+    const onScene = async (flip, body) => {
+      await _bh2With(async function (media) {
+        FM.scene.project.fps = 30;
+        const f = trackerFixture();
+        if (flip) f.layer.flipH = true;
+        FM.scene.layers.push(f.layer); media.push(f.layer.id);
+        await body(f);
+      });
+    };
+    /* How far the written x keys move the layer from 0.1 s to 3.9 s. */
+    const drift = async (flip) => {
+      let dx = NaN;
+      await onScene(flip, async function (f) {
+        const n = await FM.tracker.track(f.layer, f.seed, f.seedT, f.box);
+        const X = f.layer.transform.x;
+        if (!n || !X || !Array.isArray(X.kf) || X.kf.length < 2) throw new Error('setup: the ' + (flip ? 'flipped' : 'unflipped') + ' track wrote no x keyframes (it returned ' + n + ')');
+        dx = FM.evalProp(X, 3.9) - FM.evalProp(X, 0.1);
+      });
+      return dx;
+    };
+    /* The content point a tap on the square's on-screen centre seeds, read from the Track button's call. */
+    const seedOf = async (flip) => {
+      let got = null, f0 = null;
+      await onScene(flip, async function (f) {
+        f0 = f;
+        FM.time = f.seedT;
+        const on = FM.layerUVToCanvas(f.layer, f.seed.x / f.W, f.seed.y / f.H, f.W, f.H);
+        if (!on || !isFinite(on.x) || !isFinite(on.y)) throw new Error('setup: FM.layerUVToCanvas gave no on-screen point for the square (' + JSON.stringify(on) + ')');
+        try {
+          FM.eventToProject = function () { return { x: on.x, y: on.y }; };
+          FM.tracker.track = async function (L, seed) { got = seed ? { x: seed.x, y: seed.y } : null; return 0; };
+          FM.tracker.pick(f.layer);
+          const ov = document.getElementById('trk-overlay');
+          if (!ov) throw new Error('setup: pick() made no #trk-overlay');
+          ov.dispatchEvent(new PointerEvent('pointerdown', { bubbles: false, cancelable: true, pointerId: 41, pointerType: 'touch', isPrimary: true, clientX: 10, clientY: 10, buttons: 1 }));
+          const go = document.querySelector('#trk-bar .btn-accent');
+          if (!go) throw new Error('setup: the tap set no seed (the bar has no Track button)');
+          go.click();
+          await sleep(30);
+        } finally {
+          putBack();
+          try { FM.tracker.cancel(); } catch (e) {}
+          try { if (FM.hideToast) FM.hideToast(); } catch (e) {}
+        }
+      });
+      if (!got) throw new Error('setup: Track did not hand a seed to FM.tracker.track (' + (flip ? 'flipped' : 'unflipped') + ')');
+      return { got: got, want: f0.seed };
+    };
+    try {
+      FM.buildFrameCache = async function () { return true; };   // the fixture supplies the cache, as the three tracker tests do
+
+      /* ── THE KEYS. */
+      const plain = await drift(false);
+      if (!(plain < -80)) bad.push('CONTROL: unflipped, the keys move the layer ' + plain.toFixed(1) + ' px from 0.1 s to 3.9 s, not about −91 (left, as the square moves right)');
+      const flipped = await drift(true);
+      if (!(flipped > 80)) bad.push('flipped horizontally, the keys move the layer ' + flipped.toFixed(1) + ' px from 0.1 s to 3.9 s, not about +91: the picture moves LEFT on a flipped clip, so the layer must move right to keep the point pinned, and the tracker moved it the wrong way');
+
+      /* ── THE SEED TAP. */
+      const s0 = await seedOf(false);
+      if (Math.abs(s0.got.x - s0.want.x) > 2 || Math.abs(s0.got.y - s0.want.y) > 2) bad.push('CONTROL: unflipped, a tap on the square’s on-screen centre seeded content (' + s0.got.x.toFixed(1) + ', ' + s0.got.y.toFixed(1) + '), not its centre (' + s0.want.x + ', ' + s0.want.y + ')');
+      const s1 = await seedOf(true);
+      if (Math.abs(s1.got.x - s1.want.x) > 2 || Math.abs(s1.got.y - s1.want.y) > 2) bad.push('flipped horizontally, a tap on the square’s on-screen centre seeded content (' + s1.got.x.toFixed(1) + ', ' + s1.got.y.toFixed(1) + '), not its centre (' + s1.want.x + ', ' + s1.want.y + '): the mirror spot about the anchor, so the template is grabbed from the wrong part of the picture');
+    } finally {
+      putBack();
+      if (dBuild) Object.defineProperty(FM, 'buildFrameCache', dBuild); else delete FM.buildFrameCache;
+      try { FM.tracker.cancel(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* bughunt5 #5 — DRAW MORE ON AN ANIMATED DRAWING MOVED ITS OTHER KEYFRAMES. Draw more and the eraser re-fit the drawing's box
+     around the session's strokes (FM.refitPathLayer / refitPlaced, js/app.js), and that box is the WHOLE layer's: shapeW / shapeH and
+     x / y apply at every time. writePathSubs re-normalised only the keyframe at the playhead into it, so every other keyframe's points,
+     still in [0,1] of the OLD box, were drawn stretched and shifted by the new one. Queue 833 stopped the flattening, not this.
+     Driven through the real door: FM.startDraw('freehand', { layerId }) is what ⋯ → ✎ Draw more calls, the stroke goes in through the
+     commit the finger calls (FM.drawTool._commit, as the 690 tests do), and the eraser through FM.drawTool._eraseAt.
+     The fixture: a 100 × 100 box at (100, 100); the 0 s key is a corner (200, 100) → (200, 200) whose middle point carries a manual
+     handle (tip at (210, 120)), the 1 s key a corner half that size. At 1 s, one stroke out to (320, 320) grows the box to 220 × 220;
+     then the eraser takes that stroke away again and the box shrinks to the 1 s corner, 50 × 50.
+     What is measured is the 0 s key's OWN stored points (FM.evalShapeSubs at 0), mapped through the box the layer has at that moment
+     (FM.layerUVToCanvas with its shapeW / shapeH, the renderer's map): a fixed re-fit rewrites those points, so a literal UV would stay
+     wrong after a correct fix (the refuter's correction).
+     On 446438e5: after Draw more the 0 s corner (200, 200) is drawn at (320, 320), about 170 px off ((200, 100) at (320, 100), the
+     handle tip at (342, 144)); after the eraser it is at (150, 150), about 71 px off.
+     CONTROLS (the same before and after): the fixture sits where it says before anything; the stroke grew the box and kept both keys;
+     the 1 s key is its own corner plus the new stroke under the finger, and after the eraser just its corner; a drawing with NO
+     keyframes, given the same Draw more, keeps its old stroke where it was, stays a still path and takes the stroke under the finger.
+     BUDGET: the default 45 s: two Draw more sessions and one erase, no renders. */
+  test('bughunt5 #5 Drawing more on an animated drawing leaves its other keyframes where they were: Draw more at the 1 s keyframe of a drawing whose points are keyframed, with a stroke outside it, leaves the 0 s keyframe’s points and its handle within 1 px of where they were on the canvas, not stretched into the bigger box (about 170 px off), and so does the eraser taking that stroke away again (CONTROLS: the stroke lands under the finger and the 1 s keyframe keeps its own shape; a drawing with no keyframes behaves as before)', { item: '1176' }, async function () {
+    if (typeof FM.startDraw !== 'function' || !FM.drawTool || typeof FM.drawTool._commit !== 'function' || typeof FM.drawTool.finish !== 'function' || typeof FM.drawTool._eraseAt !== 'function' || !FM.drawTools || typeof FM.drawTools.layerId !== 'function' || typeof FM.evalShapeSubs !== 'function' || typeof FM.layerUVToCanvas !== 'function') throw new Error('setup: FM.startDraw, the draw tool seams (_commit, finish, _eraseAt, FM.drawTools.layerId), FM.evalShapeSubs or FM.layerUVToCanvas is not reachable');
+    const saved = FM.scene, savedT = FM.time, bad = [];
+    const P = { width: 640, height: 480, fps: 30, duration: 3, background: '#000000' };
+    /* A drawing on its own scene: a 100 × 100 box centred on (150, 150), so its box starts at (100, 100). */
+    const mk = (name, subs) => {
+      const L = FM.makeLayer('shape', { name: name, shape: 'path', x: 150, y: 150, shapeW: 100, shapeH: 100, fill: '#ff0000', start: 0, duration: 3, extra: { closed: false, points: null, subs: subs } });
+      FM.scene = scene([L], { project: Object.assign({}, P) });
+      return L;
+    };
+    /* Every point of the shape the drawing shows at `t`, and the tip of any manual handle, on the canvas through the layer's box. */
+    const marks = (L, t) => {
+      const keep = FM.time, out = [];
+      try {
+        FM.time = t;
+        FM.evalShapeSubs(L, t).forEach((sub, si) => sub.forEach((p, k) => {
+          const at = (u, v, what) => { const q = FM.layerUVToCanvas(L, u, v, L.shapeW, L.shapeH); out.push({ what: what, x: q.x, y: q.y }); };
+          at(p[0], p[1], 'point ' + (k + 1) + ' of stroke ' + (si + 1));
+          if (p.length >= 5) at(p[0] + p[3], p[1] + p[4], 'the handle tip of point ' + (k + 1) + ' of stroke ' + (si + 1));
+        }));
+      } finally {
+        FM.time = keep;
+      }
+      return out;
+    };
+    /* The worst miss between those marks and the canvas points they should be at. */
+    const worst = (got, want) => {
+      if (got.length !== want.length) return { d: Infinity, say: 'it has ' + got.length + ' points and handle tips, not ' + want.length };
+      let w = { d: 0, say: '' };
+      got.forEach((g, i) => {
+        const d = Math.hypot(g.x - want[i][0], g.y - want[i][1]);
+        if (!(d <= w.d)) w = { d: d, say: g.what + ' is at (' + g.x.toFixed(1) + ', ' + g.y.toFixed(1) + '), not (' + (+want[i][0]).toFixed(1) + ', ' + (+want[i][1]).toFixed(1) + '), ' + d.toFixed(1) + ' px off' };
+      });
+      return w;
+    };
+    /* ⋯ → ✎ Draw more at `t`, then one stroke through the commit the finger calls. */
+    const drawMore = async (L, t, stroke) => {
+      FM.time = t; FM.selectLayer(null); FM.refreshAll(); await sleep(60);
+      FM.startDraw('freehand', { layerId: L.id }); await sleep(200);
+      if (!FM.drawTool.active || FM.drawTools.layerId() !== L.id) throw new Error('setup: Draw more did not re-open “' + L.name + '”');
+      FM.drawTool.points = stroke.map(p => p.slice()); FM.drawTool._commit(); await sleep(150);
+    };
+    const STROKE = [[300, 300], [310, 310], [320, 320]];
+    try {
+      /* ── A DRAWING WHOSE POINTS ARE KEYFRAMED. */
+      const K0 = [[[0, 0], [1, 0, 1, 0.1, 0.2], [1, 1]]];
+      const K1 = [[[0, 0], [0.5, 0], [0.5, 0.5]]];
+      const L = mk('bh5 #5 animated drawing', { kf: [{ t: 0, v: K0, e: 'linear' }, { t: 1, v: K1, e: 'linear' }] });
+      const was0 = marks(L, 0);
+      const s0 = worst(was0, [[100, 100], [200, 100], [210, 120], [200, 200]]);
+      if (s0.d > 1e-6) throw new Error('setup: before anything, the 0 s keyframe is not where the fixture puts it: ' + s0.say);
+      const want0 = was0.map(m => [m.x, m.y]);
+
+      /* Draw more at 1 s, with a stroke outside the drawing. */
+      await drawMore(L, 1, STROKE);
+      const kfN = (L.subs && !Array.isArray(L.subs) && Array.isArray(L.subs.kf)) ? L.subs.kf.length : 0;
+      if (kfN !== 2) throw new Error('CONTROL: after Draw more the points have ' + kfN + ' keyframes, not the two they had (queue 833)');
+      if (!(L.shapeW >= 200 && L.shapeH >= 200)) throw new Error('CONTROL: a stroke out to (320, 320) did not grow the drawing’s box (it is ' + L.shapeW + ' × ' + L.shapeH + '), so this test cannot see the other keyframe being stretched by it');
+      const c1 = worst(marks(L, 1), [[100, 100], [150, 100], [150, 150], [300, 300], [310, 310], [320, 320]]);
+      if (c1.d > 1) bad.push('CONTROL: after Draw more at 1 s, the 1 s keyframe is not its own corner plus the new stroke under the finger: ' + c1.say);
+      const d1 = worst(marks(L, 0), want0);
+      if (d1.d > 1) bad.push('after Draw more at 1 s with a stroke out to (320, 320), the 0 s keyframe moved: ' + d1.say + ' — the box grew to ' + L.shapeW + ' × ' + L.shapeH + ' and only the 1 s keyframe was re-fitted into it, so the 0 s shape is stretched and shifted by it');
+
+      /* The eraser, in the same session at 1 s: rubbing that stroke out shrinks the box back to the 1 s corner. */
+      if (!FM.drawTool._eraseAt([310, 310])) throw new Error('setup: the eraser found nothing at (310, 310), on the stroke just drawn');
+      await sleep(150);
+      const n1 = FM.evalShapeSubs(L, 1).length;
+      if (n1 !== 1 || !(L.shapeW <= 60 && L.shapeH <= 60)) throw new Error('CONTROL: the eraser did not take the stroke away (the 1 s keyframe has ' + n1 + ' strokes and the box is ' + L.shapeW + ' × ' + L.shapeH + '), so the second re-fit is not measured');
+      const c2 = worst(marks(L, 1), [[100, 100], [150, 100], [150, 150]]);
+      if (c2.d > 1) bad.push('CONTROL: after the eraser, the 1 s keyframe is not its own corner: ' + c2.say);
+      const d2 = worst(marks(L, 0), want0);
+      if (d2.d > 1) bad.push('after the eraser took that stroke away again at 1 s, the 0 s keyframe moved: ' + d2.say + ' — the box shrank to ' + L.shapeW + ' × ' + L.shapeH + ' and only the 1 s keyframe followed it');
+      FM.drawTool.finish(); await sleep(150);
+
+      /* ── CONTROL: a drawing with NO keyframes, the same Draw more. */
+      const S = mk('bh5 #5 still drawing', [[[0, 0], [1, 0], [1, 1]]]);
+      await drawMore(S, 1, STROKE);
+      FM.drawTool.finish(); await sleep(150);
+      if (!Array.isArray(S.subs)) bad.push('CONTROL: Draw more on a drawing with no keyframes gave its points keyframes');
+      else {
+        const c3 = worst(marks(S, 1), [[100, 100], [200, 100], [200, 200], [300, 300], [310, 310], [320, 320]]);
+        if (c3.d > 1) bad.push('CONTROL: Draw more on a drawing with no keyframes moved its old stroke or missed the finger: ' + c3.say);
+      }
+    } finally {
+      hunt5cCleanup(saved, savedT);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* bughunt5 #9 — EVERY OPEN AND EVERY UNDO STRIPPED THE EASING CURVE FROM A ROTO MASK'S KEYFRAMES. safeMaskPath (js/storage.js), run
+     by sanitizeMasks on every project open and, through FM.storage._sanitizeLayers, on every undo, redo and import, rebuilt each mask
+     keyframe as { t, v, e }: `bez` and `ez` were dropped, and the path came back as { kf } without the Loop menu's loopMode. The
+     keyframe diamond's ease menu writes `bez` with the name (js/timeline.js), and FM.evalMaskPath eases by `bez` first, then falls back
+     to FM.EASES[e], which for easeIn is the quadratic t², not the cubic bezier(.42,0,1,1). So a mask moving 600 px with Ease In on its
+     second key sat about 39 px back at mid-segment after a reopen or any undo, under a diamond still saying Ease In.
+     Driven through the two real doors: the seam FM.storage._safeMaskPath (what the open path runs) and FM.storage._sanitizeLayers
+     (what history.restore runs). Both REPLACE the mask and path objects, so everything is re-read afterwards.
+     On 9ba7f4b4: no `bez` after either, the mask at x 150.0 at mid-segment where Ease In puts it at about 189.4, and no ez or loopMode.
+     CONTROLS (the same before and after): the fixture's own path, before any sanitiser, is on the Ease In curve; an Overshoot key (a
+     name only FM.EASE_PRESETS has, so the fallback is the same curve) agrees either way. */
+  test('bughunt5 #9 A mask keyframe keeps its easing through a reopen and an undo: a roto mask moving 600 px with Ease In on its second keyframe sits where the Ease In curve puts it at mid-segment (within 0.5 px) after the open path’s sanitiser and after the undo path’s, with its bez still on the key, not about 39 px back on the quadratic of the same name; a Steps ease and Loop: cycle survive too (CONTROLS: the path before any sanitiser is on the curve; an Overshoot key agrees either way)', { item: '1176' }, function () {
+    if (!FM.storage || typeof FM.storage._safeMaskPath !== 'function' || typeof FM.storage._sanitizeLayers !== 'function' || typeof FM.evalMaskPath !== 'function' || typeof FM.bezierAt !== 'function' || !FM.EASE_PRESETS) throw new Error('setup: FM.storage._safeMaskPath / _sanitizeLayers, FM.evalMaskPath, FM.bezierAt or FM.EASE_PRESETS is not reachable');
+    const bad = [];
+    const SQ = [[0, 0], [40, 0], [40, 40], [0, 40]];
+    const MOVED = SQ.map(p => [p[0] + 600, p[1]]);
+    const EASE_IN = [0.42, 0, 1, 1];
+    /* A path keyed at 0 s and 2 s; the second key carries the ease (the segment ENTERING a key takes that key's ease). */
+    const path = (e, bez, extra) => ({ kf: [{ t: 0, v: SQ.map(p => p.slice()), e: 'linear' },
+      Object.assign({ t: 2, v: MOVED.map(p => p.slice()), e: e }, bez ? { bez: bez.slice() } : {}, extra || {})] });
+    const copy = o => JSON.parse(JSON.stringify(o));
+    const xAt = (p, t) => { const pts = FM.evalMaskPath({ path: p }, t); return (Array.isArray(pts) && Array.isArray(pts[0])) ? pts[0][0] : NaN; };
+    const want = 600 * FM.bezierAt(0.42, 0, 1, 1, 0.5);   // about 189.4; the quadratic easeIn gives 150
+
+    const raw = path('easeIn', EASE_IN);
+    if (!(Math.abs(xAt(raw, 1) - want) <= 0.5)) throw new Error('setup: before any sanitiser the fixture is at x ' + xAt(raw, 1) + ' at mid-segment, not on the Ease In curve at ' + want.toFixed(1));
+    if (!(Math.abs(want - 150) > 30)) throw new Error('setup: the Ease In curve and the quadratic are within 30 px at mid-segment (' + want.toFixed(1) + ' against 150), so this cannot see the curve being dropped');
+
+    const check = (where, p) => {
+      const k = (p && Array.isArray(p.kf)) ? p.kf[1] : null;
+      if (!k) { bad.push(where + ': the mask path came back with no second keyframe'); return; }
+      if (!Array.isArray(k.bez) || k.bez.length !== 4 || k.bez.some((n, i) => Math.abs(n - EASE_IN[i]) > 1e-12)) bad.push(where + ': the Ease In key came back with bez ' + JSON.stringify(k.bez) + ', not ' + JSON.stringify(EASE_IN));
+      const x = xAt(p, 1);
+      if (!(Math.abs(x - want) <= 0.5)) bad.push(where + ': at mid-segment the mask is at x ' + x.toFixed(1) + ', not ' + want.toFixed(1) + ' where Ease In puts it, ' + Math.abs(x - want).toFixed(1) + ' px off (' + (100 * Math.abs(x - want) / 600).toFixed(1) + ' % of the move): it runs on the quadratic of the same name while the diamond still says Ease In');
+    };
+
+    /* ── THE OPEN PATH: sanitizeMasks → safeMaskPath. */
+    check('after a reopen (the open path’s sanitiser)', FM.storage._safeMaskPath(copy(raw)));
+
+    /* ── THE UNDO PATH: history.restore → FM.storage._sanitizeLayers, which REPLACES the mask objects, so the mask is re-read. */
+    const L = FM.makeLayer('shape', { name: 'bh5 #9 roto', shape: 'rect', x: 160, y: 120, shapeW: 100, shapeH: 100, fill: '#ffffff', start: 0, duration: 4 });
+    L.masks = [{ id: 'bh5m9', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: copy(raw) }];
+    FM.storage._sanitizeLayers([L]);
+    const m = Array.isArray(L.masks) ? L.masks[0] : null;
+    if (!m) bad.push('after an undo (the undo path’s sanitiser): the mask is gone');
+    else check('after an undo (the undo path’s sanitiser)', m.path);
+
+    /* ── A STEPS EASE (ez) AND LOOP: CYCLE, kept on the same whitelists as every other keyframed prop's. */
+    const EZ = { fam: 'steps', preset: 'steps', p: { n: 4 } };
+    const lp = path('linear', null, { ez: EZ }); lp.loopMode = 'cycle';
+    const lo = FM.storage._safeMaskPath(copy(lp));
+    const kz = (lo && Array.isArray(lo.kf)) ? lo.kf[1] : null;
+    if (!kz || !kz.ez || kz.ez.fam !== 'steps' || kz.ez.preset !== 'steps' || !kz.ez.p || kz.ez.p.n !== 4) bad.push('a key eased from the Steps rail came back with ez ' + JSON.stringify(kz && kz.ez) + ', not ' + JSON.stringify(EZ));
+    if (!lo || lo.loopMode !== 'cycle') bad.push('a mask path set to Loop: cycle came back with loopMode ' + (lo ? lo.loopMode : '(no path)') + ', so it stops looping after any reopen or undo');
+
+    /* ── CONTROL: Overshoot lives only in FM.EASE_PRESETS, so with or without its bez the curve is the same one. */
+    const ov = path('overshoot', FM.EASE_PRESETS.overshoot);
+    const ovWant = xAt(ov, 1), ovGot = xAt(FM.storage._safeMaskPath(copy(ov)), 1);
+    if (!(Math.abs(ovGot - ovWant) <= 0.5)) bad.push('CONTROL: an Overshoot key is at x ' + ovGot.toFixed(1) + ' at mid-segment after the sanitiser, not ' + ovWant.toFixed(1));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* bughunt5 #10 — PICKING AN EASING ALSO RE-EASED A CHANNEL THAT HAD NOT STARTED. pickKfs (js/graph-editor.js; the seam
+     FM._pickEaseKfs) picks, for every animated channel of the mode, the segment an easing preset lands on. v9.34 dropped a channel
+     whose animation had already ENDED, because the editor eases every channel together and the canvas draws only the first, so the
+     edit was invisible (the test 'an easing preset does not reach back into a channel whose animation already ended'). The mirror
+     case was missed: a channel whose first key is still AHEAD of the playhead fell back to its first segment and counted as live.
+     x keyed 0 → 2 s (a slide in), y keyed 3 → 4 s (a later drop), playhead at 1 s, Bounce: the drop at 3 s bounced too.
+     On a1626120: ['x', 'y'] at 1 s.
+     CONTROLS (the same before and after): a channel whose first key sits exactly AT the playhead is live, and so is one whose first
+     key is a hair (0.5 ms, inside the 1 ms epsilon) after it; y alone, before its first key, still gets its first segment (the single-property editor relies on that);
+     in the gap between x's end and y's start only y, the move ahead, is eased; past both ends, both. */
+  test('bughunt5 #10 Picking an easing leaves a channel that has not started alone: with x keyed 0 → 2 s and y keyed 3 → 4 s, an easing picked at 1 s lands on x’s segment only, not on y’s drop two seconds later that the graph never showed (CONTROLS: a channel whose first key is exactly at the playhead, or half a millisecond after it, is still eased; y alone gets its first segment; in the gap only y; past both, both)', { item: '1176' }, function () {
+    if (typeof FM._pickEaseKfs !== 'function') throw new Error('setup: FM._pickEaseKfs is not reachable');
+    const bad = [], t0 = FM.time;
+    const ch = (a, b, va, vb) => ({ kf: [{ t: a, v: va, e: 'linear' }, { t: b, v: vb, e: 'linear' }] });
+    const pick = (props, keys, t) => { FM.time = t; return FM._pickEaseKfs(k => props[k], keys); };
+    const expect = (what, r, keys, ends) => {
+      const got = JSON.stringify(r.keys), want = JSON.stringify(keys);
+      const gotEnds = JSON.stringify(r.kfs.map(k => k && k.t)), wantEnds = JSON.stringify(ends);
+      if (got !== want || gotEnds !== wantEnds) bad.push(what + ': picked ' + got + ' (segments ending at ' + gotEnds + ' s), not ' + want + ' (ending at ' + wantEnds + ' s)');
+    };
+    try {
+      const P = { x: ch(0, 2, 0, 100), y: ch(3, 4, 0, 50) };
+      expect('at 1 s, x moving and y not starting until 3 s', pick(P, ['x', 'y'], 1), ['x'], [2]);
+      if (pick(P, ['x', 'y'], 1).keys.indexOf('y') >= 0) bad.push('so picking Bounce at 1 s also bounces y’s drop at 3 s, a segment the graph does not show');
+
+      /* CONTROLS. */
+      const Q = { x: ch(0, 4, 0, 100), y: ch(1, 2, 0, 50) };
+      expect('CONTROL: at 1 s with y’s first key exactly at the playhead', pick(Q, ['x', 'y'], 1), ['x', 'y'], [4, 2]);
+      expect('CONTROL: with the playhead half a millisecond before y’s first key', pick(Q, ['x', 'y'], 1 - 0.0005), ['x', 'y'], [4, 2]);
+      expect('CONTROL: y alone, before its first key', pick(P, ['y'], 1), ['y'], [4]);
+      expect('CONTROL: at 2.5 s, after x ended and before y starts', pick(P, ['x', 'y'], 2.5), ['y'], [4]);
+      expect('CONTROL: at 9 s, past both', pick(P, ['x', 'y'], 9), ['x', 'y'], [2, 4]);
+    } finally {
+      FM.time = t0;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* bughunt5 #11 — TAPPING A POINT TO SELECT IT INSERTED A KEYFRAME. Edit Points (js/point-edit.js) ran ensureKfHere on every
+     pointerdown that hit a point, before it could know whether the finger would move, and onUp commits. So on a shape whose points
+     are keyframed, a tap just to select a point between two keys (to read its X and Y, switch it to a Curve or use the nudge pad:
+     queue 690's own list) wrote a third, LINEAR key at the playhead. The Ease In on the next key then ran over half the time, the
+     morph changed shape, and the undo stack gained a step he never made. Now only the ring insert keys on the press; a point or
+     handle drag keys once it has passed the touch slop.
+     Driven through the real overlay: a touch pointerdown and pointerup on #pe-overlay at the point's screen spot (the inverse of
+     FM.eventToProject, which the overlay reads, checked against it first), with Edit Points open embedded, as the Edit Shape panel
+     opens it.
+     On d2b38386: three keyframes after the tap, the third a linear key at 1 s, and the morph at 1.5 s moved by about 0.009 of the
+     shape's width.
+     CONTROLS (the same before and after): the tap really hit the point (it is selected afterwards); a real drag, 40 px past the 6 px
+     slop, keys the playhead and moves the point in that key, and leaves the 0 s and 2 s keys as they were.
+     BUDGET: the default 45 s: one shape, two gestures and under 1.5 s of sleeps. */
+  test('bughunt5 #11 Tapping a point to select it adds no keyframe: on an Edit Points shape keyed at 0 s and 2 s with Ease In on the second key, a finger tap on a point at 1 s (down and up, no move) selects it and leaves two keyframes and the eased morph exactly as they were, not a third, linear key at 1 s (CONTROLS: the tap selected the point; a real drag past the touch slop keys the playhead, moves the point there and leaves the other keys alone)', { item: '1176' }, async function () {
+    if (!FM.pointEdit || !FM.pointEdit.start || !FM.pointEdit.getSel || !FM.pointEdit._toCanvas || !FM.pointEdit._toLocal || typeof FM.evalShapeSubs !== 'function' || typeof FM.eventToProject !== 'function') throw new Error('setup: FM.pointEdit (start, getSel, _toCanvas, _toLocal), FM.evalShapeSubs or FM.eventToProject is not reachable');
+    const bad = [];
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const closePE = () => { try { if (FM.pointEdit.isActive()) FM.pointEdit.stop(); } catch (e) {} };
+    try {
+      if (hadHome && FM.home.close) FM.home.close();
+      await _bh2With(async function () {
+        const P = FM.scene.project, W = P.width || 320, H = P.height || 240;
+        const K0 = [[[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]]];
+        const K2 = [[[0.3, 0.3], [0.9, 0.3], [0.9, 0.9], [0.3, 0.9]]];
+        const L = FM.makeLayer('shape', { name: 'bh5 #11 morph', shape: 'path', x: Math.round(W / 2), y: Math.round(H / 2), shapeW: Math.round(W * 0.6), shapeH: Math.round(H * 0.6), fill: '#29d9bb', start: 0, duration: 4,
+          extra: { closed: true, points: null, subs: { kf: [{ t: 0, v: JSON.parse(JSON.stringify(K0)), e: 'linear' }, { t: 2, v: JSON.parse(JSON.stringify(K2)), e: 'easeIn', bez: [0.42, 0, 1, 1] }] } } });
+        L.start = 0; L.duration = 4;
+        FM.scene.layers.push(L);
+        FM.time = 1;
+        FM.selectLayer(L.id); FM.refreshAll(); await sleep(150);
+        FM.pointEdit.start(L.id, { embedded: true }); await sleep(150);
+        if (!FM.pointEdit.isActive() || FM.pointEdit.layerId() !== L.id) throw new Error('setup: Edit Points did not open on the keyframed shape');
+        const kfs = () => (L.subs && !Array.isArray(L.subs) && Array.isArray(L.subs.kf)) ? L.subs.kf : [];
+        if (kfs().length !== 2) throw new Error('setup: the shape has ' + kfs().length + ' keyframes before anything, not 2');
+        FM.time = 1;
+
+        /* A project point → the client spot FM.eventToProject reads back as that point. */
+        const cv = document.getElementById('preview');
+        const r0 = cv ? cv.getBoundingClientRect() : null;
+        if (!r0 || !(r0.width > 0 && r0.height > 0)) throw new Error('setup: the preview has no size to aim at');
+        const client = q => {
+          const r = cv.getBoundingClientRect(), sc = cv.__fmRS || 1;
+          return { x: r.left + ((q.x - (cv.__fmOX || 0)) / (cv.width / sc)) * r.width, y: r.top + ((q.y - (cv.__fmOY || 0)) / (cv.height / sc)) * r.height };
+        };
+        const spotOf = pi => {
+          const p = FM.evalShapeSubs(L, 1)[0][pi], q = FM.pointEdit._toCanvas(L, p[0], p[1]), c = client(q);
+          const back = FM.eventToProject({ clientX: c.x, clientY: c.y });
+          if (Math.hypot(back.x - q.x, back.y - q.y) > 0.5) throw new Error('setup: the client spot for point ' + pi + ' reads back ' + Math.hypot(back.x - q.x, back.y - q.y).toFixed(2) + ' project px off, so the gesture would not land on it');
+          return c;
+        };
+        const send = (type, c, buttons) => attached(document.getElementById('pe-overlay'), 'Edit Points overlay').dispatchEvent(new PointerEvent(type, {
+          bubbles: true, cancelable: true, pointerId: 61, isPrimary: true, pointerType: 'touch', clientX: c.x, clientY: c.y, buttons: buttons }));
+        const morph = t => JSON.stringify(FM.evalShapeSubs(L, t));
+
+        /* ── A TAP on point 3 (start() has point 1 selected), down and up with no move. */
+        const before15 = morph(1.5);
+        const tap = spotOf(2);
+        send('pointerdown', tap, 1);
+        send('pointerup', tap, 0);
+        await sleep(80);
+        const sel = FM.pointEdit.getSel();
+        if (!sel || sel.si !== 0 || sel.pi !== 2) throw new Error('CONTROL: the tap did not select point 3 (the selection is ' + JSON.stringify(sel) + '), so it never reached the point and nothing below is measured');
+        if (kfs().length !== 2) bad.push('a tap that only selected a point left the shape with ' + kfs().length + ' keyframes, not 2: a ' + JSON.stringify(kfs().map(k => k.t + ' s ' + k.e)) + ' set, with a new key at the playhead');
+        if (morph(1.5) !== before15) bad.push('after that tap the morph at 1.5 s is no longer what it was: the new key at 1 s cut the Ease In segment in half');
+
+        /* ── CONTROL: a real drag of point 1, 40 px across, well past the 6 px touch slop. */
+        await sleep(400);
+        const was = FM.evalShapeSubs(L, 1)[0][0].slice();
+        const grab = spotOf(0);
+        send('pointerdown', grab, 1);
+        send('pointermove', { x: grab.x + 40, y: grab.y }, 1);
+        send('pointerup', { x: grab.x + 40, y: grab.y }, 0);
+        await sleep(80);
+        const at1 = kfs().filter(k => Math.abs(k.t - 1) < 1e-3)[0];
+        if (kfs().length !== 3 || !at1) bad.push('CONTROL: a real drag at 1 s left ' + kfs().length + ' keyframes (' + JSON.stringify(kfs().map(k => k.t)) + '), not three with one at the playhead');
+        else {
+          const p = at1.v && at1.v[0] && at1.v[0][0];
+          if (!p || !(Math.abs(p[0] - was[0]) > 1e-3)) bad.push('CONTROL: the drag keyed 1 s but did not move point 1 in that key (u ' + (p ? p[0] : '?') + ', was ' + was[0] + ')');
+        }
+        const k0 = kfs().filter(k => Math.abs(k.t) < 1e-3)[0], k2 = kfs().filter(k => Math.abs(k.t - 2) < 1e-3)[0];
+        if (!k0 || JSON.stringify(k0.v) !== JSON.stringify(K0) || !k2 || JSON.stringify(k2.v) !== JSON.stringify(K2)) bad.push('CONTROL: the drag at 1 s changed the 0 s or 2 s keyframe');
+      }, closePE);
+    } finally {
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* bughunt5 #12 — DETECT SPEECH WROTE TO THE LAYER IT CAPTURED BEFORE ITS AWAITS. FM.captions.detect (js/captions.js) awaits the
+     audio decode and the detector, which take seconds on a long clip, then wrote start / duration / captions / text onto the caption
+     layer object it was handed at the press. ↶ in that window installs FRESH layer objects (history.restore), so the cues went onto
+     an orphan: the caller's commit found nothing changed and the toast still said “1 cue from …”, with nothing on the track.
+     Now both layers are re-read by id after the awaits: one the Undo took away ends the run with { count: 0, gone: true } and
+     nothing written (the caller toasts that), and one that is still there is written in its live form. Layers that were never in
+     the open scene (the 916.7 test hands detect its own) are written as before.
+     Driven through the real FM.captions.detect, with FM.decodeAudio held on a gate the test opens after the Undo and
+     FM.detectSpeech answering one stretch of speech at 1–2 s, as the 916.7 test stubs it.
+     On 706d3583: the run reports count 1 in both Undo cases; the cue goes onto the caption layer the Undo took away, and after an
+     Undo of an unrelated edit the live caption layer has none.
+     CONTROLS (the same before and after): with no Undo, one cue lands on the caption layer; layers never in the scene get theirs.
+     BUDGET: the default 45 s: four stubbed runs, two undos and under 1 s of sleeps. */
+  test('bughunt5 #12 Detect speech after an Undo writes no cues to a layer that is gone: with ↶ pressed while the clip’s audio decodes, a caption layer the Undo took away gets no cue and the run reports nothing added (count 0, gone), and when the Undo only replaced the layers the cue lands on the live caption layer, not on the object the Undo threw away (CONTROLS: with no Undo one cue lands as before; layers never in the scene are written as before)', { item: '1176' }, async function () {
+    if (!FM.captions || typeof FM.captions.detect !== 'function' || !FM.history || !FM.history.reset || !FM.history._steps || typeof FM.layerById !== 'function' || !FM.media || !FM.media.set) throw new Error('setup: FM.captions.detect, FM.history (reset, _steps), FM.layerById or FM.media.set is not reachable');
+    const bad = [];
+    const dDec = Object.getOwnPropertyDescriptor(FM, 'decodeAudio'), dDet = Object.getOwnPropertyDescriptor(FM, 'detectSpeech');
+    let open = null, entered = 0, pending = null;
+    /* FM.decodeAudio held until open() — a fresh gate per run. */
+    const hold = () => {
+      entered = 0;
+      const gate = new Promise(r => { open = r; });
+      FM.decodeAudio = async function () { entered++; await gate; return { sampleRate: 8000, length: 80000, duration: 10, numberOfChannels: 1 }; };
+    };
+    const settle = async () => { if (open) open(); if (pending) { try { await pending; } catch (e) {} pending = null; } };
+    const voice = media => {
+      const V = FM.makeLayer('video', { name: 'bh5 #12 voice' });
+      Object.assign(V, { start: 0, duration: 10, trimStart: 0, speed: 1, reversed: false });
+      FM.media.set(V.id, { kind: 'video', file: new Blob(['x'], { type: 'audio/wav' }), duration: 10, width: 0, height: 0 });
+      if (media) media.push(V.id);
+      return V;
+    };
+    const capOf = name => { const L = FM.makeLayer('text', { name: name, text: '' }); Object.assign(L, { start: 0, duration: 10, text: '' }); L.captions = []; return L; };
+    const cuesOn = l => (l && Array.isArray(l.captions)) ? l.captions.length : 0;
+    /* Start Detect speech, check it is parked on the decode, run `mid` there, then let it finish. */
+    const detectAround = async (C, V, mid) => {
+      hold();
+      pending = FM.captions.detect(C, V, null, 'clip');
+      await sleep(20);
+      if (entered !== 1) throw new Error('setup: Detect speech did not reach the audio decode (' + entered + ' calls), so nothing lands mid-run');
+      if (mid) { await mid(); await sleep(60); }
+      open();
+      const r = await pending; pending = null;
+      return r;
+    };
+    const say = r => JSON.stringify(r ? { count: r.count, gone: r.gone } : r);
+    let detached = null;
+    try {
+      FM.detectSpeech = async function () { return { segments: [{ start: 1, end: 2 }], stats: {} }; };
+
+      /* ── 1. THE UNDO TAKES THE CAPTION LAYER AWAY while the clip's audio decodes. */
+      await _bh2With(async function (media) {
+        const V = voice(media);
+        FM.scene.layers.push(V);
+        FM.history.reset();
+        const C = capOf('bh5 #12 captions');
+        FM.scene.layers.push(C);
+        FM.history.commit();
+        if (FM.history._steps().len !== 2) throw new Error('setup: adding the caption layer did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+        const r = await detectAround(C, V, () => {
+          FM.history.undo();
+          if (FM.layerById(FM.scene, C.id)) throw new Error('setup: the Undo did not take the caption layer away, so nothing below is measured');
+        });
+        if (!r || r.count !== 0 || r.gone !== true) bad.push('with the caption layer taken away by an Undo mid-run, Detect speech reported ' + say(r) + ', not count 0 and gone: the caller commits nothing and still toasts a cue count');
+        if (cuesOn(C) !== 0) bad.push('it wrote ' + cuesOn(C) + ' cue(s) onto the caption layer the Undo had already taken away');
+        const stray = FM.scene.layers.filter(l => cuesOn(l) > 0);
+        if (stray.length) bad.push('after it, a layer in the open scene carries cues: ' + stray.map(l => l.name).join(', '));
+      }, settle);
+
+      /* ── 2. AN UNDO OF AN UNRELATED EDIT: both layers survive the Undo as FRESH objects, so the cue belongs on the live one. */
+      await _bh2With(async function (media) {
+        const V = voice(media), C = capOf('bh5 #12 captions'), T = FM.makeLayer('shape', { name: 'bh5 #12 title', shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 10 });
+        FM.scene.layers.push(V, C, T);
+        FM.history.reset();
+        T.name = 'bh5 #12 title renamed';
+        FM.history.commit();
+        if (FM.history._steps().len !== 2) throw new Error('setup: renaming the title did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+        const r = await detectAround(C, V, () => {
+          FM.history.undo();
+          const C1 = FM.layerById(FM.scene, C.id);
+          if (!C1 || C1 === C) throw new Error('setup: after the Undo the caption layer is ' + (C1 ? 'still the same object' : 'gone') + ', so this case measures nothing');
+        });
+        const live = FM.layerById(FM.scene, C.id);
+        if (!r || r.count !== 1 || r.gone) bad.push('after an Undo of an unrelated edit mid-run, Detect speech reported ' + say(r) + ', not one cue');
+        if (cuesOn(live) !== 1) bad.push('after an Undo of an unrelated edit mid-run, the live caption layer carries ' + cuesOn(live) + ' cue(s), not the one detected: it went onto the object the Undo replaced, which ' + (cuesOn(C) ? 'now holds it' : 'holds none either'));
+      }, settle);
+
+      /* ── CONTROL: no Undo — one cue on the caption layer, exactly as before. */
+      await _bh2With(async function (media) {
+        const V = voice(media), C = capOf('bh5 #12 captions');
+        FM.scene.layers.push(V, C);
+        FM.history.reset();
+        const r = await detectAround(C, V, null);
+        if (!r || r.count !== 1 || r.gone || cuesOn(FM.layerById(FM.scene, C.id)) !== 1) bad.push('CONTROL: with no Undo, Detect speech reported ' + say(r) + ' and the caption layer carries ' + cuesOn(FM.layerById(FM.scene, C.id)) + ' cue(s), not one');
+      }, settle);
+
+      /* ── CONTROL: layers that were never in the open scene (as the 916.7 test hands them) are written as before. */
+      const dC = capOf('bh5 #12 detached captions');
+      detached = voice(null);
+      const rd = await detectAround(dC, detached, null);
+      if (!rd || rd.count !== 1 || rd.gone || cuesOn(dC) !== 1) bad.push('CONTROL: on layers that were never in the scene Detect speech reported ' + say(rd) + ' and wrote ' + cuesOn(dC) + ' cue(s), not one');
+    } finally {
+      await settle();
+      if (detached) { try { FM.media.remove(detached.id); } catch (e) {} }
+      if (dDec) Object.defineProperty(FM, 'decodeAudio', dDec); else delete FM.decodeAudio;
+      if (dDet) Object.defineProperty(FM, 'detectSpeech', dDet); else delete FM.detectSpeech;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* bughunt5 #13 — LOOP DID NOT LOOP A MASK PATH OR A DRAWING'S POINTS. The keyframe menu's Loop (js/timeline.js) writes loopMode on
+     every prop FM.animatedProps lists, and that list has the mask paths and a shape's keyframed point set; inheritLoopModes puts it
+     back on every rebuild. But only FM.evalProp read it. FM.evalMaskPath (js/masks.js) and FM.evalShapeSubs (js/compositor.js)
+     held the last key, so on a roto'd or morphing layer set to Loop: cycle the movement repeated past the last key while the mask
+     or the shape froze. Both now wrap the time exactly as evalProp does, through the one copy (FM.loopKfTime, js/scene.js).
+     (#9's test checks the other half: loopMode surviving the open and undo sanitiser.) Pure calls, so they hold at any width.
+     On 6acd49a5: both evaluators give the last key's points at 1.5 s (cycle) and 1.25 s (ping-pong).
+     CONTROLS (the same before and after): a keyframed number with the same keys and loopMode repeats (the rule being copied); with
+     no loopMode, or Loop: off, both hold the last key; between the keys a looping path is what a still one is. */
+  test('bughunt5 #13 A looping mask and a looping drawing repeat: with Loop: cycle a roto mask path and an Edit Points shape keyed at 0 s and 1 s show at 1.5 s and 2.5 s what they show at 0.5 s, and with Loop: ping-pong at 1.25 s what they show at 0.75 s, as a keyed number with the same loop does, not freeze on the last key (CONTROLS: the keyed number repeats; with no loop or Loop: off both hold the last key; between the keys nothing changes)', { item: '1176' }, function () {
+    if (typeof FM.evalMaskPath !== 'function' || typeof FM.evalShapeSubs !== 'function' || typeof FM.evalProp !== 'function') throw new Error('setup: FM.evalMaskPath, FM.evalShapeSubs or FM.evalProp is not reachable');
+    const bad = [];
+    const A = [[0, 0], [100, 0], [100, 100], [0, 100]];
+    const B = [[50, 20], [150, 20], [150, 120], [50, 120]];
+    const keys = (a, b) => [{ t: 0, v: JSON.parse(JSON.stringify(a)), e: 'linear' }, { t: 1, v: JSON.parse(JSON.stringify(b)), e: 'linear' }];
+    const withLoop = (o, mode) => (mode === undefined ? o : Object.assign(o, { loopMode: mode }));
+    const kinds = {
+      'a roto mask path': mode => (t => FM.evalMaskPath({ path: withLoop({ kf: keys(A, B) }, mode) }, t)),
+      'an Edit Points shape': mode => (t => FM.evalShapeSubs({ type: 'shape', shape: 'path', subs: withLoop({ kf: keys([A], [B]) }, mode) }, t)),
+    };
+    const near = (a, b) => {
+      if (Array.isArray(a) !== Array.isArray(b)) return false;
+      if (!Array.isArray(a)) return typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < 1e-9;
+      return a.length === b.length && a.every((x, i) => near(x, b[i]));
+    };
+    const say = v => JSON.stringify(v);
+
+    /* CONTROL: the rule being copied — a keyed number with the same keys and loop. */
+    const num = mode => withLoop({ kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 100, e: 'linear' }] }, mode);
+    if (Math.abs(FM.evalProp(num('cycle'), 1.5) - 50) > 1e-9 || Math.abs(FM.evalProp(num('pingpong'), 1.25) - 75) > 1e-9) throw new Error('setup: a keyed number with Loop does not repeat as this test assumes (cycle at 1.5 s gives ' + FM.evalProp(num('cycle'), 1.5) + ', ping-pong at 1.25 s gives ' + FM.evalProp(num('pingpong'), 1.25) + ')');
+
+    Object.keys(kinds).forEach(what => {
+      const at = kinds[what];
+      const still = at(undefined);
+      const mid = still(0.5), threeQ = still(0.75), last = still(1);
+      if (near(mid, last)) throw new Error('setup: ' + what + ' shows the same points at 0.5 s as at its last key, so a freeze could not be told from a loop');
+      /* ── Loop: cycle. */
+      const cyc = at('cycle');
+      [1.5, 2.5].forEach(t => { if (!near(cyc(t), mid)) bad.push(what + ' with Loop: cycle shows ' + say(cyc(t)) + ' at ' + t + ' s, not what it shows at 0.5 s (' + say(mid) + ')' + (near(cyc(t), last) ? ': it froze on its last key while the rest of the layer loops' : '')); });
+      /* ── Loop: ping-pong, on its way back. */
+      const pp = at('pingpong');
+      if (!near(pp(1.25), threeQ)) bad.push(what + ' with Loop: ping-pong shows ' + say(pp(1.25)) + ' at 1.25 s, not what it shows at 0.75 s (' + say(threeQ) + ')' + (near(pp(1.25), last) ? ': it froze on its last key' : ''));
+      /* ── CONTROLS. */
+      if (!near(still(1.5), last)) bad.push('CONTROL: ' + what + ' with no loop shows ' + say(still(1.5)) + ' at 1.5 s, not its last key');
+      if (!near(at('none')(1.5), last)) bad.push('CONTROL: ' + what + ' with Loop: off shows ' + say(at('none')(1.5)) + ' at 1.5 s, not its last key');
+      if (!near(cyc(0.5), mid)) bad.push('CONTROL: ' + what + ' with Loop: cycle shows ' + say(cyc(0.5)) + ' between its keys, not what a still one shows (' + say(mid) + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  // ── end bughunt 5 ──
 
 })();

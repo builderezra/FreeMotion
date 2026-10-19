@@ -18,10 +18,15 @@ window.FM = window.FM || {};
   function geom(layer, t) {
     const tr = layer.transform, sc = FM.evalProp(tr.scale, t) || 1e-6;
     const sz = FM.layerSize(layer);
+    /* bughunt5 #7: THE FLIP, folded into the scale. The renderer mirrors a flipped layer innermost (compositor.js
+       applyLayerTransform: `ctx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1)` after the scale, and FM.layerUVToCanvas the
+       same), and with no skew a mirror and a scale are both diagonal, so they commute: a sign on scX / scY is that exact map.
+       Without it a tap on a flipped clip seeded the mirror spot about the anchor (the seed box drawn through the same wrong
+       inverse, so it sat under his finger) and the keys moved the layer the wrong way. Every use below reads scX / scY. */
     return {
       x: FM.evalProp(tr.x, t), y: FM.evalProp(tr.y, t),
-      scX: (sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1)) || 1e-6,
-      scY: (sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1)) || 1e-6,
+      scX: ((sc * (tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1)) || 1e-6) * (layer.flipH ? -1 : 1),
+      scY: ((sc * (tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1)) || 1e-6) * (layer.flipV ? -1 : 1),
       rot: (FM.evalProp(tr.rotation, t) || 0) * Math.PI / 180,
       ax: (typeof tr.anchorX === 'number') ? tr.anchorX : 0.5,
       ay: (typeof tr.anchorY === 'number') ? tr.anchorY : 0.5,
@@ -346,10 +351,14 @@ window.FM = window.FM || {};
       keep[0] = keep[frames.length - 1] = 1;
       rdpKeep(times, xs, keep, 0, frames.length - 1, 1.6);
       rdpKeep(times, ys, keep, 0, frames.length - 1, 1.6);
+      /* bughunt5 #6: LINEAR, because the thinning above is. rdpKeep drops every frame within 1.6 px of the STRAIGHT line between
+         two kept frames, so the keys only reproduce the track if the layer moves in a straight line between them. Ease In-Out ran
+         each segment on 2f² instead: up to 12.5 % of its travel off the tracked point at its quarter points, and a dead stop at
+         every key. Audio → keyframes thins with its own copy of this RDP (audio-react.js) and writes 'linear' for the same reason. */
       const kfX = [], kfY = [];
       for (let k = 0; k < frames.length; k++) if (keep[k]) {
-        kfX.push({ t: times[k], v: xs[k], e: 'easeInOut' });
-        kfY.push({ t: times[k], v: ys[k], e: 'easeInOut' });
+        kfX.push({ t: times[k], v: xs[k], e: 'linear' });
+        kfY.push({ t: times[k], v: ys[k], e: 'linear' });
       }
       if (kfX.length < 2) return false;
       /* THE LAYER MUST STILL BE THE ONE IN THE SCENE. This function captures `layer` before awaiting

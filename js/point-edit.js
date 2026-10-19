@@ -283,7 +283,12 @@ window.FM = window.FM || {};
       return;
     }
     e.preventDefault(); e.stopPropagation();
-    ensureKfHere(l);   // a gesture is about to edit points — pin them to a keyframe here first
+    /* bughunt5 #11: only the ring insert edits the points on the press, so only it pins them to a keyframe here. A press on a
+       POINT may be a tap just to select it (queue 690's own case: to read its X and Y, switch it to a Curve, or use the nudge
+       pad); keying it here wrote a linear key at the playhead on every such tap, which re-timed an eased morph and left an undo
+       step he never made. A point drag and a handle drag now key in onMove, once they really move; the panel's setters and the
+       double-tap delete key for themselves, as they always have. The mask tool keys only on a real edit for the same reason. */
+    if (hit.kind === 'mid') ensureKfHere(l);
     const subs = subsOf(l);
     if (hit.kind === 'mid') {   // insert a vertex ON the curve, then drag it (inherits smoothness)
       const pts = subs[hit.si];
@@ -333,6 +338,14 @@ window.FM = window.FM || {};
     if (!drag) return;
     const l = layer(); if (!l) return;
     e.preventDefault();
+    // queue 690: nothing until the finger really travels, then by how far it has travelled — see grab()
+    /* (bughunt5 #11: this gate moved up from below the handle branch, unchanged. A handle drag carries no slop, so it never
+       stopped one; a point drag has to pass it BEFORE the keyframe below is made, or a trembling tap would make one.) */
+    if (!drag.moved && drag.slop && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < drag.slop) return;
+    /* bughunt5 #11: the edit is real now, so pin the points to a keyframe at the playhead before reading them (a no-op on a
+       static path, and one find() once the key exists). Between keys subsOf hands back a fresh array, so a drag that reached
+       here without a key (a handle drag did, whenever no point had been tapped first) moved a throwaway. */
+    ensureKfHere(l);
     const pt = evtToCanvas(e);
     const loc = toLocal(l, pt.x, pt.y);
     const pts = subsOf(l)[drag.si], p = pts && pts[drag.pi];
@@ -343,8 +356,6 @@ window.FM = window.FM || {};
       p[2] = 1; p[3] = hx; p[4] = hy; p.length = 5;
       FM.requestRender(); notify('move'); return;
     }
-    // queue 690: nothing until the finger really travels, then by how far it has travelled — see grab()
-    if (!drag.moved && drag.slop && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < drag.slop) return;
     const tu = drag.lu == null ? loc.u : drag.u0 + (loc.u - drag.lu), tv = drag.lv == null ? loc.v : drag.v0 + (loc.v - drag.lv);
     // One local unit spans the whole shape, so the threshold is different on each axis and has to be
     // divided back through the layer's own size and scale — a flat number in local units would be

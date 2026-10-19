@@ -1143,7 +1143,14 @@ window.FM = window.FM || {};
   // FM.buildAudioFxChain as a builder key, and .params reach AudioParams. Nothing from the file is
   // trusted: the type is whitelisted against the registry and the params are REBUILT from the registry
   // schema (file values are only ever adopted after a range check), so an unknown key can't survive.
-  const AFX_MAX = 16, AFX_MAX_KF = 200;
+  /* bughunt5 #2: AFX_MAX_KF WAS 200, and it is not only the audio params' cap. safeKfProp below is the keyframe gate for every
+     effect control too (safeFxParam), and for trim path / repeater values (numOrKf); sanitizeEffects runs it on every project
+     open and, with the rest, on every undo and redo. Audio → keyframes writes one key per project frame that its 2 % RDP keeps, so
+     a song's bake onto an effect control is hundreds of keys a minute, and everything after the 200th was cut: the effect stopped
+     pulsing partway through the song, and the next autosave wrote that. The cap is now FM.LIMITS.keyframes (js/scene.js, which
+     says how it is derived): one key per frame of the longest project at the highest frame rate, so no writer reaches it and a
+     hostile file is still bounded. */
+  const AFX_MAX = 16, AFX_MAX_KF = FM.LIMITS.keyframes;
   // own-property only: EASES/EASE_PRESETS are plain literals, so a bare [e] lookup lets 'toString' /
   // 'constructor' pass the whitelist — scene.js then calls it unbound and every eval goes NaN.
   const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
@@ -1164,10 +1171,14 @@ window.FM = window.FM || {};
     }
     return out;
   }
-  function safeKfProp(p, min, max) {
+  /* bughunt5 #2: `cap` is the suite's, through FM.storage._safeKfProp below. Every caller in the app passes three arguments
+     and gets AFX_MAX_KF (FM.LIMITS.keyframes), so nothing here behaves differently; a test can prove the cut still happens with
+     a 600-key list and a cap of 500 instead of allocating a list longer than 432,001. The cap keeps the first `cap` entries in
+     the LIST's order and then sorts them by time; a list the app wrote is already in time order. */
+  function safeKfProp(p, min, max, cap = AFX_MAX_KF) {
     if (!p || typeof p !== 'object' || !Array.isArray(p.kf)) return null;
     const kf = [];
-    p.kf.slice(0, AFX_MAX_KF).forEach(k => {
+    p.kf.slice(0, cap).forEach(k => {
       if (!k || typeof k !== 'object') return;
       const t = +k.t, v = +k.v;
       /* ⚠️ queue 827: A NEGATIVE KEYFRAME TIME IS LEGAL. A clip can be dragged PAST 0 into a negative start
@@ -1197,6 +1208,8 @@ window.FM = window.FM || {};
     if (['cycle', 'pingpong'].indexOf(p.loopMode) >= 0 && kf.length >= 2) out.loopMode = p.loopMode;
     return out;
   }
+  /* bughunt5 #2 suite seam: the real function, so a test can pass a small cap (above). */
+  FM.storage._safeKfProp = safeKfProp;
   /* ═══ A STABLE `uid` SURVIVES THE REBUILD (queue 921 S0, spec D16) ════════════════════════════════
    * Every sanitiser below REBUILDS its entries from the registry schema, keeping only known keys — which
    * is what makes an untrusted file safe, and which also deletes any identity an entry carries. Live
@@ -1325,7 +1338,10 @@ window.FM = window.FM || {};
   // runaway point/keyframe count would throw or hang the render. Rebuild each mask from the CONTRACT
   // schema, keeping ONLY known keys — same untrusted-file discipline as audioFx/trimPath/behaviors above.
   // COORDINATE SPACE: points are project/canvas pixels (0..width, 0..height), clamped to a sane range.
-  const MASK_MAX = 24, MASK_MAX_PTS = 2000, MASK_MAX_KF = 200;
+  /* bughunt5 #2: MASK_MAX_KF was 200 as well, and sanitizeMasks runs on every open and every undo. The mask tool keys the path
+     at the playhead on every edit, so a roto done frame by frame passes 200 in under seven seconds at 30 fps, and the mask then
+     stopped following the shot. Same ceiling as AFX_MAX_KF (FM.LIMITS.keyframes). The per-key point cap is unchanged. */
+  const MASK_MAX = 24, MASK_MAX_PTS = 2000, MASK_MAX_KF = FM.LIMITS.keyframes;
   // own-property whitelist: a bare MASK_MODES[m.mode] lookup would let 'constructor'/'toString' pass.
   const MASK_MODES = { add: 1, subtract: 1, intersect: 1 };
   // A point list -> a clean pts array ([x,y] corner or [x,y,1] smooth). null only when v is not an array
@@ -1346,23 +1362,38 @@ window.FM = window.FM || {};
   }
   // path is EITHER a static pts array OR an animated prop { kf:[{t,v:ptsArray,e}] } so the WHOLE path can
   // be keyframed. Returns null (drop the mask) when neither shape validates.
-  function safeMaskPath(path) {
+  /* bughunt5 #2: `cap` is the suite's, through FM.storage._safeMaskPath below, exactly as safeKfProp's: sanitizeMasks passes one
+     argument and gets MASK_MAX_KF (FM.LIMITS.keyframes). The first `cap` keys in the list's order are kept, then sorted by time. */
+  function safeMaskPath(path, cap = MASK_MAX_KF) {
     if (path && typeof path === 'object' && !Array.isArray(path) && Array.isArray(path.kf)) {
       const kf = [];
-      path.kf.slice(0, MASK_MAX_KF).forEach(k => {
+      path.kf.slice(0, cap).forEach(k => {
         if (!k || typeof k !== 'object') return;
         const t = +k.t;
         if (!isFinite(t)) return;          // queue 827: negative is legal — a clip dragged before zero takes its roto with it
         const pts = safeMaskPts(k.v);
         if (!pts || !pts.length) return;   // a keyframe with no valid vertices contributes nothing → drop it
-        kf.push({ t: Math.max(-3600, Math.min(3600, t)), v: pts, e: easeOk(k.e) ? k.e : 'linear' });
+        const o = { t: Math.max(-3600, Math.min(3600, t)), v: pts, e: easeOk(k.e) ? k.e : 'linear' };
+        /* bughunt5 #9: `bez` and `ez` are kept, validated exactly as safeKfProp keeps them. They were dropped here, and this
+           runs on every open and every undo. The keyframe diamond's ease menu writes `bez` with the name on a mask key as on any
+           other, and FM.evalMaskPath eases by `bez` first, so a roto key set to Ease In came back as the quadratic of the same
+           name (t², not bezier(.42,0,1,1)): about 6.5 % of the move off at mid-segment, under a diamond still saying Ease In. */
+        if (Array.isArray(k.bez) && k.bez.length === 4 && k.bez.every(n => isFinite(+n))) o.bez = k.bez.map(Number);
+        const ez = safeEz(k.ez); if (ez) o.ez = ez;
+        kf.push(o);
       });
       if (!kf.length) return null;
       kf.sort((a, b) => a.t - b.t);
-      return { kf: kf };
+      /* bughunt5 #9 / #13: and the Loop menu's loopMode, on the same whitelist as safeKfProp's. The menu writes it on every
+         animated prop of the layer, the mask path included, and FM.evalMaskPath now reads it. */
+      const out = { kf: kf };
+      if (['cycle', 'pingpong'].indexOf(path.loopMode) >= 0 && kf.length >= 2) out.loopMode = path.loopMode;
+      return out;
     }
     return safeMaskPts(path);   // static path (possibly []); null when not an array
   }
+  /* bughunt5 #2 suite seam: the real function, so a test can pass a small cap (above). */
+  FM.storage._safeMaskPath = safeMaskPath;
   function sanitizeMasks(l) {
     if (l.masks == null) return;
     if (!Array.isArray(l.masks)) { delete l.masks; return; }
@@ -1736,8 +1767,15 @@ window.FM = window.FM || {};
        this over every layer, so ONE UNDO OF ANYTHING left the drawing fully revealed, redo could not bring it back
        (it sanitises identically) and the next autosave wrote the loss to disk. Queue 680, one line down. */
     if (l.trimStart != null && !(FM.isAnimated && FM.isAnimated(l.trimStart))) l.trimStart = num(l.trimStart, 0, 3600, 0);
-    if (l.speed != null && !(FM.isAnimated && FM.isAnimated(l.speed))) l.speed = num(l.speed, 0.05, 100, 1);
-    if (l.volume != null && !(FM.isAnimated && FM.isAnimated(l.volume))) l.volume = num(l.volume, 0, 4, 1);
+    /* bughunt5 #1: SPEED AND VOLUME ARE CLAMPED TO WHAT THE PANELS OFFER, read from FM.LIMITS (js/scene.js), which the Speed
+       and Volume cards read too. These two lines held a plain speed to 0.05..100 and a plain volume to 0..4 while the cards
+       offer 0.01..1000 and 0..10, so one undo of anything (restore runs this over every layer) cut a 200x time-lapse to 100x, a
+       2 % slow motion to 5 % and a song at 600 % to 400 %; the undo autosaved it and redo, which sanitises the same way, could
+       not bring it back. Importing a project file, a template or an element did the same. The same class as queue 680 and 718
+       above. Non-finite is still repaired to 1, and anything outside the panels' range is still brought into it. */
+    const SPD = FM.LIMITS.speed, VOL = FM.LIMITS.volume;
+    if (l.speed != null && !(FM.isAnimated && FM.isAnimated(l.speed))) l.speed = num(l.speed, SPD[0], SPD[1], 1);
+    if (l.volume != null && !(FM.isAnimated && FM.isAnimated(l.volume))) l.volume = num(l.volume, VOL[0], VOL[1], 1);
   }
   FM.storage._sanitizeTiming = sanitizeTiming;   // seam: the suite drives the real function
 

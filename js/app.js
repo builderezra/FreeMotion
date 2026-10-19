@@ -1071,16 +1071,20 @@ window.FM = window.FM || {};
     FM.requestRender(); if (FM.history) FM.history.commit();
   };
   FM.extractAudio = async function (layer) {   // audio-only twin of a video clip
-    const before = new Set(FM.scene.layers.map(l => l.id));
     /* ⚠️ queue 914.9: ONE PRESS, ONE UNDO. duplicateLayer commits history itself, so Extract Audio left TWO
        steps, and the first Undo landed on a state he never made: two identical visible, UNMUTED clips, the
        sound playing twice (#912 audit). Muted like duplicateSelection and clipSplit, released in a finally so a
        throw cannot leave history muted for the session; the single commit is the one at the end. */
     const hist = FM.history;
     if (hist && hist.mute) hist.mute();
-    try { await FM.duplicateLayer(layer.id, true); }
+    let dupId;
+    try { dupId = await FM.duplicateLayer(layer.id, true); }
     finally { if (hist && hist.unmute) hist.unmute(); }
-    const dup = FM.scene.layers.find(l => !before.has(l.id));
+    /* bughunt5 #8: THE TWIN IS THE ID duplicateLayer RETURNED, not the first id missing from a list taken before its load. An Undo
+       inside that load brought back a layer the list never had (one deleted just before), which was renamed "(audio)" and hidden,
+       while `layer`, no longer in the scene, took the mute. duplicateLayer now abandons when its source was replaced and returns
+       nothing, and so does this: nothing named, hidden, muted or committed. */
+    const dup = dupId ? FM.layerById(FM.scene, dupId) : null;
     if (!dup) return;
     dup.name = (layer.name || 'Clip') + ' (audio)';
     dup.transform.opacity = 0;      // picture invisible; the tick still plays its sound
@@ -3347,7 +3351,9 @@ window.FM = window.FM || {};
        A keyframed path takes the new shape at the PLAYHEAD, where he is drawing, and the other keyframes
        are left alone; a keyframed position is SHIFTED by the same delta the flat assignment would have
        applied, which is what FM.shiftTransform exists for and what every other mover on the canvas does. */
-    writePathSubs(layer, flat);
+    /* bughunt5 #5: the new box's corner in the OLD box's own px, so writePathSubs can carry the other keyframes across. */
+    const o0 = (sp && sp.toBox) ? sp.toBox([minX, minY]) : null;
+    writePathSubs(layer, flat, o0 ? { oldW: sp.w, oldH: sp.h, minX: o0[0], minY: o0[1], w: w, h: h, W: Math.round(w), H: Math.round(h) } : null);
     layer.points = null;                       // subs win in traceShapePath; don't leave a stale single path
     layer.shapeW = Math.round(w); layer.shapeH = Math.round(h);
     const nx = minX + w / 2, ny = minY + h / 2;
@@ -3382,7 +3388,7 @@ window.FM = window.FM || {};
     const flat = boxSubs.map(sub => sub.map(p => (p.length > 2
       ? [(p[0] - minX) / w, (p[1] - minY) / h, p[2]]
       : [(p[0] - minX) / w, (p[1] - minY) / h])));
-    writePathSubs(layer, flat);
+    writePathSubs(layer, flat, { oldW: sp.w, oldH: sp.h, minX: minX, minY: minY, w: w, h: h, W: W, H: H });   // bughunt5 #5: minX/minY are already box px here
     layer.points = null;
     layer.shapeW = W; layer.shapeH = H;
     if (FM.shiftTransform) { FM.shiftTransform(layer, 'x', pos[0], FM.time); FM.shiftTransform(layer, 'y', pos[1], FM.time); }
@@ -3390,11 +3396,38 @@ window.FM = window.FM || {};
     return layer;
   }
   // The new point set goes in at the PLAYHEAD on a keyframed path and replaces a still one — queue 833, above.
-  function writePathSubs(layer, flat) {
+  /* bughunt5 #5 — THE OTHER KEYFRAMES FOLLOW THE NEW BOX. The re-fit writes shapeW / shapeH and moves x / y for the WHOLE layer,
+     but only the playhead's key was re-normalised into the new box; every other key stayed in [0,1] of the OLD box, so Draw more
+     or the eraser at 2 s stretched and shifted the 0 s shape by the new box (a stroke outside it scaled the 0 s shape up, a
+     shrinking morph squashed it). `box` is the re-fit in the old box's own px (minX / minY, w × h, drawn as W × H = the rounded
+     shapeW / shapeH). Every other key is carried from the box as it was drawn (oldW × oldH) to the box as it will be drawn, whose
+     corner is at minX + (w − W) / 2: u' = (u·oldW − minX − (w − W) / 2) / W, and the same for v. That is the playhead strokes'
+     own map, (u·oldW − minX) / w, read through the rounding the renderer applies, so what a key drew before the re-fit it draws
+     after, exactly. (Without the rounding term every re-fit would pull the other keys W / w towards the box's middle, and the
+     eraser re-fits on every move of a rub.) Points are [u, v], [u, v, 1] (smooth) or [u, v, 1, hx, hy] (a manual handle, an
+     offset in u/v — FM.pointCtrl): the offset scales and does not move, anything else on a point is kept. No box, or a still
+     path: exactly as before. */
+  function reboxKeySubs(v, box) {
+    const ox = box.minX + (box.w - box.W) / 2, oy = box.minY + (box.h - box.H) / 2;
+    const sx = box.oldW / box.W, sy = box.oldH / box.H;
+    const pt = p => {
+      if (!Array.isArray(p)) return p;
+      const q = p.slice();
+      q[0] = (p[0] * box.oldW - ox) / box.W;
+      q[1] = (p[1] * box.oldH - oy) / box.H;
+      if (q.length >= 5 && typeof p[3] === 'number' && typeof p[4] === 'number') { q[3] = p[3] * sx; q[4] = p[4] * sy; }
+      return q;
+    };
+    return v.map(sub => (Array.isArray(sub) ? sub.map(pt) : sub));
+  }
+  function writePathSubs(layer, flat, box) {
     if (layer.subs && !Array.isArray(layer.subs) && Array.isArray(layer.subs.kf) && layer.subs.kf.length) {
       const t = FM.time || 0;
       let hit = null, best = Infinity;
       layer.subs.kf.forEach(k => { const d = Math.abs((+k.t || 0) - t); if (d < best) { best = d; hit = k; } });
+      const okBox = !!(box && box.W > 0 && box.H > 0 && [box.oldW, box.oldH, box.minX, box.minY, box.w, box.h, box.W, box.H].every(n => typeof n === 'number' && isFinite(n)));
+      const own = (best <= 1e-3 && hit) ? hit : null;
+      if (okBox) layer.subs.kf.forEach(k => { if (k && k !== own && Array.isArray(k.v)) k.v = reboxKeySubs(k.v, box); });
       if (best <= 1e-3 && hit) hit.v = flat;
       else { layer.subs.kf.push({ t: t, v: flat, e: 'linear' }); layer.subs.kf.sort((a, b) => (+a.t) - (+b.t)); }
     } else {
@@ -4500,6 +4533,15 @@ window.FM = window.FM || {};
         if (l.karaokeOf && idMap[l.karaokeOf]) l.karaokeOf = idMap[l.karaokeOf];
       });
     }
+    /* bughunt5 #8: THE SOURCE MUST STILL BE THE OBJECT THE COPY WAS CLONED FROM, the test bughunt2 #1 gave Split. An Undo in the
+       load above (seconds for a song on a phone) swaps in fresh layers: the copy carried the edit just undone and its commit threw
+       ↷ away, or, with the source undone away (idx −1), an undone clip came back on top as "copy". Abandoned instead: nothing
+       inserted, committed or saved, the records minted for the copies' fresh ids given back, undefined returned as for a refusal. */
+    if (FM.layerById(FM.scene, id) !== src) {
+      inserts.forEach(c => { if (FM.media.get(c.id)) FM.media.remove(c.id); });
+      FM._lastDupMap = null;
+      return;
+    }
     if (FM.spine && FM.spine.onCopy) FM.spine.onCopy(inserts, 'duplicate');   // Simple mode P1: a copy is not a second main clip
     const idx = FM.scene.layers.findIndex(l => l.id === id);
     FM.scene.layers.splice(Math.max(0, idx), 0, ...inserts);
@@ -4535,9 +4577,15 @@ window.FM = window.FM || {};
        work — and the old form had the second capture the first's no-op as "the real commit" and restore
        THAT, leaving history and autosave dead for the rest of the session. A depth counter cannot be lost. */
     const hist = FM.history;
+    /* bughunt5 #8: AN UNDO OR REDO DURING THE BATCH ENDS IT, as clipSplit's (bughunt2 #1). While muted only an undo, redo or reset
+       can move the stack, so a change in its position or length means one happened: copy nothing more, commit nothing. */
+    const steps = () => (hist && hist._steps) ? hist._steps() : null;
+    const at = steps();
+    const moved = () => { const s = steps(); return !!(at && s && (s.index !== at.index || s.len !== at.len)); };
     if (hist && hist.mute) hist.mute();
     try {
       for (const id of todo) {
+        if (moved()) break;
         /* ⚠️ queue 914.14: COUNT WHAT WAS MADE, NOT WHAT IS SELECTED. A camera is refused (one per scene) and
            leaves the selection alone — and Select All puts the camera first, so the selection it left was the
            CAMERA ITSELF. It was pushed as a "copy": the toast said 3 for 2, and the original camera stayed in
@@ -4548,6 +4596,11 @@ window.FM = window.FM || {};
         made.push(made1);
       }
     } finally { if (hist && hist.unmute) hist.unmute(); }
+    /* bughunt5 #8: the copies made before it went with the scene the undo replaced; the records minted for them are given back. */
+    if (moved()) {
+      Object.keys(batch).forEach(k => { const c = batch[k]; if (!FM.layerById(FM.scene, c) && FM.media.get(c)) FM.media.remove(c); });
+      return;
+    }
     /* THE WHOLE BATCH AT ONCE, once every copy exists. A per-layer pass cannot do this: when layer A is
      * duplicated, layer B's copy does not exist yet, so a link from A to B has nothing to point at.
      * Idempotent over the per-subtree remap duplicateLayer already did — those refs are copy ids now,
@@ -4623,6 +4676,7 @@ window.FM = window.FM || {};
     const _dflt = FM.groupContext ? 0 : (FM.clampAddAt ? FM.clampAddAt() : 0);
     let insertAt = (typeof insertIndex === 'number' && insertIndex >= 0) ? Math.min(insertIndex, FM.scene.layers.length) : _dflt;
     const batchIds = new Set(copies.map(c => c.copy.id));
+    const scene0 = FM.scene, project0 = FM.scene.project;   // bughunt5 #8: what an Undo replaces (see the check after the load below)
     for (const { copy, entry } of copies) {
       // Remap parent: a parent copied in the same batch → its new clone; else keep if still present, else drop.
       if (copy.parent) {
@@ -4675,6 +4729,15 @@ window.FM = window.FM || {};
           FM.media.set(copy.id, nrec);
           if (nrec.kind === 'video') nrec.el.addEventListener('seeked', () => { if (FM._exporting || FM.playing) return; FM.requestRender(); });   // coalesced AND measured — see the note at the first of these (queue 125)
         }
+      }
+      /* bughunt5 #8: AN UNDO DURING THAT LOAD ENDS THE PASTE, as bughunt2 #1 ended Split. Spliced into the restored scene, the copy
+         landed on a state he had just stepped back to and its commit threw ↷ away. Nothing more lands, nothing is committed or
+         saved, and the records minted for this paste's copies (those already in went with the old scene) are given back. The
+         PROJECT object is watched, not the layers array: restore() installs a fresh one of each, but a Delete or a reorder also
+         refilters the array, and a paste must not stop because he deleted another layer meanwhile. */
+      if (FM.scene !== scene0 || FM.scene.project !== project0) {
+        copies.forEach(c => { if (!FM.layerById(FM.scene, c.copy.id) && FM.media.get(c.copy.id)) FM.media.remove(c.copy.id); });
+        return;
       }
       // Single-camera invariant. FM.duplicateLayer enforces it; paste did not, so Cmd-C then Cmd-V
       // on the camera made a SECOND one, and the composite takes the first it finds — the view was
