@@ -22955,13 +22955,53 @@
   });
 
   test('a comp that costs 200 ms a frame drops frames instead of seeking the audio', { item: 'audio-clock' }, async function () {
+    /* isolation (20 Oct, full-order red): it inherited the editor on screen. The rig swaps in its own 320x240, 60 s scene
+       (so the project size was never inherited) but refreshes nothing, so the timeline strip, the canvas and the panels
+       stayed built for whatever scene the earlier tests left, under Home or not as they left it. In the full order that
+       used to be the seeded project holding the 20x20 shape 'undo / redo grey out when there is nothing behind or ahead'
+       left, in the editor ('drawing: opening a project ends any sketch in progress' shut Home); both sources put things
+       back now, so it met an EMPTY project's 0 s strip (with Home over the editor if Home was open when the drawing
+       test ran) and lost 0.429 s. Alone it passes (measured twice), so it is not the load alone; which inherited part
+       did it is not proven, hence the diagnostics below. The clock is read, never accumulated (FM.clockNow), so the only
+       ways to lose wall time are a re-anchor at a stale playhead (setTime / scrubTime while playing — the timeline's
+       scroll listener scrubs when it reads a scroll it did not write — the start wait, a loop wrap) or a stop.
+       So it now sets up its own: the editor shown (Home shut, put back after), the editor rebuilt for the rig's own
+       scene (its filmstrip marked empty first, so the rebuild cannot start a strip build that seeks the fake element),
+       a settle for the debounced layout work, and CONTROLs that the timeline is the rig's 60 s and nothing plays before
+       Play. The 0.08 s limit is unchanged.
+       If it still loses time, the failure now says WHEN (the loss sampled every 250 ms) and WHO (any setTime, scrubTime
+       or pause from outside the transport while it ran, with its caller), and a stop before the measurement is its own
+       CONTROL rather than a frozen clock read as a slow one. */
+    var hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
     var rig = transportRig({ jankMs: 200 });
+    var real = { setTime: FM.setTime, scrubTime: FM.scrubTime, pause: FM.pause }, watching = false, outside = [], lost = [];
+    function caller() { var s = String((new Error()).stack || '').split('\n'); return String(s[3] || s[2] || '?').trim().slice(0, 160); }
+    function said() { return ' (lost by elapsed time, every 250 ms: ' + (lost.join(', ') || 'none sampled') + (outside.length ? '; moved from outside the transport while it ran: ' + outside.slice(0, 3).join(' | ') : '; nothing outside the transport moved the playhead') + ')'; }
     try {
+      var rec = FM.media.get(rig.layer.id);
+      if (rec && rec.stripFrames === undefined) rec.stripFrames = [];
+      FM.refreshAll();
+      await sleep(400);
+      if (!(FM.scene.project.duration >= 59)) throw new Error('CONTROL: the rig’s timeline is ' + FM.scene.project.duration + ' s long, not its own 60 s');
+      if (FM.playing) throw new Error('CONTROL: something started playback before Play was pressed');
+      // the element's seek count starts at Play, as it did when nothing ran between the rig and Play (the settle may seek it)
+      rig.el.seeks = 0;
+      FM.setTime = function (t) { if (watching) outside.push('setTime(' + Number(t).toFixed(3) + ') from ' + caller()); return real.setTime.apply(this, arguments); };
+      FM.scrubTime = function (t) { if (watching) outside.push('scrubTime(' + Number(t).toFixed(3) + ') from ' + caller()); return real.scrubTime.apply(this, arguments); };
+      FM.pause = function () { if (watching) outside.push('pause() from ' + caller()); return real.pause.apply(this, arguments); };
       FM.play();
       // Measured from AFTER play(), because play() itself pays one render — with a 200 ms comp that
       // is 200 ms of startup, and charging it to the clock would be measuring the wrong thing.
       var m0 = FM.clockNow(), t0 = performance.now();
-      await sleep(1500);
+      watching = true;
+      // the same 1.5 s as before, ended by a deadline so the samples cannot stretch it
+      var end = t0 + 1500;
+      while (performance.now() < end) {
+        await sleep(Math.max(1, Math.min(250, end - performance.now())));
+        lost.push(((performance.now() - t0) / 1000 - (FM.clockNow() - m0)).toFixed(3));
+      }
+      watching = false;
       var stats = JSON.parse(JSON.stringify(FM.playbackStats));
       var clockErr = Math.abs((FM.clockNow() - m0) - (performance.now() - t0) / 1000);
       // Against clockNow(), not FM.time: FM.time is a per-frame SNAPSHOT, so between two 200 ms
@@ -22970,7 +23010,9 @@
       // that and failed on the unmutated build at 0.371 s.)
       var elErr = Math.abs(rig.el.currentTime - FM.clockNow());
       var elSeeks = rig.el.seeks;
+      var stillPlaying = !!FM.playing;
       FM.pause();
+      if (!stillPlaying) throw new Error('CONTROL: playback had stopped before the measurement, so the clock read below was frozen, not slow' + said());
       // CONTROL, both ways. Too few renders and playback never happened; too many and the jank was
       // never applied, so every assertion below would pass on a machine that was never slow.
       if (stats.renders < 3) throw new Error('only ' + stats.renders + ' renders in 1.5 s — playback did not run, so nothing here is under test');
@@ -22979,9 +23021,14 @@
       if (stats.seeks !== 0) throw new Error(stats.seeks + ' hard seeks in 1.5 s of slow rendering — every one of those is an audible click and a hole in the sound');
       if (elSeeks > 1) throw new Error('the element was seeked ' + elSeeks + ' times (one at play start is expected)');
       if (stats.drops < 1) throw new Error('no frames were dropped — the picture is keeping up by holding the clock back, which is what shredded the audio');
-      if (clockErr > 0.08) throw new Error('the transport lost ' + clockErr.toFixed(3) + ' s against the wall clock while the compositor was busy');
+      if (clockErr > 0.08) throw new Error('the transport lost ' + clockErr.toFixed(3) + ' s against the wall clock while the compositor was busy' + said());
       if (elErr > FM.syncTuning.hard) throw new Error('the element drifted ' + elErr.toFixed(3) + ' s from the playhead and was never pulled back');
-    } finally { rig.restore(); }
+    } finally {
+      watching = false;
+      FM.setTime = real.setTime; FM.scrubTime = real.scrubTime; FM.pause = real.pause;
+      rig.restore();
+      if (hadHome && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open();
+    }
   });
 
   test('the canvas is painted once per project frame, not once per screen refresh', { item: 'audio-clock' }, async function () {
