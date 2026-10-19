@@ -155,12 +155,19 @@ window.FM = window.FM || {};
       const kf = getProp(k).kf;
       let idx = kf.findIndex(x => x.t >= t - 1e-3);
       const ended = idx < 0;                                          // playhead is past this channel's last key
+      /* bughunt5 #10: the mirror case. A channel whose FIRST key is still ahead of the playhead has no segment under it
+         either: its first segment is a move that has not started, and the canvas draws only kfs[0], so re-easing it is the
+         same invisible edit as re-easing a finished one (x keyed 0 to 2 s, y keyed 3 to 4 s, playhead at 1 s: Bounce bent the
+         drop at 3 s too). Strict, so a channel whose first key sits AT the playhead is still live. When NO channel is live
+         nothing changes: in a gap the channels still ahead are eased (as before), and past everything all of them. */
+      const notStarted = !ended && t < kf[0].t - 1e-3;
       if (idx < 1) idx = (t <= kf[0].t + 1e-3) ? 1 : kf.length - 1;   // epsilon on the fallback too — a playhead a hair past kf[0] used to select the LAST segment
       if (idx > kf.length - 1) idx = kf.length - 1;
-      picked.push({ k: k, kf: kf[idx], ended: ended });
+      picked.push({ k: k, kf: kf[idx], ended: ended, notStarted: notStarted });
     });
-    const live = picked.filter(p => !p.ended);
-    const use = live.length ? live : picked;
+    const live = picked.filter(p => !p.ended && !p.notStarted);
+    const ahead = picked.filter(p => p.notStarted);
+    const use = live.length ? live : ahead.length ? ahead : picked;
     return { keys: use.map(p => p.k), kfs: use.map(p => p.kf) };
   }
   // Suite seams: the mode→channel table and the segment picker are where both of these bugs lived.

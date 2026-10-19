@@ -166227,6 +166227,44 @@
     if (!(Math.abs(ovGot - ovWant) <= 0.5)) bad.push('CONTROL: an Overshoot key is at x ' + ovGot.toFixed(1) + ' at mid-segment after the sanitiser, not ' + ovWant.toFixed(1));
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* bughunt5 #10 — PICKING AN EASING ALSO RE-EASED A CHANNEL THAT HAD NOT STARTED. pickKfs (js/graph-editor.js; the seam
+     FM._pickEaseKfs) picks, for every animated channel of the mode, the segment an easing preset lands on. v9.34 dropped a channel
+     whose animation had already ENDED, because the editor eases every channel together and the canvas draws only the first, so the
+     edit was invisible (the test 'an easing preset does not reach back into a channel whose animation already ended'). The mirror
+     case was missed: a channel whose first key is still AHEAD of the playhead fell back to its first segment and counted as live.
+     x keyed 0 → 2 s (a slide in), y keyed 3 → 4 s (a later drop), playhead at 1 s, Bounce: the drop at 3 s bounced too.
+     On a1626120: ['x', 'y'] at 1 s.
+     CONTROLS (the same before and after): a channel whose first key sits exactly AT the playhead is live, and so is one whose first
+     key is a hair (0.5 ms, inside the 1 ms epsilon) after it; y alone, before its first key, still gets its first segment (the single-property editor relies on that);
+     in the gap between x's end and y's start only y, the move ahead, is eased; past both ends, both. */
+  test('bughunt5 #10 Picking an easing leaves a channel that has not started alone: with x keyed 0 → 2 s and y keyed 3 → 4 s, an easing picked at 1 s lands on x’s segment only, not on y’s drop two seconds later that the graph never showed (CONTROLS: a channel whose first key is exactly at the playhead, or half a millisecond after it, is still eased; y alone gets its first segment; in the gap only y; past both, both)', { item: '1176' }, function () {
+    if (typeof FM._pickEaseKfs !== 'function') throw new Error('setup: FM._pickEaseKfs is not reachable');
+    const bad = [], t0 = FM.time;
+    const ch = (a, b, va, vb) => ({ kf: [{ t: a, v: va, e: 'linear' }, { t: b, v: vb, e: 'linear' }] });
+    const pick = (props, keys, t) => { FM.time = t; return FM._pickEaseKfs(k => props[k], keys); };
+    const expect = (what, r, keys, ends) => {
+      const got = JSON.stringify(r.keys), want = JSON.stringify(keys);
+      const gotEnds = JSON.stringify(r.kfs.map(k => k && k.t)), wantEnds = JSON.stringify(ends);
+      if (got !== want || gotEnds !== wantEnds) bad.push(what + ': picked ' + got + ' (segments ending at ' + gotEnds + ' s), not ' + want + ' (ending at ' + wantEnds + ' s)');
+    };
+    try {
+      const P = { x: ch(0, 2, 0, 100), y: ch(3, 4, 0, 50) };
+      expect('at 1 s, x moving and y not starting until 3 s', pick(P, ['x', 'y'], 1), ['x'], [2]);
+      if (pick(P, ['x', 'y'], 1).keys.indexOf('y') >= 0) bad.push('so picking Bounce at 1 s also bounces y’s drop at 3 s, a segment the graph does not show');
+
+      /* CONTROLS. */
+      const Q = { x: ch(0, 4, 0, 100), y: ch(1, 2, 0, 50) };
+      expect('CONTROL: at 1 s with y’s first key exactly at the playhead', pick(Q, ['x', 'y'], 1), ['x', 'y'], [4, 2]);
+      expect('CONTROL: with the playhead half a millisecond before y’s first key', pick(Q, ['x', 'y'], 1 - 0.0005), ['x', 'y'], [4, 2]);
+      expect('CONTROL: y alone, before its first key', pick(P, ['y'], 1), ['y'], [4]);
+      expect('CONTROL: at 2.5 s, after x ended and before y starts', pick(P, ['x', 'y'], 2.5), ['y'], [4]);
+      expect('CONTROL: at 9 s, past both', pick(P, ['x', 'y'], 9), ['x', 'y'], [2, 4]);
+    } finally {
+      FM.time = t0;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
 
 })();
