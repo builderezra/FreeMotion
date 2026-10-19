@@ -59065,8 +59065,28 @@
   test('play: holding the Play button plays, it does not silently toggle Loop instead', { item: 'transport' }, async function () {
     var btn = document.getElementById('btn-play');
     if (!btn) throw new Error('no play button');
-    var wasLoop = !!FM.loop, wasPlaying = !!FM.playing;
+    var wasLoop = !!FM.loop, played0 = !!FM.playing;
+    /* isolation (20 Oct): it inherited a timeline with something on it (project.duration above 0) from earlier tests:
+       the shape 'undo / redo grey out when there is nothing behind or ahead' leaves in the scene, then whichever project
+       the two 'notes …' tests leave open (they delete theirs without reopening the original). It now sets that up
+       itself. Alone the suite runs on the seeded empty project, a 0 s timeline, where play() starts and its first tick
+       stops it (app.js tick: nt >= P.duration pauses), so Play read as doing nothing. Its own one-clip scene from 0 s,
+       stopped, pressed in the editor (Home shut if a test or the boot left it open), and everything put back. */
+    var S = FM.scene, layers0 = S.layers, copy0 = S.layers.slice(), dur0 = S.project.duration, t0 = FM.time;
+    var sel0 = S.selectedId, ids0 = (S.selectedIds || []).slice(), mode0 = FM.selectMode;
+    var hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    var wasPlaying = false;
     try {
+      if (played0 && FM.pause) FM.pause();
+      if (hadHome) FM.home.close();
+      var L = FM.makeLayer('shape', { name: 'play iso', shape: 'rect', x: 120, y: 120, shapeW: 80, shapeH: 80, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3;
+      layers0.length = 0; layers0.push(L);
+      S.selectedId = null; S.selectedIds = [];
+      FM.refreshAll();
+      if (FM.setTime) FM.setTime(0); else FM.time = 0;
+      if (!(FM.scene.project.duration >= 3)) throw new Error('CONTROL: the one-clip timeline is ' + FM.scene.project.duration + ' s long, so Play has nothing to play');
+      if (FM.playing) throw new Error('CONTROL: playback is already running before Play is pressed');
       var send = function (type) {
         var r = btn.getBoundingClientRect();
         btn.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 44, pointerType: 'touch',
@@ -59080,8 +59100,18 @@
       if (!!FM.loop !== wasLoop) throw new Error('a slow press on Play flipped Loop — a setting the user did not ask for, changed invisibly');
       if (!!FM.playing === wasPlaying) throw new Error('a slow press on Play did nothing at all — this is "I pressed play and nothing happened"');
     } finally {
-      if (!!FM.playing !== wasPlaying && FM.togglePlay) FM.togglePlay();
+      if (FM.playing && FM.pause) FM.pause();
       FM.loop = wasLoop;
+      layers0.length = 0; copy0.forEach(function (l) { layers0.push(l); }); S.layers = layers0;
+      S.selectedId = sel0; S.selectedIds = ids0; FM.selectMode = mode0;
+      FM.refreshAll();
+      // after refreshAll, whose autoFitDuration would otherwise re-fit a length the scene arrived with
+      S.project.duration = dur0; FM.time = t0;
+      if (FM.home && FM.home.isOpen) {
+        if (hadHome && !FM.home.isOpen()) FM.home.open();
+        else if (!hadHome && FM.home.isOpen()) FM.home.close();
+      }
+      if (played0 && FM.togglePlay) FM.togglePlay();
       await sleep(40);
     }
   });
