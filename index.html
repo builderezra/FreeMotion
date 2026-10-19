@@ -1268,6 +1268,76 @@
        comment never stops an export (only a note with a reminder does). -->
   <script src="js/collab-comments.js?v=7"></script>
   <script>
+    /* bughunt6 #14: A NEW BUILD WAITS UNTIL NOTHING WOULD BE LOST. A release that changes sw.js hands every open copy a new
+       worker within seconds of launch, and the controllerchange handler below reloaded on the spot, whatever was going on:
+       an export rendering or waiting on its Save card, a voice take not yet added, a clip's file still on its way to
+       IndexedDB. Now the reload is HELD while any of those is true and goes once they have all stopped. It is re-checked
+       every 2 s and on every return to the screen, so a hold cannot be forgotten when the busy state ends. Before it goes,
+       the autosave runs for real and is awaited (the document AND any clip's file still waiting; the sync flush alone writes
+       only the document), and a store that refuses the document while work is only on this screen keeps the old build:
+       the rule FM.projects.confirmLeave uses, without the question. A hold that never finds the app idle costs only the old
+       build until the next launch, which opens the new one anyway, because the new worker is already in charge. A live
+       session that starts while it waits takes the reload over (FM.collab.deferReload, as the handler does).
+       FM._swReloadWhenIdle is this function, for the suite: it takes the reload to run, because location.reload is not
+       writable. With no argument it is window.location.reload. */
+    var fmSwHeld = null;   // { reload, timer, saving, savedKey } while a takeover waits for the app to go idle
+    function fmSwBusy() {
+      var F = window.FM || {};
+      try {
+        if (F._exporting) return 'an export is running';
+        var ov = document.getElementById('export-overlay'), rd = document.getElementById('export-ready');
+        if (ov && !ov.classList.contains('hidden')) return 'an export is running';
+        if (rd && !rd.classList.contains('hidden')) return 'an exported file is waiting on Save';
+        var vs = (F.voiceRec && F.voiceRec._state) ? F.voiceRec._state() : '';
+        if (vs === 'recording' || vs === 'review') return 'a voice take is not added yet';
+        if (F.storage && F.storage.pendingSaves && F.storage.pendingSaves() > 0) return 'a save is still writing';
+        if (F._mediaBusy) return 'a media file is still being written';
+      } catch (e) { return 'the app could not be asked'; }
+      return '';
+    }
+    /* Which clips hold which file. A clip added while the save ran was not in that save, so the reload waits for the next. */
+    function fmSwMediaKey() {
+      try { return ((window.FM && FM.scene && FM.scene.layers) || []).map(function (l) { return l ? l.id + ':' + (l.mediaRev || 0) : ''; }).join(','); }
+      catch (e) { return '?'; }
+    }
+    function fmSwStop() {
+      if (fmSwHeld && fmSwHeld.timer) clearInterval(fmSwHeld.timer);
+      fmSwHeld = null;
+    }
+    /* One check. Resolves true when it reloaded. */
+    function fmSwTry() {
+      var held = fmSwHeld, F = window.FM || {};
+      if (!held || held.saving) return Promise.resolve(false);
+      if (F.collab && F.collab.active && F.collab.deferReload) { fmSwStop(); F.collab.deferReload(); return Promise.resolve(false); }
+      if (fmSwBusy()) return Promise.resolve(false);
+      var key = fmSwMediaKey(), S = F.storage || {};
+      /* Once per set of clips, so a store that refuses a file is not handed it again every 2 s. */
+      var saving = (key !== held.savedKey && S.save) ? Promise.resolve().then(function () { return S.save(); }) : null;
+      held.saving = !!saving;
+      return Promise.resolve(saving).catch(function () {}).then(function () {
+        held.saving = false;
+        if (fmSwHeld !== held) return false;   // cancelled, or replaced, while it saved
+        if (saving) held.savedKey = key;
+        if ((F.collab && F.collab.active) || fmSwBusy() || fmSwMediaKey() !== key) return false;   // the next check tries again
+        try { if (S.flushSync && !S.flushSync() && S.unsavedOnScreen && S.unsavedOnScreen()) return false; }
+        catch (e) { return false; }
+        fmSwStop();
+        try { held.reload(); } catch (e) {}
+        return true;
+      });
+    }
+    function fmSwReloadWhenIdle(reload) {
+      fmSwStop();
+      var held = { reload: typeof reload === 'function' ? reload : function () { window.location.reload(); }, timer: 0, saving: false, savedKey: null };
+      fmSwHeld = held;
+      held.timer = setInterval(fmSwTry, 2000);
+      return fmSwTry();
+    }
+    fmSwReloadWhenIdle.busy = fmSwBusy;
+    fmSwReloadWhenIdle.held = function () { return !!fmSwHeld; };
+    fmSwReloadWhenIdle.cancel = fmSwStop;
+    document.addEventListener('visibilitychange', function () { if (fmSwHeld) fmSwTry(); });
+    if (window.FM) window.FM._swReloadWhenIdle = fmSwReloadWhenIdle;
     if ('serviceWorker' in navigator && !/(^|[?&])fmtest=collab(&|$)/.test(location.search)) {
       /* queue 921 S2 (§25.3): a Tier-3 instance must never be served a cached shell — three app frames
          on three origins, each with its own worker, is three chances to be testing yesterday's build.
@@ -1287,7 +1357,7 @@
           // A new service worker took over → reload ONCE so the installed PWA shows the latest build.
           // Skip the first-ever install's claim (hadController === false) so fresh installs don't reload.
           if (reloaded || !hadController) return;
-          reloaded = true; window.location.reload();
+          reloaded = true; fmSwReloadWhenIdle();   // bughunt6 #14: held until nothing would be lost (the top of this script)
         });
         /* Did the worker just hand us an OLD build because the network dropped? (queue 306.) It leaves
            a note when it does; this is the only thing that reads it. Delayed so the toast lands after

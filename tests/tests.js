@@ -167335,6 +167335,73 @@
     if (after !== before) bad.push('a second launch of the same page changed the cache again (before: ' + before + '; after: ' + after + '), so the clean-up is not one pass');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* (#14) A NEW BUILD DOES NOT RELOAD THE APP UNDER HIM. A release that changes sw.js hands every open copy a new worker within
+     seconds of launch, and index.html's controllerchange handler reloaded on the spot whatever was going on: an export
+     rendering or waiting on its Save card, a clip's file still on its way to IndexedDB. The decision is FM._swReloadWhenIdle
+     now; the handler calls it with no argument (window.location.reload), and this hands it a counter instead, because
+     location.reload is not writable. An export, then a media write, each HOLD the reload, and once it ends the reload runs
+     exactly once BY ITSELF (the 2 s re-check, nothing fired by hand), so a held update cannot be lost. The handler's own source
+     is read to prove it goes through the check, as the 921 S2 test does for collab's deferral.
+     CONTROL: with nothing running it reloads at once, so a reload that never happens cannot pass for a held one.
+     FAILS ON 62b39595: there is no such function, and the handler calls window.location.reload() the moment the worker
+     takes over. Restores FM._exporting by descriptor, takes back its own FM._mediaBusy count, and cancels any hold. */
+  test('bughunt6 #14 An update does not reload the app in the middle of an export: with FM._exporting set, or a media file still being written, the new build waits, then reloads exactly once by itself when that ends, and index.html’s controllerchange handler goes through that check (CONTROL: an idle app reloads at once)', { item: '1176', budgetMs: 90000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function') throw new Error('the reload decision is not a function the app exposes (FM._swReloadWhenIdle), so a new worker taking over reloads the app on the spot, in the middle of an export or a save');
+    if (typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('FM._swReloadWhenIdle has no busy / held / cancel, so this cannot see what it is waiting for');
+    const src = await (await fetch('../index.html?boot=' + Date.now())).text();
+    const at = src.indexOf('addEventListener(\'controllerchange\'');
+    if (at < 0) throw new Error('setup: the fetched index.html has no controllerchange handler, so there is no call site to check');
+    const handler = src.slice(at, src.indexOf('});', at));
+    if (!/fmSwReloadWhenIdle\(/.test(handler) || /location\.reload\(/.test(handler)) {
+      throw new Error('index.html’s controllerchange handler does not go through the idle check, so the real takeover still reloads mid-export: …' + handler.replace(/\s+/g, ' ').slice(-180));
+    }
+    const dEx = Object.getOwnPropertyDescriptor(FM, '_exporting');
+    const hadMb = Object.prototype.hasOwnProperty.call(FM, '_mediaBusy');
+    let mbHeld = false, reloads = 0;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    /* Hold the reload with `start`, prove it is still held a little over one re-check later, end it with `stop`, and
+       expect exactly one reload, by itself, with nothing held after it. */
+    const holds = async (what, start, stop) => {
+      await settle(what);
+      reloads = 0;
+      start();
+      const now = await W(count);
+      if (now || reloads) throw new Error('a new build reloaded the app while ' + what + ' (' + reloads + ' reload)');
+      if (!W.held()) throw new Error('while ' + what + ' the reload was dropped rather than held, so he would stay on the old build');
+      if (!W.busy()) throw new Error('setup: with ' + what + ' the app does not count as busy');
+      await sleep(2600);
+      if (reloads) throw new Error('the held reload went ahead while ' + what + ' (' + reloads + ')');
+      stop();
+      if (!(await until(() => reloads > 0, 9000))) throw new Error('once ' + what + ' stopped, the held reload never happened by itself, so he would stay on the old build until the next launch');
+      await sleep(2600);
+      if (reloads !== 1) throw new Error('once ' + what + ' stopped, the app reloaded ' + reloads + ' times, not once');
+      if (W.held()) throw new Error('a reload is still held after it ran (' + what + '), so it would run again');
+    };
+    try {
+      await holds('an export is running', () => { FM._exporting = true; }, () => { FM._exporting = false; });
+      await holds('a media file is still being written',
+        () => { FM._mediaBusy = (FM._mediaBusy || 0) + 1; mbHeld = true; },
+        () => { FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1); mbHeld = false; });
+      await settle('control');
+      reloads = 0;
+      const now = await W(count);
+      if (!now || reloads !== 1) throw new Error('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+      if (W.held()) throw new Error('CONTROL: a reload is still held after it ran');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (dEx) Object.defineProperty(FM, '_exporting', dEx); else delete FM._exporting;
+      if (mbHeld) FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
+      if (!hadMb && !FM._mediaBusy) delete FM._mediaBusy;
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+  });
   // ── end bughunt 6 ──
 
 })();
