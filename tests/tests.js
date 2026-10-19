@@ -164255,11 +164255,11 @@
      as before. In every case the place the layer is drawn is checked FIRST against its worked-out number, and against
      FM.parentChainMatrix's own mapping of the emitter's point, so a red is the particles' and not the fixture's.
      TOL: 1e-6 px between a birth and the drawn place (one matrix, read two ways); the faults are 40 px and more. */
-  test('bughunt4 #1e Particles spray from where their emitter is drawn: inside a group flipped horizontally they are born mirrored about the group\'s pivot, under an unlinked Width of 150 % stretched from it, in a moved, scaled and turned group turned about it, and under a locked middle Controller beside it, upright, each exactly where the emitter layer itself is drawn (CONTROLS: unparented, in an untouched group and in a group that only moves they are born where they were, bit for bit; under a turned and scaled Controller within 1e-9 px of where they were; under a normal middle link they turn with the top Controller; every drawn place is checked first)', { item: '1176' }, async function () {
+  test('bughunt4 #1e Particles spray from where their emitter is drawn: inside a group flipped horizontally they are born mirrored about the group\'s pivot, under an unlinked Width of 150 % stretched from it, in a moved, scaled and turned group turned about it, and under a locked middle Controller beside it, upright, each exactly where the emitter layer itself is drawn (CONTROLS: unparented, in an untouched group and in a group that only moves they are born where they were, bit for bit; under a turned and scaled Controller within 1e-5 px of where they were; under a normal middle link they turn with the top Controller; every drawn place is checked first)', { item: '1176' }, async function () {
     const CFX = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
     if (!CFX || typeof CFX.particles !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.parentChainMatrix !== 'function' || typeof FM._layerCTM !== 'function' || typeof FM.flipLayer !== 'function' || typeof FM.setTransform !== 'function' || typeof FM.groupPivot !== 'function' || !FM.fxRegistry || typeof FM.fxRegistry.makeInstance !== 'function') throw new Error('setup: CANVAS_FX.particles / FM.makeLayer / parentChainMatrix / _layerCTM / flipLayer / setTransform / groupPivot / fxRegistry.makeInstance are not reachable');
     await _bh2With(async function () {
-      const T = 0.5, TOL = 1e-6;
+      const T = 0.5, TOL = 1e-5;   /* measured 19 Oct (v17.79 slices): the matrix route lands 1.9e-7 / 7.6e-7 px off a float64 sum — the probe canvas holds its transform in single precision. 1e-5 is 13x that; the faults this test catches are 40 px and more. */
       FM.time = T;
       const PT = Object.assign(b11Base('particles', {}), { rate: 40, lifetime: 4, speed: 0, gravity: 0 });
       const grp = (name) => {
@@ -164322,10 +164322,10 @@
       const wm = { x: 10.3 + 80, y: 40.7 + 100 }, dm = drawn(E), bm = count(births(E));
       G.transform.x = 0; G.transform.y = 0;
       if (!near(dm, wm, TOL)) throw new Error('CONTROL: in a group moved to 10.3,40.7 the emitter layer is drawn at ' + say(dm) + ', not ' + say(wm));
-      /* Within 1e-9, not bit for bit: measured 19 Oct (the v17.79 slices), the matrix route gives the moved group's sum one
+      /* Within TOL, not bit for bit: measured 19 Oct (the v17.79 slices), the matrix route gives the moved group's sum one
          float bit off (printed (90.3, 140.7) both ways), as the turned Controller's control below already allows. */
-      const offM = m => Math.abs(m.x - wm.x) > 1e-9 || Math.abs(m.y - wm.y) > 1e-9;
-      if (bm.some(offM)) throw new Error('CONTROL: in a group moved to 10.3,40.7 a particle is born at ' + say(bm.filter(offM)[0]) + ' - not within 1e-9 px of today’s sum ' + say(wm));
+      const offM = m => Math.abs(m.x - wm.x) > TOL || Math.abs(m.y - wm.y) > TOL;
+      if (bm.some(offM)) throw new Error('CONTROL: in a group moved to 10.3,40.7 a particle is born at ' + say(bm.filter(offM)[0]) + ' - not within 1e-5 px of today’s sum ' + say(wm));
 
       /* ── CONTROL: under a Controller moved to 200,20, turned 90° and scaled to 125 %: today's turn-and-scale walk. */
       const N = ctl('bh4 #1e controller', 200, 20);
@@ -164335,8 +164335,8 @@
       const r = 90 * Math.PI / 180, co = Math.cos(r), si = Math.sin(r);
       const wn = { x: 200 + (80 * co - 100 * si) * 1.25, y: 20 + (80 * si + 100 * co) * 1.25 }, dn = drawn(E), bn = count(births(E));
       if (!near(dn, { x: 75, y: 120 }, TOL) || !near(wn, dn, TOL)) throw new Error('CONTROL: under the turned, scaled Controller the emitter layer is drawn at ' + say(dn) + ' and today’s walk puts it at ' + say(wn) + ', not both at (75, 120)');
-      const bnOff = bn.filter(m => !near(m, wn, 1e-9));
-      if (bnOff.length) throw new Error('CONTROL: under the turned, scaled Controller ' + bnOff.length + ' particles are born at ' + say(bnOff[0]) + ', more than 1e-9 px from today’s ' + say(wn) + ' - a Controller’s turn and scale the old walk already had right moved');
+      const bnOff = bn.filter(m => !near(m, wn, TOL));
+      if (bnOff.length) throw new Error('CONTROL: under the turned, scaled Controller ' + bnOff.length + ' particles are born at ' + say(bnOff[0]) + ', more than TOL px from today’s ' + say(wn) + ' - a Controller’s turn and scale the old walk already had right moved');
 
       /* ── A: ⋯ → Flip Horizontally. */
       E.parent = G.id;
