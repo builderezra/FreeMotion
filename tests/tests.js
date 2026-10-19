@@ -163995,6 +163995,76 @@
    * the commit before it (#2: cce7f239, #1: dfc4f2b2). They use bughunt 2's helpers (_bh2With, _bh2Frame, _bh2Bar, _bh2MaxDiff);
    * everything else is the suite's. ═══ */
 
+  /* (#10) A GROUP'S BOX TOOK EVERY MEMBER AS CENTRED ON ITS X/Y. A group G at 0,0 holds ONE member, at x 100, y 200. On 698b5dd0
+     groupBoundsLocal and groupRestBoundsLocal span each member x ± w·sc/2, y ± h·sc/2 whatever its anchor or text alignment, while
+     the renderer draws a shape from −w·anchorX about its x and a left-aligned text from its x rightwards. So, on 698b5dd0:
+       A  a left-aligned text of measured width W is boxed 100 − W/2 .. 100 + W/2 where it is drawn 100 .. 100 + W; the pivot a pinch
+          would scale it about (FM.groupPivotMeasured, the group's anchor 0.5) is 100, the title's LEFT EDGE, not 100 + W/2; and
+          FM.groupBounds, which the canvas hit-test reads, ends at 100 + W/2, so a tap at 100 + 0.75·W on the title's right half
+          misses the group.
+       B  a right-aligned text is boxed 100 − W/2 .. 100 + W/2 where it is drawn 100 − W .. 100.
+       C  a 40 × 30 shape with anchorX 0 and anchorY 1 is boxed 80 .. 120 × 185 .. 215 where it is drawn 100 .. 140 × 170 .. 200,
+          and at scale 2 60 .. 140 × 170 .. 230 where it is drawn 100 .. 180 × 140 .. 200.
+     CONTROLS (pass on both commits): a default-anchor 40 × 30 shape is 80 .. 120 × 185 .. 215 and a centred text 100 ± W/2 — today's
+     box, sum for sum; and the text really measures wider than layerSize's 10 px floor, so A and B can tell the spans apart. */
+  test('bughunt4 #10 A group\'s box follows its members\' anchors and text alignment: a left-aligned title alone in a group is boxed from its x to x + its width and the group pivots about the title\'s middle, a right-aligned one from x − width to x, a shape anchored at its left edge from x to x + width (CONTROLS: a default-anchor shape and a centred title keep today\'s centred box)', { item: '1176' }, async function () {
+    if (typeof FM.groupBoundsLocal !== 'function' || typeof FM.groupRestBoundsLocal !== 'function' || typeof FM.groupPivotMeasured !== 'function' || typeof FM.groupBounds !== 'function' || typeof FM.layerSize !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.groupBoundsLocal / groupRestBoundsLocal / groupPivotMeasured / groupBounds / layerSize / makeLayer are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5, EPS = 1e-6, X = 100, Y = 200;
+      /* A fresh group at 0,0 holding only L: the live box at T, the rest box, the pivot a pinch at T would use, the box in the parent's space. */
+      const measure = (L) => {
+        const G = FM.makeLayer('group', { name: 'bh4 #10 group', x: 0, y: 0, start: 0, duration: 4 });
+        G.start = 0; G.duration = 4; G.transform.x = 0; G.transform.y = 0;
+        L.start = 0; L.duration = 4; L.parent = G.id;
+        FM.scene.layers = [G, L];
+        const live = FM.groupBoundsLocal(G, FM.scene, T), rest = FM.groupRestBoundsLocal(G, FM.scene);
+        if (!live || !rest) throw new Error('setup: the group holding ' + L.name + ' measured no box (live ' + JSON.stringify(live) + ', rest ' + JSON.stringify(rest) + ')');
+        return { live: live, rest: rest, pivot: FM.groupPivotMeasured(G, FM.scene, T), gb: FM.groupBounds(G, FM.scene, T) };
+      };
+      const shape = (name) => FM.makeLayer('shape', { name: name, shape: 'rect', x: X, y: Y, shapeW: 40, shapeH: 30, fill: '#ff0000', start: 0, duration: 4 });
+      const text = (name, align) => { const L = FM.makeLayer('text', { name: name, text: 'bh4 title', x: X, y: Y, fontSize: 40, start: 0, duration: 4 }); L.align = align; return L; };
+      const r1 = v => Math.round(v * 10) / 10;
+      const say = b => r1(b.minX) + ' .. ' + r1(b.maxX) + ' × ' + r1(b.minY) + ' .. ' + r1(b.maxY);
+      const bad = [];
+      /* Both walks must give [x0, x1] × [y0, y1]. */
+      const span = (what, m, x0, x1, y0, y1) => {
+        [['live', m.live], ['rest', m.rest]].forEach(([k, b]) => {
+          if (Math.abs(b.minX - x0) > EPS || Math.abs(b.maxX - x1) > EPS || Math.abs(b.minY - y0) > EPS || Math.abs(b.maxY - y1) > EPS) bad.push(what + ': the group’s ' + k + ' box is ' + say(b) + ' where the member is drawn ' + r1(x0) + ' .. ' + r1(x1) + ' × ' + r1(y0) + ' .. ' + r1(y1));
+        });
+      };
+
+      /* ── CONTROLS: a default-anchor shape, and a centred text, keep today's centred box; the text is wider than the floor. */
+      span('CONTROL: a default-anchor 40 × 30 shape', measure(shape('bh4 #10 centred shape')), X - 20, X + 20, Y - 15, Y + 15);
+      const tc = text('bh4 #10 centred title', 'center'), sz = FM.layerSize(tc), W = sz.w, H = sz.h;
+      if (!(W > 40)) throw new Error('CONTROL: the title measures ' + W + ' px wide, too close to layerSize’s 10 px floor for its span to say anything');
+      const mc = measure(tc);
+      span('CONTROL: a centred title', mc, X - W / 2, X + W / 2, Y - H / 2, Y + H / 2);
+      if (!mc.pivot || Math.abs(mc.pivot.x - X) > EPS) bad.push('CONTROL: the group of a centred title pivots at x ' + (mc.pivot && r1(mc.pivot.x)) + ', not at the title’s middle ' + X);
+
+      /* ── A: a left-aligned title — its box, the pivot a pinch would use, and a tap on its right half. */
+      const tl = text('bh4 #10 left title', 'left');
+      if (Math.abs(FM.layerSize(tl).w - W) > EPS) throw new Error('setup: the left-aligned title measures ' + FM.layerSize(tl).w + ' px, not the centred one’s ' + W);
+      const ma = measure(tl);
+      span('A: a left-aligned title of width ' + r1(W), ma, X, X + W, Y - H / 2, Y + H / 2);
+      if (!ma.pivot || Math.abs(ma.pivot.x - (X + W / 2)) > EPS) bad.push('A: the group of a left-aligned title pivots at x ' + (ma.pivot && r1(ma.pivot.x)) + ' where the title’s middle is ' + r1(X + W / 2) + ' — a pinch scales it toward the title’s left edge');
+      const tapX = X + 0.75 * W, g = ma.gb;
+      if (!g || !(tapX >= g.x - g.w / 2 && tapX <= g.x + g.w / 2)) bad.push('A: a tap at x ' + r1(tapX) + ', on the title’s right half, falls outside the group’s box ' + (g ? r1(g.x - g.w / 2) + ' .. ' + r1(g.x + g.w / 2) : '(none)') + ', so it picks the title instead of the group');
+
+      /* ── B: a right-aligned title. */
+      span('B: a right-aligned title of width ' + r1(W), measure(text('bh4 #10 right title', 'right')), X - W, X, Y - H / 2, Y + H / 2);
+
+      /* ── C: a shape anchored at its left edge and its bottom, at 100 % and at 200 %. */
+      const s1 = shape('bh4 #10 corner-anchored shape');
+      s1.transform.anchorX = 0; s1.transform.anchorY = 1;
+      span('C: a 40 × 30 shape with anchorX 0, anchorY 1', measure(s1), X, X + 40, Y - 30, Y);
+      const s2 = shape('bh4 #10 corner-anchored shape at 200 %');
+      s2.transform.anchorX = 0; s2.transform.anchorY = 1; s2.transform.scale = 2;
+      span('C: the same shape at 200 %', measure(s2), X, X + 80, Y - 60, Y);
+
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#9) THE ⧉ ISOLATE ON A GROUP SHOWED NOTHING. A full-frame white bar sits ABOVE a group G holding a red 100 × 100 block centred
      at 200,120 (10000 px) and a blue 60 × 60 one at 60,120 (3600 px); with nothing isolated the bar covers both. FM.isolate is what
      the ⧉ button sets: mode 1 "only this layer", mode 2 "this layer on top".
@@ -164070,8 +164140,7 @@
         if (!all(m2.red, AREA_R) || m2.blue !== 0) throw new Error('C2: the red block inside the styled group "on top" reads ' + say(m2) + ' where it is ' + AREA_R + ' red px over the white bar with the blue one still under it — a member of a unit was never lifted, so nothing changed');
       } finally {
         FM.isolate = iso0;
-      }
-    });
+      }    });
   });
 
   /* (#2) A GROUP'S LOOK SWITCHED HOW ITS MEMBERS BLEND. Red footage fills the frame, (255, 0, 0). Above it a group holds one 100×100

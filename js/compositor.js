@@ -29320,6 +29320,33 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { w: m ? m.width : 100, h: m ? m.height : 100 };
   };
 
+  /* ═══ bughunt4 #10 — A MEMBER'S SHARE OF ITS GROUP'S BOX IS WHERE THE MEMBER IS DRAWN ═══════════════════════════════════
+   * Both walks below took every member as CENTRED on its x/y: x ± w·sc/2. The renderer does not draw it there. A shape or a
+   * clip is drawn from −w·anchorX to w·(1 − anchorX) about its x (and the same down y with anchorY), and a text layer is moved
+   * by (0.5 − anchorX)·w and then laid out by its alignment, so a left-aligned title spans x .. x + w. So a group holding a
+   * left-aligned title, or a layer whose anchor had been moved to a corner, measured its box half a width off the content: a
+   * pinch scaled it toward the title's left edge, the selection box sat off the text, and a tap on the title's right half fell
+   * outside the group's box and picked the title itself.
+   * Each member now spans what that layer's own box spans (canvas-edit's hitTest and boxFor): its anchor, read by the
+   * renderer's own anchorX / anchorY, plus the alignment shift from FM.textAlignShift — ONE rule, which canvas-edit's
+   * alignShift now calls, so a single layer's box and its share of a group's box cannot disagree. At the default anchor (0.5)
+   * with no alignment the span is x ± w·sc/2, today's box sum for sum.
+   * ⚠️ This also moves the MEASURED pivot of a group that has none stored: an older project's scaled or turned group whose
+   * members carry a moved anchor or a left / right-aligned text is now drawn about the middle of what is really there. */
+  /* TEXT ALIGNMENT MOVES THE GLYPHS (#686): relative to the box a centred text spans [−w/2, +w/2]; 'left' moves it right by
+     w/2 and 'right' moves it left by w/2. Only text has an align, so everything else is 0. Moved here from canvas-edit. */
+  FM.textAlignShift = function (layer, w) {
+    if (!layer || layer.type !== 'text') return 0;
+    const a = layer.align || 'center';
+    return a === 'left' ? w / 2 : a === 'right' ? -w / 2 : 0;
+  };
+  // One member's extent in its group's child space: size `sz` at scale `sc`, its x/y already offset by any nested group.
+  function groupMemberSpan(l, sz, sc, x, y) {
+    const tr = l.transform || {}, ax = anchorX(tr), ay = anchorY(tr);
+    const w = sz.w * sc, h = sz.h * sc, sh = FM.textAlignShift(l, w);
+    return { x0: x - w * ax + sh, x1: x + w * (1 - ax) + sh, y0: y - h * ay, y1: y + h * (1 - ay) };
+  }
+
   // Approximate world bbox of a group's members (ignores rotations — good enough for the canvas
   // selection box + hit-test, which previously showed a meaningless 100px box at the group's 0,0).
   /* The members' extent in the group's OWN child space — before the group's x/y/scale are applied.
@@ -29343,10 +29370,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const sz = FM.layerSize(l);
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
-        const w = sz.w * sc / 2, h = sz.h * sc / 2;
+        // bughunt4 #10: the member's anchor and text alignment, not x ± w·sc/2 (groupMemberSpan)
+        const m = groupMemberSpan(l, sz, sc, x, y);
         any = true;
-        minX = Math.min(minX, x - w); maxX = Math.max(maxX, x + w);
-        minY = Math.min(minY, y - h); maxY = Math.max(maxY, y + h);
+        minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
+        minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
       });
     })(group.id, 0, 0);
     if (!any) return null;
@@ -29414,10 +29442,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const sz = FM.layerSize(l);
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
-        const w = sz.w * sc / 2, h = sz.h * sc / 2;
+        // bughunt4 #10: the same member span as groupBoundsLocal
+        const m = groupMemberSpan(l, sz, sc, x, y);
         any = true;
-        minX = Math.min(minX, x - w); maxX = Math.max(maxX, x + w);
-        minY = Math.min(minY, y - h); maxY = Math.max(maxY, y + h);
+        minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
+        minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
       });
     })(group.id, 0, 0);
     if (!any) return null;
