@@ -167988,6 +167988,62 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* (#9) …AND WHILE DRAWING. The drawing tool answers ⌘Z / ⇧⌘Z / ⌘Y itself (js/draw-tool.js's capture keydown: the bar's
+     ↶ ↷, one stroke at a time), and it tested the TYPED letter too (/^[zZyY]$/ on e.key), so on a Russian layout, where those
+     keys type я, Я and н, nothing took a stroke back; the editor's own handler does nothing while the tool is up. The tool now
+     asks FM._otherScriptLetter, the same question the editor's ⌘ keys ask. Strokes go in through the tool's own commit seam
+     (FM.drawTool._commit, what the finger calls) and are counted in the session (FM.drawTool._counts().subs); keys are pressed
+     on the page, as a real key is, with the Russian letters as \u escapes so a Latin lookalike cannot pass.
+     FAILS ON ff5f0ae8: Ctrl+я leaves both strokes, and Ctrl+Shift+Я and Ctrl+н put nothing back.
+     CONTROL: a Latin Ctrl+Z takes one stroke back, so the keys reach the tool at all. The session is ended in the way out. */
+  test('bughunt6 #9 Undo while drawing works on a Russian keyboard layout: Ctrl+Z pressed with the Russian letter on the Z key takes back one stroke, and Ctrl+Shift+Z and Ctrl+Y with the Russian letters on their keys put one back (CONTROL: a Latin Ctrl+Z takes one back too)', { item: '1176' }, async function () {
+    if (!FM.startDraw || !FM.drawTool || !FM.drawTool._commit || !FM.drawTool._undo || !FM.drawTool._counts || !FM.drawTool._stop) throw new Error('setup: the drawing tool has no test seams (_commit, _undo, _counts, _stop)');
+    if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the drawing');
+    /* The Russian letters on the Z and Y keys (ЙЦУКЕН): я, Я, н */
+    const RU = { z: 'я', Z: 'Я', y: 'н' };
+    if (Object.keys(RU).some(k => /^[\x00-\x7f]$/.test(RU[k]))) throw new Error('setup: a Russian letter here is ASCII, so this would test nothing');
+    const press = (key, code, extra) => {
+      const ev = new KeyboardEvent('keydown', Object.assign({ key: key, code: code, ctrlKey: true, bubbles: true, cancelable: true }, extra || {}));
+      document.body.dispatchEvent(ev);
+      return ev;
+    };
+    const subs = () => FM.drawTool._counts().subs;
+    const stroke = (y) => { FM.drawTool.points = [[80, y], [140, y], [200, y], [260, y]]; FM.drawTool._commit(); };
+    const endDrawing = async () => { try { if (FM.drawTool.active) FM.drawTool._stop(); } catch (e) {} await sleep(40); };
+    const bad = [];
+    await _bh2With(async function () {
+      if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+      FM.startDraw('freehand');
+      if (!FM.drawTool.active || FM.drawTool.mode !== 'freehand') throw new Error('setup: FM.startDraw(freehand) did not start a drawing');
+      stroke(60); stroke(100); stroke(140);
+      if (subs() !== 3) throw new Error('setup: three strokes made ' + subs() + ' in the drawing, so nothing below would mean anything');
+
+      /* CONTROL: a Latin Ctrl+Z takes one stroke back */
+      let s0 = subs();
+      press('z', 'KeyZ');
+      if (subs() !== s0 - 1) throw new Error('setup: a Latin Ctrl+Z while drawing left ' + subs() + ' of ' + s0 + ' strokes, so no key here reaches the drawing');
+
+      /* Ctrl+Z: я on the Z key */
+      s0 = subs();
+      press(RU.z, 'KeyZ');
+      if (subs() !== s0 - 1) bad.push('Ctrl+Z on the Russian layout (я on the Z key) while drawing took no stroke back (' + s0 + ' → ' + subs() + ')');
+
+      /* Ctrl+Shift+Z: Я on the Z key; Ctrl+Y: н on the Y key. Each puts back a stroke taken out by the tool's own ↶ if none is waiting. */
+      if (!FM.drawTool._counts().redo) FM.drawTool._undo();
+      s0 = subs();
+      if (!FM.drawTool._counts().redo) throw new Error('setup: nothing to redo in the drawing after an undo');
+      press(RU.Z, 'KeyZ', { shiftKey: true });
+      if (subs() !== s0 + 1) bad.push('Ctrl+Shift+Z on the Russian layout (Я on the Z key) while drawing put no stroke back (' + s0 + ' → ' + subs() + ')');
+      FM.drawTool._undo();
+      s0 = subs();
+      press(RU.y, 'KeyY');
+      if (subs() !== s0 + 1) bad.push('Ctrl+Y on the Russian layout (н on the Y key) while drawing put no stroke back (' + s0 + ' → ' + subs() + ')');
+      if (!FM.drawTool.active) bad.push('the drawing ended during the keys, so the ones after it reached nothing');
+    }, endDrawing);
+    if (FM.drawTool.active) throw new Error('the drawing was still up after the test put the scene back');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 6 ──
 
 })();

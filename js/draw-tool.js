@@ -1080,13 +1080,18 @@ window.FM = window.FM || {};
            do in the editor.
            A text field keeps its own ⌘Z: typing is what that key undoes there. The brush-size slider and the
            colour well are not text, so a ⌘Z pressed after using them still reaches the drawing. */
-        else if ((e.metaKey || e.ctrlKey) && !e.altKey && /^[zZyY]$/.test(e.key)) {
+        /* bughunt6 #9: on a Russian layout ⌘Z types я and ⌘Y н, so the letter test alone missed them and the drawing could
+           not be undone from the keyboard. FM._otherScriptLetter (js/app.js, the editor's own ⌘ keys) gives the Latin letter
+           of the key's place only when the key types a letter of another script, so a Latin layout is read as before. It is
+           read here, at key time, because app.js loads after this script. */
+        else if ((e.metaKey || e.ctrlKey) && !e.altKey && (/^[zZyY]$/.test(e.key) ||
+            (FM._otherScriptLetter && (FM._otherScriptLetter(e) === 'z' || FM._otherScriptLetter(e) === 'y')))) {
           var t = e.target;
           var typing = t && (t.tagName === 'TEXTAREA' || t.isContentEditable ||
             (t.tagName === 'INPUT' && !/^(range|color|checkbox|radio|button|submit)$/i.test(t.type || '')));
           if (typing) return;
           e.preventDefault(); e.stopPropagation();
-          if (e.key === 'y' || e.key === 'Y' || e.shiftKey) redoStep(); else undoStep();
+          if (e.key === 'y' || e.key === 'Y' || (FM._otherScriptLetter && FM._otherScriptLetter(e) === 'y') || e.shiftKey) redoStep(); else undoStep();
         }
       }, true);
     },

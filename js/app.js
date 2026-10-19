@@ -9221,6 +9221,9 @@ window.FM = window.FM || {};
        not read by its position either. ⌘D stays on e.key alone, as Simple's own ⌘D does, so the two editors agree on it. */
     const otherScriptLetter = e => ((typeof e.key === 'string' && /^[\p{L}\p{M}]$/u.test(e.key) && !/\p{Script=Latin}/u.test(e.key) &&
       typeof e.code === 'string' && /^Key[A-Z]$/.test(e.code)) ? e.code.slice(3).toLowerCase() : '');
+    /* …and the drawing tool's own ⌘Z / ⌘Y (js/draw-tool.js) asks the same question, so undo works the same wherever he
+       presses it. That script loads before this one, so it reads this when a key arrives, never at load. */
+    FM._otherScriptLetter = otherScriptLetter;
     window.addEventListener('keydown', e => {
       const mod = e.metaKey || e.ctrlKey;
       // Editable target = native <input>/<select>/<textarea> OR any contentEditable element
