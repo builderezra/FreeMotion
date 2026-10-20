@@ -165860,6 +165860,94 @@
     });
   });
 
+  /* (1176 leftover, curved text) RIGHT-TO-LEFT TEXT ON A CURVE WAS LAID ALONG THE ARC IN TYPING ORDER. Both curve painters walked the
+     line's characters in the order they were typed, starting from the arc's LEFT end: drawArcLine (a still layer with a Curve, or a
+     Text Curve) and drawAnimatedText's curved branch (the same with an Animate preset). Flat, a line is one fillText and the canvas
+     runs the bidirectional algorithm over it, so a Hebrew or Arabic line's first word typed is drawn on the RIGHT; on a curve it came
+     out on the left with every word spelled backwards, for the layer's whole life, in the preview and the export. Now the characters
+     go along the arc in the visual order bidiGlyphOrder gives (compositor.js); the units and their stagger keep the typing order.
+     The lines are bughunt4 #6's, 40 px white text centred at 160 on _bh2Frame's black frame: Hebrew א, three spaces, בבבבבב, and
+     Arabic لا, three spaces, مدرسة. At a Curve of 1° the arc's radius is about 8600 px for a 150 px line, so it bows the line by a
+     third of a pixel and turns a glyph by at most half a degree: the curved line is the flat line to within a pixel or two, and
+     their gaps can be compared directly. At 30° the line really bends.
+     FAILS BEFORE THE FIX: at 1°, still and under Fade by character, by word and by line, the Hebrew gap is mirrored about the ink's
+     middle, about 108 px from the flat line's (the mirror bughunt4 #6 measured on the flat path); at 30°, still and by word, the
+     Hebrew and the Arabic gap lie left of the middle; Typewriter's first letter (א) is drawn at the arc's left end.
+     CONTROL: flat, the canvas puts the Hebrew and the Arabic gap right of the middle (this browser runs the algorithm, so the orders
+     can be told apart) and a Latin line's left of it; the Latin line at 1° keeps the flat gap and edges in every mode (1° is near
+     enough flat to compare); the Hebrew line at 1° spans the flat ink in every mode; a 30° curve bows the Latin line (the curved
+     painters are what is measured); each Fade is on (FM.textHasAnim) and finished at 1 s; Typewriter draws one letter at 0.25 s.
+     TOL: 4 px on a gap's centre or an ink edge, bughunt4 #6's: on a curve every glyph is placed alone, which drops any kerning, and
+     the 1° arc moves a glyph by under a pixel; the fault is 50 px or more. The Arabic line on a curve is drawn letter by letter,
+     unjoined, so its width is not the flat line's and only the side its gap is on is judged. Not run when written (code only). */
+  test('1176 leftover: right-to-left text on a curve reads as it does flat: a Hebrew line of a one-letter word, three spaces and a six-letter word has its gap where the flat line has it at a Curve of 1°, still and under Fade by character, by word and by line; at 30° the Hebrew and the Arabic gap stay right of the middle, and Typewriter by character brings the first letter typed in at the right end (CONTROLS: flat, the canvas puts the first word on the right; a Latin line at 1° keeps the flat gap in every mode; every mode spans the flat ink; the curve bows the line; the Fade is on and finished)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim are not reachable');
+    await _bh2With(async function () {
+      const T = 1, TOL = 4;
+      const HEB = 'א   בבבבבב', ARA = 'لا   مدرسة', LAT = 'a   bbbbbb';
+      const L = FM.makeLayer('text', { name: '1176 curve title', text: HEB, x: 160, y: 120, fontSize: 40, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L];
+      const STILL = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      const fade = unit => ({ preset: 'fade', unit: unit, durIn: 0.3, durOut: 0, stagger: 0.05 });
+      /* The ink of `text` under `anim` on a Curve of `deg` at t (T unless given; a pixel brighter than 150 summed over its channels):
+         its first and last columns and rows, its middle, and the widest run of empty columns between them (the gap between the words). */
+      const ink = (text, anim, deg, t) => {
+        L.text = text; L.textAnim = Object.assign({}, anim); L.effects = []; L.textCurve = deg;
+        delete L._wrapCache;
+        const f = _bh2Frame(t == null ? T : t), col = new Uint8Array(320);
+        let y0 = -1, y1 = -1;
+        for (let i = 0, n = 0; i < f.d.length; i += 4, n++) {
+          if (f.d[i] + f.d[i + 1] + f.d[i + 2] > 150) { const x = n % 320; col[x] = 1; if (y0 < 0) y0 = (n - x) / 320; y1 = (n - x) / 320; }
+        }
+        let x0 = -1, x1 = -1;
+        for (let x = 0; x < 320; x++) if (col[x]) { if (x0 < 0) x0 = x; x1 = x; }
+        let gw = 0, gap = -1, run = 0;
+        for (let x = x0 + 1; x0 >= 0 && x <= x1; x++) {
+          if (!col[x]) { run++; continue; }
+          if (run > gw) { gw = run; gap = ((x - run) + (x - 1)) / 2; }
+          run = 0;
+        }
+        return { x0: x0, x1: x1, y0: y0, y1: y1, mid: (x0 + x1) / 2, gap: gap, gw: gw, anim: !!FM.textHasAnim(L) };
+      };
+      const say = r => 'ink at columns ' + r.x0 + '..' + r.x1 + ' (middle ' + r.mid + '), its widest gap ' + r.gw + ' px centred at ' + r.gap;
+      const bad = [];
+
+      /* ── CONTROLS: flat, the first word of an RTL line is on the right and a Latin line's on the left; a 30° curve bows the line. */
+      const fH = ink(HEB, STILL, 0), fA = ink(ARA, STILL, 0), fL = ink(LAT, STILL, 0);
+      if (fH.anim || fA.anim || fL.anim) bad.push('CONTROL: the still layer has an Animate preset by FM.textHasAnim, so “still” is not the still path');
+      if (fH.x0 < 0 || fH.x1 - fH.x0 < 80 || fH.gw < 15) bad.push('CONTROL: flat, the Hebrew line is ' + say(fH) + ' — not glyphs either side of a three-space gap, so there is nothing to place');
+      if (!(fH.gap - fH.mid >= 20)) bad.push('CONTROL: flat, the Hebrew line is ' + say(fH) + ': its gap is not right of its middle, so this browser does not lay the line out right to left and the orders cannot be told apart');
+      if (fA.x0 < 0 || fA.gw < 15 || !(fA.gap - fA.mid >= 10)) bad.push('CONTROL: flat, the Arabic line is ' + say(fA) + ': not two words with the gap right of the middle');
+      if (fL.x0 < 0 || fL.gw < 15 || !(fL.mid - fL.gap >= 20)) bad.push('CONTROL: flat, the Latin line is ' + say(fL) + ': not two words with the gap left of the middle');
+      const bow = ink(LAT, STILL, 30);
+      if (bow.x0 < 0 || !(bow.y1 - bow.y0 >= fL.y1 - fL.y0 + 5)) bad.push('CONTROL: on a 30° curve the Latin line’s ink is rows ' + bow.y0 + '..' + bow.y1 + ' where flat it is rows ' + fL.y0 + '..' + fL.y1 + ' — the curve does not bow it, so the curved painters are not what is measured');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── At 1°: still (drawArcLine), and Fade by character, by word and by line (the curved branch): the Hebrew gap where the flat one is. */
+      [['still', STILL], ['Fade by character', fade('char')], ['Fade by word', fade('word')], ['Fade by line', fade('line')]].forEach(([name, anim]) => {
+        const h = ink(HEB, anim, 1), l = ink(LAT, anim, 1);
+        if (h.anim !== (anim !== STILL)) bad.push('CONTROL: ' + name + ' on a 1° curve, FM.textHasAnim says ' + h.anim + ', so this frame did not take the path it is named for');
+        if (Math.abs(l.gap - fL.gap) > TOL || Math.abs(l.x0 - fL.x0) > TOL || Math.abs(l.x1 - fL.x1) > TOL) bad.push('CONTROL: the Latin line on a 1° curve, ' + name + ', has ' + say(l) + ' where flat it has ' + say(fL) + ', so a 1° curve is not near enough flat to compare with');
+        if (Math.abs(h.x0 - fH.x0) > TOL || Math.abs(h.x1 - fH.x1) > TOL) bad.push('CONTROL: the Hebrew line on a 1° curve, ' + name + ', has ' + say(h) + ' where flat it has ' + say(fH) + ' — its glyphs do not add up to the line');
+        if (Math.abs(h.gap - fH.gap) > TOL) bad.push('the Hebrew line on a 1° curve, ' + name + ', has ' + say(h) + ' where flat it has ' + say(fH) + (Math.abs((h.gap - h.mid) + (fH.gap - fH.mid)) <= TOL ? ' — mirrored about its middle: its letters went along the arc in the order they were typed' : ''));
+      });
+
+      /* ── At 30°, still and Fade by word: the Hebrew and the Arabic gap right of the middle, as flat. */
+      [['still', STILL], ['Fade by word', fade('word')]].forEach(([name, anim]) => {
+        const h = ink(HEB, anim, 30), a = ink(ARA, anim, 30);
+        if (h.x0 < 0 || h.gw < 15 || !(h.gap - h.mid >= 20)) bad.push('the Hebrew line on a 30° curve, ' + name + ', has ' + say(h) + ': its gap is not right of its middle as it is flat (' + say(fH) + ')' + (h.gw >= 15 && h.mid - h.gap >= 20 ? ' — the first word typed is at the arc’s left end' : ''));
+        if (a.x0 < 0 || a.gw < 15 || !(a.gap - a.mid >= 10)) bad.push('the Arabic line on a 30° curve, ' + name + ', has ' + say(a) + ': its gap is not right of its middle as it is flat (' + say(fA) + ')' + (a.gw >= 15 && a.mid - a.gap >= 10 ? ' — the first word typed is at the arc’s left end' : ''));
+      });
+
+      /* ── Typewriter by character on a 30° curve: at 0.25 s only the first letter typed (א) is in, and it is at the arc's right end. */
+      const tw = ink(HEB, { preset: 'typewriter', unit: 'char', durIn: 0.3, durOut: 0, stagger: 0.5 }, 30, 0.25);
+      if (tw.x0 < 0 || tw.x1 - tw.x0 > 40) bad.push('CONTROL: under Typewriter by character on a 30° curve at 0.25 s the ink is at columns ' + tw.x0 + '..' + tw.x1 + ', not one letter');
+      else if (!(tw.x0 > fH.gap)) bad.push('under Typewriter by character on a 30° curve at 0.25 s the one letter in (the first typed, א) is at columns ' + tw.x0 + '..' + tw.x1 + ', not right of the flat gap at ' + fH.gap + ' where it is drawn flat' + (tw.x1 < fH.mid ? ' — at the arc’s left end: the entrance runs from the end of the sentence' : ''));
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#4) AN ADJUSTMENT LAYER'S BLEND MODE DID NOTHING. Red footage fills the frame, (255, 0, 0); above it an adjustment layer with
      Invert (amount 1), whose graded plate over red is cyan, (0, 255, 255). On cedde93f both blits of the graded plate (applyAdjustment's
      and applyAdjustmentFilters') are hard-wired to source-over and never read layer.blendMode, so every mode the Mixing card offers

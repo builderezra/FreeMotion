@@ -4269,8 +4269,9 @@ window.FM = window.FM || {};
    * units are placed in the visual order it gives. The stagger still counts in typing order, so the first word typed comes in first,
    * on the right. A line with no right-to-left letter never gets past the first test: every left-to-right text draws as it did.
    * Not built (a layer with a Word Highlight keeps the old order: the highlight lays its boxes out in typing order, on the still path
-   * too, so moving the units alone would take them off their words; the curved paths, still and animated, also place glyphs in
-   * typing order; Arabic By Character draws each letter unjoined, as it always has). */
+   * too, so moving the units alone would take them off their words; Arabic By Character draws each letter unjoined, as it always
+   * has). The curved paths, still and animated, placed their glyphs in typing order too; since 1176 leftover they take the order
+   * bidiGlyphOrder gives (a bracket inside right-to-left text is still drawn alone, unmirrored, there and By Character). */
   const BIDI_RTL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFC\u200F\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
   // One character's bidirectional class (its first code point's, from UnicodeData's ranges for the scripts text is typed in)
   function bidiType(g) {
@@ -4389,6 +4390,15 @@ window.FM = window.FM || {};
     let x = x0;
     ord.forEach(k => { xs[k] = x; x += widths[k]; });
     return xs;
+  }
+  /* 1176 leftover (curved text): the visual order of one line's characters `gs` (its graphemes), left to right: gs[ord[k]] is the
+     k-th from the left. null when the line has no right-to-left letter or its order is the typing order, and the caller then walks
+     the characters as it always did. Each is one item at its own level, so a right-to-left word comes out reversed, as the canvas
+     draws it on one fillText. */
+  function bidiGlyphOrder(line, gs) {
+    if (gs.length < 2 || !BIDI_RTL.test(line)) return null;
+    const ord = bidiOrder(bidiLevels(gs));
+    return ord.every((k, i) => k === i) ? null : ord;
   }
 
   function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan, upright, hlOn) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)   // upright: Text Curve's Stay upright (#966 opts8)
@@ -4522,7 +4532,12 @@ window.FM = window.FM || {};
       const aa = Math.abs(curveDeg * Math.PI / 180), R = tw / aa, sign = curveDeg >= 0 ? 1 : -1;
       const arcAt = (sAlong) => { const a = (sAlong / tw - 0.5) * aa; return { a: a, x: R * Math.sin(a), y: sign * (R - R * Math.cos(a)) }; };
       const cMid = []; let run = 0;
-      chars.forEach((c, i) => { cMid.push(run + cw[i] / 2); run += cw[i] + lsp; });
+      /* 1176 leftover: a right-to-left line's characters take their places along the arc in the order it reads (bidiGlyphOrder, as
+         drawArcLine does), so cMid[i] is character i's place in THAT order; each unit then sits at the middle of its characters' span
+         (uL..uR below). The units, their stagger and their clocks keep the typing order. ord null: the line as it always was. */
+      const ord = bidiGlyphOrder(line, chars);
+      if (ord) ord.forEach(i => { cMid[i] = run + cw[i] / 2; run += cw[i] + lsp; });
+      else chars.forEach((c, i) => { cMid.push(run + cw[i] / 2); run += cw[i] + lsp; });
       // units as [first, last+1) character ranges, in the same order and with the same membership as the flat path
       const ranges = [];
       if (unit === 'line') { if (chars.length) ranges.push([0, chars.length]); }
@@ -4545,7 +4560,9 @@ window.FM = window.FM || {};
         const ck = clockOf(rg[0]);
         const A = animFor(ck.n++, ck);
         const i0 = rg[0], i1 = rg[1] - 1;
-        const U = arcAt(((cMid[i0] - cw[i0] / 2) + (cMid[i1] + cw[i1] / 2)) / 2);
+        let uL = Infinity, uR = -Infinity;
+        if (ord) for (let i = rg[0]; i < rg[1]; i++) { uL = Math.min(uL, cMid[i] - cw[i] / 2); uR = Math.max(uR, cMid[i] + cw[i] / 2); }
+        const U = arcAt(ord ? (uL + uR) / 2 : ((cMid[i0] - cw[i0] / 2) + (cMid[i1] + cw[i1] / 2)) / 2);
         ctx.save();
         ctx.globalAlpha = baseAlpha * Math.max(0, Math.min(1, A.alpha)) * A.outA;
         ctx.translate(U.x, U.y);
@@ -5167,8 +5184,13 @@ window.FM = window.FM || {};
     const aa = Math.abs(ac);
     const prevAlign = ctx.textAlign, prevBase = ctx.textBaseline;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    /* 1176 leftover: a right-to-left line goes along the arc in the order it reads (bidiGlyphOrder): slot k, from the arc's left end,
+       holds character ord[k], so the first letter typed of a Hebrew or Arabic line lands at the right end, as it is drawn flat. The
+       caret, the plan and the widths stay the character's own. No right-to-left letter: ord is null and slot k holds character k. */
+    const ord = bidiGlyphOrder(line, chars);
     let s = 0;
-    chars.forEach((ch, i) => {
+    chars.forEach((c0, k) => {
+      const i = ord ? ord[k] : k, ch = chars[i];
       const w = widths[i];
       if (i === gskip) { s += w + sp; return; }
       const pc = gp ? gp[i] : ch;
