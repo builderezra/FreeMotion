@@ -5502,6 +5502,7 @@ window.FM = window.FM || {};
       const off = pmSlot(d).plate; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
       off.__fmRS = ps; off.__fmOX = OX; off.__fmOY = OY;   // the nested drawLayer renders through baseT
       off.__fmCamExt = !!ctx.canvas.__fmCamExt;           // anything nested in it still gets the frame (nestedPlate)
+      off.__fmTiltExt = ctx.canvas.__fmTiltExt || 0;      // …but a layer-relative effect in a tilt plate may follow it (1176 leftover, tiltFollowsFx)
       const octx = off.getContext('2d');
       baseT(octx); octx.clearRect(OX, OY, PWp, PHp);
       octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
@@ -5586,6 +5587,7 @@ window.FM = window.FM || {};
       const off = pmSlot(d).plate; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }
       off.__fmRS = ps; off.__fmOX = OX; off.__fmOY = OY;
       off.__fmCamExt = !!ctx.canvas.__fmCamExt;
+      off.__fmTiltExt = ctx.canvas.__fmTiltExt || 0;   // 1176 leftover, as in drawPenMaskLayer
       const octx = off.getContext('2d');
       baseT(octx); octx.clearRect(OX, OY, PWp, PHp);
       octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
@@ -5721,6 +5723,7 @@ window.FM = window.FM || {};
       if (plate.width !== EW || plate.height !== EH) { plate.width = EW; plate.height = EH; }
       plate.__fmRS = ps; plate.__fmOX = RX - m; plate.__fmOY = RY - m;   // plate pixel (0,0) IS project (RX-m, RY-m) — (-m,-m) outside a camera
       plate.__fmCamExt = !!R;
+      plate.__fmTiltExt = R ? (ctx.canvas.__fmTiltExt || 0) : 0;   // 1176 leftover: in a tilt plate past the frame a layer-relative effect may follow it (tiltFollowsFx)
       const pctx = plate.getContext('2d');
       pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.clearRect(0, 0, EW, EH);
       baseT(pctx);
@@ -6493,6 +6496,30 @@ window.FM = window.FM || {};
     return { same: diff === 0, diff: diff, rect: rect, area: rect ? rect.w * rect.h : 0, plate: W * H, tFull: tFull, tCrop: tCrop };
   };
 
+  /* ═══ 1176 leftover (a) — WHICH EFFECT PASSES FOLLOW A TILT PLATE PAST THE FRAME ═══════════════════════════════════════════════
+   * Inside a plate marked __fmCamExt, nestedPlate hands an unwrapped pass the frame, because many kernels read their plate AS the
+   * frame (a Twirl turns about its centre, a Vignette fits its edges). Inside a camera's plate that stays exactly as it was. Inside a
+   * tilt plate grown past the frame it cut every effect at the frame and undid the growth (tiltFxPad's note). Such a plate is marked
+   * __fmTiltExt too (draw3DTiltLayer, buildGroupUnit), with WHY it grew:
+   *   2 — the layer's own box reaches past the frame, so there is real layer out there for a kernel to see;
+   *   1 — only what its style and effects throw does (tiltFxPad): the layer itself stops at or inside the frame.
+   * A kernel admitted to the cropped readback (CROP_FX, CROP_BOUNDED_FX) draws the same picture wherever its buffer starts and however
+   * big it is — that is what its admission proved, at five positions and on a 1080 × 1920 plate — so it may follow the tilt plate out
+   * (nestedPlate's `wrap`): at 2 every one does; at 1 only one that throws pixels OUTWARD (tiltOutFx: Drop Shadow, an Outline outside).
+   * At 1 an inward kernel (Glow Inward, Inner Blur, Bevel…) keeps the frame: on a layer whose edge sits on the frame border, a plate
+   * past it would show that kernel an edge the frame-sized plate hides, and the leant picture would jump at the first degree of tilt.
+   * A following pass runs on plates of its own (_pfPoolT, so the frame-sized ones are never resized between layers), marked with
+   * the same level so what is nested in it gets the same answer. Every other kernel keeps the frame and is cut there, as before;
+   * outside a tilt plate past the frame nothing here changes. */
+  function tiltFollowsFx(type) { return !!(CROP_FX[type] || CROP_BOUNDED_FX[type]); }
+  function tiltOutFx(fx, t) {
+    if (!fx || (fx.type !== 'dropshadow' && fx.type !== 'stroke')) return false;
+    const p = fx.params || {};
+    // read exactly as the kernels read them: Shadow only fills the hole at an edge it touches from the plate's edge pixel, so it keeps the frame
+    if (fx.type === 'dropshadow') return (p.shadowonly == null ? 0 : (Math.round(FM.evalProp(p.shadowonly, t)) | 0)) !== 1;
+    return !(p.position == null ? 0 : (Math.round(FM.evalProp(p.position, t)) | 0));   // Outside, the stroke kernel's 0 (absent is 0 there too)
+  }
+  const _pfPoolT = [];
   function drawPixelEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -6500,19 +6527,23 @@ window.FM = window.FM || {};
     // PW/PH are project units (what everything DRAWS in); W/H are the plate's real pixels (what the
     // pixel fn indexes). They are the same number at scale 1.
     const PW = proj.width, PH = proj.height;
-    // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
-    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323). In a tilt plate past the frame, see tiltFollowsFx.
+    const _lv = (ctx.canvas.__fmCamExt && ctx.canvas.__fmTiltExt) || 0;
+    const _tf = _lv > 0 && tiltFollowsFx(fx.type) && (_lv >= 2 || tiltOutFx(fx, t));
+    const _np = nestedPlate(ctx, proj, _tf), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _pfDepth++;
     try {
-      if (!_pfPool[d]) _pfPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
-      const pA = _pfPool[d].A, pB = _pfPool[d].B;
+      const _pool = _tf ? _pfPoolT : _pfPool;
+      if (!_pool[d]) _pool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+      const pA = _pool[d].A, pB = _pool[d].B;
       // Only resize when the comp dims actually change — reassigning width/height every frame reallocates
       // the backing buffer (full-res, per effect, per frame). A is cleared below; B is fully overwritten
       // by putImageData, so skipping the realloc keeps them correct. (Guard pattern as at :1512,:1686.)
       if (pA.width !== W || pA.height !== H) { pA.width = W; pA.height = H; }
       if (pB.width !== W || pB.height !== H) { pB.width = W; pB.height = H; }
       pA.__fmRS = ps; pA.__fmOX = OX; pA.__fmOY = OY;   // the nested drawLayer renders through baseT, and a nested effect inherits this scale
+      if (_tf) { pA.__fmCamExt = true; pA.__fmTiltExt = _lv; }   // 1176 leftover (a): only the following plates (_pfPoolT) are ever marked
       const actx = pA.getContext('2d');
       baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -14491,19 +14522,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return cur;
   }
 
+  /* 1176 leftover (a): the CSS chain has no geometry of its own — where ctx.filter works it is drawn straight onto whatever plate the
+     layer is drawn on — so in a tilt plate past the frame this pass follows it out too (tiltFollowsFx), on plates of its own. Its
+     blur clamps at the plate's edge, though (the GPU blur does; ctx.filter's does not), so with a blur in the chain it follows only a
+     plate grown for the layer's own box (level 2), as an inward kernel does. */
+  const _wpPoolT = [];
   function drawCssFxOnGPU(ctx, layer, t, scene, ops) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return true;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    const _lv = (ctx.canvas.__fmCamExt && ctx.canvas.__fmTiltExt) || 0;
+    const _tf = _lv >= 2 || (_lv > 0 && !(ops && ops.blurs && ops.blurs.length));
+    const _np = nestedPlate(ctx, proj, _tf), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     if (!(W > 0) || !(H > 0)) return false;
     const d = _wpDepth++;
     try {
-      if (!_wpPool[d]) _wpPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
-      const wA = _wpPool[d].A;
+      const _pool = _tf ? _wpPoolT : _wpPool;
+      if (!_pool[d]) _pool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+      const wA = _pool[d].A;
       if (wA.width !== W || wA.height !== H) { wA.width = W; wA.height = H; }
       wA.__fmRS = ps; wA.__fmOX = OX; wA.__fmOY = OY;
+      if (_tf) { wA.__fmCamExt = true; wA.__fmTiltExt = _lv; }
       const actx = wA.getContext('2d');
       baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -14525,7 +14565,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       /* ⚠️ EACH GPU PASS WRITES THE SAME CANVAS, so a chain has to be copied out between passes or the
        * second would read what it is writing. `wB` is the plate pool's other half, already the right
        * size, already allocated — the same canvas drawWarpEffect uses for its output. */
-      const outCv = runCssOpsOnGPU(wA, W, H, ops, ps, _wpPool[d]);
+      const outCv = runCssOpsOnGPU(wA, W, H, ops, ps, _pool[d]);
       if (!outCv || outCv === wA) return false;                // nothing was applied — let the old path run
       ctx.save();
       baseT(ctx);
@@ -17364,34 +17404,156 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const qx = M.a * lx + M.c * ly + M.e, qy = M.b * lx + M.d * ly + M.f;
       x0 = Math.min(x0, qx); x1 = Math.max(x1, qx); y0 = Math.min(y0, qy); y1 = Math.max(y1, qy);
     }
-    return (isFinite(x0) && isFinite(y0) && isFinite(x1) && isFinite(y1)) ? { x0: x0, y0: y0, x1: x1, y1: y1 } : null;
+    // k: the CTM's larger axis scale, for what is drawn in the layer's own units (tiltFxPad's Outline)
+    return (isFinite(x0) && isFinite(y0) && isFinite(x1) && isFinite(y1)) ? { x0: x0, y0: y0, x1: x1, y1: y1, k: Math.max(Math.hypot(M.a, M.b), Math.hypot(M.c, M.d)) } : null;
   }
+  /* ═══ 1176 leftover — THE TILT PLATE ALSO REACHES AS FAR AS THE LAYER'S SHADOW, GLOW, OUTLINE AND EFFECTS ═══════════════════════
+   * What #3b left cut (its builder's gaps a and b). Worked out from renderMesh's projection, not measured, for a red 100 px square
+   * hinged on its left edge at x 280 of a 320 × 240 frame and leant 70° about Y (pivot 280, R 50: flat x 280 + 50u lands
+   * 58.24 u / (3.405 + u) px from the hinge, so its far edge at 301.5 and a point 60 px past it at 308.2):
+   *   (a) The grown plate is marked __fmCamExt, and nestedPlate hands every unwrapped pass inside such a plate the FRAME. So with a
+   *       pixel effect on the layer its pass drew it on a 320 × 240 plate inside the 396 × 240 tilt plate: with a Drop Shadow
+   *       (Distance 60, Angle 0) the card was cut at 319 again and leant to 280..291 (about 1000 of its 1756 red px: #3b's fault,
+   *       back), and its shadow, at 340..440, fell wholly off that plate, so none of its 382 leant px (301.5..308.2) drew.
+   *   (b) The plate grew to the layer's BOX plus 16 px, so what its own style throws further was cut there: an Outline & Shadows
+   *       Shadow 60 px to the right kept 340..396 and leant to 301.5..303.6 (126 of 382 px); a Glow of Radius 30 ended in a cut
+   *       where it was still about 70 of 255; and a layer wholly inside the frame got no growth at all, so whatever its shadow
+   *       threw past the frame edge was cut AT the frame and stayed cut when the lean swung it into view.
+   * tiltFxPad answers (b): how far past its box, per side and in project px, the layer's own style and effects throw its pixels
+   * OUTWARD. Only what is drawn on the plate the tilt leans counts (a pass that keeps the frame is cut there whatever the plate does),
+   * and every number is one this file already uses:
+   *   · Shadow: applyShadow's offset moves the copy, and its Blur reaches 3σ with σ taken as the whole Blur (the canvas spec's is
+   *     Blur / 2) — the 3σ border drawBlurredNoFilter pads a blur's working copy with.
+   *   · Glow and the CSS Gaussian Blur: 3σ a pass, σ = Radius × GLOW_SIGMA (measured against Chrome), Bloom's passes stacked.
+   *   · Outline on text or a shape: stroked on its own outline at twice its Size (Outside), so it reaches its Size past it, in the
+   *     layer's own units (× k, its scale).
+   *   · Drop Shadow: its kernel's own bound (#692, SKIP WHAT CANNOT HOLD A SHADOW): the box moved by (cos, sin)(Angle) × Distance
+   *     and grown by Smoothness × (Softness + 1) + 1 (the Spread's buffer), + 1 for the plate's rounding.
+   *   · the Outline effect in its Outside position (a clip's Outline, a group's Border, or one added from Effects): cropMarginFor,
+   *     the reach the cropped readback pads that kernel's buffer by, admitted against it at every setting's maximum
+   *     (tests/_692crop.html). Drop Shadow (but for Shadow only) and this are tiltOutFx: the kernels that follow a plate grown only
+   *     for what the layer throws (tiltFollowsFx).
+   *   · A Filter's own effects count as if they stood in its place.
+   * Nothing else counts: a kernel that works inward (Glow Inward, Inner Blur, Bevel) throws nothing past the layer, and the light
+   * glows' Glow past the edges and the other kernels that spread outward still end at the plate's edge, or at the frame when the
+   * plate grew only for something else (the next gap, if it is ever hit). Summed per side (an outline round a shadow reaches both).
+   * null when nothing reaches past the box: the plate is then exactly #3b's, and a layer inside the frame gets the very plate it
+   * always did. */
+  function tiltFxPad(l, t, k) {
+    let pl = 0, pt = 0, pr = 0, pb = 0;
+    const num = v => (typeof v === 'number' && isFinite(v)) ? v : 0;
+    const all = q => { if (q > 0) { pl += q; pt += q; pr += q; pb += q; } };
+    // a copy moved by (ox, oy) and spread by g: how far it reaches past the box on each side
+    const moved = (ox, oy, g) => { pl += Math.max(0, g - ox); pr += Math.max(0, g + ox); pt += Math.max(0, g - oy); pb += Math.max(0, g + oy); };
+    const sh = l.shadow;
+    if (sh && sh.enabled && (sh.alpha == null || num(FM.evalProp(sh.alpha, t)) > 0)) moved(num(FM.evalProp(sh.dx, t)), num(FM.evalProp(sh.dy, t)), 3 * Math.max(0, num(FM.evalProp(sh.blur, t))));
+    const stk = l.stroke;
+    if (stk && stk.enabled) {
+      const w = Math.max(0, num(FM.evalProp(stk.width, t)));
+      if (l.type === 'text' || l.type === 'shape') all(w * (k > 0 ? k : 1));
+      else if (l.type === 'group' && w > 0) all(cropMarginFor('stroke', { width: w }, t, 1));
+    }
+    const one = (e, inner) => {
+      if (!e || e.enabled === false) return;
+      const p = e.params || {}, ty = e.type;
+      if (ty === 'glow') {
+        const r = fparam(p, 'radius', 12, t), n = Math.max(1, Math.min(4, Math.round(num(p.passes == null ? 1 : FM.evalProp(p.passes, t)))));
+        all(3 * (isFinite(r) ? Math.max(0, r) : 12) * GLOW_SIGMA * n);
+      } else if (ty === 'blur') {
+        if (!blurPlate(e)) { const r = fparam(p, 'radius', 6, t); all(3 * (isFinite(r) ? Math.max(0, r) : 6) * GLOW_SIGMA); }
+      } else if (ty === 'dropshadow') {
+        const dd = Math.max(0, num(fparam(p, 'distance', 18, t))), a = num(fparam(p, 'angle', 135, t)) * Math.PI / 180;
+        const s = Math.max(0, Math.round(num(fparam(p, 'softness', 6, t))));
+        const n = Math.max(1, Math.min(3, Math.round(num(p.smooth == null ? 1 : FM.evalProp(p.smooth, t)))));
+        moved(Math.cos(a) * dd, Math.sin(a) * dd, n * (s + 1) + 2);
+      } else if (ty === 'stroke') {
+        if (tiltOutFx(e, t)) all(cropMarginFor('stroke', p, t, 1));
+      } else if (!inner && ty === FM.FX_CONTAINER && Array.isArray(e.effects)) {
+        e.effects.forEach(c => one(c, true));
+      }
+    };
+    const list = l._cueFx ? (l.effects || []) : effectiveFx(l, t);
+    for (let i = 0; i < list.length; i++) one(list[i], false);
+    return (pl + pt + pr + pb > 0) ? { l: pl, t: pt, r: pr, b: pb } : null;
+  }
+  // Two pads (tiltFxPad's shape, either may be null) added side by side
+  function padSum(a, b) { return !a ? b : !b ? a : { l: a.l + b.l, t: a.t + b.t, r: a.r + b.r, b: a.b + b.b }; }
   /* A group unit's members as far as they reach (each drawn one's tiltLayerReach, in project px), or null: none, or one copies the
-     backdrop (Copy / Magnify Background), whose backdrop is the frame's. */
+     backdrop (Copy / Magnify Background), whose backdrop is the frame's. 1176 leftover: `.pad`, when any member's style or effects
+     carry it past its box (tiltFxPad), is how far the union of those padded boxes reaches past the union of the boxes — kept apart
+     so the margin is still the boxes' own (reachMargin). */
   function unitReach(u, t, scene) {
-    let b = null, keep = false;
+    let b = null, q = null, keep = false;
     scene.layers.forEach(L => {
       if (keep || !u.memberIds.has(L.id) || L.type === 'group' || L.type === 'camera' || L.type === 'adjustment' || L.type === 'null') return;
       if (!FM.isLayerVisibleAt(L, t)) return;
       if (FM.hasCopyBg && FM.hasCopyBg(L)) { keep = true; return; }
       const r = tiltLayerReach(L, t, scene);
-      if (r) b = b ? { x0: Math.min(b.x0, r.x0), y0: Math.min(b.y0, r.y0), x1: Math.max(b.x1, r.x1), y1: Math.max(b.y1, r.y1) } : r;
+      if (r) {
+        b = b ? { x0: Math.min(b.x0, r.x0), y0: Math.min(b.y0, r.y0), x1: Math.max(b.x1, r.x1), y1: Math.max(b.y1, r.y1) } : r;
+        const d = tiltFxPad(L, t, r.k), e = d ? { x0: r.x0 - d.l, y0: r.y0 - d.t, x1: r.x1 + d.r, y1: r.y1 + d.b } : r;
+        q = q ? { x0: Math.min(q.x0, e.x0), y0: Math.min(q.y0, e.y0), x1: Math.max(q.x1, e.x1), y1: Math.max(q.y1, e.y1) } : e;
+      }
     });
-    return keep ? null : b;
+    if (keep) return null;
+    if (b && q && (q.x0 < b.x0 || q.y0 < b.y0 || q.x1 > b.x1 || q.y1 > b.y1)) b.pad = { l: b.x0 - q.x0, t: b.y0 - q.y0, r: q.x1 - b.x1, b: q.y1 - b.y1 };
+    return b;
   }
   // The margin a reach gets: 16 px, or a twentieth of its longer side
   function reachMargin(b) { return Math.max(16, 0.05 * Math.max(b.x1 - b.x0, b.y1 - b.y0)); }
+  /* ═══ 1176 leftover (c) — WHERE THE GROWTH STOPS, AND WHAT IS SAID WHEN IT DOES ═══════════════════════════════════════════════
+   * A plate past the frame is a real allocation, every frame: the tilt holds two at its size (A, B) and reads one back whole
+   * (getImageData), and an effect that follows it (tiltFollowsFx) holds two more. So the growth keeps two ceilings:
+   *   · 0.6 of the frame past each side — Squish's cost ceiling, the one this file already gives a plate past the frame: the plate
+   *     is then at most (1 + 2 × 0.6)² = 4.84 × the frame. For a 1080 × 1920 export that is 2376 × 4224 = 10.0 MP, 40 MB a buffer.
+   *   · TILT_PLATE_MAX_PX plate pixels in all, 4096 × 4096 = 16.8 MP: the largest canvas WebKit allocates on iOS. Past it the canvas
+   *     cannot be drawn at all and the whole layer would vanish, which is worse than any cut — and the per-side ceiling alone does not
+   *     keep under it: 4.84 × a 1440 × 2560 frame is 17.8 MP, × a 2160 × 3840 one 40.1 MP. Over it, the growth on every side is
+   *     scaled down by one factor until the plate fits; the frame's part is never given up.
+   * (Arithmetic on sizes, not timings: nothing here was run.) At either ceiling what lies further is cut at the plate's edge, and the
+   * cut is graceful: the pivot, R and the quad come from the layer's own box and the bbox where it really is (tiltPivot), so nothing
+   * that is kept moves — the far part simply ends there, as the off-frame part ended at the frame before #3b. It is counted in
+   * FM._tiltPlateStats (grown: plates grown, capped: plates a ceiling cut short, last: { by: 'side' | 'area', want, got — plate px
+   * left, top, right, bottom — W, H }). Nothing goes to the console: this runs every frame, and nothing in this file logs from the
+   * render loop. */
+  const TILT_PLATE_MAX_PX = 4096 * 4096;
+  const _tiltStats = { grown: 0, capped: 0, last: null };
+  FM._tiltPlateStats = _tiltStats;
+  // Does `box` itself (no pad, no margin) reach past the plate `np`? tiltPlateRegion's own test, with its half-pixel slack.
+  function tiltBoxPast(box, np) {
+    const e = 0.5 / np.ps;
+    return !(box.x0 >= np.OX - e && box.y0 >= np.OY - e && box.x1 <= np.OX + np.PWp + e && box.y1 <= np.OY + np.PHp + e);
+  }
   /* The plate `np` (nestedPlate's shape: ps, OX, OY, W, H, PWp, PHp) grown to take in `box` (project px) and `m` round it, or null
      when the box is already inside np (half a plate pixel's slack) or nothing would be added. Grown by whole plate pixels on each
-     side, at most 0.6 of the frame (PW × PH) past each. */
-  function tiltPlateRegion(box, m, np, PW, PH) {
+     side, at most 0.6 of the frame (PW × PH) past each. 1176 leftover: `pad` (tiltFxPad's shape, optional) widens the box by what
+     the layer's style and effects carry past it, on each side, before either test; absent, every number is #3b's. */
+  function tiltPlateRegion(box, m, np, PW, PH, pad) {
     if (!box || !np || !(np.ps > 0) || ![box.x0, box.y0, box.x1, box.y1, m, np.OX, np.OY, np.PWp, np.PHp].every(isFinite)) return null;
+    const q = (pad && [pad.l, pad.t, pad.r, pad.b].every(isFinite)) ? pad : null;
+    const x0 = q ? box.x0 - q.l : box.x0, y0 = q ? box.y0 - q.t : box.y0, x1 = q ? box.x1 + q.r : box.x1, y1 = q ? box.y1 + q.b : box.y1;
     const ps = np.ps, e = 0.5 / ps, ex = np.OX + np.PWp, ey = np.OY + np.PHp;
-    if (box.x0 >= np.OX - e && box.y0 >= np.OY - e && box.x1 <= ex + e && box.y1 <= ey + e) return null;
+    if (x0 >= np.OX - e && y0 >= np.OY - e && x1 <= ex + e && y1 <= ey + e) return null;
     const px = (v, c) => Math.max(0, Math.ceil(Math.max(0, Math.min(c, v)) * ps - 1e-6));
-    const L = px(np.OX - (box.x0 - m), 0.6 * PW), T = px(np.OY - (box.y0 - m), 0.6 * PH);
-    const R = px(box.x1 + m - ex, 0.6 * PW), B = px(box.y1 + m - ey, 0.6 * PH);
+    const vL = np.OX - (x0 - m), vT = np.OY - (y0 - m), vR = x1 + m - ex, vB = y1 + m - ey;
+    let L = px(vL, 0.6 * PW), T = px(vT, 0.6 * PH);
+    let R = px(vR, 0.6 * PW), B = px(vB, 0.6 * PH);
     if (!(L + T + R + B > 0)) return null;
+    // (c): what each side asked for, uncapped, so a cut can be counted
+    const want = [vL, vT, vR, vB].map(v => Math.max(0, Math.ceil(Math.max(0, v) * ps - 1e-6)));
+    let by = (L < want[0] || T < want[1] || R < want[2] || B < want[3]) ? 'side' : '';
+    if ((np.W + L + R) * (np.H + T + B) > TILT_PLATE_MAX_PX) {
+      // (W + k·gx)(H + k·gy) ≤ max: the larger root of a k² + b k + c = 0 (c < 0 unless the frame alone is over it: then no growth)
+      const gx = L + R, gy = T + B, a = gx * gy, b = np.W * gy + np.H * gx, c = np.W * np.H - TILT_PLATE_MAX_PX;
+      let k = 0;
+      if (c < 0) k = a > 0 ? (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a) : -c / b;
+      k = isFinite(k) ? Math.max(0, Math.min(1, k)) : 0;
+      L = Math.floor(L * k); T = Math.floor(T * k); R = Math.floor(R * k); B = Math.floor(B * k);
+      by = 'area';
+    }
+    if (by) { _tiltStats.capped++; _tiltStats.last = { by: by, want: want, got: [L, T, R, B], W: np.W + L + R, H: np.H + T + B }; }
+    if (!(L + T + R + B > 0)) return null;
+    _tiltStats.grown++;
     const W = np.W + L + R, H = np.H + T + B;
     return { ps: ps, OX: np.OX - L / ps, OY: np.OY - T / ps, W: W, H: H, PWp: W / ps, PHp: H / ps };
   }
@@ -17411,14 +17573,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _np0 = nestedPlate(ctx, proj);
     /* bughunt4 #3b: …and as far as the layer reaches, when that is further (tiltPlateRegion). A group's flattened unit says how far
        its own plate reaches (_canvasX.., set when that plate is not the frame); a Copy / Magnify Background layer keeps the frame. */
-    let _rch = null, _rm = 0;
+    /* 1176 leftover: …and as far as its own Shadow, Glow, Outline and effects carry it (tiltFxPad). A group's proxy has none to add
+       here: buildGroupUnit has already grown its unit for the members' and the group's own (unitReach's pad). */
+    let _rch = null, _rm = 0, _pad = null;
     if (layer.type === '_flat') {
       if (typeof layer._canvasX === 'number' && typeof layer._canvasY === 'number') _rch = { x0: layer._canvasX, y0: layer._canvasY, x1: layer._canvasX + (layer._canvasW || 0), y1: layer._canvasY + (layer._canvasH || 0) };
     } else if (!(FM.hasCopyBg && FM.hasCopyBg(layer))) {
       _rch = tiltLayerReach(layer, t, scene);
-      if (_rch) _rm = reachMargin(_rch);
+      if (_rch) { _rm = reachMargin(_rch); _pad = tiltFxPad(layer, t, _rch.k); }
     }
-    const _ext = _rch ? tiltPlateRegion(_rch, _rm, _np0, PW, PH) : null;
+    const _ext = _rch ? tiltPlateRegion(_rch, _rm, _np0, PW, PH, _pad) : null;
     const _np = _ext || _np0, ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _t3Depth++;
@@ -17429,6 +17593,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (_t3B.width !== W || _t3B.height !== H) { _t3B.width = W; _t3B.height = H; }
     _t3A.__fmRS = ps; _t3A.__fmOX = OX; _t3A.__fmOY = OY;   // the nested drawLayer renders through baseT
     _t3A.__fmCamExt = !!_ext;   /* bughunt4 #3b: a grown plate is marked, so a pass nested in it with geometry of its own keeps the frame (nestedPlate) */
+    /* 1176 leftover (a): …and a layer-relative kernel may follow it out (tiltFollowsFx): level 2 when the layer's own box reaches past
+       the frame, 1 when only what it throws does. A group's proxy takes its unit's level (the unit is this plate's box): 1 when the
+       unit grew only for what its members throw, else 2. */
+    _t3A.__fmTiltExt = !_ext ? 0 : layer.type === '_flat' ? ((layer._canvas && layer._canvas.__fmTiltExt === 1) ? 1 : 2) : (tiltBoxPast(_rch, _np0) ? 2 : 1);
     const actx = _t3A.getContext('2d');
     baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -20534,6 +20702,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (_fogA.width !== FW || _fogA.height !== FH) { _fogA.width = FW; _fogA.height = FH; }
     if (ext) { _fogA.__fmRS = ctx.canvas.__fmRS || 1; _fogA.__fmOX = ctx.canvas.__fmOX || 0; _fogA.__fmOY = ctx.canvas.__fmOY || 0; _fogA.__fmCamExt = true; }
     else { _fogA.__fmRS = undefined; _fogA.__fmOX = undefined; _fogA.__fmOY = undefined; _fogA.__fmCamExt = false; }   // the unstamped frame-sized plate it always was
+    _fogA.__fmTiltExt = ext ? (ctx.canvas.__fmTiltExt || 0) : 0;   // 1176 leftover (tiltFollowsFx)
     const a = _fogA.getContext('2d');
     if (ext) { a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, FW, FH); }
     baseT(a); a.clearRect(0, 0, W, H);
@@ -20572,7 +20741,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     try {
       const P = _dfPool[d] || (_dfPool[d] = document.createElement('canvas'));
       if (P.width !== W || P.height !== H) { P.width = W; P.height = H; }
-      P.__fmRS = cv.__fmRS; P.__fmOX = cv.__fmOX; P.__fmOY = cv.__fmOY; P.__fmCamExt = cv.__fmCamExt;
+      P.__fmRS = cv.__fmRS; P.__fmOX = cv.__fmOX; P.__fmOY = cv.__fmOY; P.__fmCamExt = cv.__fmCamExt; P.__fmTiltExt = cv.__fmTiltExt;   // 1176 leftover (tiltFollowsFx)
       const a = P.getContext('2d');
       a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, W, H);
       a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
@@ -23168,6 +23337,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     _manualCv.__fmRS = ctx.canvas.__fmRS || 1;
     _manualCv.__fmOX = ctx.canvas.__fmOX || 0; _manualCv.__fmOY = ctx.canvas.__fmOY || 0;
     _manualCv.__fmCamExt = !!ctx.canvas.__fmCamExt;   // a copy of a camera plate that reaches past the frame is one too (see nestedPlate)
+    _manualCv.__fmTiltExt = ctx.canvas.__fmTiltExt || 0;   // …and of a tilt plate past the frame (1176 leftover, tiltFollowsFx)
     const mc = _manualCv.getContext('2d', { willReadFrequently: true });
     mc.setTransform(1, 0, 0, 1, 0, 0); mc.clearRect(0, 0, cw, ch);
     baseT(mc);
@@ -23237,6 +23407,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (F.width !== cw || F.height !== ch) { F.width = cw; F.height = ch; }   // cleared below
       F.__fmRS = ctx.canvas.__fmRS; F.__fmOX = ctx.canvas.__fmOX; F.__fmOY = ctx.canvas.__fmOY;   // the TARGET's grid, so the layer rasterises exactly as it would have on it
       F.__fmCamExt = !!ctx.canvas.__fmCamExt;
+      F.__fmTiltExt = ctx.canvas.__fmTiltExt || 0;   // 1176 leftover (tiltFollowsFx)
       const pc = F.getContext('2d');
       pc.setTransform(1, 0, 0, 1, 0, 0);
       pc.globalAlpha = 1; pc.globalCompositeOperation = 'source-over'; pc.filter = 'none';
@@ -23356,6 +23527,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (_blendMaskCv.width !== _bw || _blendMaskCv.height !== _bh) { _blendMaskCv.width = _bw; _blendMaskCv.height = _bh; }
       _blendMaskCv.__fmRS = _bps; _blendMaskCv.__fmOX = _bext ? (ctx.canvas.__fmOX || 0) : 0; _blendMaskCv.__fmOY = _bext ? (ctx.canvas.__fmOY || 0) : 0;
       _blendMaskCv.__fmCamExt = _bext;
+      _blendMaskCv.__fmTiltExt = _bext ? (ctx.canvas.__fmTiltExt || 0) : 0;   // 1176 leftover (tiltFollowsFx)
       const mc = _blendMaskCv.getContext('2d');
       if (_bext) { mc.setTransform(1, 0, 0, 1, 0, 0); mc.clearRect(0, 0, _bw, _bh); }
       baseT(mc); mc.clearRect(0, 0, P.width, P.height);
@@ -28751,11 +28923,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let R = ctx.canvas.__fmCamExt ? nestedPlate(ctx, P, true) : null;
     /* bughunt4 #3b: a group that tilts is leant as this one picture (draw3DTiltLayer), and a lean swings what hung past the frame into
        view, so the unit also covers as far as its members reach (unitReach, tiltPlateRegion) and is marked like the camera's (above). */
+    /* 1176 leftover: …and as far as the members' own Shadow, Glow, Outline and effects carry them (unitReach's pad), plus the group's
+       own (its Shadow, effects and Border, drawn on the proxy in the plate that leans it, which is this unit's box). A unit grown here
+       is marked __fmTiltExt too, so a member's layer-relative effect follows it out (tiltFollowsFx); one grown for a camera is not. */
+    let _tg = 0;
     if (u.group && groupTilts(u.group, t)) {
       const reach = unitReach(u, t, scene);
       const base = R || { ps: ps, OX: 0, OY: 0, W: Math.max(1, Math.round(P.width * ps)), H: Math.max(1, Math.round(P.height * ps)), PWp: P.width, PHp: P.height };
-      const grown = reach ? tiltPlateRegion(reach, reachMargin(reach), base, P.width, P.height) : null;
-      if (grown) R = grown;
+      const grown = reach ? tiltPlateRegion(reach, reachMargin(reach), base, P.width, P.height, padSum(reach.pad || null, tiltFxPad(u.group, t, 1))) : null;
+      if (grown) { R = grown; _tg = tiltBoxPast(reach, base) ? 2 : 1; }   // why it grew: tiltFollowsFx
     }
     const RX = R ? R.OX : 0, RY = R ? R.OY : 0, RW = R ? R.PWp : P.width, RH = R ? R.PHp : P.height;
     const GW = R ? R.W : Math.max(1, Math.round(P.width * ps)), GH = R ? R.H : Math.max(1, Math.round(P.height * ps));
@@ -28766,6 +28942,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     _mgA.__fmRS = ps; _mgA.__fmOX = RX; _mgA.__fmOY = RY;
     _mgB.__fmRS = ps; _mgB.__fmOX = RX; _mgB.__fmOY = RY;
     _mgA.__fmCamExt = _mgB.__fmCamExt = !!R;
+    _mgA.__fmTiltExt = _mgB.__fmTiltExt = R ? Math.max(_tg, ctx.canvas.__fmTiltExt || 0) : 0;   // a unit nested in a tilt plate follows it, as above
     const a = _mgA.getContext('2d');
     if (R) { a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, GW, GH); }
     baseT(a); a.clearRect(0, 0, P.width, P.height);

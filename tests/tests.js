@@ -166527,6 +166527,187 @@
     });
   });
 
+  /* (1176 leftover) A LEANT LAYER LOST WHAT ITS SHADOW AND GLOW THREW PAST THE FRAME. bughunt4 #3b (aaed5321, v17.84) grew the plate a
+     tilt leans to the layer's BOX plus a 16 px margin (compositor.js tiltPlateRegion) and left two gaps:
+       · every pixel effect inside the grown plate still got the FRAME: the plate is marked __fmCamExt and nestedPlate hands an unwrapped
+         pass inside such a plate the frame, so the effect's pass drew the layer on a frame-sized plate and cut it there;
+       · a Shadow or Glow reaching further than the margin was cut at the plate's edge, and a layer inside the frame got no growth at all.
+     Now tiltFxPad widens the reach by what the layer's own style and effects carry past its box, and a kernel admitted to the cropped
+     readback (tiltFollowsFx) follows the grown plate out instead of taking the frame.
+     The fixture is #3b's: a red 100 × 100 square hinged on its left edge (anchorX 0) at x 280, rows 70..169, hanging off the right edge
+     of a 320 × 240 frame, leant 70° about Y (pivot 280, R 50). Flat x 280 + 50u lands 58.24 u / (3.405 + u) px from the hinge (renderMesh),
+     so its far edge (u 2) leans to 301.5 and a point 60 px past it (440, u 3.2) to 308.2: a green copy of the square 60 px to the right
+     shows as a strip 301.5..308.2 beside the card, about 382 px (its area, worked out, not measured).
+     Every case is drawn on the 320 frame and on a 640 × 240 frame wide enough to hold the layer and all it throws. Both plates start at
+     the same corner, so the plate pixels, the alpha bbox (stride 2 from 0) and the mesh are the same, and the first 320 columns must match.
+       (a) Drop Shadow, Distance 60, Angle 0 (to the right), Softness 0, green.
+       (b) Outline & Shadows Shadow, 60 px right, Blur 0, green; and a Glow, Radius 30, green (σ = Radius, GLOW_SIGMA).
+       (d) A group with its anchor on its box's left edge, holding the square (at x 330, default anchor) with the Drop Shadow, leant the same.
+       (c) At the cap: a Drop Shadow of Distance 300 would need the plate 379 px past the right edge. It stops at 0.6 of the frame (192 px),
+           the shadow (which would lean to about 317..320) is cut there, the card stays whole and FM._tiltPlateStats counts the cut.
+     FAILS BEFORE THE FIX: (a) the Drop Shadow's pass drew the square on a 320-wide plate inside the 396-wide tilt plate: the card ends at
+     about 291 again (about 1000 red px, not 1756) and no green draws at all, 255 levels off the 640 frame. (b) the Shadow is cut at 396,
+     16 px past the box: its strip ends at 303.6 (about 126 green px of 382); the Glow is cut there too, where it is still about 70 of 255,
+     so past column 305 the 320 frame has no glow where the 640 frame keeps about 3,500 levels of green (the halo's tail 28..58 px past the
+     box, Φ(−d / 30), times the lean's area scale, about 0.055). (d) as (a), one step earlier: the member's pass was frame-sized inside
+     the group's unit. (c) FM._tiltPlateStats does not exist.
+     CONTROL: untilted at x 100 the Drop Shadow and the Shadow each show 6000 green px (60 × 100, pixel-aligned) and the Glow a halo of
+     over 2000 px, so each draws as worked out; leant inside the frame with no effect the square leans to about 100..121.5 and its plate
+     does not grow (FM._tiltPlateStats.grown stands still), and with a Drop Shadow that stays inside the frame (Distance 10) it draws as on
+     the 640 frame without growing either — the identical old plate; on the 640 frame each case's card leans to about 280..301.5, the
+     hard shadows end at about 308 with 250..520 green px and the glow keeps over 300 levels past column 305, so the fixture is the one
+     worked out above, on both commits (on the 640 frame nothing needs to grow).
+     TOL, reasoned since nothing was run: 3 levels between the 320 and 640 frames and between the group and the single layer (the same
+     plate pixels, bbox and mesh; the glow's plate grows 36 px up and down on both frames alike, an even number of rows, so the bbox's
+     stride lands on the same rows; float32 jitter moves a triangle's coverage by under a level); 120 px of the untilted 6000; at the cap
+     1 column and 2 % of the red against the 640 frame's card (its bbox no longer holds the shadow, so its mesh differs by under 0.1 px).
+     The faults are 255 levels, 256 and 382 green px, about 750 red px and about 3,500 levels of glow. */
+  test('1176 leftover: a leant layer keeps the shadow and glow it throws past the frame: a square hinged on its left edge and hanging off the frame’s right edge, leant 70° about Y, with a Drop Shadow, an Outline & Shadows Shadow or a Glow reaching past it, draws exactly as on a frame wide enough to hold it all, a leant group holding it draws the same, and at the cap the far part is cut, the card stays whole and the cut is counted (CONTROLS: untilted each draws its shadow or glow; inside the frame a leant square with no effect, or with a shadow that stays inside, keeps the plate it always had)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5;
+      FM.time = T;
+      const square = (name, x, ax, parent) => {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 120, shapeW: 100, shapeH: 100, fill: '#ff0000', start: 0, duration: 4 });
+        L.start = 0; L.duration = 4;
+        if (ax != null) L.transform.anchorX = ax;
+        if (parent) L.parent = parent;
+        return L;
+      };
+      const grp = (name, ax) => {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        if (ax != null) g.transform.anchorX = ax;
+        return g;
+      };
+      const DROP = (dist) => ({ type: 'dropshadow', enabled: true, params: { distance: dist, angle: 0, softness: 0, color: '#00ff00' } });
+      const SHADOW = () => ({ enabled: true, color: '#00ff00', alpha: 100, dx: 60, dy: 0, blur: 0 });
+      const GLOW = () => ({ type: 'glow', enabled: true, params: { radius: 30, passes: 1, strength: 100, color: '#00ff00' } });
+      /* The scene's layers drawn at T on a W × 240 frame (black), as _bh2Frame draws its 320 × 240 one. */
+      const render = (W) => {
+        const c = offscreen(W, 240), ctx = c.getContext('2d', { willReadFrequently: true });
+        const sc = { project: { width: W, height: 240, fps: 30, duration: 5, background: '#000000' }, layers: FM.scene.layers, selectedId: null, selectedIds: [] };
+        FM.renderScene(ctx, sc, T);
+        return { W: W, d: ctx.getImageData(0, 0, W, 240).data };
+      };
+      /* Over the first 320 columns: red and green pixels (count, first and last column), the glow's pixels, and the green summed past column 305. */
+      const look = (f) => {
+        const o = { red: 0, rx0: -1, rx1: -1, green: 0, gx0: -1, gx1: -1, glowPx: 0, glow: 0 };
+        for (let y = 0; y < 240; y++) {
+          for (let x = 0; x < 320; x++) {
+            const i = (y * f.W + x) * 4, r = f.d[i], g = f.d[i + 1], b = f.d[i + 2];
+            if (r > 180 && g < 70 && b < 70) { o.red++; if (o.rx0 < 0 || x < o.rx0) o.rx0 = x; if (x > o.rx1) o.rx1 = x; }
+            else if (g > 180 && r < 70 && b < 70) { o.green++; if (o.gx0 < 0 || x < o.gx0) o.gx0 = x; if (x > o.gx1) o.gx1 = x; }
+            if (r < 70 && b < 70 && g > 20) o.glowPx++;
+            if (x >= 305 && r < 70) o.glow += g;
+          }
+        }
+        return o;
+      };
+      const say = o => o.red + ' red px at columns ' + o.rx0 + '..' + o.rx1 + ', ' + o.green + ' green px at ' + o.gx0 + '..' + o.gx1 + ', ' + o.glow + ' levels of green past column 305';
+      /* The largest difference, in levels, between two frames over their first 320 columns. */
+      const diff = (a, b) => {
+        let m = 0;
+        for (let y = 0; y < 240; y++) {
+          for (let x = 0; x < 320; x++) {
+            for (let c = 0; c < 4; c++) { const q = Math.abs(a.d[(y * a.W + x) * 4 + c] - b.d[(y * b.W + x) * 4 + c]); if (q > m) m = q; }
+          }
+        }
+        return m;
+      };
+      const grown = () => (FM._tiltPlateStats ? FM._tiltPlateStats.grown : 0);
+      const bad = [];
+
+      /* ── CONTROLS: untilted at x 100 the Drop Shadow and the Shadow each show 60 × 100 green px beside the square, and the Glow a halo. */
+      const U1 = square('1176 untilted, Drop Shadow', 100, 0, null);
+      U1.effects = [DROP(60)];
+      FM.scene.layers = [U1];
+      const u1 = look(render(320));
+      if (Math.abs(u1.green - 6000) > 120) throw new Error('CONTROL: untilted at x 100 with a Drop Shadow 60 px to the right the square shows ' + say(u1) + ', not 6000 green px (60 × 100) — the Drop Shadow does not draw as worked out above');
+      const U2 = square('1176 untilted, Shadow', 100, 0, null);
+      U2.shadow = SHADOW();
+      FM.scene.layers = [U2];
+      const u2 = look(render(320));
+      if (Math.abs(u2.green - 6000) > 120) throw new Error('CONTROL: untilted at x 100 with an Outline & Shadows Shadow 60 px to the right the square shows ' + say(u2) + ', not 6000 green px (60 × 100) — the Shadow does not draw as worked out above');
+      const U3 = square('1176 untilted, Glow', 100, 0, null);
+      U3.effects = [GLOW()];
+      FM.scene.layers = [U3];
+      const u3 = look(render(320));
+      if (u3.glowPx < 2000) throw new Error('CONTROL: untilted at x 100 with a green Glow of Radius 30 the square shows ' + u3.glowPx + ' glow px, not a halo of over 2000 — the Glow does not draw');
+
+      /* ── CONTROLS: leant inside the frame with no effect, and with a Drop Shadow that stays inside, the square keeps the plate it always had. */
+      const C1 = square('1176 hinged square in the frame', 100, 0, null);
+      C1.transform.rotationY = 70;
+      FM.scene.layers = [C1];
+      let g0 = grown();
+      const c1 = look(render(320));
+      if (c1.red < 1000 || c1.rx1 - c1.rx0 + 1 > 30 || Math.abs(c1.rx0 - 100) > 1 || Math.abs(c1.rx1 + 1 - 121.5) > 2) throw new Error('CONTROL: hinged on its left edge at x 100 and leant 70° about Y, the square is ' + say(c1) + ', not about 100..121.5 — the fixture is not the one worked out above');
+      if (grown() !== g0) bad.push('CONTROL: leant inside the frame with no effect, the square’s plate grew (FM._tiltPlateStats.grown ' + g0 + ' → ' + grown() + ') — it must get the very plate it always had');
+      const C2 = square('1176 hinged square in the frame, a Drop Shadow that stays inside', 100, 0, null);
+      C2.transform.rotationY = 70;
+      C2.effects = [DROP(10)];
+      FM.scene.layers = [C2];
+      g0 = grown();
+      const c2s = render(320), c2w = render(640), m2 = diff(c2s, c2w);
+      if (grown() !== g0) bad.push('CONTROL: leant inside the frame with a Drop Shadow 10 px to the right, which stays inside the frame, the square’s plate grew (FM._tiltPlateStats.grown ' + g0 + ' → ' + grown() + ')');
+      if (m2 > 3) bad.push('CONTROL: leant inside the frame with a Drop Shadow that stays inside, the square draws ' + say(look(c2s)) + ' on the 320 frame and ' + say(look(c2w)) + ' on the 640 one (up to ' + m2 + ' levels apart)');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* Each case: the square hanging off the frame edge, leant, on the 320 and the 640 frame. */
+      const run = (L) => {
+        FM.scene.layers = [L];
+        const s = render(320), w = render(640);
+        return { s: s, w: w, ls: look(s), lw: look(w), m: diff(s, w) };
+      };
+      const hanging = (what) => { const L = square('1176 hinged square off the frame edge, ' + what, 280, 0, null); L.transform.rotationY = 70; return L; };
+      const card = o => Math.abs(o.rx0 - 280) <= 1 && Math.abs(o.rx1 + 1 - 301.5) <= 2;
+      const strip = o => o.green >= 250 && o.green <= 520 && Math.abs(o.gx1 + 1 - 308.2) <= 2;
+
+      /* ── (a) a Drop Shadow. */
+      const HA = hanging('Drop Shadow');
+      HA.effects = [DROP(60)];
+      const A = run(HA);
+      if (!card(A.lw) || !strip(A.lw)) throw new Error('CONTROL: on the 640 frame the leant square with a Drop Shadow 60 px to the right is ' + say(A.lw) + ', not its card at about 280..301.5 and a green strip to about 308 of about 380 px — the fixture is not the one worked out above');
+      if (A.m > 3) bad.push('(a) leant 70° about Y with a Drop Shadow 60 px to the right, the square hanging off the frame’s right edge draws ' + say(A.ls) + ' on the 320 frame and ' + say(A.lw) + ' on the 640 one (up to ' + A.m + ' levels apart)' + (A.ls.green === 0 && Math.abs(A.ls.rx1 + 1 - 291.1) <= 2 ? ' — the Drop Shadow’s pass drew it on a frame-sized plate inside the tilt plate, so the card is cut at the frame again and its shadow fell off that plate' : ''));
+
+      /* ── (b) an Outline & Shadows Shadow, and a Glow. */
+      const HB = hanging('Shadow');
+      HB.shadow = SHADOW();
+      const B1 = run(HB);
+      if (!card(B1.lw) || !strip(B1.lw)) throw new Error('CONTROL: on the 640 frame the leant square with an Outline & Shadows Shadow 60 px to the right is ' + say(B1.lw) + ', not its card at about 280..301.5 and a green strip to about 308 of about 380 px — the fixture is not the one worked out above');
+      if (B1.m > 3) bad.push('(b) leant 70° about Y with an Outline & Shadows Shadow 60 px to the right, the square hanging off the frame’s right edge draws ' + say(B1.ls) + ' on the 320 frame and ' + say(B1.lw) + ' on the 640 one (up to ' + B1.m + ' levels apart)' + (Math.abs(B1.ls.gx1 + 1 - 303.6) <= 1.5 ? ' — the Shadow was cut at the plate’s edge, 16 px past the square' : ''));
+      const HG = hanging('Glow');
+      HG.effects = [GLOW()];
+      const B2 = run(HG);
+      if (!card(B2.lw) || B2.lw.glow < 300) throw new Error('CONTROL: on the 640 frame the leant square with a green Glow of Radius 30 is ' + say(B2.lw) + ', not its card at about 280..301.5 with over 300 levels of glow past column 305 — the fixture is not the one worked out above');
+      if (B2.m > 3 || Math.abs(B2.ls.glow - B2.lw.glow) > 0.1 * B2.lw.glow) bad.push('(b) leant 70° about Y with a green Glow of Radius 30, the square hanging off the frame’s right edge draws ' + say(B2.ls) + ' on the 320 frame and ' + say(B2.lw) + ' on the 640 one (up to ' + B2.m + ' levels apart)' + (B2.ls.glow < 0.1 * B2.lw.glow ? ' — the Glow was cut at the plate’s edge, 16 px past the square' : ''));
+
+      /* ── (d) a leant group holding the square with the Drop Shadow draws as (a) does on the 640 frame. */
+      const G = grp('1176 hinged group off the frame edge', 0);
+      G.transform.rotationY = 70;
+      const GM = square('1176 red in the hinged group, with a Drop Shadow', 330, null, G.id);
+      GM.effects = [DROP(60)];
+      FM.scene.layers = [G, GM];
+      const fd = render(320), ld = look(fd), md = diff(fd, A.w);
+      if (md > 3) bad.push('(d) a group with its anchor on its box’s left edge, holding the square at x 330 with a Drop Shadow 60 px to the right, leant 70° about Y, draws ' + say(ld) + ' where the single square draws ' + say(A.lw) + ' on the 640 frame (up to ' + md + ' levels apart)' + (ld.green === 0 && Math.abs(ld.rx1 + 1 - 291.1) <= 2 ? ' — the member’s Drop Shadow pass was frame-sized inside the group’s unit' : ''));
+
+      /* ── (c) at the cap: the shadow past 0.6 of the frame is cut, the card is whole, and the cut is counted. */
+      const HC = hanging('Drop Shadow of Distance 300');
+      HC.effects = [DROP(300)];
+      FM.scene.layers = [HC];
+      const st = FM._tiltPlateStats;
+      if (!st || typeof st.capped !== 'number') bad.push('(c) FM._tiltPlateStats does not exist — nothing counts where the growth stops');
+      else {
+        const k0 = st.capped;
+        const lc = look(render(320)), last = st.last;
+        if (!(st.capped > k0) || !last || last.by !== 'side' || !Array.isArray(last.want) || !Array.isArray(last.got) || !(last.want[2] > last.got[2]) || last.got[2] !== 192) bad.push('(c) a Drop Shadow of Distance 300 on the leant square needs the plate 379 px past the frame’s right edge, but FM._tiltPlateStats says capped ' + k0 + ' → ' + st.capped + ', last ' + JSON.stringify(last) + ' — not one cut by the per-side ceiling, 192 px (0.6 of the frame) of the 379 asked for');
+        if (Math.abs(lc.rx0 - A.lw.rx0) > 1 || Math.abs(lc.rx1 - A.lw.rx1) > 1 || Math.abs(lc.red - A.lw.red) > Math.max(10, 0.02 * A.lw.red)) bad.push('(c) at the cap the leant card is ' + say(lc) + ', not whole as on the 640 frame (' + say(A.lw) + ')');
+        if (lc.green !== 0) bad.push('(c) at the cap ' + lc.green + ' green px still drew, though the shadow lies wholly past the 192 px the plate may grow');
+      }
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#1b) THE EDITOR STILL HANDLED A MEMBER WITH THE OLD CHAIN. bughunt4 #1 (cedde93f) made a group's Flip, unlinked Width / Height,
      Skew, depth and link mode reach its members when they are DRAWN (compositor.js applyParentChain), but canvas-edit's parentXform —
      the walk behind a member's selection box, the tap that keeps or drops its selection, the drag and the handles — still composed only
