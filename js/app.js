@@ -5112,12 +5112,24 @@ window.FM = window.FM || {};
         const spL = ramped ? FM.speedAt(layer, layer.start + delta) : sp;   // still needed to re-solve a clamped delta
         let srcD = FM.headSourceDelta ? FM.headSourceDelta(layer, delta) : delta * spL;
         if (layer.type === 'video' && (layer.trimStart || 0) + srcD < 0) {
-          delta = -(layer.trimStart || 0) / spL;                            // approximate re-solve, then re-integrate exactly
+          /* bughunt8 #6: RE-SOLVED ON THE CURVE, as the left grip does (timeline.js). This divided by the speed AT the head he asked
+             for, which is not the speed over the span the head really travels: with ramp keys at 10 s (0.5x) and 20 s (4x), a clip
+             10..20 trimmed in to 15 and extended to a playhead at 2 used 0.5x for source played at up to 2.25x, landed its head at
+             1.25 s and wrote trimStart -4.375 (a frozen head, and the next Undo of anything clamped it to 0 and moved every frame).
+             The source consumed only grows as the head goes back, so bisect for the head that uses exactly what is left before
+             trimStart; a flat speed keeps the exact division. And trimStart is never written below 0, as the grip writes it. */
+          const tr = layer.trimStart || 0;
+          if (!ramped || !FM.speedAdvanceOver) delta = -tr / spL;
+          else {
+            let lo = delta, hi = 0;
+            for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (FM.speedAdvanceOver(layer, mid, 0) > tr) lo = mid; else hi = mid; }
+            delta = hi;
+          }
           srcD = FM.headSourceDelta ? FM.headSourceDelta(layer, delta) : delta * spL;
         }
         layer.start = layer.start + delta;
         layer.duration = layer.duration - delta;
-        if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + srcD;
+        if (layer.type === 'video') layer.trimStart = Math.max(0, (layer.trimStart || 0) + srcD);
       }
     }
     // belt-and-braces: a non-finite number must NEVER reach the scene — it cascades into every layout

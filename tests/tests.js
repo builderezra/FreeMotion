@@ -174167,4 +174167,62 @@
       if (bad.length) throw new Error(bad.join(' · '));
     });
   });
+
+  /* ═══ bughunt8 #6: EXTEND ON A FORWARD SPEED-RAMPED CLIP WROTE A NEGATIVE trimStart ══════════════════════════════════════════════
+     What was wrong. js/app.js FM.extendClipTo (the rail's and the key's extend to playhead), forward head branch: when the pull ran
+     off the start of the source it re-solved the head as −trimStart / speedAt(the head he asked for), the speed at ONE point, not
+     over the span the head really travels, and wrote trimStart + (the source that span consumes) unclamped. AU1 / #1107 fixed the
+     reversed branch only; the left grip (js/timeline.js) bisects on the curve and clamps at 0. The refuter's path: ramp keys at 10 s
+     (0.5x) and 20 s (4x), linear, on a video clip 10..20 with trimStart 0; the head trimmed in to 15 (trimStart becomes the source
+     10..15 consumed, 0.5·5 + 0.35·5²/2 = 6.875 s); then Extend with the playhead at 2. The speed at 2 is 0.5 (held before the first
+     key), so the re-solve took the head to 15 − 6.875 / 0.5 = 1.25, and the source 1.25..15 consumes is 0.5·8.75 + 6.875 = 11.25 s:
+     trimStart −4.375, a head that asks for source before the file (frozen picture), and the next Undo of anything clamped it to 0
+     and moved every frame. Now it bisects as the grip does: the head stops where the source runs out, at 10 (the source 10..15 is
+     exactly the 6.875 s before trimStart), and trimStart is never below 0.
+     FAILS BEFORE THE FIX: trimStart −4.375 and the head at 1.25 s, before 10.
+     CONTROLS, which hold before and after: the head trim really wrote 6.875; a flat 2x clip 15..20 with trimStart 6 extended to 2
+     stops at 12 with trimStart 0 and its end at 20 (the exact division); on the same ramp, an Extend to 12 that does not run out
+     takes 5.175 s of source (0.5·3 + 0.35·(5² − 2²)/2) and leaves trimStart 1.7, the head at 12. Every clip keeps its end at 20.
+     TOLERANCE, reasoned (not measured: code-only session): the integral is FM.layerSourceAdvance's float32 trapezoid table at
+     120 Hz, exact on each straight piece of the ramp and off by at most 0.35·(1/120)²/8 ≈ 3e-6 s across the key at 10, with float32
+     holding about 7 digits of 7 s; 30 halvings of a 13.75 s bracket leave 1.3e-8 s. So about 1e-5 s at worst; the faults are 4.375 s
+     and 8.75 s. 1e-3 s sits between. The flat case is a single exact division: 1e-9. */
+  test('bughunt8 #6 Extend on a forward speed-ramped clip stops where its source runs out: a clip on a 0.5x to 4x ramp, trimmed in to 15 s and extended to a playhead at 2 s, keeps trimStart at 0 or above with its head at 10 s, never before the start of its source (CONTROLS: a flat clip extends as before; an Extend that does not run out is unchanged)', { item: '1176' }, function () {
+    if (typeof FM.extendClipTo !== 'function' || typeof FM.headSourceDelta !== 'function' || typeof FM.layerLocalTime !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.extendClipTo / headSourceDelta / layerLocalTime / makeLayer is not reachable');
+    const TOL = 1e-3, EX = 1e-9, bad = [];
+    const clip = function (name, speed) {
+      const L = FM.makeLayer('video', { name: name, start: 10, duration: 10 });
+      L.start = 10; L.duration = 10; L.trimStart = 0; L.reversed = false;
+      L.speed = speed;
+      return L;
+    };
+    const ramp = function () { return { kf: [{ t: 10, v: 0.5, e: 'linear' }, { t: 20, v: 4, e: 'linear' }] }; };
+    const say = function (L) { return 'start ' + (+L.start).toFixed(4) + ', duration ' + (+L.duration).toFixed(4) + ', trimStart ' + (+L.trimStart).toFixed(4); };
+
+    /* the refuter's path */
+    const A = clip('bh8 #6 ramped clip', ramp());
+    const head = FM.headSourceDelta(A, 5);
+    if (!(Math.abs(head - 6.875) <= TOL)) throw new Error('CONTROL: trimming the ramped clip’s head in by 5 s consumes ' + head + ' s of source, not 6.875 — the ramp is not the one worked out above');
+    A.start = 15; A.duration = 5; A.trimStart = head;
+    FM.extendClipTo(A, 2);
+    if (!(A.trimStart >= 0)) bad.push('extended to a playhead at 2 s, the ramped clip wrote ' + say(A) + ': a trimStart below 0 asks for source before the file, and the next Undo clamps it and moves every frame' + (Math.abs(A.trimStart + 4.375) <= 0.01 ? ' (the re-solve used the speed at 2 s, 0.5x, for source played at up to 2.25x)' : ''));
+    if (!(Math.abs(A.start - 10) <= TOL)) bad.push('extended to a playhead at 2 s, the ramped clip’s head is at ' + (+A.start).toFixed(4) + ' s, not 10 s where its source runs out (' + say(A) + ')');
+    if (!(Math.abs(A.trimStart) <= TOL)) bad.push('extended until its source ran out, the ramped clip’s trimStart is ' + (+A.trimStart).toFixed(4) + ', not 0');
+    const first = FM.layerLocalTime(A, A.start);
+    if (!(typeof first === 'number' && first >= -EX)) bad.push('the ramped clip’s first frame reads source ' + first + ' s, before the start of the file');
+    if (!(Math.abs(A.start + A.duration - 20) <= EX)) bad.push('CONTROL: the ramped clip’s end moved to ' + (A.start + A.duration) + ', not 20');
+
+    /* CONTROL: a flat 2x clip runs out the same way, by the exact division */
+    const F = clip('bh8 #6 flat clip', 2);
+    F.start = 15; F.duration = 5; F.trimStart = 6;
+    FM.extendClipTo(F, 2);
+    if (!(Math.abs(F.start - 12) <= EX && Math.abs(F.duration - 8) <= EX && Math.abs(F.trimStart) <= EX)) bad.push('CONTROL: the flat 2x clip extended to 2 s is ' + say(F) + ', not start 12, duration 8, trimStart 0');
+
+    /* CONTROL: on the same ramp, an Extend that does not run out of source */
+    const B = clip('bh8 #6 ramped clip, short pull', ramp());
+    B.start = 15; B.duration = 5; B.trimStart = 6.875;
+    FM.extendClipTo(B, 12);
+    if (!(Math.abs(B.start - 12) <= TOL && Math.abs(B.trimStart - 1.7) <= TOL && Math.abs(B.start + B.duration - 20) <= EX)) bad.push('CONTROL: the ramped clip extended to 12 s (5.175 s of source, inside the 6.875 s it has) is ' + say(B) + ', not start 12, trimStart 1.7, end 20');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
