@@ -6557,8 +6557,37 @@ window.FM = window.FM || {};
    * A following pass runs on plates of its own (_pfPoolT, so the frame-sized ones are never resized between layers), marked with
    * the same level so what is nested in it gets the same answer. Every other kernel keeps the frame and is cut there, as before;
    * outside a tilt plate past the frame nothing here changes. */
-  function tiltFollowsFx(type) { return !!(CROP_FX[type] || CROP_BOUNDED_FX[type]); }
+  /* 1176 leftover (blooms): two kernels sized by their PLATE follow it too, handed the frame's size so that they draw the picture the
+     frame-sized plate draws, carried on past its edge (TILT_FRAME_FX): Dreamy Bloom, whose box is a fortieth of the plate's shorter side
+     (its kernel reads p._fmFrameMin, which drawPixelEffect sets only on a following plate), and Halation, whose two radii are shares of
+     that side and whose mask is a quarter-size copy of the plate (halationGrid keeps the frame's grid). And the blooms that throw light
+     OUTWARD (TILT_BLOOM_FX, tiltBloomReach: Light Glow, Shadow Bloom and Dreamy Bloom with Glow past the edges On, and Halation) are
+     tiltOutFx, so they follow a plate that grew only for what the layer throws; Off, those three glows write only where the layer is,
+     and keep the frame there as every inward kernel does. */
+  const TILT_FRAME_FX = Object.assign(Object.create(null), { softglow: 1, halation: 1 });
+  function tiltFollowsFx(type) { return !!(CROP_FX[type] || CROP_BOUNDED_FX[type] || TILT_FRAME_FX[type]); }
+  /* How far, in project px, a bloom throws light outward past the layer, read as its kernel reads it; 0 when it throws none. Light
+     Glow (Highlight Bloom), Shadow Bloom and Dreamy Bloom only with Glow past the edges On and Amount above 0 (glow6 then writes the
+     halo into the empty pixels round the layer): a box blur of radius R run Smoothness times reaches exactly Smoothness × R, R the
+     Radius in px for the first two and for Dreamy Bloom a fortieth of the frame's shorter side × Radius % (at least 4 px at 100 %, 1
+     otherwise). Halation at any Amount above 0.001: its wide wash is a blur of σ = the frame's shorter side × Spread %, so 3σ, and
+     4 px more for its quarter-size mask. Each + 1 px for the layer's anti-aliased edge. P is the project ({ width, height }); without
+     it the frame-sized numbers are 0 and only whether the bloom reaches out at all is answered (tiltOutFx). */
+  const TILT_BLOOM_FX = Object.assign(Object.create(null), { lightglow: 1, darkglow: 1, softglow: 1, halation: 1 });
+  function tiltBloomReach(fx, t, P) {
+    const p = fx.params || {}, ty = fx.type;
+    const num = (k, d) => { const v = p[k] == null ? d : Number(FM.evalProp(p[k], t)); return isFinite(v) ? v : d; };
+    const m = P ? Math.max(0, Math.min(Number(P.width) || 0, Number(P.height) || 0)) : 0;
+    if (ty === 'halation') return num('amount', 0.8) > 0.001 ? 3 * m * Math.max(0.5, num('spread', 5)) / 100 + 4 + 1 : 0;
+    if (!TILT_BLOOM_FX[ty] || Math.round(Math.max(0, Math.min(1, num('outside', 0)))) !== 1 || !(num('amount', 0.6) > 0)) return 0;
+    const n = Math.round(Math.max(1, Math.min(3, num('passes', 1))));
+    let R;
+    if (ty === 'softglow') { const rad = num('radius', 100); R = rad === 100 ? Math.max(4, Math.round(m / 40)) : Math.max(1, Math.round(m / 40 * (rad / 100))); }
+    else R = Math.max(1, Math.round(num('radius', 6)));
+    return n * R + 1;
+  }
   function tiltOutFx(fx, t) {
+    if (fx && TILT_BLOOM_FX[fx.type]) return tiltBloomReach(fx, t, null) > 0;   // 1176 leftover (blooms), above
     if (!fx || (fx.type !== 'dropshadow' && fx.type !== 'stroke')) return false;
     const p = fx.params || {};
     // read exactly as the kernels read them: Shadow only fills the hole at an edge it touches from the plate's edge pixel, so it keeps the frame
@@ -6578,6 +6607,9 @@ window.FM = window.FM || {};
     const _tf = _lv > 0 && tiltFollowsFx(fx.type) && (_lv >= 2 || tiltOutFx(fx, t));
     const _np = nestedPlate(ctx, proj, _tf), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
+    // 1176 leftover (blooms): a kernel sized by its plate that follows one (TILT_FRAME_FX) is handed the frame's shorter side, in plate px
+    const _fm = (_tf && TILT_FRAME_FX[fx.type]) ? Math.min(Math.max(1, Math.round(PW * ps)), Math.max(1, Math.round(PH * ps))) : 0;
+    const _fpars = q => _fm ? Object.assign({}, q, { _fmFrameMin: _fm }) : q;
     const d = _pfDepth++;
     try {
       const _pool = _tf ? _pfPoolT : _pfPool;
@@ -6600,7 +6632,7 @@ window.FM = window.FM || {};
       // at its offset over an untouched copy of the plate. Bounded kernels keep their own path (they need the full plate
       // and a box). An empty plate skips the kernel exactly as the bounded path does.
       if ((!bounded && cropWanted(fx.type)) || (bounded && cropBoundedWanted(fx.type))) {
-        const pars = pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn);
+        const pars = _fpars(pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn));
         const rect = cropRectOf(pA, W, H, cropMarginFor(fx.type, fx.params || {}, t, ps));
         if (bounded) FM._cropStats.cropBounded++; else FM._cropStats.crops++;
         FM._cropStats.lastRect = rect;
@@ -6641,7 +6673,7 @@ window.FM = window.FM || {};
          keeps HISTORY per effect — Deflicker remembers each instance's brightness from frame to frame. Without it that kernel has
          nothing to remember on and returns at its first line on every frame: a silent no-op. Every other kernel ignores it.
          Auto Grade (#966 B51, the same pile line) keeps its smoothing history per effect on this argument too. */
-      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer, scene, fx);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
+      if (!bounded || bb) fn(img.data, W, H, _fpars(pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn)), t, ps, bb, layer, scene, fx);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);
@@ -12160,7 +12192,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Soft Glow: wide low-threshold bloom — bright-pass, separable box blur, screen-composite.
     // Same skeleton as lightglow but the pass threshold is 90 (not 153) and the radius scales with
     // frame size, so mid-tones haze softly instead of only hot highlights blooming.
-    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; /* #482 polish 6.2 — see lightglow */ var sg6=glow6Opts(p,t,true); if(sg6){ var sgRad6=p.radius==null?100:FM.evalProp(p.radius,t); return glow6(d,W,H,1,sgA,sgThrV,(sgRad6===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad6/100)))),sgWh?null:sgC,sg6); } var sgN=W*H, sgScratch=glowScratch(sgN), sgB=sgScratch[0], sgT=sgScratch[1], sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
+    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; /* #482 polish 6.2 — see lightglow */ var sg6=glow6Opts(p,t,true); if(sg6){ var sgRad6=p.radius==null?100:FM.evalProp(p.radius,t); return glow6(d,W,H,1,sgA,sgThrV,(sgRad6===100?Math.max(4,Math.round((p._fmFrameMin||Math.min(W,H))/40)):Math.max(1,Math.round((p._fmFrameMin||Math.min(W,H))/40*(sgRad6/100)))),sgWh?null:sgC,sg6); } var sgN=W*H, sgScratch=glowScratch(sgN), sgB=sgScratch[0], sgT=sgScratch[1], sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round((p._fmFrameMin||Math.min(W,H))/40)):Math.max(1,Math.round((p._fmFrameMin||Math.min(W,H))/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
     // Replace Color: pixels whose hue sits within the tolerance window of the From colour get their hue
     // shifted to the To colour (sat/val kept), with a soft falloff to the window edge. Near-greys are
     // skipped — they carry no meaningful hue to replace.
@@ -17258,18 +17290,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
              expanded: _expPool.filter(Boolean).map(at) };
   };
 
+  const _cfPoolT = [];   // 1176 leftover (blooms): the plates of a canvas pass that follows a tilt plate past the frame
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = proj.width, PH = proj.height;   // see plateScale — 1 for export/1:1, smaller for a reduced preview
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
-    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    /* 1176 leftover (blooms): …but in a tilt plate past the frame Halation follows it out as drawPixelEffect's kernels do (TILT_FRAME_FX,
+       tiltFollowsFx), on plates of its own (_cfPoolT) marked with the same level; every other canvas pass keeps the frame, as before. */
+    const _lv = (ctx.canvas.__fmCamExt && ctx.canvas.__fmTiltExt) || 0;
+    const _tf = _lv > 0 && !!TILT_FRAME_FX[fx.type] && (_lv >= 2 || tiltOutFx(fx, t));
+    const _np = nestedPlate(ctx, proj, _tf), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const _d = _cfDepth++;
     try {
-    if (!_cfPool[_d]) _cfPool[_d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
-    const _cfA = _cfPool[_d].A, _cfB = _cfPool[_d].B;
+    const _cfP = _tf ? _cfPoolT : _cfPool;
+    if (!_cfP[_d]) _cfP[_d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+    const _cfA = _cfP[_d].A, _cfB = _cfP[_d].B;
     // resize only on change — assigning .width even to the same value frees+reallocates the ~8MB
     // backing store, and this runs per canvas-effect per FRAME (wiggle/3D/tiles… = constant churn)
     if (_cfA.width !== W || _cfA.height !== H) { _cfA.width = W; _cfA.height = H; }
@@ -17278,6 +17316,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // canvas-effect fn works in the plate's own pixels (bbox, tile steps, offsets), so B must stay
     // an identity surface or the fn's coordinates would be scaled a second time.
     _cfA.__fmRS = ps; _cfA.__fmOX = OX; _cfA.__fmOY = OY;
+    if (_tf) { _cfA.__fmCamExt = true; _cfA.__fmTiltExt = _lv; }   // 1176 leftover (blooms): only the following plates (_cfPoolT) are ever marked
     const actx = _fx2d(_cfA);   // tiles/roundcorners read this whole canvas every frame
     baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -17480,12 +17519,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    *     (tests/_692crop.html). Drop Shadow (but for Shadow only) and this are tiltOutFx: the kernels that follow a plate grown only
    *     for what the layer throws (tiltFollowsFx).
    *   · A Filter's own effects count as if they stood in its place.
-   * Nothing else counts: a kernel that works inward (Glow Inward, Inner Blur, Bevel) throws nothing past the layer, and the light
-   * glows' Glow past the edges and the other kernels that spread outward still end at the plate's edge, or at the frame when the
-   * plate grew only for something else (the next gap, if it is ever hit). Summed per side (an outline round a shadow reaches both).
+   *   · (a later 1176 leftover) The blooms that throw light outward: Light Glow, Shadow Bloom and Dreamy Bloom with Glow past the
+   *     edges On, and Halation, by tiltBloomReach (each kernel's own Radius, Smoothness or Spread; the last two in shares of the
+   *     frame P, the project). They are tiltOutFx too; Dreamy Bloom and Halation follow the plate with the frame's size handed to
+   *     them (TILT_FRAME_FX). Glow past the edges Off, those three write only where the layer is: inward, and not counted.
+   * Nothing else counts: a kernel that works inward (Glow Inward, Inner Blur, Bevel) throws nothing past the layer, and the other
+   * kernels that spread outward still end at the plate's edge, or at the frame when the plate grew only for something else (the
+   * next gap, if it is ever hit). Summed per side (an outline round a shadow reaches both).
    * null when nothing reaches past the box: the plate is then exactly #3b's, and a layer inside the frame gets the very plate it
    * always did. */
-  function tiltFxPad(l, t, k) {
+  function tiltFxPad(l, t, k, P) {
     let pl = 0, pt = 0, pr = 0, pb = 0;
     const num = v => (typeof v === 'number' && isFinite(v)) ? v : 0;
     const all = q => { if (q > 0) { pl += q; pt += q; pr += q; pb += q; } };
@@ -17514,6 +17557,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         moved(Math.cos(a) * dd, Math.sin(a) * dd, n * (s + 1) + 2);
       } else if (ty === 'stroke') {
         if (tiltOutFx(e, t)) all(cropMarginFor('stroke', p, t, 1));
+      } else if (TILT_BLOOM_FX[ty]) {
+        all(tiltBloomReach(e, t, P));   // 0 when it throws nothing past the layer (Glow past the edges Off)
       } else if (!inner && ty === FM.FX_CONTAINER && Array.isArray(e.effects)) {
         e.effects.forEach(c => one(c, true));
       }
@@ -17537,7 +17582,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const r = tiltLayerReach(L, t, scene);
       if (r) {
         b = b ? { x0: Math.min(b.x0, r.x0), y0: Math.min(b.y0, r.y0), x1: Math.max(b.x1, r.x1), y1: Math.max(b.y1, r.y1) } : r;
-        const d = tiltFxPad(L, t, r.k), e = d ? { x0: r.x0 - d.l, y0: r.y0 - d.t, x1: r.x1 + d.r, y1: r.y1 + d.b } : r;
+        const d = tiltFxPad(L, t, r.k, scene.project), e = d ? { x0: r.x0 - d.l, y0: r.y0 - d.t, x1: r.x1 + d.r, y1: r.y1 + d.b } : r;
         q = q ? { x0: Math.min(q.x0, e.x0), y0: Math.min(q.y0, e.y0), x1: Math.max(q.x1, e.x1), y1: Math.max(q.y1, e.y1) } : e;
       }
     });
@@ -17626,7 +17671,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (typeof layer._canvasX === 'number' && typeof layer._canvasY === 'number') _rch = { x0: layer._canvasX, y0: layer._canvasY, x1: layer._canvasX + (layer._canvasW || 0), y1: layer._canvasY + (layer._canvasH || 0) };
     } else if (!(FM.hasCopyBg && FM.hasCopyBg(layer))) {
       _rch = tiltLayerReach(layer, t, scene);
-      if (_rch) { _rm = reachMargin(_rch); _pad = tiltFxPad(layer, t, _rch.k); }
+      if (_rch) { _rm = reachMargin(_rch); _pad = tiltFxPad(layer, t, _rch.k, proj); }
     }
     const _ext = _rch ? tiltPlateRegion(_rch, _rm, _np0, PW, PH, _pad) : null;
     const _np = _ext || _np0, ps = _np.ps, OX = _np.OX, OY = _np.OY;
@@ -18365,6 +18410,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     c.imageSmoothingEnabled = true;
     return _edgePad;
   }
+  /* 1176 leftover (blooms): Halation's quarter-size mask — its size (qw, qh), where the plate A is drawn into it (dx, dy, dw, dh), where
+     it is laid back over the plate (ux, uy, uw, uh) — and the shorter side its radii are shares of (minD). On any plate but one that
+     follows a tilt plate past the frame (A.__fmTiltExt, set only by drawCanvasEffect's _cfPoolT) these are the plate's own grid at 0, 0
+     and its own side: the very numbers the kernel always used. On a following plate, which is bigger than the frame and may start left
+     of it or above it, they are the FRAME's: a mask cell is the frame plate's (sx × sy plate px, about 4), its cells sit where the
+     frame plate's sit (the plate's corner, A.__fmOX × ps plate px from the frame's, lands fx cells into the first one), and minD is the
+     frame's shorter side, so the bloom is the one the frame-sized plate draws, carried on past its edge. */
+  function halationGrid(A, W, H, ps, scene) {
+    const P = scene && scene.project, s = ps > 0 ? ps : 1;
+    if (!(A && A.__fmTiltExt > 0) || !P || !(P.width > 0) || !(P.height > 0)) {
+      const qw = Math.max(1, Math.round(W / 4)), qh = Math.max(1, Math.round(H / 4));
+      return { qw: qw, qh: qh, dx: 0, dy: 0, dw: qw, dh: qh, ux: 0, uy: 0, uw: W, uh: H, minD: Math.min(W, H) };
+    }
+    const Wf = Math.max(1, Math.round(P.width * s)), Hf = Math.max(1, Math.round(P.height * s));
+    const sx = Wf / Math.max(1, Math.round(Wf / 4)), sy = Hf / Math.max(1, Math.round(Hf / 4));
+    const ox = (A.__fmOX || 0) * s / sx, oy = (A.__fmOY || 0) * s / sy, fx = ox - Math.floor(ox), fy = oy - Math.floor(oy);
+    const qw = Math.max(1, Math.ceil(W / sx + fx - 1e-6)), qh = Math.max(1, Math.ceil(H / sy + fy - 1e-6));
+    return { qw: qw, qh: qh, dx: fx, dy: fy, dw: W / sx, dh: H / sy, ux: -fx * sx, uy: -fy * sy, uw: qw * sx, uh: qh * sy, minD: Math.min(Wf, Hf) };
+  }
 
   const CANVAS_FX = {
     /* ═══ VIGNETTE — ONE RENDERER FOR EVERY LAYER (#986 C8, hunt) ═══════════════════════════════════════════════════
@@ -18482,7 +18546,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      *
      * Only the highlight MASK is per-pixel, and it is built at quarter resolution — 130k pixels at
      * 1080p instead of 2M — then both blurs and the upscale ride the compositor's own filter. */
-    halation: function (A, B, W, H, bb, p, t) {
+    halation: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {   // ps, scene: halationGrid (1176 leftover, blooms)
       /* DEFAULTS 0.5 / 1.8 SINCE v15.81 (queue 482, the by-eye pass). At 0.68 with a 2.4 knee the mask took only
        * near-white pixels, and on a photograph almost none qualify: measured on four fx-art photographs at 150px the
        * effect moved the picture by 0.2–1.8 at its defaults and under 2.6 at its MAXIMUM — invisible, and the amount
@@ -18497,14 +18561,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const spread = Math.max(0.5, p.spread == null ? 5 : FM.evalProp(p.spread, t));
       const knee = Math.max(1, p.knee == null ? 2.4 : FM.evalProp(p.knee, t));
       const rgb = hexToRGB(p.color || '#ff3a14');
-      const qw = Math.max(1, Math.round(W / 4)), qh = Math.max(1, Math.round(H / 4));
+      // the mask's grid and the side the radii are shares of: the plate's own, or on a plate following a tilt past the frame the frame's (halationGrid)
+      const g = halationGrid(A, W, H, ps, scene), qw = g.qw, qh = g.qh;
       if (!_halC) _halC = document.createElement('canvas');
       if (_halC.width !== qw || _halC.height !== qh) { _halC.width = qw; _halC.height = qh; }
       const hc = _halC.getContext('2d', { willReadFrequently: true });
       hc.setTransform(1, 0, 0, 1, 0, 0);
       hc.globalAlpha = 1; hc.globalCompositeOperation = 'source-over'; hc.filter = 'none';
       hc.clearRect(0, 0, qw, qh);
-      hc.drawImage(A, 0, 0, qw, qh);
+      hc.drawImage(A, g.dx, g.dy, g.dw, g.dh);
       let img;
       try { img = hc.getImageData(0, 0, qw, qh); } catch (e) { return; }   // tainted source — leave the plate alone
       const d = img.data, span = 1 - thr;
@@ -18520,7 +18585,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       hc.putImageData(img, 0, 0);
       // Radii are in PLATE pixels, and W/H already carry the preview's render scale, so a reduced
       // preview and a full export bleed by the same fraction of the frame without a ps term.
-      const minD = Math.min(W, H);
+      const minD = g.minD;   // Math.min(W, H) but on a plate following a tilt past the frame (halationGrid)
       const rWide = Math.max(0.5, minD * spread / 100);
       const rCore = Math.max(0.4, rWide * (0.06 + 0.24 * (1 - tight)));
       B.save();
@@ -18528,14 +18593,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.globalAlpha = Math.min(1, amount * 0.65);
       if (ctxFilterOK()) {
         B.filter = 'blur(' + rCore.toFixed(2) + 'px)';
-        B.drawImage(_halC, 0, 0, W, H);
+        B.drawImage(_halC, g.ux, g.uy, g.uw, g.uh);
         B.globalAlpha = Math.min(1, amount * 0.35);
         B.filter = 'blur(' + rWide.toFixed(2) + 'px)';
-        B.drawImage(_halC, 0, 0, W, H);
+        B.drawImage(_halC, g.ux, g.uy, g.uw, g.uh);
       } else {                                  // #986 C24: no ctx.filter — the bloom was a sharp red copy
-        drawBlurredNoFilter(B, _halC, +rCore.toFixed(2), 0, 0, W, H);
+        drawBlurredNoFilter(B, _halC, +rCore.toFixed(2), g.ux, g.uy, g.uw, g.uh);
         B.globalAlpha = Math.min(1, amount * 0.35);
-        drawBlurredNoFilter(B, _halC, +rWide.toFixed(2), 0, 0, W, H);
+        drawBlurredNoFilter(B, _halC, +rWide.toFixed(2), g.ux, g.uy, g.uw, g.uh);
       }
       B.restore();
     },
@@ -28976,7 +29041,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (u.group && groupTilts(u.group, t)) {
       const reach = unitReach(u, t, scene);
       const base = R || { ps: ps, OX: 0, OY: 0, W: Math.max(1, Math.round(P.width * ps)), H: Math.max(1, Math.round(P.height * ps)), PWp: P.width, PHp: P.height };
-      const grown = reach ? tiltPlateRegion(reach, reachMargin(reach), base, P.width, P.height, padSum(reach.pad || null, tiltFxPad(u.group, t, 1))) : null;
+      const grown = reach ? tiltPlateRegion(reach, reachMargin(reach), base, P.width, P.height, padSum(reach.pad || null, tiltFxPad(u.group, t, 1, P))) : null;
       if (grown) { R = grown; _tg = tiltBoxPast(reach, base) ? 2 : 1; }   // why it grew: tiltFollowsFx
     }
     const RX = R ? R.OX : 0, RY = R ? R.OY : 0, RW = R ? R.PWp : P.width, RH = R ? R.PHp : P.height;

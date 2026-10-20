@@ -166932,6 +166932,118 @@
     });
   });
 
+  /* (1176 leftover, blooms) A LEANT LAYER LOST THE BLOOM IT THREW PAST THE FRAME. The test above grew the tilt plate for a Shadow, a Glow,
+     an Outline and a Drop Shadow (compositor.js tiltFxPad) and let the kernels admitted to the cropped readback follow it (tiltFollowsFx,
+     tiltOutFx). Four blooms that throw light outward were left out:
+       · Highlight Bloom (the code's Light Glow) and Shadow Bloom with Glow past the edges On: tiltFxPad gave them no reach, so a layer
+         inside the frame got no growth and its halo was cut at the frame, and they were not tiltOutFx, so on a plate grown only for
+         something else they kept the frame. Hanging off the frame the plate grew to the box plus 16 px, and the halo (which they do
+         follow there) was cut 16 px past the box.
+       · Dreamy Bloom (Glow past the edges On) and Halation are sized by the PLATE they run on (a fortieth of its shorter side; Spread %
+         of it, on a quarter-size mask), so they are not admitted to the cropped readback and kept the frame in every tilt plate: hanging
+         off the frame the square was drawn on a frame-sized plate again, cut at 320 and leant to 291 (#3b's fault, back), and inside
+         the frame their light was cut at the frame.
+     Now tiltFxPad adds each bloom's reach (tiltBloomReach: Smoothness × Radius for the two glows, Smoothness × a fortieth of the frame's
+     shorter side × Radius % for Dreamy Bloom, 3 × the frame's shorter side × Spread % + 4 for Halation, + 1 px each), all four are
+     tiltOutFx, and Dreamy Bloom and Halation follow the plate with the FRAME's size handed to them (TILT_FRAME_FX: the softglow kernel
+     reads p._fmFrameMin, halationGrid keeps the frame's mask grid), so each draws what the frame-sized plate draws, carried on past it.
+     The fixture is the test above's: a 100 × 100 square hinged on its left edge (anchorX 0), rows 70..169, leant 70° about Y; flat x =
+     hinge + 50u lands 58.24 u / (3.405 + u) px from the hinge (renderMesh). At x 210 (inside the frame, its far edge at 310 leaning to
+     231.5) the frame edge, flat 320, leans to 232.9; at x 280 (hanging off it) #3b's plate edge, flat 396, leans to 303.6 and the frame
+     edge to 291.1. The blooms, each worked out from its kernel:
+       Highlight Bloom, Radius 40, Smoothness 1, Glow past the edges On, green, on a white square: a green halo to 40 px past it.
+       Shadow Bloom, Radius 40, Threshold 40 %, Glow past the edges On, on a red square (brightness 76, under the threshold's 102) over a
+         WHITE background: a dark halo to 40 px past it, about 44 levels deep 20 px out.
+       Dreamy Bloom, Radius 400 %, Smoothness 3, Glow past the edges On, green, on a white square: a box of 24 px (240 / 40 × 4) three
+         times, to 72 px past it.
+       Halation, Spread 10 %, Amount 2, green, on a white square: a wide wash of σ 24 px (240 × 10 %), about 38 levels 20 px out.
+     Every case is drawn on the 320 × 240 frame and on a 640 × 240 one wide enough to hold the square and its bloom. Both are 240 tall, so
+     the frame's shorter side (and with it Dreamy Bloom's box and Halation's radii and mask cell, 4 px) is the same on both; the plates
+     grow up and down alike (Dreamy Bloom 19 px, Halation 23 px, the two glows not at all) and start at the same corner, so the plate
+     pixels, the alpha box's stride and the mesh are the same, and every plate ends past the bloom's reach, so a box blur that repeats
+     its edge pixel sees nothing there on either frame. The first 320 columns must match.
+     FAILS BEFORE THE FIX: at x 210 every bloom is cut at column 233 on the 320 frame, where on the 640 frame it is still about 35 to 70
+     levels at column 234; at x 280 the two glows are cut at 303.6 (about 40 to 60 levels short at column 304), and Dreamy Bloom and
+     Halation cut the square itself at 291 (255 levels).
+     CONTROL: untilted at x 100 each bloom changes the frame past the square's right edge by 30 levels or more; leant at x 210 with Glow
+     past the edges Off, each of the three glows keeps its plate (FM._tiltPlateStats.grown stands still) and draws as on the 640 frame;
+     on the 640 frame each case lights 20 levels or more past where the old plate ended (column 234, or 304 at x 280).
+     TOL: 3 levels between the two frames, the test above's: the same plate pixels, alpha box and mesh, and float32 jitter in the mesh
+     moves a triangle's coverage by under a level; the faults are 35 to 255 levels.
+     Not run when written (code only). */
+  test('1176 leftover: a leant layer keeps the bloom it throws past the frame: a square leant 70° about Y, inside the frame or hanging off its right edge, with a Highlight Bloom, a Shadow Bloom or a Dreamy Bloom with Glow past the edges, or with a Halation, draws exactly as on a frame wide enough to hold it all (CONTROLS: untilted each bloom throws light past the square; with Glow past the edges Off a glow leant inside the frame keeps the plate it always had; on the wide frame each case lights past where the old plate ended)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5;
+      FM.time = T;
+      // a 100 × 100 square of `fill` hinged on its left edge at x, rows 70..169, leant 70° about Y when `tilt`, carrying `fx` (or nothing)
+      const square = (fill, x, tilt, fx) => {
+        const L = FM.makeLayer('shape', { name: '1176 bloom square at x ' + x, shape: 'rect', x: x, y: 120, shapeW: 100, shapeH: 100, fill: fill, start: 0, duration: 4 });
+        L.start = 0; L.duration = 4;
+        L.transform.anchorX = 0;
+        if (tilt) L.transform.rotationY = 70;
+        L.effects = fx ? [fx] : [];
+        return L;
+      };
+      /* The scene's layers drawn at T on a W × 240 frame of background `bg`, as the test above draws its frames. */
+      const render = (W, bg) => {
+        const c = offscreen(W, 240), ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, { project: { width: W, height: 240, fps: 30, duration: 5, background: bg }, layers: FM.scene.layers, selectedId: null, selectedIds: [] }, T);
+        return { W: W, d: ctx.getImageData(0, 0, W, 240).data };
+      };
+      /* The largest difference, in levels, between two frames over their first 320 columns from column c0 (all four channels). */
+      const diff = (a, b, c0) => {
+        let m = 0;
+        for (let y = 0; y < 240; y++) {
+          for (let x = c0 || 0; x < 320; x++) {
+            for (let c = 0; c < 4; c++) { const q = Math.abs(a.d[(y * a.W + x) * 4 + c] - b.d[(y * b.W + x) * 4 + c]); if (q > m) m = q; }
+          }
+        }
+        return m;
+      };
+      const grown = () => (FM._tiltPlateStats ? FM._tiltPlateStats.grown : 0);
+      const CASES = [
+        { name: 'a Highlight Bloom (Light Glow) of Radius 40 with Glow past the edges', fill: '#ffffff', bg: '#000000', fx: on => ({ type: 'lightglow', enabled: true, params: { amount: 1, radius: 40, threshold: 60, knee: 0, passes: 1, outside: on, blend: 0, from: 0, color: '#00ff00' } }) },
+        { name: 'a Shadow Bloom of Radius 40 with Glow past the edges', fill: '#ff0000', bg: '#ffffff', fx: on => ({ type: 'darkglow', enabled: true, params: { amount: 1, radius: 40, threshold: 40, knee: 0, passes: 1, outside: on, blend: 0 } }) },
+        { name: 'a Dreamy Bloom of Radius 400 % and Smoothness 3 with Glow past the edges', fill: '#ffffff', bg: '#000000', fx: on => ({ type: 'softglow', enabled: true, params: { amount: 1, radius: 400, threshold: 35, knee: 0, passes: 3, outside: on, blend: 0, from: 0, color: '#00ff00' } }) },
+        { name: 'a Halation of Spread 10 % at Amount 2', fill: '#ffffff', bg: '#000000', fx: () => ({ type: 'halation', enabled: true, params: { amount: 2, threshold: 0.5, tightness: 0.5, spread: 10, knee: 1.8, color: '#00ff00' } }) },
+      ];
+      const bad = [];
+
+      /* ── CONTROLS: untilted at x 100, each bloom throws light past the square's right edge (column 200). */
+      CASES.forEach(cs => {
+        FM.scene.layers = [square(cs.fill, 100, false, null)];
+        const f0 = render(320, cs.bg);
+        FM.scene.layers = [square(cs.fill, 100, false, cs.fx(1))];
+        const m = diff(render(320, cs.bg), f0, 202);
+        if (m < 30) bad.push('CONTROL: untilted at x 100, ' + cs.name + ' changes the frame past the square’s right edge by at most ' + m + ' levels, not 30 or more: it throws no light out, so there is nothing here to keep');
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── CONTROLS: leant inside the frame with Glow past the edges Off, a glow keeps the plate it always had and draws as on the wide frame. */
+      CASES.slice(0, 3).forEach(cs => {
+        FM.scene.layers = [square(cs.fill, 210, true, cs.fx(0))];
+        const g0 = grown(), s = render(320, cs.bg), w = render(640, cs.bg), m = diff(s, w);
+        if (grown() !== g0) bad.push('CONTROL: leant inside the frame with ' + cs.name + ' Off, the square’s plate grew (FM._tiltPlateStats.grown ' + g0 + ' → ' + grown() + '): a glow that writes only where the layer is must keep the plate it always had');
+        if (m > 3) bad.push('CONTROL: leant inside the frame with ' + cs.name + ' Off, the square draws up to ' + m + ' levels apart on the 320 and the 640 frame');
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── Each bloom on a square leant inside the frame (x 210: only its light passes the frame edge) and on one hanging off it (x 280). */
+      [[210, 234, 'leant inside the frame at x 210'], [280, 304, 'hanging off the frame’s right edge at x 280']].forEach(([x, cc, where]) => {
+        CASES.forEach(cs => {
+          FM.scene.layers = [square(cs.fill, x, true, null)];
+          const w0 = render(640, cs.bg);
+          FM.scene.layers = [square(cs.fill, x, true, cs.fx(1))];
+          const s = render(320, cs.bg), w = render(640, cs.bg), m = diff(s, w), lw = diff(w, w0, cc), ls = diff(s, w0, cc);
+          if (lw < 20) bad.push('CONTROL: ' + where + ', on the 640 frame ' + cs.name + ' changes the frame past column ' + cc + ' (where the old plate ended) by at most ' + lw + ' levels, not 20 or more — the fixture is not the one worked out above');
+          else if (m > 3) bad.push(where + ' and leant 70° about Y, the square with ' + cs.name + ' draws up to ' + m + ' levels apart on the 320 and the 640 frame (past column ' + cc + ' its bloom changes the frame by ' + ls + ' levels on the 320 frame, ' + lw + ' on the 640)' + (ls < 0.5 * lw ? ' — cut where the old plate ended' : ''));
+        });
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#1b) THE EDITOR STILL HANDLED A MEMBER WITH THE OLD CHAIN. bughunt4 #1 (cedde93f) made a group's Flip, unlinked Width / Height,
      Skew, depth and link mode reach its members when they are DRAWN (compositor.js applyParentChain), but canvas-edit's parentXform —
      the walk behind a member's selection box, the tap that keeps or drops its selection, the drag and the handles — still composed only
