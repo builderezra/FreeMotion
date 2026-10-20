@@ -1285,6 +1285,7 @@
       var F = window.FM || {};
       try {
         if (F._exporting) return 'an export is running';
+        if (F._exportingAudio) return 'a sound export is running';   // bughunt7 #6: Export sound (WAV / M4A) shows no overlay (js/app.js runAudioOnlyExport)
         var ov = document.getElementById('export-overlay'), rd = document.getElementById('export-ready');
         if (ov && !ov.classList.contains('hidden')) return 'an export is running';
         if (rd && !rd.classList.contains('hidden')) return 'an exported file is waiting on Save';

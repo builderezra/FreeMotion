@@ -6253,7 +6253,18 @@ window.FM = window.FM || {};
    * out of OfflineAudioContext as raw samples and WAV needs no codec, which matters because #215
    * established that a browser can simply refuse to encode AAC. An audio export that cannot fail for
    * want of a codec is worth more than a smaller one that sometimes hands you silence. */
+  /* bughunt7 #6: AN AUDIO-ONLY EXPORT COUNTS AS AN EXPORT TO THE UPDATE HOLD. index.html's fmSwBusy (bughunt6 #14) holds a new
+     build's reload while an export runs, and read only FM._exporting and the export overlay or Save card, none of which this
+     path has: a new build landing while Export sound built the mix (minutes on a phone for a long project) saved and reloaded
+     mid-mix, and the export was lost. FM._exportingAudio counts the ones running, from the start of the mix until the file is
+     handed over or the export gives up, and fmSwBusy reads it. Its own flag, not FM._exporting, which the compositor reads as
+     "draw for the encoder". */
   async function runAudioOnlyExport(opts) {
+    FM._exportingAudio = (FM._exportingAudio || 0) + 1;
+    try { return await runAudioOnlyExportNow(opts); }
+    finally { FM._exportingAudio = Math.max(0, (FM._exportingAudio || 1) - 1); }
+  }
+  async function runAudioOnlyExportNow(opts) {
     const wantM4A = opts && opts.m4a !== undefined
       ? !!opts.m4a
       : ((document.getElementById('exp-format') || {}).value) === 'audiom4a';

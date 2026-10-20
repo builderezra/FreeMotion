@@ -170638,4 +170638,86 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* (#6) A NEW BUILD RELOADED THE APP IN THE MIDDLE OF AN EXPORT SOUND. bughunt6 #14's hold (index.html fmSwBusy) counts an export
+     by FM._exporting, the export overlay and the Save card, and the audio-only branch of the export (js/app.js runAudioOnlyExport,
+     WAV or M4A: Export sound) has none of them, so a build landing while it built the mix (minutes on a phone) saved and reloaded
+     mid-mix and the export was lost. Now the audio-only export counts itself in FM._exportingAudio, its own flag (FM._exporting
+     is what the compositor reads as drawing for the encoder), and fmSwBusy reads it. Driven like bughunt6 #14: the hold is
+     handed a counter for the reload, never the real one.
+       1. FM._exportingAudio set: a new build waits, and reloads exactly once by itself when it is cleared;
+       2. the real audio-only export (FM._runAudioOnlyExport) with its mixer held on a gate (FM.exporter.buildAudioMix stood in for,
+          answering no audio when released): while it mixes, the app is busy; once it gives up, it is idle again.
+     FAILS BEFORE THE FIX: with FM._exportingAudio set the hold sees nothing busy and reloads at once; and the export mixing
+     leaves FM._exportingAudio unset and the app idle.
+     CONTROLS, which hold before and after: the app is idle before each part, and with nothing running a new build reloads at
+     once; the mixer really was reached. Restores FM._exportingAudio and FM.exporter.buildAudioMix by descriptor and cancels any
+     hold. */
+  test('bughunt7 #6 An update does not reload the app in the middle of an Export sound: with FM._exportingAudio set the new build waits and then reloads once by itself, and the WAV / M4A export sets it while it mixes and clears it after (CONTROLS: an idle app reloads at once; the mixer was reached)', { item: '1176', budgetMs: 90000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM._runAudioOnlyExport !== 'function' || !FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('setup: FM._runAudioOnlyExport or FM.exporter.buildAudioMix is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_exportingAudio');
+    const dMix = Object.getOwnPropertyDescriptor(FM.exporter, 'buildAudioMix');
+    const P = FM.scene.project, dur0 = P.duration;
+    const rangeEl = document.getElementById('exp-range'), range0 = rangeEl ? rangeEl.value : null;
+    let reloads = 0, open = null, entered = 0, pending = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const bad = [];
+    try {
+      /* ── 1. the flag holds a new build, and its end lets it go, once */
+      await settle('the flag');
+      reloads = 0;
+      FM._exportingAudio = true;
+      const now = await W(count);
+      if (now || reloads) bad.push('a new build reloaded the app while a sound export was running (FM._exportingAudio set; ' + reloads + ' reload; the hold saw ' + JSON.stringify(W.busy()) + ')');
+      else {
+        if (!W.held()) bad.push('while a sound export was running the reload was dropped rather than held');
+        await sleep(2600);
+        if (reloads) bad.push('the held reload went ahead while a sound export was running (' + reloads + ')');
+        FM._exportingAudio = 0;
+        if (!(await until(() => reloads > 0, 9000))) bad.push('once the sound export ended, the held reload never happened by itself');
+        await sleep(2600);
+        if (reloads > 1) bad.push('once the sound export ended, the app reloaded ' + reloads + ' times, not once');
+      }
+      try { W.cancel(); } catch (e) {}
+      FM._exportingAudio = 0;
+      await settle('the export');
+
+      /* ── 2. the real Export sound counts itself while it mixes */
+      P.duration = Math.max(1, dur0 || 0);
+      if (rangeEl) rangeEl.value = 'whole';
+      const gate = new Promise(r => { open = r; });
+      FM.exporter.buildAudioMix = function () { entered++; return gate; };
+      pending = FM._runAudioOnlyExport({ m4a: false });
+      if (!(await until(() => entered > 0, 4000))) throw new Error('setup: the audio-only export never reached its mixer (FM.exporter.buildAudioMix), so nothing was mixing');
+      const during = W.busy(), flag = FM._exportingAudio;
+      open(null);   // the mix answers no audio: the export says so and gives up
+      await pending; pending = null;
+      await sleep(60);
+      if (!during) bad.push('while Export sound was mixing the app counted as idle (FM._exportingAudio ' + JSON.stringify(flag) + '), so a new build landing then would save and reload mid-mix');
+      if (FM._exportingAudio) bad.push('after Export sound gave up FM._exportingAudio is still ' + JSON.stringify(FM._exportingAudio) + ', so every later update would wait for an export that is over');
+      if (W.busy()) bad.push('after Export sound gave up the app still counts as busy (' + W.busy() + ')');
+
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (open) open(null);
+      if (pending) { try { await pending; } catch (e) {} }
+      if (dMix) Object.defineProperty(FM.exporter, 'buildAudioMix', dMix); else delete FM.exporter.buildAudioMix;
+      if (dFlag) Object.defineProperty(FM, '_exportingAudio', dFlag); else delete FM._exportingAudio;
+      P.duration = dur0;
+      if (rangeEl && range0 != null) rangeEl.value = range0;
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();
