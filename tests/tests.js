@@ -170094,4 +170094,83 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  // ── bughunt 7 ──
+  /* ═══ BUGHUNT 7 — the confirmed findings of hunt 7 (the refuter's brief), WRITTEN WITHOUT RUNNING: code only, `node --check`,
+   * while a release shipped. Every number below is reasoned from the code it names, and each test says why it fails on 90f7602f. ═══ */
+
+  /* (#1) RIGHT-TO-LEFT TEXT ENDING OR STARTING WITH PUNCTUATION, UNDER ANIMATE BY WORD, CAME OUT IN TYPING ORDER. bughunt4 #6 lays a
+     right-to-left line's units out in the order the bidirectional algorithm gives (compositor.js bidiUnitXs), and took a unit's level
+     as the LOWEST level of its characters. A full stop at the end of a Hebrew line (or a quote mark at its start) is neutral, and the
+     end of the line counts as left to right, so it resolves to level 0, as the canvas resolves it still. By Word it sits inside its
+     word, so that whole word went to level 0 and the line's words were drawn in typing order: the first word typed on the LEFT.
+     Most sentences end in punctuation. Now a unit's level is the lowest of its STRONG characters (letters, digits), all of them only
+     for a unit with none (a space). The lines are bughunt4 #6's: 40 px white text centred at 160 on _bh2Frame's black frame,
+     a one-letter word, three spaces and a six-letter word, so still the six letters sit LEFT of a three-space gap and the one
+     letter right of it. The punctuation is drawn inside its word's unit, so it sits beside that word rather than at the line's end
+     as it does still; that moves the gap by the mark's width (about 11 px for the full stop), so the judgement is the WORD ORDER:
+     a gap of at least 15 px, with more ink left of it than right of it, as still.
+     FAILS BEFORE THE FIX: with the full stop the units' levels are [1, 1, 0] and the order space, one letter, six letters: the line
+     has no gap of 15 px between its words (the three spaces are drawn first, at its left end); with the leading quote mark they
+     are [0, 1, 1] and the order quote-and-letter, six letters, spaces, again with no gap between the words.
+     CONTROLS, which hold before and after: still, both lines put the six letters left of the gap; a Latin line ending in a full
+     stop, and the Hebrew line with no punctuation, under Fade by word keep the still gap within 4 px (bughunt4 #6's tolerance). */
+  test('bughunt7 #1 Right-to-left text with punctuation at either end reads as it does still under Animate by Word: a Hebrew line ending in a full stop, and one starting with a quote mark, keep the six-letter word left of the three-space gap and the one-letter word right of it, as the still line draws them (CONTROLS: still, both lines read right to left; a Latin line ending in a full stop and the Hebrew line with no punctuation keep the still gap)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim are not reachable');
+    await _bh2With(async function () {
+      const T = 1, TOL = 4;
+      const HEB = 'א   בבבבבב', STOP = HEB + '.', QUOTE = '"' + HEB, LAT = 'a   bbbbbb.';
+      const L = FM.makeLayer('text', { name: 'bh7 #1 title', text: HEB, x: 160, y: 120, fontSize: 40, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L];
+      const STILL = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      const WORD = { preset: 'fade', unit: 'word', durIn: 0.3, durOut: 0, stagger: 0.05 };
+      /* The ink of `text` under `anim` at t (a pixel brighter than 150 summed over its channels), counted per column: its first and
+         last columns, its middle, the widest run of empty columns between them (the gap between the words), and the ink left and
+         right of that gap. */
+      const ink = (text, anim) => {
+        L.text = text; L.textAnim = Object.assign({}, anim); L.effects = [];
+        delete L._wrapCache;
+        const f = _bh2Frame(T), col = new Uint32Array(320);
+        for (let i = 0, n = 0; i < f.d.length; i += 4, n++) if (f.d[i] + f.d[i + 1] + f.d[i + 2] > 150) col[n % 320]++;
+        let x0 = -1, x1 = -1;
+        for (let x = 0; x < 320; x++) if (col[x]) { if (x0 < 0) x0 = x; x1 = x; }
+        let gw = 0, gap = -1, run = 0;
+        for (let x = x0 + 1; x0 >= 0 && x <= x1; x++) {
+          if (!col[x]) { run++; continue; }
+          if (run > gw) { gw = run; gap = ((x - run) + (x - 1)) / 2; }
+          run = 0;
+        }
+        let left = 0, right = 0;
+        for (let x = 0; x < 320; x++) { if (gap >= 0 && x < gap) left += col[x]; else if (gap >= 0 && x > gap) right += col[x]; }
+        return { x0: x0, x1: x1, mid: (x0 + x1) / 2, gap: gap, gw: gw, left: left, right: right, anim: !!FM.textHasAnim(L) };
+      };
+      const say = r => 'ink at columns ' + r.x0 + '..' + r.x1 + ' (middle ' + r.mid + '), its widest gap ' + r.gw + ' px centred at ' + r.gap + ', ' + r.left + ' lit px left of it and ' + r.right + ' right';
+      /* the six-letter word left of a real gap, the one-letter word right of it */
+      const readsRtl = r => r.x0 >= 0 && r.gw >= 15 && r.left > r.right;
+      const bad = [];
+
+      /* ── CONTROLS: still, each Hebrew line reads right to left (the six letters left of the gap), and the Latin line left to right. */
+      const sS = ink(STOP, STILL), sQ = ink(QUOTE, STILL), sH = ink(HEB, STILL), sL = ink(LAT, STILL);
+      if (sS.anim || sQ.anim || sH.anim || sL.anim) bad.push('CONTROL: the still layer has an Animate preset by FM.textHasAnim, so “still” is not the still path');
+      if (!readsRtl(sS)) bad.push('CONTROL: still, the Hebrew line ending in a full stop is ' + say(sS) + ': not the six letters left of a three-space gap, so this browser does not lay it out right to left and the orders cannot be told apart');
+      if (!readsRtl(sQ)) bad.push('CONTROL: still, the Hebrew line starting with a quote mark is ' + say(sQ) + ': not the six letters left of a three-space gap');
+      if (!readsRtl(sH)) bad.push('CONTROL: still, the Hebrew line is ' + say(sH) + ': not the six letters left of a three-space gap');
+      if (sL.x0 < 0 || sL.gw < 15 || !(sL.left < sL.right)) bad.push('CONTROL: still, the Latin line is ' + say(sL) + ': not one letter left of the gap and six right of it');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── CONTROLS: under Fade by word, the Latin line with its full stop and the Hebrew line with no punctuation keep the still gap. */
+      const wL = ink(LAT, WORD), wH = ink(HEB, WORD);
+      if (!wL.anim) bad.push('CONTROL: Fade by word is off by FM.textHasAnim, so this frame did not take the animated path');
+      if (Math.abs(wL.gap - sL.gap) > TOL) bad.push('CONTROL: the Latin line ending in a full stop under Fade by word has ' + say(wL) + ' where still it has ' + say(sL));
+      if (Math.abs(wH.gap - sH.gap) > TOL) bad.push('CONTROL: the Hebrew line with no punctuation under Fade by word has ' + say(wH) + ' where still it has ' + say(sH) + ' (bughunt4 #6)');
+
+      /* ── The lines with punctuation at an end, under Fade by word: the words in the still order. */
+      [['ending in a full stop', STOP, sS], ['starting with a quote mark', QUOTE, sQ]].forEach(([what, text, s]) => {
+        const w = ink(text, WORD);
+        if (!readsRtl(w)) bad.push('the Hebrew line ' + what + ' under Fade by word has ' + say(w) + ', where still it has ' + say(s) + (w.gw < 15 ? ' — no gap between its words: the punctuation took its word to the line’s own level and the words were laid out in the order they were typed' : ' — its words are the other way round'));
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
 })();
