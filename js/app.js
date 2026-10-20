@@ -4907,6 +4907,12 @@ window.FM = window.FM || {};
       if (!stillCurrent()) { if (FM.toast) FM.toast('Media was not replaced — the project changed while the picker was open'); return null; }
       const kind = mediaKind(file);
       let nrec = null;
+      /* 1176 leftover (the doors handleFiles does not cover): A NEW BUILD WAITS WHILE THE PICKED FILE OPENS. The decode below
+         takes seconds (a phone video, a song's sound taken out of a video) and nothing showed busy, so a build landing then
+         reloaded the app and the file he had just picked never arrived. Counted in FM._importing, which index.html's fmSwBusy
+         reads, from after the pick to the finally below: never while the picker is open, because a dismissed one may never
+         answer. The swap's own write is counted where it waits (stashPrevMedia, below). */
+      FM._importing = (FM._importing || 0) + 1;
       try {
         if (isSong && kind === 'video') {
           const wav = await audioFromVideo(file);
@@ -4914,7 +4920,7 @@ window.FM = window.FM || {};
           nrec = await FM.loadVideoFile(wav);
         } else if (kind === 'video' || kind === 'audio') nrec = await FM.loadVideoFile(file);
         else nrec = await FM.loadImageFile(file);   // an image, or a name nothing recognises (the old fall-through)
-      } catch (e) { nrec = null; }
+      } catch (e) { nrec = null; } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
       if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return null; }
       // Decoding a phone video or photo can outlive the project it was picked in (5e8337da): never apply it to another.
       if (!stillCurrent()) { if (FM._releaseMediaRecord) FM._releaseMediaRecord(nrec); if (FM.toast) FM.toast('Media was not replaced — the project changed while it was opening'); return null; }
@@ -4943,7 +4949,10 @@ window.FM = window.FM || {};
          from the media library at once — and undo cannot reach it, because history only swaps layer JSON. */
       const outgoing = FM.media.get(id);
       if (outgoing && outgoing.file && FM.storage && FM.storage.stashPrevMedia) {
-        try { await FM.storage.stashPrevMedia(id, outgoing, layer.mediaRev || 0); } catch (e) {}
+        /* 1176 leftover: the new file is decoded but not in the clip until this write is done, so a new build waits for it
+           (FM._importing, as the decode above it). */
+        FM._importing = (FM._importing || 0) + 1;
+        try { await FM.storage.stashPrevMedia(id, outgoing, layer.mediaRev || 0); } catch (e) {} finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
       }
       if (!stillCurrent()) return stale();
       if (!FM.replaceMediaWith(id, nrec)) return stale();

@@ -171642,4 +171642,209 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ 1176 leftover (the doors handleFiles does not cover): A NEW BUILD RELOADED THE APP WHILE A FILE WAS STILL OPENING ═════════
+     handleFiles counts itself in FM._importing (the test two above), but more doors await a file's loader outside it, each with
+     nothing showing busy: Replace media from a picked file (js/app.js: the decode, then the write that keeps the outgoing file),
+     a tile in Add ▸ Media (js/medialib.js use), a sound effect's Add (js/sfx.js add), a voice take's Add (js/voice-rec.js
+     addFile: the panel has already closed, so the hold's voice-take check no longer sees it) and the Sample clip (js/sample.js).
+     A build landing meanwhile reloaded the app and the file never arrived, and a voice take exists nowhere else. Now each counts
+     itself in FM._importing from the start of its work to its finally. Driven like the test two above, the hold handed a counter
+     for the reload: four of the doors in turn (all but the Sample clip, which records for seconds through MediaRecorder), each
+     with its loader (FM.loadImageFile or FM.loadVideoFile) held on a gate for that door's own file only, matched by name. While
+     it waits the app is asked whether it is busy and handed a new build; then the loader fails, the door gives up, and the held
+     build must reload by itself. Replace media is picked through its real file input (only the OS sheet is stood in for), on a
+     picture clip put in the scene for that door alone; the tile is a stand-in Add ▸ Media row keyed at a shared copy, whose
+     record FM.storage.readMedia hands back without IndexedDB.
+     FAILS BEFORE THE FIX: while each door's file is opening fmSwBusy answers '' and the new build reloads at once.
+     CONTROLS, which hold before and after: the app is idle before each door; each door really reached its loader (else the test
+     stops as a setup failure); each gave up when its loader failed and added no layer; and with nothing running a new build
+     reloads at once. Restores both loaders, FM.storage.readMedia, the Add ▸ Media index, the file input's click and FM._importing
+     by descriptor, takes the test clip back out of the scene and cancels any hold. */
+  test('1176 leftover: an update does not reload the app while Replace media, an Add ▸ Media tile, a sound effect or a voice take is still opening its file: with each one’s loader held the new build waits, and once it gives up the app reloads by itself (CONTROLS: each door reached its loader, gave up and added nothing; an idle app reloads at once)', { item: '1176', budgetMs: 120000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM.replaceMedia !== 'function' || !FM.mediaLib || typeof FM.mediaLib.use !== 'function' || !FM.sfx || typeof FM.sfx.add !== 'function' || typeof FM.sfx.fileName !== 'function' || !FM.voiceRec || typeof FM.voiceRec.addFile !== 'function' || !FM.storage || typeof FM.storage.readMedia !== 'function' || typeof FM.loadImageFile !== 'function' || typeof FM.loadVideoFile !== 'function') throw new Error('setup: FM.replaceMedia, FM.mediaLib.use, FM.sfx.add / fileName, FM.voiceRec.addFile, FM.storage.readMedia or a loader is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_importing');
+    const dImg = Object.getOwnPropertyDescriptor(FM, 'loadImageFile'), realImg = FM.loadImageFile;
+    const dVid = Object.getOwnPropertyDescriptor(FM, 'loadVideoFile'), realVid = FM.loadVideoFile;
+    const dRead = Object.getOwnPropertyDescriptor(FM.storage, 'readMedia'), realRead = FM.storage.readMedia;
+    const dClick = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'click');
+    const putClick = () => { if (dClick) Object.defineProperty(HTMLInputElement.prototype, 'click', dClick); else delete HTMLInputElement.prototype.click; };
+    const putLoaders = () => {
+      if (dImg) Object.defineProperty(FM, 'loadImageFile', dImg); else FM.loadImageFile = realImg;
+      if (dVid) Object.defineProperty(FM, 'loadVideoFile', dVid); else FM.loadVideoFile = realVid;
+    };
+    const IDX = 'fm.medialib', idx0 = localStorage.getItem(IDX);
+    const ts = Date.now().toString(36);
+    const PNG = [137, 80, 78, 71, 13, 10, 26, 10];
+    const PICK = new File([new Uint8Array(PNG)], '1176 replace ' + ts + '.png', { type: 'image/png' });
+    const TILE = new File([new Uint8Array(PNG)], '1176 tile ' + ts + '.png', { type: 'image/png' });
+    const VOICE = new File([new Uint8Array([26, 69, 223, 163])], '1176 voice ' + ts + '.webm', { type: 'audio/webm' });
+    const LIBKEY = 'lib:q1176door' + ts, MID = 'm_q1176door' + ts;
+    const sound = (FM.sfx.byId && FM.sfx.byId('swish')) || FM.sfx.list()[0];
+    if (!sound) throw new Error('setup: the sound effect list is empty');
+    const L = FM.makeLayer('image', { name: '1176 replace clip', start: 0, duration: 2 });
+    L.start = 0; L.duration = 2;
+    const takeOut = () => { const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1); };
+    let reloads = 0, fail = null, pending = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const doors = [
+      { what: 'Replace media', kind: 'image', name: PICK.name, gaveUp: o => o.r === false, before: () => { FM.scene.layers.push(L); }, after: takeOut, start: () => {
+        /* only the OS picker sheet is stood in for */
+        Object.defineProperty(HTMLInputElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+        let p;
+        try { p = FM.replaceMedia(L.id); } finally { putClick(); }
+        const inp = Array.from(document.querySelectorAll('body > input[type=file]')).pop();
+        if (!inp || inp.accept !== 'video/*,image/*') throw new Error('setup: Replace media did not open its picker');
+        const dt = new DataTransfer(); dt.items.add(PICK); inp.files = dt.files;
+        inp.dispatchEvent(new Event('change'));
+        return p;
+      } },
+      { what: 'an Add ▸ Media tile', kind: 'image', name: TILE.name, gaveUp: o => o.r === false, start: () => FM.mediaLib.use(MID) },
+      { what: 'a sound effect', kind: 'video', name: FM.sfx.fileName(sound), gaveUp: o => !!o.error, start: () => FM.sfx.add(sound) },
+      { what: 'a voice take', kind: 'video', name: VOICE.name, gaveUp: o => !!o.error, start: () => FM.voiceRec.addFile(VOICE, 1.5) }
+    ];
+    const bad = [];
+    try {
+      const row = { mid: MID, key: LIBKEY, fp: [TILE.name, TILE.size, TILE.lastModified].join('|'), name: TILE.name, kind: 'image', type: 'image/png', audio: false, w: 8, h: 8, dur: 0, size: TILE.size, added: Date.now() };
+      let list = [];
+      try { list = JSON.parse(idx0 || '[]'); } catch (e) { list = []; }
+      localStorage.setItem(IDX, JSON.stringify([row].concat(Array.isArray(list) ? list : [])));
+      FM.storage.readMedia = function (k) { if (k === LIBKEY) return Promise.resolve({ file: TILE, kind: 'image' }); return realRead.apply(this, arguments); };
+      for (const d of doors) {
+        await settle(d.what);
+        if (d.before) d.before();
+        const n0 = FM.scene.layers.length;
+        let entered = 0;
+        const gate = new Promise((res, rej) => { fail = rej; });
+        gate.catch(() => {});
+        const real = d.kind === 'image' ? realImg : realVid;
+        const held = function (f) { if (f && f.name === d.name) { entered++; return gate; } return real.apply(this, arguments); };
+        if (d.kind === 'image') FM.loadImageFile = held; else FM.loadVideoFile = held;
+        pending = Promise.resolve(d.start()).then(r => ({ r: r }), e => ({ error: e }));
+        if (!(await until(() => entered > 0, 8000))) throw new Error('setup: ' + d.what + ' never reached its loader, so nothing was opening');
+        const during = W.busy(), n = FM._importing;
+        reloads = 0;
+        const now = await W(count);
+        const heldNow = !now && !reloads && W.held();
+        fail(new Error('1176 test: the loader was let go'));
+        const out = await pending;
+        pending = null; fail = null;
+        putLoaders();
+        await sleep(60);
+        const n1 = FM.scene.layers.length;
+        if (d.after) d.after();
+        if (!during) bad.push('while ' + d.what + ' was opening its file the app counted as idle (FM._importing ' + JSON.stringify(n) + ')');
+        if (!heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app while ' + d.what + ' was still opening its file (' + reloads + ' reload), so it never arrived' : 'was dropped rather than held while ' + d.what + ' was opening its file'));
+        if (!d.gaveUp(out)) bad.push('CONTROL: ' + d.what + ' did not give up when its loader failed (' + (out.error ? 'it threw ' + out.error.message : 'it answered ' + String(out.r)) + ')');
+        if (n1 !== n0) bad.push('CONTROL: ' + d.what + ' took the scene from ' + n0 + ' to ' + n1 + ' layers though its file never opened');
+        if (FM._importing) bad.push('after ' + d.what + ' gave up FM._importing is still ' + JSON.stringify(FM._importing) + ', so every later update would wait for it');
+        if (W.busy()) bad.push('after ' + d.what + ' gave up the app still counts as busy (' + W.busy() + ')');
+        else if (!(await until(() => reloads > 0, 9000))) bad.push('once ' + d.what + ' had given up, the held reload never happened by itself');
+        try { W.cancel(); } catch (e) {}
+      }
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (fail) fail(new Error('1176 test: cleaned up'));
+      if (pending) { try { await pending; } catch (e) {} }
+      putLoaders(); putClick();
+      if (dRead) Object.defineProperty(FM.storage, 'readMedia', dRead); else FM.storage.readMedia = realRead;
+      try { if (idx0 == null) localStorage.removeItem(IDX); else localStorage.setItem(IDX, idx0); } catch (e) {}
+      takeOut();
+      try { FM.media.remove(L.id); } catch (e) {}
+      if (dFlag) Object.defineProperty(FM, '_importing', dFlag); else delete FM._importing;
+      if (FM.hideToast) { try { FM.hideToast(); } catch (e) {} }
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (the AI's whole run): A RUN COUNTED AS IDLE AS SOON AS ITS REQUEST WAS ANSWERED ═════════════════════════════
+     FM._aiCalls (the test two above) is non-zero only while a request is in flight. A Director build is a chain of them (Interpreter,
+     Planner, the Builders, the Critic) with each answer applied before the next, and a re-roll or Refine applies its answer after
+     its request is over: from each answer to the next request, and to the end of the run, fmSwBusy answered '' though the run was
+     still going and still writing into the project. Today nothing in those gaps waits, so a new build's check cannot land in one,
+     but that was luck, not a rule: one awaited render or panel step there would open it. So fmSwBusy now also holds while
+     FM.ai.isRunning() (js/ai.js state.running, true for the whole of generateScene, rerollTask and refine). Driven with
+     FM.ai.DRY_RUN (the mock answers after the dry-run delay: no key, no network, no tokens) through a re-roll of a stand-in last
+     build, with FM.aiOps.applyOps stood in for so the answer writes nothing: at the moment the run applies its answer (its request
+     over, the run still going) the app is asked whether it is busy and handed a new build; the stand-in applies nothing, so the
+     re-roll keeps what was there and ends, and the held build must then reload by itself.
+     FAILS BEFORE THE FIX: while the run applies its answer fmSwBusy answers '' and the new build is not held for the run.
+     CONTROLS, which hold before and after: the app is idle to start with; the run really reached that moment with no request in
+     flight (FM._aiCalls 0) and FM.ai.isRunning() true there, else the test stops as a setup failure; afterwards the run is over and
+     the scene holds the same layers; and with nothing running a new build reloads at once. Restores FM.ai.DRY_RUN,
+     FM.ai._lastBuild, FM.aiOps.applyOps and FM._aiCalls, and cancels any hold. */
+  test('1176 leftover: an update does not reload the app between an AI run’s requests: while a re-roll applies the answer it got, its request over and the run still going, the new build waits, and once the run ends the app reloads by itself (CONTROLS: no request was in flight at that moment; the run kept the scene; an idle app reloads at once)', { item: '1176', budgetMs: 60000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (!FM.ai || typeof FM.ai.rerollTask !== 'function' || typeof FM.ai.isRunning !== 'function' || !FM.aiOps || typeof FM.aiOps.applyOps !== 'function' || !FM.aiMock || !FM.aiManifest || !FM.aiManifest.tools || !FM.aiManifest.tools.ops) throw new Error('setup: FM.ai.rerollTask / isRunning, FM.aiOps.applyOps, FM.aiMock or FM.aiManifest.tools.ops is not reachable');
+    if (FM.ai.isRunning()) throw new Error('setup: an AI run was already going');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_aiCalls');
+    const dApply = Object.getOwnPropertyDescriptor(FM.aiOps, 'applyOps'), realApply = FM.aiOps.applyOps;
+    const putApply = () => { if (dApply) Object.defineProperty(FM.aiOps, 'applyOps', dApply); else FM.aiOps.applyOps = realApply; };
+    const dry0 = FM.ai.DRY_RUN, lb0 = FM.ai._lastBuild;
+    let reloads = 0, pending = null, handed = null, at = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const bad = [];
+    try {
+      await settle('the run');
+      if (FM.aiBudget && typeof FM.aiBudget.spentCents === 'function' && FM.aiBudget.spentCents() >= FM.aiBudget.capCents) throw new Error('setup: the AI budget cap is already reached, so a re-roll would not run');
+      const ids0 = FM.scene.layers.map(l => l.id).join(',');
+      FM.ai.DRY_RUN = true;
+      FM.ai._lastBuild = { intent: { subject: '1176 a title card' }, tasks: [{ id: 't_1176', label: '1176 re-roll', refs: [] }], refMap: {}, dry: true, keepCanvas: false };
+      FM.aiOps.applyOps = function () {
+        if (!at) { at = { busy: W.busy(), calls: FM._aiCalls, running: FM.ai.isRunning() }; reloads = 0; handed = W(count); }
+        return { appliedCount: 0, dropped: [], results: [] };
+      };
+      pending = Promise.resolve(FM.ai.rerollTask('t_1176'));
+      await pending;
+      pending = null;
+      if (!at) throw new Error('setup: the re-roll never applied an answer (FM.aiOps.applyOps), so the run never reached the moment after its request');
+      if (at.calls) throw new Error('setup: a model request was still in flight when the answer was applied (FM._aiCalls ' + JSON.stringify(at.calls) + '), so this does not reach the gap between requests');
+      if (!at.running) throw new Error('setup: FM.ai.isRunning() was false while the re-roll applied its answer');
+      const now = await handed;
+      const heldNow = now === false && !reloads && W.held();
+      await sleep(60);
+      if (!at.busy) bad.push('while the run applied the answer to its request (no request in flight, the run still going) the app counted as idle');
+      if (!heldNow) bad.push('a new build handed over while the run applied its answer was not held for the run (' + (reloads ? reloads + ' reload' : 'dropped') + ')');
+      if (FM.ai.isRunning()) bad.push('CONTROL: the re-roll was still running after it had answered');
+      if (FM.scene.layers.map(l => l.id).join(',') !== ids0) bad.push('CONTROL: the re-roll changed the layers though its answer applied nothing');
+      if (W.busy()) bad.push('after the run ended the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(() => reloads > 0, 9000))) bad.push('once the run had ended, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      FM.ai.DRY_RUN = dry0;
+      putApply();
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (pending) { try { await pending; } catch (e) {} }
+      FM.ai.DRY_RUN = dry0;
+      FM.ai._lastBuild = lb0;
+      putApply();
+      if (dFlag) Object.defineProperty(FM, '_aiCalls', dFlag); else delete FM._aiCalls;
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();

@@ -745,11 +745,19 @@ window.FM = window.FM || {};
      FM.addMediaLayer would then give it the 5-second default from Settings instead of its real
      length. We MEASURED the take, so hand that number over when the file will not say. */
   async function addFile(file, measured) {
+    /* 1176 leftover (the doors js/app.js handleFiles does not cover): A NEW BUILD WAITS UNTIL THE TAKE IS IN. commit() closes the
+       panel first, so from there to the clip landing the hold's voice-take check (index.html fmSwBusy, 'recording' / 'review')
+       no longer saw it and nothing else showed busy: a build landing then reloaded the app, and the take exists nowhere but here.
+       Counted in FM._importing, which fmSwBusy reads, until the finally. The try is not re-indented, so its lines keep their
+       history. */
+    FM._importing = (FM._importing || 0) + 1;
+    try {
     var rec = await FM.loadVideoFile(file);
     if (!(rec.duration > 0) && measured > 0) rec.duration = measured;
     FM.addMediaLayer(rec);
     if (FM.toast) FM.toast('Recording added — ' + (rec.duration || measured || 0).toFixed(1) + 's');
     return rec;
+    } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   }
 
   /* ---- public ---------------------------------------------------------------------------------- */

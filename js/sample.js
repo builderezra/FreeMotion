@@ -60,6 +60,9 @@ window.FM = window.FM || {};
       try { if (ac && ac.state !== 'closed') ac.close(); } catch (e) {}
       try { stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} }); } catch (e) {}
     };
+    /* 1176 leftover (the doors js/app.js handleFiles does not cover): from the first frame recorded to the clip landing, a new
+       build waits. Counted in FM._importing, which index.html's fmSwBusy reads, until the finally at the end. */
+    FM._importing = (FM._importing || 0) + 1;
     try {
 
     // rising audio tone (220 -> 880 Hz) so reversed audio is audibly different
@@ -126,6 +129,6 @@ window.FM = window.FM || {};
       if (FM.toast) FM.toast('Could not make a sample clip on this browser', 3200);
       try { console.warn('addSampleClip failed', e); } catch (_) {}
       return null;
-    }
+    } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   };
 })(window.FM);

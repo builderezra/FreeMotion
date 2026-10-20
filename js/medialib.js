@@ -196,6 +196,11 @@ window.FM = window.FM || {};
         return false;
       };
       inFlight.add(flight);
+      /* 1176 leftover (the doors js/app.js handleFiles does not cover): A NEW BUILD WAITS WHILE A TILE'S FILE OPENS. A tap reads
+         the file, may write its shared copy (seconds on a phone) and decodes it, with nothing showing busy, so a build landing then
+         reloaded the app and the clip never arrived. Counted in FM._importing, which index.html's fmSwBusy reads, until the finally
+         below. */
+      FM._importing = (FM._importing || 0) + 1;
       let preparing = false;
       const prepare = () => {
         if (preparing) return;
@@ -257,6 +262,7 @@ window.FM = window.FM || {};
         return false;
       } finally {
         inFlight.delete(flight);
+        FM._importing = Math.max(0, (FM._importing || 1) - 1);
         if (preparing && --preparingNow <= 0) {   // take "Preparing…" down once NO tile is still preparing — unless something has already said something else
           preparingNow = 0;
           const t = document.getElementById('toast');
