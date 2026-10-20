@@ -17061,6 +17061,62 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (zx + zy > 2.5 * R) R = (zx + zy) / 2.5;
     return { x: x, y: y, R: R };
   }
+  /* ═══ bughunt4 #3b — THE TILT PLATE REACHES AS FAR AS THE LAYER, NOT ONLY AS FAR AS THE FRAME ══════════════════════════════════
+   * What was wrong. The flat picture a tilt leans was drawn on a plate the size of the frame (nestedPlate), so whatever part of the
+   * layer hung past the frame edge was cut off BEFORE it was leant. A lean narrows the layer toward its anchor, so that part should
+   * swing into view, and it did not: a 100 px square hinged on its left edge at x 280 of a 320 px frame, leant 70° about Y, is
+   * 21.5 px wide once leant (280..301.5) and wholly on screen, but it drew only the 40 px the frame had left of it, leant to
+   * 280..291: about half the card, ending in a hard cut. A group was cut the same way one step earlier, because its flattened unit
+   * (buildGroupUnit) is frame-sized too.
+   * Now, when the layer's own box (tiltLayerReach: its anchor, its text alignment and its CTM, parents included) reaches past the
+   * plate, the plate grows to take it in, plus a margin for what its edges carry (an outline, a glyph's overhang), in whole plate
+   * pixels so it keeps the plate's grid, and at most 0.6 of the frame past each side (the expanded plate's cost ceiling). A tilted
+   * group's unit grows the same way over its members' boxes, and the plate that leans the unit then takes the whole unit in. A
+   * grown plate is marked the way a camera plate that reaches past the frame is (__fmCamExt), so a pass inside it with geometry of
+   * its own (an effect's kernel) still gets the frame, exactly as before: only the layer's own pixels, its masks and a group's
+   * members reach past it. A Copy / Magnify Background layer keeps the frame (its backdrop is the frame's). A layer whose box is
+   * inside the plate gets the very plate it always did, so every tilt that is fully on screen draws as it did, byte for byte. */
+  function tiltLayerReach(l, t, scene) {
+    const sz = layerSizeAt(l, t), M = layerCTM(l, t, scene);
+    if (!sz || !M || !FM.textAlignShift) return null;
+    const tr = l.transform || {}, kx = anchorX(tr), ky = anchorY(tr), bw = sz.w || 0, bh = sz.h || 0, sh = FM.textAlignShift(l, bw);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i < 4; i++) {
+      const lx = ((i & 1) ? 1 - kx : -kx) * bw + sh, ly = ((i & 2) ? 1 - ky : -ky) * bh;
+      const qx = M.a * lx + M.c * ly + M.e, qy = M.b * lx + M.d * ly + M.f;
+      x0 = Math.min(x0, qx); x1 = Math.max(x1, qx); y0 = Math.min(y0, qy); y1 = Math.max(y1, qy);
+    }
+    return (isFinite(x0) && isFinite(y0) && isFinite(x1) && isFinite(y1)) ? { x0: x0, y0: y0, x1: x1, y1: y1 } : null;
+  }
+  /* A group unit's members as far as they reach (each drawn one's tiltLayerReach, in project px), or null: none, or one copies the
+     backdrop (Copy / Magnify Background), whose backdrop is the frame's. */
+  function unitReach(u, t, scene) {
+    let b = null, keep = false;
+    scene.layers.forEach(L => {
+      if (keep || !u.memberIds.has(L.id) || L.type === 'group' || L.type === 'camera' || L.type === 'adjustment' || L.type === 'null') return;
+      if (!FM.isLayerVisibleAt(L, t)) return;
+      if (FM.hasCopyBg && FM.hasCopyBg(L)) { keep = true; return; }
+      const r = tiltLayerReach(L, t, scene);
+      if (r) b = b ? { x0: Math.min(b.x0, r.x0), y0: Math.min(b.y0, r.y0), x1: Math.max(b.x1, r.x1), y1: Math.max(b.y1, r.y1) } : r;
+    });
+    return keep ? null : b;
+  }
+  // The margin a reach gets: 16 px, or a twentieth of its longer side
+  function reachMargin(b) { return Math.max(16, 0.05 * Math.max(b.x1 - b.x0, b.y1 - b.y0)); }
+  /* The plate `np` (nestedPlate's shape: ps, OX, OY, W, H, PWp, PHp) grown to take in `box` (project px) and `m` round it, or null
+     when the box is already inside np (half a plate pixel's slack) or nothing would be added. Grown by whole plate pixels on each
+     side, at most 0.6 of the frame (PW × PH) past each. */
+  function tiltPlateRegion(box, m, np, PW, PH) {
+    if (!box || !np || !(np.ps > 0) || ![box.x0, box.y0, box.x1, box.y1, m, np.OX, np.OY, np.PWp, np.PHp].every(isFinite)) return null;
+    const ps = np.ps, e = 0.5 / ps, ex = np.OX + np.PWp, ey = np.OY + np.PHp;
+    if (box.x0 >= np.OX - e && box.y0 >= np.OY - e && box.x1 <= ex + e && box.y1 <= ey + e) return null;
+    const px = (v, c) => Math.max(0, Math.ceil(Math.max(0, Math.min(c, v)) * ps - 1e-6));
+    const L = px(np.OX - (box.x0 - m), 0.6 * PW), T = px(np.OY - (box.y0 - m), 0.6 * PH);
+    const R = px(box.x1 + m - ex, 0.6 * PW), B = px(box.y1 + m - ey, 0.6 * PH);
+    if (!(L + T + R + B > 0)) return null;
+    const W = np.W + L + R, H = np.H + T + B;
+    return { ps: ps, OX: np.OX - L / ps, OY: np.OY - T / ps, W: W, H: H, PWp: W / ps, PHp: H / ps };
+  }
   function draw3DTiltLayer(ctx, layer, t, scene) {
     const tilt = tilt3D(layer, t);
     if (!tilt) return;
@@ -17074,7 +17130,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * transform; only the final blit converts back to project units. */
     const PW = proj.width, PH = proj.height;
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
-    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    const _np0 = nestedPlate(ctx, proj);
+    /* bughunt4 #3b: …and as far as the layer reaches, when that is further (tiltPlateRegion). A group's flattened unit says how far
+       its own plate reaches (_canvasX.., set when that plate is not the frame); a Copy / Magnify Background layer keeps the frame. */
+    let _rch = null, _rm = 0;
+    if (layer.type === '_flat') {
+      if (typeof layer._canvasX === 'number' && typeof layer._canvasY === 'number') _rch = { x0: layer._canvasX, y0: layer._canvasY, x1: layer._canvasX + (layer._canvasW || 0), y1: layer._canvasY + (layer._canvasH || 0) };
+    } else if (!(FM.hasCopyBg && FM.hasCopyBg(layer))) {
+      _rch = tiltLayerReach(layer, t, scene);
+      if (_rch) _rm = reachMargin(_rch);
+    }
+    const _ext = _rch ? tiltPlateRegion(_rch, _rm, _np0, PW, PH) : null;
+    const _np = _ext || _np0, ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _t3Depth++;
     try {
@@ -17083,6 +17150,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (_t3A.width !== W || _t3A.height !== H) { _t3A.width = W; _t3A.height = H; }   // resize only on change — dodge the ~8MB per-frame realloc
     if (_t3B.width !== W || _t3B.height !== H) { _t3B.width = W; _t3B.height = H; }
     _t3A.__fmRS = ps; _t3A.__fmOX = OX; _t3A.__fmOY = OY;   // the nested drawLayer renders through baseT
+    _t3A.__fmCamExt = !!_ext;   /* bughunt4 #3b: a grown plate is marked, so a pass nested in it with geometry of its own keeps the frame (nestedPlate) */
     const actx = _t3A.getContext('2d');
     baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -28402,7 +28470,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        so a group with opacity, a blend, a shadow or a mask is not cut off at the frame edge as the camera pans. The plate
        is marked, so the members' own effects — and the group's, applied to the proxy below — keep the frame
        (nestedPlate). Everywhere else R is the frame at the origin and every number below is what it was. */
-    const R = ctx.canvas.__fmCamExt ? nestedPlate(ctx, P, true) : null;
+    let R = ctx.canvas.__fmCamExt ? nestedPlate(ctx, P, true) : null;
+    /* bughunt4 #3b: a group that tilts is leant as this one picture (draw3DTiltLayer), and a lean swings what hung past the frame into
+       view, so the unit also covers as far as its members reach (unitReach, tiltPlateRegion) and is marked like the camera's (above). */
+    if (u.group && groupTilts(u.group, t)) {
+      const reach = unitReach(u, t, scene);
+      const base = R || { ps: ps, OX: 0, OY: 0, W: Math.max(1, Math.round(P.width * ps)), H: Math.max(1, Math.round(P.height * ps)), PWp: P.width, PHp: P.height };
+      const grown = reach ? tiltPlateRegion(reach, reachMargin(reach), base, P.width, P.height) : null;
+      if (grown) R = grown;
+    }
     const RX = R ? R.OX : 0, RY = R ? R.OY : 0, RW = R ? R.PWp : P.width, RH = R ? R.PHp : P.height;
     const GW = R ? R.W : Math.max(1, Math.round(P.width * ps)), GH = R ? R.H : Math.max(1, Math.round(P.height * ps));
     // Skip the full-frame realloc when the dims are unchanged — this fires per group, per frame. _mgA is

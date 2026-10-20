@@ -165939,6 +165939,95 @@
     });
   });
 
+  /* (#3b) A TILT LEANT ONLY WHAT THE FRAME HAD LEFT OF THE LAYER. On c99f5b64 draw3DTiltLayer drew the layer flat on a plate the size of
+     the frame (nestedPlate), and a group's flattened unit (buildGroupUnit) was frame-sized too, so the part of a layer hanging past the
+     frame edge was cut off BEFORE it was leant, though a lean narrows the layer toward its anchor and swings that part into view.
+     A red 100 × 100 square hinged on its left edge (anchorX 0), rows 70..169, leant 70° about Y, on _bh2Frame's 320 × 240 frame. About
+     its anchor at R 50 its far edge is unit 2 out: x' = 2 cos 70° = 0.684, z' = −2 sin 70° = −1.879, f = 3.2 / 5.079 = 0.630, so it
+     lands 0.684 · 0.630 · 50 = 21.5 px from the hinge.
+       CONTROL (in the frame): at x 100 it leans to 100..121.5.
+       (a) At x 280 (280..379 flat, the frame keeps 280..319) it should lean to 280..301.5, wholly on screen: the control moved 180 px.
+           On c99f5b64 the plate held only unit 0..0.8 of it: z' = −0.752, f = 0.810, so it ended at 280 + 0.274 · 0.810 · 50 = 291.1,
+           about 1000 red px where the whole leant card is about 1750.
+       (b) A group G at 0,0 with its anchor on its box's left edge, holding a default-anchor red square at x 330 (280..379), leant 70°:
+           it should draw exactly as (a) (its pivot is its box's left edge, 280, its R the box's 50). On c99f5b64 its unit was cut at
+           319 first and it ended at 291 the same way.
+     FAILS BEFORE THE FIX: (a) and (b) end at column 290, not 300, with about 58 % of the control's red.
+     CONTROL: untilted, the square at x 280 is really cut by the frame (280..319); the square in the frame leans to about 100..121 and is
+     narrowed (the tilt route ran); a group inside the frame (its square at x 150) leans exactly as the single square at x 100, as the
+     #3 test has it — on both commits, because nothing there reaches past the frame and the plate is the one it always was.
+     TOL: 1 column and 1 % of the red between (a) and the control moved 180 px (the same plate pixels and mesh, moved by a whole 180 px;
+     the canvas's single-precision jitter, about 1e-5 px, cannot move a column), 2 levels between (b) and (a), as the #3 test allows a
+     group against a single layer; the fault is 10 columns and 40 % of the red. */
+  test('bughunt4 #3b A leant layer swings its off-frame part into view: a square hinged on its left edge and hanging off the frame’s right edge, leant 70° about Y, draws whole, exactly as the same square leant inside the frame moved 180 px, and a leant group holding it draws the same (CONTROLS: untilted it is really cut by the frame; inside the frame it leans as before; a group inside the frame leans exactly as a single layer)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5;
+      FM.time = T;
+      const square = (name, x, ax, parent) => {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 120, shapeW: 100, shapeH: 100, fill: '#ff0000', start: 0, duration: 4 });
+        L.start = 0; L.duration = 4;
+        if (ax != null) L.transform.anchorX = ax;
+        if (parent) L.parent = parent;
+        return L;
+      };
+      const grp = (name, ax) => {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        if (ax != null) g.transform.anchorX = ax;
+        return g;
+      };
+      /* The red pixels' count and span (columns x0..x1, rows y0..y1). */
+      const reds = (f) => {
+        let n = 0, x0 = -1, x1 = -1, y0 = -1, y1 = -1;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            n++;
+            const x = k % 320, y = (k - x) / 320;
+            if (x0 < 0 || x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y0 < 0 || y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+        return { n: n, x0: x0, x1: x1, y0: y0, y1: y1 };
+      };
+      const say = r => r.n + ' red px at columns ' + r.x0 + '..' + r.x1 + ', rows ' + r.y0 + '..' + r.y1;
+      const moved = (r, c, dx) => Math.abs(r.x0 - (c.x0 + dx)) <= 1 && Math.abs(r.x1 - (c.x1 + dx)) <= 1 && Math.abs(r.y0 - c.y0) <= 1 && Math.abs(r.y1 - c.y1) <= 1 && Math.abs(r.n - c.n) <= Math.max(10, 0.01 * c.n);
+
+      /* ── CONTROLS: the hinged square inside the frame leans to about 100..121; at x 280 untilted the frame really cuts it. */
+      const Hc = square('bh4 #3b hinged square in the frame', 100, 0, null);
+      Hc.transform.rotationY = 70;
+      FM.scene.layers = [Hc];
+      const fc = _bh2Frame(T), rc = reds(fc);
+      if (rc.n < 1000 || rc.x1 - rc.x0 + 1 > 30 || Math.abs(rc.x0 - 100) > 1 || Math.abs(rc.x1 + 1 - 121.5) > 2) throw new Error('CONTROL: hinged on its left edge at x 100 and leant 70° about Y, the square is ' + say(rc) + ', not about 100..121 (its far edge 21.5 px from the hinge) — the fixture is not the one worked out above');
+      const He = square('bh4 #3b hinged square off the frame edge', 280, 0, null);
+      FM.scene.layers = [He];
+      const cut = reds(_bh2Frame(T));
+      if (Math.abs(cut.x0 - 280) > 1 || cut.x1 !== 319) throw new Error('CONTROL: untilted at x 280 the square is ' + say(cut) + ', not cut by the frame’s right edge to 280..319 — this would not test the frame edge');
+
+      /* ── (a) leant at x 280: the whole card, exactly the control moved 180 px. */
+      He.transform.rotationY = 70;
+      const fe = _bh2Frame(T), re = reds(fe);
+      if (!moved(re, rc, 180)) throw new Error('(a) a square hinged on its left edge at x 280, hanging off the frame’s right edge and leant 70° about Y, is ' + say(re) + ', not the leant square at x 100 (' + say(rc) + ') moved 180 px' + (Math.abs(re.x1 + 1 - 291.1) <= 2 ? ' — only the part the frame had left of it was leant, so the card ends in a cut at about 291' : ''));
+
+      /* ── CONTROL: a group inside the frame leans exactly as the single square. */
+      const Gi = grp('bh4 #3b hinged group in the frame', 0);
+      Gi.transform.rotationY = 70;
+      FM.scene.layers = [Gi, square('bh4 #3b red in the hinged group in the frame', 150, null, Gi.id)];
+      const fgi = _bh2Frame(T), mi = _bh2MaxDiff(fgi.d, fc.d);
+      if (mi > 2) throw new Error('CONTROL: a group at 0,0 with its anchor on its box’s left edge, holding a square at x 150 and leant 70° about Y, draws ' + say(reds(fgi)) + ' where the single square hinged at x 100 draws ' + say(rc) + ' (up to ' + mi + ' levels apart) — a group inside the frame no longer leans as a single layer');
+
+      /* ── (b) the same group with its square hanging off the frame edge draws exactly as (a). */
+      const Go = grp('bh4 #3b hinged group off the frame edge', 0);
+      Go.transform.rotationY = 70;
+      FM.scene.layers = [Go, square('bh4 #3b red in the hinged group off the frame edge', 330, null, Go.id)];
+      const fgo = _bh2Frame(T), rgo = reds(fgo), mo = _bh2MaxDiff(fgo.d, fe.d);
+      if (!moved(rgo, rc, 180)) throw new Error('(b) a group with its anchor on its box’s left edge, holding a square at x 330 that hangs off the frame’s right edge, leant 70° about Y, draws ' + say(rgo) + ', not the leant square at x 100 (' + say(rc) + ') moved 180 px' + (Math.abs(rgo.x1 + 1 - 291.1) <= 2 ? ' — the group’s flattened unit was cut at the frame edge before it was leant' : ''));
+      if (mo > 2) throw new Error('(b) a group with its anchor on its box’s left edge, holding a square at x 330 that hangs off the frame’s right edge, leant 70° about Y, draws ' + say(rgo) + ' where the single square hinged at x 280 draws ' + say(re) + ' (up to ' + mo + ' levels apart)' + (Math.abs(rgo.x1 + 1 - 291.1) <= 2 ? ' — the group’s flattened unit was cut at the frame edge before it was leant' : ''));
+    });
+  });
+
   /* (#1b) THE EDITOR STILL HANDLED A MEMBER WITH THE OLD CHAIN. bughunt4 #1 (cedde93f) made a group's Flip, unlinked Width / Height,
      Skew, depth and link mode reach its members when they are DRAWN (compositor.js applyParentChain), but canvas-edit's parentXform —
      the walk behind a member's selection box, the tap that keeps or drops its selection, the drag and the handles — still composed only
