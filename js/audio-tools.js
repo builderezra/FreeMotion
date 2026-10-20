@@ -56,6 +56,10 @@ window.FM = window.FM || {};
   /* Extract a clip's audio and download it as a WAV file (the full source track). */
   FM.downloadLayerAudio = async function (layer) {
     if (!layer) return;
+    /* bughunt7 #2 (#1091's doors): the export gate's own question and notice (js/app.js FM.exportTurnedOff). A watch-only copy's
+       clip is not saved as a file, live or not — after the owner ends the session the inspector is no longer read-only, and
+       this button would hand over a clip's whole source sound. */
+    if (FM.exportTurnedOff && FM.exportTurnedOff()) { if (FM.sayExportTurnedOff) await FM.sayExportTurnedOff(); return; }
     if (FM.toast) FM.toast('Extracting audio…', 1500);
     const ab = await layerAudioBuffer(layer);
     if (!ab) { if (FM.toast) FM.toast('This clip has no audio to extract'); return; }

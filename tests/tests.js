@@ -170173,4 +170173,188 @@
     });
   });
 
+  /* (#2) A WATCH-ONLY COPY COULD STILL BE TAKEN AWAY BY COPY, SAVE AUDIO AS WAV AND SAVE MY VERSION. #1091 made “Viewer: can only
+     watch” true at Export, the project file, Duplicate and Leave, and three doors still asked nothing: js/app.js FM.copySelection
+     (what ⌘C and the ⧉ menu’s Copy selected both call), js/audio-tools.js FM.downloadLayerAudio (reachable once the owner ends the
+     session, when the inspector is no longer read-only) and js/collab-bridge.js saveVersion (a Commenter’s Save my version: it
+     hands duplicateFrom a document with no srcIds, so duplicateFrom’s own watch-only refusal never fires). Copy put every clip
+     AND its file on the clipboard, and a paste into a project of their own exports. And a clipboard entry carrying a clip’s
+     stored file (fileKey, stamped at hydrate) keeps that record through Leave (storage.js heldByAnother), so “Leave deletes it
+     and its clips” was not true after a ⌘C (the refuter’s N3). Now all three ask the export gate’s question (FM.exportTurnedOff)
+     and say its notice; with Copy refused the clipboard cannot hold the copy’s clips, so Leave deletes them.
+     The rig is the 1091 test’s: a Viewer’s linked copy with one picture stored under its layer, in a live session whose owner’s
+     export switch is off (then, for the controls, on). The picture’s record is marked as a hydrated one (fileKey = its layer id),
+     as every clip is after a reopen. The WAV goes through a stand-in decoder (a short silent buffer, FM.decodeAudio), so the door
+     is judged by whether a WAV blob is made; URL.createObjectURL counts them and the download’s anchor click does nothing.
+     FAILS BEFORE THE FIX: with exporting off Copy answers 1 and the clipboard holds the layer with its file, no notice; Save
+     audio as WAV makes a WAV; Save my version makes a project of their own; and after Leave the clip’s record is still on the
+     device, held by that clipboard entry.
+     CONTROLS, which hold before and after: with exporting off Export is refused (the 1091 gate) and the Leave card offers no
+     copy; with exporting ON the same three doors work, with no card: the layer is copied, one WAV is made, and Save my version
+     makes a project. */
+  test('bughunt7 #2 A watch-only copy cannot be taken away by Copy, Save audio as WAV or Save my version: with exporting off a Viewer’s Copy is refused with the export notice and the clipboard keeps what it held, no WAV is made, no version is saved as a project, and after Leave the clip is gone from the device even though Copy was tried (CONTROLS: Export is refused as before; with exporting on, Copy, the WAV and Save my version all work)', { item: '1176', budgetMs: 180000 }, async function () {
+    const C = need921S7('a watch-only copy’s other doors');
+    if (typeof FM.copySelection !== 'function' || typeof FM.downloadLayerAudio !== 'function' || !C.bridge || typeof C.bridge.saveVersion !== 'function') throw new Error('setup: FM.copySelection, FM.downloadLayerAudio or the bridge’s saveVersion is not reachable');
+    const exp = document.getElementById('export-dialog');
+    const bad = [], made = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const clip0 = FM.clipboard;
+    const ownURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    const ownDecode = Object.getOwnPropertyDescriptor(FM, 'decodeAudio');
+    let wavs = 0;
+    function closeExport() {
+      const a = document.getElementById('fm-ask'); if (a && !a.classList.contains('hidden')) { const x = a.querySelector('.fm-ask-ok'); if (x) x.click(); }
+      exp.classList.add('hidden');
+      const o = document.getElementById('export-overlay'); if (o) o.classList.add('hidden');
+    }
+    /* true: the export dialog opened; false: the notice said exporting is off and nothing opened (the 1091 test's) */
+    async function exportOpens() {
+      const p = FM.showExportDialog();
+      const got = await until921S6('the export dialog or its notice', function () {
+        const q = ask967b3();
+        if (q && /Exporting is turned off/.test(q.title + ' ' + q.msg)) return { notice: q };
+        return exp.classList.contains('hidden') ? null : { open: true };
+      }, 4000);
+      if (got.notice) { got.notice.ok.click(); await p; await settle921(60); return !exp.classList.contains('hidden'); }
+      await p; await settle921(60); closeExport();
+      return true;
+    }
+    /* A card that comes up within `ms`, answered: true for the export notice (OK), its title for any other (Cancel), false for none. */
+    async function notice(ms) {
+      const t0 = Date.now();
+      while (Date.now() - t0 < ms) {
+        const q = ask967b3();
+        if (q) {
+          const said = /Exporting is turned off/.test(q.title + ' ' + q.msg);
+          if (said) q.ok.click(); else (q.cancel || q.ok).click();
+          await settle921(60);
+          return said ? true : 'a card titled “' + q.title + '”';
+        }
+        await settle921(40);
+      }
+      return false;
+    }
+    const cardOf = function (pid) { return FM.projects.list().filter(function (p) { return p.id === pid; })[0] || null; };
+    /* A Viewer's linked copy, opened, with one picture stored under its layer the way the transfer writes it. */
+    async function viewerCopy(tag) {
+      const D = { project: { name: 'Ezra’s film bh7-2 ' + tag, width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(mediaLayer921('Watch bh7-2 ' + tag, 'image'))] };
+      const gpid = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'viewer', epoch: 'e-bh7-2', seq: 0, name: 'Sam' }, D);
+      if (!gpid) throw new Error('setup: could not make the shared copy');
+      made.push(gpid);
+      await FM.projects.open(gpid);
+      const lid = FM.scene.layers[0].id;
+      await q921give(lid, await q921png([30, 200, 30], 'bh7-2' + tag + '.png'), 'image', 0);
+      return { gpid: gpid, lid: lid, name: D.project.name };
+    }
+    /* …in a live session with an owner whose export switch is `roExport` (the 1091 test's rig) */
+    function attachViewer(v, roExport) {
+      const hdoc = jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers });
+      const inv = C.bridge.invariants();
+      const H = C.Host({ base: jclone921(hdoc), invariants: inv, ownerInfo: { name: 'Ezra', color: '#ff9f43' } });
+      const HS = C.Session({ adapter: plainAdapter921(hdoc, inv), role: 'owner', mid: 'o', host: H });
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+      const mid = HS.addPeer(loop.a, { role: 'viewer', name: 'Sam', color: '#a3e635' });
+      const G = C.Session({ adapter: C.bridge, role: 'viewer', mid: mid, base: jclone921(hdoc), epoch: H.epoch });
+      G.gpid = v.gpid; G.pid = v.gpid; G.hostName = 'Ezra';
+      G.setLink(loop.b); G.bs = H.seq;
+      C.attach(G, { autoTick: false });
+      HS.setRoomSettings({ roExport: roExport, editorsInvite: false, max: 8 });
+      loop.settle();
+      if (!G.roomSettings || G.roomSettings.roExport !== roExport) throw new Error('setup: the owner’s export switch (' + roExport + ') did not reach the Viewer: ' + JSON.stringify(G.roomSettings));
+      return G;
+    }
+    async function openLeave(ui) {
+      await ui.share(); await settle921(150);
+      const leave = document.querySelector('#collab-share .cs-foot .cs-stop');
+      if (!leave) throw new Error('setup: the Viewer’s panel has no Leave');
+      leave.click();
+      return until921S6('the Leave card', ask967b3, 3000);
+    }
+    /* Copy, the WAV and Save my version on the open copy's layer `lid`: what each did, and the card each brought up. */
+    async function tryDoors(lid, what) {
+      const L = FM.layerById(FM.scene, lid);
+      if (!L || !FM.media.get(lid) || !FM.media.get(lid).file) throw new Error('setup: the ' + what + ' copy’s picture is not on its layer');
+      FM.scene.selectedId = lid; FM.scene.selectedIds = [lid];
+      const mine = [];
+      FM.clipboard = mine;
+      const n = FM.copySelection();
+      const copyCard = await notice(1500);
+      const held = (FM.clipboard || []).filter(function (e) { return e && e.snapshot && e.snapshot.id === lid; });
+      const out = { n: n, kept: FM.clipboard === mine && !mine.length, held: held.length, heldFile: held.some(function (e) { return e.fileKey === lid || !!e.file; }), copyCard: copyCard };
+      wavs = 0;
+      const pw = FM.downloadLayerAudio(L);
+      out.wavCard = await notice(1500);
+      await pw; await settle921(60);
+      out.wavs = wavs;
+      const before = FM.projects.list().map(function (p) { return p.id; });
+      const pv = C.bridge.saveVersion(jclone921({ project: FM.scene.project, layers: FM.scene.layers }));
+      out.verCard = await notice(1500);
+      const nv = await pv; await settle921(200);
+      const fresh = FM.projects.list().filter(function (p) { return before.indexOf(p.id) < 0; });
+      fresh.forEach(function (p) { made.push(p.id); });
+      if (nv && made.indexOf(nv) < 0) made.push(nv);
+      out.version = nv || null; out.fresh = fresh.map(function (p) { return p.name; });
+      return out;
+    }
+    await withLabs921(async function (ui) {
+      try {
+        if (wasHome) FM.home.close();
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: function (b) { if (b && b.type === 'audio/wav') wavs++; return ownURL.value.apply(URL, arguments); } });
+        Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+        FM.decodeAudio = async function () { return { numberOfChannels: 1, sampleRate: 8000, length: 80, getChannelData: function () { return new Float32Array(80); } }; };
+
+        /* 1. A live Viewer, exporting off: the copy is watch-only. */
+        const v = await viewerCopy('off');
+        attachViewer(v, false);
+        await settle921(80);
+        if (!C.watchOnly(v.gpid)) throw new Error('setup: the Viewer’s copy with exporting off is not watch-only (FM.collab.watchOnly)');
+        if (await exportOpens()) bad.push('CONTROL: with exporting off a live Viewer’s Export opened the export dialog');
+        FM.media.get(v.lid).fileKey = v.lid;   // as hydrate stamps every clip it reads back from the store
+        const off = await tryDoors(v.lid, 'watch-only');
+        if (off.n || !off.kept) bad.push('with exporting off Copy answered ' + off.n + ' and left ' + off.held + ' entry of the watched layer on the clipboard' + (off.heldFile ? ', with its file' : '') + ', ready to paste into a project of their own, where it exports');
+        if (off.copyCard !== true) bad.push('with exporting off Copy brought up ' + (off.copyCard || 'no card') + ', not the export notice, so nothing says why');
+        if (off.wavs) bad.push('with exporting off Save audio as WAV made ' + off.wavs + ' WAV file of the watched clip’s sound');
+        if (off.wavCard !== true) bad.push('with exporting off Save audio as WAV brought up ' + (off.wavCard || 'no card') + ', not the export notice');
+        if (off.version || off.fresh.length) bad.push('with exporting off Save my version made a project of their own: ' + JSON.stringify(off.fresh));
+        if (off.verCard !== true) bad.push('with exporting off Save my version brought up ' + (off.verCard || 'no card') + ', not the export notice');
+        /* N3: …and Leave deletes the clip, because the clipboard holds nothing of it */
+        const q = await openLeave(ui);
+        if (/keep/i.test(q.ok.textContent) || /copy stays/i.test(q.msg)) bad.push('CONTROL: with exporting off the Leave card offers to keep a copy: “' + q.msg + '” [' + q.ok.textContent + ']');
+        q.ok.click();
+        await until921S6('the session to stand down and the shared copy to go', function () { return !C.session && !cardOf(v.gpid) ? 1 : null; }, 15000);
+        await settle921(400);
+        const rec = await FM.storage.readMedia(v.lid);
+        if (rec && rec.file) bad.push('after Leave the watched clip is still stored on this device under its layer' + ((FM.clipboard || []).some(function (e) { return e && e.fileKey === v.lid; }) ? ', kept because the clipboard holds its file (storage.js heldByAnother)' : ''));
+        FM.clipboard = [];
+
+        /* 2. CONTROL: the same Viewer with exporting ON — the three doors work, with no card. */
+        const w = await viewerCopy('on');
+        attachViewer(w, true);
+        await settle921(80);
+        if (C.watchOnly(w.gpid)) throw new Error('setup: the Viewer’s copy with exporting on is watch-only');
+        const on = await tryDoors(w.lid, 'allowed');
+        FM.clipboard = [];   // let go of the copy's file before the cleanup deletes the copy
+        if (on.n !== 1 || on.held !== 1) bad.push('CONTROL: with exporting on Copy answered ' + on.n + ' and put ' + on.held + ' entry of the layer on the clipboard, not one');
+        if (on.copyCard) bad.push('CONTROL: with exporting on Copy brought up ' + on.copyCard);
+        if (on.wavs !== 1) bad.push('CONTROL: with exporting on Save audio as WAV made ' + on.wavs + ' WAV files, not one');
+        if (on.wavCard) bad.push('CONTROL: with exporting on Save audio as WAV brought up ' + on.wavCard);
+        if (!on.version || on.fresh.length !== 1) bad.push('CONTROL: with exporting on Save my version made ' + JSON.stringify(on.fresh) + ' (answered ' + on.version + '), not one project');
+        if (on.verCard) bad.push('CONTROL: with exporting on Save my version brought up ' + on.verCard);
+      } finally {
+        closeExport();
+        const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+        FM.clipboard = clip0;
+        Object.defineProperty(URL, 'createObjectURL', ownURL);
+        if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+        else delete HTMLAnchorElement.prototype.click;
+        if (ownDecode) Object.defineProperty(FM, 'decodeAudio', ownDecode); else delete FM.decodeAudio;
+        try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+        try { ui.close(); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();

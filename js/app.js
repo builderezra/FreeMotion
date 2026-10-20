@@ -4619,6 +4619,11 @@ window.FM = window.FM || {};
   FM.copySelection = function () {
     const ids = FM.selectionIds ? FM.selectionIds() : (FM.scene.selectedId ? [FM.scene.selectedId] : []);
     if (!ids.length) return 0;
+    /* bughunt7 #2 (#1091's doors): a copy whose owner turned exporting off is not copied — the clipboard would carry every clip
+       and its file into a project of his own, where it exports, and a clipboard entry holding a clip's stored file keeps that
+       record on the device through Leave (storage.js heldByAnother). Refused and said in the export gate's words; the
+       clipboard keeps whatever it held. */
+    if (exportTurnedOff()) { sayExportTurnedOff(); return 0; }
     /* ⚠️ queue 914.5: A GROUP BRINGS ITS LAYERS. A group row is only a parent link — its members are not in the
        selection — so copying one snapshotted the empty row and Paste made a "Group copy" with nothing inside it
        (#912 audit). FM.duplicateLayer walks FM.groupDescendants for exactly this reason; paste already remaps
@@ -5845,6 +5850,25 @@ window.FM = window.FM || {};
   /* Simple mode 2.7 (SU1 #20, his "2A" 14 Oct): `sx` is Simple's one-tap Export — { fmSimple: true, scale, fps, quality, from, to }, built by
      js/simple-tools.js. It goes through every gate below (pause, the owner's export switch, the notepad, clips still arriving) and then
      straight to runExport with those fixed settings, never the dialog. Every other caller passes nothing, so Full's dialog is today's. */
+  /* THE EXPORT GATE'S QUESTION AND ITS NOTICE, in one place (bughunt7 #2). Export asks it, and so does every other door that would
+     take a watch-only copy away: Copy (⌘C and the ⧉ menu's Copy selected, FM.copySelection: the clipboard carries every clip's
+     file into a project of his own), Save audio as WAV (js/audio-tools.js FM.downloadLayerAudio) and, with the copy's own id,
+     Save my version (js/collab-bridge.js saveVersion). True while a live session's role may not export, or the open copy is
+     watch-only by its card (FM.collab.watchOnly, which reads the open project when given no id). */
+  function exportTurnedOff() {
+    const C = FM.collab;
+    if (!C) return false;
+    if (C.active && C.canExport && !C.canExport()) return true;
+    const pid = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null;
+    return !!(C.watchOnly && C.watchOnly(pid));
+  }
+  function sayExportTurnedOff() {
+    if (!FM.ask) return Promise.resolve();
+    return FM.ask({ title: 'Exporting is turned off', ok: 'OK', single: true,
+      message: 'The owner of this project has turned off exporting for viewers and commenters. You can still watch it here — ask them if you need a copy.' });
+  }
+  FM.exportTurnedOff = exportTurnedOff;
+  FM.sayExportTurnedOff = sayExportTurnedOff;
   async function showExportDialog(sx) {
     /* STOP THE TRANSPORT FIRST (queue 247). Ezra: "when you open the export menu playback should pause."
      * Before the notepad confirm on purpose — that is itself a modal, so leaving the transport running
@@ -5861,11 +5885,7 @@ window.FM = window.FM || {};
        screen recording — and it is said, never silently ignored. One comparison with no session. */
     /* #1091: …and a WATCH-ONLY copy (FM.collab.watchOnly) stays unexportable with no session too — offline, reopened, or
        after the owner ended it — which is what makes “Viewer: can only watch” true. One read of the card when not live. */
-    if (FM.collab && ((FM.collab.active && FM.collab.canExport && !FM.collab.canExport()) || (FM.collab.watchOnly && FM.collab.watchOnly()))) {
-      if (FM.ask) await FM.ask({ title: 'Exporting is turned off', ok: 'OK', single: true,
-        message: 'The owner of this project has turned off exporting for viewers and commenters. You can still watch it here — ask them if you need a copy.' });
-      return;
-    }
+    if (exportTurnedOff()) { await sayExportTurnedOff(); return; }
     if (FM.notepad && FM.notepad.confirmExport) {
       const go = await FM.notepad.confirmExport();
       if (!go) return;
