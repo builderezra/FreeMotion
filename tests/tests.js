@@ -46028,12 +46028,19 @@
     }
   });
 
-  test('home\'s own paint overhangs its box, so the shake cannot uncover the editor (queue 250)', { item: 'slam' }, function () {
+  test('home\'s own paint overhangs its box, so the shake cannot uncover the editor (queue 250)', { item: 'slam' }, async function () {
     /* The overscan was doing a real job — without something covering the edges the shake shows the
        editor through (queue 144). The paint field overhangs now instead, so this asserts the guarantee
        the scale used to provide. Without it, removing the scale would simply reopen the older bug. */
+    /* isolation (20 Oct, the v17.82 checks): MEASURED ON HOME OPEN, where the shake plays. The inset is -8% of a box, and on a
+       hidden Home the pseudo-element has none, so getComputedStyle hands back the percentage itself and it read as -8px. Alone
+       it met Home open at boot; in the full run it passed on a Home an earlier leaker left open, and went red once the
+       isolation pass stopped that. It opens Home itself now; isoKeep shuts it again if it found it shut. */
+    const _isoK = isoKeep(); try {
     const root = document.getElementById('home-screen');
     if (!root) throw new Error('no #home-screen');
+    if (FM.home && FM.home.isOpen && !FM.home.isOpen() && FM.home.open) { FM.home.open(); await sleep(150); }
+    if (getComputedStyle(root).display === 'none') throw new Error('setup: Home is not on screen, so its paint layer has no box and its inset reads as a percentage, not as pixels');
     const cs = getComputedStyle(root, '::before');
     const parts = (cs.inset && cs.inset !== 'auto' ? cs.inset : [cs.top, cs.right, cs.bottom, cs.left].join(' ')).split(/\s+/);
     const nums = parts.map(parseFloat).filter(n => isFinite(n));
@@ -46041,6 +46048,7 @@
     const worst = Math.max(...nums);
     if (worst > -18)
       throw new Error('home\'s paint layer only reaches ' + worst + 'px past its box — the shake travels ~13px plus ~5px of corner swing, so the edges would show the editor');
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 295: the head wasted a dead strip on the far left ----------------
@@ -70199,6 +70207,15 @@
    * Both assert the ORDER, not a specific number, so re-tuning a z-index later cannot silently
    * reintroduce either while the test still passes. */
   test('the benchmark line stops at the lanes, and the loading pill sits under the panels (queue 348/393)', { item: 'stack-order' }, async function () {
+    /* isolation (20 Oct, the v17.82 checks): the track head it compares is a layer's row, and it used to read whatever rows an
+       earlier test left in the scene; alone, or after the isolation pass, the open project is empty and there is no row. It
+       measures beside a layer of its own (isoOwnLayer, which also shuts Home) and puts the scene and Home back as found.
+       THE PILL, the same way: js/loading.js makes #loading-dot on the first FM.loadingDot.check(), which the app asks whenever
+       something is added, so alone nothing had made it yet. It is asked here (nothing is loading, so the pill stays off), and
+       a pill this test made is taken away again (loading.js makes a new one when it is next asked). */
+    var own = isoOwnLayer(), dotMade = false;
+    try {
+    if (!document.getElementById('loading-dot') && FM.loadingDot && FM.loadingDot.check) { FM.loadingDot.check(); dotMade = !!document.getElementById('loading-dot'); }
     var z = function (sel, pseudo) {
       var el2 = document.querySelector(sel);
       if (!el2) return null;
@@ -70226,6 +70243,10 @@
         throw new Error('the loading pill (' + pill + ') is not below the inspector sheet (' + panel + ') — it will cover the controls');
       }
     });
+    } finally {
+      if (dotMade) { var dot = document.getElementById('loading-dot'); if (dot && !dot.classList.contains('on')) dot.remove(); }
+      own.put();
+    }
   });
 
   test('the timeline sizes its scroll range from itself, not from the window', { item: 'tl-width-self' }, async function () {
@@ -81466,7 +81487,10 @@
     if (FM._whiteChrome !== document.body.classList.contains('white-chrome')) throw new Error('the white-chrome constant and the body class disagree, so flipping the constant would not actually revert the look');
     if (!FM._whiteChrome) return;   // deliberately reverted — the rules below are not meant to apply
 
-    const keepAt = FM.addAt;
+    /* isolation (20 Oct, the v17.82 checks): the switch moves the add row only past a layer, and this used to press it in
+       whatever scene an earlier test left; in an empty project the row has nowhere to go and stayed at 0. It presses it beside
+       a layer of its own (isoOwnLayer, which also shuts Home); the scene, Home and the add row go back as found. */
+    const keepAt = FM.addAt, own = isoOwnLayer();
     try {
       btn.classList.remove('sw-moved', 'sw-dragging');
       btn.style.removeProperty('--sw-colour');
@@ -81497,6 +81521,7 @@
     } finally {
       btn.classList.remove('sw-moved', 'sw-dragging');
       btn.style.removeProperty('--sw-colour');
+      own.put();
       FM.addAt = keepAt;
       if (FM.clampAddAt) FM.clampAddAt();
       if (FM.syncAddSwitch) FM.syncAddSwitch();
@@ -86539,6 +86564,11 @@
        here REMOVES this benchmark". The toggle behind that tap searches with `!m.thumb`, so parked on
        the thumbnail pin it finds nothing and ADDS a benchmark. The screen promised remove; the tap did
        add. That is what the third case below is really guarding. */
+    /* isolation (20 Oct, the v17.82 checks): the project is as long as its clips (FM.autoFitDuration), and refreshAll pulls the
+       playhead back inside it, so in an empty project every park below landed on 0. It used to inherit an earlier test's
+       layers; it parks beside a 6 s layer of its own now (isoOwnLayer, which also shuts Home), put back as found. */
+    const own = isoOwnLayer(); try {
+    own.L.duration = 6; FM.refreshAll();
     const P = FM.scene.project;
     const mk0 = P.markers, t0 = FM.time, f0 = P.fps;
     const cl = document.getElementById('tl-centerline');
@@ -86571,6 +86601,7 @@
       P.markers = mk0; P.fps = f0; FM.time = t0;
       FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
+    } finally { own.put(); }
   });
 
   test('659 — the Custom format says Auto adjusts, and it still fits the tile', { item: '659' }, async function () {
