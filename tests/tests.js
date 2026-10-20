@@ -169861,4 +169861,74 @@
     }
   });
 
+  /* ═══ 1176 leftover (after #1107): A HEAD TRIM ABANDONED BY A LOST POINTER LEFT THE EFFECT CLOCK SHIFTED ══════════════════
+     The left grip (js/timeline.js applyTrimAt) re-bases the clip's effect clock, fxTimeOffset, on every move, forward and
+     reversed (queue 823, #1107), so Drift, Spin, Orbit, Wiggle and Shake hold still while the head moves. A trim abandoned by a
+     lost pointer (a pointercancel: a notification, an edge swipe, the OS taking the touch) goes through restoreGestures, which
+     put back start, duration, trimStart and the captions (queue 817) and not fxTimeOffset: the clip came back where it started
+     with its effects running on a clock shifted by however far the pointer had travelled.
+     FAILS BEFORE THE FIX: after a left-grip drag of about 1 s and a pointercancel, the forward clip's fxTimeOffset reads about
+     1.5 where it started at 0.5, the reversed clip's about 1 where it had none, and FM.fxLocalTime at 6 s is off by the same.
+     CONTROL, which holds before and after: the drag really moved the head and the clock (at least 0.2 s each, or the test stops
+     as a setup failure), and the pointercancel put start and duration back (queue 796).
+     TOLERANCE: the restore writes the stored number back, so the clock reads back to float rounding, about 1e-15 s (by
+     construction; not measured here); the fault is the whole drag, at least 0.2 s. 1e-6 s sits between the two. */
+  test('1176 leftover: a left-grip trim abandoned by a lost pointer puts the effect clock back with the clip: after a pointercancel, Drift runs on the clock it had before the drag, on a clip played forward and on one reversed (CONTROL: the drag moved the head and the clock, and the cancel put start and duration back)', { item: '1176' }, async function () {
+    const P = FM.scene.project;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    const t0 = FM.time, dur0 = P.duration;
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const made = [], bad = [], TOL = 1e-6;
+    const fxOf = function (v) { return parseFloat(v.fxTimeOffset) || 0; };
+    const run = async function (rev) {
+      const what = rev ? 'reversed' : 'forward';
+      FM.scene.layers.length = 0;
+      const v = FM.makeLayer('video', { name: '1176 trim ' + what });
+      v.start = 2; v.duration = 6; v.trimStart = 2; v.reversed = rev; v.speed = 1;
+      if (rev) delete v.fxTimeOffset; else v.fxTimeOffset = 0.5;
+      const drift = FM.fxRegistry.makeInstance('drift');
+      if (!drift) throw new Error('setup: this build has no Drift effect to put on the clip');
+      v.effects = [drift];
+      FM.scene.layers.push(v); made.push(v.id);
+      FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+      P.duration = 12; FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0);
+      await sleep(300);
+      const clip = document.querySelector('#tl-tracks .clip[data-id="' + v.id + '"]');
+      const g = attached(clip && clip.querySelector('.clip-grip.left'), what + ' clip’s left trim grip');
+      const r = g.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const pps = FM.timeline.timeToX(1) - FM.timeline.timeToX(0);
+      if (!(pps > 0)) throw new Error('setup: the timeline reports ' + pps + ' px per second');
+      const probe = 6, s0 = v.start, d0 = v.duration, fx0 = fxOf(v), had = Object.prototype.hasOwnProperty.call(v, 'fxTimeOffset');
+      const clock0 = FM.fxLocalTime(v, probe);
+      const ev = function (type, cx, b) { return new PointerEvent(type, { pointerId: 37, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true, clientX: cx, clientY: y, button: 0, buttons: b }); };
+      g.dispatchEvent(ev('pointerdown', x, 1));
+      await sleep(40);
+      for (let k = 1; k <= 6; k++) { window.dispatchEvent(ev('pointermove', x + pps * k / 6, 1)); await sleep(16); }
+      await sleep(60);
+      const moved = v.start - s0, carried = fxOf(v) - fx0;
+      /* CONTROL: the drag moved the head, and the clock with it, so there is something for the cancel to put back */
+      if (!(Math.abs(moved) >= 0.2)) throw new Error('setup: dragging the ' + what + ' clip’s left grip ' + Math.round(pps) + ' px did not move its head (start ' + s0 + ' to ' + v.start + ')');
+      if (!(Math.abs(carried) >= 0.2)) throw new Error('setup: the drag moved the ' + what + ' clip’s head ' + moved.toFixed(3) + ' s and its effect clock only ' + carried.toFixed(3) + ' s, so an abandoned trim has no clock to put back');
+      window.dispatchEvent(ev('pointercancel', x + pps, 0));   // the pointer is lost
+      await sleep(150);
+      if (Math.abs(v.start - s0) > TOL || Math.abs(v.duration - d0) > TOL) throw new Error('CONTROL: the pointercancel did not put the ' + what + ' clip back (start ' + v.start + ', duration ' + v.duration + '), so the restore itself is not running');
+      const off = fxOf(v) - fx0, jump = FM.fxLocalTime(v, probe) - clock0;
+      if (Math.abs(off) > TOL || Math.abs(jump) > TOL) bad.push('a ' + moved.toFixed(3) + ' s left-grip trim on the ' + what + ' clip, abandoned by a pointercancel, put the clip back and left its effect clock at ' + v.fxTimeOffset + ' (it was ' + (had ? fx0 : 'unset') + '), so Drift and every other time-driven effect at 6 s runs ' + jump.toFixed(3) + ' s off where it was before the drag');
+    };
+    try {
+      if (wasHome) FM.home.close();
+      await run(false);
+      await run(true);
+    } finally {
+      try { if (FM.timeline._abortGestures) FM.timeline._abortGestures(); } catch (e) {}
+      made.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.duration = dur0; FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM.time = t0; FM.refreshAll(); FM.timeline.rebuild();
+      if (wasHome && FM.home && FM.home.open) FM.home.open();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();

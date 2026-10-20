@@ -597,6 +597,12 @@ window.FM = window.FM || {};
          use it — so a trim abandoned by a lost pointer put the clip back and left its captions shifted by
          however far the finger had travelled. */
       if (trimDrag.caps) L.captions = trimDrag.caps.map(c => ({ ...c }));
+      /* 1176 leftover: …AND THE EFFECT CLOCK. A head trim re-bases fxTimeOffset on every move, forward and reversed (queue
+         823, #1107), and this put everything else back and left it, so a trim abandoned by a lost pointer returned the clip
+         to where it started with every Drift, Spin, Orbit, Wiggle and Shake on it running on a clock shifted by however far
+         the finger had travelled. The value it had at pointerdown goes back exactly; a clip that had none gets none again. */
+      if (trimDrag.fxHad === true) L.fxTimeOffset = trimDrag.fxRaw;
+      else if (trimDrag.fxHad === false) delete L.fxTimeOffset;
       trimDrag = null; hideTrimHud();
     }
     if (kfDrag) {
@@ -2359,7 +2365,7 @@ window.FM = window.FM || {};
         // `caps` is the cue list AS IT WAS AT THE GRAB — every move recomputes from the original, the
         // same way `start`/`dur`/`trim` above do. Shifting the live list per move would compound.
         touchGesture();   // queue 541: a gesture that never gets stamped looks stale to rebuild() the instant it starts
-        trimDrag = { pid: e.pointerId, fx0: (parseFloat(layer.fxTimeOffset) || 0), layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, _scrollFrames: 0, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type, sup: snappedTargetsOf(layer), caps: Array.isArray(layer.captions) ? layer.captions.map(c => ({ ...c })) : null };
+        trimDrag = { pid: e.pointerId, fx0: (parseFloat(layer.fxTimeOffset) || 0), fxHad: Object.prototype.hasOwnProperty.call(layer, 'fxTimeOffset'), fxRaw: layer.fxTimeOffset, layer: layer, edge: edge, startX: e.clientX, lastX: e.clientX, _scrollFrames: 0, startScroll: timelineEl ? timelineEl.scrollLeft : 0, start: layer.start, dur: layer.duration, trim: layer.trimStart, srcDur: (m && m.duration) ? m.duration : Infinity, type: layer.type, sup: snappedTargetsOf(layer), caps: Array.isArray(layer.captions) ? layer.captions.map(c => ({ ...c })) : null };
         FM.selectLayer(layer.id);
         if (FM.playing) FM.pause();
       };
