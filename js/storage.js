@@ -2981,7 +2981,9 @@ window.FM = window.FM || {};
        a clip that could not be copied, take the half-copy back out (every key below is one this call
        minted a moment ago — nothing of his is touched) and say false. */
     async duplicate(id) {
-      if (id === curId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();   // duplicating the OPEN project must copy the last 600ms of edits, not the stale doc
+      /* bughunt8 #2b: "the OPEN project" is THIS tab's (tabId), not the shared fm.currentProject a second tab moves: with another tab
+         on a project of its own, Duplicate here skipped the flush and the copy missed the last 600 ms of edits. */
+      if (id === tabId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();   // duplicating the OPEN project must copy the last 600ms of edits, not the stale doc
       const doc = readJSON('fm.proj.' + id, null); if (!doc) return false;
       /* THE BODY IS duplicateFrom (queue 921 S0). Behaviour-identical: `duplicate` still reads the doc off
          disk and still answers true/false; everything below the read happens there. Split because collab
@@ -3140,7 +3142,7 @@ window.FM = window.FM || {};
          restarts that timer, so during continuous work the doc stays stale indefinitely, and "the
          owner stopped sharing" arrives when he is not looking at the screen. Inside the function
          rather than at the call sites, for the reason `createLinked`'s own note gives. */
-      if (gpid === curId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();
+      if (gpid === tabId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();   // bughunt8 #2b: the copy THIS tab has open, not the shared pointer
       const doc = readJSON('fm.proj.' + gpid, null);
       if (!doc) return null;
       const src = this.list().find(p => p.id === gpid) || {};
@@ -3152,9 +3154,12 @@ window.FM = window.FM || {};
       const idx = this.list();
       const e = idx.find(p => p.id === nid);
       if (e) { delete e.collab; this.saveIndex(idx); }
-      const wasOpen = curId() === gpid;
+      /* bughunt8 #2b: open in THIS tab, not named by the shared pointer: with another tab elsewhere, the copy this tab had open was
+         deleted under it and it was never moved onto his own copy; with the linked copy open in another tab, this tab was taken off
+         its own project. */
+      const wasOpen = tabId() === gpid;
       await this.remove(gpid);
-      if (wasOpen && curId() !== nid) await this.open(nid);
+      if (wasOpen && tabId() !== nid) await this.open(nid);
       return nid;
     },
     rename(id, name) {
@@ -3191,7 +3196,9 @@ window.FM = window.FM || {};
        complaining about. So this deletion has no such branch, and is only safe on a draft that is NOT
        current — every caller switches away first, and this refuses if that was not done. */
     async discardDraft(id) {
-      if (!id || id === curId()) return false;
+      /* bughunt8 #2b: "current" is the draft THIS tab has open (tabId). Asked of the shared pointer, a draft open here was deleted
+         (its doc and its clips) whenever another tab had opened something since, and one open only in another tab was refused. */
+      if (!id || id === tabId()) return false;
       const doc = readJSON('fm.proj.' + id, null);
       try {
         const db = await openDB();
@@ -3229,7 +3236,7 @@ window.FM = window.FM || {};
      * the caller says so in words he can act on. */
     async discardDraftAnyway(id) {
       if (!id) return { ok: false, why: 'noid' };
-      if (id !== curId()) return { ok: await this.discardDraft(id), why: '' };
+      if (id !== tabId()) return { ok: await this.discardDraft(id), why: '' };   // bughunt8 #2b: open in THIS tab, not named by the shared pointer
       if (FM.storage && FM.storage.flushSync) FM.storage.flushSync();
       const others = this.list().filter(p => p.id !== id);
       const target = (others.filter(p => !p.elementDraft && !p.templateDraft)[0] || others[0] || {}).id;
@@ -3263,7 +3270,7 @@ window.FM = window.FM || {};
           const d = readJSON(lk, null);
           if (d && Array.isArray(d.layers)) d.layers.forEach(l => { if (l && l.id) elsewhere.add(l.id); });
         }
-        if (id !== curId()) ((FM.scene && FM.scene.layers) || []).forEach(l => { if (l && l.id) elsewhere.add(l.id); });
+        if (id !== tabId()) ((FM.scene && FM.scene.layers) || []).forEach(l => { if (l && l.id) elsewhere.add(l.id); });   // bughunt8 #2b: the live scene is THIS tab's project
         const ckptPrefix = 'collab:ckpt:' + id + ':';
         const allKeys = await idbKeys(db);
         for (const k of allKeys) {
@@ -3286,7 +3293,10 @@ window.FM = window.FM || {};
       try { localStorage.removeItem('fm.collab.host.' + id); } catch (e) {}   // …and the room it was shared from
       try { localStorage.removeItem('fm.proj.' + id); } catch (e) {}
       this.saveIndex(this.list().filter(p => p.id !== id));
-      if (id === curId()) {
+      /* bughunt8 #2b: the project THIS tab has open (tabId), not the shared fm.currentProject. Asked of the pointer, deleting the
+         project open here while another tab was elsewhere left this tab on it (its next save wrote the doc back with no card), and
+         deleting the one another tab had opened last took this tab off its own project. */
+      if (id === tabId()) {
         /* ⚠️ queue 834 (u7): A DRAFT WORKSPACE IS NOT SOMEWHERE TO LAND. `list()` includes the hidden
            workspaces that an element or a template is edited in, so deleting the project you had open
            could quietly drop you INSIDE one — nothing on Home shows as open, and anything you then add
