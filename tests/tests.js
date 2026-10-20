@@ -31010,6 +31010,10 @@
          ran), and `leaving` answers whether a Leave is still copying — both read state; neither does anything
          with no session. */
       'runPendingReload', 'leaving',
+      /* #1091: `watchOnly` answers whether a copy is a Viewer's or Commenter's with exporting off (it reads the session or
+         the project list, and is false with no shared copy open); `dropCopy` is the delete Leave of such a copy runs. Both
+         do nothing until something asks. */
+      'watchOnly', 'dropCopy',
       /* Simple mode P2 (queue 980): the live gate's one predicate and the linked-copy test it uses — answers, not state;
          with no session they read the project list only and change nothing. Full never calls them. */
       'isLinkedCopy', 'othersCanEdit',
