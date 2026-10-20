@@ -74421,15 +74421,18 @@
    * code that selected nothing at all. */
   test('#648: a tap selects even when no click follows the pointerup', { item: '648' }, async function () {
     /* isolation (20 Oct): it left Home open — isoKeep puts back what it found, in its own finally */
-    const _isoK = isoKeep(); try {
+    /* …and the project it found (the v17.82 checks): with fewer than two cards it makes two, and FM.projects.create OPENS each, so
+       every later test ran in 'tap B' (the leak report's open project line). It goes back to the project it found BEFORE removing
+       the two it made (removing the open one would open another), as 869 does, and only then lets isoKeep put back the rest. */
+    const _isoK = isoKeep(), orig648 = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null, made648 = []; try {
     if (!FM.home || !FM.home.open) throw new Error('FM.home is missing');
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     return await atPhoneWidth(async function () {
       FM.home.open(); await sleep(500);
       let cards = document.querySelectorAll('.hm-card[data-pid]');
       if (cards.length < 2 && FM.projects && FM.projects.create) {
-        await FM.projects.create({ name: 'tap A', width: 1080, height: 1920 });
-        await FM.projects.create({ name: 'tap B', width: 1080, height: 1920 });
+        made648.push(await FM.projects.create({ name: 'tap A', width: 1080, height: 1920 }));
+        made648.push(await FM.projects.create({ name: 'tap B', width: 1080, height: 1920 }));
         FM.home.open(); await sleep(600);
         cards = document.querySelectorAll('.hm-card[data-pid]');
       }
@@ -74467,7 +74470,11 @@
       const again = await tap(true);
       if (again === noClick) throw new Error('a tap with both pointerup and click flipped the selection twice, so it landed back where it started');
     });
-    } finally { _isoK.put(); }
+    } finally {
+      try { if (orig648 && FM.projects.currentId() !== orig648) await FM.projects.open(orig648, { confirmed: true }); } catch (e) {}
+      for (const id of made648) { try { if (id && id !== orig648 && FM.projects.currentId() !== id && FM.projects.list().some(p => p.id === id)) await FM.projects.remove(id); } catch (e) {} }
+      _isoK.put();
+    }
   });
 
   /* ═══ QUEUE 612 — THE HINGE, AND THE MEASUREMENT IT NEARLY BROKE ══════════════════════════════
