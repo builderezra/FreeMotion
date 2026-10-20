@@ -167895,6 +167895,19 @@
     }
   });
 
+  /* ISOLATION (20 Oct, the v17.82 checks): THE KEYBOARD TESTS BELOW SHUT HOME AND SETTINGS THEMSELVES. They press keys on the
+     page, and the editor answers none while a full-screen overlay owns the screen (FM.overlayOwnsScreen asks Home and Settings
+     first). Home is open at boot, so run alone or in a slice they met it and stopped at their setup line; in the full run they
+     passed only because an earlier test had left Home shut, which the isolation pass stopped. Each takes isoKeep() first and
+     calls its put() in its own finally, which opens Home again if the test found it open. Settings is shut without handing
+     back to the panel that opened it (a row that closes it does the same), and the slide-out is waited for. */
+  async function _bh6KeysToEditor() {
+    let shut = false;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen() && FM.home.close) { FM.home.close(); shut = true; }
+    if (FM.settings && FM.settings.isOpen && FM.settings.isOpen() && FM.settings.close) { FM.settings.close({ handBack: false }); shut = true; }
+    if (shut) await sleep(320);
+  }
+
   /* (#9) ⌘/CTRL SHORTCUTS ON A RUSSIAN KEYBOARD. He is learning Russian. With a Russian layout on a PC, Ctrl+Z types я, and
      every ⌘ letter in Full's keydown handler matched the letter TYPED (e.key), so Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, Ctrl+A, Ctrl+C
      and Ctrl+V did nothing at all, while the plain A / S / D / M (read by e.code) kept working. The fix reads the key's place
@@ -167909,6 +167922,9 @@
      (punctuation is not read by its place); and Ctrl+в on the D key duplicates nothing and is left to the browser, because ⌘D
      is out of this fix: Simple's own ⌘D reads the typed letter too, and the two editors must agree on it. */
   test('bughunt6 #9 Shortcuts work on a Russian keyboard layout: Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, Ctrl+A, Ctrl+C and Ctrl+V pressed with the Russian letters on those keys undo, redo, select everything, copy and paste (CONTROLS: a Latin Ctrl+Z, an AZERTY z on the W key and its w on the Z key, Dvorak’s ; on the Z key, and Ctrl+D with a Russian letter, which is left as it was)', { item: '1176' }, async function () {
+    /* isolation (20 Oct): the keys reach the editor only with Home and Settings shut (_bh6KeysToEditor); isoKeep puts Home back as found */
+    const _isoK = isoKeep(); try {
+    await _bh6KeysToEditor();
     if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
     /* The Russian letters on the Z, Y, A, C, V and D keys (ЙЦУКЕН) */
     const RU = { z: 'я', Z: 'Я', y: 'н', a: 'ф', c: 'с', v: 'м', d: 'в' };
@@ -168002,6 +168018,7 @@
       FM.clipboard = clip0;
     }
     if (bad.length) throw new Error(bad.join(' · '));
+    } finally { _isoK.put(); }
   });
 
   /* (#9) …AND WHILE DRAWING. The drawing tool answers ⌘Z / ⇧⌘Z / ⌘Y itself (js/draw-tool.js's capture keydown: the bar's
@@ -168014,6 +168031,9 @@
      CONTROL: a Latin Ctrl+Z takes one stroke back, so the keys reach the tool at all. The session is ended in the way out. */
   test('bughunt6 #9 Undo while drawing works on a Russian keyboard layout: Ctrl+Z pressed with the Russian letter on the Z key takes back one stroke, and Ctrl+Shift+Z and Ctrl+Y with the Russian letters on their keys put one back (CONTROL: a Latin Ctrl+Z takes one back too)', { item: '1176' }, async function () {
     if (!FM.startDraw || !FM.drawTool || !FM.drawTool._commit || !FM.drawTool._undo || !FM.drawTool._counts || !FM.drawTool._stop) throw new Error('setup: the drawing tool has no test seams (_commit, _undo, _counts, _stop)');
+    /* isolation (20 Oct): the keys reach the editor only with Home and Settings shut (_bh6KeysToEditor); isoKeep puts Home back as found */
+    const _isoK = isoKeep(); try {
+    await _bh6KeysToEditor();
     if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the drawing');
     /* The Russian letters on the Z and Y keys (ЙЦУКЕН): я, Я, н */
     const RU = { z: 'я', Z: 'Я', y: 'н' };
@@ -168058,6 +168078,7 @@
     }, endDrawing);
     if (FM.drawTool.active) throw new Error('the drawing was still up after the test put the scene back');
     if (bad.length) throw new Error(bad.join(' · '));
+    } finally { _isoK.put(); }
   });
 
   /* (#2) THE INSTALLED APP OPENS FROM ITS OFFLINE COPY WHEN THE NETWORK HANGS. Opening the app is a navigation, and sw.js
@@ -168358,6 +168379,9 @@
      CONTROLS, which hold before and after: Ctrl+Z on the page undoes (the keys reach the handler at all), and Ctrl+Z and
      Ctrl+Y in a focused text box move no project step and are not taken from the box, whose own undo is what they mean there. */
   test('bughunt6 #7 Undo works after using a slider or a checkbox: Ctrl+Z pressed while a range slider or a tick box has the focus undoes, and Ctrl+Y on the slider redoes (CONTROLS: Ctrl+Z on the page undoes, and Ctrl+Z and Ctrl+Y in a focused text box are left to the box’s own undo)', { item: '1176' }, async function () {
+    /* isolation (20 Oct): the keys reach the editor only with Home and Settings shut (_bh6KeysToEditor); isoKeep puts Home back as found */
+    const _isoK = isoKeep(); try {
+    await _bh6KeysToEditor();
     if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
     const press = (target, key, code) => {
       const ev = new KeyboardEvent('keydown', { key: key, code: code, ctrlKey: true, bubbles: true, cancelable: true });
@@ -168435,6 +168459,7 @@
       } catch (e) {}
     }
     if (bad.length) throw new Error(bad.join(' · '));
+    } finally { _isoK.put(); }
   });
 
   /* (#6) bughunt6 #6: TAB WALKS ONLY THE ROWS THE TIMELINE SHOWS. Tab selected the next layer of the WHOLE project, so inside
@@ -168445,6 +168470,9 @@
      CONTROL, which holds before and after: outside any group with nothing collapsed, Tab from X walks G, A, B and back to X,
      the project's order, as it always did. The group is left on the way out. */
   test('bughunt6 #6 Tab stays inside the group you are editing: inside Edit Group three Tabs and a Shift+Tab from A select only the group’s own A and B, and with the group collapsed Tab skips its members (CONTROL: outside any group with nothing collapsed, Tab walks every layer in order)', { item: '1176' }, async function () {
+    /* isolation (20 Oct): the keys reach the editor only with Home and Settings shut (_bh6KeysToEditor); isoKeep puts Home back as found */
+    const _isoK = isoKeep(); try {
+    await _bh6KeysToEditor();
     if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
     if (typeof FM.enterGroup !== 'function' || typeof FM.exitGroup !== 'function' || typeof FM.groupDescendants !== 'function') throw new Error('setup: Edit Group (FM.enterGroup / FM.exitGroup / FM.groupDescendants) is not reachable');
     const tab = shift => {
@@ -168492,6 +168520,7 @@
       }
     });
     if (bad.length) throw new Error(bad.join(' · '));
+    } finally { _isoK.put(); }
   });
 
   /* (#10) bughunt6 #10: A HELD SPACE FLIPPED PLAY AND PAUSE. Space went to FM.togglePlay on every keydown, auto-repeat included,
@@ -168503,6 +168532,9 @@
      real Space, not a repeat, still toggles it (after the fix that is the pause). Each repeat is still taken from the browser
      (its default prevented), so a held Space cannot press a focused button instead. */
   test('bughunt6 #10 Holding Space does not flicker play and pause: one Space and then three auto-repeat Spaces leave it playing, each repeat still taken from the browser (CONTROLS: the first Space starts playback, and a second real Space still toggles it)', { item: '1176' }, async function () {
+    /* isolation (20 Oct): the keys reach the editor only with Home and Settings shut (_bh6KeysToEditor); isoKeep puts Home back as found */
+    const _isoK = isoKeep(); try {
+    await _bh6KeysToEditor();
     if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
     const space = rep => {
       const ev = new KeyboardEvent('keydown', { key: ' ', code: 'Space', repeat: !!rep, bubbles: true, cancelable: true });
@@ -168541,6 +168573,7 @@
       }
     });
     if (bad.length) throw new Error(bad.join(' · '));
+    } finally { _isoK.put(); }
   });
 
   /* (#11) bughunt6 #11: EXACT SIZE AND EXACT FPS START FROM THE PROJECT THAT IS OPEN. The dialog's change listener for Exact
