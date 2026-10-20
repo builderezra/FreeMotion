@@ -1203,6 +1203,29 @@ window.FM = window.FM || {};
     return lo;
   };
 
+  /* ═══ #1107 (AU1-2): HOW FAR CAN A REVERSED CLIP'S HEAD GROW BEFORE IT RUNS OFF THE END OF ITS SOURCE?
+   * A reversed clip opens on its source window's END (`trimStart` plus all the source it plays), so pulling the head earlier
+   * walks that end UP through the file. The left trim grip and Extend (the D key) both capped it with `(srcDur - trimStart) / sp`,
+   * and `sp` is 1 for ANY speed ramp, so the cap ignored the curve: a 3x -> 0.5x ramp in a 20 s file could be grown until its
+   * first frame read source 29.5 s. The same clip's tail is capped on the curve (FM.speedAdvanceSolve, above) and so is a forward
+   * clip's tail (FM.maxDurForSource); this was the one edge left on a flat guess. A flat speed gets the same answer the division
+   * gave. Bisected on the real curve, once per edit, never per frame.
+   * `delta` is the head move asked for, NEGATIVE when the head grows. Returns the move that fits: nearer 0 when the source runs
+   * out, 0 when none is left. A shrink (delta >= 0) or a source of unknown length passes straight through. Call it with the layer
+   * as it was when the edit began, because the window is laid off `layer.start` and the speed keyframes are in project time. */
+  FM.revHeadGrowLimit = function (layer, delta, srcDur, trim) {
+    if (!layer || !(delta < 0) || !isFinite(srcDur)) return delta;
+    const avail = srcDur - ((trim || 0) + FM.layerSourceAdvance(layer, layer.duration));
+    if (!(avail > 0)) return 0;
+    if (FM.speedAdvanceOver(layer, delta, 0) <= avail + 1e-9) return delta;
+    let lo = delta, hi = 0;
+    for (let i = 0; i < 30; i++) {
+      const mid = (lo + hi) / 2;
+      if (FM.speedAdvanceOver(layer, mid, 0) > avail) lo = mid; else hi = mid;
+    }
+    return hi;
+  };
+
   /* The source consumed by moving a clip's HEAD by `delta` seconds — positive trims inward, negative
    * pulls it earlier and reveals source before the current window. Signed, so callers just add it. */
   FM.headSourceDelta = function (layer, delta) {

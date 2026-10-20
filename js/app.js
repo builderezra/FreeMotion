@@ -5064,10 +5064,9 @@ window.FM = window.FM || {};
       if (layer.start + delta < 0) delta = -layer.start;
       if (layer.duration - delta < 0.1) delta = layer.duration - 0.1;
       if (rev) {
-        if (isFinite(srcDur)) {                                // the head is the window END: only duration moves
-          const maxDur = (srcDur - (tr0 || 0)) / sp;
-          if (d0 - delta > maxDur) delta = d0 - maxDur;
-        }
+        /* The head is the window END: only duration moves. How far it may grow is solved on the speed curve (#1107, AU1-2):
+           the flat `(srcDur - trimStart) / sp` used sp = 1 for any ramp and let a ramped clip read past the end of its file. */
+        if (isFinite(srcDur) && FM.revHeadGrowLimit) delta = FM.revHeadGrowLimit(layer, delta, srcDur, tr0);
         layer.start = layer.start + delta;
         layer.duration = layer.duration - delta;
       } else {

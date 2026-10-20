@@ -169645,4 +169645,140 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ #1107 (hunt AU1, finding 1): A REVERSED CLIP'S LEFT GRIP MOVED ITS EFFECT CLOCK ═══════════════════════════════════════
+     Every time-driven effect (Drift, Spin, Orbit, Wiggle, Shake) runs on FM.fxLocalTime = t - start + fxTimeOffset, so a head
+     edit has to carry fxTimeOffset along with `start` or the picture jumps (queue 823). The left grip's FORWARD branch
+     (js/timeline.js applyTrimAt), the A key and Extend all carry it. The grip's REVERSED branch moved `start` and left the clock
+     where it was: measured on v17.31 (hunt AU1), a 40 px drag moved the clock 0.400 s at a fixed time.
+     FAILS BEFORE THE FIX: dragging the reversed clip's left grip about 1 s in moves FM.fxLocalTime at 6 s by the whole drag, about
+     1 s (a drag that moves the head less than 0.2 s stops the test as a setup failure, so the fault is never smaller than that).
+     CONTROL, which holds before and after: the same drag on the same clip played FORWARD keeps its clock still.
+     TOLERANCE: a carried clock adds and subtracts the same delta, so it reads back to float rounding, about 1e-15 s; the fault is
+     the drag itself, at least 0.2 s. 1e-4 s sits between the two. */
+  test('1107 a reversed clip’s left trim grip keeps its effect clock still: dragging the head in does not make Drift, Spin or Orbit jump (CONTROL: the same drag on the clip played forward)', { item: '1107' }, async function () {
+    const P = FM.scene.project;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    const t0 = FM.time, dur0 = P.duration;
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const made = [];
+    const drag = async function (rev) {
+      FM.scene.layers.length = 0;
+      const v = FM.makeLayer('video', { name: '1107 clip' });
+      v.start = 2; v.duration = 6; v.trimStart = 2; v.reversed = rev; v.speed = 1;
+      FM.scene.layers.push(v); made.push(v.id);
+      FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+      P.duration = 12; FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0);
+      await sleep(300);
+      const clip = document.querySelector('#tl-tracks .clip[data-id="' + v.id + '"]');
+      const g = attached(clip && clip.querySelector('.clip-grip.left'), (rev ? 'reversed' : 'forward') + ' clip’s left trim grip');
+      const r = g.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const pps = FM.timeline.timeToX(1) - FM.timeline.timeToX(0);
+      if (!(pps > 0)) throw new Error('setup: the timeline reports ' + pps + ' px per second');
+      const probe = 6, before = FM.fxLocalTime(v, probe), s0 = v.start, e0 = v.start + v.duration;
+      const ev = function (type, cx, b) { return new PointerEvent(type, { pointerId: 31, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true, clientX: cx, clientY: y, button: 0, buttons: b }); };
+      g.dispatchEvent(ev('pointerdown', x, 1));
+      await sleep(40);
+      for (let k = 1; k <= 6; k++) { window.dispatchEvent(ev('pointermove', x + pps * k / 6, 1)); await sleep(16); }
+      window.dispatchEvent(ev('pointerup', x + pps, 0));
+      await sleep(150);
+      const what = rev ? 'reversed' : 'forward';
+      if (!(Math.abs(v.start - s0) >= 0.2)) throw new Error('setup: dragging the ' + what + ' clip’s left grip ' + Math.round(pps) + ' px did not move its head (start ' + s0 + ' to ' + v.start + ')');
+      if (Math.abs((v.start + v.duration) - e0) > 1e-6) throw new Error('setup: the drag on the ' + what + ' clip’s left grip moved its tail too (' + e0 + ' to ' + (v.start + v.duration) + '), so it was a move, not a trim');
+      return { moved: v.start - s0, jump: FM.fxLocalTime(v, probe) - before };
+    };
+    try {
+      if (wasHome) FM.home.close();
+      const fwd = await drag(false);
+      if (Math.abs(fwd.jump) > 1e-4) throw new Error('CONTROL: trimming the head of the FORWARD clip ' + fwd.moved.toFixed(3) + ' s moved its effect clock ' + fwd.jump.toFixed(4) + ' s at 6 s, so this probe cannot judge the reversed one');
+      const rev = await drag(true);
+      if (Math.abs(rev.jump) > 1e-4) throw new Error('dragging the left grip of a REVERSED clip ' + rev.moved.toFixed(3) + ' s in moved its effect clock ' + rev.jump.toFixed(3) + ' s at a fixed time, so every Drift, Spin or Orbit on it jumps; the same drag on the clip played forward kept its clock still, and the A key and Extend carry it on both');
+    } finally {
+      try { if (FM.timeline._abortGestures) FM.timeline._abortGestures(); } catch (e) {}
+      made.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.duration = dur0; FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM.time = t0; FM.refreshAll(); FM.timeline.rebuild();
+      if (wasHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* ═══ #1107 (hunt AU1, finding 2): A REVERSED SPEED RAMP'S HEAD COULD BE GROWN PAST THE END OF ITS SOURCE ═════════════════
+     A reversed clip opens on its source window's END, so growing its head walks that end up through the file. The left grip
+     (js/timeline.js applyTrimAt) and Extend, the D key (js/app.js FM.extendClipTo), both capped it with (srcDur - trimStart) / sp,
+     and sp is 1 for ANY ramp, so the curve was ignored. Both now ask FM.revHeadGrowLimit (js/scene.js), which solves it on the curve.
+     The fixture: a 20 s file, trimStart 1, the clip at 6 to 12 s, reversed, at 3x falling to 0.5x, so it plays 10.5 s of source;
+     its head pulled back toward 0. The source left above its window is 20 - 1 - 10.5 = 8.5 s, which at 3x is 2.83 s of clip.
+     FAILS BEFORE THE FIX: on the ramp both edits run the head all the way to 0 s, and its first frame reads source 29.50 s of the
+     20 s file (1 + 6 s at 3x + 10.5). Measured on v17.31 (hunt AU1) at both entry points.
+     CONTROL, which holds before and after: the same edits on a flat 3x clip stop where the file runs out (head 20 s, start 5.67),
+     because the flat division was always right for a flat speed.
+     Checked both ways, so a cap that refuses all growth fails as well: the head must END at the file's end, within the tolerance.
+     TOLERANCE: the curve is integrated by a float32 trapezoid table at 120 Hz and the cap bisected 30 times, so a capped head reads
+     20 s to within about 1e-3 s at worst (the 0.001 s probe offset below reads 0.003 s low at 3x); the fault is 9.5 s. 0.01 s sits
+     between the two. */
+  test('1107 growing the head of a reversed speed-ramped clip never reads past the end of its source: the left trim grip and Extend (D) both stop where the file runs out (CONTROL: the same edits on a flat 3x clip)', { item: '1107' }, async function () {
+    const P = FM.scene.project;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    const t0 = FM.time, dur0 = P.duration;
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const SRC = 20, TOL = 0.01, made = [], bad = [];
+    const mk = async function (ramped) {
+      FM.scene.layers.length = 0;
+      const v = FM.makeLayer('video', { name: '1107 ramp' });
+      v.start = 6; v.duration = 6; v.trimStart = 1; v.reversed = true;
+      v.speed = ramped ? { kf: [{ t: 6, v: 3, e: 'linear' }, { t: 12, v: 0.5, e: 'linear' }] } : 3;
+      FM.scene.layers.push(v); made.push(v.id);
+      FM.media.set(v.id, { kind: 'video', duration: SRC, width: 2, height: 2 });
+      P.duration = 14; FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0);
+      await sleep(300);
+      return v;
+    };
+    // a reversed clip opens on the END of its source window
+    const head = function (v) { return FM.layerLocalTime(v, v.start + 0.001); };
+    const judge = function (how, what, v, ctl) {
+      const h = head(v);
+      const say = how + ' on the ' + what + ' reversed clip: its first frame reads source ' + (h == null ? 'nothing' : h.toFixed(2) + ' s') + ' of a ' + SRC + ' s file (start ' + v.start.toFixed(2) + ', duration ' + v.duration.toFixed(2) + ')';
+      if (h == null || !isFinite(h)) throw new Error('setup: ' + say);
+      if (ctl) { if (Math.abs(h - SRC) > TOL) throw new Error('CONTROL: ' + say + ', where it should stop at the end of the file'); return; }
+      if (h > SRC + TOL) bad.push(say + ': past the end of the file');
+      else if (h < SRC - TOL) bad.push(say + ': it stopped short of the end of the file');
+    };
+    try {
+      if (wasHome) FM.home.close();
+      for (const ramped of [false, true]) {
+        const what = ramped ? '3x to 0.5x ramped' : 'flat 3x';
+        /* Extend, the D key: the playhead parked at 0 s, before the clip */
+        const v = await mk(ramped);
+        FM.time = 0;
+        if (!FM.extendClipTo(v, 0)) throw new Error('setup: Extend to 0 s changed nothing on the ' + what + ' clip');
+        judge('Extend (D) to 0 s', what, v, !ramped);
+        /* the left grip, dragged 7 s to the left, past 0 s */
+        const w = await mk(ramped);
+        const clip = document.querySelector('#tl-tracks .clip[data-id="' + w.id + '"]');
+        const g = attached(clip && clip.querySelector('.clip-grip.left'), what + ' clip’s left trim grip');
+        const r = g.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+        const pps = FM.timeline.timeToX(1) - FM.timeline.timeToX(0);
+        if (!(pps > 0)) throw new Error('setup: the timeline reports ' + pps + ' px per second');
+        const ev = function (type, cx, b) { return new PointerEvent(type, { pointerId: 32, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true, clientX: cx, clientY: y, button: 0, buttons: b }); };
+        g.dispatchEvent(ev('pointerdown', x, 1));
+        await sleep(40);
+        for (let k = 1; k <= 7; k++) { window.dispatchEvent(ev('pointermove', x - pps * k, 1)); await sleep(16); }
+        window.dispatchEvent(ev('pointerup', x - pps * 7, 0));
+        await sleep(150);
+        if (!(w.start < 5.9)) throw new Error('setup: dragging the ' + what + ' clip’s left grip ' + Math.round(pps * 7) + ' px left did not pull its head back (start ' + w.start + ')');
+        judge('the left grip dragged to 0 s', what, w, !ramped);
+      }
+      if (bad.length) throw new Error(bad.join(' AND '));
+    } finally {
+      try { if (FM.timeline._abortGestures) FM.timeline._abortGestures(); } catch (e) {}
+      made.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.duration = dur0; FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM.time = t0; FM.refreshAll(); FM.timeline.rebuild();
+      if (wasHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
 })();

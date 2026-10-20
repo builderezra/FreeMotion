@@ -4262,13 +4262,17 @@ window.FM = window.FM || {};
       if (rev) {
         /* The HEAD is the window END, and the window end IS `trimStart + duration*sp` — so shortening
            from the head is purely a duration change and `trimStart` must not move. Growing it walks the
-           window end up through the source, which is what has to be clamped. */
-        if (isFinite(trimDrag.srcDur)) {
-          const maxDur = (trimDrag.srcDur - trimDrag.trim) / sp;
-          if (trimDrag.dur - delta > maxDur) delta = trimDrag.dur - maxDur;
-        }
+           window end up through the source, which is what has to be clamped.
+           #1107 (AU1-2): clamped ON THE SPEED CURVE, measured at the grab. It was `(srcDur - trim) / sp`, and sp is 1 for any
+           ramp, so a ramped reversed clip's head could be pulled out until its first frame read past the end of the file. */
+        if (isFinite(trimDrag.srcDur)) delta = atGrab(() => FM.revHeadGrowLimit(L, delta, trimDrag.srcDur, trimDrag.trim));
         L.start = trimDrag.start + delta;
         L.duration = trimDrag.dur - delta;
+        /* #1107 (AU1-1): THE EFFECT CLOCK MOVES WITH THE HEAD ON A REVERSED CLIP TOO (queue 823's rule). The forward branch
+           below re-bases it, and so do the A key and Extend, but this branch did not: dragging a reversed clip's left grip in
+           by 1 s wound every Drift, Spin, Orbit, Wiggle and Shake on it back by 1 s and the picture jumped. Re-based from the
+           value at pointerdown, as the forward branch does, so the moves of one drag do not compound. */
+        if (Math.abs(delta) > 1e-9) L.fxTimeOffset = (trimDrag.fx0 || 0) + delta;
       } else {
         /* THE SOURCE THE CUT CONSUMED, THROUGH THE RAMP'S INTEGRAL (queue 690, fourth hunt). This was
            `trim + delta × speedAt(new head)` — the instantaneous rate at the new head times the whole cut —
