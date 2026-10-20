@@ -65050,15 +65050,15 @@
      `what` reads "<part> <before> → <after>" for each part that moved. tests/_cdp.py hands it on as "leaks" in its JSON,
      run.html lists it under the results, and ship.sh prints it after each pass (tools/_testfloor.sh leaks_report).
      The parts: the open project's id, Home open or shut, FM.scene still the same object, the layer count and ids, the
-     selection, the quality ladder's tier and latches, the open project's notes, FM.playing, and the media records that
-     belong to no module (pinned ones, the effect thumbnails' cache, are the app's own and are left out).
-     CHEAP AND READ-ONLY: plain reads and three read-only app calls (FM.storage.openProjectId, FM.home.isOpen,
-     FM._perfState), no rendering, no await. NO EXEMPTIONS: a test that changes one of these on purpose for the test after
+     selection, the open project's notes, FM.playing, and the media records that belong to no module (pinned ones, the
+     effect thumbnails' cache, are the app's own and are left out). Not the quality ladder: it moves itself (see leakPrint).
+     CHEAP AND READ-ONLY: plain reads and two read-only app calls (FM.storage.openProjectId, FM.home.isOpen), no rendering,
+     no await. NO EXEMPTIONS: a test that changes one of these on purpose for the test after
      it is exactly the coupling this exists to remove — it should put it back, and the next test should set it up.
      ONE THING IT CANNOT DO: a cleanup a test did not await (a remove() or a project open still running when it returned)
      lands during the NEXT test, and is charged to that one. A test named for a change it never makes is the clue. */
   function leakPrint() {
-    var f = { project: '?', home: '?', scene: null, layers: '?', ids: '', sel: '?', quality: '?', notes: '?', playing: '?', media: '?' };
+    var f = { project: '?', home: '?', scene: null, layers: '?', ids: '', sel: '?', notes: '?', playing: '?', media: '?' };
     try { f.project = (FM.storage && FM.storage.openProjectId) ? String(FM.storage.openProjectId() || 'none') : '?'; } catch (e) {}
     try { f.home = (FM.home && FM.home.isOpen) ? (FM.home.isOpen() ? 'open' : 'shut') : '?'; } catch (e) {}
     try {
@@ -65070,13 +65070,8 @@
       f.sel = ((S && S.selectedId) || 'none') + ' (' + n + ')';
       f.notes = String(((S && S.project && S.project.notes) || []).length);
     } catch (e) {}
-    try {
-      var st = FM._perfState ? FM._perfState() : null;
-      /* The TIER is left out (the PM, 20 Oct): the ladder moves it on its own during any playback, so it read as a leak in about
-         300 of the first full run's 401 lines without any test having left anything behind. The LATCHES are kept: they are state a
-         test sets and must put back. */
-      if (st) f.quality = (st.locked ? 'latched' : 'unlatched') + (st.climbLockAt ? ', climb-latched' : '');
-    } catch (e) {}
+    /* The QUALITY LADDER is left out, its tier (62b39595) and now its latches too: the ladder sets all three itself during any
+       playback, so its latches flipped in 86 of the v17.82 full run's 91 leak lines without any test leaving anything behind. */
     try { f.playing = String(!!FM.playing); } catch (e) {}
     try {
       var all = (FM.media && FM.media.all) ? FM.media.all() : null, k = 0;
@@ -65092,7 +65087,6 @@
     if (a.layers !== b.layers) out.push('layers ' + a.layers + ' → ' + b.layers);
     else if (a.ids !== b.ids) out.push('layers ' + a.layers + ', but not the same ones');
     if (a.sel !== b.sel) out.push('selection ' + a.sel + ' → ' + b.sel);
-    if (a.quality !== b.quality) out.push('quality ladder ' + a.quality + ' → ' + b.quality);
     if (a.notes !== b.notes) out.push('project notes ' + a.notes + ' → ' + b.notes);
     if (a.playing !== b.playing) out.push('FM.playing ' + a.playing + ' → ' + b.playing);
     if (a.media !== b.media) out.push('media records ' + a.media + ' → ' + b.media);
