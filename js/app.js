@@ -9263,8 +9263,13 @@ window.FM = window.FM || {};
        the key it sits on (e.code KeyZ gives z); for anything else it is '', so a Latin letter always wins (AZERTY's z on
        the W key still undoes, its w on the Z key does not) and a key that types punctuation (Dvorak's ; on the Z key) is
        not read by its position either. ⌘D stays on e.key alone, as Simple's own ⌘D does, so the two editors agree on it. */
-    const otherScriptLetter = e => ((typeof e.key === 'string' && /^[\p{L}\p{M}]$/u.test(e.key) && !/\p{Script=Latin}/u.test(e.key) &&
-      typeof e.code === 'string' && /^Key[A-Z]$/.test(e.code)) ? e.code.slice(3).toLowerCase() : '');
+    /* The key and the code are read as plain strings (an absent one is ''), never by comparing their type to a word: the
+       Full-unchanged lock (980 FU3) reads every key or code compared to a quoted literal in a keydown script as a key name,
+       and took the type test's word for a key the probe never presses. */
+    const otherScriptLetter = e => {
+      const k = String(e.key || ''), c = String(e.code || '');
+      return (/^[\p{L}\p{M}]$/u.test(k) && !/\p{Script=Latin}/u.test(k) && /^Key[A-Z]$/.test(c)) ? c.slice(3).toLowerCase() : '';
+    };
     /* …and the drawing tool's own ⌘Z / ⌘Y (js/draw-tool.js) asks the same question, so undo works the same wherever he
        presses it. That script loads before this one, so it reads this when a key arrives, never at load. */
     FM._otherScriptLetter = otherScriptLetter;
