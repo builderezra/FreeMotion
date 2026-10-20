@@ -171108,4 +171108,88 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ 1176 leftover (after bughunt7 #6): A NEW BUILD RELOADED THE APP IN THE MIDDLE OF THREE SOUND RENDERS ════════════════════
+     bughunt6 #14's hold (index.html fmSwBusy) waits for an export, its Save card, a voice take and a file still writing, and
+     bughunt7 #6 added Export sound (FM._exportingAudio). Three more renders run for seconds with none of those showing: Save
+     audio as WAV (js/audio-tools.js FM.downloadLayerAudio: decode the whole clip, build the WAV), Remove vocals
+     (FM.toggleKaraoke: decode, render the instrumental, load it) and Reduce noise (js/noise-reduction.js apply: decode, clean,
+     load). A build landing then saved and reloaded mid-render and the work was lost. Now each counts itself in FM._rendering
+     from the start of the work to its finally, and fmSwBusy reads it. Driven like bughunt7 #6: the hold is handed a counter for
+     the reload, never the real one.
+     Each render in turn on a clip OUTSIDE the scene (so no waveform or preview decodes it too), its media record holding a file,
+     with FM.decodeAudio held on a gate for that file only: while the decode waits, the app is asked whether it is busy and handed
+     a new build; then the gate answers no audio, the render says so and gives up, and the held build must reload by itself.
+     FAILS BEFORE THE FIX: while each render decodes, fmSwBusy answers '' and the new build reloads at once.
+     CONTROLS, which hold before and after: the app is idle before each render, each render really reached its decode (else the
+     test stops as a setup failure), and with nothing running a new build reloads at once. Restores FM.decodeAudio and
+     FM._rendering by descriptor, removes the clip's record and cancels any hold. */
+  test('1176 leftover: an update does not reload the app in the middle of Save audio as WAV, Remove vocals or Reduce noise: while each one decodes its clip the new build waits, and once it is over the app reloads by itself (CONTROLS: an idle app reloads at once; each render reached its decode)', { item: '1176', budgetMs: 120000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM.downloadLayerAudio !== 'function' || typeof FM.toggleKaraoke !== 'function' || !FM.noiseReduction || typeof FM.noiseReduction.apply !== 'function' || typeof FM.decodeAudio !== 'function') throw new Error('setup: FM.downloadLayerAudio, FM.toggleKaraoke, FM.noiseReduction.apply or FM.decodeAudio is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_rendering');
+    const dDecode = Object.getOwnPropertyDescriptor(FM, 'decodeAudio'), realDecode = FM.decodeAudio;
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    const BLOB = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'video/mp4' });
+    const L = FM.makeLayer('video', { name: '1176 render clip', start: 0, duration: 2 });
+    L.start = 0; L.duration = 2;
+    let reloads = 0, open = null, pending = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const bad = [];
+    try {
+      FM.media.set(L.id, { kind: 'video', file: BLOB, duration: 2, width: 2, height: 2 });
+      Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+      const renders = [
+        ['Save audio as WAV', () => FM.downloadLayerAudio(L)],
+        ['Remove vocals', () => FM.toggleKaraoke(L)],
+        ['Reduce noise', () => FM.noiseReduction.apply(L, FM.noiseReduction.defaults ? FM.noiseReduction.defaults() : undefined)]
+      ];
+      for (const [what, start] of renders) {
+        await settle(what);
+        let entered = 0;
+        const gate = new Promise(r => { open = r; });
+        FM.decodeAudio = function (f) { if (f === BLOB) { entered++; return gate; } return realDecode.apply(this, arguments); };
+        pending = Promise.resolve(start());
+        if (!(await until(() => entered > 0, 4000))) throw new Error('setup: ' + what + ' never reached its decode (FM.decodeAudio), so nothing was rendering');
+        const during = W.busy(), n = FM._rendering;
+        reloads = 0;
+        const now = await W(count);
+        const heldNow = !now && !reloads && W.held();
+        open(null);   // the decode answers no audio: the render says so and gives up
+        try { await pending; } catch (e) {}
+        pending = null;
+        await sleep(60);
+        if (!during) bad.push('while ' + what + ' was decoding its clip the app counted as idle (FM._rendering ' + JSON.stringify(n) + ')');
+        if (!heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app in the middle of ' + what + ' (' + reloads + ' reload)' : 'was dropped rather than held during ' + what));
+        if (FM._rendering) bad.push('after ' + what + ' gave up FM._rendering is still ' + JSON.stringify(FM._rendering) + ', so every later update would wait for a render that is over');
+        if (W.busy()) bad.push('after ' + what + ' gave up the app still counts as busy (' + W.busy() + ')');
+        else if (!(await until(() => reloads > 0, 9000))) bad.push('once ' + what + ' was over, the held reload never happened by itself');
+        try { W.cancel(); } catch (e) {}
+        if (dDecode) Object.defineProperty(FM, 'decodeAudio', dDecode); else FM.decodeAudio = realDecode;
+      }
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (open) open(null);
+      if (pending) { try { await pending; } catch (e) {} }
+      if (dDecode) Object.defineProperty(FM, 'decodeAudio', dDecode); else FM.decodeAudio = realDecode;
+      if (dFlag) Object.defineProperty(FM, '_rendering', dFlag); else delete FM._rendering;
+      if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+      else delete HTMLAnchorElement.prototype.click;
+      try { FM.media.remove(L.id); } catch (e) {}
+      if (FM.hideToast) { try { FM.hideToast(); } catch (e) {} }
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();

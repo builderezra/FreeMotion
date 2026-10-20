@@ -425,6 +425,9 @@ window.FM = window.FM || {};
       const pct = Math.floor(f * 100);
       if (pct !== shown) { shown = pct; say('Reducing noise… ' + pct + '% — tap to stop', 0, stop); notify(); }
     };
+    /* 1176 leftover (bughunt7 #6's twin): counted in FM._rendering until the finally below, so a new build waits for the render
+       instead of reloading in the middle of it (index.html fmSwBusy; js/audio-tools.js FM.downloadLayerAudio says why). */
+    FM._rendering = (FM._rendering || 0) + 1;
     try {
       say('Reducing noise… — tap to stop', 0, stop);
       const ab = await decodedOf(layer);
@@ -487,6 +490,7 @@ window.FM = window.FM || {};
       else say('Could not reduce the noise: ' + (e && e.message || e), 4500);
       return false;
     } finally {
+      FM._rendering = Math.max(0, (FM._rendering || 1) - 1);
       if (job === me) job = null;
       notify();
     }

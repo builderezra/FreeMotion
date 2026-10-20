@@ -60,13 +60,21 @@ window.FM = window.FM || {};
        clip is not saved as a file, live or not — after the owner ends the session the inspector is no longer read-only, and
        this button would hand over a clip's whole source sound. */
     if (FM.exportTurnedOff && FM.exportTurnedOff()) { if (FM.sayExportTurnedOff) await FM.sayExportTurnedOff(); return; }
-    if (FM.toast) FM.toast('Extracting audio…', 1500);
-    const ab = await layerAudioBuffer(layer);
-    if (!ab) { if (FM.toast) FM.toast('This clip has no audio to extract'); return; }
-    const name = safeName(layer.name) + '.wav';
-    saveBlob(FM.audioBufferToWav(ab), name);
-    if (FM.toast) FM.toast('Saved ' + name);
+    /* 1176 leftover (bughunt7 #6's twin): THE DECODE AND THE WAV TAKE SECONDS, AND A NEW BUILD MUST WAIT FOR THEM. index.html's
+       fmSwBusy reads FM._rendering, which this, Remove vocals (FM.toggleKaraoke below) and Reduce noise (js/noise-reduction.js
+       apply) count themselves in from the start of the work until it is over, kept or not; a reload in the middle lost it. */
+    rendering(1);
+    try {
+      if (FM.toast) FM.toast('Extracting audio…', 1500);
+      const ab = await layerAudioBuffer(layer);
+      if (!ab) { if (FM.toast) FM.toast('This clip has no audio to extract'); return; }
+      const name = safeName(layer.name) + '.wav';
+      saveBlob(FM.audioBufferToWav(ab), name);
+      if (FM.toast) FM.toast('Saved ' + name);
+    } finally { rendering(-1); }
   };
+  /* How many sound renders are running (FM._rendering, read by index.html fmSwBusy): +1 as one starts, -1 in its finally. */
+  function rendering(d) { FM._rendering = Math.max(0, (FM._rendering || 0) + d); }
 
   // Karaoke vocal removal, purely by DSP (no ML). Lead vocals are almost always mixed dead-centre
   // (identical in L and R), so the SIDE signal (L − R) cancels them out. That alone also kills the
@@ -228,6 +236,7 @@ window.FM = window.FM || {};
        and the track must not land in a project he opened meanwhile — see FM.stillIn (js/app.js). */
     const pressedIn = FM.startedIn ? FM.startedIn() : null;
     const left = () => !!FM.stillIn && !FM.stillIn(pressedIn);
+    rendering(1);   // 1176 leftover: a new build waits for the render (FM.downloadLayerAudio above says why)
     try {
     if (FM.toast) FM.toast('Removing vocals…', 0);
     const ab = await layerAudioBuffer(layer);
@@ -295,7 +304,7 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
     if (FM.hideToast) FM.hideToast();
     if (FM.toast) FM.toast('Vocals removed — press again to restore');
-    } finally { if (km) km._karaokeBusy = 0; }   // cleared on THROW too — a failed decode must not wedge the feature off
+    } finally { if (km) km._karaokeBusy = 0; rendering(-1); }   // cleared on THROW too — a failed decode must not wedge the feature off
   };
   FM.removeVocals = FM.toggleKaraoke;   // back-compat alias
 })(window.FM);
