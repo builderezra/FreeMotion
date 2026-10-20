@@ -464,7 +464,7 @@ done
 # The prose list is still unioned in: it is what the "log says it closes q but q is still open" gate
 # above needs, and a release may legitimately name an item it only partly closed.
 CLOSES="$(printf '%s' "$LOGLINE" | grep -o 'queue [0-9]\+' | grep -o '[0-9]\+' | sort -u | tr '\n' ' ')"
-ORDER_MSG="$(CLOSES="$CLOSES" PARTIALS="$PARTIALS" python3 - <<'PYORDER'
+ORDER_MSG="$(CLOSES="$CLOSES" PARTIALS="$PARTIALS" VER="$VER" python3 - <<'PYORDER'
 import io, os, subprocess, sys
 sys.path.insert(0, 'tools')
 import _classify as C
@@ -480,15 +480,16 @@ for num, suf in C.closed_in_diff(diff):
     elif str(num) not in partials:
         closes.add(num)
 closes = sorted(closes)
-nxt = C.next_up(md)
-if nxt and closes:
+# late_closes, not a comparison written here: the tiers (his words, then my findings, then (team) notes) and the two
+# ways an item may be ticked behind an open one — a (team) note, and a hunt finding whose entry declares SHIPPED IN
+# an older release that POLISH-LOG has — live in tools/_classify.py with their self-tests (20 Oct).
+polish = io.open('POLISH-LOG.md', encoding='utf-8').read()
+late, nxt = C.late_closes(md, closes, os.environ.get('VER', ''), polish)
+if late:
     num, suf, head = nxt
-    # key_of, not sort_key: the tier (his words before my audit findings, 2 Sep) is read from the entry
-    late = [n for n in closes if C.key_of(md, n) > C.key_of(md, num, suf)]
-    if late:
-        name = 'an UNNUMBERED entry — those predate the numbering, so they are the oldest in the file' \
-               if num is None else '#%d%s' % (num, suf)
-        print('%s|%s|%s' % (','.join('#%d' % n for n in late), name, head.strip()[:130]))
+    name = 'an UNNUMBERED entry — those predate the numbering, so they are the oldest in the file' \
+           if num is None else '#%d%s' % (num, suf)
+    print('%s|%s|%s' % (','.join('#%d' % n for n in late), name, head.strip()[:130]))
 PYORDER
 )" || { echo "❌ the oldest-first gate could not run (git or its own error, above) — not shipping on a guess."; _WHY="the queue-order gate could not run"; exit 1; }
 if [ -n "$ORDER_MSG" ]; then

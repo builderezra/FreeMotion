@@ -290,17 +290,46 @@ def entries(md):
 # only: an entry of his that mentions an audit item in its prose is still his.
 AUDIT = re.compile(r'\(hunt (?:HIGH|MEDIUM|LOW) #\d+\)')
 
+# ── (team) HAND-OFF NOTES, AND HUNT FINDINGS THAT ALREADY SHIPPED, DO NOT HOLD THE QUEUE (20 Oct) ──────────────────
+# The PM's rule. A hand-off between sessions ("Helper lane: branch X is ready", "PM → builder: …") is logged as an entry
+# so nothing is lost, but it is not a request of his: about fifty sat open ahead of his own words, and ticking ones that
+# had long shipped was refused because #980 is open. `(team)` in the HEADER files a note after everything else and out
+# of next_up, so it neither holds the queue nor waits on it.
+# ⚠️ NEVER ON AN ENTRY THAT CARRIES HIS WORDS OR HIS ANSWERS (#1135, #1140, #1155, #1162). The marker is IGNORED when the
+# entry records them (_HIS below), so a wrong tag cannot demote him: the note just stays where it was, and
+# team_conflicts() names it so next.sh can shout.
+# And a hunt finding whose fix already shipped may be ticked late — but only on a claim the gate can check: the entry
+# DECLARES `SHIPPED IN vX.YY`, that release has its own POLISH-LOG line, and it is older than the one being shipped.
+TEAM = re.compile(r'\(team\)')
+SHIPPED_IN = re.compile(r'SHIPPED IN (v\d+\.\d+)\b')
+_HIS = re.compile(r'his words|his answer|he answered|answered by ezra|ezra answered', re.I)
 
-def sort_key(num, suffix, audit=False):
+
+def sort_key(num, suffix, audit=False, team=False):
     """Unnumbered items sort FIRST — they predate the numbering, so they are the oldest. Letter
        suffixes sort inside their number (#31b after #31), which the first version of next.sh got
-       wrong by sorting it to the bottom. Audit findings sort AFTER every request in his own words."""
+       wrong by sorting it to the bottom. Audit findings sort AFTER every request in his own words,
+       and (team) notes after those (20 Oct)."""
     if num is None: return (0, 0, '')
-    return (2 if audit else 1, num, suffix)
+    return (3 if team else 2 if audit else 1, num, suffix)
 
 
 def is_audit(body):
     return bool(AUDIT.search(body.split('\n', 1)[0]))
+
+
+def is_team(body):
+    """`(team)` in the header — and nothing of his recorded in the entry, or the tag does not count."""
+    return bool(TEAM.search(body.split('\n', 1)[0])) and not _HIS.search(body)
+
+
+def team_conflicts(md):
+    """Open entries tagged (team) whose tag is ignored because they record his words or his answers."""
+    out = []
+    for body in entries(md):
+        if OPEN.match(body) and TEAM.search(body.split('\n', 1)[0]) and _HIS.search(body):
+            out.append(body.split('\n', 1)[0][:100])
+    return out
 
 
 def key_of(md, num, suf=''):
@@ -310,8 +339,40 @@ def key_of(md, num, suf=''):
     for body in entries(md):
         m = re.match(r'- \[[ x]\] \*\*(\d+)([a-z]?)[ —]', body)
         if m and int(m.group(1)) == num and m.group(2) == (suf or ''):
-            return sort_key(num, suf or '', is_audit(body))
+            return sort_key(num, suf or '', is_audit(body), is_team(body))
     return sort_key(num, suf or '')
+
+
+def _entry_of(md, num, suf=''):
+    for body in entries(md):
+        m = re.match(r'- \[[ x]\] \*\*(\d+)([a-z]?)[ —]', body)
+        if m and int(m.group(1)) == num and m.group(2) == (suf or ''):
+            return body
+    return None
+
+
+def _ver(v):
+    return tuple(int(x) for x in v.lstrip('v').split('.'))
+
+
+def may_close_late(md, num, version='', polish=''):
+    """May this release tick #num although an older workable item is open? Only a (team) note, or a hunt finding
+       whose entry declares SHIPPED IN a release that has its own POLISH-LOG line and is older than `version`."""
+    body = None if num is None or num == -1 else _entry_of(md, num)
+    if body is None: return False
+    if is_team(body): return True
+    if not is_audit(body) or not re.match(r'v\d+\.\d+$', version or ''): return False
+    have = set(re.findall(r'^- (v\d+\.\d+) — ', polish or '', re.M))
+    return any(v in have and _ver(v) < _ver(version) for v in SHIPPED_IN.findall(body))
+
+
+def late_closes(md, closes, version='', polish=''):
+    """What ship.sh's oldest-first gate refuses: the items in `closes` (numbers, -1 for unnumbered) ranked after
+       next_up and not released by may_close_late. Returns (late, next_up)."""
+    nxt = next_up(md)
+    if not nxt or not closes: return [], nxt
+    lim = key_of(md, nxt[0], nxt[1])
+    return [n for n in closes if key_of(md, n) > lim and not may_close_late(md, n, version, polish)], nxt
 
 
 
@@ -387,6 +448,7 @@ def next_up(md):
     for body in entries(md):
         if not OPEN.match(body): continue
         if JUMPED.search(body): continue          # declared, with a reason, so it does not hold the queue
+        if is_team(body): continue                # a hand-off note, not a request (20 Oct)
         if classify(body) != 'ACTIONABLE': continue
         m = NUM.match(body)
         num = int(m.group(1)) if m else None
@@ -629,6 +691,19 @@ _ORDER = [
       nothing is stopping this""",
      (None, ''),
      'an unnumbered entry still outranks everything, his and mine alike'),
+    # (team) NOTES (20 Oct): a hand-off note numbered lower does not become the next item — his request does.
+    ('''- [ ] **1100 — Helper lane: branch ready** (team)
+      nothing is stopping this
+- [ ] **1101 — his request**
+      nothing is stopping this''',
+     (1101, ''),
+     'a (team) note does not hold the queue — next_up passes it by'),
+    ('''- [ ] **1100 — Hand-off and his call** (team)
+      HE ANSWERED: keep it
+- [ ] **1101 — his request**
+      nothing is stopping this''',
+     (1100, ''),
+     'a (team) tag on an entry that records his answer is ignored — it stays in his tier and keeps its place'),
 ]
 
 # The gate ranks the item a release has JUST TICKED against next_up. Each case: (file, closed, expect late?)
@@ -650,6 +725,30 @@ _KEY = [
      'closing a finding while an older request of his is open is OUT of order'),
 ]
 
+# late_closes (20 Oct): (file, closes, version, polish, expected late list, why). #980 stands for his open item.
+_POL = '- v17.47 — the release that shipped it\n- v17.83 — this one\n'
+_HIS980 = '- [ ] **980 — his request, still open**\n      nothing is stopping this\n'
+_LATE = [
+    (_HIS980 + '- [x] **1100 — Helper lane: branch ready** (team)\n      done', [1100], 'v17.83', _POL, [],
+     'a (team) note behind his open #980 closes'),
+    (_HIS980 + '- [x] **1001 — his other request**\n      done', [1001], 'v17.83', _POL, [1001],
+     'CONTROL: an item in his words behind #980 is still refused'),
+    (_HIS980 + '- [x] **1014 — a finding** (hunt HIGH #3)\n      SHIPPED IN v17.47 (the fix and its test)', [1014], 'v17.83', _POL, [],
+     'a hunt finding that declares SHIPPED IN an older release in POLISH-LOG closes'),
+    (_HIS980 + '- [x] **1015 — a finding** (hunt HIGH #4)\n      done', [1015], 'v17.83', _POL, [1015],
+     'CONTROL: a hunt finding with no shipped fix declared is still refused'),
+    (_HIS980 + '- [x] **1016 — a finding** (hunt HIGH #5)\n      SHIPPED IN v17.49', [1016], 'v17.83', _POL, [1016],
+     'CONTROL: SHIPPED IN a version POLISH-LOG has no line for is refused — a fake version proves nothing'),
+    (_HIS980 + '- [x] **1016 — a finding** (hunt HIGH #5)\n      SHIPPED IN v17.83', [1016], 'v17.83', _POL, [1016],
+     'CONTROL: SHIPPED IN the release being shipped is not an EARLIER release'),
+    (_HIS980 + '- [x] **1040 — his words** \n      SHIPPED IN v17.47', [1040], 'v17.83', _POL, [1040],
+     'CONTROL: SHIPPED IN does not release an item in his own words — only a hunt finding'),
+    (_HIS980 + '- [x] **1135 — Hand-off** (team)\n      His words, 12 Oct: do it this way', [1135], 'v17.83', _POL, [1135],
+     'CONTROL: a (team) tag on an entry carrying his words is ignored, so it is refused like his'),
+    (_HIS980 + '- [x] **1101 — his later request**\n      done\n- [ ] **1100 — Helper lane** (team)\n      nothing is stopping this', [1101], 'v17.83',
+     _POL, [1101], 'CONTROL: an open (team) note does not hide #980 — closing his #1101 is still out of order'),
+]
+
 
 # ═══ WHAT THE LOOP WORKS NEXT — AND "BLOCKED" IS IN IT (queue 660, 28 Aug) ═════════════════════════
 # Ezra: *"Dont ask questions like that dont stop to ask questions, log ur question and ask it me when
@@ -669,19 +768,20 @@ _KEY = [
 WORKABLE = ('ACTIONABLE', 'blocked on Ezra')
 
 
-def work_queue(buckets, audit=()):
+def work_queue(buckets, audit=(), team=()):
     """buckets = {bucket_name: [(tag, title, line), ...]}. Returns [(tag, title, line, bucket), ...]
     oldest first — unnumbered entries before every number, letter suffixes sorted inside their number,
-    and tags in `audit` (my findings, not his words) after all of them."""
+    tags in `audit` (my findings, not his words) after all of them, and `team` (hand-off notes) last."""
     items = []
     for k in WORKABLE:
         for row in buckets.get(k, []):
             items.append((row[0], row[1], row[2], k))
     audit = set(str(a) for a in audit)
+    team = set(str(a) for a in team)
 
     def key(t):
         m = re.match(r'(\d+)([a-z]?)$', str(t[0]))
-        return sort_key(int(m.group(1)), m.group(2), str(t[0]) in audit) if m else (0, 0, '')
+        return sort_key(int(m.group(1)), m.group(2), str(t[0]) in audit, str(t[0]) in team) if m else (0, 0, '')
     return sorted(items, key=key)
 
 
@@ -712,6 +812,10 @@ _WORK = [
       'audit': ['718']},
      ['760', '718'],
      'an audit finding lists AFTER his request even though its number is lower'),
+    ({'ACTIONABLE': [('1100', 'a hand-off', 1), ('1176', 'a finding', 2), ('1177', 'his request', 3)], 'blocked on Ezra': [],
+      'audit': ['1176'], 'team': ['1100']},
+     ['1177', '1176', '1100'],
+     'a (team) note lists after his words AND after my findings (20 Oct)'),
 ]
 
 
@@ -791,7 +895,7 @@ if __name__ == '__main__':
             bad += 1
             print('FAIL: next_up expected %-14s got %-14s — %s' % (want, got2, why))
     for buckets, want, why in _WORK:
-        got = [r[0] for r in work_queue(buckets, buckets.get('audit', ()))]
+        got = [r[0] for r in work_queue(buckets, buckets.get('audit', ()), buckets.get('team', ()))]
         if got != want:
             bad += 1
             print('FAIL: work_queue expected %-22s got %-22s — %s' % (want, got, why))
@@ -811,7 +915,12 @@ if __name__ == '__main__':
         if got != want:
             bad += 1
             print('FAIL: key_of late expected %-5s got %-5s — %s' % (want, got, why))
-    _total = len(_CASES) + len(_ORDER) + len(_WORK) + len(_LIVE) + len(_DIFF) + len(_KEY)
+    for md, closes, ver, pol, want, why in _LATE:
+        got = late_closes(md, closes, ver, pol)[0]
+        if got != want:
+            bad += 1
+            print('FAIL: late_closes expected %-10s got %-10s — %s' % (want, got, why))
+    _total = len(_CASES) + len(_ORDER) + len(_WORK) + len(_LIVE) + len(_DIFF) + len(_KEY) + len(_LATE)
     if bad:
         print('\n%d of %d classifier rules are broken. Each one was a real bug; do not push this.' % (bad, _total))
         _s.exit(1)
