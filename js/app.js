@@ -5861,9 +5861,6 @@ window.FM = window.FM || {};
    * call it — so gating it once covers all of them and cannot drift when a fourth route appears.
    * It resolves immediately when nothing is ticked, so an ordinary export is not made slower by a
    * feature that has nothing to say. */
-  /* Simple mode 2.7 (SU1 #20, his "2A" 14 Oct): `sx` is Simple's one-tap Export — { fmSimple: true, scale, fps, quality, from, to }, built by
-     js/simple-tools.js. It goes through every gate below (pause, the owner's export switch, the notepad, clips still arriving) and then
-     straight to runExport with those fixed settings, never the dialog. Every other caller passes nothing, so Full's dialog is today's. */
   /* THE EXPORT GATE'S QUESTION AND ITS NOTICE, in one place (bughunt7 #2). Export asks it, and so does every other door that would
      take a watch-only copy away: Copy (⌘C and the ⧉ menu's Copy selected, FM.copySelection: the clipboard carries every clip's
      file into a project of his own), Save audio as WAV (js/audio-tools.js FM.downloadLayerAudio) and, with the copy's own id,
@@ -5883,6 +5880,9 @@ window.FM = window.FM || {};
   }
   FM.exportTurnedOff = exportTurnedOff;
   FM.sayExportTurnedOff = sayExportTurnedOff;
+  /* Simple mode 2.7 (SU1 #20, his "2A" 14 Oct): `sx` is Simple's one-tap Export — { fmSimple: true, scale, fps, quality, from, to }, built by
+     js/simple-tools.js. It goes through every gate below (pause, the owner's export switch, the notepad, clips still arriving) and then
+     straight to runExport with those fixed settings, never the dialog. Every other caller passes nothing, so Full's dialog is today's. */
   async function showExportDialog(sx) {
     /* STOP THE TRANSPORT FIRST (queue 247). Ezra: "when you open the export menu playback should pause."
      * Before the notepad confirm on purpose — that is itself a modal, so leaving the transport running
