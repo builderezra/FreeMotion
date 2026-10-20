@@ -105097,22 +105097,33 @@
             await sleep(300);
             /* A card's picture comes from IndexedDB after the card is drawn (home.js getThumb), so late in a full run it can
                still be loading here: wait for it instead of reading once, and say what was seen if it never comes (20 Oct —
-               v17.82's full pass failed here once; alone, and in the run before, it passed). */
+               v17.82's full pass failed here once; alone, and in the run before, it passed).
+               …AND IT LOOKS AMONG THE SEEDED CARDS, brought into the band when none is there. The suite's own projects sit
+               above them with no picture, and on v17.82's ship the one run of three the band held started on one of those:
+               64 cards, 1 run in the band, 0 with a picture, the list scrolled to 82 px. */
+            const hasPic = function (c) { const img = c.querySelector('.hm-thumb img'); return !!(img && img.complete && img.naturalWidth); };
+            const isSeeded = function (c) { return ids.indexOf(c.dataset.pid) >= 0; };
             let seen = '';
             for (let tries = 0; tries < 25; tries++) {
               const cards = Array.prototype.slice.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'));
               const top = document.getElementById('hm-selbar') ? document.getElementById('hm-selbar').getBoundingClientRect().top : 700;
+              const lim = Math.min(top, 700);
               let band = 0, pics = 0;
               for (let i = 0; i + 2 < cards.length; i++) {
                 const y0 = hcPt(cards[i]).y, y2 = hcPt(cards[i + 2]).y;
-                const img = cards[i].querySelector('.hm-thumb img');
-                const pic = !!(img && img.complete && img.naturalWidth);
-                if (!(y0 > 200 && y2 + 30 < Math.min(top, 700))) continue;
+                const pic = hasPic(cards[i]);
+                if (!(y0 > 200 && y2 + 30 < lim)) continue;
                 band++; if (pic) pics++;
                 if (!needPic || pic) return [cards[i], cards[i + 1], cards[i + 2]];
               }
-              seen = cards.length + ' cards, ' + band + ' runs of three in the band, ' + pics + ' of them with a loaded picture, the list scrolled to ' + Math.round(ha7Scroll().scrollTop) + ' px';
-              await sleep(200);
+              /* None fits: put the first seeded card whose picture has loaded just inside the band, and look again. */
+              const k = cards.findIndex(function (c) { return isSeeded(c) && hasPic(c); });
+              const ky = k >= 0 ? hcPt(cards[k]).y : NaN;
+              if (k >= 0 && k + 2 < cards.length) sc.scrollTop += ky - 215;
+              seen = cards.length + ' cards, ' + band + ' runs of three in the band (200–' + Math.round(lim - 30) + ' px), ' + pics + ' of them with a loaded picture, '
+                + cards.filter(function (c) { return isSeeded(c) && hasPic(c); }).length + ' seeded cards with one' + (k >= 0 ? ' (the first at ' + Math.round(ky) + ' px)' : '')
+                + ', the list scrolled to ' + Math.round(sc.scrollTop) + ' px';
+              await sleep(250);
             }
             throw new Error('setup: no three cards in a row on screen with Select on' + (needPic ? ', the first with its picture showing' : '') + ' (' + seen + ')');
           };
