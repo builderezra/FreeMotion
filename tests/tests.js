@@ -87175,9 +87175,12 @@
                  { id: 'b', type: 'shape', start: -999999, duration: 5 },
                  { id: 'c', type: 'shape', start: 'nonsense', duration: 5 }];
     FM.storage._sanitizeLayers(bad);
+    /* bughunt7 #3 (N1): the floor is -(3600 + FM.LIMITS.duration) now, not -3600 — a clip longer than an hour can be dragged
+       further back than an hour — and -999999 is still absurd, so it must still be brought up to it. */
+    const FLOOR = -(3600 + ((FM.LIMITS && FM.LIMITS.duration) || 0));
     for (const l of bad) {
       if (!isFinite(l.start)) throw new Error('a non-finite start survived sanitising on layer ' + l.id);
-      if (l.start < -3600) throw new Error('an absurd start (' + l.start + ') survived on layer ' + l.id);
+      if (l.start < FLOOR) throw new Error('an absurd start (' + l.start + ') survived on layer ' + l.id);
     }
   });
 
@@ -170354,6 +170357,189 @@
         await q915aCleanup(made, orig, wasHome, [], [], []);
       }
     });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#3) ONE UNDO MOVED A LONG CLIP'S FOOTAGE AND ITS EFFECT AND MASK KEYS, BY HUNDREDS OF SECONDS. history.restore runs the load
+     sanitiser (js/storage.js) over every layer of the snapshot it puts back, and three of its bounds were the PROJECT's 3600 s:
+     a plain trimStart, which is SOURCE seconds, held to 0..3600 (sanitizeTiming); effect and audio-effect key times and mask key
+     times held to ±3600 (safeKfProp, safeMaskPath); and a clip's start held to ±3600 (sanitizeTiming, the refuter's N1). A clip is
+     not held to the project (hunt5 later A: up to FM.LIMITS.duration long), so all three are reached by ordinary edits, and the
+     undo autosaved the loss while redo, which sanitises the same way, could not bring it back. Now a key time and a start reach
+     ±(3600 + FM.LIMITS.duration) and a trimStart FM.LIMITS.duration × FM.LIMITS.speed[1].
+     Three edits, each followed by an unrelated one (renaming a title) and its Undo, then the Redo:
+       (i)   a 90-minute recording (5400 s) at 2x, 2700 s on the timeline, split at 35:00 by FM.splitLayer: the tail starts 4200 s
+             into the file (2100 s × 2);
+       (ii)  a 60 s shape with an effect key and a mask key at 50 s (and a transform key there, which no sanitiser caps), slowed to
+             1 % the way the Speed card does it (js/inspector.js: the source span kept, so 6000 s long, and FM.scaleLayerKeyframes by
+             the length it gave, 100), which puts those keys at 5000 s; then set back to 100 % the same way, which puts them back
+             at 50 s;
+       (iii) a 5000 s clip dragged to start at -4000 s, which the timeline allows (it floors a drag at -(duration - 0.1)), set as
+             the drag leaves it: start -4000 and its keys shifted with it (FM.shiftLayerKeyframes).
+     FAILS BEFORE THE FIX: after the Undo (and the Redo) the tail's trimStart is 3600, 600 s of footage shifted; the slowed
+     clip's effect and mask keys are at 3600 while its transform key is at 5000, and set back to 100 % they land at 36 s
+     against the transform key's 50 s; the dragged clip starts at -3600, 400 s later than he put it.
+     CONTROLS, which hold before and after: the split really wrote 4200 and the re-time really reached 5000 before the Undo
+     (else nothing is measured), the Undo really took the rename back, the transform key is at 5000 then 50 throughout; an
+     ordinary clip’s start, trimStart and key times come through the sanitiser untouched; and NaN, a word and absurd values
+     (±1e12) are still repaired or brought into range.
+     TOLERANCE: reasoned, not measured. Every number here is a product of integers and 0.01 that rounds back to the integer
+     (2100 × 2, 60 / 0.01 = 6000, 5000 × 0.01 = 50) and the snapshot is JSON, which round-trips a double exactly, so the values
+     come back to float rounding, about 1e-12 s; the faults are 14 s and more. 1e-6 s sits between the two. */
+  test('bughunt7 #3 One Undo keeps a long clip’s footage, keys and place: a 90-minute recording at 2x split at 35:00 keeps its tail’s trimStart of 4200 s, a 60 s clip slowed to 1 % keeps its effect and mask keys at 5000 s and back at 100 % they are at 50 s with its motion, and a long clip dragged to start at -4000 s stays there (CONTROLS: the edits wrote those values, the Undo took the rename back, an ordinary clip is untouched, and broken or absurd values are still repaired)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.history || !FM.history.reset || !FM.history._steps || typeof FM.splitLayer !== 'function' || typeof FM.scaleLayerKeyframes !== 'function' || typeof FM.shiftLayerKeyframes !== 'function' || !FM.storage || typeof FM.storage._sanitizeLayers !== 'function' || !FM.LIMITS) throw new Error('setup: FM.history (reset, _steps), FM.splitLayer, FM.scaleLayerKeyframes / shiftLayerKeyframes, FM.storage._sanitizeLayers or FM.LIMITS is not reachable');
+    const TOL = 1e-6, bad = [];
+    const near = (a, b) => typeof a === 'number' && Math.abs(a - b) <= TOL;
+    const title = () => {
+      const T = FM.makeLayer('shape', { name: 'bh7 #3 title', shape: 'rect', x: 20, y: 20, shapeW: 10, shapeH: 10, fill: '#ffffff', start: 0, duration: 4 });
+      T.start = 0; T.duration = 4;
+      return T;
+    };
+    /* rename the title as one undo step, Undo it, and hand `look` the layer `id` after the Undo and again after its Redo */
+    const undoRedo = async (T, id, look) => {
+      const n0 = FM.history._steps().len;
+      T.name = 'bh7 #3 title renamed';
+      FM.history.commit();
+      if (FM.history._steps().len !== n0 + 1) throw new Error('setup: renaming the title did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+      FM.history.undo();
+      await sleep(60);
+      const T1 = FM.layerById(FM.scene, T.id);
+      if (!T1 || T1.name !== 'bh7 #3 title') throw new Error('setup: the Undo did not take the rename back (' + (T1 ? T1.name : 'the title is gone') + '), so nothing below is measured');
+      look('after one Undo of a rename', FM.layerById(FM.scene, id));
+      FM.history.redo();
+      await sleep(60);
+      look('after its Redo', FM.layerById(FM.scene, id));
+    };
+    /* the first keyframable effect parameter with a finite range (the queue 827 test's choice), keyed 0 → `at` */
+    const fxDef = (FM.fxRegistry.all() || []).filter(d => d && !d.hidden && (d.params || []).some(pd => pd && isFinite(pd.min) && isFinite(pd.max) && pd.keyframable !== false))[0];
+    if (!fxDef) throw new Error('setup: no keyframable effect parameter in the registry to key');
+    const pdef = fxDef.params.filter(pd => pd && isFinite(pd.min) && isFinite(pd.max) && pd.keyframable !== false)[0];
+    const fxKeyed = (t0, t1) => {
+      const fx = FM.fxRegistry.makeInstance(fxDef.type);
+      fx.params[pdef.key] = { kf: [{ t: t0, v: pdef.min + (pdef.max - pdef.min) * 0.25, e: 'linear' }, { t: t1, v: pdef.min + (pdef.max - pdef.min) * 0.75, e: 'linear' }] };
+      return fx;
+    };
+    const maskKeyed = (t0, t1) => ({ type: 'pen', path: { kf: [{ t: t0, v: [[0, 0], [10, 0], [10, 10]] }, { t: t1, v: [[2, 2], [12, 2], [12, 12]] }] } });
+    const lastT = p => (p && Array.isArray(p.kf) && p.kf.length) ? p.kf[p.kf.length - 1].t : null;
+    const keysOf = c => ({
+      fx: lastT(c && c.effects && c.effects[0] && c.effects[0].params && c.effects[0].params[pdef.key]),
+      mask: lastT(c && c.masks && c.masks[0] && c.masks[0].path),
+      x: lastT(c && c.transform && c.transform.x)
+    });
+
+    /* ── (i) a 90-minute recording at 2x, split at 35:00 */
+    await _bh2With(async function (media) {
+      const T = title();
+      const V = FM.makeLayer('video', { name: 'bh7 #3 recording', start: 0, duration: 2700 });
+      V.start = 0; V.duration = 2700; V.trimStart = 0; V.speed = 2;
+      FM.media.set(V.id, { kind: 'video', duration: 5400, width: 2, height: 2 });
+      media.push(V.id);
+      FM.scene.layers = [T, V];
+      FM.scene.project.duration = 2700;
+      FM.refreshAll();
+      FM.history.reset();
+      FM.time = 2100;
+      await FM.splitLayer(V.id);
+      const B = FM.scene.layers.filter(l => l.id !== V.id && l.id !== T.id && l.type === 'video')[0];
+      if (!B) throw new Error('setup: splitting the recording at 35:00 made no tail half');
+      media.push(B.id);
+      if (!near(B.trimStart, 4200)) throw new Error('setup: the tail half of a 2x recording split at 35:00 starts ' + B.trimStart + ' s into the file, not 4200, so nothing below is measured');
+      await undoRedo(T, B.id, (where, c) => {
+        if (!c) { bad.push(where + ': the tail half of the split recording is gone'); return; }
+        if (!near(c.trimStart, 4200)) bad.push(where + ': the tail half of a 90-minute recording at 2x split at 35:00 came back starting ' + c.trimStart + ' s into the file, not 4200 s' + (c.trimStart === 3600 ? ' — cut to the 3600 s project bound, so ' + (4200 - c.trimStart) + ' s of its footage are shifted under every cut' : ''));
+      });
+    });
+
+    /* ── (ii) a 60 s clip with effect and mask keys at 50 s, slowed to 1 %, then back to 100 % */
+    await _bh2With(async function () {
+      const T = title();
+      const L = FM.makeLayer('shape', { name: 'bh7 #3 slowed', shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 60 });
+      L.start = 0; L.duration = 60; L.speed = 1;
+      L.transform.x = { kf: [{ t: 0, v: 10, e: 'linear' }, { t: 50, v: 90, e: 'linear' }] };
+      L.effects = [fxKeyed(0, 50)];
+      L.masks = [maskKeyed(0, 50)];
+      FM.scene.layers = [T, L];
+      FM.scene.project.duration = 60;
+      /* the Speed card's re-time: the source span is kept (60 s at 1x), divided by the new speed, and the keys scaled by the
+         length that resulted */
+      const retime = (lyr, sp) => {
+        const before = lyr.duration, span = lyr.duration * (typeof lyr.speed === 'number' ? lyr.speed : 1);
+        lyr.speed = sp; lyr.duration = Math.max(0.1, span / sp);
+        FM.scaleLayerKeyframes(lyr, lyr.duration / before);
+      };
+      retime(L, FM.LIMITS.speed[0]);
+      const k0 = keysOf(L);
+      if (!near(L.duration, 6000) || !near(k0.fx, 5000) || !near(k0.mask, 5000) || !near(k0.x, 5000)) throw new Error('setup: slowed to 1 % the 60 s clip is ' + L.duration + ' s long with its effect, mask and transform keys at ' + k0.fx + ', ' + k0.mask + ' and ' + k0.x + ' s, not 6000 s and 5000 s, so nothing below is measured');
+      FM.refreshAll();
+      FM.history.reset();
+      let back = null;
+      await undoRedo(T, L.id, (where, c) => {
+        if (!c) { bad.push(where + ': the slowed clip is gone'); return; }
+        const k = keysOf(c);
+        if (!near(k.x, 5000)) bad.push('CONTROL: ' + where + ' the slowed clip’s transform key is at ' + k.x + ' s, not 5000 s');
+        if (!near(k.fx, 5000)) bad.push(where + ': the slowed clip’s ' + fxDef.type + ' key came back at ' + k.fx + ' s, not 5000 s with its motion (5000 s)' + (k.fx === 3600 ? ' — cut to the 3600 s project bound' : ''));
+        if (!near(k.mask, 5000)) bad.push(where + ': the slowed clip’s mask key came back at ' + k.mask + ' s, not 5000 s' + (k.mask === 3600 ? ' — cut to the 3600 s project bound' : ''));
+        back = c;
+      });
+      if (back) {
+        retime(back, 1);
+        const k = keysOf(back);
+        if (!near(k.x, 50)) bad.push('CONTROL: set back to 100 % the clip’s transform key is at ' + k.x + ' s, not 50 s');
+        if (!near(k.fx, 50) || !near(k.mask, 50)) bad.push('set back to 100 % after the Undo, the clip’s effect key is at ' + k.fx + ' s and its mask key at ' + k.mask + ' s, where they were put at 50 s and its motion’s key is at ' + k.x + ' s — out of step with the motion');
+      }
+    });
+
+    /* ── (iii) a 5000 s clip dragged to start at -4000 s */
+    await _bh2With(async function () {
+      const T = title();
+      const N = FM.makeLayer('shape', { name: 'bh7 #3 long', shape: 'rect', x: 60, y: 60, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 5000 });
+      N.start = 0; N.duration = 5000;
+      N.transform.x = { kf: [{ t: 0, v: 10, e: 'linear' }, { t: 4500, v: 90, e: 'linear' }] };
+      FM.scene.layers = [T, N];
+      FM.scene.project.duration = 1000;
+      N.start = -4000; FM.shiftLayerKeyframes(N, -4000);   // where the drag leaves it: -4000 is above its floor, -(5000 - 0.1)
+      if (!near(N.start, -4000) || !near(lastT(N.transform.x), 500)) throw new Error('setup: the dragged clip starts at ' + N.start + ' with its last key at ' + lastT(N.transform.x) + ', not -4000 and 500');
+      FM.refreshAll();
+      FM.history.reset();
+      await undoRedo(T, N.id, (where, c) => {
+        if (!c) { bad.push(where + ': the dragged clip is gone'); return; }
+        if (!near(lastT(c.transform.x), 500)) bad.push('CONTROL: ' + where + ' the dragged clip’s transform key is at ' + lastT(c.transform.x) + ' s, not 500 s');
+        if (!near(c.start, -4000)) bad.push(where + ': a 5000 s clip dragged to start at -4000 s came back starting at ' + c.start + ' s' + (c.start === -3600 ? ' — moved ' + (c.start + 4000) + ' s by the 3600 s project bound, while its keys stayed' : ''));
+      });
+    });
+
+    /* ── CONTROLS: an ordinary clip comes through untouched, and broken or absurd values are still repaired or brought into range. */
+    const shapeAt = (name, start, dur) => {
+      const S = FM.makeLayer('shape', { name: name, shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#ffffff', start: start, duration: dur });
+      S.start = start; S.duration = dur;
+      return S;
+    };
+    const ordS = shapeAt('bh7 #3 ordinary', 2, 4);
+    ordS.effects = [fxKeyed(2.5, 5)];
+    ordS.masks = [maskKeyed(2, 5.5)];
+    const oc = JSON.parse(JSON.stringify([{ id: 'bh7o1', type: 'video', start: 2, duration: 4, trimStart: 1.5, speed: 1 }, ordS]));
+    FM.storage._sanitizeLayers(oc);
+    const ok = keysOf(oc[1]);
+    if (!oc[0] || oc[0].start !== 2 || oc[0].trimStart !== 1.5) bad.push('CONTROL: an ordinary clip (start 2, trimStart 1.5) came through the sanitiser as start ' + (oc[0] && oc[0].start) + ', trimStart ' + (oc[0] && oc[0].trimStart));
+    if (!oc[1] || oc[1].start !== 2 || ok.fx !== 5 || ok.mask !== 5.5) bad.push('CONTROL: an ordinary shape (start 2, effect key at 5, mask key at 5.5) came through the sanitiser as start ' + (oc[1] && oc[1].start) + ', effect key ' + ok.fx + ', mask key ' + ok.mask);
+    const BIG = 3600 + FM.LIMITS.duration;
+    const abS = shapeAt('bh7 #3 absurd keys', 0, 4);
+    abS.effects = [fxKeyed(-1e12, 1e12)];
+    abS.masks = [maskKeyed(-1e12, 1e12)];
+    const ab = [
+      { id: 'bh7c1', type: 'video', start: NaN, duration: 4, trimStart: 'soon' },
+      { id: 'bh7c2', type: 'video', start: -1e12, duration: 4, trimStart: 1e12 },
+      { id: 'bh7c3', type: 'video', start: 1e12, duration: 4, trimStart: -5 },
+      JSON.parse(JSON.stringify(abS))
+    ];
+    FM.storage._sanitizeLayers(ab);
+    if (ab[0].start !== 0 || ab[0].trimStart !== 0) bad.push('CONTROL: a NaN start and a trimStart of a word came back as ' + ab[0].start + ' and ' + ab[0].trimStart + ', not repaired to 0');
+    if (!isFinite(ab[1].start) || ab[1].start < -BIG || !isFinite(ab[2].start) || ab[2].start > BIG) bad.push('CONTROL: starts of -1e12 and 1e12 came back as ' + ab[1].start + ' and ' + ab[2].start + ', not inside ±' + BIG);
+    if (!isFinite(ab[1].trimStart) || ab[1].trimStart > FM.LIMITS.duration * FM.LIMITS.speed[1] || ab[2].trimStart !== 0) bad.push('CONTROL: trimStarts of 1e12 and -5 came back as ' + ab[1].trimStart + ' and ' + ab[2].trimStart + ', not brought into range');
+    const kb = ab[3].effects && ab[3].effects[0] && ab[3].effects[0].params && ab[3].effects[0].params[pdef.key];
+    const mb = ab[3].masks && ab[3].masks[0] && ab[3].masks[0].path;
+    if (!kb || !Array.isArray(kb.kf) || kb.kf.some(k => !isFinite(k.t) || Math.abs(k.t) > BIG)) bad.push('CONTROL: effect key times of ±1e12 came back as ' + JSON.stringify(kb && kb.kf && kb.kf.map(k => k.t)) + ', not inside ±' + BIG);
+    if (!mb || !Array.isArray(mb.kf) || mb.kf.some(k => !isFinite(k.t) || Math.abs(k.t) > BIG)) bad.push('CONTROL: mask key times of ±1e12 came back as ' + JSON.stringify(mb && mb.kf && mb.kf.map(k => k.t)) + ', not inside ±' + BIG);
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
