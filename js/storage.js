@@ -2230,6 +2230,15 @@ window.FM = window.FM || {};
     if (!obj || obj.app !== 'freemotion' || !obj.backup || !Array.isArray(obj.projects)) {
       return { ok: false, reason: 'That is not a FreeMotion backup file.' };
     }
+    /* bughunt8 #4: A NEW BUILD WAITS FOR THE WHOLE RESTORE. Each entry decodes its embedded clips one after another (applyScene, up
+       to 20 s each on a phone), and nothing the update hold reads (index.html fmSwBusy) was counting: a build landing mid-restore
+       saved the entry being restored with only the clips decoded so far (their bytes were only in the parsed file), never restored
+       the rest, never put him back in his own project, and a second Restore duplicated what had landed. Counted in FM._importing
+       from here to the finally, across every entry AND the gaps between them (counting each entry alone would let the reload land
+       between two) and the move back to his project. importObject counts itself as well; inside here that is one deeper. The try
+       is not re-indented, so its lines keep their history. */
+    FM._importing = (FM._importing || 0) + 1;
+    try {
     /* ⚠️ queue 915 clause 4: AND PUT HIM BACK WHERE HE WAS. importObject goes through projects.create(),
        which switches the open project once per entry — so a restore left the EDITOR on the last restored
        project while Home's OPEN badge still sat on his own, and a restore from inside a project dropped
@@ -2258,6 +2267,7 @@ window.FM = window.FM || {};
       try { await FM.projects.open(back, { confirmed: true }); } catch (e) {}
     }
     return { ok: restored > 0, restored: restored, drafts: drafts, failed: failed, total: obj.projects.length };
+    } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   };
 
   /* ═══ WHAT IS WRONG WITH THIS FILE, IN WORDS (queue 673) ══════════════════════════════════════
@@ -2292,6 +2302,11 @@ window.FM = window.FM || {};
   FM.storage.importObject = async function (obj, onDone, opts) {
     const problem = FM.storage.sceneFileProblem(obj);
     if (problem) { if (FM.toast) FM.toast(problem, 5000); return false; }
+    /* bughunt8 #4: …and Import project file the same way: from the new project to the save that keeps it, through applyScene's
+       decodes, counted in FM._importing (which index.html's fmSwBusy reads), so a build landing meanwhile waits instead of saving
+       the project with the clips decoded so far and reloading. The try is not re-indented, so its lines keep their history. */
+    FM._importing = (FM._importing || 0) + 1;
+    try {
     const kind = opts && opts.draft;   // queue 915 clause 8: only restoreBackup passes this, and only these two values
     if (FM.projects) {
       const pid = await FM.projects.create(Object.assign({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height },
@@ -2314,6 +2329,7 @@ window.FM = window.FM || {};
     if (FM.toast && !(opts && opts.quiet)) FM.toast(importWarnings.length ? 'Project imported. ' + importWarnings.join(' ') : 'Project imported', importWarnings.length ? 12000 : undefined);
     if (onDone) onDone();
     return true;
+    } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   };
 
   FM.storage.importFile = function (onDone) {   // onDone runs ONLY on a successful import (not on picker-cancel)

@@ -173927,4 +173927,132 @@
     });
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ bughunt8 #4: A NEW BUILD RELOADED THE APP IN THE MIDDLE OF A RESTORE OR AN IMPORT ══════════════════════════════════════════
+     What was wrong. js/storage.js restoreBackup puts each project of a backup back through importObject, which makes the project and
+     then decodes its embedded clips one after another (applyScene: dataURLToFile, then the loader, up to 20 s each on a phone), and
+     nothing the update hold reads (index.html fmSwBusy) counted any of it. A build landing mid-restore saved the entry being restored
+     with only the clips decoded so far, never restored the rest, never put him back in his own project, and a second Restore would
+     duplicate what had landed. A single Import project file lost its not-yet-decoded clips the same way. Now restoreBackup counts in
+     FM._importing for its whole length, the gaps between entries included, and importObject counts itself.
+     Driven like the 1176 leftover tests of the hold (a picked file still opening): the hold is handed a counter for the reload, never
+     the real one, and FM.loadImageFile is held on a gate for one named picture only. (1) A two-entry backup, each entry one picture
+     layer with its picture embedded: while entry one's picture is held the app is asked whether it is busy and handed a new build;
+     the restore's onProgress reads FM._importing as entry two starts (after entry one is over, before entry two begins); then the
+     gate opens, the restore runs to its end, and the held build must reload by itself. (2) The same for one project file through
+     importObject. Saves are let finish before each question (FM.storage.settled), so a save still writing cannot answer for it.
+     FAILS BEFORE THE FIX: while each picture decodes fmSwBusy answers '' and the new build reloads at once; between the two entries
+     FM._importing is 0.
+     CONTROLS, which hold before and after: the app is idle before each step; each held decode was reached (else a setup failure);
+     both entries were restored and the restore put him back in his project; the import landed; FM._importing is back where it was
+     after each; and with nothing running a new build reloads at once. No tolerance: every quantity is a flag or a count. */
+  test('bughunt8 #4 An update does not reload the app in the middle of Restore from backup or Import project file: while a restored entry’s picture decodes, between two entries and while an imported file’s picture decodes the new build waits, and once each is over the app reloads by itself (CONTROLS: each decode was reached, both entries came back and the restore put him back in his project, the import landed; an idle app reloads at once)', { item: '1176', budgetMs: 90000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM.storage.restoreBackup !== 'function' || typeof FM.storage.importObject !== 'function' || typeof FM.loadImageFile !== 'function') throw new Error('setup: FM.storage.restoreBackup / importObject or FM.loadImageFile is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_importing');
+    const dLoad = Object.getOwnPropertyDescriptor(FM, 'loadImageFile'), realLoad = FM.loadImageFile;
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const had = new Set(FM.projects.list().map(function (p) { return p.id; }));
+    const made = [];
+    let reloads = 0, entered = 0, open = null, pending = null;
+    const count = function () { reloads++; };
+    const until = async function (ok, ms) { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async function (what) {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(function () { return W.busy() === ''; }, 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    /* FM.loadImageFile held for the picture named `name` only, until open() */
+    const hold = function (name) {
+      entered = 0;
+      const gate = new Promise(function (r) { open = r; });
+      FM.loadImageFile = function (f) {
+        const self = this, args = arguments;
+        if (f && f.name === name) { entered++; return gate.then(function () { return realLoad.apply(self, args); }); }
+        return realLoad.apply(this, arguments);
+      };
+    };
+    const cv = document.createElement('canvas'); cv.width = 8; cv.height = 8;
+    const cg = cv.getContext('2d'); cg.fillStyle = '#c03030'; cg.fillRect(0, 0, 8, 8);
+    const url = cv.toDataURL('image/png');
+    /* one project file: a picture layer with its picture embedded, as Save project file writes it */
+    const entry = function (tag) {
+      const L = FM.makeLayer('image', { name: 'bh8-4 picture ' + tag, start: 0, duration: 2 });
+      L.start = 0; L.duration = 2;
+      const o = { app: 'freemotion', v: 1, project: { name: 'bughunt8 #4 ' + tag, width: 320, height: 240, fps: 30, duration: 2, background: '#000000' }, layers: [jclone921(L)], media: {} };
+      o.media[L.id] = { kind: 'image', name: 'bh8-4 ' + tag + '.png', dataURL: url };
+      return o;
+    };
+    const fresh = function () { return FM.projects.list().filter(function (p) { return !had.has(p.id) && made.indexOf(p.id) < 0; }).map(function (p) { return p.id; }); };
+    const bad = [];
+    try {
+      if (wasHome) FM.home.close();
+      const n0 = FM._importing || 0;
+
+      /* (1) Restore from backup: two entries, entry one's picture held. */
+      await settle('the restore');
+      hold('bh8-4 one.png');
+      let between = null;
+      pending = FM.storage.restoreBackup({ app: 'freemotion', backup: 1, v: 1, count: 2, projects: [entry('one'), entry('two')] }, function (i) { if (i === 2) between = FM._importing || 0; });
+      if (!(await until(function () { return entered > 0; }, 6000))) throw new Error('setup: the restore never reached entry one’s picture (FM.loadImageFile), so nothing was decoding');
+      if (FM.storage.settled) await FM.storage.settled();
+      const during = W.busy(), n1 = FM._importing;
+      reloads = 0;
+      const now1 = await W(count);
+      const held1 = !now1 && !reloads && W.held();
+      open();
+      const r = await pending; pending = null;
+      fresh().forEach(function (id) { made.push(id); });
+      if (FM.storage.settled) await FM.storage.settled();
+      if (!during) bad.push('while a restored entry’s picture was decoding the app counted as idle (FM._importing ' + JSON.stringify(n1) + ')');
+      if (!held1) bad.push('a new build ' + (reloads ? 'reloaded the app in the middle of Restore from backup (' + reloads + ' reload), so the entry was saved with its clips half decoded and the rest never restored' : 'was dropped rather than held during Restore from backup'));
+      if (!(between > n0)) bad.push('between the two entries of the restore FM._importing was ' + JSON.stringify(between) + ', so a build landing there would reload with entry two never restored and him left in entry one');
+      if (!r || !r.ok || r.restored !== 2) bad.push('CONTROL: the restore answered ' + JSON.stringify(r) + ', not both entries restored');
+      if (FM.projects.currentId() !== orig) bad.push('CONTROL: the restore left the editor on ' + FM.projects.currentId() + ', not back on his project ' + orig);
+      if ((FM._importing || 0) !== n0) bad.push('after the restore FM._importing is ' + JSON.stringify(FM._importing) + ', not ' + n0 + ', so every later update would wait for it');
+      if (!(await until(function () { return W.busy() === ''; }, 8000))) bad.push('after the restore the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(function () { return reloads > 0; }, 9000))) bad.push('once the restore was over, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+      if (dLoad) Object.defineProperty(FM, 'loadImageFile', dLoad); else FM.loadImageFile = realLoad;
+
+      /* (2) Import project file: one file, its picture held. */
+      await settle('the import');
+      hold('bh8-4 three.png');
+      pending = FM.storage.importObject(entry('three'), null, { quiet: true, confirmed: true });
+      if (!(await until(function () { return entered > 0; }, 6000))) throw new Error('setup: the import never reached its picture (FM.loadImageFile), so nothing was decoding');
+      if (FM.storage.settled) await FM.storage.settled();
+      const during2 = W.busy(), n2 = FM._importing;
+      reloads = 0;
+      const now2 = await W(count);
+      const held2 = !now2 && !reloads && W.held();
+      open();
+      const ok2 = await pending; pending = null;
+      fresh().forEach(function (id) { made.push(id); });
+      if (FM.storage.settled) await FM.storage.settled();
+      if (!during2) bad.push('while an imported project file’s picture was decoding the app counted as idle (FM._importing ' + JSON.stringify(n2) + ')');
+      if (!held2) bad.push('a new build ' + (reloads ? 'reloaded the app in the middle of Import project file (' + reloads + ' reload), so the project was saved with its clips half decoded' : 'was dropped rather than held during Import project file'));
+      if (ok2 !== true) bad.push('CONTROL: the import answered ' + JSON.stringify(ok2) + ', not true');
+      if ((FM._importing || 0) !== n0) bad.push('after the import FM._importing is ' + JSON.stringify(FM._importing) + ', not ' + n0);
+      if (!(await until(function () { return W.busy() === ''; }, 8000))) bad.push('after the import the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(function () { return reloads > 0; }, 9000))) bad.push('once the import was over, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+      if (dLoad) Object.defineProperty(FM, 'loadImageFile', dLoad); else FM.loadImageFile = realLoad;
+
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (open) open();
+      if (pending) { try { await pending; } catch (e) {} }
+      if (dLoad) Object.defineProperty(FM, 'loadImageFile', dLoad); else FM.loadImageFile = realLoad;
+      if (dFlag) Object.defineProperty(FM, '_importing', dFlag); else delete FM._importing;
+      fresh().forEach(function (id) { made.push(id); });
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
