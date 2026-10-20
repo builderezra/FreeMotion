@@ -174055,4 +174055,116 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ bughunt8 #5: THE GROUP BOX'S HULL CHANGED HOW SAVED PROJECTS DRAW ══════════════════════════════════════════════════════════
+     What was wrong. 644bd3c8 (1176 leftover: a group's box takes in its members as drawn) made FM.groupRestBoundsLocal the hull of
+     each member turned, sheared, set in depth and through a nested group's matrix. Right for the selection box, a tap and a pinch's
+     pivot, but two render paths read that box: compositor.js tiltPivot takes R, the unit the perspective of every leant group is
+     worked out in, from it; and FM.groupPivot falls back to it for a group that is scaled, turned or leant with no pivot stored
+     (the AI Director's keys, a scale behaviour, a group last scaled before queue 690's third hunt). So on f6e644f5 and on 644bd3c8
+     the same saved group drew differently. Now those two callers take the box as it was before the hull (the rest box's upright
+     sums, FM.groupRestBoundsLocal(g, scene, true)) and the hull stays for what he touches.
+     The members, on _bh2Frame's 320 × 240 frame: a red 40 × 40 square at 60,120 (40..80 × 100..140) and a blue 160 × 10 bar at
+     240,120 turned 90°, drawn 235..245 × 40..200. The upright sums box the bar 160..320 × 115..125, so the group's box is 40..320 ×
+     100..140: pivot 180,120, R 140. The hull is 40..245 × 40..200: pivot 142.5,120, R 102.5.
+       (A) The group, at 0,0, leant 60° about Y, no pivot stored. renderMesh draws a flat point d px from the pivot (unit d / R) at
+           pivot + d · cos 60° · 3.2 / (3.2 + (d / R) · sin 60°), so red runs X(40 − P) .. X(80 − P): 84.0 .. 118.0 about the sums
+           (as f6e644f5 drew it), 72.2 .. 105.1 about the hull. A twin whose bar lies flat (160 × 10 unturned, so its hull IS the
+           sums box) is how f6e644f5 drew this group, on any build.
+       (B) The same members in a group with a Scale behaviour (Oscillate, Amount 0.5, Phase 270°, 0.05 Hz: about 0.506 at 0.5 s, read
+           off FM.behaviorValue), not leant, no pivot stored: red runs P + s · (40 − P) .. P + s · (80 − P), 109.1 .. 129.4 about the
+           sums and 90.6 .. 110.9 about the hull.
+     FAILS BEFORE THE FIX: FM.groupPivot answers 142.5,120 for both groups, (A)'s red is at about 72..105 and differs from the
+     twin's by about 12 px, and (B)'s red is at about 91..111.
+     CONTROLS, which hold before and after: the twin draws red about 84..118; untilted and unscaled the red square is 40..79 × 100..139;
+     the lean ran (red narrowed and drawn); the behaviour really scales (s between 0.4 and 0.6) and neither group stores a pivot;
+     and the selection box (FM.groupBoundsLocal at 0.5 s, and FM.groupRestBoundsLocal with no third argument) still encloses the
+     turned bar where it is drawn, 235..245 × 40..200.
+     TOLERANCES, reasoned (not measured: code-only session): 2 px on a leant red edge against its worked-out place and 1.5 px between
+     the group and its twin, both as bughunt4 #3c allows (a column counts as red from about 70 % covered, and the 8 × 8 mesh is laid
+     over a different alpha box in each, bending a leant edge by up to half a pixel); 1 px on an upright edge (#10b's rule); 1e-9 on
+     the pivot (sums and halves of small integers, exact in double precision). The faults are 11.8 px and more. */
+  test('bughunt8 #5 A group draws as it did before the box took in its members’ turns: leant 60° about Y with a bar turned 90° beside a square, and with no pivot stored, it turns about the upright box and with its R, exactly as a twin whose bar lies flat, and a group with a Scale behaviour scales about that box too (CONTROLS: the twin; the square untilted; the lean and the behaviour really run; the selection box still encloses the turned bar)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.groupPivot !== 'function' || typeof FM.groupBoundsLocal !== 'function' || typeof FM.groupRestBoundsLocal !== 'function' || typeof FM.behaviorValue !== 'function') throw new Error('setup: FM.renderScene / makeLayer / groupPivot / groupBoundsLocal / groupRestBoundsLocal / behaviorValue are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5, NEAR = 2, TOL = 1.5, EPS = 1e-9, SUMS = 180, HULL = 142.5;
+      FM.time = T;
+      FM.scene.project = { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' };
+      const grp = function (name) {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        return g;
+      };
+      const shape = function (name, x, w, h, fill, parent) {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 120, shapeW: w, shapeH: h, fill: fill, start: 0, duration: 4 });
+        L.start = 0; L.duration = 4; L.parent = parent;
+        return L;
+      };
+      /* the group G with the red square and the blue bar, turned 90° or lying flat (the twin) */
+      const make = function (name, turned) {
+        const G = grp(name);
+        const bar = shape(name + ': blue bar', 240, 160, 10, '#0000ff', G.id);
+        if (turned) bar.transform.rotation = 90;
+        FM.scene.layers = [G, shape(name + ': red square', 60, 40, 40, '#ff0000', G.id), bar];
+        return G;
+      };
+      const reds = function (f) {
+        let n = 0, x0 = -1, x1 = -1, y0 = -1, y1 = -1;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            n++;
+            const x = k % 320, y = (k - x) / 320;
+            if (x0 < 0 || x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y0 < 0 || y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+        return { n: n, x0: x0, x1: x1, y0: y0, y1: y1 };
+      };
+      const say = function (r) { return r.n + ' red px at columns ' + r.x0 + '..' + r.x1 + ', rows ' + r.y0 + '..' + r.y1; };
+      const sayP = function (p) { return p ? '(' + (Math.round(p.x * 100) / 100) + ', ' + (Math.round(p.y * 100) / 100) + ')' : '(none)'; };
+      /* renderMesh's projection of a flat point d px from the pivot, leant 60° about Y at R */
+      const lean = function (P, R, d) { const c = Math.cos(Math.PI / 3), s = Math.sin(Math.PI / 3); return P + d * c * 3.2 / (3.2 + (d / R) * s); };
+      const bad = [];
+
+      /* ── CONTROLS: untilted and unscaled the red square is where it is put; the selection box takes the turned bar in. */
+      const G0 = make('bh8 #5 group at rest', true);
+      const r0 = reds(_bh2Frame(T));
+      if (Math.abs(r0.x0 - 40) > 1 || Math.abs(r0.x1 - 79) > 1 || Math.abs(r0.y0 - 100) > 1 || Math.abs(r0.y1 - 139) > 1) throw new Error('CONTROL: untilted the red square is ' + say(r0) + ', not 40..79 × 100..139 — the fixture is not the one worked out above');
+      [['the live box at 0.5 s (FM.groupBoundsLocal)', FM.groupBoundsLocal(G0, FM.scene, T)], ['the rest box (FM.groupRestBoundsLocal with no third argument)', FM.groupRestBoundsLocal(G0, FM.scene)]].forEach(function (pair) {
+        const b = pair[1];
+        if (!b || b.minX > 40 + 1e-6 || b.maxX < 245 - 1e-6 || b.minY > 40 + 1e-6 || b.maxY < 200 - 1e-6) bad.push('CONTROL: the group’s selection box, ' + pair[0] + ', is ' + (b ? b.minX.toFixed(1) + '..' + b.maxX.toFixed(1) + ' × ' + b.minY.toFixed(1) + '..' + b.maxY.toFixed(1) : '(none)') + ' and does not take in the turned bar drawn at 235..245 × 40..200');
+      });
+
+      /* ── (A) leant 60° about Y with no pivot stored, and its twin whose bar lies flat. */
+      const GT = make('bh8 #5 leant twin, bar flat', false);
+      GT.transform.rotationY = 60;
+      const rt = reds(_bh2Frame(T));
+      const GA = make('bh8 #5 leant group, bar turned', true);
+      GA.transform.rotationY = 60;
+      const pa = FM.groupPivot(GA, FM.scene, T);
+      const ra = reds(_bh2Frame(T));
+      const wantL = lean(SUMS, 140, 40 - SUMS), wantR = lean(SUMS, 140, 80 - SUMS), hullL = lean(HULL, 102.5, 40 - HULL), hullR = lean(HULL, 102.5, 80 - HULL);
+      if (GA.pivot || GT.pivot) throw new Error('setup: a leant group stores a pivot (' + JSON.stringify(GA.pivot || GT.pivot) + '), so its fallback is not what is measured');
+      if (ra.n < 300 || ra.x1 - ra.x0 + 1 > 36) throw new Error('CONTROL: leant 60° about Y the red square is ' + say(ra) + ' — not narrowed from its 40 px, so the tilt route did not run');
+      if (Math.abs(rt.x0 - wantL) > NEAR || Math.abs(rt.x1 + 1 - wantR) > NEAR) bad.push('CONTROL: the leant twin (its bar flat, so its hull is the upright box) draws red at ' + say(rt) + ', not about ' + wantL.toFixed(1) + '..' + wantR.toFixed(1) + ' (pivot 180, R 140)');
+      if (!pa || Math.abs(pa.x - SUMS) > EPS || Math.abs(pa.y - 120) > EPS) bad.push('(A) the leant group with no pivot stored turns about ' + sayP(pa) + ', not (180, 120), the middle of the box it was drawn with' + (pa && Math.abs(pa.x - HULL) <= 1e-6 ? ' — the middle of the hull, which only the selection box should use' : ''));
+      if (Math.abs(ra.x0 - wantL) > NEAR || Math.abs(ra.x1 + 1 - wantR) > NEAR) bad.push('(A) the leant group draws red at ' + say(ra) + ', not about ' + wantL.toFixed(1) + '..' + wantR.toFixed(1) + ' as it was drawn before the hull' + (Math.abs(ra.x0 - hullL) <= NEAR ? ' — it leans about the hull (pivot 142.5, R 102.5: about ' + hullL.toFixed(1) + '..' + hullR.toFixed(1) + ')' : ''));
+      if (Math.abs(ra.x0 - rt.x0) > TOL || Math.abs(ra.x1 - rt.x1) > TOL) bad.push('(A) the leant group draws red at ' + say(ra) + ' where its twin with the bar lying flat, the same upright box, draws ' + say(rt) + ' — turning one member changed how the whole group leans');
+
+      /* ── (B) a Scale behaviour, not leant, no pivot stored. */
+      const GB = make('bh8 #5 group with a scale behaviour', true);
+      GB.behaviors = [{ type: 'oscillate', prop: 'scale', enabled: true, params: { amp: 0.5, freq: 0.05, phase: 270 } }];
+      const sB = FM.behaviorValue(GB, 'scale', FM.evalProp(GB.transform.scale, T), T);
+      if (!(sB > 0.4 && sB < 0.6)) throw new Error('CONTROL: the Scale behaviour gives ' + sB + ' at 0.5 s, not about 0.506, so the group is not scaled as worked out');
+      const pb = FM.groupPivot(GB, FM.scene, T);
+      const rb = reds(_bh2Frame(T));
+      if (GB.pivot) throw new Error('setup: the group with a scale behaviour stores a pivot (' + JSON.stringify(GB.pivot) + ')');
+      const bL = SUMS + sB * (40 - SUMS), bR = SUMS + sB * (80 - SUMS), hbL = HULL + sB * (40 - HULL);
+      if (!pb || Math.abs(pb.x - SUMS) > EPS || Math.abs(pb.y - 120) > EPS) bad.push('(B) the group with a Scale behaviour and no pivot stored scales about ' + sayP(pb) + ', not (180, 120)');
+      if (rb.n < 100 || Math.abs(rb.x0 - bL) > 1 || Math.abs(rb.x1 + 1 - bR) > 1) bad.push('(B) the group with a Scale behaviour draws red at ' + say(rb) + ', not about ' + bL.toFixed(1) + '..' + bR.toFixed(1) + ' (scaled ' + sB.toFixed(3) + ' about 180, 120)' + (Math.abs(rb.x0 - hbL) <= 1 ? ' — it scales about the hull’s middle, 142.5' : ''));
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
 })();

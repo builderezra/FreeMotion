@@ -17433,7 +17433,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const piv = FM.groupPivot(g, scene, t);
       /* bughunt4 #3c: R from the REST box, the box a tilted group's pivot falls back to (FM.groupPivot), which does not change as
          members come on or go off screen; the live box at t made the lean's perspective jump with them. */
-      const b = (FM.groupRestBoundsLocal ? FM.groupRestBoundsLocal(g, scene) : null) || FM.groupBoundsLocal(g, scene, t);
+      /* bughunt8 #5: …its UPRIGHT sums (FM.groupRestBoundsLocal's `upright`), the box R was always taken from, not the hull 644bd3c8
+         made for the selection box: every saved leant group keeps the perspective it was drawn with. */
+      const b = (FM.groupRestBoundsLocal ? FM.groupRestBoundsLocal(g, scene, true) : null) || FM.groupBoundsLocal(g, scene, t);
       // the matrix a member is drawn with: the group's own pivot sandwich, its position and everything above it
       const M = FM.parentChainMatrix({ id: g.id + ':tilt', parent: g.id }, t, scene);
       if (!piv || !b || !M) return null;
@@ -30040,13 +30042,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (piv) T(1, 0, 0, 1, -piv.x, -piv.y);
     return m;
   }
-  function groupMemberSpan(l, sz, sc, x, y, t, M, scene) {
+  function groupMemberSpan(l, sz, sc, x, y, t, M, scene, upright) {
     const tr = l.transform || {}, ax = anchorX(tr), ay = anchorY(tr);
     const sx = tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1, sy = tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1;
     // 1176 leftover: the member's own turn, skew and depth, and M, the nested groups' matrix (nestedGroupMatrix) or null
     const rot = (tr.rotation != null ? FM.evalProp(tr.rotation, t) : 0) || 0, kx = (tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0) || 0;
     const ky = (tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0) || 0, zz = (tr.z != null ? FM.evalProp(tr.z, t) : 0) || 0;
-    if (M || rot || kx || ky || zz) return groupMemberHull(l, sz, sc * (isFinite(sx) ? sx : 1), sc * (isFinite(sy) ? sy : 1), ax, ay, x, y, rot, kx, ky, zz, M, scene);
+    // bughunt8 #5: `upright` (the render box, FM.groupRestBoundsLocal's third argument) always takes the upright sums below
+    if (!upright && (M || rot || kx || ky || zz)) return groupMemberHull(l, sz, sc * (isFinite(sx) ? sx : 1), sc * (isFinite(sy) ? sy : 1), ax, ay, x, y, rot, kx, ky, zz, M, scene);
     const w = sz.w * sc * (isFinite(sx) ? sx : 1), h = sz.h * sc * (isFinite(sy) ? sy : 1), sh = FM.textAlignShift(l, w);
     let x0 = x - w * ax + sh, x1 = x + w * (1 - ax) + sh, y0 = y - h * ay, y1 = y + h * (1 - ay);
     if (l.flipH) { const a = 2 * x - x1; x1 = 2 * x - x0; x0 = a; }
@@ -30167,7 +30170,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   /* The members' box in the group's child space, independent of the playhead: the same walk as
      groupBoundsLocal (nested groups add their offset, Nulls/cameras/adjustments carry no box), but a member
      counts whether or not it is on screen at t, and everything is read at ONE moment — the group's start. */
-  FM.groupRestBoundsLocal = function (group, scene) {
+  /* ═══ bughunt8 #5 — THE HULL IS FOR WHAT HE TOUCHES; THE PICTURE KEEPS THE BOX IT WAS DRAWN WITH ═══════════════════════════════════
+   * What was wrong. 644bd3c8 made this box the hull of each member as drawn (turned, sheared, set in depth, through a nested group's
+   * matrix), which is right for the selection box, a tap and the pivot a pinch measures. But two RENDER paths read this same box:
+   * tiltPivot's R, the size the perspective of EVERY leant group is worked out in (stored pivot or not), and FM.groupPivot's
+   * fallback, the point a non-free group with no stored pivot scales and turns about (a group the AI Director keys, one with a scale
+   * or rotation behaviour, one last scaled before queue 690's third hunt, a template's). So a saved project changed how it draws
+   * with no change of its own: a group leant 40° holding a bar turned 90° beside a square had R go from 300 to 210, and the same
+   * members scaled 1 → 1.5 with no stored pivot slid 45 px. Peers on the two builds share a session (both SCHEMA_REV 28).
+   * Now `upright` (true from those two callers only) gives the box as it was before the hull, sum for sum: every member boxed
+   * upright from its anchor, alignment, unlinked Width / Height and Flip (groupMemberSpan's own sums), and a nested group passing on
+   * its x / y alone. Without it, the hull, as 644bd3c8 left it: FM.groupBoundsLocal, a pinch's FM.groupPivotMeasured and the
+   * selection box keep it. The upright walk never asks FM.groupPivot, so the cycle guard (_gbBusy) has nothing to guard there; it
+   * still marks the group, as the hull walks do. */
+  FM.groupRestBoundsLocal = function (group, scene, upright) {
     if (!group || !scene || !scene.layers) return null;
     const t = (typeof group.start === 'number' && isFinite(group.start)) ? group.start : 0;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
@@ -30180,8 +30196,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       scene.layers.forEach(l => {
         if (l.parent !== gid) return;
         if (l.type === 'group') {
-          // 1176 leftover: as groupBoundsLocal, a nested group with a transform of its own goes in as its matrix
-          const N = nestedGroupMatrix(l, t, scene, M, ox, oy);
+          // 1176 leftover: as groupBoundsLocal, a nested group with a transform of its own goes in as its matrix (bughunt8 #5: not upright)
+          const N = upright ? null : nestedGroupMatrix(l, t, scene, M, ox, oy);
           if (N) walk(l.id, 0, 0, N);
           else walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0), M);
           return;
@@ -30191,8 +30207,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const sz = FM.layerSize(l);
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
-        // bughunt4 #10: the same member span as groupBoundsLocal
-        const m = groupMemberSpan(l, sz, sc, x, y, t, M, scene);
+        // bughunt4 #10: the same member span as groupBoundsLocal (bughunt8 #5: upright, the sums from before the hull)
+        const m = groupMemberSpan(l, sz, sc, x, y, t, M, scene, upright);
         any = true;
         minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
         minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
@@ -30241,7 +30257,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (pivotFree(group)) return FM.groupPivotMeasured(group, scene, t);
     const s = storedPivot(group);
     if (s) return { x: s.x, y: s.y };
-    return FM.groupPivotMeasured(group, scene);
+    /* bughunt8 #5: …and with none stored, the anchor on the rest box's UPRIGHT sums (FM.groupRestBoundsLocal's `upright`), the box
+       every such group was drawn about before the hull: the point it is DRAWN about must not move with a box made for taps. Until
+       now this was FM.groupPivotMeasured(group, scene), the same box with the hull. */
+    const r = FM.groupRestBoundsLocal(group, scene || FM.scene, true);
+    return (r && r.w >= 0) ? pivotIn(group, r) : null;
   };
   /* Store the pivot, or refresh it while that is free. Called BEFORE anything writes a group's scale or rotation
      (setTransform / shiftTransform), and before a layer joins or leaves a group's family:
