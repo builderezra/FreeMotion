@@ -166055,6 +166055,130 @@
     });
   });
 
+  /* (1176 leftover, the group box) A GROUP'S BOX LEFT OUT ITS MEMBERS' TURN, SKEW AND DEPTH, AND A NESTED GROUP'S OWN TRANSFORM. After
+     bughunt4 #10 / #10b, groupBoundsLocal and groupRestBoundsLocal box each member (groupMemberSpan) from its anchor, alignment,
+     unlinked Width / Height and Flip as an UPRIGHT rectangle, and a nested group passes on only its x / y. applyLayerTransform also
+     turns the member, shears it and scales it by its depth (a parented layer's z is a scale about its x / y), and applyParentChain
+     draws a nested group's members through that group's own turn, scale and Flip about its pivot. A group G at 0,0 holds ONE 40 × 30
+     red shape at x 100, y 200 (directly, or through a nested group N at 0,0); on cb26cd7b:
+       A  turned 90°: drawn 85 .. 115 × 180 .. 220, boxed 80 .. 120 × 185 .. 215.
+       B  turned 30°: drawn 75.2 .. 124.8 × 177.0 .. 223.0, boxed 80 .. 120 × 185 .. 215.
+       C  hinged on its left edge (anchorX 0) at x 100, y 150, turned 90°: drawn 85 .. 115 × 150 .. 190, boxed 100 .. 140 × 135 .. 165,
+          beside it; the pivot a pinch would use (FM.groupPivotMeasured, anchor 0.5) was 120, 150 where the drawn middle is 100, 170;
+          and a tap at 90, 185, on the shape, fell outside FM.groupBounds.
+       D  Skew X 30°: drawn 71.3 .. 128.7 × 185 .. 215, boxed 80 .. 120.
+       E  at depth 480 (the project here is 320 × 240, so the focal length is 480 and the depth halves it): drawn 90 .. 110 ×
+          192.5 .. 207.5, boxed 80 .. 120 × 185 .. 215.
+       F  in a nested group at 200 % (its pivot the shape's middle): drawn 60 .. 140 × 170 .. 230, boxed 80 .. 120 × 185 .. 215.
+       G  in a nested group flipped horizontally with its anchor at its left edge (pivot 80, 200): drawn 40 .. 80, boxed 80 .. 120.
+       H  in a nested group turned 90°: drawn 85 .. 115 × 180 .. 220, boxed 80 .. 120 × 185 .. 215.
+     Now the member's corners go through its own mirror, skew, size × depth and turn and through every nested group's matrix
+     (compositor.js groupMemberHull, nestedGroupMatrix), and the box is their hull.
+     FAILS BEFORE THE FIX: every span in A to H (live and rest), C's pivot and C's tap.
+     CONTROL: an upright member is boxed 80 .. 120 × 185 .. 215 and a member of a nested group that is only moved (x 10, y −5) 90 .. 130
+     × 180 .. 210, on both commits; and the red pixels FM.renderScene draws cover every span worked out above, so the box is checked
+     against the picture and not only against this comment.
+     TOL: 1e-6 on the box (double-precision cos, sin and tan and sums of these numbers, rounding near 1e-13; the faults are 4.8 px
+     or more). On a red edge, 1 px for an upright rectangle (#10b's: a half-covered row such as 192.5 is not counted red) and 2 px for
+     a turned or sheared one: a corner covers less than 70 % of the last column or two (a right-angled corner turned 30° is 2.3 px tall
+     one pixel back from its tip), so the last red column can sit inside the box by up to two; the faults there are 4.8 and 8.7 px.
+     Not run when written (code only). */
+  test('1176 leftover: a group’s box takes in its members as they are drawn: a member turned 90° or 30°, one hinged on its left edge and turned (with the pivot a pinch uses and a tap on it), a sheared one and one set back in depth are each boxed where they are drawn, and so is a member of a nested group at 200 %, of one flipped about its left edge and of one turned 90° (CONTROLS: an upright member and a member of a nested group that is only moved keep the old box; the red pixels drawn cover every span the box must take)', { item: '1176' }, async function () {
+    if (typeof FM.groupBoundsLocal !== 'function' || typeof FM.groupRestBoundsLocal !== 'function' || typeof FM.groupPivotMeasured !== 'function' || typeof FM.groupBounds !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.renderScene !== 'function') throw new Error('setup: FM.groupBoundsLocal / groupRestBoundsLocal / groupPivotMeasured / groupBounds / makeLayer / renderScene are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5, EPS = 1e-6, X = 100, Y = 200;
+      /* _bh2Frame draws a 320 × 240 project; the scene's own project is made the same (_bh2With puts it back), so a member's depth is
+         boxed with the focal length the picture is drawn with (twice the height, 480, with no camera). */
+      FM.scene.project = { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' };
+      /* A fresh group at 0,0 holding L, directly or through the nested group `nest(G)` makes: the live box at T, the rest box, the pivot a
+         pinch at T would use, and the box in the parent's space. */
+      const measure = (L, nest) => {
+        const G = FM.makeLayer('group', { name: '1176 group', x: 0, y: 0, start: 0, duration: 4 });
+        G.start = 0; G.duration = 4; G.transform.x = 0; G.transform.y = 0;
+        const N = nest ? nest(G) : null;
+        L.start = 0; L.duration = 4; L.parent = N ? N.id : G.id;
+        FM.scene.layers = N ? [G, N, L] : [G, L];
+        const live = FM.groupBoundsLocal(G, FM.scene, T), rest = FM.groupRestBoundsLocal(G, FM.scene);
+        if (!live || !rest) throw new Error('setup: the group holding ' + L.name + ' measured no box (live ' + JSON.stringify(live) + ', rest ' + JSON.stringify(rest) + ')');
+        return { live: live, rest: rest, pivot: FM.groupPivotMeasured(G, FM.scene, T), gb: FM.groupBounds(G, FM.scene, T) };
+      };
+      // a nested group at 0,0 inside G, `set` giving it its transform
+      const nested = (name, set) => G => {
+        const N = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        N.start = 0; N.duration = 4; N.transform.x = 0; N.transform.y = 0; N.parent = G.id;
+        set(N);
+        return N;
+      };
+      const shape = (name, y) => FM.makeLayer('shape', { name: name, shape: 'rect', x: X, y: y == null ? Y : y, shapeW: 40, shapeH: 30, fill: '#ff0000', start: 0, duration: 4 });
+      const r1 = v => Math.round(v * 10) / 10;
+      const say = b => r1(b.minX) + ' .. ' + r1(b.maxX) + ' × ' + r1(b.minY) + ' .. ' + r1(b.maxY);
+      const bad = [];
+      /* Both walks must give [x0, x1] × [y0, y1]. */
+      const span = (what, m, x0, x1, y0, y1) => {
+        [['live', m.live], ['rest', m.rest]].forEach(([k, b]) => {
+          if (Math.abs(b.minX - x0) > EPS || Math.abs(b.maxX - x1) > EPS || Math.abs(b.minY - y0) > EPS || Math.abs(b.maxY - y1) > EPS) bad.push(what + ': the group’s ' + k + ' box is ' + say(b) + ' where the member is drawn ' + r1(x0) + ' .. ' + r1(x1) + ' × ' + r1(y0) + ' .. ' + r1(y1));
+        });
+      };
+      /* CONTROL: the red pixels FM.renderScene draws for the scene measure() left really are over the span (an edge at e is the last red
+         column e − 1, or the first e), within `tol` px. */
+      const pic = (what, x0, x1, y0, y1, tol) => {
+        const f = _bh2Frame(T);
+        let a0 = -1, a1 = -1, b0 = -1, b1 = -1;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            const x = k % 320, y = (k - x) / 320;
+            if (a0 < 0 || x < a0) a0 = x;
+            if (x > a1) a1 = x;
+            if (b0 < 0 || y < b0) b0 = y;
+            if (y > b1) b1 = y;
+          }
+        }
+        if (a0 < 0 || Math.abs(a0 - x0) > tol || Math.abs(a1 + 1 - x1) > tol || Math.abs(b0 - y0) > tol || Math.abs(b1 + 1 - y1) > tol) bad.push('CONTROL: ' + what + ' is drawn at red columns ' + a0 + '..' + a1 + ', rows ' + b0 + '..' + b1 + ', not over ' + r1(x0) + ' .. ' + r1(x1) + ' × ' + r1(y0) + ' .. ' + r1(y1) + ' — the renderer does not draw it where this test works it out');
+      };
+      /* Each case: its box (both walks) and its picture. */
+      const both = (what, m, x0, x1, y0, y1, tol) => { span(what, m, x0, x1, y0, y1); pic(what, x0, x1, y0, y1, tol); };
+
+      /* ── CONTROLS: an upright member, and a member of a nested group that is only moved, keep the old box. */
+      both('CONTROL: an upright 40 × 30 shape', measure(shape('1176 upright shape')), X - 20, X + 20, Y - 15, Y + 15, 1);
+      both('CONTROL: a 40 × 30 shape in a nested group moved by 10, −5', measure(shape('1176 shape in a moved group'), nested('1176 moved group', N => { N.transform.x = 10; N.transform.y = -5; })), X - 10, X + 30, Y - 20, Y + 10, 1);
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── A, B: turned 90° and 30° about its own middle. */
+      const sa = shape('1176 shape turned 90°');
+      sa.transform.rotation = 90;
+      both('A: a 40 × 30 shape turned 90°', measure(sa), X - 15, X + 15, Y - 20, Y + 20, 1);
+      const sb = shape('1176 shape turned 30°');
+      sb.transform.rotation = 30;
+      const hx = 20 * Math.cos(Math.PI / 6) + 15 * Math.sin(Math.PI / 6), hy = 20 * Math.sin(Math.PI / 6) + 15 * Math.cos(Math.PI / 6);
+      both('B: a 40 × 30 shape turned 30°', measure(sb), X - hx, X + hx, Y - hy, Y + hy, 2);
+
+      /* ── C: hinged on its left edge at x 100, y 150 and turned 90° — its box, the pivot and a tap on it. */
+      const sc = shape('1176 shape hinged on its left edge, turned 90°', 150);
+      sc.transform.anchorX = 0; sc.transform.rotation = 90;
+      const mc = measure(sc);
+      both('C: a 40 × 30 shape with anchorX 0 at 100, 150, turned 90°', mc, X - 15, X + 15, 150, 190, 1);
+      if (!mc.pivot || Math.abs(mc.pivot.x - X) > EPS || Math.abs(mc.pivot.y - 170) > EPS) bad.push('C: the group of the hinged, turned shape pivots at ' + (mc.pivot ? r1(mc.pivot.x) + ', ' + r1(mc.pivot.y) : '(none)') + ' where the shape’s drawn middle is ' + X + ', 170 — a pinch scales it about a point beside it');
+      const tap = [90, 185], g = mc.gb;
+      if (!g || !(Math.abs(tap[0] - g.x) <= g.w / 2 && Math.abs(tap[1] - g.y) <= g.h / 2)) bad.push('C: a tap at ' + tap.join(', ') + ', on the turned shape, falls outside the group’s box ' + (g ? r1(g.x - g.w / 2) + ' .. ' + r1(g.x + g.w / 2) + ' × ' + r1(g.y - g.h / 2) + ' .. ' + r1(g.y + g.h / 2) : '(none)'));
+
+      /* ── D, E: sheared by Skew X 30°, and set back to depth 480. */
+      const sd = shape('1176 shape skewed 30°');
+      sd.transform.skewX = 30;
+      const kx = 15 * Math.tan(Math.PI / 6);
+      both('D: a 40 × 30 shape at Skew X 30°', measure(sd), X - 20 - kx, X + 20 + kx, Y - 15, Y + 15, 2);
+      const se = shape('1176 shape at depth 480');
+      se.transform.z = 480;
+      both('E: a 40 × 30 shape at depth 480 (half size)', measure(se), X - 10, X + 10, Y - 7.5, Y + 7.5, 1);
+
+      /* ── F, G, H: in a nested group at 200 %, flipped about its left edge, turned 90°. */
+      both('F: a 40 × 30 shape in a nested group at 200 %', measure(shape('1176 shape in a group at 200 %'), nested('1176 group at 200 %', N => { N.transform.scale = 2; })), X - 40, X + 40, Y - 30, Y + 30, 1);
+      both('G: a 40 × 30 shape in a nested group flipped about its left edge', measure(shape('1176 shape in a flipped group'), nested('1176 flipped group', N => { N.flipH = true; N.transform.anchorX = 0; })), X - 60, X - 20, Y - 15, Y + 15, 1);
+      both('H: a 40 × 30 shape in a nested group turned 90°', measure(shape('1176 shape in a turned group'), nested('1176 turned group', N => { N.transform.rotation = 90; })), X - 15, X + 15, Y - 20, Y + 20, 1);
+
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#4) AN ADJUSTMENT LAYER'S BLEND MODE DID NOTHING. Red footage fills the frame, (255, 0, 0); above it an adjustment layer with
      Invert (amount 1), whose graded plate over red is cyan, (0, 255, 255). On cedde93f both blits of the graded plate (applyAdjustment's
      and applyAdjustmentFilters') are hard-wired to source-over and never read layer.blendMode, so every mode the Mixing card offers

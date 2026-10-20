@@ -29704,24 +29704,102 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const a = layer.align || 'center';
     return a === 'left' ? w / 2 : a === 'right' ? -w / 2 : 0;
   };
-  // One member's extent in its group's child space: size `sz` at scale `sc`, its x/y already offset by any nested group.
+  // One member's extent in its group's child space: size `sz` at scale `sc`, its x/y already offset by any nested group's x/y
+  // (since 1176 leftover, M carries the nested groups with a transform of their own: see below).
   /* bughunt4 #10b: …and as the member is DRAWN, which applyLayerTransform does with its unlinked Width / Height (scaleX / scaleY, on
      top of `sc`) and then its own mirror (flipH / flipV, about its x / y). Both were left out, so a member at Width 200 % was boxed
      at half its width, and a flipped one with its anchor off-centre (or a flipped left-aligned title) was boxed on the wrong side
      of its x: a 40 px shape hinged on its left edge at x 100 and flipped is drawn 60 .. 100 and was boxed 100 .. 140, not touching
      it. Read at `t` (the group's start, for the rest box). Linked, unflipped: the very sums as before, w · 1 being w. */
-  function groupMemberSpan(l, sz, sc, x, y, t) {
+  /* ═══ 1176 leftover — A MEMBER'S SHARE OF ITS GROUP'S BOX IS WHAT IS DRAWN, TURNED, SHEARED AND THROUGH A NESTED GROUP ══════════════
+   * What was wrong. After bughunt4 #10 / #10b a member was boxed from its anchor, alignment, unlinked Width / Height and Flip, as an
+   * UPRIGHT rectangle at its own size, and a nested group passed on only its x / y. applyLayerTransform also turns the member
+   * (rotation), shears it (skewX / skewY) and scales it by its depth (z: a parented layer's depth is a scale about its own x / y),
+   * and applyParentChain draws a nested group's members through that group's own turn, scale, unlinked Width / Height, depth, skew
+   * and Flip, about its pivot. None of it reached the box, so a 40 × 30 shape turned 90° was boxed 40 wide where it is drawn 30
+   * wide and 40 tall, and a nested group at 200 % had its members boxed at half their drawn size: the selection box, a tap on the
+   * group, and the pivot a pinch scales about (FM.groupPivotMeasured) all sat on the wrong rectangle.
+   * Now the member's four corners go through the very order applyLayerTransform applies (mirror, skew, Width / Height × scale ×
+   * depth, turn, about its x / y), then through every nested group's own matrix (nestedGroupMatrix, applyParentChain's step for
+   * that group, about FM.groupPivot), and the box is their hull. A member with no turn, skew or depth under groups with nothing
+   * but x / y takes the old sums exactly. Not boxed: a member's or a nested group's X / Y tilt (a plate leant in perspective, whose
+   * reach depends on the drawn pixels; draw3DTiltLayer), its own link mode ('locked' / 'weighted', whose turn depends on the
+   * whole chain above the outer group), and behaviours (the walks read keyframes, as they always have). */
+  // Groups being measured right now: a nested group among them is taken by its x / y alone, so a parent cycle cannot recurse
+  const _gbBusy = new Set();
+  /* The matrix a nested group `g` draws its members with, from its child space into the walk's (M, or none, plus the offset ox / oy
+     the walk has gathered): applyParentChain's step for g, in its order: position, then about its pivot the turn, Width / Height ×
+     scale × depth, skew and mirror (a uniform scale alone when it has none of those). null when g has nothing but x / y, or is being
+     measured already, and the walk then adds its x / y as it always did. */
+  function nestedGroupMatrix(g, t, scene, M, ox, oy) {
+    const tr = g.transform || {};
+    if (_gbBusy.has(g.id)) return null;
+    const ev = (k, d) => { if (tr[k] == null) return d; const v = FM.evalProp(tr[k], t); return isFinite(v) ? v : d; };
+    const prot = ev('rotation', 0) * Math.PI / 180, ps = ev('scale', 1);
+    const sx = ev('scaleX', 1), sy = ev('scaleY', 1), kx = ev('skewX', 0), ky = ev('skewY', 0), zz = ev('z', 0), fh = !!g.flipH, fv = !!g.flipV;
+    const ex = sx !== 1 || sy !== 1 || !!kx || !!ky || !!zz || fh || fv;
+    if (!prot && ps === 1 && !ex) return null;
+    let pz = 1;
+    if (zz) {
+      const P = (scene && scene.project) || {}, F = (_camLens && _camLens.F) || Math.max(1, (P.height || 1080) * 2);
+      pz = F / Math.max(F * 0.05, F + zz);
+    }
+    const piv = FM.groupPivot ? FM.groupPivot(g, scene, t) : null;
+    let m = M ? { a: M.a, b: M.b, c: M.c, d: M.d, e: M.e, f: M.f } : { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+    // m := m · [a c e; b d f], as ctx.transform composes
+    const T = (a, b, c, d, e, f) => { m = { a: m.a * a + m.c * b, b: m.b * a + m.d * b, c: m.a * c + m.c * d, d: m.b * c + m.d * d, e: m.a * e + m.c * f + m.e, f: m.b * e + m.d * f + m.f }; };
+    T(1, 0, 0, 1, ox + (FM.evalProp(tr.x, t) || 0), oy + (FM.evalProp(tr.y, t) || 0));
+    if (piv) T(1, 0, 0, 1, piv.x, piv.y);
+    if (prot) T(Math.cos(prot), Math.sin(prot), -Math.sin(prot), Math.cos(prot), 0, 0);
+    if (ex) {
+      T(Math.max(0.001, ps * sx * pz), 0, 0, Math.max(0.001, ps * sy * pz), 0, 0);
+      if (kx || ky) T(1, Math.tan(ky * Math.PI / 180), Math.tan(kx * Math.PI / 180), 1, 0, 0);
+      if (fh || fv) T(fh ? -1 : 1, 0, 0, fv ? -1 : 1, 0, 0);
+    } else if (ps !== 1) { const c = Math.max(0.001, ps); T(c, 0, 0, c, 0, 0); }
+    if (piv) T(1, 0, 0, 1, -piv.x, -piv.y);
+    return m;
+  }
+  function groupMemberSpan(l, sz, sc, x, y, t, M, scene) {
     const tr = l.transform || {}, ax = anchorX(tr), ay = anchorY(tr);
     const sx = tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1, sy = tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1;
+    // 1176 leftover: the member's own turn, skew and depth, and M, the nested groups' matrix (nestedGroupMatrix) or null
+    const rot = (tr.rotation != null ? FM.evalProp(tr.rotation, t) : 0) || 0, kx = (tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0) || 0;
+    const ky = (tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0) || 0, zz = (tr.z != null ? FM.evalProp(tr.z, t) : 0) || 0;
+    if (M || rot || kx || ky || zz) return groupMemberHull(l, sz, sc * (isFinite(sx) ? sx : 1), sc * (isFinite(sy) ? sy : 1), ax, ay, x, y, rot, kx, ky, zz, M, scene);
     const w = sz.w * sc * (isFinite(sx) ? sx : 1), h = sz.h * sc * (isFinite(sy) ? sy : 1), sh = FM.textAlignShift(l, w);
     let x0 = x - w * ax + sh, x1 = x + w * (1 - ax) + sh, y0 = y - h * ay, y1 = y + h * (1 - ay);
     if (l.flipH) { const a = 2 * x - x1; x1 = 2 * x - x0; x0 = a; }
     if (l.flipV) { const a = 2 * y - y1; y1 = 2 * y - y0; y0 = a; }
     return { x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0: Math.min(y0, y1), y1: Math.max(y0, y1) };
   }
+  /* …the member's box corners (its content box about its x / y: the anchor and the alignment shift) through applyLayerTransform's
+     order (mirror, skew, Width / Height × scale (Sx, Sy) × depth, turn, then x / y) and M, and the hull of the four. */
+  function groupMemberHull(l, sz, Sx, Sy, ax, ay, x, y, rot, kx, ky, zz, M, scene) {
+    let pz = 1;
+    if (zz) {
+      const P = (scene && scene.project) || {}, F = (_camLens && _camLens.F) || Math.max(1, (P.height || 1080) * 2);
+      pz = F / Math.max(F * 0.05, F + zz);
+    }
+    const shU = FM.textAlignShift(l, sz.w), fx = l.flipH ? -1 : 1, fy = l.flipV ? -1 : 1;
+    const cr = Math.cos(rot * Math.PI / 180), sr = Math.sin(rot * Math.PI / 180);
+    const tx = kx ? Math.tan(kx * Math.PI / 180) : 0, ty = ky ? Math.tan(ky * Math.PI / 180) : 0;
+    const us = [-sz.w * ax + shU, sz.w * (1 - ax) + shU], vs = [-sz.h * ay, sz.h * (1 - ay)];
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    us.forEach(u => vs.forEach(v => {
+      const fu = fx * u, fv = fy * v;
+      const su = Sx * pz * (fu + tx * fv), sv = Sy * pz * (ty * fu + fv);
+      let px = x + cr * su - sr * sv, py = y + sr * su + cr * sv;
+      if (M) { const qx = M.a * px + M.c * py + M.e; py = M.b * px + M.d * py + M.f; px = qx; }
+      if (px < x0) x0 = px;
+      if (px > x1) x1 = px;
+      if (py < y0) y0 = py;
+      if (py > y1) y1 = py;
+    }));
+    return { x0: x0, x1: x1, y0: y0, y1: y1 };
+  }
 
-  // Approximate world bbox of a group's members (ignores rotations — good enough for the canvas
-  // selection box + hit-test, which previously showed a meaningless 100px box at the group's 0,0).
+  // World bbox of a group's members (since 1176 leftover their turns, skews, depths and nested groups' transforms count — see
+  // groupMemberSpan; it used to ignore rotations), for the canvas selection box + hit-test.
   /* The members' extent in the group's OWN child space — before the group's x/y/scale are applied.
    * FM.groupBounds returns the same box already converted into the parent's space, which is what a
    * selection rectangle wants; a PIVOT has to be expressed where the children actually live, or the
@@ -29731,25 +29809,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   FM.groupBoundsLocal = function (group, scene, t) {
     if (!group || !scene || !scene.layers) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
-    const seen = new Set();
-    (function walk(gid, ox, oy) {
+    const seen = new Set(), own = !_gbBusy.has(group.id);
+    if (own) _gbBusy.add(group.id);
+    try {
+    (function walk(gid, ox, oy, M) {
       if (seen.has(gid)) return;
       seen.add(gid);
       scene.layers.forEach(l => {
         if (l.parent !== gid) return;
-        if (l.type === 'group') { walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0)); return; }
+        if (l.type === 'group') {
+          // 1176 leftover: a nested group with a transform of its own goes in as its matrix (nestedGroupMatrix); else its x / y add
+          const N = nestedGroupMatrix(l, t, scene, M, ox, oy);
+          if (N) walk(l.id, 0, 0, N);
+          else walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0), M);
+          return;
+        }
         if (l.type === 'camera' || l.type === 'adjustment' || l.type === 'null') return;
         if (!FM.isLayerVisibleAt(l, t)) return;
         const sz = FM.layerSize(l);
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
         // bughunt4 #10: the member's anchor and text alignment, not x ± w·sc/2 (groupMemberSpan)
-        const m = groupMemberSpan(l, sz, sc, x, y, t);
+        const m = groupMemberSpan(l, sz, sc, x, y, t, M, scene);
         any = true;
         minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
         minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
       });
-    })(group.id, 0, 0);
+    })(group.id, 0, 0, null);
+    } finally { if (own) _gbBusy.delete(group.id); }
     if (!any) return null;
     return { minX: minX, minY: minY, maxX: maxX, maxY: maxY, w: maxX - minX, h: maxY - minY };
   };
@@ -29803,25 +29890,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (!group || !scene || !scene.layers) return null;
     const t = (typeof group.start === 'number' && isFinite(group.start)) ? group.start : 0;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
-    const seen = new Set();
-    (function walk(gid, ox, oy) {
+    const seen = new Set(), own = !_gbBusy.has(group.id);
+    if (own) _gbBusy.add(group.id);
+    try {
+    (function walk(gid, ox, oy, M) {
       if (seen.has(gid)) return;
       seen.add(gid);
       scene.layers.forEach(l => {
         if (l.parent !== gid) return;
-        if (l.type === 'group') { walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0)); return; }
+        if (l.type === 'group') {
+          // 1176 leftover: as groupBoundsLocal, a nested group with a transform of its own goes in as its matrix
+          const N = nestedGroupMatrix(l, t, scene, M, ox, oy);
+          if (N) walk(l.id, 0, 0, N);
+          else walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0), M);
+          return;
+        }
         if (l.type === 'camera' || l.type === 'adjustment' || l.type === 'null') return;
         if (l.visible === false) return;   // switched off by its eye — not "off screen right now", which no longer counts
         const sz = FM.layerSize(l);
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
         // bughunt4 #10: the same member span as groupBoundsLocal
-        const m = groupMemberSpan(l, sz, sc, x, y, t);
+        const m = groupMemberSpan(l, sz, sc, x, y, t, M, scene);
         any = true;
         minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
         minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
       });
-    })(group.id, 0, 0);
+    })(group.id, 0, 0, null);
+    } finally { if (own) _gbBusy.delete(group.id); }
     if (!any) return null;
     return { minX: minX, minY: minY, maxX: maxX, maxY: maxY, w: maxX - minX, h: maxY - minY };
   };
