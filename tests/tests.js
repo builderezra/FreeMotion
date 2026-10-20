@@ -173801,4 +173801,130 @@
     });
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ bughunt8 #2 (and the refuter's N2): THE WATCH-ONLY GATES ASKED ABOUT THE PROJECT ANOTHER TAB HAD OPENED ═══════════════════
+     What was wrong. FM.exportTurnedOff (js/app.js), FM.collab.watchOnly with no id (js/collab-core.js) and FM.storage.exportFile
+     (js/storage.js, through watchOnly(null)) read FM.projects.currentId(): the shared localStorage fm.currentProject, which every tab
+     rewrites when it opens a project, not this tab's own project (FM.storage.openProjectId). So a watch-only copy open here passed
+     Export, Copy, Save audio as WAV, the still and Save project file the moment a second tab opened a project of its own, and his
+     own project here was refused while a watch-only copy was open in another tab. The packer had the same root (N2):
+     packFromProject flushed, and read clips from memory, only for curId(), so with a second tab elsewhere it packed this tab's
+     open project from disk alone.
+     The other tab is played the way the 915.5Br test plays it: fm.currentProject is pointed at the other project's id, and put back.
+     Forward: this tab has a Viewer's watch-only copy W open (no session, its card saying roExport false) and the pointer names a
+     project X of his own. Reverse: this tab has X open and the pointer names W. Each time: FM.exportTurnedOff(), FM.collab.watchOnly()
+     with no id, and FM.storage.exportFile (a JSON blob counted at URL.createObjectURL, the download's click stood in for) with the
+     card it brings up. N2, in the reverse case: a picture layer pushed into X's scene and not saved, its picture in memory only
+     (FM.media, never written to the store), then FM._packFromProject(X) must hold that layer and its picture.
+     FAILS BEFORE THE FIX: forward, exportTurnedOff and watchOnly() are false and the copy's project file is saved with no notice;
+     reverse, both are true, his file is refused with the notice, and the pack has neither the layer nor the picture.
+     CONTROLS, which hold before and after: with the pointer on this tab's own project (one tab) W is refused and X exports, as
+     before, and a pack then takes a later unsaved rename; FM.collab.watchOnly with an id answers true for W and false for X
+     throughout. No tolerance: every quantity is a flag, a count or a name. */
+  test('bughunt8 #2 The watch-only gates ask about this tab’s project, not the one another tab opened: with a watch-only copy open here and another tab on a project of its own, the export gate, FM.collab.watchOnly and Save project file still refuse it; with his own project open here and the copy in another tab, they let it export, and packing it takes the unsaved layer and its picture in memory (CONTROLS: with one tab the answers are as before; watchOnly with an id is unchanged)', { item: '1176', budgetMs: 120000 }, async function () {
+    const C = need921S7('the watch-only gates with two tabs');
+    if (typeof FM.exportTurnedOff !== 'function' || typeof C.watchOnly !== 'function' || typeof FM.storage.exportFile !== 'function' || typeof FM.storage.openProjectId !== 'function' || typeof FM._packFromProject !== 'function' || typeof FM.loadImageFile !== 'function') throw new Error('setup: FM.exportTurnedOff, FM.collab.watchOnly, FM.storage.exportFile / openProjectId, FM._packFromProject or FM.loadImageFile is not reachable');
+    const bad = [], made = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const ownURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    let blobs = 0, ptr0 = null, moved = false, lid = null;
+    /* another tab opening project `pid`: only the shared pointer moves */
+    const otherTab = function (pid) { if (!moved) { ptr0 = localStorage.getItem('fm.currentProject'); moved = true; } localStorage.setItem('fm.currentProject', pid); };
+    const backTab = function () { if (!moved) return; moved = false; if (ptr0 === null) localStorage.removeItem('fm.currentProject'); else localStorage.setItem('fm.currentProject', ptr0); };
+    const gates = function () { return { off: !!FM.exportTurnedOff(), wo: !!C.watchOnly() }; };
+    /* Save project file once: the files it made, and the card it brought up (true: the export notice). */
+    async function saveFile() {
+      const b0 = blobs;
+      await FM.storage.exportFile();
+      await settle921(60);
+      const q = ask967b3();
+      let card = false;
+      if (q) { card = /Exporting is turned off/.test(q.title + ' ' + q.msg) ? true : 'a card titled “' + q.title + '”'; (q.cancel || q.ok).click(); await settle921(40); }
+      return { made: blobs - b0, card: card };
+    }
+    /* what a pack of X holds of the layer `id`: its name, and whether its picture came with it */
+    async function packOf(pid, id) {
+      const got = await FM._packFromProject(pid, false);
+      const L = got && got.pack && (got.pack.layers || []).filter(function (l) { return l && l.id === id; })[0];
+      const m = got && got.pack && got.pack.media && got.pack.media[id];
+      return { name: L ? L.name : null, file: !!(m && m.file) };
+    }
+    await withLabs921(async function (ui) {
+      try {
+        if (wasHome) FM.home.close();
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: function (b) { if (b && b.type === 'application/json') blobs++; return ownURL.value.apply(URL, arguments); } });
+        Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+        const X = await FM.projects.create({ name: 'bughunt8 #2 his own', width: 320, height: 240 });
+        if (!X) throw new Error('setup: could not make his own project');
+        made.push(X);
+        const D = { project: { name: 'Ezra’s film bh8-2', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(layer921('Watch bh8-2'))] };
+        const W = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'viewer', epoch: 'e-bh8-2', seq: 0, name: 'Sam' }, D);
+        if (!W) throw new Error('setup: could not make the shared copy');
+        made.push(W);
+        FM.projects.patchCollab(W, { roExport: false });
+        if (!C.watchOnly(W) || C.watchOnly(X)) throw new Error('setup: FM.collab.watchOnly answers ' + C.watchOnly(W) + ' for the copy and ' + C.watchOnly(X) + ' for his own project, not true and false');
+
+        /* ── FORWARD: the watch-only copy open in this tab. */
+        await FM.projects.open(W);
+        await settle921(80);
+        if (C.session) throw new Error('setup: a session is attached to the copy that is meant to have none');
+        if (FM.storage.openProjectId() !== W) throw new Error('setup: this tab did not open the watch-only copy');
+        const f1 = gates(), s1 = await saveFile();
+        if (!f1.off || !f1.wo) bad.push('CONTROL: with one tab the watch-only copy open here is not refused (exportTurnedOff ' + f1.off + ', watchOnly() ' + f1.wo + ')');
+        if (s1.made || s1.card !== true) bad.push('CONTROL: with one tab Save project file on the watch-only copy made ' + s1.made + ' file(s) and brought up ' + (s1.card || 'no card') + ', not none and the export notice');
+        otherTab(X);
+        const f2 = gates(), s2 = await saveFile();
+        backTab();
+        if (!f2.off) bad.push('with another tab on a project of its own, the watch-only copy open here passes the export gate (FM.exportTurnedOff is false), so Export, Copy, Save audio as WAV and the still take it away');
+        if (!f2.wo) bad.push('with another tab on a project of its own, FM.collab.watchOnly() with no id says the copy open here is not watch-only');
+        if (s2.made) bad.push('with another tab on a project of its own, Save project file saved the watch-only copy open here as a file (' + s2.made + ')');
+        if (s2.card !== true) bad.push('with another tab on a project of its own, Save project file on the watch-only copy brought up ' + (s2.card || 'no card') + ', not the export notice');
+
+        /* ── REVERSE: his own project open in this tab, the watch-only copy in the other. */
+        await FM.projects.open(X);
+        await settle921(80);
+        if (FM.storage.openProjectId() !== X) throw new Error('setup: this tab did not open his own project');
+        const r1 = gates(), t1 = await saveFile();
+        if (r1.off || r1.wo) bad.push('CONTROL: with one tab his own project is refused (exportTurnedOff ' + r1.off + ', watchOnly() ' + r1.wo + ')');
+        if (t1.made !== 1 || t1.card) bad.push('CONTROL: with one tab Save project file on his own project made ' + t1.made + ' file(s) and brought up ' + (t1.card || 'no card') + ', not one file and no card');
+        /* N2's fixture: a picture layer in his scene, not saved, its picture in memory only */
+        const L = FM.makeLayer('image', { name: 'bh8-2 unsaved', start: 0, duration: 2 });
+        L.start = 0; L.duration = 2;
+        lid = L.id;
+        const png = await q921png([200, 30, 30], 'bh8-2.png');
+        const rec = await FM.loadImageFile(png);
+        if (!rec) throw new Error('setup: the picture did not load');
+        rec.file = rec.file || png;
+        FM.media.set(lid, rec);
+        FM.scene.layers.push(L);
+        otherTab(W);
+        const r2 = gates(), t2 = await saveFile();
+        const p2 = await packOf(X, lid);
+        backTab();
+        if (r2.off) bad.push('with the watch-only copy open in another tab, his own project here fails the export gate (FM.exportTurnedOff is true), so his Export, Copy, Save audio as WAV and still are refused');
+        if (r2.wo) bad.push('with the watch-only copy open in another tab, FM.collab.watchOnly() with no id says his own project here is watch-only');
+        if (t2.made !== 1) bad.push('with the watch-only copy open in another tab, Save project file on his own project made ' + t2.made + ' file(s), not one');
+        if (t2.card) bad.push('with the watch-only copy open in another tab, Save project file on his own project brought up ' + t2.card);
+        if (p2.name !== 'bh8-2 unsaved') bad.push('with another tab on another project, packing his open project left out the layer not saved yet (the pack has ' + JSON.stringify(p2.name) + '): it was read from disk without the flush');
+        if (!p2.file) bad.push('with another tab on another project, packing his open project left out the picture held in memory: its clips were read from the store alone');
+        /* CONTROL: with one tab a pack takes a later unsaved rename, as it always did */
+        L.name = 'bh8-2 renamed, not saved';
+        const p1 = await packOf(X, lid);
+        if (p1.name !== 'bh8-2 renamed, not saved' || !p1.file) bad.push('CONTROL: with one tab the pack of his open project holds ' + JSON.stringify(p1.name) + (p1.file ? ' with' : ' without') + ' its picture, not the unsaved rename with its picture');
+        if (!C.watchOnly(W) || C.watchOnly(X)) bad.push('CONTROL: FM.collab.watchOnly with an id now answers ' + C.watchOnly(W) + ' for the copy and ' + C.watchOnly(X) + ' for his own project, not true and false');
+      } finally {
+        backTab();
+        Object.defineProperty(URL, 'createObjectURL', ownURL);
+        if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+        else delete HTMLAnchorElement.prototype.click;
+        const a = ask967b3(); if (a) (a.cancel || a.ok).click();
+        try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+        try { ui.close(); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+        if (lid) { try { FM.media.remove(lid); } catch (e) {} }
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

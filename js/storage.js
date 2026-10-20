@@ -2025,7 +2025,7 @@ window.FM = window.FM || {};
     return true;
   }
   FM.storage.exportFile = async function () {
-    if (watchOnlyRefusal(null)) return false;
+    if (watchOnlyRefusal(tabId())) return false;   // bughunt8 #2: the project this tab is saving, not the shared pointer
     let db = null;
     try {
       saveProjectFile(await serializeWith(FM.scene, async function (layerId) {
@@ -3381,11 +3381,14 @@ window.FM = window.FM || {};
     return (P && P.width > 0 && P.height > 0) ? { width: P.width, height: P.height } : null;
   }
   async function packFromProject(projectId, wantProject) {
-    const id = projectId || curId();
+    /* bughunt8 #2 (the refuter's N2): "the open project" is THIS tab's (tabId), not the shared fm.currentProject. With a second tab
+       on another project, packing this tab's open project skipped the flush and read its clips from IndexedDB alone, so the pack
+       missed the last 600 ms of edits and any clip not stored yet (Back up every project, Home's Save as template / element). */
+    const id = projectId || tabId();
     /* #1091: a watch-only copy is never packed — not into a template, an element or a backup (each caller already says
        when there is nothing to pack, and the backup names it as not included). */
     if (FM.collab && FM.collab.watchOnly && FM.collab.watchOnly(id)) return null;
-    if (id === curId()) FM.storage.flushSync();     // the doc on disk must be what he just saw
+    if (id === tabId()) FM.storage.flushSync();     // the doc on disk must be what he just saw
     const doc = readJSON('fm.proj.' + id, null); if (!doc) return null;
     /* ⚠️ AN EMPTY LAYER LIST IS NOT THE PACKER'S BUSINESS, and assuming it was broke template saving
        the moment these four routes were merged. An ELEMENT with no layers is meaningless, so
@@ -3421,7 +3424,7 @@ window.FM = window.FM || {};
     try {
       const db = await openDB();
       for (const l of pack.layers) {
-        const mem = (id === curId()) ? FM.media.get(l.id) : null;
+        const mem = (id === tabId()) ? FM.media.get(l.id) : null;   // bughunt8 #2: this tab's clips are the ones in memory
         if (mem && mem.file) pack.media[l.id] = { file: mem.file, kind: mem.kind };
         else { const rec = await idbGetMedia(db, l.id); if (rec && rec.file) pack.media[l.id] = { file: rec.file, kind: rec.kind }; }   // queue 915 phase A: a pack (template, element, backup) carries the FILE, never a pointer into this device's store
       }
@@ -3605,7 +3608,7 @@ window.FM = window.FM || {};
       } catch (e) { return false; }
       if (!put) return false;
       const idx = this.list();
-      const card = (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null);   // template cards keep an inline thumb (few templates); read the project's from IDB
+      const card = (await FM.projects.getThumb(id)) || (id === tabId() ? makeThumb() : null);   // template cards keep an inline thumb (few templates); read the project's from IDB. bughunt8 #2: makeThumb draws THIS tab's scene
       idx.unshift({ id: tid, name: name, width: pack.project.width, height: pack.project.height, duration: pack.project.duration, thumb: card });
       /* THE INDEX WRITE CAN FAIL, AND SAYING "saved" ANYWAY IS THE WORST OUTCOME (BUG-HUNT).
          writeJSON swallows a quota failure — it returns false and calls warnQuota, which only toasts
@@ -3618,7 +3621,8 @@ window.FM = window.FM || {};
       if (!writeJSON(TPL_INDEX, idx)) { try { const db2 = await openDB(); await idbDel(db2, 'tpl:' + tid); db2.close(); } catch (e) {} return false; }
       return true;
     },
-    cardFor(projectId) { const e = FM.projects.list().find(p => p.id === projectId); return (e && e.thumb) || (projectId === curId() ? makeThumb() : null); },
+    /* bughunt8 #2: makeThumb draws THIS tab's scene, so only this tab's project may be pictured by it */
+    cardFor(projectId) { const e = FM.projects.list().find(p => p.id === projectId); return (e && e.thumb) || (projectId === tabId() ? makeThumb() : null); },
     async getPack(tid) { try { const db = await openDB(); const p = await idbGet(db, 'tpl:' + tid); db.close(); return p; } catch (e) { return null; } },
     /* SAVE A TEMPLATE AS A SHAREABLE FILE (queue 343 clause 4). Ezra chose this over links, verbatim:
        *"maybe not links then and instead just project files that people can download like what's
@@ -4018,7 +4022,7 @@ window.FM = window.FM || {};
       } catch (e) { return false; }
       if (!put) return false;
       const idx = this.list();
-      idx.unshift({ id: eid, name: name, count: pack.layers.length, thumb: (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null) });
+      idx.unshift({ id: eid, name: name, count: pack.layers.length, thumb: (await FM.projects.getThumb(id)) || (id === tabId() ? makeThumb() : null) });   // bughunt8 #2: makeThumb draws this tab's scene
       if (!writeJSON(ELEM_INDEX, idx)) { try { const db2 = await openDB(); await idbDel(db2, 'elem:' + eid); db2.close(); } catch (e) {} return false; }   // see templates.save
       return true;
     },

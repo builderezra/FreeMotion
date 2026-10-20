@@ -535,7 +535,10 @@ window.FM = window.FM || {};
    * `rememberRights` writes role and roExport there), so it holds offline, after the owner ends it, and from Home.
    * Every door asks this one question (storage.js, home.js, app.js, collab-session.js C.leave, collab-ui.js). */
   C.watchOnly = function (pid) {
-    const id = pid || (FM.projects && FM.projects.currentId ? FM.projects.currentId() : null);
+    /* bughunt8 #2: with no id, THIS tab's open project (as C.isLinkedCopy asks), never the shared fm.currentProject that a second
+       tab moves: every door that asks with no id (storage.js exportFile, the bridge's keepsNoVersion with no session) was asking
+       about whatever the other tab had opened last. */
+    const id = pid || (FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null);
     if (!id) return false;
     const s = C.session;
     if (s && !s.isOwner && s.gpid === id && !s.ended && s.active !== false && s.roomSettings) {

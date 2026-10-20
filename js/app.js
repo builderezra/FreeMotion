@@ -5904,7 +5904,10 @@ window.FM = window.FM || {};
     const C = FM.collab;
     if (!C) return false;
     if (C.active && C.canExport && !C.canExport()) return true;
-    const pid = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null;
+    /* bughunt8 #2: THIS TAB's project (FM.storage.openProjectId), not the shared fm.currentProject, which a second tab moves
+       whenever it opens a project: read from that pointer, a watch-only copy here exported once another tab opened a project of
+       their own, and his own project here was refused while a watch-only copy was open in another tab. */
+    const pid = (FM.storage && FM.storage.openProjectId) ? FM.storage.openProjectId() : null;
     return !!(C.watchOnly && C.watchOnly(pid));
   }
   function sayExportTurnedOff() {

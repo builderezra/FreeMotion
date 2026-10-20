@@ -2289,7 +2289,10 @@ window.FM = window.FM || {};
      as somebody's resume point, and a deleted copy is nobody's. The open copy is flushed first, so a layer added in the
      last 600 ms is in the doc remove reads, and its clip goes with the rest. Resolves null. */
   C.dropCopy = function (gpid, sid) {
-    if (FM.projects && FM.projects.currentId && FM.projects.currentId() === gpid && FM.storage && FM.storage.flushSync) {
+    /* bughunt8 #2: "the open copy" is the one THIS tab has open (FM.storage.openProjectId), not the shared fm.currentProject a second
+       tab moves; asked of that pointer, a Leave with another tab on a project of its own skipped the flush and kept a clip added in
+       the last 600 ms on the device. */
+    if (FM.storage && FM.storage.openProjectId && FM.storage.openProjectId() === gpid && FM.storage.flushSync) {
       try { FM.storage.flushSync(); } catch (e) {}
     }
     return Promise.resolve(FM.projects.remove(gpid)).then(function () {
