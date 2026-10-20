@@ -14,7 +14,10 @@ window.FM = window.FM || {};
   function writeList(key, arr) { try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {} }
   function pushRecent(id) { const a = readList(RECENTS_KEY).filter(x => x !== id); a.unshift(id); writeList(RECENTS_KEY, a.slice(0, RECENTS_CAP)); }
   function isFav(id) { return readList(FAV_KEY).indexOf(id) >= 0; }
-  function toggleFav(id) { const a = readList(FAV_KEY); const i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id); writeList(FAV_KEY, a); return i < 0; }
+  /* bughunt6 #15: readList filters for SHOWING only; the star edits the list as it is stored, so starring one effect no
+     longer deletes the favourites this build does not know (js/fx-browser.js has the same fix and the reasons). */
+  function readStored(key) { try { const a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.filter(id => typeof id === 'string') : []; } catch (e) { return []; } }
+  function toggleFav(id) { const a = readStored(FAV_KEY); const on = a.indexOf(id) < 0; writeList(FAV_KEY, on ? a.concat([id]) : a.filter(x => x !== id)); return on; }
 
   // One star for every tile builder — the featured carousel had none, so the featured audio
   // effects were unfavouritable for no reason the user could see. (#62)

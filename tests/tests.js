@@ -168827,6 +168827,49 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* (#15) bughunt6 #15: STARRING AN EFFECT DELETED THE FAVOURITES THIS BUILD DOES NOT KNOW. Both browsers' toggleFav wrote back
+     readList's answer, and readList drops every id this build's registry does not have, so one star after a rollback (or
+     with an effect since retired) deleted those favourites from disk for good: queue 721's class, fixed there for presets.
+     The stored lists are written and read straight (localStorage 'fm.fx.fav' and 'fm.afx.fav', put back as they were), the
+     stars toggled through the functions every ★ calls (FM.fxBrowser.toggleFav, FM.audioFxBrowser.toggleFav).
+     FAILS ON bc67b146: starring Glow leaves ["blur","glow"] stored, and starring Reverb leaves ["gain","reverb"]: the
+     unknown no-such-effect ids are gone.
+     CONTROLS, which hold before and after: the star still answers on, then off; the stored known favourite stays; and what
+     the browsers SHOW still leaves the unknown id out (isFav says no), so a stored id that names nothing never reaches a tile. */
+  test('bughunt6 #15 Starring an effect keeps favourites this build does not know: with blur and no-such-effect stored, starring and unstarring Glow keeps no-such-effect in the stored favourites, and the same for the audio browser with gain and Reverb (CONTROLS: the star answers on then off, the known favourite stays, and the unknown one is never shown as a favourite)', { item: '1176' }, function () {
+    if (!FM.fxBrowser || typeof FM.fxBrowser.toggleFav !== 'function' || typeof FM.fxBrowser.isFav !== 'function') throw new Error('setup: FM.fxBrowser.toggleFav / isFav (what every ★ in the Effects browser calls) are not reachable');
+    if (!FM.audioFxBrowser || typeof FM.audioFxBrowser.toggleFav !== 'function' || typeof FM.audioFxBrowser.isFav !== 'function') throw new Error('setup: FM.audioFxBrowser.toggleFav / isFav are not reachable');
+    if (!FM.fxRegistry.get('blur') || !FM.fxRegistry.get('glow') || FM.fxRegistry.get('no-such-effect')) throw new Error('setup: this build’s effects registry does not have blur and glow, or has a no-such-effect');
+    if (!FM.audioFxRegistry.get('gain') || !FM.audioFxRegistry.get('reverb') || FM.audioFxRegistry.get('no-such-effect')) throw new Error('setup: this build’s audio registry does not have gain and reverb, or has a no-such-effect');
+    const KEYS = ['fm.fx.fav', 'fm.afx.fav'];
+    const keep = {};
+    KEYS.forEach(k => { try { keep[k] = localStorage.getItem(k); } catch (e) { keep[k] = null; } });
+    const stored = k => { try { const a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+    const bad = [];
+    try {
+      [[FM.fxBrowser, 'fm.fx.fav', 'blur', 'glow', 'the Effects browser'], [FM.audioFxBrowser, 'fm.afx.fav', 'gain', 'reverb', 'the Audio Effects browser']].forEach(([B, key, known, other, where]) => {
+        localStorage.setItem(key, JSON.stringify([known, 'no-such-effect']));
+        /* CONTROL: what is shown leaves the unknown id out, and keeps the known one */
+        if (B.isFav('no-such-effect')) bad.push('CONTROL: ' + where + ' shows no-such-effect as a favourite, an id this build has no effect for');
+        if (!B.isFav(known)) bad.push('CONTROL: ' + where + ' does not show the stored ' + known + ' as a favourite');
+        const on = B.toggleFav(other);
+        if (on !== true) bad.push('CONTROL: starring ' + other + ' in ' + where + ' answered ' + on + ', not on');
+        let s = stored(key);
+        if (s.indexOf('no-such-effect') < 0) bad.push('starring ' + other + ' in ' + where + ' left ' + JSON.stringify(s) + ' stored: the favourite this build does not know (no-such-effect) was deleted from disk');
+        if (s.indexOf(known) < 0 || s.indexOf(other) < 0) bad.push('starring ' + other + ' in ' + where + ' left ' + JSON.stringify(s) + ', not ' + known + ' and ' + other + ' among them');
+        const off = B.toggleFav(other);
+        if (off !== false) bad.push('CONTROL: unstarring ' + other + ' in ' + where + ' answered ' + off + ', not off');
+        s = stored(key);
+        if (s.indexOf('no-such-effect') < 0) bad.push('unstarring ' + other + ' in ' + where + ' left ' + JSON.stringify(s) + ': no-such-effect was deleted');
+        if (s.indexOf(other) >= 0 || s.indexOf(known) < 0) bad.push('unstarring ' + other + ' in ' + where + ' left ' + JSON.stringify(s) + ', where ' + other + ' should be gone and ' + known + ' kept');
+        if (B.isFav('no-such-effect')) bad.push('CONTROL: after the stars ' + where + ' shows no-such-effect as a favourite');
+      });
+    } finally {
+      KEYS.forEach(k => { try { if (keep[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, keep[k]); } catch (e) {} });
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 6 ──
 
 })();
