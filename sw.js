@@ -34,6 +34,15 @@ const CACHE = 'freemotion-v1';
  * conversation to join, and a message sent to nobody is exactly the kind of thing that would make
  * this warning fail to appear on the one occasion it mattered. */
 const STALE_KEY = 'served-stale-shell';
+/* bughunt6 #2 — HOW LONG A LAUNCH WAITS FOR THE NETWORK before it opens the offline copy instead. The page fetch had no
+ * limit: on one bar, or on Wi-Fi that reaches nothing, the installed app showed a blank screen until the platform gave
+ * up (about a minute on iOS), then as long again for the blip retry, with a complete offline copy in the cache.
+ * 8 s is the app's own number (FM.latestBuild and fmCanFetchLatest give up there too), and it is generous on purpose:
+ * #306 is what a short timer brings back, an older build served on a connection that was only slow. When it runs out the
+ * launch takes the ordinary offline path, stale marker and all, so the app still says what it served.
+ * self.FM_NAV_TIMEOUT_MS is a seam for tests/tests.js, which runs this file in a stub scope with a few hundred ms.
+ * Nothing sets it in a real worker. */
+const NAV_BUDGET_MS = (typeof self.FM_NAV_TIMEOUT_MS === 'number' && self.FM_NAV_TIMEOUT_MS > 0) ? self.FM_NAV_TIMEOUT_MS : 8000;
 
 self.addEventListener('install', (e) => {
   // Take over immediately. index.html reloads once on controllerchange (and deliberately skips that on
@@ -127,6 +136,32 @@ function keepCacheWorkAlive(e, tasks) {
   if (e && typeof e.waitUntil === 'function') e.waitUntil(settled);
 }
 
+/* bughunt6 #2 — THE ANSWER THAT LANDS AFTER THE BUDGET STILL REFRESHES THE OFFLINE COPY, for the next launch: the fetch
+ * keeps running under waitUntil after the page was served from the cache. Three things it does NOT do, on purpose.
+ * It does not clear the stale marker: this launch WAS the offline copy, and the app must still say so.
+ * It does not prune: the open page is that offline copy, still loading its own files from the cache.
+ * And it replaces the copy only when every script and stylesheet the new page names is already cached. That page never
+ * ran, so a release's new files were never fetched, and an offline copy naming files the phone does not hold would hang
+ * on them at the next launch instead of opening. A copy of the same release (the usual case) is replaced. */
+async function refreshFallbackLate(attempts, c, pageUrl) {
+  const res = await attempts;
+  if (!res || !res.ok) return;
+  let html = '';
+  try { html = await res.clone().text(); } catch (_) { return; }
+  const need = [];
+  const re = /(?:src|href)="([^"]+\?v=[^"]*)"/g;
+  let m;
+  while ((m = re.exec(html))) {
+    try {
+      const u = new URL(m[1], pageUrl);
+      if (isVersionedAsset(u) && /\.(?:js|css)$/.test(u.pathname)) need.push(u.href);
+    } catch (_) {}
+  }
+  const held = await Promise.all(need.map((href) => c.match(href)));
+  if (held.some((r) => !r)) return;
+  await c.put('index-fallback', res);
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;                       // never cache a write
@@ -175,11 +210,24 @@ self.addEventListener('fetch', (e) => {
        * offline warning has never appeared while the glitch has.
        * `cache: 'no-cache'` still uses the network and still allows a 304, so it costs a revalidation
        * round trip and nothing more. The blip retry is unchanged. */
-      try {
-        fresh = await fetch(req, { cache: 'no-cache' });
-      } catch (_) {
-        try { fresh = await fetch(req, { cache: 'no-cache' }); } catch (_2) { fresh = null; }   // the blip retry
-      }
+      const attempts = (async () => {
+        try {
+          return await fetch(req, { cache: 'no-cache' });
+        } catch (_) {
+          try { return await fetch(req, { cache: 'no-cache' }); } catch (_2) { return null; }   // the blip retry
+        }
+      })();
+      /* bughunt6 #2 — ONE BUDGET FOR BOTH TRIES (NAV_BUDGET_MS, at the top). The timer starts with the first fetch and is
+         not restarted for the retry, so a retry gets only the time the first try left and the wait cannot double. Past
+         it, with an offline copy, the page comes from the cache below and the fetch carries on in the background. With
+         nothing cached (a first launch) it keeps waiting, as it always did: there is nothing better to show. */
+      let timer = null;
+      const outOfTime = {};
+      const first = await Promise.race([attempts, new Promise((r) => { timer = setTimeout(() => r(outOfTime), NAV_BUDGET_MS); })]);
+      clearTimeout(timer);
+      if (first !== outOfTime) fresh = first;
+      else if (await c.match('index-fallback') || await c.match(req)) keepCacheWorkAlive(e, [refreshFallbackLate(attempts, c, req.url)]);
+      else fresh = await attempts;
       // Only keep a good response; a 404 or an opaque error cached here would BE the offline page.
       if (fresh && fresh.ok) {
         keepCacheWorkAlive(e, [

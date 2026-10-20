@@ -882,6 +882,8 @@
   });
 
   test('templates and elements can be duplicated, and the copy survives deleting the original', { item: 'pack-duplicate' }, async function () {
+    /* isolation (20 Oct): it left its probe's media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* Queue 374. Ezra: "There's no way to duplicate templates or elements". Projects have had Duplicate
        for a long time; these two had remove() and nothing else.
        ⚠️ THE ASSERTION THAT MATTERS IS THE LAST ONE, and the entry named the trap before the code was
@@ -932,6 +934,7 @@
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   /* 915.3 — A PROJECT DUPLICATE ON A NEARLY-FULL PHONE. projects.duplicate threw away every write result and
@@ -1159,7 +1162,10 @@
     try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
     for (const id of made) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await FM.projects.remove(id); } catch (e) {} }
     for (const k of libs || []) { try { await q915aDel(k); } catch (e) {} }   // raw: the app itself will not delete a lib: key any more
-    try { if (wasOpen) FM.home.open(); } catch (e) {}
+    /* isolation (20 Oct): restores Home SHUT as well as open — a test that found it shut and opened it on the way (921 S7
+       review's “Earlier versions…” from a card's ⋯) left it open for every later test. Only for a found state passed as a
+       boolean, which every caller passes (FM.home.isOpen()). */
+    try { if (wasOpen) FM.home.open(); else if (wasOpen === false && FM.home.isOpen()) FM.home.close(); } catch (e) {}
   }
 
   test('915.5A a clip stored as a pointer opens, duplicates, packs and backs up WITH its footage', { item: '915', budgetMs: 45000 }, async function () {
@@ -5817,6 +5823,8 @@
   });
 
   test('576: the text editor options open BELOW the box showing what you typed', { item: '576' }, async function () {
+    /* isolation (20 Oct): it left Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* Queue 576. Ezra: "All of the text edit options now get blocked by the part that shows you what you
      * typed, fix this so they push it down or go below it, whatever's best."
      * MEASURED at 380px: the options panel opened at y 63 (`bar.bottom + 6`) while `.te-dock` — the box
@@ -5866,6 +5874,7 @@
       layers0.forEach(function (l) { FM.scene.layers.push(l); });
       FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   test('575: a caption cue can be DRAGGED longer', { item: '575' }, async function () {
@@ -7124,6 +7133,8 @@
   });
 
   test('527: the Audio effects panel does not repeat its own button back at you', { item: '527' }, async function () {
+    /* isolation (20 Oct): it left its voice memo's media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* Queue 527. Ezra circled *"No audio effects yet — add one to shape this clip\'s sound."* and said:
        "Get rid of this text". It sat directly above a button reading **+ Add Audio Effect**, so the two
        carried one fact between them and the sentence was the redundant half.
@@ -7173,6 +7184,7 @@
       if (FM.timeline) FM.timeline.rebuild();
       if (homeWasOpen && FM.home && FM.home.open) { try { FM.home.open(); } catch (e) {} }
     }
+    } finally { _isoK.put(); }
   });
 
   test('528: the effects sheet re-pins to the canvas when the canvas moves', { item: '528' }, async function () {
@@ -10469,6 +10481,8 @@
   });
 
   test('split: the cut does not duck the sound to silence in preview', { item: 'split-declick' }, async function () {
+    /* isolation (20 Oct): it left its clip's media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* BUG HUNT (21 Aug), eleventh verified lead from BUG-HUNT §34 and the last of the split family.
        The 45ms anti-click ramp is measured from each clip's OWN edges. The two halves of a split are the
        same continuous audio butted together, so each applied its ramp to its own new edge and the two met
@@ -10522,6 +10536,7 @@
       FM.scene.layers = layers0; FM.time = t0;
       if (FM.refreshAll) FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   test('maxDurForSource: no speed value can put a NaN duration into the scene', { item: 'maxdur-safe' }, function () {
@@ -10564,6 +10579,8 @@
   });
 
   test('speed ramps: trimming or extending an edge does not move the surviving picture', { item: 'ramp-edges' }, function () {
+    /* isolation (20 Oct): it left three media records behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* BUG HUNT (21 Aug), eighth and ninth verified leads from BUG-HUNT §34, reported by two lenses in
        three forms. Moving a clip's edge advances trimStart by the INSTANTANEOUS speed at that edge times
        the delta — correct only when the speed is flat. FM.splitLayer already used the ramp's INTEGRAL
@@ -10622,6 +10639,7 @@
       FM.scene.layers = layers0; FM.time = t0;
       if (FM.refreshAll) FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   test('914.2 trim-start-to-playhead (A key, rail, phone button) on a speed ramp keeps the surviving picture still', { item: '914' }, async function () {
@@ -10754,6 +10772,8 @@
   });
 
   test('split: an Audio Drive behavior keeps driving across a cut in its source', { item: 'split-audiodrive' }, async function () {
+    /* isolation (20 Oct): it left two media records behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* BUG HUNT (21 Aug), fifth verified lead from BUG-HUNT §34 and the only one TWO independent lenses
        reported. An Audio Drive behavior stores the source clip's id, and an envelope is gated to its own
        clip's span — so once the music was split, the behavior kept reading from the HEAD half and
@@ -10811,6 +10831,7 @@
       FM.scene.layers = layers0; FM.time = t0;
       if (FM.refreshAll) FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   test('duplicate: a copied group is stacked the same way inside as the original', { item: 'dup-group-order' }, async function () {
@@ -13958,6 +13979,8 @@
   });
 
   test('Select all on a non-project tab ticks THAT tab, never the projects', { item: 'select-cross-tab' }, async function () {
+    /* isolation (20 Oct): it left Home open — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     // v5.04. Select used to be projects-only, and every part of it was hardwired to FM.projects —
     // including a `shownIds.length ? shownIds : FM.projects.list()` fallback in Select all. Opening
     // Select on the Templates tab without also filling shownIds for that tab would therefore have
@@ -14017,6 +14040,7 @@
       const pt = [].find.call(document.querySelectorAll('.hm-tab'), b => b.dataset.tab === 'projects');
       if (pt) pt.click();
     }
+    } finally { _isoK.put(); }
   });
 
   /* ---- the restroom-pictogram pair: person + woman ------------------------------------------
@@ -16705,6 +16729,8 @@
   });
 
   test('PC: canvas settings opens UPWARD and fits without scrolling', { item: 'cv-upward' }, async function () {
+    /* isolation (20 Oct): it left Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* queue 252. "you dont have to follow the sizing strictly as i want it to all fit on screen
        nicely" / "so you dont have to scroll through the menu". It used to hang DOWNWARD from a cog
        that sits low on the transport row, so it got the scraps underneath: measured at 1440x900 the
@@ -16737,6 +16763,7 @@
       // Leave nothing open behind us — a stray scrim fails whatever runs next, several tests away.
       document.querySelectorAll('.set-scrim.open').forEach(function (e) { e.classList.remove('open'); });
     }
+    } finally { _isoK.put(); }
   });
 
   test('PC: tapping outside the canvas settings closes it WITHOUT applying', { item: 'cv-upward' }, async function () {
@@ -16949,6 +16976,8 @@
   });
 
   test('export: a layer that contributes no audio is NAMED, not dropped in silence', { item: 'audio-drop-report' }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* Queue 215, the most serious open item in REQUESTS.md, and the one thing this test can actually
      * change today. Ezra: "I made a fresh project, added some sound effects, pressed export with some
      * pretty normal export settings and got an audioless clip."
@@ -16988,9 +17017,12 @@
       layers0.forEach(l => FM.scene.layers.push(l));
       FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   test('export: a clip sitting past the end of the project is NAMED, not muted in silence', { item: '215' }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* QUEUE 215, THE FOURTH SILENT LOSS — the one that survived three previous fixes because the layer
      * has nothing wrong with it. Ezra, 21 Aug: "I exported a video that was making audio in the
      * project... just be an mp4 video to camera role export." The project HAD sound; the file did not.
@@ -17044,6 +17076,7 @@
       layers0.forEach(l => FM.scene.layers.push(l));
       FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   test('PC add menu: it has a surface of its own, and it costs the panel no scrollbar', { item: 'addmenu-bg' }, async function () {
@@ -19612,6 +19645,8 @@
   }
 
   test('effects: Fill Behind fills the empty frame with a blown-up copy of the layer', { item: 'fill-behind' }, function () {
+    /* isolation (20 Oct): it left its picture's media record (fbArt) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.fxRegistry.get('fillbehind')) throw new Error('fillbehind is not in the effect registry');
     var off = fbPix([fbLayer('_fbT1', 100, 180, fbHalves, null)]);
     var on = fbPix([fbLayer('_fbT1', 100, 180, fbHalves, { blur: 20, zoom: 1, dim: 0 })]);
@@ -19655,9 +19690,12 @@
       for (var k = 0; k < 4; k++) if (off.data[i + k] !== on.data[i + k]) bad++;
     }
     if (bad) throw new Error(bad + ' bytes of the SUBJECT changed — the fill is drawing over the layer instead of behind it');
+    } finally { _isoK.put(); }
   });
 
   test('effects: Fill Behind leaves no bare corner on a layer that is not a rectangle', { item: 'fill-behind' }, function () {
+    /* isolation (20 Oct): it left its pictures' media records (fbArt) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* Cover-scaling a RECTANGLE guarantees the frame is covered. Cover-scaling an alpha BOUNDING BOX
      * does not: a rotated clip, an ellipse, a small subject all leave transparent corners inside
      * that box, and the scale carries them along in proportion — extra zoom never pushes them out.
@@ -19682,9 +19720,12 @@
     el.effects = [e3];
     var c3 = fbAt(fbPix([el]), 3, 3);
     if (c3[0] + c3[1] + c3[2] < 40) throw new Error('an ellipse left the frame corner bare: rgb(' + c3.slice(0, 3) + ')');
+    } finally { _isoK.put(); }
   });
 
   test('effects: Fill Behind blurs the fill, and the radius scales with the plate', { item: 'fill-behind' }, function () {
+    /* isolation (20 Oct): it left its pictures' media records (fbArt) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     // a) the blur does something: fine stripes in the fill must survive at blur 0 and vanish at 40.
     var sharp = fbPix([fbLayer('_fbT2', 100, 180, fbStripes, { blur: 0, zoom: 1, dim: 0 })]);
     var soft = fbPix([fbLayer('_fbT2', 100, 180, fbStripes, { blur: 40, zoom: 1, dim: 0 })]);
@@ -19724,9 +19765,12 @@
       var r = w2 / w1;
       if (!(r > 0.7 && r < 1.4)) throw new Error('at Blur ' + b + ' the fill’s edge is ' + w2.toFixed(1) + ' project px wide in a 0.5x preview but ' + w1.toFixed(1) + ' at 1:1 (' + r.toFixed(2) + 'x) — ctx.filter works in DEVICE pixels, so the radius must be multiplied by plateScale or the preview and the export disagree');
     });
+    } finally { _isoK.put(); }
   });
 
   test('effects: Fill Behind costs nothing when the layer already covers the canvas', { item: 'fill-behind' }, function () {
+    /* isolation (20 Oct): it left its picture's media record (fbArt) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* "The space the layer isn't filling" can be empty, and then the effect must be invisible AND
      * free. Two different guards do that and they are tested separately:
      *   • a cheap geometric one for media, which skips the plate entirely — measured with
@@ -19751,9 +19795,12 @@
     };
     var sd = fbDiff(fbPix([shape(null)]), fbPix([shape(true)]));
     if (sd !== 0) throw new Error('a half-transparent shape covering the whole frame rendered ' + sd + ' bytes differently with Fill Behind on — the fill is showing through it');
+    } finally { _isoK.put(); }
   });
 
   test('effects: Fill Behind still fills when the layer also carries a post-effect', { item: 'fill-behind' }, function () {
+    /* isolation (20 Oct): it left its picture's media record (fbArt) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* A one-effect scene is the easy case. This is the one that broke Magnify Background: drawLayer's
      * `if (pp.length) { applyPostFx(…); return; }` gate returns before everything below it, so an
      * effect that is mis-registered in POSTFX, or whose dispatch goes missing, works on a bare layer
@@ -19781,9 +19828,12 @@
     var c = fbAt(both, 4, 4), b = fbAt(bare, 4, 4);
     if (b[1] + b[2] > 40) throw new Error('the control scene already has something in the corner (rgb ' + b.slice(0, 3) + ') — the test cannot tell the fill apart from it');
     if (c[1] + c[2] < 120) throw new Error('with Pixelate on the same layer the corner is rgb(' + c.slice(0, 3) + ') — Fill Behind drew nothing once it was stacked. Check it has not been added to POSTFX, and that its dispatch in drawLayer is still there and still above the applyPostFx gate');
+    } finally { _isoK.put(); }
   });
 
   test('effects: Fill Behind’s Zoom and Dim each move only their own half of the picture', { item: 'fill-behind' }, function () {
+    /* isolation (20 Oct): it left its picture's media record (fbArt) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     // Zoom is a multiplier ON the cover scale, so doubling it must double the scale the fill is
     // drawn at — read from FM._fbLast, which the renderer publishes for exactly this.
     fbPix([fbLayer('_fbT5', 100, 180, fbHalves, { blur: 20, zoom: 1, dim: 0 })]);
@@ -19802,6 +19852,7 @@
     if (Math.abs(f50 / f0 - 0.5) > 0.08) throw new Error('Dim 50% left the fill at ' + (f50 / f0 * 100).toFixed(0) + '% of its brightness (' + f50 + ' vs ' + f0 + ')');
     var s0 = fbAt(d0, 140, 120), s5 = fbAt(d50, 140, 120);
     if (s0.join() !== s5.join()) throw new Error('Dim changed the SUBJECT too: rgb(' + s0.slice(0, 3) + ') became rgb(' + s5.slice(0, 3) + ')');
+    } finally { _isoK.put(); }
   });
 
   /* Ezra, on the Fill Behind that shipped in v5.88: "The blur slider on fill behind doesn't blur it
@@ -19815,6 +19866,8 @@
    * before the picture ran off the frame entirely. On a real 1080x1920 comp it was 2.11x.
    * The margin itself is NOT the bug and must not be deleted — see the next test. */
   test('effects: Fill Behind’s Blur softens the fill without zooming it', { item: 'fill-behind' }, function () {
+    /* isolation (20 Oct): it left its pictures' media records (fbArt) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     // 1. the scale itself, straight from the renderer, across the whole slider at a fixed Zoom.
     var S = {}, blurs = [0, 5, 10, 12, 25, 50, 100, 150, 200];
     blurs.forEach(function (b) {
@@ -19859,6 +19912,7 @@
       if (!z0) { z0 = sep; return; }
       if (Math.abs(sep / z0 / z - 1) > 0.03) throw new Error('Zoom ' + z + ' scaled the fill by ' + (sep / z0).toFixed(3) + 'x (edges ' + sep.toFixed(1) + 'px apart against ' + z0.toFixed(1) + 'px at Zoom 1) — fixing the blur-zooms bug has broken the control that is SUPPOSED to zoom');
     });
+    } finally { _isoK.put(); }
   });
 
   /* The other half of the fix, and the reason the overscan cannot simply be deleted: `blur(Npx)` is
@@ -19876,6 +19930,8 @@
    * of a green/blue layer measured rgb(0,96,96) — the mean-colour floor, not the layer. The source
    * rect now comes from the scan's fully-OPAQUE cells instead. */
   test('effects: Fill Behind reaches the frame edge at every blur, with no vignette and no seam', { item: 'fill-behind' }, function () {
+    /* isolation (20 Oct): it left its picture's media record (fbArt) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     [0, 5, 60, 200].forEach(function (b) {
       // a) alpha. Transparent comp, so this is the fill's own coverage and not a composite over black.
       var clear = fbPix([fbLayer('_fbC1', 100, 180, fbHalves, { blur: b, zoom: 1, dim: 0 })], 320, 240, null);
@@ -19902,6 +19958,7 @@
         if (worst.max > 12) throw new Error('at Blur ' + b + ' a row of pure fill steps by ' + worst.max + ' (summed over RGBA) between x=' + worst.at + ' and x=' + (worst.at + 1) + ' — that is a seam where the clamped margin meets the real content. Clamping must repeat the boundary pixel exactly (imageSmoothingEnabled off for the strip blits), and the strip must be taken from a WHOLE covered pixel, not the half-covered one at a fractional edge');
       }
     });
+    } finally { _isoK.put(); }
   });
 
   /* The quieter half of the same bug. The fill is built on a 1/k plate (k = 4 / 2 / 1, chosen BY THE
@@ -19912,6 +19969,8 @@
    * the Blur 12 threshold where k goes 1 -> 4. Taking the exact W/k x H/k rect out of the plate makes
    * the mapping k-independent. 321x241 is deliberate: 321 = 4*81 - 3, the worst case for k=4. */
   test('effects: Fill Behind’s 1/k working plate does not move the fill', { item: 'fill-behind' }, function () {
+    /* isolation (20 Oct): it left its picture's media record (fbArt) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var seen = {};
     [5, 10, 12, 60].forEach(function (b) {   // k = 1, 2, 4, 4
       var l = fbLayer('_fbK1', 100, 180, fbSplit(0.8), { blur: b, zoom: 1, dim: 0 });
@@ -19925,6 +19984,7 @@
     Object.keys(seen).forEach(function (b) {
       if (Math.abs(seen[b].x - seen[5].x) > 1) throw new Error('the fill’s colour edge sits at x=' + seen[b].x.toFixed(2) + ' on a 1/' + seen[b].k + ' plate (Blur ' + b + ') but at x=' + seen[5].x.toFixed(2) + ' on the 1/1 one (Blur 5) — the working plate’s ceil(W/k) width is leaking into the fill’s scale. The final blit must take the exact W/k x H/k rect out of the plate, not the whole thing');
     });
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- Fill Behind is a BACKDROP, not a full-frame blit --------------------------
@@ -22704,6 +22764,9 @@
      inside the live app, which holds the only copy of Ezra's work. */
   function importFixture(over) {
     var saved = { scene: FM.scene, time: FM.time, toast: FM.toast, commit: FM.history && FM.history.commit, save: FM.storage && FM.storage.save, libAdd: FM.mediaLib && FM.mediaLib.add };
+    /* isolation (20 Oct): restore() also removes the media records the imports registered (isoMediaPut) — the scene went
+       back and their layers with it, but every record stayed: the import, waveform and Simple + tests left 1 to 6 each */
+    var media0 = isoMediaSnap();
     var toasts = [], warns = [], _warn = console.warn;
     FM.scene = scene([], over || {});
     FM.time = 0;
@@ -22721,6 +22784,7 @@
         if (FM.storage && saved.save) FM.storage.save = saved.save;
         if (FM.mediaLib && saved.libAdd) FM.mediaLib.add = saved.libAdd;
         try { FM.refreshAll(); } catch (e) {}
+        isoMediaPut(media0);
       }
     };
   }
@@ -23258,6 +23322,8 @@
   function egSum(d) { var a = 0, b = 0; for (var i = 0; i < d.length; i++) { a = (a + d[i]) >>> 0; b = (b + a) >>> 0; } return ((b << 8) ^ a) >>> 0; }
 
   test('effects: Edge Glow reads the LAYER, the MEDIA, or both — and each one only its own edges', { item: 'edge-glow' }, function () {
+    /* isolation (20 Oct): it left its picture's media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var off = egPix([egPicture(null)]);
     var seen = [0, 1, 2].map(function (s) {
       var on = egPix([egPicture({ amount: 1.5, color: '#ffffff', radius: 8, source: s })]);
@@ -23272,6 +23338,7 @@
     // BOTH: genuinely both, not a rename of either.
     if (!(seen[2].outside > 1500)) throw new Error('Glow on Both lit ' + seen[2].outside + ' pixels outside the silhouette against Layer’s ' + seen[0].outside);
     if (!(seen[2].seam > 120)) throw new Error('Glow on Both lifted the internal seam by only ' + seen[2].seam.toFixed(1) + ' against Media’s ' + seen[1].seam.toFixed(1));
+    } finally { _isoK.put(); }
   });
 
   test('effects: Edge Glow lights a flat shape and a line of text — the case luminance alone cannot see', { item: 'edge-glow' }, function () {
@@ -26783,6 +26850,8 @@
   // decoration), and it is actually VISIBLE — a red glyph that lands 0x0, transparent, or outside
   // its thumbnail is indistinguishable in the DOM from one that works.
   test('timeline: a locked layer wears a red lock on its preview, an unlocked one does not', { item: 'lock-badge' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     try {
@@ -26847,6 +26916,7 @@
     } finally {
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   // #136 — Ezra: "I can't do anything like drag the timeline or layer when you have a captions layer
@@ -26855,6 +26925,8 @@
   // real synthetic touch through the chip and requires BOTH halves to still work — a drag reaches the
   // clip underneath, and a press-and-hold still grabs the cue.
   test('timeline: caption cues do not swallow the row — a touch drag over one still scrubs', { item: 'captions-gestures' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     const t0 = FM.time;
@@ -26926,6 +26998,7 @@
       FM.time = t0;
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   // #127 — Ezra: "Paste style menu needs to reflect the current icons that have since changed."
@@ -26934,6 +27007,8 @@
   // delete the second table, not to re-copy it — so what this guards is that no second table has
   // grown back: every Paste Style tile has to render the SAME markup the inspector card renders.
   test('paste style: every tile draws the inspector\'s own category icon, not a private copy', { item: 'paste-style-icons' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     try {
@@ -26983,6 +27058,7 @@
       FM.clipboard = null;
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #152 — Ezra: "im pretty sure the auto detect speaking and auto make the captions doesnt work…
@@ -27225,6 +27301,8 @@
      name would satisfy "there is one field" while quietly losing layer renaming, which is exactly the
      failure the old compromise existed to prevent. */
   test('studio: one name field, in the inspector header, and it does both jobs', { item: 'studio-projname' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const pn = document.getElementById('proj-name');
     if (!pn) throw new Error('#proj-name is missing');
     const hadSel = FM.scene.selectedId, hadIds = (FM.scene.selectedIds || []).slice();
@@ -27261,6 +27339,7 @@
     } finally {
       FM.scene.selectedIds = hadIds; FM.selectLayer(hadSel || null);
     }
+    } finally { _isoK.put(); }
   });
 
   /* #149 — Ezra: "when dragging the cue length for captions it should show it changing live not just
@@ -27273,6 +27352,8 @@
      So this test measures the RENDERED width, not the data and not the style property — those were
      both correct the whole time. */
   test('captions: dragging a cue edge moves the chip during the drag, not on release', { item: 'cue-live-drag' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     const mouse = (type, x, y) => new PointerEvent(type, { pointerType: 'mouse', pointerId: 77, clientX: x, clientY: y, bubbles: true, cancelable: true, button: 0, buttons: type === 'pointerup' ? 0 : 1 });
@@ -27313,6 +27394,7 @@
     } finally {
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #147 — Ezra: "this pop up menu on pc is so shit, it literally covers up the text while you edit
@@ -27323,6 +27405,8 @@
      The assertion is geometric overlap with the CANVAS, because "is it in the right parent" would pass
      on a popover that still happened to sit over the picture. */
   test('desktop text editor: the Aa options do not cover the canvas you are typing on', { item: 'text-editor-cover' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (window.innerWidth <= 700) throw new Error('this test needs a desktop-width frame; got ' + window.innerWidth);
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
@@ -27366,6 +27450,7 @@
       document.body.classList.remove('text-editing');
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #116 — Ezra, for the second time: "The sliders we have for everything like effects and what not
@@ -27401,6 +27486,8 @@
      copied — the point is one door, so the test asserts the old ones are gone as firmly as it asserts
      the new one exists. */
   test('onion skin has exactly one door, and it is the layer menu', { item: 'onion-scope' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     const was = FM.onionSkin;
@@ -27442,6 +27529,7 @@
       document.querySelectorAll('.set-scrim').forEach(n => n.remove());
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #123 — Ezra: "Linear repeat effect is shit and needs work, currently it just squishes
@@ -27533,6 +27621,8 @@
      duplicate in the app. The keyframe half matters as much as the static half — a nudged path is a
      whole animation moved 30px, which is far harder to notice and to undo. */
   test('duplicate: the copy lands exactly on the original, animated paths included', { item: 'duplicate-exact' }, async function () {
+    /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     try {
@@ -27565,6 +27655,7 @@
     } finally {
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #154, and the third time this family has bitten. The document CANVAS — what <html> paints — covers
@@ -27661,6 +27752,8 @@
      strokes at lw. Measured as RENDERED THICKNESS, because the bug is a factor of two in pixels and
      nothing about the stored numbers looked wrong. */
   test('freehand: the committed stroke is the width you drew, not double it', { item: 'freehand-width' }, function () {
+    /* isolation (20 Oct): it left its stroke selected — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const W = 400, H = 200, WANT = 12;
     // A straight horizontal stroke across the middle, exactly as the tool would hand it over.
     const pts = [[60, 100], [140, 100], [220, 100], [300, 100], [340, 100]];
@@ -27690,6 +27783,7 @@
     } finally {
       const i = FM.scene.layers.indexOf(layer); if (i >= 0) FM.scene.layers.splice(i, 1);
     }
+    } finally { _isoK.put(); }
   });
 
   /* #167 — Ezra: "when you draw with free hand drawing it creates multiple layers, it should all be
@@ -27699,6 +27793,8 @@
      The renderer always supported this — layer.subs is a multi-subpath field — and nothing was ever
      writing more than one into it. */
   test('freehand: a drawing session is ONE layer holding every stroke', { item: 'freehand-one-layer' }, function () {
+    /* isolation (20 Oct): it left its drawing selected — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.refitPathLayer) throw new Error('FM.refitPathLayer is missing — strokes cannot be merged into one layer');
     const before = FM.scene.layers.length;
     // Stroke one builds the layer; stroke two must land in the same one.
@@ -27721,6 +27817,7 @@
     } finally {
       const i = FM.scene.layers.indexOf(a); if (i >= 0) FM.scene.layers.splice(i, 1);
     }
+    } finally { _isoK.put(); }
   });
 
   /* #141 (part 2) — Ezra: "if you made a custom fps or other things etc there's no way to export at
@@ -27893,6 +27990,8 @@
      the thing you just called off. Driven with real pointer events, because the whole feature is the
      event handling. */
   test('pulling back up cancels the faves gesture, and the cancel sticks', { item: 'faves-cancel' }, async function () {
+    /* isolation (20 Oct): it left a different layer selected — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // the gesture is deliberately not armed there
@@ -27976,6 +28075,7 @@
       document.querySelectorAll('.fxb-favview').forEach(n => n.remove());
       if (hadHome && FM.home && FM.home.open) FM.home.open();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #176 — Ezra: "When you press export and the notes show up, put an option in that menu to tick off
@@ -28143,6 +28243,8 @@
      Driven with real pointer events on a clip, with enough rows to overflow, because the whole bug is
      in which branch the move handler takes. */
   test('a vertical swipe that starts ON a clip scrolls the timeline', { item: 'tl-vswipe' }, async function () {
+    /* isolation (20 Oct): it left the selection cleared — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     const savedScene = FM.scene, savedTime = FM.time;
@@ -28199,6 +28301,7 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await sleep(60);
     }
+    } finally { _isoK.put(); }
   });
 
   /* #179 — Ezra: "When you finish adding a vector drawing it does this and you have to swipe down",
@@ -43844,6 +43947,8 @@
    * So these measure the painted geometry (getBBox for the glyph) against the button's centre. */
 
   test('the effects header x and search glyphs are centred in their circles', { item: 'fxb-head' }, async function () {
+    /* isolation (20 Oct): it left its layer selected — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const frame = () => new Promise(r => setTimeout(r, 100));
     const layers0 = FM.scene.layers.slice();
     try {
@@ -43878,9 +43983,12 @@
       if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
     }
+    } finally { _isoK.put(); }
   });
 
   test('the x reads red and the search reads blue', { item: 'fxb-head' }, async function () {
+    /* isolation (20 Oct): it left its layer selected — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const frame = () => new Promise(r => setTimeout(r, 100));
     const layers0 = FM.scene.layers.slice();
     function rgb(s) { const m = String(s).match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/); return m ? [+m[1], +m[2], +m[3]] : null; }
@@ -43901,6 +44009,7 @@
       if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
     }
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 208: the add sheet's wasted band ----------------
@@ -44079,6 +44188,8 @@
    * drift apart — and the box must come BACK, which is the half that is easy to forget. */
 
   test('Move & Transform hides the outline and shows the anchor instead', { item: 'canvas-owner' }, async function () {
+    /* isolation (20 Oct): it left the selection cleared — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const frame = () => new Promise(r => setTimeout(r, 90));
     const layers0 = FM.scene.layers.slice();
     try {
@@ -44103,6 +44214,7 @@
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
       FM.inspector.openCategory('home');
     }
+    } finally { _isoK.put(); }
   });
 
   test('the anchor follows the layer through rotation and scale', { item: 'canvas-owner' }, async function () {
@@ -44152,6 +44264,8 @@
   }
 
   test('sharpening is dosed by how far the clip is actually stretched', { item: 'improve-quality' }, function () {
+    /* isolation (20 Oct): it left its two clips' media records (iqLayer) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.improveQuality) throw new Error('FM.improveQuality is not exported');
     const P = FM.scene.project;
     const w0 = P.width, h0 = P.height;
@@ -44176,9 +44290,12 @@
       P.width = w0; P.height = h0;
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
     }
+    } finally { _isoK.put(); }
   });
 
   test('pressing it twice removes the sharpening rather than stacking a second', { item: 'improve-quality' }, function () {
+    /* isolation (20 Oct): it left its two clips' media records (iqLayer) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const layers0 = FM.scene.layers.slice();
     try {
       const L = iqLayer(270, 480);
@@ -44201,9 +44318,12 @@
     } finally {
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
     }
+    } finally { _isoK.put(); }
   });
 
   test('the clip menu names it for what it does, not improve-quality', { item: 'improve-quality' }, function () {
+    /* isolation (20 Oct): it left its clip's media record (iqLayer) and its clip selected behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* The label is the first place to be honest. "Improve quality" invites exactly the expectation a
        browser cannot meet — it cannot invent detail — and a button that implies it can reads as
        broken the first time it fails to rescue a genuinely soft clip. */
@@ -44226,6 +44346,7 @@
     } finally {
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
     }
+    } finally { _isoK.put(); }
   });
 
   test('the perf verdict recognises a stutter the median cannot see', { item: 'perf-verdict' }, function () {
@@ -44270,6 +44391,8 @@
   });
 
   test('the phone bin is red, and it is the SAME red the PC uses', { item: 'bin-red' }, async function () {
+    /* isolation (20 Oct): it left the selection cleared — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* queue 259. "Make the trash icon red." The PC transport row has done this since v7.79, so this
        is the phone catching up. The second assertion is the one that stops a slow drift: two reds for
        one action across two layouts becomes a "why are these different" message later. */
@@ -44354,6 +44477,7 @@
         if (FM.refreshAll) FM.refreshAll();
       }
     }, 380);
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 257 + 258: correcting v8.20's add-menu colour ----------------
@@ -45274,6 +45398,8 @@
    * failure this is here to catch. */
 
   test('every reachable keyframe ◆ actually animates its property (queue 265)', { item: 'kf-rails' }, function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time;
     try {
       FM.time = 0;
@@ -45312,6 +45438,7 @@
       S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
       try { FM.inspector.openCategory('home'); } catch (e) {}
     }
+    } finally { _isoK.put(); }
   });
 
   /* ------- unnumbered: six effects' option buttons run off a phone, last options untappable -------
@@ -45377,6 +45504,8 @@
    * stack. The safety half is tested first, because breaking it is far worse than the leak. */
 
   test('an undone delete still has its media — freeing must never beat undo', { item: 'media-gc' }, function () {
+    /* isolation (20 Oct): it left a selectedIds entry behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId;
     try {
       const L = FM.makeLayer('image', { x: 270, y: 480 });
@@ -45390,6 +45519,7 @@
       if (!FM.media.get(L.id)) throw new Error('the layer came back but its media did not — this is the data loss the deferral was protecting against');
       FM.releaseMediaFor(L.id);
     } finally { S.layers = keep; S.selectedId = keepSel; }
+    } finally { _isoK.put(); }
   });
 
   test('a clip no undo or redo can reach is released (media leak)', { item: 'media-gc' }, function () {
@@ -45623,6 +45753,8 @@
    * one static rect, persisted, with no warning and no way back through the UI. */
 
   test('Free crop keeps a keyframed crop animation', { item: 'crop-kf' }, function () {
+    /* isolation (20 Oct): it left a media record and a selection behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time;
     const wasActive = FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive();
     try {
@@ -45652,9 +45784,12 @@
       try { if (FM.cropTool.isActive() && !wasActive) FM.cropTool.stop(); } catch (e) {}
       S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
     }
+    } finally { _isoK.put(); }
   });
 
   test('Free crop on a plain crop still writes plain numbers', { item: 'crop-kf' }, function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* The other half: the fix must not turn every ordinary crop into an animated one. FM.setProp
        plain-assigns a static container, and that is the common path by far. */
     const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time;
@@ -45676,6 +45811,7 @@
       try { if (FM.cropTool.isActive() && !wasActive) FM.cropTool.stop(); } catch (e) {}
       S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
     }
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 211: layer thumbnails spill out of the track head ----------------
@@ -45892,12 +46028,19 @@
     }
   });
 
-  test('home\'s own paint overhangs its box, so the shake cannot uncover the editor (queue 250)', { item: 'slam' }, function () {
+  test('home\'s own paint overhangs its box, so the shake cannot uncover the editor (queue 250)', { item: 'slam' }, async function () {
     /* The overscan was doing a real job — without something covering the edges the shake shows the
        editor through (queue 144). The paint field overhangs now instead, so this asserts the guarantee
        the scale used to provide. Without it, removing the scale would simply reopen the older bug. */
+    /* isolation (20 Oct, the v17.82 checks): MEASURED ON HOME OPEN, where the shake plays. The inset is -8% of a box, and on a
+       hidden Home the pseudo-element has none, so getComputedStyle hands back the percentage itself and it read as -8px. Alone
+       it met Home open at boot; in the full run it passed on a Home an earlier leaker left open, and went red once the
+       isolation pass stopped that. It opens Home itself now; isoKeep shuts it again if it found it shut. */
+    const _isoK = isoKeep(); try {
     const root = document.getElementById('home-screen');
     if (!root) throw new Error('no #home-screen');
+    if (FM.home && FM.home.isOpen && !FM.home.isOpen() && FM.home.open) { FM.home.open(); await sleep(150); }
+    if (getComputedStyle(root).display === 'none') throw new Error('setup: Home is not on screen, so its paint layer has no box and its inset reads as a percentage, not as pixels');
     const cs = getComputedStyle(root, '::before');
     const parts = (cs.inset && cs.inset !== 'auto' ? cs.inset : [cs.top, cs.right, cs.bottom, cs.left].join(' ')).split(/\s+/);
     const nums = parts.map(parseFloat).filter(n => isFinite(n));
@@ -45905,6 +46048,7 @@
     const worst = Math.max(...nums);
     if (worst > -18)
       throw new Error('home\'s paint layer only reaches ' + worst + 'px past its box — the shake travels ~13px plus ~5px of corner swing, so the edges would show the editor');
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 295: the head wasted a dead strip on the far left ----------------
@@ -46625,6 +46769,8 @@
   });
 
   test('Shift+Home / Shift+End fling the Add marker to the top and bottom (queue 294 clause 12)', { item: 'add-row' }, async function () {
+    /* isolation (20 Oct): it left Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* "we could add shortcuts on the keyboard to quickly push it up to the top… push it up to the bottom
      * so that you don't have to go and find it and then drag it up or down."
      * The pairing is the point: Home/End already jump the PLAYHEAD to the start/end, so the shifted pair
@@ -46733,6 +46879,7 @@
       FM.addAt = at0; FM.groupContext = gc0; FM.setTime(t0); FM.selectLayer(null); FM.refreshAll();
       await sleep(150);
     }
+    } finally { _isoK.put(); }
   });
 
   test('on PC the Add marker is a thin line: click opens the menu, drag moves it (queue 294)', { item: 'add-row' }, async function () {
@@ -58228,6 +58375,8 @@
   });
 
   test('the volume control is a scrub ruler that reaches 1000%', { item: 'vol-boost' }, async function () {
+    /* isolation (20 Oct): it left its clip selected — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const frame = () => new Promise(r => setTimeout(r, 90));
     const layers0 = FM.scene.layers.slice();
     try {
@@ -58264,9 +58413,12 @@
     } finally {
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
     }
+    } finally { _isoK.put(); }
   });
 
   test('keyboard can edit numeric Volume and Position values and effect inputs have names (batch2 1b.4)', { item: '1016', budgetMs: 60000 }, async function () {
+    /* isolation (20 Oct): it left the selection cleared — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const layers0 = FM.scene.layers.slice(), selected0 = FM.scene.selectedId;
     try {
@@ -58317,6 +58469,7 @@
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
       FM.selectLayer(selected0 || null); FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 184: speed to the playhead ----------------
@@ -58340,6 +58493,8 @@
   }
 
   test('speed-to-playhead lands the clip END exactly on the playhead', { item: 'speed-solve' }, async function () {
+    /* isolation (20 Oct): it left its clip selected (spdPanel) — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
     var layers0 = FM.scene.layers.slice(), t0 = FM.time;
     try {
@@ -58356,9 +58511,12 @@
       if (Math.abs(L.speed - 2) > 0.001) throw new Error('speed solved to ' + L.speed + ', expected 2');
       if (Math.abs(L.duration * L.speed - 4) > 0.001) throw new Error('the source span changed — re-timing must not add or drop footage');
     } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); FM.time = t0; }
+    } finally { _isoK.put(); }
   });
 
   test('speed-to-playhead lands the clip START exactly, holding the end', { item: 'speed-solve' }, async function () {
+    /* isolation (20 Oct): it left its clip selected (spdPanel) — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
     var layers0 = FM.scene.layers.slice(), t0 = FM.time;
     try {
@@ -58392,9 +58550,12 @@
       var cEnd = C.start + C.duration;
       if (Math.abs(cEnd - 5) > 0.002) throw new Error('the end moved to ' + cEnd.toFixed(3) + 's — with the duration clamped, the held edge must STILL land on 5s');
     } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); FM.time = t0; }
+    } finally { _isoK.put(); }
   });
 
   test('speed-to-playhead refuses the cases where there is no answer', { item: 'speed-solve' }, async function () {
+    /* isolation (20 Oct): it left its clip selected (spdPanel) — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
     var layers0 = FM.scene.layers.slice(), t0 = FM.time;
     try {
@@ -58422,9 +58583,12 @@
       FM.time = 3; if (rb[1]) rb[1].click(); await frame();
       if (JSON.stringify(R.speed) !== before) throw new Error('solving a speed destroyed an existing speed ramp');
     } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); FM.time = t0; }
+    } finally { _isoK.put(); }
   });
 
   test('the speed range reaches the 1000x he asked for', { item: 'speed-solve' }, async function () {
+    /* isolation (20 Oct): it left its clip selected (spdPanel) — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 80); }); };
     var layers0 = FM.scene.layers.slice();
     try {
@@ -58450,6 +58614,7 @@
       await frame();
       if (!(L.speed <= 0.011)) throw new Error('0.01x was refused — speed came out as ' + L.speed);
     } finally { FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); }); }
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 183: "save project as preset" ----------------
@@ -58625,6 +58790,8 @@
   });
 
   test('effect walker: copying a keyframe from inside a filter pastes back into the same slot', { item: 'fx-walker' }, function () {
+    /* isolation (20 Oct): it left the selection cleared — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10 });
     L.effects = [FM.fxRegistry.makeInstance('sepia'), fxContainer()];
     var p = L.effects[1].effects[0].params.amount;
@@ -58649,6 +58816,7 @@
       if (!FM.isAnimated(landed)) throw new Error('pasting an effect.1.0.amount keyframe did not reach the child inside the filter');
       if (FM.isAnimated(T2.effects[0].params.amount)) throw new Error('the paste landed on the TOP-LEVEL effect instead of the child — the exact silent mis-address this step exists to stop');
     } finally { FM.scene.layers = FM.scene.layers.filter(function (x) { return x !== L; }); FM.selectLayer(null); }
+    } finally { _isoK.put(); }
   });
 
   test('effect walker: a save/load keeps a filter and its children, and refuses a filter inside one', { item: 'fx-walker' }, function () {
@@ -59324,6 +59492,8 @@
   });
 
   test('play: the FIRST clip added moves the playhead to it, so play starts at its beginning', { item: 'transport' }, function () {
+    /* isolation (20 Oct): it left its clip's media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var keepLayers = FM.scene.layers.slice(), keepDur = FM.scene.project.duration, keepTime = FM.time;
     try {
       FM.scene.layers.length = 0;
@@ -59342,6 +59512,7 @@
       FM.selectLayer(null);
       if (FM.refreshAll) FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- #47 (part): a render is not thrown away by a stray gesture ----------------
@@ -60298,6 +60469,8 @@
    * So the test below is not about auto-scrolling. It is about the thing that cost three attempts:
    * a timeline gesture must not be able to hold the preview in motion mode. */
   test('timeline: an auto-scrolling clip drag does not hold the preview in low-resolution motion mode', { item: 'clip-edge-scroll-quiet' }, async function () {
+    /* isolation (20 Oct): it left its clip's media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.timeline || !FM.timeline._edgeScrollTick) throw new Error('FM.timeline._edgeScrollTick is missing — the auto-scroll has no testable seam');
     var keep = FM.scene.layers.slice(), keepDur = FM.scene.project.duration;
     var real = FM.requestRender, calls = 0;
@@ -60327,6 +60500,7 @@
       FM.selectLayer(null);
       if (FM.refreshAll) FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- #47 (second half): a render survives an actual crash ----------------
@@ -63342,6 +63516,8 @@
   });
 
   test('simple P2.4b · S7 FM.remapCommentPins: an anchored pin follows its layer to the new id on import and on project duplicate; a pin whose layer did not travel is baked to where it sat; a plain pin is not touched', { item: '980', budgetMs: 90000 }, async function () {
+    /* isolation (20 Oct): FM.storage.applyScene put the test's document (its project, two layers, a pin list) INTO the open project and nothing put it back — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     smNeedP2();
     if (!FM.remapCommentPins) throw new Error('FM.remapCommentPins does not exist');
     const mkDoc = () => {
@@ -63369,6 +63545,7 @@
         if (!k1 || ids.indexOf(k1.lid) < 0 || k1.lid === d.a.id) throw new Error('in a duplicated project the anchored pin points at ' + (k1 && k1.lid) + ', not at one of its layers');
         if (doc.project.comments.filter(c => c.id === 'k2')[0].lid !== d.a.id) throw new Error('a plain pin was remapped');
       } finally { try { await FM.projects.remove(nid); } catch (e) {} } }
+    } finally { _isoK.put(); }
   });
 
   test('simple P2.4b · S7 an identity camera (scale 1, rotation 0, x and y at the project centre) draws exactly what no camera draws, depth layers and a fractional position included (the rest-pose hold of §3.10 rule 3g rests on this)', { item: '980', budgetMs: 60000 }, function () {
@@ -63390,6 +63567,8 @@
   });
 
   test('simple P2.4b · S7 the camera’s hull after Do it anyway holds its REST pose over every stretch the old window did not cover, so those frames still render exactly as camera-less; a camera with a dolly refuses instead', { item: '980', budgetMs: 120000 }, async function () {
+    /* isolation (20 Oct): it left the selection cleared — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     smNeedP2();
     for (const dolly of [false, true]) {
       await smP2((W, H) => smThree(W, H, [(() => { const c = smCam([[2, 1], [9, 2]], { start: 2, duration: 8 }); c.transform.x = 200; c.transform.rotation = 5; if (dolly) c.transform.z = 120; return c; })(), smT('Over', 0, 12, W, H, { sm: { stay: true } })]), async function (v) {
@@ -63416,6 +63595,7 @@
         if (v.doc() !== d0) throw new Error('Undo did not restore the document');
       });
     }
+    } finally { _isoK.put(); }
   });
 
   test('simple P2.4b · S7 LOCK the key sanitiser keeps the boundary marks Simple writes (sb, split) on transform and volume keys, so a reload, an Undo or a host fix op cannot turn a boundary pair back into authored keys', { item: '980', budgetMs: 20000 }, function () {
@@ -64870,15 +65050,15 @@
      `what` reads "<part> <before> → <after>" for each part that moved. tests/_cdp.py hands it on as "leaks" in its JSON,
      run.html lists it under the results, and ship.sh prints it after each pass (tools/_testfloor.sh leaks_report).
      The parts: the open project's id, Home open or shut, FM.scene still the same object, the layer count and ids, the
-     selection, the quality ladder's tier and latches, the open project's notes, FM.playing, and the media records that
-     belong to no module (pinned ones, the effect thumbnails' cache, are the app's own and are left out).
-     CHEAP AND READ-ONLY: plain reads and three read-only app calls (FM.storage.openProjectId, FM.home.isOpen,
-     FM._perfState), no rendering, no await. NO EXEMPTIONS: a test that changes one of these on purpose for the test after
+     selection, the open project's notes, FM.playing, and the media records that belong to no module (pinned ones, the
+     effect thumbnails' cache, are the app's own and are left out). Not the quality ladder: it moves itself (see leakPrint).
+     CHEAP AND READ-ONLY: plain reads and two read-only app calls (FM.storage.openProjectId, FM.home.isOpen), no rendering,
+     no await. NO EXEMPTIONS: a test that changes one of these on purpose for the test after
      it is exactly the coupling this exists to remove — it should put it back, and the next test should set it up.
      ONE THING IT CANNOT DO: a cleanup a test did not await (a remove() or a project open still running when it returned)
      lands during the NEXT test, and is charged to that one. A test named for a change it never makes is the clue. */
   function leakPrint() {
-    var f = { project: '?', home: '?', scene: null, layers: '?', ids: '', sel: '?', quality: '?', notes: '?', playing: '?', media: '?' };
+    var f = { project: '?', home: '?', scene: null, layers: '?', ids: '', sel: '?', notes: '?', playing: '?', media: '?' };
     try { f.project = (FM.storage && FM.storage.openProjectId) ? String(FM.storage.openProjectId() || 'none') : '?'; } catch (e) {}
     try { f.home = (FM.home && FM.home.isOpen) ? (FM.home.isOpen() ? 'open' : 'shut') : '?'; } catch (e) {}
     try {
@@ -64890,10 +65070,8 @@
       f.sel = ((S && S.selectedId) || 'none') + ' (' + n + ')';
       f.notes = String(((S && S.project && S.project.notes) || []).length);
     } catch (e) {}
-    try {
-      var st = FM._perfState ? FM._perfState() : null;
-      if (st) f.quality = 'tier ' + st.tier + (st.locked ? ' latched' : '') + (st.climbLockAt ? ' climb-latched' : '');
-    } catch (e) {}
+    /* The QUALITY LADDER is left out, its tier (62b39595) and now its latches too: the ladder sets all three itself during any
+       playback, so its latches flipped in 86 of the v17.82 full run's 91 leak lines without any test leaving anything behind. */
     try { f.playing = String(!!FM.playing); } catch (e) {}
     try {
       var all = (FM.media && FM.media.all) ? FM.media.all() : null, k = 0;
@@ -64909,7 +65087,6 @@
     if (a.layers !== b.layers) out.push('layers ' + a.layers + ' → ' + b.layers);
     else if (a.ids !== b.ids) out.push('layers ' + a.layers + ', but not the same ones');
     if (a.sel !== b.sel) out.push('selection ' + a.sel + ' → ' + b.sel);
-    if (a.quality !== b.quality) out.push('quality ladder ' + a.quality + ' → ' + b.quality);
     if (a.notes !== b.notes) out.push('project notes ' + a.notes + ' → ' + b.notes);
     if (a.playing !== b.playing) out.push('FM.playing ' + a.playing + ' → ' + b.playing);
     if (a.media !== b.media) out.push('media records ' + a.media + ' → ' + b.media);
@@ -65550,6 +65727,8 @@
   });
 
   test('importing a phone photo into an empty project goes through the cap', { item: 'proj-cap' }, function () {
+    /* isolation (20 Oct): it left its photo's media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* The unit test above proves the arithmetic; this proves addMediaLayer actually calls it. Without
        this, moving the cap behind a helper nobody invokes would leave every test green. */
     var layers0 = FM.scene.layers.slice(), P = FM.scene.project;
@@ -65569,6 +65748,7 @@
       if (FM.resizeCanvas) FM.resizeCanvas();
       FM.selectLayer(null); FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   test('a panorama import keeps its canvas and centred photo when reopened (batch2 1b.2)', { item: '1014', budgetMs: 30000 }, async function () {
@@ -65979,6 +66159,8 @@
   }
 
   test('tracking yields to the browser instead of freezing the app for its whole run', { item: 'tracker-yield' }, async function () {
+    /* isolation (20 Oct): it left its clip's media record (trackerFixture) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var layers0 = FM.scene.layers.slice();
     var realBuild = FM.buildFrameCache;
     try {
@@ -66014,9 +66196,12 @@
       FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
       FM.selectLayer(null); FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   test('a track whose clip is deleted mid-run reports failure instead of claiming success', { item: 'tracker-yield' }, async function () {
+    /* isolation (20 Oct): it left its clip's media record (trackerFixture) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var layers0 = FM.scene.layers.slice();
     var realBuild = FM.buildFrameCache;
     try {
@@ -66046,9 +66231,12 @@
       FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
       FM.selectLayer(null); FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   test('a clip that vanishes during the DECODE is caught at the write, not just mid-walk', { item: 'tracker-yield' }, async function () {
+    /* isolation (20 Oct): it left its clip's media record (trackerFixture) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* WHY A SEPARATE TEST, AND WHY A SHORT CLIP. There are two guards and only one of them is reachable
        on a long clip: the walk bails at its first yield, so execution never gets near the write and a
        mutation deleting the write-site check survived every test — the assertion was dead.
@@ -66077,6 +66265,7 @@
       FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
       FM.selectLayer(null); FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   /* An audio-drive envelope costs a full RMS pass over the clip's entire decoded audio — about 8 million
@@ -66092,6 +66281,8 @@
   }
 
   test('dragging an audio-drive source does not fire a full-clip envelope pass per frame', { item: 'env-cache' }, async function () {
+    /* isolation (20 Oct): it left its song's media record (envFixture) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var real = FM.audioEnvelope;
     var layers0 = FM.scene.layers.slice();
     try {
@@ -66127,9 +66318,12 @@
       FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
       FM.selectLayer(null);
     }
+    } finally { _isoK.put(); }
   });
 
   test('the envelope cache is bounded, so a long gesture cannot strand megabytes', { item: 'env-cache' }, async function () {
+    /* isolation (20 Oct): it left its song's media record (envFixture) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var real = FM.audioEnvelope;
     var layers0 = FM.scene.layers.slice();
     try {
@@ -66154,6 +66348,7 @@
       FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
       FM.selectLayer(null);
     }
+    } finally { _isoK.put(); }
   });
 
   /* Cancel during "Decoding frames… N%" was a dead button. The decode is up to 900 sequential
@@ -66256,6 +66451,8 @@
      pictures for the rest of the session with nothing to say so.
      This measures the thing that actually matters: WHICH FRAME ENDED UP IN THE CACHE. */
   test('a frame-cache build captures the grid’s frames, not whatever the preview is seeking to', { item: 'seek-busy' }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var realBitmap = window.createImageBitmap;
     var layers0 = FM.scene.layers.slice(), t0 = FM.time, playing0 = FM.playing;
     try {
@@ -66315,6 +66512,7 @@
       FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
       FM.selectLayer(null);
     }
+    } finally { _isoK.put(); }
   });
 
   /* "Sample clip" was dead on Safari/iOS — which is the device Ezra actually uses. The container ladder
@@ -66401,6 +66599,8 @@
      then the element was playing rather than paused. One rule, written in one place and missing from
      the other. */
   test('pressing Play inside a clip’s overhang does not restart the source from the beginning', { item: 'src-end' }, function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.pastSourceEnd) throw new Error('FM.pastSourceEnd is not exposed — the rule still lives at its call sites');
     var layers0 = FM.scene.layers.slice(), t0 = FM.time, playing0 = FM.playing;
     var dur0 = FM.scene.project.duration;
@@ -66443,6 +66643,7 @@
       FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
       FM.selectLayer(null);
     }
+    } finally { _isoK.put(); }
   });
 
   /* The crop easing button set a flag the view could only honour once a crop existed — and this panel
@@ -66450,6 +66651,8 @@
      flag stayed armed, and the NEXT refresh after a crop appeared swapped the panel out: you pressed
      the keyframe diamond and the crop editor you were working in vanished into an easing graph. */
   test('the crop easing button cannot latch and hijack a later refresh', { item: 'crop-ease' }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 110); }); };
     var layers0 = FM.scene.layers.slice(), ce0 = FM._cropEasing;
     try {
@@ -66498,6 +66701,7 @@
       FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
       FM.selectLayer(null); FM.inspector.refresh();
     }
+    } finally { _isoK.put(); }
   });
 
   /* "Remove vocals" awaits a decode, an offline render and a file load before it creates the twin that
@@ -66507,6 +66711,8 @@
      elements at once. And the second tap was the reasonable thing to do, because the only feedback
      arrived after the decode. */
   test('a second tap during a vocal removal does not make a second instrumental', { item: 'karaoke-busy' }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var layers0 = FM.scene.layers.slice();
     var realDecode = FM.decodeAudio, realLoad = FM.loadVideoFile, realToast = FM.toast;
     try {
@@ -66550,6 +66756,7 @@
       FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
       FM.selectLayer(null);
     }
+    } finally { _isoK.put(); }
   });
 
   /* queue 834 clause 17: Remove vocals (and Save audio as WAV) left the whole decoded song — float PCM, ~90MB for
@@ -66557,6 +66764,8 @@
      Held both ways: a one-off decode is NOT kept, and a buffer something else already cached IS reused (export,
      reverse playback and audio-react rely on that slot). */
   test('834: removing vocals does not keep the whole decoded song in memory, and reuses one that is already there', { item: '834' }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var layers0 = FM.scene.layers.slice();
     var realDecode = FM.decodeAudio, realLoad = FM.loadVideoFile, realToast = FM.toast;
     try {
@@ -66585,6 +66794,7 @@
       FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
       FM.selectLayer(null);
     }
+    } finally { _isoK.put(); }
   });
 
   /* Saving an effect as a preset rebuilt each animated parameter as just its keyframe list — dropping
@@ -67258,6 +67468,8 @@
      THIS TEST IS OVER EVERY CREATOR, not the one that was wrong. A per-creator assertion is what let
      one of them sit unrouted while a comment claimed otherwise. */
   test('every way of adding a layer honours the Add-layer marker', { item: 'add-at' }, function () {
+    /* isolation (20 Oct): it left two media records behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     var layers0 = FM.scene.layers.slice(), at0 = FM.addAt, t0 = FM.time;
     var dur0 = FM.scene.project.duration;
     try {
@@ -67295,6 +67507,7 @@
       FM.addAt = at0; FM.time = t0; FM.scene.project.duration = dur0;
       FM.selectLayer(null); FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   /* "The media and audio screens open taller than the others… instead of three rows just two"
@@ -68860,6 +69073,101 @@
     }
   });
 
+  /* ISOLATION (20 Oct, second pass): WHAT A TEST FOUND, PUT BACK IN ITS OWN FINALLY.
+     The first full run with the leak check (20 Oct, 1280) listed about 150 tests that handed the next test a changed app,
+     and nearly all of them moved the same few things: media records they registered and never removed (a fixture under a
+     layer id the restored scene does not have), FM.scene swapped for the test's own scene() and never put back, the
+     selection, or Home left open or shut. isoKeep() is taken at the top of such a test and its put() is called in the
+     test's own finally, outermost, after the test's own cleanup. It puts back, as found, while the project it found is
+     still open (a test that left ANOTHER project open is a different leak, named on its own, and is not papered over):
+       · FM.scene, the object itself. The app never replaces it (a project open loads INTO it), so a test that swapped in
+         its own scene() and returned left every later open, edit and render working on the test's object;
+       · the layers (the same array, the same layer objects) and with them the project object and its length, then the
+         selection and select mode. Compared the way the leak check compares them (ids, not objects), so a test that
+         reopened its project and got equal copies back is left alone;
+       · the history, reset over the restored scene when the test committed, so a later undo cannot bring its scene back
+         (as isoOwnLayer does), and the restored scene flushed, since a 600 ms autosave may have saved the test's;
+       · FM.playing (paused again if it was not playing), and Home open or shut;
+       · the media records it added: isoMediaPut, below.
+     It never throws: a cleanup that throws would replace the test's own verdict. */
+  function isoKeep() {
+    var k = { S: FM.scene, media: isoMediaSnap(), pid: null, layers: null, copy: null, project: null, dur: undefined,
+              sel: null, ids: [], mode: FM.selectMode, seq: null, home: null, playing: !!FM.playing };
+    try {
+      var S = k.S;
+      k.pid = (FM.storage && FM.storage.openProjectId) ? FM.storage.openProjectId() : null;
+      if (S) {
+        k.layers = S.layers || null; k.copy = (S.layers || []).slice(); k.project = S.project;
+        k.dur = S.project ? S.project.duration : undefined;
+        k.sel = S.selectedId; k.ids = (S.selectedIds || []).slice();
+      }
+      k.seq = (FM.history && FM.history._commitSeq) ? FM.history._commitSeq() : null;
+      k.home = (FM.home && FM.home.isOpen) ? !!FM.home.isOpen() : null;
+    } catch (e) {}
+    k.put = function () { isoKeepPut(k); };
+    return k;
+  }
+  function isoKeepPut(k) {
+    var S = k.S, moved = false, sized = false, pid;
+    var idsOf = function (ls) { return (ls || []).map(function (l) { return l && l.id; }).join(','); };
+    try {
+      pid = (FM.storage && FM.storage.openProjectId) ? FM.storage.openProjectId() : null;
+      /* only while the project it found is still open: a project opened since loaded INTO whatever FM.scene was, and putting
+         the old object back under it would let the next autosave write one project's scene into the other */
+      if (S && pid === k.pid && FM.scene !== S) { FM.scene = S; moved = true; sized = true; }
+      if (S && k.layers && pid === k.pid) {
+        if (idsOf(S.layers) !== idsOf(k.copy)) {
+          k.layers.length = 0; k.copy.forEach(function (l) { k.layers.push(l); });
+          S.layers = k.layers;
+          if (k.project && S.project !== k.project) { S.project = k.project; sized = true; }
+          moved = true;
+        }
+        var ids = S.selectedIds || [];
+        if (S.selectedId !== k.sel || ids.join(',') !== k.ids.join(',')) { S.selectedId = k.sel; S.selectedIds = k.ids.slice(); moved = true; }
+        if (FM.selectMode !== k.mode) FM.selectMode = k.mode;
+      }
+    } catch (e) {}
+    try { if (!k.playing && FM.playing && FM.pause) FM.pause(); } catch (e) {}
+    try { if (k.seq != null && FM.history._commitSeq() !== k.seq) { FM.history.reset(); moved = true; } } catch (e) {}
+    if (moved) {
+      /* a scene or project object put back may be another size than the one the test left (FM.storage.applyScene sizes the
+         canvas to the document it applies; refreshAll does not size it) */
+      try { if (sized && FM.resizeCanvas) FM.resizeCanvas(); } catch (e) {}
+      try { FM.refreshAll(); } catch (e) {}
+      /* after refreshAll, whose autoFitDuration would otherwise re-fit the length to the scene it arrived with */
+      try { if (S && k.project && S.project === k.project && k.dur !== undefined && S.project.duration !== k.dur) S.project.duration = k.dur; } catch (e) {}
+      try { if (FM.storage && FM.storage.flushSync && pid === k.pid) FM.storage.flushSync(); } catch (e) {}
+    }
+    isoMediaPut(k.media);
+    try {
+      if (k.home != null && FM.home && FM.home.isOpen && FM.home.isOpen() !== k.home) {
+        if (k.home) FM.home.open(); else FM.home.close();
+      }
+    } catch (e) {}
+  }
+  /* …AND THE MEDIA RECORDS. isoMediaSnap() notes which ids FM.media holds; isoMediaPut(snap) removes, through FM.media.remove
+     (which revokes the URL, detaches the element, and leaves a record still stored under another id alone), every record
+     added since that is not pinned (the app's own, such as the effect thumbnails') and that no layer of the open scene uses:
+     a fixture registered under its layer's id after the layer was taken out again. A record the scene still uses is left
+     (a layer left behind is its own leak, and its picture must not go blank under it). A helper that builds such fixtures
+     and puts the scene back in its own finally calls the pair there, once, instead of every test that uses it. */
+  function isoMediaSnap() {
+    var m = {};
+    try { Object.keys(FM.media.all()).forEach(function (id) { m[id] = true; }); } catch (e) {}
+    return m;
+  }
+  function isoMediaPut(m0) {
+    try {
+      var all = FM.media.all(), live = {};
+      ((FM.scene && FM.scene.layers) || []).forEach(function (l) { if (l && l.id) live[l.id] = true; });
+      Object.keys(all).forEach(function (id) {
+        if ((m0 && m0[id]) || live[id]) return;
+        if (FM.media.isPinned && FM.media.isPinned(id)) return;
+        try { FM.media.remove(id); } catch (e) {}
+      });
+    } catch (e) {}
+  }
+
   /* ISOLATION (20 Oct): A LAYER OF ITS OWN, IN THE EDITOR, PUT BACK AS FOUND.
      The queue 330-339 tests below took FM.scene.layers[0] and the editor as earlier tests left them: the 20x20 shape
      'undo / redo grey out when there is nothing behind or ahead' left (autosaved into the open project), whichever
@@ -69893,6 +70201,15 @@
    * Both assert the ORDER, not a specific number, so re-tuning a z-index later cannot silently
    * reintroduce either while the test still passes. */
   test('the benchmark line stops at the lanes, and the loading pill sits under the panels (queue 348/393)', { item: 'stack-order' }, async function () {
+    /* isolation (20 Oct, the v17.82 checks): the track head it compares is a layer's row, and it used to read whatever rows an
+       earlier test left in the scene; alone, or after the isolation pass, the open project is empty and there is no row. It
+       measures beside a layer of its own (isoOwnLayer, which also shuts Home) and puts the scene and Home back as found.
+       THE PILL, the same way: js/loading.js makes #loading-dot on the first FM.loadingDot.check(), which the app asks whenever
+       something is added, so alone nothing had made it yet. It is asked here (nothing is loading, so the pill stays off), and
+       a pill this test made is taken away again (loading.js makes a new one when it is next asked). */
+    var own = isoOwnLayer(), dotMade = false;
+    try {
+    if (!document.getElementById('loading-dot') && FM.loadingDot && FM.loadingDot.check) { FM.loadingDot.check(); dotMade = !!document.getElementById('loading-dot'); }
     var z = function (sel, pseudo) {
       var el2 = document.querySelector(sel);
       if (!el2) return null;
@@ -69920,6 +70237,10 @@
         throw new Error('the loading pill (' + pill + ') is not below the inspector sheet (' + panel + ') — it will cover the controls');
       }
     });
+    } finally {
+      if (dotMade) { var dot = document.getElementById('loading-dot'); if (dot && !dot.classList.contains('on')) dot.remove(); }
+      own.put();
+    }
   });
 
   test('the timeline sizes its scroll range from itself, not from the window', { item: 'tl-width-self' }, async function () {
@@ -70472,6 +70793,11 @@
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const made = [];
     const layers0 = FM.scene.layers.slice();
+    /* isolation (20 Oct): useAsNew OPENS the forked project, and the finally used to write layers0 into it and stay there —
+       every later test ran on that fork. It now goes back to the project it found (as 915.3 does), puts its layers back,
+       saves them over the probe the switch saved, and only then removes the fork (removing the OPEN one opens another). */
+    const orig = FM.projects.currentId();
+    let pid = null;
     try {
       FM.scene.layers.length = 0;
       const L = FM.makeLayer('shape', { name: 'TplProbe', shape: 'rect', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
@@ -70483,7 +70809,7 @@
       if (!before || (before.layers || []).length !== 1) throw new Error('the probe template did not capture the scene');
 
       // …open it: this forks a project, which is clause 1
-      const pid = await FM.templates.useAsNew(t0.id);
+      pid = await FM.templates.useAsNew(t0.id);
       if (!pid) throw new Error('useAsNew did not produce a project — a template cannot be opened at all');
       await sleep(120);
       const entry = FM.projects.list().find(x => x.id === pid);
@@ -70508,9 +70834,15 @@
       if (p2 && p2.fromTemplate !== now.id) throw new Error('the project still points at the OLD template id, so its Update button would vanish after one use');
     } finally {
       for (const id of made) { try { await FM.templates.remove(id); } catch (e) {} }
-      FM.scene.layers = layers0;
-      if (FM.refreshAll) FM.refreshAll();
-      if (FM.timeline) FM.timeline.rebuild();
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
+      if (!orig || FM.projects.currentId() === orig) {
+        FM.scene.layers = layers0;
+        try { if (FM.history && FM.history.reset) FM.history.reset(); } catch (e) {}
+        if (FM.refreshAll) FM.refreshAll();
+        if (FM.timeline) FM.timeline.rebuild();
+        try { if (FM.storage && FM.storage.flushSync) FM.storage.flushSync(); } catch (e) {}
+      }
+      if (pid && pid !== orig) { try { if (FM.projects.list().some(p => p.id === pid)) await FM.projects.remove(pid); } catch (e) {} }
     }
   });
 
@@ -71182,6 +71514,8 @@
    * nothing on screen saying why. The line below the decode has always handled a decode that RESOLVES
    * to nothing, which is why this looked covered and was not. */
   test('export: one clip whose audio will not decode no longer silences the whole soundtrack (queue 47)', { item: '47' }, async function () {
+    /* isolation (20 Oct): it left four media records behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.exporter || !FM.exporter.buildAudioMix) throw new Error('FM.exporter.buildAudioMix is not reachable');
     const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration, dec0 = FM.decodeAudio;
     const peakOf = m => {
@@ -71237,6 +71571,7 @@
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   /* The other half of the same tick (queue 47). Rescuing the mix from ONE bad clip does nothing for the
@@ -71247,6 +71582,8 @@
    * Driven through a REAL export — 64x64, two frames — because the thing under test is the wiring, and
    * a test of the reporting helper alone would pass with the catch block deleted. */
   test('export: a soundtrack that cannot be built SAYS so instead of shipping a mute file (queue 47)', { item: '47' }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     const P = FM.scene.project;
     const layers0 = FM.scene.layers.slice(), dur0 = P.duration, w0 = P.width, h0 = P.height;
@@ -71288,6 +71625,7 @@
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   /* Queue 47, the next piece of untested ground: a seek that does not land in time.
@@ -71301,6 +71639,8 @@
    * Ezra asked for export to be made SAFER, and safer here does not mean the seek always lands — it
    * means the export stops quietly claiming footage it never rendered. */
   test('export: frames the video could not reach in time are counted, not passed off as real (queue 47)', { item: '47' }, async function () {
+    /* isolation (20 Oct): it left two media records behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     const P = FM.scene.project;
     const layers0 = FM.scene.layers.slice(), dur0 = P.duration, w0 = P.width, h0 = P.height, toast0 = FM.toast;
@@ -71356,6 +71696,7 @@
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   /* Queue 47 — the LONG-render half, and the cap was throwing away the render it had already saved.
@@ -71521,6 +71862,8 @@
   async function q148Run(opts) {
     const o = opts || {};
     const saved = { layers: FM.scene.layers.slice(), dur: FM.scene.project.duration, t: FM.time, playing: FM.playing };
+    /* isolation (20 Oct): the finally also removes the tone's media record (isoMediaPut) — the layer went, the record stayed */
+    const media0 = isoMediaSnap();
     try {
       FM.scene.layers.length = 0;
       const L = FM.makeLayer('video', { name: 'tone', start: 0, duration: 12, trimStart: 0, speed: 1, volume: 1 });
@@ -71545,6 +71888,7 @@
       FM.scene.project.duration = saved.dur; FM.setTime(saved.t);
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
+      isoMediaPut(media0);
     }
   }
 
@@ -71756,6 +72100,8 @@
     const P = FM.scene.project;
     const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height, toast: FM.toast, rep: null };
     try { saved.rep = localStorage.getItem('fm.lastExportReport'); } catch (e) {}
+    /* isolation (20 Oct): the finally also removes the song's media record (isoMediaPut) — the layer went, the record stayed */
+    const media0 = isoMediaSnap();
     const toasts = [];
     try {
       FM.toast = function (m) { toasts.push(String(m)); };
@@ -71783,6 +72129,7 @@
       FM._audioTrackDropped = null;
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
+      isoMediaPut(media0);
     }
   }
   test('AX2 an audio encoder that makes no sound and no error: the export drops the empty track, says so, and the report names it (encode-empty)', { item: 'AX2', budgetMs: 60000 }, async function () {
@@ -71946,6 +72293,8 @@
   });
 
   test('export: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215)', { item: '215' }, async function () {
+    /* isolation (20 Oct): it left its song's media record (q215SilentProbe) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     const P = FM.scene.project;
     const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height };
@@ -71965,6 +72314,7 @@
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   /* #604, SECOND CLAUSE — *"it played good the first time but it was inconsistent and would cut in and
@@ -72003,6 +72353,8 @@
   }
 
   test('#604: overlapping sounds do not clip the exported mix', { item: '604' }, async function () {
+    /* isolation (20 Oct): it left seven media records (mixPeakProbe) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('FM.exporter.buildAudioMix is not reachable');
     const P = FM.scene.project;
     const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height };
@@ -72043,6 +72395,7 @@
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   /* ── queue 916.8: exporting a short range builds only that stretch of each clip's audio ────────────────
@@ -72826,6 +73179,8 @@
    * `volume = 0` — but only when the element is PAUSED, which on a mid-timeline loop-region wrap it is
    * not. So that branch never fires and the envelope is flat 1.0 through the cut. */
   test('#148: a loop wrap fades the sound back in instead of cutting it', { item: '148' }, function () {
+    /* isolation (20 Oct): it left two media records behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (typeof FM._wrapTo !== 'function') throw new Error('FM._wrapTo is not exposed, so the wrap cannot be driven');
     if (typeof FM._declickGain !== 'function') throw new Error('FM._declickGain is not exposed');
     const S = FM.scene, keep = S.layers.slice(), keepT = FM.time;
@@ -72878,6 +73233,7 @@
       FM.time = keepT;
       if (FM.refreshAll) FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   /* ═══ QUEUE 129 — THE DIAGNOSTIC ITSELF HAD NO TEST ══════════════════════════════════════════════
@@ -74058,14 +74414,19 @@
    * So the case that matters here is the MIDDLE one: a pointerup with no click behind it. On the old
    * code that selected nothing at all. */
   test('#648: a tap selects even when no click follows the pointerup', { item: '648' }, async function () {
+    /* isolation (20 Oct): it left Home open — isoKeep puts back what it found, in its own finally */
+    /* …and the project it found (the v17.82 checks): with fewer than two cards it makes two, and FM.projects.create OPENS each, so
+       every later test ran in 'tap B' (the leak report's open project line). It goes back to the project it found BEFORE removing
+       the two it made (removing the open one would open another), as 869 does, and only then lets isoKeep put back the rest. */
+    const _isoK = isoKeep(), orig648 = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null, made648 = []; try {
     if (!FM.home || !FM.home.open) throw new Error('FM.home is missing');
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     return await atPhoneWidth(async function () {
       FM.home.open(); await sleep(500);
       let cards = document.querySelectorAll('.hm-card[data-pid]');
       if (cards.length < 2 && FM.projects && FM.projects.create) {
-        await FM.projects.create({ name: 'tap A', width: 1080, height: 1920 });
-        await FM.projects.create({ name: 'tap B', width: 1080, height: 1920 });
+        made648.push(await FM.projects.create({ name: 'tap A', width: 1080, height: 1920 }));
+        made648.push(await FM.projects.create({ name: 'tap B', width: 1080, height: 1920 }));
         FM.home.open(); await sleep(600);
         cards = document.querySelectorAll('.hm-card[data-pid]');
       }
@@ -74103,6 +74464,11 @@
       const again = await tap(true);
       if (again === noClick) throw new Error('a tap with both pointerup and click flipped the selection twice, so it landed back where it started');
     });
+    } finally {
+      try { if (orig648 && FM.projects.currentId() !== orig648) await FM.projects.open(orig648, { confirmed: true }); } catch (e) {}
+      for (const id of made648) { try { if (id && id !== orig648 && FM.projects.currentId() !== id && FM.projects.list().some(p => p.id === id)) await FM.projects.remove(id); } catch (e) {} }
+      _isoK.put();
+    }
   });
 
   /* ═══ QUEUE 612 — THE HINGE, AND THE MEASUREMENT IT NEARLY BROKE ══════════════════════════════
@@ -74691,6 +75057,8 @@
    * debounced autosave over whole video files; writing every blob every time would be brutal on a
    * phone. A fix that simply always wrote would pass the first two checks and quietly cost that. */
   test('#668: replacing a clip\'s media survives a save, without rewriting blobs every autosave', { item: '668' }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.storage || !FM.storage.save) throw new Error('FM.storage.save is missing');
     const openDB = () => new Promise(res => { const r = indexedDB.open('freemotion', 1); r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
     const get = (db, k) => new Promise(res => { try { const q = db.transaction('media', 'readonly').objectStore('media').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(null); } catch (e) { res(null); } });
@@ -74753,6 +75121,7 @@
       S.layers.length = 0; keep.forEach(l => S.layers.push(l));
       if (FM.refreshAll) FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   /* ═══ QUEUE 646 — THE INTRO GROUND THAT NEVER RAN ════════════════════════════════════════════
@@ -77416,6 +77785,8 @@
      would then present as "neither toast plus a silent file" and point the next investigation at the
      muxer, which is exactly the wrong place. Found by mutating the toast away during a seam audit. */
   test('export: a soundtrack that fails to ENCODE says so, so it is not mistaken for the muxer (queue 215)', { item: '215' }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     const P = FM.scene.project;
     const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height, toast: FM.toast };
@@ -77464,6 +77835,7 @@
       FM._audioTrackDropped = null;
       if (FM.refreshAll) FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   /* ═══ WAVE IS SEPARABLE, AND EXACTLY SO (queue 474).
@@ -81110,7 +81482,10 @@
     if (FM._whiteChrome !== document.body.classList.contains('white-chrome')) throw new Error('the white-chrome constant and the body class disagree, so flipping the constant would not actually revert the look');
     if (!FM._whiteChrome) return;   // deliberately reverted — the rules below are not meant to apply
 
-    const keepAt = FM.addAt;
+    /* isolation (20 Oct, the v17.82 checks): the switch moves the add row only past a layer, and this used to press it in
+       whatever scene an earlier test left; in an empty project the row has nowhere to go and stayed at 0. It presses it beside
+       a layer of its own (isoOwnLayer, which also shuts Home); the scene, Home and the add row go back as found. */
+    const keepAt = FM.addAt, own = isoOwnLayer();
     try {
       btn.classList.remove('sw-moved', 'sw-dragging');
       btn.style.removeProperty('--sw-colour');
@@ -81141,6 +81516,7 @@
     } finally {
       btn.classList.remove('sw-moved', 'sw-dragging');
       btn.style.removeProperty('--sw-colour');
+      own.put();
       FM.addAt = keepAt;
       if (FM.clampAddAt) FM.clampAddAt();
       if (FM.syncAddSwitch) FM.syncAddSwitch();
@@ -83914,6 +84290,8 @@
      editor's: phone width, zoom 3x (a crop with an offset origin), ink on the overlay at FM.projectToOverlay of a known
      point — and none at the old mapping when that lands inside the overlay. */
   test('770: the motion path\'s keyframe dot and the tracker\'s seed box land on the picture in a zoomed, cropped preview', { item: '770', budgetMs: 30000 }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.motionPath || !FM.tracker || !FM.projectToOverlay) throw new Error('motionPath / tracker / projectToOverlay missing');
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene, savedSel = FM.scene.selectedId;
@@ -83964,6 +84342,7 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await sleep(60);
     }
+    } finally { _isoK.put(); }
   });
 
   /* ═══ 771 (hunt LOW #44): A DRAFT WHOSE TEMPLATE WAS DELETED DOES NOT PROMISE A SAVE-BACK. Through the real card
@@ -84159,6 +84538,8 @@
   }
 
   test('582: the canvases the effects read every frame are declared read-heavy', { item: '582' }, async function () {
+    /* isolation (20 Oct): it left Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const keep = FM.scene.layers.slice();
     try {
       _fx582Scene(); _fx582Render();
@@ -84171,6 +84552,7 @@
       FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
       FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   /* 620 — "when you turn off the magnet button it should stop snapping … like in the position / scale
@@ -84211,6 +84593,8 @@
      Both halves are asserted, and the FIRST is the control: if slots ever start counting shapes, the
      second assertion would pass for the wrong reason. */
   test('619: the template media-swap opens only with media, and never silently', { item: '619' }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.templateFill || !FM.templateFill._slots) throw new Error('FM.templateFill is gone — the media-swap feature queue 619 is about no longer exists');
     const keep = FM.scene.layers.slice();
     try {
@@ -84259,6 +84643,7 @@
       try { FM.templateFill.close(); } catch (e) {}
       FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   /* 644 — NOTHING ON THE LIGHT HOME MAY BE LIGHT-ON-LIGHT, and this SWEEPS rather than naming one rule.
@@ -84627,6 +85012,8 @@
      could fail silently: a draft is a PROJECT wearing an Elements-tab card, so bulk delete must not
      hand it to that tab's store. */
   test('617: element drafts take part in Select, and bulk delete actually removes them', { item: '617' }, async function () {
+    /* isolation (20 Oct): it left Home open — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const made = [];
     const realConfirm = window.confirm;
     try {
@@ -84673,6 +85060,7 @@
       for (const id of made) { try { await FM.projects.discardDraftAnyway(id); } catch (e) {} }
       try { const sb = document.getElementById('hm-select-btn'); if (sb && sb.textContent.trim() === 'Done') sb.click(); } catch (e) {}
     }
+    } finally { _isoK.put(); }
   });
 
   /* 617 clause 4 — "as long as there's one left I can't delete it".
@@ -85101,6 +85489,8 @@
      447px tall, unbounded, sitting straight on the canvas. Both DESKTOP branches of positionPop have
      capped it for months (#147, queue 249); the phone branch never did. This asserts the phone one. */
   test('602: the Aa sheet does not cover the canvas on a phone', { item: '602' }, async function () {
+    /* isolation (20 Oct): it left Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const keep = FM.scene.layers.slice();
     try {
       return await atPhoneWidth(async function () {
@@ -85147,6 +85537,7 @@
       FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
       FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   test('582: no effect reads back a big chunk of a GPU-backed canvas per frame', { item: '582' }, async function () {
@@ -86168,6 +86559,11 @@
        here REMOVES this benchmark". The toggle behind that tap searches with `!m.thumb`, so parked on
        the thumbnail pin it finds nothing and ADDS a benchmark. The screen promised remove; the tap did
        add. That is what the third case below is really guarding. */
+    /* isolation (20 Oct, the v17.82 checks): the project is as long as its clips (FM.autoFitDuration), and refreshAll pulls the
+       playhead back inside it, so in an empty project every park below landed on 0. It used to inherit an earlier test's
+       layers; it parks beside a 6 s layer of its own now (isoOwnLayer, which also shuts Home), put back as found. */
+    const own = isoOwnLayer(); try {
+    own.L.duration = 6; FM.refreshAll();
     const P = FM.scene.project;
     const mk0 = P.markers, t0 = FM.time, f0 = P.fps;
     const cl = document.getElementById('tl-centerline');
@@ -86200,6 +86596,7 @@
       P.markers = mk0; P.fps = f0; FM.time = t0;
       FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     }
+    } finally { own.put(); }
   });
 
   test('659 — the Custom format says Auto adjusts, and it still fits the tile', { item: '659' }, async function () {
@@ -87439,6 +87836,8 @@
   });
 
   test('timeline: Replace media repaints the clip bar, it does not keep the old picture', { item: 'q686-replace-strip' }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* #686. "Replace media…" deliberately swaps the file UNDER THE SAME LAYER, so layer.id — which is
      * what stripCache is keyed by — is the one thing guaranteed not to change. Every other part of the
      * cache key is geometry: on an image→image swap the width, the trim and the duration are all
@@ -87501,6 +87900,7 @@
       FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
     }
+    } finally { _isoK.put(); }
   });
 
   test('import: cancelling the Audio picker does not turn the next import into a soundtrack', { item: 'q686-audio-cancel' }, async function () {
@@ -88790,6 +89190,8 @@
      which is exactly the case. A real <video> with no source rejects for real (NotSupportedError); the report must name it
      and be saved even though 0ms played. */
   test('786: a refused play() is named in the playback report, and the report is saved even though nothing played', { item: '786', budgetMs: 30000 }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (!FM.audioHealth || !FM.audioHealth.report || !FM.audioHealth.reset) throw new Error('audioHealth seams missing');   // no guard on .refused: without the fix the REPORT must be what fails
     const saved = FM.scene, savedSel = FM.scene.selectedId, report0 = localStorage.getItem('fm.lastAudioReport');
@@ -88817,9 +89219,12 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await sleep(60);
     }
+    } finally { _isoK.put(); }
   });
 
   test('790: the tracker pick overlay follows a zoom change (Fit, +, − while picking), not only a window resize', { item: '790', budgetMs: 30000 }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (!FM.tracker || !FM.tracker.pick || !FM.viewport || !FM.placeOverlayOnCanvas) throw new Error('seams missing: tracker.pick / viewport / placeOverlayOnCanvas');
     const saved = FM.scene, savedSel = FM.scene.selectedId;
@@ -88855,6 +89260,7 @@
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await sleep(60);
     }
+    } finally { _isoK.put(); }
   });
 
   /* ── queue 919: Home's pop-ups are the app's own, not the phone's grey boxes ─────────────────────────────
@@ -90448,6 +90854,8 @@
    * without a silent case also proves nothing — a badge that fires on everything tells him nothing,
    * which is the exact bug queue 603's control caught. So both directions are asserted here. */
   test('859: a black-and-white photo is told why Grayscale does nothing, and a colour photo is not', { item: '859', budgetMs: 30000 }, async function () {
+    /* isolation (20 Oct): it left two media records behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (typeof FM._fxProbeColors !== 'function') throw new Error('FM._fxProbeColors is not reachable — the photo probe seam is gone, and every number below would be meaningless');
     if (!FM.fxDeadOnLayer) throw new Error('FM.fxDeadOnLayer is not exported');
 
@@ -90502,6 +90910,7 @@
       FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
       FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
   /* A VIDEO'S PIXELS ARE UNKNOWN AND MUST STAY THAT WAY (queue 859). The photo probe reads decoded
@@ -90510,6 +90919,8 @@
      that fxDeadOnLayer makes no claim on a video; this pins the NEW seam the same way, because the
      new code is where that invariant would be broken. */
   test('859: the photo probe refuses a video, whose pixels change frame to frame', { item: '859' }, function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (typeof FM._fxProbeColors !== 'function') throw new Error('FM._fxProbeColors is not reachable');
     var layers0 = FM.scene.layers.slice();
     try {
@@ -90527,6 +90938,7 @@
     } finally {
       FM.scene.layers = layers0;
     }
+    } finally { _isoK.put(); }
   });
 
 
@@ -90603,6 +91015,8 @@
    * something to fill, and a cached "no empty space" badge goes on lying. That is not hypothetical:
    * it is the third time a stale key has done this here (movement, then colour, now coverage). */
   test('906: Backfill and Temporal Denoise say why they do nothing on a photo — and go quiet the moment they would work', { item: '906', budgetMs: 30000 }, async function () {
+    /* isolation (20 Oct): it left two media records behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (typeof FM._fxDeadHereWhy !== 'function') throw new Error('FM._fxDeadHereWhy is not reachable');
     if (typeof FM._fillBehindCovered !== 'function') throw new Error('FM._fillBehindCovered is not exposed — fx-browser would have to reimplement the renderer test and could then disagree with it');
     var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
@@ -90651,6 +91065,7 @@
       FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
       FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
 
@@ -90667,6 +91082,8 @@
    *    and with one shape behind, Backdrop Clone reproduces it exactly.
    * So each assertion below carries the control that would have caught the wrong version. */
   test('907: Drop Shadow, Frame Stutter and the two Backdrop effects say why they do nothing — and go quiet when they would work', { item: '907', budgetMs: 30000 }, async function () {
+    /* isolation (20 Oct): it left two media records behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (typeof FM._fxDeadHereWhy !== 'function') throw new Error('FM._fxDeadHereWhy is not reachable');
     var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
     var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
@@ -90718,6 +91135,7 @@
       FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
       FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
 
@@ -90731,6 +91149,8 @@
    * "Depth Push does nothing at any setting" would have been a false accusation against a working
    * effect, and it is the kind that costs a rewrite. So this test asserts BOTH halves. */
   test('908: Depth Push says why it does nothing on a frame-filling layer, and still works when the layer is smaller', { item: '908', budgetMs: 25000 }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (typeof FM._fxDeadHereWhy !== 'function') throw new Error('FM._fxDeadHereWhy is not reachable');
     var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
     var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
@@ -90779,6 +91199,7 @@
       FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
       FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
 
@@ -90846,6 +91267,8 @@
    * found independently. Badging it "the layer fills the frame" would be a true-sounding reason that
    * is not the real one, and a wrong explanation is worse than silence. */
   test('910: Tiles says why it does nothing on a layer that reaches every edge, and still tiles when the layer is smaller', { item: '910', budgetMs: 25000 }, async function () {
+    /* isolation (20 Oct): it left a media record behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (typeof FM._fxDeadHereWhy !== 'function') throw new Error('FM._fxDeadHereWhy is not reachable');
     var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
     var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
@@ -90893,6 +91316,7 @@
       FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
       FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
 
@@ -90912,6 +91336,10 @@
     var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
     var limit0 = FM.storage._backupEmbedLimit;
     var made = [];
+    /* isolation (20 Oct): create() and open() switch the open project, and the finally only removed what it made — so the
+       app was left on whichever project remove() opened next, and every later test ran there. It now goes back to the
+       project it found BEFORE removing anything (removing a project that is not open opens nothing), as 915.3 does. */
+    var orig = FM.projects.currentId();
     try {
       // a project with content worth losing
       await FM.projects.create({ name: 'FX869 ROUNDTRIP', width: 720, height: 1280 });
@@ -90987,6 +91415,7 @@
       if (!miss.some(function (m) { return String(m.file).indexOf('huge-clip') >= 0; })) throw new Error('something was reported as not included, but not the file that was actually dropped: ' + JSON.stringify(miss).slice(0, 120));
     } finally {
       FM.storage._backupEmbedLimit = limit0;
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
       for (var i = 0; i < made.length; i++) { try { await FM.projects.remove(made[i]); } catch (e) {} }
       try { var strays = FM.projects.list().filter(function (p) { return /FX869/.test(p.name); }); for (var j = 0; j < strays.length; j++) await FM.projects.remove(strays[j].id); } catch (e) {}
     }
@@ -91233,6 +91662,8 @@
    * ⚠️ AND THE CLEAN CASE IS A CONTROL, NOT A FORMALITY. A warning that fires on every save would be
    * ignored within a week, which is the same failure as no warning at all. */
   test('888: a project file names the clips too big to fit, warns again on import, and stays quiet when nothing was left out', { item: '888', budgetMs: 30000 }, async function () {
+    /* isolation (20 Oct): it left four media records behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.storage || !FM.storage.serializeScene) throw new Error('FM.storage.serializeScene is not reachable');
     var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
     var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
@@ -91291,6 +91722,7 @@
       FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
       FM.refreshAll();
     }
+    } finally { _isoK.put(); }
   });
 
 
@@ -93506,6 +93938,8 @@
   });
 
   test('930 the Assistant and the Director never stack, and the API key is entered in Settings, reached from a button in each', { item: '930', budgetMs: 60000 }, async function () {
+    /* isolation (20 Oct): it left Home open — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* Queue 930 — his clauses: one AI panel at a time; the key entered in App Settings in its own section; a button in both
        panels that opens Settings there; nothing he already entered is lost. And, because it is his real key: the full key
        is never written into the page, and the field is cleared once it is saved. */
@@ -93633,9 +94067,12 @@
       try { FM.aiPanel.hide(); FM.aiChat.hide(); if (FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
       if (had) FM.aiKey.set(had, hadRem); else FM.aiKey.forget();
     }
+    } finally { _isoK.put(); }
   });
 
   test('931 swiping the New effects strip pauses its auto-scroll well past the old 3 s, and it resumes from where he left it — real touch and a real wheel', { item: '931', budgetMs: 90000 }, async function () {
+    /* isolation (20 Oct): it left Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* Queue 931: "it's annoying when you try to slide it to see something at the start, but then it instantly starts
        scrolling. So you can't see the first effect that shows up." Real input (see 924): a swipe is a native pan whose events
        a script cannot fake, and a PC scroll is a wheel or trackpad, which never presses a pointer at all. */
@@ -93679,6 +94116,7 @@
         await atPhoneWidth(function () { return run('phone (360)', 'touch'); }, 360);
       });
     } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
+    } finally { _isoK.put(); }
   });
 
 
@@ -98478,6 +98916,8 @@
    * verifier's related case: an Extract Audio twin HAS a picture (a copy of the video at opacity 0) and so slipped past
    * the 0x0 check — it is flagged audioOnly and must not be the default either. */
   test('690 Audio to keyframes opened from a song aims at a picture layer, so Apply moves something on the canvas', { item: '690', budgetMs: 90000 }, async function () {
+    /* isolation (20 Oct): it left its song's media record (hbAudScene) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene;
     const q = s => [].slice.call(document.querySelectorAll(s));
@@ -98540,6 +98980,7 @@
       if (twinId) { try { FM.media.remove(twinId); } catch (e) {} }
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
     }
+    } finally { _isoK.put(); }
   });
 
   /* 690 (HUNT-b 2) — THE HEAR BUTTON KEPT PLAYING AFTER HE LEFT THE EFFECT.
@@ -98555,6 +98996,8 @@
    * FIXED: the Hear button passes its own selector as the audition's `control`, and the audition's tick stops the moment
    * no lit Hear button is on screen (js/audio-fx-live.js) — every way out of the panel at once, not one exit at a time. */
   test('690 an audio effect Hear preview stops when he backs out of the effect or deselects the clip — the song never loops on with no stop on screen', { item: '690', budgetMs: 90000 }, async function () {
+    /* isolation (20 Oct): it left its song's media record (hbAudScene) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene;
     const q = s => [].slice.call(document.querySelectorAll(s));
@@ -98598,6 +99041,7 @@
       try { FM.pause(); } catch (e) {}
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
     }
+    } finally { _isoK.put(); }
   });
 
   /* 690 (HUNT-b 3) — THE VOLUME RULER, GRABBED ON ITS LINE, MOVED ONE NOTCH AND STOPPED.
@@ -98614,6 +99058,8 @@
    * FIXED twice over: `.fx-scrub-notch` is pointer-events: none (styles.css), and tickStrip ends a drag on
    * lostpointercapture only when the STRIP lost it (e.target === strip), not when a child's loss bubbles up. */
   test('690 a real finger that grabs a scrub ruler on its centre line drags the whole way, not one notch', { item: '690', budgetMs: 90000 }, async function () {
+    /* isolation (20 Oct): it left its song's media record (hbAudScene) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene;
     const q = s => [].slice.call(document.querySelectorAll(s));
@@ -98645,6 +99091,7 @@
     } finally {
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
     }
+    } finally { _isoK.put(); }
   });
 
   /* 690 (HUNT-b 4) — A BEAT TAPPED ON THE PLAYHEAD LANDED WHEN THE FINGER LIFTED.
@@ -98658,6 +99105,8 @@
    * listener at the real pointerdown. CONTROL: all three taps made a mark and playback carried on.
    * FIXED: the head's pointerdown takes FM.time while playing and the click hands it to FM.toggleMarkerAtPlayhead(at). */
   test('690 a beat tapped on the playhead while the song plays is marked on the frame the finger touched, not when it lifted', { item: '690', budgetMs: 90000 }, async function () {
+    /* isolation (20 Oct): it left its song's media record (hbAudScene) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene;
     let head = null, onDown = null;
@@ -98690,6 +99139,7 @@
       try { FM.pause(); } catch (e) {}
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
     }
+    } finally { _isoK.put(); }
   });
 
   /* ═══ HUNT-c (queue 690, third hunt, 25 Sep) — GROUPS, PARENTING AND THE CAMERA ═════════════════════════════════════
@@ -104645,15 +105095,37 @@
           /* Three seeded cards in a row, on screen, clear of the select bar — for the drag-selects below. */
           const run = async function (needPic) {
             await sleep(300);
-            const cards = Array.prototype.slice.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'));
-            const top = document.getElementById('hm-selbar') ? document.getElementById('hm-selbar').getBoundingClientRect().top : 700;
-            for (let i = 0; i + 2 < cards.length; i++) {
-              const y0 = hcPt(cards[i]).y, y2 = hcPt(cards[i + 2]).y;
-              const img = cards[i].querySelector('.hm-thumb img');
-              if (needPic && !(img && img.complete && img.naturalWidth)) continue;
-              if (y0 > 200 && y2 + 30 < Math.min(top, 700)) return [cards[i], cards[i + 1], cards[i + 2]];
+            /* A card's picture comes from IndexedDB after the card is drawn (home.js getThumb), so late in a full run it can
+               still be loading here: wait for it instead of reading once, and say what was seen if it never comes (20 Oct —
+               v17.82's full pass failed here once; alone, and in the run before, it passed).
+               …AND IT LOOKS AMONG THE SEEDED CARDS, brought into the band when none is there. The suite's own projects sit
+               above them with no picture, and on v17.82's ship the one run of three the band held started on one of those:
+               64 cards, 1 run in the band, 0 with a picture, the list scrolled to 82 px. */
+            const hasPic = function (c) { const img = c.querySelector('.hm-thumb img'); return !!(img && img.complete && img.naturalWidth); };
+            const isSeeded = function (c) { return ids.indexOf(c.dataset.pid) >= 0; };
+            let seen = '';
+            for (let tries = 0; tries < 25; tries++) {
+              const cards = Array.prototype.slice.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'));
+              const top = document.getElementById('hm-selbar') ? document.getElementById('hm-selbar').getBoundingClientRect().top : 700;
+              const lim = Math.min(top, 700);
+              let band = 0, pics = 0;
+              for (let i = 0; i + 2 < cards.length; i++) {
+                const y0 = hcPt(cards[i]).y, y2 = hcPt(cards[i + 2]).y;
+                const pic = hasPic(cards[i]);
+                if (!(y0 > 200 && y2 + 30 < lim)) continue;
+                band++; if (pic) pics++;
+                if (!needPic || pic) return [cards[i], cards[i + 1], cards[i + 2]];
+              }
+              /* None fits: put the first seeded card whose picture has loaded just inside the band, and look again. */
+              const k = cards.findIndex(function (c) { return isSeeded(c) && hasPic(c); });
+              const ky = k >= 0 ? hcPt(cards[k]).y : NaN;
+              if (k >= 0 && k + 2 < cards.length) sc.scrollTop += ky - 215;
+              seen = cards.length + ' cards, ' + band + ' runs of three in the band (200–' + Math.round(lim - 30) + ' px), ' + pics + ' of them with a loaded picture, '
+                + cards.filter(function (c) { return isSeeded(c) && hasPic(c); }).length + ' seeded cards with one' + (k >= 0 ? ' (the first at ' + Math.round(ky) + ' px)' : '')
+                + ', the list scrolled to ' + Math.round(sc.scrollTop) + ' px';
+              await sleep(250);
             }
-            throw new Error('setup: no three cards in a row on screen with Select on' + (needPic ? ', the first with its picture showing' : ''));
+            throw new Error('setup: no three cards in a row on screen with Select on' + (needPic ? ', the first with its picture showing' : '') + ' (' + seen + ')');
           };
           const reselect = async function () {
             const b = document.getElementById('hm-select-btn');
@@ -118195,6 +118667,8 @@
    * renders exactly as before; that is the control. Knee 0 then compresses a full-scale sine to −6.63 dBFS where 30 gives
    * −1.50. And it is on screen: a Knee row in the open Compressor, inside the panel, at whatever width the suite runs. */
   test('986 C14 the Compressor has a Knee control, and its default is the 30 dB the node always used', { item: '986', budgetMs: 60000 }, async function () {
+    /* isolation (20 Oct): it left its song's media record (hbAudScene) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const reg = FM.audioFxRegistry;
     const inst = reg.makeInstance('compressor');
@@ -118237,6 +118711,7 @@
     } finally {
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
     }
+    } finally { _isoK.put(); }
   });
 
   /* C15 — RING MOD STOPPED AT 1024 Hz. Its carrier was a 1 s sine buffer played at playbackRate = Hz, and an
@@ -120086,6 +120561,8 @@
    * tapped: it is on screen at this width and it adds the effect. CONTROL: reverb finds Reverb (the label match that always
    * worked), and a word that means nothing still says so. */
   test('986 C13 audio-effect search finds what people call the sound - karaoke, robot voice, chipmunk, muffled, radio, bass boost, 8-bit - and the found effect adds with one tap', { item: '986', budgetMs: 60000 }, async function () {
+    /* isolation (20 Oct): it left its song's media record (hbAudScene) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (!FM.audioFxBrowser || !FM.audioFxBrowser.open) throw new Error('FM.audioFxBrowser is not reachable');
     const saved = FM.scene;
@@ -120133,6 +120610,7 @@
       try { if (recents == null) localStorage.removeItem('fm.afx.recents'); else localStorage.setItem('fm.afx.recents', recents); } catch (e) {}
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
     }
+    } finally { _isoK.put(); }
   });
 
   /* C16 — THE FLANGER'S FEEDBACK CAME BACK ONE RENDER QUANTUM LATE. Its feedback was a loop through the swept delay, and a
@@ -122223,6 +122701,8 @@
   });
 
   test('482 3.3 and 3.4 Echo and Reverb panels - Tone, Low cut, Tape wobble, Pre-delay and Width fit the open effect at 390 and 1280 px and read their defaults', { item: '482', budgetMs: 90000 }, async function () {
+    /* isolation (20 Oct): it left its song's media record (hbAudScene) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* The rows in registry order as the inspector draws them (sliders and option buttons both carry .fx-scrub-label).
        #482 8.1 put Output before Mix on every effect; 8.7 gave Echo Tempo (a slider) and Note (option buttons — no
        value check: the value loop looks for a .fx-scrub-row, which an option row is not); 9.8 gave Reverb Damping. */
@@ -122263,6 +122743,7 @@
     } finally {
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
     }
+    } finally { _isoK.put(); }
   });
 
   /* #482 batch 3 review: a live move across a bypass pair's default must fade, not click. The preview drives every key
@@ -122405,6 +122886,8 @@
   /* 3.7 — OUTPUT. A trailing gain after everything (and after the Mix blend). MEASURED at 7bbeb5bc: an `output` key is
      ignored — a 0.05 sine comes out at the same level with output -6 as without it. Built: -6.000 dB in both paths. */
   test('482 3.7 Compressor - Output turns the whole sound up or down, and a saved Compressor sounds exactly as it did', { item: '482', budgetMs: 90000 }, async function () {
+    /* isolation (20 Oct): it left its song's media record (b3OpenAudioFx) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const reg = FM.audioFxRegistry, inst = reg.makeInstance('compressor');
     if (!inst || inst.params.output !== 0 || inst.params.mix !== 1) throw new Error('a new Compressor has params ' + JSON.stringify(inst && inst.params) + ' - no Output 0 dB and Mix 1');
     const old = [{ type: 'video', audioFx: [{ type: 'compressor', enabled: true, params: { threshold: -30, ratio: 6, attack: 0.005, release: 0.2, knee: 12 } }] }];
@@ -122444,6 +122927,7 @@
       b3InsidePanel(rows.Output.row, 'Output'); b3InsidePanel(rows.Mix.row, 'Mix');
       if (rows.Output.val !== '0.0dB' || rows.Mix.val !== '1.00') throw new Error('Output reads ' + rows.Output.val + ' and Mix ' + rows.Mix.val + ', not 0.0dB and 1.00');
     } finally { FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} await sleep(50); }
+    } finally { _isoK.put(); }
   });
 
   /* 3.7 — MIX (parallel compression). The untouched copy has to wait for the squashed one: a DynamicsCompressorNode's output
@@ -122491,6 +122975,8 @@
      for its first 2 s, with the threshold at -40 dB. CONTROL: idle before Hear (nothing is playing, so nothing to show), and a
      Gain row open instead has no bar. */
   test('482 3.7 Compressor - the open row shows how far it is turning the sound down while you hear it', { item: '482', budgetMs: 60000 }, async function () {
+    /* isolation (20 Oct): it left its song's media record (b3OpenAudioFx) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const reg = FM.audioFxRegistry, saved = FM.scene;
     try {
@@ -122530,6 +123016,7 @@
       try { FM.audioFxLive.stopAudition(); } catch (e) {}
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} await sleep(50);
     }
+    } finally { _isoK.put(); }
   });
 
   /* 3.8 — LIMITER: INPUT GAIN AND RELEASE. MEASURED at 7bbeb5bc: both keys ignored - a -20 dBFS sine leaves at -20.00 with
@@ -122539,6 +123026,8 @@
      louder sounds over full scale), and -6.33 into a -6 ceiling; 60 ms after a burst stops, release 0.05 has let go (-20.0) and
      release 1 s still holds -28.6. */
   test('482 3.8 Limiter - Input gain pushes the sound into the ceiling, Release sets how fast it lets go, and a saved Limiter sounds exactly as it did', { item: '482', budgetMs: 90000 }, async function () {
+    /* isolation (20 Oct): it left its song's media record (b3OpenAudioFx) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const reg = FM.audioFxRegistry, inst = reg.makeInstance('limiter');
     if (!inst || inst.params.input !== 0 || inst.params.release !== 0.05) throw new Error('a new Limiter has params ' + JSON.stringify(inst && inst.params) + ' - no Input gain 0 dB and Release 0.05 s');
     const old = [{ type: 'video', audioFx: [{ type: 'limiter', enabled: true, params: { ceiling: -9 } }] }];
@@ -122579,6 +123068,7 @@
       b3InsidePanel(rows['Input gain'].row, 'Input gain'); b3InsidePanel(rows.Release.row, 'Release');
       if (rows['Input gain'].val !== '0.0dB' || rows.Release.val !== '0.05s') throw new Error('Input gain reads ' + rows['Input gain'].val + ' and Release ' + rows.Release.val + ', not 0.0dB and 0.05s');
     } finally { FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} await sleep(50); }
+    } finally { _isoK.put(); }
   });
 
   /* 3.1 — THE ▶ OF A PLAYING SOUND BECOMES ■. Since #986 a tap on the playing row stops it, but its button still drew ▶ (only
@@ -122693,6 +123183,8 @@
      filled, while the sound came out untouched. At 7bbeb5bc there is no bar. Built: the node's reduction weighted by the blend the
      chain is playing — 0.0 dB at Mix 0 while the node is still squashing, and the full reduction again at Mix 1. */
   test('482 3.7 Compressor - the Turning down bar shows what you hear, so at Mix 0 it reads nothing', { item: '482', budgetMs: 60000 }, async function () {
+    /* isolation (20 Oct): it left its song's media record (b3OpenAudioFx) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const reg = FM.audioFxRegistry, saved = FM.scene;
     try {
@@ -122729,6 +123221,7 @@
       try { FM.audioFxLive.stopAudition(); } catch (e) {}
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} await sleep(50);
     }
+    } finally { _isoK.put(); }
   });
 
 
@@ -122777,6 +123270,9 @@
   }
   async function audioPanel482t(type, set, check) {
     const saved = FM.scene;
+    /* isolation (20 Oct): restores the songs' media records, the selection and Home (isoKeep) — hbAudScene registers a song
+       per width and shuts Home, and only the scene went back */
+    const isoK = isoKeep();
     const run = async where => {
       const song = await hbAudScene([], 4);
       const inst = FM.audioFxRegistry.makeInstance(type); inst._expanded = true; if (set) Object.assign(inst.params, set);
@@ -122800,6 +123296,7 @@
       await atWideWidth(() => run('at 1280 px'), 1280);
     } finally {
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+      isoK.put();
     }
   }
 
@@ -127090,7 +127587,9 @@
       try { if (FM.cropTool.isActive()) FM.cropTool.stop(); } catch (e) {}
       try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
       try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
-      const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
+      /* isolation (20 Oct): removes its layer BY ID — an undo inside fn() (T3's) swaps in parsed copies, so indexOf(L) found
+         nothing and SM_CROP stayed in the scene for every later test */
+      for (let i = FM.scene.layers.length - 1; i >= 0; i--) if (FM.scene.layers[i] && FM.scene.layers[i].id === L.id) FM.scene.layers.splice(i, 1);
       try { FM.media.remove(L.id); } catch (e) {}
       FM.selectLayer(null); FM.refreshAll();
       await sleep(80);
@@ -127264,7 +127763,9 @@
       try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
       try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
       try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
-      const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
+      /* isolation (20 Oct): removes SM_REDO BY ID — the undo above swapped in parsed copies, so indexOf(L) found nothing and
+         the layer stayed in the scene for every later test */
+      for (let i = FM.scene.layers.length - 1; i >= 0; i--) if (FM.scene.layers[i] && FM.scene.layers[i].id === L.id) FM.scene.layers.splice(i, 1);
       FM.selectLayer(null); FM.refreshAll();
       await sleep(60);
     }
@@ -127402,7 +127903,9 @@
       try { if (FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
       try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {}
       try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
-      const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1);
+      /* isolation (20 Oct): removes SM_R3 BY ID — the undos above swapped in parsed copies, so indexOf(L) found nothing and
+         the layer stayed in the scene for every later test */
+      for (let i = FM.scene.layers.length - 1; i >= 0; i--) if (FM.scene.layers[i] && FM.scene.layers[i].id === L.id) FM.scene.layers.splice(i, 1);
       FM.selectLayer(null); FM.refreshAll(); await sleep(60);
     }
   });
@@ -131198,6 +131701,9 @@
   /* The open audio effect row at 390 and 1280 px. `make` returns FRESH instances (each width builds its own scene). */
   async function b7Panel(make, openIdx, check) {
     const saved = FM.scene;
+    /* isolation (20 Oct): restores the songs' media records, the selection and Home (isoKeep) — hbAudScene registers a song
+       per width and shuts Home, and only the scene went back */
+    const isoK = isoKeep();
     const run = async where => {
       const song = await hbAudScene([], 4), list = make();
       list.forEach((f, i) => { f._expanded = i === openIdx; });
@@ -131222,9 +131728,10 @@
       await atWideWidth(() => run('at 1280 px'), 1280);
     } finally {
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+      isoK.put();
     }
   }
-  const b7Fx = (type, p) => [{ type: type, enabled: true, params: Object.assign(FM.audioFxRegistry.makeInstance(type).params, p || {}) }];
+  const b7Fx =(type, p) => [{ type: type, enabled: true, params: Object.assign(FM.audioFxRegistry.makeInstance(type).params, p || {}) }];
   const b7Pd = (type, key) => (FM.audioFxRegistry.paramsOf(type) || []).filter(p => p.key === key)[0] || null;
   const b7Keys = type => (FM.audioFxRegistry.paramsOf(type) || []).map(p => p.key).join(', ');
   /* The amplitude (dB re full scale) of the component at f Hz in y[from … from+N), at 48 kHz. N must hold a WHOLE number of
@@ -135523,6 +136030,8 @@
   const B14FB_NEW = { style: 0, color: '#000000', saturation: 100, vignette: 0 };
 
   test('482 14.4 Backfill - Style, Colour, Saturation and Vignette are in the catalogue at defaults that draw the old fill, and a saved Backfill fills the frame exactly as one with every new control at its default', { item: '482', budgetMs: 60000 }, function () {
+    /* isolation (20 Oct): it leaves its pictures' media records (fbArt) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     b14Catalogue('fillbehind', B14FB_NEW, { style: 2, color: '#ff0000', saturation: 40, vignette: 0.5 });
     const st = b14Row('fillbehind', 'style'), col = b14Row('fillbehind', 'color');
     if (st.type !== 'segment' || JSON.stringify(st.options) !== JSON.stringify([[0, 'Blurred copy'], [1, 'Mirrored edges'], [2, 'Solid colour']])) throw new Error('Style is not Blurred copy / Mirrored edges / Solid colour (' + JSON.stringify(st.options) + ')');
@@ -135537,9 +136046,12 @@
         if (fbDiff(saved, now) !== 0) throw new Error('a Backfill saved before Style existed fills the frame differently (' + fbDiff(saved, now) + ' bytes) from one with Style, Saturation and Vignette at their defaults - ' + JSON.stringify(o));
       });
     }
+    } finally { _isoK.put(); }
   });
 
   test('482 14.4 Backfill - Solid colour #ff0000 paints the bars red, Mirrored edges reflects the clip outward into the bars, Saturation 0 greys the fill and Vignette darkens its corners', { item: '482', budgetMs: 90000 }, function () {
+    /* isolation (20 Oct): it leaves its picture's media record (fbArt) behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     /* MIRRORED EDGES, as laid out: on a 320 x 240 plate a 96 x 176 source at (112, 32), no zoom, working scale 1. The tile that
        holds the layer is the layer's own rect, unflipped; its neighbours across are flipped across, the ones above and below
        flipped down; together they cover the plate with no gap and no overlap. */
@@ -135561,6 +136073,7 @@
     /* THE PICTURES, on the fill-behind suite's 100 x 180 clip (green left half, blue right half) in a 320 x 240 frame —
        pixels through renderScene, which only the browser draws. */
     if (b14RealCanvas()) b14FillPictures();
+    } finally { _isoK.put(); }
   });
   function b14FillPictures() {
     const at = (o, x, y) => fbAt(fbPix([fbLayer('_fb14b', 100, 180, fbHalves, Object.assign({ blur: 20, zoom: 1, dim: 0 }, o))]), x, y);
@@ -138070,6 +138583,8 @@
      voice under Your voices, holding Pitch + Ring Mod + Phaser. Its ✕ deletes it on the SECOND tap only — the first arms it
      (a saved voice is in no project's history; no Undo brings it back). Browser only: the node harness has no DOM. */
   test('966 B1 Voice - on a phone the Voice banner opens the 16 voices, a tap adds one to the song and closes the sheet, one Undo takes the whole voice off, and Save this stack as a voice lists his voice, whose ✕ deletes it on a second tap', { item: '966', budgetMs: 90000 }, async function () {
+    /* isolation (20 Oct): it leaves its song's media record (hbAudScene) and Home shut behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     need966b1();
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const AV = FM.audioVoices, K = AV._storageKey, root = document.getElementById('afx-browser');
@@ -138141,6 +138656,7 @@
       try { if (before == null) localStorage.removeItem(K); else localStorage.setItem(K, before); } catch (e) {}
       FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
     }
+    } finally { _isoK.put(); }
   });
 
   /* ═══ #966 §B (refers to #545): new effects from the backlog, built so his pick on the sheet chooses DEFAULTS, not a rebuild
@@ -145542,6 +146058,8 @@
   });
 
   test('966 B53 on a still photo with nothing on it the effects browser says Deflicker has no flicker to even out, and goes quiet once an effect is under it and on a video (the ‘changes nothing’ probe skips it: GHOST_GATED); its tile, played as the browser plays it, pulses without it and holds steadier with it', { item: '966', budgetMs: 30000 }, async function () {
+    /* isolation (20 Oct): it leaves its photo's and its video's media records behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     _b53Need();
     if (typeof FM._fxDeadHereWhy !== 'function') throw new Error('this cannot be observed (FM._fxDeadHereWhy is not loaded: it lives in js/fx-browser.js and needs the effects browser) — run it in Chrome');
     const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -145588,6 +146106,7 @@
       FM.refreshAll();
     }
     if (bad.length) throw new Error(bad.join(' | '));
+    } finally { _isoK.put(); }
   });
   // ── end 966 B53 ──
 
@@ -147077,6 +147596,8 @@
      40: the 30 px ▶ and ★ plus 5 px padding each side). NEEDS A DOM: on 85b71929 it fails on its first line, naming the six,
      like the others; on this build, in the node harness (no DOM), it fails too — it is judged in Chrome only. */
   test('966 B36 Foley on the sound sheet - a Foley heading holding its six rows in order, each row at least 32 px tall at this width with its play button and Add', { item: '966', budgetMs: 60000 }, async function () {
+    /* isolation (20 Oct): it leaves Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     folNeedSfx966('The Everyday Foley pack (#966 B36)', folSfx966);
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     FM.sfx.open(); await sleep(400);
@@ -147097,6 +147618,7 @@
       try { FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {}
       await sleep(150);
     }
+    } finally { _isoK.put(); }
   });
   // ── end 966 B36 ──
 
@@ -148209,6 +148731,8 @@
      the exporter built the chain before measuring, the mix would come out at the song's own level. CONTROL: the song alone, with
      no effect, reads more than 3 LU away from -16. */
   test('966 B43 Loudness Match export - the real export waits for the measurement: a song never measured before, at Target -16 with Peak guard off, comes out of FM.exporter.buildAudioMix at -16 LUFS', { item: '966', budgetMs: 120000 }, async function () {
+    /* isolation (20 Oct): it leaves its song's media record (hbAudScene) and Home shut behind — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     need966b43();
     if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function' || typeof hbAudScene !== 'function') throw new Error('setup: no FM.exporter.buildAudioMix - this test needs the app in a browser');
     const saved = FM.scene;
@@ -148229,6 +148753,7 @@
       if (!(Math.abs(got - (-16)) <= 0.3)) throw new Error('the export of a song at ' + own.toFixed(2) + ' LUFS with Loudness Match at -16 comes out at ' + got.toFixed(2) + ' LUFS - want -16 (its own level means the chain was built before the measurement)');
       if (!m._loud || !m._loud.prof) throw new Error('after the export the song holds no measurement');
     } finally { FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} }
+    } finally { _isoK.put(); }
   });
 
   /* B43 — ON SCREEN (the browser's alone: it needs the panel). The open Loudness Match's Target row is the visual effects' segmented
@@ -151864,6 +152389,8 @@
      "Could not load that file" and "Media was not replaced…" — was painted UNDER it (#toast z 60, #tpl-fill z 165), so a failed swap
      said nothing at all. Read as stacking order, since a plain toast takes no pointer events and elementFromPoint looks through it. */
   test('1174 a toast raised while Insert your Media is open is painted over the sheet, not under it', { item: '1174' }, async function () {
+    /* isolation (20 Oct): it leaves Home shut — isoKeep puts back what it found, in its own finally */
+    const _isoK = isoKeep(); try {
     if (!FM.templateFill || !FM.templateFill.open) throw new Error('FM.templateFill missing');
     const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration;
     try {
@@ -151887,6 +152414,7 @@
       try { FM.templateFill.close(); } catch (e) {}
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l)); FM.scene.project.duration = dur0;
     }
+    } finally { _isoK.put(); }
   });
 
   /* ---------------- queue 929: the heart (clauses 2 and 3) ----------------
@@ -152704,7 +153232,7 @@
      ofElement / ofTemplate on an ordinary project's doc (no route makes one today: this is a guard, proved by planting one) */
   test('948 review an ordinary project whose document carries a stray element pointer keeps its Export and shows no editing bar', { item: '948' }, async function () {
     if (!FM.libEditSync || !FM.projects || !FM.projects.create) throw new Error('setup: FM.libEditSync or FM.projects missing');
-    const wasOpen = FM.home && FM.home.isOpen && FM.home.isOpen(), made = [];
+    const wasOpen = FM.home && FM.home.isOpen && FM.home.isOpen(), made = [], orig = FM.projects.currentId ? FM.projects.currentId() : null;
     try {
       if (wasOpen) FM.home.close();
       await sleep(150);
@@ -152720,7 +153248,11 @@
     } finally {
       try { delete FM.scene.project.ofElement; } catch (e) {}
       try { FM.libEditSync(); } catch (e) {}
-      for (const id of made) { try { await FM.projects.remove(id, { confirmed: true }); } catch (e) {} }
+      /* isolation (20 Oct, the v17.82 checks): back to the project it found BEFORE removing the one it made, as 869 does. Removing
+         the OPEN project opens another, and with several on the device that was not the one it found (the leak report's open
+         project line in the full run; alone the seeded project is the only other, so it never showed). */
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
+      for (const id of made) { try { if (id !== orig) await FM.projects.remove(id, { confirmed: true }); } catch (e) {} }
       if (wasOpen && FM.home && FM.home.open) FM.home.open();
     }
   });
@@ -167204,8 +167736,13 @@
   /* The real sw.js as if registered at `base` on `origin` ('/' is a site root, '/FreeMotion/' the live site). `seed` is
      [url, body] pairs; a string key such as 'index-fallback' resolves against the worker's own URL, as Cache Storage does.
      nav(page) dispatches one navigation to the folder, answered from the fake network with `page`, and waits for the answer AND
-     for the clean-up it hands to waitUntil; activate() dispatches the activate event an update delivers and waits for it. */
-  async function _bh6Worker(origin, base, seed) {
+     for the clean-up it hands to waitUntil; activate() dispatches the activate event an update delivers and waits for it.
+     (#2) `opts` is optional: opts.fetch(req, init) stands in for the network instead of answering with `page`, and
+     opts.navTimeoutMs is put in the stub scope as self.FM_NAV_TIMEOUT_MS, the navigation budget sw.js reads (8000 when it
+     is absent, as in a real worker). launch() dispatches one navigation and waits for NOTHING: it hands back the answer's
+     promise and the list of what was given to waitUntil, so a test can race an answer that may never come. */
+  async function _bh6Worker(origin, base, seed, opts) {
+    const o = opts || {};
     const src = await fetch('../sw.js?probe=bughunt6-' + Date.now()).then(r => r.text());
     if (src.length < 500 || src.indexOf('pruneSuperseded') < 0) throw new Error('setup: ../sw.js came back as ' + src.length + ' chars with no pruneSuperseded in it, so this would test nothing');
     const swUrl = origin + base + 'sw.js';
@@ -167226,9 +167763,10 @@
       location: { origin: origin, href: swUrl },
       registration: { scope: origin + base },
     };
+    if (o.navTimeoutMs != null) scope.FM_NAV_TIMEOUT_MS = o.navTimeoutMs;
     const cachesStub = { open: () => Promise.resolve(cache), keys: () => Promise.resolve(['freemotion-v1']), delete: () => Promise.resolve(true) };
     let page = '';
-    const net = () => Promise.resolve(new Response(page, { status: 200 }));
+    const net = o.fetch || (() => Promise.resolve(new Response(page, { status: 200 })));
     // eslint-disable-next-line no-new-func
     new Function('self', 'caches', 'fetch', 'Response', 'URL', src)(scope, cachesStub, net, Response, URL);
     const activate = async () => {
@@ -167250,7 +167788,16 @@
       await Promise.all(held);
       return res;
     };
-    return { store: store, key: key, has: u => store.has(key(u)), activate: activate, nav: nav };
+    const launch = () => {
+      if (!handlers.fetch || !handlers.fetch.length) throw new Error('setup: sw.js registered no fetch handler');
+      const url = origin + base;
+      let answered = null;
+      const held = [];
+      handlers.fetch[0]({ request: { method: 'GET', url: url, mode: 'navigate' }, respondWith: p => { answered = p; }, waitUntil: p => { held.push(p); } });
+      if (!answered) throw new Error('setup: sw.js did not answer the navigation to ' + url);
+      return { answer: answered, held: held };
+    };
+    return { store: store, key: key, has: u => store.has(key(u)), activate: activate, nav: nav, launch: launch };
   }
 
   /* (#1) THE PRUNE ITSELF. A launch of a page naming js/app.js?v=9 and styles.css?v=775 must delete the ?v=8 and ?v=774 copies an
@@ -167330,6 +167877,1082 @@
     await w.nav(PAGE);
     const after = [...w.store.keys()].sort().join(' | ');
     if (after !== before) bad.push('a second launch of the same page changed the cache again (before: ' + before + '; after: ' + after + '), so the clean-up is not one pass');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#14) A NEW BUILD DOES NOT RELOAD THE APP UNDER HIM. A release that changes sw.js hands every open copy a new worker within
+     seconds of launch, and index.html's controllerchange handler reloaded on the spot whatever was going on: an export
+     rendering or waiting on its Save card, a clip's file still on its way to IndexedDB. The decision is FM._swReloadWhenIdle
+     now; the handler calls it with no argument (window.location.reload), and this hands it a counter instead, because
+     location.reload is not writable. An export, then a media write, each HOLD the reload, and once it ends the reload runs
+     exactly once BY ITSELF (the 2 s re-check, nothing fired by hand), so a held update cannot be lost. The handler's own source
+     is read to prove it goes through the check, as the 921 S2 test does for collab's deferral.
+     CONTROL: with nothing running it reloads at once, so a reload that never happens cannot pass for a held one.
+     FAILS ON 62b39595: there is no such function, and the handler calls window.location.reload() the moment the worker
+     takes over. Restores FM._exporting by descriptor, takes back its own FM._mediaBusy count, and cancels any hold. */
+  test('bughunt6 #14 An update does not reload the app in the middle of an export: with FM._exporting set, or a media file still being written, the new build waits, then reloads exactly once by itself when that ends, and index.html’s controllerchange handler goes through that check (CONTROL: an idle app reloads at once)', { item: '1176', budgetMs: 90000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function') throw new Error('the reload decision is not a function the app exposes (FM._swReloadWhenIdle), so a new worker taking over reloads the app on the spot, in the middle of an export or a save');
+    if (typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('FM._swReloadWhenIdle has no busy / held / cancel, so this cannot see what it is waiting for');
+    const src = await (await fetch('../index.html?boot=' + Date.now())).text();
+    const at = src.indexOf('addEventListener(\'controllerchange\'');
+    if (at < 0) throw new Error('setup: the fetched index.html has no controllerchange handler, so there is no call site to check');
+    const handler = src.slice(at, src.indexOf('});', at));
+    if (!/fmSwReloadWhenIdle\(/.test(handler) || /location\.reload\(/.test(handler)) {
+      throw new Error('index.html’s controllerchange handler does not go through the idle check, so the real takeover still reloads mid-export: …' + handler.replace(/\s+/g, ' ').slice(-180));
+    }
+    const dEx = Object.getOwnPropertyDescriptor(FM, '_exporting');
+    const hadMb = Object.prototype.hasOwnProperty.call(FM, '_mediaBusy');
+    let mbHeld = false, reloads = 0;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    /* Hold the reload with `start`, prove it is still held a little over one re-check later, end it with `stop`, and
+       expect exactly one reload, by itself, with nothing held after it. */
+    const holds = async (what, start, stop) => {
+      await settle(what);
+      reloads = 0;
+      start();
+      const now = await W(count);
+      if (now || reloads) throw new Error('a new build reloaded the app while ' + what + ' (' + reloads + ' reload)');
+      if (!W.held()) throw new Error('while ' + what + ' the reload was dropped rather than held, so he would stay on the old build');
+      if (!W.busy()) throw new Error('setup: with ' + what + ' the app does not count as busy');
+      await sleep(2600);
+      if (reloads) throw new Error('the held reload went ahead while ' + what + ' (' + reloads + ')');
+      stop();
+      if (!(await until(() => reloads > 0, 9000))) throw new Error('once ' + what + ' stopped, the held reload never happened by itself, so he would stay on the old build until the next launch');
+      await sleep(2600);
+      if (reloads !== 1) throw new Error('once ' + what + ' stopped, the app reloaded ' + reloads + ' times, not once');
+      if (W.held()) throw new Error('a reload is still held after it ran (' + what + '), so it would run again');
+    };
+    try {
+      await holds('an export is running', () => { FM._exporting = true; }, () => { FM._exporting = false; });
+      await holds('a media file is still being written',
+        () => { FM._mediaBusy = (FM._mediaBusy || 0) + 1; mbHeld = true; },
+        () => { FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1); mbHeld = false; });
+      await settle('control');
+      reloads = 0;
+      const now = await W(count);
+      if (!now || reloads !== 1) throw new Error('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+      if (W.held()) throw new Error('CONTROL: a reload is still held after it ran');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (dEx) Object.defineProperty(FM, '_exporting', dEx); else delete FM._exporting;
+      if (mbHeld) FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
+      if (!hadMb && !FM._mediaBusy) delete FM._mediaBusy;
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+  });
+
+  /* ISOLATION (20 Oct, the v17.82 checks): THE KEYBOARD TESTS BELOW SHUT HOME AND SETTINGS THEMSELVES. They press keys on the
+     page, and the editor answers none while a full-screen overlay owns the screen (FM.overlayOwnsScreen asks Home and Settings
+     first). Home is open at boot, so run alone or in a slice they met it and stopped at their setup line; in the full run they
+     passed only because an earlier test had left Home shut, which the isolation pass stopped. Each takes isoKeep() first and
+     calls its put() in its own finally, which opens Home again if the test found it open. Settings is shut without handing
+     back to the panel that opened it (a row that closes it does the same), and the slide-out is waited for. */
+  async function _bh6KeysToEditor() {
+    let shut = false;
+    if (FM.home && FM.home.isOpen && FM.home.isOpen() && FM.home.close) { FM.home.close(); shut = true; }
+    if (FM.settings && FM.settings.isOpen && FM.settings.isOpen() && FM.settings.close) { FM.settings.close({ handBack: false }); shut = true; }
+    if (shut) await sleep(320);
+  }
+
+  /* (#9) ⌘/CTRL SHORTCUTS ON A RUSSIAN KEYBOARD. He is learning Russian. With a Russian layout on a PC, Ctrl+Z types я, and
+     every ⌘ letter in Full's keydown handler matched the letter TYPED (e.key), so Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, Ctrl+A, Ctrl+C
+     and Ctrl+V did nothing at all, while the plain A / S / D / M (read by e.code) kept working. The fix reads the key's place
+     (e.code) only when the key types a letter of another script. Each event here carries what Chrome on Windows sends: the
+     Russian letter as `key` (written as \u escapes, because с and c, or а and a, look the same on screen and a Latin one
+     would pass on any build), the key's place as `code`. Pressed on the page (document.body), as a real key is, in the test's
+     own scene with its own history.
+     FAILS ON 0ab3bdbf: Ctrl+я leaves the history where it was, Ctrl+Shift+Я and Ctrl+н redo nothing, Ctrl+ф selects nothing,
+     Ctrl+с copies nothing and Ctrl+м pastes nothing.
+     CONTROLS, which hold before and after: a Latin Ctrl+Z undoes (the keys reach the handler at all); an AZERTY z on the W key
+     undoes and its w on the Z key does not (the letter typed wins over the key's place); Dvorak's ; on the Z key does not undo
+     (punctuation is not read by its place); and Ctrl+в on the D key duplicates nothing and is left to the browser, because ⌘D
+     is out of this fix: Simple's own ⌘D reads the typed letter too, and the two editors must agree on it. */
+  test('bughunt6 #9 Shortcuts work on a Russian keyboard layout: Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, Ctrl+A, Ctrl+C and Ctrl+V pressed with the Russian letters on those keys undo, redo, select everything, copy and paste (CONTROLS: a Latin Ctrl+Z, an AZERTY z on the W key and its w on the Z key, Dvorak’s ; on the Z key, and Ctrl+D with a Russian letter, which is left as it was)', { item: '1176' }, async function () {
+    /* isolation (20 Oct): the keys reach the editor only with Home and Settings shut (_bh6KeysToEditor); isoKeep puts Home back as found */
+    const _isoK = isoKeep(); try {
+    await _bh6KeysToEditor();
+    if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
+    /* The Russian letters on the Z, Y, A, C, V and D keys (ЙЦУКЕН) */
+    const RU = { z: 'я', Z: 'Я', y: 'н', a: 'ф', c: 'с', v: 'м', d: 'в' };
+    if (Object.keys(RU).some(k => /^[\x00-\x7f]$/.test(RU[k]))) throw new Error('setup: a Russian letter here is ASCII, so this would test nothing');
+    const press = (key, code, extra) => {
+      const ev = new KeyboardEvent('keydown', Object.assign({ key: key, code: code, ctrlKey: true, bubbles: true, cancelable: true }, extra || {}));
+      document.body.dispatchEvent(ev);
+      return ev;
+    };
+    const at = () => FM.history._steps().index;
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(40); return ok(); };
+    const idle = () => until(() => !FM.jobDepth || FM.jobDepth() === 0, 3000);
+    const clip0 = FM.clipboard;
+    const bad = [];
+    let ids = [], n = 0;
+    /* One real step to undo (a rename of A, committed); returns the history's index after it */
+    const step = () => { const a = FM.layerById(FM.scene, ids[0]); a.name = 'bh6 #9 A ' + (++n); FM.history.commit(); return at(); };
+    try {
+      await _bh2With(async function () {
+        const A = FM.makeLayer('shape', { name: 'bh6 #9 A', shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#e63946' });
+        const B = FM.makeLayer('shape', { name: 'bh6 #9 B', shape: 'rect', x: 200, y: 120, shapeW: 60, shapeH: 60, fill: '#457b9d' });
+        [A, B].forEach(l => { l.start = 0; l.duration = 3; FM.scene.layers.push(l); });
+        ids = [A.id, B.id];
+        FM.refreshAll();
+        FM.history.reset();
+        if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+        if (window.getSelection) window.getSelection().removeAllRanges();
+
+        /* CONTROL: a Latin Ctrl+Z undoes */
+        let i0 = step();
+        press('z', 'KeyZ');
+        if (at() !== i0 - 1) throw new Error('setup: a Latin Ctrl+Z did not undo (history ' + i0 + ' → ' + at() + '), so no key here reaches the editor and nothing below would mean anything');
+
+        /* Ctrl+Z: я on the Z key */
+        i0 = step();
+        press(RU.z, 'KeyZ');
+        if (at() !== i0 - 1) bad.push('Ctrl+Z on the Russian layout (я on the Z key) did not undo (history ' + i0 + ' → ' + at() + ')');
+
+        /* Ctrl+Shift+Z: Я on the Z key; Ctrl+Y: н on the Y key. Each redoes a step undone by hand just before. */
+        step(); FM.history.undo(); i0 = at();
+        if (!FM.history.canRedo()) throw new Error('setup: nothing to redo straight after an undo');
+        press(RU.Z, 'KeyZ', { shiftKey: true });
+        if (at() !== i0 + 1) bad.push('Ctrl+Shift+Z on the Russian layout (Я on the Z key) did not redo (history ' + i0 + ' → ' + at() + ')');
+        step(); FM.history.undo(); i0 = at();
+        press(RU.y, 'KeyY');
+        if (at() !== i0 + 1) bad.push('Ctrl+Y on the Russian layout (н on the Y key) did not redo (history ' + i0 + ' → ' + at() + ')');
+
+        /* CONTROLS: the Latin letter typed wins over the key's place, and a key that types punctuation is not read by place */
+        i0 = step();
+        press('z', 'KeyW');
+        if (at() !== i0 - 1) bad.push('CONTROL: an AZERTY Ctrl+Z (z typed on the W key) did not undo (history ' + i0 + ' → ' + at() + '), so a Latin layout no longer matches by the letter it types');
+        i0 = step();
+        press('w', 'KeyZ');
+        if (at() !== i0) bad.push('CONTROL: an AZERTY Ctrl+W (w typed on the Z key) undid (history ' + i0 + ' → ' + at() + '), so the key’s place beat the Latin letter it typed');
+        i0 = step();
+        press(';', 'KeyZ');
+        if (at() !== i0) bad.push('CONTROL: Dvorak’s Ctrl+; (on the Z key) undid (history ' + i0 + ' → ' + at() + '), so a key that types punctuation was read by its place');
+
+        /* Ctrl+A: ф on the A key selects both layers */
+        FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.refreshAll();
+        press(RU.a, 'KeyA');
+        const sel = FM.selectionIds();
+        if (!(sel.length === 2 && ids.every(id => sel.indexOf(id) >= 0))) bad.push('Ctrl+A on the Russian layout (ф on the A key) did not select everything (' + sel.length + ' of 2 selected)');
+
+        /* Ctrl+C: с on the C key copies the selected layer */
+        FM.selectLayer(ids[0]);
+        FM.clipboard = [];
+        if (window.getSelection) window.getSelection().removeAllRanges();
+        press(RU.c, 'KeyC');
+        const cb = FM.clipboard || [];
+        if (!(cb.length === 1 && cb[0].snapshot && cb[0].snapshot.id === ids[0])) bad.push('Ctrl+C on the Russian layout (с on the C key) copied nothing (' + cb.length + ' on the clipboard)');
+
+        /* Ctrl+V: м on the V key pastes it. The clipboard is filled by hand if the copy above failed, so this is judged alone. */
+        if (!(FM.clipboard && FM.clipboard.length)) FM.copySelection();
+        if (!(FM.clipboard && FM.clipboard.length)) throw new Error('setup: FM.copySelection copied nothing with layer A selected');
+        const n0 = FM.scene.layers.length;
+        press(RU.v, 'KeyV');
+        if (!(await until(() => FM.scene.layers.length === n0 + 1, 3000))) bad.push('Ctrl+V on the Russian layout (м on the V key) pasted nothing (' + n0 + ' → ' + FM.scene.layers.length + ' layers)');
+        await idle();
+
+        /* CONTROL: Ctrl+D with в on the D key is left as it was */
+        FM.selectLayer(ids[0]);
+        const n1 = FM.scene.layers.length;
+        const ev = press(RU.d, 'KeyD');
+        await sleep(300);
+        await idle();
+        if (FM.scene.layers.length !== n1) bad.push('CONTROL: Ctrl+D on the Russian layout (в on the D key) duplicated a layer (' + n1 + ' → ' + FM.scene.layers.length + '), but ⌘D was left out of this fix on purpose: Simple’s own ⌘D reads the typed letter too, and the two editors must agree');
+        else if (ev.defaultPrevented) bad.push('CONTROL: Ctrl+D on the Russian layout (в on the D key) was taken from the browser, but ⌘D was left out of this fix on purpose');
+      }, idle);
+    } finally {
+      FM.clipboard = clip0;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+    } finally { _isoK.put(); }
+  });
+
+  /* (#9) …AND WHILE DRAWING. The drawing tool answers ⌘Z / ⇧⌘Z / ⌘Y itself (js/draw-tool.js's capture keydown: the bar's
+     ↶ ↷, one stroke at a time), and it tested the TYPED letter too (/^[zZyY]$/ on e.key), so on a Russian layout, where those
+     keys type я, Я and н, nothing took a stroke back; the editor's own handler does nothing while the tool is up. The tool now
+     asks FM._otherScriptLetter, the same question the editor's ⌘ keys ask. Strokes go in through the tool's own commit seam
+     (FM.drawTool._commit, what the finger calls) and are counted in the session (FM.drawTool._counts().subs); keys are pressed
+     on the page, as a real key is, with the Russian letters as \u escapes so a Latin lookalike cannot pass.
+     FAILS ON ff5f0ae8: Ctrl+я leaves both strokes, and Ctrl+Shift+Я and Ctrl+н put nothing back.
+     CONTROL: a Latin Ctrl+Z takes one stroke back, so the keys reach the tool at all. The session is ended in the way out. */
+  test('bughunt6 #9 Undo while drawing works on a Russian keyboard layout: Ctrl+Z pressed with the Russian letter on the Z key takes back one stroke, and Ctrl+Shift+Z and Ctrl+Y with the Russian letters on their keys put one back (CONTROL: a Latin Ctrl+Z takes one back too)', { item: '1176' }, async function () {
+    if (!FM.startDraw || !FM.drawTool || !FM.drawTool._commit || !FM.drawTool._undo || !FM.drawTool._counts || !FM.drawTool._stop) throw new Error('setup: the drawing tool has no test seams (_commit, _undo, _counts, _stop)');
+    /* isolation (20 Oct): the keys reach the editor only with Home and Settings shut (_bh6KeysToEditor); isoKeep puts Home back as found */
+    const _isoK = isoKeep(); try {
+    await _bh6KeysToEditor();
+    if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the drawing');
+    /* The Russian letters on the Z and Y keys (ЙЦУКЕН): я, Я, н */
+    const RU = { z: 'я', Z: 'Я', y: 'н' };
+    if (Object.keys(RU).some(k => /^[\x00-\x7f]$/.test(RU[k]))) throw new Error('setup: a Russian letter here is ASCII, so this would test nothing');
+    const press = (key, code, extra) => {
+      const ev = new KeyboardEvent('keydown', Object.assign({ key: key, code: code, ctrlKey: true, bubbles: true, cancelable: true }, extra || {}));
+      document.body.dispatchEvent(ev);
+      return ev;
+    };
+    const subs = () => FM.drawTool._counts().subs;
+    const stroke = (y) => { FM.drawTool.points = [[80, y], [140, y], [200, y], [260, y]]; FM.drawTool._commit(); };
+    const endDrawing = async () => { try { if (FM.drawTool.active) FM.drawTool._stop(); } catch (e) {} await sleep(40); };
+    const bad = [];
+    await _bh2With(async function () {
+      if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+      FM.startDraw('freehand');
+      if (!FM.drawTool.active || FM.drawTool.mode !== 'freehand') throw new Error('setup: FM.startDraw(freehand) did not start a drawing');
+      stroke(60); stroke(100); stroke(140);
+      if (subs() !== 3) throw new Error('setup: three strokes made ' + subs() + ' in the drawing, so nothing below would mean anything');
+
+      /* CONTROL: a Latin Ctrl+Z takes one stroke back */
+      let s0 = subs();
+      press('z', 'KeyZ');
+      if (subs() !== s0 - 1) throw new Error('setup: a Latin Ctrl+Z while drawing left ' + subs() + ' of ' + s0 + ' strokes, so no key here reaches the drawing');
+
+      /* Ctrl+Z: я on the Z key */
+      s0 = subs();
+      press(RU.z, 'KeyZ');
+      if (subs() !== s0 - 1) bad.push('Ctrl+Z on the Russian layout (я on the Z key) while drawing took no stroke back (' + s0 + ' → ' + subs() + ')');
+
+      /* Ctrl+Shift+Z: Я on the Z key; Ctrl+Y: н on the Y key. Each puts back a stroke taken out by the tool's own ↶ if none is waiting. */
+      if (!FM.drawTool._counts().redo) FM.drawTool._undo();
+      s0 = subs();
+      if (!FM.drawTool._counts().redo) throw new Error('setup: nothing to redo in the drawing after an undo');
+      press(RU.Z, 'KeyZ', { shiftKey: true });
+      if (subs() !== s0 + 1) bad.push('Ctrl+Shift+Z on the Russian layout (Я on the Z key) while drawing put no stroke back (' + s0 + ' → ' + subs() + ')');
+      FM.drawTool._undo();
+      s0 = subs();
+      press(RU.y, 'KeyY');
+      if (subs() !== s0 + 1) bad.push('Ctrl+Y on the Russian layout (н on the Y key) while drawing put no stroke back (' + s0 + ' → ' + subs() + ')');
+      if (!FM.drawTool.active) bad.push('the drawing ended during the keys, so the ones after it reached nothing');
+    }, endDrawing);
+    if (FM.drawTool.active) throw new Error('the drawing was still up after the test put the scene back');
+    if (bad.length) throw new Error(bad.join(' · '));
+    } finally { _isoK.put(); }
+  });
+
+  /* (#2) THE INSTALLED APP OPENS FROM ITS OFFLINE COPY WHEN THE NETWORK HANGS. Opening the app is a navigation, and sw.js
+     fetched the page with no time limit, retrying once on a throw: on one bar, or on Wi-Fi that reaches nothing, he saw a
+     blank screen until the platform gave up (about a minute on iOS) and then as long again for the retry, while a
+     complete offline copy (index-fallback) sat in the cache. The fix gives the page fetch one budget for both tries (8 s,
+     the app's own number) and, past it, serves the offline copy by the ordinary offline path, stale marker and all, while
+     the fetch carries on under waitUntil to refresh the copy for next time.
+     THE SEAM: sw.js reads its budget from self.FM_NAV_TIMEOUT_MS, 8000 when it is absent (always, in a real worker).
+     _bh6Worker's opts.navTimeoutMs puts a number there in the stub scope, so these run in tenths of a second, and the
+     last control gives no number, to hold the real default above a slow network's 2.5 s (#306: a short timer would
+     serve an older build on a connection that was only slow).
+     Every answer is raced against DEADLINE (4 s), so a launch that never answers fails by name instead of hanging.
+     THE RETRY'S NUMBERS: a 0.6 s budget and a first try that fails at 0.5 s. One budget for both answers at about 0.6 s;
+     a budget per try cannot answer before 1.1 s (0.5 + 0.6). The bar is 1.0 s: 0.4 s of room for a busy machine, and a
+     per-try budget can never come in under it.
+     FAILS ON 8b8cf793: the fetch that never answers leaves the launch with no answer at all, and so does the retry that
+     never answers, so neither gets the offline copy and nothing refreshes it.
+     CONTROLS, which hold before and after: a network answering in 50 ms is served and refreshes the copy and clears the
+     marker; one that fails at once gets the copy, marked, after two tries; with nothing cached a network slower than the
+     budget is still waited for; and with no budget given a network answering in 2.5 s is served. Each worker is a stub
+     scope of its own (_bh6Worker), so no global is replaced and there is nothing to restore. */
+  test('bughunt6 #2 The installed app opens from its offline copy when the network hangs: a launch whose page fetch never answers gets the cached page within its time budget, marked as the offline copy, a retry after a dropped first try fits in the same budget, and the answer that lands late refreshes the offline copy for next time unless it names scripts the phone does not hold (CONTROLS: a network that answers in 50 ms, one that fails at once, nothing cached, and the default budget waiting out a 2.5 s network)', { item: '1176' }, async function () {
+    const O = 'https://builderezra.github.io', base = '/FreeMotion/', P = O + base;
+    const DEADLINE = 4000;
+    const PAGE = v => '<span class="ver" title="Tap">' + v + '</span>';
+    const later = () => { const d = {}; d.p = new Promise((ok, no) => { d.ok = ok; d.no = no; }); return d; };
+    const within = (p, ms) => Promise.race([Promise.resolve(p).then(r => ({ r: r })), sleep(ms).then(() => null)]);
+    const text = async r => (r && typeof r.clone === 'function' ? await r.clone().text() : '');
+    const stamp = async w => { const n = w.store.get(w.key('served-stale-shell')); return n ? await n.clone().text() : null; };
+    const copy = w => text(w.store.get(w.key('index-fallback')));
+    const fails = () => Promise.reject(new TypeError('Failed to fetch'));
+    const bad = [];
+
+    /* 1. THE BUG: a page fetch that never answers, a 0.3 s budget, and an offline copy of v9.42 in the cache. Then the
+       late answer lands (v9.53, naming js/app.js?v=490, which the phone holds) and must become the offline copy, while the
+       marker keeps saying this launch opened v9.42. */
+    {
+      const slow = later();
+      const w = await _bh6Worker(O, base, [['index-fallback', PAGE('v9.42')], [P + 'js/app.js?v=490', 'bytes of js/app.js?v=490']], { navTimeoutMs: 300, fetch: () => slow.p });
+      const L = w.launch();
+      const got = await within(L.answer, DEADLINE);
+      if (!got) {
+        bad.push('a launch whose page fetch never answers had no answer ' + (DEADLINE / 1000) + ' s in, with a 0.3 s budget and an offline copy in the cache, so the installed app shows a blank screen until the network gives up, and then again for the retry');
+        slow.ok(new Response(PAGE('v9.53'), { status: 200 }));
+      } else {
+        const body = await text(got.r);
+        if (!/v9\.42/.test(body)) bad.push('past the budget the launch was not answered with the offline copy (v9.42) but with ' + JSON.stringify(body.slice(0, 80)));
+        if ((await stamp(w)) !== 'v9.42') bad.push('the launch opened the offline copy without the stale marker naming v9.42, so the app cannot say it opened an older copy (#306)');
+        if (!L.held.length) bad.push('the launch that stopped waiting handed nothing to waitUntil, so the browser may stop the worker and the slow answer is thrown away');
+        slow.ok(new Response('<script src="js/app.js?v=490"></script>' + PAGE('v9.53'), { status: 200 }));
+        if (!(await within(Promise.all(L.held), DEADLINE))) bad.push('the work kept alive for the late answer had not finished ' + (DEADLINE / 1000) + ' s after it landed');
+        const now = await copy(w);
+        if (!/v9\.53/.test(now)) bad.push('the answer that landed after the budget did not refresh the offline copy (it holds ' + JSON.stringify(now.slice(0, 80)) + '), so the next launch on a bad connection opens the older copy again');
+        if ((await stamp(w)) !== 'v9.42') bad.push('the late answer cleared or changed the stale marker, so the app would not say this launch opened its offline copy (v9.42)');
+      }
+    }
+
+    /* 1b. A late answer that names js/app.js?v=491, which the phone has never fetched (a release it has not opened yet),
+       leaves the offline copy alone: that page never ran here, so its new files are not cached, and an offline copy naming
+       them would hang on them next time instead of opening. Only judged when the launch was answered (1 says why not). */
+    {
+      const slow = later();
+      const w = await _bh6Worker(O, base, [['index-fallback', PAGE('v9.42')], [P + 'js/app.js?v=490', 'bytes of js/app.js?v=490']], { navTimeoutMs: 300, fetch: () => slow.p });
+      const L = w.launch();
+      if (await within(L.answer, DEADLINE)) {
+        slow.ok(new Response('<script src="js/app.js?v=491"></script>' + PAGE('v9.54'), { status: 200 }));
+        await within(Promise.all(L.held), DEADLINE);
+        const now = await copy(w);
+        if (!/v9\.42/.test(now)) bad.push('a late answer naming js/app.js?v=491, which the phone has never fetched, replaced the offline copy (it holds ' + JSON.stringify(now.slice(0, 80)) + '), so the next launch on a bad connection would open a page whose scripts are not there');
+      } else {
+        slow.ok(new Response(PAGE('v9.54'), { status: 200 }));
+      }
+    }
+
+    /* 2. THE RETRY FITS IN THE SAME BUDGET: 0.6 s, the first try fails at 0.5 s, the retry never answers. */
+    {
+      let tries = 0;
+      const w = await _bh6Worker(O, base, [['index-fallback', PAGE('v9.42')]], { navTimeoutMs: 600, fetch: () => { tries++; return tries === 1 ? sleep(500).then(fails) : new Promise(() => {}); } });
+      const t0 = performance.now();
+      const got = await within(w.launch().answer, DEADLINE);
+      const ms = performance.now() - t0;
+      if (!got) bad.push('a first try that failed at 0.5 s and a retry that never answers left the launch with no answer ' + (DEADLINE / 1000) + ' s in (budget 0.6 s), so the retry waits on the network with no limit');
+      else {
+        if (!/v9\.42/.test(await text(got.r))) bad.push('after a dropped first try and a hung retry the launch was not answered with the offline copy (v9.42)');
+        if (tries !== 2) bad.push('the first try failed at 0.5 s, inside the 0.6 s budget, and the page was fetched ' + tries + ' time(s), not twice, so the blip retry ' + (tries < 2 ? 'did not run' : 'ran more than once'));
+        if (ms >= 1000) bad.push('with a 0.6 s budget and the first try failing at 0.5 s the offline copy came ' + (ms / 1000).toFixed(2) + ' s in, not about 0.6 s: the retry got a budget of its own, so the wait doubles');
+      }
+    }
+
+    /* CONTROL: a network that answers in 50 ms is served, refreshes the offline copy and clears an old marker, as before */
+    {
+      const w = await _bh6Worker(O, base, [['index-fallback', PAGE('v9.42')], ['served-stale-shell', 'v9.42']], { navTimeoutMs: 300, fetch: () => sleep(50).then(() => new Response(PAGE('v9.53'), { status: 200 })) });
+      const L = w.launch();
+      const got = await within(L.answer, DEADLINE);
+      const body = got ? await text(got.r) : '';
+      if (!/v9\.53/.test(body)) bad.push('CONTROL: a network answering in 50 ms (budget 0.3 s) was not served: ' + (got ? JSON.stringify(body.slice(0, 80)) : 'no answer at all'));
+      else {
+        await within(Promise.all(L.held), DEADLINE);
+        if (!/v9\.53/.test(await copy(w))) bad.push('CONTROL: a launch answered by the network in 50 ms did not refresh the offline copy');
+        if ((await stamp(w)) !== null) bad.push('CONTROL: a launch answered by the network in 50 ms left the stale marker behind, so the app would warn about a load that was fine');
+      }
+    }
+
+    /* CONTROL: a network that fails at once gets the offline copy, marked, after two tries, as before */
+    {
+      let tries = 0;
+      const w = await _bh6Worker(O, base, [['index-fallback', PAGE('v9.42')]], { navTimeoutMs: 300, fetch: () => { tries++; return fails(); } });
+      const got = await within(w.launch().answer, DEADLINE);
+      if (!got || !/v9\.42/.test(await text(got.r))) bad.push('CONTROL: with a network that fails at once the launch was not answered with the offline copy (v9.42)');
+      else {
+        if (tries !== 2) bad.push('CONTROL: with a network that fails at once the page was fetched ' + tries + ' time(s), not twice (the blip retry)');
+        if ((await stamp(w)) !== 'v9.42') bad.push('CONTROL: with a network that fails at once the offline copy was served without the stale marker naming v9.42');
+      }
+    }
+
+    /* CONTROL: with nothing cached there is nothing better to show, so a network slower than the budget is waited for */
+    {
+      const w = await _bh6Worker(O, base, [], { navTimeoutMs: 300, fetch: () => sleep(600).then(() => new Response(PAGE('v9.53'), { status: 200 })) });
+      const got = await within(w.launch().answer, DEADLINE);
+      const ok = got && got.r && got.r.ok;
+      if (!ok || !/v9\.53/.test(await text(got.r))) bad.push('CONTROL: with nothing cached, a network answering in 0.6 s (budget 0.3 s) was not waited for: ' + (got ? (got.r && got.r.type === 'error' ? 'the launch failed at the budget' : 'the answer was not the page') : 'no answer at all'));
+    }
+
+    /* CONTROL: with no budget given (a real worker's 8 s), a network answering in 2.5 s is served, not the offline copy */
+    {
+      const w = await _bh6Worker(O, base, [['index-fallback', PAGE('v9.42')]], { fetch: () => sleep(2500).then(() => new Response(PAGE('v9.53'), { status: 200 })) });
+      const got = await within(w.launch().answer, DEADLINE + 2500);
+      const body = got ? await text(got.r) : '';
+      if (!/v9\.53/.test(body)) bad.push('CONTROL: with the default budget, a network answering in 2.5 s was not served (' + (got ? JSON.stringify(body.slice(0, 80)) : 'no answer at all') + '), so the budget is short enough to bring back #306: an older build on a connection that was only slow');
+    }
+
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ BUGHUNT 6 — #3: AN MP4 FRAME BIGGER THAN H.264 LEVEL 5.2 FAILED LATE, AND BLAMED THE BROWSER. pickVideoCodec
+   * (js/exporter.js) asks for High 5.2 at best, whose frame limit is 36,864 macroblocks (about 9.4 MP), and Chrome's
+   * isConfigSupported refuses a bigger frame for every candidate. A panorama photo as the first clip of a Custom project makes
+   * a 7680×1440 canvas (43,200 macroblocks) that nothing warns about, and the size list opens on Same as project. On 0eab51c5 the
+   * codec was picked after prepareCaches, holdVideoElements, the soundtrack mix and the AAC probe, so he waited through the
+   * decode and the mix, and then js/app.js said the browser does not support any of the H.264 settings: Chrome, which does.
+   * The encoder is stood in for (VideoEncoder.isConfigSupported, put back by its descriptor) by the level rule the refuter
+   * checked: a device whose encoder goes no higher than level 5.2, refusing a config when ceil(w/16)·ceil(h/16) is over the
+   * MaxFS of the level in its codec string (3.0: 1,620, 4.0: 8,192, 5.1 and 5.2: 36,864).
+   * The stages are closures inside exporter.js, so each is counted at a witness only it reaches: the pre-flight at
+   * FM.matchGradeFrameLayers (only prepareCaches calls it) and the mix at each OfflineAudioContext built at 2 channels and
+   * 48 kHz (buildAudioMix's). Export at that size is recorded at FM.exporter.run, not rendered.
+   * FAILS ON 0eab51c5: the refusal is an alert with the any-of-the-H.264-settings text, names no size, offers nothing, and comes
+   * after one pre-flight and one mix.
+   * CONTROL, run first: a 1080×1920 project under the same rule (and the real encoder's own answer as well) exports to its
+   * Export ready card with nothing said; both witnesses count its pre-flight and its mix, so the zeros below are real; and
+   * no setting is probed twice (the pick moved, it is not made again). WRITTEN WITHOUT RUNNING (code only, `node --check`). ═══ */
+  test('bughunt6 #3 An export too big for MP4 says so at once and offers a size that works: a 7680×1440 project the encoder refuses (an encoder that stops at H.264 level 5.2, stood in for) is named with 5760×1080 offered before any frame is decoded or the soundtrack mixed, never as a browser with no H.264; Not now exports nothing, and Export at that size exports 5760×1080 (CONTROL: a 1080×1920 project exports to its Export ready card, its pre-flight and mix are counted, and no setting is probed twice)', { item: '1176', budgetMs: 150000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no MP4 export to refuse');
+    if (typeof FM._runExport !== 'function' || typeof FM.showExportDialog !== 'function' || typeof FM._setExportSoloId !== 'function') throw new Error('setup: FM._runExport / FM.showExportDialog (the Export dialog and the entry its button calls) are not reachable');
+    if (!FM.exporter || typeof FM.exporter.run !== 'function' || typeof FM.ask !== 'function') throw new Error('setup: FM.exporter.run / FM.ask are not reachable');
+    if (typeof window.OfflineAudioContext !== 'function') throw new Error('setup: no OfflineAudioContext here, so the mix witness could not count anything');
+    const $ = id => document.getElementById(id);
+    const ready = $('export-ready'), discard = $('xr-discard'), dlg = $('export-dialog');
+    const fmtEl = $('exp-format'), rangeEl = $('exp-range'), resEl = $('exp-res'), fpsEl = $('exp-fps'), cwEl = $('exp-cw'), chEl = $('exp-ch');
+    if (!ready || !discard || !dlg || !fmtEl || !rangeEl || !resEl || !fpsEl || !cwEl || !chEl) throw new Error('setup: the Export dialog or the Export ready card is missing from this build');
+    const own = (o, k) => Object.getOwnPropertyDescriptor(o, k);
+    const put = (o, k, d) => { try { if (d) Object.defineProperty(o, k, d); else delete o[k]; } catch (e) {} };
+    const d0 = { probe: own(VideoEncoder, 'isConfigSupported'), mg: own(FM, 'matchGradeFrameLayers'), oac: own(window, 'OfflineAudioContext'),
+                 ask: own(FM, 'ask'), alert: own(window, 'alert'), run: own(FM.exporter, 'run') };
+    const keep = { fmt: fmtEl.value, range: rangeEl.value, fps: fpsEl.value, cw: cwEl.value, ch: chEl.value,
+                   solo: FM._exportSoloId ? FM._exportSoloId() : null, prefs: null, rep: null };
+    try { keep.prefs = localStorage.getItem('fm.exportPrefs'); keep.rep = localStorage.getItem('fm.lastExportReport'); } catch (e) {}
+    const realProbe = VideoEncoder.isConfigSupported, realMG = FM.matchGradeFrameLayers, ROAC = window.OfflineAudioContext, realRun = FM.exporter.run;
+    // the level rule: nothing above 5.2 on this device, and each level's frame limit in macroblocks
+    const MAXFS = lv => lv > 0x34 ? 0 : lv >= 0x33 ? 36864 : lv >= 0x32 ? 22080 : lv >= 0x2a ? 8704 : lv >= 0x28 ? 8192 : lv >= 0x20 ? 5120 : lv >= 0x1f ? 3600 : 1620;
+    const levelOk = c => {
+      const m = /^avc1\.[0-9a-f]{4}([0-9a-f]{2})$/i.exec(String(c && c.codec));
+      return !m || Math.ceil(c.width / 16) * Math.ceil(c.height / 16) <= MAXFS(parseInt(m[1], 16));
+    };
+    const X = '×';
+    let realToo = true, preps = 0, mixes = 0, answer = null, cardSeen = 0, closer = 0, running = null;
+    const probes = [], said = [], runs = [];
+    const _isoK = isoKeep();
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      Object.defineProperty(VideoEncoder, 'isConfigSupported', { configurable: true, writable: true, value: function (c) {
+        probes.push(c.width + X + c.height + ' ' + c.codec);
+        if (!levelOk(c)) return Promise.resolve({ supported: false, config: c });
+        return realToo ? realProbe.call(VideoEncoder, c) : Promise.resolve({ supported: true, config: c });
+      } });
+      Object.defineProperty(FM, 'matchGradeFrameLayers', { configurable: true, writable: true, value: function () {
+        preps++;
+        return realMG ? realMG.apply(this, arguments) : {};
+      } });
+      class MixWitness extends ROAC {
+        constructor(...a) { if (a[0] === 2 && a[2] === 48000) mixes++; super(...a); }
+      }
+      Object.defineProperty(window, 'OfflineAudioContext', { configurable: true, writable: true, value: MixWitness });
+      const askStub = function (o) {
+        said.push({ via: 'ask', text: [o && o.title, o && o.message, o && o.ok].filter(Boolean).join(' | '), preps: preps, mixes: mixes });
+        return Promise.resolve(answer);
+      };
+      askStub.isOpen = () => false;
+      Object.defineProperty(FM, 'ask', { configurable: true, writable: true, value: askStub });
+      Object.defineProperty(window, 'alert', { configurable: true, writable: true, value: function (m) {
+        said.push({ via: 'alert', text: String(m), preps: preps, mixes: mixes });
+      } });
+      Object.defineProperty(FM.exporter, 'run', { configurable: true, writable: true, value: function (o) {
+        const P = FM.scene.project, k = (o && o.scale) || 1;
+        runs.push((o.outW > 0 && o.outH > 0) ? o.outW + X + o.outH : Math.max(2, Math.round(P.width * k / 2) * 2) + X + Math.max(2, Math.round(P.height * k / 2) * 2));
+        if (runs.length > 1) return Promise.resolve();
+        return realRun.apply(this, arguments);
+      } });
+      // the MP4 ends on the Export ready card: put it away so the export can finish, and count that it came up
+      closer = setInterval(() => { if (!ready.classList.contains('hidden')) { cardSeen++; discard.click(); } }, 60);
+      const project = (w, h, name) => {
+        const S = FM.makeLayer('shape', { name: name, shape: 'rect', x: Math.round(w / 2), y: Math.round(h / 2), shapeW: Math.round(w / 4), shapeH: Math.round(h / 4), fill: '#e76f51', start: 0, duration: 0.2 });
+        FM.scene = scene([S], { project: { width: w, height: h, fps: 10, duration: 0.2, background: '#102030' } });
+        FM.selectLayer(null); FM.refreshAll();
+        FM.scene.project.duration = 0.2;
+      };
+      const openDialog = async () => {
+        await FM.showExportDialog(); await sleep(80);
+        if (dlg.classList.contains('hidden')) throw new Error('setup: the Export dialog did not open for the ' + FM.scene.project.width + X + FM.scene.project.height + ' project');
+        fmtEl.value = 'mp4'; rangeEl.value = 'whole'; fpsEl.value = 'project'; resEl.value = '1'; FM._setExportSoloId(null);
+        if (resEl.value !== '1') throw new Error('setup: the size list has no Same as project rung');
+      };
+      const exportNow = async what => {
+        preps = 0; mixes = 0; cardSeen = 0; probes.length = 0; said.length = 0; runs.length = 0;
+        running = FM._runExport();
+        const end = await Promise.race([running.then(() => 'done'), sleep(60000).then(() => 'hung')]);
+        if (end !== 'done') throw new Error(what + ' had neither finished nor stopped 60 s in');
+      };
+      const told = () => said.map(s => s.via + ' ' + JSON.stringify(s.text.slice(0, 160))).join(' / ') || 'nothing';
+
+      /* CONTROL: an ordinary portrait project, under the same rule and the real encoder's answer */
+      project(1080, 1920, 'bh6 #3 portrait');
+      await openDialog();
+      realToo = true;
+      await exportNow('CONTROL: a 1080' + X + '1920 MP4 export');
+      if (said.length) throw new Error('CONTROL: an ordinary 1080' + X + '1920 MP4 export was refused or failed: ' + told());
+      if (!cardSeen) throw new Error('CONTROL: the 1080' + X + '1920 MP4 export never reached its Export ready card, so it made no file');
+      if (!preps || !mixes) throw new Error('CONTROL: the 1080' + X + '1920 export counted ' + preps + ' pre-flight(s) at FM.matchGradeFrameLayers and ' + mixes + ' mix(es) at OfflineAudioContext, so these witnesses cannot see the stages and the zeros below would prove nothing');
+      const elsewhere = probes.filter(p => p.indexOf('1080' + X + '1920 ') !== 0);
+      if (elsewhere.length) throw new Error('CONTROL: an ordinary 1080' + X + '1920 export probed the encoder at other sizes as well (' + elsewhere.join(', ') + '): a frame the encoder takes must not go looking for a smaller one');
+      const twice = probes.filter((p, i) => probes.indexOf(p) !== i);
+      if (!probes.length || twice.length) throw new Error('CONTROL: the 1080' + X + '1920 export asked the encoder ' + (probes.join(', ') || 'nothing') + ': the codec pick is one probe per setting, made once (' + (twice.length ? twice.join(', ') + ' was asked twice' : 'it was never asked') + ')');
+
+      /* THE BUG: a panorama's canvas, 7680×1440, refused by the level 5.2 limit. Answered Not now. */
+      project(7680, 1440, 'bh6 #3 panorama');
+      await openDialog();
+      realToo = false; answer = null;
+      await exportNow('a 7680' + X + '1440 MP4 export');
+      const bad = [];
+      const generic = said.filter(s => /does not support any of the H\.264 settings/.test(s.text));
+      if (generic.length) bad.push('the 7680' + X + '1440 export was refused as a browser with no H.264 at all (' + JSON.stringify(generic[0].text.slice(0, 120)) + '): this Chrome encodes H.264, only not a frame this big, and nothing says the size');
+      const named = said.filter(s => s.text.indexOf('7680' + X + '1440') >= 0 && s.text.indexOf('5760' + X + '1080') >= 0);
+      if (!named.length) bad.push('nothing said named the frame (7680' + X + '1440) and offered the largest same-shape size the encoder takes (5760' + X + '1080, the 1080p rung of the size list); what was said: ' + told());
+      else {
+        if (named[0].preps || named[0].mixes) bad.push('the refusal came after ' + named[0].preps + ' pre-flight(s) and ' + named[0].mixes + ' mix(es): he waits through Decoding frames and the soundtrack for an export that was never going to be made');
+        if (named[0].via !== 'ask') bad.push('the size was said in an alert, with nothing to tap that exports at 5760' + X + '1080');
+      }
+      if (preps || mixes) bad.push('the refused export ran ' + preps + ' pre-flight(s) and ' + mixes + ' mix(es) in all, where it should run none');
+      if (cardSeen) bad.push('a refused export reached the Export ready card');
+      if (runs.length !== 1) bad.push('answered Not now, the export ran ' + runs.length + ' time(s) (' + runs.join(', ') + '), not once');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* …and Export at that size exports again at 5760×1080, through the same entry, with nothing more said */
+      await openDialog();
+      realToo = false; answer = true;
+      await exportNow('a 7680' + X + '1440 MP4 export answered Export at that size');
+      if (!said.some(s => s.via === 'ask')) throw new Error('the second 7680' + X + '1440 export was not offered a size at all: ' + told());
+      if (said.length !== 1) throw new Error('answered Export at that size, more was said: ' + told());
+      if (runs.join(',') !== '7680' + X + '1440,5760' + X + '1080') throw new Error('answered Export at that size, the export ran at ' + (runs.join(', ') || 'nothing') + ', not 7680' + X + '1440 and then 5760' + X + '1080');
+    } finally {
+      clearInterval(closer);
+      try { if (!ready.classList.contains('hidden')) discard.click(); } catch (e) {}
+      if (running) { try { await Promise.race([running, sleep(10000)]); } catch (e) {} }
+      put(FM.exporter, 'run', d0.run); put(window, 'alert', d0.alert); put(FM, 'ask', d0.ask);
+      put(window, 'OfflineAudioContext', d0.oac); put(FM, 'matchGradeFrameLayers', d0.mg); put(VideoEncoder, 'isConfigSupported', d0.probe);
+      try { if (!dlg.classList.contains('hidden')) { const x = $('exp-cancel'); if (x) x.click(); else dlg.classList.add('hidden'); } } catch (e) {}
+      try { const ov = $('export-overlay'); if (ov) ov.classList.add('hidden'); } catch (e) {}
+      fmtEl.value = keep.fmt; rangeEl.value = keep.range; fpsEl.value = keep.fps; cwEl.value = keep.cw; chEl.value = keep.ch;
+      try { FM._setExportSoloId(keep.solo); } catch (e) {}
+      try {
+        if (keep.prefs == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', keep.prefs);
+        if (keep.rep == null) localStorage.removeItem('fm.lastExportReport'); else localStorage.setItem('fm.lastExportReport', keep.rep);
+      } catch (e) {}
+      _isoK.put();
+    }
+  });
+
+  /* (#7) ⌘Z / ⌘Y AFTER A SLIDER OR A TICK BOX. The editor's keydown treated any focused <input> as typing and returned before
+     undo and redo, and on a PC a range or a checkbox keeps the focus after he drags or ticks it (the Opacity slider,
+     inspector.js's range row, refreshes nothing unless opacity is animated; a checkRow never refreshes), so Ctrl+Z after
+     moving Opacity did nothing until he clicked somewhere else. The fix asks the drawing tool's question at those two keys
+     only: is the focus a box he types in? The handler reads nothing but the key's target, so the inputs here are the test's
+     own, appended to the page, focused and pressed on, as a real key is; they are removed and the focus put back on the way
+     out. One real step to undo each time (a rename, committed), in the test's own scene with its own history.
+     FAILS ON 03a9eb51: Ctrl+Z on the focused slider and on the focused tick box leaves the history where it was, and Ctrl+Y
+     on the slider redoes nothing.
+     CONTROLS, which hold before and after: Ctrl+Z on the page undoes (the keys reach the handler at all), and Ctrl+Z and
+     Ctrl+Y in a focused text box move no project step and are not taken from the box, whose own undo is what they mean there. */
+  test('bughunt6 #7 Undo works after using a slider or a checkbox: Ctrl+Z pressed while a range slider or a tick box has the focus undoes, and Ctrl+Y on the slider redoes (CONTROLS: Ctrl+Z on the page undoes, and Ctrl+Z and Ctrl+Y in a focused text box are left to the box’s own undo)', { item: '1176' }, async function () {
+    /* isolation (20 Oct): the keys reach the editor only with Home and Settings shut (_bh6KeysToEditor); isoKeep puts Home back as found */
+    const _isoK = isoKeep(); try {
+    await _bh6KeysToEditor();
+    if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
+    const press = (target, key, code) => {
+      const ev = new KeyboardEvent('keydown', { key: key, code: code, ctrlKey: true, bubbles: true, cancelable: true });
+      attached(target, 'key target').dispatchEvent(ev);
+      return ev;
+    };
+    const at = () => FM.history._steps().index;
+    const focus0 = document.activeElement;
+    const made = [];
+    /* A native input of `type` on the page, small, in a corner (not over the middle, where FM.overlayOwnsScreen looks), focused */
+    const field = (type) => {
+      const el = document.createElement('input');
+      el.type = type;
+      if (type === 'range') { el.min = '0'; el.max = '1'; el.step = '0.01'; el.value = '0.5'; }
+      el.style.cssText = 'position:fixed;left:2px;top:2px;width:40px;height:16px;opacity:0.01;z-index:0;';
+      document.body.appendChild(el);
+      made.push(el);
+      el.focus({ preventScroll: true });
+      return el;
+    };
+    const bad = [];
+    let id = null, n = 0;
+    const step = () => { const a = FM.layerById(FM.scene, id); a.name = 'bh6 #7 A ' + (++n); FM.history.commit(); return at(); };
+    try {
+      await _bh2With(async function () {
+        const A = FM.makeLayer('shape', { name: 'bh6 #7 A', shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#e63946' });
+        A.start = 0; A.duration = 3; FM.scene.layers.push(A);
+        id = A.id;
+        FM.refreshAll();
+        FM.history.reset();
+        if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+
+        /* CONTROL: Ctrl+Z on the page undoes */
+        let i0 = step();
+        press(document.body, 'z', 'KeyZ');
+        if (at() !== i0 - 1) throw new Error('setup: Ctrl+Z on the page did not undo (history ' + i0 + ' → ' + at() + '), so no key here reaches the editor and nothing below would mean anything');
+
+        /* Ctrl+Z with a slider focused, as after dragging Opacity */
+        const range = field('range');
+        if (range.type !== 'range') throw new Error('setup: the slider came out as type ' + range.type);
+        i0 = step();
+        press(range, 'z', 'KeyZ');
+        if (at() !== i0 - 1) bad.push('Ctrl+Z with a slider focused did not undo (history ' + i0 + ' → ' + at() + ')');
+
+        /* Ctrl+Y with the slider still focused redoes a step undone by hand just before */
+        step(); FM.history.undo(); i0 = at();
+        if (!FM.history.canRedo()) throw new Error('setup: nothing to redo straight after an undo');
+        press(range, 'y', 'KeyY');
+        if (at() !== i0 + 1) bad.push('Ctrl+Y with a slider focused did not redo (history ' + i0 + ' → ' + at() + ')');
+
+        /* Ctrl+Z with a tick box focused, as after ticking Invert */
+        const box = field('checkbox');
+        i0 = step();
+        press(box, 'z', 'KeyZ');
+        if (at() !== i0 - 1) bad.push('Ctrl+Z with a tick box focused did not undo (history ' + i0 + ' → ' + at() + ')');
+
+        /* CONTROLS: a text box keeps Ctrl+Z and Ctrl+Y for its own undo */
+        const text = field('text');
+        text.value = 'bh6 #7';
+        i0 = step();
+        let ev = press(text, 'z', 'KeyZ');
+        if (at() !== i0) bad.push('CONTROL: Ctrl+Z in a focused text box undid a project step (history ' + i0 + ' → ' + at() + '), where the box’s own undo should have had it');
+        else if (ev.defaultPrevented) bad.push('CONTROL: Ctrl+Z in a focused text box was taken from the box (its default was prevented), so its own undo could not run');
+        FM.history.undo(); i0 = at();
+        if (!FM.history.canRedo()) throw new Error('setup: nothing to redo straight after an undo (text box control)');
+        ev = press(text, 'y', 'KeyY');
+        if (at() !== i0) bad.push('CONTROL: Ctrl+Y in a focused text box redid a project step (history ' + i0 + ' → ' + at() + '), where the box’s own redo should have had it');
+        else if (ev.defaultPrevented) bad.push('CONTROL: Ctrl+Y in a focused text box was taken from the box (its default was prevented)');
+      });
+    } finally {
+      made.forEach(el => { try { el.remove(); } catch (e) {} });
+      try {
+        if (focus0 && focus0 !== document.body && document.contains(focus0) && focus0.focus) focus0.focus({ preventScroll: true });
+        else if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+      } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+    } finally { _isoK.put(); }
+  });
+
+  /* (#6) bughunt6 #6: TAB WALKS ONLY THE ROWS THE TIMELINE SHOWS. Tab selected the next layer of the WHOLE project, so inside
+     Edit Group it walked out to a layer the open group's timeline does not draw, and past a collapsed group it walked into
+     members with no row on screen; a Delete after it deleted that layer. FM.selectAll was scoped against exactly this.
+     Keys are pressed on the page, as a real key is, in the test's own scene: X, then group G holding A and B.
+     FAILS ON bc67b146: inside G, the second Tab from A selects X; with G collapsed, the second Tab from X selects A.
+     CONTROL, which holds before and after: outside any group with nothing collapsed, Tab from X walks G, A, B and back to X,
+     the project's order, as it always did. The group is left on the way out. */
+  test('bughunt6 #6 Tab stays inside the group you are editing: inside Edit Group three Tabs and a Shift+Tab from A select only the group’s own A and B, and with the group collapsed Tab skips its members (CONTROL: outside any group with nothing collapsed, Tab walks every layer in order)', { item: '1176' }, async function () {
+    /* isolation (20 Oct): the keys reach the editor only with Home and Settings shut (_bh6KeysToEditor); isoKeep puts Home back as found */
+    const _isoK = isoKeep(); try {
+    await _bh6KeysToEditor();
+    if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
+    if (typeof FM.enterGroup !== 'function' || typeof FM.exitGroup !== 'function' || typeof FM.groupDescendants !== 'function') throw new Error('setup: Edit Group (FM.enterGroup / FM.exitGroup / FM.groupDescendants) is not reachable');
+    const tab = shift => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', shiftKey: !!shift, bubbles: true, cancelable: true }));
+      return FM.scene.selectedId;
+    };
+    const bad = [];
+    await _bh2With(async function () {
+      const shape = (name, x) => { const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 200, shapeW: 60, shapeH: 60, fill: '#2a9d8f' }); L.start = 0; L.duration = 3; return L; };
+      const X = shape('bh6 #6 X', 80), A = shape('bh6 #6 A', 200), B = shape('bh6 #6 B', 320);
+      const G = FM.makeLayer('group', { name: 'bh6 #6 G' });
+      G.start = 0; G.duration = 3; G.collapsed = false;
+      A.parent = G.id; B.parent = G.id;
+      FM.scene.layers.push(X, G, A, B);
+      const nm = id => { const l = FM.layerById(FM.scene, id); return l ? String(l.name).replace('bh6 #6 ', '') : String(id); };
+      try {
+        FM.refreshAll();
+        if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+
+        /* CONTROL: outside any group, nothing collapsed — every layer, in the project's order */
+        FM.selectLayer(X.id);
+        const walk = [tab(), tab(), tab(), tab()].map(nm);
+        if (walk[0] === 'X') throw new Error('setup: Tab did not move the selection at all, so no key here reaches the editor and nothing below would mean anything');
+        if (walk.join(',') !== 'G,A,B,X') throw new Error('CONTROL: outside any group with nothing collapsed, Tab from X walked ' + walk.join(', ') + ', not G, A, B, X (the project order Tab has always walked)');
+
+        /* inside Edit Group on G */
+        FM.enterGroup(G.id);
+        if (FM.groupContext !== G.id) throw new Error('setup: FM.enterGroup did not open the group');
+        FM.selectLayer(A.id);
+        const inside = [tab(), tab(), tab(), tab(true)].map(nm);
+        const out = inside.filter(n => n !== 'A' && n !== 'B');
+        if (out.length) bad.push('inside Edit Group on G (A and B), three Tabs and a Shift+Tab from A selected ' + inside.join(', ') + ': ' + out.join(', ') + ' has no row on the open group’s timeline, so a Delete there deletes a layer he cannot see');
+        else if (inside.join(',') !== 'B,A,B,A') bad.push('inside Edit Group the walk from A was ' + inside.join(', ') + ', not B, A, B, A');
+        FM.exitGroup(true);
+
+        /* G collapsed: its members have no rows */
+        G.collapsed = true; FM.refreshAll();
+        FM.selectLayer(X.id);
+        const folded = [tab(), tab(), tab()].map(nm);
+        const hid = folded.filter(n => n === 'A' || n === 'B');
+        if (hid.length) bad.push('with G collapsed, three Tabs from X selected ' + folded.join(', ') + ': ' + hid.join(', ') + ' is a member of the collapsed group, with no row on screen');
+        else if (folded.join(',') !== 'G,X,G') bad.push('with G collapsed, the walk from X was ' + folded.join(', ') + ', not G, X, G');
+      } finally {
+        if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+    } finally { _isoK.put(); }
+  });
+
+  /* (#10) bughunt6 #10: A HELD SPACE FLIPPED PLAY AND PAUSE. Space went to FM.togglePlay on every keydown, auto-repeat included,
+     so holding it a little long (past the system's repeat delay) started, stopped and started playback at the repeat rate;
+     M and A / S / D already return on e.repeat. Pressed on the page, as a real key is, in the test's own scene (one shape,
+     nothing to decode, so FM.requestPlay starts the transport inside the keydown). The transport is stopped on the way out.
+     FAILS ON bc67b146: after one Space and three repeats it is paused (play, pause, play, pause).
+     CONTROLS, which hold before and after: the first Space starts playback (the key reaches the editor at all), and a second
+     real Space, not a repeat, still toggles it (after the fix that is the pause). Each repeat is still taken from the browser
+     (its default prevented), so a held Space cannot press a focused button instead. */
+  test('bughunt6 #10 Holding Space does not flicker play and pause: one Space and then three auto-repeat Spaces leave it playing, each repeat still taken from the browser (CONTROLS: the first Space starts playback, and a second real Space still toggles it)', { item: '1176' }, async function () {
+    /* isolation (20 Oct): the keys reach the editor only with Home and Settings shut (_bh6KeysToEditor); isoKeep puts Home back as found */
+    const _isoK = isoKeep(); try {
+    await _bh6KeysToEditor();
+    if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
+    const space = rep => {
+      const ev = new KeyboardEvent('keydown', { key: ' ', code: 'Space', repeat: !!rep, bubbles: true, cancelable: true });
+      document.body.dispatchEvent(ev);
+      return ev;
+    };
+    const bad = [];
+    await _bh2With(async function () {
+      try {
+        if (FM.playing) FM.pause();
+        const A = FM.makeLayer('shape', { name: 'bh6 #10 A', shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#e9c46a' });
+        A.start = 0; A.duration = 20; FM.scene.layers.push(A);
+        FM.scene.project.duration = 20; FM.time = 0;
+        FM.refreshAll();
+        if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+
+        /* CONTROL: the first Space starts playback */
+        space(false);
+        if (!FM.playing) throw new Error('setup: a Space on the page did not start playback, so no key here reaches the editor and nothing below would mean anything');
+
+        /* the hold: three auto-repeats */
+        const seen = [];
+        for (let i = 0; i < 3; i++) {
+          const ev = space(true);
+          seen.push(FM.playing ? 'playing' : 'paused');
+          if (!ev.defaultPrevented) bad.push('auto-repeat Space ' + (i + 1) + ' was not taken from the browser, so a held Space presses whatever button had the focus');
+        }
+        if (seen.some(s => s !== 'playing')) bad.push('holding Space (one press, then three auto-repeats) went ' + seen.join(', ') + ': each repeat flipped play and pause, where a held key is one press');
+
+        /* CONTROL: a second real press (not a repeat) still toggles: it pauses here, once the hold left it playing */
+        const before = FM.playing;
+        space(false);
+        if (FM.playing === before) bad.push('CONTROL: a second real Space (not a repeat) did not toggle playback (it stayed ' + (before ? 'playing' : 'paused') + ')');
+      } finally {
+        if (FM.playing && FM.pause) FM.pause();
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+    } finally { _isoK.put(); }
+  });
+
+  /* (#11) bughunt6 #11: EXACT SIZE AND EXACT FPS START FROM THE PROJECT THAT IS OPEN. The dialog's change listener for Exact
+     size… (and Exact fps…) was wired once a session with the FIRST open's closure, so later picks seeded the first project's
+     numbers; and once the boxes held numbers nothing put them back, so a size typed for one project followed him into the
+     next. Two projects swapped in the way the #3 test swaps them (isoKeep puts the scene back), the dialog opened through
+     the real entry, the size and fps lists picked the way the Export card picks them (the value, then the change event).
+     FAILS ON bc67b146: on the 1920×1080 project Exact size… shows the 640×640 typed on the 1080×1920 one and Exact fps…
+     shows its 50; with the boxes emptied they fill in the first project the dialog opened on this session.
+     CONTROL, which holds before and after: each open offers that project's own size first (Same as project — W×H), so the
+     dialog is reading the project that is open. WRITTEN WITHOUT RUNNING (code only, `node --check`). */
+  test('bughunt6 #11 Exact size starts from the open project: after a 640×640 size and 50 fps were typed on a 1080×1920 project, Exact size… on a 1920×1080 project shows 1920×1080 and Exact fps… its own 24, and boxes he empties fill in from it too (CONTROL: each open offers that project’s own size first)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (typeof FM.showExportDialog !== 'function') throw new Error('setup: FM.showExportDialog (the Export dialog’s entry) is not reachable');
+    const $ = id => document.getElementById(id);
+    const dlg = $('export-dialog'), fmtEl = $('exp-format'), rangeEl = $('exp-range'), resEl = $('exp-res'), fpsEl = $('exp-fps');
+    const cwEl = $('exp-cw'), chEl = $('exp-ch'), fnEl = $('exp-fps-num');
+    if (!dlg || !fmtEl || !rangeEl || !resEl || !fpsEl || !cwEl || !chEl || !fnEl) throw new Error('setup: the Export dialog or its size / fps controls are missing from this build');
+    const keep = { fmt: fmtEl.value, range: rangeEl.value, fps: fpsEl.value, cw: cwEl.value, ch: chEl.value, fn: fnEl.value, prefs: null };
+    try { keep.prefs = localStorage.getItem('fm.exportPrefs'); } catch (e) {}
+    const X = '×';
+    const pick = (el, v) => { el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+    const boxes = () => cwEl.value + X + chEl.value;
+    const shut = async () => { try { if (!dlg.classList.contains('hidden')) { const x = $('exp-cancel'); if (x) x.click(); else dlg.classList.add('hidden'); } } catch (e) {} await sleep(60); };
+    const bad = [];
+    const _isoK = isoKeep();
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const project = (w, h, fps, name) => {
+        const S = FM.makeLayer('shape', { name: name, shape: 'rect', x: Math.round(w / 2), y: Math.round(h / 2), shapeW: 100, shapeH: 100, fill: '#264653', start: 0, duration: 2 });
+        FM.scene = scene([S], { project: { width: w, height: h, fps: fps, duration: 2, background: '#101010' } });
+        FM.selectLayer(null); FM.refreshAll();
+      };
+      const open = async (w, h) => {
+        await FM.showExportDialog(); await sleep(80);
+        if (dlg.classList.contains('hidden')) throw new Error('setup: the Export dialog did not open for the ' + w + X + h + ' project');
+        const first = resEl.options[0];
+        if (!first || first.value !== '1' || first.textContent.indexOf(w + X + h) < 0) throw new Error('CONTROL: the ' + w + X + h + ' project’s Export dialog does not offer its own size first (it reads ' + (first ? JSON.stringify(first.textContent) : 'nothing') + '), so it is not reading the open project at all');
+        if (![].some.call(resEl.options, o => o.value === 'custom') || ![].some.call(fpsEl.options, o => o.value === 'custom')) throw new Error('setup: the size or fps list has no Exact (custom) choice');
+      };
+
+      /* the first project, 1080×1920 at 30 fps: Exact size… and Exact fps…, with a size and a rate typed for this export */
+      project(1080, 1920, 30, 'bh6 #11 portrait');
+      await open(1080, 1920);
+      pick(resEl, 'custom'); pick(fpsEl, 'custom');
+      cwEl.value = '640'; chEl.value = '640'; fnEl.value = '50';
+      cwEl.dispatchEvent(new Event('input', { bubbles: true }));
+      await shut();
+
+      /* the next project, 1920×1080 at 24 fps */
+      project(1920, 1080, 24, 'bh6 #11 landscape');
+      await open(1920, 1080);
+      pick(resEl, 'custom');
+      if (boxes() !== '1920' + X + '1080') bad.push('Exact size… on the 1920' + X + '1080 project shows ' + boxes() + ', not the project’s own 1920' + X + '1080' + (boxes() === '640' + X + '640' ? ' (the size typed on the last project followed him here)' : ''));
+      pick(fpsEl, 'custom');
+      if (fnEl.value !== '24') bad.push('Exact fps… on the 24 fps project shows ' + JSON.stringify(fnEl.value) + ', not its own 24' + (fnEl.value === '50' ? ' (the rate typed on the last project followed him here)' : ''));
+
+      /* boxes he empties start again from THIS project, not from the first project the dialog opened on this session */
+      pick(resEl, '1'); cwEl.value = ''; chEl.value = ''; pick(resEl, 'custom');
+      if (boxes() !== '1920' + X + '1080') bad.push('with the boxes emptied, Exact size… on the 1920' + X + '1080 project filled in ' + boxes() + ', not 1920' + X + '1080 (the dialog’s listener still holds the numbers of the first project it opened on)');
+      pick(fpsEl, 'project'); fnEl.value = ''; pick(fpsEl, 'custom');
+      if (fnEl.value !== '24') bad.push('with the box emptied, Exact fps… on the 24 fps project filled in ' + JSON.stringify(fnEl.value) + ', not 24');
+    } finally {
+      await shut();
+      fmtEl.value = keep.fmt; rangeEl.value = keep.range; fpsEl.value = keep.fps; cwEl.value = keep.cw; chEl.value = keep.ch; fnEl.value = keep.fn;
+      try { if (keep.prefs == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', keep.prefs); } catch (e) {}
+      _isoK.put();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#12) bughunt6 #12: A PNG SEQUENCE OVER 900 FRAMES WAS REFUSED ONLY AFTER EXPORT, WITH ADVICE THAT CANNOT HELP. js/exporter.js
+     runFrames refuses more than 900 frames (or more than 2 GB of frames in memory) before it renders anything, but the
+     Export card said "1200 PNGs in a ZIP" with Export live, and the one refusal told him to shorten the range, lower the frame
+     rate OR DROP THE RESOLUTION, which cannot bring 1200 frames under 900. Projects swapped in the way the #3 test swaps them
+     (isoKeep puts the scene back), the card read off its own summary, note and button after FM.exportCard.sync(), and the
+     export started anyway through the entry the Export button calls (FM._runExport), with window.alert recorded and put back
+     by its descriptor. Small frames (320×180), so the 1200-frame case is over the frame count and nowhere near the memory one.
+     FAILS ON bc67b146: the 40 s card says 1200 PNGs in a ZIP with Export live, and the refusal offers the resolution.
+     CONTROLS, which hold before and after: at 30 s (900 frames, the most there may be) the card says 900 PNGs in a ZIP with
+     Export live; and a 30-frame 7680×4320 sequence (about 4 GB in memory) is refused with the resolution still in the advice,
+     because there it helps. WRITTEN WITHOUT RUNNING (code only, `node --check`). */
+  test('bughunt6 #12 The export card warns before a PNG-frames export goes over 900 frames: a 40 s project at 30 fps with Frames picked says 1200 frames, over the 900-frame limit, with Export greyed, and an export started anyway is refused naming the 900 without offering a lower resolution (CONTROLS: at 30 s the card says 900 PNGs in a ZIP with Export live, and a sequence over the memory budget is still told to drop the resolution)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (typeof FM.showExportDialog !== 'function' || typeof FM._runExport !== 'function') throw new Error('setup: FM.showExportDialog / FM._runExport (the Export dialog and the entry its button calls) are not reachable');
+    if (!FM.exportCard || typeof FM.exportCard.sync !== 'function') throw new Error('setup: the Export card (FM.exportCard) is not loaded');
+    if (!FM.exporter || typeof FM.exporter.runFrames !== 'function' || !FM.zipWrite) throw new Error('setup: the PNG-frames exporter or its ZIP writer is not loaded, so nothing would be refused for the reason under test');
+    const $ = id => document.getElementById(id);
+    const dlg = $('export-dialog'), fmtEl = $('exp-format'), rangeEl = $('exp-range'), resEl = $('exp-res'), fpsEl = $('exp-fps');
+    const go = $('exp-go'), small = $('xa-small'), noteEl = $('xa-note');
+    if (!dlg || !fmtEl || !rangeEl || !resEl || !fpsEl || !go || !small || !noteEl) throw new Error('setup: the Export dialog, its controls or the card’s summary / note / Export button are missing from this build');
+    const own = (o, k) => Object.getOwnPropertyDescriptor(o, k);
+    const put = (o, k, d) => { try { if (d) Object.defineProperty(o, k, d); else delete o[k]; } catch (e) {} };
+    const d0 = { alert: own(window, 'alert') };
+    const keep = { fmt: fmtEl.value, range: rangeEl.value, fps: fpsEl.value, prefs: null, rep: null };
+    try { keep.prefs = localStorage.getItem('fm.exportPrefs'); keep.rep = localStorage.getItem('fm.lastExportReport'); } catch (e) {}
+    const said = [], bad = [];
+    const _isoK = isoKeep();
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      Object.defineProperty(window, 'alert', { configurable: true, writable: true, value: function (m) { said.push(String(m)); } });
+      const project = (w, h, dur, name) => {
+        const S = FM.makeLayer('shape', { name: name, shape: 'rect', x: Math.round(w / 2), y: Math.round(h / 2), shapeW: Math.round(w / 4), shapeH: Math.round(h / 4), fill: '#f4a261', start: 0, duration: dur });
+        S.start = 0; S.duration = dur;
+        FM.scene = scene([S], { project: { width: w, height: h, fps: 30, duration: dur, background: '#102030' } });
+        FM.selectLayer(null); FM.refreshAll();
+        FM.scene.project.duration = dur;
+      };
+      const frames = () => { fmtEl.value = 'frames'; fmtEl.dispatchEvent(new Event('change', { bubbles: true })); rangeEl.value = 'whole'; fpsEl.value = 'project'; resEl.value = '1'; };
+      const card = async () => { FM.exportCard.sync(); await sleep(40); return { small: small.textContent || '', note: noteEl.textContent || '', off: !!go.disabled }; };
+      const PNG = s => /PNG sequence/.test(s);
+
+      /* CONTROL: 30 s at 30 fps is 900 frames, the most a sequence may have */
+      project(320, 180, 30, 'bh6 #12 thirty');
+      await FM.showExportDialog(); await sleep(80);
+      if (dlg.classList.contains('hidden')) throw new Error('setup: the Export dialog did not open');
+      frames();
+      let c = await card();
+      if (fmtEl.value !== 'frames') throw new Error('setup: the export format would not take frames');
+      if (c.small.indexOf('900 PNGs in a ZIP') < 0 || /limit/.test(c.small)) throw new Error('CONTROL: a 30 s Frames export at 30 fps (900 frames, which the exporter makes) reads ' + JSON.stringify(c.small) + ' on the card, not 900 PNGs in a ZIP');
+      if (c.off) throw new Error('CONTROL: Export is greyed for 900 frames, which the exporter makes');
+
+      /* 40 s at 30 fps: 1200 frames */
+      FM.scene.project.duration = 40; FM.scene.layers[0].duration = 40;
+      c = await card();
+      if (c.small.indexOf('over the 900-frame limit') < 0) bad.push('a 40 s Frames export at 30 fps (1200 frames) reads ' + JSON.stringify(c.small) + ' on the card: nothing says it is over the 900-frame limit until Export is tapped');
+      if (!c.off) bad.push('Export is live on the card for 1200 PNG frames, which the exporter can only refuse');
+
+      /* …and started anyway, through the entry the Export button calls: refused by the frame count */
+      said.length = 0;
+      await FM._runExport(); await sleep(60);
+      const fr = said.filter(PNG);
+      if (!fr.length) bad.push('the 1200-frame export, started anyway, said nothing about the PNG sequence (' + (said.length ? said.map(s => JSON.stringify(s.slice(0, 120))).join(' / ') : 'nothing at all') + ')');
+      else {
+        if (!/\b900\b/.test(fr[0])) bad.push('the 1200-frame refusal does not say a sequence holds at most 900 frames: ' + JSON.stringify(fr[0]));
+        if (/resolution/i.test(fr[0])) bad.push('the 1200-frame refusal tells him to drop the resolution, which cannot bring 1200 frames under 900: ' + JSON.stringify(fr[0]));
+      }
+
+      /* CONTROL: over the memory budget at 30 frames (7680×4320, about 133 MB a frame), the resolution is still in the advice */
+      project(7680, 4320, 1, 'bh6 #12 huge');
+      frames();
+      said.length = 0;
+      await FM._runExport(); await sleep(60);
+      const mem = said.filter(PNG);
+      if (!mem.length || !/resolution/i.test(mem[0])) bad.push('CONTROL: a 30-frame 7680×4320 sequence (about 4 GB in memory) was not refused with the advice to drop the resolution, which is what helps there: ' + (said.length ? said.map(s => JSON.stringify(s.slice(0, 120))).join(' / ') : 'nothing was said'));
+    } finally {
+      put(window, 'alert', d0.alert);
+      try { if (!dlg.classList.contains('hidden')) { const x = $('exp-cancel'); if (x) x.click(); else dlg.classList.add('hidden'); } } catch (e) {}
+      try { const ov = $('export-overlay'); if (ov) ov.classList.add('hidden'); } catch (e) {}
+      fmtEl.value = keep.fmt; rangeEl.value = keep.range; fpsEl.value = keep.fps;
+      try {
+        if (keep.prefs == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', keep.prefs);
+        if (keep.rep == null) localStorage.removeItem('fm.lastExportReport'); else localStorage.setItem('fm.lastExportReport', keep.rep);
+      } catch (e) {}
+      _isoK.put();
+      /* the card redrawn for the format and scene put back, so the Export button is not left greyed for the next test */
+      try { if (FM._syncExportFormat) FM._syncExportFormat(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#13) bughunt6 #13: A 17TH AUDIO EFFECT WAS ADDED, THEN LOST. The load sanitiser (js/storage.js sanitizeAudioFx) keeps the
+     first 16 audio effects of a clip on every Undo, Redo, reopen and friend's edit, and the autosave follows, but a tap in the
+     Audio Effects browser, the ⋯ menu's Duplicate and the Paste button all added a 17th with no check; only the Voice path
+     refused (FM.audioVoices.addTo, and its toast: A clip holds 16 audio effects). Each path is driven the way his finger
+     drives it — the browser opened on the clip and an effect tile tapped; the open row's ⋯ and its Duplicate (as the 727
+     test does); the Audio Effects section's Paste with one effect on the clipboard — on a video clip with a media record (the
+     browser refuses a clip it thinks has no sound), in the test's own scene. FM.toast is recorded and put back by its
+     descriptor; the audio clipboard is put back as it was.
+     FAILS ON bc67b146: each of the three paths leaves 17 audio effects on the clip and a history step, and says nothing.
+     CONTROLS, which hold before and after: the sanitiser keeps 16 of 17 (so 16 is the cap an Undo applies), and with 15 on the
+     clip the browser's tap adds the 16th (so the refusals below are the cap, not a tap that never landed). */
+  test('bughunt6 #13 A clip cannot be given a seventeenth audio effect: with 16 on a clip, a tap in the Audio Effects browser, the ⋯ menu’s Duplicate and Paste are each refused in the Voice path’s words (A clip holds 16 audio effects) and add nothing, so no Undo can cut one (CONTROLS: the sanitiser keeps 16 of 17, and with 15 on the clip the browser’s tap adds the 16th)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.audioFxBrowser || typeof FM.audioFxBrowser.open !== 'function' || !FM.audioFxRegistry || !FM.audioVoices) throw new Error('setup: the Audio Effects browser, its registry or FM.audioVoices is not loaded');
+    if (!FM.inspector || typeof FM.inspector.openCategory !== 'function' || !FM.contextMenu) throw new Error('setup: the inspector or the context menu is not reachable');
+    if (!FM.storage || typeof FM.storage._sanitizeLayers !== 'function' || !FM.history || !FM.history._steps) throw new Error('setup: FM.storage._sanitizeLayers or FM.history._steps is missing');
+    const MAX = FM.audioVoices.max;
+    if (MAX !== 16) throw new Error('setup: FM.audioVoices.max is ' + MAX + ', not the 16 this test was written for');
+    /* CONTROL: what an Undo, a reopen or a friend's edit keeps */
+    const probe = [{ type: 'video', audioFx: [] }];
+    for (let i = 0; i < MAX + 1; i++) probe[0].audioFx.push(FM.audioFxRegistry.makeInstance('gain'));
+    FM.storage._sanitizeLayers(probe);
+    if (probe[0].audioFx.length !== MAX) throw new Error('CONTROL: the load sanitiser keeps ' + probe[0].audioFx.length + ' of 17 audio effects, not ' + MAX + ', so ' + MAX + ' is not the cap an Undo applies');
+    const own = (o, k) => Object.getOwnPropertyDescriptor(o, k);
+    const put = (o, k, d) => { try { if (d) Object.defineProperty(o, k, d); else delete o[k]; } catch (e) {} };
+    const d0 = { toast: own(FM, 'toast'), clip: own(FM, 'audioFxClipboard') };
+    const realToast = FM.toast;
+    const toasts = [], bad = [];
+    const aRoot = document.getElementById('afx-browser');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const away = () => {
+      try { if (FM.audioFxBrowser.close) FM.audioFxBrowser.close(); } catch (e) {}
+      try { if (FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+    };
+    try {
+      if (hadHome) FM.home.close();
+      Object.defineProperty(FM, 'toast', { configurable: true, writable: true, value: function (m) {
+        toasts.push(String(m));
+        return realToast ? realToast.apply(this, arguments) : undefined;
+      } });
+      await _bh2With(async function (media) {
+        const V = FM.makeLayer('video', { name: 'bh6 #13 clip', x: 100, y: 100, start: 0, duration: 5 });
+        V.start = 0; V.duration = 5;
+        FM.media.set(V.id, { kind: 'video', el: document.createElement('video'), width: 640, height: 360, duration: 5 });
+        media.push(V.id);
+        FM.scene.layers.push(V);
+        const live = () => FM.layerById(FM.scene, V.id);
+        const count = () => ((live() || {}).audioFx || []).length;
+        /* n plain Gains on the clip, the first one open (the ⋯ menu lives on the open row); a fresh history over it */
+        const fill = n => {
+          const L = live();
+          L.audioFx = [];
+          for (let i = 0; i < n; i++) { const f = FM.audioFxRegistry.makeInstance('gain'); f._expanded = i === 0; L.audioFx.push(f); }
+          FM.selectLayer(L.id); FM.refreshAll(); FM.history.reset();
+        };
+        const refused = () => toasts.some(t => t.indexOf('A clip holds ' + MAX + ' audio effects') === 0);
+        const judge = (what, i0) => {
+          if (count() !== MAX) bad.push('with ' + MAX + ' audio effects on the clip, ' + what + ' left ' + count() + ': the next Undo, reopen or friend’s edit keeps the first ' + MAX + ' and the newest is lost, autosaved');
+          else if (FM.history._steps().index !== i0) bad.push(what + ' added nothing but still made a history step');
+          if (count() === MAX && !refused()) bad.push(what + ' was refused without a word (said: ' + (toasts.length ? toasts.map(t => JSON.stringify(t.slice(0, 90))).join(' / ') : 'nothing') + '), where the Voice path says A clip holds ' + MAX + ' audio effects');
+        };
+        /* the browser opened on the clip, and one ordinary effect tile tapped (a featured card, a recent, or a category's) */
+        const browserTap = async () => {
+          FM.audioFxBrowser.open(live()); await sleep(300);
+          if (!aRoot || aRoot.classList.contains('hidden')) throw new Error('setup: the Audio Effects browser did not open on the clip');
+          let t = aRoot.querySelector('.fxb-featured .fxb-card') || aRoot.querySelector('.fxb-tile:not(.afxb-voice-tile)');
+          if (!t) {
+            const ban = [].slice.call(aRoot.querySelectorAll('.fxb-banner')).filter(b => b.dataset.cat !== 'voice')[0];
+            if (ban) { ban.click(); await sleep(120); t = aRoot.querySelector('.fxb-catview .fxb-tile:not(.afxb-voice-tile)'); }
+          }
+          if (!t) throw new Error('setup: the Audio Effects browser shows no effect tile to tap');
+          t.click(); await sleep(150);
+          away(); await sleep(40);
+        };
+        /* the Audio Effects section of the inspector, on the clip */
+        const audioSection = async () => {
+          FM.inspector.openCategory('audiofx'); FM.inspector.refresh(); await sleep(200);
+          const add = [].slice.call(document.querySelectorAll('.fx-add-btn')).filter(b => b.textContent === '+ Add Audio Effect')[0];
+          const sec = add && add.parentElement;
+          if (!sec) throw new Error('setup: the inspector shows no Audio Effects section for the clip');
+          return sec;
+        };
+
+        /* CONTROL: with 15 the browser's tap adds the 16th */
+        fill(MAX - 1);
+        await browserTap();
+        if (count() !== MAX) throw new Error('CONTROL: with ' + (MAX - 1) + ' audio effects on the clip a tap in the Audio Effects browser left ' + count() + ', not ' + MAX + ', so the refusals below would prove nothing');
+
+        /* 1 · a tap in the browser */
+        fill(MAX);
+        toasts.length = 0;
+        let i0 = FM.history._steps().index;
+        await browserTap();
+        judge('a tap in the Audio Effects browser', i0);
+
+        /* 2 · the open row's ⋯ → Duplicate */
+        fill(MAX);
+        let sec = await audioSection();
+        const more = [].slice.call(sec.querySelectorAll('.fx-icon-btn')).filter(b => b.textContent === '⋯')[0];
+        if (!more) throw new Error('setup: no ⋯ on the open audio effect row');
+        toasts.length = 0;
+        i0 = FM.history._steps().index;
+        more.click(); await sleep(120);
+        const dup = [].slice.call(document.querySelectorAll('#ctx-menu .ctx-item, #ctx-menu button, #ctx-menu [role=menuitem]')).filter(r => /^Duplicate$/.test(r.textContent.trim()))[0];
+        if (!dup) throw new Error('setup: the audio effect’s ⋯ menu has no Duplicate');
+        dup.click(); await sleep(150);
+        away();
+        judge('Duplicate in the ⋯ menu', i0);
+
+        /* 3 · Paste, with one effect on the audio clipboard */
+        fill(MAX);
+        FM.audioFxClipboard = [JSON.parse(JSON.stringify(FM.audioFxRegistry.makeInstance('reverb')))];
+        sec = await audioSection();
+        const paste = [].slice.call(sec.querySelectorAll('.fx-act')).filter(b => b.textContent === 'Paste')[0];
+        if (!paste || paste.disabled) throw new Error('setup: the Audio Effects section has no live Paste with an effect on the clipboard');
+        toasts.length = 0;
+        i0 = FM.history._steps().index;
+        paste.click(); await sleep(150);
+        judge('Paste', i0);
+      }, async () => { away(); });
+    } finally {
+      away();
+      put(FM, 'toast', d0.toast);
+      put(FM, 'audioFxClipboard', d0.clip);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#15) bughunt6 #15: STARRING AN EFFECT DELETED THE FAVOURITES THIS BUILD DOES NOT KNOW. Both browsers' toggleFav wrote back
+     readList's answer, and readList drops every id this build's registry does not have, so one star after a rollback (or
+     with an effect since retired) deleted those favourites from disk for good: queue 721's class, fixed there for presets.
+     The stored lists are written and read straight (localStorage 'fm.fx.fav' and 'fm.afx.fav', put back as they were), the
+     stars toggled through the functions every ★ calls (FM.fxBrowser.toggleFav, FM.audioFxBrowser.toggleFav).
+     FAILS ON bc67b146: starring Glow leaves ["blur","glow"] stored, and starring Reverb leaves ["gain","reverb"]: the
+     unknown no-such-effect ids are gone.
+     CONTROLS, which hold before and after: the star still answers on, then off; the stored known favourite stays; and what
+     the browsers SHOW still leaves the unknown id out (isFav says no), so a stored id that names nothing never reaches a tile. */
+  test('bughunt6 #15 Starring an effect keeps favourites this build does not know: with blur and no-such-effect stored, starring and unstarring Glow keeps no-such-effect in the stored favourites, and the same for the audio browser with gain and Reverb (CONTROLS: the star answers on then off, the known favourite stays, and the unknown one is never shown as a favourite)', { item: '1176' }, function () {
+    if (!FM.fxBrowser || typeof FM.fxBrowser.toggleFav !== 'function' || typeof FM.fxBrowser.isFav !== 'function') throw new Error('setup: FM.fxBrowser.toggleFav / isFav (what every ★ in the Effects browser calls) are not reachable');
+    if (!FM.audioFxBrowser || typeof FM.audioFxBrowser.toggleFav !== 'function' || typeof FM.audioFxBrowser.isFav !== 'function') throw new Error('setup: FM.audioFxBrowser.toggleFav / isFav are not reachable');
+    if (!FM.fxRegistry.get('blur') || !FM.fxRegistry.get('glow') || FM.fxRegistry.get('no-such-effect')) throw new Error('setup: this build’s effects registry does not have blur and glow, or has a no-such-effect');
+    if (!FM.audioFxRegistry.get('gain') || !FM.audioFxRegistry.get('reverb') || FM.audioFxRegistry.get('no-such-effect')) throw new Error('setup: this build’s audio registry does not have gain and reverb, or has a no-such-effect');
+    const KEYS = ['fm.fx.fav', 'fm.afx.fav'];
+    const keep = {};
+    KEYS.forEach(k => { try { keep[k] = localStorage.getItem(k); } catch (e) { keep[k] = null; } });
+    const stored = k => { try { const a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+    const bad = [];
+    try {
+      [[FM.fxBrowser, 'fm.fx.fav', 'blur', 'glow', 'the Effects browser'], [FM.audioFxBrowser, 'fm.afx.fav', 'gain', 'reverb', 'the Audio Effects browser']].forEach(([B, key, known, other, where]) => {
+        localStorage.setItem(key, JSON.stringify([known, 'no-such-effect']));
+        /* CONTROL: what is shown leaves the unknown id out, and keeps the known one */
+        if (B.isFav('no-such-effect')) bad.push('CONTROL: ' + where + ' shows no-such-effect as a favourite, an id this build has no effect for');
+        if (!B.isFav(known)) bad.push('CONTROL: ' + where + ' does not show the stored ' + known + ' as a favourite');
+        const on = B.toggleFav(other);
+        if (on !== true) bad.push('CONTROL: starring ' + other + ' in ' + where + ' answered ' + on + ', not on');
+        let s = stored(key);
+        if (s.indexOf('no-such-effect') < 0) bad.push('starring ' + other + ' in ' + where + ' left ' + JSON.stringify(s) + ' stored: the favourite this build does not know (no-such-effect) was deleted from disk');
+        if (s.indexOf(known) < 0 || s.indexOf(other) < 0) bad.push('starring ' + other + ' in ' + where + ' left ' + JSON.stringify(s) + ', not ' + known + ' and ' + other + ' among them');
+        const off = B.toggleFav(other);
+        if (off !== false) bad.push('CONTROL: unstarring ' + other + ' in ' + where + ' answered ' + off + ', not off');
+        s = stored(key);
+        if (s.indexOf('no-such-effect') < 0) bad.push('unstarring ' + other + ' in ' + where + ' left ' + JSON.stringify(s) + ': no-such-effect was deleted');
+        if (s.indexOf(other) >= 0 || s.indexOf(known) < 0) bad.push('unstarring ' + other + ' in ' + where + ' left ' + JSON.stringify(s) + ', where ' + other + ' should be gone and ' + known + ' kept');
+        if (B.isFav('no-such-effect')) bad.push('CONTROL: after the stars ' + where + ' shows no-such-effect as a favourite');
+      });
+    } finally {
+      KEYS.forEach(k => { try { if (keep[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, keep[k]); } catch (e) {} });
+    }
     if (bad.length) throw new Error(bad.join(' · '));
   });
   // ── end bughunt 6 ──

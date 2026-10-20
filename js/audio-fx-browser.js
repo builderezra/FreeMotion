@@ -14,7 +14,10 @@ window.FM = window.FM || {};
   function writeList(key, arr) { try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {} }
   function pushRecent(id) { const a = readList(RECENTS_KEY).filter(x => x !== id); a.unshift(id); writeList(RECENTS_KEY, a.slice(0, RECENTS_CAP)); }
   function isFav(id) { return readList(FAV_KEY).indexOf(id) >= 0; }
-  function toggleFav(id) { const a = readList(FAV_KEY); const i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id); writeList(FAV_KEY, a); return i < 0; }
+  /* bughunt6 #15: readList filters for SHOWING only; the star edits the list as it is stored, so starring one effect no
+     longer deletes the favourites this build does not know (js/fx-browser.js has the same fix and the reasons). */
+  function readStored(key) { try { const a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.filter(id => typeof id === 'string') : []; } catch (e) { return []; } }
+  function toggleFav(id) { const a = readStored(FAV_KEY); const on = a.indexOf(id) < 0; writeList(FAV_KEY, on ? a.concat([id]) : a.filter(x => x !== id)); return on; }
 
   // One star for every tile builder — the featured carousel had none, so the featured audio
   // effects were unfavouritable for no reason the user could see. (#62)
@@ -80,6 +83,20 @@ window.FM = window.FM || {};
     return t;
   }
 
+  /* bughunt6 #13: A CLIP HOLDS 16 AUDIO EFFECTS (FM.audioVoices.max, which the '966 B1' test pins to what js/storage.js's
+     sanitiser keeps). That sanitiser keeps the first 16 on every Undo, Redo, reopen and friend's edit, so a 17th added past
+     it was lost the next time any of those ran, and the autosave kept it lost. The Voice path already refused past 16; this
+     is the same refusal, in its words, for every other way in: a tap here, and the ⋯ Duplicate and Paste in
+     js/inspector.js. True when `need` more fit; otherwise it says so, and the caller adds nothing. */
+  FM.audioFxRoom = function (layer, need) {
+    const max = (FM.audioVoices && FM.audioVoices.max) || 16;
+    const have = (layer && Array.isArray(layer.audioFx)) ? layer.audioFx.length : 0;
+    const n = Math.max(1, need | 0);
+    if (have + n <= max) return true;
+    if (FM.toast) FM.toast('A clip holds ' + max + ' audio effects — this one has ' + have + (n === 1 ? ' already' : ', and the paste needs ' + n + ' more'), 2600);
+    return false;
+  };
+
   // The ONE add path — exactly one push, then rebuild the audio graph so the effect is audible now.
   function addEffect(id) {
     // Re-resolve from the LIVE scene by id: the overlay caches _layer at open(), but a delete or an undo
@@ -92,6 +109,8 @@ window.FM = window.FM || {};
       if (FM.toast) FM.toast('Audio effects only work on a clip with sound', 2000);
       return;
     }
+    /* bughunt6 #13: past 16 it is refused, as a voice is; the sheet stays open, as it does for a voice that does not fit */
+    if (!FM.audioFxRoom(layer, 1)) return;
     if (!layer.audioFx) layer.audioFx = [];
     layer.audioFx.forEach(e => { e._expanded = false; });   // accordion: the newcomer is the one open editor
     inst._expanded = true;

@@ -186,7 +186,13 @@ window.FM = window.FM || {};
   function writeList(key, arr) { try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {} }
   function pushRecent(id) { const a = readList(RECENTS_KEY).filter(x => x !== id); a.unshift(id); writeList(RECENTS_KEY, a.slice(0, RECENTS_CAP)); }
   function isFav(id) { return readList(FAV_KEY).indexOf(id) >= 0; }
-  function toggleFav(id) { const a = readList(FAV_KEY); const i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id); writeList(FAV_KEY, a); return i < 0; }
+  /* bughunt6 #15: readList filters for SHOWING only. The star used to write readList's answer back, so starring anything
+     deleted every favourite this build does not know (after a rollback, or an effect since retired): queue 721's class,
+     fixed there for presets. The star now edits the list as it is stored: every string kept whatever it names (an old id
+     renamed by ID_ALIAS), anything that is not a string dropped. What is DRAWN is still readList's, so a stored 'toString'
+     still never reaches a tile. */
+  function readStored(key) { try { const a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.filter(id => typeof id === 'string').map(id => ID_ALIAS[id] || id) : []; } catch (e) { return []; } }
+  function toggleFav(id) { const a = readStored(FAV_KEY); const on = a.indexOf(id) < 0; writeList(FAV_KEY, on ? a.concat([id]) : a.filter(x => x !== id)); return on; }
 
   // One star, used by every tile builder. It used to be inlined in tile() only, which is exactly why
   // the featured carousel, Mask and Motion Blur (Object) had no way to be favourited. (#62)

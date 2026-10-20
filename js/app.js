@@ -5914,12 +5914,19 @@ window.FM = window.FM || {};
          export rate is a one-off override for this render. */
       const fpsCf = document.getElementById('exp-custom-fps');
       const fpsNum = document.getElementById('exp-fps-num');
+      /* bughunt6 #11: THIS PROJECT'S RATE, ON EVERY OPEN. The listener below is wired once a session, and it used to BE the
+         first open's closure, so every later Exact fps… seeded the first project's rate; and once the box held a number
+         nothing put it back, so a rate typed for one project followed him into the next. The box now starts from this
+         project's rate on every open (a typed rate is a one-off for that export, as the note above says), and the one
+         listener runs whichever open's closure is current. */
+      if (fpsNum) fpsNum.value = pf;
       const syncCustomFps = () => {
         const on = fpsSel.value === 'custom';
         if (fpsCf) fpsCf.classList.toggle('hidden', !on);
         if (on && fpsNum && !fpsNum.value) fpsNum.value = pf;
       };
-      if (!fpsSel._customWired) { fpsSel._customWired = 1; fpsSel.addEventListener('change', syncCustomFps); }
+      fpsSel._syncCustomFps = syncCustomFps;
+      if (!fpsSel._customWired) { fpsSel._customWired = 1; fpsSel.addEventListener('change', () => fpsSel._syncCustomFps()); }
       syncCustomFps();
     }
     const sel = document.getElementById('exp-res');
@@ -5947,14 +5954,20 @@ window.FM = window.FM || {};
       // …and it opens on the project's own size, every time (queue 121).
       const cf = document.getElementById('exp-custom-field');
       const cw = document.getElementById('exp-cw'), ch = document.getElementById('exp-ch');
+      /* bughunt6 #11: …and so it really does. The boxes start from THIS project's size on every open, and the listener
+         (wired once a session) runs this open's closure, not the first one's: Exact size… on a 1920×1080 project after
+         exporting a 1080×1920 one filled in 1080×1920, and a size typed once stayed in the boxes for every project after. */
+      if (cw) cw.value = W;
+      if (ch) ch.value = H;
       const syncCustom = () => {
         const on = sel.value === 'custom';
         if (cf) cf.classList.toggle('hidden', !on);
-        // Seed from the project the first time, so it opens on something valid rather than empty.
+        // Seeded from the project, so a box he emptied opens on something valid rather than empty.
         if (on && cw && !cw.value) cw.value = W;
         if (on && ch && !ch.value) ch.value = H;
       };
-      if (!sel._customWired) { sel._customWired = 1; sel.addEventListener('change', syncCustom); }
+      sel._syncCustom = syncCustom;
+      if (!sel._customWired) { sel._customWired = 1; sel.addEventListener('change', () => sel._syncCustom()); }
       syncCustom();
     }
     // 'Selected clip only' and the solo checkbox need a selection — grey them out otherwise
@@ -6452,6 +6465,7 @@ window.FM = window.FM || {};
     const fmt = sx ? 'mp4' : ((document.getElementById('exp-format') || {}).value || 'mp4');
     const tCb = document.getElementById('exp-transparent');
     const transparent = !!(tCb && tCb.checked && (fmt === 'gif' || fmt === 'frames'));
+    let tooBig = null;   // bughunt6 #3: an MP4 frame the encoder refused, answered once this export has been put away
     try {
       const expName = (FM.scene.project.name || 'freemotion-export').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'freemotion-export';
       /* ⚠️ `verbatim` EXISTS BECAUSE THIS LINE HAS BEEN MANGLING WHOLE SENTENCES (queue 47, v14.34).
@@ -6507,7 +6521,12 @@ window.FM = window.FM || {};
       /* queue 671: the encoder exists but supports none of the H.264 profiles we can write. Named
          rather than left to throw at configure(), where the message named the symptom and not this. */
       else if (e.message === 'NO_VIDEO_CODEC') alert('This browser\u2019s video encoder does not support any of the H.264 settings FreeMotion can write, so an MP4 cannot be made here.\n\nChrome, Edge and Safari all work. If you are on Firefox or an older Android browser, try one of those \u2014 or export a GIF or a PNG sequence instead, which do not need the video encoder.');
+      /* bughunt6 #3: the encoder takes H.264, only not a frame this big. Said after the finally (offerSmallerMp4). */
+      else if (e.message === 'VIDEO_TOO_BIG' && e.fmSize) tooBig = e.fmSize;
       else if (e.message === 'CANCELLED') { /* silent */ }
+      /* bughunt6 #12: said by WHICH limit (js/exporter.js runFrames marks it). Over the frame count a lower resolution is
+         no help, so it is not offered; over the memory budget all three still are, in the words below. */
+      else if (e.message === 'FRAMES_TOO_BIG' && e.fmOver === 'frames') alert('That PNG sequence would be ' + e.fmFrames + ' frames, and a PNG sequence holds at most ' + e.fmMax + '. Shorten the range or lower the frame rate and try again.');
       else if (e.message === 'FRAMES_TOO_BIG') alert('That PNG sequence is too large to build in memory. Shorten the range, lower the frame rate, or drop the resolution and try again.');
       else if (e.message === 'NO_ZIP_WRITER') alert('The frame-sequence exporter failed to load. Please hard-refresh and try again.');
       /* queue 674: was `alert('Export failed: ' + e.message)`, which on his phone read "Export failed:
@@ -6519,6 +6538,31 @@ window.FM = window.FM || {};
       bar.style.width = '0%';
       FM.seekVideosToTime();
     }
+    if (tooBig) await offerSmallerMp4(tooBig, sx);
+  }
+
+  /* bughunt6 #3: AN MP4 TOO BIG FOR THIS DEVICE NAMES ITS SIZE AND OFFERS THE LARGEST THAT WORKS. js/exporter.js refuses the
+   * frame before it decodes or mixes anything, with the largest same-shape rung the encoder took (VIDEO_TOO_BIG). Asked after
+   * runExport's finally, so the solo and the wake lock are already put back. Yes sets the size list to that rung (or Exact size
+   * to those numbers, for an exact size or a rung the list does not hold) and exports again, the same way the Export button
+   * does; Not now changes nothing. The one-tap export (`sx`) has no size list here, so it is told the size only. */
+  async function offerSmallerMp4(t, sx) {
+    const was = t.w + '×' + t.h, fits = t.fitW + '×' + t.fitH;
+    const say = was + ' is too big for an MP4 on this device. The largest it can make is ' + fits + ' (same shape).';
+    if (sx || !FM.ask) { alert(say + '\n\nPick a smaller size and export again.'); return; }
+    const go = await FM.ask({ title: 'Too big for an MP4', message: say + ' Export at that size?', ok: 'Export at ' + fits, cancel: 'Not now' });
+    if (go !== true) return;
+    const P = FM.scene.project, sel = document.getElementById('exp-res');
+    const cw = document.getElementById('exp-cw'), ch = document.getElementById('exp-ch');
+    const sized = v => Math.max(2, Math.round(v / 2) * 2);
+    const rung = (sel && !t.custom) ? [].find.call(sel.options, o => {
+      const s = parseFloat(o.value);
+      return o.value !== 'custom' && s > 0 && sized(P.width * s) === t.fitW && sized(P.height * s) === t.fitH;
+    }) : null;
+    if (rung) sel.value = rung.value;
+    else if (sel && cw && ch && [].some.call(sel.options, o => o.value === 'custom')) { sel.value = 'custom'; cw.value = t.fitW; ch.value = t.fitH; }
+    else { alert(say + '\n\nPick a smaller size and export again.'); return; }
+    return runExport();
   }
 
   /* "Export ready" — our card in front of the OS save sheet (queue 141 part 4).
@@ -9212,6 +9256,31 @@ window.FM = window.FM || {};
 
     // keyboard
     let _nudged = false;
+    /* bughunt6 #9: ⌘/CTRL LETTERS ON A NON-LATIN KEYBOARD. The ⌘ shortcuts in the handler below match the letter TYPED
+       (e.key), and with a Russian layout on a PC Ctrl+Z types я, Ctrl+A ф, Ctrl+C с, Ctrl+V м: nothing matched, so undo,
+       redo, copy, paste and select all did nothing at all, while the plain A / S / D / M beside them (read by e.code) kept
+       working. When the key types a letter of ANOTHER script (Cyrillic, Greek, Hebrew, Thai…) this is the Latin letter of
+       the key it sits on (e.code KeyZ gives z); for anything else it is '', so a Latin letter always wins (AZERTY's z on
+       the W key still undoes, its w on the Z key does not) and a key that types punctuation (Dvorak's ; on the Z key) is
+       not read by its position either. ⌘D stays on e.key alone, as Simple's own ⌘D does, so the two editors agree on it. */
+    /* The key and the code are read as plain strings (an absent one is ''), never by comparing their type to a word: the
+       Full-unchanged lock (980 FU3) reads every key or code compared to a quoted literal in a keydown script as a key name,
+       and took the type test's word for a key the probe never presses. */
+    const otherScriptLetter = e => {
+      const k = String(e.key || ''), c = String(e.code || '');
+      return (/^[\p{L}\p{M}]$/u.test(k) && !/\p{Script=Latin}/u.test(k) && /^Key[A-Z]$/.test(c)) ? c.slice(3).toLowerCase() : '';
+    };
+    /* …and the drawing tool's own ⌘Z / ⌘Y (js/draw-tool.js) asks the same question, so undo works the same wherever he
+       presses it. That script loads before this one, so it reads this when a key arrives, never at load. */
+    FM._otherScriptLetter = otherScriptLetter;
+    /* bughunt6 #7: A FOCUSED SLIDER OR TICK BOX SWALLOWED ⌘Z / ⌘Y. The handler below treats any focused <input> as typing
+       (`inEdit`), and on a PC a range or a checkbox keeps the focus after he drags or ticks it (the Opacity slider refreshes
+       nothing unless opacity is animated), so Ctrl+Z after moving Opacity did nothing until he clicked somewhere else. A
+       slider, a tick box, a colour well or a list has no text undo of its own. This is the drawing tool's rule (its ⌘Z in
+       js/draw-tool.js): only a box he TYPES in keeps ⌘Z / ⌘Y for itself. It is asked by those two keys ONLY; every other key
+       still treats any focused field as typing, so Space still ticks a focused box and the arrows still move a slider. */
+    const typingText = t => !!(t && (t.tagName === 'TEXTAREA' || t.isContentEditable ||
+      (t.tagName === 'INPUT' && !/^(range|color|checkbox|radio|button|submit)$/i.test(t.type || ''))));
     window.addEventListener('keydown', e => {
       const mod = e.metaKey || e.ctrlKey;
       // Editable target = native <input>/<select>/<textarea> OR any contentEditable element
@@ -9279,20 +9348,20 @@ window.FM = window.FM || {};
       /* SIMPLE MODE P1: in Simple, the arranging keys with no Simple command yet say so rather than do Full's thing to a
          main clip (DESIGN.md §15.1). In Full it answers NOTHING: there is no E key (DESIGN.md §0.4 B14). */
       if (!inEdit && FM.editor && FM.editor.onKey && FM.editor.onKey(e)) return;
-      if (mod && (e.key === 'z' || e.key === 'Z')) {
-        if (inEdit) return; // let field text-undo
+      if (mod && (e.key === 'z' || e.key === 'Z' || otherScriptLetter(e) === 'z')) {
+        if (inEdit && typingText(tgt)) return; // let field text-undo (bughunt6 #7: a text box only)
         e.preventDefault();
         if (e.shiftKey) { if (FM.history) FM.history.redo(); } else { if (FM.history) FM.history.undo(); }
         return;
       }
-      if (mod && (e.key === 'y' || e.key === 'Y')) { if (inEdit) return; e.preventDefault(); if (FM.history) FM.history.redo(); return; }
+      if (mod && (e.key === 'y' || e.key === 'Y' || otherScriptLetter(e) === 'y')) { if (inEdit && typingText(tgt)) return; e.preventDefault(); if (FM.history) FM.history.redo(); return; }
       if (mod && (e.key === 'd' || e.key === 'D')) {
         if (inEdit) return;
         e.preventDefault();
         if (FM.scene.selectedId) FM.duplicateSelection();
         return;
       }
-      if (mod && (e.key === 'c' || e.key === 'C')) {
+      if (mod && (e.key === 'c' || e.key === 'C' || otherScriptLetter(e) === 'c')) {
         if (inEdit) return;
         const sel = window.getSelection && window.getSelection();
         if (sel && String(sel).length) return;   // don't hijack a real text-selection copy
@@ -9300,13 +9369,13 @@ window.FM = window.FM || {};
         if (FM.copySelection) FM.copySelection();
         return;
       }
-      if (mod && (e.key === 'v' || e.key === 'V')) {
+      if (mod && (e.key === 'v' || e.key === 'V' || otherScriptLetter(e) === 'v')) {
         if (inEdit) return;
         e.preventDefault();
         if (FM.pasteClipboard) FM.pasteClipboard();
         return;
       }
-      if (mod && (e.key === 'a' || e.key === 'A')) {
+      if (mod && (e.key === 'a' || e.key === 'A' || otherScriptLetter(e) === 'a')) {
         if (inEdit) return;
         e.preventDefault();
         if (FM.selectAll) FM.selectAll();
@@ -9326,7 +9395,10 @@ window.FM = window.FM || {};
         return;
       }
       if (inEdit) return;
-      if (e.code === 'Space') { e.preventDefault(); FM.togglePlay(); }
+      /* bughunt6 #10: A HELD SPACE IS ONE PRESS. The key's auto-repeat flipped play and pause at the repeat rate for as
+         long as it was held; M and A / S / D already ignore e.repeat. Still taken from the browser on every repeat, so a
+         held Space never presses the button that had the focus. */
+      if (e.code === 'Space') { e.preventDefault(); if (e.repeat) return; FM.togglePlay(); }
       else if (e.key === '?') { e.preventDefault(); if (FM.shortcuts) FM.shortcuts.toggle(); }
       else if (e.code.indexOf('Arrow') === 0) {
         /* ⚠️ queue 823: A MEMBER OF A SELECTED GROUP IS ALREADY BEING MOVED BY THAT GROUP. Select All and
@@ -9382,7 +9454,23 @@ window.FM = window.FM || {};
       else if (e.code === 'BracketRight') { e.preventDefault(); markRegionOut(); }
       else if (e.code === 'Backslash') { e.preventDefault(); clearRegion(); }
       else if (e.code === 'KeyM') { e.preventDefault(); if (e.repeat) return; if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead(); }   // toggle (dedups within 0.12s) + ignore OS autorepeat → no stacked duplicates / undo spam
-      else if (e.code === 'Tab') { e.preventDefault(); const ls = FM.scene.layers; if (ls.length) { const i = ls.findIndex(l => l.id === FM.scene.selectedId); const n = ((i < 0 ? 0 : i + (e.shiftKey ? -1 : 1)) + ls.length) % ls.length; FM.selectLayer(ls[n].id); } }
+      else if (e.code === 'Tab') {
+        e.preventDefault();
+        /* bughunt6 #6: TAB WALKS THE ROWS THE TIMELINE SHOWS. It walked every layer in the project, so inside Edit Group,
+           or past the members of a collapsed group, it selected a layer with no row on screen, and a Delete after it
+           deleted that layer. FM.selectAll is scoped against exactly this; this is its rule with the timeline's own two
+           (js/timeline.js, rebuild): inside a group, every member of that group (it is drawn fully open); outside one,
+           every layer but the members of a collapsed group. In the project's order, which is the rows' order. */
+        const gctx = FM._liveGroupCtx ? FM._liveGroupCtx() : FM.groupContext;
+        const inGroup = gctx ? new Set(FM.groupDescendants(gctx).map(l => l.id)) : null;
+        const folded = l => {
+          let pid = l.parent, hops = 0;
+          while (pid && hops++ < 64) { const p = FM.layerById(FM.scene, pid); if (!p) return false; if (p.type === 'group' && p.collapsed) return true; pid = p.parent; }
+          return false;
+        };
+        const ls = FM.scene.layers.filter(l => inGroup ? inGroup.has(l.id) : !folded(l));
+        if (ls.length) { const i = ls.findIndex(l => l.id === FM.scene.selectedId); const n = ((i < 0 ? 0 : i + (e.shiftKey ? -1 : 1)) + ls.length) % ls.length; FM.selectLayer(ls[n].id); }
+      }
       else if ((e.code === 'Equal' || e.code === 'NumpadAdd') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1.5); }
       else if ((e.code === 'Minus' || e.code === 'NumpadSubtract') && FM.timeline.zoomBy) { e.preventDefault(); FM.timeline.zoomBy(1 / 1.5); }
       // Number keys. With a layer SELECTED: 1..N open its category cards (Color & Fill, Border,

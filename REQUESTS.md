@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 20 Oct at v17.81
+> ## 📌 WHAT I NEED FROM YOU — updated 20 Oct at v17.82
 >
-> **State:** v17.81 — **the offline copy stops hoarding old versions** (#1176): your phone has been keeping every version of the app it ever opened beside your projects, roughly 0.2–0.4 GB; the first launch after this update clears it and the app reloads once. Plus three small fixes and a sturdier test suite. Nothing to do on your side.
+> **State:** v17.82 — **eleven fixes from a sixth bug hunt** (#1176): an update waits until you finish an export or a recording before it reloads; shortcuts work on a Russian keyboard; the installed app opens offline within seconds on a bad connection; an MP4 too big to make offers a size that works; undo works after touching a slider; and six smaller ones. Nothing to do on your side.
+>
+> v17.81 — **the offline copy stops hoarding old versions** (#1176): your phone has been keeping every version of the app it ever opened beside your projects, roughly 0.2–0.4 GB; the first launch after this update clears it and the app reloads once. Plus three small fixes and a sturdier test suite. Nothing to do on your side.
 >
 > v17.80 — **thirteen fixes from a fifth bug hunt** (#1176): an Undo no longer cuts a loud song or a fast clip, and keyframes past the 200th are no longer lost on opening a project; Undo keeps Redo with an editor open or during a Duplicate; drawings, masks, the tracker, Loop and Detect speech fixed. Nothing to do on your side.
 >
@@ -35168,6 +35170,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **1001 — An import that throws leaves an empty "Imported project" behind (hunt LOW #1001)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
+      📍 **DUPLICATE OF AU28-1 in #1126** (the hand-off audit, 20 Oct: the same empty "Imported project" left by a throwing import). Closes with #1126.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.2
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct:** see the note on #1000, which covers this entry too.
@@ -36157,6 +36160,15 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **PM-verified 7 Oct (via INBOX — the PM's check of the helper's batch 3; NOT his words):** **#1090 / #1091 (Work-with-friends privacy, still waiting on Ezra's yes/yes):** F1 option B's wire steps are confirmed complete: add 'notes' to DENY (js/collab-session.js:31), make the host's validOp refuse P-root ops on DENY keys (js/collab-host.js:188-226), put DENY into the SCHEMA_FP string and bump SCHEMA_REV. F2: turning export off does NOT make "only watch" true — Leave (js/collab-ui.js:3189-3224), Home "Keep as my own copy" (js/home.js:1401-1407) and C.leave's keep branch (js/collab-session.js:1984 detachLinked) keep a full copy whatever roExport says. Making it true = for a Viewer/Commenter with roExport off, those three doors offer delete only. Test: a Viewer leaving with export off keeps no project card. F5 (peer image cap): reuse `ctl.bad[fid]` (planWants already skips it, js/collab-media.js:627; the font cap does the same at :630); keep the cap off FM.loadImageFile (his own photos use it).
       ✅ **UNBLOCKED 11 Oct, ~10:05 AWST — decided by the PM under his standing rule (#1130: "Go through each one and see where it's an obvious yes"); he can overrule:** notes stay on the owner’s device.
 
+      📍 **INBOX, logged verbatim 20 Oct (the PM's decision; NOT his words):**
+      > ### 20 Oct 2026, ~11:40 AWST — PM decision on #1090 vs #987: notes KEEP syncing, and the Share screen says so (this overrules the PM's own 11 Oct "owner-only")
+      > **Context:** v17.83's collab batch found that #1090's 11 Oct PM decision (notes owner-only: 'notes' added to DENY in collab-session.js) would break #987. #987 is the note-author colour badge, shipped in v17.57, and it only works if notes are shared.
+      > **Decided from his own words, not asked.** #987 is his request (29 Sep, verbatim): *"If you're doing a collab edit - there should be a colour indicator based on who left the note."* That makes notes something people leave for each other in a shared edit. The owner-only call on 11 Oct was the PM's, made under his rule, and it missed that. His words beat the PM's call.
+      > **So:**
+      > - #1090 becomes the honesty fix the hunt actually asked for: "nothing says so". Notes keep syncing, and the Share / Work-with-friends screen says plainly that everyone in the session, viewers included, sees the project's notes. Wording is the builder's, short and plain.
+      > - No DENY change, no SCHEMA_REV 28 and no fingerprint re-pin. Drop ba3f395a's DENY change.
+      > - It ships in v17.83 with #1091, #1092, #1093 and the `(team)` rule, red-first: a test that the Share screen states it, and that notes still reach a guest, so #987 keeps working.
+      > - He can overrule: if he ever wants private notes, that is a new option (a "private note" switch), not a reversal of #987.
 - [ ] **1091 — Work with friends: 'Viewer: can only watch' is untrue — viewers get all the media, export is on by default, and Leave keeps a full copy even with export off (hunt HIGH #1091)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
       **STATUS: 🟢 READY — nothing is stopping this**
       - CONFIRMED F2: "Viewer: can only watch" is untrue. Viewers get all the raw media, export is on by default (roExport true), and a viewer can Leave keeping a full copy even with export switched off.
@@ -36265,6 +36277,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 - [ ] **1100 — The project card's thumbnail renders the whole project at full size on every import and every autosave (hunt MEDIUM #1100)** (7 Oct ~12:25 AWST — via INBOX, the PM's verified finding from its read-only check of the cloud helper's batch 3 against v17.24; verdicts with file:line in tools/design/pm/helper-batch3-verified.json; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
+      📍 **DUPLICATE OF #1111** (the hand-off audit, 20 Oct: the same import-time thumbnail cost; #1111 is the one kept and fixed). Closes with #1111.
 
       📥 **The INBOX item, verbatim:** **(hunt MEDIUM) The project card's thumbnail renders the WHOLE project at full size, on every import and on every autosave (at most once every 12 s while editing, when nothing is playing).** `makeThumb` (js/storage.js:2133-2161) and `makeLayerThumb` (:2210-2229) build a 1080x1920 canvas, render the scene, then halve it down; called from importObject (:2009 via touchCurrent(true)) and from save (:752 → touchCurrent :2468). On a heavy project that is a full main-thread render every 12 s — a plausible cause of the oldest "editing lags" reports. The helper measured 10 glows: 8.4 s full size vs 108 ms at card scale (not re-run by the PM). Change: render straight onto a ~360 px canvas (renderScene already scales by canvas.width / P.width, js/compositor.js:18745-18748; the manual `__fmRS` lines in the helper's snippet are redundant). ⚠️ It changes what the cards look like: the halving loop exists because one big downscale made "mushy cards" (:2130-2132). So per #545: render old vs new cards for a project with a big photo, a video frame and small text, show him both, then build. Test: a timing test that the 12-s card refresh of a 40-effect project stays under a budget, plus a picture test that the new card matches the old within a measured tolerance on a media project.
 
@@ -37628,7 +37641,7 @@ re-opened #480, which I had marked done and had not fixed.
         6. Each of the six sounds: keep, change or remove.
 
 - [ ] **1176 — Two bug hunts over what he edits every day found eight defects; all survived a refuter and are fixed red-first (hunt MEDIUM #1176)** (18 Oct — the builder's hunts under his "burn all usage in smart ways"; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       Code reading only; every finding was attacked by a separate refuter before it became work.
       **Hunt 1** (v17.50 → v17.68: the #966 rounds, the Scramble layout, the collab fixes, the Export card). Three survived:
         - a decoding Scramble ignored the caption's alignment under an Animate preset by Line or Word (Character is right as it is);
@@ -37666,6 +37679,48 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v17.79 (19 Oct): bug hunt 4, the rest** (the PM's week pace, 16:07) — #3 3D tilt about the anchor (tiltPivot), #7 a masking group whose top member is a group (maskSet / drawGroupMask), #1e particles born through FM.parentChainMatrix, #5 Outline Center on the animated and curved painters, #8 Word spacing under Animate by Character / Word, #9 the ⧉ isolate on a group (a set: the group and its descendants), #10 a group's box and pivot follow members' anchors and text alignment (FM.textAlignShift, shared with the single-layer box). Dropped: #12 (unreachable). Logged: #6 (RTL under an animator). From #3, for later: pivotFree does not count tilt, and the tilt plate is still frame-sized; from #10: a member's own flip and unlinked scale are still ignored by the group box.
       📍 **v17.80 (20 Oct): bug hunt 5** (the PM's week pace; one HIGH-pair exception to the hold for data damage on every Undo): #1 sanitizeTiming's volume / speed clamps now FM.LIMITS (the panels' own ranges); #2 the 200-key cap on effect and mask keyframes → 3600 s × 120 fps + 1; #3 restore() mutes the editors' close-commits (Redo kept); #8 Duplicate / Duplicate selection / Paste / Extract audio abandon when an Undo replaced the scene during their load; #4 evalShapeSubs at a key's own time; #5 Draw more / eraser re-map every other key (reboxKeySubs); #6 tracker keys linear; #7 tracker honours Flip; #9 mask keys keep bez / ez / loopMode; #10 graph editor leaves a not-yet-started channel; #11 a tap selects a point without a key; #12 Detect speech re-reads its layers after the awaits; #13 FM.loopKfTime loops mask paths and drawings (evalProp keeps a fast path). SCHEMA_REV 26, FP pinned. Write-ups: the builder's scratchpad bh5/HUNT.md and REFUTE.md. **For later:** the duration cap (1 % speed on a clip over 36 s passes 3600 s); ai-ops.js / audio-fx-live.js volume literals not yet read from FM.LIMITS; masks.js easeF ignores `ez`; an edit still in flight when ↶ arrives is still lost (needs a flush in undo(), which is Simple-locked).
       📍 **v17.81 (20 Oct):** bug hunt 6 #1 (sw.js pruneSuperseded resolved names against the bare origin, so on the /FreeMotion/ project site nothing was ever pruned — every cached ?v= of every file kept; now resolved against the page, and the first launch sweeps the backlog by the same rule); hunt 5's later trio (A the duration cap follows FM.LIMITS.duration = 3600 / 0.01; B ai-ops and audio-fx-live read FM.LIMITS.volume; C mask easeF honours `ez` through FM.easeApply); and TEST ISOLATION (the PM's 20 Oct ask): 11 tests that inherited state set it up themselves, the 5 sources clean up in their own finally, 10 dead clean-up calls (FM.media.delete / unpin) fixed, and a per-test leak check in the runner (leakPrint / leakDiff → `leaks` in the summary, LEAKS lines in ship.log; report-only, LEAKS_ARE_RED to flip). The first full run reported 401 leak lines — most the quality ladder's tier moving with playback, the rest media records and a few scene swaps. SCHEMA_REV 27. **Hunt 6, still to fix:** #14, #2, #3, #9 (Full only, ⌘D left), #7, #6, #10, #11, #12, #13, #15; #4 with the next instrument release; #5 with a Simple release. **Possible app bug (from the preset-preview test):** fx-thumbs' photosChanged → remountLive can store a picture under a key minted for other content.
+      📍 **v17.82 (20 Oct): bug hunt 6, the rest** — #14 FM._swReloadWhenIdle holds the update's reload while exporting / recording / saving; #9 otherScriptLetter (Cyrillic and other scripts map by e.code, Latin layouts untouched; ⌘D left out with Simple's) in the editor and the draw tool; #2 the offline launch races ~8 s, serves the marked fallback, refreshes it late only if its scripts are cached; #3 the codec probe moved before the decode, with an offer of the largest MP4 size; #7 ⌘Z/⌘Y pass a slider or tick box (typingText); #6 Tab over the drawn rows only; #10 Space ignores repeats; #11 Exact size re-seeds per open; #12 the 900-frame card warning; #13 FM.audioFxRoom caps audio effects at 16; #15 starring keeps unknown favourites. Plus the leak-source fixes (isoKeep / isoMediaSnap helpers, ~110 tests wrapped) and the quality ladder out of the leak fingerprint (its tier and latches move on their own during playback); the tests that inherited what the old leakers left (queue 250, 348/393, 501, 658, the five keyboard tests) now build what they need. **For later:** #4 (rollback.sh re-bumps restored ?v=) with the next instrument release; #5 (Alt in Simple runs Full's keys) with a Simple release; #14's gaps (the file pick to autosave window, a WAV / M4A export, an AI request); recents still drop unknown ids; **the Windows AAC pass should drive a dedicated test Chrome (Chrome for Testing or a portable build), independent of his daily browser and its pending update — v17.66 and v17.81 were each refused once because his Chrome would not launch the test page; needs his yes for the download, ask as one line when due**.
+      📥 **From INBOX.md, logged 20 Oct, verbatim (the PM's route-A decision for closing team notes):**
+      > ### 20 Oct 2026, ~11:05 AWST — PM decision on the hand-off audit: route A (a `(team)` tag), shipped with the privacy batch, no standalone tools ship
+      > **Context:** the builder's hand-off audit (its scratchpad handoff-audit.md) found 40 team notes DONE or SUPERSEDED. ship.sh's oldest-first gate refuses ticking them while #980 is open, and #980 must not be JUMPED.
+      >
+      > **Decided, not asked.** This is under his 11 Oct rule: bookkeeping, not a taste call. His rule is "I want the oldest things in the list done first". It is about HIS requests. A note between chats is not a request, so letting it close out of order does not touch his order. His other words on this file, "i want to be able to see this note myself … and see ur not missing shit", need the list to be true.
+      >
+      > **Route:**
+      > 1. **The classifier rule.**
+      >    - A header tag `(team)` marks a note written between the chats. It sorts after his words, the way `(hunt …)` does.
+      >    - It never holds the order gate, and it may be ticked whatever the gate's next_up is.
+      >    - Red-first in _classify.py's self-test, with three controls:
+      >      - (a) a `(team)` note behind #980 closes;
+      >      - (b) an item in his words behind #980 is still refused;
+      >      - (c) a hunt item behind #980 with no shipped fix is still refused.
+      >    - **Never tag an entry that carries HIS WORDS / HIS ANSWERS** (#1135, #1140, #1155, #1162, …). Those stay under the normal gate.
+      > 2. **Shipped-but-unticked hunt items** (#1014, #1015, #1016, #1040, #1041, #1056, #1059, #1172, #1174, maybe #996). These go in the same rule as a second clause.
+      >    - Such an item may close out of order only when its entry names the earlier release that shipped the fix, and the gate checks that the version exists in POLISH-LOG.md and is older than the release being shipped.
+      >    - Why this does not weaken the gate: it prevents working out of order at the release that does the work. Refusing a tick afterwards prevents nothing; it only hides work that already shipped.
+      >    - Control: a hunt item naming a version that does not exist is still refused.
+      > 3. **Timing: no standalone tools ship.** A ship is ~2 h of the laptop, too much for bookkeeping.
+      >    - _classify.py is not in the lock's INSTRUMENT_FILES, so the rule rides with v17.83, the collab privacy batch (#1090–#1093).
+      >    - The tags and the ~50 ticks go in the release after, so the gate that judges them is the one already proven live.
+      > 4. **In v17.82's REQUESTS update (no ticks, so the gate is not involved):**
+      >    - fix the stale NEEDS YOU stamps on #1138 and #1154;
+      >    - write "DUPLICATE OF #N" into #1100 (keep #1111) and into #1001 / AU28-1.
+      > 5. **The summary block** gives him the real count once the ticks land: his open requests / hunt findings / waiting on him.
+      📥 **From INBOX.md, logged 20 Oct, verbatim (the PM's note on closing finished team hand-off notes, and the collab privacy batch after v17.82):**
+      > ### 20 Oct 2026, ~09:05 AWST — PM → builder: close the team hand-off notes that are finished, so the open list reads true for him
+      > **Why:** Ezra asked "what work still needs doing" (20 Oct ~09:00). The classifier counts 175 ACTIONABLE, but about 35 of them (#1135–#1170, plus #1117, #1121, #1122 and similar) are team hand-off notes: PM → API builder, helper-lane verdicts, "not Ezra". Many of those are finished, e.g. notes to the API builder, which wound down on Thu 15 Oct and has not run since, or branches that have since landed. They hide his real requests in the count, and REQUESTS.md is written for him to read.
+      >
+      > **Ask (do it with v17.82's REQUESTS update, no extra ship):**
+      > 1. Read each hand-off entry against the tree and git log. Tick the ones whose work has landed, or which are pure instructions now kept in LOOP.md, CLAUDE.md or memory, with a one-line "✅ closed 20 Oct: <version or where it lives>".
+      > 2. Any clause still not built: move it into the real item it belongs to (#966, #1155, #1176, …) and tick the note.
+      > 3. Do not touch entries in his own words that are still open (#1155's picks, #1162, #1177 and so on). Close those only if every clause shipped.
+      > 4. Then the summary block at the top can give him a real count: his open requests vs audit findings vs waiting-on-him.
+      >
+      > **And the next batch after v17.82: the four collab privacy fixes, #1090–#1093.** All four were decided on 11 Oct under his rule and are marked READY. They are still open in the code: `DENY` at js/collab-session.js:31 has no `'notes'`, so the owner's private Notes pad still syncs to every guest. Privacy fixes are an obvious yes, so the PM decided this and did not ask him. They are audit items, the same tier as #1176, which is being worked now. Take them as #1176's next batch, red-first, one release:
+      > - #1090: notes stay on the owner's device.
+      > - #1091: "only watch" made true.
+      > - #1092: the wording at collab-ui.js:1988.
+      > - #1093: a ~50 MP cap in collab-media.js writeRecord.
       📍 **Also logged 19 Oct (bug hunt 4, not built):** #12 the old feathered layer mask's shared canvas is UNREACHABLE today — that mask is the innermost pass in drawLayer, so nothing can nest inside it (its fixer had to force nesting by wrapping FM.isLayerVisibleAt to get a red test); pool it only if the dispatch order ever changes. #6 right-to-left text under an animator stays logged (not cheap).
       ✅ **DONE in v17.74 (bughunt2 #10; was: STILL OPEN — the next agent job when the PM says go, ~22:00, 18 Oct):** the exporter warms Audio Drive's sound data for the HEAD half of a split clip only (`js/exporter.js` ~1148), so in an export the tail half's audio-driven motion is dead. A real export bug in the same family; red-first, then its own release.
 

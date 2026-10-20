@@ -131,6 +131,12 @@
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
   function fpsTxt(n) { return String(Math.round(n * 100) / 100); }
+  /* bughunt6 #12: A PNG SEQUENCE HOLDS AT MOST 900 FRAMES (js/exporter.js FRAMES_MAX; runFrames refuses more before it
+     renders anything). The card counted the frames ("1200 PNGs in a ZIP") and offered Export anyway, and the refusal came
+     after the tap. Counted here exactly as runFrames counts them, so the card says it is over and greys Export first. */
+  function framesMax() { return (FM.exporter && FM.exporter.FRAMES_MAX) || 900; }
+  function frameCount(f) { return Math.max(1, Math.round(f.len * f.fps)); }
+  function framesOver(f) { return f.kind === 'frames' && frameCount(f) > framesMax(); }
   function hasMarks() { return !!(FM.hasLoopRegion && FM.hasLoopRegion()); }
   function soloLayer() {
     const id = FM._exportSoloId ? FM._exportSoloId() : null;
@@ -352,7 +358,7 @@
     else if (f.kind === 'gif') txt(small, [nwb(wh), ' · ', nw(fpsTxt(Math.min(50, f.fps)) + ' fps'), ' · loops · ', nw('size shown when done')]);
     else if (f.kind === 'picture') txt(small, [nwb(wh), ' · PNG · ', nw('the frame under the playhead')]);
     else if (f.kind === 'sound') txt(small, [nwb(m4a ? 'M4A' : 'WAV'), ' · ', nw(m4a ? 'AAC 160 kb/s' : '48 kHz stereo'), ' · ', nw(['about ', [mb(soundBytes(m4a, f.len))]])]);
-    else txt(small, [nwb(wh), ' · ', nw(fpsTxt(f.fps) + ' fps'), ' · ', nw(Math.max(1, Math.round(f.len * f.fps)) + ' PNGs in a ZIP')]);
+    else txt(small, [nwb(wh), ' · ', nw(fpsTxt(f.fps) + ' fps'), ' · ', framesOver(f) ? nw(frameCount(f) + ' frames, over the ' + framesMax() + '-frame limit') : nw(frameCount(f) + ' PNGs in a ZIP')]);
     // one layer is never silent: it says so in amber, under the summary (mapping 18)
     const L = soloLayer();
     $('xa-only').classList.toggle('hidden', !L);
@@ -367,7 +373,7 @@
       t = 'A GIF is at most 640 px on its longest side, 50 fps and 256 colours' + ((raw[0] !== d[0] || raw[1] !== d[1]) ? ' — so this one comes out ' + d[0] + '×' + d[1] + '.' : '.');
     } else if (f.kind === 'sound') t = 'Just the soundtrack, no picture.';
     else if (f.kind === 'picture') t = 'The frame under the playhead, as a PNG. Slide to the moment you want first.';
-    else if (f.kind === 'frames') t = 'Every frame as its own PNG, all in one ZIP.';
+    else if (f.kind === 'frames') t = framesOver(f) ? 'A ZIP of PNGs holds at most ' + framesMax() + ' frames, and this is ' + frameCount(f) + '. Shorten the Part or lower the Smoothness to export it.' : 'Every frame as its own PNG, all in one ZIP.';
     n.textContent = t;
     n.classList.toggle('hidden', !t);
   }
@@ -456,6 +462,7 @@
     else if (f.kind === 'picture') k = 'Save picture';
     else if (f.kind === 'sound') { k = 'Export sound'; s = 'about ' + mb(soundBytes(m4a, f.len)); }
     else k = 'Export frames';
+    go.disabled = framesOver(f);   // bughunt6 #12: nothing to tap that can only be refused (every other kind re-enables it here)
     go.textContent = '';
     go.appendChild(span('xa-go-k', k));
     if (s) go.appendChild(span('xa-go-s', ' · ' + s));   // the space keeps its name "Export video · about 34 MB" when read aloud
