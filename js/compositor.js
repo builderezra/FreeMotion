@@ -4439,9 +4439,16 @@ window.FM = window.FM || {};
       else runs.push({ o0: off, o1: off + g.length, lv: lv[i] });
       off += g.length;
     });
+    /* 1176 leftover (Word spacing): the canvas gives a space its Word spacing only when it is not the first character of the text it
+       draws or measures (a lone space measures the same at any Word spacing: drawArcLine). In the one fillText a run that starts with
+       a space after the line's first character has it; measured alone, the run and every piece of it were that much short, so the
+       runs after it, and its own words, were drawn that far left of the text (Hello, a Hebrew word, then a space and world: world's
+       box 40 px left of it at 40 px of Word spacing; a lone space between two numbers the same). r.ld puts it back. Letter spacing
+       needs nothing: each character carries its own gap, the last one too, so the runs measured alone add up to the line. */
+    const ws = ('wordSpacing' in ctx) ? (parseFloat(ctx.wordSpacing) || 0) : 0;
     let x = x0;
-    bidiOrder(runs.map(r => r.lv)).forEach(k => { const r = runs[k]; r.s = s.slice(r.o0, r.o1); r.w = ctx.measureText(r.s).width; r.x = x; x += r.w; });
-    const adv = (r, n) => n <= 0 ? 0 : n >= r.s.length ? r.w : ctx.measureText(r.s.slice(0, n)).width;
+    bidiOrder(runs.map(r => r.lv)).forEach(k => { const r = runs[k]; r.s = s.slice(r.o0, r.o1); r.ld = (ws && r.o0 > 0 && /^[\t\n\f\r ]/.test(r.s)) ? ws : 0; r.w = ctx.measureText(r.s).width + r.ld; r.x = x; x += r.w; });
+    const adv = (r, n) => n <= 0 ? 0 : n >= r.s.length ? r.w : ctx.measureText(r.s.slice(0, n)).width + r.ld;
     return (i0, i1) => {
       let a = Infinity, b = -Infinity;
       runs.forEach(r => {
