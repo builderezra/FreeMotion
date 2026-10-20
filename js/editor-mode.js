@@ -253,7 +253,14 @@ window.FM = window.FM || {};
         const sel = FM.selectionIds ? FM.selectionIds() : [];
         if (sel.length === 1 && FM.spine.read(FM.scene).isMain(sel[0])) { e.preventDefault(); if (!e.repeat) FM.spine.cmd.move(sel[0], e.code === 'ArrowLeft' ? -1 : 1); return true; }
       }
-      if (mode !== 'simple' || e.altKey) return false;
+      /* bughunt6 #5: ALT IS NOT A DOOR INTO FULL'S KEYS. This line returned false for EVERY key held with Alt (Option on a Mac),
+         so in Simple Alt+Delete, Alt+A / D / S and Alt+⌘D skipped Simple's own answers below and fell through to Full's handler
+         in js/app.js, which never reads Alt: Alt+Delete on a main clip ran Full's delete and left a gap where the clip had been,
+         and Alt+D cut a main clip's tail with no ripple. Full binds nothing to Alt, so in Simple a key held with Alt means what
+         the plain key means: Simple's keys answer it exactly as they answer the plain key, and what Simple shares with Full
+         (Space, ⌘Z / ⌘⇧Z / ⌘Y, the frame step, M, zoom) goes on to Full's handler exactly as the plain key does. Alt+← / Alt+→
+         on one main clip keep their own branch above. In Full this still returns false before anything is read. */
+      if (mode !== 'simple') return false;
       const mod = e.metaKey || e.ctrlKey;
       const S = FM.spine;
       if (!S || !S.cmd) return false;
