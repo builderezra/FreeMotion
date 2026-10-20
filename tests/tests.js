@@ -165067,6 +165067,104 @@
     });
   });
 
+  /* (#10b) A GROUP'S BOX LEFT OUT ITS MEMBERS' OWN MIRROR AND UNLINKED SIZE. After #10, groupBoundsLocal and groupRestBoundsLocal span
+     each member from its anchor and text alignment at its uniform scale — but applyLayerTransform also draws it at its unlinked Width /
+     Height (scaleX / scaleY, multiplying the scale) and then mirrors it (flipH / flipV) about its own x / y, and on c99f5b64
+     groupMemberSpan read neither. A group G at 0,0 holds ONE member at x 100, y 200; W is a title's measured width. On c99f5b64:
+       A  a 40 × 30 shape with anchorX 0 and anchorY 1, flipped (⋯ → Flip, both ways), is drawn 60 .. 100 × 200 .. 230 and was boxed
+          100 .. 140 × 170 .. 200 — beside it, not touching it; the pivot a pinch would use (FM.groupPivotMeasured, anchor 0.5) was
+          120, 40 px right of the drawn middle 80; and a tap at x 70, on the shape, fell outside FM.groupBounds.
+       B  a default-anchor 40 × 30 shape at Width 200 % and Height 50 % is drawn 60 .. 140 × 192.5 .. 207.5 and was boxed
+          80 .. 120 × 185 .. 215 — half its width; and anchored at its left edge at Width 200 % it is drawn 100 .. 180, boxed 100 .. 140.
+       C  a left-aligned title, flipped horizontally, is drawn 100 − W .. 100 and was boxed 100 .. 100 + W.
+     FAILS BEFORE THE FIX: every span in A, B and C, A's pivot (120, not 80) and A's tap.
+     CONTROL: a default-anchor 40 × 30 shape is 80 .. 120 × 185 .. 215 linked and unflipped, and the same flipped both ways (a centred
+     box mirrors onto itself), on both commits; and A's and B's red pixels, drawn by FM.renderScene, really cover the spans worked out
+     above, so the box is checked against the picture and not only against this comment.
+     TOL: 1e-6 on the box (it is double-precision sums of these same numbers, rounding near 1e-13; the fault is 7.5 px or more) and 1
+     px on a red edge (a half-covered row at 192.5 or 207.5 is not counted as red, and an edge on a whole column is). */
+  test('bughunt4 #10b A group’s box follows its members’ own Flip and unlinked Width / Height: a flipped shape anchored at its corner is boxed where it is drawn, mirrored about its x / y, and the group pivots about its drawn middle; a shape at Width 200 % and Height 50 % is boxed at that size; a flipped left-aligned title is boxed from x − its width to x (CONTROLS: a default-anchor shape keeps its box linked and unflipped, and flipped; the red pixels drawn cover the spans the box must take)', { item: '1176' }, async function () {
+    if (typeof FM.groupBoundsLocal !== 'function' || typeof FM.groupRestBoundsLocal !== 'function' || typeof FM.groupPivotMeasured !== 'function' || typeof FM.groupBounds !== 'function' || typeof FM.layerSize !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.renderScene !== 'function') throw new Error('setup: FM.groupBoundsLocal / groupRestBoundsLocal / groupPivotMeasured / groupBounds / layerSize / makeLayer / renderScene are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5, EPS = 1e-6, X = 100, Y = 200;
+      /* A fresh group at 0,0 holding only L: the live box at T, the rest box, the pivot a pinch at T would use, the box in the parent's space. */
+      const measure = (L) => {
+        const G = FM.makeLayer('group', { name: 'bh4 #10b group', x: 0, y: 0, start: 0, duration: 4 });
+        G.start = 0; G.duration = 4; G.transform.x = 0; G.transform.y = 0;
+        L.start = 0; L.duration = 4; L.parent = G.id;
+        FM.scene.layers = [G, L];
+        const live = FM.groupBoundsLocal(G, FM.scene, T), rest = FM.groupRestBoundsLocal(G, FM.scene);
+        if (!live || !rest) throw new Error('setup: the group holding ' + L.name + ' measured no box (live ' + JSON.stringify(live) + ', rest ' + JSON.stringify(rest) + ')');
+        return { live: live, rest: rest, pivot: FM.groupPivotMeasured(G, FM.scene, T), gb: FM.groupBounds(G, FM.scene, T) };
+      };
+      const shape = (name) => FM.makeLayer('shape', { name: name, shape: 'rect', x: X, y: Y, shapeW: 40, shapeH: 30, fill: '#ff0000', start: 0, duration: 4 });
+      const r1 = v => Math.round(v * 10) / 10;
+      const say = b => r1(b.minX) + ' .. ' + r1(b.maxX) + ' × ' + r1(b.minY) + ' .. ' + r1(b.maxY);
+      const bad = [];
+      /* Both walks must give [x0, x1] × [y0, y1]. */
+      const span = (what, m, x0, x1, y0, y1) => {
+        [['live', m.live], ['rest', m.rest]].forEach(([k, b]) => {
+          if (Math.abs(b.minX - x0) > EPS || Math.abs(b.maxX - x1) > EPS || Math.abs(b.minY - y0) > EPS || Math.abs(b.maxY - y1) > EPS) bad.push(what + ': the group’s ' + k + ' box is ' + say(b) + ' where the member is drawn ' + r1(x0) + ' .. ' + r1(x1) + ' × ' + r1(y0) + ' .. ' + r1(y1));
+        });
+      };
+      /* The red pixels FM.renderScene draws for the scene measure() left (320 × 240, _bh2Frame): columns x0..x1 and rows y0..y1. */
+      const drawn = () => {
+        const f = _bh2Frame(T);
+        let x0 = -1, x1 = -1, y0 = -1, y1 = -1;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            const x = k % 320, y = (k - x) / 320;
+            if (x0 < 0 || x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y0 < 0 || y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+        return { x0: x0, x1: x1, y0: y0, y1: y1 };
+      };
+      /* CONTROL: the picture really is where the span says (an edge at e is the last red column e − 1, or the first e). */
+      const pic = (what, x0, x1, y0, y1) => {
+        const d = drawn();
+        if (d.x0 < 0 || Math.abs(d.x0 - x0) > 1 || Math.abs(d.x1 + 1 - x1) > 1 || Math.abs(d.y0 - y0) > 1 || Math.abs(d.y1 + 1 - y1) > 1) bad.push('CONTROL: ' + what + ' is drawn at red columns ' + d.x0 + '..' + d.x1 + ', rows ' + d.y0 + '..' + d.y1 + ', not over ' + r1(x0) + ' .. ' + r1(x1) + ' × ' + r1(y0) + ' .. ' + r1(y1) + ' — the renderer does not draw it where this test works it out');
+      };
+
+      /* ── CONTROLS: a default-anchor shape, linked and unflipped, then flipped both ways: today's centred box. */
+      span('CONTROL: a default-anchor 40 × 30 shape', measure(shape('bh4 #10b centred shape')), X - 20, X + 20, Y - 15, Y + 15);
+      const cf = shape('bh4 #10b centred shape, flipped');
+      cf.flipH = true; cf.flipV = true;
+      span('CONTROL: a default-anchor 40 × 30 shape flipped both ways', measure(cf), X - 20, X + 20, Y - 15, Y + 15);
+
+      /* ── A: a shape anchored at its left edge and its bottom, flipped both ways — its box, its picture, the pivot and a tap. */
+      const sa = shape('bh4 #10b corner-anchored shape, flipped');
+      sa.transform.anchorX = 0; sa.transform.anchorY = 1; sa.flipH = true; sa.flipV = true;
+      const ma = measure(sa);
+      span('A: a 40 × 30 shape with anchorX 0, anchorY 1, flipped both ways', ma, X - 40, X, Y, Y + 30);
+      pic('A: the corner-anchored shape flipped both ways', X - 40, X, Y, Y + 30);
+      if (!ma.pivot || Math.abs(ma.pivot.x - (X - 20)) > EPS || Math.abs(ma.pivot.y - (Y + 15)) > EPS) bad.push('A: the group of the flipped corner-anchored shape pivots at ' + (ma.pivot ? r1(ma.pivot.x) + ', ' + r1(ma.pivot.y) : '(none)') + ' where the shape’s drawn middle is ' + (X - 20) + ', ' + (Y + 15) + ' — a pinch scales it about a point beside it');
+      const tapX = X - 30, g = ma.gb;
+      if (!g || !(tapX >= g.x - g.w / 2 && tapX <= g.x + g.w / 2)) bad.push('A: a tap at x ' + tapX + ', on the flipped shape, falls outside the group’s box ' + (g ? r1(g.x - g.w / 2) + ' .. ' + r1(g.x + g.w / 2) : '(none)'));
+
+      /* ── B: a shape at Width 200 % and Height 50 %, centred and then anchored at its left edge. */
+      const sb = shape('bh4 #10b stretched shape');
+      sb.transform.scaleX = 2; sb.transform.scaleY = 0.5;
+      span('B: a 40 × 30 shape at Width 200 %, Height 50 %', measure(sb), X - 40, X + 40, Y - 7.5, Y + 7.5);
+      pic('B: the shape at Width 200 %, Height 50 %', X - 40, X + 40, Y - 7.5, Y + 7.5);
+      const sb2 = shape('bh4 #10b stretched shape anchored at its left edge');
+      sb2.transform.scaleX = 2; sb2.transform.anchorX = 0;
+      span('B: a 40 × 30 shape at Width 200 % with anchorX 0', measure(sb2), X, X + 80, Y - 15, Y + 15);
+      pic('B: the shape at Width 200 % anchored at its left edge', X, X + 80, Y - 15, Y + 15);
+
+      /* ── C: a left-aligned title, flipped horizontally. */
+      const tl = FM.makeLayer('text', { name: 'bh4 #10b left title, flipped', text: 'bh4 title', x: X, y: Y, fontSize: 40, start: 0, duration: 4 });
+      tl.align = 'left'; tl.flipH = true;
+      const sz = FM.layerSize(tl), W = sz.w, H = sz.h;
+      if (!(W > 40)) throw new Error('CONTROL: the title measures ' + W + ' px wide, too close to layerSize’s 10 px floor for its span to say anything');
+      span('C: a left-aligned title of width ' + r1(W) + ', flipped horizontally', measure(tl), X - W, X, Y - H / 2, Y + H / 2);
+
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#9) THE ⧉ ISOLATE ON A GROUP SHOWED NOTHING. A full-frame white bar sits ABOVE a group G holding a red 100 × 100 block centred
      at 200,120 (10000 px) and a blue 60 × 60 one at 60,120 (3600 px); with nothing isolated the bar covers both. FM.isolate is what
      the ⧉ button sets: mode 1 "only this layer", mode 2 "this layer on top".
@@ -165680,6 +165778,85 @@
     });
   });
 
+  /* (#6) RIGHT-TO-LEFT TEXT UNDER AN ANIMATE PRESET WAS LAID OUT IN TYPING ORDER. Still, a text line is one fillText, and the canvas runs
+     the Unicode bidirectional algorithm over it: a Hebrew or Arabic line's first word typed is drawn on the RIGHT. On c99f5b64
+     drawAnimatedText's flat path (By Character, By Word) placed its units from the line's LEFT edge in the order they were typed
+     (x += w), so an RTL line came out mirrored: its words in reverse order By Word, every word spelled backwards By Character, and the
+     entrance sweeping in from the end of the sentence. The lines here are 40 px white text centred at 160 on _bh2Frame's black frame:
+       Hebrew  א, three spaces, בבבבבב — one letter, a gap of about 33 px, six letters. Still, the six letters sit on the left and the
+               one on the right, so the gap is about 54 px right of the ink's middle; laid out in typing order it is as far left of it,
+               about 108 px from where it belongs.
+       Arabic  لا, three spaces, مدرسة, By Word — the same, the short word on the right.
+       Typewriter By Character at 0.25 s with a 0.5 s stagger shows only the first letter typed, א: on the right, past the still gap.
+     Now a line with a right-to-left letter is resolved by the bidirectional algorithm (compositor.js bidiLevels / bidiOrder) and its
+     units are placed in the visual order it gives (bidiUnitXs); the stagger keeps counting in typing order.
+     FAILS BEFORE THE FIX: the Hebrew gap under Fade by character and Fade by word, and the Arabic one under Fade by word, is mirrored
+     about the middle, about 108 px (Arabic about 50) from the still one; under Typewriter א is drawn at the left end.
+     CONTROL: still, the canvas puts the Hebrew and the Arabic gap right of the middle (this browser runs the algorithm, so the test can
+     tell the orders apart) and a Latin line's left of it; the Latin line under every mode, and the Hebrew under Fade by line (one unit,
+     one fillText), have the still gap; every mode's ink spans what the still ink spans (the units' advances add up to the line's);
+     the Fade is on, and finished at 1 s (By Character the last of ten units is in by 9 × 0.05 + 0.3 = 0.75 s); Typewriter draws one
+     letter at 0.25 s.
+     TOL: 4 px on a gap's centre or an ink edge. By Character each glyph is placed alone, which drops any kerning between letters and
+     moves an anti-aliased edge by a fraction of a pixel (#8 measured within 3 px of the still width); the fault is 50 px or more. */
+  test('bughunt4 #6 Right-to-left text under Animate by Character and by Word reads as it does still: a Hebrew line of a one-letter word, three spaces and a six-letter word has its gap where the still line has it under Fade by character and Fade by word, an Arabic line the same by word, and Typewriter by character shows the first letter typed first, on the right (CONTROLS: still, the canvas puts the first word on the right; a Latin line and Fade by line already match; every mode spans the still ink; the Fade is on and finished)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim are not reachable');
+    await _bh2With(async function () {
+      const T = 1, TOL = 4;
+      const HEB = '\u05D0   \u05D1\u05D1\u05D1\u05D1\u05D1\u05D1', ARA = '\u0644\u0627   \u0645\u062F\u0631\u0633\u0629', LAT = 'a   bbbbbb';
+      const L = FM.makeLayer('text', { name: 'bh4 #6 title', text: HEB, x: 160, y: 120, fontSize: 40, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L];
+      const STILL = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      const fade = unit => ({ preset: 'fade', unit: unit, durIn: 0.3, durOut: 0, stagger: 0.05 });
+      /* The ink of `text` under `anim` at t (a pixel brighter than 150 summed over its channels): its first and last columns, its middle,
+         and the widest run of empty columns between them (the gap between the words), its width and its centre. */
+      const ink = (text, anim, t) => {
+        L.text = text; L.textAnim = Object.assign({}, anim); L.effects = [];
+        delete L._wrapCache;
+        const f = _bh2Frame(t), col = new Uint8Array(320);
+        for (let i = 0, n = 0; i < f.d.length; i += 4, n++) if (f.d[i] + f.d[i + 1] + f.d[i + 2] > 150) col[n % 320] = 1;
+        let x0 = -1, x1 = -1;
+        for (let x = 0; x < 320; x++) if (col[x]) { if (x0 < 0) x0 = x; x1 = x; }
+        let gw = 0, gap = -1, run = 0;
+        for (let x = x0 + 1; x0 >= 0 && x <= x1; x++) {
+          if (!col[x]) { run++; continue; }
+          if (run > gw) { gw = run; gap = ((x - run) + (x - 1)) / 2; }
+          run = 0;
+        }
+        return { x0: x0, x1: x1, mid: (x0 + x1) / 2, gap: gap, gw: gw, anim: !!FM.textHasAnim(L) };
+      };
+      const say = r => 'ink at columns ' + r.x0 + '..' + r.x1 + ' (middle ' + r.mid + '), its widest gap ' + r.gw + ' px centred at ' + r.gap;
+      const bad = [];
+
+      /* ── CONTROLS: still, the canvas puts the first word of an RTL line on the right, and a Latin line's on the left. */
+      const sH = ink(HEB, STILL, T), sA = ink(ARA, STILL, T), sL = ink(LAT, STILL, T);
+      if (sH.anim || sA.anim || sL.anim) bad.push('CONTROL: the still layer has an Animate preset by FM.textHasAnim, so “still” is not the still path');
+      if (sH.x0 < 0 || sH.x1 - sH.x0 < 80 || sH.gw < 15) bad.push('CONTROL: still, the Hebrew line is ' + say(sH) + ' — not glyphs either side of a three-space gap, so there is nothing to place');
+      if (!(sH.gap - sH.mid >= 20)) bad.push('CONTROL: still, the Hebrew line is ' + say(sH) + ': its gap is not right of its middle, so this browser does not lay the line out right to left and the orders cannot be told apart');
+      if (sA.x0 < 0 || sA.gw < 15 || !(sA.gap - sA.mid >= 10)) bad.push('CONTROL: still, the Arabic line is ' + say(sA) + ': not two words with the gap right of the middle');
+      if (sL.x0 < 0 || sL.gw < 15 || !(sL.mid - sL.gap >= 20)) bad.push('CONTROL: still, the Latin line is ' + say(sL) + ': not two words with the gap left of the middle');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── Fade by character, by word and (CONTROL) by line: the Hebrew gap where the still one is; the Latin line and the spans as still. */
+      [['Fade by character', fade('char')], ['Fade by word', fade('word')], ['Fade by line', fade('line')]].forEach(([name, anim]) => {
+        const h = ink(HEB, anim, T), l = ink(LAT, anim, T);
+        if (!h.anim) bad.push('CONTROL: ' + name + ' is off by FM.textHasAnim, so this frame did not take the animated path');
+        if (Math.abs(l.gap - sL.gap) > TOL) bad.push('CONTROL: the Latin line under ' + name + ' has ' + say(l) + ' where still it has ' + say(sL));
+        if (Math.abs(h.x0 - sH.x0) > TOL || Math.abs(h.x1 - sH.x1) > TOL) bad.push('CONTROL: the Hebrew line under ' + name + ' has ' + say(h) + ' where still it has ' + say(sH) + ' — its units do not add up to the line');
+        if (Math.abs(h.gap - sH.gap) > TOL) bad.push((name === 'Fade by line' ? 'CONTROL: ' : '') + 'the Hebrew line under ' + name + ' has ' + say(h) + ' where still it has ' + say(sH) + (Math.abs((h.gap - h.mid) + (sH.gap - sH.mid)) <= TOL ? ' — mirrored about its middle: its units were laid out from the left in the order they were typed' : ''));
+      });
+      const aw = ink(ARA, fade('word'), T);
+      if (Math.abs(aw.gap - sA.gap) > TOL) bad.push('the Arabic line under Fade by word has ' + say(aw) + ' where still it has ' + say(sA) + (Math.abs((aw.gap - aw.mid) + (sA.gap - sA.mid)) <= TOL ? ' — mirrored about its middle: its words were laid out in the order they were typed' : ''));
+
+      /* ── Typewriter by character: at 0.25 s only the first letter typed is in, and it is on the right. */
+      const tw = ink(HEB, { preset: 'typewriter', unit: 'char', durIn: 0.3, durOut: 0, stagger: 0.5 }, 0.25);
+      if (tw.x0 < 0 || tw.x1 - tw.x0 > 40) bad.push('CONTROL: under Typewriter by character at 0.25 s the ink is at columns ' + tw.x0 + '..' + tw.x1 + ', not one letter');
+      else if (!(tw.x0 > sH.gap)) bad.push('under Typewriter by character at 0.25 s the one letter in (the first typed, א) is at columns ' + tw.x0 + '..' + tw.x1 + ', not right of the still gap at ' + sH.gap + ' where it is drawn still' + (tw.x1 < sH.mid ? ' — at the left end: the entrance runs from the end of the sentence' : ''));
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#4) AN ADJUSTMENT LAYER'S BLEND MODE DID NOTHING. Red footage fills the frame, (255, 0, 0); above it an adjustment layer with
      Invert (amount 1), whose graded plate over red is cyan, (0, 255, 255). On cedde93f both blits of the graded plate (applyAdjustment's
      and applyAdjustmentFilters') are hard-wired to source-over and never read layer.blendMode, so every mode the Mixing card offers
@@ -165853,6 +166030,178 @@
       if (Math.abs(rg.x0 - 90) > 2) throw new Error('(d) a group at x 30 with its anchor on its box’s left edge, leant 60° about Y, draws its block from column ' + rg.x0 + ', not from about 90 where that anchor is (' + say(rg) + ')' + (Math.abs(rg.x0 - 97) <= 1 ? ' — it turned about the middle of its visible pixels, not about its anchor' : ''));
       const mg = _bh2MaxDiff(fg.d, fa.d);
       if (mg > 2) throw new Error('(d) a group at x 30 with its anchor on its box’s left edge, leant 60° about Y, draws ' + say(rg) + ' where a block hinged on its left edge at x 90 and leant 60° draws ' + say(ra) + ' (up to ' + mg + ' levels apart) — the group does not turn about its own anchor as a single layer does');
+    });
+  });
+
+  /* (#3c) A LEANT GROUP RE-MEASURED ITS HINGE EVERY FRAME. On c99f5b64 pivotFree (compositor.js) did not count rotationX / rotationY, so
+     a group at 100 % and 0° that was leant counted as “free”: FM.groupPivot answered with the middle of the members ON SCREEN at t, and
+     tiltPivot took R from that same live box. Here a group G at 0,0 holds a red 40 × 40 block at 100,120 (on 0..4 s) and a blue one at
+     220,120 that comes on at 2 s, and G is leant 60° about Y. renderMesh's F is 3.2, and a Y tilt of 60° sends unit x to x' = x / 2 with
+     z' = −0.866 x, drawn at pivot + x' · 3.2 / (3.2 − z') · R. On c99f5b64:
+       at 1 s only red is on screen: pivot 100, R 20, so red spans 100 − 0.5 · 1.371 · 20 = 86.3 to 100 + 0.5 · 0.787 · 20 = 107.9;
+       at 3 s both are: pivot 160, R 80, so red spans 160 − 0.5 · 1.371 · 80 = 105.2 to 160 − 0.25 · 1.157 · 80 = 136.9.
+     Red, which never moves, jumped 19 px right and grew from 22 to 32 px wide the instant blue came on.
+     Now a tilted group keeps its pivot as a place, as a scaled or turned one does: the stored one, or the rest box's (every member not
+     switched off, at the group's start), and R is the rest box's.
+       (A) No pivot stored: the rest box is 80..240, so the pivot is 160 and R 80 at both times, and red is 105.2..136.9 at 1 s and at 3 s.
+       (B) The tilt set through FM.setTransform at 1 s (the inspector's and the canvas's way in) stores the pivot then, on what is on
+           screen: 100. Red is 100 − 0.125 · 1.073 · 80 = 89.3 to 100 + 0.125 · 0.937 · 80 = 109.4 at both times (R is still the rest
+           box's 80). On c99f5b64 setTransform stored nothing for a tilt.
+     FAILS BEFORE THE FIX: in (A) and in (B) red's left edge is at 86.3 at 1 s and at 105.2 at 3 s.
+     CONTROL: untilted, red is 80..119 at both times; blue is really off at 1 s and on at 3 s; at 3 s, with both members on screen, (A)'s
+     red is at 105.2..136.9, as it was before (the live box and the rest box are the same box then).
+     TOL: 1.5 px between the two times on each red edge (the 8 × 8 mesh is laid over a different bbox at each, and its affine cells bend
+     a leant edge by up to half a pixel), 2 px on an edge against its worked-out place (a column counts as red from about 70 % covered);
+     the fault is 19 px. */
+  test('bughunt4 #3c A leant group keeps its hinge: a group leant 60° about Y draws its red block in the same place before and after a second member comes on screen, about the rest box’s middle with no pivot stored and about the stored pivot once the tilt is set through FM.setTransform (CONTROLS: untilted the block does not move; the second member really comes on; with both on screen the group leans as before)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.setTransform !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.setTransform are not reachable');
+    await _bh2With(async function () {
+      const T1 = 1, T3 = 3, TOL = 1.5, NEAR = 2;
+      const block = (name, x, fill, start, dur, parent) => {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 120, shapeW: 40, shapeH: 40, fill: fill, start: start, duration: dur });
+        L.start = start; L.duration = dur; L.parent = parent;
+        return L;
+      };
+      /* The group, the always-on red block and the blue one that comes on at 2 s, as the scene's only layers. */
+      const make = (name) => {
+        const G = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        G.start = 0; G.duration = 4; G.transform.x = 0; G.transform.y = 0;
+        FM.scene.layers = [G, block(name + ': red, always on', 100, '#ff0000', 0, 4, G.id), block(name + ': blue, on from 2 s', 220, '#0000ff', 2, 2, G.id)];
+        return G;
+      };
+      /* The red pixels' count and span (columns x0..x1, rows y0..y1), and the blue pixels' count. */
+      const reds = (f) => {
+        let n = 0, x0 = -1, x1 = -1, y0 = -1, y1 = -1, blue = 0;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            n++;
+            const x = k % 320, y = (k - x) / 320;
+            if (x0 < 0 || x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y0 < 0 || y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          } else if (f.d[i] < 70 && f.d[i + 1] < 70 && f.d[i + 2] > 180) blue++;
+        }
+        return { n: n, x0: x0, x1: x1, y0: y0, y1: y1, blue: blue };
+      };
+      const say = r => r.n + ' red px at columns ' + r.x0 + '..' + r.x1 + ', rows ' + r.y0 + '..' + r.y1;
+      const bad = [];
+
+      /* ── CONTROLS: untilted the red block stands still and blue really comes on at 2 s. */
+      make('bh4 #3c untilted group');
+      const f01 = reds(_bh2Frame(T1)), f03 = reds(_bh2Frame(T3));
+      [[f01, T1], [f03, T3]].forEach(([r, t]) => {
+        if (Math.abs(r.x0 - 80) > 1 || Math.abs(r.x1 - 119) > 1 || Math.abs(r.y0 - 100) > 1 || Math.abs(r.y1 - 139) > 1) bad.push('CONTROL: untilted at ' + t + ' s the red block is ' + say(r) + ', not 80..119 × 100..139 — the fixture is not the one worked out above');
+      });
+      if (f01.blue > 0 || f03.blue < 1500) bad.push('CONTROL: the blue block shows ' + f01.blue + ' px at 1 s and ' + f03.blue + ' at 3 s, not none and then about 1600 — it does not come on screen at 2 s');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── (A) leant with no pivot stored: about the rest box's middle at both times. */
+      const GA = make('bh4 #3c group leant, no pivot stored');
+      GA.transform.rotationY = 60;
+      const a1 = reds(_bh2Frame(T1)), a3 = reds(_bh2Frame(T3));
+      if (a3.n < 600 || a3.x1 - a3.x0 + 1 > 36) throw new Error('CONTROL: leant 60° about Y at 3 s the red block is ' + say(a3) + ' — not narrowed from its 40 px, so the tilt route did not run');
+      if (Math.abs(a3.x0 - 105.2) > NEAR || Math.abs(a3.x1 + 1 - 136.9) > NEAR) bad.push('CONTROL: at 3 s, with both members on screen, the leant group draws red at ' + say(a3) + ', not about 105.2..136.9 as before (pivot 160, R 80)');
+      if (Math.abs(a1.x0 - a3.x0) > TOL || Math.abs(a1.x1 - a3.x1) > TOL) bad.push('(A) a leant group with no pivot stored draws its red block, which never moves, at ' + say(a1) + ' at 1 s and at ' + say(a3) + ' at 3 s, after blue comes on' + (Math.abs(a1.x0 - 86.3) <= NEAR ? ' — at 1 s it leant about the middle of the members on screen (100, R 20), not about the rest box’s (160, R 80)' : ''));
+
+      /* ── (B) the tilt set through FM.setTransform at 1 s: the pivot is stored then, on what is on screen (100). */
+      const GB = make('bh4 #3c group leant through setTransform');
+      FM.time = T1;
+      FM.setTransform(GB, 'rotationY', 60, T1);
+      if (GB.transform.rotationY !== 60) throw new Error('setup: FM.setTransform left rotationY at ' + JSON.stringify(GB.transform.rotationY) + ', not 60');
+      const b1 = reds(_bh2Frame(T1)), b3 = reds(_bh2Frame(T3));
+      if (Math.abs(b1.x0 - b3.x0) > TOL || Math.abs(b1.x1 - b3.x1) > TOL) bad.push('(B) a group leant through FM.setTransform at 1 s draws its red block at ' + say(b1) + ' at 1 s and at ' + say(b3) + ' at 3 s, after blue comes on (stored pivot ' + JSON.stringify(GB.pivot || null) + ')' + (Math.abs(b1.x0 - 86.3) <= NEAR ? ' — its hinge was re-measured on the members on screen at each time' : ''));
+      if (Math.abs(b1.x0 - 89.3) > NEAR || Math.abs(b1.x1 + 1 - 109.4) > NEAR) bad.push('(B) at 1 s the group leant through FM.setTransform draws red at ' + say(b1) + ', not about 89.3..109.4 (about the pivot stored at 1 s, 100, with the rest box’s R 80)');
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
+  /* (#3b) A TILT LEANT ONLY WHAT THE FRAME HAD LEFT OF THE LAYER. On c99f5b64 draw3DTiltLayer drew the layer flat on a plate the size of
+     the frame (nestedPlate), and a group's flattened unit (buildGroupUnit) was frame-sized too, so the part of a layer hanging past the
+     frame edge was cut off BEFORE it was leant, though a lean narrows the layer toward its anchor and swings that part into view.
+     A red 100 × 100 square hinged on its left edge (anchorX 0), rows 70..169, leant 70° about Y, on _bh2Frame's 320 × 240 frame. About
+     its anchor at R 50 its far edge is unit 2 out: x' = 2 cos 70° = 0.684, z' = −2 sin 70° = −1.879, f = 3.2 / 5.079 = 0.630, so it
+     lands 0.684 · 0.630 · 50 = 21.5 px from the hinge.
+       CONTROL (in the frame): at x 100 it leans to 100..121.5.
+       (a) At x 280 (280..379 flat, the frame keeps 280..319) it should lean to 280..301.5, wholly on screen: the control moved 180 px.
+           On c99f5b64 the plate held only unit 0..0.8 of it: z' = −0.752, f = 0.810, so it ended at 280 + 0.274 · 0.810 · 50 = 291.1,
+           about 1000 red px where the whole leant card is about 1750.
+       (b) A group G at 0,0 with its anchor on its box's left edge, holding a default-anchor red square at x 330 (280..379), leant 70°:
+           it should draw exactly as (a) (its pivot is its box's left edge, 280, its R the box's 50). On c99f5b64 its unit was cut at
+           319 first and it ended at 291 the same way.
+     FAILS BEFORE THE FIX: (a) and (b) end at column 290, not 300, with about 58 % of the control's red.
+     CONTROL: untilted, the square at x 280 is really cut by the frame (280..319); the square in the frame leans to about 100..121 and is
+     narrowed (the tilt route ran); a group inside the frame (its square at x 150) leans exactly as the single square at x 100, as the
+     #3 test has it — on both commits, because nothing there reaches past the frame and the plate is the one it always was.
+     TOL: 1 column and 1 % of the red between (a) and the control moved 180 px (the same plate pixels and mesh, moved by a whole 180 px;
+     the canvas's single-precision jitter, about 1e-5 px, cannot move a column), 2 levels between (b) and (a), as the #3 test allows a
+     group against a single layer; the fault is 10 columns and 40 % of the red. */
+  test('bughunt4 #3b A leant layer swings its off-frame part into view: a square hinged on its left edge and hanging off the frame’s right edge, leant 70° about Y, draws whole, exactly as the same square leant inside the frame moved 180 px, and a leant group holding it draws the same (CONTROLS: untilted it is really cut by the frame; inside the frame it leans as before; a group inside the frame leans exactly as a single layer)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5;
+      FM.time = T;
+      const square = (name, x, ax, parent) => {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 120, shapeW: 100, shapeH: 100, fill: '#ff0000', start: 0, duration: 4 });
+        L.start = 0; L.duration = 4;
+        if (ax != null) L.transform.anchorX = ax;
+        if (parent) L.parent = parent;
+        return L;
+      };
+      const grp = (name, ax) => {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        if (ax != null) g.transform.anchorX = ax;
+        return g;
+      };
+      /* The red pixels' count and span (columns x0..x1, rows y0..y1). */
+      const reds = (f) => {
+        let n = 0, x0 = -1, x1 = -1, y0 = -1, y1 = -1;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            n++;
+            const x = k % 320, y = (k - x) / 320;
+            if (x0 < 0 || x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y0 < 0 || y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+        return { n: n, x0: x0, x1: x1, y0: y0, y1: y1 };
+      };
+      const say = r => r.n + ' red px at columns ' + r.x0 + '..' + r.x1 + ', rows ' + r.y0 + '..' + r.y1;
+      const moved = (r, c, dx) => Math.abs(r.x0 - (c.x0 + dx)) <= 1 && Math.abs(r.x1 - (c.x1 + dx)) <= 1 && Math.abs(r.y0 - c.y0) <= 1 && Math.abs(r.y1 - c.y1) <= 1 && Math.abs(r.n - c.n) <= Math.max(10, 0.01 * c.n);
+
+      /* ── CONTROLS: the hinged square inside the frame leans to about 100..121; at x 280 untilted the frame really cuts it. */
+      const Hc = square('bh4 #3b hinged square in the frame', 100, 0, null);
+      Hc.transform.rotationY = 70;
+      FM.scene.layers = [Hc];
+      const fc = _bh2Frame(T), rc = reds(fc);
+      if (rc.n < 1000 || rc.x1 - rc.x0 + 1 > 30 || Math.abs(rc.x0 - 100) > 1 || Math.abs(rc.x1 + 1 - 121.5) > 2) throw new Error('CONTROL: hinged on its left edge at x 100 and leant 70° about Y, the square is ' + say(rc) + ', not about 100..121 (its far edge 21.5 px from the hinge) — the fixture is not the one worked out above');
+      const He = square('bh4 #3b hinged square off the frame edge', 280, 0, null);
+      FM.scene.layers = [He];
+      const cut = reds(_bh2Frame(T));
+      if (Math.abs(cut.x0 - 280) > 1 || cut.x1 !== 319) throw new Error('CONTROL: untilted at x 280 the square is ' + say(cut) + ', not cut by the frame’s right edge to 280..319 — this would not test the frame edge');
+
+      /* ── (a) leant at x 280: the whole card, exactly the control moved 180 px. */
+      He.transform.rotationY = 70;
+      const fe = _bh2Frame(T), re = reds(fe);
+      if (!moved(re, rc, 180)) throw new Error('(a) a square hinged on its left edge at x 280, hanging off the frame’s right edge and leant 70° about Y, is ' + say(re) + ', not the leant square at x 100 (' + say(rc) + ') moved 180 px' + (Math.abs(re.x1 + 1 - 291.1) <= 2 ? ' — only the part the frame had left of it was leant, so the card ends in a cut at about 291' : ''));
+
+      /* ── CONTROL: a group inside the frame leans exactly as the single square. */
+      const Gi = grp('bh4 #3b hinged group in the frame', 0);
+      Gi.transform.rotationY = 70;
+      FM.scene.layers = [Gi, square('bh4 #3b red in the hinged group in the frame', 150, null, Gi.id)];
+      const fgi = _bh2Frame(T), mi = _bh2MaxDiff(fgi.d, fc.d);
+      if (mi > 2) throw new Error('CONTROL: a group at 0,0 with its anchor on its box’s left edge, holding a square at x 150 and leant 70° about Y, draws ' + say(reds(fgi)) + ' where the single square hinged at x 100 draws ' + say(rc) + ' (up to ' + mi + ' levels apart) — a group inside the frame no longer leans as a single layer');
+
+      /* ── (b) the same group with its square hanging off the frame edge draws exactly as (a). */
+      const Go = grp('bh4 #3b hinged group off the frame edge', 0);
+      Go.transform.rotationY = 70;
+      FM.scene.layers = [Go, square('bh4 #3b red in the hinged group off the frame edge', 330, null, Go.id)];
+      const fgo = _bh2Frame(T), rgo = reds(fgo), mo = _bh2MaxDiff(fgo.d, fe.d);
+      if (!moved(rgo, rc, 180)) throw new Error('(b) a group with its anchor on its box’s left edge, holding a square at x 330 that hangs off the frame’s right edge, leant 70° about Y, draws ' + say(rgo) + ', not the leant square at x 100 (' + say(rc) + ') moved 180 px' + (Math.abs(rgo.x1 + 1 - 291.1) <= 2 ? ' — the group’s flattened unit was cut at the frame edge before it was leant' : ''));
+      if (mo > 2) throw new Error('(b) a group with its anchor on its box’s left edge, holding a square at x 330 that hangs off the frame’s right edge, leant 70° about Y, draws ' + say(rgo) + ' where the single square hinged at x 280 draws ' + say(re) + ' (up to ' + mo + ' levels apart)' + (Math.abs(rgo.x1 + 1 - 291.1) <= 2 ? ' — the group’s flattened unit was cut at the frame edge before it was leant' : ''));
     });
   });
 

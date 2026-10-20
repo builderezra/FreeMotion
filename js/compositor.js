@@ -4257,8 +4257,132 @@ window.FM = window.FM || {};
   // The regex alone, for the suite: Chrome always has Intl.Segmenter, so the fallback is held against it directly.
   FM._graphemesFallback = function (s) { return String(s == null ? '' : s).match(GRAPHEME_RE) || []; };
 
-  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan, upright) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)   // upright: Text Curve's Stay upright (#966 opts8)
+  /* ═══ bughunt4 #6 — RIGHT-TO-LEFT TEXT UNDER AN ANIMATE PRESET IS LAID OUT AS IT READS ═══════════════════════════════════════
+   * What was wrong. Still, a line is ONE fillText, and the canvas runs the Unicode bidirectional algorithm over it: in a Hebrew or
+   * Arabic line the first word typed is drawn on the RIGHT, and each word reads right to left. drawAnimatedText's flat path, By
+   * Character and By Word, placed its units one after another from the line's LEFT edge in the order they were typed, so the first
+   * word typed landed on the left: By Word an RTL line's words came out in reverse order, By Character every word was spelled
+   * backwards, and the entrance swept in from the end of the sentence. For the layer's whole life, not only during the entrance,
+   * in the preview and the export. By Line was right all along (its one unit is one fillText).
+   * Now a line holding a right-to-left letter is resolved by that same algorithm, cut down to what one line of plain text needs at
+   * the canvas's own left-to-right direction (UAX #9 rules W1–W7, N1–N2, I1, L1 and L2; no explicit embeddings or isolates), and its
+   * units are placed in the visual order it gives. The stagger still counts in typing order, so the first word typed comes in first,
+   * on the right. A line with no right-to-left letter never gets past the first test: every left-to-right text draws as it did.
+   * Not built (a layer with a Word Highlight keeps the old order: the highlight lays its boxes out in typing order, on the still path
+   * too, so moving the units alone would take them off their words; the curved paths, still and animated, also place glyphs in
+   * typing order; Arabic By Character draws each letter unjoined, as it always has). */
+  const BIDI_RTL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFC\u200F\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
+  // One character's bidirectional class (its first code point's, from UnicodeData's ranges for the scripts text is typed in)
+  function bidiType(g) {
+    const c = g.codePointAt(0);
+    if (c === undefined) return 'ON';
+    if (c >= 0x30 && c <= 0x39) return 'EN';
+    if ((c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A)) return 'L';
+    if (c === 0x2B || c === 0x2D) return 'ES';
+    if (c === 0x23 || c === 0x24 || c === 0x25) return 'ET';
+    if (c === 0x2C || c === 0x2E || c === 0x2F || c === 0x3A) return 'CS';
+    if (c < 0x80) return /\s/.test(g.charAt(0)) ? 'WS' : 'ON';
+    if (/^[\p{Mn}\p{Me}]/u.test(g)) return 'NSM';
+    if (c === 0xA0 || c === 0x202F || c === 0x060C || c === 0x2044 || c === 0xFE50 || c === 0xFE52 || c === 0xFE55 || c === 0xFF0C || c === 0xFF0E || c === 0xFF0F || c === 0xFF1A) return 'CS';
+    if ((c >= 0x0660 && c <= 0x0669) || c === 0x066B || c === 0x066C || (c >= 0x0600 && c <= 0x0605) || c === 0x06DD || c === 0x08E2) return 'AN';
+    if ((c >= 0x06F0 && c <= 0x06F9) || c === 0xB2 || c === 0xB3 || c === 0xB9 || c === 0x2070 || (c >= 0x2074 && c <= 0x2079) || (c >= 0x2080 && c <= 0x2089) || (c >= 0xFF10 && c <= 0xFF19)) return 'EN';
+    if (c === 0x207A || c === 0x207B || c === 0x208A || c === 0x208B || c === 0x2212 || c === 0xFB29 || c === 0xFE62 || c === 0xFE63 || c === 0xFF0B || c === 0xFF0D) return 'ES';
+    if ((c >= 0xA2 && c <= 0xA5) || c === 0xB0 || c === 0xB1 || c === 0x0609 || c === 0x060A || c === 0x066A || (c >= 0x2030 && c <= 0x2034) || (c >= 0x20A0 && c <= 0x20CF) || c === 0x212E || c === 0x2213 || (c >= 0xFF03 && c <= 0xFF05) || c === 0xFFE0 || c === 0xFFE1 || c === 0xFFE5 || c === 0xFFE6) return 'ET';
+    if (c === 0x200F || (c >= 0x0590 && c <= 0x05FF) || (c >= 0x07C0 && c <= 0x085F) || (c >= 0xFB1D && c <= 0xFB4F) || (c >= 0x10800 && c <= 0x10FFF) || (c >= 0x1E800 && c <= 0x1EFFF)) return 'R';
+    if (c === 0x061C || (c >= 0x0600 && c <= 0x07BF) || (c >= 0x0860 && c <= 0x08FF) || (c >= 0xFB50 && c <= 0xFDFF) || (c >= 0xFE70 && c <= 0xFEFF)) return 'AL';
+    if (c === 0x200E) return 'L';
+    if (/^\s/u.test(g)) return 'WS';
+    if (/^[\p{L}\p{N}\p{Mc}]/u.test(g)) return 'L';
+    return 'ON';
+  }
+  /* The embedding level of each character of one line, `gs` its characters (graphemes), at paragraph level 0 (left to right, the
+     canvas's own direction): 0 left to right, 1 right to left, 2 a number inside right-to-left text. */
+  function bidiLevels(gs) {
+    const n = gs.length, orig = gs.map(bidiType), t = orig.slice();
+    /* W1: a mark takes the class of what it follows (the start of the line counts as L) */
+    for (let i = 0; i < n; i++) if (t[i] === 'NSM') t[i] = i ? t[i - 1] : 'L';
+    /* W2: a European digit after Arabic letters is an Arabic number. W3: Arabic letters are R from here on. */
+    let s = 'L';
+    for (let i = 0; i < n; i++) { const c = t[i]; if (c === 'L' || c === 'R' || c === 'AL') s = c; else if (c === 'EN' && s === 'AL') t[i] = 'AN'; }
+    for (let i = 0; i < n; i++) if (t[i] === 'AL') t[i] = 'R';
+    /* W4: one separator between two numbers of a kind joins them */
+    for (let i = 1; i < n - 1; i++) {
+      if ((t[i] === 'ES' || t[i] === 'CS') && t[i - 1] === 'EN' && t[i + 1] === 'EN') t[i] = 'EN';
+      else if (t[i] === 'CS' && t[i - 1] === 'AN' && t[i + 1] === 'AN') t[i] = 'AN';
+    }
+    /* W5: currency and percent signs next to a European number belong to it. W6: any other separator or terminator is neutral. */
+    for (let i = 0; i < n; i++) {
+      if (t[i] !== 'ET') continue;
+      let j = i;
+      while (j < n && t[j] === 'ET') j++;
+      if ((i > 0 && t[i - 1] === 'EN') || (j < n && t[j] === 'EN')) for (let k = i; k < j; k++) t[k] = 'EN';
+      i = j - 1;
+    }
+    for (let i = 0; i < n; i++) if (t[i] === 'ES' || t[i] === 'ET' || t[i] === 'CS') t[i] = 'ON';
+    /* W7: a European number in left-to-right text is left to right */
+    s = 'L';
+    for (let i = 0; i < n; i++) { const c = t[i]; if (c === 'L' || c === 'R') s = c; else if (c === 'EN' && s === 'L') t[i] = 'L'; }
+    /* N1, N2: a run of spaces and punctuation takes the direction on both sides of it when they agree (numbers count as R), else
+       the paragraph's (L); the start and the end of the line count as L */
+    const dir = c => c === 'L' ? 'L' : (c === 'R' || c === 'EN' || c === 'AN') ? 'R' : null;
+    for (let i = 0; i < n; i++) {
+      if (dir(t[i])) continue;
+      let j = i;
+      while (j < n && !dir(t[j])) j++;
+      const a = i > 0 ? dir(t[i - 1]) : 'L', b = j < n ? dir(t[j]) : 'L', v = a === b ? a : 'L';
+      for (let k = i; k < j; k++) t[k] = v;
+      i = j - 1;
+    }
+    /* I1, then L1: white space at the end of the line goes back to the paragraph's level */
+    const lv = t.map(c => c === 'R' ? 1 : (c === 'EN' || c === 'AN') ? 2 : 0);
+    for (let i = n - 1; i >= 0 && orig[i] === 'WS'; i--) lv[i] = 0;
+    return lv;
+  }
+  /* L2: the visual order of items at levels `lv`, left to right — from the highest level down to 1, every run at that level or
+     above is reversed. */
+  function bidiOrder(lv) {
+    const n = lv.length, ord = [];
+    let hi = 0;
+    for (let i = 0; i < n; i++) { ord.push(i); if (lv[i] > hi) hi = lv[i]; }
+    for (let k = hi; k >= 1; k--) {
+      for (let i = 0; i < n; i++) {
+        if (lv[ord[i]] < k) continue;
+        let j = i;
+        while (j < n && lv[ord[j]] >= k) j++;
+        for (let a = i, b = j - 1; a < b; a++, b--) { const q = ord[a]; ord[a] = ord[b]; ord[b] = q; }
+        i = j - 1;
+      }
+    }
+    return ord;
+  }
+  /* Where each unit of one line starts, in the visual order: xs[k] is unit k's left edge, the units laid out left to right from x0
+     with their own advances `widths` (so the line keeps its width and its left edge). A unit is one item at the lowest level of its
+     characters (a word drawn whole lays itself out inside). null when the line has no right-to-left letter or its order is the
+     typing order, and the caller then lays the units out as it always did. */
+  function bidiUnitXs(line, units, widths, x0) {
+    if (units.length < 2 || !BIDI_RTL.test(line)) return null;
+    const gs = graphemes(line), lv = bidiLevels(gs), at = new Uint8Array(line.length);
+    let off = 0;
+    gs.forEach((g, i) => { at.fill(lv[i], off, Math.min(line.length, off + g.length)); off += g.length; });
+    const ul = [];
+    off = 0;
+    units.forEach(u => {
+      let m = 255;
+      for (let k = off; k < off + u.length && k < at.length; k++) if (at[k] < m) m = at[k];
+      ul.push(m === 255 ? 0 : m);
+      off += u.length;
+    });
+    const ord = bidiOrder(ul);
+    if (ord.every((k, i) => k === i)) return null;
+    const xs = new Array(units.length);
+    let x = x0;
+    ord.forEach(k => { xs[k] = x; x += widths[k]; });
+    return xs;
+  }
+
+  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan, upright, hlOn) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)   // upright: Text Curve's Stay upright (#966 opts8)
     // plan: textPlanLines' plan for these lines, or null (#966 scramble layout)
+    /* hlOn (bughunt4 #6): the layer carries a Word Highlight, lit or not; its lines keep the typing order (bidiUnitXs says why) */
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
     /* Landing with a bounce rather than an ease — the standard piecewise curve. `drop` is the only
@@ -4458,6 +4582,9 @@ window.FM = window.FM || {};
       const sp = parseFloat(ctx.letterSpacing) || 0;   // global spacing is active; measureText over-counts one trailing gap per unit (#5)
       const lineW = widths.reduce((a, b) => a + b, 0) - (units.length ? sp : 0);
       let x = align === 'center' ? -lineW / 2 : align === 'right' ? -lineW : 0;
+      /* bughunt4 #6: a right-to-left line's units go where it reads, each unit's left edge from bidiUnitXs; null (every line with no
+         right-to-left letter, By Line, and a layer with a Word Highlight) lays them out one after another as before */
+      const bidiX = (unit !== 'line' && !hlOn) ? bidiUnitXs(line, units, widths, x) : null;
       /* #482 12.4 review: on the caret's line, the unit holding Type-On's dark caret (the last, or the first when typing from
          the End) is laid out and animated whole and painted without it — the caret alone paints nothing; a word or a line
          ending in it paints the rest from the same left edge (left-aligned here), shifted by the caret's advance when it leads. */
@@ -4466,6 +4593,7 @@ window.FM = window.FM || {};
          Word Highlight is on the layer or nothing on this line is lit, and then every unit is drawn by the two lines it always was. */
       const hlo = hl ? hlAnimLine(ctx, hl, li, lines.length, units, widths, x, sp, fs, yy, lh) : null;
       units.forEach((u, ui) => {
+        if (bidiX) x = bidiX[ui];
         const w = widths[ui];
         const wDraw = Math.max(0, w - sp);   // visual width = measured minus the over-counted trailing gap; advance still uses w (= inter-unit gap) (#5)
         const { alpha, dx, dy, sc, scx, scy, rot, outA } = animFor(ck.n++, ck);
@@ -17035,7 +17163,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const g = flat._ofGroup;
       if (!g || g.type !== 'group' || !FM.groupPivot || !FM.parentChainMatrix || !FM.groupBoundsLocal) return null;
       const piv = FM.groupPivot(g, scene, t);
-      const b = FM.groupBoundsLocal(g, scene, t) || (FM.groupRestBoundsLocal ? FM.groupRestBoundsLocal(g, scene) : null);
+      /* bughunt4 #3c: R from the REST box, the box a tilted group's pivot falls back to (FM.groupPivot), which does not change as
+         members come on or go off screen; the live box at t made the lean's perspective jump with them. */
+      const b = (FM.groupRestBoundsLocal ? FM.groupRestBoundsLocal(g, scene) : null) || FM.groupBoundsLocal(g, scene, t);
       // the matrix a member is drawn with: the group's own pivot sandwich, its position and everything above it
       const M = FM.parentChainMatrix({ id: g.id + ':tilt', parent: g.id }, t, scene);
       if (!piv || !b || !M) return null;
@@ -17059,6 +17189,62 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (zx + zy > 2.5 * R) R = (zx + zy) / 2.5;
     return { x: x, y: y, R: R };
   }
+  /* ═══ bughunt4 #3b — THE TILT PLATE REACHES AS FAR AS THE LAYER, NOT ONLY AS FAR AS THE FRAME ══════════════════════════════════
+   * What was wrong. The flat picture a tilt leans was drawn on a plate the size of the frame (nestedPlate), so whatever part of the
+   * layer hung past the frame edge was cut off BEFORE it was leant. A lean narrows the layer toward its anchor, so that part should
+   * swing into view, and it did not: a 100 px square hinged on its left edge at x 280 of a 320 px frame, leant 70° about Y, is
+   * 21.5 px wide once leant (280..301.5) and wholly on screen, but it drew only the 40 px the frame had left of it, leant to
+   * 280..291: about half the card, ending in a hard cut. A group was cut the same way one step earlier, because its flattened unit
+   * (buildGroupUnit) is frame-sized too.
+   * Now, when the layer's own box (tiltLayerReach: its anchor, its text alignment and its CTM, parents included) reaches past the
+   * plate, the plate grows to take it in, plus a margin for what its edges carry (an outline, a glyph's overhang), in whole plate
+   * pixels so it keeps the plate's grid, and at most 0.6 of the frame past each side (the expanded plate's cost ceiling). A tilted
+   * group's unit grows the same way over its members' boxes, and the plate that leans the unit then takes the whole unit in. A
+   * grown plate is marked the way a camera plate that reaches past the frame is (__fmCamExt), so a pass inside it with geometry of
+   * its own (an effect's kernel) still gets the frame, exactly as before: only the layer's own pixels, its masks and a group's
+   * members reach past it. A Copy / Magnify Background layer keeps the frame (its backdrop is the frame's). A layer whose box is
+   * inside the plate gets the very plate it always did, so every tilt that is fully on screen draws as it did, byte for byte. */
+  function tiltLayerReach(l, t, scene) {
+    const sz = layerSizeAt(l, t), M = layerCTM(l, t, scene);
+    if (!sz || !M || !FM.textAlignShift) return null;
+    const tr = l.transform || {}, kx = anchorX(tr), ky = anchorY(tr), bw = sz.w || 0, bh = sz.h || 0, sh = FM.textAlignShift(l, bw);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i < 4; i++) {
+      const lx = ((i & 1) ? 1 - kx : -kx) * bw + sh, ly = ((i & 2) ? 1 - ky : -ky) * bh;
+      const qx = M.a * lx + M.c * ly + M.e, qy = M.b * lx + M.d * ly + M.f;
+      x0 = Math.min(x0, qx); x1 = Math.max(x1, qx); y0 = Math.min(y0, qy); y1 = Math.max(y1, qy);
+    }
+    return (isFinite(x0) && isFinite(y0) && isFinite(x1) && isFinite(y1)) ? { x0: x0, y0: y0, x1: x1, y1: y1 } : null;
+  }
+  /* A group unit's members as far as they reach (each drawn one's tiltLayerReach, in project px), or null: none, or one copies the
+     backdrop (Copy / Magnify Background), whose backdrop is the frame's. */
+  function unitReach(u, t, scene) {
+    let b = null, keep = false;
+    scene.layers.forEach(L => {
+      if (keep || !u.memberIds.has(L.id) || L.type === 'group' || L.type === 'camera' || L.type === 'adjustment' || L.type === 'null') return;
+      if (!FM.isLayerVisibleAt(L, t)) return;
+      if (FM.hasCopyBg && FM.hasCopyBg(L)) { keep = true; return; }
+      const r = tiltLayerReach(L, t, scene);
+      if (r) b = b ? { x0: Math.min(b.x0, r.x0), y0: Math.min(b.y0, r.y0), x1: Math.max(b.x1, r.x1), y1: Math.max(b.y1, r.y1) } : r;
+    });
+    return keep ? null : b;
+  }
+  // The margin a reach gets: 16 px, or a twentieth of its longer side
+  function reachMargin(b) { return Math.max(16, 0.05 * Math.max(b.x1 - b.x0, b.y1 - b.y0)); }
+  /* The plate `np` (nestedPlate's shape: ps, OX, OY, W, H, PWp, PHp) grown to take in `box` (project px) and `m` round it, or null
+     when the box is already inside np (half a plate pixel's slack) or nothing would be added. Grown by whole plate pixels on each
+     side, at most 0.6 of the frame (PW × PH) past each. */
+  function tiltPlateRegion(box, m, np, PW, PH) {
+    if (!box || !np || !(np.ps > 0) || ![box.x0, box.y0, box.x1, box.y1, m, np.OX, np.OY, np.PWp, np.PHp].every(isFinite)) return null;
+    const ps = np.ps, e = 0.5 / ps, ex = np.OX + np.PWp, ey = np.OY + np.PHp;
+    if (box.x0 >= np.OX - e && box.y0 >= np.OY - e && box.x1 <= ex + e && box.y1 <= ey + e) return null;
+    const px = (v, c) => Math.max(0, Math.ceil(Math.max(0, Math.min(c, v)) * ps - 1e-6));
+    const L = px(np.OX - (box.x0 - m), 0.6 * PW), T = px(np.OY - (box.y0 - m), 0.6 * PH);
+    const R = px(box.x1 + m - ex, 0.6 * PW), B = px(box.y1 + m - ey, 0.6 * PH);
+    if (!(L + T + R + B > 0)) return null;
+    const W = np.W + L + R, H = np.H + T + B;
+    return { ps: ps, OX: np.OX - L / ps, OY: np.OY - T / ps, W: W, H: H, PWp: W / ps, PHp: H / ps };
+  }
   function draw3DTiltLayer(ctx, layer, t, scene) {
     const tilt = tilt3D(layer, t);
     if (!tilt) return;
@@ -17072,7 +17258,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * transform; only the final blit converts back to project units. */
     const PW = proj.width, PH = proj.height;
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
-    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    const _np0 = nestedPlate(ctx, proj);
+    /* bughunt4 #3b: …and as far as the layer reaches, when that is further (tiltPlateRegion). A group's flattened unit says how far
+       its own plate reaches (_canvasX.., set when that plate is not the frame); a Copy / Magnify Background layer keeps the frame. */
+    let _rch = null, _rm = 0;
+    if (layer.type === '_flat') {
+      if (typeof layer._canvasX === 'number' && typeof layer._canvasY === 'number') _rch = { x0: layer._canvasX, y0: layer._canvasY, x1: layer._canvasX + (layer._canvasW || 0), y1: layer._canvasY + (layer._canvasH || 0) };
+    } else if (!(FM.hasCopyBg && FM.hasCopyBg(layer))) {
+      _rch = tiltLayerReach(layer, t, scene);
+      if (_rch) _rm = reachMargin(_rch);
+    }
+    const _ext = _rch ? tiltPlateRegion(_rch, _rm, _np0, PW, PH) : null;
+    const _np = _ext || _np0, ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _t3Depth++;
     try {
@@ -17081,6 +17278,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (_t3A.width !== W || _t3A.height !== H) { _t3A.width = W; _t3A.height = H; }   // resize only on change — dodge the ~8MB per-frame realloc
     if (_t3B.width !== W || _t3B.height !== H) { _t3B.width = W; _t3B.height = H; }
     _t3A.__fmRS = ps; _t3A.__fmOX = OX; _t3A.__fmOY = OY;   // the nested drawLayer renders through baseT
+    _t3A.__fmCamExt = !!_ext;   /* bughunt4 #3b: a grown plate is marked, so a pass nested in it with geometry of its own keeps the frame (nestedPlate) */
     const actx = _t3A.getContext('2d');
     baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -23231,7 +23429,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // #966 opts8: Text Curve's Stay upright (st.curveUpright, set only by a Text Curve that asks for it)
       const _cUp = !!(_tEff && _tEff.curveUpright === true);
       if (FM.textHasAnim(layer)) {
-        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null, _plan, _cUp);
+        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null, _plan, _cUp, !!_hl);
       } else {
         const stk = layer.stroke;
         const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)
@@ -28400,7 +28598,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        so a group with opacity, a blend, a shadow or a mask is not cut off at the frame edge as the camera pans. The plate
        is marked, so the members' own effects — and the group's, applied to the proxy below — keep the frame
        (nestedPlate). Everywhere else R is the frame at the origin and every number below is what it was. */
-    const R = ctx.canvas.__fmCamExt ? nestedPlate(ctx, P, true) : null;
+    let R = ctx.canvas.__fmCamExt ? nestedPlate(ctx, P, true) : null;
+    /* bughunt4 #3b: a group that tilts is leant as this one picture (draw3DTiltLayer), and a lean swings what hung past the frame into
+       view, so the unit also covers as far as its members reach (unitReach, tiltPlateRegion) and is marked like the camera's (above). */
+    if (u.group && groupTilts(u.group, t)) {
+      const reach = unitReach(u, t, scene);
+      const base = R || { ps: ps, OX: 0, OY: 0, W: Math.max(1, Math.round(P.width * ps)), H: Math.max(1, Math.round(P.height * ps)), PWp: P.width, PHp: P.height };
+      const grown = reach ? tiltPlateRegion(reach, reachMargin(reach), base, P.width, P.height) : null;
+      if (grown) R = grown;
+    }
     const RX = R ? R.OX : 0, RY = R ? R.OY : 0, RW = R ? R.PWp : P.width, RH = R ? R.PHp : P.height;
     const GW = R ? R.W : Math.max(1, Math.round(P.width * ps)), GH = R ? R.H : Math.max(1, Math.round(P.height * ps));
     // Skip the full-frame realloc when the dims are unchanged — this fires per group, per frame. _mgA is
@@ -29349,10 +29555,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return a === 'left' ? w / 2 : a === 'right' ? -w / 2 : 0;
   };
   // One member's extent in its group's child space: size `sz` at scale `sc`, its x/y already offset by any nested group.
-  function groupMemberSpan(l, sz, sc, x, y) {
+  /* bughunt4 #10b: …and as the member is DRAWN, which applyLayerTransform does with its unlinked Width / Height (scaleX / scaleY, on
+     top of `sc`) and then its own mirror (flipH / flipV, about its x / y). Both were left out, so a member at Width 200 % was boxed
+     at half its width, and a flipped one with its anchor off-centre (or a flipped left-aligned title) was boxed on the wrong side
+     of its x: a 40 px shape hinged on its left edge at x 100 and flipped is drawn 60 .. 100 and was boxed 100 .. 140, not touching
+     it. Read at `t` (the group's start, for the rest box). Linked, unflipped: the very sums as before, w · 1 being w. */
+  function groupMemberSpan(l, sz, sc, x, y, t) {
     const tr = l.transform || {}, ax = anchorX(tr), ay = anchorY(tr);
-    const w = sz.w * sc, h = sz.h * sc, sh = FM.textAlignShift(l, w);
-    return { x0: x - w * ax + sh, x1: x + w * (1 - ax) + sh, y0: y - h * ay, y1: y + h * (1 - ay) };
+    const sx = tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1, sy = tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1;
+    const w = sz.w * sc * (isFinite(sx) ? sx : 1), h = sz.h * sc * (isFinite(sy) ? sy : 1), sh = FM.textAlignShift(l, w);
+    let x0 = x - w * ax + sh, x1 = x + w * (1 - ax) + sh, y0 = y - h * ay, y1 = y + h * (1 - ay);
+    if (l.flipH) { const a = 2 * x - x1; x1 = 2 * x - x0; x0 = a; }
+    if (l.flipV) { const a = 2 * y - y1; y1 = 2 * y - y0; y0 = a; }
+    return { x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0: Math.min(y0, y1), y1: Math.max(y0, y1) };
   }
 
   // Approximate world bbox of a group's members (ignores rotations — good enough for the canvas
@@ -29379,7 +29594,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
         // bughunt4 #10: the member's anchor and text alignment, not x ± w·sc/2 (groupMemberSpan)
-        const m = groupMemberSpan(l, sz, sc, x, y);
+        const m = groupMemberSpan(l, sz, sc, x, y, t);
         any = true;
         minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
         minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
@@ -29451,7 +29666,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
         // bughunt4 #10: the same member span as groupBoundsLocal
-        const m = groupMemberSpan(l, sz, sc, x, y);
+        const m = groupMemberSpan(l, sz, sc, x, y, t);
         any = true;
         minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
         minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
@@ -29483,6 +29698,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (group.parent && group.parentMode && group.parentMode !== 'normal') return false;
     const off = (k, d) => tr[k] != null && (!!isAnimatedProp(tr[k]) || FM.evalProp(tr[k], 0) !== d);
     if (off('scaleX', 1) || off('scaleY', 1) || off('skewX', 0) || off('skewY', 0) || off('z', 0)) return false;
+    /* bughunt4 #3c: an X / Y tilt leans the group's picture about the pivot too (tiltPivot), so a tilted group keeps it as a place.
+       It did not count here, so a group at 100 % and 0° but leant had its hinge re-measured every frame on the members on screen:
+       a member that came on screen slid every other one, standing still, across the frame (the #690 slide, under a tilt). */
+    if (off('rotationX', 0) || off('rotationY', 0)) return false;
     const sc = FM.evalProp(tr.scale, 0);
     return (sc == null || sc === 1) && !(FM.evalProp(tr.rotation, 0) || 0);
   }

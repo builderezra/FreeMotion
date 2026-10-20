@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 20 Oct at v17.83
+> ## 📌 WHAT I NEED FROM YOU — updated 20 Oct at v17.84
 >
-> **State:** v17.83 — **Work with friends says what a guest really gets** (#1090–#1093): a watch-only copy cannot be exported, saved or kept; the invite says everyone who joins sees the notes; the privacy list says trying to join shows your address; a friend's huge picture is refused. Nothing to do on your side.
+> **State:** v17.84 — **three leftovers from bug hunt 4, and the list caught up** (#1176): a leant group keeps its hinge; a leant layer is no longer cut at the frame edge; a group's box follows a member's Flip and unlinked size; right-to-left text under Animate by Character / Word reads right. 51 entries whose work had already shipped are ticked (open: 235 → 185). Nothing to do on your side.
+>
+> v17.83 — **Work with friends says what a guest really gets** (#1090–#1093): a watch-only copy cannot be exported, saved or kept; the invite says everyone who joins sees the notes; the privacy list says trying to join shows your address; a friend's huge picture is refused. Nothing to do on your side.
 >
 > v17.82 — **eleven fixes from a sixth bug hunt** (#1176): an update waits until you finish an export or a recording before it reloads; shortcuts work on a Russian keyboard; the installed app opens offline within seconds on a bad connection; an MP4 too big to make offers a size that works; undo works after touching a slider; and six smaller ones. Nothing to do on your side.
 >
@@ -30263,6 +30265,7 @@ re-opened #480, which I had marked done and had not fixed.
              ~~❓ASK: play something with audio EFFECTS on it until it glitches, then Settings → Your last playback → Copy.~~ — replaced 30 Sep by the one ask below ("still glitching?" first).
              ❓ASK: is audio with EFFECTS on it still glitching on your phone since v16.94 (two audio faults were fixed there)? If yes: play it until it glitches, stop, then Settings → Your last playback → Copy, and paste it.
       📋 **30 Sep (#993 housekeeping):** #96 is closed into this entry on his 9 Sep words (*"…sounded fine deciding effects to them. They start to glitch out on my phone."*) — reopen #96 as a second cause if a song with NO effects ever fails again. #663 points here too: one answer covers both.
+      📍 **Moved here from #1114 (20 Oct hand-off audit):** P27's fix for this, applyAt rewriting every audio param every frame (15,960 writes against 133), was never landed. plans/helper-27 has no js change and this entry never mentioned it.
 
 - [ ] **846 — Standing instruction, 10 Sep (verbatim):**
       **STATUS: 📌 NOTE — nothing to build**
@@ -33590,8 +33593,8 @@ re-opened #480, which I had marked done and had not fixed.
       2. [x] It goes back to normal when Select ends. ✅ v17.03
       🖼 **His approved before/after picture (26 Sep, ~11:08 AWST, sent on its own with no words): `tools/design/950-952-before-after.png`.** It is the TARGET, rendered by the claude.ai chat against v17.00. When this ships, render the same crop from the build and send it beside that picture, so he can see it matches what he approved.
 
-- [ ] **953 — Housekeeping from the logging chat's open-questions audit: answers never recorded, stale asks, missing asks, status.sh frozen (hunt MEDIUM #953)** (26 Sep, via INBOX — the logging chat's audit, NOT his words except where quoted)
-      **STATUS: 📌 NOTE — nothing to build**
+- [x] **953 — Housekeeping from the logging chat's open-questions audit: answers never recorded, stale asks, missing asks, status.sh frozen (hunt MEDIUM #953)** (26 Sep, via INBOX — the logging chat's audit, NOT his words except where quoted)
+      ✅ **SHIPPED IN v17.57** (20 Oct hand-off audit): status.sh was unfrozen and stale_asks() finds none; #96/#406/#657/#867/#929/#941 ticked; #955 logged; the AM-rename ask shipped as #954 in v17.57. The one piece never done is moved to #1178.
       ### 26 Sep 2026, ~10:42 AWST — His answers that were never written into REQUESTS.md (found by the logging chat's open-questions audit)
 
       These are HIS words, found in his chat history, that answer an open ask but were never recorded against it. The logging chat checked his typed messages since July against every entry that waits on him (71 entries, 19 readers, each verdict checked by a second reader trying to refute it). Record each one verbatim in the entry it answers, then strike the ask.
@@ -34095,6 +34098,7 @@ re-opened #480, which I had marked done and had not fixed.
         11. **Round ten: more choice on seven more effects** (`hunt/966-opts10`, shipped from `hunt/bughunt1-fix` 2fc2444a): Heat Map Blend + Cycle speed, Page Curl Back + Back colour, Bleach Bypass Silver tint + Protect skin, Colourize Saturation + Lightness, Soften Skin Brighten + Show selection, Split Toning Blending, Tiles Fills + Fade copies. Every default byte-identical (tested). 26 tests green at 1280 and 380, bounds measured, SCHEMA_FP pinned. Pictures: on the combined rounds 3–10 review page. 📍 **Ships as v17.71** (on v17.70, collab schema rev 25) with #1176's first two fixes.
       📍 **ONE review page for rounds three to ten** (18 Oct, the PM's call: six separate sheets were too many; it replaces them): <https://claude.ai/artifact/4EwJ8rfPENpvvJiPyHPDbc>. Every effect starts on Keep; the only real questions at the top are the Laser core, how a Wipe border leaves, and #1175's six picks.
       📍 **PM-verified 7 Oct (via INBOX — the PM's check of the helper's batch 3; NOT his words):** **New effects (#966 idle work, from the helper's R3 specs):** auto In/Out transitions must read `layer._clipStart ?? layer.start` and `layer._clipDuration ?? layer.duration` (a group proxy's start is t-1 and duration 2, compositor.js:18519-18521; follow the splitOf lineage like flashdark :7633-7638); Zoom/Whip pan/Spin must draw through moverSource (:12381-12392), and "Spin" needs a different label ("Spin in/out"); Colour wheels needs a visible default or the "482: every effect does something visible at its own defaults" test refuses the ship; Glitch cut should be an EFFECT_PRESETS entry on the existing Glitch; Particles palette needs its own hash stream (pHash(i*4+3) already sets rotation) and a widened shape clamp (:14359).
+      📍 **Moved here from #1154 (20 Oct hand-off audit):** "Trail Time offset on video (frame cache)" was parked as its own item and never logged. It is here so it is not lost.
 
 - [ ] **967 — Live collaboration feels extremely underbaked on his phone: pull it all up, make sure it's all there and working, and make it simple enough for someone who's never used it** (26 Sep, builder chat — his words)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -35091,12 +35095,12 @@ re-opened #480, which I had marked done and had not fixed.
       Builder's context (not his words): #482's default question (Keep 0.8 or Gentler 0.5) is still open — the default stays 0.8 until he answers.
       JUMPED: #986's last batch was already built and reviewed when this arrived; v17.16 ships it and this is next.
 
-- [ ] **996 — Two render tests fail TOGETHER, only in the full phone pass: the sheet preview fixture misdraws layer A and the Presets card makes no tile canvas (hunt MEDIUM #996)** (1 Oct — found by v17.19's ship, NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **996 — Two render tests fail TOGETHER, only in the full phone pass: the sheet preview fixture misdraws layer A and the Presets card makes no tile canvas (hunt MEDIUM #996)** (1 Oct — found by v17.19's ship, NOT his words)
+      ✅ **SHIPPED IN v17.40** (20 Oct hand-off audit): the real cause, a live session writing into another project, was fixed in v17.40 (#1129), and both render tests pass in every full phone pass since.
       Seen twice, both times as the same PAIR and both times only at 380 px in a full run: v17.07's ship (30 Sep) and v17.19's first ship (1 Oct), both desktop-green. Alone at 380 each passes. Messages: “the sheet previews the picked effects over the whole comp, and puts it all back (queue 277 + 390) — the fixture did not draw layer A at its own centre (231,41,141)” [v17.07: (232,52,135)] and “the Presets card renders a live tile per applicable preset, and none for a broken one — the applicable preset has no preview canvas”. They sit at tests.js ~55909 and ~60225, so thousands of tests apart; failing together points at one shared cause that switches rendering off for a stretch of the run (a lost WebGL context under memory pressure is the first suspect — both need a render to land), not at either test.
-      1. [ ] Capture the state at the failure (GL context lost? FM render errors? the thumb queue?) in a full 380 run, find the cause, fix it or the leak; a test that fails without the fix.
+      1. [x] Capture the state at the failure (GL context lost? FM render errors? the thumb queue?) in a full 380 run, find the cause, fix it or the leak; a test that fails without the fix. — moot: the pair's cause, a live session writing into another project, was fixed in v17.40 (#1129), and every release since passed the full phone pass with both tests green (the hand-off audit, 20 Oct)
       📋 **1 Oct — instrumented.** The runner now records, against each test, anything it leaves in the shared scene (layers, an effects-sheet preview, an isolate); tests/_cdp.py prints it as `sceneLeaks` after every run, and ship.sh prints it under a red pass. A full 380 run (with batch-3 builders beside it) went 2219/2220 — the pair did NOT recur — and listed three leaks: “undo / redo grey out…” leaves a white 20x20 shape at (10,10); “the home + catches taps…” is charged with Box / Path / their copies, which really come from “notes stay with their own project…” deleting its projects without reopening the original (the app is left on a deleted project and the next scene load brings those in) — and it leaves Home open; “869: a backup…” reloads a project still holding “TplProbe”. None is pink or sits on layer A, so none explains (231,41,141) by itself; they are not changed blind, because 2,000 later tests start from the state they leave and a retry costs a 90-minute ship.
-      2. [ ] When the pair recurs, read the leak list ship.sh prints under it, find the layer or override that tints layer A, and fix that test's cleanup (and the three above with it).
+      2. [x] When the pair recurs, read the leak list ship.sh prints under it, find the layer or override that tints layer A, and fix that test's cleanup (and the three above with it). — moot: the pair's cause, a live session writing into another project, was fixed in v17.40 (#1129), and every release since passed the full phone pass with both tests green (the hand-off audit, 20 Oct)
       📋 **5 Oct — it recurred (v17.23's 5th ship, desktop pass) and the leak list named it:** “921 S6 review: “Back in sync” waits for the owner's welcome…” left “Shared A” / “Shared B” — the linked copy its reconnect opens. Its cleanup (q915aCleanup) switched back with projects.open(orig) WITHOUT { confirmed: true }; open() asks before leaving when the save is refused and work is on screen, nobody answers in a test, so the app stayed on the copy and the fixture read a leftover shape: (34,225,219) instead of layer A's red. Fixed: q915aCleanup passes { confirmed: true }, as hcCleanup always did. Earlier occurrences named other leftovers (a pink one, Box/Path), so this stays open until a run shows the pair gone; the leak list keeps naming whatever is left.
       JUMPED: instrumented — nothing more can be learned until the pair recurs, and ship.sh will print the evidence when it does.
       📍 **PM-verified 7 Oct:** see the note on #1000, which covers this entry too.
@@ -35304,8 +35308,8 @@ re-opened #480, which I had marked done and had not fixed.
       ⏩ Land as ONE release with its pair (f25e15d3 f3109105 3170a94c 3c712a1d), retag the tests 1013, claim queue 1013 — in the first gap between Simple-mode releases, before B1 (#1069). The JUMPED line above stays: ChatGPT built it, the builder lands it.
       ⚠️ 6 Oct ~04:10: superseded — ChatGPT's chain on v17.23 has the proven fix (2ea47a00; see #1068). Land that one; branch land-1013 (the pile's pair) is retired.
       📍 **PM-verified 7 Oct:** see the note on #1068, which covers this entry too.
-- [ ] **1014 — A panorama import makes a canvas that changes shape when the project is reopened (hunt HIGH #1014)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1014 — A panorama import makes a canvas that changes shape when the project is reopened (hunt HIGH #1014)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      ✅ **SHIPPED IN v17.37** (20 Oct hand-off audit): fixed in v17.37 d55cabc8, with its test in tests/tests.js.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 2
       Where: js/app.js:3020-3026 (fitProjectSize caps only the short side, at 2160) vs js/storage.js:1004-1010 (clampProjectDims caps each side at 7680, called at :890, :1777). The oversize warning at js/app.js:2982 checks only the short side · He sees: 16000×4000 → 8640×2160 project → reopens as 7680×2160. 9000×2000 is not capped at import and reopens as 7680×2000. The photo is then off-centre with its right edge cut, and nothing tells him. Arithmetic reproduced; the on-screen effect is inferred, not seen · Fix: Cap the long side at 7680 in fitProjectSize too, keeping the aspect ratio. Make the warning check both sides · Test: Unit: fitProjectSize(16000,4000) has both sides ≤ 7680. Round trip: import a 16000×4000 still, save, reopen, and assert the dims are unchanged and the layer is still centred. Mutation: drop the long-side cap
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
@@ -35340,16 +35344,16 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ 6 Oct ~04:10: superseded — ChatGPT's chain on v17.23 has the proven fix (9cec73a1; see #1068). Land that one; branch land-1013 (the pile's pair) is retired.
       ✅ **FIXED IN v17.37** (10 Oct): ChatGPT's verified fix landed under #1068 (partial), his #1117. Left [ ] only because
       the queue gate closes hunt-tier items after the ones in his words; nothing here is left to build.
-- [ ] **1015 — Edits a guest makes while offline go out without the clash check if they edit again before the host's catch-up reply, and silently overwrite the owner's newer change (hunt MEDIUM #1015)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1015 — Edits a guest makes while offline go out without the clash check if they edit again before the host's catch-up reply, and silently overwrite the owner's newer change (hunt MEDIUM #1015)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      ✅ **SHIPPED IN v17.37** (20 Oct hand-off audit): fixed in v17.37 d55cabc8, with its test in tests/tests.js.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 3
       Where: js/collab-session.js:287 (pushLocal entry has no queued), :1219 (runStep, the same), :1367-1371 (markOffline flags only entries that exist), :350 (q=0), js/collab-host.js:873 (CAS only when q===1), :861 (dup drop) · He sees: Owner and guest change the same thing during an outage. The guest reconnects mid-drag, and the guest's stale value wins with no clash. Reproduced in JSC with the real modules. Not specific to Undo/Redo, as ChatGPT said · Fix: Keep catchingUp from markOffline until replayOutstanding/onSnap. Mark entries created while offline or catching up as queued:true, or defer flushOutstanding until the replay · Test: Extend "921 S2 … wire is cut": guest offline, rename A, owner renames A, guest setOnline(true) and edits again *before* the tail. Assert the offline cid went out q:1, the owner's name survives and the ack carries a clash. Add an Undo variant. Prove with mutate.sh
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       ✅ **FIXED IN v17.37** (10 Oct): ChatGPT's verified fix landed under #1068 (partial), his #1117. Left [ ] only because
       the queue gate closes hunt-tier items after the ones in his words; nothing here is left to build.
 
-- [ ] **1016 — Volume and Position/Scale/Size/Skew values cannot be reached or changed from a keyboard (hunt MEDIUM #1016)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1016 — Volume and Position/Scale/Size/Skew values cannot be reached or changed from a keyboard (hunt MEDIUM #1016)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      ✅ **SHIPPED IN v17.37** (20 Oct hand-off audit): fixed in v17.37 d55cabc8, with its test in tests/tests.js.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 4
       Where: js/inspector.js:4384-4387 (mt-vbox-val is a plain div), :4540 (startEdit runs only from a pointer tap), Volume :5616/:5629, transforms :4732-4736, :5232-5244, :5363. Effect scrubbers :898-1076 do have number inputs, but those have no accessible name · He sees: On PC with a keyboard, there is no way to type a volume or position. Effect values can be typed · Fix: .mt-vbox-val: tabIndex 0, role=spinbutton, aria-label, Enter calls startEdit, arrow keys step. Give each .fx-scrub-val aria-label=p.label. Optionally make .fx-scrub a role=slider · Test: Tab to the Volume box, press Enter, type 50, press Enter: volume is 0.5. Every .fx-scrub-val has a name
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
@@ -35506,15 +35510,15 @@ re-opened #480, which I had marked done and had not fixed.
       **Design input:** `effect-upgrade-specs-VETTED.md`, the six effect-upgrade specs, corrected (none was buildable as written). They are for #966's idle work, after a before/after picture for him.
       🔒 Never merge, cherry-pick or rebase onto a codex/* or chatgpt/* branch; each item below is fixed here, with its own test.
 
-- [ ] **1040 — A layer with no transform gets through import, breaks the timeline, and after a save makes every launch fail before Home (hunt MEDIUM #1040)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1040 — A layer with no transform gets through import, breaks the timeline, and after a save makes every launch fail before Home (hunt MEDIUM #1040)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      ✅ **SHIPPED IN v17.37** (20 Oct hand-off audit): fixed in v17.37 d55cabc8, with its test in tests/tests.js.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 1
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       ✅ **FIXED IN v17.37** (10 Oct): ChatGPT's verified fix landed under #1068 (partial), his #1117. Left [ ] only because
       the queue gate closes hunt-tier items after the ones in his words; nothing here is left to build.
 
-- [ ] **1041 — Three or more nested styled groups draw the wrong picture, and the work doubles per level (hunt MEDIUM #1041)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1041 — Three or more nested styled groups draw the wrong picture, and the work doubles per level (hunt MEDIUM #1041)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      ✅ **SHIPPED IN v17.37** (20 Oct hand-off audit): fixed in v17.37 d55cabc8, with its test in tests/tests.js.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 2
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       ✅ **FIXED IN v17.37** (10 Oct): ChatGPT's verified fix landed under #1068 (partial), his #1117. Left [ ] only because
@@ -35590,8 +35594,8 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 16
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
 
-- [ ] **1056 — Mosaic's Average mode gives cutout edges a dark fringe (hunt LOW #1056)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1056 — Mosaic's Average mode gives cutout edges a dark fringe (hunt LOW #1056)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      ✅ **SHIPPED IN v17.44** (20 Oct hand-off audit): Mosaic Average's fringe fixed in v17.44.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 17
       ✅ (answered 11 Oct, ~10:05 AWST, #1130) ❓ASK: this fix changes how existing projects look (it changes how existing projects look) — OK to change it? Build nothing until he says.
       ✅ **HE ANSWERED 11 Oct, ~10:05 AWST (#1130):** FIX the Mosaic Average dark fringe; old projects changing is fine.
@@ -35616,8 +35620,8 @@ re-opened #480, which I had marked done and had not fixed.
       **Yield is falling:** 4 new from 45 rows, against 18 from 99 in batch 3 and 19 from 47 in batch 2. The checkers recommend narrowing, then stopping. He has been given one big day-long job instead (a per-file mechanical audit, an architecture map and a user guide). Its results will come through the logging chat.
       🔒 Never merge, cherry-pick or rebase onto a codex/* or chatgpt/* branch; each item below is fixed here, with its own test.
 
-- [ ] **1059 — Detect speech gives up on the first clip with no sound, so the talking clip is never tried (hunt MEDIUM #1059)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1059 — Detect speech gives up on the first clip with no sound, so the talking clip is never tried (hunt MEDIUM #1059)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
+      ✅ **SHIPPED IN v17.37** (20 Oct hand-off audit): fixed in v17.37 d55cabc8, with its test in tests/tests.js.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 1
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       ✅ **FIXED IN v17.37** (10 Oct): ChatGPT's verified fix landed under #1068 (partial), his #1117. Left [ ] only because
@@ -35787,8 +35791,8 @@ re-opened #480, which I had marked done and had not fixed.
       ⏸ **B8 (the C31 stills half) BUILT but PARKED** (hunt/1068-b8 bdb4360b, first run green: its 43 tests, the 482 goldens unchanged, Time Warp, 794, 839): under the 4× phone throttle at 380 a Time Warp jump at Sweep 20 s with keyed Levels above took 1022–2043 ms (v17.57: 14–105), because every strip runs the grade over a whole frame. Frame Stutter with Blur or Vignette costs the same as v17.57. It lands only once a strip runs the grade over its own rows (the shared list is all pixel-by-pixel, so that is exact) and the throttled jump is close to v17.57's; else it stays parked. REMAINS OPEN for B8 and the queue order.
       ⏸ **17 Oct — strip-only grade BUILT and MEASURED, still PARKED** (hunt/1068-b8 15c19964): each strip now grades its own band. Under the same throttle, two runs each: the Levels jump 326/233/318 and 275/201/294 ms (main v17.59: 39/77/15 and 35/74/14; the first B8 1022–2043); the plain jump 36–53 ms (main 4–6); playback and Frame Stutter equal. Six to seven times better, still three to twenty times today's on a jump, so it stays out. First run 44/45 at 900 and 380: the one red is its own exactness guard at a fractional width (one pixel one level off, 133 vs 134, from resampling at a band origin; the two planted off-by-one faults read 52 and 138, so a tolerance of 2 would separate them). The cost is inherent in showing the right picture after a jump (up to 600 strips at Sweep 20 s); the cheap routes are a design call — draw today's picture at once and finish the rebuild over the next few frames, or rebuild once the scrub settles — or park B8 as LOW for good. Asked of the PM.
       🅿️ **PARKED FOR GOOD as LOW (the PM, 17 Oct ~06:30; #1067 had already steered away from this family).** No more work goes into it unless he reports the wrong frame after a jump himself. If he does, it comes back from hunt/1068-b8 15c19964 with these numbers in hand — the Levels jump: main 14–77 ms vs strip-only 201–326 ms; the plain jump: 4–6 vs 36–53 ms (4× throttle, 380, Sweep 20 s) — and one of two routes: (a) PROGRESSIVE, draw today's picture at once and finish the strip rebuild over the next few frames while paused, or (b) AFTER-SETTLE, rebuild only once the scrub has stopped. Either keeps a scrub as fast as today. Its exactness guard needs a tolerance of 2 levels at fractional widths (measured 1; the off-by-one faults read 52 and 138).
-- [ ] **1069 — Land ChatGPT batch B1: saving, importing, offline and small app fixes (14 commits, with the five fixes the land list names) (hunt MEDIUM #1069)** (5 Oct — the PM's land list, #1068; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1069 — Land ChatGPT batch B1: saving, importing, offline and small app fixes (14 commits, with the five fixes the land list names) (hunt MEDIUM #1069)** (5 Oct — the PM's land list, #1068; NOT his words)
+      ✅ **SHIPPED IN v17.40** (20 Oct hand-off audit): B1 shipped in v17.40 caef240d; B2 + B3 in v17.44 c77528ee (the entry's own 🔨 lines). B4–B8 belong to #1068.
       Order and fixes: #1068's block (52843cc2 … d662aa35; fix 2e5e0cf0, 70797f4c, f1ac5fa8, b69c5795; leave out d662aa35's sw.js change). Its tests are tagged 'TBD' in the pile — retag them 1069. 9cd5923c + a4de4183 close #1051, not #1040.
       🔨 **v17.40 (13 Oct):** B1 landed — ChatGPT's 14 commits with the land list's fixes (land-b1 via wip/v17.40-port). Left open (partial) for the oldest-first gate.
       🔨 **v17.44 (14 Oct):** B2 + B3 landed with the land list's fixes (fix-land-b3: Unsharp Mask Protect colour off by default + schema rev 9, RGB Split's floor gone, F1 at every site) and answers-1130 4a–4e, via c41-fb2b. The 55 new tests 55/55 at 1280 and 380 before the ship. Still open (partial).
@@ -35986,8 +35990,8 @@ re-opened #480, which I had marked done and had not fixed.
          - **Test:** on Windows Chrome, export, then Save. Is there any way to get the file onto disk?
          - **Likely fix:** on a non-touch, wide screen, download the file, or offer Download beside Share.
 
-- [ ] **1082 — Show the checked tutorials in Home's Tutorials tab? (hunt LOW #1082)** (6 Oct, ~03:55 — the PM's note, NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1082 — Show the checked tutorials in Home's Tutorials tab? (hunt LOW #1082)** (6 Oct, ~03:55 — the PM's note, NOT his words)
+      ✅ **SHIPPED IN v17.41** (20 Oct hand-off audit): layout A, 20 Full + 13 Simple lessons, in v17.41 7d381f8b; v17.42 2e5dcf07 added the check that every shown lesson matches the app; js/tutorials.js uses textContent only.
       2. **(note) The app already has a home for tutorials.** Home's **Tutorials** tab is a placeholder reading "Short walkthroughs of the editor will live here." (home.js:2601-2605). The second Claude account is writing checked how-to tutorials on branch `tutorials-drafts`: 01 first video, 02 trim/split, 03 glow and shadow. 02 and 03 pass a three-round step-by-step code check, and 01 is on its last two fixes. 04 keyframes, 05 titles and 06 music are being written.
          - Showing them in that tab is a design decision for him. Draw options first (#545).
          - Also check BEFORE-PUBLISHING.md if they go public.
@@ -35997,12 +36001,12 @@ re-opened #480, which I had marked done and had not fixed.
       **His words (verbatim):** "And also I want the tutorials in the app and also show me them now"
       **Done for the second half:** at ~11:12 the PM sent him the Tutorials tab prototype pictures (list-380, reader-01-380, from `design/tutorials-tab` aefa599f) and all 34 drafts in one clean file (20 Full + 14 Simple, from `tutorials-drafts` 92258bc2, internal notes stripped).
       **Build this (PM plan, from tools/design/tutorials-tab/README.md on that branch):**
-      1. [ ] Layout **A** (cards, like Projects/Templates/Elements), with a "Start here" ribbon on tutorial 1 and Previous/Next in the reader. It replaces the "Tutorials are coming" placeholder in `js/home.js`. A is the recommended layout and his rule is not to ask obvious yeses.
-      2. [ ] Land the files in `tutorials/` on main (Full) and `tutorials/simple/` (Simple). Leave out `walk-simple.md` and the walk notes. Make the list in `tutorials/index.json`, and show the Simple set when the Editor is in Simple.
-      3. [ ] Simple 10 and 13 are both titled "Add a crossfade between two clips in Simple". Keep 10 (it covers the dips and "On every cut"), and fold 13 into it or retitle it.
-      4. [ ] Renderer: a new `js/tutorials.js` that uses `textContent` only, never `innerHTML`. Strip `<!-- … -->` and everything from `### Verification` down. Fetch with `?v=` so the service worker caches the files for offline.
-      5. [ ] **Re-check every tutorial against the CURRENT app before it lands.** The 6 Oct review said fixes were needed, 11 to 20 have had no human review, and the app has moved since. Add a test that each tutorial's **bold** button names still exist in the source.
-      6. [ ] Put any wrong steps found in step 5 on the queue, fixed in the tutorial text and not left wrong.
+      1. [x] Layout **A** (cards, like Projects/Templates/Elements), with a "Start here" ribbon on tutorial 1 and Previous/Next in the reader. It replaces the "Tutorials are coming" placeholder in `js/home.js`. A is the recommended layout and his rule is not to ask obvious yeses. — shipped (v17.41 layout A and the lessons, v17.42 the lesson check; the hand-off audit, 20 Oct)
+      2. [x] Land the files in `tutorials/` on main (Full) and `tutorials/simple/` (Simple). Leave out `walk-simple.md` and the walk notes. Make the list in `tutorials/index.json`, and show the Simple set when the Editor is in Simple. — shipped (v17.41 layout A and the lessons, v17.42 the lesson check; the hand-off audit, 20 Oct)
+      3. [x] Simple 10 and 13 are both titled "Add a crossfade between two clips in Simple". Keep 10 (it covers the dips and "On every cut"), and fold 13 into it or retitle it. — shipped (v17.41 layout A and the lessons, v17.42 the lesson check; the hand-off audit, 20 Oct)
+      4. [x] Renderer: a new `js/tutorials.js` that uses `textContent` only, never `innerHTML`. Strip `<!-- … -->` and everything from `### Verification` down. Fetch with `?v=` so the service worker caches the files for offline. — shipped (v17.41 layout A and the lessons, v17.42 the lesson check; the hand-off audit, 20 Oct)
+      5. [x] **Re-check every tutorial against the CURRENT app before it lands.** The 6 Oct review said fixes were needed, 11 to 20 have had no human review, and the app has moved since. Add a test that each tutorial's **bold** button names still exist in the source. — shipped (v17.41 layout A and the lessons, v17.42 the lesson check; the hand-off audit, 20 Oct)
+      6. [x] Put any wrong steps found in step 5 on the queue, fixed in the tutorial text and not left wrong. — shipped (v17.41 layout A and the lessons, v17.42 the lesson check; the hand-off audit, 20 Oct)
       **Verify:** at 380 px, Home → Tutorials → card 1 → Next → back, plus the same in Simple, and offline after one read.
       ✅ **HE ANSWERED 11 Oct, ~11:08 AWST (the block above):** YES — layout A (design/tutorials-tab aefa599f), the 20 Full + 14 Simple drafts (tutorials-drafts 92258bc2), Simple 10 and 13 merged, every step re-checked against the app, textContent only. Built on hunt/1082-tut (3183851f); the helper re-checks the steps.
       🔨 **v17.41 (13 Oct): THE TUTORIALS TAB SHIPPED** (hunt/1082-tut via wip/fb2a1-port): layout A, 20 Full + 13 Simple lessons, Simple 02–04 shown now that 2.1/2.2 are in, lesson 17 rewritten for Work with friends on by default. Left open (partial) for the oldest-first gate.
@@ -36155,8 +36159,8 @@ re-opened #480, which I had marked done and had not fixed.
       - Decoded audio stays on m.audioBuffer after an export. Delete the buffers the export itself decoded, except reversed or audio-reactive clips.
       - Reverse and frame-blend caches have per-clip budgets but no global cap (over 1 GB possible). Use a device-aware budget shared across clips in prepareCaches.
 
-- [ ] **1090 — Work with friends: the owner's private Notes-pad text and reminders sync to EVERY guest, viewers included, and nothing says so (hunt HIGH #1090)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1090 — Work with friends: the owner's private Notes-pad text and reminders sync to EVERY guest, viewers included, and nothing says so (hunt HIGH #1090)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
+      ✅ **SHIPPED IN v17.83** (20 Oct hand-off audit): notes keep travelling (his #987), and the New people join as row says everyone who joins, Viewers too, sees the notes and reminders; its 1090 test fails on v17.82.
       - CONFIRMED F1: the owner's private Notes-pad text and reminders (scene.project.notes) sync to EVERY guest, viewers included, and nothing on the Share screens says so.
         - ❓ASK (his decision): keep notes on the owner's device only (add 'notes' to DENY in collab-session.js:31, so editors no longer share notes), or keep sharing them and say so on the Share screen? Recommended: owner-only.
       📍 **PM-verified 7 Oct (via INBOX — the PM's check of the helper's batch 3; NOT his words):** **#1090 / #1091 (Work-with-friends privacy, still waiting on Ezra's yes/yes):** F1 option B's wire steps are confirmed complete: add 'notes' to DENY (js/collab-session.js:31), make the host's validOp refuse P-root ops on DENY keys (js/collab-host.js:188-226), put DENY into the SCHEMA_FP string and bump SCHEMA_REV. F2: turning export off does NOT make "only watch" true — Leave (js/collab-ui.js:3189-3224), Home "Keep as my own copy" (js/home.js:1401-1407) and C.leave's keep branch (js/collab-session.js:1984 detachLinked) keep a full copy whatever roExport says. Making it true = for a Viewer/Commenter with roExport off, those three doors offer delete only. Test: a Viewer leaving with export off keeps no project card. F5 (peer image cap): reuse `ctl.bad[fid]` (planWants already skips it, js/collab-media.js:627; the font cap does the same at :630); keep the cap off FM.loadImageFile (his own photos use it).
@@ -36172,21 +36176,21 @@ re-opened #480, which I had marked done and had not fixed.
       > - It ships in v17.83 with #1091, #1092, #1093 and the `(team)` rule, red-first: a test that the Share screen states it, and that notes still reach a guest, so #987 keeps working.
       > - He can overrule: if he ever wants private notes, that is a new option (a "private note" switch), not a reversal of #987.
       📍 **v17.83 (20 Oct): SHIPPED** — notes keep travelling (#987); the New people join as row says everyone who joins, Viewers too, sees the notes and reminders. Ticked next release with SHIPPED IN v17.83 (the order gate).
-- [ ] **1091 — Work with friends: 'Viewer: can only watch' is untrue — viewers get all the media, export is on by default, and Leave keeps a full copy even with export off (hunt HIGH #1091)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1091 — Work with friends: 'Viewer: can only watch' is untrue — viewers get all the media, export is on by default, and Leave keeps a full copy even with export off (hunt HIGH #1091)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
+      ✅ **SHIPPED IN v17.83** (20 Oct hand-off audit): FM.collab.watchOnly: with exporting off a watch-only copy cannot be exported, saved as a project file or duplicated, even with no session, and Leave deletes it; its 1091 test fails on v17.82.
       - CONFIRMED F2: "Viewer: can only watch" is untrue. Viewers get all the raw media, export is on by default (roExport true), and a viewer can Leave keeping a full copy even with export switched off.
         - ❓ASK (his decision): change the words to "can watch, and keep a copy", or make "only watch" true (no copy on Leave when export is off)? Recommended: make it true.
       📍 **PM-verified 7 Oct:** see the note on #1090, which covers this entry too.
       ✅ **UNBLOCKED 11 Oct, ~10:05 AWST — decided by the PM under his standing rule (#1130: "Go through each one and see where it's an obvious yes"); he can overrule:** make "only watch" TRUE.
       📍 **v17.83 (20 Oct): SHIPPED** — FM.collab.watchOnly: with exporting off, a watch-only copy refuses export, Save project file and Duplicate even with no session, and Leave deletes it. Ticked next release with SHIPPED IN v17.83.
 
-- [ ] **1092 — Work with friends: anyone holding the link or code learns the owner's internet address by trying to join, even if refused — the wording says otherwise (hunt HIGH #1092)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1092 — Work with friends: anyone holding the link or code learns the owner's internet address by trying to join, even if refused — the wording says otherwise (hunt HIGH #1092)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
+      ✅ **SHIPPED IN v17.83** (20 Oct hand-off audit): the privacy list says whoever holds the link or short code sees your address by trying to join, refused or not; its 1092 test fails on v17.82.
       - CONFIRMED F4: anyone holding the link or code learns the owner's internet address by trying to join, even if refused. Recommended: correct the wording at collab-ui.js:1988; changing the behaviour would break one-tap links.
       📍 **v17.83 (20 Oct): SHIPPED** — the privacy list says whoever holds the link or code sees YOUR address by trying, refused or not. Ticked next release with SHIPPED IN v17.83.
 
-- [ ] **1093 — Work with friends: images a peer sends have no pixel limit (GIFs are capped at 64 MP), so a hostile admitted editor could freeze phones (hunt HIGH #1093)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1093 — Work with friends: images a peer sends have no pixel limit (GIFs are capped at 64 MP), so a hostile admitted editor could freeze phones (hunt HIGH #1093)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
+      ✅ **SHIPPED IN v17.83** (20 Oct hand-off audit): a picture over 50 MP is refused by its header before it is kept or decoded (LIMITS.IMAGE_PX); its 1093 test fails on v17.82.
       - PARTLY F5: peer-sent images have no pixel limit (GIFs are capped at 64 MP), so a hostile admitted editor could freeze phones. Refuse over ~50 MP in writeRecord (collab-media.js:1191).
       📍 **v17.83 (20 Oct): SHIPPED** — a picture over 50 MP (LIMITS.IMAGE_PX) is refused by its header before it is kept or decoded. Ticked next release with SHIPPED IN v17.83.
 
@@ -36466,8 +36470,8 @@ re-opened #480, which I had marked done and had not fixed.
         - Merging cleanly needs that script, because it unions the appended tests.
         - Five `?v=` numbers collide with main: app.js 470, scene.js 120 and storage.js 60 are needed, or phones keep the old files.
 
-- [ ] **1114 — Six new effects built and waiting for his look; the collab fuzz test fails 1 in 5 other seeds on main; an audio write flood with a patch; ChatGPT's batches replayed (hunt MEDIUM #12)** (10 Oct 2026, ~07:40 AWST, via INBOX — a helper finding, filed by the logger; NOT his words)
-      **STATUS: 📌 NOTE — nothing to build**
+- [x] **1114 — Six new effects built and waiting for his look; the collab fuzz test fails 1 in 5 other seeds on main; an audio write flood with a patch; ChatGPT's batches replayed (hunt MEDIUM #12)** (10 Oct 2026, ~07:40 AWST, via INBOX — a helper finding, filed by the logger; NOT his words)
+      ✅ **SHIPPED IN v17.47** (20 Oct hand-off audit): E1's six effects in v17.47 (his yes, #1130); the fuzz seeds in v17.63 e1de033a; P27's #1069 in v17.40; #1070 in v17.24. The audio write-flood patch is moved to #845.
       Moved from INBOX.md whole:
       ### 10 Oct 2026, ~07:40 AWST — Six new effects built and waiting for his look; the collab fuzz test fails 1 in 5 other seeds on main; an audio write flood with a patch; ChatGPT's batches replayed (hunt MEDIUM #12)
       **His words (verbatim):** none. These come from the helper's E1, P27 and P28, NOT his words. The PM read the reports and looked at the sheet, but has NOT re-run the tests.
@@ -36495,8 +36499,8 @@ re-opened #480, which I had marked done and had not fixed.
         - **#206, #1072 and #352:** nothing to build.
       ✅ **HE ANSWERED 11 Oct, ~10:05 AWST (#1130):** add ALL SIX new effects (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art). Oil Paint = the helper’s Kuwahara (#1117); drop B6’s `oilpaint`.
 
-- [ ] **1115 — All 19 audit, perf and alias branches merge onto v17.34 without one source conflict; a landing order, smallest risk first (hunt MEDIUM #13)** (10 Oct 2026, ~08:15 AWST, via INBOX — a helper finding, filed by the logger; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1115 — All 19 audit, perf and alias branches merge onto v17.34 without one source conflict; a landing order, smallest risk first (hunt MEDIUM #13)** (10 Oct 2026, ~08:15 AWST, via INBOX — a helper finding, filed by the logger; NOT his words)
+      ✅ **SHIPPED IN v17.63** (20 Oct hand-off audit): SUPERSEDED: the landing order was built on v17.34; the parts that landed shipped in v17.63 (fuzz seeds) and v17.38 (AU22), and every remaining branch is tracked in #1106–#1113, #1118, #1119 and #1126.
       Moved from INBOX.md whole:
       ### 10 Oct 2026, ~08:15 AWST — All 19 audit, perf and alias branches merge onto v17.34 without one source conflict; a landing order, smallest risk first (hunt MEDIUM #13)
       **His words (verbatim):** none. This comes from the helper's INT1, NOT his words. The PM read the report, but has NOT re-run the tests.
@@ -36524,8 +36528,8 @@ re-opened #480, which I had marked done and had not fixed.
         10. AU1, a reversed clip's head trim
         11. …and the rest, ending with storage. The full list is in the file.
 
-- [ ] **1116 — A REAL live-collab bug (the host replays a stale ack); 3 real bugs in the Simple engine on main; Oil Paint and Soften Skin sheets; a private test-runner file inside several helper branches (hunt HIGH #14)** (10 Oct, ~10:45 AWST, via INBOX — a helper finding, filed by the logger; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1116 — A REAL live-collab bug (the host replays a stale ack); 3 real bugs in the Simple engine on main; Oil Paint and Soften Skin sheets; a private test-runner file inside several helper branches (hunt HIGH #14)** (10 Oct, ~10:45 AWST, via INBOX — a helper finding, filed by the logger; NOT his words)
+      ✅ **SHIPPED IN v17.63** (20 Oct hand-off audit): FZ1/FZ2 in v17.63 e1de033a; AU22 in v17.38 a77db174; E2 Oil Paint + Soften Skin in v17.47.
       Moved from INBOX.md whole:
       ### 10 Oct 2026, ~10:45 AWST — A REAL live-collab bug (the host replays a stale ack); 3 real bugs in the Simple engine on main; Oil Paint and Soften Skin sheets; a private test-runner file inside several helper branches (hunt HIGH #14)
       **His words (verbatim):** none. These come from the helper's FZ1, AU22, E2, P29 and P30, NOT his words. The PM read the DONE lines, the reports and the sheets, but has NOT re-run the tests.
@@ -36559,7 +36563,8 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **HE ANSWERED 11 Oct, ~10:05 AWST (#1130):** Soften Skin stronger by default, the helper’s proposal: Amount 0.85, 10 px, Keep detail 50, Soften: Everything.
 
 - [ ] **1117 — Ezra hands the ChatGPT landing decision to us (answers #1073 (a), now/after for land-chain-r2)** (10 Oct, ~11:20 AWST, via INBOX — HIS WORDS, filed by the logger)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 📌 NOTE — nothing to build**
+      📌 **Standing note — this is the receipt** (20 Oct hand-off audit): his hand-over of the landing call stands: the team decides what lands from the ChatGPT pile, by the land list (LAND-LIST.md, #1068).
       Moved from INBOX.md whole:
       ### 10 Oct 2026, 11:20 AWST — Ezra hands the ChatGPT landing decision to us (answers #1073 (a), now/after for land-chain-r2)
       **His words (verbatim):** "you just decide whats best for the chatgpt"
@@ -36624,8 +36629,8 @@ re-opened #480, which I had marked done and had not fixed.
       - **`plans/helper-33` and `plans/helper-34`:** #855, #856 c3, #860, #862, #870, #871, #872, #875, #876 and #877.
         - **Stale facts found:** #875 says a suite pass takes 8 minutes; it is 45–48. #877's 8b is already amended, but its header still contradicts it.
 
-- [ ] **1120 — For the refused v17.36: the helper saw "978 on a PC ⤢ swaps them" red on the 1.3 tree as far back as r3 (hunt LOW #17)** (10 Oct, ~16:00 AWST, via INBOX — a helper finding, filed by the logger; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1120 — For the refused v17.36: the helper saw "978 on a PC ⤢ swaps them" red on the 1.3 tree as far back as r3 (hunt LOW #17)** (10 Oct, ~16:00 AWST, via INBOX — a helper finding, filed by the logger; NOT his words)
+      ✅ **SHIPPED IN v17.36** (20 Oct hand-off audit): v17.36 shipped the fix: the blocks now fly with no area (#1125 records grid-area: auto while flying).
       Moved from INBOX.md whole:
       ### 10 Oct 2026, ~16:00 AWST — For the refused v17.36: the helper saw "978 on a PC ⤢ swaps them" red on the 1.3 tree as far back as r3 (hunt LOW #17)
       **His words (verbatim):** none. This is a PM note from the helper's AU24 report (`hunt/audit-simple-13`, tools/design/hunts/audit-simple-13.md, "Neighbours on the copy").
@@ -36638,7 +36643,8 @@ re-opened #480, which I had marked done and had not fixed.
       - The other red, `980 cog T12`, PASSES ALONE, so it depends on what ran before it. Check the scene leaks listed beside it (SM_CROP, SM_REDO, SM_R3 are 980's own leftovers).
 
 - [ ] **1121 — Ezra: tell him anything blocking Simple; while tests run, do meaningful work instead of waiting; usage is not the constraint, wasted time is** (10 Oct, ~16:10 AWST, via INBOX — HIS WORDS, filed by the logger)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 📌 NOTE — nothing to build**
+      📌 **Standing note — this is the receipt** (20 Oct hand-off audit): the rule lives in LOOP.md (B2, build during ships), tick.sh's IDLE line (tools/_shipidle.sh) and the builder's memory note build-while-ship-runs.
       Moved from INBOX.md whole:
       ### 10 Oct 2026, ~16:10 AWST — Ezra: tell him anything blocking Simple; while tests run, do meaningful work instead of waiting; usage is not the constraint, wasted time is
       **His words (verbatim):** "if theres anything blocking the release of simple mode let me know. Also if testing is taking so long cant you get it to work on something meaningful while waiting for the tests? its not that i want to burn usage its that i dont want to waste time and i have that bonus 250 cloud usage that will only start to drain when main usage is up"
@@ -36675,6 +36681,7 @@ re-opened #480, which I had marked done and had not fixed.
       - These were the last picks on Simple's path. His remaining open picks are the swipe-Reset fix (yes recommended), which effects from E1 to add (all 4 recommended), and the Soften Skin default (Stronger A recommended). None of them blocks Simple.
       ✅ **HE ANSWERED 11 Oct, ~10:05 AWST (#1130):** "if an issue then fix" — fix the slow swipe that raises a Reset menu in Full too.
       🔨 **11 Oct, ~15:00 — his answer built (code + test, no browser yet):** `hunt/answers-1130` 327974c9 drops S4d's Simple-only condition, so a slow swipe that starts on a category card raises no Reset menu in Full either; test `1122 Full too: a slow swipe…` at phone and wide (control: a still hold still raises it). Ships in a Full release; clauses 1–2 ride the Simple releases.
+      📍 **Moved here from #1136 (20 Oct hand-off audit):** the Full slow-swipe fix (327974c9, answer 3) never landed.
 
 - [ ] **1123 — Ezra: the list of every question for him, and the old Simple artifact** (10 Oct, ~17:55 AWST, via INBOX — HIS WORDS, filed by the logger)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
@@ -36750,8 +36757,8 @@ re-opened #480, which I had marked done and had not fixed.
       - **⚠️ A caveat on the helper's earlier results (its own words, ~22:30, during PRE2):** "my private runner copy was stale compared to each tree's own tests/_cdp.py, which has the newer touch/media input protocol". It made both pre-flight trees hang in the "690 …" effect-keyframe tests. It now runs each tree's OWN driver, and it re-ran PRE2 from scratch on wip/v17.38-tree 797ea31a first.
         - **Earlier helper reports were run with that private copy** (`tests/_cdp_h52.py`, the same file #14 flagged in branch histories). Their touch and media results may differ from the real driver's. Where a landing relies on one of them, re-run that slice with the tree's own `tests/_cdp.py`.
 
-- [ ] **1127 — The first cloud pre-flight (his #1124) caught a 2.1 tree that would ship with Simple DEAD: two script tags missing, and a buster going backwards (hunt HIGH #19)** (11 Oct, ~02:00 AWST, via INBOX — a helper finding, filed by the logger; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1127 — The first cloud pre-flight (his #1124) caught a 2.1 tree that would ship with Simple DEAD: two script tags missing, and a buster going backwards (hunt HIGH #19)** (11 Oct, ~02:00 AWST, via INBOX — a helper finding, filed by the logger; NOT his words)
+      ✅ **SHIPPED IN v17.38** (20 Oct hand-off audit): v17.38 a77db174 shipped the repaired tree (the entry's own ✅).
       Moved from INBOX.md whole:
       ### 11 Oct 2026, ~02:00 AWST — The first cloud pre-flight (his #1124) caught a 2.1 tree that would ship with Simple DEAD: two script tags missing, and a buster going backwards (hunt HIGH #19)
       **His words (verbatim):** none. This is the helper's PRE2/LR1 report on `hunt/preflight-v17.38` (efae0ab, 024dd3e), NOT his words. The PM read the report, and sent it to the builder directly at ~02:00 (delivered).
@@ -36784,8 +36791,8 @@ re-opened #480, which I had marked done and had not fixed.
         - When 2.1 lands, ask him what "usable" means to him: which three things he tries first in Simple.
       - If he names specific things that feel broken (not just missing), log them as their own items.
 
-- [ ] **1129 — The cloud confirms a REAL cross-project overwrite in live collab (#996), but the first fix breaks a join test; pre-flights of 2.2, 2.3+E, 2.5 and 2.6 (hunt HIGH #20)** (11 Oct, ~08:10 AWST, via INBOX — the PM's or a helper's, filed by the logger; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1129 — The cloud confirms a REAL cross-project overwrite in live collab (#996), but the first fix breaks a join test; pre-flights of 2.2, 2.3+E, 2.5 and 2.6 (hunt HIGH #20)** (11 Oct, ~08:10 AWST, via INBOX — the PM's or a helper's, filed by the logger; NOT his words)
+      ✅ **SHIPPED IN v17.40** (20 Oct hand-off audit): v17.40 caef240d: a live session never writes into a project that is not its own (#996); the pre-flighted trees shipped as v17.39–v17.46.
       Moved from INBOX.md whole:
       ### 11 Oct 2026, ~08:10 AWST — The cloud confirms a REAL cross-project overwrite in live collab (#996), but the first fix breaks a join test; pre-flights of 2.2, 2.3+E, 2.5 and 2.6 (hunt HIGH #20)
       **His words (verbatim):** none. These are the helper's G996 and PRE3b/3d/4b/4c reports on `hunt/preflight-*`, NOT his words. The PM read the verdicts and sent them to the builder at ~08:10 (delivered).
@@ -36918,6 +36925,7 @@ re-opened #480, which I had marked done and had not fixed.
       - With Canvas open, the old "Canvas settings" title goes, because its bar now says "Canvas" with the size summary.
       - The App settings end glyph is a `span` inside the one `<button id=cv-app-bar>` (no nested button).
       - To check while building: the Editor block open at 1280×720 sits 4 px above the screen (is today the same?), and the PC closed-bar titles look slightly dimmer than "App settings" (same computed colour; cause unknown).
+      📍 **Moved here from #1141 (20 Oct hand-off audit):** hunt/cog-1132 a0a0985c, ported as wip/c41-cog e3703003 + 48d4e115, never landed.
 
 - [ ] **1133 — "the builder looks like its slacking again" (hunt HIGH #21: tick.sh hides the queue during a ship, so the loop idles)** (11 Oct, ~11:35 AWST, via INBOX — HIS WORDS, filed by the logger)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -36991,8 +36999,8 @@ re-opened #480, which I had marked done and had not fixed.
       - ChatGPT is out of usage, so it's not used now.
       🔨 **12 Oct (the API builder):** logged. "API builder: yes" is done — `~/fm-api-builder.sh` is running. The branch swaps (hunt/simple-firstuser-fixes into wip/v17.39-tree; hunt/labs-on-fixes for hunt/labs-on; hunt/fix-land-b3 for hunt/land-b3) are applied as each tree ships. Decisions 1–4's builds are in the builder chat's lane (#1136).
 
-- [ ] **1136 — For the API builder: three facts from the builder chat (now in the helper lane)** (12 Oct, ~21:00 AWST, via INBOX — the builder chat's words, a teammate, not Ezra)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1136 — For the API builder: three facts from the builder chat (now in the helper lane)** (12 Oct, ~21:00 AWST, via INBOX — the builder chat's words, a teammate, not Ezra) (team)
+      ✅ **DONE** (20 Oct hand-off audit): facts (1) and (2) shipped; (3) Filters layout A and Mosaic in v17.44, Glitch in v17.47. The Full slow-swipe fix is moved to #1122.
       Moved from INBOX.md whole:
       ### 12 Oct 2026, ~21:00 AWST — For the API builder: three facts from the builder chat (now in the helper lane)
       **From the builder chat (teammate, not Ezra):**
@@ -37007,8 +37015,8 @@ re-opened #480, which I had marked done and had not fixed.
       **Lanes until the PM says otherwise:** you (`~/fm-api-builder.sh`) are THE builder. The builder chat works only on hunt/<topic> branches in its own worktrees and reports to hunt/preflight-* and helper/done. Its queue is SU1 #9, SU1 #12, ✂ under the playhead, Radial Wipe at 0, title fit, More closes on a second press plus layout options, and the _cdp.py dialog hang. Take its branches when they land on helper/done, as you would the cloud helper's.
       🔨 **12 Oct (the API builder):** logged. The uncommitted LOOP.md / REQUESTS.md edits are kept and ride the next release. Simple 2.2's lock run is re-run before it ships, after clearing stale `_cdp.py`/Chrome.
 
-- [ ] **1137 — PM → API builder: build during the lock run, because "still running" turns spend his API money (hunt MEDIUM #23)** (12 Oct, ~21:40 AWST, via INBOX — the PM / helper lane, not Ezra)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1137 — PM → API builder: build during the lock run, because "still running" turns spend his API money (hunt MEDIUM #23)** (12 Oct, ~21:40 AWST, via INBOX — the PM / helper lane, not Ezra)
+      ✅ **SHIPPED IN v17.40** (20 Oct hand-off audit): SUPERSEDED: the API builder stopped 15 Oct 08:07 (#1167); the rule lives in LOOP.md (B2, build during ships) and tick.sh's IDLE line, which shipped in v17.40.
       Moved from INBOX.md whole:
       ### 12 Oct 2026, ~21:40 AWST — PM → API builder: build during the lock run, because "still running" turns spend his API money (hunt MEDIUM #23)
       **What the PM measured (~/.fm-api-builder/progress.log):** since the v17.39 Full-unchanged lock started at 21:21, three turns in a row only reported "the lock is still running, finishes ~23:15":
@@ -37024,8 +37032,8 @@ re-opened #480, which I had marked done and had not fixed.
          If there is truly nothing to code, end the turn with exactly "IDLE until <time>" and nothing else.
       2. The PM is moving the builder chat into a SEPARATE clone (~/fm-helper), so its edits stop resetting your idle back-off.
 
-- [ ] **1138 — Helper-lane branches ready for the API builder (builder chat's queue (a)–(g), DONE on helper/done 882e703f)** (12 Oct, ~22:05 AWST, via INBOX — the PM / helper lane, not Ezra)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **1138 — Helper-lane branches ready for the API builder (builder chat's queue (a)–(g), DONE on helper/done 882e703f)** (12 Oct, ~22:05 AWST, via INBOX — the PM / helper lane, not Ezra) (team)
+      ✅ **DONE** (20 Oct hand-off audit): su1-fixes/su1-split/su1-more in v17.48 b883b6f8; cdp-dialogs in v17.43 53493ee8; fix-radialwipe0 landed.
       Moved from INBOX.md whole:
       ### 12 Oct 2026, ~22:05 AWST — Helper-lane branches ready for the API builder (builder chat's queue (a)–(g), DONE on helper/done 882e703f)
       **Take in queue order, in place of the cloud hand-off's versions where they overlap:**
@@ -37047,8 +37055,8 @@ re-opened #480, which I had marked done and had not fixed.
         - The branch adds radialwipe:progress=min to queue 264's sweep beside wipe's. No behaviour change.
       **Lanes:** the builder chat stays off the browser while your lock run or a ship runs. It will do the remaining browser proofs and More's layout options after the v17.39 lock finishes.
 
-- [ ] **1139 — Helper lane: your v17.40-port → v17.44-port chain pre-flighted (code), and the SU1 fixes rebased onto it** (12 Oct, ~22:35 AWST, via INBOX — the PM / helper lane, not Ezra)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1139 — Helper lane: your v17.40-port → v17.44-port chain pre-flighted (code), and the SU1 fixes rebased onto it** (12 Oct, ~22:35 AWST, via INBOX — the PM / helper lane, not Ezra) (team)
+      ✅ **DONE** (20 Oct hand-off audit): the chain shipped as v17.40–v17.46; hunt/su1-on-v17.44 in v17.48.
       Moved from INBOX.md whole:
       ### 12 Oct 2026, ~22:35 AWST — Helper lane: your v17.40-port → v17.44-port chain pre-flighted (code), and the SU1 fixes rebased onto it
       **From the builder chat (helper lane, ~/fm-helper):**
@@ -37058,7 +37066,8 @@ re-opened #480, which I had marked done and had not fixed.
       - **`hunt/su1-on-v17.44` 83e39d18** = all five SU1 commits rebased onto v17.44-port: SU1 #9 label, #12 nothing selected on open, ✂ under the playhead, title fit, and More toggles. No code conflicts: tests.js appends were rebuilt by blocks, busters renumbered, the tree check passes, nothing dropped. Its 380/1280 slices run after your lock finishes. Take it instead of the separate su1-* branches when the chain reaches 2.6.
 
 - [ ] **1140 — His credit rule + who owns what (so no work is done twice)** (12 Oct, ~23:18 AWST, via INBOX — HIS WORDS)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 📌 NOTE — nothing to build**
+      📌 **Standing note — this is the receipt** (20 Oct hand-off audit): the API credit was spent to the cap and the API builder stopped 15 Oct 08:07 (#1167); his rule that slow is waste lives in the builder's memory note pm-job-no-wasted-credits.
       Moved from INBOX.md whole:
       ### 12 Oct 2026, ~23:18 AWST — His credit rule + who owns what (so no work is done twice)
       **His words (verbatim):** "The API can fully run out i don't care - it needs to be used up anyways" … "Auto reload is off" … "You're job is to make sure my credits aren't wasted - they can be wasted in two ways - it doing stuff so slowly I don't use my weekly limit - it wasting it on pointless stuff or errors"
@@ -37073,8 +37082,8 @@ re-opened #480, which I had marked done and had not fixed.
         3. #966, new effects/filters/sfx and effect polish.
         It reports finished branches on helper/done; you land them in queue order. Everything else in next.sh order is yours: the v17.39 → v17.44 Simple chain, v17.40 Full batch, AX2 export audio after the Windows-Chrome AAC pass, #1082 Tutorials tab, labs-on-fixes, fix-land-b3.
 
-- [ ] **1141 — Helper lane: hunt/su1-c and hunt/cog-1132 (#1132) built (DONE on helper/done db149574)** (12 Oct, ~23:58 AWST, via INBOX — the PM / helper lane, not Ezra)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1141 — Helper lane: hunt/su1-c and hunt/cog-1132 (#1132) built (DONE on helper/done db149574)** (12 Oct, ~23:58 AWST, via INBOX — the PM / helper lane, not Ezra) (team)
+      ✅ **DONE** (20 Oct hand-off audit): su1-c shipped in v17.48. The unlanded cog port is moved to #1132.
       Moved from INBOX.md whole:
       ### 12 Oct 2026, ~23:58 AWST — Helper lane: hunt/su1-c and hunt/cog-1132 (#1132) built (DONE on helper/done db149574)
       **Built by reading only: code plus red-first tests. The browser proofs run in the builder chat after the v17.39 lock clears.**
@@ -37091,8 +37100,8 @@ re-opened #480, which I had marked done and had not fixed.
         - **One deviation from the picture he saw, accepted by the PM:** on a PC with Friends or the Editor open, App settings sits at the far end of the small column, not under Canvas. The render's placement lifted Canvas off the cog's line, which breaks #978's "Canvas always right by the button".
       **Still being built in the helper lane:** SU1 #5 and #17; #966 batches 7, 10 and 13.
 
-- [ ] **1142 — Helper lane: Simple Move/Extend gap fix + #966 batch 13 (Stylize depth) (DONE on helper/done 2ffc0666)** (13 Oct, ~00:08 AWST, via INBOX — the PM / helper lane, not Ezra)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1142 — Helper lane: Simple Move/Extend gap fix + #966 batch 13 (Stylize depth) (DONE on helper/done 2ffc0666)** (13 Oct, ~00:08 AWST, via INBOX — the PM / helper lane, not Ezra) (team)
+      ✅ **DONE** (20 Oct hand-off audit): su1-c 445ca218 in v17.48; fx-b13 in v17.47 da0604f7 (Stylize, batch 13).
       Moved from INBOX.md whole:
       ### 13 Oct 2026, ~00:08 AWST — Helper lane: Simple Move/Extend gap fix + #966 batch 13 (Stylize depth) (DONE on helper/done 2ffc0666)
       - **`hunt/su1-c` 445ca218.** In Simple, More's **Move to playhead** moves the clip to the cut nearest the playhead (the rule Clips › After Clip N uses). **Extend to playhead** goes through Simple's grip commands. So there are no gaps and nothing is hidden. Two red-first tests, with Full as the control. PM: nearest cut is approved, because it matches After Clip N.
@@ -37106,8 +37115,8 @@ re-opened #480, which I had marked done and had not fixed.
         - **Poster Print** keeps its current look. Switching it to Colour dots changes a library look, so Ezra sees a before/after first, and only then does it change.
       **Still being built in the helper lane:** SU1 #5 and #17; #966 batches 7 (audio), 10 (warps), 11 (generators) and 14 (blurs/3D). Proofs run in node where possible; the browser queue waits for the lock.
 
-- [ ] **1143 — Helper lane: hunt/su1-bc 9dd09f31 = su1-c + SU1 #17 + SU1 #5 (helper/done 061550cc)** (13 Oct, ~00:12 AWST, via INBOX — the PM / helper lane, not Ezra)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1143 — Helper lane: hunt/su1-bc 9dd09f31 = su1-c + SU1 #17 + SU1 #5 (helper/done 061550cc)** (13 Oct, ~00:12 AWST, via INBOX — the PM / helper lane, not Ezra) (team)
+      ✅ **DONE** (20 Oct hand-off audit): v17.48: selecting a sound draws no box; More's docked sheet scrolls its body.
       Moved from INBOX.md whole:
       ### 13 Oct 2026, ~00:12 AWST — Helper lane: hunt/su1-bc 9dd09f31 = su1-c + SU1 #17 + SU1 #5 (helper/done 061550cc)
       - **SU1 #17:** selecting a sound no longer draws a transform box.
@@ -37116,8 +37125,8 @@ re-opened #480, which I had marked done and had not fixed.
       - **SU1 #5 (More's panel won't scroll with a finger) is UNPROVEN.** The agent could not find a cause in the code: nothing on the path blocks scrolling, and the sheet does overflow. So it restructured instead: the docked sheet's body now scrolls under the grab bar, the shape the PC band uses. Its tests send real wheel and touch input against a plain scrolling box.
         - A red check is queued with the #5 change taken back. If that check passes, the bug doesn't reproduce in the suite's Chrome, and #5 lands only with an honest UNPROVABLE line, or waits for Ezra's phone.
 
-- [ ] **1144 — Helper lane: #966 batches 7 (audio) and 10 (warps), both on e1-land (helper/done e79f7452, aff12339)** (13 Oct, ~00:15 AWST, via INBOX — the PM / helper lane, not Ezra)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1144 — Helper lane: #966 batches 7 (audio) and 10 (warps), both on e1-land (helper/done e79f7452, aff12339)** (13 Oct, ~00:15 AWST, via INBOX — the PM / helper lane, not Ezra) (team)
+      ✅ **DONE** (20 Oct hand-off audit): v17.47 da0604f7: Sound (7) and Warps (10), on the CPU and the GPU, one SCHEMA_REV 10.
       Moved from INBOX.md whole:
       ### 13 Oct 2026, ~00:15 AWST — Helper lane: #966 batches 7 (audio) and 10 (warps), both on e1-land (helper/done e79f7452, aff12339)
       - **`hunt/fx-b7` 69f57acc, audio choices, 8 items.**
@@ -37148,8 +37157,8 @@ re-opened #480, which I had marked done and had not fixed.
       - His questions (names, sounds, feel calls such as Kaleidoscope Flow's direction) are in each DONE line. The PM collects them into one picture/sound sheet for him.
       **Landing note:** all the fx batches (b7, b10, b13, and 8/11/12/14 coming) sit on e1-land. Land them as one Full batch after one browser pass, with ONE SCHEMA_REV bump and ONE 921 re-pin, not one per batch.
 
-- [ ] **1145 — Helper lane: #966 batches 8 and 11 (fx-b11 incl. the Lightning Core swatch fix) — see helper/done for each DONE line** (13 Oct, ~02:00 AWST, via INBOX — the PM / helper lane, not Ezra)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1145 — Helper lane: #966 batches 8 and 11 (fx-b11 incl. the Lightning Core swatch fix) — see helper/done for each DONE line** (13 Oct, ~02:00 AWST, via INBOX — the PM / helper lane, not Ezra) (team)
+      ✅ **DONE** (20 Oct hand-off audit): v17.47: batches 8 and 11, and the Lightning Core swatch fix.
       Moved from INBOX.md whole:
       ### 13 Oct 2026, ~02:00 AWST — Helper lane: #966 batches 8 and 11 (fx-b11 incl. the Lightning Core swatch fix) — see helper/done for each DONE line
       - **`hunt/fx-b11` 5159b1a9** (generators, on e1-land), including a follow-up: with Lightning's Core unset, the Core row's swatch now shows the colour the kernel actually draws (the bolt colour 80% toward white).
@@ -37162,7 +37171,8 @@ re-opened #480, which I had marked done and had not fixed.
       **Landing:** as pm15 says, land all the fx batches on e1-land together after one browser pass, with ONE SCHEMA_REV bump and ONE 921 re-pin.
 
 - [ ] **1146 — PM → API builder: you are UNDER-spending (his rule: slow = waste)** (13 Oct, ~02:10 AWST, via INBOX — the PM / helper lane, not Ezra)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 📌 NOTE — nothing to build**
+      📌 **Standing note — this is the receipt** (20 Oct hand-off audit): his rule (slow = waste, the credit "needs to be used up") lives in the builder's memory note pm-job-no-wasted-credits; the API builder it was sent to stopped 15 Oct 08:07.
       Moved from INBOX.md whole:
       ### 13 Oct 2026, ~02:10 AWST — PM → API builder: you are UNDER-spending (his rule: slow = waste)
       **Measured:** about $10 spent in 5 h (≈ $2/h). One single turn (since 21:36) has mostly waited on the v17.39 lock and ship. At this pace the $200 credit is NOT used by your stop time (15 Oct 15:45, ~60 h), and his words are "it needs to be used up anyways".
@@ -37180,8 +37190,8 @@ re-opened #480, which I had marked done and had not fixed.
          - When the helper posts "BROWSER FREE" on helper/done, or the 40 minutes are up, the browser is yours again.
          Without this window its proofs never get a gap, and its branches can't land.
 
-- [ ] **1147 — PM → API builder: the browser-sharing rule, replacing pm17 item 4 (a collision happened at 03:00)** (13 Oct, ~03:12 AWST, via INBOX — the PM / helper lane, not Ezra)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1147 — PM → API builder: the browser-sharing rule, replacing pm17 item 4 (a collision happened at 03:00)** (13 Oct, ~03:12 AWST, via INBOX — the PM / helper lane, not Ezra) (team)
+      ✅ **DONE** (20 Oct hand-off audit): SUPERSEDED: one builder since 15 Oct 08:07; the browser slot appears nowhere in the tools.
       Moved from INBOX.md whole:
       ### 13 Oct 2026, ~03:12 AWST — PM → API builder: the browser-sharing rule, replacing pm17 item 4 (a collision happened at 03:00)
       **What happened:**
@@ -37196,8 +37206,8 @@ re-opened #480, which I had marked done and had not fixed.
          It deletes the file when done. Please grant one slot of about 30 minutes after v17.40 lands. Ezra's decisions on More's layout, the tray fade, Poster Print and the fx-b7 sounds are waiting on that sheet.
       3. **End your turn** when you are only waiting on a ship or a suite (your wrapper rules already say so). The wrapper calls you back, and each new turn reads INBOX. Waiting inside one turn for hours means you miss notes like this one.
 
-- [ ] **1148 — The lock gate fires on every SCHEMA_REV bump, so no #482 / #966 effects batch can ship (hunt HIGH #24)** (13 Oct, ~04:20 AWST — the API builder's finding)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1148 — The lock gate fires on every SCHEMA_REV bump, so no #482 / #966 effects batch can ship (hunt HIGH #24)** (13 Oct, ~04:20 AWST — the API builder's finding)
+      ✅ **SHIPPED IN v17.43** (20 Oct hand-off audit): the gate fix shipped alone with its own PASS in v17.43 53493ee8; the Full batches it waited for shipped through it in v17.44 (schema rev 9) and v17.47.
       **What happened:** Full batch 2 (wip/fb2-port: AX2, labs-on-fixes, land-b2/b3 + fix-land-b3, answers-1130, #1082) was ported onto v17.40 code-only. `tools/_fu_gate.py why`
       on it FIRES (6 lines), with or without #1122. The trigger is js/collab-core.js `C.SCHEMA_REV` (line 48) and `C.SCHEMA_FP` (line 257): `git blame` on main
       gives 29a5faff (v17.33, Simple 1.2) and f7ec250c (v17.36, Simple 1.3), so rule 5 (provenance: "a line a Simple release wrote") claims them. Any release that
@@ -37217,8 +37227,8 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **v17.43 — the gate fix shipped ALONE as an instrument change** (c41-gate = v17.42 + ee1b9e0a, tools/_fu_gate.py only), with its own lock PASS on
       the exact tree. Kept open as (partial) until the first Full batch (v17.44, c41-fb2b) ships through the fixed gate without it firing.
 
-- [ ] **1149 — PM → API builder: reproduce a red in its full-pass position BEFORE re-shipping; status-only polls cost ~$1.20, so build the next items in worktrees while a ship or lock runs** (13 Oct, ~10:20 AWST, via INBOX — the PM / helper lane, not Ezra)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1149 — PM → API builder: reproduce a red in its full-pass position BEFORE re-shipping; status-only polls cost ~$1.20, so build the next items in worktrees while a ship or lock runs** (13 Oct, ~10:20 AWST, via INBOX — the PM / helper lane, not Ezra) (team)
+      ✅ **DONE** (20 Oct hand-off audit): SUPERSEDED: the API builder is gone; the rule lives on in the builder's notes, and the #1082 test family was fixed in v17.41.
       Moved from INBOX.md whole:
       ### 13 Oct 2026, ~10:20 AWST — PM → API builder: reproduce a red in its full-pass position BEFORE re-shipping (two v17.41 refusals ≈ 3 h)
       **What happened:**
@@ -37236,7 +37246,8 @@ re-opened #480, which I had marked done and had not fixed.
       4. **For new tests from the helper lane** (e.g. #1082), run that test family at 380 AND 1280 in a slice before it rides a ship. A one-minute slice beats a two-hour refusal.
 
 - [ ] **1150 — PM → API builder: you now own the builder chat's lanes — during every lock and ship, build #966 §B new effects, SU1's Simple fixes, his picture/sound sheet and the helper-branch landings in worktrees with code-only subagents; spend the API credit on work, not polls** (13 Oct, ~16:30 AWST, via INBOX — the PM lane, quoting Ezra)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 📌 NOTE — nothing to build**
+      📌 **Standing note — this is the receipt** (20 Oct hand-off audit): the lanes are one builder's since 15 Oct 08:07; the rule to build during every lock and ship lives in LOOP.md (B2) and the builder's memory note build-while-ship-runs.
       Moved from INBOX.md whole:
       ### 13 Oct 2026, ~16:30 AWST — PM → API builder: you now OWN the builder chat's lanes too (spend the credit on work, save his subscription)
       **His two rules, 13 Oct:**
@@ -37251,8 +37262,8 @@ re-opened #480, which I had marked done and had not fixed.
       4. **Landing the helper branches** already on helper/done: fx-all, cog-1132 (+ release L lock pricing), su1-*, cdp-dialogs, fix-radialwipe0.
       The builder chat stays available for small reviews only.
 
-- [ ] **1151 — An intended change to a Mac-pinned picture cannot ship from the laptop: #1110 is stuck behind it (hunt HIGH #25)** (14 Oct, ~01:20 AWST — the API builder's finding, from v17.44's refusal; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1151 — An intended change to a Mac-pinned picture cannot ship from the laptop: #1110 is stuck behind it (hunt HIGH #25)** (14 Oct, ~01:20 AWST — the API builder's finding, from v17.44's refusal; NOT his words)
+      ✅ **SHIPPED IN v17.45** (20 Oct hand-off audit): the RE-PINS step, record-baselines.sh --candidate and 11 self-tests in v17.45 2661fc94; #1110 landed with its RE-PINS line in v17.47 da0604f7.
       **What happened:** v17.44's first ship was refused by five #482 tests that pin pictures "byte for byte as on v17.xx" — #1110 (his yes, 11 Oct) moves
       Glitch's RGB fringe at a half-scale plate, so Glitch and the Datamosh filter draw new bytes there. On the Mac those pins are literals in tests.js;
       everywhere else they are tests/baselines.json, written by tools/record-baselines.sh. Three rules, each right on its own, close the door together:
@@ -37267,8 +37278,8 @@ re-opened #480, which I had marked done and had not fixed.
       **Meanwhile:** #1110 is backed out of v17.44 (patch 14268dfd unchanged) and every later c41 branch still carries it — apply their step diffs
       with `git apply -3` and drop its two hunks until this is decided.
 
-- [ ] **1152 — PM decision on #1151: option A — a declared `RE-PINS:` step in ship.sh (names each moved pin and why; refuses any pin that moved unnamed), then land #1110 with its RE-PINS line** (14 Oct, ~01:10 AWST, via INBOX — the PM lane, NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1152 — PM decision on #1151: option A — a declared `RE-PINS:` step in ship.sh (names each moved pin and why; refuses any pin that moved unnamed), then land #1110 with its RE-PINS line** (14 Oct, ~01:10 AWST, via INBOX — the PM lane, NOT his words) (team)
+      ✅ **DONE** (20 Oct hand-off audit): v17.45 (the RE-PINS step) and v17.47 (#1110 with its RE-PINS line), as #1151.
       🔨 **v17.45 (14 Oct): the RE-PINS: step is BUILT and ships here** (wip/repins): no ship.sh change — tools/_shipgates.py (the declaration, candidate_hash, the gate rules) + tools/record-baselines.sh --candidate + 11 test-port cases; three mutations caught. Next: #1110 lands with its RE-PINS line in the fx9 Full release.
       Moved from INBOX.md whole:
       ### 14 Oct 2026, ~01:10 AWST — PM decision on #1151 (the re-pin gap that held #1110 out of v17.44): option A
@@ -37279,8 +37290,8 @@ re-opened #480, which I had marked done and had not fixed.
       - B (ship from the Mac) and C (per-release overrides) are rejected. B needs his hands, and C is a silent bypass.
       **Then:** land #1110 (his 11 Oct answer on Glitch preview/export) in the next release with its `RE-PINS:` line. Build the ship.sh step and its self-test (test-port style) during the next lock or ship.
 
-- [ ] **1153 — PM → API builder: the see/hear sheet (pm20 lane 3) is being rendered by the builder chat on hunt/ezra-sheet-1 — take it off my list** (14 Oct, ~05:10 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1153 — PM → API builder: the see/hear sheet (pm20 lane 3) is being rendered by the builder chat on hunt/ezra-sheet-1 — take it off my list** (14 Oct, ~05:10 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): the sheet was rendered on hunt/ezra-sheet-1 81dd061c, sent 14 Oct 05:25 (#1154) and answered 07:40 (#1155).
       Moved from INBOX.md whole:
       ### 14 Oct 2026, ~05:10 AWST — PM → API builder: the see/hear sheet (pm20 lane 3) is being rendered by the builder chat, don't redo it
       - You have been STOPPED since the 02:29 WSL update. With no ship, no lock and no builder running, the PM used the free browser gap: the builder chat (in ~/fm-helper only) is rendering Ezra's sheet now.
@@ -37294,8 +37305,8 @@ re-opened #480, which I had marked done and had not fixed.
       - The files will be on branch **hunt/ezra-sheet-1**, and the PM sends them to Ezra.
       - **When you restart:** take this lane off your list. The builder chat stops its browser work the moment your lock pids or .ship-in-progress go live, so you can run straight away. Everything else in pm20 is still yours, plus pm21 (the RE-PINS: step, then #1110).
 
-- [ ] **1154 — PM: sheet 1 sent to Ezra (More A/B/C, Poster Print → Colour dots, Q1 Undo playhead, Q2 Simple next); PM decisions on the name/feel calls under his 11 Oct rule** (14 Oct, ~05:25 AWST, via INBOX — the PM lane)
-      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
+- [x] **1154 — PM: sheet 1 sent to Ezra (More A/B/C, Poster Print → Colour dots, Q1 Undo playhead, Q2 Simple next); PM decisions on the name/feel calls under his 11 Oct rule** (14 Oct, ~05:25 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): answered in #1155; the PM's decisions shipped in v17.47. Trail Time offset on video is moved to #966.
       Moved from INBOX.md whole:
       ### 14 Oct 2026, ~05:25 AWST — PM: sheet 1 sent to Ezra; PM decisions on the name/feel calls (don't wait on him for these)
       **Sent to Ezra 05:25:** `hunt/ezra-sheet-1` (81dd061c) `more-options-sheet.jpg` plus the 13 fx-b7 sound clips.
@@ -37340,7 +37351,8 @@ re-opened #480, which I had marked done and had not fixed.
       **Still open, for the NEXT sheet:** the SU1 #15 tray fade, which a still image can't show and which he should feel on the phone. Also the audio preset chips and the Filters "On my clip" switch (pm23).
 
 - [ ] **1156 — PM → API builder: start ONE code-only subagent at the START of every lock or ship wait (no browser, no node/python runs, red-first tests unrun, tests.js parse-check first); order = #1155's picks, then pm23's decisions** (14 Oct, ~09:10 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 📌 NOTE — nothing to build**
+      📌 **Standing note — this is the receipt** (20 Oct hand-off audit): its four items shipped (Colour dots v17.47, 1A + 2A rows v17.48, pm23's decisions v17.47); the one-agent-during-every-wait rule lives in the builder's memory note build-while-ship-runs.
       ✅ 14 Oct ~11:05 (API builder): all four of its items were already built by the earlier subagents — fx-extras (Colour dots), c41-p27 (1A + the 2A rows), fx-pm23 (the three pm23 decisions). This wait's subagent ported hunt/cog-1132 onto the chain as `wip/c41-cog` (e3703003 + 48d4e115, the '1132 on a PC with Canvas open…' red fixed by reading; not run). Standing: one subagent per wait.
       Moved from INBOX.md whole:
       ### 14 Oct 2026, ~09:10 AWST — PM → API builder: you are idling through the Simple 2.4 lock again; start a code-only subagent at the start of every wait
@@ -37366,8 +37378,8 @@ re-opened #480, which I had marked done and had not fixed.
       - Your session (42e665ff) is ~430k context and has not rotated, because killed runs never update session_spent.
       - **Neither is yours to change** (the wrapper and ~/go are Ezra's). Just know that a fresh session after this run is cheaper per step.
 
-- [ ] **1157 — PM → API builder: #966 §B new effects is the builder chat's lane today — do not build §B; land its effects from helper/done when they are ready** (14 Oct, ~09:30 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1157 — PM → API builder: #966 §B new effects is the builder chat's lane today — do not build §B; land its effects from helper/done when they are ready** (14 Oct, ~09:30 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): SUPERSEDED: §B landed in v17.49, v17.50 and v17.51, and the API builder stopped.
       Noted 14 Oct ~11:05 (API builder): not building §B; helper/done's newest §B lines (B22/B23/B26) are "BUILT AS CODE, NOTHING RUN YET", so nothing of it is ready to land.
       Moved from INBOX.md whole:
       ### 14 Oct 2026, ~09:30 AWST — PM → API builder: #966 §B NEW effects is the builder chat's lane today (it changes pm20 lane 1)
@@ -37376,8 +37388,8 @@ re-opened #480, which I had marked done and had not fixed.
       - **Don't build #966 §B yourself.** Land its effects from helper/done when they're ready, like the other helper branches.
       - **Your subagent order during waits is pm24's list:** #1155 picks first, then pm23's decisions.
 
-- [ ] **1158 — The suite's leak recorder does not see a side bar left open: one cost v17.45 a whole ship (hunt MEDIUM #1158)** (14 Oct, ~14:10 AWST — the API builder's finding, from v17.45's first ship)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1158 — The suite's leak recorder does not see a side bar left open: one cost v17.45 a whole ship (hunt MEDIUM #1158)** (14 Oct, ~14:10 AWST — the API builder's finding, from v17.45's first ship)
+      ✅ **SHIPPED IN v17.47** (20 Oct hand-off audit): v17.47 da0604f7: the suite puts back #opt-bar / #view-bar and the timeline zoom and names the test that left them.
       **What happened.** v17.45's first ship was refused at the end of its 45-minute desktop pass by `simple P2.4b · S7 Sort by date taken…` ("⋯ does not offer Sort by date taken"), which passed alone. Bisected with `?after=`/`?upto=` (red from the start and from line 20022, green from 25021): the old test `the project ⋯ is gone from the top bar, and every action it held still works` opens the ⋯ pop-up (#opt-bar) and its cleanup shut the view bar but never the pop-up. ~1100 tests later Simple's ⋯ saw a lit pop-up and did what review finding 28 says — closed it — so its own list never opened. Fixed in v17.45 (the test's `finally` now calls `FM.setSideBar(opt-bar, btn-opts, false)`); the pair alone was red before and green after.
       **The structural half (not done).** The runner already reports, by the culprit's name, a scene layer, a stubbed `window.visualViewport`, `FM._mtMode` and a live timeline gesture left behind (tests.js, the hygiene block in `run()`, "left in the shared scene"). It does not look at `#opt-bar` / `#view-bar` (`FM.sideBarOpen`), so a test that leaves one open is found only when a test far later trips over it — and only after a full pass. Add both to that list (report against the culprit and put them back), the way `_mtMode` is handled.
       🔁 **Second instance the same day (v17.46's first ship):** Simple 2.5's `smDragEnv` set the timeline zoom to 28 px/s and never restored it; '690 a sideways swipe that starts on a keyframe diamond…', ~29,000 lines later, found its diamonds packed too close for its control swipe (passed alone). Fixed in the helper for v17.46. The runner's put-back list should hold `FM.timeline.getZoom()` too — built for the side bars on `wip/fx-pm23` 5b1d3e52; add the zoom there.
@@ -37408,8 +37420,8 @@ re-opened #480, which I had marked done and had not fixed.
       - Do code-only work until it expires, or until the helper deletes it (it releases early when done). Start no Chrome, lock or slice of your own while it exists and is unexpired.
       - That costs ≤ 40 min per cycle, and it is the only way his new effects reach a release.
 
-- [ ] **1160 — PM: the helper's 14:18–14:48 slot verdicts — fxnew-all (#966 §B, the combined new effects) PROVEN at 41ad4291, rev 11 FP 8082352878296088; Clarity & Dehaze nearly; boom/drums next slot; land fxnew-all after #1155's picks** (14 Oct, ~15:10 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1160 — PM: the helper's 14:18–14:48 slot verdicts — fxnew-all (#966 §B, the combined new effects) PROVEN at 41ad4291, rev 11 FP 8082352878296088; Clarity & Dehaze nearly; boom/drums next slot; land fxnew-all after #1155's picks** (14 Oct, ~15:10 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): fxnew-all shipped in v17.49 d7cdfc9e.
       Noted 14 Oct 15:30 (API builder): the landing order is v17.46 (2.5+2.6, lock running) → the Full effects release (fx-pm23: batches 7–15, batch 9, Colour dots, pm23's decisions, #1110) → the Simple picks release (c41-dock B, c41-p27 1A + the four rows, then the hint) → fxnew-all. fxnew-all sits on the effects landing (8004fa16 lineage), so it needs porting onto whatever the effects release ships as, and its rev 11 FP re-measured on that tree.
       Checked 15:45: fxnew-all's newest commit 41ad4291 only pins the FP; everything before it (8004fa16..6e6f01f7) is already on the chain as `wip/c41-fxnew2` d09c9e7f (re-stacked onto c41-su1, rev 11 FP 1764566856041040 measured there, security review done). Landing = re-stack c41-fxnew2's step onto what ships, re-measure the FP, run every '966 B' at 1280 + 380.
       Moved from INBOX.md whole:
@@ -37427,8 +37439,8 @@ re-opened #480, which I had marked done and had not fixed.
       - **The slot works.** The helper handed it back 9 minutes early. A watcher now ends its proof 90 s before the expiry and deletes the slot file the moment nothing of the helper's is running.
       - **For the API builder:** land fxnew-all after #1155's picks, per pm26's order, or alongside them if it fits the same lock.
 
-- [ ] **1161 — PM: helper/done verdicts from the 19:xx slot — fxnew-clarity (Clarity & Dehaze, #966 §B26) and fxnew-boom (§B23 Explosion & thunder) PROVEN, ready to land; fxnew-drums still to prove; land the three after #1155's picks, in pm26's order** (14 Oct, ~22:10 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1161 — PM: helper/done verdicts from the 19:xx slot — fxnew-clarity (Clarity & Dehaze, #966 §B26) and fxnew-boom (§B23 Explosion & thunder) PROVEN, ready to land; fxnew-drums still to prove; land the three after #1155's picks, in pm26's order** (14 Oct, ~22:10 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): Clarity & Dehaze and Explosion & Thunder in v17.49; the Drums pack in v17.50.
       Noted 14 Oct 23:30 (API builder): already built as the next Full release while v17.47 shipped — `prep49` (worktree .claude/worktrees/prep47) = c41-su1..c41-fxnew2 (fxnew-all) + fxnew-clarity 6e6f01f7..8a7b84dc + fxnew-boom 47735673..787491d6, stacked on the Simple picks release (v17.48, his #1155 order), busters +1, SCHEMA_REV 11 with its fingerprint re-measured by fp.js (3283768459784470, match), lock gate NOT triggered. Not run in a browser yet: its new tests get a slice at 1280 and 380 before it ships. Lands after v17.48 (a Full batch cannot share a Simple lock: Full changes on purpose). fxnew-drums joins if its re-run is proven by then.
       Moved from INBOX.md whole:
       ### 14 Oct 2026, ~22:10 AWST — PM: two more helper/done verdicts (#966 §B; builder chat, the 19:xx slot)
@@ -37452,8 +37464,8 @@ re-opened #480, which I had marked done and had not fixed.
       - **Builder chat:** back to full pace now. Code-only fan-out in its own clone is allowed again (up to ~3 agents). New effects are un-paused.
       - **When the API builder stops at its spend cap,** the builder chat becomes the full builder of ~/FreeMotion.
 
-- [ ] **1163 — PM: new helper/done branches (#966 §B; builder chat), plus one integration trap** (15 Oct, ~01:15 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1163 — PM: new helper/done branches (#966 §B; builder chat), plus one integration trap** (15 Oct, ~01:15 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): v17.50 612cefce (B&W Mixer, Graphic EQ, Cartoon).
       Noted 15 Oct 04:35 (API builder): prep49 (the next Full release) already applies 8a7b84dc — clarity is taken to its tip before boom's own commits — so the trap does not bite there. B33, B34, B31 are code only and wait for their proofs.
       Moved from INBOX.md whole:
       ### 15 Oct 2026, ~01:15 AWST — PM: new helper/done branches (#966 §B; builder chat), plus one integration trap
@@ -37472,8 +37484,8 @@ re-opened #480, which I had marked done and had not fixed.
       **Proven so far:** fxnew-all, fxnew-clarity and fxnew-boom.
       **Drums:** the cymbal onset is missing in ba-dum-tss even at +7 dB. A 10-second envelope probe is queued for the next helper slot.
 
-- [ ] **1164 — PM: two more helper/done branches (#966 §B; builder chat). Built as code, not run yet** (15 Oct, ~00:45 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1164 — PM: two more helper/done branches (#966 §B; builder chat). Built as code, not run yet** (15 Oct, ~00:45 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): v17.50 (Venetian Blinds, Radio Waves).
       Noted 15 Oct 04:35 (API builder): B27 / B28 wait for their proofs; any landing applies 8a7b84dc first.
       Moved from INBOX.md whole:
       ### 15 Oct 2026, ~00:45 AWST — PM: two more helper/done branches (#966 §B; builder chat). Built as code, not run yet
@@ -37484,8 +37496,8 @@ re-opened #480, which I had marked done and had not fixed.
 
       The builder chat now works ONE agent at a time, to keep the weekly on his ~90–95%-at-reset pace (ez16).
 
-- [ ] **1165 — PM: more helper/done branches (#966 §B; builder chat)** (15 Oct, ~02:15 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1165 — PM: more helper/done branches (#966 §B; builder chat)** (15 Oct, ~02:15 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): v17.50 (Lens Magnifier, Circle Array, Drums).
       Noted 15 Oct 04:35 (API builder): drums joins prep49 once helper/done records the browser verdict for 85b71929.
       Moved from INBOX.md whole:
       ### 15 Oct 2026, ~02:15 AWST — PM: more helper/done branches (#966 §B; builder chat)
@@ -37503,8 +37515,8 @@ re-opened #480, which I had marked done and had not fixed.
 
       **Apply `8a7b84dc` first** to every §B branch (pm29).
 
-- [ ] **1166 — PM decision: the builder chat's §B effects SUPERSEDE their ChatGPT-pile twins. Land theirs, drop the pile commits, never both** (15 Oct, ~02:35 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1166 — PM decision: the builder chat's §B effects SUPERSEDE their ChatGPT-pile twins. Land theirs, drop the pile commits, never both** (15 Oct, ~02:35 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): v17.50 and v17.51 landed the builder chat's versions; LAND-LIST.md carries the SUPERSEDED note.
       Noted 15 Oct 04:35 (API builder): understood — land the builder chat's §B versions, drop their ChatGPT-pile twins, never both.
       Moved from INBOX.md whole:
       ### 15 Oct 2026, ~02:35 AWST — PM decision: the builder chat's §B effects SUPERSEDE their ChatGPT-pile twins. Land theirs, drop the pile commits, never both
@@ -37532,8 +37544,8 @@ re-opened #480, which I had marked done and had not fixed.
 
       The same note goes into LAND-LIST.md itself, above B6, after this ship. The PM wrote it there at 02:30, then saw a ship running and took it out again.
 
-- [ ] **1167 — PM: helper/done verdict, plus the handover state** (15 Oct, ~05:15 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1167 — PM: helper/done verdict, plus the handover state** (15 Oct, ~05:15 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): the adopted lock shipped in v17.48 b883b6f8; bwmix in v17.50; the API builder stopped 08:07 as planned.
       Noted 15 Oct ~08:20 (builder chat, now the builder after the API builder stopped at 08:07): taken as the plan for v17.49 / v17.50 — the §B and pile branches land stacked after 8a7b84dc with ONE prove pass (PM 05:35).
       Moved from INBOX.md whole:
       ### 15 Oct 2026, ~05:15 AWST — PM: helper/done verdict, plus the handover state
@@ -37547,8 +37559,8 @@ re-opened #480, which I had marked done and had not fixed.
       **v17.47's two stalls are explained and fixed.** Test #333 left ~200 effects picked, and the next launch hung on them. It now unpicks them.
 
 
-- [ ] **1168 — PM: pile-only ports pushed by the builder chat (LAND-LIST B6, with its written fixes; built as code, not run yet)** (15 Oct, ~05:35 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1168 — PM: pile-only ports pushed by the builder chat (LAND-LIST B6, with its written fixes; built as code, not run yet)** (15 Oct, ~05:35 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): v17.50 (Gradient Wipe, Fractal Noise, Odometer Roll).
       Noted 15 Oct ~08:20 (builder chat, now the builder after the API builder stopped at 08:07): taken as the plan for v17.49 / v17.50 — the §B and pile branches land stacked after 8a7b84dc with ONE prove pass (PM 05:35).
       Moved from INBOX.md whole:
       ### 15 Oct 2026, ~05:35 AWST — PM: pile-only ports pushed by the builder chat (LAND-LIST B6, with its written fixes; built as code, not run yet)
@@ -37562,8 +37574,8 @@ re-opened #480, which I had marked done and had not fixed.
       **Proof timing:** the helper's slot-queue estimates are now 1900 s each, so one proof fits a 40-min slot.
 
 
-- [ ] **1169 — PM: three more pile-only ports (LAND-LIST B6; builder chat; built as code, not run yet)** (15 Oct, ~06:35 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1169 — PM: three more pile-only ports (LAND-LIST B6; builder chat; built as code, not run yet)** (15 Oct, ~06:35 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): v17.50 (Deflicker, Laser Beam, Title Warp).
       Noted 15 Oct ~08:20 (builder chat, now the builder after the API builder stopped at 08:07): taken as the plan for v17.49 / v17.50 — the §B and pile branches land stacked after 8a7b84dc with ONE prove pass (PM 05:35).
       Moved from INBOX.md whole:
       ### 15 Oct 2026, ~06:35 AWST — PM: three more pile-only ports (LAND-LIST B6; builder chat; built as code, not run yet)
@@ -37574,8 +37586,8 @@ re-opened #480, which I had marked done and had not fixed.
       Spill Suppressor is next. With it, every B6 pile item has a ported branch. Prove them as one stacked batch, not one by one (PM, 05:35).
 
 
-- [ ] **1170 — PM: the LAND-LIST B6 port list is complete (builder chat)** (15 Oct, ~07:15 AWST, via INBOX — the PM lane)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1170 — PM: the LAND-LIST B6 port list is complete (builder chat)** (15 Oct, ~07:15 AWST, via INBOX — the PM lane) (team)
+      ✅ **DONE** (20 Oct hand-off audit): v17.50 and v17.51 (the last six ports).
       Noted 15 Oct ~08:20 (builder chat, now the builder after the API builder stopped at 08:07): taken as the plan for v17.49 / v17.50 — the §B and pile branches land stacked after 8a7b84dc with ONE prove pass (PM 05:35).
       Moved from INBOX.md whole:
       ### 15 Oct 2026, ~07:15 AWST — PM: the LAND-LIST B6 port list is complete (builder chat)
@@ -37602,8 +37614,8 @@ re-opened #480, which I had marked done and had not fixed.
       "the preview shrinks when More opens (as built)?". The 450 ms guard does not help a deliberate second tap a second later.
       📍 16 Oct: APPLIED in the Simple Phase 3 stack (hunt/sm3-stack bc8b4f63, test renamed from its PROBE title; it also arms for Look's panel and Edit lines). The review then moved its seven window listeners so they are on only while armed and off 500 ms later (hunt/sm3-review 145f0425) — loaded at start they sat in Full too, and a non-passive touchstart holds phone scrolling. Ships with Simple Phase 3, under its lock.
 
-- [ ] **1172 — An export made on a 44.1 kHz device trims the treble of every clip's sound (hunt MEDIUM #1172)** (16 Oct, ~03:10 AWST — found by the v17.51 first-run agent; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1172 — An export made on a 44.1 kHz device trims the treble of every clip's sound (hunt MEDIUM #1172)** (16 Oct, ~03:10 AWST — found by the v17.51 first-run agent; NOT his words)
+      ✅ **SHIPPED IN v17.52** (20 Oct hand-off audit): the 44.1 kHz treble fix shipped in v17.52.
       The exporter decodes each clip at the device's own rate (js/exporter.js ~562 → FM.decodeAudio → a plain AudioContext), then plays it into the 48 kHz export mix, where it is stretched by interpolation. Measured on white noise on the laptop (44.1 kHz): −2.3 dB at 10–15 kHz and −5.3 dB at 15–20 kHz; tones lose 0.002–0.047 dB. A 48 kHz device (iPhones usually are) is not affected.
       🔨 BUILT, not run: hunt/export-treble 7a5c5b57 (on stack51) — an export decodes at 48 kHz itself (mixAudioOf; the 48 kHz copy kept on the media record and dropped with it); a 48 kHz device takes exactly today's path. Its test ('export keeps the treble of a 44.1 kHz decode …', item 1172) needs its first run and its TODO tolerance measured, and every export test should run with it. A Full release.
       📍 **BUILT v17.52, REMAINS OPEN only for the queue order (a hunt finding closes after his own items)** — an export decodes each clip at the 48 kHz mix itself; the test reads the export's 10–15 and 15–20 kHz
@@ -37614,8 +37626,8 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       tools/_fu_gate.py SIMPLE_FILES lists spine.js, spine-words.js, simple-timeline.js, editor-mode.js and simple-tools.js. A release changing only spine-edit.js or the new editor-morph.js fires the gate only through its hooks (Simple's names) or blame (a line a Simple release wrote): most changes would, a new line naming nothing Simple would not. Adding the two is an INSTRUMENT change, so it is a release of its own with its own Full-unchanged PASS.
 
-- [ ] **1174 — A toast raised while Insert your Media is open was painted under the sheet, so a failed media swap said nothing (hunt MEDIUM #1174)** (16 Oct — found by the agent building Simple's template Replace; NOT his words, but it is the silence #619 is about)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1174 — A toast raised while Insert your Media is open was painted under the sheet, so a failed media swap said nothing (hunt MEDIUM #1174)** (16 Oct — found by the agent building Simple's template Replace; NOT his words, but it is the silence #619 is about)
+      ✅ **SHIPPED IN v17.53** (20 Oct hand-off audit): the toast over Insert your Media shipped in v17.53, its test fixed in v17.54.
       #toast is z-index 60 and the Insert your Media sheet (#tpl-fill) 165, so the sheet's own "Could not load that file" and "Media was
       not replaced…" were invisible over it, in both editors: a swap that failed looked like a tap that did nothing.
       🔨 BUILT v17.53 (REMAINS OPEN only for the queue order — a hunt finding closes after his own items): while the sheet is open the toast sits over it (read off the sheet's own state, as the
@@ -37686,6 +37698,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v17.80 (20 Oct): bug hunt 5** (the PM's week pace; one HIGH-pair exception to the hold for data damage on every Undo): #1 sanitizeTiming's volume / speed clamps now FM.LIMITS (the panels' own ranges); #2 the 200-key cap on effect and mask keyframes → 3600 s × 120 fps + 1; #3 restore() mutes the editors' close-commits (Redo kept); #8 Duplicate / Duplicate selection / Paste / Extract audio abandon when an Undo replaced the scene during their load; #4 evalShapeSubs at a key's own time; #5 Draw more / eraser re-map every other key (reboxKeySubs); #6 tracker keys linear; #7 tracker honours Flip; #9 mask keys keep bez / ez / loopMode; #10 graph editor leaves a not-yet-started channel; #11 a tap selects a point without a key; #12 Detect speech re-reads its layers after the awaits; #13 FM.loopKfTime loops mask paths and drawings (evalProp keeps a fast path). SCHEMA_REV 26, FP pinned. Write-ups: the builder's scratchpad bh5/HUNT.md and REFUTE.md. **For later:** the duration cap (1 % speed on a clip over 36 s passes 3600 s); ai-ops.js / audio-fx-live.js volume literals not yet read from FM.LIMITS; masks.js easeF ignores `ez`; an edit still in flight when ↶ arrives is still lost (needs a flush in undo(), which is Simple-locked).
       📍 **v17.81 (20 Oct):** bug hunt 6 #1 (sw.js pruneSuperseded resolved names against the bare origin, so on the /FreeMotion/ project site nothing was ever pruned — every cached ?v= of every file kept; now resolved against the page, and the first launch sweeps the backlog by the same rule); hunt 5's later trio (A the duration cap follows FM.LIMITS.duration = 3600 / 0.01; B ai-ops and audio-fx-live read FM.LIMITS.volume; C mask easeF honours `ez` through FM.easeApply); and TEST ISOLATION (the PM's 20 Oct ask): 11 tests that inherited state set it up themselves, the 5 sources clean up in their own finally, 10 dead clean-up calls (FM.media.delete / unpin) fixed, and a per-test leak check in the runner (leakPrint / leakDiff → `leaks` in the summary, LEAKS lines in ship.log; report-only, LEAKS_ARE_RED to flip). The first full run reported 401 leak lines — most the quality ladder's tier moving with playback, the rest media records and a few scene swaps. SCHEMA_REV 27. **Hunt 6, still to fix:** #14, #2, #3, #9 (Full only, ⌘D left), #7, #6, #10, #11, #12, #13, #15; #4 with the next instrument release; #5 with a Simple release. **Possible app bug (from the preset-preview test):** fx-thumbs' photosChanged → remountLive can store a picture under a key minted for other content.
       📍 **v17.82 (20 Oct): bug hunt 6, the rest** — #14 FM._swReloadWhenIdle holds the update's reload while exporting / recording / saving; #9 otherScriptLetter (Cyrillic and other scripts map by e.code, Latin layouts untouched; ⌘D left out with Simple's) in the editor and the draw tool; #2 the offline launch races ~8 s, serves the marked fallback, refreshes it late only if its scripts are cached; #3 the codec probe moved before the decode, with an offer of the largest MP4 size; #7 ⌘Z/⌘Y pass a slider or tick box (typingText); #6 Tab over the drawn rows only; #10 Space ignores repeats; #11 Exact size re-seeds per open; #12 the 900-frame card warning; #13 FM.audioFxRoom caps audio effects at 16; #15 starring keeps unknown favourites. Plus the leak-source fixes (isoKeep / isoMediaSnap helpers, ~110 tests wrapped) and the quality ladder out of the leak fingerprint (its tier and latches move on their own during playback); the tests that inherited what the old leakers left (queue 250, 348/393, 501, 658, the five keyboard tests) now build what they need. **For later:** #4 (rollback.sh re-bumps restored ?v=) with the next instrument release; #5 (Alt in Simple runs Full's keys) with a Simple release; #14's gaps (the file pick to autosave window, a WAV / M4A export, an AI request); recents still drop unknown ids; **the Windows AAC pass should drive a dedicated test Chrome (Chrome for Testing or a portable build), independent of his daily browser and its pending update — v17.66 and v17.81 were each refused once because his Chrome would not launch the test page; needs his yes for the download, ask as one line when due**.
+      📍 **v17.84 (20 Oct): bug hunt 4 leftovers** — #3c pivotFree counts a tilt and tiltPivot's R comes from the rest box (FM.groupRestBoundsLocal), and a tilt write stores the pivot; #3b the tilt plate and a tilted group's unit grow past the frame when the layer reaches past it (tiltPlateRegion: max(16 px, 5 %), at most 0.6 of the frame per side, marked __fmCamExt); #10b groupMemberSpan follows a member's Flip and unlinked Width / Height; #6 RTL under Animate by Character / Word places units in visual order (bidiLevels / bidiOrder, a cut-down UAX #9; a unit's level from its strong characters, bug hunt 7 #1 rides in v17.85). **For later:** Word Highlight and curved text under RTL, and the group box's rotation / skew / nested scale (built on hunt/v90); the tilt plate still cuts a layer's effects and a long shadow at the frame.
       📥 **From INBOX.md, logged 20 Oct, verbatim (the PM's route-A decision for closing team notes):**
       > ### 20 Oct 2026, ~11:05 AWST — PM decision on the hand-off audit: route A (a `(team)` tag), shipped with the privacy batch, no standalone tools ship
       > **Context:** the builder's hand-off audit (its scratchpad handoff-audit.md) found 40 team notes DONE or SUPERSEDED. ship.sh's oldest-first gate refuses ticking them while #980 is open, and #980 must not be JUMPED.
@@ -37739,3 +37752,6 @@ re-opened #480, which I had marked done and had not fixed.
       - **Builder chat:** two code-only agents in parallel, and a third when the weekly is a point or more under the new line. The first runs the #966 options rounds. The second runs a bug hunt with refuters over everything shipped since v17.50. The third takes the next LAND-LIST item, or a Simple Phase 3 part that needs no pick from him.
       - **The PM paces it.** It reads get_usage every tick and trims back to one agent if the weekly runs more than a point over the line.
       - **"Smart ways":** no padding. Every agent works on something that ships, or that finds real defects (findings must survive a refuter).
+- [ ] **1178 — ship.sh still swallows a failing status.sh: it runs `./tools/status.sh >/dev/null 2>&1 || true` (hunt LOW #1178)** (20 Oct — moved out of #953 by the hand-off audit; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      - #953 asked for the status.sh failure to stop being swallowed; status.sh itself was fixed, this half never was.
