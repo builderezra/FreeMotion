@@ -171847,4 +171847,104 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ 1176 leftover (after v17.85's time bounds): A FADE CARRIED ACROSS A CUT ON A CLIP OVER AN HOUR LONG WAS MEASURED OVER A SPAN CUT AT 3600 s
+     bughunt3 #3 carries a fade across a cut: each half keeps how far the clip it came from reaches past its own edges (fadeInLead,
+     fadeOutTail), and FM.fadeWindows / FM.fadeMul measure the fade over that whole span. js/scene.js FM.fadeWindows held each span
+     to 3600 s, calling that the longest clip storage keeps. It is not any more: a clip may be FM.LIMITS.duration long (hunt5 later
+     A), and v17.85 stopped the sanitiser cutting its times at an hour. Past an hour the span was cut, so a fade long enough to
+     reach past the cut-off (one a stored project carries; the panels offer 10 s and an AI edit 60 s) read a different number on
+     each side of the cut, and a half cut again built its span from the cut one. Two pairs of halves, written as FM.splitLayer
+     writes a cut inside a fade (js/app.js: the head's fadeOutTail is the original's end minus the cut, the tail's fadeInLead is
+     the cut, both halves keep the fade):
+       · a 10,000 s clip with a 5,000 s fade-out, cut at 6,000 s: the head's span is 4,000 s, so it ends at 0.8 where the tail
+         starts at 0.8. Cut to 3,600, the head ended at 0.72, a step down you hear at the cut;
+       · a 7,000 s clip with a 5,000 s fade-in, cut at 4,000 s: the tail's span is 4,000 s, so it starts at 0.8 where the head
+         ends at 0.8. Cut to 3,600, the tail started at 0.72.
+     Now a span reaches as far as FM.LIMITS.duration, the longest clip storage keeps, and is still finite.
+     FAILS BEFORE THE FIX: the spans read back 3600, the fade-out's head ends at 0.72 and the fade-in's tail starts at 0.72.
+     CONTROLS, which hold before and after: the other half of each pair reads 0.8 at the cut (else the halves are not what a split
+     writes, and the test stops as a setup failure); the fade-out's head plays at full level from its start; a 10 s clip with a
+     2 s fade-in and a 3 s fade-out, and a half with a 1 s span, read exactly what they always did; an absurd span stays finite
+     and no longer than FM.LIMITS.duration, and a word, a non-finite or a negative one still means none. Plain layer objects:
+     nothing in the scene, nothing saved. */
+  test('1176 leftover: a fade carried across a cut on a clip over an hour long reads the same on both sides of the cut: a 10,000 s clip cut at 6,000 s inside its 5,000 s fade-out, and a 7,000 s clip cut at 4,000 s inside its 5,000 s fade-in, each read 0.8 on both halves at the cut, every half keeping its whole span (CONTROLS: the other halves read 0.8; ordinary fades and a short span read as before; an absurd span stays finite)', { item: '1176' }, function () {
+    if (typeof FM.fadeWindows !== 'function' || typeof FM.fadeMul !== 'function' || !FM.LIMITS || !(FM.LIMITS.duration > 3600)) throw new Error('setup: FM.fadeWindows, FM.fadeMul or an FM.LIMITS.duration over an hour is not reachable');
+    const near = (a, b) => typeof a === 'number' && Math.abs(a - b) < 1e-9;
+    const r3 = x => Math.round(x * 1000) / 1000;
+    const bad = [];
+    /* a 10,000 s clip, its fade-out 5,000 s (from 5,000 s), cut at 6,000 s */
+    const outHead = { fadeIn: 0, fadeOut: 5000, fadeOutTail: 4000 }, outTail = { fadeIn: 0, fadeOut: 5000, fadeInLead: 6000 };
+    const otStart = FM.fadeMul(outTail, 0, 4000);
+    if (!near(otStart, 0.8)) throw new Error('setup: the tail of the fade-out reads ' + otStart + ' at its start, not 0.8, so the halves are not what a split writes');
+    const ohEnd = FM.fadeMul(outHead, 6000, 6000), ohSpan = FM.fadeWindows(outHead, 6000).tail;
+    if (!near(ohEnd, 0.8) || ohSpan !== 4000) bad.push('the head of a 10,000 s clip cut at 6,000 s inside its fade-out reads ' + r3(ohEnd) + ' at the cut where the tail starts at 0.8 (its span read back ' + ohSpan + ' s of 4,000)');
+    const otSpan = FM.fadeWindows(outTail, 4000).lead;
+    if (otSpan !== 6000) bad.push('the tail of that clip read back a span of ' + otSpan + ' s of the 6,000 it reaches back, so cutting it again would carry the wrong one');
+    /* a 7,000 s clip, its fade-in 5,000 s, cut at 4,000 s */
+    const inHead = { fadeIn: 5000, fadeOut: 0, fadeOutTail: 3000 }, inTail = { fadeIn: 5000, fadeOut: 0, fadeInLead: 4000 };
+    const ihEnd = FM.fadeMul(inHead, 4000, 4000);
+    if (!near(ihEnd, 0.8)) throw new Error('setup: the head of the fade-in reads ' + ihEnd + ' at the cut, not 0.8, so the halves are not what a split writes');
+    const itStart = FM.fadeMul(inTail, 0, 3000), itSpan = FM.fadeWindows(inTail, 3000).lead;
+    if (!near(itStart, 0.8) || itSpan !== 4000) bad.push('the tail of a 7,000 s clip cut at 4,000 s inside its fade-in starts at ' + r3(itStart) + ' where the head ends at 0.8 (its span read back ' + itSpan + ' s of 4,000)');
+    /* ── CONTROLS */
+    if (!near(FM.fadeMul(outHead, 0, 6000), 1)) bad.push('CONTROL: the head of the fade-out does not play at full level from its start (' + r3(FM.fadeMul(outHead, 0, 6000)) + ')');
+    const plain = { fadeIn: 2, fadeOut: 3 }, w = FM.fadeWindows(plain, 10);
+    if (!(w.fi === 2 && w.fo === 3 && w.lead === 0 && w.tail === 0)) bad.push('CONTROL: a 10 s clip with a 2 s fade-in and a 3 s fade-out gave windows ' + [w.fi, w.fo, w.lead, w.tail].join(' / ') + ', not 2 / 3 / 0 / 0');
+    [[1, 0.5], [5, 1], [8.5, 0.5]].forEach(([t, want]) => {
+      const g = FM.fadeMul(plain, t, 10);
+      if (!near(g, want)) bad.push('CONTROL: the 10 s clip reads ' + r3(g) + ' at ' + t + ' s, not ' + want);
+    });
+    const shortSpan = { fadeIn: 3, fadeOut: 0, fadeInLead: 1 };
+    [[0, 1 / 3], [2, 1]].forEach(([t, want]) => {
+      const g = FM.fadeMul(shortSpan, t, 9);
+      if (!near(g, want)) bad.push('CONTROL: a half with a 1 s span reads ' + r3(g) + ' at ' + t + ' s, not ' + r3(want));
+    });
+    const wild = FM.fadeWindows({ fadeIn: 1e9, fadeOut: 0, fadeInLead: 1e12 }, 10).lead;
+    if (!(isFinite(wild) && wild > 0 && wild <= FM.LIMITS.duration)) bad.push('CONTROL: an absurd span read back ' + wild + ', not a finite one no longer than FM.LIMITS.duration');
+    ['x', Infinity, NaN, -5].forEach(v => {
+      const l = FM.fadeWindows({ fadeIn: 2, fadeOut: 0, fadeInLead: v }, 10).lead;
+      if (l !== 0) bad.push('CONTROL: a span of ' + String(v) + ' read back ' + l + ', not none');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (after v17.85's time bounds): AN AI-WRITTEN KEY ON A CLIP OVER AN HOUR LONG WAS MOVED TO 3600 s ══════════════
+     js/ai-ops.js addKeyframe, the one door every Director stage and the Assistant write keys through, held each key's time to
+     0..3600, the longest project. A clip is not held to the project: one over an hour long (a long recording, a clip slowed on the
+     Speed card) carries key times past 3600, and v17.85 stopped the sanitiser cutting them there. The AI's were still cut: asked
+     for opacity keys at 100 s and 4,200 s on a 5,000 s clip, the second landed at 3,600 s (and one asked at 9,000 s on top of it,
+     so it was dropped as a duplicate), and on a clip dragged to start at -1,000 s a key asked at -500 s, on the clip, was moved
+     to 0. Now a key time is held to the project's range widened to the clip's own span, [min(0, start), max(3600, end)], inside
+     the range js/storage.js keeps. Driven through FM.aiOps.applyOps itself, on a stand-in scene of four text layers swapped in
+     for the call and put back before anything else runs (the call is synchronous; nothing is saved or committed).
+     FAILS BEFORE THE FIX: the long clip's keys land at 100 and 3600, the early clip's at 0 and 3600.
+     CONTROLS, which hold before and after: every op applied; on a 10 s clip keys asked at -3, 2 and 5,000 s land at 0, 2 and
+     3,600, and on a clip starting at 0.4 s keys asked at 0 and 1 s stay at 0 and 1 (the Director keys a layer from 0 before it
+     starts), exactly as before. */
+  test('1176 leftover: an AI-written key on a clip over an hour long lands where it was asked: on a 5,000 s clip keys at 100 and 4,200 s stay there and one at 9,000 s is held to the clip’s end, and on a clip dragged to start at -1,000 s a key at -500 s stays there (CONTROLS: every op applied; on a 10 s clip keys at -3, 2 and 5,000 s land at 0, 2 and 3,600, and on a clip starting at 0.4 s keys at 0 and 1 s stay put, as before)', { item: '1176' }, function () {
+    if (!FM.aiOps || typeof FM.aiOps.applyOps !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.aiOps.applyOps or FM.makeLayer is not reachable');
+    const mk = (name, start, duration) => { const L = FM.makeLayer('text', { name: name, start: start, duration: duration }); L.start = start; L.duration = duration; return L; };
+    const LONG = mk('1176 long clip', 0, 5000), BACK = mk('1176 clip before zero', -1000, 5000), SHORT = mk('1176 short clip', 0, 10), LATE = mk('1176 later clip', 0.4, 2);
+    const op = (L, keys) => ({ op: 'addKeyframe', ref: L.id, path: 'transform.opacity', keys: keys });
+    const saved = FM.scene;
+    let log = null;
+    try {
+      FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 3600, background: '#000000' }, layers: [LONG, BACK, SHORT, LATE], selectedId: null, selectedIds: [] };
+      log = FM.aiOps.applyOps([
+        op(LONG, [{ t: 100, v: 0 }, { t: 4200, v: 1 }, { t: 9000, v: 0.5 }]),
+        op(BACK, [{ t: -500, v: 0 }, { t: 3900, v: 1 }]),
+        op(SHORT, [{ t: -3, v: 0 }, { t: 2, v: 1 }, { t: 5000, v: 0.5 }]),
+        op(LATE, [{ t: 0, v: 0 }, { t: 1, v: 1 }])
+      ], {});
+    } finally { FM.scene = saved; }
+    const times = L => { const p = L.transform && L.transform.opacity; return p && Array.isArray(p.kf) ? p.kf.map(k => k.t).join(', ') : 'no keys'; };
+    if (!log || log.appliedCount !== 4 || log.dropped.length) throw new Error('setup: the four addKeyframe ops did not all apply (' + (log ? log.appliedCount + ' applied; dropped: ' + log.dropped.map(d => d.reason).join('; ') : 'no log') + ')');
+    const bad = [];
+    if (times(LONG) !== '100, 4200, 5000') bad.push('on a 5,000 s clip keys asked at 100, 4,200 and 9,000 s landed at ' + times(LONG) + ', not 100, 4200, 5000');
+    if (times(BACK) !== '-500, 3900') bad.push('on a clip starting at -1,000 s keys asked at -500 and 3,900 s landed at ' + times(BACK) + ', not -500, 3900');
+    if (times(SHORT) !== '0, 2, 3600') bad.push('CONTROL: on a 10 s clip keys asked at -3, 2 and 5,000 s landed at ' + times(SHORT) + ', not 0, 2, 3600 as before');
+    if (times(LATE) !== '0, 1') bad.push('CONTROL: on a clip starting at 0.4 s keys asked at 0 and 1 s landed at ' + times(LATE) + ', not 0, 1 as before');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();

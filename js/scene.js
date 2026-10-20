@@ -1281,10 +1281,15 @@ window.FM = window.FM || {};
      * when they overlap. A half carries the same span: the head's tail reaches on to E, the tail half's lead reaches back to S, so
      * each moment gets the number it had before the cut, the squeeze included. A half cut again adds to them (FM.splitLayer).
      * Absent, 0, or not a finite positive number means exactly what it always meant: every expression below reduces to the old one.
-     * Capped at an hour, the longest clip storage keeps, so no schedule built from them can overflow to a non-finite time (the
-     * reversed preview divides by the preview rate). A trim moves an edge and the span with it, exactly as a trim always moved a
-     * fade with its edge; a fade set by hand (the volume panel, an AI edit) clears its own side's span, so it starts at the edge. */
-    const span = v => Math.min(3600, num(v));
+     * Capped at FM.LIMITS.duration, the longest clip storage keeps (a span reaches no further than the clip it was cut from), so
+     * no schedule built from them can overflow to a non-finite time (the reversed preview divides by the preview rate). 1176
+     * leftover: the cap was 3600, written when an hour was the longest clip; since hunt5 later A a clip may be far longer, and since
+     * v17.85 the sanitiser keeps its times past the hour, so a span on a clip over an hour long was cut here, and a fade long enough
+     * to reach past the cap (one a stored project carries: the panels offer 10 s, an AI edit 60 s) read a different number on each
+     * side of the cut. Read at the call, so a widened FM.LIMITS moves it too. A trim moves an edge and the span with it, exactly
+     * as a trim always moved a fade with its edge; a fade set by hand (the volume panel, an AI edit) clears its own side's span,
+     * so it starts at the edge. */
+    const span = v => Math.min(FM.LIMITS.duration, num(v));
     const lead = span(layer.fadeInLead), tail = span(layer.fadeOutTail);
     if (clipDur > 0 && fi + fo > clipDur + lead + tail) { const k = (clipDur + lead + tail) / (fi + fo); fi *= k; fo *= k; }
     return { fi: fi, fo: fo, lead: lead, tail: tail };

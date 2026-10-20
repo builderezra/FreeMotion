@@ -412,9 +412,18 @@ window.FM = window.FM || {};
               if (!pdef || pdef.type !== 'range' || pdef.keyframable === false) { drop(o.op, ref, 'effect param not keyframeable'); break; }
               container = fx.params; key = pkey; range = [pdef.min, pdef.max];
             } else { drop(o.op, ref, 'bad keyframe path'); break; }
+            /* 1176 leftover (after v17.85's time bounds): A KEY TIME IS HELD TO WHERE A TIME ON THIS CLIP CAN BE. It was held to
+               0..3600, the longest project, but a clip is not held to the project: one over an hour long (a long recording, a clip
+               slowed on the Speed card) carries times past 3600, and v17.85 stopped the sanitiser cutting them there, so a key the
+               AI put at 4,200 s on a 5,000 s clip landed at 3,600 and the change it asked for came ten minutes early. Now it is the
+               project's range widened to the clip's own span, [min(0, start), max(3600, end)], inside the
+               ±(3600 + FM.LIMITS.duration) js/storage.js keeps (clipTimeBound): a clip inside the project is held exactly as
+               before, and a longer one gets its keys where they were asked, up to its own end. */
+            var tB = 3600 + FM.LIMITS.duration, tS = num(layer.start, 0), tE = tS + Math.max(0, num(layer.duration, 0));
+            var tLo = clamp(tS, -tB, 0), tHi = clamp(tE, 3600, tB);
             var kf = keys.map(function (k) {
               var v = num(k && k.v, 0); if (range) v = clamp(v, range[0], range[1]);
-              var o2 = { t: clamp(num(k && k.t, 0), 0, 3600), v: v, e: snap(k && k.e, FM.EASE_NAMES, 'easeInOut') };
+              var o2 = { t: clamp(num(k && k.t, 0), tLo, tHi), v: v, e: snap(k && k.e, FM.EASE_NAMES, 'easeInOut') };
               if (k && k.bezPreset && FM.EASE_PRESETS[k.bezPreset]) o2.bez = FM.EASE_PRESETS[k.bezPreset].slice();
               return o2;
             }).sort(function (a, b) { return a.t - b.t; });
