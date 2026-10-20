@@ -119,8 +119,12 @@ window.FM = window.FM || {};
      `cycle`, Page Curl `back` and a Back colour (`color`, greyed except under Solid colour), Bleach Bypass `skin` and a Silver tint
      (`color`), Colourize `sat` and `light`, Soften Skin `brighten` and `view` (Brighten greys out under Show selection), Split Toning
      `blending`, Tiles `axis` and `fade` (both greyed under Grid). Every default draws what the effect drew before, but an older
-     build's sanitiser would drop the new keys, so the two would normalise one project differently. */
-  C.SCHEMA_REV = 27;
+     build's sanitiser would drop the new keys, so the two would normalise one project differently.
+     Rev 28 (v17.85, bug hunt 7 #3 and its leftovers): the sanitiser stops cutting a clip's trimStart, start, effect / audio /
+     mask key times and caption word starts at 3600 s (trimStart up to FM.LIMITS.duration x the top speed, the rest to
+     3600 + FM.LIMITS.duration). A rev-27 owner's tidy-up and fix ops would cut a rev-28 guest's long clip back to an hour,
+     and a rev-27 guest's reopen would send the cuts as owed edits, so the two must not join. fp_2 in the fixture pins it. */
+  C.SCHEMA_REV = 28;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -246,6 +250,14 @@ window.FM = window.FM || {};
       speed: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 2, e: 'easeIn' }] },
       // Simple mode (SCHEMA_REV 8): junk, a plain unknown sub-key and a newer build's object sub-key, side by side
       sm: { main: 'yes', stay: true, row: 2, future: { a: 1 } }, srcW: 1920, srcH: -4, srcRev: 0, pick: { b: 'pk1', i: 2, x: 1 }
+    }, {
+      /* Rev 28: the time bounds. Each value is either kept by rev 28 and cut by rev 27, or past the new bound, so the
+         clamp result pins the bound itself (the v17.85 storage review). */
+      id: 'fp_2', type: 'text', name: 'Long', start: -1e9, duration: 4, trimStart: 1e12,
+      text: 'a b', transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      captions: [{ start: 0, end: 5000, text: 'a b', words: [0, 4000] }],
+      masks: [{ id: 'fpm2', mode: 'add', path: { kf: [{ t: 5000, v: [[0, 0], [8, 0], [8, 8]], e: 'linear' }, { t: 1e12, v: [[0, 0], [8, 0], [8, 8]], e: 'linear' }] } }],
+      effects: [{ type: 'blur', enabled: true, params: { radius: { kf: [{ t: -1e12, v: 1, e: 'linear' }, { t: 5000, v: 2, e: 'linear' }] } } }]
     }];
   };
   /* …and a project carrying Simple's project keys (SCHEMA_REV 8): `home` any string ≤ 32 is kept, `v` clamped, junk dropped. */
@@ -331,7 +343,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =813560502119456;   // SCHEMA_REV 27 on v17.80 + hunt/iso (#1176, hunt 5's later fixes): the sanitiser keeps a clip's duration up to FM.LIMITS.duration (3600 s at 1 % speed), so a v17.80 peer would cut it. Pinned 20 Oct with fp.js at rev 27.
+  C.SCHEMA_FP =4487778860768040;   // SCHEMA_REV 28 on v17.84 + bug hunt 7 and its leftovers (#1176): the sanitiser keeps a clip's trimStart, start, key times and caption word starts past 3600 s, and fp_2 in the fixture pins those bounds. Pinned 20 Oct with fp.js at rev 28.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
