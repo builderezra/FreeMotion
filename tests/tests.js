@@ -165948,6 +165948,113 @@
     });
   });
 
+  /* (1176 leftover, Word Highlight) A RIGHT-TO-LEFT LINE'S HIGHLIGHT WAS LAID OUT IN TYPING ORDER. Still, the line is one fillText and the
+     canvas draws a Hebrew or Arabic line's first word typed at the RIGHT end; drawHighlightLines placed each word's box, underline and
+     lit colour at the advance of the text typed BEFORE it, measured from the line's LEFT edge (hlGeom), so the first word's box sat
+     over the left end of the line, on another word. Animated, bughunt4 #6 had kept such a layer's units in typing order (hlOn) for
+     that reason, so the whole line came out mirrored the moment it carried a Word Highlight, lit or not, and hlAnimLine's boxes rode
+     the mirrored words. Now a line holding a right-to-left letter is measured where it is drawn (compositor.js bidiSpanFn, hlGeomVis,
+     hlRunsVis; animated, hlAnimLineVis on bidiUnitXs' edges), and the animated units read as they do without a highlight.
+     The lines are bughunt4 #6's, 40 px white text centred at 160 on _bh2Frame's black frame (Hebrew א, three spaces, בבבבבב: the six
+     letters on the left, about 130 px of them, the one letter on the right past a gap of about 33 px; Arabic لا, three spaces, مدرسة).
+     The Word Highlight lights one word by Progress (0.25 the first word typed, 0.75 the second; two words), in a pure red box with
+     4 px of Padding and square corners, or in Colour, pure red.
+     FAILS BEFORE THE FIX: still, the first word's box is drawn over the left end of the line (about 165 px left of the letter it
+     lights) and the second word's from about a third of the way in to past the right end; in Colour the red falls on the six
+     letters' left end; the Arabic first word's box is on the left. Under Fade by word and by character the white text's gap is
+     mirrored about its middle (about 108 px off) and the red letter is the mirrored א at the left end. Under Fade by line the text
+     is drawn right (one fillText) but the red falls on the six letters' left end, as still. (The animated boxes are compared with
+     the still ones, which were wrong the same way, so it is the still checks that catch them.)
+     CONTROL: still with no highlight, the canvas puts the Hebrew and the Arabic gap right of the middle and a Latin line's left of
+     it; FM._hlUnits says Progress 0.25 lights the first word and 0.75 the second; a Latin line's boxes sit on its words, still and
+     under every Fade, and its animated boxes and gap are the still ones; each Fade is on (FM.textHasAnim) and finished at 1 s.
+     TOL: 4 px between an animated box edge or gap and the still one (bughunt4 #6's: By Character each glyph is placed alone, which
+     drops any kerning); 1 px of slack where a box must cover a word's ink (its 4 px of Padding stand past the word's advance, and a
+     half-covered column is not counted red) and 2 px where a red letter must lie inside its word's ink. The faults are 30 px or more.
+     Not run when written (code only). */
+  test('1176 leftover: Word Highlight on right-to-left text lights each word where it is drawn: on a Hebrew line of a one-letter word, three spaces and a six-letter word, still, the first word’s box sits on the right-hand letter and the second word’s on the six letters, and in Colour the right-hand letter is the one drawn red; under Fade by word, by character and by line the text keeps the still gap and each box and red letter lands where the still one is; an Arabic line’s first word is boxed on the right (CONTROLS: still, the canvas puts the first word on the right; Progress lights the word it names; a Latin line’s boxes sit on its words, still and animated; each Fade is on and finished)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function' || typeof FM._hlUnits !== 'function' || typeof FM.applyTextEffects !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim / FM._hlUnits / FM.applyTextEffects are not reachable');
+    await _bh2With(async function () {
+      const T = 1, TOL = 4, PAD = 4;
+      const HEB = 'א   בבבבבב', ARA = 'لا   مدرسة', LAT = 'a   bbbbbb';
+      const L = FM.makeLayer('text', { name: '1176 highlight title', text: HEB, x: 160, y: 120, fontSize: 40, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L];
+      const STILL = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      const fade = unit => ({ preset: 'fade', unit: unit, durIn: 0.3, durOut: 0, stagger: 0.05 });
+      const BOX = 1, COLOUR = 0;
+      /* A Word Highlight lighting word `word` of two by Progress (0 the first typed, 1 the second): Box behind (pure red, 4 px Padding,
+         square corners) or Colour (pure red). */
+      const hl = (word, style) => [{ type: 'wordhighlight', enabled: true, params: { follow: 0, progress: word === 0 ? 0.25 : 0.75, unit: 0, style: style, color: '#ff0000', boxcolor: '#ff0000', padding: PAD, radius: 0, past: 0 } }];
+      /* One frame of `text` under `anim` with the effects `fx`: its WHITE ink by column (each channel above 180; a lit red letter and the
+         box are not white), the widest empty run inside it (the gap between the words) and the two words' ink either side of it; and
+         the columns of its pure-red pixels (_bh2Frame: the box, or a letter lit red). */
+      const shot = (text, anim, fx) => {
+        L.text = text; L.textAnim = Object.assign({}, anim); L.effects = fx;
+        delete L._wrapCache;
+        const f = _bh2Frame(T), col = new Uint8Array(320);
+        for (let i = 0, n = 0; i < f.d.length; i += 4, n++) if (f.d[i] > 180 && f.d[i + 1] > 180 && f.d[i + 2] > 180) col[n % 320] = 1;
+        let x0 = -1, x1 = -1;
+        for (let x = 0; x < 320; x++) if (col[x]) { if (x0 < 0) x0 = x; x1 = x; }
+        let gw = 0, gap = -1, run = 0;
+        for (let x = x0 + 1; x0 >= 0 && x <= x1; x++) {
+          if (!col[x]) { run++; continue; }
+          if (run > gw) { gw = run; gap = ((x - run) + (x - 1)) / 2; }
+          run = 0;
+        }
+        return { x0: x0, x1: x1, mid: (x0 + x1) / 2, gap: gap, gw: gw, lw: [x0, gap - (gw + 1) / 2], rw: [gap + (gw + 1) / 2, x1], red: f.red, r0: f.x0, r1: f.x1, anim: !!FM.textHasAnim(L) };
+      };
+      const say = r => 'white ink at columns ' + r.x0 + '..' + r.x1 + ' (middle ' + r.mid + '), its widest gap ' + r.gw + ' px centred at ' + r.gap;
+      const sayRed = r => r.red + ' red px at columns ' + r.r0 + '..' + r.r1;
+      const span = w => w[0] + '..' + w[1];
+      // the red covers word `w`'s ink (1 px of slack) and stops short of the other word's ink `o`
+      const boxed = (r, w, o) => r.red > 0 && r.r0 <= w[0] + 1 && r.r1 >= w[1] - 1 && (o[0] > w[1] ? r.r1 < o[0] : r.r0 > o[1]);
+      const bad = [];
+
+      /* ── CONTROLS: still with no highlight, the first word of an RTL line is on the right and a Latin line's on the left; Progress
+         lights the word it names (the units, without pixels); a Latin line's boxes sit on its words. */
+      const sH = shot(HEB, STILL, []), sA = shot(ARA, STILL, []), sL = shot(LAT, STILL, []);
+      if (sH.anim || sA.anim || sL.anim) bad.push('CONTROL: the still layer has an Animate preset by FM.textHasAnim, so “still” is not the still path');
+      if (sH.x0 < 0 || sH.gw < 15 || !(sH.gap - sH.mid >= 20)) bad.push('CONTROL: still, the Hebrew line is ' + say(sH) + ': not two words with the gap right of the middle, so this browser does not lay it out right to left and the orders cannot be told apart');
+      if (sA.x0 < 0 || sA.gw < 15 || !(sA.gap - sA.mid >= 10)) bad.push('CONTROL: still, the Arabic line is ' + say(sA) + ': not two words with the gap right of the middle');
+      if (sL.x0 < 0 || sL.gw < 15 || !(sL.mid - sL.gap >= 20)) bad.push('CONTROL: still, the Latin line is ' + say(sL) + ': not two words with the gap left of the middle');
+      [0, 1].forEach(word => {
+        L.effects = hl(word, BOX);
+        const st = FM.applyTextEffects(L, HEB, 0, T, FM.scene), lit = st.highlight ? FM._hlUnits(L, T, [HEB], st.highlight)[0].map(u => u.on ? 1 : 0).join('') : '(no highlight)';
+        if (lit !== (word === 0 ? '10' : '01')) bad.push('CONTROL: Progress ' + (word === 0 ? 0.25 : 0.75) + ' lights the words ' + lit + ', not only word ' + (word + 1) + ' of two, so the boxes below are not the words this test names');
+      });
+      const lb0 = shot(LAT, STILL, hl(0, BOX)), lb1 = shot(LAT, STILL, hl(1, BOX)), lc0 = shot(LAT, STILL, hl(0, COLOUR));
+      if (!boxed(lb0, sL.lw, sL.rw)) bad.push('CONTROL: still, the Latin line’s first word (a, ink ' + span(sL.lw) + ') is boxed at ' + sayRed(lb0) + ' — the box is not on its word even in a left-to-right line');
+      if (!boxed(lb1, sL.rw, sL.lw)) bad.push('CONTROL: still, the Latin line’s second word (ink ' + span(sL.rw) + ') is boxed at ' + sayRed(lb1));
+      if (!(lc0.red > 30 && lc0.r0 >= sL.lw[0] - 2 && lc0.r1 <= sL.lw[1] + 2)) bad.push('CONTROL: still in Colour, the Latin line’s first word (a, ink ' + span(sL.lw) + ') lights ' + sayRed(lc0) + ', not that letter');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── Still: the Hebrew first word (א) is the right-hand ink, the second (בבבבבב) the left; the Arabic first word (لا) the right. */
+      const hb0 = shot(HEB, STILL, hl(0, BOX)), hb1 = shot(HEB, STILL, hl(1, BOX)), hc0 = shot(HEB, STILL, hl(0, COLOUR)), ab0 = shot(ARA, STILL, hl(0, BOX));
+      if (!boxed(hb0, sH.rw, sH.lw)) bad.push('still, the Hebrew first word typed (א, drawn at ink ' + span(sH.rw) + ') is boxed at ' + sayRed(hb0) + (hb0.r0 <= sH.lw[0] + PAD + 1 ? ' — at the line’s left end, over the six letters: the box went by the typing order' : ''));
+      if (!boxed(hb1, sH.lw, sH.rw)) bad.push('still, the Hebrew second word (the six letters, drawn at ink ' + span(sH.lw) + ') is boxed at ' + sayRed(hb1));
+      if (!(hc0.red > 30 && hc0.r0 >= sH.rw[0] - 2 && hc0.r1 <= sH.rw[1] + 2)) bad.push('still in Colour, the Hebrew first word typed (א, drawn at ink ' + span(sH.rw) + ') lights ' + sayRed(hc0) + ', not that letter' + (hc0.red && hc0.r1 < sH.rw[0] ? ' — the six letters’ left end is lit instead' : ''));
+      if (!boxed(ab0, sA.rw, sA.lw)) bad.push('still, the Arabic first word typed (لا, drawn at ink ' + span(sA.rw) + ') is boxed at ' + sayRed(ab0) + (ab0.r1 < sA.gap ? ' — on the left, over the other word' : ''));
+
+      /* ── Fade by word, by character and by line: the text keeps the still gap, every box lands where the still one is (and so on its
+         word), the red letter on its word; the Latin line the same. */
+      [['Fade by word', fade('word')], ['Fade by character', fade('char')], ['Fade by line', fade('line')]].forEach(([name, anim]) => {
+        [[HEB, 'Hebrew', hb0, hb1, hc0, sH], [LAT, 'Latin', lb0, lb1, lc0, sL]].forEach(([text, lang, s0, s1, c0, plain]) => {
+          const ctl = lang === 'Latin' ? 'CONTROL: ' : '';
+          const b0 = shot(text, anim, hl(0, BOX)), b1 = shot(text, anim, hl(1, BOX)), c = shot(text, anim, hl(0, COLOUR));
+          if (!b0.anim) bad.push('CONTROL: ' + name + ' is off by FM.textHasAnim, so this frame did not take the animated path');
+          if (Math.abs(b0.gap - s0.gap) > TOL) bad.push(ctl + 'the ' + lang + ' line under ' + name + ' with its first word boxed has ' + say(b0) + ' where still it has ' + say(s0) + (Math.abs((b0.gap - b0.mid) + (s0.gap - s0.mid)) <= TOL ? ' — mirrored about its middle: a highlighted layer kept its units in typing order' : ''));
+          [[b0, s0, 'first'], [b1, s1, 'second']].forEach(([a, s, which]) => {
+            if (!(a.red > 0) || Math.abs(a.r0 - s.r0) > TOL || Math.abs(a.r1 - s.r1) > TOL) bad.push(ctl + 'under ' + name + ' the ' + lang + ' ' + which + ' word’s box is ' + sayRed(a) + ' where still it is ' + sayRed(s));
+          });
+          const fw = lang === 'Latin' ? plain.lw : plain.rw;   // the first word typed: the left-hand ink of a Latin line, the right-hand of a Hebrew one
+          if (!(c.red > 30 && c.r0 >= fw[0] - 2 && c.r1 <= fw[1] + 2) || Math.abs(c.r0 - c0.r0) > TOL || Math.abs(c.r1 - c0.r1) > TOL) bad.push(ctl + 'under ' + name + ' in Colour the ' + lang + ' first word typed (drawn at ink ' + span(fw) + ' still) lights ' + sayRed(c) + ' where still it lights ' + sayRed(c0));
+        });
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#4) AN ADJUSTMENT LAYER'S BLEND MODE DID NOTHING. Red footage fills the frame, (255, 0, 0); above it an adjustment layer with
      Invert (amount 1), whose graded plate over red is cyan, (0, 255, 255). On cedde93f both blits of the graded plate (applyAdjustment's
      and applyAdjustmentFilters') are hard-wired to source-over and never read layer.blendMode, so every mode the Mixing card offers

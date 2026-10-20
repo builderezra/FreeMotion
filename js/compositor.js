@@ -4268,10 +4268,11 @@ window.FM = window.FM || {};
    * the canvas's own left-to-right direction (UAX #9 rules W1–W7, N1–N2, I1, L1 and L2; no explicit embeddings or isolates), and its
    * units are placed in the visual order it gives. The stagger still counts in typing order, so the first word typed comes in first,
    * on the right. A line with no right-to-left letter never gets past the first test: every left-to-right text draws as it did.
-   * Not built (a layer with a Word Highlight keeps the old order: the highlight lays its boxes out in typing order, on the still path
-   * too, so moving the units alone would take them off their words; Arabic By Character draws each letter unjoined, as it always
-   * has). The curved paths, still and animated, placed their glyphs in typing order too; since 1176 leftover they take the order
-   * bidiGlyphOrder gives (a bracket inside right-to-left text is still drawn alone, unmirrored, there and By Character). */
+   * Not built (Arabic By Character draws each letter unjoined, as it always has). A layer with a Word Highlight kept the old order,
+   * because the highlight laid its boxes out in typing order, on the still path too; since 1176 leftover the boxes follow the words
+   * where they are drawn (hlGeomVis), still and animated, and the units take this order with them. The curved paths, still and
+   * animated, placed their glyphs in typing order too; since 1176 leftover they take the order bidiGlyphOrder gives (a bracket
+   * inside right-to-left text is still drawn alone, unmirrored, there and By Character). */
   const BIDI_RTL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFC\u200F\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
   // One character's bidirectional class (its first code point's, from UnicodeData's ranges for the scripts text is typed in)
   function bidiType(g) {
@@ -4400,10 +4401,42 @@ window.FM = window.FM || {};
     const ord = bidiOrder(bidiLevels(gs));
     return ord.every((k, i) => k === i) ? null : ord;
   }
+  /* 1176 leftover (Word Highlight): where the characters of `s` land when `s` is drawn as ONE fillText whose left edge is x0. The canvas
+     cuts it into runs at one level (bidiLevels), lays the runs out left to right in the order bidiOrder gives them, and draws a
+     right-to-left run from its right end. Returns span(i0, i1) -> { a, b }, the left and right edge of the characters at offsets
+     i0..i1 of `s` (the hull of their pieces when they straddle runs): each run is measured alone, a piece of it by the advance of the
+     run's text before the piece. null when `s` has no right-to-left letter, and the caller measures from the left as it always did. */
+  function bidiSpanFn(ctx, s, x0) {
+    if (!BIDI_RTL.test(s)) return null;
+    const gs = graphemes(s), lv = bidiLevels(gs), runs = [];
+    let off = 0;
+    gs.forEach((g, i) => {
+      const r = runs[runs.length - 1];
+      if (r && r.lv === lv[i]) r.o1 = off + g.length;
+      else runs.push({ o0: off, o1: off + g.length, lv: lv[i] });
+      off += g.length;
+    });
+    let x = x0;
+    bidiOrder(runs.map(r => r.lv)).forEach(k => { const r = runs[k]; r.s = s.slice(r.o0, r.o1); r.w = ctx.measureText(r.s).width; r.x = x; x += r.w; });
+    const adv = (r, n) => n <= 0 ? 0 : n >= r.s.length ? r.w : ctx.measureText(r.s.slice(0, n)).width;
+    return (i0, i1) => {
+      let a = Infinity, b = -Infinity;
+      runs.forEach(r => {
+        const p = Math.max(i0, r.o0) - r.o0, q = Math.min(i1, r.o1) - r.o0;
+        if (q <= p) return;
+        const wp = adv(r, p), wq = adv(r, q), rtl = (r.lv & 1) === 1;
+        const lo = rtl ? r.x + r.w - wq : r.x + wp, hi = rtl ? r.x + r.w - wp : r.x + wq;
+        if (lo < a) a = lo;
+        if (hi > b) b = hi;
+      });
+      return a <= b ? { a: a, b: b } : { a: x0, b: x0 };
+    };
+  }
 
-  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan, upright, hlOn) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)   // upright: Text Curve's Stay upright (#966 opts8)
+  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan, upright) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)   // upright: Text Curve's Stay upright (#966 opts8)
     // plan: textPlanLines' plan for these lines, or null (#966 scramble layout)
-    /* hlOn (bughunt4 #6): the layer carries a Word Highlight, lit or not; its lines keep the typing order (bidiUnitXs says why) */
+    /* 1176 leftover: a layer with a Word Highlight used to keep the typing order here (bughunt4 #6's hlOn), because the highlight laid
+       its boxes out that way; the boxes now follow the units where they are drawn (hlAnimLine), so its lines read as every other's. */
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
     /* Landing with a bounce rather than an ease — the standard piecewise curve. `drop` is the only
@@ -4611,15 +4644,16 @@ window.FM = window.FM || {};
       const lineW = widths.reduce((a, b) => a + b, 0) - (units.length ? sp : 0);
       let x = align === 'center' ? -lineW / 2 : align === 'right' ? -lineW : 0;
       /* bughunt4 #6: a right-to-left line's units go where it reads, each unit's left edge from bidiUnitXs; null (every line with no
-         right-to-left letter, By Line, and a layer with a Word Highlight) lays them out one after another as before */
-      const bidiX = (unit !== 'line' && !hlOn) ? bidiUnitXs(line, units, widths, x) : null;
+         right-to-left letter, and By Line) lays them out one after another as before. Since 1176 leftover a layer with a Word Highlight
+         takes it too, and its boxes are laid out on these same edges (hlAnimLine). */
+      const bidiX = unit !== 'line' ? bidiUnitXs(line, units, widths, x) : null;
       /* #482 12.4 review: on the caret's line, the unit holding Type-On's dark caret (the last, or the first when typing from
          the End) is laid out and animated whole and painted without it — the caret alone paints nothing; a word or a line
          ending in it paints the rest from the same left edge (left-aligned here), shifted by the caret's advance when it leads. */
       const gU = (ghost && ghost.ch && li === (ghost.at === 'start' ? 0 : lines.length - 1) && units.length) ? (ghost.at === 'start' ? 0 : units.length - 1) : -1;
       /* #966 B9: this line's lit words, laid out on THESE units' own advances (each unit is measured alone here). null when no
          Word Highlight is on the layer or nothing on this line is lit, and then every unit is drawn by the two lines it always was. */
-      const hlo = hl ? hlAnimLine(ctx, hl, li, lines.length, units, widths, x, sp, fs, yy, lh) : null;
+      const hlo = hl ? hlAnimLine(ctx, hl, li, lines.length, units, widths, x, sp, fs, yy, lh, bidiX) : null;
       units.forEach((u, ui) => {
         if (bidiX) x = bidiX[ui];
         const w = widths[ui];
@@ -4852,6 +4886,34 @@ window.FM = window.FM || {};
     });
     return runs;
   }
+  /* ═══ 1176 leftover — A RIGHT-TO-LEFT LINE'S BOXES SIT ON ITS WORDS AS DRAWN ═══════════════════════════════════════════════════
+   * What was wrong. hlGeom places a unit at the advance of the line's text BEFORE it in typing order, measured from the line's left
+   * edge, and hlRuns joins units that are neighbours in typing order. Still, a line is one fillText and the canvas lays a Hebrew or
+   * Arabic line out right to left, so the first word typed is drawn at the RIGHT end while its box, its underline and its lit
+   * colour went to the LEFT end, over another word; animated, the layer kept the typing order for its units as well (bughunt4 #6's
+   * hlOn), so a lit right-to-left caption was drawn mirrored, its boxes on the mirrored words.
+   * Now a line holding a right-to-left letter is measured where it is drawn: each unit's span from bidiSpanFn (the still line, or
+   * on the animated path each unit's own fillText at its bidiUnitXs edge), each clip halfway to its neighbour AS DRAWN, and lit
+   * units side by side as drawn joined into one run. A line with no right-to-left letter goes through hlGeom and hlRuns as before. */
+  function hlGeomVis(us, spanOf, sp, fs) {
+    us.forEach(u => { const s = spanOf(u.i0, u.i1); u.a = s.a; u.b = Math.max(u.a, s.b - sp); });
+    const vs = us.slice().sort((p, q) => p.a - q.a);
+    vs.forEach((u, k) => {
+      const prev = vs[k - 1], next = vs[k + 1];
+      u.ca = prev ? (prev.b + u.a) / 2 : u.a - fs;
+      u.cb = next ? (u.b + next.a) / 2 : u.b + fs;
+    });
+  }
+  // …its lit units side by side AS DRAWN, one run each (i0..i1 the hull of their characters)
+  function hlRunsVis(us) {
+    const runs = []; let cur = null;
+    us.slice().sort((p, q) => p.a - q.a).forEach(u => {
+      if (!u.on) { cur = null; return; }
+      if (cur) { cur.b = u.b; cur.cb = u.cb; cur.i0 = Math.min(cur.i0, u.i0); cur.i1 = Math.max(cur.i1, u.i1); }
+      else { cur = { a: u.a, b: u.b, ca: u.ca, cb: u.cb, i0: u.i0, i1: u.i1 }; runs.push(cur); }
+    });
+    return runs;
+  }
   // a line's band: halfway to the next line, and a font size past the first and the last, so no ascender or descender is cut
   function hlBand(li, n, yy, lh, fs) { const h = Math.max(lh, fs); return { y0: li === 0 ? yy - h : yy - lh / 2, y1: li === n - 1 ? yy + h : yy + lh / 2 }; }
   function hlRoundRect(ctx, x, y, w, h, r) {
@@ -4868,6 +4930,14 @@ window.FM = window.FM || {};
   function hlEachRun(ctx, o, draw) {
     o.runs.forEach(r => {
       if (!o.span) { draw(r); return; }
+      /* 1176 leftover: a right-to-left line's run (hlAnimLineVis) is held by the units in r.ks; of those, the leftmost and the rightmost
+         AS DRAWN (r.kL, r.kR) carry its two ends and the Padding beyond them, and every one draws the part over its own advance */
+      if (r.ks) {
+        if (!r.ks.has(o.k)) return;
+        const L = o.k === r.kL ? -HL_BIG : o.slice[0] - o.ox, R = o.k === r.kR ? HL_BIG : o.slice[1] - o.ox;
+        ctx.save(); ctx.beginPath(); ctx.rect(L, -HL_BIG, R - L, 2 * HL_BIG); ctx.clip(); draw(r); ctx.restore();
+        return;
+      }
       const u0 = o.span[0], u1 = o.span[1];
       if (u1 <= r.i0 || u0 >= r.i1) return;   // none of this run's characters are in this unit
       const L = u0 <= r.i0 ? -HL_BIG : o.slice[0] - o.ox, R = u1 >= r.i1 ? HL_BIG : o.slice[1] - o.ox;
@@ -4956,8 +5026,11 @@ window.FM = window.FM || {};
       const o = { paint: paint, base: base, H: H, fs: fs, yy: yy, ox: 0, oy: 0, slice: null, runs: [], on: [], band: hlBand(li, lines.length, yy, lh, fs) };
       if (us.some(u => u.on)) {
         const W = ctx.measureText(line).width, x0 = al === 'center' ? -W / 2 : (al === 'right' || al === 'end') ? -W : 0;
-        hlGeom(us, i => x0 + (i > 0 ? ctx.measureText(line.slice(0, i)).width : 0), sp, fs);
-        o.runs = hlRuns(us); o.on = us.filter(u => u.on);
+        // 1176 leftover: a right-to-left line's units where its one fillText draws them (bidiSpanFn, hlGeomVis); bs null: as before
+        const bs = bidiSpanFn(ctx, line, x0);
+        if (bs) hlGeomVis(us, bs, sp, fs);
+        else hlGeom(us, i => x0 + (i > 0 ? ctx.measureText(line.slice(0, i)).width : 0), sp, fs);
+        o.runs = bs ? hlRunsVis(us) : hlRuns(us); o.on = us.filter(u => u.on);
       }
       return o;
     });
@@ -4968,11 +5041,13 @@ window.FM = window.FM || {};
     ctx.fillStyle = base;
   }
   // …and the ANIMATED path: one line's lit runs on its units' own advances (drawAnimatedText measures each unit alone), or null
-  function hlAnimLine(ctx, hl, li, n, units, widths, x0, sp, fs, yy, lh) {
+  function hlAnimLine(ctx, hl, li, n, units, widths, x0, sp, fs, yy, lh, bxs) {
     const us = hl.units[li] || [];
     if (!units.length || !us.some(u => u.on)) return null;
     const offs = [], xs = []; let off = 0, xx = x0;
-    units.forEach((u, k) => { offs.push(off); xs.push(xx); off += u.length; xx += widths[k]; });
+    // bxs (1176 leftover): bidiUnitXs' left edges, where drawAnimatedText draws a right-to-left line's units; null, one after another
+    units.forEach((u, k) => { offs.push(off); xs.push(bxs ? bxs[k] : xx); off += u.length; xx += widths[k]; });
+    if (BIDI_RTL.test(units.join(''))) return hlAnimLineVis(ctx, hl, li, n, units, widths, offs, xs, us, sp, fs, yy, lh);
     const xAt = (i) => {
       let k = 0;
       while (k + 1 < units.length && offs[k + 1] <= i) k++;
@@ -4983,13 +5058,55 @@ window.FM = window.FM || {};
     hlGeom(us, xAt, sp, fs);
     return { H: hl.H, fs: fs, yy: yy, band: hlBand(li, n, yy, lh, fs), runs: hlRuns(us), on: us.filter(u => u.on), offs: offs, lens: units.map(u => u.length) };
   }
+  /* 1176 leftover: hlAnimLine for a line holding a right-to-left letter. Unit k is drawn as one fillText from its left edge xs[k], so
+     its own characters land where bidiSpanFn says for its text from there (a unit with no right-to-left letter: from the left, as
+     hlAnimLine's xAt measures it); a lit unit's span is the hull of its pieces in the units that hold it. Each run records the units
+     that reach into it as drawn (ks) and, of those, the leftmost and the rightmost (kL, kR), for hlEachRun and hlNear. */
+  function hlAnimLineVis(ctx, hl, li, n, units, widths, offs, xs, us, sp, fs, yy, lh) {
+    const inUnit = [];
+    const pieceOf = (k, p, q) => {
+      let f = inUnit[k];
+      if (!f) {
+        const u = units[k], x = xs[k], at = (j) => j <= 0 ? 0 : j >= u.length ? widths[k] : ctx.measureText(u.slice(0, j)).width;
+        f = inUnit[k] = bidiSpanFn(ctx, u, x) || ((p0, q0) => ({ a: x + at(p0), b: x + at(q0) }));
+      }
+      return f(p, q);
+    };
+    const spanOf = (i0, i1) => {
+      let a = Infinity, b = -Infinity;
+      units.forEach((u, k) => {
+        const u0 = offs[k], p = Math.max(i0, u0), q = Math.min(i1, u0 + u.length);
+        if (q <= p) return;
+        const s = pieceOf(k, p - u0, q - u0);
+        if (s.a < a) a = s.a;
+        if (s.b > b) b = s.b;
+      });
+      return a <= b ? { a: a, b: b } : { a: xs[0], b: xs[0] };
+    };
+    hlGeomVis(us, spanOf, sp, fs);
+    const runs = hlRunsVis(us);
+    /* A unit holds a run when its advance reaches into the run as drawn (by more than half a pixel, or a third of a run narrower than
+       that), so the spaces between two lit words of one run draw their part of its box, as the typing-order path's i0..i1 has them */
+    runs.forEach(r => {
+      r.ks = new Set();
+      const e = Math.min(0.5, (r.b - r.a) / 3);
+      let lo = Infinity, hi = -Infinity;
+      units.forEach((u, k) => {
+        if (!(xs[k] < r.b - e && xs[k] + widths[k] > r.a + e)) return;
+        r.ks.add(k);
+        if (xs[k] < lo) { lo = xs[k]; r.kL = k; }
+        if (xs[k] + widths[k] > hi) { hi = xs[k] + widths[k]; r.kR = k; }
+      });
+    });
+    return { H: hl.H, fs: fs, yy: yy, band: hlBand(li, n, yy, lh, fs), runs: runs, on: us.filter(u => u.on), offs: offs, lens: units.map(u => u.length) };
+  }
   // does animated unit k hold any character of a lit run? A unit that does not is drawn by the two lines it always was
   function hlNear(L, k) {
     const u0 = L.offs[k], u1 = u0 + L.lens[k];
-    return L.runs.some(r => u0 < r.i1 && u1 > r.i0);
+    return L.runs.some(r => r.ks ? r.ks.has(k) : (u0 < r.i1 && u1 > r.i0));
   }
   function hlAnimPiece(ctx, L, k, x, w, wDraw, paint) {
-    const o = { paint: paint, base: ctx.fillStyle, H: L.H, fs: L.fs, yy: L.yy, ox: x + wDraw / 2, oy: L.yy,
+    const o = { paint: paint, base: ctx.fillStyle, H: L.H, fs: L.fs, yy: L.yy, ox: x + wDraw / 2, oy: L.yy, k: k,
       span: [L.offs[k], L.offs[k] + L.lens[k]], slice: [x, x + w], runs: L.runs, on: L.on, band: L.band };
     hlBoxes(ctx, o); hlText(ctx, o); hlScaled(ctx, o); hlUnderline(ctx, o);
     ctx.fillStyle = o.base;
@@ -23462,7 +23579,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // #966 opts8: Text Curve's Stay upright (st.curveUpright, set only by a Text Curve that asks for it)
       const _cUp = !!(_tEff && _tEff.curveUpright === true);
       if (FM.textHasAnim(layer)) {
-        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null, _plan, _cUp, !!_hl);
+        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null, _plan, _cUp);
       } else {
         const stk = layer.stroke;
         const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)
