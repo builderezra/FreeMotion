@@ -52,6 +52,8 @@ window.FM = window.FM || {};
     PART_TTL: 7 * 24 * 3600 * 1000, // §12.4 — parts older than a week are nobody's resume point
     SWEEP: 1500,                    // §9's sweep rule applied to media: notice what nothing announced
     NAME_MAX: 200,                  // a file name is a peer's string
+    /* #1093 — a still picture from a PEER over this many pixels is refused before it is kept or decoded (`pictureSize`). */
+    IMAGE_PX: 50e6,
     TRIES: 2,                       // §14.9 — a file that arrives broken twice is not asked for a third time
     /* S8 review: fonts are the one thing this file writes OUTSIDE the project — into the font index, where
        `rehydrateAll` puts every one back on every boot, for every project. An Editor writes the text layers
@@ -1140,6 +1142,11 @@ window.FM = window.FM || {};
       M.ui.sync(ctl);
       return ok;
     }
+    /* #1093: a friend's picture too big to open is refused HERE, before a byte of it is kept (see `pictureSize`). */
+    if (e.kind === 'image') {
+      const big = await overPixels(file);
+      if (big) { refuseHuge(ctl, e, big); return false; }
+    }
     const v = ctl.S.adapter.view();
     const byId = Object.create(null);
     ((v && v.layers) || []).forEach(function (l) { if (l && l.id) byId[l.id] = l; });
@@ -1183,6 +1190,97 @@ window.FM = window.FM || {};
     }
     M.ui.sync(ctl);
     return true;
+  }
+
+  /* ═══ #1093 — A FRIEND'S PICTURE IS MEASURED BEFORE IT IS KEPT ═══════════════════════════════════════════
+   * 📐 DECIDED (hunt HIGH #1093, PM-verified 7 Oct, READY 11 Oct): a still picture a PEER sends that is over
+   * LIM.IMAGE_PX (50 MP) is refused — never written to this device's media store and never handed to a decoder. Bytes
+   * say nothing about pixels: a solid-colour 10000 × 10000 PNG is a few hundred KB and decodes to 400 MB, which freezes
+   * a phone, and once stored it decodes again every time the project opens — on the owner too, because a guest's clip
+   * lands in HIS project. The GIF decoder has refused a picture this size for a long time (media.js, `W * H > 64e6`);
+   * a still had nothing, and the only gate here was by bytes (ASK_ABOVE).
+   * The size is read from the file's own HEADER (PNG, GIF, JPEG, WebP, BMP, and the `ispe` box of AVIF / HEIC), so
+   * nothing is decoded to learn it. A format the header reader does not know is measured by the browser's still load
+   * (`FM.loadImageFile` with `still`, which reads the size and draws nothing).
+   * ONLY A PEER'S FILE. His own imports go through FM.loadImageFile untouched (some phones take 200 MP photos), and a
+   * local copy (§15.2's zero-byte path) is a file this device already holds. The refused file is marked `bad`, so
+   * `planWants` never asks for it again, counted in `failed`, so the card says a clip was skipped, and SAID, so the
+   * person knows why that clip is blank. */
+  async function pictureSize(file) {
+    let b = null;
+    try { b = new Uint8Array(await file.slice(0, 512 * 1024).arrayBuffer()); } catch (x) { return null; }
+    const n = b.length;
+    const be16 = function (o) { return (b[o] << 8) | b[o + 1]; };
+    const be32 = function (o) { return (b[o] * 16777216) + ((b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]); };
+    const le16 = function (o) { return b[o] | (b[o + 1] << 8); };
+    const le24 = function (o) { return b[o] | (b[o + 1] << 8) | (b[o + 2] << 16); };
+    const le32 = function (o) { return (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16)) + (b[o + 3] * 16777216); };
+    const tag = function (o) { return o + 4 <= n ? String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3]) : ''; };
+    if (n >= 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 && tag(12) === 'IHDR') return { w: be32(16), h: be32(20) };
+    if (n >= 10 && tag(0) === 'GIF8') return { w: le16(6), h: le16(8) };
+    if (n >= 26 && b[0] === 0x42 && b[1] === 0x4d) {
+      if (le32(14) === 12) return { w: le16(18), h: le16(20) };
+      const bw = le32(18), bh = le32(22);
+      /* signed 32-bit fields: a negative height is a top-down picture of that many rows */
+      return { w: bw > 2147483647 ? 4294967296 - bw : bw, h: bh > 2147483647 ? 4294967296 - bh : bh };
+    }
+    if (n >= 30 && tag(0) === 'RIFF' && tag(8) === 'WEBP') {
+      const t = tag(12);
+      if (t === 'VP8X') return { w: 1 + le24(24), h: 1 + le24(27) };
+      if (t === 'VP8L' && b[20] === 0x2f) { const v = le32(21); return { w: (v % 16384) + 1, h: (Math.floor(v / 16384) % 16384) + 1 }; }
+      if (t === 'VP8 ') return { w: le16(26) & 0x3fff, h: le16(28) & 0x3fff };
+      return null;
+    }
+    if (n >= 4 && b[0] === 0xff && b[1] === 0xd8) {
+      let o = 2;
+      while (o + 4 <= n) {
+        if (b[o] !== 0xff) return null;                       // off the marker chain: not a header this can read
+        const m = b[o + 1];
+        if (m === 0xff) { o++; continue; }                     // a fill byte
+        if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { o += 2; continue; }
+        if (m === 0xd9 || m === 0xda) return null;             // the end, or the scan, before any frame header
+        const len = be16(o + 2);
+        if (len < 2) return null;
+        if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return o + 9 <= n ? { w: be16(o + 7), h: be16(o + 5) } : null;
+        o += 2 + len;
+      }
+      return null;
+    }
+    if (n >= 12 && tag(4) === 'ftyp') {
+      /* AVIF / HEIC: every `ispe` box is a picture's size (a grid's own and each tile's); the biggest is what decodes. */
+      let best = null;
+      for (let o = 4; o + 16 <= n; o++) {
+        if (b[o] !== 0x69 || tag(o) !== 'ispe') continue;
+        const w = be32(o + 8), h = be32(o + 12);
+        if (!best || w * h > best.w * best.h) best = { w: w, h: h };
+      }
+      return best;
+    }
+    return null;
+  }
+  /* The size if it is over the cap, else null. */
+  async function overPixels(file) {
+    let d = await pictureSize(file);
+    if (!d || !(d.w > 0 && d.h > 0)) {
+      d = null;
+      try {
+        const r = await FM.loadImageFile(file, { still: true });
+        if (r && r.width > 0 && r.height > 0) d = { w: r.width, h: r.height };
+        if (r && r.url) { try { URL.revokeObjectURL(r.url); } catch (x) {} }
+      } catch (x) { d = null; }
+    }
+    return (d && d.w * d.h > LIM.IMAGE_PX) ? d : null;
+  }
+  function refuseHuge(ctl, e, d) {
+    ctl.bad[e.fid] = 1;
+    delete ctl.wanted[e.fid];
+    ctl.failed++;
+    ctl.dirty = true;
+    dropParts(ctl, e.fid);
+    if (FM.toast) {
+      try { FM.toast('A friend’s picture “' + clean(e.name || 'image', 60) + '” is ' + d.w + ' × ' + d.h + ' — too big to open on this device, so it was not saved here', 5200); } catch (x) {}
+    }
+    M.ui.sync(ctl);
   }
 
   /* The one writer. Record first, then the decoded element — in that order, because a record on disk

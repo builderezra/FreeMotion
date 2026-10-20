@@ -168957,4 +168957,78 @@
   });
   // ── end bughunt 6 ──
 
+  /* ═══ #1093 (hunt HIGH): A HUGE PICTURE FROM A FRIEND IS REFUSED, NOT DECODED ═══════════════════════════════════
+     A still picture a peer sent was written to IndexedDB and decoded whatever its size (only GIFs were capped, at 64 MP),
+     so one admitted Editor could freeze every phone in the room with a small file, again on every reopen. Decided: over
+     50 MP (collab-media.js LIMITS.IMAGE_PX) it is refused before it is kept, read from the file's own header.
+     FAILS BEFORE THE FIX: writeRecord stores the 100 MP file under its layer (FM.storage.writeMedia is called with that
+     layer id) and hands it to FM.loadImageFile, nothing marks it bad, and nobody is told.
+     CONTROL, which holds before and after: a real 4000 × 3000 picture in the same session is stored and decoded. */
+  function png1093(w, h, name) {
+    /* The PNG signature and an IHDR claiming w × h: exactly what a decoder reads first, and nothing it could draw. A real
+       100 MP picture cannot be made in a test without spending the very memory the cap is there to protect. */
+    const b = new Uint8Array(33);
+    b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+    const dv = new DataView(b.buffer);
+    dv.setUint32(16, w);
+    dv.setUint32(20, h);
+    b[24] = 8; b[25] = 2;
+    return new File([b], name, { type: 'image/png', lastModified: 1600000109300 });
+  }
+  async function realPng1093(w, h, name) {
+    const c = offscreen(w, h);
+    const g = c.getContext('2d');
+    g.fillStyle = 'rgb(40, 200, 90)';
+    g.fillRect(0, 0, w, h);
+    const blob = await new Promise(function (res) { c.toBlob(res, 'image/png'); });
+    c.width = 1; c.height = 1;
+    return new File([blob], name, { type: 'image/png', lastModified: 1600000109301 });
+  }
+  test('1093 Work with friends: a huge image from a friend is refused, not decoded: a picture whose header says 10000 × 10000 (100 MP, over the 50 MP cap) arrives whole and is neither stored on this device nor handed to the image decoder, it is not asked for again, and the person is told it was too big (CONTROL: a real 4000 × 3000 picture from the same friend in the same session is stored and decoded at its size)', { item: '1093', budgetMs: 180000 }, async function () {
+    const C = need921S4('the pixel cap on a friend’s picture');
+    const fine = await realPng1093(4000, 3000, 'fine1093.png');
+    const huge = png1093(10000, 10000, 'huge1093.png');
+    await withCollabGuest921([mediaLayer921('Huge 1093', 'image'), mediaLayer921('Fine 1093', 'image')], async function (c) {
+      const realLoad = FM.loadImageFile, realWrite = FM.storage.writeMedia, realToast = FM.toast;
+      const decoded = [], stored = [], toasts = [];
+      FM.loadImageFile = function (file) { decoded.push(file && file.name); return realLoad.apply(this, arguments); };
+      FM.storage.writeMedia = function (id) { stored.push(id); return realWrite.apply(this, arguments); };
+      FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
+      try {
+        const fHuge = c.peer.add(huge, 'image', [[c.ids[0], 0]]);
+        const fFine = c.peer.add(fine, 'image', [[c.ids[1], 0]]);
+        c.peer.announce('mf');
+        await until921('both pictures to arrive and be dealt with', async function () {
+          return (c.ctl.have[fFine] && (c.ctl.have[fHuge] || c.ctl.bad[fHuge]) && !C.media.pending(c.G).n) ? 1 : null;
+        }, 120000);
+        const bad = [];
+        /* CONTROL first: the ordinary picture is kept and decoded, so what happens to the big one is about its size. */
+        const fr = await FM.storage.readMedia(c.ids[1]);
+        if (!fr || !fr.file || fr.file.size !== fine.size) bad.push('CONTROL: the 4000 × 3000 picture from the friend is not stored on this device (' + (fr && fr.file ? fr.file.size + ' bytes' : 'no record') + ' against ' + fine.size + ')');
+        if (decoded.indexOf('fine1093.png') < 0) bad.push('CONTROL: the 4000 × 3000 picture was never handed to the image decoder (decoded: ' + JSON.stringify(decoded) + ')');
+        const fm = FM.media.get(c.ids[1]);
+        if (!fm || fm.width !== 4000 || fm.height !== 3000) bad.push('CONTROL: the 4000 × 3000 picture is in the media registry as ' + (fm ? fm.width + ' × ' + fm.height : 'nothing'));
+        /* The 100 MP one. */
+        if (stored.indexOf(c.ids[0]) >= 0) bad.push('the 10000 × 10000 picture was written to this device’s media store under its layer, where it would decode again every time the project opens');
+        const hr = await FM.storage.readMedia(c.ids[0]);
+        if (hr && hr.file) bad.push('the 10000 × 10000 picture is on this device’s disk (' + hr.file.size + ' bytes)');
+        if (decoded.indexOf('huge1093.png') >= 0) bad.push('the 10000 × 10000 picture was handed to the image decoder (FM.loadImageFile) — 400 MB of pixels on a phone');
+        if (FM.media.get(c.ids[0])) bad.push('the 10000 × 10000 picture is in the media registry');
+        if (!c.ctl.bad[fHuge]) bad.push('the 10000 × 10000 picture is not marked as one this device will not ask for again');
+        if (!toasts.some(function (t) { return /too big/i.test(t) && /10000/.test(t); })) bad.push('nobody was told the friend’s picture was too big: the toasts were ' + JSON.stringify(toasts));
+        /* …and it is not asked for again: three more sweeps, and the friend is sent no second want for it. */
+        const asked = c.peer.wants.filter(function (w) { return w.fid === fHuge; }).length;
+        for (let i = 0; i < 3; i++) { await C.media._reconcile(c.G); await settle921(120); }
+        const again = c.peer.wants.filter(function (w) { return w.fid === fHuge; }).length;
+        if (asked < 1) bad.push('CONTROL: the big picture was never asked for, so its refusal was never reached (wants ' + JSON.stringify(c.peer.wants) + ')');
+        if (again !== asked) bad.push('the refused picture was asked for again ' + (again - asked) + ' time(s) after it was refused');
+        if (bad.length) throw new Error(bad.join(' · '));
+      } finally {
+        FM.loadImageFile = realLoad;
+        FM.storage.writeMedia = realWrite;
+        FM.toast = realToast;
+      }
+    });
+  });
+
 })();
