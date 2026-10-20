@@ -2464,7 +2464,17 @@ window.FM = window.FM || {};
          it should still be visible when you're at the end of it") — but this capture used the raw time, so the
          project he had just watched through came Home as a plain black card. Same rule as the preview, so the card
          and the screen agree; a genuinely empty moment mid-timeline is left as it is, exactly as the preview leaves it. */
-      FM.renderScene(src.getContext('2d'), FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time);
+      /* 1176 leftover: THE CARD IS THE PROJECT, NOT THE VIEW. The View menu's ⧉ isolate (FM.isolate) is read by the
+         compositor's layer loop, so a card captured while a clip was isolated (the 12 s autosave does it) showed that one
+         clip, or in mode 2 that clip lifted on top, and the crop tool's whole-frame flag showed a cropped clip uncropped.
+         Both are held aside for this one render and put straight back, exactly as the Export card's picture
+         (js/export-card.js drawThumb) and the still (FM.snapshotPNG) do, so the preview he is looking at does not change. */
+      const isoWas = FM.isolate;
+      const cropHeld = (FM.scene.layers || []).filter(l => l && l._cropEditing);
+      FM.isolate = null;
+      cropHeld.forEach(l => { l._cropEditing = false; });
+      try { FM.renderScene(src.getContext('2d'), FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time); }
+      finally { FM.isolate = isoWas; cropHeld.forEach(l => { l._cropEditing = true; }); }
       while (src.width >= tw * 2) {   // halve until within 2× of target — each step averages real pixels
         const half = document.createElement('canvas');
         half.width = Math.max(tw, Math.round(src.width / 2)); half.height = Math.max(th, Math.round(src.height / 2));

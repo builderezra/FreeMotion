@@ -169931,4 +169931,84 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ 1176 leftover (after #1111): THE HOME CARD PICTURE CAPTURED AN ISOLATED CLIP ═════════════════════════════════════════
+     Every Home card picture is drawn by makeThumb (js/storage.js): the import, the 12 s autosave, a pinned picture, a template or
+     element save. It rendered with whatever view state the preview had, and the View menu's ⧉ isolate (FM.isolate) is read by the
+     compositor's layer loop: in mode 1 only the isolated layer is drawn. So a card captured while a clip was isolated, which the
+     autosave does every 12 s, showed that one clip alone on Home. The Export card's picture (js/export-card.js drawThumb) and the
+     still (FM.snapshotPNG) hold the isolate, and the crop tool's whole-frame flag (_cropEditing), aside for their one render;
+     makeThumb now does the same. Reached the way the 1111 test reaches it, FM.templates.cardFor on the open project.
+     FAILS BEFORE THE FIX: FM.renderScene, wrapped, sees FM.isolate set to the white square in mode 1 (and the red square's crop flag
+     on) during the card render, and the card's bottom-right corner, where the red square is, shows the background.
+     CONTROL, which holds before and after: the card is rendered (no stored picture came back instead) and shows the isolated white
+     square, and the isolate and the crop flag are back in place after it, so the preview he is looking at does not change.
+     COLOUR THRESHOLDS: as in the 1111 test, the card is a JPEG at quality 0.8 read as 5 x 5 px averages inside 64 px blocks; the
+     squares are 255 / 255 / 255 and 255 / 0 / 0 and the background 16 / 32 / 48, so white above 180 on all three, and red above
+     180 with green and blue below 90, sit far from the background and from each other. */
+  test('1176 leftover: the Home card picture is the whole project even while a clip is isolated: with the white square isolated (⧉, mode 1) the card still shows the red square, because makeThumb renders with the isolate and the crop tool’s whole-frame flag held aside (CONTROL: the card is rendered and shows the isolated square, and the isolate and the crop flag are back in place after it)', { item: '1176' }, async function () {
+    if (!FM.templates || typeof FM.templates.cardFor !== 'function' || !FM.projects) throw new Error('setup: FM.templates.cardFor (the card picture, makeThumb) is not reachable');
+    const P = FM.scene.project;
+    const keep = { w: P.width, h: P.height, d: P.duration, hasBg: Object.prototype.hasOwnProperty.call(P, 'background'), bg: P.background, t: FM.time };
+    const layers0 = FM.scene.layers.slice();
+    const iso0 = FM.isolate;
+    const realRender = FM.renderScene;
+    const bad = [];
+    let mark = null;
+    try {
+      P.width = 320; P.height = 240; P.duration = 4; P.background = '#102030';
+      FM.scene.layers.length = 0;
+      const white = FM.makeLayer('shape', { name: '1176 isolated', shape: 'rect', x: 64, y: 48, shapeW: 64, shapeH: 64, fill: '#ffffff' });
+      white.start = 0; white.duration = 4;
+      mark = FM.makeLayer('shape', { name: '1176 mark', shape: 'rect', x: 256, y: 192, shapeW: 64, shapeH: 64, fill: '#ff0000' });
+      mark.start = 0; mark.duration = 4;
+      FM.scene.layers.push(white, mark);
+      FM.time = 1;
+      const isoSet = { id: white.id, mode: 1 };
+      FM.isolate = isoSet;
+      mark._cropEditing = true;
+      const seen = [];
+      FM.renderScene = function (ctx, scn) {
+        const c = ctx && ctx.canvas;
+        if (c && c.id !== 'preview' && scn && scn.layers && scn.layers.indexOf(mark) >= 0) seen.push({ iso: FM.isolate || null, crop: !!mark._cropEditing });
+        return realRender.apply(this, arguments);
+      };
+      let url = null;
+      try { url = FM.templates.cardFor(FM.projects.currentId()); } finally { FM.renderScene = realRender; }
+      const isoAfter = FM.isolate, cropAfter = !!mark._cropEditing;
+      FM.isolate = iso0; delete mark._cropEditing;
+      if (!seen.length) throw new Error('setup: the card was not rendered at all (' + (url ? 'a stored picture came back instead' : 'no picture') + '), so nothing can be measured');
+      if (typeof url !== 'string' || url.indexOf('data:image/jpeg') !== 0) throw new Error('setup: the card is not a JPEG picture: ' + String(url).slice(0, 40));
+      /* CONTROL: drawing the card leaves the preview's view state as it found it */
+      if (isoAfter !== isoSet) throw new Error('CONTROL: drawing the card changed the isolate to ' + JSON.stringify(isoAfter) + ', so the preview he is looking at changed under him');
+      if (!cropAfter) throw new Error('CONTROL: drawing the card switched off the crop tool’s whole-frame flag on the clip being cropped');
+      const img = new Image(); img.src = url;
+      await new Promise(function (r) { img.onload = r; img.onerror = r; });
+      const cv = document.createElement('canvas'); cv.width = img.naturalWidth || 1; cv.height = img.naturalHeight || 1;
+      const g = cv.getContext('2d'); g.drawImage(img, 0, 0);
+      const at = function (fx, fy) {
+        const x = Math.max(2, Math.min(cv.width - 3, Math.round(fx * cv.width))), y = Math.max(2, Math.min(cv.height - 3, Math.round(fy * cv.height)));
+        const d = g.getImageData(x - 2, y - 2, 5, 5).data;
+        let r = 0, gr = 0, b = 0;
+        for (let i = 0; i < d.length; i += 4) { r += d[i]; gr += d[i + 1]; b += d[i + 2]; }
+        return [Math.round(r / 25), Math.round(gr / 25), Math.round(b / 25)];
+      };
+      const isWhite = function (p) { return p[0] > 180 && p[1] > 180 && p[2] > 180; };
+      const isRed = function (p) { return p[0] > 180 && p[1] < 90 && p[2] < 90; };
+      const wp = at(0.2, 0.2), rp = at(0.8, 0.8);
+      if (cv.width !== 320 || cv.height !== 240 || !isWhite(wp)) throw new Error('CONTROL: the 320 x 240 card is ' + cv.width + ' x ' + cv.height + ' with rgb(' + wp + ') where the isolated white square is, so this probe cannot read a card');
+      if (seen.some(function (s) { return s.iso; })) bad.push('the Home card was rendered with the isolate still on (the white square, mode 1), so a card the 12 s autosave captures while a clip is isolated shows that clip alone');
+      if (seen.some(function (s) { return s.crop; })) bad.push('the Home card was rendered with the crop tool’s whole-frame flag still on, so a card captured while cropping shows the clip uncropped');
+      if (!isRed(rp)) bad.push('the Home card captured while the white square was isolated shows rgb(' + rp + ') where the red square is, not the red square: the card is the view, not the project');
+    } finally {
+      FM.renderScene = realRender;
+      FM.isolate = iso0;
+      if (mark) delete mark._cropEditing;
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.width = keep.w; P.height = keep.h; P.duration = keep.d; FM.time = keep.t;
+      if (keep.hasBg) P.background = keep.bg; else delete P.background;
+      if (FM.requestRender) FM.requestRender();
+    }
+    if (bad.length) throw new Error(bad.join(' AND '));
+  });
+
 })();
