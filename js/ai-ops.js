@@ -69,7 +69,7 @@ window.FM = window.FM || {};
   }
   /* The same for a keyframed VOLUME (a fade drawn with keys): "make it quieter" scales the whole fade, as scale does above,
      instead of flattening it. At ~0 (the playhead on the silent start of a fade-in) a ratio means nothing, so it shifts.
-     Its keys are held to the APP's range, 0..10 (VOL_MAX in js/inspector.js, "up to like 1000%"), not to the 0..1 an AI
+     Its keys are held to the APP's range, 0..10 (FM.LIMITS.volume in js/scene.js, "up to like 1000%"), not to the 0..1 an AI
      value is clamped to — a boost he keyed by hand must not be cut down by an edit to some other part of the fade. */
   function setAnimatedLevel(p, n, r, at) {
     var cur = FM.evalProp(p, at);
@@ -108,7 +108,9 @@ window.FM = window.FM || {};
        * branch and is dropped with a logged reason, like any other path we do not honour. */
       case 'reversed': { if (layer.type === 'video') layer.reversed = bool(value, false); return layer.type === 'video'; }
       case 'frameBlend': { layer.frameBlend = bool(value, false); return true; }
-      case 'volume': { var v = clampNum(value, 0, 1); if (v == null) return false; if (FM.isAnimated && FM.isAnimated(layer.volume)) setAnimatedLevel(layer.volume, v, [0, 10], at); else layer.volume = v; return true; }   // queue 690 (hunt d): a keyed fade survives
+      /* hunt5 later B: the keys' range is FM.LIMITS.volume (js/scene.js), the one the Volume card and the undo sanitiser read,
+         read here at the call. It was a literal [0, 10] of its own, which bughunt5 #1 left behind when it gathered the others. */
+      case 'volume': { var v = clampNum(value, 0, 1); if (v == null) return false; if (FM.isAnimated && FM.isAnimated(layer.volume)) setAnimatedLevel(layer.volume, v, FM.LIMITS.volume, at); else layer.volume = v; return true; }   // queue 690 (hunt d): a keyed fade survives
       /* bughunt3 #3: a fade set here starts at this clip's own edge, as one set in the volume panel does, so it clears the span a
          split half's fade was measured over (fadeInLead / fadeOutTail, js/scene.js). */
       case 'fadeIn': { var fi = clampNum(value, 0, 60); if (fi == null) return false; layer.fadeIn = fi; delete layer.fadeInLead; return true; }

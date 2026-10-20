@@ -13688,20 +13688,41 @@
       if (grey(u) === FM.history.canUndo()) throw new Error(where + ': undo button greyed=' + grey(u) + ' but canUndo=' + FM.history.canUndo());
       if (grey(r) === FM.history.canRedo()) throw new Error(where + ': redo button greyed=' + grey(r) + ' but canRedo=' + FM.history.canRedo());
     };
-    FM.history.reset();
-    if (FM.history.canUndo()) throw new Error('a freshly reset history should have nothing to undo');
-    agree('fresh');
-    var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
-    FM.scene.layers.unshift(L);
-    FM.history.commit();
-    if (!FM.history.canUndo()) throw new Error('after an edit there should be something to undo');
-    if (FM.history.canRedo()) throw new Error('a fresh edit must leave nothing to redo');
-    agree('after edit');
-    FM.history.undo();
-    if (!FM.history.canRedo()) throw new Error('after undo there should be something to redo');
-    agree('after undo');
-    FM.history.redo();
-    agree('after redo');
+    /* isolation (20 Oct): this test used to LEAVE its 20x20 shape in the scene (the redo below puts it back, last thing)
+       on top of a history whose newest step was that shape, so every later test found a layer to work from that a test
+       run alone never has: the hold-Play test, the preset tags test and the queue 330-339 tests all leaned on it. Undo
+       and redo swap in PARSED COPIES of the project and the layers (history.js restore), so the finally puts back the
+       very objects it found: the project, the same layers array with the same contents, the selection, select mode,
+       the project length and the playhead, then resets the history over that scene so its steps cannot be undone into
+       the next test. The stack it found cannot be put back (no setter, and its first act below is reset()), so a fresh
+       stack over the restored scene is as close to "as found" as the history gets. */
+    var S = FM.scene, layers0 = S.layers, copy0 = layers0.slice(), project0 = S.project, dur0 = project0.duration;
+    var sel0 = S.selectedId, ids0 = (S.selectedIds || []).slice(), mode0 = FM.selectMode, t0 = FM.time;
+    try {
+      FM.history.reset();
+      if (FM.history.canUndo()) throw new Error('a freshly reset history should have nothing to undo');
+      agree('fresh');
+      var L = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#fff' });
+      FM.scene.layers.unshift(L);
+      FM.history.commit();
+      if (!FM.history.canUndo()) throw new Error('after an edit there should be something to undo');
+      if (FM.history.canRedo()) throw new Error('a fresh edit must leave nothing to redo');
+      agree('after edit');
+      FM.history.undo();
+      if (!FM.history.canRedo()) throw new Error('after undo there should be something to redo');
+      agree('after undo');
+      FM.history.redo();
+      agree('after redo');
+    } finally {
+      if (FM.scene !== S) FM.scene = S;
+      S.project = project0;
+      layers0.length = 0; copy0.forEach(function (l) { layers0.push(l); }); S.layers = layers0;
+      S.selectedId = sel0; S.selectedIds = ids0; FM.selectMode = mode0;
+      FM.history.reset();
+      FM.refreshAll();
+      // after refreshAll, whose autoFitDuration would otherwise re-fit a length the scene arrived with
+      S.project.duration = dur0; FM.time = t0;
+    }
   });
 
   /* ---------------- runner ---------------- */
@@ -15590,9 +15611,20 @@
       el.dispatchEvent(new PointerEvent('pointerup', o));
       el.dispatchEvent(new MouseEvent('click', o));
     };
-    const hadSel = FM.scene.selectedId;
-    if (!hadSel && FM.scene.layers.length) FM.selectLayer(FM.scene.layers[0].id);   // both triggers need a selection
+    /* isolation (20 Oct, full-order red): it inherited the layer it selects (FM.scene.layers[0]), the 20x20 shape
+       'undo / redo grey out when there is nothing behind or ahead' used to leave in the scene. That source puts the
+       scene back now, so a full run met an empty scene, selected nothing, and #btn-parent's click handler returns at
+       once with no selection (js/app.js, `if (!sel) return;`), which read as "a different trigger closed everything".
+       Not an app bug. It now sets up its own two shapes in the editor (isoOwnLayer, below the 330s, plus one more,
+       because the PC transport shows #btn-parent only with a selection AND two or more layers, pcTransportSync) and
+       selects its own; the finally puts the scene, selection and Home back as found. */
+    const iso = isoOwnLayer();
     try {
+      const L2 = FM.makeLayer('shape', { name: 'iso layer 2', shape: 'rect', x: 220, y: 220, shapeW: 60, shapeH: 60, fill: '#3a7bd5', start: 0, duration: 3 });
+      FM.scene.layers.push(L2);
+      FM.refreshAll();
+      FM.selectLayer(iso.L.id);   // both triggers need a selection
+      if (FM.scene.selectedId !== iso.L.id) throw new Error('CONTROL: its own layer did not become the selection, so neither trigger has anything to open a menu for');
       FM.contextMenu.hide();
       tap(a);
       if (!FM.contextMenu.isOpen()) throw new Error('the first tap did not open a menu at all');
@@ -15607,7 +15639,7 @@
       if (!FM.contextMenu.isOpen()) throw new Error('with no menu showing, tapping the last-used trigger toggled a stale opener shut instead of opening');
     } finally {
       FM.contextMenu.hide();
-      if (!hadSel) FM.selectLayer(null); else FM.selectLayer(hadSel);
+      iso.put();
     }
   });
 
@@ -16432,6 +16464,11 @@
     if (!FM.startDraw) throw new Error('FM.startDraw is not reachable');
     if (!FM.home || !FM.home._openProject) throw new Error('FM.home._openProject is not reachable');
     const bodyHas = c => document.body.classList.contains(c);
+    /* isolation (20 Oct): the finally used to CLOSE Home whatever it found, and never reopen it, so every test after this
+       one ran on the editor while the same test run alone starts on Home (the boot opens it): the group crumb test
+       leaned on that. It now puts Home back as it found it (open or shut), with the selection and playhead. */
+    const hadHome = !!(FM.home.isOpen && FM.home.isOpen());
+    const S0 = FM.scene, sel0 = S0.selectedId, ids0 = (S0.selectedIds || []).slice(), mode0 = FM.selectMode, t0 = FM.time;
     try {
       FM.startDraw('vector');
       await sleep(60);
@@ -16466,7 +16503,17 @@
       if (seen) throw new Error('the drawing overlay is still painted over the home screen');
     } finally {
       try { FM.drawTool._stop(); } catch (e) {}
-      try { if (FM.home.isOpen && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      // the selection and playhead back on the same scene (reopening the open project does not load a new one)
+      try {
+        if (FM.scene === S0) { S0.selectedId = sel0; S0.selectedIds = ids0; FM.selectMode = mode0; FM.time = t0; FM.refreshAll(); }
+      } catch (e) {}
+      // Home back as it was found: shut if it was shut (the old behaviour), reopened if it was open
+      try {
+        if (FM.home.isOpen) {
+          if (hadHome && !FM.home.isOpen()) FM.home.open();
+          else if (!hadHome && FM.home.isOpen()) FM.home.close();
+        }
+      } catch (e) {}
       await sleep(80);
     }
   });
@@ -16568,11 +16615,23 @@
      * running through that would keep the exact thing he is complaining about, just behind one more
      * sheet. The test drives the real `showExportDialog`, so it covers both. */
     if (!FM.showExportDialog) throw new Error('FM.showExportDialog is not reachable');
-    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    /* isolation (20 Oct, full-order red): it inherited a timeline longer than 0 s. It swapped in its own 8 s box but never
+       refreshed, so project.duration stayed whatever the scene had: the 20x20 shape 'undo / redo grey out when there is
+       nothing behind or ahead' used to leave made it a few seconds. That source puts the scene back now, so a full run
+       met the seeded empty project, a 0 s timeline, where play() starts and its first tick stops it (app.js tick:
+       nt >= P.duration pauses) — "the transport would not start". The app was right; the hold-Play test (e8cac75d) met
+       the same. It now sets up its own 8 s box in the editor (isoOwnLayer, below the 330s), refreshes so the timeline
+       really is 8 s long (CONTROL), and the finally puts the scene, selection, length, playhead and Home back, and the
+       transport running again if it found it running. */
+    const played0 = !!FM.playing;
+    if (played0 && FM.pause) FM.pause();
+    const iso = isoOwnLayer({ name: 'Box', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00' });
     try {
-      FM.scene.layers.length = 0;
-      FM.scene.layers.push(FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 8 }));
+      iso.L.duration = 8;
+      FM.refreshAll();
       FM.time = 0;
+      if (!(FM.scene.project.duration >= 8)) throw new Error('CONTROL: the one-clip timeline is ' + FM.scene.project.duration + ' s long, so Play has nothing to play');
+      if (FM.playing) throw new Error('CONTROL: playback is already running before Play is pressed');
       await FM.requestPlay();
       await sleep(140);
       // CONTROL: it must really be playing, or "it is paused afterwards" is true of a transport that
@@ -16586,10 +16645,8 @@
       if (FM.playing) FM.pause();
       const d = document.getElementById('export-dialog'); if (d) d.classList.add('hidden');
       const o = document.getElementById('export-overlay'); if (o) o.classList.add('hidden');
-      FM.scene.layers.length = 0;
-      layers0.forEach(l => FM.scene.layers.push(l));
-      FM.time = t0;
-      FM.refreshAll();
+      iso.put();
+      if (played0 && !FM.playing && FM.togglePlay) FM.togglePlay();
     }
   });
 
@@ -16603,11 +16660,23 @@
      * on the thing that should have lit, and scrubbing away and back was the only way to make the app
      * look again. The test therefore never moves the playhead, because moving it is the bug's own
      * workaround and would hide the defect completely. */
+    /* isolation (20 Oct, full-order red): it inherited a timeline at least 1 s long, and the editor. It parks the playhead
+       at 1 s with a bare `FM.time = 1` and never made anything that long: in the full order the 20x20 shape 'undo / redo
+       grey out when there is nothing behind or ahead' used to leave did, and 'drawing: opening a project ends any sketch in
+       progress' shut Home. Both sources put things back now, so a full run met the seeded empty project (a 0 s timeline,
+       on which a playhead at 1 s is a state the app cannot hold: setTime, scrubTime and autoFitDuration all clamp it to
+       0) with Home over the editor, and the benchmark added at the playhead did not light the chip. It now sets up its
+       own 3 s shape in the editor (isoOwnLayer, below the 330s), with two CONTROLs: the timeline is longer than 1 s, and
+       the playhead is still on 1 s after the benchmark goes in, so a playhead moved by something else cannot read as the
+       reported staleness. The finally puts the markers back, then the scene, selection, length, playhead and Home
+       (iso.put), and resets the history the two toggles committed to. */
+    const iso = isoOwnLayer();
     const P = FM.scene.project;
     const marks0 = (P.markers || []).slice(), t0 = FM.time;
     const chip = document.getElementById('time-readout');
-    if (!chip) throw new Error('the timecode chip is not in the DOM');
     try {
+      if (!chip) throw new Error('the timecode chip is not in the DOM');
+      if (!(P.duration > 1)) throw new Error('CONTROL: the timeline is ' + P.duration + ' s long, so the playhead cannot stand at 1 s');
       P.markers = [];
       FM.time = 1;
       if (FM.updateReadout) FM.updateReadout();
@@ -16618,6 +16687,7 @@
       FM.toggleMarkerAtPlayhead();
       await sleep(20);
       if (!P.markers.length) throw new Error('the benchmark was not added, so there is nothing to light for');
+      if (Math.abs(FM.time - 1) > 0.5 / (P.fps || 30)) throw new Error('CONTROL: the playhead left 1 s (it reads ' + FM.time + ') while the benchmark went in, so an unlit chip below would not be the reported staleness');
       // NOT moving the playhead is the whole point: that is the workaround, not the fix.
       if (!chip.classList.contains('on-mark')) throw new Error('a benchmark was added at the playhead and the chip is still not lit — you would have to scrub away and back, which is exactly the report');
 
@@ -16629,6 +16699,8 @@
       P.markers = marks0; FM.time = t0;
       if (FM.updateReadout) FM.updateReadout();
       if (FM.timeline) FM.timeline.rebuild();
+      iso.put();
+      if (FM.updateReadout) FM.updateReadout();
     }
   });
 
@@ -19185,31 +19257,73 @@
       for (var i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) > 2) return false;
       return true;
     }
-    var layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
-    FM.scene.layers.length = 0; FM.scene.layers.push(L.A); FM.scene.layers.push(L.B);
-    FM.selectLayer(L.A.id);
+    /* isolation (20 Oct, full-order red): it inherited the playhead, the editor and the fx-art photographs. Its siblings
+       above set FM.time = 0 through withLayers; this one read whatever an earlier test left (windowFor anchors the strip
+       at the playhead, sceneRev keys on its frame), on a project whose length still said the scene it found (no refresh),
+       with Home over the editor since 'drawing: opening a project ends any sketch in progress' stopped shutting it. It
+       now sets up its own: the two layers in the editor (isoOwnLayer, below the 330s, then A and B in its place,
+       refreshed), the playhead at 0 as its siblings have it, and the photographs in BEFORE the first tile.
+       THE PHOTOGRAPHS ARE THE LIKELY CULPRIT, and that path is the app's, so it is named here: the first request for them
+       in a full run is FM.fxThumbs.previewScene in the sample-tile tests just above (the browser test far earlier stubs
+       its mounts), and when they decode, photosChanged() waits 80 ms and calls remountLive(), which clears the cache and
+       regenerates every tile on the page under its OLD key from the LIVE layer (layerStep finds the layer by id; the
+       recipe's `rev` is not consulted). Landing after the rotation, it repaints t1 with the rotated layer, so t1 and t3
+       match: exactly "the tile came back from the cache unchanged". So it waits for the photographs and that remount
+       first, counts any remount that still lands during the test (named in the failures it could cause), and checks
+       each tile is a picture of the layer (the TW x TH box), not the sample fallback (PX square), so a refused
+       preview can never pass or fail the key checks by its size alone. The finally puts the scene, selection,
+       length, playhead and Home back (iso.put). */
+    var tsz = FM.fxThumbs._tileSize ? FM.fxThumbs._tileSize() : null;
+    function layerTile(c, what) {
+      if (tsz && (c.width !== tsz.w || c.height !== tsz.h)) throw new Error('CONTROL: ' + what + ' is ' + c.width + 'x' + c.height + ', the sample fallback, not a ' + tsz.w + 'x' + tsz.h + ' picture of the layer, so it says nothing about the cache key');
+    }
+    async function artSettled() {
+      try { if (FM.fxThumbs.previewScene) FM.fxThumbs.previewScene(preset.fx); } catch (e) {}   // starts the module's own preload, mounts nothing
+      var keys = (FM.fxThumbs._photoKeys && FM.fxThumbs._photoKeys()) || [];
+      await Promise.all(keys.map(function (k) {
+        return new Promise(function (res) {
+          var im = new Image(), done = function () { res(); };
+          im.onload = done; im.onerror = done; setTimeout(done, 4000);
+          im.src = 'fx-art/' + k + '.jpg?v=1';
+        });
+      }));
+      // past photosChanged's 80 ms settle, so its remount has run before the first tile of this test exists
+      await new Promise(function (r) { setTimeout(r, 250); });
+    }
+    var remounts = 0, realRemount = FM.fxThumbs.remountLive;
+    function remountNote() { return remounts ? ' (remountLive ran ' + remounts + ' time(s) during the test, regenerating every tile from the live layer under its old key)' : ''; }
+    var iso = isoOwnLayer();
     try {
+      FM.scene.layers.length = 0; FM.scene.layers.push(L.A); FM.scene.layers.push(L.B);
+      FM.refreshAll();
+      FM.time = 0;
+      FM.selectLayer(L.A.id);
+      await artSettled();
+      FM.fxThumbs.remountLive = function () { remounts++; return realRemount.apply(this, arguments); };
       var t1 = tile(); FM.fxThumbs.mountPreset(t1, preset, L.A); await ready(t1);
+      layerTile(t1, 'the first tile of layer A');
       // the same layer again: same key, same entry, same pixels — the control for everything below
       var t1b = tile(); FM.fxThumbs.mountPreset(t1b, preset, L.A); await ready(t1b);
-      if (!same(pix(t1), pix(t1b))) throw new Error('two tiles of the same layer and preset disagree — the cache key is not stable');
+      if (!same(pix(t1), pix(t1b))) throw new Error('two tiles of the same layer and preset disagree — the cache key is not stable' + remountNote());
       // a DIFFERENT layer must not be served the first one's picture
       var t2 = tile(); FM.fxThumbs.mountPreset(t2, preset, L.B); await ready(t2);
+      layerTile(t2, 'the tile of layer B');
       if (same(pix(t1), pix(t2))) throw new Error('layer B was served layer A’s cached tile');
       // an EDIT to the same layer must not be served the pre-edit picture
       L.A.transform.rotation = 33;
       var t3 = tile(); FM.fxThumbs.mountPreset(t3, preset, L.A); await ready(t3);
-      if (same(pix(t1), pix(t3))) throw new Error('after rotating the layer the tile came back from the cache unchanged — the key ignores the layer’s content');
+      layerTile(t3, 'the tile of the rotated layer A');
+      if (same(pix(t1), pix(t3))) throw new Error('after rotating the layer the tile came back from the cache unchanged — the key ignores the layer’s content' + remountNote());
       // …and undoing it must bring the original entry back (content-keyed, not a counter)
       L.A.transform.rotation = 0;
       var t4 = tile(); FM.fxThumbs.mountPreset(t4, preset, L.A); await ready(t4);
-      if (!same(pix(t1), pix(t4))) throw new Error('undoing the edit did not return the original cached tile');
+      layerTile(t4, 'the tile of layer A turned back');
+      if (!same(pix(t1), pix(t4))) throw new Error('undoing the edit did not return the original cached tile' + remountNote());
     } finally {
+      FM.fxThumbs.remountLive = realRemount;
       FM.fxThumbs.stopAll();
       host.remove();
-      FM.scene.layers.length = 0;
-      layers0.forEach(function (l) { FM.scene.layers.push(l); });
-      FM.selectLayer(sel0);
+      iso.put();
     }
   });
 
@@ -22841,13 +22955,53 @@
   });
 
   test('a comp that costs 200 ms a frame drops frames instead of seeking the audio', { item: 'audio-clock' }, async function () {
+    /* isolation (20 Oct, full-order red): it inherited the editor on screen. The rig swaps in its own 320x240, 60 s scene
+       (so the project size was never inherited) but refreshes nothing, so the timeline strip, the canvas and the panels
+       stayed built for whatever scene the earlier tests left, under Home or not as they left it. In the full order that
+       used to be the seeded project holding the 20x20 shape 'undo / redo grey out when there is nothing behind or ahead'
+       left, in the editor ('drawing: opening a project ends any sketch in progress' shut Home); both sources put things
+       back now, so it met an EMPTY project's 0 s strip (with Home over the editor if Home was open when the drawing
+       test ran) and lost 0.429 s. Alone it passes (measured twice), so it is not the load alone; which inherited part
+       did it is not proven, hence the diagnostics below. The clock is read, never accumulated (FM.clockNow), so the only
+       ways to lose wall time are a re-anchor at a stale playhead (setTime / scrubTime while playing — the timeline's
+       scroll listener scrubs when it reads a scroll it did not write — the start wait, a loop wrap) or a stop.
+       So it now sets up its own: the editor shown (Home shut, put back after), the editor rebuilt for the rig's own
+       scene (its filmstrip marked empty first, so the rebuild cannot start a strip build that seeks the fake element),
+       a settle for the debounced layout work, and CONTROLs that the timeline is the rig's 60 s and nothing plays before
+       Play. The 0.08 s limit is unchanged.
+       If it still loses time, the failure now says WHEN (the loss sampled every 250 ms) and WHO (any setTime, scrubTime
+       or pause from outside the transport while it ran, with its caller), and a stop before the measurement is its own
+       CONTROL rather than a frozen clock read as a slow one. */
+    var hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
     var rig = transportRig({ jankMs: 200 });
+    var real = { setTime: FM.setTime, scrubTime: FM.scrubTime, pause: FM.pause }, watching = false, outside = [], lost = [];
+    function caller() { var s = String((new Error()).stack || '').split('\n'); return String(s[3] || s[2] || '?').trim().slice(0, 160); }
+    function said() { return ' (lost by elapsed time, every 250 ms: ' + (lost.join(', ') || 'none sampled') + (outside.length ? '; moved from outside the transport while it ran: ' + outside.slice(0, 3).join(' | ') : '; nothing outside the transport moved the playhead') + ')'; }
     try {
+      var rec = FM.media.get(rig.layer.id);
+      if (rec && rec.stripFrames === undefined) rec.stripFrames = [];
+      FM.refreshAll();
+      await sleep(400);
+      if (!(FM.scene.project.duration >= 59)) throw new Error('CONTROL: the rig’s timeline is ' + FM.scene.project.duration + ' s long, not its own 60 s');
+      if (FM.playing) throw new Error('CONTROL: something started playback before Play was pressed');
+      // the element's seek count starts at Play, as it did when nothing ran between the rig and Play (the settle may seek it)
+      rig.el.seeks = 0;
+      FM.setTime = function (t) { if (watching) outside.push('setTime(' + Number(t).toFixed(3) + ') from ' + caller()); return real.setTime.apply(this, arguments); };
+      FM.scrubTime = function (t) { if (watching) outside.push('scrubTime(' + Number(t).toFixed(3) + ') from ' + caller()); return real.scrubTime.apply(this, arguments); };
+      FM.pause = function () { if (watching) outside.push('pause() from ' + caller()); return real.pause.apply(this, arguments); };
       FM.play();
       // Measured from AFTER play(), because play() itself pays one render — with a 200 ms comp that
       // is 200 ms of startup, and charging it to the clock would be measuring the wrong thing.
       var m0 = FM.clockNow(), t0 = performance.now();
-      await sleep(1500);
+      watching = true;
+      // the same 1.5 s as before, ended by a deadline so the samples cannot stretch it
+      var end = t0 + 1500;
+      while (performance.now() < end) {
+        await sleep(Math.max(1, Math.min(250, end - performance.now())));
+        lost.push(((performance.now() - t0) / 1000 - (FM.clockNow() - m0)).toFixed(3));
+      }
+      watching = false;
       var stats = JSON.parse(JSON.stringify(FM.playbackStats));
       var clockErr = Math.abs((FM.clockNow() - m0) - (performance.now() - t0) / 1000);
       // Against clockNow(), not FM.time: FM.time is a per-frame SNAPSHOT, so between two 200 ms
@@ -22856,7 +23010,9 @@
       // that and failed on the unmutated build at 0.371 s.)
       var elErr = Math.abs(rig.el.currentTime - FM.clockNow());
       var elSeeks = rig.el.seeks;
+      var stillPlaying = !!FM.playing;
       FM.pause();
+      if (!stillPlaying) throw new Error('CONTROL: playback had stopped before the measurement, so the clock read below was frozen, not slow' + said());
       // CONTROL, both ways. Too few renders and playback never happened; too many and the jank was
       // never applied, so every assertion below would pass on a machine that was never slow.
       if (stats.renders < 3) throw new Error('only ' + stats.renders + ' renders in 1.5 s — playback did not run, so nothing here is under test');
@@ -22865,9 +23021,14 @@
       if (stats.seeks !== 0) throw new Error(stats.seeks + ' hard seeks in 1.5 s of slow rendering — every one of those is an audible click and a hole in the sound');
       if (elSeeks > 1) throw new Error('the element was seeked ' + elSeeks + ' times (one at play start is expected)');
       if (stats.drops < 1) throw new Error('no frames were dropped — the picture is keeping up by holding the clock back, which is what shredded the audio');
-      if (clockErr > 0.08) throw new Error('the transport lost ' + clockErr.toFixed(3) + ' s against the wall clock while the compositor was busy');
+      if (clockErr > 0.08) throw new Error('the transport lost ' + clockErr.toFixed(3) + ' s against the wall clock while the compositor was busy' + said());
       if (elErr > FM.syncTuning.hard) throw new Error('the element drifted ' + elErr.toFixed(3) + ' s from the playhead and was never pulled back');
-    } finally { rig.restore(); }
+    } finally {
+      watching = false;
+      FM.setTime = real.setTime; FM.scrubTime = real.scrubTime; FM.pause = real.pause;
+      rig.restore();
+      if (hadHome && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open();
+    }
   });
 
   test('the canvas is painted once per project frame, not once per screen refresh', { item: 'audio-clock' }, async function () {
@@ -28313,7 +28474,13 @@
   test('the group crumb is gone and back still leaves the group', { item: 'group-crumb' }, async function () {
     if (document.getElementById('group-crumb')) throw new Error('the floating "Editing group" pill is back');
     const savedScene = FM.scene;
+    /* isolation (20 Oct): it inherited the EDITOR being on screen from 'drawing: opening a project ends any sketch in
+       progress', whose finally closes Home and never reopens it; it now closes Home itself and puts it back. Alone the
+       suite starts on Home (the boot opens it), so Home was already open before back was pressed, and the check below
+       read that as back leaving the project. Back from inside a group never opens Home (app.js, #btn-back). */
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     try {
+      if (hadHome) FM.home.close();
       FM.scene = scene([
         FM.makeLayer('shape', { name: 'A', shape: 'rect', x: 60, y: 60, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 }),
         FM.makeLayer('shape', { name: 'B', shape: 'rect', x: 90, y: 90, shapeW: 40, shapeH: 40, fill: '#0f0', start: 0, duration: 2 }),
@@ -28325,6 +28492,7 @@
       FM.enterGroup(grp.id);
       if (FM.groupContext !== grp.id) throw new Error('enterGroup did not put us inside the group');
       if (!document.body.classList.contains('group-editing')) throw new Error('body.group-editing is gone — the + FAB hides on that class, so it must survive the pill');
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) throw new Error('CONTROL: Home is already open before back is pressed, so Home open afterwards could not tell a working back button from one that left the project');
       document.getElementById('btn-back').click();
       await sleep(60);
       if (FM.groupContext) throw new Error('the back button no longer leaves the group — with the pill removed there would be no way out but leaving the project');
@@ -28340,6 +28508,11 @@
       if (FM.exitGroup) FM.exitGroup(true);
       FM.scene = savedScene;
       FM.selectLayer(null); FM.timeline.rebuild(); FM.refreshAll();
+      // Home back as it was found: reopened if it was open, shut if a broken back button opened it
+      if (FM.home && FM.home.isOpen) {
+        if (hadHome && !FM.home.isOpen()) FM.home.open();
+        else if (!hadHome && FM.home.isOpen()) FM.home.close();
+      }
       await sleep(40);
     }
   });
@@ -30194,11 +30367,13 @@
     const layerRef = host.base.layers[0];
     const effectsRef = layerRef.effects, maskPathRef = layerRef.masks[0].path, fxRef = layerRef.effects[0];
 
-    /* An out-of-range duration: something the sanitiser has an opinion about. */
-    const r = host.receive('g1', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'duration'], v: 99999 }] });
+    /* An out-of-range duration: something the sanitiser has an opinion about.
+       (hunt5 later A: the ceiling is FM.LIMITS.duration now, 360,000 s, the longest clip the Speed card makes; it was 3600, and
+       99999 was out of range then. 1e9 is out of range under either.) */
+    const r = host.receive('g1', { cid: 1, bs: 0, ops: [{ o: 's', p: ['L', 'l1', 'duration'], v: 1e9 }] });
     if (!r.b) throw new Error('nothing was sequenced');
-    if (!r.b.fix.length) throw new Error('the host accepted a duration of 99999 with no fix — the sanitiser clamps it to 3600, so without a fix op every guest would hold a different number from the host forever: ' + JSON.stringify(r.b));
-    if (host.base.layers[0].duration !== 3600) throw new Error('base was not repaired, it is ' + host.base.layers[0].duration);
+    if (!r.b.fix.length) throw new Error('the host accepted a duration of 1e9 with no fix — the sanitiser clamps it to FM.LIMITS.duration, so without a fix op every guest would hold a different number from the host forever: ' + JSON.stringify(r.b));
+    if (host.base.layers[0].duration !== FM.LIMITS.duration) throw new Error('base was not repaired to FM.LIMITS.duration (' + FM.LIMITS.duration + '), it is ' + host.base.layers[0].duration);
 
     if (host.base.layers[0] !== layerRef) throw new Error('the LAYER object was replaced — every closure in the inspector now edits a detached copy');
     if (host.base.layers[0].effects !== effectsRef) throw new Error('the effects ARRAY was replaced — this is exactly what storage.js\'s sanitizeEffects does, and why it must only ever run on a clone');
@@ -43406,9 +43581,44 @@
    * symptom is a TEMPLATE, which packs the whole project object and handed its notes to every new
    * project made from it. So the tests pin the boundary, not just the fix. */
 
+  /* isolation (20 Oct): both notes tests below used to delete their projects WITHOUT awaiting remove() and without going
+     back to the project they started in, and remove() of the open project then opens some other one (storage.js: the
+     first left in the list, often one of theirs, half deleted). So every later test ran in a 640x640 comp it never asked
+     for, with whatever layers that project held: the hold-Play, preset tags, quality ladder and queue 330-339 tests all
+     leaned on it. This is their shared finally: back to the project that was open (by id, loaded as storage has it, since
+     create() and open() flush it first), then each made project removed, awaited, and each template, then the selection,
+     playhead and Home as they were found. */
+  async function notesIsoRestore(iso, made, tplName) {
+    try {
+      if (FM.storage.openProjectId() !== iso.id0) await FM.projects.open(iso.id0 || null, { confirmed: true });
+    } catch (e) {}
+    for (const id of made) { try { if (id && id !== iso.id0) await FM.projects.remove(id); } catch (e) {} }
+    if (tplName && FM.templates && FM.templates.list && FM.templates.remove) {
+      // matched the way the test finds it (a name CONTAINING it), so a decorated name is removed too
+      const tpls = (FM.templates.list() || []).filter(function (x) { return x && String(x.name || '').indexOf(tplName) >= 0; });
+      for (const t of tpls) { try { await FM.templates.remove(t.id); } catch (e) {} }
+    }
+    try {
+      const S = FM.scene, has = function (id) { return !!(id && FM.layerById(S, id)); };
+      if (has(iso.sel0)) { S.selectedId = iso.sel0; S.selectedIds = iso.ids0.filter(has); FM.selectMode = iso.mode0; }
+      FM.time = iso.t0;
+      FM.refreshAll();
+    } catch (e) {}
+    if (FM.home && FM.home.isOpen) {
+      if (iso.hadHome && !FM.home.isOpen()) FM.home.open();
+      else if (!iso.hadHome && FM.home.isOpen()) FM.home.close();
+    }
+  }
+  function notesIsoTake() {
+    return { id0: FM.storage.openProjectId(), sel0: FM.scene.selectedId, ids0: (FM.scene.selectedIds || []).slice(),
+             mode0: FM.selectMode, t0: FM.time, hadHome: !!(FM.home && FM.home.isOpen && FM.home.isOpen()) };
+  }
+
   test('a template does not carry its notes into a new project', { item: 'notes-scope' }, async function () {
     if (!FM.templates || !FM.templates.save || !FM.templates.useAsNew) throw new Error('the templates API is missing');
     const made = [];
+    // isolation (20 Oct): what it found, put back by notesIsoRestore (above) in the finally
+    const iso = notesIsoTake();
     try {
       const a = await FM.projects.create({ name: 'ZZ-notes-src', width: 640, height: 640 });
       made.push(a);
@@ -43428,14 +43638,16 @@
       await FM.projects.open(a);
       const still = (FM.scene.project.notes || []).map(function (n) { return n.text; });
       if (still.length !== 1) throw new Error('the source project lost its notes when it was templatised: ' + JSON.stringify(still));
-      FM.templates.remove && FM.templates.remove(t.id);
     } finally {
-      for (const id of made) { try { FM.projects.remove && FM.projects.remove(id); } catch (e) {} }
+      // the template goes in the finally now too, so a failure above cannot leave it on the Templates tab
+      await notesIsoRestore(iso, made, 'ZZ-notes-tpl');
     }
   });
 
   test('notes stay with their own project, and travel in the saved file', { item: 'notes-scope' }, async function () {
     const made = [];
+    // isolation (20 Oct): what it found, put back by notesIsoRestore (above) in the finally
+    const iso = notesIsoTake();
     try {
       const a = await FM.projects.create({ name: 'ZZ-notes-A', width: 640, height: 640 });
       made.push(a);
@@ -43454,7 +43666,7 @@
       const back = ((FM.scene.project.notes) || []).map(function (n) { return n.text; });
       if (back.join() !== 'only for A') throw new Error('A lost its own notes: ' + JSON.stringify(back));
     } finally {
-      for (const id of made) { try { FM.projects.remove && FM.projects.remove(id); } catch (e) {} }
+      await notesIsoRestore(iso, made, null);
     }
   });
 
@@ -43509,7 +43721,12 @@
         if (diag > axis * 1.25) throw new Error('the hit area reaches ' + diag + 'px diagonally against ' + axis + 'px on the axis — it is a square, and the corners steal taps meant for cards');
         // and it must not run past the bottom of the screen, over the home indicator
         if (r.bottom + 12 > window.innerHeight + 1) throw new Error('the hit ring extends past the bottom of the viewport, over the home indicator');
-      } finally { if (!(FM.home && FM.home.isOpen && FM.home.isOpen())) { /* left as found */ } }
+      } finally {
+        /* isolation (20 Oct): this finally used to be EMPTY (its comment said "left as found", and nothing did it), so
+           when it found the editor it left Home open over it for every later test. Shut again if it was shut; a close
+           with no push option is instant (home.js close), so nothing is still animating when the next test starts. */
+        if (!wasOpen && FM.home && FM.home.isOpen && FM.home.isOpen()) { FM.home.close(); await frame(); }
+      }
     }, 375);
   });
 
@@ -44886,7 +45103,8 @@
       if (drift) bad.push(key + ': an instance without the control differs from soft 0 in ' + drift + ' bytes — the legacy render is not pinned');
       const dOld = mad(plain, b);
       if (dOld >= fDef) bad.push(key + ': soft 0 reads ' + dOld.toFixed(2) + ', so the legacy render is not the faint one and this floor proves nothing');
-      try { FM.media.unpin && FM.media.unpin(mid); } catch (e) {}
+      // isolation (20 Oct): FM.media has no unpin() (remove() drops the pin with the record, js/media.js), so this was a no-op and the pinned record outlived the test
+      try { FM.media.remove(mid); } catch (e) {}
     }
     if (bad.length) throw new Error(bad.join(' · ') + ' (queue 799)');
   });
@@ -44993,7 +45211,8 @@
       const pinned = R.makeInstance('halation'); pinned.params.threshold = 0.68; pinned.params.knee = 2.4;
       const drift = mad(shot(old), shot(pinned));
       if (drift !== 0) bad.push(key + ': an instance without the new keys drifted by ' + drift.toFixed(3) + ' from the 0.68 / 2.4 render it used to be');
-      try { FM.media.unpin && FM.media.unpin(mid); } catch (e) {}
+      // isolation (20 Oct): FM.media has no unpin() (remove() drops the pin with the record, js/media.js), so this was a no-op and the pinned record outlived the test
+      try { FM.media.remove(mid); } catch (e) {}
     }
     if (bad.length) throw new Error(bad.join(' · ') + ' (queue 482)');
   });
@@ -59053,8 +59272,28 @@
   test('play: holding the Play button plays, it does not silently toggle Loop instead', { item: 'transport' }, async function () {
     var btn = document.getElementById('btn-play');
     if (!btn) throw new Error('no play button');
-    var wasLoop = !!FM.loop, wasPlaying = !!FM.playing;
+    var wasLoop = !!FM.loop, played0 = !!FM.playing;
+    /* isolation (20 Oct): it inherited a timeline with something on it (project.duration above 0) from earlier tests:
+       the shape 'undo / redo grey out when there is nothing behind or ahead' leaves in the scene, then whichever project
+       the two 'notes …' tests leave open (they delete theirs without reopening the original). It now sets that up
+       itself. Alone the suite runs on the seeded empty project, a 0 s timeline, where play() starts and its first tick
+       stops it (app.js tick: nt >= P.duration pauses), so Play read as doing nothing. Its own one-clip scene from 0 s,
+       stopped, pressed in the editor (Home shut if a test or the boot left it open), and everything put back. */
+    var S = FM.scene, layers0 = S.layers, copy0 = S.layers.slice(), dur0 = S.project.duration, t0 = FM.time;
+    var sel0 = S.selectedId, ids0 = (S.selectedIds || []).slice(), mode0 = FM.selectMode;
+    var hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    var wasPlaying = false;
     try {
+      if (played0 && FM.pause) FM.pause();
+      if (hadHome) FM.home.close();
+      var L = FM.makeLayer('shape', { name: 'play iso', shape: 'rect', x: 120, y: 120, shapeW: 80, shapeH: 80, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 3;
+      layers0.length = 0; layers0.push(L);
+      S.selectedId = null; S.selectedIds = [];
+      FM.refreshAll();
+      if (FM.setTime) FM.setTime(0); else FM.time = 0;
+      if (!(FM.scene.project.duration >= 3)) throw new Error('CONTROL: the one-clip timeline is ' + FM.scene.project.duration + ' s long, so Play has nothing to play');
+      if (FM.playing) throw new Error('CONTROL: playback is already running before Play is pressed');
       var send = function (type) {
         var r = btn.getBoundingClientRect();
         btn.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 44, pointerType: 'touch',
@@ -59068,8 +59307,18 @@
       if (!!FM.loop !== wasLoop) throw new Error('a slow press on Play flipped Loop — a setting the user did not ask for, changed invisibly');
       if (!!FM.playing === wasPlaying) throw new Error('a slow press on Play did nothing at all — this is "I pressed play and nothing happened"');
     } finally {
-      if (!!FM.playing !== wasPlaying && FM.togglePlay) FM.togglePlay();
+      if (FM.playing && FM.pause) FM.pause();
       FM.loop = wasLoop;
+      layers0.length = 0; copy0.forEach(function (l) { layers0.push(l); }); S.layers = layers0;
+      S.selectedId = sel0; S.selectedIds = ids0; FM.selectMode = mode0;
+      FM.refreshAll();
+      // after refreshAll, whose autoFitDuration would otherwise re-fit a length the scene arrived with
+      S.project.duration = dur0; FM.time = t0;
+      if (FM.home && FM.home.isOpen) {
+        if (hadHome && !FM.home.isOpen()) FM.home.open();
+        else if (!hadHome && FM.home.isOpen()) FM.home.close();
+      }
+      if (played0 && FM.togglePlay) FM.togglePlay();
       await sleep(40);
     }
   });
@@ -60593,7 +60842,8 @@
       if (!nullChecked) { nullChecked = true; if (mad(plain, shot(false)) !== 0) throw new Error('a filterless render differs from itself, so nothing below means anything'); }
       const moved = mad(plain, shot(true));
       if (moved < 1.5) dead.push(id + ' moved its photograph by only ' + moved.toFixed(2));
-      try { FM.media.unpin && FM.media.unpin(mid); } catch (e) {}
+      // isolation (20 Oct): FM.media has no unpin() (remove() drops the pin with the record, js/media.js), so this was a no-op and the pinned record outlived the test
+      try { FM.media.remove(mid); } catch (e) {}
     }
     if (dead.length) throw new Error(dead.join(' · ') + ' (queue 778)');
   });
@@ -64612,8 +64862,67 @@
     } finally { FM.scene = saved; FM.scene.selectedId = savedSel; try { FM.refreshAll(); } catch (e) {} if (hadHome && FM.home && FM.home.open) FM.home.open(); }
   });
 
+  /* ═══ THE LEAK CHECK (20 Oct, the isolation pass) ═══════════════════════════════════════════════════════════════════
+     A test that changes shared app state and does not put it back hands it to every test after it, and those tests then
+     pass in the full order on what they inherited and fail alone (the 20 Oct pass found six such sources and eleven
+     inheritors, one at a time). Nothing named them. So the runner takes a small FINGERPRINT of that state before and after
+     EVERY test, and a difference is recorded against the test that made it: window.__fmLeaks = [{ test, what }], where
+     `what` reads "<part> <before> → <after>" for each part that moved. tests/_cdp.py hands it on as "leaks" in its JSON,
+     run.html lists it under the results, and ship.sh prints it after each pass (tools/_testfloor.sh leaks_report).
+     The parts: the open project's id, Home open or shut, FM.scene still the same object, the layer count and ids, the
+     selection, the quality ladder's tier and latches, the open project's notes, FM.playing, and the media records that
+     belong to no module (pinned ones, the effect thumbnails' cache, are the app's own and are left out).
+     CHEAP AND READ-ONLY: plain reads and three read-only app calls (FM.storage.openProjectId, FM.home.isOpen,
+     FM._perfState), no rendering, no await. NO EXEMPTIONS: a test that changes one of these on purpose for the test after
+     it is exactly the coupling this exists to remove — it should put it back, and the next test should set it up.
+     ONE THING IT CANNOT DO: a cleanup a test did not await (a remove() or a project open still running when it returned)
+     lands during the NEXT test, and is charged to that one. A test named for a change it never makes is the clue. */
+  function leakPrint() {
+    var f = { project: '?', home: '?', scene: null, layers: '?', ids: '', sel: '?', quality: '?', notes: '?', playing: '?', media: '?' };
+    try { f.project = (FM.storage && FM.storage.openProjectId) ? String(FM.storage.openProjectId() || 'none') : '?'; } catch (e) {}
+    try { f.home = (FM.home && FM.home.isOpen) ? (FM.home.isOpen() ? 'open' : 'shut') : '?'; } catch (e) {}
+    try {
+      var S = FM.scene; f.scene = S || null;
+      var ls = (S && S.layers) || [];
+      f.layers = String(ls.length);
+      f.ids = ls.map(function (l) { return l && l.id; }).join(',');
+      var n = (S && S.selectedIds && S.selectedIds.length) || ((S && S.selectedId) ? 1 : 0);
+      f.sel = ((S && S.selectedId) || 'none') + ' (' + n + ')';
+      f.notes = String(((S && S.project && S.project.notes) || []).length);
+    } catch (e) {}
+    try {
+      var st = FM._perfState ? FM._perfState() : null;
+      if (st) f.quality = 'tier ' + st.tier + (st.locked ? ' latched' : '') + (st.climbLockAt ? ' climb-latched' : '');
+    } catch (e) {}
+    try { f.playing = String(!!FM.playing); } catch (e) {}
+    try {
+      var all = (FM.media && FM.media.all) ? FM.media.all() : null, k = 0;
+      if (all) { for (var id in all) { if (!(FM.media.isPinned && FM.media.isPinned(id))) k++; } f.media = String(k); }
+    } catch (e) {}
+    return f;
+  }
+  function leakDiff(a, b) {
+    var out = [];
+    if (a.project !== b.project) out.push('open project ' + a.project + ' → ' + b.project);
+    if (a.home !== b.home) out.push('Home ' + a.home + ' → ' + b.home);
+    if (a.scene !== b.scene) out.push('FM.scene is another object than the one it found');
+    if (a.layers !== b.layers) out.push('layers ' + a.layers + ' → ' + b.layers);
+    else if (a.ids !== b.ids) out.push('layers ' + a.layers + ', but not the same ones');
+    if (a.sel !== b.sel) out.push('selection ' + a.sel + ' → ' + b.sel);
+    if (a.quality !== b.quality) out.push('quality ladder ' + a.quality + ' → ' + b.quality);
+    if (a.notes !== b.notes) out.push('project notes ' + a.notes + ' → ' + b.notes);
+    if (a.playing !== b.playing) out.push('FM.playing ' + a.playing + ' → ' + b.playing);
+    if (a.media !== b.media) out.push('media records ' + a.media + ' → ' + b.media);
+    return out.join('; ');
+  }
+
   async function run() {
     var results = [];
+    /* REPORT ONLY while this is false: a leak is listed, and no test turns red for it. THE PM'S PLAN (20 Oct): once a full
+       run lists no LEAKS on both passes, flip this to true, so a test that leaves state behind FAILS by name from then on,
+       instead of failing whichever test inherits it, alone or deep in a run. One constant; nothing else changes. */
+    var LEAKS_ARE_RED = false, LEAK_CAP = 400, leaksMore = 0;
+    window.__fmLeaks = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
     var WIN_KEYS = ['innerHeight', 'innerWidth', 'outerHeight', 'outerWidth', 'devicePixelRatio', 'visualViewport', 'matchMedia'];
     var winD0 = {}; WIN_KEYS.forEach(function (k) { try { winD0[k] = Object.getOwnPropertyDescriptor(window, k); } catch (e) {} });
@@ -64677,6 +64986,7 @@
       var _sbIds = ['opt-bar', 'view-bar'], _sb0 = _sbIds.map(function (id) { var el = document.getElementById(id); return !!(el && FM.sideBarOpen && FM.sideBarOpen(el)); });
       var _z0 = (FM.timeline && FM.timeline.getZoom) ? FM.timeline.getZoom() : null;
       try { _lk0 = { scene: FM.scene, ids: (FM.scene && FM.scene.layers || []).map(function (l) { return l.id; }), pv: FM._fxPreview || null, iso: FM.isolate || null }; } catch (e) {}
+      var _fp0 = leakPrint();   // the leak check's BEFORE (see leakPrint, above run)
       var _t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       /* A HUNG TEST IS A NAMED FAILURE, NOT A SILENT STALL (2 Sep). A throw inside a callback a test does not
        * await — a timer, a rAF, a dropped promise — used to leave its outer promise pending for ever; the
@@ -64763,12 +65073,27 @@
           }
         }
       } catch (e) {}
+      // the leak check's AFTER (see leakPrint, above run): what this test left changed for the next one
+      try {
+        var _leak = leakDiff(_fp0, leakPrint());
+        if (_leak) {
+          if (window.__fmLeaks.length < LEAK_CAP) window.__fmLeaks.push({ test: t.name, what: _leak });
+          else leaksMore++;
+          if (LEAKS_ARE_RED) {
+            var _lmsg = 'LEAKS: ' + _leak + ' — left for the next test; put it back in this test\'s own finally';
+            if (ok || notRun) { ok = false; notRun = ''; err = _lmsg; }
+            else err += ' [also ' + _lmsg + ']';
+          }
+        }
+      } catch (e) {}
       results.push({ name: t.name, item: t.item, pending: t.pending, ok: ok, error: err, notRun: notRun });   // a NOT RUN that leaked state above is a FAIL, not a NOT RUN
     }
     undoFakes();
     var reg = results.filter(function (r) { return !r.pending; });
     if (window.__fmFiltered) results.__filtered = window.__fmFiltered;
     results.__slowest = window.__fmSlow || [];   // the eight slowest tests of this run (ms, name)
+    // the leak check's list is capped; past the cap it says how many more, so a long list is never read as the whole one
+    if (leaksMore) window.__fmLeaks.push({ test: '(not listed)', what: leaksMore + ' more test(s) left state changed; the list stops at ' + LEAK_CAP });
     var pend = results.filter(function (r) { return r.pending; });
     // NOT RUN HERE: counted in the total (so the test floor still sees every registered test), never in the passes, and
     // green only means "nothing that RAN failed" — run.html prints the count beside the summary and lists every one.
@@ -64789,7 +65114,8 @@
       notRun: notRunList,
       pendingPass: pend.filter(function (r) { return r.ok; }).length,
       pendingTotal: pend.length,
-      results: results
+      results: results,
+      leaks: window.__fmLeaks   // the leak check (leakPrint, above run): report only unless LEAKS_ARE_RED
     };
   }
 
@@ -68534,6 +68860,51 @@
     }
   });
 
+  /* ISOLATION (20 Oct): A LAYER OF ITS OWN, IN THE EDITOR, PUT BACK AS FOUND.
+     The queue 330-339 tests below took FM.scene.layers[0] and the editor as earlier tests left them: the 20x20 shape
+     'undo / redo grey out when there is nothing behind or ahead' left (autosaved into the open project), whichever
+     project the two 'notes …' tests left open, and the editor 'drawing: opening a project ends any sketch in progress'
+     left on screen. Run alone they met the seeded empty project on Home and stopped at 'no layer to work from'. Those
+     sources put everything back now, so a full run would meet the same thing. So each sets it up itself: isoOwnLayer()
+     makes the open scene hold ONLY the test's own shape (the same layers array, emptied in place, as the hold-Play test
+     does), with nothing selected, and shuts Home if it was open; put(), called in the test's own finally, puts back the
+     array's contents, the selection, select mode, project length, playhead and Home exactly as found. Nothing inherited
+     is touched, so nothing inherited needs restoring (queue 333 used to wipe an inherited layer's effects).
+     Two quieter carriers go back too. THE HISTORY: a test that committed (333's Done adds effects) left steps whose
+     snapshots hold its own shape, so a later undo could bring that scene back; when the commit counter moved, the history
+     is reset over the restored scene, as a project open does. THE SAVED PROJECT: an autosave fires 600 ms after an edit,
+     so a long test (333 runs for minutes) writes its own one-layer scene into the open project's document; put() flushes
+     the restored scene, and writeScene writes nothing when the document already matches. */
+  function isoOwnLayer(props) {
+    var S = FM.scene, layers0 = S.layers, copy0 = layers0.slice(), dur0 = S.project.duration, t0 = FM.time;
+    var sel0 = S.selectedId, ids0 = (S.selectedIds || []).slice(), mode0 = FM.selectMode;
+    var seq0 = (FM.history && FM.history._commitSeq) ? FM.history._commitSeq() : null;
+    var hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    var L = FM.makeLayer('shape', Object.assign({ name: 'iso layer', shape: 'rect', x: 120, y: 120, shapeW: 80, shapeH: 80, fill: '#c04070' }, props || {}));
+    L.start = 0; L.duration = 3;
+    layers0.length = 0; layers0.push(L);
+    S.selectedId = null; S.selectedIds = [];
+    FM.refreshAll();
+    return {
+      L: L,
+      put: function () {
+        if (FM.scene !== S) FM.scene = S;
+        layers0.length = 0; copy0.forEach(function (l) { layers0.push(l); }); S.layers = layers0;
+        S.selectedId = sel0; S.selectedIds = ids0.slice(); FM.selectMode = mode0;
+        if (seq0 != null && FM.history._commitSeq() !== seq0) FM.history.reset();
+        FM.refreshAll();
+        // after refreshAll, whose autoFitDuration would otherwise re-fit a length the scene arrived with
+        S.project.duration = dur0; FM.time = t0;
+        try { if (FM.storage && FM.storage.flushSync) FM.storage.flushSync(); } catch (e) {}
+        if (FM.home && FM.home.isOpen) {
+          if (hadHome && !FM.home.isOpen()) FM.home.open();
+          else if (!hadHome && FM.home.isOpen()) FM.home.close();
+        }
+      }
+    };
+  }
+
   /* Queue 330 — *"Also when you save a preset you have to exit and go back into the menu, make it auto
    * update the menu"*.
    * Four things change the two preset lists (two save buttons, two ✕) and each had to remember to
@@ -68546,19 +68917,21 @@
    * calling refresh() by hand, which is the whole complaint. Both lists are covered, because a fix in
    * one store says nothing about the other. */
   test('saving a preset updates the open Presets card by itself (queue 330)', { item: 'preset-live' }, async function () {
-    var L = FM.scene.layers[0];
-    if (!L) throw new Error('no layer to work from');
-    var id0 = FM.selectedLayer(FM.scene) && FM.selectedLayer(FM.scene).id;
+    /* isolation (20 Oct): it inherited its layer (FM.scene.layers[0]) and the editor from earlier tests; alone it stopped
+       at 'no layer to work from'. It now saves from its own shape in the editor (isoOwnLayer, above), and the finally
+       puts the scene, selection and Home back as found. The selection and the Presets card moved inside the try, so a
+       throw there is cleaned up too. */
+    var iso = isoOwnLayer(), L = iso.L;
     var NAME_L = '__qa layer preset', NAME_F = '__qa fx preset';
-    FM.selectLayer(L.id);
-    FM.inspector.openCategory('presets');
-    await sleep(120);
     var rows = function () {
       return [].slice.call(document.querySelectorAll('#inspector .insp-preset-row'))
                .map(function (r) { return r.textContent || ''; }).join(' | ');
     };
-    if (rows().indexOf(NAME_L) >= 0 || rows().indexOf(NAME_F) >= 0) throw new Error('test names already present — stale state');
     try {
+      FM.selectLayer(L.id);
+      FM.inspector.openCategory('presets');
+      await sleep(120);
+      if (rows().indexOf(NAME_L) >= 0 || rows().indexOf(NAME_F) >= 0) throw new Error('test names already present — stale state');
       // No refresh() here on purpose. If the panel does not update on its own, that IS the defect.
       FM.layerPresets.save(NAME_L, L);
       await sleep(120);
@@ -68578,9 +68951,9 @@
     } finally {
       FM.layerPresets.remove(NAME_L);
       FM.fxPresets.remove(NAME_F);
-      if (id0) FM.selectLayer(id0);
       FM.inspector.openCategory('home');
       await sleep(80);
+      iso.put();
     }
   });
 
@@ -68593,15 +68966,17 @@
    * method as queue 209 and 296, because the button was ALREADY a centred flex box and measuring the
    * box is exactly what makes a mis-set glyph look correct. */
   test('the Presets card leads with its save button and its ✕ is drawn, not typed (queue 331)', { item: 'preset-card' }, async function () {
-    var L = FM.scene.layers[0];
-    if (!L) throw new Error('no layer to work from');
-    var id0 = FM.selectedLayer(FM.scene) && FM.selectedLayer(FM.scene).id;
+    /* isolation (20 Oct): it inherited its layer (FM.scene.layers[0]) and the editor from earlier tests; alone it stopped
+       at 'no layer to work from', and with Home over the editor the ✕ it measures would have no box. It now saves from
+       its own shape in the editor (isoOwnLayer, above), and the finally puts the scene, selection and Home back as found.
+       The setup moved inside the try, so a throw there is cleaned up too. */
+    var iso = isoOwnLayer(), L = iso.L;
     var NAME = '__qa card preset';
-    FM.selectLayer(L.id);
-    FM.layerPresets.save(NAME, L);
-    FM.inspector.openCategory('presets');
-    await sleep(160);
     try {
+      FM.selectLayer(L.id);
+      FM.layerPresets.save(NAME, L);
+      FM.inspector.openCategory('presets');
+      await sleep(160);
       var wrap = document.querySelector('#inspector .preset-wrap');
       if (!wrap) throw new Error('no Presets card on screen');
 
@@ -68644,9 +69019,9 @@
       }
     } finally {
       FM.layerPresets.remove(NAME);
-      if (id0) FM.selectLayer(id0);
       FM.inspector.openCategory('home');
       await sleep(80);
+      iso.put();
     }
   });
 
@@ -68692,9 +69067,16 @@
    * The rename-clash check is the one that matters most and is the least visible: the stores are keyed
    * by NAME, so renaming onto a name in use would merge two saved looks and destroy one without a word. */
   test('presets can be searched, tagged, grouped and renamed (queue 331 clauses 4-9)', { item: 'preset-tags' }, async function () {
-    var L = FM.scene.layers[0];
-    if (!L) throw new Error('no layer to work from');
-    var id0 = FM.selectedLayer(FM.scene) && FM.selectedLayer(FM.scene).id;
+    /* isolation (20 Oct): it inherited a layer to save presets from (FM.scene.layers[0]) from earlier tests: the shape
+       'undo / redo grey out when there is nothing behind or ahead' leaves in the scene, then whichever project the two
+       'notes …' tests leave open (they delete theirs without reopening the original). It now sets that up itself: its
+       own shape, pushed onto the same layers array, selected, and taken out again in the finally with the selection put
+       back exactly as it was found. Alone the seeded project is empty, so it stopped at 'no layer to work from'. */
+    var S = FM.scene, layers0 = S.layers;
+    var sel0 = S.selectedId, ids0 = (S.selectedIds || []).slice(), mode0 = FM.selectMode;
+    var L = FM.makeLayer('shape', { name: 'iso preset layer', shape: 'rect', x: 120, y: 120, shapeW: 80, shapeH: 80, fill: '#c04070' });
+    L.start = 0; L.duration = 3;
+    layers0.push(L);
     var A = '__qa alpha', B = '__qa bravo', A2 = '__qa alpha renamed';
     var names = function () {
       return [].slice.call(document.querySelectorAll('#inspector .insp-preset-name'))
@@ -68705,8 +69087,8 @@
       return [].slice.call(document.querySelectorAll('#inspector .preset-chip'))
                .map(function (c) { return c.textContent; });
     };
-    FM.selectLayer(L.id);
     try {
+      FM.selectLayer(L.id);
       /* SAVED IN THE ORDER THAT MAKES THE "UNTAGGED LAST" CHECK MEAN SOMETHING. The first version saved
          A then B, and save() UNSHIFTS — so the store already listed the tagged one first and the
          assertion passed with the ordering code deleted. The mutation check caught it; nothing else
@@ -68766,7 +69148,13 @@
       FM.presetTags.set('lp:' + A, []); FM.presetTags.set('lp:' + A2, []); FM.presetTags.set('lp:' + B, []);
       var bx = document.querySelector('#inspector .preset-search');
       if (bx) { bx.value = ''; bx.dispatchEvent(new Event('input', { bubbles: true })); }
-      if (id0) FM.selectLayer(id0);
+      // its own layer out of the same array it went into, wherever it sits now; then the selection as it was found
+      var at = layers0.indexOf(L);
+      if (at >= 0) layers0.splice(at, 1);
+      S.layers = layers0;
+      FM.selectLayer(sel0 || null);
+      S.selectedIds = ids0; FM.selectMode = mode0;
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
       FM.inspector.openCategory('home');
       await sleep(80);
     }
@@ -68840,12 +69228,16 @@
      * ⚠️ THIS TEST IS THE SINGLE BIGGEST COST IN THE PHONE PASS. The pass sits around 20 minutes against a 30-minute
      * ceiling in ship.sh; this raise spends ~3 more of the 10 minutes of headroom left. The next thing to grow past
      * its budget should be looked at as a suite-wide problem rather than given another raise. */
+    /* isolation (20 Oct): it took FM.scene.layers[0] when an earlier test had left one, WIPED ITS EFFECTS and never put
+       them back (L.effects = [] in the finally), and made its own shape only when there was none, which it then left
+       in the scene; Home was whatever it found. It now always works on its own shape (the one its stand-alone branch
+       made, the same size and place) in the editor (isoOwnLayer, above), and the finally puts the scene, selection and
+       Home back as found, so no inherited layer is touched at all. */
+    var iso = isoOwnLayer({ x: 200, y: 300, shapeW: 120, shapeH: 90, fill: '#c05030' });
+    try {
     await atPhoneWidth(async function () {
-      var L = FM.scene.layers[0];
-      if (!L) {   // stand alone: this test used to depend on whatever an earlier test had left (2 Sep)
-        L = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 90, fill: '#c05030' }); L.start = 0; L.duration = 3;
-        FM.scene.layers.push(L); FM.refreshAll(); await sleep(150);
-      }
+      var L = iso.L;
+      await sleep(150);
       FM.selectLayer(L.id);
       L.effects = [];
       window.__fmStep = 'open browser'; FM.fxBrowser.open(L);
@@ -68930,6 +69322,12 @@
         await sleep(120);
       }
     });
+    } finally {
+      // the browser is shut by the inner finally once it opened; a throw before that cannot leave it over the editor either
+      if (FM.fxBrowser && FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()) FM.fxBrowser.close();
+      iso.put();
+      await sleep(60);
+    }
   });
 
   /* Queue 335 — *"Motion blur doesn't even act as an effect and is pretty poorly designed"*, then
@@ -69085,9 +69483,13 @@
    * wait at all — a hold forced on the desktop would be an annoyance guarding against nothing, since a
    * mouse-down on a 13px target cannot happen by accident mid-scroll. */
   test('a trim grip needs a hold on touch, arms visibly, and is instant on mouse (queue 336)', { item: 'trim-hold' }, async function () {
+    /* isolation (20 Oct): it inherited its layer (FM.scene.layers[0]) and the editor from earlier tests, RETIMED that
+       layer (start 1, length 3) and never put it back; alone it stopped at 'no layer to work from'. It now trims its own
+       shape in the editor (isoOwnLayer, above), and the finally puts the scene, selection and Home back as found. */
+    var iso = isoOwnLayer();
+    try {
     await atPhoneWidth(async function () {
-      var L = FM.scene.layers[0];
-      if (!L) throw new Error('no layer to work from');
+      var L = iso.L;
       L.start = 1; L.duration = 3;
       FM.selectLayer(L.id); FM.refreshAll(); FM.timeline.rebuild();
       await sleep(160);
@@ -69138,6 +69540,10 @@
       if (!armedNow) throw new Error('a mouse press did not start a trim straight away');
       await sleep(60);
     });
+    } finally {
+      iso.put();
+      await sleep(60);
+    }
   });
 
   /* Queue 378 / 379 — *"Get rid of motion blur explanation, and make a note to get rid of all
@@ -69147,8 +69553,11 @@
    * while the renderer still clamps internally would leave the crank turning further and doing nothing
    * — which is the exact complaint, made worse by looking fixed. */
   test('effect panels carry no explanation block, and motion blur cranks past one frame (queue 378/379)', { item: 'fx-desc-crank' }, async function () {
-    var L = FM.scene.layers[0];
-    if (!L) throw new Error('no layer to work from');
+    /* isolation (20 Oct): it inherited its layer (FM.scene.layers[0]) and the editor from earlier tests, and selected
+       that layer without putting the selection back; alone it stopped at 'no layer to work from'. It now opens the
+       effects panel on its own shape in the editor (isoOwnLayer, above), and the finally puts the scene, selection and
+       Home back as found. */
+    var iso = isoOwnLayer(), L = iso.L;
     var fx0 = L.effects ? L.effects.slice() : [];
     try {
       L.effects = [{ type: 'objectblur', enabled: true, params: { shutter: 0.5, samples: 8 } }];
@@ -69187,6 +69596,7 @@
       L.effects = fx0;
       FM.inspector.openCategory('home'); FM.refreshAll();
       await sleep(80);
+      iso.put();
     }
   });
 
@@ -69271,9 +69681,15 @@
    * them apart" is the entire request. Fill-vs-outline is the cue that carries at 15px, so that is what
    * is checked, plus a plain not-identical guard so a copy-paste slip cannot pass. */
   test('the phone move/extend buttons are not the same drawing (queue 338)', { item: 'extend-icons' }, async function () {
+    /* isolation (20 Oct): it inherited its layer (FM.scene.layers[0]) and the editor from earlier tests, RETIMED that
+       layer (start 0, length 2), moved the playhead past it and put neither back; alone it stopped at 'no layer to work
+       from'. It now works on its own shape in the editor (isoOwnLayer, above), and the finally puts the scene, selection,
+       playhead and Home back as found. A playhead the 2 s timeline clamps to the clip's end still reads as past it
+       (FM.clipPlayheadSide: t >= end is +1), so the pair renders as it did in the longer inherited comp. */
+    var iso = isoOwnLayer();
+    try {
     await atPhoneWidth(async function () {
-      var L = FM.scene.layers[0];
-      if (!L) throw new Error('no layer to work from');
+      var L = iso.L;
       L.start = 0; L.duration = 2;
       FM.selectLayer(L.id);
       FM.setTime(L.start + L.duration + 1);        // playhead PAST the clip → the move/extend pair renders
@@ -69290,6 +69706,10 @@
       }
       if (!/stroke-dasharray/.test(a + b)) throw new Error('neither icon shows the dashed span that says "this edge stretches"');
     });
+    } finally {
+      iso.put();
+      await sleep(60);
+    }
   });
 
   /* Queue 339 — *"make it so each buttons background is the same but the line around it is a unique colour
@@ -69300,9 +69720,14 @@
    * likely to rot — a later refactor that drops the per-card phase would leave the grid pulsing in unison
    * and nothing else would notice. */
   test('every category card has its own gradient ring, out of step with the others (queue 339)', { item: 'cat-rings' }, async function () {
+    /* isolation (20 Oct): it inherited its layer (FM.scene.layers[0]) and the editor from earlier tests, and selected
+       that layer without putting the selection back; alone it stopped at 'no layer to work from'. It now reads the cards
+       of its own shape in the editor (isoOwnLayer, above), and the finally puts the scene, selection and Home back as
+       found. A shape is what it most likely had in the full order (the shape the undo test left). */
+    var iso = isoOwnLayer();
+    try {
     await atPhoneWidth(async function () {
-      var L = FM.scene.layers[0];
-      if (!L) throw new Error('no layer to work from');
+      var L = iso.L;
       FM.selectLayer(L.id); FM.inspector.openCategory('home'); FM.refreshAll();
       await sleep(200);
       var cards = [].slice.call(document.querySelectorAll('#inspector .cat-card'));
@@ -69349,6 +69774,10 @@
       if (dupDelay.length) throw new Error(delays[dupDelay[0]] + ' cards share the animation delay ' + dupDelay[0] + ' — they will move in lockstep');
       if (Object.keys(durs).length < 2) throw new Error('every card animates at the same speed, so they read as one pattern');
     });
+    } finally {
+      iso.put();
+      await sleep(60);
+    }
   });
 
   /* Queue 341 — *"Film grain background isn't even moving on mobile, and honestly I prefer it, maybe pc
@@ -71170,8 +71599,16 @@
   async function q202Ladder(opts) {
     const cv = document.getElementById('canvas') || document.querySelector('canvas');
     const o = opts || {};
+    /* isolation (20 Oct): the finally used to put the layers back as a COPY of the array, leave the selection to whatever
+       refreshAll made of it, and leave the quality LADDER wherever this run drove it — down a few tiers, often latched —
+       for every later test that plays or drags. There is no API to read the ladder back in (FM._perfState is a read-only
+       snapshot), so it is put back the way a fresh boot and every project open start it: FM._resetPlayQuality(), the
+       same call FM.projects.open makes. Then the canvas is sized for the restored mode. If the leak check names this test
+       for a ladder that was NOT fresh when it started, that tier was left by an earlier test. */
+    const S0 = FM.scene, layers0 = S0.layers;
     const saved = { render: FM.renderScene, layers: FM.scene.layers.slice(),
-                    dur: FM.scene.project.duration, mode: FM.settings.get('playbackQuality'), t: FM.time };
+                    dur: FM.scene.project.duration, mode: FM.settings.get('playbackQuality'), t: FM.time,
+                    sel: S0.selectedId, ids: (S0.selectedIds || []).slice(), selMode: FM.selectMode };
     const build = () => {
       FM.scene.layers.length = 0;
       const L = FM.makeLayer('shape', { shape: 'rect', name: 'box', start: 0, duration: 12, x: 120, y: 120, shapeW: 80, shapeH: 80, fill: '#f00' });
@@ -71187,6 +71624,16 @@
       FM.settings.set('playbackQuality', 'auto');
 
       build();
+      /* isolation (20 Oct): it inherited a comp whose 'detail' canvas is (nearly) the size of its 'auto' one — a comp
+         shown at or above its own pixel size, such as the 640x640 projects the two 'notes …' tests leave open — and it now
+         sizes the canvas itself. px0 used to be read off the canvas the pause() above left, which was sized while the
+         mode was still 'detail' (floor 1x); nothing resizes it when the setting changes, and FM.play() then resizes into
+         'auto'. Alone, on the seeded 1080x1920 project, that 'auto' canvas is a small fraction of the 'detail' one (by
+         previewScale, about a tenth in the runner's frame), so each frame burned a fraction of costMs and the struggle
+         control read 36 ms, the 30 fps frame interval. Not an app bug: the preview is meant to be smaller in 'auto'.
+         Resized here, so px0 is the canvas playback starts on (checked after FM.play below), and before.canvasPx, which
+         the shrink check compares with, is that canvas too. */
+      if (FM.resizeCanvas) FM.resizeCanvas();
       /* Normalised against THIS canvas's own starting size, not a fixed pixel count. A hardcoded
          reference makes the burn depend on whatever resolution the harness happens to run at — the
          first version used 500k and produced a 33 ms frame here, so the test tripped its own
@@ -71199,6 +71646,8 @@
       };
       const before = FM._perfState();
       FM.play();
+      const pxStart = cv ? cv.width * cv.height : px0;
+      if (pxStart !== px0) throw new Error('CONTROL: playback started on a ' + pxStart + ' px canvas but the load was scaled to a ' + px0 + ' px one, so a frame did not cost the ' + o.costMs + ' ms this run asked for');
       const trace = [];
       for (let i = 0; i < (o.samples || 12); i++) { await sleep(250); const st = FM._perfState(); trace.push(st); }
       const last = FM._perfState();
@@ -71208,11 +71657,20 @@
                firstGap: trace[0].gapAvg, lastGap: last.gapAvg };
     } finally {
       try { FM.pause(); } catch (e) {}
-      FM.renderScene = saved.render; FM.scene.layers = saved.layers;
+      FM.renderScene = saved.render;
+      if (FM.scene !== S0) FM.scene = S0;
+      // the same array it found, with the same contents (build() emptied it in place)
+      layers0.length = 0; saved.layers.forEach(function (l) { layers0.push(l); }); S0.layers = layers0;
+      S0.selectedId = saved.sel; S0.selectedIds = saved.ids; FM.selectMode = saved.selMode;
       FM.scene.project.duration = saved.dur;
       FM.settings.set('playbackQuality', saved.mode || 'auto');
+      // the ladder as a fresh boot or a project open leaves it (see the isolation note at the top)
+      if (FM._resetPlayQuality) FM._resetPlayQuality();
       FM.setTime(saved.t);
       if (FM.refreshAll) FM.refreshAll();
+      // after refreshAll, whose autoFitDuration would otherwise re-fit a length the scene arrived with
+      FM.scene.project.duration = saved.dur;
+      if (FM.resizeCanvas) FM.resizeCanvas();
       if (FM.timeline) FM.timeline.rebuild();
     }
   }
@@ -72222,7 +72680,9 @@
       FM.audioHealth.note = realNote;
       try { FM.pause(); } catch (e) {}
       FM.audioHealth.reset();
-      FM.scene.layers.forEach(l => { try { FM.media.delete && FM.media.delete(l.id); } catch (e) {} });
+      /* isolation (20 Oct): FM.media has no delete() (it is remove(), js/media.js), and the guard made this a silent no-op,
+         so the fake element's record outlived the test. The layers here are only this test's own. */
+      FM.scene.layers.forEach(l => { try { FM.media.remove(l.id); } catch (e) {} });
       FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l));
       FM.scene.project.duration = saved.dur;
       FM.setTime(saved.t);
@@ -76582,7 +77042,8 @@
       snd.muted = true;
       if (FM.projectHasAudio() !== false) throw new Error('a MUTED layer was counted as sound the export would lose');
     } finally {
-      made.forEach(id => { try { FM.media.del ? FM.media.del(id) : FM.media.delete(id); } catch (e) {} });
+      // isolation (20 Oct): FM.media has neither del() nor delete() (it is remove()), so the throw was caught and the record stayed
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
       FM.scene.layers.length = 0;
       saved.forEach(l => FM.scene.layers.push(l));
       if (FM.refreshAll) FM.refreshAll();
@@ -81534,7 +81995,8 @@
       if (Li < 0.9) throw new Error('the image clip\'s name is inked ' + getComputedStyle(li).color + ' over its frames — chosen from the bar colour, the 1.10:1 the QA pass measured');
       if (Ls > 0.5) throw new Error('the shape clip on a light bar is inked ' + getComputedStyle(ls).color + ' — the tinted ink on a solid bar was lost (the control)');
     } finally {
-      try { if (I && FM.media.delete) FM.media.delete(I.id); } catch (e) {}
+      // isolation (20 Oct): FM.media has no delete() (it is remove()), so the guard made this a no-op and the record stayed
+      try { if (I) FM.media.remove(I.id); } catch (e) {}
       FM.scene = saved; FM.scene.selectedId = savedSel;
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();
@@ -81940,7 +82402,8 @@
       rb2.click(); await sleep(120);
       if (L.crop.x !== 0 || L.crop.y !== 0 || L.crop.w !== 400 || L.crop.h !== 300) throw new Error('control: Reset on a plain crop did not set the full frame: ' + JSON.stringify(L.crop));
     } finally {
-      try { made.forEach(id => { if (FM.media.delete) FM.media.delete(id); }); } catch (e) {}
+      // isolation (20 Oct): FM.media has no delete() (it is remove()), so the guard made this a no-op and three records stayed
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
       FM.scene = saved; FM.scene.selectedId = savedSel;
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();
@@ -90996,7 +91459,8 @@
       FM.audioFxLive.setBoost(L);
       if (Math.abs(B.last() - 3) > 0.01) throw new Error('outside any fade the seed is ' + B.last().toFixed(2) + 'x where the layer asks for 3x — the fade fix has killed the ordinary boost');
     } finally {
-      try { if (L) FM.media.delete(L.id); } catch (e) {}
+      // isolation (20 Oct): FM.media has no delete() (it is remove(), js/media.js), so this threw, was caught, and the record stayed
+      try { if (L) FM.media.remove(L.id); } catch (e) {}
       FM.playing = saved.playing; FM.scene.layers = saved.layers;
       FM.scene.project.duration = saved.dur; FM.setTime(saved.t);
       if (FM.refreshAll) FM.refreshAll();
@@ -91130,7 +91594,8 @@
       if (outside.flag === 'all-suppressed') throw new Error('the song sits at 6–10s and the export is 1–4s, so the RANGE left it out — blaming the solo for it is a false alarm');
       if (/solo/.test(outside.card)) throw new Error('the card blamed a solo for a clip the range had already excluded: ' + JSON.stringify(outside.card));
     } finally {
-      made.forEach(function (id) { try { FM.media.delete(id); } catch (e) {} });
+      // isolation (20 Oct): FM.media has no delete() (it is remove()), so this threw, was caught, and both records stayed
+      made.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
       FM.scene.layers = saved.layers; P.duration = saved.dur;
       FM._audioTrackDropped = null; clearNote();
       if (FM.refreshAll) FM.refreshAll();
@@ -91322,7 +91787,8 @@
       AC.createBufferSource = cbs0; AC.createGain = cg0;
       try { FM.audioPlay.stop(); } catch (e) {}
       FM.playing = saved.playing;
-      if (L) { try { FM.media.delete(L.id); } catch (e) {} }
+      // isolation (20 Oct): FM.media has no delete() (it is remove()), so this threw, was caught, and the record stayed
+      if (L) { try { FM.media.remove(L.id); } catch (e) {} }
       FM.scene.layers = saved.layers; FM.scene.project.duration = saved.dur;
       FM.scene.selectedId = saved.sel; FM.scene.selectedIds = saved.sel ? [saved.sel] : [];
       FM.setTime(saved.t);
@@ -166514,6 +166980,358 @@
     });
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* hunt5 later A — ONE UNDO CUT A SLOWED CLIP TO AN HOUR. sanitizeTiming (js/storage.js), which history.restore runs over every layer
+     of the snapshot it puts back, held a plain duration to 0.05..3600 s, the longest project. But the Speed card re-times a clip about
+     its source with no ceiling (FM.setClipSpeed, js/inspector.js: the span is kept and divided by the new speed), so a 60 s clip at
+     1 % is 6000 s long. Rename a title, ↶: the clip came back 3600 s long at 1 %, which is 36 s of its 60 s of footage, and set back
+     to 1x it was a 36 s clip. Undo autosaves on its next line and redo sanitises the same way. The class of bughunt5 #1.
+     Now the ceiling is FM.LIMITS.duration (js/scene.js): the longest project at the slowest speed, 3600 / speed[0] = 360,000 s.
+     Driven through the app's own speed path (FM.setClipSpeed, which the Speed card's slider and typed box call) on a plain shape clip,
+     so no media record decides the length: 60 s × 1 / 0.01 = 6000 s.
+     On 03ae2e94: 3600 after the Undo and again after the Redo, and FM.LIMITS has no duration.
+     CONTROLS (the same before and after): the slowed clip really is past an hour before the Undo (else the case measures nothing); a
+     NaN, a word, a negative and an absurd 1e12 plain duration are still repaired or brought into range.
+     BUDGET: the default 45 s: one speed change, one undo and one redo over two small layers. */
+  test('hunt5 later A: a slow clip keeps its length through an Undo: a 60 s clip set to 1 % by the Speed card’s own path (FM.setClipSpeed) is 6000 s long, and one Undo of an unrelated edit and its Redo bring it back 6000 s long at 1 %, not cut to 3600 s, which is 36 s of its footage (CONTROLS: the clip is past an hour before the Undo; a NaN, a word, a negative and an absurd plain duration are still repaired into range; the ceiling is FM.LIMITS.duration, the longest project at the slowest speed)', { item: '1176' }, async function () {
+    if (!FM.history || !FM.history.reset || !FM.history._steps || typeof FM.setClipSpeed !== 'function' || !FM.storage || typeof FM.storage._sanitizeLayers !== 'function' || !FM.LIMITS || !Array.isArray(FM.LIMITS.speed)) throw new Error('setup: FM.history (reset, _steps), FM.setClipSpeed, FM.storage._sanitizeLayers or FM.LIMITS.speed is not reachable');
+    const SLOW = FM.LIMITS.speed[0], LEN = 60;
+    const bad = [];
+    const mk = (name, dur) => {
+      const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: dur });
+      L.start = 0; L.duration = dur; L.speed = 1;
+      return L;
+    };
+
+    /* ── THE SPEED CARD'S PATH, THEN ONE UNDO OF AN UNRELATED EDIT AND ITS REDO. */
+    await _bh2With(async function () {
+      const C = mk('hunt5 later A slow', LEN), T = mk('hunt5 later A title', 4);
+      FM.scene.layers = [T, C];
+      FM.scene.project.duration = LEN;
+      FM.scene.selectedId = T.id; FM.scene.selectedIds = [T.id];
+      FM.refreshAll();
+      FM.setClipSpeed(C, SLOW);
+      const D = C.duration;
+      if (!(D > 3600)) throw new Error('setup: the Speed card’s path made a ' + LEN + ' s clip at ' + SLOW + 'x ' + D + ' s long, not past an hour, so the old 3600 s cap could not cut it and nothing here is measured');
+      if (C.speed !== SLOW) throw new Error('setup: FM.setClipSpeed left the clip at speed ' + C.speed + ', not ' + SLOW);
+      FM.refreshAll();
+      FM.history.reset();
+      T.name = 'hunt5 later A title renamed';
+      FM.history.commit();
+      if (FM.history._steps().len !== 2) throw new Error('setup: renaming the title did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+      const check = where => {
+        const c = FM.layerById(FM.scene, C.id);
+        if (!c) { bad.push(where + ': the slowed clip is gone'); return; }
+        if (c.duration !== D) bad.push(where + ': the ' + LEN + ' s clip at ' + (SLOW * 100) + ' % came back ' + c.duration + ' s long, not ' + D + ' s, so ' + (c.duration * SLOW).toFixed(1) + ' s of its ' + LEN + ' s of footage are left' + (c.duration === 3600 ? ' (cut to the longest project)' : ''));
+        if (c.speed !== SLOW) bad.push(where + ': the slowed clip came back at speed ' + c.speed + ', not ' + SLOW);
+      };
+      FM.history.undo();
+      await sleep(60);
+      const T1 = FM.layerById(FM.scene, T.id);
+      if (!T1 || T1.name !== 'hunt5 later A title') throw new Error('setup: the Undo did not take the rename back (' + (T1 ? T1.name : 'the title is gone') + '), so nothing below is measured');
+      check('after one Undo of a rename');
+      FM.history.redo();
+      await sleep(60);
+      check('after its Redo');
+    });
+
+    /* ── CONTROLS: the protection the clamp exists for. */
+    const ab = [
+      { id: 'h5lA1', type: 'shape', start: 0, duration: NaN },
+      { id: 'h5lA2', type: 'shape', start: 0, duration: 1e12 },
+      { id: 'h5lA3', type: 'shape', start: 0, duration: -5 },
+      { id: 'h5lA4', type: 'shape', start: 0, duration: 'long' },
+    ];
+    FM.storage._sanitizeLayers(ab);
+    ab.forEach(l => { if (typeof l.duration !== 'number' || !isFinite(l.duration) || l.duration <= 0 || l.duration >= 1e12) bad.push('CONTROL: layer ' + l.id + '’s plain duration came out of the sanitiser as ' + l.duration + ', not a usable length in range'); });
+    if (ab[0].duration !== 1 || ab[3].duration !== 1) bad.push('CONTROL: a NaN duration and a duration of a word came back as ' + ab[0].duration + ' and ' + ab[3].duration + ', not repaired to 1 s');
+    if (ab[2].duration !== 0.05) bad.push('CONTROL: a negative duration came back as ' + ab[2].duration + ', not the 0.05 s floor');
+
+    /* ── AND THE CEILING IS THE SHARED ONE (after the fix): FM.LIMITS.duration, written as the longest project at the slowest speed. */
+    const CAP = FM.LIMITS.duration;
+    if (typeof CAP !== 'number' || !isFinite(CAP)) bad.push('FM.LIMITS (js/scene.js) holds no duration ceiling (' + CAP + '), so the sanitiser keeps its own copy of the longest clip');
+    else {
+      if (CAP !== 3600 / SLOW) bad.push('FM.LIMITS.duration is ' + CAP + ', not the longest project (3600 s) at the slowest speed (' + SLOW + '): ' + (3600 / SLOW));
+      if (ab[1].duration !== CAP) bad.push('the sanitiser brings an absurd plain duration to ' + ab[1].duration + ', not to FM.LIMITS.duration (' + CAP + ')');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* hunt5 later B — TWO VOLUME CEILINGS WERE STILL WRITTEN OUT BY HAND. bughunt5 #1 put the volume range in FM.LIMITS (js/scene.js),
+     which the Volume card and the undo sanitiser read, and left two literal 10s behind: the Assistant's volume edit on a keyed fade
+     held the keys to [0, 10] (js/ai-ops.js, setAnimatedLevel), and the live boost stage capped its gain at Math.min(10, …)
+     (js/audio-fx-live.js, setBoost). They agree with FM.LIMITS today only because nobody has moved it; widen the range and those two
+     would cut what the card offers, the next time the Assistant touched a fade or a boosted clip played.
+     The test stands a narrower FM.LIMITS in (volume 0..7, every other limit the real one's) by its descriptor, for the few synchronous
+     lines that drive both paths, and puts the real one back in a finally.
+     The Assistant: a keyed fade 1 → 9 → 12 at 0 / 1 / 2 s, setProp volume 1 at 0 s, where the fade reads 1, so the ratio is 1 and only
+     the clamp can move a key. The boost stage: setBoost at a level of 9 into a recording stage (the 886 test's rig).
+     On 34da7ac2: with the stand-in both still stop at 10, so the fade keeps its 9 and the stage is written 9.
+     CONTROLS (the same before and after): with the real FM.LIMITS, before the stand-in and after it is put back, the fade's 12 comes out
+     10 and its 9 stays 9, and the stage is written 10 for a level of 12 and 9 for a level of 9; the stand-in is what the page reads
+     while it is in place. */
+  test('hunt5 later B: every volume range reads one source: with FM.LIMITS.volume narrowed to 0..7 for the test, the Assistant’s volume edit on a keyed fade holds its keys to 7 and the live boost stage (FM.audioFxLive.setBoost) is written 7 for a level of 9, not held to a 10 of their own (CONTROLS: with the real FM.LIMITS, before and after, both stop at 10 and leave a 9 alone; the stand-in is the FM.LIMITS the page reads)', { item: '1176' }, async function () {
+    if (!FM.aiOps || typeof FM.aiOps.applyOps !== 'function' || !FM.audioFxLive || typeof FM.audioFxLive.setBoost !== 'function' || !FM.media || typeof FM.media.set !== 'function' || !FM.LIMITS || !Array.isArray(FM.LIMITS.volume)) throw new Error('setup: FM.aiOps.applyOps, FM.audioFxLive.setBoost, FM.media.set or FM.LIMITS.volume is not reachable');
+    const d0 = Object.getOwnPropertyDescriptor(FM, 'LIMITS'), L0 = FM.LIMITS;
+    if (!d0 || !d0.configurable) throw new Error('setup: FM.LIMITS is not a configurable own property of FM, so it cannot be stood in for and put back');
+    if (L0.volume[1] !== 10) throw new Error('setup: FM.LIMITS.volume tops out at ' + L0.volume[1] + ', not 10, so the controls below (which expect 10) do not describe this build');
+    const NARROW = 7;
+    const bad = [];
+    /* A recording boost stage, through both of setBoost's writes (the ramp, and the bare assignment it falls back to). */
+    const w = [];
+    const g = { _v: 1, setTargetAtTime: function (v) { w.push(v); g._v = v; } };
+    Object.defineProperty(g, 'value', { get: function () { return g._v; }, set: function (v) { w.push(v); g._v = v; } });
+    const boostId = 'h5lB_' + Math.random().toString(36).slice(2, 8);
+    const boostLayer = { id: boostId, type: 'video', start: 0, duration: 4 };
+    const fadeKeys = () => ({ kf: [{ t: 0, v: 1, e: 'linear' }, { t: 1, v: 9, e: 'linear' }, { t: 2, v: 12, e: 'linear' }] });
+    let stood = false;
+    await _bh2With(async function (media) {
+      const F = FM.makeLayer('shape', { name: 'hunt5 later B fade', shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 4 });
+      F.start = 0; F.duration = 4;
+      FM.scene.layers = [F];
+      FM.media.set(boostId, { kind: 'video', width: 2, height: 2, duration: 4, _boost: { gain: { gain: g } } });
+      media.push(boostId);
+      /* The Assistant's volume edit on a fresh keyed fade, and the keys it leaves. */
+      const assistant = () => {
+        F.volume = fadeKeys();
+        const r = FM.aiOps.applyOps([{ op: 'setProp', ref: F.id, path: 'volume', value: 1 }], {}, { at: 0 });
+        if (!r || r.appliedCount !== 1) throw new Error('setup: the Assistant’s volume edit did not apply (' + JSON.stringify(r && r.dropped).replace(/"/g, "'") + ')');
+        if (!FM.isAnimated(F.volume) || F.volume.kf.length !== 3) throw new Error('setup: the Assistant’s volume edit flattened the fade: ' + JSON.stringify(F.volume).replace(/"/g, "'"));
+        return F.volume.kf.map(k => k.v);
+      };
+      const boost = level => { w.length = 0; FM.audioFxLive.setBoost(boostLayer, level); return w.length ? w[w.length - 1] : null; };
+      const controls = when => {
+        const c = assistant();
+        if (c[0] !== 1 || c[1] !== 9 || c[2] !== 10) bad.push('CONTROL (' + when + '): with the real FM.LIMITS the Assistant’s edit left the fade at ' + JSON.stringify(c) + ', not [1, 9, 10]');
+        const c12 = boost(12), c9 = boost(9);
+        if (c12 !== 10 || c9 !== 9) bad.push('CONTROL (' + when + '): with the real FM.LIMITS the boost stage was written ' + c12 + ' for a level of 12 and ' + c9 + ' for 9, not 10 and 9');
+      };
+      try {
+        controls('before the stand-in');
+
+        /* ── THE STAND-IN: volume 0..7, every other limit the real one's. */
+        const S = Object.freeze(Object.assign({}, L0, { volume: Object.freeze([0, NARROW]) }));
+        Object.defineProperty(FM, 'LIMITS', { value: S, writable: true, enumerable: d0.enumerable, configurable: true });
+        stood = true;
+        if (FM.LIMITS !== S || FM.LIMITS.volume[1] !== NARROW) throw new Error('setup: the stand-in FM.LIMITS is not what the page reads');
+        const k = assistant();
+        if (k[1] !== NARROW || k[2] !== NARROW) bad.push('with FM.LIMITS.volume at 0..' + NARROW + ' the Assistant’s volume edit left the fade at ' + JSON.stringify(k) + ', not [1, ' + NARROW + ', ' + NARROW + ']: it holds the keys to a range of its own (js/ai-ops.js)');
+        if (k[0] !== 1) bad.push('with FM.LIMITS.volume at 0..' + NARROW + ' the fade’s first key moved from 1 to ' + k[0]);
+        const g9 = boost(9);
+        if (g9 !== NARROW) bad.push('with FM.LIMITS.volume at 0..' + NARROW + ' the boost stage was written ' + g9 + ' for a level of 9, not ' + NARROW + ': it caps at a number of its own (js/audio-fx-live.js setBoost)');
+        Object.defineProperty(FM, 'LIMITS', d0);
+        stood = false;
+
+        if (FM.LIMITS !== L0) bad.push('CONTROL: the real FM.LIMITS was not put back');
+        controls('after the real FM.LIMITS is put back');
+      } finally {
+        if (stood) { Object.defineProperty(FM, 'LIMITS', d0); stood = false; }
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* hunt5 later C — A MASK KEY EASED FROM THE STEPS OR BOUNCE RAIL MOVED ON A STRAIGHT LINE. easeF (js/masks.js), the ease FM.evalMaskPath
+     gives a roto mask's keyed path, read a key's `bez` and its named `e` only. A key eased from the graph editor's Bounce or Steps rail
+     carries `ez` ({ fam, preset, p }, js/eases.js), which evalProp resolves first for every other keyed value (js/scene.js, through
+     FM.easeApply), and since bughunt5 #9 the sanitiser keeps it on a mask key too. So a roto mask set to Steps glided while the layer it
+     cuts out stepped, and one set to Bounce slid in with no bounce. easeF now asks FM.easeApply first, the same call evalProp makes.
+     The test: a mask path and a keyed number, both keyed 0 → 600 over 0 s → 2 s with the SECOND key eased (the segment entering a key
+     takes that key's ease, as in evalProp), by Steps (4 treads) and by Bounce. At 0.6 s, 1 s and 1.6 s the mask's first point must be
+     where FM.evalProp puts the number, on the path as built and on the path the undo path's sanitiser (FM.storage._sanitizeLayers)
+     hands back. Both lerp 0 + 600 × f, so they agree exactly; 0.01 px is slack, not a measurement.
+     On 74fed5dd: the mask is on the straight line, 180 / 300 / 480, where Steps puts the number at 200 / 400 / 600.
+     CONTROLS (the same before and after): the eased number is more than 15 px off the straight line at one of the three times (else a
+     mask on the straight line could not be told apart); the sanitiser kept each key's ez; an Ease In key with no ez agrees either way. */
+  test('hunt5 later C: a mask key eased by name moves by that ease: a roto mask moving 600 px into a key eased from the Steps rail (4 treads) or the Bounce rail is, at 0.6 s, 1 s and 1.6 s of its 2 s move, where FM.evalProp puts a number keyed the same way, as built and after the undo path’s sanitiser, not on the straight line (CONTROLS: the eased number is off the straight line; the sanitiser keeps the ez; an Ease In key with no ez agrees either way)', { item: '1176' }, function () {
+    if (typeof FM.evalMaskPath !== 'function' || typeof FM.evalProp !== 'function' || typeof FM.easeApply !== 'function' || !FM.storage || typeof FM.storage._sanitizeLayers !== 'function') throw new Error('setup: FM.evalMaskPath, FM.evalProp, FM.easeApply or FM.storage._sanitizeLayers is not reachable');
+    const bad = [];
+    const SQ = [[0, 0], [40, 0], [40, 40], [0, 40]];
+    const MOVED = SQ.map(p => [p[0] + 600, p[1]]);
+    const TIMES = [0.6, 1, 1.6];
+    const copy = o => JSON.parse(JSON.stringify(o));
+    const second = ease => Object.assign({ t: 2, e: 'linear' }, copy(ease));
+    const maskPath = ease => ({ kf: [{ t: 0, v: copy(SQ), e: 'linear' }, Object.assign(second(ease), { v: copy(MOVED) })] });
+    const number = ease => ({ kf: [{ t: 0, v: 0, e: 'linear' }, Object.assign(second(ease), { v: 600 })] });
+    const xAt = (p, t) => { const pts = FM.evalMaskPath({ path: p }, t); return (Array.isArray(pts) && Array.isArray(pts[0])) ? pts[0][0] : NaN; };
+    const line = t => 600 * t / 2;
+    /* The undo path: _sanitizeLayers rebuilds the mask and its path, so the path is re-read from the layer. */
+    const viaUndo = p => {
+      const L = [{ id: 'h5lC', type: 'shape', start: 0, duration: 4, masks: [{ id: 'h5lCm', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: copy(p) }] }];
+      FM.storage._sanitizeLayers(L);
+      return (Array.isArray(L[0].masks) && L[0].masks[0]) ? L[0].masks[0].path : null;
+    };
+    const cases = [
+      { say: 'Steps (4 treads)', ease: { ez: { fam: 'steps', preset: 'steps', p: { n: 4 } } } },
+      { say: 'Bounce', ease: { ez: { fam: 'bounce', preset: 'bounce', p: { n: 3, d: 0.5 } } } },
+    ];
+    cases.forEach(c => {
+      const num = number(c.ease), raw = maskPath(c.ease);
+      const want = TIMES.map(t => FM.evalProp(num, t));
+      if (!want.some((v, i) => Math.abs(v - line(TIMES[i])) > 15)) throw new Error('setup: a number keyed with ' + c.say + ' is within 15 px of the straight line at ' + TIMES.join(', ') + ' s (' + want.map(v => v.toFixed(1)).join(', ') + '), so a mask on the straight line could not be told apart');
+      const san = viaUndo(raw);
+      const k = (san && Array.isArray(san.kf)) ? san.kf[1] : null;
+      if (!k || !k.ez || k.ez.fam !== c.ease.ez.fam || k.ez.preset !== c.ease.ez.preset) bad.push('CONTROL: the undo path’s sanitiser gave the ' + c.say + ' key back with ez ' + JSON.stringify(k && k.ez) + ', so its half below cannot see the ease');
+      [['as built', raw], ['after the undo path’s sanitiser', san]].forEach(pair => {
+        const where = pair[0], p = pair[1];
+        if (!p) { bad.push(c.say + ', ' + where + ': the mask path is gone'); return; }
+        TIMES.forEach((t, i) => {
+          const x = xAt(p, t);
+          if (!(Math.abs(x - want[i]) <= 0.01)) bad.push('a mask eased by ' + c.say + ', ' + where + ', is at x ' + (isFinite(x) ? x.toFixed(1) : x) + ' at ' + t + ' s, not ' + want[i].toFixed(1) + ' where FM.evalProp puts a number keyed the same way' + (Math.abs(x - line(t)) < 0.01 ? ': it moves on the straight line, its ez ignored' : ''));
+        });
+      });
+    });
+    /* ── CONTROL: an Ease In key with no ez is the same curve either way (easeF has always read a named e). */
+    const ei = { e: 'easeIn' };
+    TIMES.forEach(t => {
+      const v = FM.evalProp(number(ei), t), x = xAt(maskPath(ei), t);
+      if (!(Math.abs(x - v) <= 0.01)) bad.push('CONTROL: a mask keyed with Ease In and no ez is at x ' + x + ' at ' + t + ' s, not ' + v + ' where FM.evalProp puts the number');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 5 ──
+  // ── bughunt 6 ──
+  /* ═══ BUGHUNT 6 — #1: the offline cache's clean-up (queue 430) never deleted anything on the live site. sw.js resolved the
+   * names index.html gives its files (`js/app.js?v=490`) against the bare ORIGIN, so on https://builderezra.github.io/FreeMotion/
+   * it looked for /js/app.js while every cache key is /FreeMotion/js/app.js?v=N, and every version of every file his phone ever
+   * loaded stayed (the refuter's estimate: 0.2 to 0.4 GB on his iPhone, 768 MB at most, in the storage budget his projects' media
+   * shares). Every earlier worker test (runSW, the 690 lifetime test, the 1082 lesson test) ran at the site root, where the origin
+   * and the page's folder are the same place. WRITTEN WITHOUT RUNNING (code only, `node --check`): each test says why it fails on
+   * 0d2a3f45.
+   * The worker is run, not installed, as runSW (queue 306) and the 1082 test do: sw.js is evaluated in a private stub scope whose
+   * cache, caches, network and self are passed in as parameters, so no global is replaced and there is nothing to restore. ═══ */
+
+  /* The real sw.js as if registered at `base` on `origin` ('/' is a site root, '/FreeMotion/' the live site). `seed` is
+     [url, body] pairs; a string key such as 'index-fallback' resolves against the worker's own URL, as Cache Storage does.
+     nav(page) dispatches one navigation to the folder, answered from the fake network with `page`, and waits for the answer AND
+     for the clean-up it hands to waitUntil; activate() dispatches the activate event an update delivers and waits for it. */
+  async function _bh6Worker(origin, base, seed) {
+    const src = await fetch('../sw.js?probe=bughunt6-' + Date.now()).then(r => r.text());
+    if (src.length < 500 || src.indexOf('pruneSuperseded') < 0) throw new Error('setup: ../sw.js came back as ' + src.length + ' chars with no pruneSuperseded in it, so this would test nothing');
+    const swUrl = origin + base + 'sw.js';
+    const key = k => new URL(typeof k === 'string' ? k : k.url, swUrl).href;
+    const store = new Map();
+    seed.forEach(([k, v]) => store.set(key(k), new Response(v)));
+    const cache = {
+      match: k => Promise.resolve(store.get(key(k))),
+      put: (k, v) => { store.set(key(k), v); return Promise.resolve(); },
+      delete: k => Promise.resolve(store.delete(key(k))),
+      keys: () => Promise.resolve([...store.keys()].map(u => ({ url: u }))),
+    };
+    const handlers = {};
+    const scope = {
+      addEventListener: (t, fn) => { (handlers[t] = handlers[t] || []).push(fn); },
+      skipWaiting: () => {},
+      clients: { claim: () => Promise.resolve() },
+      location: { origin: origin, href: swUrl },
+      registration: { scope: origin + base },
+    };
+    const cachesStub = { open: () => Promise.resolve(cache), keys: () => Promise.resolve(['freemotion-v1']), delete: () => Promise.resolve(true) };
+    let page = '';
+    const net = () => Promise.resolve(new Response(page, { status: 200 }));
+    // eslint-disable-next-line no-new-func
+    new Function('self', 'caches', 'fetch', 'Response', 'URL', src)(scope, cachesStub, net, Response, URL);
+    const activate = async () => {
+      if (!handlers.activate || !handlers.activate.length) throw new Error('setup: sw.js registered no activate handler');
+      const held = [];
+      handlers.activate.forEach(fn => fn({ waitUntil: p => { held.push(p); } }));
+      await Promise.all(held);
+    };
+    const nav = async (html) => {
+      if (!handlers.fetch || !handlers.fetch.length) throw new Error('setup: sw.js registered no fetch handler');
+      page = html;
+      const url = origin + base;
+      let answered = null;
+      const held = [];
+      handlers.fetch[0]({ request: { method: 'GET', url: url, mode: 'navigate' }, respondWith: p => { answered = p; }, waitUntil: p => { held.push(p); } });
+      if (!answered) throw new Error('setup: sw.js did not answer the navigation to ' + url);
+      const res = await answered;
+      if (!held.length) throw new Error('a good launch of ' + url + ' started no clean-up at all (nothing was handed to waitUntil)');
+      await Promise.all(held);
+      return res;
+    };
+    return { store: store, key: key, has: u => store.has(key(u)), activate: activate, nav: nav };
+  }
+
+  /* (#1) THE PRUNE ITSELF. A launch of a page naming js/app.js?v=9 and styles.css?v=775 must delete the ?v=8 and ?v=774 copies an
+     older release cached, and keep this release's files, the paths the page does not name (the CSS wordmark, an fx-art
+     thumbnail: this cannot know who needs them, queue 430's own rule) and this release's lesson; an older release's lesson goes
+     either way (#1082, judged by the version label, which never used the broken map).
+     FAILS ON 0d2a3f45 at /FreeMotion/ only: `new URL('js/app.js?v=9', self.location.origin)` is /js/app.js, so `live` holds
+     /js/app.js and /styles.css, no key under /FreeMotion/ matches, and js/app.js?v=8 and styles.css?v=774 survive.
+     CONTROL: the same cache and page at a site root, the shape every earlier test used, where the old code deletes them too, so
+     the fixture can delete and only the folder differs. */
+  test('bughunt6 #1 The offline cache drops old releases on the live site: on https://builderezra.github.io/FreeMotion/ a good launch deletes the js/app.js and styles.css copies an older release cached and keeps this release’s files, the CSS wordmark, an fx-art thumbnail and this release’s lesson (CONTROL: the same cache at a site root deletes them too)', { item: '1176' }, async function () {
+    const O = 'https://builderezra.github.io';
+    const PAGE = '<link rel="stylesheet" href="styles.css?v=775"><script src="js/app.js?v=9"></script><span class="ver" title="Tap">v17.82</span>';
+    const bad = [];
+    for (const base of ['/', '/FreeMotion/']) {
+      const P = O + base;
+      const who = base === '/' ? 'CONTROL (a site root, ' + P + '): ' : 'on the live site (' + P + '): ';
+      const old = [
+        [P + 'js/app.js?v=8', 'the page names js/app.js?v=9'],
+        [P + 'styles.css?v=774', 'the page names styles.css?v=775'],
+        [P + 'tutorials/01-first-video.md?v=17.81', 'the page is v17.82'],
+      ];
+      const kept = [P + 'js/app.js?v=9', P + 'styles.css?v=775', P + 'brand-wordmark.png?v=2', P + 'fx-art/blur.jpg?v=1', P + 'tutorials/01-first-video.md?v=17.82'];
+      const w = await _bh6Worker(O, base, old.map(o => [o[0], 'bytes of ' + o[0]]).concat(kept.map(u => [u, 'bytes of ' + u])));
+      const res = await w.nav(PAGE);
+      if (!res || !res.ok || !/v17\.82/.test(await res.clone().text())) { bad.push(who + 'the launch was not answered with the page from the network, so nothing below means anything'); continue; }
+      old.forEach(o => {
+        if (w.has(o[0])) bad.push(who + o[0].slice(P.length) + ' survived a good launch although ' + o[1] + ', so every release leaves its copy on the phone for good');
+      });
+      kept.forEach(u => {
+        if (!w.has(u)) bad.push(who + 'the clean-up deleted ' + u.slice(P.length) + ', which this release still uses, so offline it would be gone');
+      });
+      if (!w.has('index-fallback')) bad.push(who + 'a good launch left no offline copy of the page (index-fallback)');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#1) THE BACKLOG ALREADY ON HIS PHONE. The PM's ask: the copies older releases left must go on the next update, not only
+     future ones. Twenty stale copies across three files under /FreeMotion/, plus this release's three files, the kept assets and
+     the previous release's offline page. Activation alone must not touch what the open page uses; after activation and the one
+     reload index.html makes on controllerchange, exactly this release's files, the kept assets and the new index-fallback must
+     remain; a second launch must delete nothing more (one pass, by the same rule, so it cannot keep finding work).
+     FAILS ON 0d2a3f45: the same resolve against the bare origin matches no key under /FreeMotion/, so all twenty survive. */
+  test('bughunt6 #1 The offline cache drops old releases on the live site: twenty copies older releases left under /FreeMotion/ (8 of js/compositor.js, 7 of styles.css, 5 of js/app.js) are gone once the update activates and the app reloads, only this release’s files and the kept assets remain, and a second launch deletes nothing more', { item: '1176' }, async function () {
+    const O = 'https://builderezra.github.io', base = '/FreeMotion/', P = O + base;
+    const PAGE = '<link rel="stylesheet" href="styles.css?v=775"><script src="js/compositor.js?v=242"></script><script src="js/app.js?v=490"></script><span class="ver" title="Tap">v17.82</span>';
+    const OLD_PAGE = '<link rel="stylesheet" href="styles.css?v=774"><script src="js/compositor.js?v=237"></script><script src="js/app.js?v=489"></script><span class="ver" title="Tap">v17.81</span>';
+    const stale = [];
+    for (let v = 230; v < 238; v++) stale.push(P + 'js/compositor.js?v=' + v);
+    for (let v = 768; v < 775; v++) stale.push(P + 'styles.css?v=' + v);
+    for (let v = 485; v < 490; v++) stale.push(P + 'js/app.js?v=' + v);
+    if (stale.length !== 20) throw new Error('setup: ' + stale.length + ' stale copies were seeded, not 20');
+    const current = [P + 'js/compositor.js?v=242', P + 'styles.css?v=775', P + 'js/app.js?v=490'];
+    const assets = [P + 'brand-wordmark.png?v=2', P + 'fx-art/blur.jpg?v=1', P + 'tutorials/index.json?v=17.82', P + 'tutorials/01-first-video.md?v=17.82'];
+    const seed = stale.concat(current, assets).map(u => [u, 'bytes of ' + u]).concat([['index-fallback', OLD_PAGE]]);
+    const w = await _bh6Worker(O, base, seed);
+    const short = k => (k.indexOf(P) === 0 ? k.slice(P.length) : k);
+    const bad = [];
+
+    await w.activate();
+    const lostAtActivate = current.concat(assets).filter(u => !w.has(u));
+    if (lostAtActivate.length) throw new Error('activating the new worker deleted ' + lostAtActivate.map(short).join(', ') + ', which the open page still uses');
+
+    const res = await w.nav(PAGE);
+    if (!res || !res.ok || !/v17\.82/.test(await res.clone().text())) throw new Error('setup: the reload after activation was not answered with the page from the network');
+    const survived = stale.filter(u => w.has(u));
+    if (survived.length) bad.push(survived.length + ' of the 20 copies older releases left survived the first launch after the update (' + survived.map(short).join(', ') + '), so what is already on his phone stays for good');
+    const want = current.concat(assets).map(w.key).concat([w.key('index-fallback')]);
+    const lost = want.filter(k => !w.store.has(k));
+    if (lost.length) bad.push('the clean-up deleted ' + lost.map(short).join(', ') + ', which this release still uses or keeps on purpose');
+    const extra = [...w.store.keys()].filter(k => want.indexOf(k) < 0 && stale.map(w.key).indexOf(k) < 0);
+    if (extra.length) bad.push('the cache holds entries nobody seeded: ' + extra.map(short).join(', '));
+    const fb = w.store.get(w.key('index-fallback'));
+    if (!fb || !/v17\.82/.test(await fb.clone().text())) bad.push('the offline copy of the page is not this release’s page after the launch, so offline it would open the old build');
+
+    const before = [...w.store.keys()].sort().join(' | ');
+    await w.nav(PAGE);
+    const after = [...w.store.keys()].sort().join(' | ');
+    if (after !== before) bad.push('a second launch of the same page changed the cache again (before: ' + before + '; after: ' + after + '), so the clean-up is not one pass');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  // ── end bughunt 6 ──
 
 })();

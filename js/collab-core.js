@@ -120,7 +120,7 @@ window.FM = window.FM || {};
      (`color`), Colourize `sat` and `light`, Soften Skin `brighten` and `view` (Brighten greys out under Show selection), Split Toning
      `blending`, Tiles `axis` and `fade` (both greyed under Grid). Every default draws what the effect drew before, but an older
      build's sanitiser would drop the new keys, so the two would normalise one project differently. */
-  C.SCHEMA_REV = 26;
+  C.SCHEMA_REV = 27;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -331,7 +331,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =5327623801281957;   // SCHEMA_REV 26 on v17.79 + hunt/bh5 (bug hunt 5, #1176): the sanitiser keeps what the panels offer — volume to 1000 % and speed 1 %–1000x from FM.LIMITS (#1), up to 432001 keys a property (#2), and a mask key's bez / ez / loopMode (#9); a v17.79 peer would cut them, so the revision moves. Pinned 19 Oct with fp.js at rev 26.
+  C.SCHEMA_FP =813560502119456;   // SCHEMA_REV 27 on v17.80 + hunt/iso (#1176, hunt 5's later fixes): the sanitiser keeps a clip's duration up to FM.LIMITS.duration (3600 s at 1 % speed), so a v17.80 peer would cut it. Pinned 20 Oct with fp.js at rev 27.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════

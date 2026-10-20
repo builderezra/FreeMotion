@@ -42,6 +42,16 @@ window.FM = window.FM || {};
     volume: Object.freeze([0, 10]),
     speed: Object.freeze([0.01, 1000]),
     keyframes: 3600 * 120 + 1,
+    /* hunt5 later A: duration is the longest PLAIN clip length the sanitiser keeps (sanitizeTiming, js/storage.js). It was 3600 s,
+       the longest project, but a clip is not held to the project: the Speed card re-times a clip about its source (the clip speed setter,
+       js/inspector.js: the span is kept and divided by the new speed, with no ceiling), so a 60 s clip at 1 % is 6000 s long. One
+       Undo of anything then cut it to 3600 s at 1 %, 36 s of its 60 s of footage, and putting it back to 1x gave a 36 s clip; the
+       undo autosaved it and redo, which sanitises the same way, could not bring it back. The class of #1 above.
+       The ceiling is now what that path makes from a clip the sanitiser keeps: the longest project (3600 s, clampProjectDims in
+       js/storage.js) at the slowest speed (speed[0], 1 %), 360,000 s. A clip longer than its project keeps its length and so its
+       footage; the project's own end (held to 3600 s on every open) is what bounds playback and export, as it always was.
+       Written as 3600 / speed[0]; the suite pins that, so a new speed floor cannot leave this behind. */
+    duration: 3600 / 0.01,
   });
 
   /* ---- animatable properties ----

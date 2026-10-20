@@ -320,7 +320,9 @@ window.FM = window.FM || {};
             : 1);
       /* Floored at 1 where el.volume carries everything up to unity — and at 0 on an element whose volume
          cannot be set (an iPhone, queue 690), where this stage is the only thing that can turn it down. */
-      const g = Math.max(volumeLocked(m) ? 0 : 1, Math.min(10, isFinite(v) ? v : 1));
+      /* hunt5 later B: capped at FM.LIMITS.volume[1] (js/scene.js), the top of the Volume card and of the undo sanitiser, read at the
+         call. It was a literal 10 of its own, which bughunt5 #1 left behind when it gathered the others. */
+      const g = Math.max(volumeLocked(m) ? 0 : 1, Math.min(FM.LIMITS.volume[1], isFinite(v) ? v : 1));
       try {
         const ctx = FM.audioCtx();
         m._boost.gain.gain.setTargetAtTime(g, ctx.currentTime, 0.01);
