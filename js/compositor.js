@@ -4379,8 +4379,6 @@ window.FM = window.FM || {};
     ord.forEach(k => { xs[k] = x; x += widths[k]; });
     return xs;
   }
-  /* suite seam: each character's level, as the animated path reads it */
-  FM._bidiLevels = function (s) { return bidiLevels(graphemes(s)); };
 
   function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan, upright, hlOn) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)   // upright: Text Curve's Stay upright (#966 opts8)
     // plan: textPlanLines' plan for these lines, or null (#966 scramble layout)
