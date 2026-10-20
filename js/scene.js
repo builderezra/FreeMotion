@@ -1100,9 +1100,12 @@ window.FM = window.FM || {};
     if (!c || c.sig !== sig) {
       const SR = 120, n = Math.max(2, Math.ceil((layer.duration || 0) * SR) + 2);
       const tab = new Float32Array(n);
-      let acc = 0, prev = Math.max(0.05, evalProp(sp, layer.start));
+      /* bughunt7 #9: a ramp is floored at the slowest speed the Speed card offers, FM.LIMITS.speed[0] (1 %), not 5 %: the ruler
+         writes ramp keys down to 1 % and its readout shows them, while playback, scrub and export ran anything below 5 % at 5 %. */
+      const lo = FM.LIMITS.speed[0];
+      let acc = 0, prev = Math.max(lo, evalProp(sp, layer.start));
       for (let i = 1; i < n; i++) {
-        const v = Math.max(0.05, evalProp(sp, layer.start + i / SR));
+        const v = Math.max(lo, evalProp(sp, layer.start + i / SR));
         acc += (prev + v) / (2 * SR);
         tab[i] = acc; prev = v;
       }
@@ -1138,7 +1141,7 @@ window.FM = window.FM || {};
       const n = (typeof sp === 'number') ? sp : parseFloat(sp);
       return (isFinite(n) && n !== 0) ? n : 1;
     }
-    return Math.max(0.05, evalProp(sp, t == null ? (FM.time || 0) : t) || 1);
+    return Math.max(FM.LIMITS.speed[0], evalProp(sp, t == null ? (FM.time || 0) : t) || 1);   // bughunt7 #9: 1 %, as layerSourceAdvance
   };
   /* Longest clip duration whose consumed source stays within availSrc source-seconds.
    * Static speed: plain division (old behaviour). Ramped: bisect the monotonic advance integral. */

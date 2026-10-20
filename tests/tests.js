@@ -170868,4 +170868,38 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* (#9) A SPEED RAMP KEYED BELOW 5 % PLAYED AT 5 %. The Speed card's ruler writes ramp keys down to FM.LIMITS.speed[0], 1 %
+     (js/inspector.js SPD_MIN), and its readout shows the key, but js/scene.js floored a ramp at 0.05 in FM.speedAt and in
+     FM.layerSourceAdvance's integral, so playback, scrub and export ran a 2 % key at 5 %: two and a half times as much source.
+     (FM.speedAdvanceOver, FM.speedAdvanceSolve and FM.revHeadGrowLimit have no floor of their own; they integrate through
+     FM.layerSourceAdvance.) Now both floor a ramp at FM.LIMITS.speed[0]. Measured on a clip with no media (the advance is pure
+     arithmetic): a ramp keyed 2 % at both ends of a 4 s clip, and (CONTROL) the same at 50 %.
+     FAILS BEFORE THE FIX: over 1 s of the 2 % ramp the source advances 0.05 s, not 0.02 s; FM.speedAt reads 0.05; and the clip's
+     source time at 2 s is 0.10 s, not 0.04 s.
+     CONTROLS, which hold before and after: the slowest speed the Speed card offers is 1 % (FM.LIMITS.speed[0] = 0.01); the 50 %
+     ramp advances 0.5 s a second, reads 0.5, and is at 1 s of source at 2 s.
+     TOLERANCE: the integral is a float32 trapezoid table at 120 Hz; on a constant rate the trapezoid is exact and float32 keeps
+     about 7 digits, so 1 s of advance reads within about 1e-8 s (reasoned, not measured); the fault is 0.03 s. 1e-4 s sits
+     between the two. */
+  test('bughunt7 #9 A speed ramp keyed at 2 % plays at 2 %, not 5 %: over one second of a ramp keyed 2 % the source advances 0.02 s, FM.speedAt reads 0.02 and the source time follows (CONTROLS: the slowest speed offered is 1 %; a ramp keyed 50 % is unchanged)', { item: '1176' }, function () {
+    if (typeof FM.layerSourceAdvance !== 'function' || typeof FM.speedAt !== 'function' || typeof FM.layerLocalTime !== 'function' || !FM.LIMITS || !Array.isArray(FM.LIMITS.speed)) throw new Error('setup: FM.layerSourceAdvance / speedAt / layerLocalTime or FM.LIMITS.speed is not reachable');
+    const TOL = 1e-4, bad = [];
+    if (FM.LIMITS.speed[0] !== 0.01) bad.push('CONTROL: the slowest speed the Speed card offers is ' + FM.LIMITS.speed[0] + ', not 1 % (0.01), so a 2 % key is not inside the range this measures');
+    const ramp = (name, v) => {
+      const L = FM.makeLayer('video', { name: name, start: 0, duration: 4 });
+      L.start = 0; L.duration = 4; L.trimStart = 0; L.reversed = false;
+      L.speed = { kf: [{ t: 0, v: v, e: 'linear' }, { t: 4, v: v, e: 'linear' }] };
+      return L;
+    };
+    [[0.02, '2 %', false], [0.5, '50 %', true]].forEach(([v, what, control]) => {
+      const L = ramp('bh7 #9 ramp ' + what, v);
+      const span = FM.layerSourceAdvance(L, 2) - FM.layerSourceAdvance(L, 1), at = FM.speedAt(L, 1.5), src = FM.layerLocalTime(L, 2);
+      const tag = control ? 'CONTROL: ' : '';
+      if (!(Math.abs(span - v) <= TOL)) bad.push(tag + 'over one second of a ramp keyed ' + what + ' the source advanced ' + span.toFixed(5) + ' s, not ' + v + ' s' + (!control && Math.abs(span - 0.05) <= TOL ? ' — it played at the old 5 % floor, two and a half times as fast as its key' : ''));
+      if (!(Math.abs(at - v) <= TOL)) bad.push(tag + 'FM.speedAt on a ramp keyed ' + what + ' reads ' + at + ', not ' + v);
+      if (!(typeof src === 'number' && Math.abs(src - 2 * v) <= TOL)) bad.push(tag + 'the clip ramped at ' + what + ' is at ' + src + ' s of its source at 2 s, not ' + (2 * v) + ' s');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();
