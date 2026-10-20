@@ -38,13 +38,57 @@ window.FM = window.FM || {};
     try { return await callNow(model, system, messages, tool, opts); }
     finally { FM._aiCalls = Math.max(0, (FM._aiCalls || 1) - 1); }
   }
+  /* ═══ bughunt8 #8: A REQUEST THAT NEVER ANSWERS IS LET GO ═══════════════════════════════════════════════════════════════════════
+   * The fetch below had no AbortController and no time limit, and FM.ai.cancel only set state.abort, which a run reads BETWEEN its
+   * steps. So a request stalled on a half-open connection (a phone that changed networks) kept FM._aiCalls up for as long as the
+   * browser let it hang — and with it every app update (index.html fmSwBusy reads it) — and Cancel could not let it go. Now each
+   * FM.ai.call carries ONE controller, its retries included (they pass it on in opts._ctl): Cancel aborts every request on its
+   * way, and a ceiling, FM.ai.TIMEOUT_MS (three minutes: Opus with a large max_tokens answers well inside it), aborts one that
+   * runs past it and says so in the error it throws. The dry run's wait and the retries' waits are part of the request, so they
+   * stop too. Either way the request throws, and call's finally gives the count back. A Cancel's error carries `cancelled`, so the
+   * Director's run ends as cancelled (its catch reads err.cancelled), not as a failure. */
+  var inflight = [];   // the controllers of the requests on their way
+  function stopReq(ctl, why) {
+    if (ctl.why) return;
+    ctl.why = why;
+    if (ctl.ac) { try { ctl.ac.abort(); } catch (e) {} }
+    if (ctl.wake) ctl.wake();
+  }
+  function stoppedErr(ctl) {
+    var e = new Error(ctl.why === 'timeout' ? 'Claude did not answer within ' + Math.round(ctl.ms / 1000) + ' s, so the request was stopped' : 'Cancelled');
+    if (ctl.why !== 'timeout') e.cancelled = true;
+    return e;
+  }
+  // a wait that a stopped request cuts short (by throwing its error)
+  function waitFor(ms, ctl) {
+    if (!ctl) return sleep(ms);
+    return new Promise(function (res, rej) {
+      if (ctl.why) { rej(stoppedErr(ctl)); return; }
+      var id = setTimeout(function () { ctl.wake = null; res(); }, ms);
+      ctl.wake = function () { clearTimeout(id); ctl.wake = null; rej(stoppedErr(ctl)); };
+    });
+  }
   async function callNow(model, system, messages, tool, opts) {
     opts = opts || {};
+    if (opts._ctl) return requestNow(model, system, messages, tool, opts, opts._ctl);   // a retry: the call's own controller
+    var ctl = { ac: typeof AbortController === 'function' ? new AbortController() : null, why: '', wake: null, ms: 180000, timer: 0 };
+    if (typeof FM.ai.TIMEOUT_MS === 'number' && FM.ai.TIMEOUT_MS > 0) ctl.ms = FM.ai.TIMEOUT_MS;
+    ctl.timer = setTimeout(function () { stopReq(ctl, 'timeout'); }, ctl.ms);
+    inflight.push(ctl);
+    try { return await requestNow(model, system, messages, tool, Object.assign({}, opts, { _ctl: ctl }), ctl); }
+    catch (e) { if (ctl.why) throw stoppedErr(ctl); throw e; }
+    finally {
+      clearTimeout(ctl.timer);
+      var k = inflight.indexOf(ctl);
+      if (k >= 0) inflight.splice(k, 1);
+    }
+  }
+  async function requestNow(model, system, messages, tool, opts, ctl) {
     var tools = Array.isArray(tool) ? tool : [tool];
     // the mock returns a tool INPUT; wrap it so dry-run and live hand back the same shape (else every
     // consumer needs two code paths and the dry-run one is the one no test exercises)
     if (FM.ai.DRY_RUN || state.dry) {
-      await sleep(opts.dryDelay || 240);
+      await waitFor(opts.dryDelay || 240, ctl);   // bughunt8 #8: a stopped request stops waiting
       var mk = FM.aiMock.respond(tools[0].name, opts.mock || {});
       return { out: mk, stop: 'mock', content: [{ type: 'tool_use', id: 'mock_' + tools[0].name, name: tools[0].name, input: mk }] };
     }
@@ -53,7 +97,9 @@ window.FM = window.FM || {};
     var attempt = opts.attempt || 0;
     var res;
     try {
+      /* bughunt8 #8: the call's own signal, so Cancel and the ceiling abort it */
       res = await fetch(ENDPOINT, {
+        signal: ctl && ctl.ac ? ctl.ac.signal : undefined,
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -71,14 +117,15 @@ window.FM = window.FM || {};
         }),
       });
     } catch (e) {
+      if (ctl && ctl.why) throw stoppedErr(ctl);   // bughunt8 #8: aborted by Cancel or the ceiling, never retried
       // network error → retry a few times
-      if (attempt < 4 && !state.abort) { await sleep((2 ** attempt) * 800 + Math.random() * 300); return call(model, system, messages, tool, Object.assign({}, opts, { attempt: attempt + 1 })); }
+      if (attempt < 4 && !state.abort) { await waitFor((2 ** attempt) * 800 + Math.random() * 300, ctl); return call(model, system, messages, tool, Object.assign({}, opts, { attempt: attempt + 1 })); }
       throw new Error('Network error reaching Claude');
     }
     if (!res.ok) {
       if ((res.status === 429 || res.status >= 500) && attempt < 5 && !state.abort) {
         var ra = Math.min(30, Number(res.headers.get('retry-after')) || (2 ** attempt));   // clamp: a huge server Retry-After froze the panel for minutes
-        await sleep(ra * 1000 + Math.random() * 400);
+        await waitFor(ra * 1000 + Math.random() * 400, ctl);
         var m = res.status === 529 ? MODELS.build : model;   // overloaded → drop a tier
         return call(m, system, messages, tool, Object.assign({}, opts, { attempt: attempt + 1 }));
       }
@@ -411,7 +458,11 @@ window.FM = window.FM || {};
     generateScene: generateScene,
     rerollTask: rerollTask,
     refine: refine,
-    cancel: function () { state.abort = true; },
+    /* bughunt8 #8: …and every request on its way is aborted (stopReq), so its count is given back at once. The run's flag is set
+       only while a run is going: set with none, it stayed set and cost the Assistant's next calls their retries (queue 930 review). */
+    cancel: function () { if (state.running) state.abort = true; inflight.slice().forEach(function (c) { stopReq(c, 'cancel'); }); },
+    /* bughunt8 #8: the ceiling on one request, its retries included, in ms (read as each request starts) */
+    TIMEOUT_MS: 180000,
     isRunning: function () { return state.running; },
     _lastBuild: null,
     _renderToBase64: renderToBase64,   // exposed for tests

@@ -174317,4 +174317,72 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ bughunt8 #8: AN AI REQUEST THAT NEVER ANSWERED COULD NOT BE LET GO ═════════════════════════════════════════════════════════
+     What was wrong. js/ai.js call counts every model request in FM._aiCalls, which the update hold reads (index.html fmSwBusy), and
+     the fetch had no AbortController and no time limit; FM.ai.cancel only set state.abort, read between a run's steps. A request
+     stalled on a half-open connection held every app update for as long as the browser let it hang, and Cancel could not release
+     it. Now each FM.ai.call carries one controller: Cancel aborts every request on its way, and a ceiling (FM.ai.TIMEOUT_MS, three
+     minutes) aborts one that runs past it, and the request throws, so call's finally gives the count back.
+     Driven like the 1176 leftover test of the hold with an AI answer on its way: FM.ai.DRY_RUN stands in for the network (the mock
+     answers after `dryDelay`: no key, no tokens, no request), and a 20 s dryDelay stands in for a request that hangs. (a) One held
+     request, then FM.ai.cancel(): it must throw within a second, as cancelled, and FM._aiCalls go back. (b) FM.ai.TIMEOUT_MS set to
+     400 ms and one held request: it must throw within three seconds with an error that says it took too long (not a cancel), and
+     FM._aiCalls go back.
+     FAILS BEFORE THE FIX: neither request ends before its 20 s are up (Cancel does not reach it and there is no ceiling), so
+     FM._aiCalls stays at 1 through both waits.
+     CONTROLS, which hold before and after: while each request is held FM._aiCalls counts it (1 more), and an ordinary dry request
+     with a 300 ms delay answers with the mock's intent and gives its count back. The waits are reasoned, not measured: the stop is
+     a timer or a call away (milliseconds), and the fault is the whole 20 s; 1 s and 3 s sit between. Restores FM.ai.DRY_RUN,
+     FM.ai.TIMEOUT_MS and FM._aiCalls by descriptor. */
+  test('bughunt8 #8 An AI request that never answers can be let go: with a model request held in flight, Cancel ends it at once and gives back its count, and one that runs past the ceiling (FM.ai.TIMEOUT_MS) is stopped and says it took too long (CONTROLS: a held request is counted; an ordinary request still answers)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.ai || typeof FM.ai.call !== 'function' || typeof FM.ai.cancel !== 'function' || !FM.ai.MODELS || !FM.aiManifest || !FM.aiManifest.tools || !FM.aiManifest.tools.intent || !FM.aiMock) throw new Error('setup: FM.ai.call / cancel, FM.ai.MODELS, FM.aiManifest.tools.intent or FM.aiMock is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_aiCalls');
+    const dTimeout = Object.getOwnPropertyDescriptor(FM.ai, 'TIMEOUT_MS');
+    const dry0 = FM.ai.DRY_RUN;
+    const bad = [];
+    const ask = function (delay) {
+      const box = { done: false, out: null, err: null };
+      box.p = FM.ai.call(FM.ai.MODELS.intent, 'You are a test.', [{ role: 'user', content: 'bughunt8 #8 a title card' }], FM.aiManifest.tools.intent, { maxTokens: 64, dryDelay: delay, mock: { prompt: 'bughunt8 #8 a title card' } })
+        .then(function (r) { box.out = r; box.done = true; }, function (e) { box.err = e; box.done = true; });
+      return box;
+    };
+    const until = async function (ok, ms) { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(50); return ok(); };
+    try {
+      FM.ai.DRY_RUN = true;
+      const n0 = FM._aiCalls || 0;
+
+      /* ── CONTROL: an ordinary dry request answers and gives its count back. */
+      const c = ask(300);
+      await until(function () { return c.done; }, 4000);
+      if (!c.done || c.err || !c.out || !c.out.out || typeof c.out.out.subject !== 'string') throw new Error('setup: an ordinary dry request did not answer with the mock’s intent (' + (c.err ? c.err.message : JSON.stringify(c.out && c.out.out)) + ')');
+      if ((FM._aiCalls || 0) !== n0) bad.push('CONTROL: after an ordinary request answered FM._aiCalls is ' + FM._aiCalls + ', not ' + n0);
+
+      /* ── (a) Cancel. */
+      const a = ask(20000);
+      await sleep(200);
+      const na = FM._aiCalls || 0;
+      if (na !== n0 + 1) bad.push('CONTROL: a request held in flight is not counted (FM._aiCalls ' + na + ', not ' + (n0 + 1) + ')');
+      FM.ai.cancel();
+      await until(function () { return a.done; }, 1000);
+      if (!a.done) bad.push('Cancel did not end a request held in flight: a second later it is still waiting, so its answer can hold every update until the browser gives up on it');
+      else if (!a.err) bad.push('after Cancel the held request answered as if nothing happened (' + JSON.stringify(a.out && a.out.out) + ')');
+      else if (!a.err.cancelled) bad.push('after Cancel the held request threw “' + a.err.message + '”, not marked as cancelled, so the Director would report a failure instead of a cancel');
+      if ((FM._aiCalls || 0) !== n0) bad.push('after Cancel FM._aiCalls is ' + FM._aiCalls + ', not ' + n0 + ', so the update hold still waits for an answer that is never coming');
+
+      /* ── (b) The ceiling. */
+      Object.defineProperty(FM.ai, 'TIMEOUT_MS', { configurable: true, writable: true, enumerable: true, value: 400 });
+      const b = ask(20000);
+      await until(function () { return b.done; }, 3000);
+      if (!b.done) bad.push('a request held past the ceiling (FM.ai.TIMEOUT_MS 400 ms) was still waiting 3 s later: nothing stops a request that never answers');
+      else if (!b.err) bad.push('a request held past the ceiling answered (' + JSON.stringify(b.out && b.out.out) + ') instead of being stopped');
+      else if (b.err.cancelled || !/did not answer/i.test(b.err.message || '')) bad.push('a request stopped by the ceiling threw “' + b.err.message + '”' + (b.err.cancelled ? ', marked as cancelled,' : '') + ' — not that it took too long');
+      if ((FM._aiCalls || 0) !== n0) bad.push('after the ceiling FM._aiCalls is ' + FM._aiCalls + ', not ' + n0);
+    } finally {
+      FM.ai.DRY_RUN = dry0;
+      if (dTimeout) Object.defineProperty(FM.ai, 'TIMEOUT_MS', dTimeout); else delete FM.ai.TIMEOUT_MS;
+      if (dFlag) Object.defineProperty(FM, '_aiCalls', dFlag); else delete FM._aiCalls;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
