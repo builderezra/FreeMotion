@@ -4448,7 +4448,14 @@ window.FM = window.FM || {};
     const rec = FM.media.get(srcId);
     if (!rec || !rec.file || (rec.kind !== 'video' && rec.kind !== 'image')) return;
     let nrec = null;
-    try { nrec = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file); } catch (e) { nrec = null; }
+    /* 1176 leftover (after handleFiles and Replace media): A NEW BUILD WAITS WHILE A COPY OPENS ITS FILE. Split has already cut the
+       clip to its head half when it opens the file here for the tail half, and Duplicate (Extract audio through it) opens it before
+       the copy goes in. A build landing meanwhile saved the cut clip and reloaded, so the tail half, every second after the cut, was
+       gone; a Duplicate's copy never landed, and one of several clips stopped part way with its links still on the originals.
+       Counted in FM._importing, which index.html's fmSwBusy reads, until the finally; the loaders settle on their own (a video gives
+       up after 20 s). */
+    FM._importing = (FM._importing || 0) + 1;
+    try { nrec = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file); } catch (e) { nrec = null; } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
     if (nrec && nrec !== rec) {
       carryStoredFile(rec, nrec);
       FM.media.set(dstId, nrec);
@@ -4730,10 +4737,14 @@ window.FM = window.FM || {};
       }
       if (entry.file && entry.kind && entry.kind !== 'text') {
         let nrec = null;
+        /* 1176 leftover: A NEW BUILD WAITS WHILE A PASTED COPY OPENS ITS FILE. Each copy goes in after its own load, so a build landing
+           in one saved the copies already in and reloaded: the rest never arrived, and the clipboard lives in memory only, so there was
+           nothing left to paste them from. Counted in FM._importing, which index.html's fmSwBusy reads, until the finally. */
+        FM._importing = (FM._importing || 0) + 1;
         try {
           if (entry.kind === 'video') nrec = await FM.loadVideoFile(entry.file);
           else if (entry.kind === 'image') nrec = await FM.loadImageFile(entry.file);
-        } catch (e) { nrec = null; }
+        } catch (e) { nrec = null; } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
         if (nrec) {
           carryStoredFile(entry, nrec);   // queue 915 phase B
           FM.media.set(copy.id, nrec);
@@ -4800,6 +4811,13 @@ window.FM = window.FM || {};
       if (!live || (live.rev || 0) === want) continue;       // the picture already is the revision the layer names
       if (FM.storage.hasPrevMedia && !FM.storage.hasPrevMedia(id, want)) continue;   // nothing kept for it — no read on every undo
       const unchanged = () => { const L = FM.layerById(FM.scene, id); return !!L && (L.mediaRev || 0) === want && FM.media.get(id) === live; };
+      /* 1176 leftover: A NEW BUILD WAITS WHILE AN UNDO PUTS BACK THE FILE A REPLACE SWAPPED OUT. From the read below to the swap, the
+         layer is already back at the old revision while it still shows the replacement: a build landing then saved exactly that and
+         reloaded, and the boot sweep deleted the kept copy, his original, for good. Counted in FM._importing, which index.html's
+         fmSwBusy reads, until the finally; every wait inside is one IndexedDB call or one loader. The try is not re-indented, so the
+         lines it wraps keep their history. */
+      FM._importing = (FM._importing || 0) + 1;
+      try {
       const prev = await FM.storage.takePrevMedia(id, want);
       if (!prev || !prev.file || (prev.rev || 0) !== want) continue;
       let rec = null;
@@ -4811,6 +4829,7 @@ window.FM = window.FM || {};
       rec.rev = want;
       FM.replaceMediaWith(id, rec);
       back++;
+      } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
     }
     /* autosave, not just markDirty: the undo's own save may already have run while this was fetching, and after
        it nothing else would write the restored file to disk until his next edit */

@@ -172128,4 +172128,203 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ 1176 leftover (the loaders the doors above still missed): A NEW BUILD RELOADED THE APP IN THE MIDDLE OF A PASTE, A SPLIT OR A FRIEND’S CLIP BEING STORED ═══
+     The doors above count a file still opening in FM._importing, which index.html's fmSwBusy reads. Four more waited on a file with
+     nothing showing busy, and a build landing in one saved the project as it stood and reloaded:
+       · Paste (js/app.js FM.pasteClipboard) opens each clipboard clip's file again before that copy goes in. The clipboard lives in
+         memory only, so the copies not yet in were gone with the reload, with nothing left to paste them from;
+       · Split (FM.splitLayer, through reloadMediaTo, which Duplicate and Extract audio share) has already cut the clip to its head
+         half when it opens the file for the tail half: the save kept the shortened clip, and the tail half, every second after the
+         cut, was gone;
+       · an Undo of a Replace (FM.restoreReplacedMedia) reads back the file the Replace put away and opens it: the save kept the layer
+         at the old revision showing the replacement, and the next boot's sweep deleted the kept copy, his original, for good;
+       · a friend's clip (js/collab-media.js complete) with every byte in the room's resume parts but not yet in its layer's record. A
+         build that arrives during a session runs when the session ends, and the file goes on being put in place after that: a reload
+         then left the clip blank on this device, with no session left to resume it from.
+     Now each counts itself in FM._importing: the three in js/app.js around their loader (the Undo from its read to its swap), the
+     friend's clip from its last part landing to its record being written (complete, and applyHeld for a clip that waited behind the
+     barrier), never across the open-ended transfer. Three of the four are driven here; the Undo is not.
+     Driven like the tests above, the hold handed a counter for the reload, never the real one. Paste and Split each on a scene of
+     their own (_bh2With) with an image clip whose record holds a file, FM.loadImageFile held on a gate for that file only; the gate
+     then answers a stand-in picture and the work lands. The friend's clip through the real guest session and test peer
+     (withCollabGuest921): a picture whose header the size check (#1093) cannot read, so the check asks FM.loadImageFile for a still,
+     held on a gate for that file only, after the last part is on disk and before the layer's record exists. The session then ends
+     (while one runs, the hold hands its reload to the session, which runs the REAL reload when it ends: asking it then would reload
+     this page), the hold is asked and handed a new build, and then the gate answers and the picture is stored.
+     FAILS BEFORE THE FIX: while each one waits on its loader fmSwBusy answers '' and the new build reloads at once.
+     CONTROLS, which hold before and after: the app is idle before each door; each door reached its loader (else the test stops as a
+     setup failure); the split had already cut the clip to its head half there; the friend's picture was in the room's parts with no
+     record yet, and the session had ended before the hold was asked; afterwards the paste landed one copy and the split a tail half,
+     each with a record of its own, and the friend's picture is in its layer's record; and with nothing running a new build reloads
+     at once. Restores FM.loadImageFile, the clipboard and FM._importing, puts each scene back and cancels any hold. */
+  test('1176 leftover: an update does not reload the app in the middle of a Paste, a Split or a friend’s clip being stored: with each one’s loader held the new build waits, and once the work has landed the app reloads by itself (CONTROLS: each door reached its loader and its work landed; the split had cut the clip; the friend’s clip was all here with no record yet, and the session had ended; an idle app reloads at once)', { item: '1176', budgetMs: 180000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM.pasteClipboard !== 'function' || typeof FM.copySelection !== 'function' || typeof FM.splitLayer !== 'function' || typeof FM.loadImageFile !== 'function' || !FM.storage || typeof FM.storage.readMedia !== 'function' || typeof FM.storage.collabKeys !== 'function') throw new Error('setup: FM.pasteClipboard, FM.copySelection, FM.splitLayer, FM.loadImageFile, FM.storage.readMedia or FM.storage.collabKeys is not reachable');
+    const C = need921S4('a friend’s clip being stored under the update hold');
+    if (typeof C.end !== 'function' || typeof C.media._partPrefix !== 'function' || typeof C.media._fp !== 'function') throw new Error('setup: FM.collab.end, FM.collab.media._partPrefix or FM.collab.media._fp is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_importing');
+    const dImg = Object.getOwnPropertyDescriptor(FM, 'loadImageFile'), realImg = FM.loadImageFile;
+    const putImg = () => { if (dImg) Object.defineProperty(FM, 'loadImageFile', dImg); else FM.loadImageFile = realImg; };
+    const clip0 = FM.clipboard;
+    const ts = Date.now().toString(36);
+    const PNG = [137, 80, 78, 71, 13, 10, 26, 10];
+    let reloads = 0, open = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const stand = () => { const cv = document.createElement('canvas'); cv.width = 2; cv.height = 2; return { kind: 'image', el: cv, width: 2, height: 2 }; };
+    /* FM.loadImageFile held on a fresh gate for the calls `gated` picks, a stand-in answered at once for the calls `quick` picks, and
+       the real loader for every other call. */
+    const hold = (gated, quick) => {
+      const h = { entered: 0 };
+      const gate = new Promise(r => { open = r; });
+      FM.loadImageFile = function (f, o) {
+        if (gated(f, o)) { h.entered++; return gate; }
+        if (quick && quick(f, o)) return Promise.resolve(stand());
+        return realImg.apply(this, arguments);
+      };
+      return h;
+    };
+    const bad = [];
+    /* The hold asked while the loader waits: what it says, and whether a new build handed to it now waits. */
+    const handOver = async () => {
+      const during = W.busy(), n = FM._importing;
+      reloads = 0;
+      const now = await W(count);
+      return { during: during, n: n, heldNow: !now && !reloads && W.held() };
+    };
+    /* …and once the work has landed and its save has settled, the held build must go by itself. */
+    const verdict = async (what, a) => {
+      if (!a.during) bad.push('while ' + what + ' waited on its loader the app counted as idle (FM._importing ' + JSON.stringify(a.n) + ')');
+      if (!a.heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app in the middle of ' + what + ' (' + reloads + ' reload)' : 'was dropped rather than held during ' + what));
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => !FM._importing, 5000))) bad.push('after ' + what + ' was over FM._importing is still ' + JSON.stringify(FM._importing) + ', so every later update would wait for it');
+      else if (!(await until(() => W.busy() === '', 8000))) bad.push('after ' + what + ' was over the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(() => reloads > 0, 9000))) bad.push('once ' + what + ' was over, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+    };
+    try {
+      /* ── PASTE: an image clip copied, then pasted, the copy's file held as it opens. */
+      await _bh2With(async function (media) {
+        const A = _bh2Img('1176 paste clip', media);
+        FM.scene.layers.push(A);
+        FM.scene.selectedId = A.id; FM.scene.selectedIds = [A.id];
+        FM.history.reset();
+        const FILE = FM.media.get(A.id).file;
+        if (FM.copySelection() !== 1) throw new Error('setup: Copy did not put the paste clip on the clipboard');
+        FM.time = 0;
+        const keys0 = new Set(Object.keys(FM.media.all()));
+        await settle('the paste');
+        const h = hold(f => f === FILE);
+        let p = null;
+        try {
+          p = Promise.resolve(FM.pasteClipboard());
+          if (!(await until(() => h.entered > 0, 4000))) throw new Error('setup: the paste never reached its loader (FM.loadImageFile), so nothing was opening');
+          const a = await handOver();
+          open(stand());
+          await p; p = null;
+          putImg();
+          const copies = FM.scene.layers.filter(l => l.id !== A.id);
+          if (copies.length !== 1 || !FM.media.get(copies[0].id)) bad.push('CONTROL: once its loader answered the paste did not land one copy with a record of its own (' + FM.scene.layers.length + ' layers)');
+          await verdict('a paste', a);
+        } finally {
+          putImg();
+          if (open) open(stand());
+          if (p) { try { await p; } catch (e) {} }
+          try { W.cancel(); } catch (e) {}
+          if (FM.storage && FM.storage.settled) { try { await FM.storage.settled(); } catch (e) {} }
+          _bh2NewMedia(keys0).forEach(k => { try { FM.media.remove(k); } catch (e) {} });
+        }
+      });
+
+      /* ── SPLIT: a 6 s image clip cut at 3 s, the tail half's file held as it opens. */
+      await _bh2With(async function (media) {
+        const A = _bh2Img('1176 split clip', media);
+        FM.scene.layers.push(A);
+        FM.scene.selectedId = A.id; FM.scene.selectedIds = [A.id];
+        FM.history.reset();
+        FM.time = 3;
+        const FILE = FM.media.get(A.id).file;
+        const keys0 = new Set(Object.keys(FM.media.all()));
+        await settle('the split');
+        const h = hold(f => f === FILE);
+        let p = null;
+        try {
+          p = Promise.resolve(FM.splitLayer(A.id));
+          if (!(await until(() => h.entered > 0, 4000))) throw new Error('setup: the split never reached its loader (FM.loadImageFile), so nothing was opening');
+          if (FM.scene.layers.length !== 1 || Math.abs(A.duration - 3) > 1e-6) throw new Error('setup: while its loader waited the split had not cut the clip to its 3 s head half with the tail half still to come (' + FM.scene.layers.length + ' layers, the clip ' + A.duration + ' s)');
+          const a = await handOver();
+          open(stand());
+          await p; p = null;
+          putImg();
+          const ls = FM.scene.layers, B = ls.find(l => l.id !== A.id);
+          if (ls.length !== 2 || !B || Math.abs(B.start - 3) > 1e-6 || Math.abs(B.duration - 3) > 1e-6 || !FM.media.get(B.id)) bad.push('CONTROL: once its loader answered the split did not land a 3 s tail half at 3 s with a record of its own (' + ls.map(l => l.start + ' + ' + l.duration).join(', ') + ')');
+          await verdict('a split', a);
+        } finally {
+          putImg();
+          if (open) open(stand());
+          if (p) { try { await p; } catch (e) {} }
+          try { W.cancel(); } catch (e) {}
+          if (FM.storage && FM.storage.settled) { try { await FM.storage.settled(); } catch (e) {} }
+          _bh2NewMedia(keys0).forEach(k => { try { FM.media.remove(k); } catch (e) {} });
+        }
+      });
+
+      /* ── A FRIEND'S CLIP: all of it here, its size check held, the session ended, and then it is stored. A held build must not
+         be waiting when the session starts: the hold would hand it to the session, which runs the real reload at its end. */
+      try { W.cancel(); } catch (e) {}
+      if (W.held()) throw new Error('setup: a new build was still held before the session started, and the session would take it over');
+      const NAME = '1176 friend ' + ts + '.png';
+      const PIC = new File([new Uint8Array(PNG)], NAME, { type: 'image/png', lastModified: 1600001176000 });
+      await withCollabGuest921([mediaLayer921('1176 Friend', 'image')], async function (c) {
+        const lid = c.ids[0];
+        const isPic = f => !!(f && f.name === NAME);
+        const h = hold((f, o) => isPic(f) && !!(o && o.still), f => isPic(f));
+        try {
+          const pre = C.media._partPrefix(c.G, C.media._fp(PIC));
+          c.peer.add(PIC, 'image', [[lid, 0]]);
+          c.peer.announce('mf');
+          await until921('the friend’s picture to reach its size check', async function () { return h.entered ? 1 : null; }, 60000);
+          const parts = pre ? await FM.storage.collabKeys(pre) : [];
+          const rec0 = await FM.storage.readMedia(lid);
+          if (!parts.length || (rec0 && rec0.file)) throw new Error('setup: when its size check was held the friend’s picture was not in the room’s parts with no record yet (' + parts.length + ' parts, ' + (rec0 && rec0.file ? 'a record' : 'no record') + ')');
+          C.end();
+          if (C.active || C.session) throw new Error('setup: the session did not end, so the hold would hand its reload to the session');
+          if (FM.storage && FM.storage.settled) await FM.storage.settled();
+          const a = await handOver();
+          open({ kind: 'image', width: 2, height: 2, url: '' });
+          let got = null;
+          for (let i = 0; i < 100; i++) { got = await FM.storage.readMedia(lid); if (got && got.file) break; await sleep(100); }
+          if (!got || !got.file || got.file.size !== PIC.size) bad.push('CONTROL: once its size check answered the friend’s picture did not land in its layer’s record (' + (got && got.file ? got.file.size + ' bytes' : 'no record') + ' of ' + PIC.size + ')');
+          await verdict('a friend’s clip being stored', a);
+        } finally {
+          try { W.cancel(); } catch (e) {}
+          if (open) open({ kind: 'image', width: 2, height: 2, url: '' });
+          await until(() => !FM._importing, 5000);
+          putImg();
+        }
+      });
+
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      if (FM.collab && FM.collab.active) throw new Error('setup: a session was still running for the control, and the hold would hand its reload to it');
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (open) open(null);
+      putImg();
+      FM.clipboard = clip0;
+      if (dFlag) Object.defineProperty(FM, '_importing', dFlag); else delete FM._importing;
+      if (FM.hideToast) { try { FM.hideToast(); } catch (e) {} }
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();

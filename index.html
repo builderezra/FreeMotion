@@ -1214,7 +1214,7 @@
   <script src="js/captions.js?v=64"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=6"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=493"></script>
+  <script src="js/app.js?v=494"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->
@@ -1249,7 +1249,7 @@
   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
        resume parts under `collab:`, fonts, and the two honest answers (out of room, still arriving).
        A library like the rest: it does nothing at all until a session installs a controller on it. -->
-  <script src="js/collab-media.js?v=6"></script>
+  <script src="js/collab-media.js?v=7"></script>
   <!-- queue 921 stage S3 — the first real connection and the only collaboration UI there is. Both are
        libraries too: `signal` is the minimal-SDP codec and the auth handshake (no rendezvous driver, no
        invite link — those are S6), and `ui` builds nothing at all until Settings → Labs → Live
@@ -1287,7 +1287,7 @@
         if (F._exporting) return 'an export is running';
         if (F._exportingAudio) return 'a sound export is running';   // bughunt7 #6: Export sound (WAV / M4A) shows no overlay (js/app.js runAudioOnlyExport)
         if (F._rendering) return 'a sound is still being worked out';   // 1176 leftover: Save audio as WAV, Remove vocals, Reduce noise (js/audio-tools.js, js/noise-reduction.js)
-        if (F._importing) return 'a file is still opening';   // 1176 leftover: from the pick to the add (js/app.js handleFiles and Replace media, js/medialib.js use, js/sfx.js add, js/voice-rec.js addFile, js/sample.js)
+        if (F._importing) return 'a file is still opening';   // 1176 leftover: from the pick to the add (js/app.js handleFiles and Replace media, js/medialib.js use, js/sfx.js add, js/voice-rec.js addFile, js/sample.js), a copy re-opening its file (js/app.js Paste, Duplicate and Split, Undo of a Replace) and a friend's clip from its last part to its record (js/collab-media.js complete, applyHeld)
         if (F._aiCalls) return 'an AI answer is on its way';   // 1176 leftover: a model request in flight (js/ai.js call)
         if (F.ai && F.ai.isRunning && F.ai.isRunning()) return 'an AI run is still going';   // 1176 leftover: a Director build, re-roll or Refine for its whole length, between its requests too (js/ai.js state.running)
         var ov = document.getElementById('export-overlay'), rd = document.getElementById('export-ready');
