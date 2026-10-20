@@ -302,7 +302,8 @@ AUDIT = re.compile(r'\(hunt (?:HIGH|MEDIUM|LOW) #\d+\)')
 # DECLARES `SHIPPED IN vX.YY`, that release has its own POLISH-LOG line, and it is older than the one being shipped.
 TEAM = re.compile(r'\(team\)')
 SHIPPED_IN = re.compile(r'SHIPPED IN (v\d+\.\d+)\b')
-_HIS = re.compile(r'his words|his answer|he answered|answered by ezra|ezra answered', re.I)
+# "NOT his words" is how most PM notes label themselves, so it must not count; "quoting Ezra" does (#1150).
+_HIS = re.compile(r'(?<!not )(?:his words|his answer)|he answered|answered by ezra|ezra answered|quoting (?:ezra|him)', re.I)
 
 
 def sort_key(num, suffix, audit=False, team=False):
@@ -704,6 +705,18 @@ _ORDER = [
       nothing is stopping this''',
      (1100, ''),
      'a (team) tag on an entry that records his answer is ignored — it stays in his tier and keeps its place'),
+    ('''- [ ] **1100 — PM decision on the gate** (14 Oct — the PM lane, NOT his words) (team)
+      nothing is stopping this
+- [ ] **1101 — his request**
+      nothing is stopping this''',
+     (1101, ''),
+     '“NOT his words” — how PM notes label themselves — does not void the (team) tag'),
+    ('''- [ ] **1100 — PM → builder: own the lanes** (13 Oct — the PM lane, quoting Ezra) (team)
+      nothing is stopping this
+- [ ] **1101 — his request**
+      nothing is stopping this''',
+     (1100, ''),
+     '“quoting Ezra” carries his words, so the (team) tag is ignored'),
 ]
 
 # The gate ranks the item a release has JUST TICKED against next_up. Each case: (file, closed, expect late?)
