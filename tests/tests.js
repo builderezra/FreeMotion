@@ -174552,11 +174552,14 @@
      first each time:
      1. Duplicate: a layer pushed into this tab's open project and not saved, then Duplicate of that project. The copy must hold it.
      2. Delete: the project open here, deleted while the other tab is elsewhere, must move this tab off it; the project the other tab
-        has open, deleted from here, must leave this tab on his own project.
+        has open, deleted from here, must leave this tab on his own project, untouched: the same document object, with a layer not
+        saved yet still on screen (review F2: an id check alone passed on the old code whenever the first card was his own project,
+        which the old switch then tore down and opened again).
      3. Leave (delete my copy) from a guest session with no gpid, on a shared copy open here, while the other tab has another shared
         copy open: the copy open here goes, and the other tab's stays, unmarked. (The copies have no room to reach: nothing dials.)
      FAILS BEFORE THE FIX: with the pointer elsewhere, Duplicate copies the document on disk without the unsaved layer; deleting the
-     project open here leaves this tab on it, and deleting the other tab's project moves this tab off his own; Leave marks the other
+     project open here leaves this tab on it, and deleting the other tab's project moves this tab off his own (or, when the first
+     card is his own, reloads it: the document object and the unsaved layer are replaced); Leave marks the other
      tab's copy left and deletes it, and the copy open here stays on the device, still linked.
      CONTROLS, which hold before and after: with one tab Duplicate copies the unsaved layer, deleting the open project moves this tab
      off it, and Leave deletes the copy open here. No tolerance: every quantity is a name, an id or a count. */
@@ -174651,11 +174654,17 @@
         made.push(W);
         await FM.projects.open(X, { confirmed: true });
         if (here() !== X) throw new Error('setup: this tab did not go back to his own project');
+        /* What this tab holds before the delete: the document object and a layer not saved yet. The old switch opened the
+           first card, and when that card is X itself open(X) is not cut short (the pointer names W), so X is torn down and
+           loaded again: the id alone would pass. Both of these are replaced by any reload, whatever the index order. */
+        const keepP = FM.scene.project, keepL = layer921('bh8-2b not saved, still on screen');
+        FM.scene.layers.push(keepL);
         otherTab(W);
         await FM.projects.remove(W);
-        const w = here();
+        const w = here(), wDoc = FM.scene.project === keepP, wLayer = FM.scene.layers.indexOf(keepL) >= 0;
         backTab();
         if (w !== X) bad.push('deleting from here the project another tab has open took this tab off his own project, to ' + nameOf(w));
+        else if (!wDoc || !wLayer) bad.push('deleting from here the project another tab has open tore his own project down and opened it again (' + (wDoc ? '' : 'its document was replaced') + (wDoc || wLayer ? '' : ', ') + (wLayer ? '' : 'the layer not saved yet is not the one on screen') + '): his undo goes with that, and a live session is stood down');
 
         /* ── 3. LEAVE (delete my copy) from a session that carries no gpid */
         const G0 = linked('0');
