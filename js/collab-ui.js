@@ -1811,6 +1811,10 @@ window.FM = window.FM || {};
     });
     b.setAttribute('aria-label', 'New people join as ' + labelFor(cur));
     row.appendChild(b);
+    /* #1090 (hunt HIGH, decided 20 Oct from #987, his words: “there should be a colour indicator based on who left the
+       note”): the Notes pad and its reminders travel to everyone in the session, Viewers included, because notes are
+       what the people in a shared edit leave each other. Nothing said so; it is said where a newcomer’s role is picked. */
+    row.appendChild(el('div', 'cs-rowhint', 'Everyone who joins — Viewers too — sees the whole project, its notes and reminders included.'));
     return row;
   }
 

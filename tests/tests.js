@@ -169235,4 +169235,65 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ #1090 (hunt HIGH): THE SHARE SCREEN SAYS EVERYONE WHO JOINS SEES THE NOTES ═══════════════════════════════════
+     `project.notes` — the Notes pad and its reminders — travels to every guest, Viewers included, and nothing on the Share
+     screens said so. Decided 20 Oct from his own words (#987, 29 Sep: “there should be a colour indicator based on who
+     left the note”): notes are what the people in a shared edit leave each other, so they keep travelling and the screen
+     says so, under the role a newcomer gets. (The 11 Oct owner-only call would have undone #987.)
+     FAILS BEFORE THE FIX: the “New people join as” row says nothing about notes.
+     CONTROL, which holds before and after: the owner's note and ticked reminder reach a Viewer who is in and an Editor
+     who joins after, and the copy a guest starts from holds them — #987's author faces need them there. */
+  test('1090 Work with friends: the Share screen says everyone who joins sees the notes: on a 390 phone the New people join as row says plainly that everyone who joins, Viewers too, sees the project’s notes and reminders, inside the screen (CONTROL: the owner’s note and ticked reminder still reach a Viewer, an Editor who joins after and the copy a guest starts from, so #987 keeps working)', { item: '1090', budgetMs: 120000 }, async function () {
+    need921S7('who sees the notes');
+    const NOTE = 'Client pays 4k 1090 shared', REMIND = 'Invoice before export 1090';
+    const bad = [];
+    await withLabs921(async function () {
+      await with945(async function () {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const wasNotes = FM.scene.project.notes;
+          const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+          try {
+            /* CONTROL first: the notes travel, exactly as before. */
+            const V = rawWire921(ctx, 'viewer', 'Vee');
+            V.say({ t: 'hello', role: 'viewer', name: 'Vee', have: { epoch: null, seq: 0 } });
+            FM.scene.project.notes = [{ id: 'n1090a', text: NOTE, remind: false }, { id: 'n1090b', text: REMIND, remind: true }];
+            ctx.S.tick('full');
+            V.loop.settle();
+            const E = rawWire921(ctx, 'editor', 'Ed');
+            E.say({ t: 'hello', role: 'editor', name: 'Ed', have: { epoch: null, seq: 0 } });
+            [['the Viewer', V], ['the Editor who joined after', E]].forEach(function (pair) {
+              const s = JSON.stringify(pair[1].got);
+              if (s.indexOf(NOTE) < 0 || s.indexOf(REMIND) < 0) bad.push('CONTROL: ' + pair[0] + ' was not sent the owner’s note and reminder (' + pair[1].got.length + ' messages), so the line would not be true');
+            });
+            const g = ctx.addGuest({ role: 'editor', name: 'Gee' });
+            if (JSON.stringify(g.doc.project.notes || null).indexOf(NOTE) < 0) bad.push('CONTROL: the copy a guest starts from holds no notes: ' + JSON.stringify(g.doc.project.notes));
+            /* The words, on the screen the role is picked on. */
+            if (wasHome) FM.home.close();
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              const row = fr.querySelector('.cs-joinrow');
+              if (!row || !row.querySelector('.cs-joinas')) throw new Error('setup: the Friends block has no “New people join as” row');
+              const hint = row.querySelector('.cs-rowhint');
+              const t = hint ? hint.textContent : '';
+              if (!/notes/i.test(t)) bad.push('the “New people join as” row says nothing about notes' + (t ? ': “' + t + '”' : ''));
+              else {
+                if (!/viewers/i.test(t)) bad.push('“' + t + '” does not say Viewers see them too');
+                if (!/reminders/i.test(t)) bad.push('“' + t + '” does not say the reminders go too');
+                if (!/everyone/i.test(t)) bad.push('“' + t + '” does not say everyone who joins sees them');
+                const r = hint.getBoundingClientRect();
+                if (!(r.height > 0) || r.left < 0 || r.right > window.innerWidth + 0.5) bad.push('the line is not inside the screen at ' + window.innerWidth + ' px (' + Math.round(r.left) + '–' + Math.round(r.right) + ', ' + Math.round(r.height) + ' px tall)');
+              }
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          } finally {
+            FM.scene.project.notes = wasNotes;
+            if (wasHome && !FM.home.isOpen()) FM.home.open();
+          }
+        });
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();
