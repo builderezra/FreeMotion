@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=775">
+<link rel="stylesheet" href="styles.css?v=776">
 <link rel="stylesheet" href="theme-glass.css?v=68">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -403,6 +403,10 @@
 
     <div id="main">
       <section id="stage">
+        <!-- #1083, his pick B: on PC a second way out, a glass "‹ Projects" pill that appears when the mouse is over the
+             stage's top-left corner. Ezra: "on pc i often find myself looking for the back button … in the top left". The
+             real back button stays where it is ("its in a functionally better spot"); this one just presses it. -->
+        <button id="btn-back-corner" class="corner-back" type="button" tabindex="-1" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg><span class="cb-proj">Projects</span><span class="cb-grp">Back</span></button>
         <div id="canvas-wrap">
           <canvas id="preview"></canvas>
           <!-- The pause bloom (queue 538). Ezra: "make it have a nice pause animation and a little pause
@@ -1214,7 +1218,7 @@
   <script src="js/captions.js?v=64"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=7"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=494"></script>
+  <script src="js/app.js?v=495"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->
