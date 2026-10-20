@@ -165860,6 +165860,429 @@
     });
   });
 
+  /* (1176 leftover, curved text) RIGHT-TO-LEFT TEXT ON A CURVE WAS LAID ALONG THE ARC IN TYPING ORDER. Both curve painters walked the
+     line's characters in the order they were typed, starting from the arc's LEFT end: drawArcLine (a still layer with a Curve, or a
+     Text Curve) and drawAnimatedText's curved branch (the same with an Animate preset). Flat, a line is one fillText and the canvas
+     runs the bidirectional algorithm over it, so a Hebrew or Arabic line's first word typed is drawn on the RIGHT; on a curve it came
+     out on the left with every word spelled backwards, for the layer's whole life, in the preview and the export. Now the characters
+     go along the arc in the visual order bidiGlyphOrder gives (compositor.js); the units and their stagger keep the typing order.
+     The lines are bughunt4 #6's, 40 px white text centred at 160 on _bh2Frame's black frame: Hebrew א, three spaces, בבבבבב, and
+     Arabic لا, three spaces, مدرسة. At a Curve of 1° the arc's radius is about 8600 px for a 150 px line, so it bows the line by a
+     third of a pixel and turns a glyph by at most half a degree: the curved line is the flat line to within a pixel or two, and
+     their gaps can be compared directly. At 30° the line really bends.
+     FAILS BEFORE THE FIX: at 1°, still and under Fade by character, by word and by line, the Hebrew gap is mirrored about the ink's
+     middle, about 108 px from the flat line's (the mirror bughunt4 #6 measured on the flat path); at 30°, still and by word, the
+     Hebrew and the Arabic gap lie left of the middle; Typewriter's first letter (א) is drawn at the arc's left end.
+     CONTROL: flat, the canvas puts the Hebrew and the Arabic gap right of the middle (this browser runs the algorithm, so the orders
+     can be told apart) and a Latin line's left of it; the Latin line at 1° keeps the flat gap and edges in every mode (1° is near
+     enough flat to compare); the Hebrew line at 1° spans the flat ink in every mode; a 30° curve bows the Latin line (the curved
+     painters are what is measured); each Fade is on (FM.textHasAnim) and finished at 1 s; Typewriter draws one letter at 0.25 s.
+     TOL: 4 px on a gap's centre or an ink edge, bughunt4 #6's: on a curve every glyph is placed alone, which drops any kerning, and
+     the 1° arc moves a glyph by under a pixel; the fault is 50 px or more. The Arabic line on a curve is drawn letter by letter,
+     unjoined, so its width is not the flat line's and only the side its gap is on is judged. Not run when written (code only). */
+  test('1176 leftover: right-to-left text on a curve reads as it does flat: a Hebrew line of a one-letter word, three spaces and a six-letter word has its gap where the flat line has it at a Curve of 1°, still and under Fade by character, by word and by line; at 30° the Hebrew and the Arabic gap stay right of the middle, and Typewriter by character brings the first letter typed in at the right end (CONTROLS: flat, the canvas puts the first word on the right; a Latin line at 1° keeps the flat gap in every mode; every mode spans the flat ink; the curve bows the line; the Fade is on and finished)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim are not reachable');
+    await _bh2With(async function () {
+      const T = 1, TOL = 4;
+      const HEB = 'א   בבבבבב', ARA = 'لا   مدرسة', LAT = 'a   bbbbbb';
+      const L = FM.makeLayer('text', { name: '1176 curve title', text: HEB, x: 160, y: 120, fontSize: 40, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L];
+      const STILL = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      const fade = unit => ({ preset: 'fade', unit: unit, durIn: 0.3, durOut: 0, stagger: 0.05 });
+      /* The ink of `text` under `anim` on a Curve of `deg` at t (T unless given; a pixel brighter than 150 summed over its channels):
+         its first and last columns and rows, its middle, and the widest run of empty columns between them (the gap between the words). */
+      const ink = (text, anim, deg, t) => {
+        L.text = text; L.textAnim = Object.assign({}, anim); L.effects = []; L.textCurve = deg;
+        delete L._wrapCache;
+        const f = _bh2Frame(t == null ? T : t), col = new Uint8Array(320);
+        let y0 = -1, y1 = -1;
+        for (let i = 0, n = 0; i < f.d.length; i += 4, n++) {
+          if (f.d[i] + f.d[i + 1] + f.d[i + 2] > 150) { const x = n % 320; col[x] = 1; if (y0 < 0) y0 = (n - x) / 320; y1 = (n - x) / 320; }
+        }
+        let x0 = -1, x1 = -1;
+        for (let x = 0; x < 320; x++) if (col[x]) { if (x0 < 0) x0 = x; x1 = x; }
+        let gw = 0, gap = -1, run = 0;
+        for (let x = x0 + 1; x0 >= 0 && x <= x1; x++) {
+          if (!col[x]) { run++; continue; }
+          if (run > gw) { gw = run; gap = ((x - run) + (x - 1)) / 2; }
+          run = 0;
+        }
+        return { x0: x0, x1: x1, y0: y0, y1: y1, mid: (x0 + x1) / 2, gap: gap, gw: gw, anim: !!FM.textHasAnim(L) };
+      };
+      const say = r => 'ink at columns ' + r.x0 + '..' + r.x1 + ' (middle ' + r.mid + '), its widest gap ' + r.gw + ' px centred at ' + r.gap;
+      const bad = [];
+
+      /* ── CONTROLS: flat, the first word of an RTL line is on the right and a Latin line's on the left; a 30° curve bows the line. */
+      const fH = ink(HEB, STILL, 0), fA = ink(ARA, STILL, 0), fL = ink(LAT, STILL, 0);
+      if (fH.anim || fA.anim || fL.anim) bad.push('CONTROL: the still layer has an Animate preset by FM.textHasAnim, so “still” is not the still path');
+      if (fH.x0 < 0 || fH.x1 - fH.x0 < 80 || fH.gw < 15) bad.push('CONTROL: flat, the Hebrew line is ' + say(fH) + ' — not glyphs either side of a three-space gap, so there is nothing to place');
+      if (!(fH.gap - fH.mid >= 20)) bad.push('CONTROL: flat, the Hebrew line is ' + say(fH) + ': its gap is not right of its middle, so this browser does not lay the line out right to left and the orders cannot be told apart');
+      if (fA.x0 < 0 || fA.gw < 15 || !(fA.gap - fA.mid >= 10)) bad.push('CONTROL: flat, the Arabic line is ' + say(fA) + ': not two words with the gap right of the middle');
+      if (fL.x0 < 0 || fL.gw < 15 || !(fL.mid - fL.gap >= 20)) bad.push('CONTROL: flat, the Latin line is ' + say(fL) + ': not two words with the gap left of the middle');
+      const bow = ink(LAT, STILL, 30);
+      if (bow.x0 < 0 || !(bow.y1 - bow.y0 >= fL.y1 - fL.y0 + 5)) bad.push('CONTROL: on a 30° curve the Latin line’s ink is rows ' + bow.y0 + '..' + bow.y1 + ' where flat it is rows ' + fL.y0 + '..' + fL.y1 + ' — the curve does not bow it, so the curved painters are not what is measured');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── At 1°: still (drawArcLine), and Fade by character, by word and by line (the curved branch): the Hebrew gap where the flat one is. */
+      [['still', STILL], ['Fade by character', fade('char')], ['Fade by word', fade('word')], ['Fade by line', fade('line')]].forEach(([name, anim]) => {
+        const h = ink(HEB, anim, 1), l = ink(LAT, anim, 1);
+        if (h.anim !== (anim !== STILL)) bad.push('CONTROL: ' + name + ' on a 1° curve, FM.textHasAnim says ' + h.anim + ', so this frame did not take the path it is named for');
+        if (Math.abs(l.gap - fL.gap) > TOL || Math.abs(l.x0 - fL.x0) > TOL || Math.abs(l.x1 - fL.x1) > TOL) bad.push('CONTROL: the Latin line on a 1° curve, ' + name + ', has ' + say(l) + ' where flat it has ' + say(fL) + ', so a 1° curve is not near enough flat to compare with');
+        if (Math.abs(h.x0 - fH.x0) > TOL || Math.abs(h.x1 - fH.x1) > TOL) bad.push('CONTROL: the Hebrew line on a 1° curve, ' + name + ', has ' + say(h) + ' where flat it has ' + say(fH) + ' — its glyphs do not add up to the line');
+        if (Math.abs(h.gap - fH.gap) > TOL) bad.push('the Hebrew line on a 1° curve, ' + name + ', has ' + say(h) + ' where flat it has ' + say(fH) + (Math.abs((h.gap - h.mid) + (fH.gap - fH.mid)) <= TOL ? ' — mirrored about its middle: its letters went along the arc in the order they were typed' : ''));
+      });
+
+      /* ── At 30°, still and Fade by word: the Hebrew and the Arabic gap right of the middle, as flat. */
+      [['still', STILL], ['Fade by word', fade('word')]].forEach(([name, anim]) => {
+        const h = ink(HEB, anim, 30), a = ink(ARA, anim, 30);
+        if (h.x0 < 0 || h.gw < 15 || !(h.gap - h.mid >= 20)) bad.push('the Hebrew line on a 30° curve, ' + name + ', has ' + say(h) + ': its gap is not right of its middle as it is flat (' + say(fH) + ')' + (h.gw >= 15 && h.mid - h.gap >= 20 ? ' — the first word typed is at the arc’s left end' : ''));
+        if (a.x0 < 0 || a.gw < 15 || !(a.gap - a.mid >= 10)) bad.push('the Arabic line on a 30° curve, ' + name + ', has ' + say(a) + ': its gap is not right of its middle as it is flat (' + say(fA) + ')' + (a.gw >= 15 && a.mid - a.gap >= 10 ? ' — the first word typed is at the arc’s left end' : ''));
+      });
+
+      /* ── Typewriter by character on a 30° curve: at 0.25 s only the first letter typed (א) is in, and it is at the arc's right end. */
+      const tw = ink(HEB, { preset: 'typewriter', unit: 'char', durIn: 0.3, durOut: 0, stagger: 0.5 }, 30, 0.25);
+      if (tw.x0 < 0 || tw.x1 - tw.x0 > 40) bad.push('CONTROL: under Typewriter by character on a 30° curve at 0.25 s the ink is at columns ' + tw.x0 + '..' + tw.x1 + ', not one letter');
+      else if (!(tw.x0 > fH.gap)) bad.push('under Typewriter by character on a 30° curve at 0.25 s the one letter in (the first typed, א) is at columns ' + tw.x0 + '..' + tw.x1 + ', not right of the flat gap at ' + fH.gap + ' where it is drawn flat' + (tw.x1 < fH.mid ? ' — at the arc’s left end: the entrance runs from the end of the sentence' : ''));
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
+  /* (1176 leftover, Word Highlight) A RIGHT-TO-LEFT LINE'S HIGHLIGHT WAS LAID OUT IN TYPING ORDER. Still, the line is one fillText and the
+     canvas draws a Hebrew or Arabic line's first word typed at the RIGHT end; drawHighlightLines placed each word's box, underline and
+     lit colour at the advance of the text typed BEFORE it, measured from the line's LEFT edge (hlGeom), so the first word's box sat
+     over the left end of the line, on another word. Animated, bughunt4 #6 had kept such a layer's units in typing order (hlOn) for
+     that reason, so the whole line came out mirrored the moment it carried a Word Highlight, lit or not, and hlAnimLine's boxes rode
+     the mirrored words. Now a line holding a right-to-left letter is measured where it is drawn (compositor.js bidiSpanFn, hlGeomVis,
+     hlRunsVis; animated, hlAnimLineVis on bidiUnitXs' edges), and the animated units read as they do without a highlight.
+     The lines are bughunt4 #6's, 40 px white text centred at 160 on _bh2Frame's black frame (Hebrew א, three spaces, בבבבבב: the six
+     letters on the left, about 130 px of them, the one letter on the right past a gap of about 33 px; Arabic لا, three spaces, مدرسة).
+     The Word Highlight lights one word by Progress (0.25 the first word typed, 0.75 the second; two words), in a pure red box with
+     4 px of Padding and square corners, or in Colour, pure red.
+     FAILS BEFORE THE FIX: still, the first word's box is drawn over the left end of the line (about 165 px left of the letter it
+     lights) and the second word's from about a third of the way in to past the right end; in Colour the red falls on the six
+     letters' left end; the Arabic first word's box is on the left. Under Fade by word and by character the white text's gap is
+     mirrored about its middle (about 108 px off) and the red letter is the mirrored א at the left end. Under Fade by line the text
+     is drawn right (one fillText) but the red falls on the six letters' left end, as still. (The animated boxes are compared with
+     the still ones, which were wrong the same way, so it is the still checks that catch them.)
+     CONTROL: still with no highlight, the canvas puts the Hebrew and the Arabic gap right of the middle and a Latin line's left of
+     it; FM._hlUnits says Progress 0.25 lights the first word and 0.75 the second; a Latin line's boxes sit on its words, still and
+     under every Fade, and its animated boxes and gap are the still ones; each Fade is on (FM.textHasAnim) and finished at 1 s.
+     TOL: 4 px between an animated box edge or gap and the still one (bughunt4 #6's: By Character each glyph is placed alone, which
+     drops any kerning); 1 px of slack where a box must cover a word's ink (its 4 px of Padding stand past the word's advance, and a
+     half-covered column is not counted red) and 2 px where a red letter must lie inside its word's ink. The faults are 30 px or more.
+     Not run when written (code only). */
+  test('1176 leftover: Word Highlight on right-to-left text lights each word where it is drawn: on a Hebrew line of a one-letter word, three spaces and a six-letter word, still, the first word’s box sits on the right-hand letter and the second word’s on the six letters, and in Colour the right-hand letter is the one drawn red; under Fade by word, by character and by line the text keeps the still gap and each box and red letter lands where the still one is; an Arabic line’s first word is boxed on the right (CONTROLS: still, the canvas puts the first word on the right; Progress lights the word it names; a Latin line’s boxes sit on its words, still and animated; each Fade is on and finished)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function' || typeof FM._hlUnits !== 'function' || typeof FM.applyTextEffects !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim / FM._hlUnits / FM.applyTextEffects are not reachable');
+    await _bh2With(async function () {
+      const T = 1, TOL = 4, PAD = 4;
+      const HEB = 'א   בבבבבב', ARA = 'لا   مدرسة', LAT = 'a   bbbbbb';
+      const L = FM.makeLayer('text', { name: '1176 highlight title', text: HEB, x: 160, y: 120, fontSize: 40, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L];
+      const STILL = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      const fade = unit => ({ preset: 'fade', unit: unit, durIn: 0.3, durOut: 0, stagger: 0.05 });
+      const BOX = 1, COLOUR = 0;
+      /* A Word Highlight lighting word `word` of two by Progress (0 the first typed, 1 the second): Box behind (pure red, 4 px Padding,
+         square corners) or Colour (pure red). */
+      const hl = (word, style) => [{ type: 'wordhighlight', enabled: true, params: { follow: 0, progress: word === 0 ? 0.25 : 0.75, unit: 0, style: style, color: '#ff0000', boxcolor: '#ff0000', padding: PAD, radius: 0, past: 0 } }];
+      /* One frame of `text` under `anim` with the effects `fx`: its WHITE ink by column (each channel above 180; a lit red letter and the
+         box are not white), the widest empty run inside it (the gap between the words) and the two words' ink either side of it; and
+         the columns of its pure-red pixels (_bh2Frame: the box, or a letter lit red). */
+      const shot = (text, anim, fx) => {
+        L.text = text; L.textAnim = Object.assign({}, anim); L.effects = fx;
+        delete L._wrapCache;
+        const f = _bh2Frame(T), col = new Uint8Array(320);
+        for (let i = 0, n = 0; i < f.d.length; i += 4, n++) if (f.d[i] > 180 && f.d[i + 1] > 180 && f.d[i + 2] > 180) col[n % 320] = 1;
+        let x0 = -1, x1 = -1;
+        for (let x = 0; x < 320; x++) if (col[x]) { if (x0 < 0) x0 = x; x1 = x; }
+        let gw = 0, gap = -1, run = 0;
+        for (let x = x0 + 1; x0 >= 0 && x <= x1; x++) {
+          if (!col[x]) { run++; continue; }
+          if (run > gw) { gw = run; gap = ((x - run) + (x - 1)) / 2; }
+          run = 0;
+        }
+        return { x0: x0, x1: x1, mid: (x0 + x1) / 2, gap: gap, gw: gw, lw: [x0, gap - (gw + 1) / 2], rw: [gap + (gw + 1) / 2, x1], red: f.red, r0: f.x0, r1: f.x1, anim: !!FM.textHasAnim(L) };
+      };
+      const say = r => 'white ink at columns ' + r.x0 + '..' + r.x1 + ' (middle ' + r.mid + '), its widest gap ' + r.gw + ' px centred at ' + r.gap;
+      const sayRed = r => r.red + ' red px at columns ' + r.r0 + '..' + r.r1;
+      const span = w => w[0] + '..' + w[1];
+      // the red covers word `w`'s ink (1 px of slack) and stops short of the other word's ink `o`
+      const boxed = (r, w, o) => r.red > 0 && r.r0 <= w[0] + 1 && r.r1 >= w[1] - 1 && (o[0] > w[1] ? r.r1 < o[0] : r.r0 > o[1]);
+      const bad = [];
+
+      /* ── CONTROLS: still with no highlight, the first word of an RTL line is on the right and a Latin line's on the left; Progress
+         lights the word it names (the units, without pixels); a Latin line's boxes sit on its words. */
+      const sH = shot(HEB, STILL, []), sA = shot(ARA, STILL, []), sL = shot(LAT, STILL, []);
+      if (sH.anim || sA.anim || sL.anim) bad.push('CONTROL: the still layer has an Animate preset by FM.textHasAnim, so “still” is not the still path');
+      if (sH.x0 < 0 || sH.gw < 15 || !(sH.gap - sH.mid >= 20)) bad.push('CONTROL: still, the Hebrew line is ' + say(sH) + ': not two words with the gap right of the middle, so this browser does not lay it out right to left and the orders cannot be told apart');
+      if (sA.x0 < 0 || sA.gw < 15 || !(sA.gap - sA.mid >= 10)) bad.push('CONTROL: still, the Arabic line is ' + say(sA) + ': not two words with the gap right of the middle');
+      if (sL.x0 < 0 || sL.gw < 15 || !(sL.mid - sL.gap >= 20)) bad.push('CONTROL: still, the Latin line is ' + say(sL) + ': not two words with the gap left of the middle');
+      [0, 1].forEach(word => {
+        L.effects = hl(word, BOX);
+        const st = FM.applyTextEffects(L, HEB, 0, T, FM.scene), lit = st.highlight ? FM._hlUnits(L, T, [HEB], st.highlight)[0].map(u => u.on ? 1 : 0).join('') : '(no highlight)';
+        if (lit !== (word === 0 ? '10' : '01')) bad.push('CONTROL: Progress ' + (word === 0 ? 0.25 : 0.75) + ' lights the words ' + lit + ', not only word ' + (word + 1) + ' of two, so the boxes below are not the words this test names');
+      });
+      const lb0 = shot(LAT, STILL, hl(0, BOX)), lb1 = shot(LAT, STILL, hl(1, BOX)), lc0 = shot(LAT, STILL, hl(0, COLOUR));
+      if (!boxed(lb0, sL.lw, sL.rw)) bad.push('CONTROL: still, the Latin line’s first word (a, ink ' + span(sL.lw) + ') is boxed at ' + sayRed(lb0) + ' — the box is not on its word even in a left-to-right line');
+      if (!boxed(lb1, sL.rw, sL.lw)) bad.push('CONTROL: still, the Latin line’s second word (ink ' + span(sL.rw) + ') is boxed at ' + sayRed(lb1));
+      if (!(lc0.red > 30 && lc0.r0 >= sL.lw[0] - 2 && lc0.r1 <= sL.lw[1] + 2)) bad.push('CONTROL: still in Colour, the Latin line’s first word (a, ink ' + span(sL.lw) + ') lights ' + sayRed(lc0) + ', not that letter');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── Still: the Hebrew first word (א) is the right-hand ink, the second (בבבבבב) the left; the Arabic first word (لا) the right. */
+      const hb0 = shot(HEB, STILL, hl(0, BOX)), hb1 = shot(HEB, STILL, hl(1, BOX)), hc0 = shot(HEB, STILL, hl(0, COLOUR)), ab0 = shot(ARA, STILL, hl(0, BOX));
+      if (!boxed(hb0, sH.rw, sH.lw)) bad.push('still, the Hebrew first word typed (א, drawn at ink ' + span(sH.rw) + ') is boxed at ' + sayRed(hb0) + (hb0.r0 <= sH.lw[0] + PAD + 1 ? ' — at the line’s left end, over the six letters: the box went by the typing order' : ''));
+      if (!boxed(hb1, sH.lw, sH.rw)) bad.push('still, the Hebrew second word (the six letters, drawn at ink ' + span(sH.lw) + ') is boxed at ' + sayRed(hb1));
+      if (!(hc0.red > 30 && hc0.r0 >= sH.rw[0] - 2 && hc0.r1 <= sH.rw[1] + 2)) bad.push('still in Colour, the Hebrew first word typed (א, drawn at ink ' + span(sH.rw) + ') lights ' + sayRed(hc0) + ', not that letter' + (hc0.red && hc0.r1 < sH.rw[0] ? ' — the six letters’ left end is lit instead' : ''));
+      if (!boxed(ab0, sA.rw, sA.lw)) bad.push('still, the Arabic first word typed (لا, drawn at ink ' + span(sA.rw) + ') is boxed at ' + sayRed(ab0) + (ab0.r1 < sA.gap ? ' — on the left, over the other word' : ''));
+
+      /* ── Fade by word, by character and by line: the text keeps the still gap, every box lands where the still one is (and so on its
+         word), the red letter on its word; the Latin line the same. */
+      [['Fade by word', fade('word')], ['Fade by character', fade('char')], ['Fade by line', fade('line')]].forEach(([name, anim]) => {
+        [[HEB, 'Hebrew', hb0, hb1, hc0, sH], [LAT, 'Latin', lb0, lb1, lc0, sL]].forEach(([text, lang, s0, s1, c0, plain]) => {
+          const ctl = lang === 'Latin' ? 'CONTROL: ' : '';
+          const b0 = shot(text, anim, hl(0, BOX)), b1 = shot(text, anim, hl(1, BOX)), c = shot(text, anim, hl(0, COLOUR));
+          if (!b0.anim) bad.push('CONTROL: ' + name + ' is off by FM.textHasAnim, so this frame did not take the animated path');
+          if (Math.abs(b0.gap - s0.gap) > TOL) bad.push(ctl + 'the ' + lang + ' line under ' + name + ' with its first word boxed has ' + say(b0) + ' where still it has ' + say(s0) + (Math.abs((b0.gap - b0.mid) + (s0.gap - s0.mid)) <= TOL ? ' — mirrored about its middle: a highlighted layer kept its units in typing order' : ''));
+          [[b0, s0, 'first'], [b1, s1, 'second']].forEach(([a, s, which]) => {
+            if (!(a.red > 0) || Math.abs(a.r0 - s.r0) > TOL || Math.abs(a.r1 - s.r1) > TOL) bad.push(ctl + 'under ' + name + ' the ' + lang + ' ' + which + ' word’s box is ' + sayRed(a) + ' where still it is ' + sayRed(s));
+          });
+          const fw = lang === 'Latin' ? plain.lw : plain.rw;   // the first word typed: the left-hand ink of a Latin line, the right-hand of a Hebrew one
+          if (!(c.red > 30 && c.r0 >= fw[0] - 2 && c.r1 <= fw[1] + 2) || Math.abs(c.r0 - c0.r0) > TOL || Math.abs(c.r1 - c0.r1) > TOL) bad.push(ctl + 'under ' + name + ' in Colour the ' + lang + ' first word typed (drawn at ink ' + span(fw) + ' still) lights ' + sayRed(c) + ' where still it lights ' + sayRed(c0));
+        });
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
+  /* (1176 leftover, rule L4) A BRACKET DRAWN ALONE IN RIGHT-TO-LEFT TEXT FACED AWAY FROM ITS WORD. Still, a line is one fillText, and the
+     canvas draws a Bidi_Mirrored character at an odd level as its mirror image (UAX #9 rule L4): in the Hebrew line א ( בבב ) גגגג every
+     character is at level 1, so the line is laid out reversed and the '(' typed first is drawn as ')' to the right of בבב, the ')' as
+     '(' to its left, and the pair opens toward the word it holds. The paths that place glyph by glyph draw each glyph with a fillText of
+     its own, at the canvas's level 0, so they drew each bracket as typed: drawArcLine (a still Curve), drawAnimatedText's curved branch
+     (any Animate preset on a Curve) and its flat branch By Character and, for a bracket standing alone between spaces, By Word. There
+     the left-hand bracket came out ')' and the right-hand one '(': both faced outward. Now they draw the partner (compositor.js
+     BIDI_MIRROR, bidiMirrors).
+     The lines are 56 px white text centred at 240 on a 480 × 240 black frame of the test's own: Hebrew א ( בבב ) גגגג and Latin
+     a ( bbb ) cccc, single spaces between, so the ink is five blobs a space apart (about 18 px of space plus the side bearings; inside a
+     word the letters are a few px apart). A bracket's ink is about 50 px tall and bows about a tenth of an em (5 or 6 px) between its
+     middle and its two ends, so a blob's BEND (the mean column of its ink in the top and the bottom fifth of its rows, less the mean
+     column in the middle fifth) is about +5 for '(' and about -5 for ')'. At a Curve of 1° the arc's radius is about 20,000 px: it bows
+     the line by under a pixel and turns a glyph by at most half a degree, which moves its top and bottom fifths by under half a pixel
+     each, in opposite directions, so a bend on the curve is the flat one.
+     FAILS BEFORE THE FIX: on the 1° Curve still and under Fade by character, and flat under Fade by character and by word, the Hebrew
+     line's left-hand bracket (blob 2 of 5) bends about -5 and its right-hand one (blob 4) about +5, both drawn as typed; and
+     FM._bidiMirrors, which maps each bracket of a line that is right to left throughout to its partner, does not exist.
+     CONTROL: still, the Hebrew line's left blob is the four-letter word and its right blob the one letter (the canvas lays it out right
+     to left) and its left bracket bends +1.5 or more and its right one -1.5 or less (the canvas mirrors them, and the bend tells ( from
+     ) on this font); Fade by line draws the line whole and keeps those brackets; the Latin line keeps '(' left of bbb and ')' right of
+     it on every path; every path draws five blobs with the Hebrew four-letter word on the left; each Fade is on (FM.textHasAnim) and
+     finished by 1.5 s.
+     TOL: 1.5 px of bend each way, about a quarter of the bow: anti-aliasing moves a band's mean column by a fraction of a pixel and the
+     1° curve by under half of one, and a bracket drawn the wrong way round reads about 10 px from the right one.
+     Not run when written (code only). */
+  test('1176 leftover: a bracket in right-to-left text faces the way the still line draws it: on a Hebrew line of a one-letter word, a bracket, a three-letter word, a bracket and a four-letter word, the left-hand bracket opens to the right and the right-hand one to the left on a Curve of 1°, still and under Fade by character, and flat under Fade by character and by word, as the line drawn whole mirrors them (CONTROLS: still, the canvas lays the line out right to left and mirrors its brackets; Fade by line draws it whole; a Latin line keeps its brackets on every path; every path draws the five blobs in the still order; each Fade is on and finished)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function' || typeof FM._graphemes !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim / FM._graphemes are not reachable');
+    await _bh2With(async function () {
+      const T = 1.5, W = 480, H = 240, BEND = 1.5;
+      const HEB = 'א ( בבב ) גגגג', LAT = 'a ( bbb ) cccc';
+      const L = FM.makeLayer('text', { name: '1176 bracket title', text: HEB, x: 240, y: 120, fontSize: 56, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L];
+      const STILL = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      const fade = unit => ({ preset: 'fade', unit: unit, durIn: 0.3, durOut: 0, stagger: 0.04 });
+      /* `text` under `anim` on a Curve of `deg`, drawn at T on a W × H black frame: its ink (channels summing past 150) as blobs left to
+         right (runs of inked columns, a run of 12 or more empty columns ending one), each with its columns c0..c1, its width and its bend. */
+      const look = (text, anim, deg) => {
+        L.text = text; L.textAnim = Object.assign({}, anim); L.effects = []; L.textCurve = deg;
+        delete L._wrapCache;
+        const c = offscreen(W, H), ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, { project: { width: W, height: H, fps: 30, duration: 5, background: '#000000' }, layers: FM.scene.layers, selectedId: null, selectedIds: [] }, T);
+        const d = ctx.getImageData(0, 0, W, H).data;
+        const ink = (x, y) => { const i = (y * W + x) * 4; return d[i] + d[i + 1] + d[i + 2] > 150; };
+        const spans = [];
+        let cur = null;
+        for (let x = 0; x < W; x++) {
+          let any = false;
+          for (let y = 0; y < H && !any; y++) any = ink(x, y);
+          if (!any) continue;
+          if (cur && x - cur.c1 <= 12) cur.c1 = x;
+          else { cur = { c0: x, c1: x }; spans.push(cur); }
+        }
+        const b = spans.map(s => {
+          let y0 = -1, y1 = -1;
+          for (let y = 0; y < H; y++) for (let x = s.c0; x <= s.c1; x++) if (ink(x, y)) { if (y0 < 0) y0 = y; y1 = y; break; }
+          const h = y1 - y0 + 1;
+          const band = (f0, f1) => {
+            let sx = 0, n = 0;
+            for (let y = y0 + Math.floor(h * f0); y <= y0 + Math.ceil(h * f1) - 1; y++) for (let x = s.c0; x <= s.c1; x++) if (ink(x, y)) { sx += x; n++; }
+            return n ? sx / n : NaN;
+          };
+          return { c0: s.c0, c1: s.c1, w: s.c1 - s.c0 + 1, bend: (band(0, 0.2) + band(0.8, 1)) / 2 - band(0.4, 0.6) };
+        });
+        return { b: b, anim: !!FM.textHasAnim(L) };
+      };
+      const say = r => r.b.length + ' blobs at ' + r.b.map(o => o.c0 + '..' + o.c1 + ' (bend ' + (isFinite(o.bend) ? o.bend.toFixed(1) : o.bend) + ')').join(', ');
+      const five = r => r.b.length === 5;
+      const faces = r => five(r) && r.b[1].bend >= BEND && r.b[3].bend <= -BEND;     // the left bracket opens to the right, the right one to the left
+      const outward = r => five(r) && r.b[1].bend <= -BEND && r.b[3].bend >= BEND;
+      const rtl = r => five(r) && r.b[0].w >= 2 * r.b[4].w;   // the four-letter word (typed last) on the left, the one letter on the right
+      const ltr = r => five(r) && r.b[4].w >= 2 * r.b[0].w;
+      const bad = [];
+
+      /* ── CONTROLS: still, the canvas lays the Hebrew line out right to left and mirrors its brackets; the Latin line keeps them. */
+      const sH = look(HEB, STILL, 0), sL = look(LAT, STILL, 0);
+      if (sH.anim || sL.anim) bad.push('CONTROL: the still layer has an Animate preset by FM.textHasAnim, so “still” is not the still path');
+      if (!rtl(sH)) bad.push('CONTROL: still, the Hebrew line is ' + say(sH) + ': not five blobs with the four-letter word on the left, so this browser does not lay it out right to left and nothing here can be told apart');
+      else if (!faces(sH)) bad.push('CONTROL: still, the Hebrew line is ' + say(sH) + ': the canvas does not draw its brackets opening toward the word between them, or the bend cannot tell ( from ) on this font');
+      if (!ltr(sL) || !faces(sL)) bad.push('CONTROL: still, the Latin line is ' + say(sL) + ': not five blobs with ( left of the three-letter word and ) right of it');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── The table, without pixels: every bracket of a line that is right to left throughout maps to its partner; a Latin line to nothing. */
+      if (typeof FM._bidiMirrors !== 'function') bad.push('FM._bidiMirrors does not exist: nothing maps a bracket in right-to-left text to its partner');
+      else {
+        const ln = 'א [ { < « ( ב ) » > } ] ג', gs = FM._graphemes(ln), m = FM._bidiMirrors(ln, gs) || [];
+        const got = gs.map((g, i) => m[i] || '').join(''), want = ']}>»)(«<{[';
+        if (got !== want) bad.push('FM._bidiMirrors maps the brackets of ' + ln + ' to ' + JSON.stringify(got) + ', not ' + JSON.stringify(want));
+        if (FM._bidiMirrors(LAT, FM._graphemes(LAT)) !== null) bad.push('CONTROL: FM._bidiMirrors mirrors a bracket of the Latin line, which has no right-to-left letter');
+      }
+
+      /* ── Each glyph-by-glyph path, and (CONTROL) Fade by line: the Hebrew brackets face the word as still, the blobs in the still order. */
+      [['still on a Curve of 1°', STILL, 1], ['Fade by character on a Curve of 1°', fade('char'), 1], ['Fade by character', fade('char'), 0], ['Fade by word', fade('word'), 0], ['Fade by line', fade('line'), 0]].forEach(([name, anim, deg]) => {
+        const h = look(HEB, anim, deg), l = look(LAT, anim, deg), ctl = name === 'Fade by line' ? 'CONTROL: ' : '';
+        if (h.anim !== (anim !== STILL)) bad.push('CONTROL: ' + name + ', FM.textHasAnim says ' + h.anim + ', so this frame did not take the path it is named for');
+        if (!ltr(l) || !faces(l)) bad.push('CONTROL: ' + name + ', the Latin line is ' + say(l) + ' where still it is ' + say(sL) + ': its brackets are not where and how they are typed');
+        if (!rtl(h)) bad.push('CONTROL: ' + name + ', the Hebrew line is ' + say(h) + ': not five blobs with the four-letter word on the left, as still (' + say(sH) + ')');
+        else if (!faces(h)) bad.push(ctl + name + ', the Hebrew line is ' + say(h) + ' where still it is ' + say(sH) + (outward(h) ? ' — both brackets face outward, away from the word between them: each was drawn as typed' : ''));
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
+  /* (1176 leftover, the group box) A GROUP'S BOX LEFT OUT ITS MEMBERS' TURN, SKEW AND DEPTH, AND A NESTED GROUP'S OWN TRANSFORM. After
+     bughunt4 #10 / #10b, groupBoundsLocal and groupRestBoundsLocal box each member (groupMemberSpan) from its anchor, alignment,
+     unlinked Width / Height and Flip as an UPRIGHT rectangle, and a nested group passes on only its x / y. applyLayerTransform also
+     turns the member, shears it and scales it by its depth (a parented layer's z is a scale about its x / y), and applyParentChain
+     draws a nested group's members through that group's own turn, scale and Flip about its pivot. A group G at 0,0 holds ONE 40 × 30
+     red shape at x 100, y 200 (directly, or through a nested group N at 0,0); on cb26cd7b:
+       A  turned 90°: drawn 85 .. 115 × 180 .. 220, boxed 80 .. 120 × 185 .. 215.
+       B  turned 30°: drawn 75.2 .. 124.8 × 177.0 .. 223.0, boxed 80 .. 120 × 185 .. 215.
+       C  hinged on its left edge (anchorX 0) at x 100, y 150, turned 90°: drawn 85 .. 115 × 150 .. 190, boxed 100 .. 140 × 135 .. 165,
+          beside it; the pivot a pinch would use (FM.groupPivotMeasured, anchor 0.5) was 120, 150 where the drawn middle is 100, 170;
+          and a tap at 90, 185, on the shape, fell outside FM.groupBounds.
+       D  Skew X 30°: drawn 71.3 .. 128.7 × 185 .. 215, boxed 80 .. 120.
+       E  at depth 480 (the project here is 320 × 240, so the focal length is 480 and the depth halves it): drawn 90 .. 110 ×
+          192.5 .. 207.5, boxed 80 .. 120 × 185 .. 215.
+       F  in a nested group at 200 % (its pivot the shape's middle): drawn 60 .. 140 × 170 .. 230, boxed 80 .. 120 × 185 .. 215.
+       G  in a nested group flipped horizontally with its anchor at its left edge (pivot 80, 200): drawn 40 .. 80, boxed 80 .. 120.
+       H  in a nested group turned 90°: drawn 85 .. 115 × 180 .. 220, boxed 80 .. 120 × 185 .. 215.
+     Now the member's corners go through its own mirror, skew, size × depth and turn and through every nested group's matrix
+     (compositor.js groupMemberHull, nestedGroupMatrix), and the box is their hull.
+     FAILS BEFORE THE FIX: every span in A to H (live and rest), C's pivot and C's tap.
+     CONTROL: an upright member is boxed 80 .. 120 × 185 .. 215 and a member of a nested group that is only moved (x 10, y −5) 90 .. 130
+     × 180 .. 210, on both commits; and the red pixels FM.renderScene draws cover every span worked out above, so the box is checked
+     against the picture and not only against this comment.
+     TOL: 1e-6 on the box (double-precision cos, sin and tan and sums of these numbers, rounding near 1e-13; the faults are 4.8 px
+     or more). On a red edge, 1 px for an upright rectangle (#10b's: a half-covered row such as 192.5 is not counted red) and 2 px for
+     a turned or sheared one: a corner covers less than 70 % of the last column or two (a right-angled corner turned 30° is 2.3 px tall
+     one pixel back from its tip), so the last red column can sit inside the box by up to two; the faults there are 4.8 and 8.7 px.
+     Not run when written (code only). */
+  test('1176 leftover: a group’s box takes in its members as they are drawn: a member turned 90° or 30°, one hinged on its left edge and turned (with the pivot a pinch uses and a tap on it), a sheared one and one set back in depth are each boxed where they are drawn, and so is a member of a nested group at 200 %, of one flipped about its left edge and of one turned 90° (CONTROLS: an upright member and a member of a nested group that is only moved keep the old box; the red pixels drawn cover every span the box must take)', { item: '1176' }, async function () {
+    if (typeof FM.groupBoundsLocal !== 'function' || typeof FM.groupRestBoundsLocal !== 'function' || typeof FM.groupPivotMeasured !== 'function' || typeof FM.groupBounds !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.renderScene !== 'function') throw new Error('setup: FM.groupBoundsLocal / groupRestBoundsLocal / groupPivotMeasured / groupBounds / makeLayer / renderScene are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5, EPS = 1e-6, X = 100, Y = 200;
+      /* _bh2Frame draws a 320 × 240 project; the scene's own project is made the same (_bh2With puts it back), so a member's depth is
+         boxed with the focal length the picture is drawn with (twice the height, 480, with no camera). */
+      FM.scene.project = { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' };
+      /* A fresh group at 0,0 holding L, directly or through the nested group `nest(G)` makes: the live box at T, the rest box, the pivot a
+         pinch at T would use, and the box in the parent's space. */
+      const measure = (L, nest) => {
+        const G = FM.makeLayer('group', { name: '1176 group', x: 0, y: 0, start: 0, duration: 4 });
+        G.start = 0; G.duration = 4; G.transform.x = 0; G.transform.y = 0;
+        const N = nest ? nest(G) : null;
+        L.start = 0; L.duration = 4; L.parent = N ? N.id : G.id;
+        FM.scene.layers = N ? [G, N, L] : [G, L];
+        const live = FM.groupBoundsLocal(G, FM.scene, T), rest = FM.groupRestBoundsLocal(G, FM.scene);
+        if (!live || !rest) throw new Error('setup: the group holding ' + L.name + ' measured no box (live ' + JSON.stringify(live) + ', rest ' + JSON.stringify(rest) + ')');
+        return { live: live, rest: rest, pivot: FM.groupPivotMeasured(G, FM.scene, T), gb: FM.groupBounds(G, FM.scene, T) };
+      };
+      // a nested group at 0,0 inside G, `set` giving it its transform
+      const nested = (name, set) => G => {
+        const N = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        N.start = 0; N.duration = 4; N.transform.x = 0; N.transform.y = 0; N.parent = G.id;
+        set(N);
+        return N;
+      };
+      const shape = (name, y) => FM.makeLayer('shape', { name: name, shape: 'rect', x: X, y: y == null ? Y : y, shapeW: 40, shapeH: 30, fill: '#ff0000', start: 0, duration: 4 });
+      const r1 = v => Math.round(v * 10) / 10;
+      const say = b => r1(b.minX) + ' .. ' + r1(b.maxX) + ' × ' + r1(b.minY) + ' .. ' + r1(b.maxY);
+      const bad = [];
+      /* Both walks must give [x0, x1] × [y0, y1]. */
+      const span = (what, m, x0, x1, y0, y1) => {
+        [['live', m.live], ['rest', m.rest]].forEach(([k, b]) => {
+          if (Math.abs(b.minX - x0) > EPS || Math.abs(b.maxX - x1) > EPS || Math.abs(b.minY - y0) > EPS || Math.abs(b.maxY - y1) > EPS) bad.push(what + ': the group’s ' + k + ' box is ' + say(b) + ' where the member is drawn ' + r1(x0) + ' .. ' + r1(x1) + ' × ' + r1(y0) + ' .. ' + r1(y1));
+        });
+      };
+      /* CONTROL: the red pixels FM.renderScene draws for the scene measure() left really are over the span (an edge at e is the last red
+         column e − 1, or the first e), within `tol` px. */
+      const pic = (what, x0, x1, y0, y1, tol) => {
+        const f = _bh2Frame(T);
+        let a0 = -1, a1 = -1, b0 = -1, b1 = -1;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            const x = k % 320, y = (k - x) / 320;
+            if (a0 < 0 || x < a0) a0 = x;
+            if (x > a1) a1 = x;
+            if (b0 < 0 || y < b0) b0 = y;
+            if (y > b1) b1 = y;
+          }
+        }
+        if (a0 < 0 || Math.abs(a0 - x0) > tol || Math.abs(a1 + 1 - x1) > tol || Math.abs(b0 - y0) > tol || Math.abs(b1 + 1 - y1) > tol) bad.push('CONTROL: ' + what + ' is drawn at red columns ' + a0 + '..' + a1 + ', rows ' + b0 + '..' + b1 + ', not over ' + r1(x0) + ' .. ' + r1(x1) + ' × ' + r1(y0) + ' .. ' + r1(y1) + ' — the renderer does not draw it where this test works it out');
+      };
+      /* Each case: its box (both walks) and its picture. */
+      const both = (what, m, x0, x1, y0, y1, tol) => { span(what, m, x0, x1, y0, y1); pic(what, x0, x1, y0, y1, tol); };
+
+      /* ── CONTROLS: an upright member, and a member of a nested group that is only moved, keep the old box. */
+      both('CONTROL: an upright 40 × 30 shape', measure(shape('1176 upright shape')), X - 20, X + 20, Y - 15, Y + 15, 1);
+      both('CONTROL: a 40 × 30 shape in a nested group moved by 10, −5', measure(shape('1176 shape in a moved group'), nested('1176 moved group', N => { N.transform.x = 10; N.transform.y = -5; })), X - 10, X + 30, Y - 20, Y + 10, 1);
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── A, B: turned 90° and 30° about its own middle. */
+      const sa = shape('1176 shape turned 90°');
+      sa.transform.rotation = 90;
+      both('A: a 40 × 30 shape turned 90°', measure(sa), X - 15, X + 15, Y - 20, Y + 20, 1);
+      const sb = shape('1176 shape turned 30°');
+      sb.transform.rotation = 30;
+      const hx = 20 * Math.cos(Math.PI / 6) + 15 * Math.sin(Math.PI / 6), hy = 20 * Math.sin(Math.PI / 6) + 15 * Math.cos(Math.PI / 6);
+      both('B: a 40 × 30 shape turned 30°', measure(sb), X - hx, X + hx, Y - hy, Y + hy, 2);
+
+      /* ── C: hinged on its left edge at x 100, y 150 and turned 90° — its box, the pivot and a tap on it. */
+      const sc = shape('1176 shape hinged on its left edge, turned 90°', 150);
+      sc.transform.anchorX = 0; sc.transform.rotation = 90;
+      const mc = measure(sc);
+      both('C: a 40 × 30 shape with anchorX 0 at 100, 150, turned 90°', mc, X - 15, X + 15, 150, 190, 1);
+      if (!mc.pivot || Math.abs(mc.pivot.x - X) > EPS || Math.abs(mc.pivot.y - 170) > EPS) bad.push('C: the group of the hinged, turned shape pivots at ' + (mc.pivot ? r1(mc.pivot.x) + ', ' + r1(mc.pivot.y) : '(none)') + ' where the shape’s drawn middle is ' + X + ', 170 — a pinch scales it about a point beside it');
+      const tap = [90, 185], g = mc.gb;
+      if (!g || !(Math.abs(tap[0] - g.x) <= g.w / 2 && Math.abs(tap[1] - g.y) <= g.h / 2)) bad.push('C: a tap at ' + tap.join(', ') + ', on the turned shape, falls outside the group’s box ' + (g ? r1(g.x - g.w / 2) + ' .. ' + r1(g.x + g.w / 2) + ' × ' + r1(g.y - g.h / 2) + ' .. ' + r1(g.y + g.h / 2) : '(none)'));
+
+      /* ── D, E: sheared by Skew X 30°, and set back to depth 480. */
+      const sd = shape('1176 shape skewed 30°');
+      sd.transform.skewX = 30;
+      const kx = 15 * Math.tan(Math.PI / 6);
+      both('D: a 40 × 30 shape at Skew X 30°', measure(sd), X - 20 - kx, X + 20 + kx, Y - 15, Y + 15, 2);
+      const se = shape('1176 shape at depth 480');
+      se.transform.z = 480;
+      both('E: a 40 × 30 shape at depth 480 (half size)', measure(se), X - 10, X + 10, Y - 7.5, Y + 7.5, 1);
+
+      /* ── F, G, H: in a nested group at 200 %, flipped about its left edge, turned 90°. */
+      both('F: a 40 × 30 shape in a nested group at 200 %', measure(shape('1176 shape in a group at 200 %'), nested('1176 group at 200 %', N => { N.transform.scale = 2; })), X - 40, X + 40, Y - 30, Y + 30, 1);
+      both('G: a 40 × 30 shape in a nested group flipped about its left edge', measure(shape('1176 shape in a flipped group'), nested('1176 flipped group', N => { N.flipH = true; N.transform.anchorX = 0; })), X - 60, X - 20, Y - 15, Y + 15, 1);
+      both('H: a 40 × 30 shape in a nested group turned 90°', measure(shape('1176 shape in a turned group'), nested('1176 turned group', N => { N.transform.rotation = 90; })), X - 15, X + 15, Y - 20, Y + 20, 1);
+
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#4) AN ADJUSTMENT LAYER'S BLEND MODE DID NOTHING. Red footage fills the frame, (255, 0, 0); above it an adjustment layer with
      Invert (amount 1), whose graded plate over red is cyan, (0, 255, 255). On cedde93f both blits of the graded plate (applyAdjustment's
      and applyAdjustmentFilters') are hard-wired to source-over and never read layer.blendMode, so every mode the Mixing card offers
@@ -166205,6 +166628,299 @@
       const fgo = _bh2Frame(T), rgo = reds(fgo), mo = _bh2MaxDiff(fgo.d, fe.d);
       if (!moved(rgo, rc, 180)) throw new Error('(b) a group with its anchor on its box’s left edge, holding a square at x 330 that hangs off the frame’s right edge, leant 70° about Y, draws ' + say(rgo) + ', not the leant square at x 100 (' + say(rc) + ') moved 180 px' + (Math.abs(rgo.x1 + 1 - 291.1) <= 2 ? ' — the group’s flattened unit was cut at the frame edge before it was leant' : ''));
       if (mo > 2) throw new Error('(b) a group with its anchor on its box’s left edge, holding a square at x 330 that hangs off the frame’s right edge, leant 70° about Y, draws ' + say(rgo) + ' where the single square hinged at x 280 draws ' + say(re) + ' (up to ' + mo + ' levels apart)' + (Math.abs(rgo.x1 + 1 - 291.1) <= 2 ? ' — the group’s flattened unit was cut at the frame edge before it was leant' : ''));
+    });
+  });
+
+  /* (1176 leftover) A LEANT LAYER LOST WHAT ITS SHADOW AND GLOW THREW PAST THE FRAME. bughunt4 #3b (aaed5321, v17.84) grew the plate a
+     tilt leans to the layer's BOX plus a 16 px margin (compositor.js tiltPlateRegion) and left two gaps:
+       · every pixel effect inside the grown plate still got the FRAME: the plate is marked __fmCamExt and nestedPlate hands an unwrapped
+         pass inside such a plate the frame, so the effect's pass drew the layer on a frame-sized plate and cut it there;
+       · a Shadow or Glow reaching further than the margin was cut at the plate's edge, and a layer inside the frame got no growth at all.
+     Now tiltFxPad widens the reach by what the layer's own style and effects carry past its box, and a kernel admitted to the cropped
+     readback (tiltFollowsFx) follows the grown plate out instead of taking the frame.
+     The fixture is #3b's: a red 100 × 100 square hinged on its left edge (anchorX 0) at x 280, rows 70..169, hanging off the right edge
+     of a 320 × 240 frame, leant 70° about Y (pivot 280, R 50). Flat x 280 + 50u lands 58.24 u / (3.405 + u) px from the hinge (renderMesh),
+     so its far edge (u 2) leans to 301.5 and a point 60 px past it (440, u 3.2) to 308.2: a green copy of the square 60 px to the right
+     shows as a strip 301.5..308.2 beside the card, about 382 px (its area, worked out, not measured).
+     Every case is drawn on the 320 frame and on a 640 × 240 frame wide enough to hold the layer and all it throws. Both plates start at
+     the same corner, so the plate pixels, the alpha bbox (stride 2 from 0) and the mesh are the same, and the first 320 columns must match.
+       (a) Drop Shadow, Distance 60, Angle 0 (to the right), Softness 0, green.
+       (b) Outline & Shadows Shadow, 60 px right, Blur 0, green; and a Glow, Radius 30, green (σ = Radius, GLOW_SIGMA).
+       (d) A group with its anchor on its box's left edge, holding the square (at x 330, default anchor) with the Drop Shadow, leant the same.
+       (c) At the cap: a Drop Shadow of Distance 300 would need the plate 379 px past the right edge. It stops at 0.6 of the frame (192 px),
+           the shadow (which would lean to about 317..320) is cut there, the card stays whole and FM._tiltPlateStats counts the cut.
+     FAILS BEFORE THE FIX: (a) the Drop Shadow's pass drew the square on a 320-wide plate inside the 396-wide tilt plate: the card ends at
+     about 291 again (about 1000 red px, not 1756) and no green draws at all, 255 levels off the 640 frame. (b) the Shadow is cut at 396,
+     16 px past the box: its strip ends at 303.6 (about 126 green px of 382); the Glow is cut there too, where it is still about 70 of 255,
+     so past column 305 the 320 frame has no glow where the 640 frame keeps about 3,500 levels of green (the halo's tail 28..58 px past the
+     box, Φ(−d / 30), times the lean's area scale, about 0.055). (d) as (a), one step earlier: the member's pass was frame-sized inside
+     the group's unit. (c) FM._tiltPlateStats does not exist.
+     CONTROL: untilted at x 100 the Drop Shadow and the Shadow each show 6000 green px (60 × 100, pixel-aligned) and the Glow a halo of
+     over 2000 px, so each draws as worked out; leant inside the frame with no effect the square leans to about 100..121.5 and its plate
+     does not grow (FM._tiltPlateStats.grown stands still), and with a Drop Shadow that stays inside the frame (Distance 10) it draws as on
+     the 640 frame without growing either — the identical old plate; on the 640 frame each case's card leans to about 280..301.5, the
+     hard shadows end at about 308 with 250..520 green px and the glow keeps over 300 levels past column 305, so the fixture is the one
+     worked out above, on both commits (on the 640 frame nothing needs to grow).
+     TOL, reasoned since nothing was run: 3 levels between the 320 and 640 frames and between the group and the single layer (the same
+     plate pixels, bbox and mesh; the glow's plate grows 36 px up and down on both frames alike, an even number of rows, so the bbox's
+     stride lands on the same rows; float32 jitter moves a triangle's coverage by under a level); 120 px of the untilted 6000; at the cap
+     1 column and 2 % of the red against the 640 frame's card (its bbox no longer holds the shadow, so its mesh differs by under 0.1 px).
+     The faults are 255 levels, 256 and 382 green px, about 750 red px and about 3,500 levels of glow. */
+  test('1176 leftover: a leant layer keeps the shadow and glow it throws past the frame: a square hinged on its left edge and hanging off the frame’s right edge, leant 70° about Y, with a Drop Shadow, an Outline & Shadows Shadow or a Glow reaching past it, draws exactly as on a frame wide enough to hold it all, a leant group holding it draws the same, and at the cap the far part is cut, the card stays whole and the cut is counted (CONTROLS: untilted each draws its shadow or glow; inside the frame a leant square with no effect, or with a shadow that stays inside, keeps the plate it always had)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5;
+      FM.time = T;
+      const square = (name, x, ax, parent) => {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 120, shapeW: 100, shapeH: 100, fill: '#ff0000', start: 0, duration: 4 });
+        L.start = 0; L.duration = 4;
+        if (ax != null) L.transform.anchorX = ax;
+        if (parent) L.parent = parent;
+        return L;
+      };
+      const grp = (name, ax) => {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        if (ax != null) g.transform.anchorX = ax;
+        return g;
+      };
+      const DROP = (dist) => ({ type: 'dropshadow', enabled: true, params: { distance: dist, angle: 0, softness: 0, color: '#00ff00' } });
+      const SHADOW = () => ({ enabled: true, color: '#00ff00', alpha: 100, dx: 60, dy: 0, blur: 0 });
+      const GLOW = () => ({ type: 'glow', enabled: true, params: { radius: 30, passes: 1, strength: 100, color: '#00ff00' } });
+      /* The scene's layers drawn at T on a W × 240 frame (black), as _bh2Frame draws its 320 × 240 one. */
+      const render = (W) => {
+        const c = offscreen(W, 240), ctx = c.getContext('2d', { willReadFrequently: true });
+        const sc = { project: { width: W, height: 240, fps: 30, duration: 5, background: '#000000' }, layers: FM.scene.layers, selectedId: null, selectedIds: [] };
+        FM.renderScene(ctx, sc, T);
+        return { W: W, d: ctx.getImageData(0, 0, W, 240).data };
+      };
+      /* Over the first 320 columns: red and green pixels (count, first and last column), the glow's pixels, and the green summed past column 305. */
+      const look = (f) => {
+        const o = { red: 0, rx0: -1, rx1: -1, green: 0, gx0: -1, gx1: -1, glowPx: 0, glow: 0 };
+        for (let y = 0; y < 240; y++) {
+          for (let x = 0; x < 320; x++) {
+            const i = (y * f.W + x) * 4, r = f.d[i], g = f.d[i + 1], b = f.d[i + 2];
+            if (r > 180 && g < 70 && b < 70) { o.red++; if (o.rx0 < 0 || x < o.rx0) o.rx0 = x; if (x > o.rx1) o.rx1 = x; }
+            else if (g > 180 && r < 70 && b < 70) { o.green++; if (o.gx0 < 0 || x < o.gx0) o.gx0 = x; if (x > o.gx1) o.gx1 = x; }
+            if (r < 70 && b < 70 && g > 20) o.glowPx++;
+            if (x >= 305 && r < 70) o.glow += g;
+          }
+        }
+        return o;
+      };
+      const say = o => o.red + ' red px at columns ' + o.rx0 + '..' + o.rx1 + ', ' + o.green + ' green px at ' + o.gx0 + '..' + o.gx1 + ', ' + o.glow + ' levels of green past column 305';
+      /* The largest difference, in levels, between two frames over their first 320 columns. */
+      const diff = (a, b) => {
+        let m = 0;
+        for (let y = 0; y < 240; y++) {
+          for (let x = 0; x < 320; x++) {
+            for (let c = 0; c < 4; c++) { const q = Math.abs(a.d[(y * a.W + x) * 4 + c] - b.d[(y * b.W + x) * 4 + c]); if (q > m) m = q; }
+          }
+        }
+        return m;
+      };
+      const grown = () => (FM._tiltPlateStats ? FM._tiltPlateStats.grown : 0);
+      const bad = [];
+
+      /* ── CONTROLS: untilted at x 100 the Drop Shadow and the Shadow each show 60 × 100 green px beside the square, and the Glow a halo. */
+      const U1 = square('1176 untilted, Drop Shadow', 100, 0, null);
+      U1.effects = [DROP(60)];
+      FM.scene.layers = [U1];
+      const u1 = look(render(320));
+      if (Math.abs(u1.green - 6000) > 120) throw new Error('CONTROL: untilted at x 100 with a Drop Shadow 60 px to the right the square shows ' + say(u1) + ', not 6000 green px (60 × 100) — the Drop Shadow does not draw as worked out above');
+      const U2 = square('1176 untilted, Shadow', 100, 0, null);
+      U2.shadow = SHADOW();
+      FM.scene.layers = [U2];
+      const u2 = look(render(320));
+      if (Math.abs(u2.green - 6000) > 120) throw new Error('CONTROL: untilted at x 100 with an Outline & Shadows Shadow 60 px to the right the square shows ' + say(u2) + ', not 6000 green px (60 × 100) — the Shadow does not draw as worked out above');
+      const U3 = square('1176 untilted, Glow', 100, 0, null);
+      U3.effects = [GLOW()];
+      FM.scene.layers = [U3];
+      const u3 = look(render(320));
+      if (u3.glowPx < 2000) throw new Error('CONTROL: untilted at x 100 with a green Glow of Radius 30 the square shows ' + u3.glowPx + ' glow px, not a halo of over 2000 — the Glow does not draw');
+
+      /* ── CONTROLS: leant inside the frame with no effect, and with a Drop Shadow that stays inside, the square keeps the plate it always had. */
+      const C1 = square('1176 hinged square in the frame', 100, 0, null);
+      C1.transform.rotationY = 70;
+      FM.scene.layers = [C1];
+      let g0 = grown();
+      const c1 = look(render(320));
+      if (c1.red < 1000 || c1.rx1 - c1.rx0 + 1 > 30 || Math.abs(c1.rx0 - 100) > 1 || Math.abs(c1.rx1 + 1 - 121.5) > 2) throw new Error('CONTROL: hinged on its left edge at x 100 and leant 70° about Y, the square is ' + say(c1) + ', not about 100..121.5 — the fixture is not the one worked out above');
+      if (grown() !== g0) bad.push('CONTROL: leant inside the frame with no effect, the square’s plate grew (FM._tiltPlateStats.grown ' + g0 + ' → ' + grown() + ') — it must get the very plate it always had');
+      const C2 = square('1176 hinged square in the frame, a Drop Shadow that stays inside', 100, 0, null);
+      C2.transform.rotationY = 70;
+      C2.effects = [DROP(10)];
+      FM.scene.layers = [C2];
+      g0 = grown();
+      const c2s = render(320), c2w = render(640), m2 = diff(c2s, c2w);
+      if (grown() !== g0) bad.push('CONTROL: leant inside the frame with a Drop Shadow 10 px to the right, which stays inside the frame, the square’s plate grew (FM._tiltPlateStats.grown ' + g0 + ' → ' + grown() + ')');
+      if (m2 > 3) bad.push('CONTROL: leant inside the frame with a Drop Shadow that stays inside, the square draws ' + say(look(c2s)) + ' on the 320 frame and ' + say(look(c2w)) + ' on the 640 one (up to ' + m2 + ' levels apart)');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* Each case: the square hanging off the frame edge, leant, on the 320 and the 640 frame. */
+      const run = (L) => {
+        FM.scene.layers = [L];
+        const s = render(320), w = render(640);
+        return { s: s, w: w, ls: look(s), lw: look(w), m: diff(s, w) };
+      };
+      const hanging = (what) => { const L = square('1176 hinged square off the frame edge, ' + what, 280, 0, null); L.transform.rotationY = 70; return L; };
+      const card = o => Math.abs(o.rx0 - 280) <= 1 && Math.abs(o.rx1 + 1 - 301.5) <= 2;
+      const strip = o => o.green >= 250 && o.green <= 520 && Math.abs(o.gx1 + 1 - 308.2) <= 2;
+
+      /* ── (a) a Drop Shadow. */
+      const HA = hanging('Drop Shadow');
+      HA.effects = [DROP(60)];
+      const A = run(HA);
+      if (!card(A.lw) || !strip(A.lw)) throw new Error('CONTROL: on the 640 frame the leant square with a Drop Shadow 60 px to the right is ' + say(A.lw) + ', not its card at about 280..301.5 and a green strip to about 308 of about 380 px — the fixture is not the one worked out above');
+      if (A.m > 3) bad.push('(a) leant 70° about Y with a Drop Shadow 60 px to the right, the square hanging off the frame’s right edge draws ' + say(A.ls) + ' on the 320 frame and ' + say(A.lw) + ' on the 640 one (up to ' + A.m + ' levels apart)' + (A.ls.green === 0 && Math.abs(A.ls.rx1 + 1 - 291.1) <= 2 ? ' — the Drop Shadow’s pass drew it on a frame-sized plate inside the tilt plate, so the card is cut at the frame again and its shadow fell off that plate' : ''));
+
+      /* ── (b) an Outline & Shadows Shadow, and a Glow. */
+      const HB = hanging('Shadow');
+      HB.shadow = SHADOW();
+      const B1 = run(HB);
+      if (!card(B1.lw) || !strip(B1.lw)) throw new Error('CONTROL: on the 640 frame the leant square with an Outline & Shadows Shadow 60 px to the right is ' + say(B1.lw) + ', not its card at about 280..301.5 and a green strip to about 308 of about 380 px — the fixture is not the one worked out above');
+      if (B1.m > 3) bad.push('(b) leant 70° about Y with an Outline & Shadows Shadow 60 px to the right, the square hanging off the frame’s right edge draws ' + say(B1.ls) + ' on the 320 frame and ' + say(B1.lw) + ' on the 640 one (up to ' + B1.m + ' levels apart)' + (Math.abs(B1.ls.gx1 + 1 - 303.6) <= 1.5 ? ' — the Shadow was cut at the plate’s edge, 16 px past the square' : ''));
+      const HG = hanging('Glow');
+      HG.effects = [GLOW()];
+      const B2 = run(HG);
+      if (!card(B2.lw) || B2.lw.glow < 300) throw new Error('CONTROL: on the 640 frame the leant square with a green Glow of Radius 30 is ' + say(B2.lw) + ', not its card at about 280..301.5 with over 300 levels of glow past column 305 — the fixture is not the one worked out above');
+      if (B2.m > 3 || Math.abs(B2.ls.glow - B2.lw.glow) > 0.1 * B2.lw.glow) bad.push('(b) leant 70° about Y with a green Glow of Radius 30, the square hanging off the frame’s right edge draws ' + say(B2.ls) + ' on the 320 frame and ' + say(B2.lw) + ' on the 640 one (up to ' + B2.m + ' levels apart)' + (B2.ls.glow < 0.1 * B2.lw.glow ? ' — the Glow was cut at the plate’s edge, 16 px past the square' : ''));
+
+      /* ── (d) a leant group holding the square with the Drop Shadow draws as (a) does on the 640 frame. */
+      const G = grp('1176 hinged group off the frame edge', 0);
+      G.transform.rotationY = 70;
+      const GM = square('1176 red in the hinged group, with a Drop Shadow', 330, null, G.id);
+      GM.effects = [DROP(60)];
+      FM.scene.layers = [G, GM];
+      const fd = render(320), ld = look(fd), md = diff(fd, A.w);
+      if (md > 3) bad.push('(d) a group with its anchor on its box’s left edge, holding the square at x 330 with a Drop Shadow 60 px to the right, leant 70° about Y, draws ' + say(ld) + ' where the single square draws ' + say(A.lw) + ' on the 640 frame (up to ' + md + ' levels apart)' + (ld.green === 0 && Math.abs(ld.rx1 + 1 - 291.1) <= 2 ? ' — the member’s Drop Shadow pass was frame-sized inside the group’s unit' : ''));
+
+      /* ── (c) at the cap: the shadow past 0.6 of the frame is cut, the card is whole, and the cut is counted. */
+      const HC = hanging('Drop Shadow of Distance 300');
+      HC.effects = [DROP(300)];
+      FM.scene.layers = [HC];
+      const st = FM._tiltPlateStats;
+      if (!st || typeof st.capped !== 'number') bad.push('(c) FM._tiltPlateStats does not exist — nothing counts where the growth stops');
+      else {
+        const k0 = st.capped;
+        const lc = look(render(320)), last = st.last;
+        if (!(st.capped > k0) || !last || last.by !== 'side' || !Array.isArray(last.want) || !Array.isArray(last.got) || !(last.want[2] > last.got[2]) || last.got[2] !== 192) bad.push('(c) a Drop Shadow of Distance 300 on the leant square needs the plate 379 px past the frame’s right edge, but FM._tiltPlateStats says capped ' + k0 + ' → ' + st.capped + ', last ' + JSON.stringify(last) + ' — not one cut by the per-side ceiling, 192 px (0.6 of the frame) of the 379 asked for');
+        if (Math.abs(lc.rx0 - A.lw.rx0) > 1 || Math.abs(lc.rx1 - A.lw.rx1) > 1 || Math.abs(lc.red - A.lw.red) > Math.max(10, 0.02 * A.lw.red)) bad.push('(c) at the cap the leant card is ' + say(lc) + ', not whole as on the 640 frame (' + say(A.lw) + ')');
+        if (lc.green !== 0) bad.push('(c) at the cap ' + lc.green + ' green px still drew, though the shadow lies wholly past the 192 px the plate may grow');
+      }
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
+  /* (1176 leftover, blooms) A LEANT LAYER LOST THE BLOOM IT THREW PAST THE FRAME. The test above grew the tilt plate for a Shadow, a Glow,
+     an Outline and a Drop Shadow (compositor.js tiltFxPad) and let the kernels admitted to the cropped readback follow it (tiltFollowsFx,
+     tiltOutFx). Four blooms that throw light outward were left out:
+       · Highlight Bloom (the code's Light Glow) and Shadow Bloom with Glow past the edges On: tiltFxPad gave them no reach, so a layer
+         inside the frame got no growth and its halo was cut at the frame, and they were not tiltOutFx, so on a plate grown only for
+         something else they kept the frame. Hanging off the frame the plate grew to the box plus 16 px, and the halo (which they do
+         follow there) was cut 16 px past the box.
+       · Dreamy Bloom (Glow past the edges On) and Halation are sized by the PLATE they run on (a fortieth of its shorter side; Spread %
+         of it, on a quarter-size mask), so they are not admitted to the cropped readback and kept the frame in every tilt plate: hanging
+         off the frame the square was drawn on a frame-sized plate again, cut at 320 and leant to 291 (#3b's fault, back), and inside
+         the frame their light was cut at the frame.
+     Now tiltFxPad adds each bloom's reach (tiltBloomReach: Smoothness × Radius for the two glows, Smoothness × a fortieth of the frame's
+     shorter side × Radius % for Dreamy Bloom, 3 × the frame's shorter side × Spread % + 4 for Halation, + 1 px each), all four are
+     tiltOutFx, and Dreamy Bloom and Halation follow the plate with the FRAME's size handed to them (TILT_FRAME_FX: the softglow kernel
+     reads p._fmFrameMin, halationGrid keeps the frame's mask grid), so each draws what the frame-sized plate draws, carried on past it.
+     The fixture is the test above's: a 100 × 100 square hinged on its left edge (anchorX 0), rows 70..169, leant 70° about Y; flat x =
+     hinge + 50u lands 58.24 u / (3.405 + u) px from the hinge (renderMesh). At x 210 (inside the frame, its far edge at 310 leaning to
+     231.5) the frame edge, flat 320, leans to 232.9; at x 280 (hanging off it) #3b's plate edge, flat 396, leans to 303.6 and the frame
+     edge to 291.1. The blooms, each worked out from its kernel:
+       Highlight Bloom, Radius 40, Smoothness 1, Glow past the edges On, green, on a white square: a green halo to 40 px past it.
+       Shadow Bloom, Radius 40, Threshold 40 %, Glow past the edges On, on a red square (brightness 76, under the threshold's 102) over a
+         WHITE background: a dark halo to 40 px past it, about 44 levels deep 20 px out.
+       Dreamy Bloom, Radius 400 %, Smoothness 3, Glow past the edges On, green, on a white square: a box of 24 px (240 / 40 × 4) three
+         times, to 72 px past it.
+       Halation, Spread 10 %, Amount 2, green, on a white square: a wide wash of σ 24 px (240 × 10 %), about 38 levels 20 px out.
+     Every case is drawn on the 320 × 240 frame and on a 640 × 240 one wide enough to hold the square and its bloom. Both are 240 tall, so
+     the frame's shorter side (and with it Dreamy Bloom's box and Halation's radii and mask cell, 4 px) is the same on both; the plates
+     grow up and down alike (Dreamy Bloom 19 px, Halation 23 px, the two glows not at all) and start at the same corner, so the plate
+     pixels, the alpha box's stride and the mesh are the same, and every plate ends past the bloom's reach, so a box blur that repeats
+     its edge pixel sees nothing there on either frame. The first 320 columns must match.
+     FAILS BEFORE THE FIX: at x 210 every bloom is cut at column 233 on the 320 frame, where on the 640 frame it is still about 35 to 70
+     levels at column 234; at x 280 the two glows are cut at 303.6 (about 40 to 60 levels short at column 304), and Dreamy Bloom and
+     Halation cut the square itself at 291 (255 levels).
+     CONTROL: untilted at x 100 each bloom changes the frame past the square's right edge by 30 levels or more; leant at x 210 with Glow
+     past the edges Off, each of the three glows keeps its plate (FM._tiltPlateStats.grown stands still) and draws as on the 640 frame;
+     on the 640 frame each case lights 20 levels or more past where the old plate ended (column 234, or 304 at x 280).
+     TOL: 3 levels between the two frames, the test above's: the same plate pixels, alpha box and mesh, and float32 jitter in the mesh
+     moves a triangle's coverage by under a level; the faults are 35 to 255 levels.
+     Not run when written (code only). */
+  test('1176 leftover: a leant layer keeps the bloom it throws past the frame: a square leant 70° about Y, inside the frame or hanging off its right edge, with a Highlight Bloom, a Shadow Bloom or a Dreamy Bloom with Glow past the edges, or with a Halation, draws exactly as on a frame wide enough to hold it all (CONTROLS: untilted each bloom throws light past the square; with Glow past the edges Off a glow leant inside the frame keeps the plate it always had; on the wide frame each case lights past where the old plate ended)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5;
+      FM.time = T;
+      // a 100 × 100 square of `fill` hinged on its left edge at x, rows 70..169, leant 70° about Y when `tilt`, carrying `fx` (or nothing)
+      const square = (fill, x, tilt, fx) => {
+        const L = FM.makeLayer('shape', { name: '1176 bloom square at x ' + x, shape: 'rect', x: x, y: 120, shapeW: 100, shapeH: 100, fill: fill, start: 0, duration: 4 });
+        L.start = 0; L.duration = 4;
+        L.transform.anchorX = 0;
+        if (tilt) L.transform.rotationY = 70;
+        L.effects = fx ? [fx] : [];
+        return L;
+      };
+      /* The scene's layers drawn at T on a W × 240 frame of background `bg`, as the test above draws its frames. */
+      const render = (W, bg) => {
+        const c = offscreen(W, 240), ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, { project: { width: W, height: 240, fps: 30, duration: 5, background: bg }, layers: FM.scene.layers, selectedId: null, selectedIds: [] }, T);
+        return { W: W, d: ctx.getImageData(0, 0, W, 240).data };
+      };
+      /* The largest difference, in levels, between two frames over their first 320 columns from column c0 (all four channels). */
+      const diff = (a, b, c0) => {
+        let m = 0;
+        for (let y = 0; y < 240; y++) {
+          for (let x = c0 || 0; x < 320; x++) {
+            for (let c = 0; c < 4; c++) { const q = Math.abs(a.d[(y * a.W + x) * 4 + c] - b.d[(y * b.W + x) * 4 + c]); if (q > m) m = q; }
+          }
+        }
+        return m;
+      };
+      const grown = () => (FM._tiltPlateStats ? FM._tiltPlateStats.grown : 0);
+      const CASES = [
+        { name: 'a Highlight Bloom (Light Glow) of Radius 40 with Glow past the edges', fill: '#ffffff', bg: '#000000', fx: on => ({ type: 'lightglow', enabled: true, params: { amount: 1, radius: 40, threshold: 60, knee: 0, passes: 1, outside: on, blend: 0, from: 0, color: '#00ff00' } }) },
+        { name: 'a Shadow Bloom of Radius 40 with Glow past the edges', fill: '#ff0000', bg: '#ffffff', fx: on => ({ type: 'darkglow', enabled: true, params: { amount: 1, radius: 40, threshold: 40, knee: 0, passes: 1, outside: on, blend: 0 } }) },
+        { name: 'a Dreamy Bloom of Radius 400 % and Smoothness 3 with Glow past the edges', fill: '#ffffff', bg: '#000000', fx: on => ({ type: 'softglow', enabled: true, params: { amount: 1, radius: 400, threshold: 35, knee: 0, passes: 3, outside: on, blend: 0, from: 0, color: '#00ff00' } }) },
+        { name: 'a Halation of Spread 10 % at Amount 2', fill: '#ffffff', bg: '#000000', fx: () => ({ type: 'halation', enabled: true, params: { amount: 2, threshold: 0.5, tightness: 0.5, spread: 10, knee: 1.8, color: '#00ff00' } }) },
+      ];
+      const bad = [];
+
+      /* ── CONTROLS: untilted at x 100, each bloom throws light past the square's right edge (column 200). */
+      CASES.forEach(cs => {
+        FM.scene.layers = [square(cs.fill, 100, false, null)];
+        const f0 = render(320, cs.bg);
+        FM.scene.layers = [square(cs.fill, 100, false, cs.fx(1))];
+        const m = diff(render(320, cs.bg), f0, 202);
+        if (m < 30) bad.push('CONTROL: untilted at x 100, ' + cs.name + ' changes the frame past the square’s right edge by at most ' + m + ' levels, not 30 or more: it throws no light out, so there is nothing here to keep');
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── CONTROLS: leant inside the frame with Glow past the edges Off, a glow keeps the plate it always had and draws as on the wide frame. */
+      CASES.slice(0, 3).forEach(cs => {
+        FM.scene.layers = [square(cs.fill, 210, true, cs.fx(0))];
+        const g0 = grown(), s = render(320, cs.bg), w = render(640, cs.bg), m = diff(s, w);
+        if (grown() !== g0) bad.push('CONTROL: leant inside the frame with ' + cs.name + ' Off, the square’s plate grew (FM._tiltPlateStats.grown ' + g0 + ' → ' + grown() + '): a glow that writes only where the layer is must keep the plate it always had');
+        if (m > 3) bad.push('CONTROL: leant inside the frame with ' + cs.name + ' Off, the square draws up to ' + m + ' levels apart on the 320 and the 640 frame');
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── Each bloom on a square leant inside the frame (x 210: only its light passes the frame edge) and on one hanging off it (x 280). */
+      [[210, 234, 'leant inside the frame at x 210'], [280, 304, 'hanging off the frame’s right edge at x 280']].forEach(([x, cc, where]) => {
+        CASES.forEach(cs => {
+          FM.scene.layers = [square(cs.fill, x, true, null)];
+          const w0 = render(640, cs.bg);
+          FM.scene.layers = [square(cs.fill, x, true, cs.fx(1))];
+          const s = render(320, cs.bg), w = render(640, cs.bg), m = diff(s, w), lw = diff(w, w0, cc), ls = diff(s, w0, cc);
+          if (lw < 20) bad.push('CONTROL: ' + where + ', on the 640 frame ' + cs.name + ' changes the frame past column ' + cc + ' (where the old plate ended) by at most ' + lw + ' levels, not 20 or more — the fixture is not the one worked out above');
+          else if (m > 3) bad.push(where + ' and leant 70° about Y, the square with ' + cs.name + ' draws up to ' + m + ' levels apart on the 320 and the 640 frame (past column ' + cc + ' its bloom changes the frame by ' + ls + ' levels on the 320 frame, ' + lw + ' on the 640)' + (ls < 0.5 * lw ? ' — cut where the old plate ended' : ''));
+        });
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
     });
   });
 
@@ -171318,6 +172034,510 @@
       if (pending) { try { await pending; } catch (e) {} }
       FM.ai.DRY_RUN = dry0;
       if (dFlag) Object.defineProperty(FM, '_aiCalls', dFlag); else delete FM._aiCalls;
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (the doors handleFiles does not cover): A NEW BUILD RELOADED THE APP WHILE A FILE WAS STILL OPENING ═════════
+     handleFiles counts itself in FM._importing (the test two above), but more doors await a file's loader outside it, each with
+     nothing showing busy: Replace media from a picked file (js/app.js: the decode, then the write that keeps the outgoing file),
+     a tile in Add ▸ Media (js/medialib.js use), a sound effect's Add (js/sfx.js add), a voice take's Add (js/voice-rec.js
+     addFile: the panel has already closed, so the hold's voice-take check no longer sees it) and the Sample clip (js/sample.js).
+     A build landing meanwhile reloaded the app and the file never arrived, and a voice take exists nowhere else. Now each counts
+     itself in FM._importing from the start of its work to its finally. Driven like the test two above, the hold handed a counter
+     for the reload: four of the doors in turn (all but the Sample clip, which records for seconds through MediaRecorder), each
+     with its loader (FM.loadImageFile or FM.loadVideoFile) held on a gate for that door's own file only, matched by name. While
+     it waits the app is asked whether it is busy and handed a new build; then the loader fails, the door gives up, and the held
+     build must reload by itself. Replace media is picked through its real file input (only the OS sheet is stood in for), on a
+     picture clip put in the scene for that door alone; the tile is a stand-in Add ▸ Media row keyed at a shared copy, whose
+     record FM.storage.readMedia hands back without IndexedDB.
+     FAILS BEFORE THE FIX: while each door's file is opening fmSwBusy answers '' and the new build reloads at once.
+     CONTROLS, which hold before and after: the app is idle before each door; each door really reached its loader (else the test
+     stops as a setup failure); each gave up when its loader failed and added no layer; and with nothing running a new build
+     reloads at once. Restores both loaders, FM.storage.readMedia, the Add ▸ Media index, the file input's click and FM._importing
+     by descriptor, takes the test clip back out of the scene and cancels any hold. */
+  test('1176 leftover: an update does not reload the app while Replace media, an Add ▸ Media tile, a sound effect or a voice take is still opening its file: with each one’s loader held the new build waits, and once it gives up the app reloads by itself (CONTROLS: each door reached its loader, gave up and added nothing; an idle app reloads at once)', { item: '1176', budgetMs: 120000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM.replaceMedia !== 'function' || !FM.mediaLib || typeof FM.mediaLib.use !== 'function' || !FM.sfx || typeof FM.sfx.add !== 'function' || typeof FM.sfx.fileName !== 'function' || !FM.voiceRec || typeof FM.voiceRec.addFile !== 'function' || !FM.storage || typeof FM.storage.readMedia !== 'function' || typeof FM.loadImageFile !== 'function' || typeof FM.loadVideoFile !== 'function') throw new Error('setup: FM.replaceMedia, FM.mediaLib.use, FM.sfx.add / fileName, FM.voiceRec.addFile, FM.storage.readMedia or a loader is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_importing');
+    const dImg = Object.getOwnPropertyDescriptor(FM, 'loadImageFile'), realImg = FM.loadImageFile;
+    const dVid = Object.getOwnPropertyDescriptor(FM, 'loadVideoFile'), realVid = FM.loadVideoFile;
+    const dRead = Object.getOwnPropertyDescriptor(FM.storage, 'readMedia'), realRead = FM.storage.readMedia;
+    const dClick = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'click');
+    const putClick = () => { if (dClick) Object.defineProperty(HTMLInputElement.prototype, 'click', dClick); else delete HTMLInputElement.prototype.click; };
+    const putLoaders = () => {
+      if (dImg) Object.defineProperty(FM, 'loadImageFile', dImg); else FM.loadImageFile = realImg;
+      if (dVid) Object.defineProperty(FM, 'loadVideoFile', dVid); else FM.loadVideoFile = realVid;
+    };
+    const IDX = 'fm.medialib', idx0 = localStorage.getItem(IDX);
+    const ts = Date.now().toString(36);
+    const PNG = [137, 80, 78, 71, 13, 10, 26, 10];
+    const PICK = new File([new Uint8Array(PNG)], '1176 replace ' + ts + '.png', { type: 'image/png' });
+    const TILE = new File([new Uint8Array(PNG)], '1176 tile ' + ts + '.png', { type: 'image/png' });
+    const VOICE = new File([new Uint8Array([26, 69, 223, 163])], '1176 voice ' + ts + '.webm', { type: 'audio/webm' });
+    const LIBKEY = 'lib:q1176door' + ts, MID = 'm_q1176door' + ts;
+    const sound = (FM.sfx.byId && FM.sfx.byId('swish')) || FM.sfx.list()[0];
+    if (!sound) throw new Error('setup: the sound effect list is empty');
+    const L = FM.makeLayer('image', { name: '1176 replace clip', start: 0, duration: 2 });
+    L.start = 0; L.duration = 2;
+    const takeOut = () => { const i = FM.scene.layers.indexOf(L); if (i >= 0) FM.scene.layers.splice(i, 1); };
+    let reloads = 0, fail = null, pending = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const doors = [
+      { what: 'Replace media', kind: 'image', name: PICK.name, gaveUp: o => o.r === false, before: () => { FM.scene.layers.push(L); }, after: takeOut, start: () => {
+        /* only the OS picker sheet is stood in for */
+        Object.defineProperty(HTMLInputElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+        let p;
+        try { p = FM.replaceMedia(L.id); } finally { putClick(); }
+        const inp = Array.from(document.querySelectorAll('body > input[type=file]')).pop();
+        if (!inp || inp.accept !== 'video/*,image/*') throw new Error('setup: Replace media did not open its picker');
+        const dt = new DataTransfer(); dt.items.add(PICK); inp.files = dt.files;
+        inp.dispatchEvent(new Event('change'));
+        return p;
+      } },
+      { what: 'an Add ▸ Media tile', kind: 'image', name: TILE.name, gaveUp: o => o.r === false, start: () => FM.mediaLib.use(MID) },
+      { what: 'a sound effect', kind: 'video', name: FM.sfx.fileName(sound), gaveUp: o => !!o.error, start: () => FM.sfx.add(sound) },
+      { what: 'a voice take', kind: 'video', name: VOICE.name, gaveUp: o => !!o.error, start: () => FM.voiceRec.addFile(VOICE, 1.5) }
+    ];
+    const bad = [];
+    try {
+      const row = { mid: MID, key: LIBKEY, fp: [TILE.name, TILE.size, TILE.lastModified].join('|'), name: TILE.name, kind: 'image', type: 'image/png', audio: false, w: 8, h: 8, dur: 0, size: TILE.size, added: Date.now() };
+      let list = [];
+      try { list = JSON.parse(idx0 || '[]'); } catch (e) { list = []; }
+      localStorage.setItem(IDX, JSON.stringify([row].concat(Array.isArray(list) ? list : [])));
+      FM.storage.readMedia = function (k) { if (k === LIBKEY) return Promise.resolve({ file: TILE, kind: 'image' }); return realRead.apply(this, arguments); };
+      for (const d of doors) {
+        await settle(d.what);
+        if (d.before) d.before();
+        const n0 = FM.scene.layers.length;
+        let entered = 0;
+        const gate = new Promise((res, rej) => { fail = rej; });
+        gate.catch(() => {});
+        const real = d.kind === 'image' ? realImg : realVid;
+        const held = function (f) { if (f && f.name === d.name) { entered++; return gate; } return real.apply(this, arguments); };
+        if (d.kind === 'image') FM.loadImageFile = held; else FM.loadVideoFile = held;
+        pending = Promise.resolve(d.start()).then(r => ({ r: r }), e => ({ error: e }));
+        if (!(await until(() => entered > 0, 8000))) throw new Error('setup: ' + d.what + ' never reached its loader, so nothing was opening');
+        const during = W.busy(), n = FM._importing;
+        reloads = 0;
+        const now = await W(count);
+        const heldNow = !now && !reloads && W.held();
+        fail(new Error('1176 test: the loader was let go'));
+        const out = await pending;
+        pending = null; fail = null;
+        putLoaders();
+        await sleep(60);
+        const n1 = FM.scene.layers.length;
+        if (d.after) d.after();
+        if (!during) bad.push('while ' + d.what + ' was opening its file the app counted as idle (FM._importing ' + JSON.stringify(n) + ')');
+        if (!heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app while ' + d.what + ' was still opening its file (' + reloads + ' reload), so it never arrived' : 'was dropped rather than held while ' + d.what + ' was opening its file'));
+        if (!d.gaveUp(out)) bad.push('CONTROL: ' + d.what + ' did not give up when its loader failed (' + (out.error ? 'it threw ' + out.error.message : 'it answered ' + String(out.r)) + ')');
+        if (n1 !== n0) bad.push('CONTROL: ' + d.what + ' took the scene from ' + n0 + ' to ' + n1 + ' layers though its file never opened');
+        if (FM._importing) bad.push('after ' + d.what + ' gave up FM._importing is still ' + JSON.stringify(FM._importing) + ', so every later update would wait for it');
+        if (W.busy()) bad.push('after ' + d.what + ' gave up the app still counts as busy (' + W.busy() + ')');
+        else if (!(await until(() => reloads > 0, 9000))) bad.push('once ' + d.what + ' had given up, the held reload never happened by itself');
+        try { W.cancel(); } catch (e) {}
+      }
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (fail) fail(new Error('1176 test: cleaned up'));
+      if (pending) { try { await pending; } catch (e) {} }
+      putLoaders(); putClick();
+      if (dRead) Object.defineProperty(FM.storage, 'readMedia', dRead); else FM.storage.readMedia = realRead;
+      try { if (idx0 == null) localStorage.removeItem(IDX); else localStorage.setItem(IDX, idx0); } catch (e) {}
+      takeOut();
+      try { FM.media.remove(L.id); } catch (e) {}
+      if (dFlag) Object.defineProperty(FM, '_importing', dFlag); else delete FM._importing;
+      if (FM.hideToast) { try { FM.hideToast(); } catch (e) {} }
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (the AI's whole run): A RUN COUNTED AS IDLE AS SOON AS ITS REQUEST WAS ANSWERED ═════════════════════════════
+     FM._aiCalls (the test two above) is non-zero only while a request is in flight. A Director build is a chain of them (Interpreter,
+     Planner, the Builders, the Critic) with each answer applied before the next, and a re-roll or Refine applies its answer after
+     its request is over: from each answer to the next request, and to the end of the run, fmSwBusy answered '' though the run was
+     still going and still writing into the project. Today nothing in those gaps waits, so a new build's check cannot land in one,
+     but that was luck, not a rule: one awaited render or panel step there would open it. So fmSwBusy now also holds while
+     FM.ai.isRunning() (js/ai.js state.running, true for the whole of generateScene, rerollTask and refine). Driven with
+     FM.ai.DRY_RUN (the mock answers after the dry-run delay: no key, no network, no tokens) through a re-roll of a stand-in last
+     build, with FM.aiOps.applyOps stood in for so the answer writes nothing: at the moment the run applies its answer (its request
+     over, the run still going) the app is asked whether it is busy and handed a new build; the stand-in applies nothing, so the
+     re-roll keeps what was there and ends, and the held build must then reload by itself.
+     FAILS BEFORE THE FIX: while the run applies its answer fmSwBusy answers '' and the new build is not held for the run.
+     CONTROLS, which hold before and after: the app is idle to start with; the run really reached that moment with no request in
+     flight (FM._aiCalls 0) and FM.ai.isRunning() true there, else the test stops as a setup failure; afterwards the run is over and
+     the scene holds the same layers; and with nothing running a new build reloads at once. Restores FM.ai.DRY_RUN,
+     FM.ai._lastBuild, FM.aiOps.applyOps and FM._aiCalls, and cancels any hold. */
+  test('1176 leftover: an update does not reload the app between an AI run’s requests: while a re-roll applies the answer it got, its request over and the run still going, the new build waits, and once the run ends the app reloads by itself (CONTROLS: no request was in flight at that moment; the run kept the scene; an idle app reloads at once)', { item: '1176', budgetMs: 60000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (!FM.ai || typeof FM.ai.rerollTask !== 'function' || typeof FM.ai.isRunning !== 'function' || !FM.aiOps || typeof FM.aiOps.applyOps !== 'function' || !FM.aiMock || !FM.aiManifest || !FM.aiManifest.tools || !FM.aiManifest.tools.ops) throw new Error('setup: FM.ai.rerollTask / isRunning, FM.aiOps.applyOps, FM.aiMock or FM.aiManifest.tools.ops is not reachable');
+    if (FM.ai.isRunning()) throw new Error('setup: an AI run was already going');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_aiCalls');
+    const dApply = Object.getOwnPropertyDescriptor(FM.aiOps, 'applyOps'), realApply = FM.aiOps.applyOps;
+    const putApply = () => { if (dApply) Object.defineProperty(FM.aiOps, 'applyOps', dApply); else FM.aiOps.applyOps = realApply; };
+    const dry0 = FM.ai.DRY_RUN, lb0 = FM.ai._lastBuild;
+    let reloads = 0, pending = null, handed = null, at = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const bad = [];
+    try {
+      await settle('the run');
+      if (FM.aiBudget && typeof FM.aiBudget.spentCents === 'function' && FM.aiBudget.spentCents() >= FM.aiBudget.capCents) throw new Error('setup: the AI budget cap is already reached, so a re-roll would not run');
+      const ids0 = FM.scene.layers.map(l => l.id).join(',');
+      FM.ai.DRY_RUN = true;
+      FM.ai._lastBuild = { intent: { subject: '1176 a title card' }, tasks: [{ id: 't_1176', label: '1176 re-roll', refs: [] }], refMap: {}, dry: true, keepCanvas: false };
+      FM.aiOps.applyOps = function () {
+        if (!at) { at = { busy: W.busy(), calls: FM._aiCalls, running: FM.ai.isRunning() }; reloads = 0; handed = W(count); }
+        return { appliedCount: 0, dropped: [], results: [] };
+      };
+      pending = Promise.resolve(FM.ai.rerollTask('t_1176'));
+      await pending;
+      pending = null;
+      if (!at) throw new Error('setup: the re-roll never applied an answer (FM.aiOps.applyOps), so the run never reached the moment after its request');
+      if (at.calls) throw new Error('setup: a model request was still in flight when the answer was applied (FM._aiCalls ' + JSON.stringify(at.calls) + '), so this does not reach the gap between requests');
+      if (!at.running) throw new Error('setup: FM.ai.isRunning() was false while the re-roll applied its answer');
+      const now = await handed;
+      const heldNow = now === false && !reloads && W.held();
+      await sleep(60);
+      if (!at.busy) bad.push('while the run applied the answer to its request (no request in flight, the run still going) the app counted as idle');
+      if (!heldNow) bad.push('a new build handed over while the run applied its answer was not held for the run (' + (reloads ? reloads + ' reload' : 'dropped') + ')');
+      if (FM.ai.isRunning()) bad.push('CONTROL: the re-roll was still running after it had answered');
+      if (FM.scene.layers.map(l => l.id).join(',') !== ids0) bad.push('CONTROL: the re-roll changed the layers though its answer applied nothing');
+      if (W.busy()) bad.push('after the run ended the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(() => reloads > 0, 9000))) bad.push('once the run had ended, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      FM.ai.DRY_RUN = dry0;
+      putApply();
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (pending) { try { await pending; } catch (e) {} }
+      FM.ai.DRY_RUN = dry0;
+      FM.ai._lastBuild = lb0;
+      putApply();
+      if (dFlag) Object.defineProperty(FM, '_aiCalls', dFlag); else delete FM._aiCalls;
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (after v17.85's time bounds): A FADE CARRIED ACROSS A CUT ON A CLIP OVER AN HOUR LONG WAS MEASURED OVER A SPAN CUT AT 3600 s
+     bughunt3 #3 carries a fade across a cut: each half keeps how far the clip it came from reaches past its own edges (fadeInLead,
+     fadeOutTail), and FM.fadeWindows / FM.fadeMul measure the fade over that whole span. js/scene.js FM.fadeWindows held each span
+     to 3600 s, calling that the longest clip storage keeps. It is not any more: a clip may be FM.LIMITS.duration long (hunt5 later
+     A), and v17.85 stopped the sanitiser cutting its times at an hour. Past an hour the span was cut, so a fade long enough to
+     reach past the cut-off (one a stored project carries; the panels offer 10 s and an AI edit 60 s) read a different number on
+     each side of the cut, and a half cut again built its span from the cut one. Two pairs of halves, written as FM.splitLayer
+     writes a cut inside a fade (js/app.js: the head's fadeOutTail is the original's end minus the cut, the tail's fadeInLead is
+     the cut, both halves keep the fade):
+       · a 10,000 s clip with a 5,000 s fade-out, cut at 6,000 s: the head's span is 4,000 s, so it ends at 0.8 where the tail
+         starts at 0.8. Cut to 3,600, the head ended at 0.72, a step down you hear at the cut;
+       · a 7,000 s clip with a 5,000 s fade-in, cut at 4,000 s: the tail's span is 4,000 s, so it starts at 0.8 where the head
+         ends at 0.8. Cut to 3,600, the tail started at 0.72.
+     Now a span reaches as far as FM.LIMITS.duration, the longest clip storage keeps, and is still finite.
+     FAILS BEFORE THE FIX: the spans read back 3600, the fade-out's head ends at 0.72 and the fade-in's tail starts at 0.72.
+     CONTROLS, which hold before and after: the other half of each pair reads 0.8 at the cut (else the halves are not what a split
+     writes, and the test stops as a setup failure); the fade-out's head plays at full level from its start; a 10 s clip with a
+     2 s fade-in and a 3 s fade-out, and a half with a 1 s span, read exactly what they always did; an absurd span stays finite
+     and no longer than FM.LIMITS.duration, and a word, a non-finite or a negative one still means none. Plain layer objects:
+     nothing in the scene, nothing saved. */
+  test('1176 leftover: a fade carried across a cut on a clip over an hour long reads the same on both sides of the cut: a 10,000 s clip cut at 6,000 s inside its 5,000 s fade-out, and a 7,000 s clip cut at 4,000 s inside its 5,000 s fade-in, each read 0.8 on both halves at the cut, every half keeping its whole span (CONTROLS: the other halves read 0.8; ordinary fades and a short span read as before; an absurd span stays finite)', { item: '1176' }, function () {
+    if (typeof FM.fadeWindows !== 'function' || typeof FM.fadeMul !== 'function' || !FM.LIMITS || !(FM.LIMITS.duration > 3600)) throw new Error('setup: FM.fadeWindows, FM.fadeMul or an FM.LIMITS.duration over an hour is not reachable');
+    const near = (a, b) => typeof a === 'number' && Math.abs(a - b) < 1e-9;
+    const r3 = x => Math.round(x * 1000) / 1000;
+    const bad = [];
+    /* a 10,000 s clip, its fade-out 5,000 s (from 5,000 s), cut at 6,000 s */
+    const outHead = { fadeIn: 0, fadeOut: 5000, fadeOutTail: 4000 }, outTail = { fadeIn: 0, fadeOut: 5000, fadeInLead: 6000 };
+    const otStart = FM.fadeMul(outTail, 0, 4000);
+    if (!near(otStart, 0.8)) throw new Error('setup: the tail of the fade-out reads ' + otStart + ' at its start, not 0.8, so the halves are not what a split writes');
+    const ohEnd = FM.fadeMul(outHead, 6000, 6000), ohSpan = FM.fadeWindows(outHead, 6000).tail;
+    if (!near(ohEnd, 0.8) || ohSpan !== 4000) bad.push('the head of a 10,000 s clip cut at 6,000 s inside its fade-out reads ' + r3(ohEnd) + ' at the cut where the tail starts at 0.8 (its span read back ' + ohSpan + ' s of 4,000)');
+    const otSpan = FM.fadeWindows(outTail, 4000).lead;
+    if (otSpan !== 6000) bad.push('the tail of that clip read back a span of ' + otSpan + ' s of the 6,000 it reaches back, so cutting it again would carry the wrong one');
+    /* a 7,000 s clip, its fade-in 5,000 s, cut at 4,000 s */
+    const inHead = { fadeIn: 5000, fadeOut: 0, fadeOutTail: 3000 }, inTail = { fadeIn: 5000, fadeOut: 0, fadeInLead: 4000 };
+    const ihEnd = FM.fadeMul(inHead, 4000, 4000);
+    if (!near(ihEnd, 0.8)) throw new Error('setup: the head of the fade-in reads ' + ihEnd + ' at the cut, not 0.8, so the halves are not what a split writes');
+    const itStart = FM.fadeMul(inTail, 0, 3000), itSpan = FM.fadeWindows(inTail, 3000).lead;
+    if (!near(itStart, 0.8) || itSpan !== 4000) bad.push('the tail of a 7,000 s clip cut at 4,000 s inside its fade-in starts at ' + r3(itStart) + ' where the head ends at 0.8 (its span read back ' + itSpan + ' s of 4,000)');
+    /* ── CONTROLS */
+    if (!near(FM.fadeMul(outHead, 0, 6000), 1)) bad.push('CONTROL: the head of the fade-out does not play at full level from its start (' + r3(FM.fadeMul(outHead, 0, 6000)) + ')');
+    const plain = { fadeIn: 2, fadeOut: 3 }, w = FM.fadeWindows(plain, 10);
+    if (!(w.fi === 2 && w.fo === 3 && w.lead === 0 && w.tail === 0)) bad.push('CONTROL: a 10 s clip with a 2 s fade-in and a 3 s fade-out gave windows ' + [w.fi, w.fo, w.lead, w.tail].join(' / ') + ', not 2 / 3 / 0 / 0');
+    [[1, 0.5], [5, 1], [8.5, 0.5]].forEach(([t, want]) => {
+      const g = FM.fadeMul(plain, t, 10);
+      if (!near(g, want)) bad.push('CONTROL: the 10 s clip reads ' + r3(g) + ' at ' + t + ' s, not ' + want);
+    });
+    const shortSpan = { fadeIn: 3, fadeOut: 0, fadeInLead: 1 };
+    [[0, 1 / 3], [2, 1]].forEach(([t, want]) => {
+      const g = FM.fadeMul(shortSpan, t, 9);
+      if (!near(g, want)) bad.push('CONTROL: a half with a 1 s span reads ' + r3(g) + ' at ' + t + ' s, not ' + r3(want));
+    });
+    const wild = FM.fadeWindows({ fadeIn: 1e9, fadeOut: 0, fadeInLead: 1e12 }, 10).lead;
+    if (!(isFinite(wild) && wild > 0 && wild <= FM.LIMITS.duration)) bad.push('CONTROL: an absurd span read back ' + wild + ', not a finite one no longer than FM.LIMITS.duration');
+    ['x', Infinity, NaN, -5].forEach(v => {
+      const l = FM.fadeWindows({ fadeIn: 2, fadeOut: 0, fadeInLead: v }, 10).lead;
+      if (l !== 0) bad.push('CONTROL: a span of ' + String(v) + ' read back ' + l + ', not none');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (after v17.85's time bounds): AN AI-WRITTEN KEY ON A CLIP OVER AN HOUR LONG WAS MOVED TO 3600 s ══════════════
+     js/ai-ops.js addKeyframe, the one door every Director stage and the Assistant write keys through, held each key's time to
+     0..3600, the longest project. A clip is not held to the project: one over an hour long (a long recording, a clip slowed on the
+     Speed card) carries key times past 3600, and v17.85 stopped the sanitiser cutting them there. The AI's were still cut: asked
+     for opacity keys at 100 s and 4,200 s on a 5,000 s clip, the second landed at 3,600 s (and one asked at 9,000 s on top of it,
+     so it was dropped as a duplicate), and on a clip dragged to start at -1,000 s a key asked at -500 s, on the clip, was moved
+     to 0. Now a key time is held to the project's range widened to the clip's own span, [min(0, start), max(3600, end)], inside
+     the range js/storage.js keeps. Driven through FM.aiOps.applyOps itself, on a stand-in scene of four text layers swapped in
+     for the call and put back before anything else runs (the call is synchronous; nothing is saved or committed).
+     FAILS BEFORE THE FIX: the long clip's keys land at 100 and 3600, the early clip's at 0 and 3600.
+     CONTROLS, which hold before and after: every op applied; on a 10 s clip keys asked at -3, 2 and 5,000 s land at 0, 2 and
+     3,600, and on a clip starting at 0.4 s keys asked at 0 and 1 s stay at 0 and 1 (the Director keys a layer from 0 before it
+     starts), exactly as before. */
+  test('1176 leftover: an AI-written key on a clip over an hour long lands where it was asked: on a 5,000 s clip keys at 100 and 4,200 s stay there and one at 9,000 s is held to the clip’s end, and on a clip dragged to start at -1,000 s a key at -500 s stays there (CONTROLS: every op applied; on a 10 s clip keys at -3, 2 and 5,000 s land at 0, 2 and 3,600, and on a clip starting at 0.4 s keys at 0 and 1 s stay put, as before)', { item: '1176' }, function () {
+    if (!FM.aiOps || typeof FM.aiOps.applyOps !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.aiOps.applyOps or FM.makeLayer is not reachable');
+    const mk = (name, start, duration) => { const L = FM.makeLayer('text', { name: name, start: start, duration: duration }); L.start = start; L.duration = duration; return L; };
+    const LONG = mk('1176 long clip', 0, 5000), BACK = mk('1176 clip before zero', -1000, 5000), SHORT = mk('1176 short clip', 0, 10), LATE = mk('1176 later clip', 0.4, 2);
+    const op = (L, keys) => ({ op: 'addKeyframe', ref: L.id, path: 'transform.opacity', keys: keys });
+    const saved = FM.scene;
+    let log = null;
+    try {
+      FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 3600, background: '#000000' }, layers: [LONG, BACK, SHORT, LATE], selectedId: null, selectedIds: [] };
+      log = FM.aiOps.applyOps([
+        op(LONG, [{ t: 100, v: 0 }, { t: 4200, v: 1 }, { t: 9000, v: 0.5 }]),
+        op(BACK, [{ t: -500, v: 0 }, { t: 3900, v: 1 }]),
+        op(SHORT, [{ t: -3, v: 0 }, { t: 2, v: 1 }, { t: 5000, v: 0.5 }]),
+        op(LATE, [{ t: 0, v: 0 }, { t: 1, v: 1 }])
+      ], {});
+    } finally { FM.scene = saved; }
+    const times = L => { const p = L.transform && L.transform.opacity; return p && Array.isArray(p.kf) ? p.kf.map(k => k.t).join(', ') : 'no keys'; };
+    if (!log || log.appliedCount !== 4 || log.dropped.length) throw new Error('setup: the four addKeyframe ops did not all apply (' + (log ? log.appliedCount + ' applied; dropped: ' + log.dropped.map(d => d.reason).join('; ') : 'no log') + ')');
+    const bad = [];
+    if (times(LONG) !== '100, 4200, 5000') bad.push('on a 5,000 s clip keys asked at 100, 4,200 and 9,000 s landed at ' + times(LONG) + ', not 100, 4200, 5000');
+    if (times(BACK) !== '-500, 3900') bad.push('on a clip starting at -1,000 s keys asked at -500 and 3,900 s landed at ' + times(BACK) + ', not -500, 3900');
+    if (times(SHORT) !== '0, 2, 3600') bad.push('CONTROL: on a 10 s clip keys asked at -3, 2 and 5,000 s landed at ' + times(SHORT) + ', not 0, 2, 3600 as before');
+    if (times(LATE) !== '0, 1') bad.push('CONTROL: on a clip starting at 0.4 s keys asked at 0 and 1 s landed at ' + times(LATE) + ', not 0, 1 as before');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (the loaders the doors above still missed): A NEW BUILD RELOADED THE APP IN THE MIDDLE OF A PASTE, A SPLIT OR A FRIEND’S CLIP BEING STORED ═══
+     The doors above count a file still opening in FM._importing, which index.html's fmSwBusy reads. Four more waited on a file with
+     nothing showing busy, and a build landing in one saved the project as it stood and reloaded:
+       · Paste (js/app.js FM.pasteClipboard) opens each clipboard clip's file again before that copy goes in. The clipboard lives in
+         memory only, so the copies not yet in were gone with the reload, with nothing left to paste them from;
+       · Split (FM.splitLayer, through reloadMediaTo, which Duplicate and Extract audio share) has already cut the clip to its head
+         half when it opens the file for the tail half: the save kept the shortened clip, and the tail half, every second after the
+         cut, was gone;
+       · an Undo of a Replace (FM.restoreReplacedMedia) reads back the file the Replace put away and opens it: the save kept the layer
+         at the old revision showing the replacement, and the next boot's sweep deleted the kept copy, his original, for good;
+       · a friend's clip (js/collab-media.js complete) with every byte in the room's resume parts but not yet in its layer's record. A
+         build that arrives during a session runs when the session ends, and the file goes on being put in place after that: a reload
+         then left the clip blank on this device, with no session left to resume it from.
+     Now each counts itself in FM._importing: the three in js/app.js around their loader (the Undo from its read to its swap), the
+     friend's clip from its last part landing to its record being written (complete, and applyHeld for a clip that waited behind the
+     barrier), never across the open-ended transfer. Three of the four are driven here; the Undo is not.
+     Driven like the tests above, the hold handed a counter for the reload, never the real one. Paste and Split each on a scene of
+     their own (_bh2With) with an image clip whose record holds a file, FM.loadImageFile held on a gate for that file only; the gate
+     then answers a stand-in picture and the work lands. The friend's clip through the real guest session and test peer
+     (withCollabGuest921): a picture whose header the size check (#1093) cannot read, so the check asks FM.loadImageFile for a still,
+     held on a gate for that file only, after the last part is on disk and before the layer's record exists. The session then ends
+     (while one runs, the hold hands its reload to the session, which runs the REAL reload when it ends: asking it then would reload
+     this page), the hold is asked and handed a new build, and then the gate answers and the picture is stored.
+     FAILS BEFORE THE FIX: while each one waits on its loader fmSwBusy answers '' and the new build reloads at once.
+     CONTROLS, which hold before and after: the app is idle before each door; each door reached its loader (else the test stops as a
+     setup failure); the split had already cut the clip to its head half there; the friend's picture was in the room's parts with no
+     record yet, and the session had ended before the hold was asked; afterwards the paste landed one copy and the split a tail half,
+     each with a record of its own, and the friend's picture is in its layer's record; and with nothing running a new build reloads
+     at once. Restores FM.loadImageFile, the clipboard and FM._importing, puts each scene back and cancels any hold. */
+  test('1176 leftover: an update does not reload the app in the middle of a Paste, a Split or a friend’s clip being stored: with each one’s loader held the new build waits, and once the work has landed the app reloads by itself (CONTROLS: each door reached its loader and its work landed; the split had cut the clip; the friend’s clip was all here with no record yet, and the session had ended; an idle app reloads at once)', { item: '1176', budgetMs: 180000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM.pasteClipboard !== 'function' || typeof FM.copySelection !== 'function' || typeof FM.splitLayer !== 'function' || typeof FM.loadImageFile !== 'function' || !FM.storage || typeof FM.storage.readMedia !== 'function' || typeof FM.storage.collabKeys !== 'function') throw new Error('setup: FM.pasteClipboard, FM.copySelection, FM.splitLayer, FM.loadImageFile, FM.storage.readMedia or FM.storage.collabKeys is not reachable');
+    const C = need921S4('a friend’s clip being stored under the update hold');
+    if (typeof C.end !== 'function' || typeof C.media._partPrefix !== 'function' || typeof C.media._fp !== 'function') throw new Error('setup: FM.collab.end, FM.collab.media._partPrefix or FM.collab.media._fp is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_importing');
+    const dImg = Object.getOwnPropertyDescriptor(FM, 'loadImageFile'), realImg = FM.loadImageFile;
+    const putImg = () => { if (dImg) Object.defineProperty(FM, 'loadImageFile', dImg); else FM.loadImageFile = realImg; };
+    const clip0 = FM.clipboard;
+    const ts = Date.now().toString(36);
+    const PNG = [137, 80, 78, 71, 13, 10, 26, 10];
+    let reloads = 0, open = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const stand = () => { const cv = document.createElement('canvas'); cv.width = 2; cv.height = 2; return { kind: 'image', el: cv, width: 2, height: 2 }; };
+    /* FM.loadImageFile held on a fresh gate for the calls `gated` picks, a stand-in answered at once for the calls `quick` picks, and
+       the real loader for every other call. */
+    const hold = (gated, quick) => {
+      const h = { entered: 0 };
+      const gate = new Promise(r => { open = r; });
+      FM.loadImageFile = function (f, o) {
+        if (gated(f, o)) { h.entered++; return gate; }
+        if (quick && quick(f, o)) return Promise.resolve(stand());
+        return realImg.apply(this, arguments);
+      };
+      return h;
+    };
+    const bad = [];
+    /* The hold asked while the loader waits: what it says, and whether a new build handed to it now waits. */
+    const handOver = async () => {
+      const during = W.busy(), n = FM._importing;
+      reloads = 0;
+      const now = await W(count);
+      return { during: during, n: n, heldNow: !now && !reloads && W.held() };
+    };
+    /* …and once the work has landed and its save has settled, the held build must go by itself. */
+    const verdict = async (what, a) => {
+      if (!a.during) bad.push('while ' + what + ' waited on its loader the app counted as idle (FM._importing ' + JSON.stringify(a.n) + ')');
+      if (!a.heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app in the middle of ' + what + ' (' + reloads + ' reload)' : 'was dropped rather than held during ' + what));
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => !FM._importing, 5000))) bad.push('after ' + what + ' was over FM._importing is still ' + JSON.stringify(FM._importing) + ', so every later update would wait for it');
+      else if (!(await until(() => W.busy() === '', 8000))) bad.push('after ' + what + ' was over the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(() => reloads > 0, 9000))) bad.push('once ' + what + ' was over, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+    };
+    try {
+      /* ── PASTE: an image clip copied, then pasted, the copy's file held as it opens. */
+      await _bh2With(async function (media) {
+        const A = _bh2Img('1176 paste clip', media);
+        FM.scene.layers.push(A);
+        FM.scene.selectedId = A.id; FM.scene.selectedIds = [A.id];
+        FM.history.reset();
+        const FILE = FM.media.get(A.id).file;
+        if (FM.copySelection() !== 1) throw new Error('setup: Copy did not put the paste clip on the clipboard');
+        FM.time = 0;
+        const keys0 = new Set(Object.keys(FM.media.all()));
+        await settle('the paste');
+        const h = hold(f => f === FILE);
+        let p = null;
+        try {
+          p = Promise.resolve(FM.pasteClipboard());
+          if (!(await until(() => h.entered > 0, 4000))) throw new Error('setup: the paste never reached its loader (FM.loadImageFile), so nothing was opening');
+          const a = await handOver();
+          open(stand());
+          await p; p = null;
+          putImg();
+          const copies = FM.scene.layers.filter(l => l.id !== A.id);
+          if (copies.length !== 1 || !FM.media.get(copies[0].id)) bad.push('CONTROL: once its loader answered the paste did not land one copy with a record of its own (' + FM.scene.layers.length + ' layers)');
+          await verdict('a paste', a);
+        } finally {
+          putImg();
+          if (open) open(stand());
+          if (p) { try { await p; } catch (e) {} }
+          try { W.cancel(); } catch (e) {}
+          if (FM.storage && FM.storage.settled) { try { await FM.storage.settled(); } catch (e) {} }
+          _bh2NewMedia(keys0).forEach(k => { try { FM.media.remove(k); } catch (e) {} });
+        }
+      });
+
+      /* ── SPLIT: a 6 s image clip cut at 3 s, the tail half's file held as it opens. */
+      await _bh2With(async function (media) {
+        const A = _bh2Img('1176 split clip', media);
+        FM.scene.layers.push(A);
+        FM.scene.selectedId = A.id; FM.scene.selectedIds = [A.id];
+        FM.history.reset();
+        FM.time = 3;
+        const FILE = FM.media.get(A.id).file;
+        const keys0 = new Set(Object.keys(FM.media.all()));
+        await settle('the split');
+        const h = hold(f => f === FILE);
+        let p = null;
+        try {
+          p = Promise.resolve(FM.splitLayer(A.id));
+          if (!(await until(() => h.entered > 0, 4000))) throw new Error('setup: the split never reached its loader (FM.loadImageFile), so nothing was opening');
+          if (FM.scene.layers.length !== 1 || Math.abs(A.duration - 3) > 1e-6) throw new Error('setup: while its loader waited the split had not cut the clip to its 3 s head half with the tail half still to come (' + FM.scene.layers.length + ' layers, the clip ' + A.duration + ' s)');
+          const a = await handOver();
+          open(stand());
+          await p; p = null;
+          putImg();
+          const ls = FM.scene.layers, B = ls.find(l => l.id !== A.id);
+          if (ls.length !== 2 || !B || Math.abs(B.start - 3) > 1e-6 || Math.abs(B.duration - 3) > 1e-6 || !FM.media.get(B.id)) bad.push('CONTROL: once its loader answered the split did not land a 3 s tail half at 3 s with a record of its own (' + ls.map(l => l.start + ' + ' + l.duration).join(', ') + ')');
+          await verdict('a split', a);
+        } finally {
+          putImg();
+          if (open) open(stand());
+          if (p) { try { await p; } catch (e) {} }
+          try { W.cancel(); } catch (e) {}
+          if (FM.storage && FM.storage.settled) { try { await FM.storage.settled(); } catch (e) {} }
+          _bh2NewMedia(keys0).forEach(k => { try { FM.media.remove(k); } catch (e) {} });
+        }
+      });
+
+      /* ── A FRIEND'S CLIP: all of it here, its size check held, the session ended, and then it is stored. A held build must not
+         be waiting when the session starts: the hold would hand it to the session, which runs the real reload at its end. */
+      try { W.cancel(); } catch (e) {}
+      if (W.held()) throw new Error('setup: a new build was still held before the session started, and the session would take it over');
+      const NAME = '1176 friend ' + ts + '.png';
+      const PIC = new File([new Uint8Array(PNG)], NAME, { type: 'image/png', lastModified: 1600001176000 });
+      await withCollabGuest921([mediaLayer921('1176 Friend', 'image')], async function (c) {
+        const lid = c.ids[0];
+        const isPic = f => !!(f && f.name === NAME);
+        const h = hold((f, o) => isPic(f) && !!(o && o.still), f => isPic(f));
+        try {
+          const pre = C.media._partPrefix(c.G, C.media._fp(PIC));
+          c.peer.add(PIC, 'image', [[lid, 0]]);
+          c.peer.announce('mf');
+          await until921('the friend’s picture to reach its size check', async function () { return h.entered ? 1 : null; }, 60000);
+          const parts = pre ? await FM.storage.collabKeys(pre) : [];
+          const rec0 = await FM.storage.readMedia(lid);
+          if (!parts.length || (rec0 && rec0.file)) throw new Error('setup: when its size check was held the friend’s picture was not in the room’s parts with no record yet (' + parts.length + ' parts, ' + (rec0 && rec0.file ? 'a record' : 'no record') + ')');
+          C.end();
+          if (C.active || C.session) throw new Error('setup: the session did not end, so the hold would hand its reload to the session');
+          if (FM.storage && FM.storage.settled) await FM.storage.settled();
+          const a = await handOver();
+          open({ kind: 'image', width: 2, height: 2, url: '' });
+          let got = null;
+          for (let i = 0; i < 100; i++) { got = await FM.storage.readMedia(lid); if (got && got.file) break; await sleep(100); }
+          if (!got || !got.file || got.file.size !== PIC.size) bad.push('CONTROL: once its size check answered the friend’s picture did not land in its layer’s record (' + (got && got.file ? got.file.size + ' bytes' : 'no record') + ' of ' + PIC.size + ')');
+          await verdict('a friend’s clip being stored', a);
+        } finally {
+          try { W.cancel(); } catch (e) {}
+          if (open) open({ kind: 'image', width: 2, height: 2, url: '' });
+          await until(() => !FM._importing, 5000);
+          putImg();
+        }
+      });
+
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      if (FM.collab && FM.collab.active) throw new Error('setup: a session was still running for the control, and the hold would hand its reload to it');
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (open) open(null);
+      putImg();
+      FM.clipboard = clip0;
+      if (dFlag) Object.defineProperty(FM, '_importing', dFlag); else delete FM._importing;
+      if (FM.hideToast) { try { FM.hideToast(); } catch (e) {} }
       try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
     }
     if (bad.length) throw new Error(bad.join(' · '));

@@ -1077,6 +1077,16 @@ window.FM = window.FM || {};
 
   /* ═══ COMPLETION (§15.6 step 2 onward) ════════════════════════════════════════════════════════ */
   async function complete(ctl, inb) {
+    /* 1176 leftover: A NEW BUILD WAITS WHILE A FRIEND'S CLIP IS PUT IN ITS LAYER. A build that arrives during a session is held by
+       the session and run when it ends (collab-core.js deferReload), and the file arriving carries on past that. From here (every
+       byte is in the room's parts on disk) to the clip's record being written (applyFile's writeRecord), a reload left the clip
+       blank on this device, with no session left to resume it from. Counted in FM._importing, which index.html's fmSwBusy reads,
+       from the last part landing to the finally: a bounded step (IndexedDB reads, a size check, one write, one decode), never the
+       open-ended transfer before it (a part landing is FM._mediaBusy's, and a stalled transfer must not hold a new build for good). A file
+       parked behind the barrier below is not held either; applyHeld counts its own apply when the barrier lifts. The try is not
+       re-indented, so the lines it wraps keep their history. */
+    FM._importing = (FM._importing || 0) + 1;
+    try {
     const e = inb.e;
     delete ctl.inb[e.fid];
     if (ctl.byXid && inb.xkey) delete ctl.byXid[inb.xkey];
@@ -1104,6 +1114,7 @@ window.FM = window.FM || {};
     ctl.held.push({ e: e, file: file });
     ctl.dirty = true;
     await applyHeld(ctl);
+    } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   }
 
   async function applyHeld(ctl) {
@@ -1111,7 +1122,13 @@ window.FM = window.FM || {};
     const A = ctl.S.adapter;
     if ((A.frozen && A.frozen()) || (A.busy && A.busy())) return;
     const jobs = ctl.held.splice(0, ctl.held.length);
-    for (let i = 0; i < jobs.length; i++) await applyFile(ctl, jobs[i].e, jobs[i].file);
+    /* 1176 leftover: the files taken off the barrier are being put in their layers, which a reload would lose as it would in
+       complete above, so this counts in FM._importing too (inside complete the count is simply one deeper). Only once they are
+       taken: a file still parked waits on an export or a job, and that wait is not this one's to hold a new build through. */
+    FM._importing = (FM._importing || 0) + 1;
+    try {
+      for (let i = 0; i < jobs.length; i++) await applyFile(ctl, jobs[i].e, jobs[i].file);
+    } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   }
 
   async function applyFile(ctl, e, file) {

@@ -4268,9 +4268,12 @@ window.FM = window.FM || {};
    * the canvas's own left-to-right direction (UAX #9 rules W1–W7, N1–N2, I1, L1 and L2; no explicit embeddings or isolates), and its
    * units are placed in the visual order it gives. The stagger still counts in typing order, so the first word typed comes in first,
    * on the right. A line with no right-to-left letter never gets past the first test: every left-to-right text draws as it did.
-   * Not built (a layer with a Word Highlight keeps the old order: the highlight lays its boxes out in typing order, on the still path
-   * too, so moving the units alone would take them off their words; the curved paths, still and animated, also place glyphs in
-   * typing order; Arabic By Character draws each letter unjoined, as it always has). */
+   * Not built (Arabic By Character draws each letter unjoined, as it always has). A layer with a Word Highlight kept the old order,
+   * because the highlight laid its boxes out in typing order, on the still path too; since 1176 leftover the boxes follow the words
+   * where they are drawn (hlGeomVis), still and animated, and the units take this order with them. The curved paths, still and
+   * animated, placed their glyphs in typing order too; since 1176 leftover they take the order bidiGlyphOrder gives, and a bracket
+   * drawn alone there, By Character or as a word of its own is drawn as its mirror partner where the line's one fillText mirrors it
+   * (bidiMirrors, rule L4). */
   const BIDI_RTL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFC\u200F\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
   // One character's bidirectional class (its first code point's, from UnicodeData's ranges for the scripts text is typed in)
   function bidiType(g) {
@@ -4390,10 +4393,73 @@ window.FM = window.FM || {};
     ord.forEach(k => { xs[k] = x; x += widths[k]; });
     return xs;
   }
+  /* 1176 leftover (curved text): the visual order of one line's characters `gs` (its graphemes), left to right: gs[ord[k]] is the
+     k-th from the left. null when the line has no right-to-left letter or its order is the typing order, and the caller then walks
+     the characters as it always did. Each is one item at its own level, so a right-to-left word comes out reversed, as the canvas
+     draws it on one fillText. */
+  function bidiGlyphOrder(line, gs) {
+    if (gs.length < 2 || !BIDI_RTL.test(line)) return null;
+    const ord = bidiOrder(bidiLevels(gs));
+    return ord.every((k, i) => k === i) ? null : ord;
+  }
+  /* 1176 leftover (rule L4): A BRACKET DRAWN ALONE IS DRAWN AS THE LINE DRAWS IT. The still path's one fillText draws a Bidi_Mirrored
+     character at an odd level as its mirror image: in a Hebrew line alef ( bet ) gimel every character is at level 1, the canvas lays
+     it out reversed and draws the '(' typed first as ')' and the ')' as '(', so the pair still opens toward the bet between them. A glyph
+     drawn by a fillText of its own (By Character, every glyph on a curve, a lone bracket By Word) is laid out at the canvas's level 0
+     and was drawn as typed, so on those paths the brackets of that line faced outward, away from the word they hold. Those paths now
+     draw the partner from this table, the common pairs of BidiMirroring.txt:
+       ( )  [ ]  { }  < >  « »  ‹ ›  ⁅ ⁆  ⁽ ⁾  ₍ ₎  ≤ ≥  ⟨ ⟩  〈 〉  《 》  「 」  『 』  【 】  〔 〕  （ ）  ［ ］  ｛ ｝  ＜ ＞
+     Any other mirrored character is drawn as typed, as before. bidiMirrors(line, gs): m[i] the partner to draw for character i of
+     `gs` (the line's graphemes), or nothing; null when the line has no right-to-left letter or none of these at an odd level. */
+  const BIDI_MIRROR = (function () {
+    const m = Object.create(null), s = '()[]{}<>«»‹›⁅⁆⁽⁾₍₎≤≥⟨⟩〈〉《》「」『』【】〔〕（）［］｛｝＜＞';
+    for (let i = 0; i + 1 < s.length; i += 2) { m[s[i]] = s[i + 1]; m[s[i + 1]] = s[i]; }
+    return m;
+  })();
+  function bidiMirrors(line, gs) {
+    if (!gs.some(g => BIDI_MIRROR[g]) || !BIDI_RTL.test(line)) return null;
+    const lv = bidiLevels(gs), m = [];
+    let any = false;
+    gs.forEach((g, i) => { if ((lv[i] & 1) && BIDI_MIRROR[g]) { m[i] = BIDI_MIRROR[g]; any = true; } });
+    return any ? m : null;
+  }
+  FM._bidiMirrors = bidiMirrors;   // suite seam
+  /* 1176 leftover (Word Highlight): where the characters of `s` land when `s` is drawn as ONE fillText whose left edge is x0. The canvas
+     cuts it into runs at one level (bidiLevels), lays the runs out left to right in the order bidiOrder gives them, and draws a
+     right-to-left run from its right end. Returns span(i0, i1) -> { a, b }, the left and right edge of the characters at offsets
+     i0..i1 of `s` (the hull of their pieces when they straddle runs): each run is measured alone, a piece of it by the advance of the
+     run's text before the piece. null when `s` has no right-to-left letter, and the caller measures from the left as it always did. */
+  function bidiSpanFn(ctx, s, x0) {
+    if (!BIDI_RTL.test(s)) return null;
+    const gs = graphemes(s), lv = bidiLevels(gs), runs = [];
+    let off = 0;
+    gs.forEach((g, i) => {
+      const r = runs[runs.length - 1];
+      if (r && r.lv === lv[i]) r.o1 = off + g.length;
+      else runs.push({ o0: off, o1: off + g.length, lv: lv[i] });
+      off += g.length;
+    });
+    let x = x0;
+    bidiOrder(runs.map(r => r.lv)).forEach(k => { const r = runs[k]; r.s = s.slice(r.o0, r.o1); r.w = ctx.measureText(r.s).width; r.x = x; x += r.w; });
+    const adv = (r, n) => n <= 0 ? 0 : n >= r.s.length ? r.w : ctx.measureText(r.s.slice(0, n)).width;
+    return (i0, i1) => {
+      let a = Infinity, b = -Infinity;
+      runs.forEach(r => {
+        const p = Math.max(i0, r.o0) - r.o0, q = Math.min(i1, r.o1) - r.o0;
+        if (q <= p) return;
+        const wp = adv(r, p), wq = adv(r, q), rtl = (r.lv & 1) === 1;
+        const lo = rtl ? r.x + r.w - wq : r.x + wp, hi = rtl ? r.x + r.w - wp : r.x + wq;
+        if (lo < a) a = lo;
+        if (hi > b) b = hi;
+      });
+      return a <= b ? { a: a, b: b } : { a: x0, b: x0 };
+    };
+  }
 
-  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan, upright, hlOn) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)   // upright: Text Curve's Stay upright (#966 opts8)
+  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan, upright) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)   // upright: Text Curve's Stay upright (#966 opts8)
     // plan: textPlanLines' plan for these lines, or null (#966 scramble layout)
-    /* hlOn (bughunt4 #6): the layer carries a Word Highlight, lit or not; its lines keep the typing order (bidiUnitXs says why) */
+    /* 1176 leftover: a layer with a Word Highlight used to keep the typing order here (bughunt4 #6's hlOn), because the highlight laid
+       its boxes out that way; the boxes now follow the units where they are drawn (hlAnimLine), so its lines read as every other's. */
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
     /* Landing with a bounce rather than an ease — the standard piecewise curve. `drop` is the only
@@ -4522,7 +4588,13 @@ window.FM = window.FM || {};
       const aa = Math.abs(curveDeg * Math.PI / 180), R = tw / aa, sign = curveDeg >= 0 ? 1 : -1;
       const arcAt = (sAlong) => { const a = (sAlong / tw - 0.5) * aa; return { a: a, x: R * Math.sin(a), y: sign * (R - R * Math.cos(a)) }; };
       const cMid = []; let run = 0;
-      chars.forEach((c, i) => { cMid.push(run + cw[i] / 2); run += cw[i] + lsp; });
+      /* 1176 leftover: a right-to-left line's characters take their places along the arc in the order it reads (bidiGlyphOrder, as
+         drawArcLine does), so cMid[i] is character i's place in THAT order; each unit then sits at the middle of its characters' span
+         (uL..uR below). The units, their stagger and their clocks keep the typing order. ord null: the line as it always was. */
+      const ord = bidiGlyphOrder(line, chars);
+      const mir = bidiMirrors(line, chars);   // …and a bracket at an odd level is drawn as its partner (rule L4); null: as typed
+      if (ord) ord.forEach(i => { cMid[i] = run + cw[i] / 2; run += cw[i] + lsp; });
+      else chars.forEach((c, i) => { cMid.push(run + cw[i] / 2); run += cw[i] + lsp; });
       // units as [first, last+1) character ranges, in the same order and with the same membership as the flat path
       const ranges = [];
       if (unit === 'line') { if (chars.length) ranges.push([0, chars.length]); }
@@ -4545,7 +4617,9 @@ window.FM = window.FM || {};
         const ck = clockOf(rg[0]);
         const A = animFor(ck.n++, ck);
         const i0 = rg[0], i1 = rg[1] - 1;
-        const U = arcAt(((cMid[i0] - cw[i0] / 2) + (cMid[i1] + cw[i1] / 2)) / 2);
+        let uL = Infinity, uR = -Infinity;
+        if (ord) for (let i = rg[0]; i < rg[1]; i++) { uL = Math.min(uL, cMid[i] - cw[i] / 2); uR = Math.max(uR, cMid[i] + cw[i] / 2); }
+        const U = arcAt(ord ? (uL + uR) / 2 : ((cMid[i0] - cw[i0] / 2) + (cMid[i1] + cw[i1] / 2)) / 2);
         ctx.save();
         ctx.globalAlpha = baseAlpha * Math.max(0, Math.min(1, A.alpha)) * A.outA;
         ctx.translate(U.x, U.y);
@@ -4556,7 +4630,7 @@ window.FM = window.FM || {};
         const ca = Math.cos(-sign * U.a), sa = Math.sin(-sign * U.a);
         for (let i = rg[0]; i < rg[1]; i++) {
           if (i === gskip) continue;   // the dark caret keeps its place in the unit and on the arc, unpainted
-          const pc = gp ? gp[i] : chars[i];   // the finished glyph's place, the plan's character (#966 scramble layout)
+          const pc0 = gp ? gp[i] : chars[i], pc = (mir && mir[i] && pc0 === chars[i]) ? mir[i] : pc0;   // the finished glyph's place, the plan's character (#966 scramble layout); a landed bracket mirrored (L4)
           if (gp && !/\S/.test(pc)) continue;   // hidden (or a space): its place is kept, nothing is painted
           const C = arcAt(cMid[i]), rx = C.x - U.x, ry = C.y - U.y;
           ctx.save();
@@ -4594,15 +4668,29 @@ window.FM = window.FM || {};
       const lineW = widths.reduce((a, b) => a + b, 0) - (units.length ? sp : 0);
       let x = align === 'center' ? -lineW / 2 : align === 'right' ? -lineW : 0;
       /* bughunt4 #6: a right-to-left line's units go where it reads, each unit's left edge from bidiUnitXs; null (every line with no
-         right-to-left letter, By Line, and a layer with a Word Highlight) lays them out one after another as before */
-      const bidiX = (unit !== 'line' && !hlOn) ? bidiUnitXs(line, units, widths, x) : null;
+         right-to-left letter, and By Line) lays them out one after another as before. Since 1176 leftover a layer with a Word Highlight
+         takes it too, and its boxes are laid out on these same edges (hlAnimLine). */
+      const bidiX = unit !== 'line' ? bidiUnitXs(line, units, widths, x) : null;
+      /* 1176 leftover (rule L4): a unit that is one bracket at an odd level (By Character, or a bracket standing alone By Word) is
+         drawn as its partner, as the line's one fillText draws it (bidiMirrors). mirU null, every unit is drawn as typed. */
+      let mirU = null;
+      if (unit !== 'line' && BIDI_RTL.test(line)) {
+        const gl = unit === 'char' ? units : graphemes(line), mg = bidiMirrors(line, gl);
+        if (mg) {
+          const at = Object.create(null);   // code-unit offset in the line -> the partner to draw there
+          let o = 0;
+          gl.forEach((g, i) => { if (mg[i]) at[o] = mg[i]; o += g.length; });
+          mirU = []; o = 0;
+          units.forEach((u, ui) => { if (u.length === 1 && at[o]) mirU[ui] = at[o]; o += u.length; });
+        }
+      }
       /* #482 12.4 review: on the caret's line, the unit holding Type-On's dark caret (the last, or the first when typing from
          the End) is laid out and animated whole and painted without it — the caret alone paints nothing; a word or a line
          ending in it paints the rest from the same left edge (left-aligned here), shifted by the caret's advance when it leads. */
       const gU = (ghost && ghost.ch && li === (ghost.at === 'start' ? 0 : lines.length - 1) && units.length) ? (ghost.at === 'start' ? 0 : units.length - 1) : -1;
       /* #966 B9: this line's lit words, laid out on THESE units' own advances (each unit is measured alone here). null when no
          Word Highlight is on the layer or nothing on this line is lit, and then every unit is drawn by the two lines it always was. */
-      const hlo = hl ? hlAnimLine(ctx, hl, li, lines.length, units, widths, x, sp, fs, yy, lh) : null;
+      const hlo = hl ? hlAnimLine(ctx, hl, li, lines.length, units, widths, x, sp, fs, yy, lh, bidiX) : null;
       units.forEach((u, ui) => {
         if (bidiX) x = bidiX[ui];
         const w = widths[ui];
@@ -4625,6 +4713,7 @@ window.FM = window.FM || {};
         }
         if (runs && !runs.length) { x += w; return; }
         let paint = u, px = -wDraw / 2;
+        if (mirU && mirU[ui]) paint = mirU[ui];   // 1176 leftover: a lone bracket at an odd level, mirrored (L4)
         if (ui === gU && (ghost.at === 'start' ? u.charAt(0) : u.slice(-1)) === ghost.ch) { paint = ghost.at === 'start' ? u.slice(1) : u.slice(0, -1); if (ghost.at === 'start') px += w - ctx.measureText(paint).width; }
         if (ui === gU && !paint) { x += w; return; }
         const paintRuns = () => runs.forEach(r => {
@@ -4835,6 +4924,34 @@ window.FM = window.FM || {};
     });
     return runs;
   }
+  /* ═══ 1176 leftover — A RIGHT-TO-LEFT LINE'S BOXES SIT ON ITS WORDS AS DRAWN ═══════════════════════════════════════════════════
+   * What was wrong. hlGeom places a unit at the advance of the line's text BEFORE it in typing order, measured from the line's left
+   * edge, and hlRuns joins units that are neighbours in typing order. Still, a line is one fillText and the canvas lays a Hebrew or
+   * Arabic line out right to left, so the first word typed is drawn at the RIGHT end while its box, its underline and its lit
+   * colour went to the LEFT end, over another word; animated, the layer kept the typing order for its units as well (bughunt4 #6's
+   * hlOn), so a lit right-to-left caption was drawn mirrored, its boxes on the mirrored words.
+   * Now a line holding a right-to-left letter is measured where it is drawn: each unit's span from bidiSpanFn (the still line, or
+   * on the animated path each unit's own fillText at its bidiUnitXs edge), each clip halfway to its neighbour AS DRAWN, and lit
+   * units side by side as drawn joined into one run. A line with no right-to-left letter goes through hlGeom and hlRuns as before. */
+  function hlGeomVis(us, spanOf, sp, fs) {
+    us.forEach(u => { const s = spanOf(u.i0, u.i1); u.a = s.a; u.b = Math.max(u.a, s.b - sp); });
+    const vs = us.slice().sort((p, q) => p.a - q.a);
+    vs.forEach((u, k) => {
+      const prev = vs[k - 1], next = vs[k + 1];
+      u.ca = prev ? (prev.b + u.a) / 2 : u.a - fs;
+      u.cb = next ? (u.b + next.a) / 2 : u.b + fs;
+    });
+  }
+  // …its lit units side by side AS DRAWN, one run each (i0..i1 the hull of their characters)
+  function hlRunsVis(us) {
+    const runs = []; let cur = null;
+    us.slice().sort((p, q) => p.a - q.a).forEach(u => {
+      if (!u.on) { cur = null; return; }
+      if (cur) { cur.b = u.b; cur.cb = u.cb; cur.i0 = Math.min(cur.i0, u.i0); cur.i1 = Math.max(cur.i1, u.i1); }
+      else { cur = { a: u.a, b: u.b, ca: u.ca, cb: u.cb, i0: u.i0, i1: u.i1 }; runs.push(cur); }
+    });
+    return runs;
+  }
   // a line's band: halfway to the next line, and a font size past the first and the last, so no ascender or descender is cut
   function hlBand(li, n, yy, lh, fs) { const h = Math.max(lh, fs); return { y0: li === 0 ? yy - h : yy - lh / 2, y1: li === n - 1 ? yy + h : yy + lh / 2 }; }
   function hlRoundRect(ctx, x, y, w, h, r) {
@@ -4851,6 +4968,14 @@ window.FM = window.FM || {};
   function hlEachRun(ctx, o, draw) {
     o.runs.forEach(r => {
       if (!o.span) { draw(r); return; }
+      /* 1176 leftover: a right-to-left line's run (hlAnimLineVis) is held by the units in r.ks; of those, the leftmost and the rightmost
+         AS DRAWN (r.kL, r.kR) carry its two ends and the Padding beyond them, and every one draws the part over its own advance */
+      if (r.ks) {
+        if (!r.ks.has(o.k)) return;
+        const L = o.k === r.kL ? -HL_BIG : o.slice[0] - o.ox, R = o.k === r.kR ? HL_BIG : o.slice[1] - o.ox;
+        ctx.save(); ctx.beginPath(); ctx.rect(L, -HL_BIG, R - L, 2 * HL_BIG); ctx.clip(); draw(r); ctx.restore();
+        return;
+      }
       const u0 = o.span[0], u1 = o.span[1];
       if (u1 <= r.i0 || u0 >= r.i1) return;   // none of this run's characters are in this unit
       const L = u0 <= r.i0 ? -HL_BIG : o.slice[0] - o.ox, R = u1 >= r.i1 ? HL_BIG : o.slice[1] - o.ox;
@@ -4939,8 +5064,11 @@ window.FM = window.FM || {};
       const o = { paint: paint, base: base, H: H, fs: fs, yy: yy, ox: 0, oy: 0, slice: null, runs: [], on: [], band: hlBand(li, lines.length, yy, lh, fs) };
       if (us.some(u => u.on)) {
         const W = ctx.measureText(line).width, x0 = al === 'center' ? -W / 2 : (al === 'right' || al === 'end') ? -W : 0;
-        hlGeom(us, i => x0 + (i > 0 ? ctx.measureText(line.slice(0, i)).width : 0), sp, fs);
-        o.runs = hlRuns(us); o.on = us.filter(u => u.on);
+        // 1176 leftover: a right-to-left line's units where its one fillText draws them (bidiSpanFn, hlGeomVis); bs null: as before
+        const bs = bidiSpanFn(ctx, line, x0);
+        if (bs) hlGeomVis(us, bs, sp, fs);
+        else hlGeom(us, i => x0 + (i > 0 ? ctx.measureText(line.slice(0, i)).width : 0), sp, fs);
+        o.runs = bs ? hlRunsVis(us) : hlRuns(us); o.on = us.filter(u => u.on);
       }
       return o;
     });
@@ -4951,11 +5079,13 @@ window.FM = window.FM || {};
     ctx.fillStyle = base;
   }
   // …and the ANIMATED path: one line's lit runs on its units' own advances (drawAnimatedText measures each unit alone), or null
-  function hlAnimLine(ctx, hl, li, n, units, widths, x0, sp, fs, yy, lh) {
+  function hlAnimLine(ctx, hl, li, n, units, widths, x0, sp, fs, yy, lh, bxs) {
     const us = hl.units[li] || [];
     if (!units.length || !us.some(u => u.on)) return null;
     const offs = [], xs = []; let off = 0, xx = x0;
-    units.forEach((u, k) => { offs.push(off); xs.push(xx); off += u.length; xx += widths[k]; });
+    // bxs (1176 leftover): bidiUnitXs' left edges, where drawAnimatedText draws a right-to-left line's units; null, one after another
+    units.forEach((u, k) => { offs.push(off); xs.push(bxs ? bxs[k] : xx); off += u.length; xx += widths[k]; });
+    if (BIDI_RTL.test(units.join(''))) return hlAnimLineVis(ctx, hl, li, n, units, widths, offs, xs, us, sp, fs, yy, lh);
     const xAt = (i) => {
       let k = 0;
       while (k + 1 < units.length && offs[k + 1] <= i) k++;
@@ -4966,13 +5096,55 @@ window.FM = window.FM || {};
     hlGeom(us, xAt, sp, fs);
     return { H: hl.H, fs: fs, yy: yy, band: hlBand(li, n, yy, lh, fs), runs: hlRuns(us), on: us.filter(u => u.on), offs: offs, lens: units.map(u => u.length) };
   }
+  /* 1176 leftover: hlAnimLine for a line holding a right-to-left letter. Unit k is drawn as one fillText from its left edge xs[k], so
+     its own characters land where bidiSpanFn says for its text from there (a unit with no right-to-left letter: from the left, as
+     hlAnimLine's xAt measures it); a lit unit's span is the hull of its pieces in the units that hold it. Each run records the units
+     that reach into it as drawn (ks) and, of those, the leftmost and the rightmost (kL, kR), for hlEachRun and hlNear. */
+  function hlAnimLineVis(ctx, hl, li, n, units, widths, offs, xs, us, sp, fs, yy, lh) {
+    const inUnit = [];
+    const pieceOf = (k, p, q) => {
+      let f = inUnit[k];
+      if (!f) {
+        const u = units[k], x = xs[k], at = (j) => j <= 0 ? 0 : j >= u.length ? widths[k] : ctx.measureText(u.slice(0, j)).width;
+        f = inUnit[k] = bidiSpanFn(ctx, u, x) || ((p0, q0) => ({ a: x + at(p0), b: x + at(q0) }));
+      }
+      return f(p, q);
+    };
+    const spanOf = (i0, i1) => {
+      let a = Infinity, b = -Infinity;
+      units.forEach((u, k) => {
+        const u0 = offs[k], p = Math.max(i0, u0), q = Math.min(i1, u0 + u.length);
+        if (q <= p) return;
+        const s = pieceOf(k, p - u0, q - u0);
+        if (s.a < a) a = s.a;
+        if (s.b > b) b = s.b;
+      });
+      return a <= b ? { a: a, b: b } : { a: xs[0], b: xs[0] };
+    };
+    hlGeomVis(us, spanOf, sp, fs);
+    const runs = hlRunsVis(us);
+    /* A unit holds a run when its advance reaches into the run as drawn (by more than half a pixel, or a third of a run narrower than
+       that), so the spaces between two lit words of one run draw their part of its box, as the typing-order path's i0..i1 has them */
+    runs.forEach(r => {
+      r.ks = new Set();
+      const e = Math.min(0.5, (r.b - r.a) / 3);
+      let lo = Infinity, hi = -Infinity;
+      units.forEach((u, k) => {
+        if (!(xs[k] < r.b - e && xs[k] + widths[k] > r.a + e)) return;
+        r.ks.add(k);
+        if (xs[k] < lo) { lo = xs[k]; r.kL = k; }
+        if (xs[k] + widths[k] > hi) { hi = xs[k] + widths[k]; r.kR = k; }
+      });
+    });
+    return { H: hl.H, fs: fs, yy: yy, band: hlBand(li, n, yy, lh, fs), runs: runs, on: us.filter(u => u.on), offs: offs, lens: units.map(u => u.length) };
+  }
   // does animated unit k hold any character of a lit run? A unit that does not is drawn by the two lines it always was
   function hlNear(L, k) {
     const u0 = L.offs[k], u1 = u0 + L.lens[k];
-    return L.runs.some(r => u0 < r.i1 && u1 > r.i0);
+    return L.runs.some(r => r.ks ? r.ks.has(k) : (u0 < r.i1 && u1 > r.i0));
   }
   function hlAnimPiece(ctx, L, k, x, w, wDraw, paint) {
-    const o = { paint: paint, base: ctx.fillStyle, H: L.H, fs: L.fs, yy: L.yy, ox: x + wDraw / 2, oy: L.yy,
+    const o = { paint: paint, base: ctx.fillStyle, H: L.H, fs: L.fs, yy: L.yy, ox: x + wDraw / 2, oy: L.yy, k: k,
       span: [L.offs[k], L.offs[k] + L.lens[k]], slice: [x, x + w], runs: L.runs, on: L.on, band: L.band };
     hlBoxes(ctx, o); hlText(ctx, o); hlScaled(ctx, o); hlUnderline(ctx, o);
     ctx.fillStyle = o.base;
@@ -5167,11 +5339,17 @@ window.FM = window.FM || {};
     const aa = Math.abs(ac);
     const prevAlign = ctx.textAlign, prevBase = ctx.textBaseline;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    /* 1176 leftover: a right-to-left line goes along the arc in the order it reads (bidiGlyphOrder): slot k, from the arc's left end,
+       holds character ord[k], so the first letter typed of a Hebrew or Arabic line lands at the right end, as it is drawn flat. The
+       caret, the plan and the widths stay the character's own. No right-to-left letter: ord is null and slot k holds character k. */
+    const ord = bidiGlyphOrder(line, chars);
+    const mir = bidiMirrors(line, chars);   // 1176 leftover (rule L4): …and a bracket at an odd level is drawn as its partner; null: as typed
     let s = 0;
-    chars.forEach((ch, i) => {
+    chars.forEach((c0, k) => {
+      const i = ord ? ord[k] : k, ch = chars[i];
       const w = widths[i];
       if (i === gskip) { s += w + sp; return; }
-      const pc = gp ? gp[i] : ch;
+      const pc0 = gp ? gp[i] : ch, pc = (mir && mir[i] && pc0 === ch) ? mir[i] : pc0;   // 1176 leftover: a landed bracket at an odd level, mirrored (L4)
       if (gp && !/\S/.test(pc)) { s += w + sp; return; }   // hidden (or a space): it keeps its place on the arc, nothing is painted
       const a = ((s + w / 2) / tw - 0.5) * aa;
       ctx.save();
@@ -5363,6 +5541,7 @@ window.FM = window.FM || {};
       const off = pmSlot(d).plate; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }   // cleared below
       off.__fmRS = ps; off.__fmOX = OX; off.__fmOY = OY;   // the nested drawLayer renders through baseT
       off.__fmCamExt = !!ctx.canvas.__fmCamExt;           // anything nested in it still gets the frame (nestedPlate)
+      off.__fmTiltExt = ctx.canvas.__fmTiltExt || 0;      // …but a layer-relative effect in a tilt plate may follow it (1176 leftover, tiltFollowsFx)
       const octx = off.getContext('2d');
       baseT(octx); octx.clearRect(OX, OY, PWp, PHp);
       octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
@@ -5447,6 +5626,7 @@ window.FM = window.FM || {};
       const off = pmSlot(d).plate; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }
       off.__fmRS = ps; off.__fmOX = OX; off.__fmOY = OY;
       off.__fmCamExt = !!ctx.canvas.__fmCamExt;
+      off.__fmTiltExt = ctx.canvas.__fmTiltExt || 0;   // 1176 leftover, as in drawPenMaskLayer
       const octx = off.getContext('2d');
       baseT(octx); octx.clearRect(OX, OY, PWp, PHp);
       octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; octx.filter = 'none';
@@ -5582,6 +5762,7 @@ window.FM = window.FM || {};
       if (plate.width !== EW || plate.height !== EH) { plate.width = EW; plate.height = EH; }
       plate.__fmRS = ps; plate.__fmOX = RX - m; plate.__fmOY = RY - m;   // plate pixel (0,0) IS project (RX-m, RY-m) — (-m,-m) outside a camera
       plate.__fmCamExt = !!R;
+      plate.__fmTiltExt = R ? (ctx.canvas.__fmTiltExt || 0) : 0;   // 1176 leftover: in a tilt plate past the frame a layer-relative effect may follow it (tiltFollowsFx)
       const pctx = plate.getContext('2d');
       pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.clearRect(0, 0, EW, EH);
       baseT(pctx);
@@ -6354,6 +6535,59 @@ window.FM = window.FM || {};
     return { same: diff === 0, diff: diff, rect: rect, area: rect ? rect.w * rect.h : 0, plate: W * H, tFull: tFull, tCrop: tCrop };
   };
 
+  /* ═══ 1176 leftover (a) — WHICH EFFECT PASSES FOLLOW A TILT PLATE PAST THE FRAME ═══════════════════════════════════════════════
+   * Inside a plate marked __fmCamExt, nestedPlate hands an unwrapped pass the frame, because many kernels read their plate AS the
+   * frame (a Twirl turns about its centre, a Vignette fits its edges). Inside a camera's plate that stays exactly as it was. Inside a
+   * tilt plate grown past the frame it cut every effect at the frame and undid the growth (tiltFxPad's note). Such a plate is marked
+   * __fmTiltExt too (draw3DTiltLayer, buildGroupUnit), with WHY it grew:
+   *   2 — the layer's own box reaches past the frame, so there is real layer out there for a kernel to see;
+   *   1 — only what its style and effects throw does (tiltFxPad): the layer itself stops at or inside the frame.
+   * A kernel admitted to the cropped readback (CROP_FX, CROP_BOUNDED_FX) draws the same picture wherever its buffer starts and however
+   * big it is — that is what its admission proved, at five positions and on a 1080 × 1920 plate — so it may follow the tilt plate out
+   * (nestedPlate's `wrap`): at 2 every one does; at 1 only one that throws pixels OUTWARD (tiltOutFx: Drop Shadow, an Outline outside).
+   * At 1 an inward kernel (Glow Inward, Inner Blur, Bevel…) keeps the frame: on a layer whose edge sits on the frame border, a plate
+   * past it would show that kernel an edge the frame-sized plate hides, and the leant picture would jump at the first degree of tilt.
+   * A following pass runs on plates of its own (_pfPoolT, so the frame-sized ones are never resized between layers), marked with
+   * the same level so what is nested in it gets the same answer. Every other kernel keeps the frame and is cut there, as before;
+   * outside a tilt plate past the frame nothing here changes. */
+  /* 1176 leftover (blooms): two kernels sized by their PLATE follow it too, handed the frame's size so that they draw the picture the
+     frame-sized plate draws, carried on past its edge (TILT_FRAME_FX): Dreamy Bloom, whose box is a fortieth of the plate's shorter side
+     (its kernel reads p._fmFrameMin, which drawPixelEffect sets only on a following plate), and Halation, whose two radii are shares of
+     that side and whose mask is a quarter-size copy of the plate (halationGrid keeps the frame's grid). And the blooms that throw light
+     OUTWARD (TILT_BLOOM_FX, tiltBloomReach: Light Glow, Shadow Bloom and Dreamy Bloom with Glow past the edges On, and Halation) are
+     tiltOutFx, so they follow a plate that grew only for what the layer throws; Off, those three glows write only where the layer is,
+     and keep the frame there as every inward kernel does. */
+  const TILT_FRAME_FX = Object.assign(Object.create(null), { softglow: 1, halation: 1 });
+  function tiltFollowsFx(type) { return !!(CROP_FX[type] || CROP_BOUNDED_FX[type] || TILT_FRAME_FX[type]); }
+  /* How far, in project px, a bloom throws light outward past the layer, read as its kernel reads it; 0 when it throws none. Light
+     Glow (Highlight Bloom), Shadow Bloom and Dreamy Bloom only with Glow past the edges On and Amount above 0 (glow6 then writes the
+     halo into the empty pixels round the layer): a box blur of radius R run Smoothness times reaches exactly Smoothness × R, R the
+     Radius in px for the first two and for Dreamy Bloom a fortieth of the frame's shorter side × Radius % (at least 4 px at 100 %, 1
+     otherwise). Halation at any Amount above 0.001: its wide wash is a blur of σ = the frame's shorter side × Spread %, so 3σ, and
+     4 px more for its quarter-size mask. Each + 1 px for the layer's anti-aliased edge. P is the project ({ width, height }); without
+     it the frame-sized numbers are 0 and only whether the bloom reaches out at all is answered (tiltOutFx). */
+  const TILT_BLOOM_FX = Object.assign(Object.create(null), { lightglow: 1, darkglow: 1, softglow: 1, halation: 1 });
+  function tiltBloomReach(fx, t, P) {
+    const p = fx.params || {}, ty = fx.type;
+    const num = (k, d) => { const v = p[k] == null ? d : Number(FM.evalProp(p[k], t)); return isFinite(v) ? v : d; };
+    const m = P ? Math.max(0, Math.min(Number(P.width) || 0, Number(P.height) || 0)) : 0;
+    if (ty === 'halation') return num('amount', 0.8) > 0.001 ? 3 * m * Math.max(0.5, num('spread', 5)) / 100 + 4 + 1 : 0;
+    if (!TILT_BLOOM_FX[ty] || Math.round(Math.max(0, Math.min(1, num('outside', 0)))) !== 1 || !(num('amount', 0.6) > 0)) return 0;
+    const n = Math.round(Math.max(1, Math.min(3, num('passes', 1))));
+    let R;
+    if (ty === 'softglow') { const rad = num('radius', 100); R = rad === 100 ? Math.max(4, Math.round(m / 40)) : Math.max(1, Math.round(m / 40 * (rad / 100))); }
+    else R = Math.max(1, Math.round(num('radius', 6)));
+    return n * R + 1;
+  }
+  function tiltOutFx(fx, t) {
+    if (fx && TILT_BLOOM_FX[fx.type]) return tiltBloomReach(fx, t, null) > 0;   // 1176 leftover (blooms), above
+    if (!fx || (fx.type !== 'dropshadow' && fx.type !== 'stroke')) return false;
+    const p = fx.params || {};
+    // read exactly as the kernels read them: Shadow only fills the hole at an edge it touches from the plate's edge pixel, so it keeps the frame
+    if (fx.type === 'dropshadow') return (p.shadowonly == null ? 0 : (Math.round(FM.evalProp(p.shadowonly, t)) | 0)) !== 1;
+    return !(p.position == null ? 0 : (Math.round(FM.evalProp(p.position, t)) | 0));   // Outside, the stroke kernel's 0 (absent is 0 there too)
+  }
+  const _pfPoolT = [];
   function drawPixelEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -6361,19 +6595,26 @@ window.FM = window.FM || {};
     // PW/PH are project units (what everything DRAWS in); W/H are the plate's real pixels (what the
     // pixel fn indexes). They are the same number at scale 1.
     const PW = proj.width, PH = proj.height;
-    // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
-    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323). In a tilt plate past the frame, see tiltFollowsFx.
+    const _lv = (ctx.canvas.__fmCamExt && ctx.canvas.__fmTiltExt) || 0;
+    const _tf = _lv > 0 && tiltFollowsFx(fx.type) && (_lv >= 2 || tiltOutFx(fx, t));
+    const _np = nestedPlate(ctx, proj, _tf), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
+    // 1176 leftover (blooms): a kernel sized by its plate that follows one (TILT_FRAME_FX) is handed the frame's shorter side, in plate px
+    const _fm = (_tf && TILT_FRAME_FX[fx.type]) ? Math.min(Math.max(1, Math.round(PW * ps)), Math.max(1, Math.round(PH * ps))) : 0;
+    const _fpars = q => _fm ? Object.assign({}, q, { _fmFrameMin: _fm }) : q;
     const d = _pfDepth++;
     try {
-      if (!_pfPool[d]) _pfPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
-      const pA = _pfPool[d].A, pB = _pfPool[d].B;
+      const _pool = _tf ? _pfPoolT : _pfPool;
+      if (!_pool[d]) _pool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+      const pA = _pool[d].A, pB = _pool[d].B;
       // Only resize when the comp dims actually change — reassigning width/height every frame reallocates
       // the backing buffer (full-res, per effect, per frame). A is cleared below; B is fully overwritten
       // by putImageData, so skipping the realloc keeps them correct. (Guard pattern as at :1512,:1686.)
       if (pA.width !== W || pA.height !== H) { pA.width = W; pA.height = H; }
       if (pB.width !== W || pB.height !== H) { pB.width = W; pB.height = H; }
       pA.__fmRS = ps; pA.__fmOX = OX; pA.__fmOY = OY;   // the nested drawLayer renders through baseT, and a nested effect inherits this scale
+      if (_tf) { pA.__fmCamExt = true; pA.__fmTiltExt = _lv; }   // 1176 leftover (a): only the following plates (_pfPoolT) are ever marked
       const actx = pA.getContext('2d');
       baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -6384,7 +6625,7 @@ window.FM = window.FM || {};
       // at its offset over an untouched copy of the plate. Bounded kernels keep their own path (they need the full plate
       // and a box). An empty plate skips the kernel exactly as the bounded path does.
       if ((!bounded && cropWanted(fx.type)) || (bounded && cropBoundedWanted(fx.type))) {
-        const pars = pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn);
+        const pars = _fpars(pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn));
         const rect = cropRectOf(pA, W, H, cropMarginFor(fx.type, fx.params || {}, t, ps));
         if (bounded) FM._cropStats.cropBounded++; else FM._cropStats.crops++;
         FM._cropStats.lastRect = rect;
@@ -6425,7 +6666,7 @@ window.FM = window.FM || {};
          keeps HISTORY per effect — Deflicker remembers each instance's brightness from frame to frame. Without it that kernel has
          nothing to remember on and returns at its first line on every frame: a silent no-op. Every other kernel ignores it.
          Auto Grade (#966 B51, the same pile line) keeps its smoothing history per effect on this argument too. */
-      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer, scene, fx);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
+      if (!bounded || bb) fn(img.data, W, H, _fpars(pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn)), t, ps, bb, layer, scene, fx);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);
@@ -11944,7 +12185,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Soft Glow: wide low-threshold bloom — bright-pass, separable box blur, screen-composite.
     // Same skeleton as lightglow but the pass threshold is 90 (not 153) and the radius scales with
     // frame size, so mid-tones haze softly instead of only hot highlights blooming.
-    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; /* #482 polish 6.2 — see lightglow */ var sg6=glow6Opts(p,t,true); if(sg6){ var sgRad6=p.radius==null?100:FM.evalProp(p.radius,t); return glow6(d,W,H,1,sgA,sgThrV,(sgRad6===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad6/100)))),sgWh?null:sgC,sg6); } var sgN=W*H, sgScratch=glowScratch(sgN), sgB=sgScratch[0], sgT=sgScratch[1], sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
+    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; /* #482 polish 6.2 — see lightglow */ var sg6=glow6Opts(p,t,true); if(sg6){ var sgRad6=p.radius==null?100:FM.evalProp(p.radius,t); return glow6(d,W,H,1,sgA,sgThrV,(sgRad6===100?Math.max(4,Math.round((p._fmFrameMin||Math.min(W,H))/40)):Math.max(1,Math.round((p._fmFrameMin||Math.min(W,H))/40*(sgRad6/100)))),sgWh?null:sgC,sg6); } var sgN=W*H, sgScratch=glowScratch(sgN), sgB=sgScratch[0], sgT=sgScratch[1], sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round((p._fmFrameMin||Math.min(W,H))/40)):Math.max(1,Math.round((p._fmFrameMin||Math.min(W,H))/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
     // Replace Color: pixels whose hue sits within the tolerance window of the From colour get their hue
     // shifted to the To colour (sat/val kept), with a soft falloff to the window edge. Near-greys are
     // skipped — they carry no meaningful hue to replace.
@@ -14352,19 +14593,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return cur;
   }
 
+  /* 1176 leftover (a): the CSS chain has no geometry of its own — where ctx.filter works it is drawn straight onto whatever plate the
+     layer is drawn on — so in a tilt plate past the frame this pass follows it out too (tiltFollowsFx), on plates of its own. Its
+     blur clamps at the plate's edge, though (the GPU blur does; ctx.filter's does not), so with a blur in the chain it follows only a
+     plate grown for the layer's own box (level 2), as an inward kernel does. */
+  const _wpPoolT = [];
   function drawCssFxOnGPU(ctx, layer, t, scene, ops) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return true;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
-    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    const _lv = (ctx.canvas.__fmCamExt && ctx.canvas.__fmTiltExt) || 0;
+    const _tf = _lv >= 2 || (_lv > 0 && !(ops && ops.blurs && ops.blurs.length));
+    const _np = nestedPlate(ctx, proj, _tf), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     if (!(W > 0) || !(H > 0)) return false;
     const d = _wpDepth++;
     try {
-      if (!_wpPool[d]) _wpPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
-      const wA = _wpPool[d].A;
+      const _pool = _tf ? _wpPoolT : _wpPool;
+      if (!_pool[d]) _pool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+      const wA = _pool[d].A;
       if (wA.width !== W || wA.height !== H) { wA.width = W; wA.height = H; }
       wA.__fmRS = ps; wA.__fmOX = OX; wA.__fmOY = OY;
+      if (_tf) { wA.__fmCamExt = true; wA.__fmTiltExt = _lv; }
       const actx = wA.getContext('2d');
       baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
       actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -14386,7 +14636,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       /* ⚠️ EACH GPU PASS WRITES THE SAME CANVAS, so a chain has to be copied out between passes or the
        * second would read what it is writing. `wB` is the plate pool's other half, already the right
        * size, already allocated — the same canvas drawWarpEffect uses for its output. */
-      const outCv = runCssOpsOnGPU(wA, W, H, ops, ps, _wpPool[d]);
+      const outCv = runCssOpsOnGPU(wA, W, H, ops, ps, _pool[d]);
       if (!outCv || outCv === wA) return false;                // nothing was applied — let the old path run
       ctx.save();
       baseT(ctx);
@@ -17033,18 +17283,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
              expanded: _expPool.filter(Boolean).map(at) };
   };
 
+  const _cfPoolT = [];   // 1176 leftover (blooms): the plates of a canvas pass that follows a tilt plate past the frame
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = proj.width, PH = proj.height;   // see plateScale — 1 for export/1:1, smaller for a reduced preview
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
-    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    /* 1176 leftover (blooms): …but in a tilt plate past the frame Halation follows it out as drawPixelEffect's kernels do (TILT_FRAME_FX,
+       tiltFollowsFx), on plates of its own (_cfPoolT) marked with the same level; every other canvas pass keeps the frame, as before. */
+    const _lv = (ctx.canvas.__fmCamExt && ctx.canvas.__fmTiltExt) || 0;
+    const _tf = _lv > 0 && !!TILT_FRAME_FX[fx.type] && (_lv >= 2 || tiltOutFx(fx, t));
+    const _np = nestedPlate(ctx, proj, _tf), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const _d = _cfDepth++;
     try {
-    if (!_cfPool[_d]) _cfPool[_d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
-    const _cfA = _cfPool[_d].A, _cfB = _cfPool[_d].B;
+    const _cfP = _tf ? _cfPoolT : _cfPool;
+    if (!_cfP[_d]) _cfP[_d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
+    const _cfA = _cfP[_d].A, _cfB = _cfP[_d].B;
     // resize only on change — assigning .width even to the same value frees+reallocates the ~8MB
     // backing store, and this runs per canvas-effect per FRAME (wiggle/3D/tiles… = constant churn)
     if (_cfA.width !== W || _cfA.height !== H) { _cfA.width = W; _cfA.height = H; }
@@ -17053,6 +17309,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // canvas-effect fn works in the plate's own pixels (bbox, tile steps, offsets), so B must stay
     // an identity surface or the fn's coordinates would be scaled a second time.
     _cfA.__fmRS = ps; _cfA.__fmOX = OX; _cfA.__fmOY = OY;
+    if (_tf) { _cfA.__fmCamExt = true; _cfA.__fmTiltExt = _lv; }   // 1176 leftover (blooms): only the following plates (_cfPoolT) are ever marked
     const actx = _fx2d(_cfA);   // tiles/roundcorners read this whole canvas every frame
     baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -17225,34 +17482,162 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const qx = M.a * lx + M.c * ly + M.e, qy = M.b * lx + M.d * ly + M.f;
       x0 = Math.min(x0, qx); x1 = Math.max(x1, qx); y0 = Math.min(y0, qy); y1 = Math.max(y1, qy);
     }
-    return (isFinite(x0) && isFinite(y0) && isFinite(x1) && isFinite(y1)) ? { x0: x0, y0: y0, x1: x1, y1: y1 } : null;
+    // k: the CTM's larger axis scale, for what is drawn in the layer's own units (tiltFxPad's Outline)
+    return (isFinite(x0) && isFinite(y0) && isFinite(x1) && isFinite(y1)) ? { x0: x0, y0: y0, x1: x1, y1: y1, k: Math.max(Math.hypot(M.a, M.b), Math.hypot(M.c, M.d)) } : null;
   }
+  /* ═══ 1176 leftover — THE TILT PLATE ALSO REACHES AS FAR AS THE LAYER'S SHADOW, GLOW, OUTLINE AND EFFECTS ═══════════════════════
+   * What #3b left cut (its builder's gaps a and b). Worked out from renderMesh's projection, not measured, for a red 100 px square
+   * hinged on its left edge at x 280 of a 320 × 240 frame and leant 70° about Y (pivot 280, R 50: flat x 280 + 50u lands
+   * 58.24 u / (3.405 + u) px from the hinge, so its far edge at 301.5 and a point 60 px past it at 308.2):
+   *   (a) The grown plate is marked __fmCamExt, and nestedPlate hands every unwrapped pass inside such a plate the FRAME. So with a
+   *       pixel effect on the layer its pass drew it on a 320 × 240 plate inside the 396 × 240 tilt plate: with a Drop Shadow
+   *       (Distance 60, Angle 0) the card was cut at 319 again and leant to 280..291 (about 1000 of its 1756 red px: #3b's fault,
+   *       back), and its shadow, at 340..440, fell wholly off that plate, so none of its 382 leant px (301.5..308.2) drew.
+   *   (b) The plate grew to the layer's BOX plus 16 px, so what its own style throws further was cut there: an Outline & Shadows
+   *       Shadow 60 px to the right kept 340..396 and leant to 301.5..303.6 (126 of 382 px); a Glow of Radius 30 ended in a cut
+   *       where it was still about 70 of 255; and a layer wholly inside the frame got no growth at all, so whatever its shadow
+   *       threw past the frame edge was cut AT the frame and stayed cut when the lean swung it into view.
+   * tiltFxPad answers (b): how far past its box, per side and in project px, the layer's own style and effects throw its pixels
+   * OUTWARD. Only what is drawn on the plate the tilt leans counts (a pass that keeps the frame is cut there whatever the plate does),
+   * and every number is one this file already uses:
+   *   · Shadow: applyShadow's offset moves the copy, and its Blur reaches 3σ with σ taken as the whole Blur (the canvas spec's is
+   *     Blur / 2) — the 3σ border drawBlurredNoFilter pads a blur's working copy with.
+   *   · Glow and the CSS Gaussian Blur: 3σ a pass, σ = Radius × GLOW_SIGMA (measured against Chrome), Bloom's passes stacked.
+   *   · Outline on text or a shape: stroked on its own outline at twice its Size (Outside), so it reaches its Size past it, in the
+   *     layer's own units (× k, its scale).
+   *   · Drop Shadow: its kernel's own bound (#692, SKIP WHAT CANNOT HOLD A SHADOW): the box moved by (cos, sin)(Angle) × Distance
+   *     and grown by Smoothness × (Softness + 1) + 1 (the Spread's buffer), + 1 for the plate's rounding.
+   *   · the Outline effect in its Outside position (a clip's Outline, a group's Border, or one added from Effects): cropMarginFor,
+   *     the reach the cropped readback pads that kernel's buffer by, admitted against it at every setting's maximum
+   *     (tests/_692crop.html). Drop Shadow (but for Shadow only) and this are tiltOutFx: the kernels that follow a plate grown only
+   *     for what the layer throws (tiltFollowsFx).
+   *   · A Filter's own effects count as if they stood in its place.
+   *   · (a later 1176 leftover) The blooms that throw light outward: Light Glow, Shadow Bloom and Dreamy Bloom with Glow past the
+   *     edges On, and Halation, by tiltBloomReach (each kernel's own Radius, Smoothness or Spread; the last two in shares of the
+   *     frame P, the project). They are tiltOutFx too; Dreamy Bloom and Halation follow the plate with the frame's size handed to
+   *     them (TILT_FRAME_FX). Glow past the edges Off, those three write only where the layer is: inward, and not counted.
+   * Nothing else counts: a kernel that works inward (Glow Inward, Inner Blur, Bevel) throws nothing past the layer, and the other
+   * kernels that spread outward still end at the plate's edge, or at the frame when the plate grew only for something else (the
+   * next gap, if it is ever hit). Summed per side (an outline round a shadow reaches both).
+   * null when nothing reaches past the box: the plate is then exactly #3b's, and a layer inside the frame gets the very plate it
+   * always did. */
+  function tiltFxPad(l, t, k, P) {
+    let pl = 0, pt = 0, pr = 0, pb = 0;
+    const num = v => (typeof v === 'number' && isFinite(v)) ? v : 0;
+    const all = q => { if (q > 0) { pl += q; pt += q; pr += q; pb += q; } };
+    // a copy moved by (ox, oy) and spread by g: how far it reaches past the box on each side
+    const moved = (ox, oy, g) => { pl += Math.max(0, g - ox); pr += Math.max(0, g + ox); pt += Math.max(0, g - oy); pb += Math.max(0, g + oy); };
+    const sh = l.shadow;
+    if (sh && sh.enabled && (sh.alpha == null || num(FM.evalProp(sh.alpha, t)) > 0)) moved(num(FM.evalProp(sh.dx, t)), num(FM.evalProp(sh.dy, t)), 3 * Math.max(0, num(FM.evalProp(sh.blur, t))));
+    const stk = l.stroke;
+    if (stk && stk.enabled) {
+      const w = Math.max(0, num(FM.evalProp(stk.width, t)));
+      if (l.type === 'text' || l.type === 'shape') all(w * (k > 0 ? k : 1));
+      else if (l.type === 'group' && w > 0) all(cropMarginFor('stroke', { width: w }, t, 1));
+    }
+    const one = (e, inner) => {
+      if (!e || e.enabled === false) return;
+      const p = e.params || {}, ty = e.type;
+      if (ty === 'glow') {
+        const r = fparam(p, 'radius', 12, t), n = Math.max(1, Math.min(4, Math.round(num(p.passes == null ? 1 : FM.evalProp(p.passes, t)))));
+        all(3 * (isFinite(r) ? Math.max(0, r) : 12) * GLOW_SIGMA * n);
+      } else if (ty === 'blur') {
+        if (!blurPlate(e)) { const r = fparam(p, 'radius', 6, t); all(3 * (isFinite(r) ? Math.max(0, r) : 6) * GLOW_SIGMA); }
+      } else if (ty === 'dropshadow') {
+        const dd = Math.max(0, num(fparam(p, 'distance', 18, t))), a = num(fparam(p, 'angle', 135, t)) * Math.PI / 180;
+        const s = Math.max(0, Math.round(num(fparam(p, 'softness', 6, t))));
+        const n = Math.max(1, Math.min(3, Math.round(num(p.smooth == null ? 1 : FM.evalProp(p.smooth, t)))));
+        moved(Math.cos(a) * dd, Math.sin(a) * dd, n * (s + 1) + 2);
+      } else if (ty === 'stroke') {
+        if (tiltOutFx(e, t)) all(cropMarginFor('stroke', p, t, 1));
+      } else if (TILT_BLOOM_FX[ty]) {
+        all(tiltBloomReach(e, t, P));   // 0 when it throws nothing past the layer (Glow past the edges Off)
+      } else if (!inner && ty === FM.FX_CONTAINER && Array.isArray(e.effects)) {
+        e.effects.forEach(c => one(c, true));
+      }
+    };
+    const list = l._cueFx ? (l.effects || []) : effectiveFx(l, t);
+    for (let i = 0; i < list.length; i++) one(list[i], false);
+    return (pl + pt + pr + pb > 0) ? { l: pl, t: pt, r: pr, b: pb } : null;
+  }
+  // Two pads (tiltFxPad's shape, either may be null) added side by side
+  function padSum(a, b) { return !a ? b : !b ? a : { l: a.l + b.l, t: a.t + b.t, r: a.r + b.r, b: a.b + b.b }; }
   /* A group unit's members as far as they reach (each drawn one's tiltLayerReach, in project px), or null: none, or one copies the
-     backdrop (Copy / Magnify Background), whose backdrop is the frame's. */
+     backdrop (Copy / Magnify Background), whose backdrop is the frame's. 1176 leftover: `.pad`, when any member's style or effects
+     carry it past its box (tiltFxPad), is how far the union of those padded boxes reaches past the union of the boxes — kept apart
+     so the margin is still the boxes' own (reachMargin). */
   function unitReach(u, t, scene) {
-    let b = null, keep = false;
+    let b = null, q = null, keep = false;
     scene.layers.forEach(L => {
       if (keep || !u.memberIds.has(L.id) || L.type === 'group' || L.type === 'camera' || L.type === 'adjustment' || L.type === 'null') return;
       if (!FM.isLayerVisibleAt(L, t)) return;
       if (FM.hasCopyBg && FM.hasCopyBg(L)) { keep = true; return; }
       const r = tiltLayerReach(L, t, scene);
-      if (r) b = b ? { x0: Math.min(b.x0, r.x0), y0: Math.min(b.y0, r.y0), x1: Math.max(b.x1, r.x1), y1: Math.max(b.y1, r.y1) } : r;
+      if (r) {
+        b = b ? { x0: Math.min(b.x0, r.x0), y0: Math.min(b.y0, r.y0), x1: Math.max(b.x1, r.x1), y1: Math.max(b.y1, r.y1) } : r;
+        const d = tiltFxPad(L, t, r.k, scene.project), e = d ? { x0: r.x0 - d.l, y0: r.y0 - d.t, x1: r.x1 + d.r, y1: r.y1 + d.b } : r;
+        q = q ? { x0: Math.min(q.x0, e.x0), y0: Math.min(q.y0, e.y0), x1: Math.max(q.x1, e.x1), y1: Math.max(q.y1, e.y1) } : e;
+      }
     });
-    return keep ? null : b;
+    if (keep) return null;
+    if (b && q && (q.x0 < b.x0 || q.y0 < b.y0 || q.x1 > b.x1 || q.y1 > b.y1)) b.pad = { l: b.x0 - q.x0, t: b.y0 - q.y0, r: q.x1 - b.x1, b: q.y1 - b.y1 };
+    return b;
   }
   // The margin a reach gets: 16 px, or a twentieth of its longer side
   function reachMargin(b) { return Math.max(16, 0.05 * Math.max(b.x1 - b.x0, b.y1 - b.y0)); }
+  /* ═══ 1176 leftover (c) — WHERE THE GROWTH STOPS, AND WHAT IS SAID WHEN IT DOES ═══════════════════════════════════════════════
+   * A plate past the frame is a real allocation, every frame: the tilt holds two at its size (A, B) and reads one back whole
+   * (getImageData), and an effect that follows it (tiltFollowsFx) holds two more. So the growth keeps two ceilings:
+   *   · 0.6 of the frame past each side — Squish's cost ceiling, the one this file already gives a plate past the frame: the plate
+   *     is then at most (1 + 2 × 0.6)² = 4.84 × the frame. For a 1080 × 1920 export that is 2376 × 4224 = 10.0 MP, 40 MB a buffer.
+   *   · TILT_PLATE_MAX_PX plate pixels in all, 4096 × 4096 = 16.8 MP: the largest canvas WebKit allocates on iOS. Past it the canvas
+   *     cannot be drawn at all and the whole layer would vanish, which is worse than any cut — and the per-side ceiling alone does not
+   *     keep under it: 4.84 × a 1440 × 2560 frame is 17.8 MP, × a 2160 × 3840 one 40.1 MP. Over it, the growth on every side is
+   *     scaled down by one factor until the plate fits; the frame's part is never given up.
+   * (Arithmetic on sizes, not timings: nothing here was run.) At either ceiling what lies further is cut at the plate's edge, and the
+   * cut is graceful: the pivot, R and the quad come from the layer's own box and the bbox where it really is (tiltPivot), so nothing
+   * that is kept moves — the far part simply ends there, as the off-frame part ended at the frame before #3b. It is counted in
+   * FM._tiltPlateStats (grown: plates grown, capped: plates a ceiling cut short, last: { by: 'side' | 'area', want, got — plate px
+   * left, top, right, bottom — W, H }). Nothing goes to the console: this runs every frame, and nothing in this file logs from the
+   * render loop. */
+  const TILT_PLATE_MAX_PX = 4096 * 4096;
+  const _tiltStats = { grown: 0, capped: 0, last: null };
+  FM._tiltPlateStats = _tiltStats;
+  // Does `box` itself (no pad, no margin) reach past the plate `np`? tiltPlateRegion's own test, with its half-pixel slack.
+  function tiltBoxPast(box, np) {
+    const e = 0.5 / np.ps;
+    return !(box.x0 >= np.OX - e && box.y0 >= np.OY - e && box.x1 <= np.OX + np.PWp + e && box.y1 <= np.OY + np.PHp + e);
+  }
   /* The plate `np` (nestedPlate's shape: ps, OX, OY, W, H, PWp, PHp) grown to take in `box` (project px) and `m` round it, or null
      when the box is already inside np (half a plate pixel's slack) or nothing would be added. Grown by whole plate pixels on each
-     side, at most 0.6 of the frame (PW × PH) past each. */
-  function tiltPlateRegion(box, m, np, PW, PH) {
+     side, at most 0.6 of the frame (PW × PH) past each. 1176 leftover: `pad` (tiltFxPad's shape, optional) widens the box by what
+     the layer's style and effects carry past it, on each side, before either test; absent, every number is #3b's. */
+  function tiltPlateRegion(box, m, np, PW, PH, pad) {
     if (!box || !np || !(np.ps > 0) || ![box.x0, box.y0, box.x1, box.y1, m, np.OX, np.OY, np.PWp, np.PHp].every(isFinite)) return null;
+    const q = (pad && [pad.l, pad.t, pad.r, pad.b].every(isFinite)) ? pad : null;
+    const x0 = q ? box.x0 - q.l : box.x0, y0 = q ? box.y0 - q.t : box.y0, x1 = q ? box.x1 + q.r : box.x1, y1 = q ? box.y1 + q.b : box.y1;
     const ps = np.ps, e = 0.5 / ps, ex = np.OX + np.PWp, ey = np.OY + np.PHp;
-    if (box.x0 >= np.OX - e && box.y0 >= np.OY - e && box.x1 <= ex + e && box.y1 <= ey + e) return null;
+    if (x0 >= np.OX - e && y0 >= np.OY - e && x1 <= ex + e && y1 <= ey + e) return null;
     const px = (v, c) => Math.max(0, Math.ceil(Math.max(0, Math.min(c, v)) * ps - 1e-6));
-    const L = px(np.OX - (box.x0 - m), 0.6 * PW), T = px(np.OY - (box.y0 - m), 0.6 * PH);
-    const R = px(box.x1 + m - ex, 0.6 * PW), B = px(box.y1 + m - ey, 0.6 * PH);
+    const vL = np.OX - (x0 - m), vT = np.OY - (y0 - m), vR = x1 + m - ex, vB = y1 + m - ey;
+    let L = px(vL, 0.6 * PW), T = px(vT, 0.6 * PH);
+    let R = px(vR, 0.6 * PW), B = px(vB, 0.6 * PH);
     if (!(L + T + R + B > 0)) return null;
+    // (c): what each side asked for, uncapped, so a cut can be counted
+    const want = [vL, vT, vR, vB].map(v => Math.max(0, Math.ceil(Math.max(0, v) * ps - 1e-6)));
+    let by = (L < want[0] || T < want[1] || R < want[2] || B < want[3]) ? 'side' : '';
+    if ((np.W + L + R) * (np.H + T + B) > TILT_PLATE_MAX_PX) {
+      // (W + k·gx)(H + k·gy) ≤ max: the larger root of a k² + b k + c = 0 (c < 0 unless the frame alone is over it: then no growth)
+      const gx = L + R, gy = T + B, a = gx * gy, b = np.W * gy + np.H * gx, c = np.W * np.H - TILT_PLATE_MAX_PX;
+      let k = 0;
+      if (c < 0) k = a > 0 ? (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a) : -c / b;
+      k = isFinite(k) ? Math.max(0, Math.min(1, k)) : 0;
+      L = Math.floor(L * k); T = Math.floor(T * k); R = Math.floor(R * k); B = Math.floor(B * k);
+      by = 'area';
+    }
+    if (by) { _tiltStats.capped++; _tiltStats.last = { by: by, want: want, got: [L, T, R, B], W: np.W + L + R, H: np.H + T + B }; }
+    if (!(L + T + R + B > 0)) return null;
+    _tiltStats.grown++;
     const W = np.W + L + R, H = np.H + T + B;
     return { ps: ps, OX: np.OX - L / ps, OY: np.OY - T / ps, W: W, H: H, PWp: W / ps, PHp: H / ps };
   }
@@ -17272,14 +17657,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _np0 = nestedPlate(ctx, proj);
     /* bughunt4 #3b: …and as far as the layer reaches, when that is further (tiltPlateRegion). A group's flattened unit says how far
        its own plate reaches (_canvasX.., set when that plate is not the frame); a Copy / Magnify Background layer keeps the frame. */
-    let _rch = null, _rm = 0;
+    /* 1176 leftover: …and as far as its own Shadow, Glow, Outline and effects carry it (tiltFxPad). A group's proxy has none to add
+       here: buildGroupUnit has already grown its unit for the members' and the group's own (unitReach's pad). */
+    let _rch = null, _rm = 0, _pad = null;
     if (layer.type === '_flat') {
       if (typeof layer._canvasX === 'number' && typeof layer._canvasY === 'number') _rch = { x0: layer._canvasX, y0: layer._canvasY, x1: layer._canvasX + (layer._canvasW || 0), y1: layer._canvasY + (layer._canvasH || 0) };
     } else if (!(FM.hasCopyBg && FM.hasCopyBg(layer))) {
       _rch = tiltLayerReach(layer, t, scene);
-      if (_rch) _rm = reachMargin(_rch);
+      if (_rch) { _rm = reachMargin(_rch); _pad = tiltFxPad(layer, t, _rch.k, proj); }
     }
-    const _ext = _rch ? tiltPlateRegion(_rch, _rm, _np0, PW, PH) : null;
+    const _ext = _rch ? tiltPlateRegion(_rch, _rm, _np0, PW, PH, _pad) : null;
     const _np = _ext || _np0, ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _t3Depth++;
@@ -17290,6 +17677,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (_t3B.width !== W || _t3B.height !== H) { _t3B.width = W; _t3B.height = H; }
     _t3A.__fmRS = ps; _t3A.__fmOX = OX; _t3A.__fmOY = OY;   // the nested drawLayer renders through baseT
     _t3A.__fmCamExt = !!_ext;   /* bughunt4 #3b: a grown plate is marked, so a pass nested in it with geometry of its own keeps the frame (nestedPlate) */
+    /* 1176 leftover (a): …and a layer-relative kernel may follow it out (tiltFollowsFx): level 2 when the layer's own box reaches past
+       the frame, 1 when only what it throws does. A group's proxy takes its unit's level (the unit is this plate's box): 1 when the
+       unit grew only for what its members throw, else 2. */
+    _t3A.__fmTiltExt = !_ext ? 0 : layer.type === '_flat' ? ((layer._canvas && layer._canvas.__fmTiltExt === 1) ? 1 : 2) : (tiltBoxPast(_rch, _np0) ? 2 : 1);
     const actx = _t3A.getContext('2d');
     baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
@@ -18012,6 +18403,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     c.imageSmoothingEnabled = true;
     return _edgePad;
   }
+  /* 1176 leftover (blooms): Halation's quarter-size mask — its size (qw, qh), where the plate A is drawn into it (dx, dy, dw, dh), where
+     it is laid back over the plate (ux, uy, uw, uh) — and the shorter side its radii are shares of (minD). On any plate but one that
+     follows a tilt plate past the frame (A.__fmTiltExt, set only by drawCanvasEffect's _cfPoolT) these are the plate's own grid at 0, 0
+     and its own side: the very numbers the kernel always used. On a following plate, which is bigger than the frame and may start left
+     of it or above it, they are the FRAME's: a mask cell is the frame plate's (sx × sy plate px, about 4), its cells sit where the
+     frame plate's sit (the plate's corner, A.__fmOX × ps plate px from the frame's, lands fx cells into the first one), and minD is the
+     frame's shorter side, so the bloom is the one the frame-sized plate draws, carried on past its edge. */
+  function halationGrid(A, W, H, ps, scene) {
+    const P = scene && scene.project, s = ps > 0 ? ps : 1;
+    if (!(A && A.__fmTiltExt > 0) || !P || !(P.width > 0) || !(P.height > 0)) {
+      const qw = Math.max(1, Math.round(W / 4)), qh = Math.max(1, Math.round(H / 4));
+      return { qw: qw, qh: qh, dx: 0, dy: 0, dw: qw, dh: qh, ux: 0, uy: 0, uw: W, uh: H, minD: Math.min(W, H) };
+    }
+    const Wf = Math.max(1, Math.round(P.width * s)), Hf = Math.max(1, Math.round(P.height * s));
+    const sx = Wf / Math.max(1, Math.round(Wf / 4)), sy = Hf / Math.max(1, Math.round(Hf / 4));
+    const ox = (A.__fmOX || 0) * s / sx, oy = (A.__fmOY || 0) * s / sy, fx = ox - Math.floor(ox), fy = oy - Math.floor(oy);
+    const qw = Math.max(1, Math.ceil(W / sx + fx - 1e-6)), qh = Math.max(1, Math.ceil(H / sy + fy - 1e-6));
+    return { qw: qw, qh: qh, dx: fx, dy: fy, dw: W / sx, dh: H / sy, ux: -fx * sx, uy: -fy * sy, uw: qw * sx, uh: qh * sy, minD: Math.min(Wf, Hf) };
+  }
 
   const CANVAS_FX = {
     /* ═══ VIGNETTE — ONE RENDERER FOR EVERY LAYER (#986 C8, hunt) ═══════════════════════════════════════════════════
@@ -18129,7 +18539,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      *
      * Only the highlight MASK is per-pixel, and it is built at quarter resolution — 130k pixels at
      * 1080p instead of 2M — then both blurs and the upscale ride the compositor's own filter. */
-    halation: function (A, B, W, H, bb, p, t) {
+    halation: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {   // ps, scene: halationGrid (1176 leftover, blooms)
       /* DEFAULTS 0.5 / 1.8 SINCE v15.81 (queue 482, the by-eye pass). At 0.68 with a 2.4 knee the mask took only
        * near-white pixels, and on a photograph almost none qualify: measured on four fx-art photographs at 150px the
        * effect moved the picture by 0.2–1.8 at its defaults and under 2.6 at its MAXIMUM — invisible, and the amount
@@ -18144,14 +18554,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const spread = Math.max(0.5, p.spread == null ? 5 : FM.evalProp(p.spread, t));
       const knee = Math.max(1, p.knee == null ? 2.4 : FM.evalProp(p.knee, t));
       const rgb = hexToRGB(p.color || '#ff3a14');
-      const qw = Math.max(1, Math.round(W / 4)), qh = Math.max(1, Math.round(H / 4));
+      // the mask's grid and the side the radii are shares of: the plate's own, or on a plate following a tilt past the frame the frame's (halationGrid)
+      const g = halationGrid(A, W, H, ps, scene), qw = g.qw, qh = g.qh;
       if (!_halC) _halC = document.createElement('canvas');
       if (_halC.width !== qw || _halC.height !== qh) { _halC.width = qw; _halC.height = qh; }
       const hc = _halC.getContext('2d', { willReadFrequently: true });
       hc.setTransform(1, 0, 0, 1, 0, 0);
       hc.globalAlpha = 1; hc.globalCompositeOperation = 'source-over'; hc.filter = 'none';
       hc.clearRect(0, 0, qw, qh);
-      hc.drawImage(A, 0, 0, qw, qh);
+      hc.drawImage(A, g.dx, g.dy, g.dw, g.dh);
       let img;
       try { img = hc.getImageData(0, 0, qw, qh); } catch (e) { return; }   // tainted source — leave the plate alone
       const d = img.data, span = 1 - thr;
@@ -18167,7 +18578,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       hc.putImageData(img, 0, 0);
       // Radii are in PLATE pixels, and W/H already carry the preview's render scale, so a reduced
       // preview and a full export bleed by the same fraction of the frame without a ps term.
-      const minD = Math.min(W, H);
+      const minD = g.minD;   // Math.min(W, H) but on a plate following a tilt past the frame (halationGrid)
       const rWide = Math.max(0.5, minD * spread / 100);
       const rCore = Math.max(0.4, rWide * (0.06 + 0.24 * (1 - tight)));
       B.save();
@@ -18175,14 +18586,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.globalAlpha = Math.min(1, amount * 0.65);
       if (ctxFilterOK()) {
         B.filter = 'blur(' + rCore.toFixed(2) + 'px)';
-        B.drawImage(_halC, 0, 0, W, H);
+        B.drawImage(_halC, g.ux, g.uy, g.uw, g.uh);
         B.globalAlpha = Math.min(1, amount * 0.35);
         B.filter = 'blur(' + rWide.toFixed(2) + 'px)';
-        B.drawImage(_halC, 0, 0, W, H);
+        B.drawImage(_halC, g.ux, g.uy, g.uw, g.uh);
       } else {                                  // #986 C24: no ctx.filter — the bloom was a sharp red copy
-        drawBlurredNoFilter(B, _halC, +rCore.toFixed(2), 0, 0, W, H);
+        drawBlurredNoFilter(B, _halC, +rCore.toFixed(2), g.ux, g.uy, g.uw, g.uh);
         B.globalAlpha = Math.min(1, amount * 0.35);
-        drawBlurredNoFilter(B, _halC, +rWide.toFixed(2), 0, 0, W, H);
+        drawBlurredNoFilter(B, _halC, +rWide.toFixed(2), g.ux, g.uy, g.uw, g.uh);
       }
       B.restore();
     },
@@ -20395,6 +20806,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (_fogA.width !== FW || _fogA.height !== FH) { _fogA.width = FW; _fogA.height = FH; }
     if (ext) { _fogA.__fmRS = ctx.canvas.__fmRS || 1; _fogA.__fmOX = ctx.canvas.__fmOX || 0; _fogA.__fmOY = ctx.canvas.__fmOY || 0; _fogA.__fmCamExt = true; }
     else { _fogA.__fmRS = undefined; _fogA.__fmOX = undefined; _fogA.__fmOY = undefined; _fogA.__fmCamExt = false; }   // the unstamped frame-sized plate it always was
+    _fogA.__fmTiltExt = ext ? (ctx.canvas.__fmTiltExt || 0) : 0;   // 1176 leftover (tiltFollowsFx)
     const a = _fogA.getContext('2d');
     if (ext) { a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, FW, FH); }
     baseT(a); a.clearRect(0, 0, W, H);
@@ -20433,7 +20845,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     try {
       const P = _dfPool[d] || (_dfPool[d] = document.createElement('canvas'));
       if (P.width !== W || P.height !== H) { P.width = W; P.height = H; }
-      P.__fmRS = cv.__fmRS; P.__fmOX = cv.__fmOX; P.__fmOY = cv.__fmOY; P.__fmCamExt = cv.__fmCamExt;
+      P.__fmRS = cv.__fmRS; P.__fmOX = cv.__fmOX; P.__fmOY = cv.__fmOY; P.__fmCamExt = cv.__fmCamExt; P.__fmTiltExt = cv.__fmTiltExt;   // 1176 leftover (tiltFollowsFx)
       const a = P.getContext('2d');
       a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, W, H);
       a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
@@ -23029,6 +23441,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     _manualCv.__fmRS = ctx.canvas.__fmRS || 1;
     _manualCv.__fmOX = ctx.canvas.__fmOX || 0; _manualCv.__fmOY = ctx.canvas.__fmOY || 0;
     _manualCv.__fmCamExt = !!ctx.canvas.__fmCamExt;   // a copy of a camera plate that reaches past the frame is one too (see nestedPlate)
+    _manualCv.__fmTiltExt = ctx.canvas.__fmTiltExt || 0;   // …and of a tilt plate past the frame (1176 leftover, tiltFollowsFx)
     const mc = _manualCv.getContext('2d', { willReadFrequently: true });
     mc.setTransform(1, 0, 0, 1, 0, 0); mc.clearRect(0, 0, cw, ch);
     baseT(mc);
@@ -23098,6 +23511,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (F.width !== cw || F.height !== ch) { F.width = cw; F.height = ch; }   // cleared below
       F.__fmRS = ctx.canvas.__fmRS; F.__fmOX = ctx.canvas.__fmOX; F.__fmOY = ctx.canvas.__fmOY;   // the TARGET's grid, so the layer rasterises exactly as it would have on it
       F.__fmCamExt = !!ctx.canvas.__fmCamExt;
+      F.__fmTiltExt = ctx.canvas.__fmTiltExt || 0;   // 1176 leftover (tiltFollowsFx)
       const pc = F.getContext('2d');
       pc.setTransform(1, 0, 0, 1, 0, 0);
       pc.globalAlpha = 1; pc.globalCompositeOperation = 'source-over'; pc.filter = 'none';
@@ -23217,6 +23631,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (_blendMaskCv.width !== _bw || _blendMaskCv.height !== _bh) { _blendMaskCv.width = _bw; _blendMaskCv.height = _bh; }
       _blendMaskCv.__fmRS = _bps; _blendMaskCv.__fmOX = _bext ? (ctx.canvas.__fmOX || 0) : 0; _blendMaskCv.__fmOY = _bext ? (ctx.canvas.__fmOY || 0) : 0;
       _blendMaskCv.__fmCamExt = _bext;
+      _blendMaskCv.__fmTiltExt = _bext ? (ctx.canvas.__fmTiltExt || 0) : 0;   // 1176 leftover (tiltFollowsFx)
       const mc = _blendMaskCv.getContext('2d');
       if (_bext) { mc.setTransform(1, 0, 0, 1, 0, 0); mc.clearRect(0, 0, _bw, _bh); }
       baseT(mc); mc.clearRect(0, 0, P.width, P.height);
@@ -23440,7 +23855,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // #966 opts8: Text Curve's Stay upright (st.curveUpright, set only by a Text Curve that asks for it)
       const _cUp = !!(_tEff && _tEff.curveUpright === true);
       if (FM.textHasAnim(layer)) {
-        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null, _plan, _cUp, !!_hl);
+        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null, _plan, _cUp);
       } else {
         const stk = layer.stroke;
         const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)
@@ -28612,11 +29027,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let R = ctx.canvas.__fmCamExt ? nestedPlate(ctx, P, true) : null;
     /* bughunt4 #3b: a group that tilts is leant as this one picture (draw3DTiltLayer), and a lean swings what hung past the frame into
        view, so the unit also covers as far as its members reach (unitReach, tiltPlateRegion) and is marked like the camera's (above). */
+    /* 1176 leftover: …and as far as the members' own Shadow, Glow, Outline and effects carry them (unitReach's pad), plus the group's
+       own (its Shadow, effects and Border, drawn on the proxy in the plate that leans it, which is this unit's box). A unit grown here
+       is marked __fmTiltExt too, so a member's layer-relative effect follows it out (tiltFollowsFx); one grown for a camera is not. */
+    let _tg = 0;
     if (u.group && groupTilts(u.group, t)) {
       const reach = unitReach(u, t, scene);
       const base = R || { ps: ps, OX: 0, OY: 0, W: Math.max(1, Math.round(P.width * ps)), H: Math.max(1, Math.round(P.height * ps)), PWp: P.width, PHp: P.height };
-      const grown = reach ? tiltPlateRegion(reach, reachMargin(reach), base, P.width, P.height) : null;
-      if (grown) R = grown;
+      const grown = reach ? tiltPlateRegion(reach, reachMargin(reach), base, P.width, P.height, padSum(reach.pad || null, tiltFxPad(u.group, t, 1, P))) : null;
+      if (grown) { R = grown; _tg = tiltBoxPast(reach, base) ? 2 : 1; }   // why it grew: tiltFollowsFx
     }
     const RX = R ? R.OX : 0, RY = R ? R.OY : 0, RW = R ? R.PWp : P.width, RH = R ? R.PHp : P.height;
     const GW = R ? R.W : Math.max(1, Math.round(P.width * ps)), GH = R ? R.H : Math.max(1, Math.round(P.height * ps));
@@ -28627,6 +29046,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     _mgA.__fmRS = ps; _mgA.__fmOX = RX; _mgA.__fmOY = RY;
     _mgB.__fmRS = ps; _mgB.__fmOX = RX; _mgB.__fmOY = RY;
     _mgA.__fmCamExt = _mgB.__fmCamExt = !!R;
+    _mgA.__fmTiltExt = _mgB.__fmTiltExt = R ? Math.max(_tg, ctx.canvas.__fmTiltExt || 0) : 0;   // a unit nested in a tilt plate follows it, as above
     const a = _mgA.getContext('2d');
     if (R) { a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, GW, GH); }
     baseT(a); a.clearRect(0, 0, P.width, P.height);
@@ -29565,24 +29985,102 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const a = layer.align || 'center';
     return a === 'left' ? w / 2 : a === 'right' ? -w / 2 : 0;
   };
-  // One member's extent in its group's child space: size `sz` at scale `sc`, its x/y already offset by any nested group.
+  // One member's extent in its group's child space: size `sz` at scale `sc`, its x/y already offset by any nested group's x/y
+  // (since 1176 leftover, M carries the nested groups with a transform of their own: see below).
   /* bughunt4 #10b: …and as the member is DRAWN, which applyLayerTransform does with its unlinked Width / Height (scaleX / scaleY, on
      top of `sc`) and then its own mirror (flipH / flipV, about its x / y). Both were left out, so a member at Width 200 % was boxed
      at half its width, and a flipped one with its anchor off-centre (or a flipped left-aligned title) was boxed on the wrong side
      of its x: a 40 px shape hinged on its left edge at x 100 and flipped is drawn 60 .. 100 and was boxed 100 .. 140, not touching
      it. Read at `t` (the group's start, for the rest box). Linked, unflipped: the very sums as before, w · 1 being w. */
-  function groupMemberSpan(l, sz, sc, x, y, t) {
+  /* ═══ 1176 leftover — A MEMBER'S SHARE OF ITS GROUP'S BOX IS WHAT IS DRAWN, TURNED, SHEARED AND THROUGH A NESTED GROUP ══════════════
+   * What was wrong. After bughunt4 #10 / #10b a member was boxed from its anchor, alignment, unlinked Width / Height and Flip, as an
+   * UPRIGHT rectangle at its own size, and a nested group passed on only its x / y. applyLayerTransform also turns the member
+   * (rotation), shears it (skewX / skewY) and scales it by its depth (z: a parented layer's depth is a scale about its own x / y),
+   * and applyParentChain draws a nested group's members through that group's own turn, scale, unlinked Width / Height, depth, skew
+   * and Flip, about its pivot. None of it reached the box, so a 40 × 30 shape turned 90° was boxed 40 wide where it is drawn 30
+   * wide and 40 tall, and a nested group at 200 % had its members boxed at half their drawn size: the selection box, a tap on the
+   * group, and the pivot a pinch scales about (FM.groupPivotMeasured) all sat on the wrong rectangle.
+   * Now the member's four corners go through the very order applyLayerTransform applies (mirror, skew, Width / Height × scale ×
+   * depth, turn, about its x / y), then through every nested group's own matrix (nestedGroupMatrix, applyParentChain's step for
+   * that group, about FM.groupPivot), and the box is their hull. A member with no turn, skew or depth under groups with nothing
+   * but x / y takes the old sums exactly. Not boxed: a member's or a nested group's X / Y tilt (a plate leant in perspective, whose
+   * reach depends on the drawn pixels; draw3DTiltLayer), its own link mode ('locked' / 'weighted', whose turn depends on the
+   * whole chain above the outer group), and behaviours (the walks read keyframes, as they always have). */
+  // Groups being measured right now: a nested group among them is taken by its x / y alone, so a parent cycle cannot recurse
+  const _gbBusy = new Set();
+  /* The matrix a nested group `g` draws its members with, from its child space into the walk's (M, or none, plus the offset ox / oy
+     the walk has gathered): applyParentChain's step for g, in its order: position, then about its pivot the turn, Width / Height ×
+     scale × depth, skew and mirror (a uniform scale alone when it has none of those). null when g has nothing but x / y, or is being
+     measured already, and the walk then adds its x / y as it always did. */
+  function nestedGroupMatrix(g, t, scene, M, ox, oy) {
+    const tr = g.transform || {};
+    if (_gbBusy.has(g.id)) return null;
+    const ev = (k, d) => { if (tr[k] == null) return d; const v = FM.evalProp(tr[k], t); return isFinite(v) ? v : d; };
+    const prot = ev('rotation', 0) * Math.PI / 180, ps = ev('scale', 1);
+    const sx = ev('scaleX', 1), sy = ev('scaleY', 1), kx = ev('skewX', 0), ky = ev('skewY', 0), zz = ev('z', 0), fh = !!g.flipH, fv = !!g.flipV;
+    const ex = sx !== 1 || sy !== 1 || !!kx || !!ky || !!zz || fh || fv;
+    if (!prot && ps === 1 && !ex) return null;
+    let pz = 1;
+    if (zz) {
+      const P = (scene && scene.project) || {}, F = (_camLens && _camLens.F) || Math.max(1, (P.height || 1080) * 2);
+      pz = F / Math.max(F * 0.05, F + zz);
+    }
+    const piv = FM.groupPivot ? FM.groupPivot(g, scene, t) : null;
+    let m = M ? { a: M.a, b: M.b, c: M.c, d: M.d, e: M.e, f: M.f } : { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+    // m := m · [a c e; b d f], as ctx.transform composes
+    const T = (a, b, c, d, e, f) => { m = { a: m.a * a + m.c * b, b: m.b * a + m.d * b, c: m.a * c + m.c * d, d: m.b * c + m.d * d, e: m.a * e + m.c * f + m.e, f: m.b * e + m.d * f + m.f }; };
+    T(1, 0, 0, 1, ox + (FM.evalProp(tr.x, t) || 0), oy + (FM.evalProp(tr.y, t) || 0));
+    if (piv) T(1, 0, 0, 1, piv.x, piv.y);
+    if (prot) T(Math.cos(prot), Math.sin(prot), -Math.sin(prot), Math.cos(prot), 0, 0);
+    if (ex) {
+      T(Math.max(0.001, ps * sx * pz), 0, 0, Math.max(0.001, ps * sy * pz), 0, 0);
+      if (kx || ky) T(1, Math.tan(ky * Math.PI / 180), Math.tan(kx * Math.PI / 180), 1, 0, 0);
+      if (fh || fv) T(fh ? -1 : 1, 0, 0, fv ? -1 : 1, 0, 0);
+    } else if (ps !== 1) { const c = Math.max(0.001, ps); T(c, 0, 0, c, 0, 0); }
+    if (piv) T(1, 0, 0, 1, -piv.x, -piv.y);
+    return m;
+  }
+  function groupMemberSpan(l, sz, sc, x, y, t, M, scene) {
     const tr = l.transform || {}, ax = anchorX(tr), ay = anchorY(tr);
     const sx = tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1, sy = tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1;
+    // 1176 leftover: the member's own turn, skew and depth, and M, the nested groups' matrix (nestedGroupMatrix) or null
+    const rot = (tr.rotation != null ? FM.evalProp(tr.rotation, t) : 0) || 0, kx = (tr.skewX != null ? FM.evalProp(tr.skewX, t) : 0) || 0;
+    const ky = (tr.skewY != null ? FM.evalProp(tr.skewY, t) : 0) || 0, zz = (tr.z != null ? FM.evalProp(tr.z, t) : 0) || 0;
+    if (M || rot || kx || ky || zz) return groupMemberHull(l, sz, sc * (isFinite(sx) ? sx : 1), sc * (isFinite(sy) ? sy : 1), ax, ay, x, y, rot, kx, ky, zz, M, scene);
     const w = sz.w * sc * (isFinite(sx) ? sx : 1), h = sz.h * sc * (isFinite(sy) ? sy : 1), sh = FM.textAlignShift(l, w);
     let x0 = x - w * ax + sh, x1 = x + w * (1 - ax) + sh, y0 = y - h * ay, y1 = y + h * (1 - ay);
     if (l.flipH) { const a = 2 * x - x1; x1 = 2 * x - x0; x0 = a; }
     if (l.flipV) { const a = 2 * y - y1; y1 = 2 * y - y0; y0 = a; }
     return { x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0: Math.min(y0, y1), y1: Math.max(y0, y1) };
   }
+  /* …the member's box corners (its content box about its x / y: the anchor and the alignment shift) through applyLayerTransform's
+     order (mirror, skew, Width / Height × scale (Sx, Sy) × depth, turn, then x / y) and M, and the hull of the four. */
+  function groupMemberHull(l, sz, Sx, Sy, ax, ay, x, y, rot, kx, ky, zz, M, scene) {
+    let pz = 1;
+    if (zz) {
+      const P = (scene && scene.project) || {}, F = (_camLens && _camLens.F) || Math.max(1, (P.height || 1080) * 2);
+      pz = F / Math.max(F * 0.05, F + zz);
+    }
+    const shU = FM.textAlignShift(l, sz.w), fx = l.flipH ? -1 : 1, fy = l.flipV ? -1 : 1;
+    const cr = Math.cos(rot * Math.PI / 180), sr = Math.sin(rot * Math.PI / 180);
+    const tx = kx ? Math.tan(kx * Math.PI / 180) : 0, ty = ky ? Math.tan(ky * Math.PI / 180) : 0;
+    const us = [-sz.w * ax + shU, sz.w * (1 - ax) + shU], vs = [-sz.h * ay, sz.h * (1 - ay)];
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    us.forEach(u => vs.forEach(v => {
+      const fu = fx * u, fv = fy * v;
+      const su = Sx * pz * (fu + tx * fv), sv = Sy * pz * (ty * fu + fv);
+      let px = x + cr * su - sr * sv, py = y + sr * su + cr * sv;
+      if (M) { const qx = M.a * px + M.c * py + M.e; py = M.b * px + M.d * py + M.f; px = qx; }
+      if (px < x0) x0 = px;
+      if (px > x1) x1 = px;
+      if (py < y0) y0 = py;
+      if (py > y1) y1 = py;
+    }));
+    return { x0: x0, x1: x1, y0: y0, y1: y1 };
+  }
 
-  // Approximate world bbox of a group's members (ignores rotations — good enough for the canvas
-  // selection box + hit-test, which previously showed a meaningless 100px box at the group's 0,0).
+  // World bbox of a group's members (since 1176 leftover their turns, skews, depths and nested groups' transforms count — see
+  // groupMemberSpan; it used to ignore rotations), for the canvas selection box + hit-test.
   /* The members' extent in the group's OWN child space — before the group's x/y/scale are applied.
    * FM.groupBounds returns the same box already converted into the parent's space, which is what a
    * selection rectangle wants; a PIVOT has to be expressed where the children actually live, or the
@@ -29592,25 +30090,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   FM.groupBoundsLocal = function (group, scene, t) {
     if (!group || !scene || !scene.layers) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
-    const seen = new Set();
-    (function walk(gid, ox, oy) {
+    const seen = new Set(), own = !_gbBusy.has(group.id);
+    if (own) _gbBusy.add(group.id);
+    try {
+    (function walk(gid, ox, oy, M) {
       if (seen.has(gid)) return;
       seen.add(gid);
       scene.layers.forEach(l => {
         if (l.parent !== gid) return;
-        if (l.type === 'group') { walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0)); return; }
+        if (l.type === 'group') {
+          // 1176 leftover: a nested group with a transform of its own goes in as its matrix (nestedGroupMatrix); else its x / y add
+          const N = nestedGroupMatrix(l, t, scene, M, ox, oy);
+          if (N) walk(l.id, 0, 0, N);
+          else walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0), M);
+          return;
+        }
         if (l.type === 'camera' || l.type === 'adjustment' || l.type === 'null') return;
         if (!FM.isLayerVisibleAt(l, t)) return;
         const sz = FM.layerSize(l);
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
         // bughunt4 #10: the member's anchor and text alignment, not x ± w·sc/2 (groupMemberSpan)
-        const m = groupMemberSpan(l, sz, sc, x, y, t);
+        const m = groupMemberSpan(l, sz, sc, x, y, t, M, scene);
         any = true;
         minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
         minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
       });
-    })(group.id, 0, 0);
+    })(group.id, 0, 0, null);
+    } finally { if (own) _gbBusy.delete(group.id); }
     if (!any) return null;
     return { minX: minX, minY: minY, maxX: maxX, maxY: maxY, w: maxX - minX, h: maxY - minY };
   };
@@ -29664,25 +30171,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (!group || !scene || !scene.layers) return null;
     const t = (typeof group.start === 'number' && isFinite(group.start)) ? group.start : 0;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
-    const seen = new Set();
-    (function walk(gid, ox, oy) {
+    const seen = new Set(), own = !_gbBusy.has(group.id);
+    if (own) _gbBusy.add(group.id);
+    try {
+    (function walk(gid, ox, oy, M) {
       if (seen.has(gid)) return;
       seen.add(gid);
       scene.layers.forEach(l => {
         if (l.parent !== gid) return;
-        if (l.type === 'group') { walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0)); return; }
+        if (l.type === 'group') {
+          // 1176 leftover: as groupBoundsLocal, a nested group with a transform of its own goes in as its matrix
+          const N = nestedGroupMatrix(l, t, scene, M, ox, oy);
+          if (N) walk(l.id, 0, 0, N);
+          else walk(l.id, ox + (FM.evalProp(l.transform.x, t) || 0), oy + (FM.evalProp(l.transform.y, t) || 0), M);
+          return;
+        }
         if (l.type === 'camera' || l.type === 'adjustment' || l.type === 'null') return;
         if (l.visible === false) return;   // switched off by its eye — not "off screen right now", which no longer counts
         const sz = FM.layerSize(l);
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
         // bughunt4 #10: the same member span as groupBoundsLocal
-        const m = groupMemberSpan(l, sz, sc, x, y, t);
+        const m = groupMemberSpan(l, sz, sc, x, y, t, M, scene);
         any = true;
         minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
         minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
       });
-    })(group.id, 0, 0);
+    })(group.id, 0, 0, null);
+    } finally { if (own) _gbBusy.delete(group.id); }
     if (!any) return null;
     return { minX: minX, minY: minY, maxX: maxX, maxY: maxY, w: maxX - minX, h: maxY - minY };
   };

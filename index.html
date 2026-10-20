@@ -266,7 +266,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.85</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.86</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1148,7 +1148,7 @@
        rest of the collab modules are pure libraries and sit at the end of the list. -->
   <script src="js/collab-core.js?v=49"></script>
   <script src="js/screen.js?v=1"></script>
-  <script src="js/scene.js?v=131"></script>
+  <script src="js/scene.js?v=132"></script>
   <script src="js/spine-words.js?v=13"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
   <script src="js/spine.js?v=7"></script>         <!-- Simple mode P1: FM.spine, the read side — after scene.js, before compositor/storage -->
   <script src="js/spine-edit.js?v=12"></script>    <!-- Simple mode P2: FM.spine.edit, the runner and the commands — after spine.js -->
@@ -1159,7 +1159,7 @@
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=5"></script>
   <script src="js/gl-color.js?v=5"></script>
-  <script src="js/compositor.js?v=244"></script>
+  <script src="js/compositor.js?v=245"></script>
   <script src="js/fx-registry.js?v=33"></script>
   <script src="js/filters.js?v=24"></script>
   <script src="js/fx-presets.js?v=12"></script>
@@ -1197,7 +1197,7 @@
   <script src="js/history.js?v=43"></script>
   <script src="js/storage.js?v=75"></script>
   <script src="js/export-resume.js?v=10"></script>
-  <script src="js/medialib.js?v=8"></script>
+  <script src="js/medialib.js?v=9"></script>
   <script src="js/template-fill.js?v=4"></script>
   <script src="js/home-arrow.js?v=5"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
   <script src="js/tutorials.js?v=1"></script>   <!-- #1082: the lessons in Home's Tutorials tab -->
@@ -1206,7 +1206,7 @@
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
   <script src="js/exporter.js?v=136"></script>
-  <script src="js/sample.js?v=10"></script>
+  <script src="js/sample.js?v=11"></script>
   <script src="js/contextmenu.js?v=49"></script>
   <script src="js/ask.js?v=4"></script>
   <script src="js/shortcuts.js?v=85"></script>
@@ -1214,17 +1214,17 @@
   <script src="js/captions.js?v=64"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=6"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=493"></script>
+  <script src="js/app.js?v=494"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->
   <script src="js/loading.js?v=3"></script>
-  <script src="js/sfx.js?v=23"></script>
-  <script src="js/voice-rec.js?v=9"></script>
+  <script src="js/sfx.js?v=24"></script>
+  <script src="js/voice-rec.js?v=10"></script>
   <script src="js/audio-react.js?v=13"></script>
   <script src="js/mobile.js?v=51"></script>
   <script src="js/ai-manifest.js?v=12"></script>
-  <script src="js/ai-ops.js?v=21"></script>
+  <script src="js/ai-ops.js?v=22"></script>
   <script src="js/ai-key.js?v=1"></script>
   <script src="js/ai-budget.js?v=1"></script>
   <script src="js/ai-mock.js?v=5"></script>
@@ -1249,7 +1249,7 @@
   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
        resume parts under `collab:`, fonts, and the two honest answers (out of room, still arriving).
        A library like the rest: it does nothing at all until a session installs a controller on it. -->
-  <script src="js/collab-media.js?v=6"></script>
+  <script src="js/collab-media.js?v=7"></script>
   <!-- queue 921 stage S3 — the first real connection and the only collaboration UI there is. Both are
        libraries too: `signal` is the minimal-SDP codec and the auth handshake (no rendezvous driver, no
        invite link — those are S6), and `ui` builds nothing at all until Settings → Labs → Live
@@ -1287,8 +1287,9 @@
         if (F._exporting) return 'an export is running';
         if (F._exportingAudio) return 'a sound export is running';   // bughunt7 #6: Export sound (WAV / M4A) shows no overlay (js/app.js runAudioOnlyExport)
         if (F._rendering) return 'a sound is still being worked out';   // 1176 leftover: Save audio as WAV, Remove vocals, Reduce noise (js/audio-tools.js, js/noise-reduction.js)
-        if (F._importing) return 'a picked file is still opening';   // 1176 leftover: from the pick to the add (js/app.js handleFiles)
+        if (F._importing) return 'a file is still opening';   // 1176 leftover: from the pick to the add (js/app.js handleFiles and Replace media, js/medialib.js use, js/sfx.js add, js/voice-rec.js addFile, js/sample.js), a copy re-opening its file (js/app.js Paste, Duplicate and Split, Undo of a Replace) and a friend's clip from its last part to its record (js/collab-media.js complete, applyHeld)
         if (F._aiCalls) return 'an AI answer is on its way';   // 1176 leftover: a model request in flight (js/ai.js call)
+        if (F.ai && F.ai.isRunning && F.ai.isRunning()) return 'an AI run is still going';   // 1176 leftover: a Director build, re-roll or Refine for its whole length, between its requests too (js/ai.js state.running)
         var ov = document.getElementById('export-overlay'), rd = document.getElementById('export-ready');
         if (ov && !ov.classList.contains('hidden')) return 'an export is running';
         if (rd && !rd.classList.contains('hidden')) return 'an exported file is waiting on Save';

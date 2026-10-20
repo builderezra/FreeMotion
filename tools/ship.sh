@@ -691,7 +691,15 @@ fi
 
 # Refresh REQUESTS.md's STATUS labels first, so they can never be stale in a commit (queue 352).
 # A label written by hand is true the day it is written and misleading a week later.
-./tools/status.sh >/dev/null 2>&1 || true
+# #1178 (left over from #953's audit): a failing status.sh used to be swallowed here (`|| true`), so a commit could carry
+# stale labels with nothing said, which is the opposite of the line above. It refuses now, with status.sh's own words,
+# before any suite time is spent.
+if ! _ST_OUT="$(./tools/status.sh 2>&1)"; then
+  echo "❌ tools/status.sh failed, so REQUESTS.md's STATUS labels cannot be refreshed — not committing, not pushing:"
+  printf '%s\n' "$_ST_OUT" | tail -8 | sed 's/^/   /'
+  _WHY="status.sh failed"
+  exit 1
+fi
 
 # ⚠️ A SUITE THAT RAN OUT OF TIME IS NOT A SUITE THAT FAILED, and this gate could not tell them apart
 # (25 Aug). `_cdp.py` gives up after `--timeout` seconds and prints `"ok": false` with an `error` and

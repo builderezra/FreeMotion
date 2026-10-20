@@ -2266,6 +2266,12 @@ window.FM = window.FM || {};
     return def.name + ' (' + parts.join(', ') + ').wav';
   }
   async function add(def, opts) {
+    /* 1176 leftover (the doors js/app.js handleFiles does not cover): A NEW BUILD WAITS UNTIL THE SOUND IS IN. The render and the
+       load below take a moment (a long bed, seconds), with nothing showing busy, so a build landing then reloaded the app and the
+       sound never arrived. Counted in FM._importing, which index.html's fmSwBusy reads, until the finally. The try is not
+       re-indented, so the lines it wraps keep their history. */
+    FM._importing = (FM._importing || 0) + 1;
+    try {
     const buf = await rendered(def, opts);   // the buffer the ▶ played, when it has been heard (queue 986)
     const blob = encodeWav(buf);
     const name = fileName(def, opts);
@@ -2275,6 +2281,7 @@ window.FM = window.FM || {};
     const rec = await FM.loadVideoFile(file);
     FM.addMediaLayer(rec);
     if (FM.toast) FM.toast('Added ' + def.name);
+    } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   }
 
   /* ---- the panel -------------------------------------------------------------------------------
