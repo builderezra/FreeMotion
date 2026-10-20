@@ -105101,15 +105101,26 @@
           /* Three seeded cards in a row, on screen, clear of the select bar — for the drag-selects below. */
           const run = async function (needPic) {
             await sleep(300);
-            const cards = Array.prototype.slice.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'));
-            const top = document.getElementById('hm-selbar') ? document.getElementById('hm-selbar').getBoundingClientRect().top : 700;
-            for (let i = 0; i + 2 < cards.length; i++) {
-              const y0 = hcPt(cards[i]).y, y2 = hcPt(cards[i + 2]).y;
-              const img = cards[i].querySelector('.hm-thumb img');
-              if (needPic && !(img && img.complete && img.naturalWidth)) continue;
-              if (y0 > 200 && y2 + 30 < Math.min(top, 700)) return [cards[i], cards[i + 1], cards[i + 2]];
+            /* A card's picture comes from IndexedDB after the card is drawn (home.js getThumb), so late in a full run it can
+               still be loading here: wait for it instead of reading once, and say what was seen if it never comes (20 Oct —
+               v17.82's full pass failed here once; alone, and in the run before, it passed). */
+            let seen = '';
+            for (let tries = 0; tries < 25; tries++) {
+              const cards = Array.prototype.slice.call(document.querySelectorAll('#home-screen .hm-card[data-pid]'));
+              const top = document.getElementById('hm-selbar') ? document.getElementById('hm-selbar').getBoundingClientRect().top : 700;
+              let band = 0, pics = 0;
+              for (let i = 0; i + 2 < cards.length; i++) {
+                const y0 = hcPt(cards[i]).y, y2 = hcPt(cards[i + 2]).y;
+                const img = cards[i].querySelector('.hm-thumb img');
+                const pic = !!(img && img.complete && img.naturalWidth);
+                if (!(y0 > 200 && y2 + 30 < Math.min(top, 700))) continue;
+                band++; if (pic) pics++;
+                if (!needPic || pic) return [cards[i], cards[i + 1], cards[i + 2]];
+              }
+              seen = cards.length + ' cards, ' + band + ' runs of three in the band, ' + pics + ' of them with a loaded picture, the list scrolled to ' + Math.round(ha7Scroll().scrollTop) + ' px';
+              await sleep(200);
             }
-            throw new Error('setup: no three cards in a row on screen with Select on' + (needPic ? ', the first with its picture showing' : ''));
+            throw new Error('setup: no three cards in a row on screen with Select on' + (needPic ? ', the first with its picture showing' : '') + ' (' + seen + ')');
           };
           const reselect = async function () {
             const b = document.getElementById('hm-select-btn');
