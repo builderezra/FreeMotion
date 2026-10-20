@@ -4271,8 +4271,9 @@ window.FM = window.FM || {};
    * Not built (Arabic By Character draws each letter unjoined, as it always has). A layer with a Word Highlight kept the old order,
    * because the highlight laid its boxes out in typing order, on the still path too; since 1176 leftover the boxes follow the words
    * where they are drawn (hlGeomVis), still and animated, and the units take this order with them. The curved paths, still and
-   * animated, placed their glyphs in typing order too; since 1176 leftover they take the order bidiGlyphOrder gives (a bracket
-   * inside right-to-left text is still drawn alone, unmirrored, there and By Character). */
+   * animated, placed their glyphs in typing order too; since 1176 leftover they take the order bidiGlyphOrder gives, and a bracket
+   * drawn alone there, By Character or as a word of its own is drawn as its mirror partner where the line's one fillText mirrors it
+   * (bidiMirrors, rule L4). */
   const BIDI_RTL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFC\u200F\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
   // One character's bidirectional class (its first code point's, from UnicodeData's ranges for the scripts text is typed in)
   function bidiType(g) {
@@ -4401,6 +4402,28 @@ window.FM = window.FM || {};
     const ord = bidiOrder(bidiLevels(gs));
     return ord.every((k, i) => k === i) ? null : ord;
   }
+  /* 1176 leftover (rule L4): A BRACKET DRAWN ALONE IS DRAWN AS THE LINE DRAWS IT. The still path's one fillText draws a Bidi_Mirrored
+     character at an odd level as its mirror image: in a Hebrew line alef ( bet ) gimel every character is at level 1, the canvas lays
+     it out reversed and draws the '(' typed first as ')' and the ')' as '(', so the pair still opens toward the bet between them. A glyph
+     drawn by a fillText of its own (By Character, every glyph on a curve, a lone bracket By Word) is laid out at the canvas's level 0
+     and was drawn as typed, so on those paths the brackets of that line faced outward, away from the word they hold. Those paths now
+     draw the partner from this table, the common pairs of BidiMirroring.txt:
+       ( )  [ ]  { }  < >  « »  ‹ ›  ⁅ ⁆  ⁽ ⁾  ₍ ₎  ≤ ≥  ⟨ ⟩  〈 〉  《 》  「 」  『 』  【 】  〔 〕  （ ）  ［ ］  ｛ ｝  ＜ ＞
+     Any other mirrored character is drawn as typed, as before. bidiMirrors(line, gs): m[i] the partner to draw for character i of
+     `gs` (the line's graphemes), or nothing; null when the line has no right-to-left letter or none of these at an odd level. */
+  const BIDI_MIRROR = (function () {
+    const m = Object.create(null), s = '()[]{}<>«»‹›⁅⁆⁽⁾₍₎≤≥⟨⟩〈〉《》「」『』【】〔〕（）［］｛｝＜＞';
+    for (let i = 0; i + 1 < s.length; i += 2) { m[s[i]] = s[i + 1]; m[s[i + 1]] = s[i]; }
+    return m;
+  })();
+  function bidiMirrors(line, gs) {
+    if (!gs.some(g => BIDI_MIRROR[g]) || !BIDI_RTL.test(line)) return null;
+    const lv = bidiLevels(gs), m = [];
+    let any = false;
+    gs.forEach((g, i) => { if ((lv[i] & 1) && BIDI_MIRROR[g]) { m[i] = BIDI_MIRROR[g]; any = true; } });
+    return any ? m : null;
+  }
+  FM._bidiMirrors = bidiMirrors;   // suite seam
   /* 1176 leftover (Word Highlight): where the characters of `s` land when `s` is drawn as ONE fillText whose left edge is x0. The canvas
      cuts it into runs at one level (bidiLevels), lays the runs out left to right in the order bidiOrder gives them, and draws a
      right-to-left run from its right end. Returns span(i0, i1) -> { a, b }, the left and right edge of the characters at offsets
@@ -4569,6 +4592,7 @@ window.FM = window.FM || {};
          drawArcLine does), so cMid[i] is character i's place in THAT order; each unit then sits at the middle of its characters' span
          (uL..uR below). The units, their stagger and their clocks keep the typing order. ord null: the line as it always was. */
       const ord = bidiGlyphOrder(line, chars);
+      const mir = bidiMirrors(line, chars);   // …and a bracket at an odd level is drawn as its partner (rule L4); null: as typed
       if (ord) ord.forEach(i => { cMid[i] = run + cw[i] / 2; run += cw[i] + lsp; });
       else chars.forEach((c, i) => { cMid.push(run + cw[i] / 2); run += cw[i] + lsp; });
       // units as [first, last+1) character ranges, in the same order and with the same membership as the flat path
@@ -4606,7 +4630,7 @@ window.FM = window.FM || {};
         const ca = Math.cos(-sign * U.a), sa = Math.sin(-sign * U.a);
         for (let i = rg[0]; i < rg[1]; i++) {
           if (i === gskip) continue;   // the dark caret keeps its place in the unit and on the arc, unpainted
-          const pc = gp ? gp[i] : chars[i];   // the finished glyph's place, the plan's character (#966 scramble layout)
+          const pc0 = gp ? gp[i] : chars[i], pc = (mir && mir[i] && pc0 === chars[i]) ? mir[i] : pc0;   // the finished glyph's place, the plan's character (#966 scramble layout); a landed bracket mirrored (L4)
           if (gp && !/\S/.test(pc)) continue;   // hidden (or a space): its place is kept, nothing is painted
           const C = arcAt(cMid[i]), rx = C.x - U.x, ry = C.y - U.y;
           ctx.save();
@@ -4647,6 +4671,19 @@ window.FM = window.FM || {};
          right-to-left letter, and By Line) lays them out one after another as before. Since 1176 leftover a layer with a Word Highlight
          takes it too, and its boxes are laid out on these same edges (hlAnimLine). */
       const bidiX = unit !== 'line' ? bidiUnitXs(line, units, widths, x) : null;
+      /* 1176 leftover (rule L4): a unit that is one bracket at an odd level (By Character, or a bracket standing alone By Word) is
+         drawn as its partner, as the line's one fillText draws it (bidiMirrors). mirU null, every unit is drawn as typed. */
+      let mirU = null;
+      if (unit !== 'line' && BIDI_RTL.test(line)) {
+        const gl = unit === 'char' ? units : graphemes(line), mg = bidiMirrors(line, gl);
+        if (mg) {
+          const at = Object.create(null);   // code-unit offset in the line -> the partner to draw there
+          let o = 0;
+          gl.forEach((g, i) => { if (mg[i]) at[o] = mg[i]; o += g.length; });
+          mirU = []; o = 0;
+          units.forEach((u, ui) => { if (u.length === 1 && at[o]) mirU[ui] = at[o]; o += u.length; });
+        }
+      }
       /* #482 12.4 review: on the caret's line, the unit holding Type-On's dark caret (the last, or the first when typing from
          the End) is laid out and animated whole and painted without it — the caret alone paints nothing; a word or a line
          ending in it paints the rest from the same left edge (left-aligned here), shifted by the caret's advance when it leads. */
@@ -4676,6 +4713,7 @@ window.FM = window.FM || {};
         }
         if (runs && !runs.length) { x += w; return; }
         let paint = u, px = -wDraw / 2;
+        if (mirU && mirU[ui]) paint = mirU[ui];   // 1176 leftover: a lone bracket at an odd level, mirrored (L4)
         if (ui === gU && (ghost.at === 'start' ? u.charAt(0) : u.slice(-1)) === ghost.ch) { paint = ghost.at === 'start' ? u.slice(1) : u.slice(0, -1); if (ghost.at === 'start') px += w - ctx.measureText(paint).width; }
         if (ui === gU && !paint) { x += w; return; }
         const paintRuns = () => runs.forEach(r => {
@@ -5305,12 +5343,13 @@ window.FM = window.FM || {};
        holds character ord[k], so the first letter typed of a Hebrew or Arabic line lands at the right end, as it is drawn flat. The
        caret, the plan and the widths stay the character's own. No right-to-left letter: ord is null and slot k holds character k. */
     const ord = bidiGlyphOrder(line, chars);
+    const mir = bidiMirrors(line, chars);   // 1176 leftover (rule L4): …and a bracket at an odd level is drawn as its partner; null: as typed
     let s = 0;
     chars.forEach((c0, k) => {
       const i = ord ? ord[k] : k, ch = chars[i];
       const w = widths[i];
       if (i === gskip) { s += w + sp; return; }
-      const pc = gp ? gp[i] : ch;
+      const pc0 = gp ? gp[i] : ch, pc = (mir && mir[i] && pc0 === ch) ? mir[i] : pc0;   // 1176 leftover: a landed bracket at an odd level, mirrored (L4)
       if (gp && !/\S/.test(pc)) { s += w + sp; return; }   // hidden (or a space): it keeps its place on the arc, nothing is painted
       const a = ((s + w / 2) / tw - 0.5) * aa;
       ctx.save();

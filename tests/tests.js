@@ -166055,6 +166055,110 @@
     });
   });
 
+  /* (1176 leftover, rule L4) A BRACKET DRAWN ALONE IN RIGHT-TO-LEFT TEXT FACED AWAY FROM ITS WORD. Still, a line is one fillText, and the
+     canvas draws a Bidi_Mirrored character at an odd level as its mirror image (UAX #9 rule L4): in the Hebrew line א ( בבב ) גגגג every
+     character is at level 1, so the line is laid out reversed and the '(' typed first is drawn as ')' to the right of בבב, the ')' as
+     '(' to its left, and the pair opens toward the word it holds. The paths that place glyph by glyph draw each glyph with a fillText of
+     its own, at the canvas's level 0, so they drew each bracket as typed: drawArcLine (a still Curve), drawAnimatedText's curved branch
+     (any Animate preset on a Curve) and its flat branch By Character and, for a bracket standing alone between spaces, By Word. There
+     the left-hand bracket came out ')' and the right-hand one '(': both faced outward. Now they draw the partner (compositor.js
+     BIDI_MIRROR, bidiMirrors).
+     The lines are 56 px white text centred at 240 on a 480 × 240 black frame of the test's own: Hebrew א ( בבב ) גגגג and Latin
+     a ( bbb ) cccc, single spaces between, so the ink is five blobs a space apart (about 18 px of space plus the side bearings; inside a
+     word the letters are a few px apart). A bracket's ink is about 50 px tall and bows about a tenth of an em (5 or 6 px) between its
+     middle and its two ends, so a blob's BEND (the mean column of its ink in the top and the bottom fifth of its rows, less the mean
+     column in the middle fifth) is about +5 for '(' and about -5 for ')'. At a Curve of 1° the arc's radius is about 20,000 px: it bows
+     the line by under a pixel and turns a glyph by at most half a degree, which moves its top and bottom fifths by under half a pixel
+     each, in opposite directions, so a bend on the curve is the flat one.
+     FAILS BEFORE THE FIX: on the 1° Curve still and under Fade by character, and flat under Fade by character and by word, the Hebrew
+     line's left-hand bracket (blob 2 of 5) bends about -5 and its right-hand one (blob 4) about +5, both drawn as typed; and
+     FM._bidiMirrors, which maps each bracket of a line that is right to left throughout to its partner, does not exist.
+     CONTROL: still, the Hebrew line's left blob is the four-letter word and its right blob the one letter (the canvas lays it out right
+     to left) and its left bracket bends +1.5 or more and its right one -1.5 or less (the canvas mirrors them, and the bend tells ( from
+     ) on this font); Fade by line draws the line whole and keeps those brackets; the Latin line keeps '(' left of bbb and ')' right of
+     it on every path; every path draws five blobs with the Hebrew four-letter word on the left; each Fade is on (FM.textHasAnim) and
+     finished by 1.5 s.
+     TOL: 1.5 px of bend each way, about a quarter of the bow: anti-aliasing moves a band's mean column by a fraction of a pixel and the
+     1° curve by under half of one, and a bracket drawn the wrong way round reads about 10 px from the right one.
+     Not run when written (code only). */
+  test('1176 leftover: a bracket in right-to-left text faces the way the still line draws it: on a Hebrew line of a one-letter word, a bracket, a three-letter word, a bracket and a four-letter word, the left-hand bracket opens to the right and the right-hand one to the left on a Curve of 1°, still and under Fade by character, and flat under Fade by character and by word, as the line drawn whole mirrors them (CONTROLS: still, the canvas lays the line out right to left and mirrors its brackets; Fade by line draws it whole; a Latin line keeps its brackets on every path; every path draws the five blobs in the still order; each Fade is on and finished)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function' || typeof FM._graphemes !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim / FM._graphemes are not reachable');
+    await _bh2With(async function () {
+      const T = 1.5, W = 480, H = 240, BEND = 1.5;
+      const HEB = 'א ( בבב ) גגגג', LAT = 'a ( bbb ) cccc';
+      const L = FM.makeLayer('text', { name: '1176 bracket title', text: HEB, x: 240, y: 120, fontSize: 56, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L];
+      const STILL = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      const fade = unit => ({ preset: 'fade', unit: unit, durIn: 0.3, durOut: 0, stagger: 0.04 });
+      /* `text` under `anim` on a Curve of `deg`, drawn at T on a W × H black frame: its ink (channels summing past 150) as blobs left to
+         right (runs of inked columns, a run of 12 or more empty columns ending one), each with its columns c0..c1, its width and its bend. */
+      const look = (text, anim, deg) => {
+        L.text = text; L.textAnim = Object.assign({}, anim); L.effects = []; L.textCurve = deg;
+        delete L._wrapCache;
+        const c = offscreen(W, H), ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, { project: { width: W, height: H, fps: 30, duration: 5, background: '#000000' }, layers: FM.scene.layers, selectedId: null, selectedIds: [] }, T);
+        const d = ctx.getImageData(0, 0, W, H).data;
+        const ink = (x, y) => { const i = (y * W + x) * 4; return d[i] + d[i + 1] + d[i + 2] > 150; };
+        const spans = [];
+        let cur = null;
+        for (let x = 0; x < W; x++) {
+          let any = false;
+          for (let y = 0; y < H && !any; y++) any = ink(x, y);
+          if (!any) continue;
+          if (cur && x - cur.c1 <= 12) cur.c1 = x;
+          else { cur = { c0: x, c1: x }; spans.push(cur); }
+        }
+        const b = spans.map(s => {
+          let y0 = -1, y1 = -1;
+          for (let y = 0; y < H; y++) for (let x = s.c0; x <= s.c1; x++) if (ink(x, y)) { if (y0 < 0) y0 = y; y1 = y; break; }
+          const h = y1 - y0 + 1;
+          const band = (f0, f1) => {
+            let sx = 0, n = 0;
+            for (let y = y0 + Math.floor(h * f0); y <= y0 + Math.ceil(h * f1) - 1; y++) for (let x = s.c0; x <= s.c1; x++) if (ink(x, y)) { sx += x; n++; }
+            return n ? sx / n : NaN;
+          };
+          return { c0: s.c0, c1: s.c1, w: s.c1 - s.c0 + 1, bend: (band(0, 0.2) + band(0.8, 1)) / 2 - band(0.4, 0.6) };
+        });
+        return { b: b, anim: !!FM.textHasAnim(L) };
+      };
+      const say = r => r.b.length + ' blobs at ' + r.b.map(o => o.c0 + '..' + o.c1 + ' (bend ' + (isFinite(o.bend) ? o.bend.toFixed(1) : o.bend) + ')').join(', ');
+      const five = r => r.b.length === 5;
+      const faces = r => five(r) && r.b[1].bend >= BEND && r.b[3].bend <= -BEND;     // the left bracket opens to the right, the right one to the left
+      const outward = r => five(r) && r.b[1].bend <= -BEND && r.b[3].bend >= BEND;
+      const rtl = r => five(r) && r.b[0].w >= 2 * r.b[4].w;   // the four-letter word (typed last) on the left, the one letter on the right
+      const ltr = r => five(r) && r.b[4].w >= 2 * r.b[0].w;
+      const bad = [];
+
+      /* ── CONTROLS: still, the canvas lays the Hebrew line out right to left and mirrors its brackets; the Latin line keeps them. */
+      const sH = look(HEB, STILL, 0), sL = look(LAT, STILL, 0);
+      if (sH.anim || sL.anim) bad.push('CONTROL: the still layer has an Animate preset by FM.textHasAnim, so “still” is not the still path');
+      if (!rtl(sH)) bad.push('CONTROL: still, the Hebrew line is ' + say(sH) + ': not five blobs with the four-letter word on the left, so this browser does not lay it out right to left and nothing here can be told apart');
+      else if (!faces(sH)) bad.push('CONTROL: still, the Hebrew line is ' + say(sH) + ': the canvas does not draw its brackets opening toward the word between them, or the bend cannot tell ( from ) on this font');
+      if (!ltr(sL) || !faces(sL)) bad.push('CONTROL: still, the Latin line is ' + say(sL) + ': not five blobs with ( left of the three-letter word and ) right of it');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── The table, without pixels: every bracket of a line that is right to left throughout maps to its partner; a Latin line to nothing. */
+      if (typeof FM._bidiMirrors !== 'function') bad.push('FM._bidiMirrors does not exist: nothing maps a bracket in right-to-left text to its partner');
+      else {
+        const ln = 'א [ { < « ( ב ) » > } ] ג', gs = FM._graphemes(ln), m = FM._bidiMirrors(ln, gs) || [];
+        const got = gs.map((g, i) => m[i] || '').join(''), want = ']}>»)(«<{[';
+        if (got !== want) bad.push('FM._bidiMirrors maps the brackets of ' + ln + ' to ' + JSON.stringify(got) + ', not ' + JSON.stringify(want));
+        if (FM._bidiMirrors(LAT, FM._graphemes(LAT)) !== null) bad.push('CONTROL: FM._bidiMirrors mirrors a bracket of the Latin line, which has no right-to-left letter');
+      }
+
+      /* ── Each glyph-by-glyph path, and (CONTROL) Fade by line: the Hebrew brackets face the word as still, the blobs in the still order. */
+      [['still on a Curve of 1°', STILL, 1], ['Fade by character on a Curve of 1°', fade('char'), 1], ['Fade by character', fade('char'), 0], ['Fade by word', fade('word'), 0], ['Fade by line', fade('line'), 0]].forEach(([name, anim, deg]) => {
+        const h = look(HEB, anim, deg), l = look(LAT, anim, deg), ctl = name === 'Fade by line' ? 'CONTROL: ' : '';
+        if (h.anim !== (anim !== STILL)) bad.push('CONTROL: ' + name + ', FM.textHasAnim says ' + h.anim + ', so this frame did not take the path it is named for');
+        if (!ltr(l) || !faces(l)) bad.push('CONTROL: ' + name + ', the Latin line is ' + say(l) + ' where still it is ' + say(sL) + ': its brackets are not where and how they are typed');
+        if (!rtl(h)) bad.push('CONTROL: ' + name + ', the Hebrew line is ' + say(h) + ': not five blobs with the four-letter word on the left, as still (' + say(sH) + ')');
+        else if (!faces(h)) bad.push(ctl + name + ', the Hebrew line is ' + say(h) + ' where still it is ' + say(sH) + (outward(h) ? ' — both brackets face outward, away from the word between them: each was drawn as typed' : ''));
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (1176 leftover, the group box) A GROUP'S BOX LEFT OUT ITS MEMBERS' TURN, SKEW AND DEPTH, AND A NESTED GROUP'S OWN TRANSFORM. After
      bughunt4 #10 / #10b, groupBoundsLocal and groupRestBoundsLocal box each member (groupMemberSpan) from its anchor, alignment,
      unlinked Width / Height and Flip as an UPRIGHT rectangle, and a nested group passes on only its x / y. applyLayerTransform also
