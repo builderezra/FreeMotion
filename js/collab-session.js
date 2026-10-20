@@ -2260,6 +2260,11 @@ window.FM = window.FM || {};
        whose card carries no `collab` record is not a linked copy, whatever the session believes. */
     const card = ((FM.projects && FM.projects.list()) || []).filter(function (p) { return p.id === gpid; })[0];
     if (!card || !card.collab) { s.stop('left'); C.detach(); return Promise.resolve(null); }
+    /* #1091 (decided: make “Viewer: can only watch” TRUE): a watch-only copy — a Viewer's or Commenter's while the owner
+       has exporting off — is never kept, whatever the caller asked for. Read now, while the session still says what it
+       is; the room's sid too, for the parts the delete collects (C.dropCopy). */
+    const watchOnly = !!(C.watchOnly && C.watchOnly(gpid));
+    const roomSid = (s._media && s._media.sid) || s.sid || (card.collab && card.collab.sid) || null;
     /* ⚠️ S8 review: THE CARD IS MARKED LEFT FIRST, AND A WAITING APP UPDATE WAITS FOR THE COPY. `C.detach` runs a
        deferred service-worker reload synchronously, so an update that had landed during the session reloaded
        the page before `detachLinked` had copied a byte — and the linked card, untouched, reconnected on the
@@ -2272,8 +2277,21 @@ window.FM = window.FM || {};
     s.stop('left');
     C.detach({ holdReload: true });
     const settled = function (v) { leaving = Math.max(0, leaving - 1); C.runPendingReload(); return v; };
-    const job = (o.keep === false) ? FM.projects.remove(gpid).then(function () { return null; }) : FM.projects.detachLinked(gpid);
+    const job = (o.keep === false || watchOnly) ? C.dropCopy(gpid, roomSid) : FM.projects.detachLinked(gpid);
     return Promise.resolve(job).then(settled, function (e) { settled(); throw e; });
+  };
+  /* #1091: A COPY THAT IS DELETED TAKES ITS ROOM'S LEFTOVERS WITH IT. projects.remove takes the doc, its clips, its base
+     and its save points; the 4 MiB parts of a clip that never finished arriving stayed — §12.4 keeps a room's own parts
+     as somebody's resume point, and a deleted copy is nobody's. The open copy is flushed first, so a layer added in the
+     last 600 ms is in the doc remove reads, and its clip goes with the rest. Resolves null. */
+  C.dropCopy = function (gpid, sid) {
+    if (FM.projects && FM.projects.currentId && FM.projects.currentId() === gpid && FM.storage && FM.storage.flushSync) {
+      try { FM.storage.flushSync(); } catch (e) {}
+    }
+    return Promise.resolve(FM.projects.remove(gpid)).then(function () {
+      if (!sid || !C.media || !C.media.gcParts) return null;
+      return Promise.resolve(C.media.gcParts({ sid: sid, force: true })).then(function () { return null; }, function () { return null; });
+    });
   };
 
   /* §12.4's guest reload recovery, and the only piece of §12.2 that runs when nothing was clicked: the

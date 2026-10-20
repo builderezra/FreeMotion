@@ -1217,7 +1217,17 @@ window.FM = window.FM || {};
   function roleMeans(r) { for (let i = 0; i < ROLES.length; i++) if (ROLES[i][0] === r) return ROLES[i][2]; return ROLES[0][2]; }
   /* The owner changed this device's role: said, applied, and every open surface redrawn — now, not at
      the next thing the person tries (§16.3 "live role changes update these classes immediately"). */
+  /* #1091: what this device may do with its copy, written on the copy's card each time the owner says it (a role, the
+     room's switches, a welcome back), so a watch-only copy stays watch-only when there is no session to ask
+     (FM.collab.watchOnly). A guest that has not been told the switches yet writes only its role. */
+  function rememberRights(s) {
+    if (!s || s.isOwner || !s.gpid || !FM.projects || !FM.projects.patchCollab) return;
+    const patch = { role: s.role };
+    if (s.roomSettings) patch.roExport = s.roomSettings.roExport !== false;
+    try { FM.projects.patchCollab(s.gpid, patch); } catch (e) {}
+  }
   U.onRole = function () {
+    rememberRights(C.session);                   // #1091
     setAsk(null);                                // #967 B5: his role change is the answer to anything asked
     applyRoleClasses();
     const s = C.session;
@@ -1229,6 +1239,7 @@ window.FM = window.FM || {};
   };
   U.onSettings = function () {
     const s = C.session;
+    rememberRights(s);                           // #1091
     const root = panelRoot();
     if (root && s && !s.isOwner) drawGuestPanel(s, root === card ? undefined : root);
   };
@@ -1520,7 +1531,7 @@ window.FM = window.FM || {};
       text = n ? n + (n === 1 ? ' person here' : ' people here') : 'waiting for someone';
     } else if (s) {
       live = !s.ended && s.online !== false;
-      text = s.ended ? 'Ended — your copy stays here' : s.online === false ? 'Offline — reconnecting' : 'shared with you';
+      text = s.ended ? (C.watchOnly && C.watchOnly(s.gpid) ? 'Ended — watch only, not kept' : 'Ended — your copy stays here') : s.online === false ? 'Offline — reconnecting' : 'shared with you';   // #1091
     } else {
       const lc = cardOf(currentPid());
       text = (lc && lc.collab) ? 'Shared by ' + hostNameFor(lc.id) + ' · not connected' : 'Not sharing · invite people';
@@ -1875,8 +1886,10 @@ window.FM = window.FM || {};
       !!st.editorsInvite, function (v) { st.editorsInvite = v; saveRoom(hostRoomPid || currentPid(), hostRoom); pushSettings(); redrawShare(); }));
     /* D11: said honestly. The video is made on THEIR device, from a copy of the project that has to be on
        their device for the session to work at all, so this can only ask their FreeMotion to hold back. */
+    /* #1091: off now also means they keep nothing — Leave deletes their copy and its clips — so "their copy is on their
+       device either way" stopped being true. What it still cannot stop is said. */
     ppl.appendChild(switchRow('Viewers and commenters can export',
-      'Their device makes the video, so this only asks it not to — it can’t stop a screen recording, and their copy is on their device either way.',
+      'Off, their FreeMotion won’t export it or keep a copy when they leave. Their device needs the clips to play it, so it can’t stop a screen recording.',
       st.roExport !== false, function (v) { st.roExport = v; saveRoom(hostRoomPid || currentPid(), hostRoom); pushSettings(); redrawShare(); }));
     const cap = isPhoneNow() ? ((C.LIMITS && C.LIMITS.PEOPLE_MAX_PHONE) || 6) : ((C.LIMITS && C.LIMITS.PEOPLE_MAX_PC) || 12);
     const mr = el('div', 'cs-srow');
@@ -3183,7 +3196,7 @@ window.FM = window.FM || {};
     const c = host ? mountHost(host) : openCard('collab-share', { label: 'This shared project' });
     const head = el('div', 'cs-head');
     head.appendChild(el('h2', 'fm-ask-title', 'Shared with you'));
-    head.appendChild(el('div', 'cs-state', s.ended ? 'Ended — your copy stays on this device'
+    head.appendChild(el('div', 'cs-state', s.ended ? (C.watchOnly && C.watchOnly(s.gpid) ? 'Ended — it was shared with you to watch only, so no copy is kept' : 'Ended — your copy stays on this device')
       : s.online === false ? 'Offline — the live link dropped; your changes are kept here' : 'Live'));
     /* #967: an ended copy is nobody's room — "You're an Editor" under "Ended" was a contradiction. */
     /* #967 B4 (J5-9): the role, and what it means. */
@@ -3199,7 +3212,7 @@ window.FM = window.FM || {};
       body.appendChild(el('div', 'collab-sub cs-rolehint', (s.role === 'viewer'
         ? 'You can play it, and watch along with anyone here. '
         : 'You can read and add comments, and change or delete your own. ') +
-        (rs.roExport === false ? 'Exporting is turned off for viewers and commenters in this project.' : 'You can export a video of it on this device.')));
+        (rs.roExport === false ? 'Exporting is turned off for viewers and commenters in this project, and leaving keeps no copy.' : 'You can export a video of it on this device.')));
     }
     /* S5 (§19.1 "Guest panel"): who else is in, read-only, each with Follow. The names come from the
        host's roster via presence, so this is the same list the owner sees, in the same colours. */
@@ -3258,6 +3271,8 @@ window.FM = window.FM || {};
     c.appendChild(offRow(host));   // #967 batch 2: the switch that stays — for a friend it says it leaves the owner's project
     const foot = el('div', 'cs-foot');
     foot.appendChild(btn('cs-stop', 'Leave', function () {
+      /* #1091: a watch-only copy is not theirs to keep — its Leave says so and deletes it (leaveWatching). */
+      if (C.watchOnly && C.watchOnly(s.gpid)) { leaveWatching(s.gpid || currentPid(), host); return; }
       /* ⚠️ IT SAID "or delete it from this device" AND HAD NO DELETE BUTTON (queue 921 S3 review).
          `FM.ask` builds exactly two buttons, and `C.leave({keep:false})` — the delete branch — has no
          caller anywhere in the app. Offering a choice the dialog cannot express is worse than not
@@ -3312,6 +3327,31 @@ window.FM = window.FM || {};
         return null;
       });
     });
+  }
+  /* #1091 (decided 11 Oct: make “Viewer: can only watch” TRUE): THE LEAVE OF A WATCH-ONLY COPY. It was shared to watch
+     with exporting off, so there is no copy to keep — leaving deletes it and its clips from this device, and the card says
+     so BEFORE the tap. Live, through C.leave (which also collects the room's half-arrived parts); with no session, the
+     same delete from the copy's card. Resolves true when it went ahead. */
+  function leaveWatching(pid, host) {
+    const s = C.session;
+    const live = !!(s && !s.isOwner && s.gpid === pid);
+    const who = live ? hostNameOf(s) : hostNameFor(pid);
+    return Promise.resolve(FM.ask({ title: 'Leave this project?', danger: true, ok: 'Leave and delete', cancel: 'Cancel',
+      message: who + ' shared this with you to watch only, so no copy is kept — leaving deletes it and its clips from this device.' }))
+      .then(function (yes) {
+        if (!yes) return false;
+        if (host) closeAny(); else closeCard();
+        if (recon && recon.gpid === pid) stopRecon();
+        const card = cardOf(pid);
+        if (!live) joinBusy++;
+        const job = live ? C.leave({ keep: false }) : C.dropCopy(pid, card && card.collab && card.collab.sid);
+        return Promise.resolve(job).then(function () { return true; }, function () { return false; }).then(function (ok) {
+          if (!live) joinBusy = Math.max(0, joinBusy - 1);
+          U.syncBanner();
+          if (ok && FM.toast) FM.toast('You left — the copy was deleted from this device', 2600);
+          return ok;
+        });
+      });
   }
   /* B4/B5 review: the copy Leave keeps has a NEW project id, which the comments count reads as another project — a comment
      he was told about and never opened was zeroed. What he has not read yet goes across with the copy (collab-comments.js). */
@@ -3398,6 +3438,7 @@ window.FM = window.FM || {};
     c.appendChild(offRow(host));   // #967 batch 2: the switch that stays, on a shared copy too
     const foot = el('div', 'cs-foot');
     foot.appendChild(btn('cs-stop', 'Leave', function () {
+      if (C.watchOnly && C.watchOnly(pid)) { leaveWatching(pid, host); return; }   // #1091: nothing to keep — Leave deletes it
       U.leaveKeep(pid, function () { if (host) closeAny(); else closeCard(); });
     }));
     foot.appendChild(btn('cs-done accent', 'Done', function () { if (host) closeAny(); else closeCard(); }));
@@ -4446,6 +4487,8 @@ window.FM = window.FM || {};
        words, as the other states already had. */
     /* #967 B3 review: `switched` — the owner opened another project and this copy joined with a long code (U.beforePause):
        it has ended, and a new code is the way back. */
+    /* #1091: a watch-only copy keeps nothing (its next open or Leave deletes it) — said instead of "your copy is kept". */
+    if (s.ended && C.watchOnly && C.watchOnly(s.gpid)) return U.banner(isPhoneNow() ? 'Ended · watch only, not kept' : 'Sharing has ended — it was shared with you to watch only, so no copy is kept', { warn: true });
     if (s.ended) return U.banner(s.ended === 'removed'
       ? (isPhoneNow() ? 'Removed · your copy is kept' : 'You were removed from this project — your copy stays on this device')
       : s.ended === 'switched'
@@ -4695,6 +4738,17 @@ window.FM = window.FM || {};
     if (joinBusy || !FM.projects || !FM.projects.detachLinked) return null;
     const card = cardOf(gpid);
     const name = cleanName(card && card.collab && card.collab.hostName) || 'The owner';
+    /* #1091: a watch-only copy whose room is over does not become his own — it goes, clips and all, and that is said. */
+    if (C.watchOnly && C.watchOnly(gpid)) {
+      joinBusy++;
+      return C.dropCopy(gpid, card && card.collab && card.collab.sid).then(function () {
+        if (FM.toast) {
+          FM.toast((why === 'removed' ? name + ' removed you' : why === 'left' ? 'You left' : why === 'lost' ? 'That shared project can no longer be reached' : name + ' stopped sharing')
+            + ' — it was shared with you to watch only, so the copy was deleted from this device', 3800);
+        }
+        return null;
+      }, function () { return null; }).then(function (r) { joinBusy = Math.max(0, joinBusy - 1); return r; });
+    }
     joinBusy++;
     return FM.projects.detachLinked(gpid).then(function (nid) {
       if (nid && FM.toast) {
@@ -4729,6 +4783,7 @@ window.FM = window.FM || {};
   /* The owner admitted a reconnect's hello: NOW it is back in sync (S6 review). */
   U.onWelcome = function () {
     const s = C.session;
+    rememberRights(s);                           // #1091: a welcome back carries the role the owner holds for this device
     if (recon && recon.awaiting && s && !s.isOwner && s.gpid === recon.gpid && recon.back) recon.back();
   };
   /* A `deny` AFTER the handshake — the owner's answer to a reconnect's hello (§14.7, §22). */
@@ -5442,7 +5497,11 @@ window.FM = window.FM || {};
     const projects = (plan.live ? [plan.live] : []).concat(plan.kept);
     if (!plan.guestOf && !projects.length) return Promise.resolve({ ok: true, said: null });
     let message, said;
-    if (plan.guestOf) {
+    if (plan.guestOf && C.watchOnly && C.watchOnly(C.session && C.session.gpid)) {
+      /* #1091: a watch-only copy is deleted on the way out (C.leave), so the question says so. */
+      message = 'This leaves ' + plan.guestOf + '’s project — it was shared with you to watch only, so the copy is deleted from this device.';
+      said = 'You left ' + plan.guestOf + '’s project — the copy was deleted.';
+    } else if (plan.guestOf) {
       message = 'This leaves ' + plan.guestOf + '’s project — your copy stays on this device.';
       said = 'You left ' + plan.guestOf + '’s project — your copy is kept.';
     } else {
@@ -5505,10 +5564,12 @@ window.FM = window.FM || {};
       if (s && !s.isOwner) {
         /* #967: the guest is told where they are now — they left, and the copy is theirs. */
         const who = hostNameOf(s);
+        const watched = !!(C.watchOnly && C.watchOnly(s.gpid));   // #1091: C.leave deletes a watch-only copy, so it is said
         try {
           Promise.resolve(C.leave({ keep: true })).then(function (nid) { return nid; }, function () { return null; }).then(function (nid) {
             U.syncBanner();
-            if (FM.toast) FM.toast(nid ? 'You left ' + who + '’s project — your copy is kept'
+            if (FM.toast) FM.toast(watched ? 'You left ' + who + '’s project — it was shared with you to watch only, so the copy was deleted'
+              : nid ? 'You left ' + who + '’s project — your copy is kept'
               : 'You left ' + who + '’s project — your copy could not be made your own yet (the device may be full)', 3200);
           });
         } catch (e) {}

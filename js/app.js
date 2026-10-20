@@ -5860,7 +5860,9 @@ window.FM = window.FM || {};
     /* queue 921 S7 (D11, §16.1): the owner can turn exporting off for viewers and commenters. It is his
        request, honoured by this device — the Share panel tells him in so many words that it cannot stop a
        screen recording — and it is said, never silently ignored. One comparison with no session. */
-    if (FM.collab && FM.collab.active && FM.collab.canExport && !FM.collab.canExport()) {
+    /* #1091: …and a WATCH-ONLY copy (FM.collab.watchOnly) stays unexportable with no session too — offline, reopened, or
+       after the owner ended it — which is what makes “Viewer: can only watch” true. One read of the card when not live. */
+    if (FM.collab && ((FM.collab.active && FM.collab.canExport && !FM.collab.canExport()) || (FM.collab.watchOnly && FM.collab.watchOnly()))) {
       if (FM.ask) await FM.ask({ title: 'Exporting is turned off', ok: 'OK', single: true,
         message: 'The owner of this project has turned off exporting for viewers and commenters. You can still watch it here — ask them if you need a copy.' });
       return;

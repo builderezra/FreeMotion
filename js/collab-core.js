@@ -514,6 +514,26 @@ window.FM = window.FM || {};
   C.roomSettings = function () { const s = C.session; return (s && s.roomSettings) || {}; };
   /* D11: viewers and commenters may export unless the owner turned it off. Everyone else always may. */
   C.canExport = function () { return !roleReadOnly() || C.roomSettings().roExport !== false; };
+  /* ═══ #1091 (hunt HIGH, decided 11 Oct: make “Viewer: can only watch” TRUE) ═════════════════════════════════════════
+   * A Viewer's or Commenter's copy, while the owner has “Viewers and commenters can export” OFF, is WATCH-ONLY: it plays
+   * here and nothing takes it away — no video export, no project file, no backup, template, element or duplicate of it,
+   * and no copy kept when they leave (Leave deletes it and its clips). canExport above only held while a session was
+   * live, and every way out of a session (Leave, the owner ending it, a reopen with no link) made the copy theirs.
+   * Asked of the live session when it is this copy's; otherwise of what the copy's card last heard (collab-ui.js
+   * `rememberRights` writes role and roExport there), so it holds offline, after the owner ends it, and from Home.
+   * Every door asks this one question (storage.js, home.js, app.js, collab-session.js C.leave, collab-ui.js). */
+  C.watchOnly = function (pid) {
+    const id = pid || (FM.projects && FM.projects.currentId ? FM.projects.currentId() : null);
+    if (!id) return false;
+    const s = C.session;
+    if (s && !s.isOwner && s.gpid === id && !s.ended && s.active !== false && s.roomSettings) {
+      return (s.role === 'viewer' || s.role === 'commenter') && s.roomSettings.roExport === false;
+    }
+    let card = null;
+    try { card = ((FM.projects && FM.projects.list && FM.projects.list()) || []).filter(function (p) { return p && p.id === id; })[0] || null; } catch (e) { card = null; }
+    const cx = card && card.collab;
+    return !!cx && typeof cx === 'object' && (cx.role === 'viewer' || cx.role === 'commenter') && cx.roExport === false;
+  };
   /* Somebody else would see a change right now — the question the canvas-size confirm asks (D10). */
   C.othersHere = function () {
     const s = C.session;

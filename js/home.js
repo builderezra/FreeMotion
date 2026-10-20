@@ -1398,7 +1398,9 @@ window.FM = window.FM || {};
         /* §19.6: somebody else's shared copy is not his to duplicate, template or share — it can be kept as his
            own (the same detach Leave does), exported, or left and deleted. */
         ...(cx && cx.kind === 'shared' ? [
-          { label: 'Keep as my own copy', action: async () => {
+          /* #1091: a watch-only copy (FM.collab.watchOnly — shared to watch, exporting off) has nothing to keep, so
+             Leave & delete is its one way out. */
+          ...((FM.collab && FM.collab.watchOnly && FM.collab.watchOnly(p.id)) ? [] : [{ label: 'Keep as my own copy', action: async () => {
             if (!await FM.ask({ title: 'Keep this as your own project?', message: 'It stops being a copy of ' + cx.host + '’s project and becomes yours — their changes stop arriving.', ok: 'Keep as mine' })) return;
             const s = FM.collab.session;
             if (s && !s.isOwner && s.gpid === p.id) { await FM.collab.leave({ keep: true }); }
@@ -1408,7 +1410,7 @@ window.FM = window.FM || {};
               if (!nid && FM.toast) FM.toast('Could not make it your own — the device may be full');
             }
             render();
-          } },
+          } }]),
           { label: 'Leave & delete', danger: true, action: async () => {
             if (!await FM.ask({ title: 'Leave and delete this copy?', message: 'Your copy of ' + cx.host + '’s project is removed from this device. Their project is not touched.', ok: 'Leave & delete', danger: true })) return;
             const s = FM.collab.session;

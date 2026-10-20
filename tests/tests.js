@@ -169066,4 +169066,169 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ #1091 (hunt HIGH): “VIEWER — CAN ONLY WATCH” IS TRUE ═════════════════════════════════════════════════════════
+     With “Viewers and commenters can export” off, a Viewer could still tap Leave → “Leave (keep my copy)” and walk away
+     with the whole project and every clip as a project of their own — and with no session (offline, reopened, ended) the
+     export gate did not apply at all. Decided 11 Oct: make “only watch” true (FM.collab.watchOnly, every door).
+     FAILS BEFORE THE FIX: the card never records the export switch; the Leave card offers “Leave (keep my copy)”; after
+     Leave a new project named like the shared one is on the device; a watch-only copy with no session opens the export
+     dialog, saves a project file and duplicates.
+     CONTROLS, which hold before and after: with exporting off a live Viewer's Export is refused (the old in-session gate);
+     with exporting on the same Viewer's Leave keeps the copy as their own; an allowed copy with no session exports. */
+  test('1091 Work with friends: a viewer can only watch: with exporting off a Viewer’s Export is refused, the copy’s card remembers it, Leave offers no copy and afterwards the shared project, its clip and its card are gone from the device with nothing of it kept as theirs, and a watch-only copy with no session cannot be exported, saved as a project file or duplicated (CONTROLS: with exporting on the same Viewer’s Leave keeps the copy as their own, and an allowed copy with no session exports)', { item: '1091', budgetMs: 180000 }, async function () {
+    const C = need921S7('a Viewer who can only watch');
+    const exp = document.getElementById('export-dialog');
+    const bad = [];
+    function closeExport() {
+      const a = document.getElementById('fm-ask'); if (a && !a.classList.contains('hidden')) { const x = a.querySelector('.fm-ask-ok'); if (x) x.click(); }
+      exp.classList.add('hidden');
+      const o = document.getElementById('export-overlay'); if (o) o.classList.add('hidden');
+    }
+    /* true: the export dialog opened; false: the notice said exporting is off and nothing opened. */
+    async function exportOpens() {
+      const p = FM.showExportDialog();
+      const got = await until921S6('the export dialog or its notice', function () {
+        const q = ask967b3();
+        if (q && /Exporting is turned off/.test(q.title + ' ' + q.msg)) return { notice: q };
+        return exp.classList.contains('hidden') ? null : { open: true };
+      }, 4000);
+      if (got.notice) { got.notice.ok.click(); await p; await settle921(60); return !exp.classList.contains('hidden'); }
+      await p; await settle921(60); closeExport();
+      return true;
+    }
+    const cardOf1091 = function (pid) { return FM.projects.list().filter(function (p) { return p.id === pid; })[0] || null; };
+    const made = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    /* A Viewer's linked copy, opened, with one picture stored under its layer the way the transfer writes it. */
+    async function viewerCopy(tag) {
+      const D = { project: { name: 'Ezra’s film 1091 ' + tag, width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(mediaLayer921('Watch 1091 ' + tag, 'image'))] };
+      const gpid = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'viewer', epoch: 'e-1091', seq: 0, name: 'Sam' }, D);
+      if (!gpid) throw new Error('setup: could not make the shared copy');
+      made.push(gpid);
+      await FM.projects.open(gpid);
+      const lid = FM.scene.layers[0].id;
+      await q921give(lid, await q921png([30, 200, 30], 'watch1091' + tag + '.png'), 'image', 0);
+      return { gpid: gpid, lid: lid, name: D.project.name };
+    }
+    /* …in a live session with an owner whose export switch is `roExport`, as 967 B5 7 rigs it. */
+    function attachViewer(v, roExport) {
+      const hdoc = jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers });
+      const inv = C.bridge.invariants();
+      const H = C.Host({ base: jclone921(hdoc), invariants: inv, ownerInfo: { name: 'Ezra', color: '#ff9f43' } });
+      const HS = C.Session({ adapter: plainAdapter921(hdoc, inv), role: 'owner', mid: 'o', host: H });
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+      const mid = HS.addPeer(loop.a, { role: 'viewer', name: 'Sam', color: '#a3e635' });
+      const G = C.Session({ adapter: C.bridge, role: 'viewer', mid: mid, base: jclone921(hdoc), epoch: H.epoch });
+      G.gpid = v.gpid; G.pid = v.gpid; G.hostName = 'Ezra';
+      G.setLink(loop.b); G.bs = H.seq;
+      C.attach(G, { autoTick: false });
+      HS.setRoomSettings({ roExport: roExport, editorsInvite: false, max: 8 });
+      loop.settle();
+      if (!G.roomSettings || G.roomSettings.roExport !== roExport) throw new Error('setup: the owner’s export switch (' + roExport + ') did not reach the Viewer: ' + JSON.stringify(G.roomSettings));
+      return G;
+    }
+    async function openLeave(ui) {
+      await ui.share(); await settle921(150);
+      const leave = document.querySelector('#collab-share .cs-foot .cs-stop');
+      if (!leave) throw new Error('setup: the Viewer’s panel has no Leave');
+      leave.click();
+      return until921S6('the Leave card', ask967b3, 3000);
+    }
+    const storedNamed = function (name) {
+      const out = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || k.indexOf('fm.proj.') !== 0) continue;
+        let d = null;
+        try { d = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { d = null; }
+        if (d && d.project && d.project.name === name) out.push(k);
+      }
+      return out;
+    };
+    const ownURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    await withLabs921(async function (ui) {
+      try {
+        if (wasHome) FM.home.close();
+
+        /* 1. A LIVE Viewer, exporting off. */
+        const v = await viewerCopy('off');
+        attachViewer(v, false);
+        await settle921(80);
+        const cx = (cardOf1091(v.gpid) || {}).collab || {};
+        if (cx.role !== 'viewer' || cx.roExport !== false) bad.push('the copy’s card did not remember what the owner said (role ' + cx.role + ', roExport ' + cx.roExport + ') — with no session there would be nothing to ask');
+        if (await exportOpens()) bad.push('CONTROL: with exporting off a live Viewer’s Export opened the export dialog');
+        const before = FM.projects.list().map(function (p) { return p.id; });
+        const q = await openLeave(ui);
+        if (/keep/i.test(q.ok.textContent) || /copy stays/i.test(q.msg)) bad.push('with exporting off the Leave card still offers to keep a copy: “' + q.msg + '” [' + q.ok.textContent + ']');
+        q.ok.click();
+        await until921S6('the session to stand down and the shared copy to go', function () { return !C.session && !cardOf1091(v.gpid) ? 1 : null; }, 15000);
+        await settle921(400);
+        const fresh = FM.projects.list().filter(function (p) { return before.indexOf(p.id) < 0; });
+        fresh.forEach(function (p) { made.push(p.id); });
+        if (fresh.length) bad.push('after Leave with exporting off this device has ' + fresh.length + ' new project(s) ' + JSON.stringify(fresh.map(function (p) { return p.name; })) + ' — the watched project kept as theirs');
+        const named = storedNamed(v.name);
+        if (named.length) bad.push('after Leave a stored project still holds the watched “' + v.name + '” (' + named.join(', ') + ')');
+        const rec = await FM.storage.readMedia(v.lid);
+        if (rec && rec.file) bad.push('after Leave the shared clip is still stored on this device under its layer');
+
+        /* 2. CONTROL: the same Viewer with exporting ON keeps the copy as their own, as before. */
+        const w = await viewerCopy('on');
+        attachViewer(w, true);
+        await settle921(80);
+        if (!(await exportOpens())) bad.push('CONTROL: with exporting on a live Viewer could not export');
+        const before2 = FM.projects.list().map(function (p) { return p.id; });
+        const q2 = await openLeave(ui);
+        if (!/keep/i.test(q2.ok.textContent)) bad.push('CONTROL: with exporting on the Leave card no longer offers to keep the copy [' + q2.ok.textContent + ']');
+        q2.ok.click();
+        const nid = await until921S6('the allowed copy to become their own', function () {
+          const id = FM.projects.currentId();
+          return id && id !== w.gpid && !cardOf1091(w.gpid) && before2.indexOf(id) < 0 ? id : null;
+        }, 15000);
+        made.push(nid);
+        await settle921(300);
+
+        /* 3. A watch-only copy with NO session — offline, or reopened — as its card says after case 1. */
+        const x = await viewerCopy('nosession');
+        FM.projects.patchCollab(x.gpid, { roExport: false });
+        await settle921(80);
+        if (C.session) throw new Error('setup: a session is attached to the copy that is meant to have none');
+        if (await exportOpens()) bad.push('a watch-only copy with no session opened the export dialog');
+        let blobs = 0;
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: function (b) { if (b && b.type === 'application/json') blobs++; return ownURL.value.apply(URL, arguments); } });
+        Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+        try {
+          await FM.storage.exportFile();
+          await settle921(60);
+          const n1 = ask967b3(); if (n1) n1.ok.click();
+          if (blobs) bad.push('a watch-only copy with no session was saved as a project file');
+          const b1 = blobs;
+          await FM.storage.exportProjectFile(x.gpid);
+          await settle921(60);
+          const n2 = ask967b3(); if (n2) n2.ok.click();
+          if (blobs !== b1) bad.push('a watch-only copy with no session was saved as a project file from Home’s Save project file');
+        } finally {
+          Object.defineProperty(URL, 'createObjectURL', ownURL);
+          if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+          else delete HTMLAnchorElement.prototype.click;
+        }
+        const before3 = FM.projects.list().map(function (p) { return p.id; });
+        const dup = await FM.projects.duplicate(x.gpid);
+        const dups = FM.projects.list().filter(function (p) { return before3.indexOf(p.id) < 0; });
+        dups.forEach(function (p) { made.push(p.id); });
+        if (dup || dups.length) bad.push('a watch-only copy with no session was duplicated into ' + JSON.stringify(dups.map(function (p) { return p.name; })));
+        /* CONTROL: the same copy with exporting allowed exports — so the refusals above are about the switch. */
+        FM.projects.patchCollab(x.gpid, { roExport: true });
+        if (!(await exportOpens())) bad.push('CONTROL: a Viewer’s copy with exporting allowed and no session could not export');
+      } finally {
+        closeExport();
+        const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+        try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+        try { ui.close(); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();
