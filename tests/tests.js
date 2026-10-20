@@ -72163,8 +72163,6 @@
   });
 
   test('export: a browser with no AAC encoder ships an honest silent file, not one promising a track (queue 215)', { item: '215' }, async function () {
-    /* isolation (20 Oct): it leaves its songs' media records behind wherever AAC runs (the queue-215 family) — isoKeep puts back what it found, in its own finally */
-    const _isoK = isoKeep(); try {
     // its control needs a REAL AAC encode (measured 6 Oct: with AAC taken away it went red) — NOT RUN HERE without one (#1071)
     await needsAac();
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
@@ -72223,7 +72221,6 @@
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
     }
-    } finally { _isoK.put(); }
   });
 
   /* Queue 215 — THE FIFTH SILENT LOSS, and the one that fits his report best.
@@ -72264,8 +72261,6 @@
   }
 
   test('export: a soundtrack that is entirely muted says so instead of shipping a silent file (queue 215)', { item: '215' }, async function () {
-    /* isolation (20 Oct): it leaves its songs' media records (q215SilentProbe) behind wherever AAC runs — isoKeep puts back what it found, in its own finally */
-    const _isoK = isoKeep(); try {
     // its control needs a REAL AAC encode (measured 6 Oct: with AAC taken away it went red) — NOT RUN HERE without one (#1071)
     await needsAac();
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
@@ -72295,7 +72290,6 @@
       if (FM.refreshAll) FM.refreshAll();
       if (FM.timeline) FM.timeline.rebuild();
     }
-    } finally { _isoK.put(); }
   });
 
   test('export: SOLO on a silent layer kills the whole soundtrack, and now says so (queue 215)', { item: '215' }, async function () {
