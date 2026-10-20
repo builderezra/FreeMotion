@@ -1531,12 +1531,18 @@ window.FM = window.FM || {};
      * skipped the check entirely would simply be weaker still. Recursion is one level and cannot loop:
      * a cue is a plain object with no captions of its own. */
     if (Array.isArray(l.captions)) {
+      /* 1176 leftover: a stored word start reaches as far as a time on its clip can, clipTimeBound (bughunt7 #3 says why), the
+         bound a key time has. It was 3600, the project's: a word start is seconds from its cue's real start, and a caption track
+         is not held to the project (up to FM.LIMITS.duration long), so on a cue over an hour long one Undo of anything dropped
+         every stored word start and the cue fell back to the shared-out times; the undo autosaved that and redo could not
+         bring it back. Still finite, never negative, still bounded: a list holding anything past the bound is dropped whole. */
+      const WB = clipTimeBound();
       l.captions.forEach(c => {
         if (!c || typeof c !== 'object') return;
         /* #966 B9: a cue's stored word starts (Word Highlight, FM.captions.bakeWords) — plain numbers or nothing. A list of
            finite seconds is KEPT as it is (the renderer itself ignores one that does not fit the words); any other shape is
            dropped whole, never repaired, so the cue falls back to the shared-out times. */
-        if (c.words != null && !(Array.isArray(c.words) && c.words.length <= 5000 && c.words.every(v => typeof v === 'number' && isFinite(v) && v >= 0 && v <= 3600))) delete c.words;
+        if (c.words != null && !(Array.isArray(c.words) && c.words.length <= 5000 && c.words.every(v => typeof v === 'number' && isFinite(v) && v >= 0 && v <= WB))) delete c.words;
         if (c.effects == null) return;
         if (!Array.isArray(c.effects)) { delete c.effects; return; }
         sanitizeEffects(c);

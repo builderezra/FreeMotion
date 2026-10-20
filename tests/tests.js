@@ -170902,4 +170902,69 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ 1176 leftover (after bughunt7 #3): ONE UNDO DROPPED THE STORED WORD TIMES OF A CAPTION OVER AN HOUR LONG ═══════════════
+     js/storage.js sanitizeEffects keeps a cue's stored word starts (#966 B9, Word Highlight) only while every one is a finite
+     number from 0 to 3600, the PROJECT's bound, and drops the whole list otherwise. A word start is seconds from its cue's real
+     start, and a caption track is not held to the project (hunt5 later A: up to FM.LIMITS.duration long), so on a cue longer
+     than an hour every word said after its first hour is past 3600. history.restore runs that sanitiser over every layer, so
+     one Undo of anything dropped the cue's stored times and the highlight fell back to the shared-out ones; the undo autosaved
+     that and redo, which sanitises the same way, could not bring it back. Now a word start is bounded as bughunt7 #3 bounds a
+     key time: 3600 + FM.LIMITS.duration (clipTimeBound).
+     A caption track 5000 s long: one cue across 4800 s of it with its four words stored at 0, 1200, 3700 and 4400 s, and a cue
+     under an hour (words at 0, 0.2, 0.4 and 2 s); then a rename of another layer, its Undo, and its Redo.
+     FAILS BEFORE THE FIX: after the Undo (and the Redo) the long cue has no words at all, and 3900 s into it lights the fourth
+     word (the shared-out times: four one-beat words, 1200 s each) where the stored times light the third.
+     CONTROLS, which hold before and after: before the Undo the stored and the shared-out times light different words at 3900 s
+     (else the lit word measures nothing); the Undo really took the rename back; the cue under an hour keeps [0, 0.2, 0.4, 2];
+     and a list holding a negative, a NaN or an absurd time (1e12) is still dropped whole. */
+  test('1176 leftover: one Undo keeps the stored word times of a caption over an hour long: a 5000 s caption track whose cue has its words stored at 0, 1200, 3700 and 4400 s keeps all four through an Undo and its Redo, and 3900 s into it the third word is the one lit (CONTROLS: the Undo took the rename back, a cue under an hour keeps its words, and a list with a negative, a NaN or an absurd time is still dropped whole)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.history || !FM.history.reset || !FM.history._steps || !FM.storage || typeof FM.storage._sanitizeLayers !== 'function' || typeof FM.captionWordTimes !== 'function' || !FM.LIMITS) throw new Error('setup: FM.history (reset, _steps), FM.storage._sanitizeLayers, FM.captionWordTimes or FM.LIMITS is not reachable');
+    const bad = [], LONG = [0, 1200, 3700, 4400], SHORT = [0, 0.2, 0.4, 2], TEXT = 'one two three four';
+    /* which word of `cue` is lit at layer-local time t, by the renderer's own word times */
+    const litAt = (cue, t, dur) => FM.captionWordTimes(cue, null, dur).findIndex(w => t >= w.s && t < w.e);
+    await _bh2With(async function () {
+      const T = FM.makeLayer('shape', { name: '1176 words title', shape: 'rect', x: 20, y: 20, shapeW: 10, shapeH: 10, fill: '#ffffff', start: 0, duration: 4 });
+      T.start = 0; T.duration = 4;
+      const K = FM.makeLayer('text', { name: '1176 words captions', text: 'Captions', fontSize: 28, color: '#ffffff', x: 160, y: 200, start: 0, duration: 5000 });
+      K.start = 0; K.duration = 5000;
+      K.captions = [{ start: 0, end: 4800, text: TEXT, words: LONG.slice() }, { start: 4800, end: 4806, text: 'sold by Friday now', words: SHORT.slice() }];
+      FM.scene.layers = [T, K];
+      FM.scene.project.duration = 3600;
+      FM.refreshAll();
+      FM.history.reset();
+      const stored0 = litAt(K.captions[0], 3900, K.duration), shared0 = litAt({ start: 0, end: 4800, text: TEXT }, 3900, K.duration);
+      if (stored0 !== 2 || shared0 === 2) throw new Error('setup: 3900 s into the cue the stored times light word ' + stored0 + ' and the shared-out ones word ' + shared0 + ', so the lit word cannot tell them apart');
+      const look = (where) => {
+        const c = FM.layerById(FM.scene, K.id);
+        const cs = c && Array.isArray(c.captions) ? c.captions : [];
+        if (!c || cs.length !== 2) { bad.push(where + ': the caption track came back with ' + cs.length + ' cue(s), not two'); return; }
+        if (JSON.stringify(cs[0].words) !== JSON.stringify(LONG)) bad.push(where + ': the cue over an hour long came back with its stored words ' + ('words' in cs[0] ? JSON.stringify(cs[0].words) : 'gone') + ', not ' + JSON.stringify(LONG) + ' — two of them are past 3600 s, and the sanitiser dropped the whole list');
+        const lit = litAt(cs[0], 3900, c.duration);
+        if (lit !== 2) bad.push(where + ': 3900 s into the cue word ' + lit + ' is lit, not word 2 (“three”, stored at 3700 s)' + (lit === shared0 ? ' — the shared-out times, as if no word had been timed' : ''));
+        if (JSON.stringify(cs[1].words) !== JSON.stringify(SHORT)) bad.push('CONTROL: ' + where + ' the cue under an hour came back with its words ' + JSON.stringify(cs[1].words) + ', not ' + JSON.stringify(SHORT));
+      };
+      const n0 = FM.history._steps().len;
+      T.name = '1176 words title renamed';
+      FM.history.commit();
+      if (FM.history._steps().len !== n0 + 1) throw new Error('setup: renaming the title did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+      FM.history.undo();
+      await sleep(60);
+      const T1 = FM.layerById(FM.scene, T.id);
+      if (!T1 || T1.name !== '1176 words title') throw new Error('setup: the Undo did not take the rename back (' + (T1 ? T1.name : 'the title is gone') + '), so nothing below is measured');
+      look('after one Undo of a rename');
+      FM.history.redo();
+      await sleep(60);
+      look('after its Redo');
+    });
+    /* ── CONTROL: a list holding a negative, a NaN or an absurd time is still dropped whole */
+    const A = JSON.parse(JSON.stringify(FM.makeLayer('text', { name: '1176 words broken', text: 'x', start: 0, duration: 10 })));
+    A.start = 0; A.duration = 10;
+    A.captions = [{ start: 0, end: 2, text: 'a b', words: [0, -1] }, { start: 2, end: 4, text: 'c d', words: [0, NaN] }, { start: 4, end: 6, text: 'e f', words: [0, 1e12] }, { start: 6, end: 8, text: 'g h', words: [0, 1] }];
+    FM.storage._sanitizeLayers([A]);
+    const cw = (A.captions || []).map(c => ('words' in c) ? JSON.stringify(c.words) : 'gone');
+    if (cw[0] !== 'gone' || cw[1] !== 'gone' || cw[2] !== 'gone') bad.push('CONTROL: word lists holding -1, NaN and 1e12 came back as ' + cw.slice(0, 3).join(', ') + ', not dropped whole');
+    if (cw[3] !== '[0,1]') bad.push('CONTROL: an ordinary word list [0,1] came back as ' + cw[3]);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();
