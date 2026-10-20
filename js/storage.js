@@ -3214,11 +3214,12 @@ window.FM = window.FM || {};
     /* DELETE A DRAFT EVEN WHEN IT IS THE ONE YOU HAVE OPEN (queue 617 clause 4).
      * Ezra: *"You have to manually delete them you can't do the select delete, I figured it out"* …
      * *"But as long as there's one left I can't delete it"*.
-     * He was exactly right, and the cause is one line: `discardDraft` returns false for `curId()`, by
-     * design, because deleting the current document leaves the current-project pointer dangling and
-     * the next boot mints "My project". So he could delete his way down the list and the last one —
-     * whichever he happened to have open — refused forever, with a toast telling HIM to go and open
-     * something else first.
+     * He was exactly right, and the cause is one line: `discardDraft` returns false for the draft THIS
+     * tab has open (`tabId()`; until bughunt8 #2b it asked `curId()`, the shared pointer), by design,
+     * because deleting the document open here leaves the editor on a project with no card (when this
+     * was written, the pointer dangled and the next boot minted "My project"). So he could delete his
+     * way down the list and the last one — whichever he happened to have open — refused forever, with
+     * a toast telling HIM to go and open something else first.
      * ⚠️ THE ORDER IS THE WHOLE TRICK, and `commitDraft` below already learned it the hard way: switch
      * away FIRST, then discard. The other order simply leaves the draft behind.
      * ⚠️ AND `remove()` IS NOT THE ANSWER, tempting as it looks. It handles the current project by
@@ -4111,8 +4112,8 @@ window.FM = window.FM || {};
       const ok = await this.insert(eid);
       /* NOTHING TO EDIT — AND THIS LINE USED TO STRAND A DRAFT EVERY TIME, which is queue 617 clause 1.
          Its comment said "do not strand a draft" and it stranded one on every failed open, because
-         `create()` ends with `await this.open(id)` — so the workspace it just minted IS the current
-         project — and `discardDraft` REFUSES on the current project by design (`id === curId()`
+         `create()` ends with `await this.open(id)` — so the workspace it just minted IS the project
+         open in this tab — and `discardDraft` REFUSES on that project by design (`id === tabId()`
          returns false). The cleanup called the one function that cannot run here.
          MEASURED (tests/_617drafts.html): openForEdit returned null and left `p_…` behind with its
          `ofElement` set. It strands one per element rather than one per tap — the second open matches
