@@ -174385,4 +174385,78 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ bughunt8 #9: THE TILT PLATES WERE KEPT FOR THE LIFE OF THE PAGE ════════════════════════════════════════════════════════════
+     What was wrong. js/compositor.js draw3DTiltLayer's plate pair (_t3Pool) and the three pools of the passes that follow a tilt
+     plate past the frame (_pfPoolT, _wpPoolT, _cfPoolT) are re-sized to the last plate drawn through them and never released, so
+     after an export with a leant layer they held export-sized canvases (up to about 80 MB a pool for 1080 × 1920) until something
+     leant was drawn again — kept with the layer deleted, the project closed or Home open, against WebKit's canvas-memory cap on his
+     phone. Now FM.releaseTiltPools sets every one of them to 0 × 0 and empties the pools, and the exporter calls it as each export
+     ends and projects.open as the project changes; FM._tiltPoolPixels says how many pixels they hold.
+     In a project made for this test (320 × 240), a red square hinged on its left edge at x 280 and leant 70° about Y (#3b's square:
+     its plate grows past the frame) with a Drop Shadow on it. (1) Drawn once: the pools hold pixels. (2) The real PNG-frames export
+     of one frame (FM.exporter.runFrames; its zip and download are stood in for): while it renders the pools hold pixels, and once it
+     has ended they hold none. (3) Drawn again, then another project opened: they hold none.
+     FAILS BEFORE THE FIX: FM._tiltPoolPixels is missing, nothing releases the pools, and after the export and after the switch the
+     plates are still held.
+     CONTROLS, which hold on the fixed tree: drawing the leant square really fills the pools, and so does the export's own frame (so
+     an empty pool afterwards is a release, not a pool that was never used); the export ran (one zip). No tolerance: counts. */
+  test('bughunt8 #9 The tilt plates are given back: after an export of a leant layer, and when another project is opened, the tilt pools hold no pixels (CONTROLS: drawing the leant layer and the export’s own frame really fill them; the export ran)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.runFrames !== 'function' || !FM.zipWrite || typeof FM.zipWrite.create !== 'function' || typeof FM.renderScene !== 'function') throw new Error('setup: the PNG-frames exporter (FM.exporter.runFrames, FM.zipWrite) or FM.renderScene is not reachable');
+    const bad = [], made = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const ownURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    const realRender = FM.renderScene;
+    const pixels = function () { return typeof FM._tiltPoolPixels === 'function' ? FM._tiltPoolPixels() : null; };
+    let zips = 0;
+    try {
+      if (wasHome) FM.home.close();
+      if (typeof FM._tiltPoolPixels !== 'function' || typeof FM.releaseTiltPools !== 'function') bad.push('the tilt pools cannot be read (FM._tiltPoolPixels) and nothing gives them back (FM.releaseTiltPools): after an export or a project switch the leant layer’s plates stay held for the life of the page');
+      const X = await FM.projects.create({ name: 'bughunt8 #9 leant', width: 320, height: 240 });
+      if (!X) throw new Error('setup: could not make the test’s project');
+      made.push(X);
+      FM.scene.project.duration = 2;
+      const L = FM.makeLayer('shape', { name: 'bh8 #9 leant square', shape: 'rect', x: 280, y: 120, shapeW: 100, shapeH: 100, fill: '#ff0000', start: 0, duration: 2 });
+      L.start = 0; L.duration = 2;
+      L.transform.anchorX = 0; L.transform.rotationY = 70;
+      L.effects = [{ type: 'dropshadow', enabled: true, params: _o4P('dropshadow') }];
+      FM.scene.layers.push(L);
+
+      /* (1) drawn once: the pools fill */
+      _bh2Frame(0.5);
+      const p1 = pixels();
+      if (p1 !== null && !(p1 > 0)) bad.push('CONTROL: drawing the leant square left the tilt pools empty (' + p1 + ' px), so a release cannot be told from a pool never used');
+
+      /* (2) the real PNG-frames export of one frame */
+      Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: function (b) { if (b && /zip/.test(b.type || '')) zips++; return 'blob:bughunt8-9'; } });
+      Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+      let during = 0;
+      FM.renderScene = function () { const r = realRender.apply(this, arguments); if (FM._exporting) { const n = pixels(); if (n > during) during = n; } return r; };
+      let exErr = null;
+      try { await FM.exporter.runFrames({ scale: 1, fps: 10, from: 0, to: 0.1, name: 'bughunt8-9', format: 'png', onProgress: function () {} }); } catch (e) { exErr = e; }
+      FM.renderScene = realRender;
+      if (exErr) throw new Error('setup: the PNG-frames export failed (' + (exErr && exErr.message) + '), so nothing was measured');
+      if (zips !== 1) bad.push('CONTROL: the PNG-frames export made ' + zips + ' zip(s), not one, so it did not run to its end');
+      if (p1 !== null && !(during > 0)) bad.push('CONTROL: the export’s own frame of the leant square left the tilt pools empty, so the export did not draw through them');
+      const p2 = pixels();
+      if (p2 !== null && p2 !== 0) bad.push('after the export of the leant square ended, the tilt pools still hold ' + p2 + ' px of plates, which nothing will give back until something leant is drawn again');
+
+      /* (3) drawn again, then another project opened */
+      _bh2Frame(0.5);
+      const p3 = pixels();
+      const Y = await FM.projects.create({ name: 'bughunt8 #9 elsewhere', width: 320, height: 240 });
+      if (Y) made.push(Y);
+      const p4 = pixels();
+      if (p3 !== null && !(p3 > 0)) bad.push('CONTROL: drawing the leant square again left the tilt pools empty (' + p3 + ' px)');
+      if (p4 !== null && p4 !== 0) bad.push('after another project was opened, the tilt pools still hold ' + p4 + ' px of the last project’s plates');
+    } finally {
+      FM.renderScene = realRender;
+      Object.defineProperty(URL, 'createObjectURL', ownURL);
+      if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+      else delete HTMLAnchorElement.prototype.click;
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

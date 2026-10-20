@@ -18100,6 +18100,29 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // …and Deflicker's brightness history (#966 B53, a PIXEL_FX kernel with its own store: dfReset, beside it near FM._FX_TABLES)
   // …and Auto Grade's smoothed grade (#966 B51, a PIXEL_FX kernel with its own store: agReset, beside it near FM._FX_TABLES)
   FM.resetMotionFlowCache = function () { for (const k in _mflow) delete _mflow[k]; dfReset(); agReset(); };
+  /* ═══ bughunt8 #9: THE TILT PLATES ARE GIVEN BACK WHEN AN EXPORT ENDS AND WHEN THE PROJECT CHANGES ═══════════════════════════════
+   * draw3DTiltLayer's pair (_t3Pool) and the three pools of the passes that follow a tilt plate past the frame (_pfPoolT,
+   * _wpPoolT, _cfPoolT) are sized to the last plate drawn through them and were never released: one export frame of a 1080 × 1920
+   * project with a leant layer carrying a following effect left up to about 80 MB per pool held, after the layer was deleted or the
+   * project closed, and WebKit on iOS caps the total canvas memory (past it getContext answers null and layers vanish, which the
+   * 4096² ceiling exists to prevent). So the exporter calls this as each export ends (js/exporter.js, beside FM._exporting = false)
+   * and a project switch does (js/storage.js projects.open, beside FM.resetMotionFlowCache): each canvas is set to 0 × 0, which
+   * frees its pixels at once, and the pools are emptied; the next leant layer drawn makes its plates again. Never mid-render: a
+   * plate in use (any depth counter up) is left alone. FM._tiltPoolPixels says how many pixels the four pools hold (a suite seam). */
+  const _tiltPools = () => [_pfPoolT, _wpPoolT, _cfPoolT, _t3Pool];
+  FM.releaseTiltPools = function () {
+    if (_t3Depth || _pfDepth || _wpDepth || _cfDepth) return false;
+    _tiltPools().forEach(pool => {
+      pool.forEach(s => { if (s) ['A', 'B'].forEach(k => { const c = s[k]; if (c) { c.width = 0; c.height = 0; } }); });
+      pool.length = 0;
+    });
+    return true;
+  };
+  FM._tiltPoolPixels = function () {
+    let n = 0;
+    _tiltPools().forEach(pool => pool.forEach(s => { if (s) ['A', 'B'].forEach(k => { const c = s[k]; if (c) n += (c.width || 0) * (c.height || 0); }); }));
+    return n;
+  };
   function _mfRec(id, W, H) {
     let r = _mflow[id];
     if (!r) {

@@ -2900,6 +2900,7 @@ window.FM = window.FM || {};
       // OUTGOING project's layer ids and nothing else ever clears them (only the exporter did), so
       // the store grew for the whole session and a re-used id could inherit a stranger's frame.
       if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
+      if (FM.releaseTiltPools) FM.releaseTiltPools();   // bughunt8 #9: the outgoing project's tilt plates go back (compositor.js)
       if (FM._resetPlayQuality) FM._resetPlayQuality();   // queue 690: the playback quality learned on the outgoing project is not evidence about this one
       if (FM.viewport) FM.viewport.reset();   // fresh project → fresh view (preview pan/zoom is never saved)
       FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.scene.layers = []; FM.time = 0;
