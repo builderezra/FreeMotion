@@ -174695,4 +174695,346 @@
     });
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ bughunt8 #2c: THE REST OF THE “IS IT THE ONE OPEN HERE?” CHECKS #1176 MOVED, WITH ANOTHER TAB ON A PROJECT OF ITS OWN ═══════
+     What it guards. 6739671e..faf84581 moved every check that means the project THIS tab has open off FM.projects.currentId(), the
+     shared localStorage fm.currentProject every tab rewrites when it opens a project, onto this tab's own (tabId() in storage.js,
+     FM.storage.openProjectId() everywhere else). bughunt8 #2b catches Duplicate, remove()'s switch and C.leave's fallback; 921 S2
+     and 996 catch pushLocal's lock, C.onReset and offProject. The review of the change (F1) found the rest with no test that fails
+     when one of them is put back on the pointer, and this is that test. The other tab is played as #2 and #2b play it: with his
+     own project X open here, fm.currentProject is pointed at another project, then put back on what this tab has open. No
+     network: no session dials, a reconnect's link is a fake object, and Share on a loopback page is refused by relayGate.
+     Seven doors, a CONTROL in one tab each time, and the site each assertion guards:
+     1. The comments count (collab-comments.js scan's pid). Sam's comment counts 1; the pointer moves and his second arrives: 2.
+     2. The bridge's base fallbacks with no session (collab-bridge.js openPid, one assertion for each of the three): persistBase()
+        files the base under X, not under the other tab's Y, which holds a decoy; readBase() with no id reads X's, not the decoy;
+        dropBase() with no id drops X's and leaves the decoy.
+     3. A reconnect through a fake link and a stand-in readBase (collab-session.js C.reopen): with gpid X it still attaches (its
+        #996 gate); with no gpid it asks for X's base (its fallback).
+     4. Delete's keep-set (storage.js remove, its live-scene clause). A clip on screen here and not saved yet, whose id a project
+        V's stored document also names (a linked copy carries the host's ids), with a record in the store. The other tab has V
+        open and V is deleted from here: the record is kept. A record only V names goes (the control that the delete ran).
+     5. Detach (storage.js detachLinked). (a) The shared copy open here, with a layer not saved yet, detached while the other tab
+        is elsewhere: the new copy holds the layer (its flush), and it is what this tab has open. (b) The shared copy open in the
+        OTHER tab, detached from here: this tab stays on X (its wasOpen).
+     6. Drafts. A draft open here: discardDraft refuses it and keeps its document and card (discardDraft's check), and
+        discardDraftAnyway takes the switch-away route, so this tab ends off the draft and the draft is gone (discardDraftAnyway's
+        check).
+     7. Share (U.share, then armShare, then C.share), with X open and the pointer on Y: the session is bound to X (C.share's
+        S.pid), and the room is filed under X and not under Y (collab-ui.js currentPid, which armShare's lock, room and save
+        point read). With a shared copy open here and the pointer on a plain project, Share arms nothing (currentPid again, in
+        U.share's and armShare's refusal of somebody else's copy).
+     NOT SEPARATELY REACHABLE: detachLinked's last line (`tabId() !== nid` before its own open). With the copy open here, remove()
+     has already moved this tab onto the new copy (it is first in the index), so this tab and the pointer agree by then; with the
+     copy open elsewhere wasOpen is false and the line does nothing. 5(a)'s "this tab is on the new copy" is the outcome it serves.
+     currentPid()'s other readers (the resume, the banner, the knock card) are the same one function, so 7 guards them as one.
+     Not asserted on purpose: discardDraft of a draft open only in ANOTHER tab now goes ahead (the review's F3: not a regression,
+     and not a behaviour to pin).
+     FAILS BEFORE THE FIX, each with that one site read from the pointer: 1 the count is 0, not 2 (the move reads as another
+     project, and both comments are marked seen); 2 the base is filed under Y, read as the decoy, and the decoy is the one
+     dropped; 3 the reconnect with gpid X attaches nothing, and the one with no gpid asks for Y's base; 4 the record of the clip
+     on screen is deleted; 5(a) the new copy lacks the layer, 5(b) this tab is moved off X onto the new copy; 6 discardDraft
+     deletes the draft open here under the open editor, and discardDraftAnyway takes the not-open route and leaves this tab on
+     the draft; 7 the session is bound to Y, the room is filed under Y, and the shared copy is armed as a room of the guest's own.
+     CONTROLS, which hold before and after: with one tab Sam's comment counts 1; a base is filed, read and dropped under X; a
+     reconnect with no gpid attaches to X; deleting another project keeps a clip on screen and deletes a record only it named;
+     detaching the copy open here copies the unsaved layer and lands on the copy; discardDraft refuses the draft open here and
+     discardDraftAnyway deletes it from somewhere else; Share arms X with X's room; Share on a shared copy arms nothing. Share's
+     control runs AFTER its two-tab arm: collab-ui keeps the last room in memory (useRoom), so a room made for X first would let
+     the two-tab arm skip the save the assertion reads. No tolerance: every quantity is an id, a name, a count or a flag. */
+  test('bughunt8 #2c with another tab on a project of its own, the rest of the checks that mean the project open in THIS tab ask this tab: the comments count is kept, a base is filed, read and dropped under the project open here, a reconnect to it is not dropped, deleting the other tab’s project keeps the clips on screen here, Detach flushes and moves this tab onto the new copy (and leaves it alone when the copy is open elsewhere), a draft open here is refused by discardDraft and switched away from by discardDraftAnyway, and Share binds the session and the room to the project open here and arms no shared copy (CONTROLS: with one tab each does what it did before)', { item: '1176', budgetMs: 180000 }, async function () {
+    const C = need921S7('the rest of the open-project checks with two tabs');
+    if (typeof FM.storage.openProjectId !== 'function' || typeof FM.storage.collabPut !== 'function' || typeof FM.storage.collabGet !== 'function' || typeof FM.storage.collabDel !== 'function' || typeof FM.storage.collabKeys !== 'function' || typeof FM.projects.remove !== 'function' || typeof FM.projects.createLinked !== 'function' || typeof FM.projects.detachLinked !== 'function' || typeof FM.projects.discardDraft !== 'function' || typeof FM.projects.discardDraftAnyway !== 'function' || typeof C.reopen !== 'function' || typeof C.bridge.persistBase !== 'function' || typeof C.bridge.readBase !== 'function' || typeof C.bridge.dropBase !== 'function' || typeof C.comments.unread !== 'function' || typeof C.comments.onChange !== 'function' || typeof C.ui.share !== 'function') throw new Error('setup: FM.storage.openProjectId / collabPut / collabGet / collabDel / collabKeys, FM.projects.remove / createLinked / detachLinked / discardDraft / discardDraftAnyway, FM.collab.reopen, the bridge base calls, the comments count or the Share panel is not reachable');
+    const bad = [], made = [], recs = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const ts = Date.now().toString(36);
+    let moved = false;
+    /* another tab opening project `pid`: only the shared pointer moves */
+    const otherTab = function (pid) { moved = true; localStorage.setItem('fm.currentProject', pid); };
+    /* …and closing again: the pointer is what this tab last wrote there, the project it has open */
+    const backTab = function () {
+      if (!moved) return;
+      moved = false;
+      const mine = FM.storage.openProjectId();
+      if (mine) localStorage.setItem('fm.currentProject', mine); else localStorage.removeItem('fm.currentProject');
+    };
+    const here = function () { return FM.storage.openProjectId(); };
+    const cardOf = function (pid) { return FM.projects.list().filter(function (p) { return p.id === pid; })[0] || null; };
+    const has = function (pid) { return !!cardOf(pid); };
+    const nameOf = function (pid) { const c = pid ? cardOf(pid) : null; return pid ? '“' + ((c && c.name) || pid) + '”' : 'nothing'; };
+    const hasRoom = function (pid) { try { return localStorage.getItem('fm.collab.host.' + pid) !== null; } catch (e) { return false; } };
+    const say = function (v) { return JSON.stringify(v === undefined ? null : v).replace(/"/g, "'"); };
+    /* the layer names a project's stored document holds */
+    const docNames = function (pid) {
+      let d = null;
+      try { d = JSON.parse(localStorage.getItem('fm.proj.' + pid) || 'null'); } catch (e) { d = null; }
+      return ((d && d.layers) || []).map(function (l) { return l && l.name; });
+    };
+    /* an Editor's shared copy with no way back to a room (no hub, rid or token), so opening it starts no reconnect */
+    function linked(tag) {
+      const D = { project: { name: 'Ezra’s film bh8-2c ' + tag, width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(layer921('Shared bh8-2c ' + tag))] };
+      const id = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'editor', epoch: 'e-bh8-2c-' + tag, seq: 0, name: 'Sam' }, D);
+      if (!id) throw new Error('setup: could not make the shared copy ' + tag);
+      made.push(id);
+      return id;
+    }
+    async function openHere(pid, what) {
+      await FM.projects.open(pid, { confirmed: true });
+      await settle921(80);
+      if (here() !== pid) throw new Error('setup: this tab did not open ' + what);
+    }
+    /* a hidden workspace an element is built in, made and opened here */
+    async function draft(tag) {
+      const id = await FM.projects.create({ name: 'bughunt8 #2c draft ' + tag, width: 320, height: 240, elementDraft: true });
+      if (!id) throw new Error('setup: could not make the draft ' + tag);
+      made.push(id);
+      if (here() !== id) throw new Error('setup: this tab is not on the draft ' + tag);
+      return id;
+    }
+    /* every room, save point and base that an arm or the bridge wrote under a project this test made */
+    async function dropRooms() {
+      made.forEach(function (id) { try { localStorage.removeItem('fm.collab.host.' + id); } catch (e) {} });
+      for (let m = 0; m < made.length; m++) {
+        try {
+          const left = await FM.storage.collabKeys('collab:ckpt:' + made[m] + ':');
+          for (let i = 0; i < left.length; i++) await FM.storage.collabDel(left[i]);
+          await FM.storage.collabDel('collab:base:' + made[m]);
+        } catch (e) {}
+      }
+    }
+    await withLabs921(async function (ui) {
+      try {
+        if (wasHome) FM.home.close();
+        const Y = await FM.projects.create({ name: 'bughunt8 #2c the other tab', width: 320, height: 240 });
+        if (!Y) throw new Error('setup: could not make the other tab’s project');
+        made.push(Y);
+        const X = await FM.projects.create({ name: 'bughunt8 #2c his own', width: 320, height: 240 });
+        if (!X) throw new Error('setup: could not make his own project');
+        made.push(X);
+        await settle921(60);
+        if (here() !== X) throw new Error('setup: this tab is not on his own project');
+        if (C.session) throw new Error('setup: a session is attached before anything here made one');
+        const toX = async function () {
+          if (here() !== X) await FM.projects.open(X, { confirmed: true });
+          await settle921(60);
+          if (here() !== X) throw new Error('setup: this tab could not go back to his own project');
+        };
+
+        /* ── 1. THE COMMENTS COUNT (collab-comments.js scan) */
+        if (!C.comments.installed()) throw new Error('setup: the comments are not installed with Work with friends on, so nothing is counted');
+        if (C.comments.isOpen()) C.comments.close();
+        C.comments.paintMarks();
+        const P1 = FM.scene.project;
+        if (!Array.isArray(P1.comments)) P1.comments = [];
+        const fromSam = function (n) { return { id: 'c_bh82c_' + n + '_' + ts, text: 'Sam’s comment ' + n, by: { mid: 'm7', name: 'Sam', color: '#a3e635' }, replies: [] }; };
+        P1.comments.push(fromSam(1));
+        C.comments.onChange();
+        const u1 = C.comments.unread();
+        if (u1 !== 1) bad.push('CONTROL: with one tab a comment from Sam counts ' + u1 + ', not 1, so the count with two tabs cannot be read');
+        else {
+          otherTab(Y);
+          P1.comments.push(fromSam(2));
+          C.comments.onChange();
+          const u2 = C.comments.unread();
+          backTab();
+          if (u2 !== 2) bad.push('with another tab on a project of its own, the count of comments not read here is ' + u2 + ', not 2: the scan took the other tab opening a project for this tab opening another one, zeroed the count and marked both seen (collab-comments.js scan)');
+        }
+        P1.comments = P1.comments.filter(function (c) { return !(c && typeof c.id === 'string' && c.id.indexOf('c_bh82c_') === 0); });
+
+        /* ── 2. THE BRIDGE'S BASE FALLBACKS, NO SESSION (collab-bridge.js openPid) */
+        if (C.session) throw new Error('setup: a session is attached, so the bridge reads its gpid and not the fallback');
+        const baseKey = function (pid) { return 'collab:base:' + pid; };
+        const baseRec = function (pid, epoch) { return { v: 1, gpid: pid, epoch: epoch, seq: 0, cid: 0, D: { project: {}, layers: [] }, at: Date.now() }; };
+        const epochOf = async function (pid) { const r = await FM.storage.collabGet(baseKey(pid)); return r ? r.epoch : null; };
+        const p0 = await C.bridge.persistBase({ epoch: 'bh8-2c one tab', seq: 1, D: { project: {}, layers: [] } });
+        const b0 = await epochOf(X), rb0 = await C.bridge.readBase();
+        await C.bridge.dropBase();
+        const g0 = await epochOf(X);
+        if (!p0 || b0 !== 'bh8-2c one tab' || !rb0 || rb0.epoch !== 'bh8-2c one tab' || g0 !== null) bad.push('CONTROL: with one tab the base was filed under the project open here as ' + say(b0) + ' (persistBase answered ' + say(p0) + '), read back as ' + say(rb0 && rb0.epoch) + ' and left as ' + say(g0) + ' after the drop');
+        await FM.storage.collabPut(baseKey(Y), baseRec(Y, 'bh8-2c decoy'));
+        otherTab(Y);
+        await C.bridge.persistBase({ epoch: 'bh8-2c filed here', seq: 2, D: { project: {}, layers: [] } });
+        const bX = await epochOf(X), bY = await epochOf(Y);
+        await FM.storage.collabPut(baseKey(X), baseRec(X, 'bh8-2c read here'));
+        await FM.storage.collabPut(baseKey(Y), baseRec(Y, 'bh8-2c decoy'));
+        const rb = await C.bridge.readBase();
+        await C.bridge.dropBase();
+        const dX = await epochOf(X), dY = await epochOf(Y);
+        backTab();
+        if (bX !== 'bh8-2c filed here' || bY !== 'bh8-2c decoy') bad.push('with another tab on a project of its own, persistBase with no session filed the base ' + (bY === 'bh8-2c filed here' ? 'under the other tab’s project' : 'somewhere else') + ' (the project open here holds ' + say(bX) + ', the other tab’s ' + say(bY) + '): collab-bridge.js persistBase’s fallback');
+        if (!rb || rb.epoch !== 'bh8-2c read here') bad.push('with another tab on a project of its own, readBase with no id read ' + say(rb && rb.epoch) + ', not the base of the project open here: collab-bridge.js readBase’s fallback');
+        if (dX !== null || dY !== 'bh8-2c decoy') bad.push('with another tab on a project of its own, dropBase with no id ' + (dY === null ? 'dropped the other tab’s base' : 'did not drop the base of the project open here') + ' (here ' + say(dX) + ', the other tab’s ' + say(dY) + '): collab-bridge.js dropBase’s fallback');
+        await FM.storage.collabDel(baseKey(X));
+        await FM.storage.collabDel(baseKey(Y));
+
+        /* ── 3. A RECONNECT (collab-session.js C.reopen), through a fake link: nothing leaves */
+        const asked = [];
+        const based = { project: jclone921(FM.scene.project), layers: jclone921(FM.scene.layers) };
+        const A3 = Object.create(C.bridge);
+        A3.readBase = function (g) { asked.push(g || null); return Promise.resolve({ D: jclone921(based), epoch: 1, seq: 0, cid: 0 }); };
+        /* reconnect with `gpid` (or none): which base it asked for, and which project the session it attached is on */
+        const reopen = async function (gpid) {
+          const o = { link: t996Link(), adapter: A3, role: 'editor', mid: 'g', autoTick: false };
+          if (gpid) o.gpid = gpid;
+          const n = asked.length;
+          let res = null, err = null;
+          try { res = await C.reopen(o); } catch (e) { err = e; }
+          const out = { asked: asked.slice(n), on: (res && res.session) ? (res.gpid || '?') : null, err: err ? String(err && err.message || err) : null };
+          try { if (res && res.session) { res.session.stop('left'); if (C.session === res.session) C.detach(); } } catch (e) {}
+          try { if (C._undoHandover) C._undoHandover(false); } catch (e) {}
+          return out;
+        };
+        const o0 = await reopen(null);
+        if (o0.on !== X || o0.asked[0] !== X) bad.push('CONTROL: with one tab a reconnect with no project id asked for the base of ' + nameOf(o0.asked[0]) + ' and attached to ' + nameOf(o0.on) + (o0.err ? ' (' + o0.err + ')' : '') + ', not the project open here');
+        otherTab(Y);
+        const o1 = await reopen(X);
+        const o2 = await reopen(null);
+        backTab();
+        if (o1.on !== X) bad.push('with another tab on a project of its own, the reconnect to the project still open here attached ' + nameOf(o1.on) + (o1.err ? ' (' + o1.err + ')' : '') + ': C.reopen’s #996 gate asked the shared pointer whether it was still open, so another tab opening anything drops this tab’s reconnect');
+        if (o2.asked[0] !== X) bad.push('with another tab on a project of its own, a reconnect with no project id asked for the base of ' + nameOf(o2.asked[0]) + ', not the project open here (C.reopen’s fallback)' + (o2.on ? ', and attached to ' + nameOf(o2.on) : ''));
+
+        /* ── 4. DELETE'S KEEP-SET (storage.js remove): a clip on screen here, not saved yet, whose id another document names */
+        const V0 = await FM.projects.create({ name: 'bughunt8 #2c deleted, one tab', width: 320, height: 240 });
+        if (!V0) throw new Error('setup: could not make the project to delete with one tab');
+        made.push(V0);
+        const V = await FM.projects.create({ name: 'bughunt8 #2c deleted, open in the other tab', width: 320, height: 240 });
+        if (!V) throw new Error('setup: could not make the project the other tab has open');
+        made.push(V);
+        await toX();
+        const live0 = layer921('bh8-2c on screen, one tab'), live = layer921('bh8-2c on screen, two tabs');
+        const only0 = 'l_bh82c_only0_' + ts, only = 'l_bh82c_only_' + ts;
+        const storedDoc = function (name, lids) { return JSON.stringify({ project: { name: name, width: 320, height: 240, duration: 3 }, layers: lids.map(function (id) { return { id: id, type: 'image', start: 0, duration: 2 }; }), selectedId: null, selectedIds: [] }); };
+        localStorage.setItem('fm.proj.' + V0, storedDoc('bughunt8 #2c deleted, one tab', [live0.id, only0]));
+        localStorage.setItem('fm.proj.' + V, storedDoc('bughunt8 #2c deleted, open in the other tab', [live.id, only]));
+        const f4 = await q915aPng('bh82c', '#264653');
+        const k4 = [live0.id, only0, live.id, only];
+        k4.forEach(function (k) { recs.push(k); });
+        for (const k of k4) await q915aPut(k, { file: f4, kind: 'image' });
+        /* nothing pending: no autosave can write the two clips below into his document before the deletes read it */
+        FM.storage.flushSync();
+        FM.scene.layers.push(live0, live);
+        await FM.projects.remove(V0);
+        const raw0 = await q915aRaw();
+        if (raw0[only0]) bad.push('CONTROL: with one tab, deleting a project left a record only it named, so the deletes here may not run at all');
+        else if (!raw0[live0.id]) bad.push('CONTROL: with one tab, deleting another project deleted the record of a clip on screen here and not saved yet');
+        const keep4 = FM.scene.project;
+        otherTab(V);
+        await FM.projects.remove(V);
+        const h4 = here(), same4 = FM.scene.project === keep4, raw1 = await q915aRaw();
+        backTab();
+        /* A save of his project with the clip in it before the delete read the documents would make the live scene irrelevant.
+           Only when nothing reloaded it: the old switch (remove()'s own, guarded by #2b) flushes X AFTER the keep-set was read. */
+        const xDoc = localStorage.getItem('fm.proj.' + X) || '';
+        if (h4 === X && same4 && xDoc.indexOf(live.id) >= 0) bad.push('setup: his project was saved with the clip before the delete read it, so the live scene was not what decided');
+        else if (raw1[only]) bad.push('setup: deleting the project the other tab has open left a record only it named, so the delete may not have run');
+        else if (!raw1[live.id]) bad.push('with another tab on the project being deleted, deleting it from here deleted the record of a clip on screen in this tab and not saved yet: remove() left the live scene out of its keep-set because the shared pointer named the project being deleted (storage.js remove), so that clip comes back blank');
+        FM.scene.layers = FM.scene.layers.filter(function (l) { return !(l && (l.id === live0.id || l.id === live.id)); });
+
+        /* ── 5. DETACH (storage.js detachLinked): a shared copy made his own */
+        const unsaved = function (tag) { const L = layer921('bh8-2c not saved ' + tag); FM.scene.layers.push(L); return L.name; };
+        const E0 = linked('d0');
+        await openHere(E0, 'the shared copy to detach with one tab');
+        const n0 = unsaved('d0');
+        const e0 = await FM.projects.detachLinked(E0);
+        if (e0) made.push(e0);
+        if (!e0 || docNames(e0).indexOf(n0) < 0 || here() !== e0) bad.push('CONTROL: with one tab, detaching the shared copy open here made ' + nameOf(e0) + ' holding ' + say(e0 ? docNames(e0) : null) + ' and left this tab on ' + nameOf(here()) + ', not a copy holding the layer not saved yet with this tab on it');
+        const E1 = linked('d1');
+        await openHere(E1, 'the shared copy to detach with two tabs');
+        const n1 = unsaved('d1');
+        otherTab(Y);
+        const e1 = await FM.projects.detachLinked(E1);
+        const h5 = here();
+        backTab();
+        if (e1) made.push(e1);
+        if (!e1) bad.push('with another tab on a project of its own, detaching the shared copy open here made no copy');
+        else {
+          if (docNames(e1).indexOf(n1) < 0) bad.push('with another tab on a project of its own, detaching the shared copy open here copied the document on disk without the flush: the new copy holds ' + say(docNames(e1)) + ' and not the layer added last (storage.js detachLinked’s flush)');
+          if (h5 !== e1) bad.push('with another tab on a project of its own, detaching the shared copy open here left this tab on ' + nameOf(h5) + ', not on the copy that is now his');
+        }
+        await toX();
+        const E2 = linked('d2');
+        otherTab(E2);
+        const e2 = await FM.projects.detachLinked(E2);
+        const h6 = here();
+        backTab();
+        if (e2) made.push(e2);
+        if (!e2) bad.push('setup: detaching the shared copy the other tab has open made no copy');
+        else if (h6 !== X) bad.push('detaching from here the shared copy another tab has open took this tab off his own project, to ' + nameOf(h6) + ' (storage.js detachLinked’s wasOpen asked the shared pointer)');
+
+        /* ── 6. DRAFTS (storage.js discardDraft and discardDraftAnyway): a draft open here */
+        const D0 = await draft('one tab');
+        const k0 = await FM.projects.discardDraft(D0);
+        if (k0 !== false || !has(D0)) bad.push('CONTROL: with one tab, discardDraft of the draft open here answered ' + say(k0) + ' and ' + (has(D0) ? 'kept' : 'deleted') + ' it, not false and kept');
+        const a0 = await FM.projects.discardDraftAnyway(D0);
+        if (here() === D0 || has(D0)) bad.push('CONTROL: with one tab, discardDraftAnyway of the draft open here answered ' + say(a0) + ', ' + (here() === D0 ? 'left this tab on it' : 'moved this tab off it') + ' and ' + (has(D0) ? 'kept' : 'deleted') + ' it, not moved off and deleted');
+        const D1 = await draft('two tabs, refused');
+        otherTab(Y);
+        const k1 = await FM.projects.discardDraft(D1);
+        const k1doc = localStorage.getItem('fm.proj.' + D1) !== null, k1card = has(D1);
+        backTab();
+        if (k1 !== false || !k1doc || !k1card) bad.push('with another tab on a project of its own, discardDraft of the draft open here answered ' + say(k1) + ', ' + (k1card ? 'kept' : 'deleted') + ' its card and ' + (k1doc ? 'kept' : 'deleted') + ' its document, while this tab still has it open (storage.js discardDraft’s check)');
+        const D2 = has(D1) ? D1 : await draft('two tabs, deleted');
+        if (here() !== D2) throw new Error('setup: this tab is not on the draft to delete');
+        otherTab(Y);
+        const a2 = await FM.projects.discardDraftAnyway(D2);
+        const h7 = here();
+        backTab();
+        if (h7 === D2) bad.push('with another tab on a project of its own, discardDraftAnyway of the draft open here took the route for a draft that is not open and left this tab on it (' + (has(D2) ? 'refused: ' + say(a2) : 'its document and clips deleted under the open editor') + '): storage.js discardDraftAnyway’s check');
+        else if (has(D2)) bad.push('with another tab on a project of its own, discardDraftAnyway moved this tab off the draft open here and kept the draft (' + say(a2) + ')');
+
+        /* ── 7. SHARE (U.share, armShare, C.share): the session and the room are the project open here */
+        await toX();
+        if (C.session) throw new Error('setup: a session is attached before Share');
+        if (hasRoom(X) || hasRoom(Y)) throw new Error('setup: a room is already filed under one of the two projects');
+        otherTab(Y);
+        await ui.share();
+        const s7 = C.session, p7 = (s7 && s7.isOwner) ? s7.pid : null;
+        const rX = hasRoom(X), rY = hasRoom(Y);
+        backTab();
+        try { ui.close(); } catch (e) {}
+        try { C.end(); } catch (e) {}
+        if (!s7) bad.push('with another tab on a project of its own, Share here armed nothing');
+        else {
+          if (p7 !== X) bad.push('with another tab on a project of its own, Share here bound the session to ' + nameOf(p7) + ', not to the project open here (collab-session.js C.share’s S.pid): the lock that keeps a session to its project then refuses every edit made here');
+          if (!rX || rY) bad.push('with another tab on a project of its own, Share here filed the room under ' + (rY ? nameOf(Y) : 'nothing') + (rX ? ' as well as under the project open here' : '') + ' (collab-ui.js currentPid, which armShare’s lock, room and save point read): the room was the other tab’s project while this tab’s scene was shared');
+        }
+        await ui.share();
+        const s8 = C.session, p8 = (s8 && s8.isOwner) ? s8.pid : null, r8 = hasRoom(X);
+        try { ui.close(); } catch (e) {}
+        try { C.end(); } catch (e) {}
+        if (p8 !== X || !r8) bad.push('CONTROL: with one tab, Share here armed ' + nameOf(p8) + (r8 ? ' with' : ' without') + ' a room filed under the project open here');
+        await dropRooms();
+        const G3 = linked('s3');
+        await openHere(G3, 'the shared copy to Share from');
+        await ui.share();
+        const c0 = !!C.session;
+        try { ui.close(); } catch (e) {}
+        if (c0) { bad.push('CONTROL: with one tab, Share on the shared copy open here armed it'); try { C.end(); } catch (e) {} }
+        otherTab(Y);
+        await ui.share();
+        const c1 = C.session ? (C.session.pid || '?') : null;
+        backTab();
+        try { ui.close(); } catch (e) {}
+        if (c1) { bad.push('with another tab on a project of its own, Share on the shared copy open here ARMED it (the session is on ' + nameOf(c1) + '): collab-ui.js currentPid read the other tab’s card, which is not a shared copy, so somebody else’s project became a room of the guest’s own'); try { C.end(); } catch (e) {} }
+      } finally {
+        backTab();
+        try { ui.close(); } catch (e) {}
+        try { if (C.session) { if (C.session.isOwner) C.end(); else { C.session.stop('left'); C.detach(); } } } catch (e) {}
+        try { if (C._undoHandover) C._undoHandover(false); } catch (e) {}
+        /* rooms first, so nothing resumes or asks about a project about to be deleted */
+        await dropRooms();
+        try {
+          const q = document.getElementById('fm-ask'), t = q && q.querySelector('.fm-ask-title');
+          if (q && !q.classList.contains('hidden') && t && /^(Carry on sharing|Stop sharing)/.test(t.textContent)) q.querySelector('.fm-ask-cancel').click();
+        } catch (e) {}
+        /* the pointer back on what this tab has open, so the cleanup's own "is orig open?" reads this tab */
+        try { const mine = FM.storage.openProjectId(); if (mine) localStorage.setItem('fm.currentProject', mine); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+        /* a project deleted under this tab (the bug) is written back by its next flush: no card, so take the stray document */
+        made.forEach(function (id) { try { if (!has(id)) localStorage.removeItem('fm.proj.' + id); } catch (e) {} });
+        for (const k of recs) { try { await q915aDel(k); } catch (e) {} }
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
