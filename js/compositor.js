@@ -17035,7 +17035,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const g = flat._ofGroup;
       if (!g || g.type !== 'group' || !FM.groupPivot || !FM.parentChainMatrix || !FM.groupBoundsLocal) return null;
       const piv = FM.groupPivot(g, scene, t);
-      const b = FM.groupBoundsLocal(g, scene, t) || (FM.groupRestBoundsLocal ? FM.groupRestBoundsLocal(g, scene) : null);
+      /* bughunt4 #3c: R from the REST box, the box a tilted group's pivot falls back to (FM.groupPivot), which does not change as
+         members come on or go off screen; the live box at t made the lean's perspective jump with them. */
+      const b = (FM.groupRestBoundsLocal ? FM.groupRestBoundsLocal(g, scene) : null) || FM.groupBoundsLocal(g, scene, t);
       // the matrix a member is drawn with: the group's own pivot sandwich, its position and everything above it
       const M = FM.parentChainMatrix({ id: g.id + ':tilt', parent: g.id }, t, scene);
       if (!piv || !b || !M) return null;
@@ -29483,6 +29485,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (group.parent && group.parentMode && group.parentMode !== 'normal') return false;
     const off = (k, d) => tr[k] != null && (!!isAnimatedProp(tr[k]) || FM.evalProp(tr[k], 0) !== d);
     if (off('scaleX', 1) || off('scaleY', 1) || off('skewX', 0) || off('skewY', 0) || off('z', 0)) return false;
+    /* bughunt4 #3c: an X / Y tilt leans the group's picture about the pivot too (tiltPivot), so a tilted group keeps it as a place.
+       It did not count here, so a group at 100 % and 0° but leant had its hinge re-measured every frame on the members on screen:
+       a member that came on screen slid every other one, standing still, across the frame (the #690 slide, under a tilt). */
+    if (off('rotationX', 0) || off('rotationY', 0)) return false;
     const sc = FM.evalProp(tr.scale, 0);
     return (sc == null || sc === 1) && !(FM.evalProp(tr.rotation, 0) || 0);
   }

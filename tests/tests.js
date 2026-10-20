@@ -165856,6 +165856,89 @@
     });
   });
 
+  /* (#3c) A LEANT GROUP RE-MEASURED ITS HINGE EVERY FRAME. On c99f5b64 pivotFree (compositor.js) did not count rotationX / rotationY, so
+     a group at 100 % and 0° that was leant counted as “free”: FM.groupPivot answered with the middle of the members ON SCREEN at t, and
+     tiltPivot took R from that same live box. Here a group G at 0,0 holds a red 40 × 40 block at 100,120 (on 0..4 s) and a blue one at
+     220,120 that comes on at 2 s, and G is leant 60° about Y. renderMesh's F is 3.2, and a Y tilt of 60° sends unit x to x' = x / 2 with
+     z' = −0.866 x, drawn at pivot + x' · 3.2 / (3.2 − z') · R. On c99f5b64:
+       at 1 s only red is on screen: pivot 100, R 20, so red spans 100 − 0.5 · 1.371 · 20 = 86.3 to 100 + 0.5 · 0.787 · 20 = 107.9;
+       at 3 s both are: pivot 160, R 80, so red spans 160 − 0.5 · 1.371 · 80 = 105.2 to 160 − 0.25 · 1.157 · 80 = 136.9.
+     Red, which never moves, jumped 19 px right and grew from 22 to 32 px wide the instant blue came on.
+     Now a tilted group keeps its pivot as a place, as a scaled or turned one does: the stored one, or the rest box's (every member not
+     switched off, at the group's start), and R is the rest box's.
+       (A) No pivot stored: the rest box is 80..240, so the pivot is 160 and R 80 at both times, and red is 105.2..136.9 at 1 s and at 3 s.
+       (B) The tilt set through FM.setTransform at 1 s (the inspector's and the canvas's way in) stores the pivot then, on what is on
+           screen: 100. Red is 100 − 0.125 · 1.073 · 80 = 89.3 to 100 + 0.125 · 0.937 · 80 = 109.4 at both times (R is still the rest
+           box's 80). On c99f5b64 setTransform stored nothing for a tilt.
+     FAILS BEFORE THE FIX: in (A) and in (B) red's left edge is at 86.3 at 1 s and at 105.2 at 3 s.
+     CONTROL: untilted, red is 80..119 at both times; blue is really off at 1 s and on at 3 s; at 3 s, with both members on screen, (A)'s
+     red is at 105.2..136.9, as it was before (the live box and the rest box are the same box then).
+     TOL: 1.5 px between the two times on each red edge (the 8 × 8 mesh is laid over a different bbox at each, and its affine cells bend
+     a leant edge by up to half a pixel), 2 px on an edge against its worked-out place (a column counts as red from about 70 % covered);
+     the fault is 19 px. */
+  test('bughunt4 #3c A leant group keeps its hinge: a group leant 60° about Y draws its red block in the same place before and after a second member comes on screen, about the rest box’s middle with no pivot stored and about the stored pivot once the tilt is set through FM.setTransform (CONTROLS: untilted the block does not move; the second member really comes on; with both on screen the group leans as before)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.setTransform !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.setTransform are not reachable');
+    await _bh2With(async function () {
+      const T1 = 1, T3 = 3, TOL = 1.5, NEAR = 2;
+      const block = (name, x, fill, start, dur, parent) => {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 120, shapeW: 40, shapeH: 40, fill: fill, start: start, duration: dur });
+        L.start = start; L.duration = dur; L.parent = parent;
+        return L;
+      };
+      /* The group, the always-on red block and the blue one that comes on at 2 s, as the scene's only layers. */
+      const make = (name) => {
+        const G = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        G.start = 0; G.duration = 4; G.transform.x = 0; G.transform.y = 0;
+        FM.scene.layers = [G, block(name + ': red, always on', 100, '#ff0000', 0, 4, G.id), block(name + ': blue, on from 2 s', 220, '#0000ff', 2, 2, G.id)];
+        return G;
+      };
+      /* The red pixels' count and span (columns x0..x1, rows y0..y1), and the blue pixels' count. */
+      const reds = (f) => {
+        let n = 0, x0 = -1, x1 = -1, y0 = -1, y1 = -1, blue = 0;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            n++;
+            const x = k % 320, y = (k - x) / 320;
+            if (x0 < 0 || x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y0 < 0 || y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          } else if (f.d[i] < 70 && f.d[i + 1] < 70 && f.d[i + 2] > 180) blue++;
+        }
+        return { n: n, x0: x0, x1: x1, y0: y0, y1: y1, blue: blue };
+      };
+      const say = r => r.n + ' red px at columns ' + r.x0 + '..' + r.x1 + ', rows ' + r.y0 + '..' + r.y1;
+      const bad = [];
+
+      /* ── CONTROLS: untilted the red block stands still and blue really comes on at 2 s. */
+      make('bh4 #3c untilted group');
+      const f01 = reds(_bh2Frame(T1)), f03 = reds(_bh2Frame(T3));
+      [[f01, T1], [f03, T3]].forEach(([r, t]) => {
+        if (Math.abs(r.x0 - 80) > 1 || Math.abs(r.x1 - 119) > 1 || Math.abs(r.y0 - 100) > 1 || Math.abs(r.y1 - 139) > 1) bad.push('CONTROL: untilted at ' + t + ' s the red block is ' + say(r) + ', not 80..119 × 100..139 — the fixture is not the one worked out above');
+      });
+      if (f01.blue > 0 || f03.blue < 1500) bad.push('CONTROL: the blue block shows ' + f01.blue + ' px at 1 s and ' + f03.blue + ' at 3 s, not none and then about 1600 — it does not come on screen at 2 s');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── (A) leant with no pivot stored: about the rest box's middle at both times. */
+      const GA = make('bh4 #3c group leant, no pivot stored');
+      GA.transform.rotationY = 60;
+      const a1 = reds(_bh2Frame(T1)), a3 = reds(_bh2Frame(T3));
+      if (a3.n < 600 || a3.x1 - a3.x0 + 1 > 36) throw new Error('CONTROL: leant 60° about Y at 3 s the red block is ' + say(a3) + ' — not narrowed from its 40 px, so the tilt route did not run');
+      if (Math.abs(a3.x0 - 105.2) > NEAR || Math.abs(a3.x1 + 1 - 136.9) > NEAR) bad.push('CONTROL: at 3 s, with both members on screen, the leant group draws red at ' + say(a3) + ', not about 105.2..136.9 as before (pivot 160, R 80)');
+      if (Math.abs(a1.x0 - a3.x0) > TOL || Math.abs(a1.x1 - a3.x1) > TOL) bad.push('(A) a leant group with no pivot stored draws its red block, which never moves, at ' + say(a1) + ' at 1 s and at ' + say(a3) + ' at 3 s, after blue comes on' + (Math.abs(a1.x0 - 86.3) <= NEAR ? ' — at 1 s it leant about the middle of the members on screen (100, R 20), not about the rest box’s (160, R 80)' : ''));
+
+      /* ── (B) the tilt set through FM.setTransform at 1 s: the pivot is stored then, on what is on screen (100). */
+      const GB = make('bh4 #3c group leant through setTransform');
+      FM.time = T1;
+      FM.setTransform(GB, 'rotationY', 60, T1);
+      if (GB.transform.rotationY !== 60) throw new Error('setup: FM.setTransform left rotationY at ' + JSON.stringify(GB.transform.rotationY) + ', not 60');
+      const b1 = reds(_bh2Frame(T1)), b3 = reds(_bh2Frame(T3));
+      if (Math.abs(b1.x0 - b3.x0) > TOL || Math.abs(b1.x1 - b3.x1) > TOL) bad.push('(B) a group leant through FM.setTransform at 1 s draws its red block at ' + say(b1) + ' at 1 s and at ' + say(b3) + ' at 3 s, after blue comes on (stored pivot ' + JSON.stringify(GB.pivot || null) + ')' + (Math.abs(b1.x0 - 86.3) <= NEAR ? ' — its hinge was re-measured on the members on screen at each time' : ''));
+      if (Math.abs(b1.x0 - 89.3) > NEAR || Math.abs(b1.x1 + 1 - 109.4) > NEAR) bad.push('(B) at 1 s the group leant through FM.setTransform draws red at ' + say(b1) + ', not about 89.3..109.4 (about the pivot stored at 1 s, 100, with the rest box’s R 80)');
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#1b) THE EDITOR STILL HANDLED A MEMBER WITH THE OLD CHAIN. bughunt4 #1 (cedde93f) made a group's Flip, unlinked Width / Height,
      Skew, depth and link mode reach its members when they are DRAWN (compositor.js applyParentChain), but canvas-edit's parentXform —
      the walk behind a member's selection box, the tap that keeps or drops its selection, the drag and the handles — still composed only

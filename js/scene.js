@@ -379,7 +379,8 @@ window.FM = window.FM || {};
      (free — nothing on screen depends on it yet); otherwise it only makes sure one is stored, so nothing the
      group contains can drag it about afterwards. */
   /* bughunt4 #1: an unlinked Width / Height, a skew and a depth are drawn about that point too now (compositor.js applyParentChain). */
-  const PIVOT_KEYS = ['scale', 'rotation', 'scaleX', 'scaleY', 'skewX', 'skewY', 'z'];
+  /* bughunt4 #3c: and the X / Y tilt, which leans the group's picture about that point (compositor.js tiltPivot). */
+  const PIVOT_KEYS = ['scale', 'rotation', 'scaleX', 'scaleY', 'skewX', 'skewY', 'z', 'rotationX', 'rotationY'];
   function settlePivotBefore(layer, key, time) {
     if (layer && layer.type === 'group' && PIVOT_KEYS.indexOf(key) >= 0 && FM.settleGroupPivot) FM.settleGroupPivot(layer, FM.scene, time);
   }
