@@ -169781,4 +169781,84 @@
     }
   });
 
+  /* ═══ #1111 (and its twin #1100, hunt PF1): IMPORTING INTO A PROJECT WITH GLOW EFFECTS FROZE FOR SECONDS ══════════════════════
+     Every Home card picture is drawn by makeThumb (js/storage.js): the import's touchCurrent(true), the 12 s autosave capture, a
+     pinned card picture, a template or element save. It rendered the whole scene onto a canvas the PROJECT's size, 1080 x 1920,
+     and only then halved it down to the 203 x 360 card, and the render is where an effect stack spends its time: measured on
+     v17.32 (hunt PF1), one layer of 8 Glows rendered in 3.0 s at 1080 x 1920 and 0.16 s at card size, and its import took 6.2 s
+     before and 0.29 s after. The card is now drawn at twice its own size, 405 x 720 (render scale 0.375), and halved once.
+     Tested by what causes the time, the size of the canvas the card is rendered on, because a clock is not reliable in a suite.
+     FAILS BEFORE THE FIX: the card of a 1080 x 1920 project with two Glows is rendered on a 1080 x 1920 canvas at render scale 1,
+     7.1 times the pixels of the 405 x 720 it needs.
+     CONTROL, which holds before and after: the card is still the WHOLE frame, 203 x 360, with the red square from the project's
+     bottom-right corner in the card's bottom-right corner and the background in its top-left; and a 320 x 240 project, already
+     inside the card, is rendered on a 320 x 240 canvas exactly as before.
+     COLOUR THRESHOLDS: the card is a JPEG at quality 0.8, whose noise on a flat 40 px block is a few levels (PF1 measured a mean
+     0.61 per channel between the old and the new card); the marker is 255 / 0 / 0 and the background 16 / 32 / 48, so red above
+     180 with green and blue below 90 sits far from both. */
+  test('1111 a project with Glow effects draws its Home card at the card’s size, not the project’s: the import and every autosave stop rendering 1080 x 1920 for a 203 x 360 picture (CONTROL: the card is still the whole frame, and a small project is drawn as before)', { item: '1111' }, async function () {
+    if (!FM.templates || typeof FM.templates.cardFor !== 'function' || !FM.projects || !FM.fxRegistry) throw new Error('setup: FM.templates.cardFor (the card picture, makeThumb) is not reachable');
+    const P = FM.scene.project;
+    const keep = { w: P.width, h: P.height, d: P.duration, hasBg: Object.prototype.hasOwnProperty.call(P, 'background'), bg: P.background, t: FM.time };
+    const layers0 = FM.scene.layers.slice();
+    const realRender = FM.renderScene;
+    const bad = [];
+    const card = async function (w, h) {
+      P.width = w; P.height = h; P.duration = 4; P.background = '#102030';
+      FM.scene.layers.length = 0;
+      const glow = FM.makeLayer('shape', { name: '1111 glow', shape: 'ellipse', x: w * 0.5, y: h * 0.2, shapeW: w * 0.18, shapeH: w * 0.18, fill: '#ffffff' });
+      glow.start = 0; glow.duration = 4; glow.effects = [FM.fxRegistry.makeInstance('glow'), FM.fxRegistry.makeInstance('glow')];
+      const side = Math.round(Math.min(w, h) * 0.2);
+      const mark = FM.makeLayer('shape', { name: '1111 mark', shape: 'rect', x: w * 0.8, y: h * 0.8, shapeW: side, shapeH: side, fill: '#ff0000' });
+      mark.start = 0; mark.duration = 4;
+      FM.scene.layers.push(glow, mark);
+      FM.time = 1;
+      const calls = [];
+      FM.renderScene = function (ctx, scn) {
+        const out = realRender.apply(this, arguments);
+        const c = ctx && ctx.canvas;
+        if (c && c.id !== 'preview' && scn && scn.layers && scn.layers.indexOf(glow) >= 0) calls.push({ w: c.width, h: c.height, rs: c.__fmRS });
+        return out;
+      };
+      let url = null;
+      try { url = FM.templates.cardFor(FM.projects.currentId()); } finally { FM.renderScene = realRender; }
+      if (!calls.length) throw new Error('setup: the ' + w + ' x ' + h + ' card was not rendered at all (' + (url ? 'a stored picture came back instead' : 'no picture') + '), so nothing can be measured');
+      if (typeof url !== 'string' || url.indexOf('data:image/jpeg') !== 0) throw new Error('setup: the ' + w + ' x ' + h + ' card is not a JPEG picture: ' + String(url).slice(0, 40));
+      const img = new Image(); img.src = url;
+      await new Promise(function (r) { img.onload = r; img.onerror = r; });
+      const cv = document.createElement('canvas'); cv.width = img.naturalWidth || 1; cv.height = img.naturalHeight || 1;
+      const g = cv.getContext('2d'); g.drawImage(img, 0, 0);
+      const at = function (fx, fy) {
+        const x = Math.max(2, Math.min(cv.width - 3, Math.round(fx * cv.width))), y = Math.max(2, Math.min(cv.height - 3, Math.round(fy * cv.height)));
+        const d = g.getImageData(x - 2, y - 2, 5, 5).data;
+        let r = 0, gr = 0, b = 0;
+        for (let i = 0; i < d.length; i += 4) { r += d[i]; gr += d[i + 1]; b += d[i + 2]; }
+        return [Math.round(r / 25), Math.round(gr / 25), Math.round(b / 25)];
+      };
+      return { calls: calls, cw: cv.width, ch: cv.height, mark: at(0.8, 0.8), corner: at(0.05, 0.05) };
+    };
+    const red = function (p) { return p[0] > 180 && p[1] < 90 && p[2] < 90; };
+    const sizes = function (calls) { return calls.map(function (c) { return c.w + ' x ' + c.h; }).join(', '); };
+    try {
+      /* CONTROL first: a project already inside the card is rendered at its own size, as it always was */
+      const small = await card(320, 240);
+      if (small.calls.some(function (c) { return c.w !== 320 || c.h !== 240; })) throw new Error('CONTROL: the card of a 320 x 240 project, already inside the card, was rendered on ' + sizes(small.calls) + ' instead of its own 320 x 240');
+      if (small.cw !== 320 || small.ch !== 240 || !red(small.mark) || red(small.corner)) throw new Error('CONTROL: the 320 x 240 card is ' + small.cw + ' x ' + small.ch + ' with its marker corner at rgb(' + small.mark + ') and its top-left at rgb(' + small.corner + '), so this probe cannot read a card');
+      const big = await card(1080, 1920);
+      if (big.cw !== 203 || big.ch !== 360) throw new Error('CONTROL: the 1080 x 1920 card is ' + big.cw + ' x ' + big.ch + ', not 203 x 360');
+      if (!red(big.mark)) throw new Error('CONTROL: the red square in the 1080 x 1920 project’s bottom-right corner is not in its card’s bottom-right corner (rgb(' + big.mark + ')), so the card is not the whole frame');
+      if (red(big.corner)) throw new Error('CONTROL: the 1080 x 1920 card’s top-left corner is red (rgb(' + big.corner + ')), so the picture is misplaced');
+      big.calls.forEach(function (c) {
+        if (c.w > 2 * 203 || c.h > 2 * 360) bad.push('the Home card of a 1080 x 1920 project with two Glows was rendered on a ' + c.w + ' x ' + c.h + ' canvas at render scale ' + (+c.rs).toFixed(3) + ', ' + ((c.w * c.h) / (405 * 720)).toFixed(1) + ' times the pixels of the 405 x 720 a 203 x 360 card needs; on a layer of 8 Glows that one render took 3.0 s against 0.16 s (hunt PF1), on every import and every 12 s autosave');
+      });
+      if (bad.length) throw new Error(bad.join(' AND '));
+    } finally {
+      FM.renderScene = realRender;
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.width = keep.w; P.height = keep.h; P.duration = keep.d; FM.time = keep.t;
+      if (keep.hasBg) P.background = keep.bg; else delete P.background;
+      if (FM.requestRender) FM.requestRender();
+    }
+  });
+
 })();

@@ -2440,7 +2440,23 @@ window.FM = window.FM || {};
     if (sceneMediaReleased()) return null;
     try {
       const P = FM.scene.project;
-      let src = document.createElement('canvas'); src.width = P.width; src.height = P.height;
+      const s = Math.min(360 / P.width, 360 / P.height, 1);
+      const tw = Math.max(2, Math.round(P.width * s)), th = Math.max(2, Math.round(P.height * s));
+      /* ═══ #1111 / #1100: THE CARD IS DRAWN AT THE CARD'S SIZE, NOT THE PROJECT'S. Importing into a project with glow effects
+         froze for seconds (hunt PF1). This rendered the whole scene onto a canvas the PROJECT's size (1080 x 1920) and then
+         halved it down to the 203 x 360 card, and the render is where an effect stack spends its time: measured on v17.32,
+         one layer of 8 Glows rendered in 3.0 s at 1080 x 1920 and 0.16 s at card size, and its import took 6.2 s against
+         0.29 s. Every card goes through here: the import's touchCurrent(true), the 12 s autosave, a pinned card picture, a
+         template or element save. So it is drawn at TWICE the card's size (405 x 720 for 1080 x 1920; renderScene reads the
+         render scale off the canvas, exactly as for the phone preview and the Export card), and the last step below is still
+         an average of real pixels. The height follows the width's scale, rounded down, so no sliver of the canvas is left
+         unpainted. A project whose longer side is 720 px or less is drawn at its own size, exactly as before. */
+      const rs = Math.min(1, 2 * s);
+      let src = document.createElement('canvas');
+      if (rs < 1) {
+        src.width = Math.max(2, Math.round(P.width * rs));
+        src.height = Math.max(2, Math.floor(P.height * (src.width / P.width) + 1e-6));
+      } else { src.width = P.width; src.height = P.height; }
       /* ⚠️ THE CARD IS THE PICTURE THE PREVIEW SHOWS, WHICH AT THE END IS NOT THE RAW PLAYHEAD (queue 690, HUNT-c).
          Playback without Loop parks the playhead ON the project's last instant (FM.time = duration), and every clip's
          window is half-open, so at that instant nothing is live and a raw render is the bare background. The preview
@@ -2449,8 +2465,6 @@ window.FM = window.FM || {};
          project he had just watched through came Home as a plain black card. Same rule as the preview, so the card
          and the screen agree; a genuinely empty moment mid-timeline is left as it is, exactly as the preview leaves it. */
       FM.renderScene(src.getContext('2d'), FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time);
-      const s = Math.min(360 / P.width, 360 / P.height, 1);
-      const tw = Math.max(2, Math.round(P.width * s)), th = Math.max(2, Math.round(P.height * s));
       while (src.width >= tw * 2) {   // halve until within 2× of target — each step averages real pixels
         const half = document.createElement('canvas');
         half.width = Math.max(tw, Math.round(src.width / 2)); half.height = Math.max(th, Math.round(src.height / 2));
