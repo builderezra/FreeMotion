@@ -173653,4 +173653,152 @@
     if (!r.toasts.some(function (t) { return /NO SOUND/.test(t); })) bad.push('nothing said so on screen: ' + JSON.stringify(r.toasts));
     if (bad.length) throw new Error(bad.join(' · '));
   });
+  /* ═══ bughunt8 #1 (#1091's doors): SAVE AS ELEMENT WALKED A WATCH-ONLY COPY'S CLIPS OUT ═════════════════════════════════════════
+     What was wrong. bughunt7 #2 made Copy, Save audio as WAV and Save my version ask the export gate's question (FM.exportTurnedOff),
+     and the row right under Copy selected in the ⧉ menu asked nothing: js/app.js FM.saveElementPrompt → js/storage.js
+     FM.elements.save → packLayers copies every selected clip's FILE into an elem: pack, which Leave never deletes and Elements →
+     Export file writes out as a .fmelement.json. Three doors reach it: the ⧉ menu's Save as element…, the layer ⋯ menu's Save
+     selection as element… (the desktop right-click on a clip opens the same items, FM.layerMenuItems) and the Elements browser's
+     empty-state button. Now the prompt asks the gate first and says its notice, and FM.elements.save refuses a watch-only copy of
+     this tab's project by itself.
+     The rig is the 1091 test's third case: a Viewer's linked copy with one picture stored under its layer, no session, its card
+     saying the owner turned exporting off (patchCollab roExport false), then on for the CONTROL. window.prompt is stood in for, so a
+     door that gets as far as asking for a name is answered and counted. A pack is counted by the elem: keys in the store
+     (FM.storage.listMediaKeys), and read back for the clip's file. The browser's empty state shows its button only while the device
+     has no element at all, so the Elements index is held at [] for that one door and put back, raw, right after the tap (the save
+     reads the index only after its IndexedDB write, so it never sees the held one).
+     FAILS BEFORE THE FIX: with exporting off each door asks for a name and writes an elem: pack holding the watched clip's file,
+     with no notice, and FM.elements.save answers true.
+     CONTROL, which holds before and after: with exporting off the copy is watch-only and the export gate says so; with exporting on
+     each door asks for a name once, writes one pack holding the clip's file and brings up no card, and FM.elements.save answers
+     true. No tolerance: every quantity is a count. */
+  test('bughunt8 #1 Save as element cannot take a watch-only copy away: with exporting off the ⧉ menu’s Save as element…, the layer menu’s Save selection as element… and the Elements browser’s button each bring up the export notice and write no element, and FM.elements.save refuses (CONTROL: with exporting on each door saves one element holding the clip’s file)', { item: '1176', budgetMs: 120000 }, async function () {
+    const C = need921S7('Save as element on a watch-only copy');
+    if (typeof FM.saveElementPrompt !== 'function' || !FM.elements || typeof FM.elements.save !== 'function' || typeof FM.elements.getPack !== 'function' || typeof FM.layerMenuItems !== 'function' || !FM.elementsBrowser || typeof FM.elementsBrowser.open !== 'function' || typeof FM.storage.listMediaKeys !== 'function' || typeof FM.exportTurnedOff !== 'function') throw new Error('setup: FM.saveElementPrompt, FM.elements (save, getPack), FM.layerMenuItems, FM.elementsBrowser.open, FM.storage.listMediaKeys or FM.exportTurnedOff is not reachable');
+    const lmBtn = document.getElementById('btn-layermenu');
+    if (!lmBtn) throw new Error('setup: #btn-layermenu (the ⧉ menu) is gone');
+    const bad = [], made = [], elems = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const realPrompt = window.prompt;
+    let asked = 0, idxRaw = null, idxHeld = false;
+    const holdIndex = () => { idxRaw = localStorage.getItem('fm.elements'); idxHeld = true; localStorage.setItem('fm.elements', '[]'); };
+    const putIndex = () => { if (!idxHeld) return; idxHeld = false; if (idxRaw === null) localStorage.removeItem('fm.elements'); else localStorage.setItem('fm.elements', idxRaw); };
+    const keys = async () => (await FM.storage.listMediaKeys('elem:')) || [];
+    /* A card that comes up within `ms`, answered: true for the export notice (OK), its title for any other, false for none. */
+    async function notice(ms) {
+      const t0 = Date.now();
+      while (Date.now() - t0 < ms) {
+        const q = ask967b3();
+        if (q) {
+          const said = /Exporting is turned off/.test(q.title + ' ' + q.msg);
+          if (said) q.ok.click(); else (q.cancel || q.ok).click();
+          await settle921(60);
+          return said ? true : 'a card titled “' + q.title + '”';
+        }
+        await settle921(40);
+      }
+      return false;
+    }
+    /* One door: what it asked, the card it brought up, and the packs it wrote (and how many of them hold a clip's file). */
+    async function tryDoor(open) {
+      const k0 = await keys();
+      asked = 0;
+      await open();
+      const card = await notice(1200);
+      let fresh = [];
+      const t0 = Date.now();
+      while (true) {
+        fresh = (await keys()).filter(function (k) { return k0.indexOf(k) < 0; });
+        if (fresh.length || Date.now() - t0 > (asked ? 3000 : 300)) break;
+        await settle921(60);
+      }
+      let withFile = 0;
+      for (const k of fresh) {
+        elems.push(k.slice(5));
+        const p = await FM.elements.getPack(k.slice(5));
+        if (p && p.media && Object.keys(p.media).some(function (id) { return p.media[id] && p.media[id].file; })) withFile++;
+      }
+      return { card: card, asked: asked, packs: fresh.length, withFile: withFile };
+    }
+    const doors = [
+      ['the ⧉ menu’s Save as element…', async function () {
+        lmBtn.click(); await settle921(140);
+        const it = Array.prototype.slice.call(document.querySelectorAll('#ctx-menu .ctx-item')).filter(function (n) { return /Save as element/.test(n.textContent || ''); })[0];
+        if (!it) { FM.contextMenu.hide(); throw new Error('setup: the ⧉ menu has no Save as element… row'); }
+        if (it.classList.contains('disabled')) { FM.contextMenu.hide(); throw new Error('setup: the ⧉ menu’s Save as element… is greyed out, so the selection did not take'); }
+        it.click();
+      }],
+      ['the layer menu’s Save selection as element…', async function () {
+        const it = (FM.layerMenuItems(FM.selectedLayer(FM.scene)) || []).filter(function (i) { return i && /Save selection as element/.test(i.label || ''); })[0];
+        if (!it) throw new Error('setup: the layer menu has no Save selection as element… row');
+        it.action();
+      }],
+      ['the Elements browser’s button', async function () {
+        holdIndex();
+        try {
+          FM.elementsBrowser.open(); await settle921(80);
+          const b = document.querySelector('#el-browser .elb-empty-go');
+          if (!b) { FM.elementsBrowser.close(); throw new Error('setup: with no element on the device and a layer selected the Elements browser shows no Save … as an element button'); }
+          b.click();
+        } finally { putIndex(); }
+      }]
+    ];
+    async function allDoors(lid) {
+      FM.scene.selectedId = lid; FM.scene.selectedIds = [lid];
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      const out = [];
+      for (const [name, open] of doors) { const r = await tryDoor(open); r.name = name; out.push(r); }
+      const k0 = await keys();
+      const L = FM.layerById(FM.scene, lid);
+      const direct = await FM.elements.save('bughunt8 #1 element, direct', [L]);
+      const fresh = (await keys()).filter(function (k) { return k0.indexOf(k) < 0; });
+      fresh.forEach(function (k) { elems.push(k.slice(5)); });
+      return { doors: out, direct: direct, directPacks: fresh.length };
+    }
+    await withLabs921(async function (ui) {
+      try {
+        if (wasHome) FM.home.close();
+        window.prompt = function () { asked++; return 'bughunt8 #1 element'; };
+        const D = { project: { name: 'Ezra’s film bh8-1', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(mediaLayer921('Watch bh8-1', 'image'))] };
+        const gpid = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'viewer', epoch: 'e-bh8-1', seq: 0, name: 'Sam' }, D);
+        if (!gpid) throw new Error('setup: could not make the shared copy');
+        made.push(gpid);
+        await FM.projects.open(gpid);
+        const lid = FM.scene.layers[0].id;
+        await q921give(lid, await q921png([30, 200, 30], 'bh8-1.png'), 'image', 0);
+        FM.projects.patchCollab(gpid, { roExport: false });
+        await settle921(80);
+        if (C.session) throw new Error('setup: a session is attached to the copy that is meant to have none');
+
+        /* 1. Exporting off: the copy is watch-only, and no door may pack it. */
+        if (!C.watchOnly(gpid) || !FM.exportTurnedOff()) throw new Error('setup: the Viewer’s copy with exporting off is not watch-only (FM.collab.watchOnly ' + C.watchOnly(gpid) + ', FM.exportTurnedOff ' + FM.exportTurnedOff() + ')');
+        const off = await allDoors(lid);
+        off.doors.forEach(function (r) {
+          if (r.packs) bad.push('with exporting off ' + r.name + ' wrote ' + r.packs + ' element pack' + (r.withFile ? ', holding the watched clip’s file,' : '') + ' — ready to export as a file or drop into a project of their own');
+          if (r.card !== true) bad.push('with exporting off ' + r.name + ' brought up ' + (r.card || 'no card') + ', not the export notice' + (r.asked ? ', and asked for a name' : ''));
+        });
+        if (off.direct || off.directPacks) bad.push('with exporting off FM.elements.save answered ' + off.direct + ' and wrote ' + off.directPacks + ' pack of the watched layer');
+
+        /* 2. CONTROL: the same copy with exporting ON — each door saves one element with the clip's file, and says nothing. */
+        FM.projects.patchCollab(gpid, { roExport: true });
+        if (C.watchOnly(gpid) || FM.exportTurnedOff()) throw new Error('setup: the Viewer’s copy with exporting on is watch-only');
+        const on = await allDoors(lid);
+        on.doors.forEach(function (r) {
+          if (r.asked !== 1 || r.packs !== 1 || r.withFile !== 1) bad.push('CONTROL: with exporting on ' + r.name + ' asked for a name ' + r.asked + ' times and wrote ' + r.packs + ' pack(s), ' + r.withFile + ' with the clip’s file, not once, one and one');
+          if (r.card) bad.push('CONTROL: with exporting on ' + r.name + ' brought up ' + r.card);
+        });
+        if (on.direct !== true || on.directPacks !== 1) bad.push('CONTROL: with exporting on FM.elements.save answered ' + on.direct + ' and wrote ' + on.directPacks + ' pack(s), not true and one');
+      } finally {
+        putIndex();
+        window.prompt = realPrompt;
+        try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+        try { if (FM.elementsBrowser && FM.elementsBrowser.close) FM.elementsBrowser.close(); } catch (e) {}
+        const a = ask967b3(); if (a) (a.cancel || a.ok).click();
+        try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+        try { ui.close(); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], elems, []);
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

@@ -3951,6 +3951,10 @@ window.FM = window.FM || {};
     // Save the given layers (the current selection) as a reusable element.
     async save(name, layers) {
       if (!layers || !layers.length) return false;
+      /* bughunt8 #1: …and the selection route never packs a WATCH-ONLY copy (FM.collab.watchOnly of THIS tab's project, which also
+         answers for a live session), as packFromProject already refuses the Home route. The prompt says why (js/app.js
+         FM.saveElementPrompt); this is the floor for any caller that does not ask first. */
+      if (FM.collab && FM.collab.watchOnly && FM.collab.watchOnly(tabId())) return false;
       const eid = newId('e');
       const pack = packLayers(layers);
       pack.canvas = elementCanvasOf(FM.scene.project);   // the canvas these layers sit on — see packFromProject (queue 690, HUNT-e)

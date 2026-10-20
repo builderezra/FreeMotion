@@ -5633,6 +5633,12 @@ window.FM = window.FM || {};
   };
   // Save the current selection as a reusable ELEMENT (insertable from Add → Object/Element).
   FM.saveElementPrompt = async function () {
+    /* bughunt8 #1 (#1091's doors): SAVE AS ELEMENT ASKS THE EXPORT GATE'S QUESTION TOO. An element pack carries every selected clip's
+       file (storage.js packLayers), lives under its own elem: key that Leave never touches, and Elements → Export file writes it out,
+       so a watch-only copy could be walked away as an element. The ⧉ menu's Save as element…, the layer ⋯ menu's (and its right-click
+       twin's) Save selection as element… and the Elements browser's empty-state button all come here: refused with the export notice
+       before anything is asked or packed. FM.elements.save refuses on its own as well, for any caller this misses. */
+    if (exportTurnedOff()) return sayExportTurnedOff();
     const ids = FM.selectionIds();
     const layers = FM.scene.layers.filter(l => ids.includes(l.id));
     if (!layers.length) { if (FM.toast) FM.toast('Select the layers to save first'); return; }
