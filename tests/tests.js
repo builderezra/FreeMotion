@@ -170967,4 +170967,145 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ 1176 leftover (after bughunt7 #2): A WATCH-ONLY COPY'S STILL, AND THE SAVE MY VERSION IT WAS STILL OFFERED ════════════
+     bughunt7 #2 asked the export gate's question (FM.exportTurnedOff) at Copy, Save audio as WAV and Save my version, and two
+     doors were left. (a) The camera button beside the transport (#btn-snapshot, Save current frame as PNG: js/app.js
+     FM.snapshotPNG) renders the frame to a PNG and asked nothing, while the export dialog's own This frame (PNG) is refused with
+     the rest of Export, so a watch-only copy could still be taken away a frame at a time. (b) A watch-only Commenter was still
+     OFFERED Save my version — the offline-clash toast (js/collab-session.js onClash: “— tap to save your version as a copy”) and
+     the full outbox's banner (js/collab-ui.js syncBanner: [Save my version]) — though v88 made the tap refuse with the notice.
+     Now FM.snapshotPNG asks the gate and says its notice, and both offers first ask the adapter's watchOnly (js/collab-bridge.js,
+     the question its saveVersion asks) and leave the action out: the toast says only that the changes clashed, the banner only
+     its words.
+     The rig is bughunt7 #2's, as a Commenter (who can comment offline, so a clash can be theirs): a linked copy in a live session
+     whose owner's export switch is off, then, for the controls, on. A PNG is counted at URL.createObjectURL by its type and the
+     download's anchor click does nothing. The clash is handed straight to the session's onClash (S._onClash, a suite seam) with
+     one lost change and a version kept a moment ago, and FM.toast is stood in for to read what it says; the banner is drawn by
+     C.ui.syncBanner with the session's outboxFull set, and read.
+     FAILS BEFORE THE FIX: with exporting off the camera button saves a PNG and brings up no card; the session has no S._onClash
+     (and, given one, the clash toast says “tap to save your version as a copy” with a tap action); and the banner carries a
+     [Save my version] button.
+     CONTROLS, which hold before and after: with exporting off the copy is watch-only and the export gate says so, and the full
+     outbox's banner is the one drawn; with exporting ON the camera button saves one PNG with no card, the banner has its
+     [Save my version] button, and (given the seam) the clash toast offers the save with its tap. */
+  test('1176 leftover: a watch-only copy’s still and its Save my version offers: with exporting off a Commenter’s camera button (Save current frame as PNG) is refused with the export notice and saves no PNG, an offline clash says so without offering to save their version, and a full outbox’s banner has no Save my version button (CONTROLS: the copy is watch-only; with exporting on the camera button saves one PNG and both offers are there)', { item: '1176', budgetMs: 120000 }, async function () {
+    const C = need921S7('a watch-only copy’s still and its Save my version offers');
+    const snapBtn = document.getElementById('btn-snapshot');
+    if (!snapBtn || typeof FM.snapshotPNG !== 'function' || typeof FM.exportTurnedOff !== 'function' || !C.bridge || !C.ui || typeof C.ui.syncBanner !== 'function') throw new Error('setup: #btn-snapshot, FM.snapshotPNG, FM.exportTurnedOff, the bridge or C.ui.syncBanner is not reachable');
+    const bad = [], made = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const ownURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    const ownToast = Object.getOwnPropertyDescriptor(FM, 'toast');
+    let pngs = 0;
+    /* A card that comes up within `ms`, answered: true for the export notice (OK), its title for any other, false for none. */
+    async function notice(ms) {
+      const t0 = Date.now();
+      while (Date.now() - t0 < ms) {
+        const q = ask967b3();
+        if (q) {
+          const said = /Exporting is turned off/.test(q.title + ' ' + q.msg);
+          if (said) q.ok.click(); else (q.cancel || q.ok).click();
+          await settle921(60);
+          return said ? true : 'a card titled “' + q.title + '”';
+        }
+        await settle921(40);
+      }
+      return false;
+    }
+    /* A Commenter's linked copy, opened, in a live session whose owner's export switch is `roExport` (bughunt7 #2's rig). */
+    async function commenterCopy(tag, roExport) {
+      const D = { project: { name: 'Ezra’s film 1176 still ' + tag, width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(layer921('Watch 1176 still ' + tag))] };
+      const gpid = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'commenter', epoch: 'e-1176-still', seq: 0, name: 'Sam' }, D);
+      if (!gpid) throw new Error('setup: could not make the shared copy');
+      made.push(gpid);
+      await FM.projects.open(gpid);
+      const hdoc = jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers });
+      const inv = C.bridge.invariants();
+      const H = C.Host({ base: jclone921(hdoc), invariants: inv, ownerInfo: { name: 'Ezra', color: '#ff9f43' } });
+      const HS = C.Session({ adapter: plainAdapter921(hdoc, inv), role: 'owner', mid: 'o', host: H });
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+      const mid = HS.addPeer(loop.a, { role: 'commenter', name: 'Sam', color: '#a3e635' });
+      const G = C.Session({ adapter: C.bridge, role: 'commenter', mid: mid, base: jclone921(hdoc), epoch: H.epoch });
+      G.gpid = gpid; G.pid = gpid; G.hostName = 'Ezra';
+      G.setLink(loop.b); G.bs = H.seq;
+      C.attach(G, { autoTick: false });
+      HS.setRoomSettings({ roExport: roExport, editorsInvite: false, max: 8 });
+      loop.settle();
+      if (!G.roomSettings || G.roomSettings.roExport !== roExport) throw new Error('setup: the owner’s export switch (' + roExport + ') did not reach the Commenter: ' + JSON.stringify(G.roomSettings));
+      await settle921(80);
+      return { gpid: gpid, G: G };
+    }
+    /* The camera button, a clash and a full outbox on the open copy's session G: what each did and said. */
+    async function tryDoors(G) {
+      const out = {};
+      pngs = 0;
+      snapBtn.click();
+      out.card = await notice(1500);
+      const t0 = Date.now();
+      while (!pngs && Date.now() - t0 < 2500) await settle921(50);
+      out.pngs = pngs;
+      if (typeof G._onClash === 'function') {
+        const said = [];
+        G.myVersionKept = { D: G.myVersion(), at: Date.now() };
+        Object.defineProperty(FM, 'toast', { configurable: true, writable: true, value: function (m, ms, fn) { said.push({ m: String(m), fn: typeof fn === 'function' }); } });
+        try { G._onClash({ cid: 0, lost: [['layers']], rej: [] }, null); }
+        finally { if (ownToast) Object.defineProperty(FM, 'toast', ownToast); else delete FM.toast; }
+        out.clash = said.filter(function (t) { return /clashed/.test(t.m); });
+      }
+      G.outboxFull = true;
+      try {
+        C.ui.syncBanner();
+        const b = document.getElementById('collab-banner');
+        const tx = b && b.querySelector('.cb-text'), act = b && b.querySelector('.cb-act');
+        out.banner = tx ? tx.textContent : (b ? b.textContent : null);
+        out.act = act ? act.textContent : null;
+      } finally { G.outboxFull = false; C.ui.syncBanner(); }
+      return out;
+    }
+    await withLabs921(async function (ui) {
+      try {
+        if (wasHome) FM.home.close();
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: function (b) { if (b && b.type === 'image/png') pngs++; return ownURL.value.apply(URL, arguments); } });
+        Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+
+        /* 1. A live Commenter, exporting off: the copy is watch-only. */
+        const v = await commenterCopy('off', false);
+        if (!C.watchOnly(v.gpid) || !FM.exportTurnedOff()) throw new Error('setup: the Commenter’s copy with exporting off is not watch-only (FM.collab.watchOnly ' + C.watchOnly(v.gpid) + ', FM.exportTurnedOff ' + FM.exportTurnedOff() + ')');
+        if (typeof v.G._onClash !== 'function') bad.push('the session has no S._onClash (js/collab-session.js), so what an offline clash says cannot be read');
+        const off = await tryDoors(v.G);
+        if (off.pngs) bad.push('with exporting off the camera button (Save current frame as PNG) saved ' + off.pngs + ' PNG of the watched copy');
+        if (off.card !== true) bad.push('with exporting off the camera button brought up ' + (off.card || 'no card') + ', not the export notice, so nothing says why');
+        if (off.clash) {
+          if (off.clash.length !== 1) bad.push('CONTROL: with exporting off the clash was said ' + off.clash.length + ' times, not once: ' + JSON.stringify(off.clash));
+          else if (off.clash[0].fn || /save your version/i.test(off.clash[0].m)) bad.push('with exporting off an offline clash still offers Save my version: “' + off.clash[0].m + '”' + (off.clash[0].fn ? ', with a tap' : '') + ' — a tap that can only refuse');
+        }
+        if (!off.banner || !/Too many offline changes/.test(off.banner)) bad.push('CONTROL: with the outbox full the banner reads ' + JSON.stringify(off.banner) + ', not that there are too many offline changes, so the offer was not measured');
+        else if (off.act) bad.push('with exporting off the full outbox’s banner still has a [' + off.act + '] button, which can only refuse');
+        try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+        await settle921(100);
+
+        /* 2. CONTROL: the same Commenter with exporting ON — the camera saves, and both offers are made. */
+        const w = await commenterCopy('on', true);
+        if (C.watchOnly(w.gpid) || FM.exportTurnedOff()) throw new Error('setup: the Commenter’s copy with exporting on is watch-only');
+        const on = await tryDoors(w.G);
+        if (on.pngs !== 1) bad.push('CONTROL: with exporting on the camera button saved ' + on.pngs + ' PNGs, not one');
+        if (on.card) bad.push('CONTROL: with exporting on the camera button brought up ' + on.card);
+        if (on.clash && (on.clash.length !== 1 || !on.clash[0].fn || !/tap to save your version/.test(on.clash[0].m))) bad.push('CONTROL: with exporting on an offline clash said ' + JSON.stringify(on.clash) + ', not the offer to save their version with its tap');
+        if (!on.banner || !/Too many offline changes/.test(on.banner) || !on.act || !/Save m/.test(on.act)) bad.push('CONTROL: with exporting on the full outbox’s banner reads ' + JSON.stringify(on.banner) + ' with ' + (on.act ? 'a [' + on.act + '] button' : 'no button') + ', not its Save my version');
+      } finally {
+        const a = ask967b3(); if (a) a.ok.click();
+        Object.defineProperty(URL, 'createObjectURL', ownURL);
+        if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+        else delete HTMLAnchorElement.prototype.click;
+        if (ownToast) Object.defineProperty(FM, 'toast', ownToast); else delete FM.toast;
+        try { if (C.session) { C.session.outboxFull = false; C.session.stop('left'); C.detach(); } } catch (e) {}
+        try { C.ui.syncBanner(); } catch (e) {}
+        try { ui.close(); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();

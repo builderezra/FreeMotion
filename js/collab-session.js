@@ -1133,7 +1133,10 @@ window.FM = window.FM || {};
            before the flush. Ten seconds, and only while that version is under ten minutes old. */
         const mv = S.myVersionKept && (now() - S.myVersionKept.at) < 600000 ? S.myVersionKept : null;
         const said = lost + gone + ' of your offline changes clashed with newer edits and were not applied';
-        if (mv && A.toastAction && A.saveVersion) {
+        /* 1176 leftover: …and not on a WATCH-ONLY copy (the adapter's watchOnly, the question its saveVersion asks): there the
+           tap could only refuse, so the toast says what happened and offers nothing. */
+        const keepsNone = !!(A.watchOnly && A.watchOnly());
+        if (mv && A.toastAction && A.saveVersion && !keepsNone) {
           try { A.toastAction(said + ' — tap to save your version as a copy', function () { A.saveVersion(mv.D); }, 10000); } catch (e) {}
         } else toast(said);
       }
@@ -1841,6 +1844,7 @@ window.FM = window.FM || {};
     S._release = release;
     S._pushLocal = pushLocal;
     S._forced = function () { return forced.length; };
+    S._onClash = onClash;   // 1176 leftover suite seam: what a clash says, without staging one through a host
 
     /* ═══ S7 · WRITING BASE BACK INTO LIVE (§16.3, §7.2, §17.2) ══════════════════════════════════
        Live changed in ways the room will not take (a role, a lease), so live goes back to base on exactly

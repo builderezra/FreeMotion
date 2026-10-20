@@ -4356,7 +4356,12 @@ window.FM = window.FM || {};
      (js/exporter.js mediaBack says why). With nothing re-loading it runs at once, synchronously, exactly as before; while a
      re-load is in flight it toasts "Loading clips…" and renders when the clips are back (or the wait gives up). */
   FM.snapshotPNG = function (opts) {
-    const back = (FM.exporter && FM.exporter.mediaBack) ? FM.exporter.mediaBack(FM.scene, s => { if (FM.toast) FM.toast(s, 2500); }) : null;
+    /* 1176 leftover (bughunt7 #2's doors): THE TOOLBAR'S STILL ASKS THE EXPORT GATE'S QUESTION TOO. The export dialog's own This
+       frame (PNG) is refused with the rest of Export, and the camera button beside the transport (#btn-snapshot, Save current
+       frame as PNG) renders the same frame to a file and asked nothing, so a watch-only copy could still be taken away a frame
+       at a time. Refused here with the export notice, before anything is rendered; every caller reaches it through this. */
+    if (exportTurnedOff()) return sayExportTurnedOff();
+    const back =(FM.exporter && FM.exporter.mediaBack) ? FM.exporter.mediaBack(FM.scene, s => { if (FM.toast) FM.toast(s, 2500); }) : null;
     if (back) return back.then(() => snapshotNow(opts));
     return snapshotNow(opts);
   };

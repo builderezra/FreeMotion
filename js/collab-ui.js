@@ -4508,7 +4508,10 @@ window.FM = window.FM || {};
       : (isPhoneNow() ? 'Sharing ended · your copy is kept' : 'Sharing has ended — your copy stays on this device'), { warn: true });
     /* §13.1 (S8 review): "Too many offline changes to hold — [Save my version as a copy]". */
     if (!s.isOwner && s.outboxFull) {
-      return U.banner(isPhoneNow() ? 'Too many offline changes' : 'Too many offline changes to hold — editing waits until they are sent', {
+      /* 1176 leftover: …with no [Save my version] on a WATCH-ONLY copy (the adapter's watchOnly, the question its saveVersion
+         asks), where the tap could only refuse. The words say what is true either way. */
+      const keepsNone = !!(s.adapter && s.adapter.watchOnly && s.adapter.watchOnly());
+      return U.banner(isPhoneNow() ? 'Too many offline changes' : 'Too many offline changes to hold — editing waits until they are sent', keepsNone ? { warn: true } : {
         warn: true, action: isPhoneNow() ? 'Save mine' : 'Save my version',
         onAction: function () { if (s.adapter && s.adapter.saveVersion) s.adapter.saveVersion(s.myVersion()); }
       });
