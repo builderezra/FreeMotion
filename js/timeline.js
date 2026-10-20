@@ -4233,6 +4233,26 @@ window.FM = window.FM || {};
        L.start / L.duration have already moved on earlier frames of this drag, and FM.speedAdvanceOver lays
        its window off L.start — the speed keyframes are in project time. Put back on a finally. */
     const atGrab = fn => { const s0 = L.start, d0 = L.duration; L.start = trimDrag.start; L.duration = trimDrag.dur; try { return fn(); } finally { L.start = s0; L.duration = d0; } };
+    /* bughunt7 #7: A HEAD DRAG THAT COMES BACK TO ITS GRAB PUTS THE EFFECT CLOCK AND THE CUES BACK TOO. Both head branches re-base
+       fxTimeOffset (and the forward one a caption track's cues) only for a delta off zero, and the delta is frame-rounded, so a
+       drag back to a frame-aligned start is exactly 0: start and duration went back and the clock and cues kept the last step's
+       values. Release compares start, duration and trim only, so it committed nothing, but the live layer kept them and the next
+       commit or autosave recorded them. At zero, after a move away, the values from pointerdown go back exactly, as the cancel's
+       restore puts them (a clip that had no fxTimeOffset gets none); a press that has not moved yet writes nothing. `cues`: the
+       forward branch's caption re-base rides along (the reversed branch never had one). */
+    const headRebase = (delta, cues) => {
+      if (Math.abs(delta) > 1e-9) {
+        if (cues && Array.isArray(L.captions)) L.captions = shiftCues(trimDrag.caps, delta);
+        L.fxTimeOffset = (trimDrag.fx0 || 0) + delta;
+        trimDrag.headMoved = true;
+        return;
+      }
+      if (!trimDrag.headMoved) return;
+      trimDrag.headMoved = false;
+      if (cues && trimDrag.caps && Array.isArray(L.captions)) L.captions = trimDrag.caps.map(c => ({ ...c }));
+      if (trimDrag.fxHad === true) L.fxTimeOffset = trimDrag.fxRaw;
+      else if (trimDrag.fxHad === false) delete L.fxTimeOffset;
+    };
     if (trimDrag.edge === 'right') {
       let nd = Math.max(0.1, trimDrag.dur + dt);
       if (rev && ramped) {
@@ -4278,7 +4298,7 @@ window.FM = window.FM || {};
            below re-bases it, and so do the A key and Extend, but this branch did not: dragging a reversed clip's left grip in
            by 1 s wound every Drift, Spin, Orbit, Wiggle and Shake on it back by 1 s and the picture jumped. Re-based from the
            value at pointerdown, as the forward branch does, so the moves of one drag do not compound. */
-        if (Math.abs(delta) > 1e-9) L.fxTimeOffset = (trimDrag.fx0 || 0) + delta;
+        headRebase(delta, false);
       } else {
         /* THE SOURCE THE CUT CONSUMED, THROUGH THE RAMP'S INTEGRAL (queue 690, fourth hunt). This was
            `trim + delta × speedAt(new head)` — the instantaneous rate at the new head times the whole cut —
@@ -4316,11 +4336,10 @@ window.FM = window.FM || {};
            Non-destructive on purpose — cues pushed before the new head keep negative times rather than
            being deleted, so dragging the head back out brings them back, exactly as re-extending a video
            brings its frames back. `indexAt` only ever matches `lt >= c.start && lt < c.end`, so a
-           negative cue simply never shows. */
-        if (Array.isArray(L.captions) && Math.abs(delta) > 1e-9) L.captions = shiftCues(trimDrag.caps, delta);
-        /* queue 823: re-based from the value at pointerdown for the same reason the cues are — a drag
-           reports its position every frame, so adding to the live value would compound it. */
-        if (Math.abs(delta) > 1e-9) L.fxTimeOffset = (trimDrag.fx0 || 0) + delta;
+           negative cue simply never shows.
+           queue 823: the effect clock is re-based from the value at pointerdown for the same reason the cues are — a drag
+           reports its position every frame, so adding to the live value would compound it. Both in headRebase (above). */
+        headRebase(delta, true);
       }
     }
     // belt-and-braces: a non-finite number must NEVER reach the scene (it cascades into every layout)

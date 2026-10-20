@@ -170720,4 +170720,103 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* (#7) A LEFT-GRIP DRAG THAT CAME BACK TO WHERE IT STARTED LEFT THE EFFECT CLOCK AND THE CUES SHIFTED. The left grip (js/timeline.js
+     applyTrimAt) re-bases fxTimeOffset on every move, forward and reversed (queue 823, #1107), and a caption track's cues on the
+     forward branch, from their pointerdown values, but only for a delta off zero. The delta is frame-rounded, so a drag back to a
+     frame-aligned start is exactly 0: start and duration went back, the clock and the cues kept the LAST step's values, release
+     compared start, duration and trim only and committed nothing, and the live layer kept the shift for the next commit or
+     autosave to record. Now at zero the pointerdown values go back exactly (v87's fxHad / fxRaw, and the grab's copy of the cues).
+     Driven as the 1176 leftover test drives the grip: pointerdown on the left grip, six moves 1 s in, six moves back to exactly
+     where it was pressed, then pointerup; on a video played forward (fxTimeOffset 0.5), the same reversed (no fxTimeOffset), and
+     a caption track (cues at 0.5–1.5 s and 2–3 s into it). Each clip starts at 2 s, a whole frame at 30 fps.
+     FAILS BEFORE THE FIX: back at the grab, the forward clip's fxTimeOffset reads about 0.667 (0.5 plus the last step, 1/6 s
+     rounded to 5 frames), the reversed one's about 0.167 where it had none, FM.fxLocalTime at 6 s is off by the same, and the
+     caption track's cues sit about 0.167 s earlier than they were; all still so after the release.
+     CONTROLS, which hold before and after: the drag really moved the head and the clock (or the cues) by at least 0.2 s before it
+     came back (else the test stops as a setup failure), and back at the grab the start and duration are the grab's.
+     TOLERANCE: the values written back are the stored ones, so they read back to float rounding, about 1e-15 s (by construction;
+     not measured here); the fault is a whole step, 5 frames at 30 fps. 1e-6 s sits between the two. */
+  test('bughunt7 #7 A left-grip drag that comes back to where it started puts the effect clock and the cues back: dragged 1 s in and back to exactly its start, a forward clip, a reversed clip and a caption track end with the effect clock and the cue times they had before the drag, held and after the release (CONTROL: the drag moved the head and the clock or cues, and back at the grab the start and duration are the grab’s)', { item: '1176' }, async function () {
+    const P = FM.scene.project;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    const t0 = FM.time, dur0 = P.duration, fps0 = P.fps;
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const made = [], bad = [], TOL = 1e-6;
+    const fxOf = function (v) { return parseFloat(v.fxTimeOffset) || 0; };
+    const cuesOf = function (v) { return Array.isArray(v.captions) ? v.captions.map(function (c) { return [c.start, c.end]; }) : null; };
+    const cuesOff = function (a, b) {
+      if (!a || !b || a.length !== b.length) return Infinity;
+      let m = 0;
+      for (let i = 0; i < a.length; i++) m = Math.max(m, Math.abs(a[i][0] - b[i][0]), Math.abs(a[i][1] - b[i][1]));
+      return m;
+    };
+    const run = async function (kind) {
+      FM.scene.layers.length = 0;
+      let v;
+      if (kind === 'caption track') {
+        v = FM.makeLayer('text', { name: 'bh7 #7 captions', text: 'one' });
+        v.captions = [{ start: 0.5, end: 1.5, text: 'one' }, { start: 2, end: 3, text: 'two' }];
+      } else {
+        v = FM.makeLayer('video', { name: 'bh7 #7 ' + kind });
+        v.trimStart = 2; v.reversed = kind === 'reversed'; v.speed = 1;
+        FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+      }
+      v.start = 2; v.duration = 6;
+      if (kind === 'reversed') delete v.fxTimeOffset; else v.fxTimeOffset = 0.5;
+      const drift = FM.fxRegistry.makeInstance('drift');
+      if (!drift) throw new Error('setup: this build has no Drift effect to put on the clip');
+      v.effects = [drift];
+      FM.scene.layers.push(v); made.push(v.id);
+      P.duration = 12; P.fps = 30; FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0);
+      await sleep(300);
+      const clip = document.querySelector('#tl-tracks .clip[data-id="' + v.id + '"]');
+      const g = attached(clip && clip.querySelector('.clip-grip.left'), 'the ' + kind + '’s left trim grip');
+      const r = g.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const pps = FM.timeline.timeToX(1) - FM.timeline.timeToX(0);
+      if (!(pps > 0)) throw new Error('setup: the timeline reports ' + pps + ' px per second');
+      const probe = 6, s0 = v.start, d0 = v.duration, fx0 = fxOf(v), had = Object.prototype.hasOwnProperty.call(v, 'fxTimeOffset');
+      const clock0 = FM.fxLocalTime(v, probe), cues0 = cuesOf(v);
+      const ev = function (type, cx, b) { return new PointerEvent(type, { pointerId: 41, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true, clientX: cx, clientY: y, button: 0, buttons: b }); };
+      g.dispatchEvent(ev('pointerdown', x, 1));
+      await sleep(40);
+      for (let k = 1; k <= 6; k++) { window.dispatchEvent(ev('pointermove', x + pps * k / 6, 1)); await sleep(16); }
+      await sleep(40);
+      /* CONTROL: the drag moved the head, and the clock or the cues with it, so there is something to put back */
+      const moved = v.start - s0, carried = fxOf(v) - fx0, slid = cuesOff(cuesOf(v), cues0);
+      if (!(Math.abs(moved) >= 0.2)) throw new Error('setup: dragging the ' + kind + '’s left grip ' + Math.round(pps) + ' px did not move its head (start ' + s0 + ' to ' + v.start + ')');
+      if (!(Math.abs(carried) >= 0.2)) throw new Error('setup: the drag moved the ' + kind + '’s head ' + moved.toFixed(3) + ' s and its effect clock only ' + carried.toFixed(3) + ' s, so there is no clock to put back');
+      if (cues0 && !(slid >= 0.2)) throw new Error('setup: the drag moved the caption track’s head ' + moved.toFixed(3) + ' s and its cues only ' + slid.toFixed(3) + ' s');
+      for (let k = 5; k >= 0; k--) { window.dispatchEvent(ev('pointermove', x + pps * k / 6, 1)); await sleep(16); }
+      await sleep(40);
+      const judge = function (when) {
+        if (Math.abs(v.start - s0) > TOL || Math.abs(v.duration - d0) > TOL) throw new Error('CONTROL: ' + when + ' the ' + kind + ' is at start ' + v.start + ', duration ' + v.duration + ', not its grab (' + s0 + ', ' + d0 + '), so the drag did not come back to where it started');
+        const off = fxOf(v) - fx0, jump = FM.fxLocalTime(v, probe) - clock0;
+        if (Math.abs(off) > TOL || Math.abs(jump) > TOL) bad.push(when + ' the ' + kind + ', dragged ' + moved.toFixed(3) + ' s in and back to its start, has its effect clock at ' + v.fxTimeOffset + ' (it was ' + (had ? fx0 : 'unset') + '), so Drift at 6 s runs ' + jump.toFixed(3) + ' s off where it was');
+        if (cues0) {
+          const cd = cuesOff(cuesOf(v), cues0);
+          if (cd > TOL) bad.push(when + ' the caption track, dragged ' + moved.toFixed(3) + ' s in and back to its start, has its cues ' + cd.toFixed(3) + ' s from where they were: ' + JSON.stringify(cuesOf(v)) + ' against ' + JSON.stringify(cues0));
+        }
+      };
+      judge('held back at the grab,');
+      window.dispatchEvent(ev('pointerup', x, 0));
+      await sleep(150);
+      judge('after the release,');
+    };
+    try {
+      if (wasHome) FM.home.close();
+      await run('forward clip');
+      await run('reversed');
+      await run('caption track');
+    } finally {
+      try { if (FM.timeline._abortGestures) FM.timeline._abortGestures(); } catch (e) {}
+      made.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.duration = dur0; P.fps = fps0; FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM.time = t0; FM.refreshAll(); FM.timeline.rebuild();
+      if (wasHome && FM.home && FM.home.open) FM.home.open();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();
