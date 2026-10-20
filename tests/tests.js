@@ -170543,4 +170543,99 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* (#5) AN UPDATE THAT WAITED ON A SESSION RELOADED AT ONCE WHEN IT ENDED, AND STOP SHARING LOST ITS LAST SAVE POINT. A new build
+     that lands during a live session is handed to FM.collab.deferReload (index.html), and when the session lets go it ran
+     C._reload (js/collab-core.js), a bare location.reload(): none of bughunt6 #14's hold (FM._swReloadWhenIdle: no export, no
+     clip's file still writing, the autosave awaited). And Stop sharing (js/collab-ui.js stopSharingNow) starts the 'stop' save
+     point without awaiting it and then calls C.end, whose C.detach ran that reload in the same task, before the save point's
+     IndexedDB write (a read, a read, then the put) could land (the refuter's N2). Now C._reload goes through the idle hold when
+     there is one, and Stop sharing holds a waiting update until its save point has settled.
+     Two parts, both with the reload stood in for (location.reload is not writable, so the suite cannot let it run):
+       1. the deferred reload itself: C._reload's own source must name the hold, and only then is it run — after a deferReload
+          and the session gone, through C.runPendingReload — with FM._swReloadWhenIdle replaced by a counter, so the real page
+          is never reloaded by a build that still calls location.reload;
+       2. Stop sharing on a shared project with an update waiting (C.deferReload during the session; C._reload logs ‘reload’,
+          and FM.storage.collabPut logs ‘put’ when the stop save point's write resolves).
+     FAILS BEFORE THE FIX: C._reload's source is location.reload() alone; and Stop sharing logs reload → put, the reload first.
+     CONTROLS, which hold before and after: with no update waiting, C.runPendingReload reloads nothing; the stop really wrote its
+     save point (one more key under collab:ckpt:<pid>:), and the waiting update ran exactly once. */
+  test('bughunt7 #5 An update that waited on a shared session goes through the idle hold when the session ends, and Stop sharing saves its last save point before the update reloads: the deferred reload calls FM._swReloadWhenIdle, and the stop save point’s write lands before the reload (CONTROLS: nothing waiting reloads nothing; the stop wrote its save point and the update ran once)', { item: '1176', budgetMs: 120000 }, async function () {
+    const C = need921S7('the update that waits on a session');
+    if (typeof C._reload !== 'function' || typeof C.deferReload !== 'function' || typeof C.runPendingReload !== 'function' || typeof C._pendingReload !== 'function') throw new Error('setup: FM.collab._reload / deferReload / runPendingReload / _pendingReload are not reachable');
+    if (typeof FM._swReloadWhenIdle !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) is not reachable');
+    const realReload = C._reload, realPut = FM.storage.collabPut;
+    const dW = Object.getOwnPropertyDescriptor(FM, '_swReloadWhenIdle');
+    const bad = [], log = [];
+    let keys = null;
+    try {
+      await withLabs921(async function (ui) {
+        const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+        if (wasHome) FM.home.close();
+        try {
+          if (C.session) throw new Error('setup: a session is already attached, so the deferred reload cannot run');
+          /* ── 1. the deferred reload itself */
+          let held = 0, direct = 0;
+          Object.defineProperty(FM, '_swReloadWhenIdle', { configurable: true, writable: true, value: function () { held++; return Promise.resolve(false); } });
+          if (C._pendingReload()) { C._reload = function () {}; C.runPendingReload(); }   // one an earlier test left behind, run into a stand-in
+          C._reload = function () { direct++; };
+          if (C.runPendingReload() || direct || held) bad.push('CONTROL: with no update waiting, C.runPendingReload reloaded (' + direct + ' reload, ' + held + ' call to the hold)');
+          C._reload = realReload;
+          const src = String(realReload).replace(/\s+/g, ' ');
+          if (!/_swReloadWhenIdle/.test(src)) bad.push('the update a session held is reloaded by C._reload straight away, past the idle hold: ' + src.slice(0, 160));
+          else {
+            C.deferReload();
+            const ran = C.runPendingReload();
+            if (!ran || held !== 1) bad.push('once the session let go, the waiting update ' + (ran ? 'ran' : 'did not run') + ' and asked the idle hold ' + held + ' times, not once');
+            if (C._pendingReload()) bad.push('the update is still marked waiting after it ran');
+          }
+          if (dW) Object.defineProperty(FM, '_swReloadWhenIdle', dW); else delete FM._swReloadWhenIdle;
+
+          /* ── 2. Stop sharing with an update waiting */
+          made.push(await FM.projects.create({ name: 'FX bh7 #5 stop', width: 320, height: 240 }));
+          const pid = FM.projects.currentId();
+          FM.scene.layers.push(layer921('A'));
+          FM.history.commit(); FM.storage.markDirty(); await FM.storage.save();
+          const prefix = 'collab:ckpt:' + pid + ':';
+          keys = function () { return FM.storage.collabKeys(prefix); };
+          await ui.share(); ui.close();
+          if (!C.session || !C.session.isOwner) throw new Error('setup: sharing did not start an owner session');
+          const k0 = (await keys()).length;
+          FM.scene.layers[0].name = 'A changed'; FM.history.commit();   // so the stop save point differs from the arm's and is written
+          C._reload = function () { log.push('reload'); };
+          FM.storage.collabPut = function (k) {
+            const p = realPut.apply(this, arguments);
+            if (typeof k === 'string' && k.indexOf(prefix) === 0 && !/-arm$/.test(k)) Promise.resolve(p).then(function () { log.push('put'); }, function () { log.push('put failed'); });
+            return p;
+          };
+          C.deferReload();   // an app update landed during the session
+          await ui.share();
+          document.querySelector('#collab-share .cs-stop').click();
+          (await askOk921()).click();
+          await until921S6('the session to stop', function () { return !C.session; }, 4000);
+          await until921S6('the waiting update to run', function () { return log.indexOf('reload') >= 0 ? 1 : 0; }, 6000).catch(function () {});
+          await settle921(300);
+          FM.storage.collabPut = realPut;
+          const k1 = (await keys()).length;
+          if (k1 !== k0 + 1 || log.indexOf('put') < 0) bad.push('CONTROL: Stop sharing wrote ' + (k1 - k0) + ' save point(s) (' + log.join(' → ') + '), not one, so the order cannot be judged');
+          if (log.filter(function (x) { return x === 'reload'; }).length !== 1) bad.push('CONTROL: the waiting update ran ' + log.filter(function (x) { return x === 'reload'; }).length + ' times after Stop sharing, not once (' + log.join(' → ') + ')');
+          else if (log.indexOf('put') >= 0 && log.indexOf('reload') < log.indexOf('put')) bad.push('Stop sharing with an update waiting reloaded before its last save point was written (' + log.join(' → ') + '): on a real phone the page unloads first and the save point §24 promises is lost');
+        } finally {
+          FM.storage.collabPut = realPut;
+          try { if (C.session) C.end(); } catch (e) {}
+          try { if (keys) { const ks = await keys(); for (let i = 0; i < ks.length; i++) await FM.storage.collabDel(ks[i]); } } catch (e) {}
+          await q915aCleanup(made, orig, wasHome, [], [], []);
+        }
+      });
+    } finally {
+      /* A reload left pending would fire at the next detach of any later test and reload the SUITE: it is run here, into a
+         stand-in, before the real one goes back (the 921 S8r test's own clean-up). */
+      FM.storage.collabPut = realPut;
+      C._reload = function () {};
+      try { if (C._pendingReload() && !C.session) C.runPendingReload(); } catch (e) {}
+      C._reload = realReload;
+      if (dW) Object.defineProperty(FM, '_swReloadWhenIdle', dW); else delete FM._swReloadWhenIdle;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();

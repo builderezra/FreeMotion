@@ -570,7 +570,15 @@ window.FM = window.FM || {};
      the reload could only ever assert that a flag was set, which is the half of the rule that does not
      matter; the half that does is that the reload happens when the session lets go, and `location.reload`
      is not writable. (queue 921 S2) */
-  C._reload = function () { location.reload(); };
+  /* bughunt7 #5: …AND IT WAITS IN THE SAME HOLD AS EVERY OTHER NEW BUILD. A takeover that lands during a session is handed here
+     (index.html: the controllerchange handler, and the idle hold itself when a session starts while it waits), and this was a
+     bare location.reload(): with no busy check and no awaited save, a clip's file still on its way to IndexedDB or an export
+     on its Save card was cut by the reload the moment the session ended. index.html's FM._swReloadWhenIdle (bughunt6 #14) holds
+     it until nothing would be lost, saves, and then reloads; a session started meanwhile takes it back (deferReload). */
+  C._reload = function () {
+    if (typeof FM._swReloadWhenIdle === 'function') FM._swReloadWhenIdle();
+    else location.reload();
+  };
   C._pendingReload = function () { return pendingReload; };
   C._undoHandover = function (v) { if (v !== undefined) { undoHandover = !!v; if (!undoHandover) handoverSession = null; } return undoHandover; };
 

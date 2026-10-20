@@ -1700,8 +1700,16 @@ window.FM = window.FM || {};
          people in it left it. Not awaited: IndexedDB takes its own time and the stop must not wait on it.
          #967 B3: not for a project being DELETED — its save points go with it, and one landing after the delete
          would be kept for a project that no longer exists. */
-      if (!(o && o.deleting)) checkpoint(pid, 'stop');
-      C.end();
+      /* bughunt7 #5 (N2): …BUT AN APP UPDATE WAITING ON THE SESSION WAITS FOR IT. C.end detaches, and C.detach runs a
+         deferred reload in the same task, before the save point's IndexedDB write (a read, a read, then the put) could
+         commit, so every Stop sharing while an update waited lost the "last picture" §24 promises. The stop still does not
+         wait: the reload is held (C.end's holdReload) and run once the save point has settled, either way. */
+      const saved = (o && o.deleting) ? null : checkpoint(pid, 'stop');
+      if (saved) {
+        C.end({ holdReload: true });
+        const runUpdate = function () { C.runPendingReload(); };
+        saved.then(runUpdate, runUpdate);
+      } else C.end();
     }
     /* …and the code he read out a minute ago really does stop working — the offer belongs to the live session (or to
        none), never to a different project that is live right now.

@@ -2339,11 +2339,13 @@ window.FM = window.FM || {};
     });
   };
 
-  C.end = function () {
+  /* bughunt7 #5 (N2): `opts.holdReload` passes C.detach's own hold through — Stop sharing runs the waiting update itself once
+     its last save point has landed (collab-ui.js stopSharingNow). Every other caller passes nothing, as before. */
+  C.end = function (opts) {
     const s = C.session;
     if (!s) return null;
     s.stop('ended');
-    C.detach();
+    C.detach(opts && opts.holdReload ? { holdReload: true } : undefined);
     return s;
   };
 
