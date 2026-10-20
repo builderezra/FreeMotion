@@ -12,7 +12,9 @@ window.FM = window.FM || {};
   const RECENTS_KEY = 'fm.afx.recents', FAV_KEY = 'fm.afx.fav', RECENTS_CAP = 8, PAGE_SIZE = 8;
   function readList(key) { try { const a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.filter(id => FM.audioFxRegistry.get(id)) : []; } catch (e) { return []; } }
   function writeList(key, arr) { try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {} }
-  function pushRecent(id) { const a = readList(RECENTS_KEY).filter(x => x !== id); a.unshift(id); writeList(RECENTS_KEY, a.slice(0, RECENTS_CAP)); }
+  /* 1176 leftover: the recents are written as they are stored too (readStored, below), so adding an effect no longer
+     deletes the recents this build does not know; js/fx-browser.js has the same fix and the reasons. */
+  function pushRecent(id) { const a = readStored(RECENTS_KEY).filter(x => x !== id); a.unshift(id); writeList(RECENTS_KEY, a.slice(0, RECENTS_CAP)); }
   function isFav(id) { return readList(FAV_KEY).indexOf(id) >= 0; }
   /* bughunt6 #15: readList filters for SHOWING only; the star edits the list as it is stored, so starring one effect no
      longer deletes the favourites this build does not know (js/fx-browser.js has the same fix and the reasons). */

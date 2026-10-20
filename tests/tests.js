@@ -87175,9 +87175,12 @@
                  { id: 'b', type: 'shape', start: -999999, duration: 5 },
                  { id: 'c', type: 'shape', start: 'nonsense', duration: 5 }];
     FM.storage._sanitizeLayers(bad);
+    /* bughunt7 #3 (N1): the floor is -(3600 + FM.LIMITS.duration) now, not -3600 — a clip longer than an hour can be dragged
+       further back than an hour — and -999999 is still absurd, so it must still be brought up to it. */
+    const FLOOR = -(3600 + ((FM.LIMITS && FM.LIMITS.duration) || 0));
     for (const l of bad) {
       if (!isFinite(l.start)) throw new Error('a non-finite start survived sanitising on layer ' + l.id);
-      if (l.start < -3600) throw new Error('an absurd start (' + l.start + ') survived on layer ' + l.id);
+      if (l.start < FLOOR) throw new Error('an absurd start (' + l.start + ') survived on layer ' + l.id);
     }
   });
 
@@ -169642,6 +169645,1681 @@
         });
       });
     });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #1107 (hunt AU1, finding 1): A REVERSED CLIP'S LEFT GRIP MOVED ITS EFFECT CLOCK ═══════════════════════════════════════
+     Every time-driven effect (Drift, Spin, Orbit, Wiggle, Shake) runs on FM.fxLocalTime = t - start + fxTimeOffset, so a head
+     edit has to carry fxTimeOffset along with `start` or the picture jumps (queue 823). The left grip's FORWARD branch
+     (js/timeline.js applyTrimAt), the A key and Extend all carry it. The grip's REVERSED branch moved `start` and left the clock
+     where it was: measured on v17.31 (hunt AU1), a 40 px drag moved the clock 0.400 s at a fixed time.
+     FAILS BEFORE THE FIX: dragging the reversed clip's left grip about 1 s in moves FM.fxLocalTime at 6 s by the whole drag, about
+     1 s (a drag that moves the head less than 0.2 s stops the test as a setup failure, so the fault is never smaller than that).
+     CONTROL, which holds before and after: the same drag on the same clip played FORWARD keeps its clock still.
+     TOLERANCE: a carried clock adds and subtracts the same delta, so it reads back to float rounding, about 1e-15 s; the fault is
+     the drag itself, at least 0.2 s. 1e-4 s sits between the two. */
+  test('1107 a reversed clip’s left trim grip keeps its effect clock still: dragging the head in does not make Drift, Spin or Orbit jump (CONTROL: the same drag on the clip played forward)', { item: '1107' }, async function () {
+    const P = FM.scene.project;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    const t0 = FM.time, dur0 = P.duration;
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const made = [];
+    const drag = async function (rev) {
+      FM.scene.layers.length = 0;
+      const v = FM.makeLayer('video', { name: '1107 clip' });
+      v.start = 2; v.duration = 6; v.trimStart = 2; v.reversed = rev; v.speed = 1;
+      FM.scene.layers.push(v); made.push(v.id);
+      FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+      P.duration = 12; FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0);
+      await sleep(300);
+      const clip = document.querySelector('#tl-tracks .clip[data-id="' + v.id + '"]');
+      const g = attached(clip && clip.querySelector('.clip-grip.left'), (rev ? 'reversed' : 'forward') + ' clip’s left trim grip');
+      const r = g.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const pps = FM.timeline.timeToX(1) - FM.timeline.timeToX(0);
+      if (!(pps > 0)) throw new Error('setup: the timeline reports ' + pps + ' px per second');
+      const probe = 6, before = FM.fxLocalTime(v, probe), s0 = v.start, e0 = v.start + v.duration;
+      const ev = function (type, cx, b) { return new PointerEvent(type, { pointerId: 31, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true, clientX: cx, clientY: y, button: 0, buttons: b }); };
+      g.dispatchEvent(ev('pointerdown', x, 1));
+      await sleep(40);
+      for (let k = 1; k <= 6; k++) { window.dispatchEvent(ev('pointermove', x + pps * k / 6, 1)); await sleep(16); }
+      window.dispatchEvent(ev('pointerup', x + pps, 0));
+      await sleep(150);
+      const what = rev ? 'reversed' : 'forward';
+      if (!(Math.abs(v.start - s0) >= 0.2)) throw new Error('setup: dragging the ' + what + ' clip’s left grip ' + Math.round(pps) + ' px did not move its head (start ' + s0 + ' to ' + v.start + ')');
+      if (Math.abs((v.start + v.duration) - e0) > 1e-6) throw new Error('setup: the drag on the ' + what + ' clip’s left grip moved its tail too (' + e0 + ' to ' + (v.start + v.duration) + '), so it was a move, not a trim');
+      return { moved: v.start - s0, jump: FM.fxLocalTime(v, probe) - before };
+    };
+    try {
+      if (wasHome) FM.home.close();
+      const fwd = await drag(false);
+      if (Math.abs(fwd.jump) > 1e-4) throw new Error('CONTROL: trimming the head of the FORWARD clip ' + fwd.moved.toFixed(3) + ' s moved its effect clock ' + fwd.jump.toFixed(4) + ' s at 6 s, so this probe cannot judge the reversed one');
+      const rev = await drag(true);
+      if (Math.abs(rev.jump) > 1e-4) throw new Error('dragging the left grip of a REVERSED clip ' + rev.moved.toFixed(3) + ' s in moved its effect clock ' + rev.jump.toFixed(3) + ' s at a fixed time, so every Drift, Spin or Orbit on it jumps; the same drag on the clip played forward kept its clock still, and the A key and Extend carry it on both');
+    } finally {
+      try { if (FM.timeline._abortGestures) FM.timeline._abortGestures(); } catch (e) {}
+      made.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.duration = dur0; FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM.time = t0; FM.refreshAll(); FM.timeline.rebuild();
+      if (wasHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* ═══ #1107 (hunt AU1, finding 2): A REVERSED SPEED RAMP'S HEAD COULD BE GROWN PAST THE END OF ITS SOURCE ═════════════════
+     A reversed clip opens on its source window's END, so growing its head walks that end up through the file. The left grip
+     (js/timeline.js applyTrimAt) and Extend, the D key (js/app.js FM.extendClipTo), both capped it with (srcDur - trimStart) / sp,
+     and sp is 1 for ANY ramp, so the curve was ignored. Both now ask FM.revHeadGrowLimit (js/scene.js), which solves it on the curve.
+     The fixture: a 20 s file, trimStart 1, the clip at 6 to 12 s, reversed, at 3x falling to 0.5x, so it plays 10.5 s of source;
+     its head pulled back toward 0. The source left above its window is 20 - 1 - 10.5 = 8.5 s, which at 3x is 2.83 s of clip.
+     FAILS BEFORE THE FIX: on the ramp both edits run the head all the way to 0 s, and its first frame reads source 29.50 s of the
+     20 s file (1 + 6 s at 3x + 10.5). Measured on v17.31 (hunt AU1) at both entry points.
+     CONTROL, which holds before and after: the same edits on a flat 3x clip stop where the file runs out (head 20 s, start 5.67),
+     because the flat division was always right for a flat speed.
+     Checked both ways, so a cap that refuses all growth fails as well: the head must END at the file's end, within the tolerance.
+     TOLERANCE: the curve is integrated by a float32 trapezoid table at 120 Hz and the cap bisected 30 times, so a capped head reads
+     20 s to within about 1e-3 s at worst (the 0.001 s probe offset below reads 0.003 s low at 3x); the fault is 9.5 s. 0.01 s sits
+     between the two. */
+  test('1107 growing the head of a reversed speed-ramped clip never reads past the end of its source: the left trim grip and Extend (D) both stop where the file runs out (CONTROL: the same edits on a flat 3x clip)', { item: '1107' }, async function () {
+    const P = FM.scene.project;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    const t0 = FM.time, dur0 = P.duration;
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const SRC = 20, TOL = 0.01, made = [], bad = [];
+    const mk = async function (ramped) {
+      FM.scene.layers.length = 0;
+      const v = FM.makeLayer('video', { name: '1107 ramp' });
+      v.start = 6; v.duration = 6; v.trimStart = 1; v.reversed = true;
+      v.speed = ramped ? { kf: [{ t: 6, v: 3, e: 'linear' }, { t: 12, v: 0.5, e: 'linear' }] } : 3;
+      FM.scene.layers.push(v); made.push(v.id);
+      FM.media.set(v.id, { kind: 'video', duration: SRC, width: 2, height: 2 });
+      P.duration = 14; FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0);
+      await sleep(300);
+      return v;
+    };
+    // a reversed clip opens on the END of its source window
+    const head = function (v) { return FM.layerLocalTime(v, v.start + 0.001); };
+    const judge = function (how, what, v, ctl) {
+      const h = head(v);
+      const say = how + ' on the ' + what + ' reversed clip: its first frame reads source ' + (h == null ? 'nothing' : h.toFixed(2) + ' s') + ' of a ' + SRC + ' s file (start ' + v.start.toFixed(2) + ', duration ' + v.duration.toFixed(2) + ')';
+      if (h == null || !isFinite(h)) throw new Error('setup: ' + say);
+      if (ctl) { if (Math.abs(h - SRC) > TOL) throw new Error('CONTROL: ' + say + ', where it should stop at the end of the file'); return; }
+      if (h > SRC + TOL) bad.push(say + ': past the end of the file');
+      else if (h < SRC - TOL) bad.push(say + ': it stopped short of the end of the file');
+    };
+    try {
+      if (wasHome) FM.home.close();
+      for (const ramped of [false, true]) {
+        const what = ramped ? '3x to 0.5x ramped' : 'flat 3x';
+        /* Extend, the D key: the playhead parked at 0 s, before the clip */
+        const v = await mk(ramped);
+        FM.time = 0;
+        if (!FM.extendClipTo(v, 0)) throw new Error('setup: Extend to 0 s changed nothing on the ' + what + ' clip');
+        judge('Extend (D) to 0 s', what, v, !ramped);
+        /* the left grip, dragged 7 s to the left, past 0 s */
+        const w = await mk(ramped);
+        const clip = document.querySelector('#tl-tracks .clip[data-id="' + w.id + '"]');
+        const g = attached(clip && clip.querySelector('.clip-grip.left'), what + ' clip’s left trim grip');
+        const r = g.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+        const pps = FM.timeline.timeToX(1) - FM.timeline.timeToX(0);
+        if (!(pps > 0)) throw new Error('setup: the timeline reports ' + pps + ' px per second');
+        const ev = function (type, cx, b) { return new PointerEvent(type, { pointerId: 32, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true, clientX: cx, clientY: y, button: 0, buttons: b }); };
+        g.dispatchEvent(ev('pointerdown', x, 1));
+        await sleep(40);
+        for (let k = 1; k <= 7; k++) { window.dispatchEvent(ev('pointermove', x - pps * k, 1)); await sleep(16); }
+        window.dispatchEvent(ev('pointerup', x - pps * 7, 0));
+        await sleep(150);
+        if (!(w.start < 5.9)) throw new Error('setup: dragging the ' + what + ' clip’s left grip ' + Math.round(pps * 7) + ' px left did not pull its head back (start ' + w.start + ')');
+        judge('the left grip dragged to 0 s', what, w, !ramped);
+      }
+      if (bad.length) throw new Error(bad.join(' AND '));
+    } finally {
+      try { if (FM.timeline._abortGestures) FM.timeline._abortGestures(); } catch (e) {}
+      made.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.duration = dur0; FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM.time = t0; FM.refreshAll(); FM.timeline.rebuild();
+      if (wasHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* ═══ #1111 (and its twin #1100, hunt PF1): IMPORTING INTO A PROJECT WITH GLOW EFFECTS FROZE FOR SECONDS ══════════════════════
+     Every Home card picture is drawn by makeThumb (js/storage.js): the import's touchCurrent(true), the 12 s autosave capture, a
+     pinned card picture, a template or element save. It rendered the whole scene onto a canvas the PROJECT's size, 1080 x 1920,
+     and only then halved it down to the 203 x 360 card, and the render is where an effect stack spends its time: measured on
+     v17.32 (hunt PF1), one layer of 8 Glows rendered in 3.0 s at 1080 x 1920 and 0.16 s at card size, and its import took 6.2 s
+     before and 0.29 s after. The card is now drawn at twice its own size, 405 x 720 (render scale 0.375), and halved once.
+     Tested by what causes the time, the size of the canvas the card is rendered on, because a clock is not reliable in a suite.
+     FAILS BEFORE THE FIX: the card of a 1080 x 1920 project with two Glows is rendered on a 1080 x 1920 canvas at render scale 1,
+     7.1 times the pixels of the 405 x 720 it needs.
+     CONTROL, which holds before and after: the card is still the WHOLE frame, 203 x 360, with the red square from the project's
+     bottom-right corner in the card's bottom-right corner and the background in its top-left; and a 320 x 240 project, already
+     inside the card, is rendered on a 320 x 240 canvas exactly as before.
+     COLOUR THRESHOLDS: the card is a JPEG at quality 0.8, whose noise on a flat 40 px block is a few levels (PF1 measured a mean
+     0.61 per channel between the old and the new card); the marker is 255 / 0 / 0 and the background 16 / 32 / 48, so red above
+     180 with green and blue below 90 sits far from both. */
+  test('1111 a project with Glow effects draws its Home card at the card’s size, not the project’s: the import and every autosave stop rendering 1080 x 1920 for a 203 x 360 picture (CONTROL: the card is still the whole frame, and a small project is drawn as before)', { item: '1111' }, async function () {
+    if (!FM.templates || typeof FM.templates.cardFor !== 'function' || !FM.projects || !FM.fxRegistry) throw new Error('setup: FM.templates.cardFor (the card picture, makeThumb) is not reachable');
+    const P = FM.scene.project;
+    const keep = { w: P.width, h: P.height, d: P.duration, hasBg: Object.prototype.hasOwnProperty.call(P, 'background'), bg: P.background, t: FM.time };
+    const layers0 = FM.scene.layers.slice();
+    const realRender = FM.renderScene;
+    const bad = [];
+    const card = async function (w, h) {
+      P.width = w; P.height = h; P.duration = 4; P.background = '#102030';
+      FM.scene.layers.length = 0;
+      const glow = FM.makeLayer('shape', { name: '1111 glow', shape: 'ellipse', x: w * 0.5, y: h * 0.2, shapeW: w * 0.18, shapeH: w * 0.18, fill: '#ffffff' });
+      glow.start = 0; glow.duration = 4; glow.effects = [FM.fxRegistry.makeInstance('glow'), FM.fxRegistry.makeInstance('glow')];
+      const side = Math.round(Math.min(w, h) * 0.2);
+      const mark = FM.makeLayer('shape', { name: '1111 mark', shape: 'rect', x: w * 0.8, y: h * 0.8, shapeW: side, shapeH: side, fill: '#ff0000' });
+      mark.start = 0; mark.duration = 4;
+      FM.scene.layers.push(glow, mark);
+      FM.time = 1;
+      const calls = [];
+      FM.renderScene = function (ctx, scn) {
+        const out = realRender.apply(this, arguments);
+        const c = ctx && ctx.canvas;
+        if (c && c.id !== 'preview' && scn && scn.layers && scn.layers.indexOf(glow) >= 0) calls.push({ w: c.width, h: c.height, rs: c.__fmRS });
+        return out;
+      };
+      let url = null;
+      try { url = FM.templates.cardFor(FM.projects.currentId()); } finally { FM.renderScene = realRender; }
+      if (!calls.length) throw new Error('setup: the ' + w + ' x ' + h + ' card was not rendered at all (' + (url ? 'a stored picture came back instead' : 'no picture') + '), so nothing can be measured');
+      if (typeof url !== 'string' || url.indexOf('data:image/jpeg') !== 0) throw new Error('setup: the ' + w + ' x ' + h + ' card is not a JPEG picture: ' + String(url).slice(0, 40));
+      const img = new Image(); img.src = url;
+      await new Promise(function (r) { img.onload = r; img.onerror = r; });
+      const cv = document.createElement('canvas'); cv.width = img.naturalWidth || 1; cv.height = img.naturalHeight || 1;
+      const g = cv.getContext('2d'); g.drawImage(img, 0, 0);
+      const at = function (fx, fy) {
+        const x = Math.max(2, Math.min(cv.width - 3, Math.round(fx * cv.width))), y = Math.max(2, Math.min(cv.height - 3, Math.round(fy * cv.height)));
+        const d = g.getImageData(x - 2, y - 2, 5, 5).data;
+        let r = 0, gr = 0, b = 0;
+        for (let i = 0; i < d.length; i += 4) { r += d[i]; gr += d[i + 1]; b += d[i + 2]; }
+        return [Math.round(r / 25), Math.round(gr / 25), Math.round(b / 25)];
+      };
+      return { calls: calls, cw: cv.width, ch: cv.height, mark: at(0.8, 0.8), corner: at(0.05, 0.05) };
+    };
+    const red = function (p) { return p[0] > 180 && p[1] < 90 && p[2] < 90; };
+    const sizes = function (calls) { return calls.map(function (c) { return c.w + ' x ' + c.h; }).join(', '); };
+    try {
+      /* CONTROL first: a project already inside the card is rendered at its own size, as it always was */
+      const small = await card(320, 240);
+      if (small.calls.some(function (c) { return c.w !== 320 || c.h !== 240; })) throw new Error('CONTROL: the card of a 320 x 240 project, already inside the card, was rendered on ' + sizes(small.calls) + ' instead of its own 320 x 240');
+      if (small.cw !== 320 || small.ch !== 240 || !red(small.mark) || red(small.corner)) throw new Error('CONTROL: the 320 x 240 card is ' + small.cw + ' x ' + small.ch + ' with its marker corner at rgb(' + small.mark + ') and its top-left at rgb(' + small.corner + '), so this probe cannot read a card');
+      const big = await card(1080, 1920);
+      if (big.cw !== 203 || big.ch !== 360) throw new Error('CONTROL: the 1080 x 1920 card is ' + big.cw + ' x ' + big.ch + ', not 203 x 360');
+      if (!red(big.mark)) throw new Error('CONTROL: the red square in the 1080 x 1920 project’s bottom-right corner is not in its card’s bottom-right corner (rgb(' + big.mark + ')), so the card is not the whole frame');
+      if (red(big.corner)) throw new Error('CONTROL: the 1080 x 1920 card’s top-left corner is red (rgb(' + big.corner + ')), so the picture is misplaced');
+      big.calls.forEach(function (c) {
+        if (c.w > 2 * 203 || c.h > 2 * 360) bad.push('the Home card of a 1080 x 1920 project with two Glows was rendered on a ' + c.w + ' x ' + c.h + ' canvas at render scale ' + (+c.rs).toFixed(3) + ', ' + ((c.w * c.h) / (405 * 720)).toFixed(1) + ' times the pixels of the 405 x 720 a 203 x 360 card needs; on a layer of 8 Glows that one render took 3.0 s against 0.16 s (hunt PF1), on every import and every 12 s autosave');
+      });
+      if (bad.length) throw new Error(bad.join(' AND '));
+    } finally {
+      FM.renderScene = realRender;
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.width = keep.w; P.height = keep.h; P.duration = keep.d; FM.time = keep.t;
+      if (keep.hasBg) P.background = keep.bg; else delete P.background;
+      if (FM.requestRender) FM.requestRender();
+    }
+  });
+
+  /* ═══ 1176 leftover (after #1107): A HEAD TRIM ABANDONED BY A LOST POINTER LEFT THE EFFECT CLOCK SHIFTED ══════════════════
+     The left grip (js/timeline.js applyTrimAt) re-bases the clip's effect clock, fxTimeOffset, on every move, forward and
+     reversed (queue 823, #1107), so Drift, Spin, Orbit, Wiggle and Shake hold still while the head moves. A trim abandoned by a
+     lost pointer (a pointercancel: a notification, an edge swipe, the OS taking the touch) goes through restoreGestures, which
+     put back start, duration, trimStart and the captions (queue 817) and not fxTimeOffset: the clip came back where it started
+     with its effects running on a clock shifted by however far the pointer had travelled.
+     FAILS BEFORE THE FIX: after a left-grip drag of about 1 s and a pointercancel, the forward clip's fxTimeOffset reads about
+     1.5 where it started at 0.5, the reversed clip's about 1 where it had none, and FM.fxLocalTime at 6 s is off by the same.
+     CONTROL, which holds before and after: the drag really moved the head and the clock (at least 0.2 s each, or the test stops
+     as a setup failure), and the pointercancel put start and duration back (queue 796).
+     TOLERANCE: the restore writes the stored number back, so the clock reads back to float rounding, about 1e-15 s (by
+     construction; not measured here); the fault is the whole drag, at least 0.2 s. 1e-6 s sits between the two. */
+  test('1176 leftover: a left-grip trim abandoned by a lost pointer puts the effect clock back with the clip: after a pointercancel, Drift runs on the clock it had before the drag, on a clip played forward and on one reversed (CONTROL: the drag moved the head and the clock, and the cancel put start and duration back)', { item: '1176' }, async function () {
+    const P = FM.scene.project;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    const t0 = FM.time, dur0 = P.duration;
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const made = [], bad = [], TOL = 1e-6;
+    const fxOf = function (v) { return parseFloat(v.fxTimeOffset) || 0; };
+    const run = async function (rev) {
+      const what = rev ? 'reversed' : 'forward';
+      FM.scene.layers.length = 0;
+      const v = FM.makeLayer('video', { name: '1176 trim ' + what });
+      v.start = 2; v.duration = 6; v.trimStart = 2; v.reversed = rev; v.speed = 1;
+      if (rev) delete v.fxTimeOffset; else v.fxTimeOffset = 0.5;
+      const drift = FM.fxRegistry.makeInstance('drift');
+      if (!drift) throw new Error('setup: this build has no Drift effect to put on the clip');
+      v.effects = [drift];
+      FM.scene.layers.push(v); made.push(v.id);
+      FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+      P.duration = 12; FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0);
+      await sleep(300);
+      const clip = document.querySelector('#tl-tracks .clip[data-id="' + v.id + '"]');
+      const g = attached(clip && clip.querySelector('.clip-grip.left'), what + ' clip’s left trim grip');
+      const r = g.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const pps = FM.timeline.timeToX(1) - FM.timeline.timeToX(0);
+      if (!(pps > 0)) throw new Error('setup: the timeline reports ' + pps + ' px per second');
+      const probe = 6, s0 = v.start, d0 = v.duration, fx0 = fxOf(v), had = Object.prototype.hasOwnProperty.call(v, 'fxTimeOffset');
+      const clock0 = FM.fxLocalTime(v, probe);
+      const ev = function (type, cx, b) { return new PointerEvent(type, { pointerId: 37, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true, clientX: cx, clientY: y, button: 0, buttons: b }); };
+      g.dispatchEvent(ev('pointerdown', x, 1));
+      await sleep(40);
+      for (let k = 1; k <= 6; k++) { window.dispatchEvent(ev('pointermove', x + pps * k / 6, 1)); await sleep(16); }
+      await sleep(60);
+      const moved = v.start - s0, carried = fxOf(v) - fx0;
+      /* CONTROL: the drag moved the head, and the clock with it, so there is something for the cancel to put back */
+      if (!(Math.abs(moved) >= 0.2)) throw new Error('setup: dragging the ' + what + ' clip’s left grip ' + Math.round(pps) + ' px did not move its head (start ' + s0 + ' to ' + v.start + ')');
+      if (!(Math.abs(carried) >= 0.2)) throw new Error('setup: the drag moved the ' + what + ' clip’s head ' + moved.toFixed(3) + ' s and its effect clock only ' + carried.toFixed(3) + ' s, so an abandoned trim has no clock to put back');
+      window.dispatchEvent(ev('pointercancel', x + pps, 0));   // the pointer is lost
+      await sleep(150);
+      if (Math.abs(v.start - s0) > TOL || Math.abs(v.duration - d0) > TOL) throw new Error('CONTROL: the pointercancel did not put the ' + what + ' clip back (start ' + v.start + ', duration ' + v.duration + '), so the restore itself is not running');
+      const off = fxOf(v) - fx0, jump = FM.fxLocalTime(v, probe) - clock0;
+      if (Math.abs(off) > TOL || Math.abs(jump) > TOL) bad.push('a ' + moved.toFixed(3) + ' s left-grip trim on the ' + what + ' clip, abandoned by a pointercancel, put the clip back and left its effect clock at ' + v.fxTimeOffset + ' (it was ' + (had ? fx0 : 'unset') + '), so Drift and every other time-driven effect at 6 s runs ' + jump.toFixed(3) + ' s off where it was before the drag');
+    };
+    try {
+      if (wasHome) FM.home.close();
+      await run(false);
+      await run(true);
+    } finally {
+      try { if (FM.timeline._abortGestures) FM.timeline._abortGestures(); } catch (e) {}
+      made.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.duration = dur0; FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM.time = t0; FM.refreshAll(); FM.timeline.rebuild();
+      if (wasHome && FM.home && FM.home.open) FM.home.open();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (after #1111): THE HOME CARD PICTURE CAPTURED AN ISOLATED CLIP ═════════════════════════════════════════
+     Every Home card picture is drawn by makeThumb (js/storage.js): the import, the 12 s autosave, a pinned picture, a template or
+     element save. It rendered with whatever view state the preview had, and the View menu's ⧉ isolate (FM.isolate) is read by the
+     compositor's layer loop: in mode 1 only the isolated layer is drawn. So a card captured while a clip was isolated, which the
+     autosave does every 12 s, showed that one clip alone on Home. The Export card's picture (js/export-card.js drawThumb) and the
+     still (FM.snapshotPNG) hold the isolate, and the crop tool's whole-frame flag (_cropEditing), aside for their one render;
+     makeThumb now does the same. Reached the way the 1111 test reaches it, FM.templates.cardFor on the open project.
+     FAILS BEFORE THE FIX: FM.renderScene, wrapped, sees FM.isolate set to the white square in mode 1 (and the red square's crop flag
+     on) during the card render, and the card's bottom-right corner, where the red square is, shows the background.
+     CONTROL, which holds before and after: the card is rendered (no stored picture came back instead) and shows the isolated white
+     square, and the isolate and the crop flag are back in place after it, so the preview he is looking at does not change.
+     COLOUR THRESHOLDS: as in the 1111 test, the card is a JPEG at quality 0.8 read as 5 x 5 px averages inside 64 px blocks; the
+     squares are 255 / 255 / 255 and 255 / 0 / 0 and the background 16 / 32 / 48, so white above 180 on all three, and red above
+     180 with green and blue below 90, sit far from the background and from each other. */
+  test('1176 leftover: the Home card picture is the whole project even while a clip is isolated: with the white square isolated (⧉, mode 1) the card still shows the red square, because makeThumb renders with the isolate and the crop tool’s whole-frame flag held aside (CONTROL: the card is rendered and shows the isolated square, and the isolate and the crop flag are back in place after it)', { item: '1176' }, async function () {
+    if (!FM.templates || typeof FM.templates.cardFor !== 'function' || !FM.projects) throw new Error('setup: FM.templates.cardFor (the card picture, makeThumb) is not reachable');
+    const P = FM.scene.project;
+    const keep = { w: P.width, h: P.height, d: P.duration, hasBg: Object.prototype.hasOwnProperty.call(P, 'background'), bg: P.background, t: FM.time };
+    const layers0 = FM.scene.layers.slice();
+    const iso0 = FM.isolate;
+    const realRender = FM.renderScene;
+    const bad = [];
+    let mark = null;
+    try {
+      P.width = 320; P.height = 240; P.duration = 4; P.background = '#102030';
+      FM.scene.layers.length = 0;
+      const white = FM.makeLayer('shape', { name: '1176 isolated', shape: 'rect', x: 64, y: 48, shapeW: 64, shapeH: 64, fill: '#ffffff' });
+      white.start = 0; white.duration = 4;
+      mark = FM.makeLayer('shape', { name: '1176 mark', shape: 'rect', x: 256, y: 192, shapeW: 64, shapeH: 64, fill: '#ff0000' });
+      mark.start = 0; mark.duration = 4;
+      FM.scene.layers.push(white, mark);
+      FM.time = 1;
+      const isoSet = { id: white.id, mode: 1 };
+      FM.isolate = isoSet;
+      mark._cropEditing = true;
+      const seen = [];
+      FM.renderScene = function (ctx, scn) {
+        const c = ctx && ctx.canvas;
+        if (c && c.id !== 'preview' && scn && scn.layers && scn.layers.indexOf(mark) >= 0) seen.push({ iso: FM.isolate || null, crop: !!mark._cropEditing });
+        return realRender.apply(this, arguments);
+      };
+      let url = null;
+      try { url = FM.templates.cardFor(FM.projects.currentId()); } finally { FM.renderScene = realRender; }
+      const isoAfter = FM.isolate, cropAfter = !!mark._cropEditing;
+      FM.isolate = iso0; delete mark._cropEditing;
+      if (!seen.length) throw new Error('setup: the card was not rendered at all (' + (url ? 'a stored picture came back instead' : 'no picture') + '), so nothing can be measured');
+      if (typeof url !== 'string' || url.indexOf('data:image/jpeg') !== 0) throw new Error('setup: the card is not a JPEG picture: ' + String(url).slice(0, 40));
+      /* CONTROL: drawing the card leaves the preview's view state as it found it */
+      if (isoAfter !== isoSet) throw new Error('CONTROL: drawing the card changed the isolate to ' + JSON.stringify(isoAfter) + ', so the preview he is looking at changed under him');
+      if (!cropAfter) throw new Error('CONTROL: drawing the card switched off the crop tool’s whole-frame flag on the clip being cropped');
+      const img = new Image(); img.src = url;
+      await new Promise(function (r) { img.onload = r; img.onerror = r; });
+      const cv = document.createElement('canvas'); cv.width = img.naturalWidth || 1; cv.height = img.naturalHeight || 1;
+      const g = cv.getContext('2d'); g.drawImage(img, 0, 0);
+      const at = function (fx, fy) {
+        const x = Math.max(2, Math.min(cv.width - 3, Math.round(fx * cv.width))), y = Math.max(2, Math.min(cv.height - 3, Math.round(fy * cv.height)));
+        const d = g.getImageData(x - 2, y - 2, 5, 5).data;
+        let r = 0, gr = 0, b = 0;
+        for (let i = 0; i < d.length; i += 4) { r += d[i]; gr += d[i + 1]; b += d[i + 2]; }
+        return [Math.round(r / 25), Math.round(gr / 25), Math.round(b / 25)];
+      };
+      const isWhite = function (p) { return p[0] > 180 && p[1] > 180 && p[2] > 180; };
+      const isRed = function (p) { return p[0] > 180 && p[1] < 90 && p[2] < 90; };
+      const wp = at(0.2, 0.2), rp = at(0.8, 0.8);
+      if (cv.width !== 320 || cv.height !== 240 || !isWhite(wp)) throw new Error('CONTROL: the 320 x 240 card is ' + cv.width + ' x ' + cv.height + ' with rgb(' + wp + ') where the isolated white square is, so this probe cannot read a card');
+      if (seen.some(function (s) { return s.iso; })) bad.push('the Home card was rendered with the isolate still on (the white square, mode 1), so a card the 12 s autosave captures while a clip is isolated shows that clip alone');
+      if (seen.some(function (s) { return s.crop; })) bad.push('the Home card was rendered with the crop tool’s whole-frame flag still on, so a card captured while cropping shows the clip uncropped');
+      if (!isRed(rp)) bad.push('the Home card captured while the white square was isolated shows rgb(' + rp + ') where the red square is, not the red square: the card is the view, not the project');
+    } finally {
+      FM.renderScene = realRender;
+      FM.isolate = iso0;
+      if (mark) delete mark._cropEditing;
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.width = keep.w; P.height = keep.h; P.duration = keep.d; FM.time = keep.t;
+      if (keep.hasBg) P.background = keep.bg; else delete P.background;
+      if (FM.requestRender) FM.requestRender();
+    }
+    if (bad.length) throw new Error(bad.join(' AND '));
+  });
+
+  /* ═══ 1176 leftover (bughunt6 #15's twin): ADDING AN EFFECT DELETED THE RECENTS THIS BUILD DOES NOT KNOW ══════════════════
+     bughunt6 #15 made the star edit the favourites as they are stored, so starring no longer deletes the favourites this build
+     does not know. The recents kept the same fault: pushRecent, in both browsers (js/fx-browser.js, js/audio-fx-browser.js), wrote
+     back readList's answer, and readList drops every id this build's registry does not have. So one effect added on an older
+     build (after a rollback, or with an effect since retired) deleted from disk every recent a newer build had put there. Both
+     now write the list as it is stored (readStored) and filter only what they draw.
+     Driven through the real add paths: the Effects browser's addEffect (FM.fxBrowser._addEffect, as the 722 test drives it) and
+     a tap on the Audio Effects browser's Recents tile, with localStorage 'fm.fx.recents' and 'fm.afx.recents' written and read
+     straight, and put back as they were.
+     FAILS BEFORE THE FIX: adding Blur leaves ["blur","glow"] stored, and tapping Gain leaves ["gain"]: no-such-effect is gone.
+     CONTROLS, which hold before and after: each add lands (one more effect on the layer, and first in the stored recents), the
+     known recent stays, and what the browsers SHOW leaves the unknown id out (one Recents tile each, the known effect's). */
+  test('1176 leftover: adding an effect keeps the recents this build does not know: with glow and no-such-effect stored as the Effects browser’s recents, adding Blur keeps no-such-effect stored, and the same for the Audio Effects browser with gain (CONTROLS: the add lands first in the recents, the known recent stays, and the unknown one is never shown)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.fxBrowser || typeof FM.fxBrowser.open !== 'function' || typeof FM.fxBrowser._addEffect !== 'function') throw new Error('setup: FM.fxBrowser.open / _addEffect (the Effects browser’s add path) are not reachable');
+    if (!FM.audioFxBrowser || typeof FM.audioFxBrowser.open !== 'function') throw new Error('setup: FM.audioFxBrowser.open is not reachable');
+    if (!FM.fxRegistry.get('blur') || !FM.fxRegistry.get('glow') || FM.fxRegistry.get('no-such-effect')) throw new Error('setup: this build’s effects registry does not have blur and glow, or has a no-such-effect');
+    if (!FM.audioFxRegistry.get('gain') || FM.audioFxRegistry.get('no-such-effect')) throw new Error('setup: this build’s audio registry does not have gain, or has a no-such-effect');
+    const KEYS = ['fm.fx.recents', 'fm.afx.recents', 'fm.fx.presetHint'];
+    const keep = {};
+    KEYS.forEach(k => { try { keep[k] = localStorage.getItem(k); } catch (e) { keep[k] = null; } });
+    const stored = k => { try { const a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+    const fxRoot = document.getElementById('fx-browser'), aRoot = document.getElementById('afx-browser');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const bad = [];
+    const away = () => {
+      try { if (FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()) FM.fxBrowser.close(); } catch (e) {}
+      try { if (FM.audioFxBrowser.close) FM.audioFxBrowser.close(); } catch (e) {}
+    };
+    try {
+      if (hadHome) FM.home.close();
+      try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (e) {}
+      await _bh2With(async function (media) {
+        /* 1 · the Effects browser, on a shape */
+        const L = FM.makeLayer('shape', { name: '1176 recents', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#f80', start: 0, duration: 6 });
+        L.start = 0; L.duration = 6;
+        FM.scene.layers.push(L);
+        if (!FM.fxRegistry.supportsLayer('blur', L)) throw new Error('setup: Blur cannot be added to a shape in this build');
+        localStorage.setItem('fm.fx.recents', JSON.stringify(['no-such-effect', 'glow']));
+        FM.selectLayer(L.id); FM.refreshAll();
+        FM.fxBrowser.open(L); await sleep(250);
+        if (!fxRoot || fxRoot.classList.contains('hidden')) throw new Error('setup: the Effects browser did not open on the shape');
+        const shownFx = [].slice.call(fxRoot.querySelectorAll('.fxb-recents .fxb-tile')).map(t => t.dataset.fxid || '?');
+        if (shownFx.join(',') !== 'glow') bad.push('CONTROL: with glow and no-such-effect stored, the Effects browser’s Recents shows ' + JSON.stringify(shownFx) + ', not Glow alone');
+        const n0 = (L.effects || []).length;
+        FM.fxBrowser._addEffect('blur'); await sleep(120);
+        away(); await sleep(40);
+        let s = stored('fm.fx.recents');
+        if ((L.effects || []).length !== n0 + 1 || s[0] !== 'blur') bad.push('CONTROL: adding Blur through the Effects browser left ' + (L.effects || []).length + ' effects on the shape (was ' + n0 + ') and ' + JSON.stringify(s) + ' stored, so the add did not land');
+        if (s.indexOf('glow') < 0) bad.push('CONTROL: adding Blur left ' + JSON.stringify(s) + ' stored: the known recent glow was dropped');
+        if (s.indexOf('no-such-effect') < 0) bad.push('adding Blur in the Effects browser left ' + JSON.stringify(s) + ' stored: the recent this build does not know (no-such-effect) was deleted from disk, so a newer build’s recents are gone after one add here');
+
+        /* 2 · the Audio Effects browser, on a clip with sound: its Recents tile tapped */
+        const V = FM.makeLayer('video', { name: '1176 recents clip', x: 100, y: 100, start: 0, duration: 5 });
+        V.start = 0; V.duration = 5;
+        FM.media.set(V.id, { kind: 'video', el: document.createElement('video'), width: 640, height: 360, duration: 5 });
+        media.push(V.id);
+        FM.scene.layers.push(V);
+        localStorage.setItem('fm.afx.recents', JSON.stringify(['no-such-effect', 'gain']));
+        FM.selectLayer(V.id); FM.refreshAll();
+        FM.audioFxBrowser.open(V); await sleep(300);
+        if (!aRoot || aRoot.classList.contains('hidden')) throw new Error('setup: the Audio Effects browser did not open on the clip');
+        const page = aRoot.querySelector('.fxb-pager .fxb-page');
+        const tiles = page ? [].slice.call(page.querySelectorAll('.fxb-tile')) : [];
+        const names = tiles.map(t => ((t.querySelector('.fxb-tile-name') || {}).textContent || '').trim());
+        const gainLabel = FM.audioFxRegistry.get('gain').label;
+        if (names.join(',') !== gainLabel) bad.push('CONTROL: with gain and no-such-effect stored, the Audio Effects browser’s Recents shows ' + JSON.stringify(names) + ', not ' + gainLabel + ' alone');
+        const a0 = (V.audioFx || []).length;
+        if (!tiles.length) throw new Error('setup: the Audio Effects browser’s Recents page has no tile to tap');
+        tiles[0].click(); await sleep(150);
+        away(); await sleep(40);
+        const live = FM.layerById(FM.scene, V.id) || V;
+        s = stored('fm.afx.recents');
+        if ((live.audioFx || []).length !== a0 + 1 || s[0] !== 'gain') bad.push('CONTROL: tapping the Gain recent left ' + (live.audioFx || []).length + ' audio effects on the clip (was ' + a0 + ') and ' + JSON.stringify(s) + ' stored, so the tap did not land');
+        if (s.indexOf('no-such-effect') < 0) bad.push('tapping Gain in the Audio Effects browser left ' + JSON.stringify(s) + ' stored: the recent this build does not know (no-such-effect) was deleted from disk');
+      }, async () => { away(); });
+    } finally {
+      away();
+      KEYS.forEach(k => { try { if (keep[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, keep[k]); } catch (e) {} });
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  // ── bughunt 7 ──
+  /* ═══ BUGHUNT 7 — the confirmed findings of hunt 7 (the refuter's brief), WRITTEN WITHOUT RUNNING: code only, `node --check`,
+   * while a release shipped. Every number below is reasoned from the code it names, and each test says why it fails on 90f7602f. ═══ */
+
+  /* (#1) RIGHT-TO-LEFT TEXT ENDING OR STARTING WITH PUNCTUATION, UNDER ANIMATE BY WORD, CAME OUT IN TYPING ORDER. bughunt4 #6 lays a
+     right-to-left line's units out in the order the bidirectional algorithm gives (compositor.js bidiUnitXs), and took a unit's level
+     as the LOWEST level of its characters. A full stop at the end of a Hebrew line (or a quote mark at its start) is neutral, and the
+     end of the line counts as left to right, so it resolves to level 0, as the canvas resolves it still. By Word it sits inside its
+     word, so that whole word went to level 0 and the line's words were drawn in typing order: the first word typed on the LEFT.
+     Most sentences end in punctuation. Now a unit's level is the lowest of its STRONG characters (letters, digits), all of them only
+     for a unit with none (a space). The lines are bughunt4 #6's: 40 px white text centred at 160 on _bh2Frame's black frame,
+     a one-letter word, three spaces and a six-letter word, so still the six letters sit LEFT of a three-space gap and the one
+     letter right of it. The punctuation is drawn inside its word's unit, so it sits beside that word rather than at the line's end
+     as it does still; that moves the gap by the mark's width (about 11 px for the full stop), so the judgement is the WORD ORDER:
+     a gap of at least 15 px, with more ink left of it than right of it, as still.
+     FAILS BEFORE THE FIX: with the full stop the units' levels are [1, 1, 0] and the order space, one letter, six letters: the line
+     has no gap of 15 px between its words (the three spaces are drawn first, at its left end); with the leading quote mark they
+     are [0, 1, 1] and the order quote-and-letter, six letters, spaces, again with no gap between the words.
+     CONTROLS, which hold before and after: still, both lines put the six letters left of the gap; a Latin line ending in a full
+     stop, and the Hebrew line with no punctuation, under Fade by word keep the still gap within 4 px (bughunt4 #6's tolerance). */
+  test('bughunt7 #1 Right-to-left text with punctuation at either end reads as it does still under Animate by Word: a Hebrew line ending in a full stop, and one starting with a quote mark, keep the six-letter word left of the three-space gap and the one-letter word right of it, as the still line draws them (CONTROLS: still, both lines read right to left; a Latin line ending in a full stop and the Hebrew line with no punctuation keep the still gap)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim are not reachable');
+    await _bh2With(async function () {
+      const T = 1, TOL = 4;
+      const HEB = 'א   בבבבבב', STOP = HEB + '.', QUOTE = '"' + HEB, LAT = 'a   bbbbbb.';
+      const L = FM.makeLayer('text', { name: 'bh7 #1 title', text: HEB, x: 160, y: 120, fontSize: 40, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L];
+      const STILL = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      const WORD = { preset: 'fade', unit: 'word', durIn: 0.3, durOut: 0, stagger: 0.05 };
+      /* The ink of `text` under `anim` at t (a pixel brighter than 150 summed over its channels), counted per column: its first and
+         last columns, its middle, the widest run of empty columns between them (the gap between the words), and the ink left and
+         right of that gap. */
+      const ink = (text, anim) => {
+        L.text = text; L.textAnim = Object.assign({}, anim); L.effects = [];
+        delete L._wrapCache;
+        const f = _bh2Frame(T), col = new Uint32Array(320);
+        for (let i = 0, n = 0; i < f.d.length; i += 4, n++) if (f.d[i] + f.d[i + 1] + f.d[i + 2] > 150) col[n % 320]++;
+        let x0 = -1, x1 = -1;
+        for (let x = 0; x < 320; x++) if (col[x]) { if (x0 < 0) x0 = x; x1 = x; }
+        let gw = 0, gap = -1, run = 0;
+        for (let x = x0 + 1; x0 >= 0 && x <= x1; x++) {
+          if (!col[x]) { run++; continue; }
+          if (run > gw) { gw = run; gap = ((x - run) + (x - 1)) / 2; }
+          run = 0;
+        }
+        let left = 0, right = 0;
+        for (let x = 0; x < 320; x++) { if (gap >= 0 && x < gap) left += col[x]; else if (gap >= 0 && x > gap) right += col[x]; }
+        return { x0: x0, x1: x1, mid: (x0 + x1) / 2, gap: gap, gw: gw, left: left, right: right, anim: !!FM.textHasAnim(L) };
+      };
+      const say = r => 'ink at columns ' + r.x0 + '..' + r.x1 + ' (middle ' + r.mid + '), its widest gap ' + r.gw + ' px centred at ' + r.gap + ', ' + r.left + ' lit px left of it and ' + r.right + ' right';
+      /* the six-letter word left of a real gap, the one-letter word right of it */
+      const readsRtl = r => r.x0 >= 0 && r.gw >= 15 && r.left > r.right;
+      const bad = [];
+
+      /* ── CONTROLS: still, each Hebrew line reads right to left (the six letters left of the gap), and the Latin line left to right. */
+      const sS = ink(STOP, STILL), sQ = ink(QUOTE, STILL), sH = ink(HEB, STILL), sL = ink(LAT, STILL);
+      if (sS.anim || sQ.anim || sH.anim || sL.anim) bad.push('CONTROL: the still layer has an Animate preset by FM.textHasAnim, so “still” is not the still path');
+      if (!readsRtl(sS)) bad.push('CONTROL: still, the Hebrew line ending in a full stop is ' + say(sS) + ': not the six letters left of a three-space gap, so this browser does not lay it out right to left and the orders cannot be told apart');
+      if (!readsRtl(sQ)) bad.push('CONTROL: still, the Hebrew line starting with a quote mark is ' + say(sQ) + ': not the six letters left of a three-space gap');
+      if (!readsRtl(sH)) bad.push('CONTROL: still, the Hebrew line is ' + say(sH) + ': not the six letters left of a three-space gap');
+      if (sL.x0 < 0 || sL.gw < 15 || !(sL.left < sL.right)) bad.push('CONTROL: still, the Latin line is ' + say(sL) + ': not one letter left of the gap and six right of it');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── CONTROLS: under Fade by word, the Latin line with its full stop and the Hebrew line with no punctuation keep the still gap. */
+      const wL = ink(LAT, WORD), wH = ink(HEB, WORD);
+      if (!wL.anim) bad.push('CONTROL: Fade by word is off by FM.textHasAnim, so this frame did not take the animated path');
+      if (Math.abs(wL.gap - sL.gap) > TOL) bad.push('CONTROL: the Latin line ending in a full stop under Fade by word has ' + say(wL) + ' where still it has ' + say(sL));
+      if (Math.abs(wH.gap - sH.gap) > TOL) bad.push('CONTROL: the Hebrew line with no punctuation under Fade by word has ' + say(wH) + ' where still it has ' + say(sH) + ' (bughunt4 #6)');
+
+      /* ── The lines with punctuation at an end, under Fade by word: the words in the still order. */
+      [['ending in a full stop', STOP, sS], ['starting with a quote mark', QUOTE, sQ]].forEach(([what, text, s]) => {
+        const w = ink(text, WORD);
+        if (!readsRtl(w)) bad.push('the Hebrew line ' + what + ' under Fade by word has ' + say(w) + ', where still it has ' + say(s) + (w.gw < 15 ? ' — no gap between its words: the punctuation took its word to the line’s own level and the words were laid out in the order they were typed' : ' — its words are the other way round'));
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
+  /* (#2) A WATCH-ONLY COPY COULD STILL BE TAKEN AWAY BY COPY, SAVE AUDIO AS WAV AND SAVE MY VERSION. #1091 made “Viewer: can only
+     watch” true at Export, the project file, Duplicate and Leave, and three doors still asked nothing: js/app.js FM.copySelection
+     (what ⌘C and the ⧉ menu’s Copy selected both call), js/audio-tools.js FM.downloadLayerAudio (reachable once the owner ends the
+     session, when the inspector is no longer read-only) and js/collab-bridge.js saveVersion (a Commenter’s Save my version: it
+     hands duplicateFrom a document with no srcIds, so duplicateFrom’s own watch-only refusal never fires). Copy put every clip
+     AND its file on the clipboard, and a paste into a project of their own exports. And a clipboard entry carrying a clip’s
+     stored file (fileKey, stamped at hydrate) keeps that record through Leave (storage.js heldByAnother), so “Leave deletes it
+     and its clips” was not true after a ⌘C (the refuter’s N3). Now all three ask the export gate’s question (FM.exportTurnedOff)
+     and say its notice; with Copy refused the clipboard cannot hold the copy’s clips, so Leave deletes them.
+     The rig is the 1091 test’s: a Viewer’s linked copy with one picture stored under its layer, in a live session whose owner’s
+     export switch is off (then, for the controls, on). The picture’s record is marked as a hydrated one (fileKey = its layer id),
+     as every clip is after a reopen. The WAV goes through a stand-in decoder (a short silent buffer, FM.decodeAudio), so the door
+     is judged by whether a WAV blob is made; URL.createObjectURL counts them and the download’s anchor click does nothing.
+     FAILS BEFORE THE FIX: with exporting off Copy answers 1 and the clipboard holds the layer with its file, no notice; Save
+     audio as WAV makes a WAV; Save my version makes a project of their own; and after Leave the clip’s record is still on the
+     device, held by that clipboard entry.
+     CONTROLS, which hold before and after: with exporting off Export is refused (the 1091 gate) and the Leave card offers no
+     copy; with exporting ON the same three doors work, with no card: the layer is copied, one WAV is made, and Save my version
+     makes a project. */
+  test('bughunt7 #2 A watch-only copy cannot be taken away by Copy, Save audio as WAV or Save my version: with exporting off a Viewer’s Copy is refused with the export notice and the clipboard keeps what it held, no WAV is made, no version is saved as a project, and after Leave the clip is gone from the device even though Copy was tried (CONTROLS: Export is refused as before; with exporting on, Copy, the WAV and Save my version all work)', { item: '1176', budgetMs: 180000 }, async function () {
+    const C = need921S7('a watch-only copy’s other doors');
+    if (typeof FM.copySelection !== 'function' || typeof FM.downloadLayerAudio !== 'function' || !C.bridge || typeof C.bridge.saveVersion !== 'function') throw new Error('setup: FM.copySelection, FM.downloadLayerAudio or the bridge’s saveVersion is not reachable');
+    const exp = document.getElementById('export-dialog');
+    const bad = [], made = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const clip0 = FM.clipboard;
+    const ownURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    const ownDecode = Object.getOwnPropertyDescriptor(FM, 'decodeAudio');
+    let wavs = 0;
+    function closeExport() {
+      const a = document.getElementById('fm-ask'); if (a && !a.classList.contains('hidden')) { const x = a.querySelector('.fm-ask-ok'); if (x) x.click(); }
+      exp.classList.add('hidden');
+      const o = document.getElementById('export-overlay'); if (o) o.classList.add('hidden');
+    }
+    /* true: the export dialog opened; false: the notice said exporting is off and nothing opened (the 1091 test's) */
+    async function exportOpens() {
+      const p = FM.showExportDialog();
+      const got = await until921S6('the export dialog or its notice', function () {
+        const q = ask967b3();
+        if (q && /Exporting is turned off/.test(q.title + ' ' + q.msg)) return { notice: q };
+        return exp.classList.contains('hidden') ? null : { open: true };
+      }, 4000);
+      if (got.notice) { got.notice.ok.click(); await p; await settle921(60); return !exp.classList.contains('hidden'); }
+      await p; await settle921(60); closeExport();
+      return true;
+    }
+    /* A card that comes up within `ms`, answered: true for the export notice (OK), its title for any other (Cancel), false for none. */
+    async function notice(ms) {
+      const t0 = Date.now();
+      while (Date.now() - t0 < ms) {
+        const q = ask967b3();
+        if (q) {
+          const said = /Exporting is turned off/.test(q.title + ' ' + q.msg);
+          if (said) q.ok.click(); else (q.cancel || q.ok).click();
+          await settle921(60);
+          return said ? true : 'a card titled “' + q.title + '”';
+        }
+        await settle921(40);
+      }
+      return false;
+    }
+    const cardOf = function (pid) { return FM.projects.list().filter(function (p) { return p.id === pid; })[0] || null; };
+    /* A Viewer's linked copy, opened, with one picture stored under its layer the way the transfer writes it. */
+    async function viewerCopy(tag) {
+      const D = { project: { name: 'Ezra’s film bh7-2 ' + tag, width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(mediaLayer921('Watch bh7-2 ' + tag, 'image'))] };
+      const gpid = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'viewer', epoch: 'e-bh7-2', seq: 0, name: 'Sam' }, D);
+      if (!gpid) throw new Error('setup: could not make the shared copy');
+      made.push(gpid);
+      await FM.projects.open(gpid);
+      const lid = FM.scene.layers[0].id;
+      await q921give(lid, await q921png([30, 200, 30], 'bh7-2' + tag + '.png'), 'image', 0);
+      return { gpid: gpid, lid: lid, name: D.project.name };
+    }
+    /* …in a live session with an owner whose export switch is `roExport` (the 1091 test's rig) */
+    function attachViewer(v, roExport) {
+      const hdoc = jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers });
+      const inv = C.bridge.invariants();
+      const H = C.Host({ base: jclone921(hdoc), invariants: inv, ownerInfo: { name: 'Ezra', color: '#ff9f43' } });
+      const HS = C.Session({ adapter: plainAdapter921(hdoc, inv), role: 'owner', mid: 'o', host: H });
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+      const mid = HS.addPeer(loop.a, { role: 'viewer', name: 'Sam', color: '#a3e635' });
+      const G = C.Session({ adapter: C.bridge, role: 'viewer', mid: mid, base: jclone921(hdoc), epoch: H.epoch });
+      G.gpid = v.gpid; G.pid = v.gpid; G.hostName = 'Ezra';
+      G.setLink(loop.b); G.bs = H.seq;
+      C.attach(G, { autoTick: false });
+      HS.setRoomSettings({ roExport: roExport, editorsInvite: false, max: 8 });
+      loop.settle();
+      if (!G.roomSettings || G.roomSettings.roExport !== roExport) throw new Error('setup: the owner’s export switch (' + roExport + ') did not reach the Viewer: ' + JSON.stringify(G.roomSettings));
+      return G;
+    }
+    async function openLeave(ui) {
+      await ui.share(); await settle921(150);
+      const leave = document.querySelector('#collab-share .cs-foot .cs-stop');
+      if (!leave) throw new Error('setup: the Viewer’s panel has no Leave');
+      leave.click();
+      return until921S6('the Leave card', ask967b3, 3000);
+    }
+    /* Copy, the WAV and Save my version on the open copy's layer `lid`: what each did, and the card each brought up. */
+    async function tryDoors(lid, what) {
+      const L = FM.layerById(FM.scene, lid);
+      if (!L || !FM.media.get(lid) || !FM.media.get(lid).file) throw new Error('setup: the ' + what + ' copy’s picture is not on its layer');
+      FM.scene.selectedId = lid; FM.scene.selectedIds = [lid];
+      const mine = [];
+      FM.clipboard = mine;
+      const n = FM.copySelection();
+      const copyCard = await notice(1500);
+      const held = (FM.clipboard || []).filter(function (e) { return e && e.snapshot && e.snapshot.id === lid; });
+      const out = { n: n, kept: FM.clipboard === mine && !mine.length, held: held.length, heldFile: held.some(function (e) { return e.fileKey === lid || !!e.file; }), copyCard: copyCard };
+      wavs = 0;
+      const pw = FM.downloadLayerAudio(L);
+      out.wavCard = await notice(1500);
+      await pw; await settle921(60);
+      out.wavs = wavs;
+      const before = FM.projects.list().map(function (p) { return p.id; });
+      const pv = C.bridge.saveVersion(jclone921({ project: FM.scene.project, layers: FM.scene.layers }));
+      out.verCard = await notice(1500);
+      const nv = await pv; await settle921(200);
+      const fresh = FM.projects.list().filter(function (p) { return before.indexOf(p.id) < 0; });
+      fresh.forEach(function (p) { made.push(p.id); });
+      if (nv && made.indexOf(nv) < 0) made.push(nv);
+      out.version = nv || null; out.fresh = fresh.map(function (p) { return p.name; });
+      return out;
+    }
+    await withLabs921(async function (ui) {
+      try {
+        if (wasHome) FM.home.close();
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: function (b) { if (b && b.type === 'audio/wav') wavs++; return ownURL.value.apply(URL, arguments); } });
+        Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+        FM.decodeAudio = async function () { return { numberOfChannels: 1, sampleRate: 8000, length: 80, getChannelData: function () { return new Float32Array(80); } }; };
+
+        /* 1. A live Viewer, exporting off: the copy is watch-only. */
+        const v = await viewerCopy('off');
+        attachViewer(v, false);
+        await settle921(80);
+        if (!C.watchOnly(v.gpid)) throw new Error('setup: the Viewer’s copy with exporting off is not watch-only (FM.collab.watchOnly)');
+        if (await exportOpens()) bad.push('CONTROL: with exporting off a live Viewer’s Export opened the export dialog');
+        FM.media.get(v.lid).fileKey = v.lid;   // as hydrate stamps every clip it reads back from the store
+        const off = await tryDoors(v.lid, 'watch-only');
+        if (off.n || !off.kept) bad.push('with exporting off Copy answered ' + off.n + ' and left ' + off.held + ' entry of the watched layer on the clipboard' + (off.heldFile ? ', with its file' : '') + ', ready to paste into a project of their own, where it exports');
+        if (off.copyCard !== true) bad.push('with exporting off Copy brought up ' + (off.copyCard || 'no card') + ', not the export notice, so nothing says why');
+        if (off.wavs) bad.push('with exporting off Save audio as WAV made ' + off.wavs + ' WAV file of the watched clip’s sound');
+        if (off.wavCard !== true) bad.push('with exporting off Save audio as WAV brought up ' + (off.wavCard || 'no card') + ', not the export notice');
+        if (off.version || off.fresh.length) bad.push('with exporting off Save my version made a project of their own: ' + JSON.stringify(off.fresh));
+        if (off.verCard !== true) bad.push('with exporting off Save my version brought up ' + (off.verCard || 'no card') + ', not the export notice');
+        /* N3: …and Leave deletes the clip, because the clipboard holds nothing of it */
+        const q = await openLeave(ui);
+        if (/keep/i.test(q.ok.textContent) || /copy stays/i.test(q.msg)) bad.push('CONTROL: with exporting off the Leave card offers to keep a copy: “' + q.msg + '” [' + q.ok.textContent + ']');
+        q.ok.click();
+        await until921S6('the session to stand down and the shared copy to go', function () { return !C.session && !cardOf(v.gpid) ? 1 : null; }, 15000);
+        await settle921(400);
+        const rec = await FM.storage.readMedia(v.lid);
+        if (rec && rec.file) bad.push('after Leave the watched clip is still stored on this device under its layer' + ((FM.clipboard || []).some(function (e) { return e && e.fileKey === v.lid; }) ? ', kept because the clipboard holds its file (storage.js heldByAnother)' : ''));
+        FM.clipboard = [];
+
+        /* 2. CONTROL: the same Viewer with exporting ON — the three doors work, with no card. */
+        const w = await viewerCopy('on');
+        attachViewer(w, true);
+        await settle921(80);
+        if (C.watchOnly(w.gpid)) throw new Error('setup: the Viewer’s copy with exporting on is watch-only');
+        const on = await tryDoors(w.lid, 'allowed');
+        FM.clipboard = [];   // let go of the copy's file before the cleanup deletes the copy
+        if (on.n !== 1 || on.held !== 1) bad.push('CONTROL: with exporting on Copy answered ' + on.n + ' and put ' + on.held + ' entry of the layer on the clipboard, not one');
+        if (on.copyCard) bad.push('CONTROL: with exporting on Copy brought up ' + on.copyCard);
+        if (on.wavs !== 1) bad.push('CONTROL: with exporting on Save audio as WAV made ' + on.wavs + ' WAV files, not one');
+        if (on.wavCard) bad.push('CONTROL: with exporting on Save audio as WAV brought up ' + on.wavCard);
+        if (!on.version || on.fresh.length !== 1) bad.push('CONTROL: with exporting on Save my version made ' + JSON.stringify(on.fresh) + ' (answered ' + on.version + '), not one project');
+        if (on.verCard) bad.push('CONTROL: with exporting on Save my version brought up ' + on.verCard);
+      } finally {
+        closeExport();
+        const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+        FM.clipboard = clip0;
+        Object.defineProperty(URL, 'createObjectURL', ownURL);
+        if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+        else delete HTMLAnchorElement.prototype.click;
+        if (ownDecode) Object.defineProperty(FM, 'decodeAudio', ownDecode); else delete FM.decodeAudio;
+        try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+        try { ui.close(); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#3) ONE UNDO MOVED A LONG CLIP'S FOOTAGE AND ITS EFFECT AND MASK KEYS, BY HUNDREDS OF SECONDS. history.restore runs the load
+     sanitiser (js/storage.js) over every layer of the snapshot it puts back, and three of its bounds were the PROJECT's 3600 s:
+     a plain trimStart, which is SOURCE seconds, held to 0..3600 (sanitizeTiming); effect and audio-effect key times and mask key
+     times held to ±3600 (safeKfProp, safeMaskPath); and a clip's start held to ±3600 (sanitizeTiming, the refuter's N1). A clip is
+     not held to the project (hunt5 later A: up to FM.LIMITS.duration long), so all three are reached by ordinary edits, and the
+     undo autosaved the loss while redo, which sanitises the same way, could not bring it back. Now a key time and a start reach
+     ±(3600 + FM.LIMITS.duration) and a trimStart FM.LIMITS.duration × FM.LIMITS.speed[1].
+     Three edits, each followed by an unrelated one (renaming a title) and its Undo, then the Redo:
+       (i)   a 90-minute recording (5400 s) at 2x, 2700 s on the timeline, split at 35:00 by FM.splitLayer: the tail starts 4200 s
+             into the file (2100 s × 2);
+       (ii)  a 60 s shape with an effect key and a mask key at 50 s (and a transform key there, which no sanitiser caps), slowed to
+             1 % the way the Speed card does it (js/inspector.js: the source span kept, so 6000 s long, and FM.scaleLayerKeyframes by
+             the length it gave, 100), which puts those keys at 5000 s; then set back to 100 % the same way, which puts them back
+             at 50 s;
+       (iii) a 5000 s clip dragged to start at -4000 s, which the timeline allows (it floors a drag at -(duration - 0.1)), set as
+             the drag leaves it: start -4000 and its keys shifted with it (FM.shiftLayerKeyframes).
+     FAILS BEFORE THE FIX: after the Undo (and the Redo) the tail's trimStart is 3600, 600 s of footage shifted; the slowed
+     clip's effect and mask keys are at 3600 while its transform key is at 5000, and set back to 100 % they land at 36 s
+     against the transform key's 50 s; the dragged clip starts at -3600, 400 s later than he put it.
+     CONTROLS, which hold before and after: the split really wrote 4200 and the re-time really reached 5000 before the Undo
+     (else nothing is measured), the Undo really took the rename back, the transform key is at 5000 then 50 throughout; an
+     ordinary clip’s start, trimStart and key times come through the sanitiser untouched; and NaN, a word and absurd values
+     (±1e12) are still repaired or brought into range.
+     TOLERANCE: reasoned, not measured. Every number here is a product of integers and 0.01 that rounds back to the integer
+     (2100 × 2, 60 / 0.01 = 6000, 5000 × 0.01 = 50) and the snapshot is JSON, which round-trips a double exactly, so the values
+     come back to float rounding, about 1e-12 s; the faults are 14 s and more. 1e-6 s sits between the two. */
+  test('bughunt7 #3 One Undo keeps a long clip’s footage, keys and place: a 90-minute recording at 2x split at 35:00 keeps its tail’s trimStart of 4200 s, a 60 s clip slowed to 1 % keeps its effect and mask keys at 5000 s and back at 100 % they are at 50 s with its motion, and a long clip dragged to start at -4000 s stays there (CONTROLS: the edits wrote those values, the Undo took the rename back, an ordinary clip is untouched, and broken or absurd values are still repaired)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.history || !FM.history.reset || !FM.history._steps || typeof FM.splitLayer !== 'function' || typeof FM.scaleLayerKeyframes !== 'function' || typeof FM.shiftLayerKeyframes !== 'function' || !FM.storage || typeof FM.storage._sanitizeLayers !== 'function' || !FM.LIMITS) throw new Error('setup: FM.history (reset, _steps), FM.splitLayer, FM.scaleLayerKeyframes / shiftLayerKeyframes, FM.storage._sanitizeLayers or FM.LIMITS is not reachable');
+    const TOL = 1e-6, bad = [];
+    const near = (a, b) => typeof a === 'number' && Math.abs(a - b) <= TOL;
+    const title = () => {
+      const T = FM.makeLayer('shape', { name: 'bh7 #3 title', shape: 'rect', x: 20, y: 20, shapeW: 10, shapeH: 10, fill: '#ffffff', start: 0, duration: 4 });
+      T.start = 0; T.duration = 4;
+      return T;
+    };
+    /* rename the title as one undo step, Undo it, and hand `look` the layer `id` after the Undo and again after its Redo */
+    const undoRedo = async (T, id, look) => {
+      const n0 = FM.history._steps().len;
+      T.name = 'bh7 #3 title renamed';
+      FM.history.commit();
+      if (FM.history._steps().len !== n0 + 1) throw new Error('setup: renaming the title did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+      FM.history.undo();
+      await sleep(60);
+      const T1 = FM.layerById(FM.scene, T.id);
+      if (!T1 || T1.name !== 'bh7 #3 title') throw new Error('setup: the Undo did not take the rename back (' + (T1 ? T1.name : 'the title is gone') + '), so nothing below is measured');
+      look('after one Undo of a rename', FM.layerById(FM.scene, id));
+      FM.history.redo();
+      await sleep(60);
+      look('after its Redo', FM.layerById(FM.scene, id));
+    };
+    /* the first keyframable effect parameter with a finite range (the queue 827 test's choice), keyed 0 → `at` */
+    const fxDef = (FM.fxRegistry.all() || []).filter(d => d && !d.hidden && (d.params || []).some(pd => pd && isFinite(pd.min) && isFinite(pd.max) && pd.keyframable !== false))[0];
+    if (!fxDef) throw new Error('setup: no keyframable effect parameter in the registry to key');
+    const pdef = fxDef.params.filter(pd => pd && isFinite(pd.min) && isFinite(pd.max) && pd.keyframable !== false)[0];
+    const fxKeyed = (t0, t1) => {
+      const fx = FM.fxRegistry.makeInstance(fxDef.type);
+      fx.params[pdef.key] = { kf: [{ t: t0, v: pdef.min + (pdef.max - pdef.min) * 0.25, e: 'linear' }, { t: t1, v: pdef.min + (pdef.max - pdef.min) * 0.75, e: 'linear' }] };
+      return fx;
+    };
+    const maskKeyed = (t0, t1) => ({ type: 'pen', path: { kf: [{ t: t0, v: [[0, 0], [10, 0], [10, 10]] }, { t: t1, v: [[2, 2], [12, 2], [12, 12]] }] } });
+    const lastT = p => (p && Array.isArray(p.kf) && p.kf.length) ? p.kf[p.kf.length - 1].t : null;
+    const keysOf = c => ({
+      fx: lastT(c && c.effects && c.effects[0] && c.effects[0].params && c.effects[0].params[pdef.key]),
+      mask: lastT(c && c.masks && c.masks[0] && c.masks[0].path),
+      x: lastT(c && c.transform && c.transform.x)
+    });
+
+    /* ── (i) a 90-minute recording at 2x, split at 35:00 */
+    await _bh2With(async function (media) {
+      const T = title();
+      const V = FM.makeLayer('video', { name: 'bh7 #3 recording', start: 0, duration: 2700 });
+      V.start = 0; V.duration = 2700; V.trimStart = 0; V.speed = 2;
+      FM.media.set(V.id, { kind: 'video', duration: 5400, width: 2, height: 2 });
+      media.push(V.id);
+      FM.scene.layers = [T, V];
+      FM.scene.project.duration = 2700;
+      FM.refreshAll();
+      FM.history.reset();
+      FM.time = 2100;
+      await FM.splitLayer(V.id);
+      const B = FM.scene.layers.filter(l => l.id !== V.id && l.id !== T.id && l.type === 'video')[0];
+      if (!B) throw new Error('setup: splitting the recording at 35:00 made no tail half');
+      media.push(B.id);
+      if (!near(B.trimStart, 4200)) throw new Error('setup: the tail half of a 2x recording split at 35:00 starts ' + B.trimStart + ' s into the file, not 4200, so nothing below is measured');
+      await undoRedo(T, B.id, (where, c) => {
+        if (!c) { bad.push(where + ': the tail half of the split recording is gone'); return; }
+        if (!near(c.trimStart, 4200)) bad.push(where + ': the tail half of a 90-minute recording at 2x split at 35:00 came back starting ' + c.trimStart + ' s into the file, not 4200 s' + (c.trimStart === 3600 ? ' — cut to the 3600 s project bound, so ' + (4200 - c.trimStart) + ' s of its footage are shifted under every cut' : ''));
+      });
+    });
+
+    /* ── (ii) a 60 s clip with effect and mask keys at 50 s, slowed to 1 %, then back to 100 % */
+    await _bh2With(async function () {
+      const T = title();
+      const L = FM.makeLayer('shape', { name: 'bh7 #3 slowed', shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 60 });
+      L.start = 0; L.duration = 60; L.speed = 1;
+      L.transform.x = { kf: [{ t: 0, v: 10, e: 'linear' }, { t: 50, v: 90, e: 'linear' }] };
+      L.effects = [fxKeyed(0, 50)];
+      L.masks = [maskKeyed(0, 50)];
+      FM.scene.layers = [T, L];
+      FM.scene.project.duration = 60;
+      /* the Speed card's re-time: the source span is kept (60 s at 1x), divided by the new speed, and the keys scaled by the
+         length that resulted */
+      const retime = (lyr, sp) => {
+        const before = lyr.duration, span = lyr.duration * (typeof lyr.speed === 'number' ? lyr.speed : 1);
+        lyr.speed = sp; lyr.duration = Math.max(0.1, span / sp);
+        FM.scaleLayerKeyframes(lyr, lyr.duration / before);
+      };
+      retime(L, FM.LIMITS.speed[0]);
+      const k0 = keysOf(L);
+      if (!near(L.duration, 6000) || !near(k0.fx, 5000) || !near(k0.mask, 5000) || !near(k0.x, 5000)) throw new Error('setup: slowed to 1 % the 60 s clip is ' + L.duration + ' s long with its effect, mask and transform keys at ' + k0.fx + ', ' + k0.mask + ' and ' + k0.x + ' s, not 6000 s and 5000 s, so nothing below is measured');
+      FM.refreshAll();
+      FM.history.reset();
+      let back = null;
+      await undoRedo(T, L.id, (where, c) => {
+        if (!c) { bad.push(where + ': the slowed clip is gone'); return; }
+        const k = keysOf(c);
+        if (!near(k.x, 5000)) bad.push('CONTROL: ' + where + ' the slowed clip’s transform key is at ' + k.x + ' s, not 5000 s');
+        if (!near(k.fx, 5000)) bad.push(where + ': the slowed clip’s ' + fxDef.type + ' key came back at ' + k.fx + ' s, not 5000 s with its motion (5000 s)' + (k.fx === 3600 ? ' — cut to the 3600 s project bound' : ''));
+        if (!near(k.mask, 5000)) bad.push(where + ': the slowed clip’s mask key came back at ' + k.mask + ' s, not 5000 s' + (k.mask === 3600 ? ' — cut to the 3600 s project bound' : ''));
+        back = c;
+      });
+      if (back) {
+        retime(back, 1);
+        const k = keysOf(back);
+        if (!near(k.x, 50)) bad.push('CONTROL: set back to 100 % the clip’s transform key is at ' + k.x + ' s, not 50 s');
+        if (!near(k.fx, 50) || !near(k.mask, 50)) bad.push('set back to 100 % after the Undo, the clip’s effect key is at ' + k.fx + ' s and its mask key at ' + k.mask + ' s, where they were put at 50 s and its motion’s key is at ' + k.x + ' s — out of step with the motion');
+      }
+    });
+
+    /* ── (iii) a 5000 s clip dragged to start at -4000 s */
+    await _bh2With(async function () {
+      const T = title();
+      const N = FM.makeLayer('shape', { name: 'bh7 #3 long', shape: 'rect', x: 60, y: 60, shapeW: 20, shapeH: 20, fill: '#ffffff', start: 0, duration: 5000 });
+      N.start = 0; N.duration = 5000;
+      N.transform.x = { kf: [{ t: 0, v: 10, e: 'linear' }, { t: 4500, v: 90, e: 'linear' }] };
+      FM.scene.layers = [T, N];
+      FM.scene.project.duration = 1000;
+      N.start = -4000; FM.shiftLayerKeyframes(N, -4000);   // where the drag leaves it: -4000 is above its floor, -(5000 - 0.1)
+      if (!near(N.start, -4000) || !near(lastT(N.transform.x), 500)) throw new Error('setup: the dragged clip starts at ' + N.start + ' with its last key at ' + lastT(N.transform.x) + ', not -4000 and 500');
+      FM.refreshAll();
+      FM.history.reset();
+      await undoRedo(T, N.id, (where, c) => {
+        if (!c) { bad.push(where + ': the dragged clip is gone'); return; }
+        if (!near(lastT(c.transform.x), 500)) bad.push('CONTROL: ' + where + ' the dragged clip’s transform key is at ' + lastT(c.transform.x) + ' s, not 500 s');
+        if (!near(c.start, -4000)) bad.push(where + ': a 5000 s clip dragged to start at -4000 s came back starting at ' + c.start + ' s' + (c.start === -3600 ? ' — moved ' + (c.start + 4000) + ' s by the 3600 s project bound, while its keys stayed' : ''));
+      });
+    });
+
+    /* ── CONTROLS: an ordinary clip comes through untouched, and broken or absurd values are still repaired or brought into range. */
+    const shapeAt = (name, start, dur) => {
+      const S = FM.makeLayer('shape', { name: name, shape: 'rect', x: 40, y: 40, shapeW: 20, shapeH: 20, fill: '#ffffff', start: start, duration: dur });
+      S.start = start; S.duration = dur;
+      return S;
+    };
+    const ordS = shapeAt('bh7 #3 ordinary', 2, 4);
+    ordS.effects = [fxKeyed(2.5, 5)];
+    ordS.masks = [maskKeyed(2, 5.5)];
+    const oc = JSON.parse(JSON.stringify([{ id: 'bh7o1', type: 'video', start: 2, duration: 4, trimStart: 1.5, speed: 1 }, ordS]));
+    FM.storage._sanitizeLayers(oc);
+    const ok = keysOf(oc[1]);
+    if (!oc[0] || oc[0].start !== 2 || oc[0].trimStart !== 1.5) bad.push('CONTROL: an ordinary clip (start 2, trimStart 1.5) came through the sanitiser as start ' + (oc[0] && oc[0].start) + ', trimStart ' + (oc[0] && oc[0].trimStart));
+    if (!oc[1] || oc[1].start !== 2 || ok.fx !== 5 || ok.mask !== 5.5) bad.push('CONTROL: an ordinary shape (start 2, effect key at 5, mask key at 5.5) came through the sanitiser as start ' + (oc[1] && oc[1].start) + ', effect key ' + ok.fx + ', mask key ' + ok.mask);
+    const BIG = 3600 + FM.LIMITS.duration;
+    const abS = shapeAt('bh7 #3 absurd keys', 0, 4);
+    abS.effects = [fxKeyed(-1e12, 1e12)];
+    abS.masks = [maskKeyed(-1e12, 1e12)];
+    const ab = [
+      { id: 'bh7c1', type: 'video', start: NaN, duration: 4, trimStart: 'soon' },
+      { id: 'bh7c2', type: 'video', start: -1e12, duration: 4, trimStart: 1e12 },
+      { id: 'bh7c3', type: 'video', start: 1e12, duration: 4, trimStart: -5 },
+      JSON.parse(JSON.stringify(abS))
+    ];
+    FM.storage._sanitizeLayers(ab);
+    if (ab[0].start !== 0 || ab[0].trimStart !== 0) bad.push('CONTROL: a NaN start and a trimStart of a word came back as ' + ab[0].start + ' and ' + ab[0].trimStart + ', not repaired to 0');
+    if (!isFinite(ab[1].start) || ab[1].start < -BIG || !isFinite(ab[2].start) || ab[2].start > BIG) bad.push('CONTROL: starts of -1e12 and 1e12 came back as ' + ab[1].start + ' and ' + ab[2].start + ', not inside ±' + BIG);
+    if (!isFinite(ab[1].trimStart) || ab[1].trimStart > FM.LIMITS.duration * FM.LIMITS.speed[1] || ab[2].trimStart !== 0) bad.push('CONTROL: trimStarts of 1e12 and -5 came back as ' + ab[1].trimStart + ' and ' + ab[2].trimStart + ', not brought into range');
+    const kb = ab[3].effects && ab[3].effects[0] && ab[3].effects[0].params && ab[3].effects[0].params[pdef.key];
+    const mb = ab[3].masks && ab[3].masks[0] && ab[3].masks[0].path;
+    if (!kb || !Array.isArray(kb.kf) || kb.kf.some(k => !isFinite(k.t) || Math.abs(k.t) > BIG)) bad.push('CONTROL: effect key times of ±1e12 came back as ' + JSON.stringify(kb && kb.kf && kb.kf.map(k => k.t)) + ', not inside ±' + BIG);
+    if (!mb || !Array.isArray(mb.kf) || mb.kf.some(k => !isFinite(k.t) || Math.abs(k.t) > BIG)) bad.push('CONTROL: mask key times of ±1e12 came back as ' + JSON.stringify(mb && mb.kf && mb.kf.map(k => k.t)) + ', not inside ±' + BIG);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#5) AN UPDATE THAT WAITED ON A SESSION RELOADED AT ONCE WHEN IT ENDED, AND STOP SHARING LOST ITS LAST SAVE POINT. A new build
+     that lands during a live session is handed to FM.collab.deferReload (index.html), and when the session lets go it ran
+     C._reload (js/collab-core.js), a bare location.reload(): none of bughunt6 #14's hold (FM._swReloadWhenIdle: no export, no
+     clip's file still writing, the autosave awaited). And Stop sharing (js/collab-ui.js stopSharingNow) starts the 'stop' save
+     point without awaiting it and then calls C.end, whose C.detach ran that reload in the same task, before the save point's
+     IndexedDB write (a read, a read, then the put) could land (the refuter's N2). Now C._reload goes through the idle hold when
+     there is one, and Stop sharing holds a waiting update until its save point has settled.
+     Two parts, both with the reload stood in for (location.reload is not writable, so the suite cannot let it run):
+       1. the deferred reload itself: C._reload's own source must name the hold, and only then is it run — after a deferReload
+          and the session gone, through C.runPendingReload — with FM._swReloadWhenIdle replaced by a counter, so the real page
+          is never reloaded by a build that still calls location.reload;
+       2. Stop sharing on a shared project with an update waiting (C.deferReload during the session; C._reload logs ‘reload’,
+          and FM.storage.collabPut logs ‘put’ when the stop save point's write resolves).
+     FAILS BEFORE THE FIX: C._reload's source is location.reload() alone; and Stop sharing logs reload → put, the reload first.
+     CONTROLS, which hold before and after: with no update waiting, C.runPendingReload reloads nothing; the stop really wrote its
+     save point (one more key under collab:ckpt:<pid>:), and the waiting update ran exactly once. */
+  test('bughunt7 #5 An update that waited on a shared session goes through the idle hold when the session ends, and Stop sharing saves its last save point before the update reloads: the deferred reload calls FM._swReloadWhenIdle, and the stop save point’s write lands before the reload (CONTROLS: nothing waiting reloads nothing; the stop wrote its save point and the update ran once)', { item: '1176', budgetMs: 120000 }, async function () {
+    const C = need921S7('the update that waits on a session');
+    if (typeof C._reload !== 'function' || typeof C.deferReload !== 'function' || typeof C.runPendingReload !== 'function' || typeof C._pendingReload !== 'function') throw new Error('setup: FM.collab._reload / deferReload / runPendingReload / _pendingReload are not reachable');
+    if (typeof FM._swReloadWhenIdle !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) is not reachable');
+    const realReload = C._reload, realPut = FM.storage.collabPut;
+    const dW = Object.getOwnPropertyDescriptor(FM, '_swReloadWhenIdle');
+    const bad = [], log = [];
+    let keys = null;
+    try {
+      await withLabs921(async function (ui) {
+        const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+        if (wasHome) FM.home.close();
+        try {
+          if (C.session) throw new Error('setup: a session is already attached, so the deferred reload cannot run');
+          /* ── 1. the deferred reload itself */
+          let held = 0, direct = 0;
+          Object.defineProperty(FM, '_swReloadWhenIdle', { configurable: true, writable: true, value: function () { held++; return Promise.resolve(false); } });
+          if (C._pendingReload()) { C._reload = function () {}; C.runPendingReload(); }   // one an earlier test left behind, run into a stand-in
+          C._reload = function () { direct++; };
+          if (C.runPendingReload() || direct || held) bad.push('CONTROL: with no update waiting, C.runPendingReload reloaded (' + direct + ' reload, ' + held + ' call to the hold)');
+          C._reload = realReload;
+          const src = String(realReload).replace(/\s+/g, ' ');
+          if (!/_swReloadWhenIdle/.test(src)) bad.push('the update a session held is reloaded by C._reload straight away, past the idle hold: ' + src.slice(0, 160));
+          else {
+            C.deferReload();
+            const ran = C.runPendingReload();
+            if (!ran || held !== 1) bad.push('once the session let go, the waiting update ' + (ran ? 'ran' : 'did not run') + ' and asked the idle hold ' + held + ' times, not once');
+            if (C._pendingReload()) bad.push('the update is still marked waiting after it ran');
+          }
+          if (dW) Object.defineProperty(FM, '_swReloadWhenIdle', dW); else delete FM._swReloadWhenIdle;
+
+          /* ── 2. Stop sharing with an update waiting */
+          made.push(await FM.projects.create({ name: 'FX bh7 #5 stop', width: 320, height: 240 }));
+          const pid = FM.projects.currentId();
+          FM.scene.layers.push(layer921('A'));
+          FM.history.commit(); FM.storage.markDirty(); await FM.storage.save();
+          const prefix = 'collab:ckpt:' + pid + ':';
+          keys = function () { return FM.storage.collabKeys(prefix); };
+          await ui.share(); ui.close();
+          if (!C.session || !C.session.isOwner) throw new Error('setup: sharing did not start an owner session');
+          const k0 = (await keys()).length;
+          FM.scene.layers[0].name = 'A changed'; FM.history.commit();   // so the stop save point differs from the arm's and is written
+          C._reload = function () { log.push('reload'); };
+          FM.storage.collabPut = function (k) {
+            const p = realPut.apply(this, arguments);
+            if (typeof k === 'string' && k.indexOf(prefix) === 0 && !/-arm$/.test(k)) Promise.resolve(p).then(function () { log.push('put'); }, function () { log.push('put failed'); });
+            return p;
+          };
+          C.deferReload();   // an app update landed during the session
+          await ui.share();
+          document.querySelector('#collab-share .cs-stop').click();
+          (await askOk921()).click();
+          await until921S6('the session to stop', function () { return !C.session; }, 4000);
+          await until921S6('the waiting update to run', function () { return log.indexOf('reload') >= 0 ? 1 : 0; }, 6000).catch(function () {});
+          await settle921(300);
+          FM.storage.collabPut = realPut;
+          const k1 = (await keys()).length;
+          if (k1 !== k0 + 1 || log.indexOf('put') < 0) bad.push('CONTROL: Stop sharing wrote ' + (k1 - k0) + ' save point(s) (' + log.join(' → ') + '), not one, so the order cannot be judged');
+          if (log.filter(function (x) { return x === 'reload'; }).length !== 1) bad.push('CONTROL: the waiting update ran ' + log.filter(function (x) { return x === 'reload'; }).length + ' times after Stop sharing, not once (' + log.join(' → ') + ')');
+          else if (log.indexOf('put') >= 0 && log.indexOf('reload') < log.indexOf('put')) bad.push('Stop sharing with an update waiting reloaded before its last save point was written (' + log.join(' → ') + '): on a real phone the page unloads first and the save point §24 promises is lost');
+        } finally {
+          FM.storage.collabPut = realPut;
+          try { if (C.session) C.end(); } catch (e) {}
+          try { if (keys) { const ks = await keys(); for (let i = 0; i < ks.length; i++) await FM.storage.collabDel(ks[i]); } } catch (e) {}
+          await q915aCleanup(made, orig, wasHome, [], [], []);
+        }
+      });
+    } finally {
+      /* A reload left pending would fire at the next detach of any later test and reload the SUITE: it is run here, into a
+         stand-in, before the real one goes back (the 921 S8r test's own clean-up). */
+      FM.storage.collabPut = realPut;
+      C._reload = function () {};
+      try { if (C._pendingReload() && !C.session) C.runPendingReload(); } catch (e) {}
+      C._reload = realReload;
+      if (dW) Object.defineProperty(FM, '_swReloadWhenIdle', dW); else delete FM._swReloadWhenIdle;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#6) A NEW BUILD RELOADED THE APP IN THE MIDDLE OF AN EXPORT SOUND. bughunt6 #14's hold (index.html fmSwBusy) counts an export
+     by FM._exporting, the export overlay and the Save card, and the audio-only branch of the export (js/app.js runAudioOnlyExport,
+     WAV or M4A: Export sound) has none of them, so a build landing while it built the mix (minutes on a phone) saved and reloaded
+     mid-mix and the export was lost. Now the audio-only export counts itself in FM._exportingAudio, its own flag (FM._exporting
+     is what the compositor reads as drawing for the encoder), and fmSwBusy reads it. Driven like bughunt6 #14: the hold is
+     handed a counter for the reload, never the real one.
+       1. FM._exportingAudio set: a new build waits, and reloads exactly once by itself when it is cleared;
+       2. the real audio-only export (FM._runAudioOnlyExport) with its mixer held on a gate (FM.exporter.buildAudioMix stood in for,
+          answering no audio when released): while it mixes, the app is busy; once it gives up, it is idle again.
+     FAILS BEFORE THE FIX: with FM._exportingAudio set the hold sees nothing busy and reloads at once; and the export mixing
+     leaves FM._exportingAudio unset and the app idle.
+     CONTROLS, which hold before and after: the app is idle before each part, and with nothing running a new build reloads at
+     once; the mixer really was reached. Restores FM._exportingAudio and FM.exporter.buildAudioMix by descriptor and cancels any
+     hold. */
+  test('bughunt7 #6 An update does not reload the app in the middle of an Export sound: with FM._exportingAudio set the new build waits and then reloads once by itself, and the WAV / M4A export sets it while it mixes and clears it after (CONTROLS: an idle app reloads at once; the mixer was reached)', { item: '1176', budgetMs: 90000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM._runAudioOnlyExport !== 'function' || !FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('setup: FM._runAudioOnlyExport or FM.exporter.buildAudioMix is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_exportingAudio');
+    const dMix = Object.getOwnPropertyDescriptor(FM.exporter, 'buildAudioMix');
+    const P = FM.scene.project, dur0 = P.duration;
+    const rangeEl = document.getElementById('exp-range'), range0 = rangeEl ? rangeEl.value : null;
+    let reloads = 0, open = null, entered = 0, pending = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const bad = [];
+    try {
+      /* ── 1. the flag holds a new build, and its end lets it go, once */
+      await settle('the flag');
+      reloads = 0;
+      FM._exportingAudio = true;
+      const now = await W(count);
+      if (now || reloads) bad.push('a new build reloaded the app while a sound export was running (FM._exportingAudio set; ' + reloads + ' reload; the hold saw ' + JSON.stringify(W.busy()) + ')');
+      else {
+        if (!W.held()) bad.push('while a sound export was running the reload was dropped rather than held');
+        await sleep(2600);
+        if (reloads) bad.push('the held reload went ahead while a sound export was running (' + reloads + ')');
+        FM._exportingAudio = 0;
+        if (!(await until(() => reloads > 0, 9000))) bad.push('once the sound export ended, the held reload never happened by itself');
+        await sleep(2600);
+        if (reloads > 1) bad.push('once the sound export ended, the app reloaded ' + reloads + ' times, not once');
+      }
+      try { W.cancel(); } catch (e) {}
+      FM._exportingAudio = 0;
+      await settle('the export');
+
+      /* ── 2. the real Export sound counts itself while it mixes */
+      P.duration = Math.max(1, dur0 || 0);
+      if (rangeEl) rangeEl.value = 'whole';
+      const gate = new Promise(r => { open = r; });
+      FM.exporter.buildAudioMix = function () { entered++; return gate; };
+      pending = FM._runAudioOnlyExport({ m4a: false });
+      if (!(await until(() => entered > 0, 4000))) throw new Error('setup: the audio-only export never reached its mixer (FM.exporter.buildAudioMix), so nothing was mixing');
+      const during = W.busy(), flag = FM._exportingAudio;
+      open(null);   // the mix answers no audio: the export says so and gives up
+      await pending; pending = null;
+      await sleep(60);
+      if (!during) bad.push('while Export sound was mixing the app counted as idle (FM._exportingAudio ' + JSON.stringify(flag) + '), so a new build landing then would save and reload mid-mix');
+      if (FM._exportingAudio) bad.push('after Export sound gave up FM._exportingAudio is still ' + JSON.stringify(FM._exportingAudio) + ', so every later update would wait for an export that is over');
+      if (W.busy()) bad.push('after Export sound gave up the app still counts as busy (' + W.busy() + ')');
+
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (open) open(null);
+      if (pending) { try { await pending; } catch (e) {} }
+      if (dMix) Object.defineProperty(FM.exporter, 'buildAudioMix', dMix); else delete FM.exporter.buildAudioMix;
+      if (dFlag) Object.defineProperty(FM, '_exportingAudio', dFlag); else delete FM._exportingAudio;
+      P.duration = dur0;
+      if (rangeEl && range0 != null) rangeEl.value = range0;
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#7) A LEFT-GRIP DRAG THAT CAME BACK TO WHERE IT STARTED LEFT THE EFFECT CLOCK AND THE CUES SHIFTED. The left grip (js/timeline.js
+     applyTrimAt) re-bases fxTimeOffset on every move, forward and reversed (queue 823, #1107), and a caption track's cues on the
+     forward branch, from their pointerdown values, but only for a delta off zero. The delta is frame-rounded, so a drag back to a
+     frame-aligned start is exactly 0: start and duration went back, the clock and the cues kept the LAST step's values, release
+     compared start, duration and trim only and committed nothing, and the live layer kept the shift for the next commit or
+     autosave to record. Now at zero the pointerdown values go back exactly (v87's fxHad / fxRaw, and the grab's copy of the cues).
+     Driven as the 1176 leftover test drives the grip: pointerdown on the left grip, six moves 1 s in, six moves back to exactly
+     where it was pressed, then pointerup; on a video played forward (fxTimeOffset 0.5), the same reversed (no fxTimeOffset), and
+     a caption track (cues at 0.5–1.5 s and 2–3 s into it). Each clip starts at 2 s, a whole frame at 30 fps.
+     FAILS BEFORE THE FIX: back at the grab, the forward clip's fxTimeOffset reads about 0.667 (0.5 plus the last step, 1/6 s
+     rounded to 5 frames), the reversed one's about 0.167 where it had none, FM.fxLocalTime at 6 s is off by the same, and the
+     caption track's cues sit about 0.167 s earlier than they were; all still so after the release.
+     CONTROLS, which hold before and after: the drag really moved the head and the clock (or the cues) by at least 0.2 s before it
+     came back (else the test stops as a setup failure), and back at the grab the start and duration are the grab's.
+     TOLERANCE: the values written back are the stored ones, so they read back to float rounding, about 1e-15 s (by construction;
+     not measured here); the fault is a whole step, 5 frames at 30 fps. 1e-6 s sits between the two. */
+  test('bughunt7 #7 A left-grip drag that comes back to where it started puts the effect clock and the cues back: dragged 1 s in and back to exactly its start, a forward clip, a reversed clip and a caption track end with the effect clock and the cue times they had before the drag, held and after the release (CONTROL: the drag moved the head and the clock or cues, and back at the grab the start and duration are the grab’s)', { item: '1176' }, async function () {
+    const P = FM.scene.project;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, ids0 = (FM.scene.selectedIds || []).slice();
+    const t0 = FM.time, dur0 = P.duration, fps0 = P.fps;
+    const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const made = [], bad = [], TOL = 1e-6;
+    const fxOf = function (v) { return parseFloat(v.fxTimeOffset) || 0; };
+    const cuesOf = function (v) { return Array.isArray(v.captions) ? v.captions.map(function (c) { return [c.start, c.end]; }) : null; };
+    const cuesOff = function (a, b) {
+      if (!a || !b || a.length !== b.length) return Infinity;
+      let m = 0;
+      for (let i = 0; i < a.length; i++) m = Math.max(m, Math.abs(a[i][0] - b[i][0]), Math.abs(a[i][1] - b[i][1]));
+      return m;
+    };
+    const run = async function (kind) {
+      FM.scene.layers.length = 0;
+      let v;
+      if (kind === 'caption track') {
+        v = FM.makeLayer('text', { name: 'bh7 #7 captions', text: 'one' });
+        v.captions = [{ start: 0.5, end: 1.5, text: 'one' }, { start: 2, end: 3, text: 'two' }];
+      } else {
+        v = FM.makeLayer('video', { name: 'bh7 #7 ' + kind });
+        v.trimStart = 2; v.reversed = kind === 'reversed'; v.speed = 1;
+        FM.media.set(v.id, { kind: 'video', duration: 60, width: 2, height: 2 });
+      }
+      v.start = 2; v.duration = 6;
+      if (kind === 'reversed') delete v.fxTimeOffset; else v.fxTimeOffset = 0.5;
+      const drift = FM.fxRegistry.makeInstance('drift');
+      if (!drift) throw new Error('setup: this build has no Drift effect to put on the clip');
+      v.effects = [drift];
+      FM.scene.layers.push(v); made.push(v.id);
+      P.duration = 12; P.fps = 30; FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0);
+      await sleep(300);
+      const clip = document.querySelector('#tl-tracks .clip[data-id="' + v.id + '"]');
+      const g = attached(clip && clip.querySelector('.clip-grip.left'), 'the ' + kind + '’s left trim grip');
+      const r = g.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const pps = FM.timeline.timeToX(1) - FM.timeline.timeToX(0);
+      if (!(pps > 0)) throw new Error('setup: the timeline reports ' + pps + ' px per second');
+      const probe = 6, s0 = v.start, d0 = v.duration, fx0 = fxOf(v), had = Object.prototype.hasOwnProperty.call(v, 'fxTimeOffset');
+      const clock0 = FM.fxLocalTime(v, probe), cues0 = cuesOf(v);
+      const ev = function (type, cx, b) { return new PointerEvent(type, { pointerId: 41, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true, clientX: cx, clientY: y, button: 0, buttons: b }); };
+      g.dispatchEvent(ev('pointerdown', x, 1));
+      await sleep(40);
+      for (let k = 1; k <= 6; k++) { window.dispatchEvent(ev('pointermove', x + pps * k / 6, 1)); await sleep(16); }
+      await sleep(40);
+      /* CONTROL: the drag moved the head, and the clock or the cues with it, so there is something to put back */
+      const moved = v.start - s0, carried = fxOf(v) - fx0, slid = cuesOff(cuesOf(v), cues0);
+      if (!(Math.abs(moved) >= 0.2)) throw new Error('setup: dragging the ' + kind + '’s left grip ' + Math.round(pps) + ' px did not move its head (start ' + s0 + ' to ' + v.start + ')');
+      if (!(Math.abs(carried) >= 0.2)) throw new Error('setup: the drag moved the ' + kind + '’s head ' + moved.toFixed(3) + ' s and its effect clock only ' + carried.toFixed(3) + ' s, so there is no clock to put back');
+      if (cues0 && !(slid >= 0.2)) throw new Error('setup: the drag moved the caption track’s head ' + moved.toFixed(3) + ' s and its cues only ' + slid.toFixed(3) + ' s');
+      for (let k = 5; k >= 0; k--) { window.dispatchEvent(ev('pointermove', x + pps * k / 6, 1)); await sleep(16); }
+      await sleep(40);
+      const judge = function (when) {
+        if (Math.abs(v.start - s0) > TOL || Math.abs(v.duration - d0) > TOL) throw new Error('CONTROL: ' + when + ' the ' + kind + ' is at start ' + v.start + ', duration ' + v.duration + ', not its grab (' + s0 + ', ' + d0 + '), so the drag did not come back to where it started');
+        const off = fxOf(v) - fx0, jump = FM.fxLocalTime(v, probe) - clock0;
+        if (Math.abs(off) > TOL || Math.abs(jump) > TOL) bad.push(when + ' the ' + kind + ', dragged ' + moved.toFixed(3) + ' s in and back to its start, has its effect clock at ' + v.fxTimeOffset + ' (it was ' + (had ? fx0 : 'unset') + '), so Drift at 6 s runs ' + jump.toFixed(3) + ' s off where it was');
+        if (cues0) {
+          const cd = cuesOff(cuesOf(v), cues0);
+          if (cd > TOL) bad.push(when + ' the caption track, dragged ' + moved.toFixed(3) + ' s in and back to its start, has its cues ' + cd.toFixed(3) + ' s from where they were: ' + JSON.stringify(cuesOf(v)) + ' against ' + JSON.stringify(cues0));
+        }
+      };
+      judge('held back at the grab,');
+      window.dispatchEvent(ev('pointerup', x, 0));
+      await sleep(150);
+      judge('after the release,');
+    };
+    try {
+      if (wasHome) FM.home.close();
+      await run('forward clip');
+      await run('reversed');
+      await run('caption track');
+    } finally {
+      try { if (FM.timeline._abortGestures) FM.timeline._abortGestures(); } catch (e) {}
+      made.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.duration = dur0; P.fps = fps0; FM.scene.selectedId = sel0; FM.scene.selectedIds = ids0;
+      FM.time = t0; FM.refreshAll(); FM.timeline.rebuild();
+      if (wasHome && FM.home && FM.home.open) FM.home.open();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#8) STARRING A SOUND EFFECT OR A FILTER DELETED THE FAVOURITES THIS BUILD DOES NOT KNOW. bughunt6 #15's fault, in the two
+     browsers it did not reach: js/sfx.js toggleFav wrote back readFavs' answer, which keeps only ids byId finds, and js/filters.js
+     toggleFave wrote back readFaves', which keeps only ids FM.filters.get finds. So one star after a rollback (or with a sound or
+     filter since retired) deleted those favourites from disk for good. Both stars now edit the list as it is stored and filter
+     only what they show, as bughunt6 #15 and v87's recents fix do. The stored lists are written and read straight (localStorage
+     'fm.sfx.fav' and 'fm.filterFaves', put back as they were), the stars toggled through the functions every ★ calls
+     (FM.sfx.toggleFav, FM.filters.toggleFave), on the first two sounds and the first two filters this build has.
+     FAILS BEFORE THE FIX: starring the second sound leaves [first, second] stored and starring the second filter leaves
+     [second, first]: the unknown no-such ids are gone.
+     CONTROLS, which hold before and after: the star still answers on, then off; the stored known favourite stays; and what each
+     browser SHOWS still leaves the unknown id out (isFav / isFave say no, favs / faves do not list it). */
+  test('bughunt7 #8 Starring a sound effect or a filter keeps favourites this build does not know: with a known one and a no-such id stored, starring and unstarring another keeps the no-such id in the stored favourites, in the Sound effects list and in the Filters browser (CONTROLS: the star answers on then off, the known favourite stays, and the unknown one is never shown as a favourite)', { item: '1176' }, function () {
+    if (!FM.sfx || typeof FM.sfx.toggleFav !== 'function' || typeof FM.sfx.isFav !== 'function' || typeof FM.sfx.favs !== 'function' || typeof FM.sfx.list !== 'function' || typeof FM.sfx.byId !== 'function') throw new Error('setup: FM.sfx.toggleFav / isFav / favs / list / byId (what every ★ in the Sound effects list calls) are not reachable');
+    if (!FM.filters || typeof FM.filters.toggleFave !== 'function' || typeof FM.filters.isFave !== 'function' || typeof FM.filters.faves !== 'function' || typeof FM.filters.get !== 'function' || !Array.isArray(FM.FILTERS)) throw new Error('setup: FM.filters.toggleFave / isFave / faves / get or FM.FILTERS are not reachable');
+    const sounds = FM.sfx.list(), filters = FM.FILTERS;
+    if (sounds.length < 2 || filters.length < 2) throw new Error('setup: this build has ' + sounds.length + ' sounds and ' + filters.length + ' filters, not two of each to star');
+    if (FM.sfx.byId('no-such-sound') || FM.filters.get('no-such-filter')) throw new Error('setup: this build has a no-such-sound or a no-such-filter');
+    const KEYS = ['fm.sfx.fav', 'fm.filterFaves'];
+    const keep = {};
+    KEYS.forEach(k => { try { keep[k] = localStorage.getItem(k); } catch (e) { keep[k] = null; } });
+    const stored = k => { try { const a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+    const bad = [];
+    try {
+      [
+        { key: 'fm.sfx.fav', known: sounds[0].id, other: sounds[1].id, none: 'no-such-sound', where: 'the Sound effects list', star: id => FM.sfx.toggleFav(id), is: id => FM.sfx.isFav(id), shown: () => FM.sfx.favs() },
+        { key: 'fm.filterFaves', known: filters[0].id, other: filters[1].id, none: 'no-such-filter', where: 'the Filters browser', star: id => FM.filters.toggleFave(id), is: id => FM.filters.isFave(id), shown: () => FM.filters.faves().map(f => f && f.id) }
+      ].forEach(B => {
+        localStorage.setItem(B.key, JSON.stringify([B.known, B.none]));
+        /* CONTROL: what is shown leaves the unknown id out, and keeps the known one */
+        if (B.is(B.none) || B.shown().indexOf(B.none) >= 0) bad.push('CONTROL: ' + B.where + ' shows ' + B.none + ' as a favourite, an id this build has nothing for');
+        if (!B.is(B.known)) bad.push('CONTROL: ' + B.where + ' does not show the stored ' + B.known + ' as a favourite');
+        const on = B.star(B.other);
+        if (on !== true) bad.push('CONTROL: starring ' + B.other + ' in ' + B.where + ' answered ' + on + ', not on');
+        let s = stored(B.key);
+        if (s.indexOf(B.none) < 0) bad.push('starring ' + B.other + ' in ' + B.where + ' left ' + JSON.stringify(s) + ' stored: the favourite this build does not know (' + B.none + ') was deleted from disk');
+        if (s.indexOf(B.known) < 0 || s.indexOf(B.other) < 0) bad.push('starring ' + B.other + ' in ' + B.where + ' left ' + JSON.stringify(s) + ', not ' + B.known + ' and ' + B.other + ' among them');
+        const off = B.star(B.other);
+        if (off !== false) bad.push('CONTROL: unstarring ' + B.other + ' in ' + B.where + ' answered ' + off + ', not off');
+        s = stored(B.key);
+        if (s.indexOf(B.none) < 0) bad.push('unstarring ' + B.other + ' in ' + B.where + ' left ' + JSON.stringify(s) + ': ' + B.none + ' was deleted');
+        if (s.indexOf(B.other) >= 0 || s.indexOf(B.known) < 0) bad.push('unstarring ' + B.other + ' in ' + B.where + ' left ' + JSON.stringify(s) + ', where ' + B.other + ' should be gone and ' + B.known + ' kept');
+        if (B.is(B.none) || B.shown().indexOf(B.none) >= 0) bad.push('CONTROL: after the stars ' + B.where + ' shows ' + B.none + ' as a favourite');
+      });
+    } finally {
+      KEYS.forEach(k => { try { if (keep[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, keep[k]); } catch (e) {} });
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (#9) A SPEED RAMP KEYED BELOW 5 % PLAYED AT 5 %. The Speed card's ruler writes ramp keys down to FM.LIMITS.speed[0], 1 %
+     (js/inspector.js SPD_MIN), and its readout shows the key, but js/scene.js floored a ramp at 0.05 in FM.speedAt and in
+     FM.layerSourceAdvance's integral, so playback, scrub and export ran a 2 % key at 5 %: two and a half times as much source.
+     (FM.speedAdvanceOver, FM.speedAdvanceSolve and FM.revHeadGrowLimit have no floor of their own; they integrate through
+     FM.layerSourceAdvance.) Now both floor a ramp at FM.LIMITS.speed[0]. Measured on a clip with no media (the advance is pure
+     arithmetic): a ramp keyed 2 % at both ends of a 4 s clip, and (CONTROL) the same at 50 %.
+     FAILS BEFORE THE FIX: over 1 s of the 2 % ramp the source advances 0.05 s, not 0.02 s; FM.speedAt reads 0.05; and the clip's
+     source time at 2 s is 0.10 s, not 0.04 s.
+     CONTROLS, which hold before and after: the slowest speed the Speed card offers is 1 % (FM.LIMITS.speed[0] = 0.01); the 50 %
+     ramp advances 0.5 s a second, reads 0.5, and is at 1 s of source at 2 s.
+     TOLERANCE: the integral is a float32 trapezoid table at 120 Hz; on a constant rate the trapezoid is exact and float32 keeps
+     about 7 digits, so 1 s of advance reads within about 1e-8 s (reasoned, not measured); the fault is 0.03 s. 1e-4 s sits
+     between the two. */
+  test('bughunt7 #9 A speed ramp keyed at 2 % plays at 2 %, not 5 %: over one second of a ramp keyed 2 % the source advances 0.02 s, FM.speedAt reads 0.02 and the source time follows (CONTROLS: the slowest speed offered is 1 %; a ramp keyed 50 % is unchanged)', { item: '1176' }, function () {
+    if (typeof FM.layerSourceAdvance !== 'function' || typeof FM.speedAt !== 'function' || typeof FM.layerLocalTime !== 'function' || !FM.LIMITS || !Array.isArray(FM.LIMITS.speed)) throw new Error('setup: FM.layerSourceAdvance / speedAt / layerLocalTime or FM.LIMITS.speed is not reachable');
+    const TOL = 1e-4, bad = [];
+    if (FM.LIMITS.speed[0] !== 0.01) bad.push('CONTROL: the slowest speed the Speed card offers is ' + FM.LIMITS.speed[0] + ', not 1 % (0.01), so a 2 % key is not inside the range this measures');
+    const ramp = (name, v) => {
+      const L = FM.makeLayer('video', { name: name, start: 0, duration: 4 });
+      L.start = 0; L.duration = 4; L.trimStart = 0; L.reversed = false;
+      L.speed = { kf: [{ t: 0, v: v, e: 'linear' }, { t: 4, v: v, e: 'linear' }] };
+      return L;
+    };
+    [[0.02, '2 %', false], [0.5, '50 %', true]].forEach(([v, what, control]) => {
+      const L = ramp('bh7 #9 ramp ' + what, v);
+      const span = FM.layerSourceAdvance(L, 2) - FM.layerSourceAdvance(L, 1), at = FM.speedAt(L, 1.5), src = FM.layerLocalTime(L, 2);
+      const tag = control ? 'CONTROL: ' : '';
+      if (!(Math.abs(span - v) <= TOL)) bad.push(tag + 'over one second of a ramp keyed ' + what + ' the source advanced ' + span.toFixed(5) + ' s, not ' + v + ' s' + (!control && Math.abs(span - 0.05) <= TOL ? ' — it played at the old 5 % floor, two and a half times as fast as its key' : ''));
+      if (!(Math.abs(at - v) <= TOL)) bad.push(tag + 'FM.speedAt on a ramp keyed ' + what + ' reads ' + at + ', not ' + v);
+      if (!(typeof src === 'number' && Math.abs(src - 2 * v) <= TOL)) bad.push(tag + 'the clip ramped at ' + what + ' is at ' + src + ' s of its source at 2 s, not ' + (2 * v) + ' s');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (after bughunt7 #3): ONE UNDO DROPPED THE STORED WORD TIMES OF A CAPTION OVER AN HOUR LONG ═══════════════
+     js/storage.js sanitizeEffects keeps a cue's stored word starts (#966 B9, Word Highlight) only while every one is a finite
+     number from 0 to 3600, the PROJECT's bound, and drops the whole list otherwise. A word start is seconds from its cue's real
+     start, and a caption track is not held to the project (hunt5 later A: up to FM.LIMITS.duration long), so on a cue longer
+     than an hour every word said after its first hour is past 3600. history.restore runs that sanitiser over every layer, so
+     one Undo of anything dropped the cue's stored times and the highlight fell back to the shared-out ones; the undo autosaved
+     that and redo, which sanitises the same way, could not bring it back. Now a word start is bounded as bughunt7 #3 bounds a
+     key time: 3600 + FM.LIMITS.duration (clipTimeBound).
+     A caption track 5000 s long: one cue across 4800 s of it with its four words stored at 0, 1200, 3700 and 4400 s, and a cue
+     under an hour (words at 0, 0.2, 0.4 and 2 s); then a rename of another layer, its Undo, and its Redo.
+     FAILS BEFORE THE FIX: after the Undo (and the Redo) the long cue has no words at all, and 3900 s into it lights the fourth
+     word (the shared-out times: four one-beat words, 1200 s each) where the stored times light the third.
+     CONTROLS, which hold before and after: before the Undo the stored and the shared-out times light different words at 3900 s
+     (else the lit word measures nothing); the Undo really took the rename back; the cue under an hour keeps [0, 0.2, 0.4, 2];
+     and a list holding a negative, a NaN or an absurd time (1e12) is still dropped whole. */
+  test('1176 leftover: one Undo keeps the stored word times of a caption over an hour long: a 5000 s caption track whose cue has its words stored at 0, 1200, 3700 and 4400 s keeps all four through an Undo and its Redo, and 3900 s into it the third word is the one lit (CONTROLS: the Undo took the rename back, a cue under an hour keeps its words, and a list with a negative, a NaN or an absurd time is still dropped whole)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.history || !FM.history.reset || !FM.history._steps || !FM.storage || typeof FM.storage._sanitizeLayers !== 'function' || typeof FM.captionWordTimes !== 'function' || !FM.LIMITS) throw new Error('setup: FM.history (reset, _steps), FM.storage._sanitizeLayers, FM.captionWordTimes or FM.LIMITS is not reachable');
+    const bad = [], LONG = [0, 1200, 3700, 4400], SHORT = [0, 0.2, 0.4, 2], TEXT = 'one two three four';
+    /* which word of `cue` is lit at layer-local time t, by the renderer's own word times */
+    const litAt = (cue, t, dur) => FM.captionWordTimes(cue, null, dur).findIndex(w => t >= w.s && t < w.e);
+    await _bh2With(async function () {
+      const T = FM.makeLayer('shape', { name: '1176 words title', shape: 'rect', x: 20, y: 20, shapeW: 10, shapeH: 10, fill: '#ffffff', start: 0, duration: 4 });
+      T.start = 0; T.duration = 4;
+      const K = FM.makeLayer('text', { name: '1176 words captions', text: 'Captions', fontSize: 28, color: '#ffffff', x: 160, y: 200, start: 0, duration: 5000 });
+      K.start = 0; K.duration = 5000;
+      K.captions = [{ start: 0, end: 4800, text: TEXT, words: LONG.slice() }, { start: 4800, end: 4806, text: 'sold by Friday now', words: SHORT.slice() }];
+      FM.scene.layers = [T, K];
+      FM.scene.project.duration = 3600;
+      FM.refreshAll();
+      FM.history.reset();
+      const stored0 = litAt(K.captions[0], 3900, K.duration), shared0 = litAt({ start: 0, end: 4800, text: TEXT }, 3900, K.duration);
+      if (stored0 !== 2 || shared0 === 2) throw new Error('setup: 3900 s into the cue the stored times light word ' + stored0 + ' and the shared-out ones word ' + shared0 + ', so the lit word cannot tell them apart');
+      const look = (where) => {
+        const c = FM.layerById(FM.scene, K.id);
+        const cs = c && Array.isArray(c.captions) ? c.captions : [];
+        if (!c || cs.length !== 2) { bad.push(where + ': the caption track came back with ' + cs.length + ' cue(s), not two'); return; }
+        if (JSON.stringify(cs[0].words) !== JSON.stringify(LONG)) bad.push(where + ': the cue over an hour long came back with its stored words ' + ('words' in cs[0] ? JSON.stringify(cs[0].words) : 'gone') + ', not ' + JSON.stringify(LONG) + ' — two of them are past 3600 s, and the sanitiser dropped the whole list');
+        const lit = litAt(cs[0], 3900, c.duration);
+        if (lit !== 2) bad.push(where + ': 3900 s into the cue word ' + lit + ' is lit, not word 2 (“three”, stored at 3700 s)' + (lit === shared0 ? ' — the shared-out times, as if no word had been timed' : ''));
+        if (JSON.stringify(cs[1].words) !== JSON.stringify(SHORT)) bad.push('CONTROL: ' + where + ' the cue under an hour came back with its words ' + JSON.stringify(cs[1].words) + ', not ' + JSON.stringify(SHORT));
+      };
+      const n0 = FM.history._steps().len;
+      T.name = '1176 words title renamed';
+      FM.history.commit();
+      if (FM.history._steps().len !== n0 + 1) throw new Error('setup: renaming the title did not make exactly one undo step (' + JSON.stringify(FM.history._steps()) + ')');
+      FM.history.undo();
+      await sleep(60);
+      const T1 = FM.layerById(FM.scene, T.id);
+      if (!T1 || T1.name !== '1176 words title') throw new Error('setup: the Undo did not take the rename back (' + (T1 ? T1.name : 'the title is gone') + '), so nothing below is measured');
+      look('after one Undo of a rename');
+      FM.history.redo();
+      await sleep(60);
+      look('after its Redo');
+    });
+    /* ── CONTROL: a list holding a negative, a NaN or an absurd time is still dropped whole */
+    const A = JSON.parse(JSON.stringify(FM.makeLayer('text', { name: '1176 words broken', text: 'x', start: 0, duration: 10 })));
+    A.start = 0; A.duration = 10;
+    A.captions = [{ start: 0, end: 2, text: 'a b', words: [0, -1] }, { start: 2, end: 4, text: 'c d', words: [0, NaN] }, { start: 4, end: 6, text: 'e f', words: [0, 1e12] }, { start: 6, end: 8, text: 'g h', words: [0, 1] }];
+    FM.storage._sanitizeLayers([A]);
+    const cw = (A.captions || []).map(c => ('words' in c) ? JSON.stringify(c.words) : 'gone');
+    if (cw[0] !== 'gone' || cw[1] !== 'gone' || cw[2] !== 'gone') bad.push('CONTROL: word lists holding -1, NaN and 1e12 came back as ' + cw.slice(0, 3).join(', ') + ', not dropped whole');
+    if (cw[3] !== '[0,1]') bad.push('CONTROL: an ordinary word list [0,1] came back as ' + cw[3]);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (after bughunt7 #2): A WATCH-ONLY COPY'S STILL, AND THE SAVE MY VERSION IT WAS STILL OFFERED ════════════
+     bughunt7 #2 asked the export gate's question (FM.exportTurnedOff) at Copy, Save audio as WAV and Save my version, and two
+     doors were left. (a) The camera button beside the transport (#btn-snapshot, Save current frame as PNG: js/app.js
+     FM.snapshotPNG) renders the frame to a PNG and asked nothing, while the export dialog's own This frame (PNG) is refused with
+     the rest of Export, so a watch-only copy could still be taken away a frame at a time. (b) A watch-only Commenter was still
+     OFFERED Save my version — the offline-clash toast (js/collab-session.js onClash: “— tap to save your version as a copy”) and
+     the full outbox's banner (js/collab-ui.js syncBanner: [Save my version]) — though v88 made the tap refuse with the notice.
+     Now FM.snapshotPNG asks the gate and says its notice, and both offers first ask the adapter's watchOnly (js/collab-bridge.js,
+     the question its saveVersion asks) and leave the action out: the toast says only that the changes clashed, the banner only
+     its words.
+     The rig is bughunt7 #2's, as a Commenter (who can comment offline, so a clash can be theirs): a linked copy in a live session
+     whose owner's export switch is off, then, for the controls, on. A PNG is counted at URL.createObjectURL by its type and the
+     download's anchor click does nothing. The clash is handed straight to the session's onClash (S._onClash, a suite seam) with
+     one lost change and a version kept a moment ago, and FM.toast is stood in for to read what it says; the banner is drawn by
+     C.ui.syncBanner with the session's outboxFull set, and read.
+     FAILS BEFORE THE FIX: with exporting off the camera button saves a PNG and brings up no card; the session has no S._onClash
+     (and, given one, the clash toast says “tap to save your version as a copy” with a tap action); and the banner carries a
+     [Save my version] button.
+     CONTROLS, which hold before and after: with exporting off the copy is watch-only and the export gate says so, and the full
+     outbox's banner is the one drawn; with exporting ON the camera button saves one PNG with no card, the banner has its
+     [Save my version] button, and (given the seam) the clash toast offers the save with its tap. */
+  test('1176 leftover: a watch-only copy’s still and its Save my version offers: with exporting off a Commenter’s camera button (Save current frame as PNG) is refused with the export notice and saves no PNG, an offline clash says so without offering to save their version, and a full outbox’s banner has no Save my version button (CONTROLS: the copy is watch-only; with exporting on the camera button saves one PNG and both offers are there)', { item: '1176', budgetMs: 120000 }, async function () {
+    const C = need921S7('a watch-only copy’s still and its Save my version offers');
+    const snapBtn = document.getElementById('btn-snapshot');
+    if (!snapBtn || typeof FM.snapshotPNG !== 'function' || typeof FM.exportTurnedOff !== 'function' || !C.bridge || !C.ui || typeof C.ui.syncBanner !== 'function') throw new Error('setup: #btn-snapshot, FM.snapshotPNG, FM.exportTurnedOff, the bridge or C.ui.syncBanner is not reachable');
+    const bad = [], made = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const ownURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    const ownToast = Object.getOwnPropertyDescriptor(FM, 'toast');
+    let pngs = 0;
+    /* A card that comes up within `ms`, answered: true for the export notice (OK), its title for any other, false for none. */
+    async function notice(ms) {
+      const t0 = Date.now();
+      while (Date.now() - t0 < ms) {
+        const q = ask967b3();
+        if (q) {
+          const said = /Exporting is turned off/.test(q.title + ' ' + q.msg);
+          if (said) q.ok.click(); else (q.cancel || q.ok).click();
+          await settle921(60);
+          return said ? true : 'a card titled “' + q.title + '”';
+        }
+        await settle921(40);
+      }
+      return false;
+    }
+    /* A Commenter's linked copy, opened, in a live session whose owner's export switch is `roExport` (bughunt7 #2's rig). */
+    async function commenterCopy(tag, roExport) {
+      const D = { project: { name: 'Ezra’s film 1176 still ' + tag, width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(layer921('Watch 1176 still ' + tag))] };
+      const gpid = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'commenter', epoch: 'e-1176-still', seq: 0, name: 'Sam' }, D);
+      if (!gpid) throw new Error('setup: could not make the shared copy');
+      made.push(gpid);
+      await FM.projects.open(gpid);
+      const hdoc = jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers });
+      const inv = C.bridge.invariants();
+      const H = C.Host({ base: jclone921(hdoc), invariants: inv, ownerInfo: { name: 'Ezra', color: '#ff9f43' } });
+      const HS = C.Session({ adapter: plainAdapter921(hdoc, inv), role: 'owner', mid: 'o', host: H });
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+      const mid = HS.addPeer(loop.a, { role: 'commenter', name: 'Sam', color: '#a3e635' });
+      const G = C.Session({ adapter: C.bridge, role: 'commenter', mid: mid, base: jclone921(hdoc), epoch: H.epoch });
+      G.gpid = gpid; G.pid = gpid; G.hostName = 'Ezra';
+      G.setLink(loop.b); G.bs = H.seq;
+      C.attach(G, { autoTick: false });
+      HS.setRoomSettings({ roExport: roExport, editorsInvite: false, max: 8 });
+      loop.settle();
+      if (!G.roomSettings || G.roomSettings.roExport !== roExport) throw new Error('setup: the owner’s export switch (' + roExport + ') did not reach the Commenter: ' + JSON.stringify(G.roomSettings));
+      await settle921(80);
+      return { gpid: gpid, G: G };
+    }
+    /* The camera button, a clash and a full outbox on the open copy's session G: what each did and said. */
+    async function tryDoors(G) {
+      const out = {};
+      pngs = 0;
+      snapBtn.click();
+      out.card = await notice(1500);
+      const t0 = Date.now();
+      while (!pngs && Date.now() - t0 < 2500) await settle921(50);
+      out.pngs = pngs;
+      if (typeof G._onClash === 'function') {
+        const said = [];
+        G.myVersionKept = { D: G.myVersion(), at: Date.now() };
+        Object.defineProperty(FM, 'toast', { configurable: true, writable: true, value: function (m, ms, fn) { said.push({ m: String(m), fn: typeof fn === 'function' }); } });
+        try { G._onClash({ cid: 0, lost: [['layers']], rej: [] }, null); }
+        finally { if (ownToast) Object.defineProperty(FM, 'toast', ownToast); else delete FM.toast; }
+        out.clash = said.filter(function (t) { return /clashed/.test(t.m); });
+      }
+      G.outboxFull = true;
+      try {
+        C.ui.syncBanner();
+        const b = document.getElementById('collab-banner');
+        const tx = b && b.querySelector('.cb-text'), act = b && b.querySelector('.cb-act');
+        out.banner = tx ? tx.textContent : (b ? b.textContent : null);
+        out.act = act ? act.textContent : null;
+      } finally { G.outboxFull = false; C.ui.syncBanner(); }
+      return out;
+    }
+    await withLabs921(async function (ui) {
+      try {
+        if (wasHome) FM.home.close();
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: function (b) { if (b && b.type === 'image/png') pngs++; return ownURL.value.apply(URL, arguments); } });
+        Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+
+        /* 1. A live Commenter, exporting off: the copy is watch-only. */
+        const v = await commenterCopy('off', false);
+        if (!C.watchOnly(v.gpid) || !FM.exportTurnedOff()) throw new Error('setup: the Commenter’s copy with exporting off is not watch-only (FM.collab.watchOnly ' + C.watchOnly(v.gpid) + ', FM.exportTurnedOff ' + FM.exportTurnedOff() + ')');
+        if (typeof v.G._onClash !== 'function') bad.push('the session has no S._onClash (js/collab-session.js), so what an offline clash says cannot be read');
+        const off = await tryDoors(v.G);
+        if (off.pngs) bad.push('with exporting off the camera button (Save current frame as PNG) saved ' + off.pngs + ' PNG of the watched copy');
+        if (off.card !== true) bad.push('with exporting off the camera button brought up ' + (off.card || 'no card') + ', not the export notice, so nothing says why');
+        if (off.clash) {
+          if (off.clash.length !== 1) bad.push('CONTROL: with exporting off the clash was said ' + off.clash.length + ' times, not once: ' + JSON.stringify(off.clash));
+          else if (off.clash[0].fn || /save your version/i.test(off.clash[0].m)) bad.push('with exporting off an offline clash still offers Save my version: “' + off.clash[0].m + '”' + (off.clash[0].fn ? ', with a tap' : '') + ' — a tap that can only refuse');
+        }
+        if (!off.banner || !/Too many offline changes/.test(off.banner)) bad.push('CONTROL: with the outbox full the banner reads ' + JSON.stringify(off.banner) + ', not that there are too many offline changes, so the offer was not measured');
+        else if (off.act) bad.push('with exporting off the full outbox’s banner still has a [' + off.act + '] button, which can only refuse');
+        try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+        await settle921(100);
+
+        /* 2. CONTROL: the same Commenter with exporting ON — the camera saves, and both offers are made. */
+        const w = await commenterCopy('on', true);
+        if (C.watchOnly(w.gpid) || FM.exportTurnedOff()) throw new Error('setup: the Commenter’s copy with exporting on is watch-only');
+        const on = await tryDoors(w.G);
+        if (on.pngs !== 1) bad.push('CONTROL: with exporting on the camera button saved ' + on.pngs + ' PNGs, not one');
+        if (on.card) bad.push('CONTROL: with exporting on the camera button brought up ' + on.card);
+        if (on.clash && (on.clash.length !== 1 || !on.clash[0].fn || !/tap to save your version/.test(on.clash[0].m))) bad.push('CONTROL: with exporting on an offline clash said ' + JSON.stringify(on.clash) + ', not the offer to save their version with its tap');
+        if (!on.banner || !/Too many offline changes/.test(on.banner) || !on.act || !/Save m/.test(on.act)) bad.push('CONTROL: with exporting on the full outbox’s banner reads ' + JSON.stringify(on.banner) + ' with ' + (on.act ? 'a [' + on.act + '] button' : 'no button') + ', not its Save my version');
+      } finally {
+        const a = ask967b3(); if (a) a.ok.click();
+        Object.defineProperty(URL, 'createObjectURL', ownURL);
+        if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+        else delete HTMLAnchorElement.prototype.click;
+        if (ownToast) Object.defineProperty(FM, 'toast', ownToast); else delete FM.toast;
+        try { if (C.session) { C.session.outboxFull = false; C.session.stop('left'); C.detach(); } } catch (e) {}
+        try { C.ui.syncBanner(); } catch (e) {}
+        try { ui.close(); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (after bughunt7 #6): A NEW BUILD RELOADED THE APP IN THE MIDDLE OF THREE SOUND RENDERS ════════════════════
+     bughunt6 #14's hold (index.html fmSwBusy) waits for an export, its Save card, a voice take and a file still writing, and
+     bughunt7 #6 added Export sound (FM._exportingAudio). Three more renders run for seconds with none of those showing: Save
+     audio as WAV (js/audio-tools.js FM.downloadLayerAudio: decode the whole clip, build the WAV), Remove vocals
+     (FM.toggleKaraoke: decode, render the instrumental, load it) and Reduce noise (js/noise-reduction.js apply: decode, clean,
+     load). A build landing then saved and reloaded mid-render and the work was lost. Now each counts itself in FM._rendering
+     from the start of the work to its finally, and fmSwBusy reads it. Driven like bughunt7 #6: the hold is handed a counter for
+     the reload, never the real one.
+     Each render in turn on a clip OUTSIDE the scene (so no waveform or preview decodes it too), its media record holding a file,
+     with FM.decodeAudio held on a gate for that file only: while the decode waits, the app is asked whether it is busy and handed
+     a new build; then the gate answers no audio, the render says so and gives up, and the held build must reload by itself.
+     FAILS BEFORE THE FIX: while each render decodes, fmSwBusy answers '' and the new build reloads at once.
+     CONTROLS, which hold before and after: the app is idle before each render, each render really reached its decode (else the
+     test stops as a setup failure), and with nothing running a new build reloads at once. Restores FM.decodeAudio and
+     FM._rendering by descriptor, removes the clip's record and cancels any hold. */
+  test('1176 leftover: an update does not reload the app in the middle of Save audio as WAV, Remove vocals or Reduce noise: while each one decodes its clip the new build waits, and once it is over the app reloads by itself (CONTROLS: an idle app reloads at once; each render reached its decode)', { item: '1176', budgetMs: 120000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM.downloadLayerAudio !== 'function' || typeof FM.toggleKaraoke !== 'function' || !FM.noiseReduction || typeof FM.noiseReduction.apply !== 'function' || typeof FM.decodeAudio !== 'function') throw new Error('setup: FM.downloadLayerAudio, FM.toggleKaraoke, FM.noiseReduction.apply or FM.decodeAudio is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_rendering');
+    const dDecode = Object.getOwnPropertyDescriptor(FM, 'decodeAudio'), realDecode = FM.decodeAudio;
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    const BLOB = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'video/mp4' });
+    const L = FM.makeLayer('video', { name: '1176 render clip', start: 0, duration: 2 });
+    L.start = 0; L.duration = 2;
+    let reloads = 0, open = null, pending = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const bad = [];
+    try {
+      FM.media.set(L.id, { kind: 'video', file: BLOB, duration: 2, width: 2, height: 2 });
+      Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+      const renders = [
+        ['Save audio as WAV', () => FM.downloadLayerAudio(L)],
+        ['Remove vocals', () => FM.toggleKaraoke(L)],
+        ['Reduce noise', () => FM.noiseReduction.apply(L, FM.noiseReduction.defaults ? FM.noiseReduction.defaults() : undefined)]
+      ];
+      for (const [what, start] of renders) {
+        await settle(what);
+        let entered = 0;
+        const gate = new Promise(r => { open = r; });
+        FM.decodeAudio = function (f) { if (f === BLOB) { entered++; return gate; } return realDecode.apply(this, arguments); };
+        pending = Promise.resolve(start());
+        if (!(await until(() => entered > 0, 4000))) throw new Error('setup: ' + what + ' never reached its decode (FM.decodeAudio), so nothing was rendering');
+        const during = W.busy(), n = FM._rendering;
+        reloads = 0;
+        const now = await W(count);
+        const heldNow = !now && !reloads && W.held();
+        open(null);   // the decode answers no audio: the render says so and gives up
+        try { await pending; } catch (e) {}
+        pending = null;
+        await sleep(60);
+        if (!during) bad.push('while ' + what + ' was decoding its clip the app counted as idle (FM._rendering ' + JSON.stringify(n) + ')');
+        if (!heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app in the middle of ' + what + ' (' + reloads + ' reload)' : 'was dropped rather than held during ' + what));
+        if (FM._rendering) bad.push('after ' + what + ' gave up FM._rendering is still ' + JSON.stringify(FM._rendering) + ', so every later update would wait for a render that is over');
+        if (W.busy()) bad.push('after ' + what + ' gave up the app still counts as busy (' + W.busy() + ')');
+        else if (!(await until(() => reloads > 0, 9000))) bad.push('once ' + what + ' was over, the held reload never happened by itself');
+        try { W.cancel(); } catch (e) {}
+        if (dDecode) Object.defineProperty(FM, 'decodeAudio', dDecode); else FM.decodeAudio = realDecode;
+      }
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (open) open(null);
+      if (pending) { try { await pending; } catch (e) {} }
+      if (dDecode) Object.defineProperty(FM, 'decodeAudio', dDecode); else FM.decodeAudio = realDecode;
+      if (dFlag) Object.defineProperty(FM, '_rendering', dFlag); else delete FM._rendering;
+      if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+      else delete HTMLAnchorElement.prototype.click;
+      try { FM.media.remove(L.id); } catch (e) {}
+      if (FM.hideToast) { try { FM.hideToast(); } catch (e) {} }
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (bughunt6 #14's first gap): A NEW BUILD RELOADED THE APP WHILE A PICKED FILE WAS STILL OPENING ═════════════
+     The hold (index.html fmSwBusy) covers a clip once it is in the scene: fmSwTry saves first whenever the clips changed, and
+     waits on a save still writing. Before that, from the pick (the file input, a drop, FM.importFiles) to the add, js/app.js
+     handleFiles awaits the file's loader — seconds for a song decoded end to end, a GIF frame by frame, or the sound taken out
+     of a whole video — and nothing showed busy, so a build landing then reloaded the app and the picked files never arrived.
+     Now handleFiles counts itself in FM._importing until its batch is over, and fmSwBusy reads it. Driven like bughunt7 #6, the
+     hold handed a counter for the reload: one PNG through FM._handleFiles with FM.loadImageFile held on a gate for that file
+     only; while it waits the app is asked whether it is busy and handed a new build; then the loader fails, the import reports
+     it (FM.reportError, stood in for, so no card comes up) and gives up, and the held build must reload by itself.
+     FAILS BEFORE THE FIX: while the file is opening fmSwBusy answers '' and the new build reloads at once.
+     CONTROLS, which hold before and after: the app is idle to start with, the loader was reached (else the test stops as a setup
+     failure), the failure was reported once and nothing was added, and with nothing running a new build reloads at once.
+     Restores FM.loadImageFile, FM.reportError and FM._importing by descriptor and cancels any hold. */
+  test('1176 leftover: an update does not reload the app while a picked file is still opening: with a picture held in its loader the new build waits, and once the import is over the app reloads by itself (CONTROLS: the loader was reached, the failure was reported and nothing was added; an idle app reloads at once)', { item: '1176', budgetMs: 60000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM._handleFiles !== 'function' || typeof FM.loadImageFile !== 'function' || typeof FM.reportError !== 'function') throw new Error('setup: FM._handleFiles, FM.loadImageFile or FM.reportError is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_importing');
+    const dLoad = Object.getOwnPropertyDescriptor(FM, 'loadImageFile'), realLoad = FM.loadImageFile;
+    const dReport = Object.getOwnPropertyDescriptor(FM, 'reportError');
+    const FILE = new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], '1176 opening.png', { type: 'image/png' });
+    const n0 = FM.scene.layers.length;
+    let reloads = 0, entered = 0, reported = 0, fail = null, pending = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const bad = [];
+    try {
+      await settle('the import');
+      const gate = new Promise((res, rej) => { fail = rej; });
+      gate.catch(() => {});
+      FM.loadImageFile = function (f) { if (f === FILE) { entered++; return gate; } return realLoad.apply(this, arguments); };
+      FM.reportError = function () { reported++; };
+      pending = Promise.resolve(FM._handleFiles([FILE]));
+      if (!(await until(() => entered > 0, 4000))) throw new Error('setup: the import never reached its loader (FM.loadImageFile), so nothing was opening');
+      const during = W.busy(), n = FM._importing;
+      reloads = 0;
+      const now = await W(count);
+      const heldNow = !now && !reloads && W.held();
+      fail(new Error('1176 test: the loader was let go'));
+      try { await pending; } catch (e) {}
+      pending = null;
+      await sleep(60);
+      if (!during) bad.push('while a picked file was opening the app counted as idle (FM._importing ' + JSON.stringify(n) + ')');
+      if (!heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app while a picked file was still opening (' + reloads + ' reload), so the file never arrived' : 'was dropped rather than held while a picked file was opening'));
+      if (reported !== 1 || FM.scene.layers.length !== n0) bad.push('CONTROL: the failed load was reported ' + reported + ' times and the scene went from ' + n0 + ' to ' + FM.scene.layers.length + ' layers, not once and unchanged');
+      if (FM._importing) bad.push('after the import was over FM._importing is still ' + JSON.stringify(FM._importing) + ', so every later update would wait for it');
+      if (W.busy()) bad.push('after the import was over the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(() => reloads > 0, 9000))) bad.push('once the import was over, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (fail) fail(new Error('1176 test: cleaned up'));
+      if (pending) { try { await pending; } catch (e) {} }
+      if (dLoad) Object.defineProperty(FM, 'loadImageFile', dLoad); else FM.loadImageFile = realLoad;
+      if (dReport) Object.defineProperty(FM, 'reportError', dReport); else delete FM.reportError;
+      if (dFlag) Object.defineProperty(FM, '_importing', dFlag); else delete FM._importing;
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (bughunt6 #14's second gap): A NEW BUILD RELOADED THE APP WITH AN AI ANSWER ON ITS WAY ═══════════════════
+     Every model request goes through one door, js/ai.js call (the Director's stages, a re-roll, Refine, and the Assistant via
+     FM.ai.call), and a reply takes seconds to most of a minute on his own key. Nothing in the hold (index.html fmSwBusy) knew,
+     so a build landing meanwhile reloaded the app and the answer, already paid for, was thrown away. Now call counts its
+     requests in FM._aiCalls, a retry inside its own, and fmSwBusy reads it. Driven like bughunt7 #6, the hold handed a counter
+     for the reload, with FM.ai.DRY_RUN standing in for the network (the mock answers after `dryDelay`: no key, no tokens, no
+     request): one Interpreter call held 3 s in flight; while it waits the app is asked whether it is busy and handed a new
+     build; once it has answered, the held build must reload by itself.
+     FAILS BEFORE THE FIX: while the request is in flight fmSwBusy answers '' and the new build reloads at once.
+     CONTROLS, which hold before and after: the app is idle to start with, the request really answered with the mock's intent,
+     and with nothing running a new build reloads at once. Restores FM.ai.DRY_RUN and FM._aiCalls and cancels any hold. */
+  test('1176 leftover: an update does not reload the app with an AI answer on its way: with a model request in flight the new build waits, and once the answer is in the app reloads by itself (CONTROLS: the request answered; an idle app reloads at once)', { item: '1176', budgetMs: 60000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (!FM.ai || typeof FM.ai.call !== 'function' || !FM.ai.MODELS || !FM.aiManifest || !FM.aiManifest.tools || !FM.aiManifest.tools.intent || !FM.aiMock) throw new Error('setup: FM.ai.call, FM.ai.MODELS, FM.aiManifest.tools.intent or FM.aiMock is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_aiCalls');
+    const dry0 = FM.ai.DRY_RUN;
+    let reloads = 0, pending = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const bad = [];
+    try {
+      await settle('the request');
+      FM.ai.DRY_RUN = true;
+      let answer = null;
+      pending = FM.ai.call(FM.ai.MODELS.intent, 'You are a test.', [{ role: 'user', content: '1176 a title card' }], FM.aiManifest.tools.intent, { maxTokens: 64, dryDelay: 3000, mock: { prompt: '1176 a title card' } })
+        .then(r => { answer = r; }, e => { answer = { error: e }; });
+      await sleep(200);
+      const during = W.busy(), n = FM._aiCalls;
+      reloads = 0;
+      const now = await W(count);
+      const heldNow = !now && !reloads && W.held();
+      await pending; pending = null;
+      await sleep(60);
+      if (!answer || answer.error || !answer.out || typeof answer.out.subject !== 'string') throw new Error('setup: the held request did not answer with the mock’s intent (' + (answer && answer.error ? answer.error.message : JSON.stringify(answer && answer.out)) + '), so nothing was in flight');
+      if (!during) bad.push('while an AI request was in flight the app counted as idle (FM._aiCalls ' + JSON.stringify(n) + ')');
+      if (!heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app with an AI answer on its way (' + reloads + ' reload), so the answer was thrown away' : 'was dropped rather than held while an AI request was in flight'));
+      if (FM._aiCalls) bad.push('after the answer came FM._aiCalls is still ' + JSON.stringify(FM._aiCalls) + ', so every later update would wait for it');
+      if (W.busy()) bad.push('after the answer came the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(() => reloads > 0, 9000))) bad.push('once the answer was in, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      FM.ai.DRY_RUN = dry0;
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (pending) { try { await pending; } catch (e) {} }
+      FM.ai.DRY_RUN = dry0;
+      if (dFlag) Object.defineProperty(FM, '_aiCalls', dFlag); else delete FM._aiCalls;
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
     if (bad.length) throw new Error(bad.join(' · '));
   });
 

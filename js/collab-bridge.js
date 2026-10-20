@@ -126,6 +126,10 @@ window.FM = window.FM || {};
     }
     return out || ls;
   }
+  /* bughunt7 #2 / 1176 leftover: is the copy this session shares WATCH-ONLY (FM.collab.watchOnly, js/collab-core.js)? Then
+     saveVersion keeps nothing, and the two places that offer it — the clash toast (collab-session.js onClash) and the full
+     outbox's banner (collab-ui.js syncBanner) — ask this same question first, so nothing offers a button that only refuses. */
+  function keepsNoVersion() { return !!(C.watchOnly && C.watchOnly((C.session && C.session.gpid) || null)); }
 
   const bridge = {
     /* ── the document ─────────────────────────────────────────────────────────────────────────── */
@@ -239,6 +243,14 @@ window.FM = window.FM || {};
        takes a document that has no card of its own (collab-session.js keeps it before an offline flush). */
     saveVersion: function (D) {
       if (!D || !FM.projects || !FM.projects.duplicateFrom) return Promise.resolve(null);
+      /* bughunt7 #2 (#1091's doors): duplicateFrom refuses a watch-only source only when it is handed its ids (srcIds), and this
+         copies a document, so the question is asked here: a Commenter's offline version of a watch-only copy is not kept as a
+         project of their own. Said in the export gate's words (js/app.js FM.sayExportTurnedOff). */
+      if (keepsNoVersion()) {
+        if (FM.sayExportTurnedOff) FM.sayExportTurnedOff();
+        else if (FM.toast) FM.toast('Not saved — it was shared with you to watch only, so no copy is kept', 3200);
+        return Promise.resolve(null);
+      }
       const nm = ((FM.scene && FM.scene.project && FM.scene.project.name) || 'Shared project') + ' — my version';
       return FM.projects.duplicateFrom(D, { name: nm }).then(function (nid) {
         if (FM.toast) FM.toast(nid ? 'Saved your version on Home as “' + nm + '”' : 'Could not save your version — the device may be full', 3200);
@@ -246,6 +258,8 @@ window.FM = window.FM || {};
         return nid;
       }, function () { if (FM.toast) FM.toast('Could not save your version — the device may be full', 3200); return null; });
     },
+    /* 1176 leftover: true when saveVersion above would refuse — asked before it is offered (keepsNoVersion says why). */
+    watchOnly: function () { return keepsNoVersion(); },
     /* §13.1 (S8 review): the outbox is full (read-only until it drains) or has drained. */
     onOutboxFull: function () { syncCollabBanner(); },
     /* S8 review: a guest said `bye` — the UI keeps the room's member table, and a guest who LEFT is not coming back

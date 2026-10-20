@@ -1177,7 +1177,7 @@ window.FM = window.FM || {};
      the LIST's order and then sorts them by time; a list the app wrote is already in time order. */
   function safeKfProp(p, min, max, cap = AFX_MAX_KF) {
     if (!p || typeof p !== 'object' || !Array.isArray(p.kf)) return null;
-    const kf = [];
+    const kf = [], TB = clipTimeBound();   // bughunt7 #3: a key time reaches as far as its clip can (clipTimeBound says why)
     p.kf.slice(0, cap).forEach(k => {
       if (!k || typeof k !== 'object') return;
       const t = +k.t, v = +k.v;
@@ -1188,7 +1188,7 @@ window.FM = window.FM || {};
          keyframe held, and the next autosave wrote that loss to disk. Bounded on BOTH sides now, which is
          what the upper clamp was already doing for the other end. */
       if (!isFinite(t) || !isFinite(v)) return;
-      const o = { t: Math.max(-3600, Math.min(3600, t)), v: Math.max(min, Math.min(max, v)), e: easeOk(k.e) ? k.e : 'linear' };
+      const o = { t: Math.max(-TB, Math.min(TB, t)), v: Math.max(min, Math.min(max, v)), e: easeOk(k.e) ? k.e : 'linear' };
       if (Array.isArray(k.bez) && k.bez.length === 4 && k.bez.every(n => isFinite(+n))) o.bez = k.bez.map(Number);
       /* ez / ti / to used to be dropped here, silently. That was survivable while this function only
        * saw audio params, and stops being survivable the moment effect params come through it (below):
@@ -1366,14 +1366,14 @@ window.FM = window.FM || {};
      argument and gets MASK_MAX_KF (FM.LIMITS.keyframes). The first `cap` keys in the list's order are kept, then sorted by time. */
   function safeMaskPath(path, cap = MASK_MAX_KF) {
     if (path && typeof path === 'object' && !Array.isArray(path) && Array.isArray(path.kf)) {
-      const kf = [];
+      const kf = [], TB = clipTimeBound();   // bughunt7 #3, as safeKfProp
       path.kf.slice(0, cap).forEach(k => {
         if (!k || typeof k !== 'object') return;
         const t = +k.t;
         if (!isFinite(t)) return;          // queue 827: negative is legal — a clip dragged before zero takes its roto with it
         const pts = safeMaskPts(k.v);
         if (!pts || !pts.length) return;   // a keyframe with no valid vertices contributes nothing → drop it
-        const o = { t: Math.max(-3600, Math.min(3600, t)), v: pts, e: easeOk(k.e) ? k.e : 'linear' };
+        const o = { t: Math.max(-TB, Math.min(TB, t)), v: pts, e: easeOk(k.e) ? k.e : 'linear' };
         /* bughunt5 #9: `bez` and `ez` are kept, validated exactly as safeKfProp keeps them. They were dropped here, and this
            runs on every open and every undo. The keyframe diamond's ease menu writes `bez` with the name on a mask key as on any
            other, and FM.evalMaskPath eases by `bez` first, so a roto key set to Ease In came back as the quadratic of the same
@@ -1531,12 +1531,18 @@ window.FM = window.FM || {};
      * skipped the check entirely would simply be weaker still. Recursion is one level and cannot loop:
      * a cue is a plain object with no captions of its own. */
     if (Array.isArray(l.captions)) {
+      /* 1176 leftover: a stored word start reaches as far as a time on its clip can, clipTimeBound (bughunt7 #3 says why), the
+         bound a key time has. It was 3600, the project's: a word start is seconds from its cue's real start, and a caption track
+         is not held to the project (up to FM.LIMITS.duration long), so on a cue over an hour long one Undo of anything dropped
+         every stored word start and the cue fell back to the shared-out times; the undo autosaved that and redo could not
+         bring it back. Still finite, never negative, still bounded: a list holding anything past the bound is dropped whole. */
+      const WB = clipTimeBound();
       l.captions.forEach(c => {
         if (!c || typeof c !== 'object') return;
         /* #966 B9: a cue's stored word starts (Word Highlight, FM.captions.bakeWords) — plain numbers or nothing. A list of
            finite seconds is KEPT as it is (the renderer itself ignores one that does not fit the words); any other shape is
            dropped whole, never repaired, so the cue falls back to the shared-out times. */
-        if (c.words != null && !(Array.isArray(c.words) && c.words.length <= 5000 && c.words.every(v => typeof v === 'number' && isFinite(v) && v >= 0 && v <= 3600))) delete c.words;
+        if (c.words != null && !(Array.isArray(c.words) && c.words.length <= 5000 && c.words.every(v => typeof v === 'number' && isFinite(v) && v >= 0 && v <= WB))) delete c.words;
         if (c.effects == null) return;
         if (!Array.isArray(c.effects)) { delete c.effects; return; }
         sanitizeEffects(c);
@@ -1742,6 +1748,19 @@ window.FM = window.FM || {};
     v = +v;
     return isFinite(v) ? Math.max(lo, Math.min(hi, v)) : dflt;
   }
+  /* bughunt7 #3: HOW FAR A TIME ON A CLIP CAN REACH, for the sanitisers history.restore runs on every undo and redo. A clip's
+     start and its effect, audio-effect and mask key times are PROJECT seconds, and a clip is not held to the project: it may be
+     FM.LIMITS.duration long (the longest project at 1 %, hunt5 later A), start before 0 by nearly that much (the timeline floors
+     a drag at -(duration - 0.1)) and end that far past a start inside the 3600 s project, so ±(3600 + FM.LIMITS.duration) holds
+     every time such a clip can carry. They were ±3600, the PROJECT's bound (clampProjectDims): a 60 s clip slowed to 1 % moves an
+     effect key at 50 s to 5000 s, and one Undo put it at 3600 (36 s once back at 1x, while its transform keys, never capped,
+     came back to 50 s); a clip over an hour long dragged to start at -4000 s was moved 400 s by the next Undo. A trimStart is
+     SOURCE seconds, and was held to 3600: a 90-minute recording at 2x split at 35:00 has a tail starting 4200 s in, and one Undo
+     moved it 600 s back. The most source a clip the sanitiser keeps can reach is its longest length at the fastest speed,
+     FM.LIMITS.duration × FM.LIMITS.speed[1]. Read at the call, so a widened FM.LIMITS moves these with it. Still finite and
+     still bounded: NaN and a word are repaired, an absurd number is brought into range. */
+  function clipTimeBound() { return 3600 + FM.LIMITS.duration; }
+  function sourceTimeBound() { return FM.LIMITS.duration * FM.LIMITS.speed[1]; }
   function sanitizeTiming(l) {
     if (!l) return;
     /* ⚠️ THE FLOOR IS -3600, NOT 0, AND THAT IS A DATA-LOSS FIX (queue 680).
@@ -1758,8 +1777,9 @@ window.FM = window.FM || {};
      * ⚠️ WHY NO TEST CAUGHT IT: the only test feeding a negative start uses -1e999, which is -Infinity
      * and returns via the non-finite branch above without ever reaching the clamp. That test pins
      * "must be finite" and passes identically with or without this floor.
-     * The protection that mattered is kept: still finite, still bounded, just bounded symmetrically. */
-    l.start = num(l.start, -3600, 3600, 0);
+     * The protection that mattered is kept: still finite, still bounded, just bounded symmetrically.
+     * bughunt7 #3 (N1): bounded by clipTimeBound above, not 3600 — a clip longer than an hour can be dragged further back than that. */
+    l.start = num(l.start, -clipTimeBound(), clipTimeBound(), 0);
     /* hunt5 later A: the ceiling is FM.LIMITS.duration (js/scene.js), the longest clip the Speed card makes: the longest project
        at 1 %. It was 3600, and the clip speed setter has no ceiling, so a 60 s clip slowed to 1 % (6000 s) came back from one Undo of
        anything 3600 s long at 1 %: 24 s of its footage gone, autosaved, and redo could not bring it back. NaN, a word, a negative
@@ -1769,8 +1789,9 @@ window.FM = window.FM || {};
     /* trimStart joined them in queue 718 (hunt HIGH #1). It is keyframable on an open path — the Draw-from — and
        this line had no guard: `+{kf:[…]}` is NaN, so the whole animation became a plain 0. history.restore() runs
        this over every layer, so ONE UNDO OF ANYTHING left the drawing fully revealed, redo could not bring it back
-       (it sanitises identically) and the next autosave wrote the loss to disk. Queue 680, one line down. */
-    if (l.trimStart != null && !(FM.isAnimated && FM.isAnimated(l.trimStart))) l.trimStart = num(l.trimStart, 0, 3600, 0);
+       (it sanitises identically) and the next autosave wrote the loss to disk. Queue 680, one line down.
+       bughunt7 #3: a plain one is finite and at least 0, up to sourceTimeBound above (source seconds, not the project's 3600). */
+    if (l.trimStart != null && !(FM.isAnimated && FM.isAnimated(l.trimStart))) l.trimStart = num(l.trimStart, 0, sourceTimeBound(), 0);
     /* bughunt5 #1: SPEED AND VOLUME ARE CLAMPED TO WHAT THE PANELS OFFER, read from FM.LIMITS (js/scene.js), which the Speed
        and Volume cards read too. These two lines held a plain speed to 0.05..100 and a plain volume to 0..4 while the cards
        offer 0.01..1000 and 0..10, so one undo of anything (restore runs this over every layer) cut a 200x time-lapse to 100x, a
@@ -2440,7 +2461,23 @@ window.FM = window.FM || {};
     if (sceneMediaReleased()) return null;
     try {
       const P = FM.scene.project;
-      let src = document.createElement('canvas'); src.width = P.width; src.height = P.height;
+      const s = Math.min(360 / P.width, 360 / P.height, 1);
+      const tw = Math.max(2, Math.round(P.width * s)), th = Math.max(2, Math.round(P.height * s));
+      /* ═══ #1111 / #1100: THE CARD IS DRAWN AT THE CARD'S SIZE, NOT THE PROJECT'S. Importing into a project with glow effects
+         froze for seconds (hunt PF1). This rendered the whole scene onto a canvas the PROJECT's size (1080 x 1920) and then
+         halved it down to the 203 x 360 card, and the render is where an effect stack spends its time: measured on v17.32,
+         one layer of 8 Glows rendered in 3.0 s at 1080 x 1920 and 0.16 s at card size, and its import took 6.2 s against
+         0.29 s. Every card goes through here: the import's touchCurrent(true), the 12 s autosave, a pinned card picture, a
+         template or element save. So it is drawn at TWICE the card's size (405 x 720 for 1080 x 1920; renderScene reads the
+         render scale off the canvas, exactly as for the phone preview and the Export card), and the last step below is still
+         an average of real pixels. The height follows the width's scale, rounded down, so no sliver of the canvas is left
+         unpainted. A project whose longer side is 720 px or less is drawn at its own size, exactly as before. */
+      const rs = Math.min(1, 2 * s);
+      let src = document.createElement('canvas');
+      if (rs < 1) {
+        src.width = Math.max(2, Math.round(P.width * rs));
+        src.height = Math.max(2, Math.floor(P.height * (src.width / P.width) + 1e-6));
+      } else { src.width = P.width; src.height = P.height; }
       /* ⚠️ THE CARD IS THE PICTURE THE PREVIEW SHOWS, WHICH AT THE END IS NOT THE RAW PLAYHEAD (queue 690, HUNT-c).
          Playback without Loop parks the playhead ON the project's last instant (FM.time = duration), and every clip's
          window is half-open, so at that instant nothing is live and a raw render is the bare background. The preview
@@ -2448,9 +2485,17 @@ window.FM = window.FM || {};
          it should still be visible when you're at the end of it") — but this capture used the raw time, so the
          project he had just watched through came Home as a plain black card. Same rule as the preview, so the card
          and the screen agree; a genuinely empty moment mid-timeline is left as it is, exactly as the preview leaves it. */
-      FM.renderScene(src.getContext('2d'), FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time);
-      const s = Math.min(360 / P.width, 360 / P.height, 1);
-      const tw = Math.max(2, Math.round(P.width * s)), th = Math.max(2, Math.round(P.height * s));
+      /* 1176 leftover: THE CARD IS THE PROJECT, NOT THE VIEW. The View menu's ⧉ isolate (FM.isolate) is read by the
+         compositor's layer loop, so a card captured while a clip was isolated (the 12 s autosave does it) showed that one
+         clip, or in mode 2 that clip lifted on top, and the crop tool's whole-frame flag showed a cropped clip uncropped.
+         Both are held aside for this one render and put straight back, exactly as the Export card's picture
+         (js/export-card.js drawThumb) and the still (FM.snapshotPNG) do, so the preview he is looking at does not change. */
+      const isoWas = FM.isolate;
+      const cropHeld = (FM.scene.layers || []).filter(l => l && l._cropEditing);
+      FM.isolate = null;
+      cropHeld.forEach(l => { l._cropEditing = false; });
+      try { FM.renderScene(src.getContext('2d'), FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time); }
+      finally { FM.isolate = isoWas; cropHeld.forEach(l => { l._cropEditing = true; }); }
       while (src.width >= tw * 2) {   // halve until within 2× of target — each step averages real pixels
         const half = document.createElement('canvas');
         half.width = Math.max(tw, Math.round(src.width / 2)); half.height = Math.max(th, Math.round(src.height / 2));

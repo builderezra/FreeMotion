@@ -1100,9 +1100,12 @@ window.FM = window.FM || {};
     if (!c || c.sig !== sig) {
       const SR = 120, n = Math.max(2, Math.ceil((layer.duration || 0) * SR) + 2);
       const tab = new Float32Array(n);
-      let acc = 0, prev = Math.max(0.05, evalProp(sp, layer.start));
+      /* bughunt7 #9: a ramp is floored at the slowest speed the Speed card offers, FM.LIMITS.speed[0] (1 %), not 5 %: the ruler
+         writes ramp keys down to 1 % and its readout shows them, while playback, scrub and export ran anything below 5 % at 5 %. */
+      const lo = FM.LIMITS.speed[0];
+      let acc = 0, prev = Math.max(lo, evalProp(sp, layer.start));
       for (let i = 1; i < n; i++) {
-        const v = Math.max(0.05, evalProp(sp, layer.start + i / SR));
+        const v = Math.max(lo, evalProp(sp, layer.start + i / SR));
         acc += (prev + v) / (2 * SR);
         tab[i] = acc; prev = v;
       }
@@ -1138,7 +1141,7 @@ window.FM = window.FM || {};
       const n = (typeof sp === 'number') ? sp : parseFloat(sp);
       return (isFinite(n) && n !== 0) ? n : 1;
     }
-    return Math.max(0.05, evalProp(sp, t == null ? (FM.time || 0) : t) || 1);
+    return Math.max(FM.LIMITS.speed[0], evalProp(sp, t == null ? (FM.time || 0) : t) || 1);   // bughunt7 #9: 1 %, as layerSourceAdvance
   };
   /* Longest clip duration whose consumed source stays within availSrc source-seconds.
    * Static speed: plain division (old behaviour). Ramped: bisect the monotonic advance integral. */
@@ -1201,6 +1204,29 @@ window.FM = window.FM || {};
       if (FM.speedAdvanceOver(layer, fromInto, mid) > budget) hi = mid; else lo = mid;
     }
     return lo;
+  };
+
+  /* ═══ #1107 (AU1-2): HOW FAR CAN A REVERSED CLIP'S HEAD GROW BEFORE IT RUNS OFF THE END OF ITS SOURCE?
+   * A reversed clip opens on its source window's END (`trimStart` plus all the source it plays), so pulling the head earlier
+   * walks that end UP through the file. The left trim grip and Extend (the D key) both capped it with `(srcDur - trimStart) / sp`,
+   * and `sp` is 1 for ANY speed ramp, so the cap ignored the curve: a 3x -> 0.5x ramp in a 20 s file could be grown until its
+   * first frame read source 29.5 s. The same clip's tail is capped on the curve (FM.speedAdvanceSolve, above) and so is a forward
+   * clip's tail (FM.maxDurForSource); this was the one edge left on a flat guess. A flat speed gets the same answer the division
+   * gave. Bisected on the real curve, once per edit, never per frame.
+   * `delta` is the head move asked for, NEGATIVE when the head grows. Returns the move that fits: nearer 0 when the source runs
+   * out, 0 when none is left. A shrink (delta >= 0) or a source of unknown length passes straight through. Call it with the layer
+   * as it was when the edit began, because the window is laid off `layer.start` and the speed keyframes are in project time. */
+  FM.revHeadGrowLimit = function (layer, delta, srcDur, trim) {
+    if (!layer || !(delta < 0) || !isFinite(srcDur)) return delta;
+    const avail = srcDur - ((trim || 0) + FM.layerSourceAdvance(layer, layer.duration));
+    if (!(avail > 0)) return 0;
+    if (FM.speedAdvanceOver(layer, delta, 0) <= avail + 1e-9) return delta;
+    let lo = delta, hi = 0;
+    for (let i = 0; i < 30; i++) {
+      const mid = (lo + hi) / 2;
+      if (FM.speedAdvanceOver(layer, mid, 0) > avail) lo = mid; else hi = mid;
+    }
+    return hi;
   };
 
   /* The source consumed by moving a clip's HEAD by `delta` seconds — positive trims inward, negative

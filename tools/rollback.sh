@@ -26,6 +26,8 @@
 #
 # ⚠️ IT NEVER REWRITES HISTORY. It makes a NEW commit that restores the old files, so the record of what
 # happened stays intact and there is no force-push. Roll back the rollback the same way if need be.
+# ⚠️ AND NO CACHE NUMBER GOES BACKWARDS (bughunt6 #4). index.html's ?v= numbers that a later release already used are moved
+# above every number that file has had, in the same commit, and it says which: see the block before the commit.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -188,7 +190,60 @@ git ls-tree -r --name-only HEAD | while IFS= read -r f; do
   git cat-file -e "$HASH:$f" 2>/dev/null || rm -f "$f"
 done
 
-if [ -z "$(git status --porcelain)" ]; then echo "✅ already identical to that release — nothing to do."; exit 0; fi
+# A restore that differs from HEAD only in index.html's cache numbers is the same app: it happens when the target is the
+# release HEAD already rolled back to, whose numbers the block below moved up. The same files, nothing to publish.
+_PORC="$(git status --porcelain)"
+if [ -n "$_PORC" ] && [ "$(printf '%s\n' "$_PORC" | cut -c4-)" = "index.html" ] \
+   && [ "$(sed -E 's/[?]v=[0-9]+([.][0-9]+)?/?v=/g' index.html)" = "$(git show HEAD:index.html 2>/dev/null | sed -E 's/[?]v=[0-9]+([.][0-9]+)?/?v=/g')" ]; then
+  git checkout HEAD -- index.html
+  _PORC=""
+fi
+if [ -z "$_PORC" ]; then echo "✅ already identical to that release — nothing to do."; exit 0; fi
+
+# ── AND NO CACHE NUMBER GOES BACKWARDS (bughunt6 #4) ─────────────────────────────────────────────
+# The restore above puts index.html's `?v=` numbers back to the target's, which are LOWER than today's for every file
+# changed since. sw.js answers a `?v=` address CACHE-FIRST, keyed on the whole address, because the number is a promise
+# that the address's bytes never change. Going backwards breaks that promise one release later: ship.sh bumps a changed
+# file's number by one, so the first fix after a rollback to compositor.js?v=238 ships as ?v=239, an address a release
+# between the target and today already published with OTHER code. A device that still holds that older ?v=239 (one that
+# last opened the app back then: an iPad, the PC's installed app, a phone left on Home) is served the old file from its
+# cache, beside the new index.html: a mixed build, with every symptom of a fix that "did not work". And a file index.html
+# stopped naming is never pruned from the cache at all, so its old copies wait there indefinitely.
+# So every restored number that some release already went past is moved to one above the highest that file has ever had,
+# in today's index.html, the restored one or any earlier version of index.html. Numbers no later release passed are left
+# alone: the same address, the same bytes. A failure here commits nothing, because publishing the old numbers is the bug.
+# The history matters, not only today's index.html: main's numbers have gone DOWN before (compositor.js 296 -> 8.97 at v8.97,
+# when the busters were release numbers for a while, and back up through the 200s since), so "one above today's" can
+# still be an address an older release used. Decimal numbers like that are read whole, and replaced by a whole number.
+_VTOK='[A-Za-z0-9_./-]+[?]v=[0-9]+([.][0-9]+)?'
+_VTOP="$( { cat index.html; git show HEAD:index.html; git log --format= -p HEAD -- index.html; } 2>/dev/null \
+  | grep -oE "$_VTOK" \
+  | awk '{ q = index($0, "?v="); p = substr($0, 1, q - 1); v = substr($0, q + 3) + 0; if (!(p in m) || v > m[p]) m[p] = v } END { for (p in m) print p " " m[p] }')"
+_REBUMPED=""
+if [ -f index.html ] && [ -n "$_VTOP" ]; then
+  _REBUMPED="$(FM_VTOP="$_VTOP" FM_VTOK="$_VTOK" awk '
+    BEGIN { n = split(ENVIRON["FM_VTOP"], L, "\n"); for (i = 1; i <= n; i++) if (split(L[i], kv, " ") == 2) top[kv[1]] = kv[2] + 0; re = ENVIRON["FM_VTOK"] }
+    {
+      line = $0; out = ""
+      while (match(line, re)) {
+        tok = substr(line, RSTART, RLENGTH); q = index(tok, "?v="); p = substr(tok, 1, q - 1); vs = substr(tok, q + 3); v = vs + 0
+        if ((p in top) && top[p] > v) {
+          nv = int(top[p]) + 1; tok = p "?v=" nv
+          if (!(p in said)) { said[p] = 1; printf("%s ?v=%s -> ?v=%d\n", p, vs, nv) > "/dev/stderr" }
+        }
+        out = out substr(line, 1, RSTART - 1) tok; line = substr(line, RSTART + RLENGTH)
+      }
+      print out line
+    }' index.html 2>&1 >index.html.rb)" && mv index.html.rb index.html \
+    || { rm -f index.html.rb; echo "❌ could not move index.html's cache numbers above today's. Nothing is committed."; exit 1; }
+fi
+if [ -n "$_REBUMPED" ]; then
+  echo "→ cache numbers: $(printf '%s\n' "$_REBUMPED" | wc -l | tr -d ' ') file(s) in index.html moved ABOVE every number they have had, so no phone can"
+  echo "   be handed a cached copy of another version of a file under the same address (and the next release's +1 is a fresh one):"
+  printf '%s\n' "$_REBUMPED" | sed 's/^/   · /'
+else
+  echo "→ cache numbers: no later release went past any of the restored ones, so none needed moving."
+fi
 
 # ── AND THE SHIP DOOR STAYS UNLOCKED ─────────────────────────────────────────────────────────────
 # ⚠️ A ROLLBACK USED TO BRICK ship.sh, silently. Three of its gates compare index.html's version with
@@ -212,6 +267,7 @@ git commit -q -m "ROLLBACK to $SUBJ
 Put the app's files back to $HASH. Nothing was deleted from the history — this is a new
 commit that restores the old content, so the rollback itself can be rolled back.
 His projects are untouched: they live in localStorage / IndexedDB on the device, not here.
+Cache numbers (?v=) a later release had already gone past were moved above every number those files have had.
 (A build older than v16.80 cannot read clips reused from Add → Media — rollback.sh warns before publishing,
 and publishes one only when the version is typed back.)" || { echo "❌ commit failed."; exit 1; }
 

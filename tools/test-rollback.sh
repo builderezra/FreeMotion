@@ -45,6 +45,10 @@ git remote add ssh "$TMP/fake.git"; git push -q ssh HEAD:main; git fetch -q ssh
 TARGET="$(git log --format='%s' -60 | grep -oE '^v[0-9]+\.[0-9]+' | sed -n '6p')"
 [ -n "$TARGET" ] || { echo "❌ could not find a release to roll back to"; exit 1; }
 BEFORE="$(grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><')"
+# today's index.html and the target's, kept for check 5b (the cache numbers)
+git show HEAD:index.html > "$TMP/idx-before.html"
+T_HASH="$(git log --format='%H %s' | grep -m1 -E "^[0-9a-f]+ $TARGET( |—|$)" | cut -d' ' -f1)"
+git show "$T_HASH:index.html" > "$TMP/idx-target.html" 2>/dev/null
 echo "── rolling $BEFORE back to $TARGET ──"
 ./tools/rollback.sh "$TARGET" -y > "$TMP/out.txt" 2>&1 || bad "rollback.sh exited non-zero: $(tail -2 "$TMP/out.txt")"
 
@@ -76,6 +80,37 @@ REQ="$(grep -o 'at v[0-9][0-9.]*' REQUESTS.md | head -1 | sed 's/^at //')"
                        || bad "POLISH-LOG's newest line is $LOG but the app is $TARGET — ship.sh will refuse to release"
 [ "$REQ" = "$TARGET" ] && ok "REQUESTS.md's stamp is $TARGET (ship.sh's gate passes)" \
                        || bad "REQUESTS.md is stamped $REQ but the app is $TARGET — ship.sh will refuse to release"
+
+# 5b. NO CACHE NUMBER WENT BACKWARDS (bughunt6 #4). The restore put index.html's ?v= numbers back to the target's, lower
+#     than today's for every file changed since. sw.js answers a ?v= address cache-first, and ship.sh bumps a changed file
+#     by one, so the first fix after a rollback to compositor.js?v=238 shipped as ?v=239: an address a release between the
+#     target and today had already published with other code, which a device that last opened the app back then still
+#     holds and is served from its cache, beside the new index.html. rollback.sh now moves every restored number a later
+#     release went past to one above the highest that file has had in any index.html (so above today's).
+#     FAILS BEFORE THE FIX: every file changed between $TARGET and today comes back at $TARGET's lower number (STILL below),
+#     and the output says nothing about cache numbers.
+#     CONTROLS, which hold before and after: with the numbers taken out, index.html is exactly $TARGET's (only numbers
+#     moved), and rolling back to $TARGET a second time is still "already identical", with no new commit.
+vmap() { grep -oE '[A-Za-z0-9_./-]+[?]v=[0-9]+([.][0-9]+)?' "$1" | awk '{ q = index($0, "?v="); p = substr($0, 1, q - 1); if (!(p in s)) { s[p] = 1; print p, substr($0, q + 3) + 0 } }'; }
+vmap "$TMP/idx-before.html" > "$TMP/v-before"; vmap "$TMP/idx-target.html" > "$TMP/v-target"; vmap index.html > "$TMP/v-now"
+VCHK="$(awk -v tgt="$TARGET" 'FILENAME == ARGV[1] { b[$1] = $2; next } FILENAME == ARGV[2] { t[$1] = $2; next }
+  ($1 in t) && ($1 in b) && t[$1] + 0 < b[$1] + 0 { went++; if ($2 + 0 <= b[$1] + 0) print "STILL " $1 " is ?v=" $2 " (today ?v=" b[$1] ", " tgt " ?v=" t[$1] ")" }
+  END { print "WENT " went + 0 }' "$TMP/v-before" "$TMP/v-target" "$TMP/v-now")"
+WENT="$(printf '%s\n' "$VCHK" | sed -n 's/^WENT //p')"
+if [ ! -s "$TMP/v-target" ] || [ "${WENT:-0}" -eq 0 ]; then
+  bad "no cache number went backwards between $BEFORE and $TARGET (or $TARGET's index.html could not be read), so 5b proves nothing"
+elif printf '%s\n' "$VCHK" | grep -q '^STILL '; then
+  bad "the rollback put back cache numbers a later release had already used, so the next ship's +1 lands on an address a device may hold with other code: $(printf '%s\n' "$VCHK" | grep '^STILL ' | head -3 | sed 's/^STILL //' | tr '\n' ';')"
+else ok "all $WENT cache numbers that went backwards were moved above today's"; fi
+grep -q 'cache numbers' "$TMP/out.txt" && ok "it says what it did to the cache numbers" \
+                                       || bad "the rollback's output says nothing about the cache numbers it restored"
+if [ "$(sed -E 's/[?]v=[0-9]+([.][0-9]+)?/?v=/g' index.html)" = "$(sed -E 's/[?]v=[0-9]+([.][0-9]+)?/?v=/g' "$TMP/idx-target.html")" ]; then ok "CONTROL: apart from its cache numbers, index.html is exactly $TARGET's"
+else bad "CONTROL: index.html differs from $TARGET's in more than its cache numbers"; fi
+H5="$(git rev-parse HEAD)"
+./tools/rollback.sh "$TARGET" -y > "$TMP/again.txt" 2>&1
+if [ "$(git rev-parse HEAD)" = "$H5" ] && [ -z "$(git status --porcelain)" ] && grep -q 'already identical' "$TMP/again.txt"; then
+  ok "CONTROL: rolling back to $TARGET a second time is a no-op (already identical, no commit)"
+else bad "CONTROL: rolling back to $TARGET a second time was not a no-op: $(tail -2 "$TMP/again.txt" | tr '\n' ' ')"; fi
 
 # 6. orphan removal still works on an APP file
 echo "// added after the target" > js/rollback-test-orphan.js

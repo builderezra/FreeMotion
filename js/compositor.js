@@ -4357,19 +4357,30 @@ window.FM = window.FM || {};
   }
   /* Where each unit of one line starts, in the visual order: xs[k] is unit k's left edge, the units laid out left to right from x0
      with their own advances `widths` (so the line keeps its width and its left edge). A unit is one item at the lowest level of its
-     characters (a word drawn whole lays itself out inside). null when the line has no right-to-left letter or its order is the
-     typing order, and the caller then lays the units out as it always did. */
+     STRONG characters (letters and digits; a word drawn whole lays itself out inside), or of all its characters when it has none,
+     as a space does. bughunt7 #1: a full stop, comma, quote or bracket at either end of the line resolves to the line's own level
+     (the end of the line counts as left to right), and By Word it sits inside its word, so the lowest of ALL the characters put
+     the last word of a Hebrew sentence ending in a full stop at level 0 and drew the words in typing order. null when the line has
+     no right-to-left letter or its order is the typing order, and the caller then lays the units out as it always did. */
   function bidiUnitXs(line, units, widths, x0) {
     if (units.length < 2 || !BIDI_RTL.test(line)) return null;
-    const gs = graphemes(line), lv = bidiLevels(gs), at = new Uint8Array(line.length);
+    const gs = graphemes(line), lv = bidiLevels(gs), at = new Uint8Array(line.length), strong = new Uint8Array(line.length);
     let off = 0;
-    gs.forEach((g, i) => { at.fill(lv[i], off, Math.min(line.length, off + g.length)); off += g.length; });
+    gs.forEach((g, i) => {
+      const end = Math.min(line.length, off + g.length), c = bidiType(g);
+      at.fill(lv[i], off, end);
+      if (c === 'L' || c === 'R' || c === 'AL' || c === 'EN' || c === 'AN') strong.fill(1, off, end);
+      off += g.length;
+    });
     const ul = [];
     off = 0;
     units.forEach(u => {
-      let m = 255;
-      for (let k = off; k < off + u.length && k < at.length; k++) if (at[k] < m) m = at[k];
-      ul.push(m === 255 ? 0 : m);
+      let m = 255, ms = 255;
+      for (let k = off; k < off + u.length && k < at.length; k++) {
+        if (at[k] < m) m = at[k];
+        if (strong[k] && at[k] < ms) ms = at[k];
+      }
+      ul.push(ms !== 255 ? ms : m === 255 ? 0 : m);
       off += u.length;
     });
     const ord = bidiOrder(ul);

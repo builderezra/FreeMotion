@@ -2306,10 +2306,20 @@ window.FM = window.FM || {};
     } catch (e) { return []; }
   }
   function writeFavs(a) { try { localStorage.setItem(FAV_KEY, JSON.stringify(a)); } catch (e) {} }
+  /* bughunt7 #8 (bughunt6 #15's fault, here): readFavs filters for SHOWING only. The star wrote readFavs' answer back, so starring
+     any sound deleted every favourite this build does not know (after a rollback, or a sound since retired). The star now edits
+     the list as it is STORED: every string kept whatever it names, anything that is not a string dropped. What is drawn is
+     still readFavs', through byId, so a stored 'toString' still never reaches a row. */
+  function readStoredFavs() {
+    try {
+      const a = JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
+      return Array.isArray(a) ? a.filter(id => typeof id === 'string') : [];
+    } catch (e) { return []; }
+  }
   function isFav(id) { return readFavs().indexOf(id) >= 0; }
   function toggleFav(id) {
     if (!byId(id)) return false;
-    const a = readFavs(), i = a.indexOf(id);
+    const a = readStoredFavs(), i = a.indexOf(id);
     if (i >= 0) a.splice(i, 1); else a.push(id);
     writeFavs(a);
     return i < 0;

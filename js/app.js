@@ -4356,6 +4356,11 @@ window.FM = window.FM || {};
      (js/exporter.js mediaBack says why). With nothing re-loading it runs at once, synchronously, exactly as before; while a
      re-load is in flight it toasts "Loading clips…" and renders when the clips are back (or the wait gives up). */
   FM.snapshotPNG = function (opts) {
+    /* 1176 leftover (bughunt7 #2's doors): THE TOOLBAR'S STILL ASKS THE EXPORT GATE'S QUESTION TOO. The export dialog's own This
+       frame (PNG) is refused with the rest of Export, and the camera button beside the transport (#btn-snapshot, Save current
+       frame as PNG) renders the same frame to a file and asked nothing, so a watch-only copy could still be taken away a frame
+       at a time. Refused here with the export notice, before anything is rendered; every caller reaches it through this. */
+    if (exportTurnedOff()) return sayExportTurnedOff();
     const back = (FM.exporter && FM.exporter.mediaBack) ? FM.exporter.mediaBack(FM.scene, s => { if (FM.toast) FM.toast(s, 2500); }) : null;
     if (back) return back.then(() => snapshotNow(opts));
     return snapshotNow(opts);
@@ -4619,6 +4624,11 @@ window.FM = window.FM || {};
   FM.copySelection = function () {
     const ids = FM.selectionIds ? FM.selectionIds() : (FM.scene.selectedId ? [FM.scene.selectedId] : []);
     if (!ids.length) return 0;
+    /* bughunt7 #2 (#1091's doors): a copy whose owner turned exporting off is not copied — the clipboard would carry every clip
+       and its file into a project of his own, where it exports, and a clipboard entry holding a clip's stored file keeps that
+       record on the device through Leave (storage.js heldByAnother). Refused and said in the export gate's words; the
+       clipboard keeps whatever it held. */
+    if (exportTurnedOff()) { sayExportTurnedOff(); return 0; }
     /* ⚠️ queue 914.5: A GROUP BRINGS ITS LAYERS. A group row is only a parent link — its members are not in the
        selection — so copying one snapshotted the empty row and Paste made a "Group copy" with nothing inside it
        (#912 audit). FM.duplicateLayer walks FM.groupDescendants for exactly this reason; paste already remaps
@@ -5064,10 +5074,9 @@ window.FM = window.FM || {};
       if (layer.start + delta < 0) delta = -layer.start;
       if (layer.duration - delta < 0.1) delta = layer.duration - 0.1;
       if (rev) {
-        if (isFinite(srcDur)) {                                // the head is the window END: only duration moves
-          const maxDur = (srcDur - (tr0 || 0)) / sp;
-          if (d0 - delta > maxDur) delta = d0 - maxDur;
-        }
+        /* The head is the window END: only duration moves. How far it may grow is solved on the speed curve (#1107, AU1-2):
+           the flat `(srcDur - trimStart) / sp` used sp = 1 for any ramp and let a ramped clip read past the end of its file. */
+        if (isFinite(srcDur) && FM.revHeadGrowLimit) delta = FM.revHeadGrowLimit(layer, delta, srcDur, tr0);
         layer.start = layer.start + delta;
         layer.duration = layer.duration - delta;
       } else {
@@ -5736,6 +5745,14 @@ window.FM = window.FM || {};
   async function handleFiles(files, opts) {
     // Consumed here, once, for THIS batch — see audioImport in js/addmenu.js.
     const wantAudio = !!FM._wantAudioOnly; FM._wantAudioOnly = false;
+    /* 1176 leftover (bughunt6 #14's first gap): FROM THE PICK TO THE ADD, A NEW BUILD WAITS. The loaders below take seconds (a
+       song is decoded end to end, a GIF frame by frame, Add ▸ Audio takes the sound out of a whole video) and nothing showed
+       busy, so a build landing then reloaded the app and the files he had picked never arrived. FM._importing counts the
+       batches still opening, and index.html's fmSwBusy reads it; once a clip is in the scene, the hold's own awaited save
+       covers its file (fmSwTry saves first whenever the clips changed). The try is not re-indented, so the lines it wraps
+       keep their history. */
+    FM._importing = (FM._importing || 0) + 1;
+    try {
     const pickedIn = FM.startedIn(), notAdded = [];   // queue 690 (hunt 5): see FM.stillIn above
     /* SIMPLE MODE P1 (DESIGN.md §15.1, §5.2 import stacks). Every layer of one pick carries `pick: {b, i}`, so the Simple
        view can tell "four clips picked together" from a stacked take. With `opts.at` (Simple's +) the files are laid END
@@ -5781,6 +5798,7 @@ window.FM = window.FM || {};
         ? 'Not added — you switched projects while “' + (notAdded[0] && notAdded[0].name || 'that file') + '” was opening'
         : 'Not added — you switched projects while ' + notAdded.length + ' files were opening', 5000);
     }
+    } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   }
 
   /* ---------- export ---------- */
@@ -5843,6 +5861,25 @@ window.FM = window.FM || {};
    * call it — so gating it once covers all of them and cannot drift when a fourth route appears.
    * It resolves immediately when nothing is ticked, so an ordinary export is not made slower by a
    * feature that has nothing to say. */
+  /* THE EXPORT GATE'S QUESTION AND ITS NOTICE, in one place (bughunt7 #2). Export asks it, and so does every other door that would
+     take a watch-only copy away: Copy (⌘C and the ⧉ menu's Copy selected, FM.copySelection: the clipboard carries every clip's
+     file into a project of his own), Save audio as WAV (js/audio-tools.js FM.downloadLayerAudio) and, with the copy's own id,
+     Save my version (js/collab-bridge.js saveVersion). True while a live session's role may not export, or the open copy is
+     watch-only by its card (FM.collab.watchOnly, which reads the open project when given no id). */
+  function exportTurnedOff() {
+    const C = FM.collab;
+    if (!C) return false;
+    if (C.active && C.canExport && !C.canExport()) return true;
+    const pid = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null;
+    return !!(C.watchOnly && C.watchOnly(pid));
+  }
+  function sayExportTurnedOff() {
+    if (!FM.ask) return Promise.resolve();
+    return FM.ask({ title: 'Exporting is turned off', ok: 'OK', single: true,
+      message: 'The owner of this project has turned off exporting for viewers and commenters. You can still watch it here — ask them if you need a copy.' });
+  }
+  FM.exportTurnedOff = exportTurnedOff;
+  FM.sayExportTurnedOff = sayExportTurnedOff;
   /* Simple mode 2.7 (SU1 #20, his "2A" 14 Oct): `sx` is Simple's one-tap Export — { fmSimple: true, scale, fps, quality, from, to }, built by
      js/simple-tools.js. It goes through every gate below (pause, the owner's export switch, the notepad, clips still arriving) and then
      straight to runExport with those fixed settings, never the dialog. Every other caller passes nothing, so Full's dialog is today's. */
@@ -5862,11 +5899,7 @@ window.FM = window.FM || {};
        screen recording — and it is said, never silently ignored. One comparison with no session. */
     /* #1091: …and a WATCH-ONLY copy (FM.collab.watchOnly) stays unexportable with no session too — offline, reopened, or
        after the owner ended it — which is what makes “Viewer: can only watch” true. One read of the card when not live. */
-    if (FM.collab && ((FM.collab.active && FM.collab.canExport && !FM.collab.canExport()) || (FM.collab.watchOnly && FM.collab.watchOnly()))) {
-      if (FM.ask) await FM.ask({ title: 'Exporting is turned off', ok: 'OK', single: true,
-        message: 'The owner of this project has turned off exporting for viewers and commenters. You can still watch it here — ask them if you need a copy.' });
-      return;
-    }
+    if (exportTurnedOff()) { await sayExportTurnedOff(); return; }
     if (FM.notepad && FM.notepad.confirmExport) {
       const go = await FM.notepad.confirmExport();
       if (!go) return;
@@ -6234,7 +6267,18 @@ window.FM = window.FM || {};
    * out of OfflineAudioContext as raw samples and WAV needs no codec, which matters because #215
    * established that a browser can simply refuse to encode AAC. An audio export that cannot fail for
    * want of a codec is worth more than a smaller one that sometimes hands you silence. */
+  /* bughunt7 #6: AN AUDIO-ONLY EXPORT COUNTS AS AN EXPORT TO THE UPDATE HOLD. index.html's fmSwBusy (bughunt6 #14) holds a new
+     build's reload while an export runs, and read only FM._exporting and the export overlay or Save card, none of which this
+     path has: a new build landing while Export sound built the mix (minutes on a phone for a long project) saved and reloaded
+     mid-mix, and the export was lost. FM._exportingAudio counts the ones running, from the start of the mix until the file is
+     handed over or the export gives up, and fmSwBusy reads it. Its own flag, not FM._exporting, which the compositor reads as
+     "draw for the encoder". */
   async function runAudioOnlyExport(opts) {
+    FM._exportingAudio = (FM._exportingAudio || 0) + 1;
+    try { return await runAudioOnlyExportNow(opts); }
+    finally { FM._exportingAudio = Math.max(0, (FM._exportingAudio || 1) - 1); }
+  }
+  async function runAudioOnlyExportNow(opts) {
     const wantM4A = opts && opts.m4a !== undefined
       ? !!opts.m4a
       : ((document.getElementById('exp-format') || {}).value) === 'audiom4a';
