@@ -359,11 +359,13 @@ for i, ln in enumerate(open(sys.argv[1], encoding='utf-8'), 1):
     # HIS WORDS BEFORE MY FINDINGS (2 Sep): an audit finding — "(hunt HIGH #n)" in the header — lists
     # after every request in his own words, whatever its number. Same tier the gate in ship.sh uses,
     # from the same function, so the list he reads and the order that ships cannot disagree.
-    rows.append((sys.path.insert(0, 'tools') or __import__('_classify').sort_key(n, suf, __import__('_classify').is_audit(ln)), n, suf, i, re.sub(r'\*\*', '', title)[:70]))
+    rows.append((sys.path.insert(0, 'tools') or __import__('_classify').sort_key(n, suf, __import__('_classify').is_audit(ln), bool(__import__('_classify').TEAM.search(ln))), n, suf, i, re.sub(r'\*\*', '', title)[:70]))
 shown_tier = None
 for key, n, suf, i, title in sorted(rows):
     if key[0] == 2 and shown_tier != 2:
         print('--- audit findings (mine, not his words) — queued behind everything above ---')
+    if key[0] == 3 and shown_tier != 3:
+        print('--- (team) hand-off notes — not his words; they never hold the queue ---')
     shown_tier = key[0]
     print('%s%s\t(line %d)\t%s' % (n, suf, i, title))
 PY
@@ -392,9 +394,9 @@ starts = [i for i, l in enumerate(lines) if re.match(r'^- \[[ x]\] ', l)]
 # verdict into REQUESTS.md for Ezra to read. Two copies of this rule would drift, and a rule living in
 # two places is the most expensive bug shape in this project.
 sys.path.insert(0, 'tools')
-from _classify import classify, BUCKETS, is_audit
+from _classify import classify, BUCKETS, is_audit, is_team, team_conflicts
 buckets = {k: [] for k in BUCKETS}
-audit_tags = []
+audit_tags, team_tags = [], []
 for n, i in enumerate(starts):
     if not lines[i].startswith('- [ ] '): continue
     end = starts[n + 1] if n + 1 < len(starts) else len(lines)
@@ -405,6 +407,7 @@ for n, i in enumerate(starts):
     key = classify(body)
     buckets[key].append((tag, title, i + 1))
     if is_audit(body): audit_tags.append(tag)        # my findings list after his words (2 Sep)
+    if is_team(body): team_tags.append(tag)          # hand-off notes after both (20 Oct)
 for k in ('ACTIONABLE', 'blocked on Ezra', 'built out — waiting on him', 'waiting on the logging chat', 'held by Ezra', 'needs its own session', 'standing note (no build)', 'only long-term ideas left'):
     print('%-28s %d' % (k + ':', len(buckets[k])))
 # BUILT OUT, LISTED — NEVER HIDDEN (2 Sep). These are older than everything in the work queue below and
@@ -427,7 +430,11 @@ if lp:
 # #129, #148 and #202 were all open and unreachable. His instruction is that a question NEVER stops the
 # loop: write it in the entry, build the half that does not depend on it, move on. So blocked is work.
 from _classify import work_queue
-wq = work_queue(buckets, audit_tags)
+wq = work_queue(buckets, audit_tags, team_tags)
+# A (team) tag the classifier IGNORES, because the entry records his words or his answers — say so, or the tagger
+# believes the note left the queue when it did not (20 Oct).
+for h in team_conflicts('\n'.join(lines)):
+    print('!! (team) IGNORED — this entry records his words or his answers, so it stays his: ' + h)
 if wq:
     print('\nSTART HERE (oldest first) — but READ THE CODE BEFORE YOU BUILD:')
     print('  On 20 Aug THREE open entries turned out to be already done — 395 (audio export shipped')

@@ -266,7 +266,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.82</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.83</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1146,7 +1146,7 @@
   <script src="js/settings.js?v=55"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
-  <script src="js/collab-core.js?v=47"></script>
+  <script src="js/collab-core.js?v=48"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=129"></script>
   <script src="js/spine-words.js?v=13"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
@@ -1195,13 +1195,13 @@
   <script src="js/audio-fx-live.js?v=17"></script>
   <script src="js/audio-fx-browser.js?v=16"></script>
   <script src="js/history.js?v=43"></script>
-  <script src="js/storage.js?v=73"></script>
+  <script src="js/storage.js?v=74"></script>
   <script src="js/export-resume.js?v=10"></script>
   <script src="js/medialib.js?v=8"></script>
   <script src="js/template-fill.js?v=4"></script>
   <script src="js/home-arrow.js?v=5"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
   <script src="js/tutorials.js?v=1"></script>   <!-- #1082: the lessons in Home's Tutorials tab -->
-  <script src="js/home.js?v=205"></script>
+  <script src="js/home.js?v=206"></script>
   <script src="js/graph-editor.js?v=19"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
@@ -1214,7 +1214,7 @@
   <script src="js/captions.js?v=64"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=6"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=491"></script>
+  <script src="js/app.js?v=492"></script>
   <script src="js/audio-tools.js?v=11"></script>
   <script src="js/noise-reduction.js?v=2"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->
@@ -1244,12 +1244,12 @@
        All three are inert until something hands a session a link, which in S2 only the test rig does. -->
   <script src="js/collab-signal.js?v=5"></script>
   <script src="js/collab-link.js?v=9"></script>
-  <script src="js/collab-session.js?v=19"></script>
-  <script src="js/collab-bridge.js?v=15"></script>
+  <script src="js/collab-session.js?v=20"></script>
+  <script src="js/collab-bridge.js?v=16"></script>
   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
        resume parts under `collab:`, fonts, and the two honest answers (out of room, still arriving).
        A library like the rest: it does nothing at all until a session installs a controller on it. -->
-  <script src="js/collab-media.js?v=5"></script>
+  <script src="js/collab-media.js?v=6"></script>
   <!-- queue 921 stage S3 — the first real connection and the only collaboration UI there is. Both are
        libraries too: `signal` is the minimal-SDP codec and the auth handshake (no rendezvous driver, no
        invite link — those are S6), and `ui` builds nothing at all until Settings → Labs → Live
@@ -1258,7 +1258,7 @@
   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
   <script src="js/collab-qr.js?v=3"></script>
-  <script src="js/collab-ui.js?v=21"></script>
+  <script src="js/collab-ui.js?v=22"></script>
   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
        there is no presence DOM, no listener and no timer. -->

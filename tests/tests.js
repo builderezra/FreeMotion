@@ -31010,6 +31010,10 @@
          ran), and `leaving` answers whether a Leave is still copying — both read state; neither does anything
          with no session. */
       'runPendingReload', 'leaving',
+      /* #1091: `watchOnly` answers whether a copy is a Viewer's or Commenter's with exporting off (it reads the session or
+         the project list, and is false with no shared copy open); `dropCopy` is the delete Leave of such a copy runs. Both
+         do nothing until something asks. */
+      'watchOnly', 'dropCopy',
       /* Simple mode P2 (queue 980): the live gate's one predicate and the linked-copy test it uses — answers, not state;
          with no session they read the project list only and change nothing. Full never calls them. */
       'isLinkedCopy', 'othersCanEdit',
@@ -168956,5 +168960,340 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
   // ── end bughunt 6 ──
+
+  /* ═══ #1093 (hunt HIGH): A HUGE PICTURE FROM A FRIEND IS REFUSED, NOT DECODED ═══════════════════════════════════
+     A still picture a peer sent was written to IndexedDB and decoded whatever its size (only GIFs were capped, at 64 MP),
+     so one admitted Editor could freeze every phone in the room with a small file, again on every reopen. Decided: over
+     50 MP (collab-media.js LIMITS.IMAGE_PX) it is refused before it is kept, read from the file's own header.
+     FAILS BEFORE THE FIX: writeRecord stores the 100 MP file under its layer (FM.storage.writeMedia is called with that
+     layer id) and hands it to FM.loadImageFile, nothing marks it bad, and nobody is told.
+     CONTROL, which holds before and after: a real 4000 × 3000 picture in the same session is stored and decoded. */
+  function png1093(w, h, name) {
+    /* The PNG signature and an IHDR claiming w × h: exactly what a decoder reads first, and nothing it could draw. A real
+       100 MP picture cannot be made in a test without spending the very memory the cap is there to protect. */
+    const b = new Uint8Array(33);
+    b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+    const dv = new DataView(b.buffer);
+    dv.setUint32(16, w);
+    dv.setUint32(20, h);
+    b[24] = 8; b[25] = 2;
+    return new File([b], name, { type: 'image/png', lastModified: 1600000109300 });
+  }
+  async function realPng1093(w, h, name) {
+    const c = offscreen(w, h);
+    const g = c.getContext('2d');
+    g.fillStyle = 'rgb(40, 200, 90)';
+    g.fillRect(0, 0, w, h);
+    const blob = await new Promise(function (res) { c.toBlob(res, 'image/png'); });
+    c.width = 1; c.height = 1;
+    return new File([blob], name, { type: 'image/png', lastModified: 1600000109301 });
+  }
+  test('1093 Work with friends: a huge image from a friend is refused, not decoded: a picture whose header says 10000 × 10000 (100 MP, over the 50 MP cap) arrives whole and is neither stored on this device nor handed to the image decoder, it is not asked for again, and the person is told it was too big (CONTROL: a real 4000 × 3000 picture from the same friend in the same session is stored and decoded at its size)', { item: '1093', budgetMs: 180000 }, async function () {
+    const C = need921S4('the pixel cap on a friend’s picture');
+    const fine = await realPng1093(4000, 3000, 'fine1093.png');
+    const huge = png1093(10000, 10000, 'huge1093.png');
+    await withCollabGuest921([mediaLayer921('Huge 1093', 'image'), mediaLayer921('Fine 1093', 'image')], async function (c) {
+      const realLoad = FM.loadImageFile, realWrite = FM.storage.writeMedia, realToast = FM.toast;
+      const decoded = [], stored = [], toasts = [];
+      FM.loadImageFile = function (file) { decoded.push(file && file.name); return realLoad.apply(this, arguments); };
+      FM.storage.writeMedia = function (id) { stored.push(id); return realWrite.apply(this, arguments); };
+      FM.toast = function (m) { toasts.push(String(m)); return realToast.apply(this, arguments); };
+      try {
+        const fHuge = c.peer.add(huge, 'image', [[c.ids[0], 0]]);
+        const fFine = c.peer.add(fine, 'image', [[c.ids[1], 0]]);
+        c.peer.announce('mf');
+        await until921('both pictures to arrive and be dealt with', async function () {
+          return (c.ctl.have[fFine] && (c.ctl.have[fHuge] || c.ctl.bad[fHuge]) && !C.media.pending(c.G).n) ? 1 : null;
+        }, 120000);
+        const bad = [];
+        /* CONTROL first: the ordinary picture is kept and decoded, so what happens to the big one is about its size. */
+        const fr = await FM.storage.readMedia(c.ids[1]);
+        if (!fr || !fr.file || fr.file.size !== fine.size) bad.push('CONTROL: the 4000 × 3000 picture from the friend is not stored on this device (' + (fr && fr.file ? fr.file.size + ' bytes' : 'no record') + ' against ' + fine.size + ')');
+        if (decoded.indexOf('fine1093.png') < 0) bad.push('CONTROL: the 4000 × 3000 picture was never handed to the image decoder (decoded: ' + JSON.stringify(decoded) + ')');
+        const fm = FM.media.get(c.ids[1]);
+        if (!fm || fm.width !== 4000 || fm.height !== 3000) bad.push('CONTROL: the 4000 × 3000 picture is in the media registry as ' + (fm ? fm.width + ' × ' + fm.height : 'nothing'));
+        /* The 100 MP one. */
+        if (stored.indexOf(c.ids[0]) >= 0) bad.push('the 10000 × 10000 picture was written to this device’s media store under its layer, where it would decode again every time the project opens');
+        const hr = await FM.storage.readMedia(c.ids[0]);
+        if (hr && hr.file) bad.push('the 10000 × 10000 picture is on this device’s disk (' + hr.file.size + ' bytes)');
+        if (decoded.indexOf('huge1093.png') >= 0) bad.push('the 10000 × 10000 picture was handed to the image decoder (FM.loadImageFile) — 400 MB of pixels on a phone');
+        if (FM.media.get(c.ids[0])) bad.push('the 10000 × 10000 picture is in the media registry');
+        if (!c.ctl.bad[fHuge]) bad.push('the 10000 × 10000 picture is not marked as one this device will not ask for again');
+        if (!toasts.some(function (t) { return /too big/i.test(t) && /10000/.test(t); })) bad.push('nobody was told the friend’s picture was too big: the toasts were ' + JSON.stringify(toasts));
+        /* …and it is not asked for again: three more sweeps, and the friend is sent no second want for it. */
+        const asked = c.peer.wants.filter(function (w) { return w.fid === fHuge; }).length;
+        for (let i = 0; i < 3; i++) { await C.media._reconcile(c.G); await settle921(120); }
+        const again = c.peer.wants.filter(function (w) { return w.fid === fHuge; }).length;
+        if (asked < 1) bad.push('CONTROL: the big picture was never asked for, so its refusal was never reached (wants ' + JSON.stringify(c.peer.wants) + ')');
+        if (again !== asked) bad.push('the refused picture was asked for again ' + (again - asked) + ' time(s) after it was refused');
+        if (bad.length) throw new Error(bad.join(' · '));
+      } finally {
+        FM.loadImageFile = realLoad;
+        FM.storage.writeMedia = realWrite;
+        FM.toast = realToast;
+      }
+    });
+  });
+
+  /* ═══ #1092 (hunt HIGH): THE INVITE SAYS WHAT JOINING REVEALS ═══════════════════════════════════════════════════════
+     The owner's device answers a joiner's offer and completes the connection BEFORE the knock card asks him, so whoever
+     holds the link or short code learns his internet address just by trying — even if he then turns them away. The list
+     behind “What gets sent? ›” said they could see “the internet address of each device that joins”: the wrong device,
+     and silent about the refused case. Decided: correct the words (answering only after approval would break one-tap links).
+     FAILS BEFORE THE FIX: the line reads “…the internet address of each device that joins.”
+     CONTROL, which holds before and after: the plain sentence and the other four lines of the list are exactly as they were. */
+  test('1092 Work with friends: the invite says what joining reveals: the privacy list behind What gets sent says anyone with the link or short code sees YOUR internet address just by trying to join, even if you do not let them in, and no longer says it is each joining device’s (CONTROL: the plain sentence and the other four lines are unchanged)', { item: '1092' }, function () {
+    const ui = FM.collab && FM.collab.ui;
+    if (!ui || typeof ui.privacyBlock !== 'function') throw new Error('setup: FM.collab.ui.privacyBlock (the block every Share screen and Settings show) is not reachable');
+    const box = ui.privacyBlock();
+    const plain = box.querySelector('.cs-privplain');
+    const lines = Array.prototype.map.call(box.querySelectorAll('.cs-privfull li'), function (li) { return li.textContent; });
+    const bad = [];
+    const PLAIN = 'Your project goes straight from phone to phone, encrypted. A few free online helpers let the phones find each other — they see your internet address, never your project.';
+    if (!plain || plain.textContent !== PLAIN) bad.push('CONTROL: the plain sentence changed: “' + (plain && plain.textContent) + '”');
+    [
+      'Your project — every edit and every clip — goes straight between the devices, encrypted. The helpers below never see your project.',
+      'To find each other, the devices use free public services: PeerJS, EMQX and HiveMQ pass the first hello between them, and Google and Cloudflare tell each device its internet address.',
+      'Those services see your internet address and when a project is being shared — and so can anyone watching those services.',
+      'Swap codes only skips them all: links and short codes stop working, and you swap codes with each person instead.'
+    ].forEach(function (t) { if (lines.indexOf(t) < 0) bad.push('CONTROL: the list no longer says “' + t + '”'); });
+    if (lines.length !== 5) bad.push('CONTROL: the list has ' + lines.length + ' lines, not 5: ' + JSON.stringify(lines));
+    const line = lines.filter(function (t) { return /link or short code/.test(t); })[0];
+    if (!line) bad.push('the list has no line about whoever holds the link or short code: ' + JSON.stringify(lines));
+    else {
+      if (/each device that joins/i.test(line)) bad.push('it still says “' + line + '” — whoever holds the link learns the OWNER’s address, not each joiner’s');
+      if (!/your internet address/i.test(line)) bad.push('“' + line + '” does not say it is YOUR internet address');
+      if (!/try(ing)? to join/i.test(line)) bad.push('“' + line + '” does not say that trying to join is enough');
+      if (!/even if you don.t let them in/i.test(line)) bad.push('“' + line + '” does not say that turning them away does not stop it');
+    }
+    if (/\brelays?\b/i.test(lines.join(' '))) bad.push('CONTROL: the list says “relay” (967 B4: they are named for what they do)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #1091 (hunt HIGH): “VIEWER — CAN ONLY WATCH” IS TRUE ═════════════════════════════════════════════════════════
+     With “Viewers and commenters can export” off, a Viewer could still tap Leave → “Leave (keep my copy)” and walk away
+     with the whole project and every clip as a project of their own — and with no session (offline, reopened, ended) the
+     export gate did not apply at all. Decided 11 Oct: make “only watch” true (FM.collab.watchOnly, every door).
+     FAILS BEFORE THE FIX: the card never records the export switch; the Leave card offers “Leave (keep my copy)”; after
+     Leave a new project named like the shared one is on the device; a watch-only copy with no session opens the export
+     dialog, saves a project file and duplicates.
+     CONTROLS, which hold before and after: with exporting off a live Viewer's Export is refused (the old in-session gate);
+     with exporting on the same Viewer's Leave keeps the copy as their own; an allowed copy with no session exports. */
+  test('1091 Work with friends: a viewer can only watch: with exporting off a Viewer’s Export is refused, the copy’s card remembers it, Leave offers no copy and afterwards the shared project, its clip and its card are gone from the device with nothing of it kept as theirs, and a watch-only copy with no session cannot be exported, saved as a project file or duplicated (CONTROLS: with exporting on the same Viewer’s Leave keeps the copy as their own, and an allowed copy with no session exports)', { item: '1091', budgetMs: 180000 }, async function () {
+    const C = need921S7('a Viewer who can only watch');
+    const exp = document.getElementById('export-dialog');
+    const bad = [];
+    function closeExport() {
+      const a = document.getElementById('fm-ask'); if (a && !a.classList.contains('hidden')) { const x = a.querySelector('.fm-ask-ok'); if (x) x.click(); }
+      exp.classList.add('hidden');
+      const o = document.getElementById('export-overlay'); if (o) o.classList.add('hidden');
+    }
+    /* true: the export dialog opened; false: the notice said exporting is off and nothing opened. */
+    async function exportOpens() {
+      const p = FM.showExportDialog();
+      const got = await until921S6('the export dialog or its notice', function () {
+        const q = ask967b3();
+        if (q && /Exporting is turned off/.test(q.title + ' ' + q.msg)) return { notice: q };
+        return exp.classList.contains('hidden') ? null : { open: true };
+      }, 4000);
+      if (got.notice) { got.notice.ok.click(); await p; await settle921(60); return !exp.classList.contains('hidden'); }
+      await p; await settle921(60); closeExport();
+      return true;
+    }
+    const cardOf1091 = function (pid) { return FM.projects.list().filter(function (p) { return p.id === pid; })[0] || null; };
+    const made = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    /* A Viewer's linked copy, opened, with one picture stored under its layer the way the transfer writes it. */
+    async function viewerCopy(tag) {
+      const D = { project: { name: 'Ezra’s film 1091 ' + tag, width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(mediaLayer921('Watch 1091 ' + tag, 'image'))] };
+      const gpid = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'viewer', epoch: 'e-1091', seq: 0, name: 'Sam' }, D);
+      if (!gpid) throw new Error('setup: could not make the shared copy');
+      made.push(gpid);
+      await FM.projects.open(gpid);
+      const lid = FM.scene.layers[0].id;
+      await q921give(lid, await q921png([30, 200, 30], 'watch1091' + tag + '.png'), 'image', 0);
+      return { gpid: gpid, lid: lid, name: D.project.name };
+    }
+    /* …in a live session with an owner whose export switch is `roExport`, as 967 B5 7 rigs it. */
+    function attachViewer(v, roExport) {
+      const hdoc = jclone921({ project: C._viewOfProject(FM.scene.project), layers: FM.scene.layers });
+      const inv = C.bridge.invariants();
+      const H = C.Host({ base: jclone921(hdoc), invariants: inv, ownerInfo: { name: 'Ezra', color: '#ff9f43' } });
+      const HS = C.Session({ adapter: plainAdapter921(hdoc, inv), role: 'owner', mid: 'o', host: H });
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+      const mid = HS.addPeer(loop.a, { role: 'viewer', name: 'Sam', color: '#a3e635' });
+      const G = C.Session({ adapter: C.bridge, role: 'viewer', mid: mid, base: jclone921(hdoc), epoch: H.epoch });
+      G.gpid = v.gpid; G.pid = v.gpid; G.hostName = 'Ezra';
+      G.setLink(loop.b); G.bs = H.seq;
+      C.attach(G, { autoTick: false });
+      HS.setRoomSettings({ roExport: roExport, editorsInvite: false, max: 8 });
+      loop.settle();
+      if (!G.roomSettings || G.roomSettings.roExport !== roExport) throw new Error('setup: the owner’s export switch (' + roExport + ') did not reach the Viewer: ' + JSON.stringify(G.roomSettings));
+      return G;
+    }
+    async function openLeave(ui) {
+      await ui.share(); await settle921(150);
+      const leave = document.querySelector('#collab-share .cs-foot .cs-stop');
+      if (!leave) throw new Error('setup: the Viewer’s panel has no Leave');
+      leave.click();
+      return until921S6('the Leave card', ask967b3, 3000);
+    }
+    const storedNamed = function (name) {
+      const out = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || k.indexOf('fm.proj.') !== 0) continue;
+        let d = null;
+        try { d = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { d = null; }
+        if (d && d.project && d.project.name === name) out.push(k);
+      }
+      return out;
+    };
+    const ownURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    await withLabs921(async function (ui) {
+      try {
+        if (wasHome) FM.home.close();
+
+        /* 1. A LIVE Viewer, exporting off. */
+        const v = await viewerCopy('off');
+        attachViewer(v, false);
+        await settle921(80);
+        const cx = (cardOf1091(v.gpid) || {}).collab || {};
+        if (cx.role !== 'viewer' || cx.roExport !== false) bad.push('the copy’s card did not remember what the owner said (role ' + cx.role + ', roExport ' + cx.roExport + ') — with no session there would be nothing to ask');
+        if (await exportOpens()) bad.push('CONTROL: with exporting off a live Viewer’s Export opened the export dialog');
+        const before = FM.projects.list().map(function (p) { return p.id; });
+        const q = await openLeave(ui);
+        if (/keep/i.test(q.ok.textContent) || /copy stays/i.test(q.msg)) bad.push('with exporting off the Leave card still offers to keep a copy: “' + q.msg + '” [' + q.ok.textContent + ']');
+        q.ok.click();
+        await until921S6('the session to stand down and the shared copy to go', function () { return !C.session && !cardOf1091(v.gpid) ? 1 : null; }, 15000);
+        await settle921(400);
+        const fresh = FM.projects.list().filter(function (p) { return before.indexOf(p.id) < 0; });
+        fresh.forEach(function (p) { made.push(p.id); });
+        if (fresh.length) bad.push('after Leave with exporting off this device has ' + fresh.length + ' new project(s) ' + JSON.stringify(fresh.map(function (p) { return p.name; })) + ' — the watched project kept as theirs');
+        const named = storedNamed(v.name);
+        if (named.length) bad.push('after Leave a stored project still holds the watched “' + v.name + '” (' + named.join(', ') + ')');
+        const rec = await FM.storage.readMedia(v.lid);
+        if (rec && rec.file) bad.push('after Leave the shared clip is still stored on this device under its layer');
+
+        /* 2. CONTROL: the same Viewer with exporting ON keeps the copy as their own, as before. */
+        const w = await viewerCopy('on');
+        attachViewer(w, true);
+        await settle921(80);
+        if (!(await exportOpens())) bad.push('CONTROL: with exporting on a live Viewer could not export');
+        const before2 = FM.projects.list().map(function (p) { return p.id; });
+        const q2 = await openLeave(ui);
+        if (!/keep/i.test(q2.ok.textContent)) bad.push('CONTROL: with exporting on the Leave card no longer offers to keep the copy [' + q2.ok.textContent + ']');
+        q2.ok.click();
+        const nid = await until921S6('the allowed copy to become their own', function () {
+          const id = FM.projects.currentId();
+          return id && id !== w.gpid && !cardOf1091(w.gpid) && before2.indexOf(id) < 0 ? id : null;
+        }, 15000);
+        made.push(nid);
+        await settle921(300);
+
+        /* 3. A watch-only copy with NO session — offline, or reopened — as its card says after case 1. */
+        const x = await viewerCopy('nosession');
+        FM.projects.patchCollab(x.gpid, { roExport: false });
+        await settle921(80);
+        if (C.session) throw new Error('setup: a session is attached to the copy that is meant to have none');
+        if (await exportOpens()) bad.push('a watch-only copy with no session opened the export dialog');
+        let blobs = 0;
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: function (b) { if (b && b.type === 'application/json') blobs++; return ownURL.value.apply(URL, arguments); } });
+        Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+        try {
+          await FM.storage.exportFile();
+          await settle921(60);
+          const n1 = ask967b3(); if (n1) n1.ok.click();
+          if (blobs) bad.push('a watch-only copy with no session was saved as a project file');
+          const b1 = blobs;
+          await FM.storage.exportProjectFile(x.gpid);
+          await settle921(60);
+          const n2 = ask967b3(); if (n2) n2.ok.click();
+          if (blobs !== b1) bad.push('a watch-only copy with no session was saved as a project file from Home’s Save project file');
+        } finally {
+          Object.defineProperty(URL, 'createObjectURL', ownURL);
+          if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+          else delete HTMLAnchorElement.prototype.click;
+        }
+        const before3 = FM.projects.list().map(function (p) { return p.id; });
+        const dup = await FM.projects.duplicate(x.gpid);
+        const dups = FM.projects.list().filter(function (p) { return before3.indexOf(p.id) < 0; });
+        dups.forEach(function (p) { made.push(p.id); });
+        if (dup || dups.length) bad.push('a watch-only copy with no session was duplicated into ' + JSON.stringify(dups.map(function (p) { return p.name; })));
+        /* CONTROL: the same copy with exporting allowed exports — so the refusals above are about the switch. */
+        FM.projects.patchCollab(x.gpid, { roExport: true });
+        if (!(await exportOpens())) bad.push('CONTROL: a Viewer’s copy with exporting allowed and no session could not export');
+      } finally {
+        closeExport();
+        const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+        try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+        try { ui.close(); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #1090 (hunt HIGH): THE SHARE SCREEN SAYS EVERYONE WHO JOINS SEES THE NOTES ═══════════════════════════════════
+     `project.notes` — the Notes pad and its reminders — travels to every guest, Viewers included, and nothing on the Share
+     screens said so. Decided 20 Oct from his own words (#987, 29 Sep: “there should be a colour indicator based on who
+     left the note”): notes are what the people in a shared edit leave each other, so they keep travelling and the screen
+     says so, under the role a newcomer gets. (The 11 Oct owner-only call would have undone #987.)
+     FAILS BEFORE THE FIX: the “New people join as” row says nothing about notes.
+     CONTROL, which holds before and after: the owner's note and ticked reminder reach a Viewer who is in and an Editor
+     who joins after, and the copy a guest starts from holds them — #987's author faces need them there. */
+  test('1090 Work with friends: the Share screen says everyone who joins sees the notes: on a 390 phone the New people join as row says plainly that everyone who joins, Viewers too, sees the project’s notes and reminders, inside the screen (CONTROL: the owner’s note and ticked reminder still reach a Viewer, an Editor who joins after and the copy a guest starts from, so #987 keeps working)', { item: '1090', budgetMs: 120000 }, async function () {
+    need921S7('who sees the notes');
+    const NOTE = 'Client pays 4k 1090 shared', REMIND = 'Invoice before export 1090';
+    const bad = [];
+    await withLabs921(async function () {
+      await with945(async function () {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const wasNotes = FM.scene.project.notes;
+          const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+          try {
+            /* CONTROL first: the notes travel, exactly as before. */
+            const V = rawWire921(ctx, 'viewer', 'Vee');
+            V.say({ t: 'hello', role: 'viewer', name: 'Vee', have: { epoch: null, seq: 0 } });
+            FM.scene.project.notes = [{ id: 'n1090a', text: NOTE, remind: false }, { id: 'n1090b', text: REMIND, remind: true }];
+            ctx.S.tick('full');
+            V.loop.settle();
+            const E = rawWire921(ctx, 'editor', 'Ed');
+            E.say({ t: 'hello', role: 'editor', name: 'Ed', have: { epoch: null, seq: 0 } });
+            [['the Viewer', V], ['the Editor who joined after', E]].forEach(function (pair) {
+              const s = JSON.stringify(pair[1].got);
+              if (s.indexOf(NOTE) < 0 || s.indexOf(REMIND) < 0) bad.push('CONTROL: ' + pair[0] + ' was not sent the owner’s note and reminder (' + pair[1].got.length + ' messages), so the line would not be true');
+            });
+            const g = ctx.addGuest({ role: 'editor', name: 'Gee' });
+            if (JSON.stringify(g.doc.project.notes || null).indexOf(NOTE) < 0) bad.push('CONTROL: the copy a guest starts from holds no notes: ' + JSON.stringify(g.doc.project.notes));
+            /* The words, on the screen the role is picked on. */
+            if (wasHome) FM.home.close();
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              const row = fr.querySelector('.cs-joinrow');
+              if (!row || !row.querySelector('.cs-joinas')) throw new Error('setup: the Friends block has no “New people join as” row');
+              const hint = row.querySelector('.cs-rowhint');
+              const t = hint ? hint.textContent : '';
+              if (!/notes/i.test(t)) bad.push('the “New people join as” row says nothing about notes' + (t ? ': “' + t + '”' : ''));
+              else {
+                if (!/viewers/i.test(t)) bad.push('“' + t + '” does not say Viewers see them too');
+                if (!/reminders/i.test(t)) bad.push('“' + t + '” does not say the reminders go too');
+                if (!/everyone/i.test(t)) bad.push('“' + t + '” does not say everyone who joins sees them');
+                const r = hint.getBoundingClientRect();
+                if (!(r.height > 0) || r.left < 0 || r.right > window.innerWidth + 0.5) bad.push('the line is not inside the screen at ' + window.innerWidth + ' px (' + Math.round(r.left) + '–' + Math.round(r.right) + ', ' + Math.round(r.height) + ' px tall)');
+              }
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          } finally {
+            FM.scene.project.notes = wasNotes;
+            if (wasHome && !FM.home.isOpen()) FM.home.open();
+          }
+        });
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 
 })();

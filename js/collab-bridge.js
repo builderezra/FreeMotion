@@ -270,7 +270,11 @@ window.FM = window.FM || {};
       /* #967 B3 review: `switched` — the owner opened another project, and this device joined with a long code, which
          nothing brings back: what ended, and what to ask for (collab-ui.js U.beforePause). */
       const owner = (C.session && typeof C.session.hostName === 'string' && C.session.hostName) || 'The owner';
-      if (FM.toast) FM.toast(why === 'removed'
+      /* #1091: a watch-only copy is not kept (FM.collab.watchOnly — the next open or Leave deletes it), so it is not "yours". */
+      const watched = !!(C.watchOnly && C.watchOnly(C.session && C.session.gpid));
+      if (FM.toast) FM.toast(watched
+        ? (why === 'removed' ? 'You were removed from the project' : why === 'switched' ? owner + ' opened another project' : owner + ' stopped sharing') + ' — it was shared with you to watch only, so no copy is kept'
+        : why === 'removed'
         ? 'You were removed from the project — your copy stays on this device'
         : why === 'switched' ? owner + ' opened another project — ask them for a new swap code to join again. Your copy stays on this device'
         : owner + ' stopped sharing — your copy stays on this device', 4200);   // #967 B4: no "session"

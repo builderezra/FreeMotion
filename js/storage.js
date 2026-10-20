@@ -1994,7 +1994,17 @@ window.FM = window.FM || {};
      only what has DECODED: a clip still loading, or one whose decode failed, has no entry there while its file sits
      on this device — and 2e5e0cf0's warning then told him it was "no longer stored on this device", about a file that
      is. Read the store as exportProjectFile does before naming anything as gone. */
+  /* #1091: a WATCH-ONLY copy's project file is not saved (FM.collab.watchOnly) — and that is said, never skipped quietly.
+     True when it was refused. */
+  function watchOnlyRefusal(pid) {
+    if (!(FM.collab && FM.collab.watchOnly && FM.collab.watchOnly(pid))) return false;
+    if (FM.ask) {
+      try { FM.ask({ title: 'Exporting is turned off', ok: 'OK', single: true, message: 'The owner of this project has turned off exporting for viewers and commenters, so its project file can’t be saved on this device. You can still watch it here.' }); } catch (e) {}
+    }
+    return true;
+  }
   FM.storage.exportFile = async function () {
+    if (watchOnlyRefusal(null)) return false;
     let db = null;
     try {
       saveProjectFile(await serializeWith(FM.scene, async function (layerId) {
@@ -2016,6 +2026,7 @@ window.FM = window.FM || {};
    * saving would have written. The CARD's name wins, as in the backup: it is the name he chose it by.
    * Resolves false when the project is no longer on this device. */
   FM.storage.exportProjectFile = async function (projectId) {
+    if (watchOnlyRefusal(projectId || null)) return true;     // #1091: refused and said — the project IS on this device
     if (!projectId || projectId === tabId()) {   // the open one: its live scene is the truth — with anything Home released put back first (queue 385)
       await hydrateSceneMedia({ onlyMissing: true });
       await FM.storage.exportFile();
@@ -2925,6 +2936,11 @@ window.FM = window.FM || {};
     async duplicateFrom(doc, opts) {
       opts = opts || {};
       if (!doc || !doc.project) return null;
+      /* #1091: a WATCH-ONLY copy (a Viewer's or Commenter's while the owner has exporting off) is nobody's to copy. This
+         is the one copier — Duplicate, the bulk Duplicate and detachLinked all come here — so it refuses here, and a door
+         nobody remembered still cannot make the copy his own. */
+      const watched = (opts.srcIds || [])[0];
+      if (watched && FM.collab && FM.collab.watchOnly && FM.collab.watchOnly(watched)) return null;
       doc = JSON.parse(JSON.stringify(doc));
       const src = (opts.srcIds || []).map(sid => this.list().find(p => p.id === sid)).filter(Boolean)[0] || {};
       const id = (opts.srcIds || [])[0] || null;   // the thumbnail's source, when there is one
@@ -3033,6 +3049,10 @@ window.FM = window.FM || {};
       const e = idx.find(p => p.id === id);
       if (!e || !e.collab || !patch) return false;
       ['ended', 'seen'].forEach(k => { if (k in patch) e.collab[k] = patch[k]; });
+      /* #1091: this device's role in the room and the owner's export switch as last heard, so a watch-only copy stays
+         watch-only with no session (FM.collab.watchOnly). Only the three roles, and only a boolean. */
+      if (patch.role === 'editor' || patch.role === 'commenter' || patch.role === 'viewer') e.collab.role = patch.role;
+      if (typeof patch.roExport === 'boolean') e.collab.roExport = patch.roExport;
       return this.saveIndex(idx);
     },
     /* §12.3: the linked copy stops being linked and becomes HIS. New project id, NEW LAYER IDS (that is
@@ -3317,6 +3337,9 @@ window.FM = window.FM || {};
   }
   async function packFromProject(projectId, wantProject) {
     const id = projectId || curId();
+    /* #1091: a watch-only copy is never packed — not into a template, an element or a backup (each caller already says
+       when there is nothing to pack, and the backup names it as not included). */
+    if (FM.collab && FM.collab.watchOnly && FM.collab.watchOnly(id)) return null;
     if (id === curId()) FM.storage.flushSync();     // the doc on disk must be what he just saw
     const doc = readJSON('fm.proj.' + id, null); if (!doc) return null;
     /* ⚠️ AN EMPTY LAYER LIST IS NOT THE PACKER'S BUSINESS, and assuming it was broke template saving

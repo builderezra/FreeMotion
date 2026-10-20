@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 20 Oct at v17.82
+> ## 📌 WHAT I NEED FROM YOU — updated 20 Oct at v17.83
 >
-> **State:** v17.82 — **eleven fixes from a sixth bug hunt** (#1176): an update waits until you finish an export or a recording before it reloads; shortcuts work on a Russian keyboard; the installed app opens offline within seconds on a bad connection; an MP4 too big to make offers a size that works; undo works after touching a slider; and six smaller ones. Nothing to do on your side.
+> **State:** v17.83 — **Work with friends says what a guest really gets** (#1090–#1093): a watch-only copy cannot be exported, saved or kept; the invite says everyone who joins sees the notes; the privacy list says trying to join shows your address; a friend's huge picture is refused. Nothing to do on your side.
+>
+> v17.82 — **eleven fixes from a sixth bug hunt** (#1176): an update waits until you finish an export or a recording before it reloads; shortcuts work on a Russian keyboard; the installed app opens offline within seconds on a bad connection; an MP4 too big to make offers a size that works; undo works after touching a slider; and six smaller ones. Nothing to do on your side.
 >
 > v17.81 — **the offline copy stops hoarding old versions** (#1176): your phone has been keeping every version of the app it ever opened beside your projects, roughly 0.2–0.4 GB; the first launch after this update clears it and the app reloads once. Plus three small fixes and a sturdier test suite. Nothing to do on your side.
 >
@@ -36169,20 +36171,24 @@ re-opened #480, which I had marked done and had not fixed.
       > - No DENY change, no SCHEMA_REV 28 and no fingerprint re-pin. Drop ba3f395a's DENY change.
       > - It ships in v17.83 with #1091, #1092, #1093 and the `(team)` rule, red-first: a test that the Share screen states it, and that notes still reach a guest, so #987 keeps working.
       > - He can overrule: if he ever wants private notes, that is a new option (a "private note" switch), not a reversal of #987.
+      📍 **v17.83 (20 Oct): SHIPPED** — notes keep travelling (#987); the New people join as row says everyone who joins, Viewers too, sees the notes and reminders. Ticked next release with SHIPPED IN v17.83 (the order gate).
 - [ ] **1091 — Work with friends: 'Viewer: can only watch' is untrue — viewers get all the media, export is on by default, and Leave keeps a full copy even with export off (hunt HIGH #1091)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
       **STATUS: 🟢 READY — nothing is stopping this**
       - CONFIRMED F2: "Viewer: can only watch" is untrue. Viewers get all the raw media, export is on by default (roExport true), and a viewer can Leave keeping a full copy even with export switched off.
         - ❓ASK (his decision): change the words to "can watch, and keep a copy", or make "only watch" true (no copy on Leave when export is off)? Recommended: make it true.
       📍 **PM-verified 7 Oct:** see the note on #1090, which covers this entry too.
       ✅ **UNBLOCKED 11 Oct, ~10:05 AWST — decided by the PM under his standing rule (#1130: "Go through each one and see where it's an obvious yes"); he can overrule:** make "only watch" TRUE.
+      📍 **v17.83 (20 Oct): SHIPPED** — FM.collab.watchOnly: with exporting off, a watch-only copy refuses export, Save project file and Duplicate even with no session, and Leave deletes it. Ticked next release with SHIPPED IN v17.83.
 
 - [ ] **1092 — Work with friends: anyone holding the link or code learns the owner's internet address by trying to join, even if refused — the wording says otherwise (hunt HIGH #1092)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
       **STATUS: 🟢 READY — nothing is stopping this**
       - CONFIRMED F4: anyone holding the link or code learns the owner's internet address by trying to join, even if refused. Recommended: correct the wording at collab-ui.js:1988; changing the behaviour would break one-tap links.
+      📍 **v17.83 (20 Oct): SHIPPED** — the privacy list says whoever holds the link or code sees YOUR address by trying, refused or not. Ticked next release with SHIPPED IN v17.83.
 
 - [ ] **1093 — Work with friends: images a peer sends have no pixel limit (GIFs are capped at 64 MP), so a hostile admitted editor could freeze phones (hunt HIGH #1093)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
       **STATUS: 🟢 READY — nothing is stopping this**
       - PARTLY F5: peer-sent images have no pixel limit (GIFs are capped at 64 MP), so a hostile admitted editor could freeze phones. Refuse over ~50 MP in writeRecord (collab-media.js:1191).
+      📍 **v17.83 (20 Oct): SHIPPED** — a picture over 50 MP (LIMITS.IMAGE_PX) is refused by its header before it is kept or decoded. Ticked next release with SHIPPED IN v17.83.
 
 - [ ] **1094 — macOS's keychain daemon secd burns 60–170% CPU whenever test Chromes run; --use-mock-keychain on every Mac Chrome launch (hunt MEDIUM #1094)** (6 Oct, ~23:50 — the PM's finding, NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
