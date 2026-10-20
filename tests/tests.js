@@ -168542,6 +168542,74 @@
     });
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* (#11) bughunt6 #11: EXACT SIZE AND EXACT FPS START FROM THE PROJECT THAT IS OPEN. The dialog's change listener for Exact
+     size… (and Exact fps…) was wired once a session with the FIRST open's closure, so later picks seeded the first project's
+     numbers; and once the boxes held numbers nothing put them back, so a size typed for one project followed him into the
+     next. Two projects swapped in the way the #3 test swaps them (isoKeep puts the scene back), the dialog opened through
+     the real entry, the size and fps lists picked the way the Export card picks them (the value, then the change event).
+     FAILS ON bc67b146: on the 1920×1080 project Exact size… shows the 640×640 typed on the 1080×1920 one and Exact fps…
+     shows its 50; with the boxes emptied they fill in the first project the dialog opened on this session.
+     CONTROL, which holds before and after: each open offers that project's own size first (Same as project — W×H), so the
+     dialog is reading the project that is open. WRITTEN WITHOUT RUNNING (code only, `node --check`). */
+  test('bughunt6 #11 Exact size starts from the open project: after a 640×640 size and 50 fps were typed on a 1080×1920 project, Exact size… on a 1920×1080 project shows 1920×1080 and Exact fps… its own 24, and boxes he empties fill in from it too (CONTROL: each open offers that project’s own size first)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (typeof FM.showExportDialog !== 'function') throw new Error('setup: FM.showExportDialog (the Export dialog’s entry) is not reachable');
+    const $ = id => document.getElementById(id);
+    const dlg = $('export-dialog'), fmtEl = $('exp-format'), rangeEl = $('exp-range'), resEl = $('exp-res'), fpsEl = $('exp-fps');
+    const cwEl = $('exp-cw'), chEl = $('exp-ch'), fnEl = $('exp-fps-num');
+    if (!dlg || !fmtEl || !rangeEl || !resEl || !fpsEl || !cwEl || !chEl || !fnEl) throw new Error('setup: the Export dialog or its size / fps controls are missing from this build');
+    const keep = { fmt: fmtEl.value, range: rangeEl.value, fps: fpsEl.value, cw: cwEl.value, ch: chEl.value, fn: fnEl.value, prefs: null };
+    try { keep.prefs = localStorage.getItem('fm.exportPrefs'); } catch (e) {}
+    const X = '×';
+    const pick = (el, v) => { el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+    const boxes = () => cwEl.value + X + chEl.value;
+    const shut = async () => { try { if (!dlg.classList.contains('hidden')) { const x = $('exp-cancel'); if (x) x.click(); else dlg.classList.add('hidden'); } } catch (e) {} await sleep(60); };
+    const bad = [];
+    const _isoK = isoKeep();
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      const project = (w, h, fps, name) => {
+        const S = FM.makeLayer('shape', { name: name, shape: 'rect', x: Math.round(w / 2), y: Math.round(h / 2), shapeW: 100, shapeH: 100, fill: '#264653', start: 0, duration: 2 });
+        FM.scene = scene([S], { project: { width: w, height: h, fps: fps, duration: 2, background: '#101010' } });
+        FM.selectLayer(null); FM.refreshAll();
+      };
+      const open = async (w, h) => {
+        await FM.showExportDialog(); await sleep(80);
+        if (dlg.classList.contains('hidden')) throw new Error('setup: the Export dialog did not open for the ' + w + X + h + ' project');
+        const first = resEl.options[0];
+        if (!first || first.value !== '1' || first.textContent.indexOf(w + X + h) < 0) throw new Error('CONTROL: the ' + w + X + h + ' project’s Export dialog does not offer its own size first (it reads ' + (first ? JSON.stringify(first.textContent) : 'nothing') + '), so it is not reading the open project at all');
+        if (![].some.call(resEl.options, o => o.value === 'custom') || ![].some.call(fpsEl.options, o => o.value === 'custom')) throw new Error('setup: the size or fps list has no Exact (custom) choice');
+      };
+
+      /* the first project, 1080×1920 at 30 fps: Exact size… and Exact fps…, with a size and a rate typed for this export */
+      project(1080, 1920, 30, 'bh6 #11 portrait');
+      await open(1080, 1920);
+      pick(resEl, 'custom'); pick(fpsEl, 'custom');
+      cwEl.value = '640'; chEl.value = '640'; fnEl.value = '50';
+      cwEl.dispatchEvent(new Event('input', { bubbles: true }));
+      await shut();
+
+      /* the next project, 1920×1080 at 24 fps */
+      project(1920, 1080, 24, 'bh6 #11 landscape');
+      await open(1920, 1080);
+      pick(resEl, 'custom');
+      if (boxes() !== '1920' + X + '1080') bad.push('Exact size… on the 1920' + X + '1080 project shows ' + boxes() + ', not the project’s own 1920' + X + '1080' + (boxes() === '640' + X + '640' ? ' (the size typed on the last project followed him here)' : ''));
+      pick(fpsEl, 'custom');
+      if (fnEl.value !== '24') bad.push('Exact fps… on the 24 fps project shows ' + JSON.stringify(fnEl.value) + ', not its own 24' + (fnEl.value === '50' ? ' (the rate typed on the last project followed him here)' : ''));
+
+      /* boxes he empties start again from THIS project, not from the first project the dialog opened on this session */
+      pick(resEl, '1'); cwEl.value = ''; chEl.value = ''; pick(resEl, 'custom');
+      if (boxes() !== '1920' + X + '1080') bad.push('with the boxes emptied, Exact size… on the 1920' + X + '1080 project filled in ' + boxes() + ', not 1920' + X + '1080 (the dialog’s listener still holds the numbers of the first project it opened on)');
+      pick(fpsEl, 'project'); fnEl.value = ''; pick(fpsEl, 'custom');
+      if (fnEl.value !== '24') bad.push('with the box emptied, Exact fps… on the 24 fps project filled in ' + JSON.stringify(fnEl.value) + ', not 24');
+    } finally {
+      await shut();
+      fmtEl.value = keep.fmt; rangeEl.value = keep.range; fpsEl.value = keep.fps; cwEl.value = keep.cw; chEl.value = keep.ch; fnEl.value = keep.fn;
+      try { if (keep.prefs == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', keep.prefs); } catch (e) {}
+      _isoK.put();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 6 ──
 
 })();

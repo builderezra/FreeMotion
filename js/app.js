@@ -5914,12 +5914,19 @@ window.FM = window.FM || {};
          export rate is a one-off override for this render. */
       const fpsCf = document.getElementById('exp-custom-fps');
       const fpsNum = document.getElementById('exp-fps-num');
+      /* bughunt6 #11: THIS PROJECT'S RATE, ON EVERY OPEN. The listener below is wired once a session, and it used to BE the
+         first open's closure, so every later Exact fps… seeded the first project's rate; and once the box held a number
+         nothing put it back, so a rate typed for one project followed him into the next. The box now starts from this
+         project's rate on every open (a typed rate is a one-off for that export, as the note above says), and the one
+         listener runs whichever open's closure is current. */
+      if (fpsNum) fpsNum.value = pf;
       const syncCustomFps = () => {
         const on = fpsSel.value === 'custom';
         if (fpsCf) fpsCf.classList.toggle('hidden', !on);
         if (on && fpsNum && !fpsNum.value) fpsNum.value = pf;
       };
-      if (!fpsSel._customWired) { fpsSel._customWired = 1; fpsSel.addEventListener('change', syncCustomFps); }
+      fpsSel._syncCustomFps = syncCustomFps;
+      if (!fpsSel._customWired) { fpsSel._customWired = 1; fpsSel.addEventListener('change', () => fpsSel._syncCustomFps()); }
       syncCustomFps();
     }
     const sel = document.getElementById('exp-res');
@@ -5947,14 +5954,20 @@ window.FM = window.FM || {};
       // …and it opens on the project's own size, every time (queue 121).
       const cf = document.getElementById('exp-custom-field');
       const cw = document.getElementById('exp-cw'), ch = document.getElementById('exp-ch');
+      /* bughunt6 #11: …and so it really does. The boxes start from THIS project's size on every open, and the listener
+         (wired once a session) runs this open's closure, not the first one's: Exact size… on a 1920×1080 project after
+         exporting a 1080×1920 one filled in 1080×1920, and a size typed once stayed in the boxes for every project after. */
+      if (cw) cw.value = W;
+      if (ch) ch.value = H;
       const syncCustom = () => {
         const on = sel.value === 'custom';
         if (cf) cf.classList.toggle('hidden', !on);
-        // Seed from the project the first time, so it opens on something valid rather than empty.
+        // Seeded from the project, so a box he emptied opens on something valid rather than empty.
         if (on && cw && !cw.value) cw.value = W;
         if (on && ch && !ch.value) ch.value = H;
       };
-      if (!sel._customWired) { sel._customWired = 1; sel.addEventListener('change', syncCustom); }
+      sel._syncCustom = syncCustom;
+      if (!sel._customWired) { sel._customWired = 1; sel.addEventListener('change', () => sel._syncCustom()); }
       syncCustom();
     }
     // 'Selected clip only' and the solo checkbox need a selection — grey them out otherwise
