@@ -7361,7 +7361,14 @@ window.FM = window.FM || {};
       cornerBtn.addEventListener('click', () => { if (!cornerOff()) backBtn.click(); });
       const fine = window.matchMedia('(min-width: 701px) and (hover: hover) and (pointer: fine)');
       let lit = false;
-      const light = (v) => { if (v !== lit) { lit = v; cornerBtn.classList.toggle('is-on', v); } };
+      /* …and a live session's people strip (.collab-people, the same corner, above the pill) steps right of the lit pill:
+         the stage carries cb-lit and the pill's right edge, read from its layout box (offsets), not its sliding transform. */
+      const light = (v) => {
+        if (v === lit) return;
+        lit = v; cornerBtn.classList.toggle('is-on', v);
+        if (v) stageEl.style.setProperty('--cb-right', (cornerBtn.offsetLeft + cornerBtn.offsetWidth) + 'px');
+        stageEl.classList.toggle('cb-lit', v);
+      };
       stageEl.addEventListener('mousemove', (e) => {
         if (!fine.matches || (e.buttons && !lit)) { light(false); return; }
         const r = stageEl.getBoundingClientRect();

@@ -173322,4 +173322,40 @@
     }
   });
 
+  /* 1083 (5) THE PEOPLE STRIP STEPS PAST THE LIT PILL. In a live session the faces (.collab-people) sit at the stage's top-left on
+   * a PC (top 10, left 12, z-index 21), which is where the pill lights, and above it: the lit pill was under them and could not be
+   * clicked. While the pill is lit the strip now moves right of it by its own 12 px gap, and back when the pill goes dark.
+   * FAILS BEFORE THE FIX: the strip stays at left 12 over the lit pill, and the pill's middle hits the strip.
+   * CONTROL: with the pill dark the strip is at its own place (left 12). A stand-in strip with the real class, removed after. */
+  test('1083 in a live session the people strip steps right of the lit ‘‹ Projects’ pill and back when it goes dark, so neither covers the other', { item: '1083' }, async function () {
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) notRunHere('this browser reports no mouse ((hover: hover) and (pointer: fine) is false), and the corner pill is for a real mouse');
+    if (FM.home && FM.home.isOpen()) { FM.home.close(); await sleep(400); }
+    const st = document.getElementById('stage');
+    const chip = document.createElement('button');
+    chip.className = 'collab-people'; chip.id = 'collab-people-1083';
+    chip.innerHTML = '<span class="cp-av">A</span><span class="cp-av">B</span>';
+    st.appendChild(chip);
+    const bad = [];
+    try {
+      await atWideWidth(async () => {
+        const pill = document.getElementById('btn-back-corner');
+        if (!pill) throw new Error('there is no #btn-back-corner on the stage');
+        cornerMove1083(600, 400); await sleep(260);
+        const sr = st.getBoundingClientRect();
+        const rest = chip.getBoundingClientRect().left - sr.left;
+        if (Math.abs(rest - 12) > 1.5) bad.push('CONTROL: with the pill dark the strip sits at ' + Math.round(rest) + ' px, not its own 12');
+        cornerMove1083(40, 30); await sleep(260);
+        if (!pill.classList.contains('is-on')) throw new Error('setup: the mouse in the corner did not light the pill');
+        const pr = pill.getBoundingClientRect(), cr = chip.getBoundingClientRect();
+        if (cr.left < pr.right + 11) bad.push('with the pill lit the strip starts at ' + Math.round(cr.left - sr.left) + ' px, over the pill, which ends at ' + Math.round(pr.right - sr.left));
+        const mid = document.elementFromPoint((pr.left + pr.right) / 2, (pr.top + pr.bottom) / 2);
+        if (!mid || !pill.contains(mid)) bad.push('the lit pill’s middle is under ' + (mid && (mid.id || mid.className)) + ', so it cannot be clicked');
+        cornerMove1083(600, 400); await sleep(260);
+        const back = chip.getBoundingClientRect().left - sr.left;
+        if (Math.abs(back - 12) > 1.5) bad.push('with the pill dark again the strip stays at ' + Math.round(back) + ' px, not back at 12');
+        st.dispatchEvent(new MouseEvent('mouseleave'));
+      });
+    } finally { chip.remove(); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

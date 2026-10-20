@@ -11430,6 +11430,13 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 .collab-people::before { content: ""; position: absolute; inset: -8px -6px; }   /* ≥ 44 px to hit */
 .collab-people.cp-hidden { display: none; }
 body.text-editing .collab-people { display: none; }
+/* #1083 × the people strip: on a PC the faces sit where the ‹ Projects pill lights, and above it. While the pill is lit
+   (#stage.cb-lit, app.js) they step right of it by their own 12 px gap, and back when it goes dark. */
+@media (min-width: 701px) and (hover: hover) and (pointer: fine) {
+  .collab-people { transition: left .16s ease-out; }
+  #stage.cb-lit > .collab-people { left: calc(var(--cb-right, 0px) + 12px); }
+}
+@media (prefers-reduced-motion: reduce) { .collab-people { transition: none; } }
 /* (#967 batch 2 took out `@media (max-width: 700px) { body.sel-mode .collab-people { display: none } }` — his pick A: the
    chip stays with layers selected. In Select it was the one way to the people, and to Stop sharing, that vanished.) */
 /* queue 944 — ON PC THE CHIP DOES NOT OFFER AN INVITE. His words: "On PC, get rid of the little plus at the top left to add friends.
