@@ -174225,4 +174225,96 @@
     if (!(Math.abs(B.start - 12) <= TOL && Math.abs(B.trimStart - 1.7) <= TOL && Math.abs(B.start + B.duration - 20) <= EX)) bad.push('CONTROL: the ramped clip extended to 12 s (5.175 s of source, inside the 6.875 s it has) is ' + say(B) + ', not start 12, trimStart 1.7, end 20');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ bughunt8 #7: THE HOME CARD, THE STILL AND THE EXPORT CARD'S PICTURE BAKED IN A PREVIEWED EFFECT ═══════════════════════════
+     What was wrong. makeThumb (js/storage.js, every Home card picture), snapshotNow (js/app.js, the camera button's PNG and This
+     frame) and the Export card's picture (js/export-card.js drawThumb) hold FM.isolate and the crop tool's flag aside for their one
+     render, and not the two other view-only overrides documented as using the same arrangement: the effects sheet's previewed stack
+     (FM._fxPreview) and the held ◐ (FM._fxCompare). The compositor drops both only under FM._exporting, which none of the three
+     sets, so a card the 12 s autosave or Home's capture took while the sheet was previewing an effect showed an effect he never
+     added. Now all three null both beside the isolate and put them back in the same finally.
+     The 1176 isolate test's rig: a 320 × 240 project, a red 64 × 64 square in its bottom-right corner, FM.renderScene wrapped to
+     record what the two overrides hold whenever it draws the project anywhere but #preview. The previewed stack is an Invert on the
+     square (red becomes cyan) and the ◐ is held on it. The card through FM.templates.cardFor on the open project, the still through
+     FM.snapshotPNG (the PNG is counted at URL.createObjectURL and its download's click does nothing), the Export card's picture
+     through FM.exportCard.opened() (then closed()).
+     FAILS BEFORE THE FIX: each of the three renders with the previewed Invert and the ◐ still set, and the card shows the square
+     cyan, the previewed Invert.
+     CONTROLS, which hold before and after: each of the three really rendered (else a setup failure), the still made one PNG, and
+     after each the previewed stack and the ◐ are back exactly as they were, so the sheet he is looking at does not change.
+     COLOUR THRESHOLDS, as the 1176 isolate test reasons them: the card is a JPEG at quality 0.8, read as a 5 × 5 average well inside
+     a 64 px block; red is above 180 with green and blue below 90, and its Invert, cyan (0, 255, 255), is nowhere near that. */
+  test('bughunt8 #7 The Home card, the still and the Export card’s picture leave out an effect only being previewed: with the effects sheet previewing an Invert on the red square and the ◐ held on it, each renders with neither, and the card shows the square red (CONTROLS: each really rendered, the still made one PNG, and the preview and the ◐ are back in place after each)', { item: '1176' }, async function () {
+    if (!FM.templates || typeof FM.templates.cardFor !== 'function' || typeof FM.snapshotPNG !== 'function' || !FM.exportCard || typeof FM.exportCard.opened !== 'function' || typeof FM.exportCard.closed !== 'function') throw new Error('setup: FM.templates.cardFor (makeThumb), FM.snapshotPNG or FM.exportCard.opened / closed is not reachable');
+    const P = FM.scene.project;
+    const keep = { w: P.width, h: P.height, d: P.duration, hasBg: Object.prototype.hasOwnProperty.call(P, 'background'), bg: P.background, t: FM.time };
+    const layers0 = FM.scene.layers.slice();
+    const pv0 = FM._fxPreview, cmp0 = FM._fxCompare;
+    const realRender = FM.renderScene;
+    const ownURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    const bad = [], seen = { card: [], still: [], xcard: [] };
+    let who = null, pngs = 0;
+    try {
+      P.width = 320; P.height = 240; P.duration = 4; P.background = '#102030';
+      FM.scene.layers.length = 0;
+      const mark = FM.makeLayer('shape', { name: 'bh8 #7 mark', shape: 'rect', x: 256, y: 192, shapeW: 64, shapeH: 64, fill: '#ff0000' });
+      mark.start = 0; mark.duration = 4;
+      FM.scene.layers.push(mark);
+      FM.time = 1;
+      const pvSet = { id: mark.id, list: [{ type: 'invert', enabled: true, params: { amount: 1 } }] }, cmpSet = { id: mark.id };
+      FM._fxPreview = pvSet; FM._fxCompare = cmpSet;
+      Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: function (b) { if (b && b.type === 'image/png') pngs++; return ownURL.value.apply(URL, arguments); } });
+      Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+      FM.renderScene = function (ctx, scn) {
+        const c = ctx && ctx.canvas;
+        if (who && c && c.id !== 'preview' && scn && scn.layers && scn.layers.indexOf(mark) >= 0) seen[who].push({ pv: FM._fxPreview || null, cmp: FM._fxCompare || null });
+        return realRender.apply(this, arguments);
+      };
+      const back = function (what) {
+        if (FM._fxPreview !== pvSet || FM._fxCompare !== cmpSet) bad.push('CONTROL: after ' + what + ' the previewed stack is ' + JSON.stringify(FM._fxPreview || null) + ' and the ◐ ' + JSON.stringify(FM._fxCompare || null) + ', not put back as they were, so the sheet he is looking at changed');
+      };
+      let url = null;
+      who = 'card';
+      try { url = FM.templates.cardFor(FM.projects.currentId()); } finally { who = null; }
+      back('drawing the Home card');
+      who = 'still';
+      try { await FM.snapshotPNG(); } finally { who = null; }
+      for (let i = 0; i < 50 && !pngs; i++) await sleep(20);
+      back('saving the still');
+      who = 'xcard';
+      try { FM.exportCard.opened(); } finally { who = null; try { FM.exportCard.closed(); } catch (e) {} }
+      back('drawing the Export card’s picture');
+      FM.renderScene = realRender;
+
+      [['card', 'the Home card'], ['still', 'the still (Save current frame as PNG)'], ['xcard', 'the Export card’s picture']].forEach(function (pair) {
+        const s = seen[pair[0]];
+        if (!s.length) { bad.push('CONTROL: ' + pair[1] + ' was not rendered at all, so nothing was measured'); return; }
+        if (s.some(function (x) { return x.pv; })) bad.push(pair[1] + ' was rendered with the effects sheet’s previewed Invert still set (FM._fxPreview), so it shows an effect he never added');
+        if (s.some(function (x) { return x.cmp; })) bad.push(pair[1] + ' was rendered with the ◐ still held (FM._fxCompare), so it shows the square with its filters taken off');
+      });
+      if (pngs !== 1) bad.push('CONTROL: the still made ' + pngs + ' PNG(s), not one');
+      if (typeof url !== 'string' || url.indexOf('data:image/jpeg') !== 0) throw new Error('setup: the card is not a JPEG picture (' + String(url).slice(0, 40) + '), so a stored picture came back or none was made');
+      const img = new Image(); img.src = url;
+      await new Promise(function (r) { img.onload = r; img.onerror = r; });
+      const cv = document.createElement('canvas'); cv.width = img.naturalWidth || 1; cv.height = img.naturalHeight || 1;
+      const g = cv.getContext('2d'); g.drawImage(img, 0, 0);
+      const x = Math.round(0.8 * cv.width), y = Math.round(0.8 * cv.height), d = g.getImageData(x - 2, y - 2, 5, 5).data;
+      let r = 0, gr = 0, b = 0;
+      for (let i = 0; i < d.length; i += 4) { r += d[i]; gr += d[i + 1]; b += d[i + 2]; }
+      const rp = [Math.round(r / 25), Math.round(gr / 25), Math.round(b / 25)];
+      if (!(rp[0] > 180 && rp[1] < 90 && rp[2] < 90)) bad.push('the Home card shows rgb(' + rp + ') where the red square is, not red' + (rp[0] < 90 && rp[1] > 180 && rp[2] > 180 ? ': the previewed Invert, an effect he never added' : ''));
+    } finally {
+      FM.renderScene = realRender;
+      FM._fxPreview = pv0; FM._fxCompare = cmp0;
+      Object.defineProperty(URL, 'createObjectURL', ownURL);
+      if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+      else delete HTMLAnchorElement.prototype.click;
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.width = keep.w; P.height = keep.h; P.duration = keep.d; FM.time = keep.t;
+      if (keep.hasBg) P.background = keep.bg; else delete P.background;
+      if (FM.requestRender) FM.requestRender();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

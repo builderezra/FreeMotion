@@ -2508,10 +2508,16 @@ window.FM = window.FM || {};
          (js/export-card.js drawThumb) and the still (FM.snapshotPNG) do, so the preview he is looking at does not change. */
       const isoWas = FM.isolate;
       const cropHeld = (FM.scene.layers || []).filter(l => l && l._cropEditing);
+      /* bughunt8 #7: …and the other two view-only overrides that "use the same arrangement FM.isolate already uses": the effects
+         sheet's previewed stack (FM._fxPreview) and the held ◐ (FM._fxCompare). The compositor drops them only under FM._exporting,
+         which a card never sets, so a card the 12 s autosave or Home's capture took while the sheet was previewing baked effects
+         he had not added into the picture. Held aside for this one render too, and put back in the same finally. */
+      const pvWas = FM._fxPreview, cmpWas = FM._fxCompare;
       FM.isolate = null;
+      FM._fxPreview = null; FM._fxCompare = null;
       cropHeld.forEach(l => { l._cropEditing = false; });
       try { FM.renderScene(src.getContext('2d'), FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time); }
-      finally { FM.isolate = isoWas; cropHeld.forEach(l => { l._cropEditing = true; }); }
+      finally { FM.isolate = isoWas; FM._fxPreview = pvWas; FM._fxCompare = cmpWas; cropHeld.forEach(l => { l._cropEditing = true; }); }
       while (src.width >= tw * 2) {   // halve until within 2× of target — each step averages real pixels
         const half = document.createElement('canvas');
         half.width = Math.max(tw, Math.round(src.width / 2)); half.height = Math.max(th, Math.round(src.height / 2));

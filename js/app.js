@@ -4393,9 +4393,14 @@ window.FM = window.FM || {};
     const isoWas = FM.isolate; FM.isolate = null;
     const cropHeld = FM.scene.layers.filter(l => l && l._cropEditing);
     cropHeld.forEach(l => { l._cropEditing = false; });
+    /* bughunt8 #7: …and the effects sheet's previewed stack (FM._fxPreview) and the held ◐ (FM._fxCompare), the same kind of view
+       state, which the compositor drops only under FM._exporting: a still saved while the sheet previewed an effect held it. */
+    const pvWas = FM._fxPreview, cmpWas = FM._fxCompare;
+    FM._fxPreview = null; FM._fxCompare = null;
     try { FM.renderScene(full.getContext('2d'), FM.scene, t); }
     finally {
       FM.isolate = isoWas; cropHeld.forEach(l => { l._cropEditing = true; });
+      FM._fxPreview = pvWas; FM._fxCompare = cmpWas;
       exportSoloRestore(soloRestore);
     }
     const c = document.createElement('canvas');
