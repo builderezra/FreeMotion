@@ -418,12 +418,13 @@ window.FM = window.FM || {};
        Ezra, 6 Oct: "wherever you touched from it basically expands out from where you touched … It will like pulse out from
        like a circle outwards but like in a nice looking way and it'll be fairly quick" — and "just have a toggle switch to
        change the two modes in the settings". His pick, 7 Oct: "i want the circle one for when a project is empty" (option a,
-       260 ms, tools/design/1084-add-anim on design/1084-add-anim); "b" for the add row with layers waits on his OK of its
-       redraw, so that row keeps the slide-up for now.
+       260 ms, tools/design/1084-add-anim on design/1084-add-anim); "b" for the add row with layers is the next block
+       (stretchAdd, queue 1084 half b), behind the same switch.
        ONE DOOR ASKS FOR IT: js/timeline.js openFromArea (the empty project's area, its big +, Enter on it) passes
-       { grow: true, origin: {x, y} } — the finger, or for a key the +'s centre. Every other caller passes nothing and gets
-       the old path, untouched. The setting is FM.settings 'addMenuGrow' (off unless he turns it on, #545); reduced motion never
-       grows — the menu arrives exactly as it does today.
+       { grow: true, origin: {x, y} } — the finger, or for a key the +'s centre (the slim row's door, openFromRow, asks for
+       the stretch below instead). Every other caller passes nothing and gets the old path, untouched. The setting is
+       FM.settings 'addMenuGrow' (off unless he turns it on, #545); reduced motion never grows — the menu arrives exactly as
+       it does today.
        HOW: `.add-grow` goes on BEFORE `.open`, so no style pass ever sees `.open` without it (that would start the swing,
        fm-hinge-up); `#add-sheet.open.add-grow` (styles.css) turns the swing and the slide off, so the sheet sits where it
        rests and a clip-path circle reveals it: circle(0 at the tap) → a circle past the farthest corner, 260 ms, the
@@ -536,6 +537,237 @@ window.FM = window.FM || {};
         addSheet.classList.remove('closing');
       }, D + 30);
     }
+
+    /* ═══ …AND ON A PROJECT WITH LAYERS THE "TAP TO ADD A LAYER" ROW STRETCHES INTO IT (queue 1084, half b) ════════════════
+       Ezra, 6 Oct: "if you're actually in the middle of editing … you tap on the tap to add layer bar … the tap to add layer
+       basically expands up and down until it's created that menu like it'll just like expand from where it was on the
+       timeline to fill up the screen area where it's supposed to be". His pick, 7 Oct: "i want b for when u are pressing the
+       add layer, although the preview u sent is buggy and needs work for b". So b was redrawn as D4b (branch
+       design/1084-add-anim fe6a1548: tools/design/1084-add-anim/b-row-expands.html and the D4b table in its README) and sent
+       at 300 and 380 ms, 300 recommended. Built to D4b at STRETCH_MS, behind the SAME switch as the circle (growOn: a phone,
+       motion allowed, Settings › Add menu grows from your tap). With the switch off openAdd takes the old path and the row's
+       slide-up is the one it always was; less motion gets today's menu too, as the circle's does.
+       THE SHAPE, one line per D4b fix:
+       - THE ROW IS THE GROWING SHAPE. The sheet starts clipped to the row's own box (clip-path inset, the row's 10 px corners),
+         in the row's own colour laid solid over the timeline, and its top and bottom edges move outward to the whole sheet —
+         past its top by the shadow's reach (GROW_TOP_PAD, as the circle), so dropping the clip changes nothing. GROW_EASE, the
+         prototype's ease-out.
+       - OPAQUE AND UNBLURRED WHILE IT MOVES (the old b smeared the timeline through a moving, blurred, see-through sheet): the
+         stretch holds backdrop-filter at none and a solid colour (the sheet's own tint, opaque); once nothing moves the sheet
+         crossfades to its resting look (the glass tint and blur) over STRETCH_SETTLE_MS.
+       - THE ROW'S DASHED EDGE AND ITS PRESS LIGHT RIDE THE MOVING EDGE (.add-stretch-edge, a fixed sibling over the sheet, its
+         box animated through the clip's own numbers): it starts as the row's own faint dashes, lights in the #616 press band's
+         colours and fades by the end, where the sheet's own top rim takes over. That is clause 4's hand-over: js/timeline.js
+         stops the row's press band the moment the row becomes the shape, so there is one light, and it is on the edge.
+       - THE ROW'S + AND WORDS STAY WHERE THEY WERE for the first 35% (.add-stretch-skin, a snapshot of the row drawn over the
+         shape), so nothing is blank where the row was.
+       - A PLAIN DIM BEHIND (.add-stretch-dim, no blur, STRETCH_DIM), held while the menu is up.
+       - THE MENU'S CONTENTS FADE IN ONCE, over the last 40%.
+       - CLOSE IS THE SAME ANIMATION OBJECTS PLAYED BACKWARDS (reverse()), so the curve is identical both ways and nothing
+         toggles: the contents go first, then the shape shrinks back onto the row — onto where the row is NOW (a pick adds a
+         layer and the rebuilt timeline moves the row a slot), the same objects re-aimed with setKeyframes first. A swipe down
+         still slides it away from the finger (#773), as the circle's does.
+       Everything that holds it (fill: both) is cancelled by endStretch, which every way out runs. Everything here is numbers,
+       colours the page computed, or a clone of the app's own row; nothing user-supplied reaches any markup. */
+    var STRETCH_MS = 300;   // his speed for b: D4b was sent at 300 and 380 ms, 300 recommended (7 Oct). Change this one number.
+    var STRETCH_SETTLE_MS = 120;   // the opaque panel's crossfade to the sheet's own glass, once the stretch has stopped
+    var STRETCH_DIM = 'rgba(2, 6, 10, .55)';   // D4b's plain dim behind the menu; '' draws none
+    var STRETCH_LIT = 'rgba(150, 232, 255, .8)';   // the #616 press band's colour, now on the moving edge
+    var STRETCH_GLOW = '0 0 14px 0px rgba(150, 232, 255, .5)';
+    function stretchPx(n) { return (+n).toFixed(1) + 'px'; }
+    // a colour as [r, g, b, a]: rgb() / rgba() as the page computes them, or #rgb / #rrggbb (a custom property); else null
+    function stretchRGBA(c) {
+      c = String(c || '').trim();
+      var m = /^rgba?\(([^)]*)\)$/i.exec(c);
+      if (m) {
+        var p = m[1].split(/[\s,\/]+/).filter(Boolean).map(parseFloat);
+        if (p.length < 3 || !isFinite(p[0]) || !isFinite(p[1]) || !isFinite(p[2])) return null;
+        return [p[0], p[1], p[2], p.length > 3 && isFinite(p[3]) ? p[3] : 1];
+      }
+      m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c);
+      if (!m) return null;
+      var h = m[1].length === 3 ? m[1].replace(/./g, '$&$&') : m[1];
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16), 1];
+    }
+    function stretchSolid(c) { return 'rgb(' + Math.round(c[0]) + ', ' + Math.round(c[1]) + ', ' + Math.round(c[2]) + ')'; }
+    // the one opaque colour that looks like `tint` laid over `ground` (the prototype's over()), so the shape starts as the row
+    function stretchOver(tint, ground) {
+      var a = Math.max(0, Math.min(1, tint[3]));
+      return [tint[0] * a + ground[0] * (1 - a), tint[1] * a + ground[1] * (1 - a), tint[2] * a + ground[2] * (1 - a), 1];
+    }
+    // what the row is drawn on: its nearest ancestor that paints a colour of its own, else the app's ground
+    function stretchGround(el) {
+      for (var n = el; n && n.nodeType === 1; n = n.parentElement) {
+        var c = stretchRGBA(getComputedStyle(n).backgroundColor);
+        if (c && c[3] > 0.5) return c;
+      }
+      return stretchRGBA(getComputedStyle(document.documentElement).getPropertyValue('--bg')) || [14, 19, 32, 1];
+    }
+    // where the row is, as insets of the sheet's box sr (clamped: a row half scrolled out starts at the sheet's edge), or null
+    function stretchBox(row, sr) {
+      if (!row || !row.isConnected || !row.getBoundingClientRect) return null;
+      var rr = row.getBoundingClientRect();
+      if (!(rr.width > 0) || !(rr.height > 0) || !(sr.width > 0) || !(sr.height > 0)) return null;
+      var t = Math.max(0, Math.min(sr.height, rr.top - sr.top));
+      var l = Math.max(0, Math.min(sr.width, rr.left - sr.left));
+      var b = Math.max(0, Math.min(sr.height - t, sr.bottom - rr.bottom));
+      var r = Math.max(0, Math.min(sr.width - l, sr.right - rr.right));
+      return { t: t, r: r, b: b, l: l, rad: parseFloat(getComputedStyle(row).borderTopLeftRadius) || 10 };
+    }
+    /* The sheet's box in its containing block (left/top as the sheet itself resolves them), and that block's corner in the
+       viewport — (0, 0) unless an ancestor moves it — so the fixed pieces beside the sheet land where the sheet's own
+       numbers say, as the circle's rings do. Read with the sheet at rest (.open + .add-grow: no swing, no slide). */
+    function stretchGeom(st) {
+      var sr = addSheet.getBoundingClientRect(), scs = getComputedStyle(addSheet);
+      st.sheet = { x: parseFloat(scs.left) || 0, y: parseFloat(scs.top) || 0, w: sr.width, h: sr.height };
+      st.cb = { x: sr.left - st.sheet.x, y: sr.top - st.sheet.y };
+      return sr;
+    }
+    function stretchSheetKeys(st) {
+      var a = st.box;
+      var from = 'inset(' + [a.t, a.r, a.b, a.l].map(stretchPx).join(' ') + ' round ' + stretchPx(a.rad) + ')';
+      // the colour lands at 60% and holds there, so the glass's crossfade, played backwards on close, meets it exactly
+      return [
+        { offset: 0, clipPath: from, backgroundColor: st.from, backdropFilter: 'none' },
+        { offset: 0.6, backgroundColor: st.panel },
+        { offset: 1, clipPath: st.to, backgroundColor: st.panel, backdropFilter: 'none' }
+      ];
+    }
+    // the lit edge's box: the clip's own numbers (from the row's box to the sheet plus the shadow's reach), so it rides it
+    function stretchEdgeKeys(st) {
+      var s = st.sheet, a = st.box;
+      return [
+        { left: stretchPx(s.x + a.l), top: stretchPx(s.y + a.t), width: stretchPx(s.w - a.l - a.r), height: stretchPx(s.h - a.t - a.b), borderRadius: stretchPx(a.rad) },
+        { left: stretchPx(s.x), top: stretchPx(s.y - GROW_TOP_PAD), width: stretchPx(s.w), height: stretchPx(s.h + GROW_TOP_PAD), borderRadius: st.R + ' ' + st.R + ' 0px 0px' }
+      ];
+    }
+    /* The row as it is drawn this moment: a deep clone with every computed style written inline (its rules are scoped to the
+       timeline and would not reach it out here), its press band dropped (the edge carries that light) and its classes and ids
+       taken off, so no rule and no ::before tint lands on it a second time. */
+    function stretchSnap(row) {
+      var copy = row.cloneNode(true);
+      var src = [row].concat([].slice.call(row.querySelectorAll('*')));
+      var dst = [copy].concat([].slice.call(copy.querySelectorAll('*')));
+      for (var i = 0; i < src.length && i < dst.length; i++) {
+        var cs = getComputedStyle(src[i]), css = '';
+        for (var j = 0; j < cs.length; j++) css += cs[j] + ':' + cs.getPropertyValue(cs[j]) + ';';
+        dst[i].style.cssText = css + 'animation:none;transition:none;pointer-events:none;';
+      }
+      [].slice.call(copy.querySelectorAll('.tl-addrow-pulse, .tl-addrow-hint')).forEach(function (n) { n.parentNode.removeChild(n); });
+      dst.forEach(function (n) { ['id', 'class', 'role', 'tabindex', 'aria-label'].forEach(function (k) { n.removeAttribute(k); }); });
+      copy.className = 'add-stretch-skin';
+      copy.setAttribute('aria-hidden', 'true');
+      return copy;
+    }
+    // the snapshot stands on the row (its geometry LAST in the block, so it beats any copied logical inset or size)
+    function stretchPlaceSkin(st) {
+      if (!st.skin || !st.row || !st.row.isConnected) return;
+      var rr = st.row.getBoundingClientRect();
+      st.skin.style.cssText = st.skinCss + 'position:fixed;margin:0;right:auto;bottom:auto;transform:none;z-index:64;box-sizing:border-box;' +
+        'left:' + stretchPx(rr.left - st.cb.x) + ';top:' + stretchPx(rr.top - st.cb.y) + ';width:' + stretchPx(rr.width) + ';height:' + stretchPx(rr.height) + ';';
+    }
+    /* Every trace of a stretch goes: its animations (fill: both holds them until now), the edge, the snapshot, the dim, the
+       class. A swipe asks for the dim to fade out with the slide instead of vanishing (fadeDim). Safe to call at any time. */
+    function endStretch(fadeDim) {
+      var st = addSheet._stretch;
+      addSheet._stretch = null;
+      if (st) {
+        var dim = fadeDim && st.dim && st.dim.parentNode ? st.dim : null;
+        var dimAt = dim ? +getComputedStyle(dim).opacity : 0;
+        st.anims.forEach(function (a) { try { a.cancel(); } catch (e) {} });
+        st.bits.forEach(function (n) { if (n !== dim && n.parentNode) n.parentNode.removeChild(n); });
+        if (dim) {
+          dim.style.opacity = String(isFinite(dimAt) ? dimAt : 0);
+          dim.animate([{ opacity: dim.style.opacity }, { opacity: 0 }], { duration: 220, easing: 'ease', fill: 'forwards' });   // the slide's own .22 s
+          setTimeout(function () { if (dim.parentNode) dim.parentNode.removeChild(dim); }, 260);
+        }
+      }
+      addSheet.classList.remove('add-grow');
+    }
+    function stretchAdd(row) {
+      var st = { row: row, anims: [], bits: [] };
+      var sr = stretchGeom(st);
+      st.box = stretchBox(row, sr);
+      if (!st.box) { endStretch(false); return; }
+      var scs = getComputedStyle(addSheet), pre = getComputedStyle(row, '::before');
+      var rest = stretchRGBA(scs.backgroundColor);
+      if (!rest || !(rest[3] > 0)) rest = [12, 28, 37, 1];
+      var tint = stretchRGBA((/rgba?\([^)]*\)/i.exec(pre.backgroundImage || '') || [''])[0]) || [0, 0, 0, 0];
+      st.R = stretchPx(parseFloat(scs.borderTopLeftRadius) || 16);
+      st.to = 'inset(' + stretchPx(-GROW_TOP_PAD) + ' 0px 0px 0px round ' + st.R + ' ' + st.R + ' 0px 0px)';
+      st.from = stretchSolid(stretchOver(tint, stretchGround(row)));
+      st.panel = stretchSolid(rest);
+      st.rest = scs.backgroundColor;
+      st.restBlur = scs.backdropFilter || 'none';
+      st.dash = pre.borderTopColor || 'rgba(120, 214, 240, .26)';
+      var parent = addSheet.parentNode, after = addSheet.nextSibling;
+      if (STRETCH_DIM) {
+        st.dim = document.createElement('div');
+        st.dim.className = 'add-stretch-dim';
+        st.dim.setAttribute('aria-hidden', 'true');
+        st.dim.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;margin:0;z-index:62;pointer-events:none;opacity:0;background:' + STRETCH_DIM + ';';
+        parent.insertBefore(st.dim, addSheet);
+        st.bits.push(st.dim);
+      }
+      st.skin = stretchSnap(row);
+      st.skinCss = st.skin.style.cssText;
+      stretchPlaceSkin(st);
+      parent.insertBefore(st.skin, after);
+      st.edge = document.createElement('div');
+      st.edge.className = 'add-stretch-edge';
+      st.edge.setAttribute('aria-hidden', 'true');
+      st.edge.style.cssText = 'position:fixed;margin:0;z-index:64;pointer-events:none;box-sizing:border-box;border:1.5px dashed ' + st.dash + ';';
+      parent.insertBefore(st.edge, st.skin.nextSibling);
+      st.bits.push(st.skin, st.edge);
+      var T = { duration: STRETCH_MS, easing: GROW_EASE, fill: 'both' };
+      var L = { duration: STRETCH_MS, easing: 'linear', fill: 'both' };
+      st.clip = addSheet.animate(stretchSheetKeys(st), T);
+      st.clip.id = 'fm-add-stretch';
+      // the glass comes back only once nothing moves: after the stretch, never during it (no backwards fill, so it waits)
+      var settle = addSheet.animate([{ backgroundColor: st.panel, backdropFilter: 'none' }, { backgroundColor: st.rest, backdropFilter: st.restBlur }], { duration: STRETCH_SETTLE_MS, delay: STRETCH_MS, easing: 'ease-out', fill: 'forwards' });
+      settle.id = 'fm-add-settle';
+      st.anims.push(st.clip, settle);
+      growKids().forEach(function (k) { st.anims.push(k.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], L)); });
+      st.edgeAt = st.edge.animate(stretchEdgeKeys(st), T);
+      st.anims.push(st.edgeAt);
+      st.anims.push(st.edge.animate([
+        { offset: 0, opacity: 1, borderColor: st.dash, boxShadow: '0 0 0px 0px rgba(150, 232, 255, 0)' },
+        { offset: 0.15, borderColor: STRETCH_LIT, boxShadow: STRETCH_GLOW },
+        { offset: 0.25, opacity: 1 },
+        { offset: 1, opacity: 0, borderColor: STRETCH_LIT, boxShadow: STRETCH_GLOW }
+      ], L));
+      st.anims.push(st.skin.animate([{ opacity: 1 }, { opacity: 0, offset: 0.35 }, { opacity: 0 }], L));
+      if (st.dim) st.anims.push(st.dim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: STRETCH_MS, easing: 'ease-out', fill: 'both' }));
+      addSheet._stretch = st;
+    }
+    function unstretchAdd() {
+      var st = addSheet._stretch;
+      // back onto where the row is NOW: after a pick the rebuilt timeline has a new row a slot further on, so re-aim first
+      var live = st.row && st.row.isConnected ? st.row : document.querySelector('.tl-addrow');
+      var box = stretchBox(live, stretchGeom(st));
+      if (box) {
+        st.row = live;
+        st.box = box;
+        try { st.clip.effect.setKeyframes(stretchSheetKeys(st)); st.edgeAt.effect.setKeyframes(stretchEdgeKeys(st)); } catch (e) {}
+        stretchPlaceSkin(st);
+      }
+      addSheet.classList.add('closing');
+      addSheet.style.transition = 'none';
+      addSheet.style.transform = 'translateY(0)';   // held where it rests while the shape runs back onto the row
+      addSheet.classList.remove('open');
+      document.body.classList.remove('add-open');
+      st.anims.forEach(function (a) { try { a.reverse(); } catch (e) {} });
+      if (addSheet._closeTimer) clearTimeout(addSheet._closeTimer);
+      addSheet._closeTimer = setTimeout(function () {
+        addSheet._closeTimer = 0;
+        if (addSheet.classList.contains('open')) return;   // reopened in between — openAdd already tidied
+        addSheet.style.transform = '';                     // off the screen FIRST (the base rule's translateY(100%), no transition)…
+        void addSheet.offsetHeight;
+        endStretch(false);                                 // …THEN drop the clip and the pieces, so no frame shows the whole sheet
+        addSheet.style.transition = '';                    // nothing is moving now, so this starts no slide
+        addSheet.classList.remove('closing');
+      }, STRETCH_MS + 30);
+    }
     function openAdd(opts) {
       /* queue 921 S7 review: a Viewer or a Commenter adds nothing — the sheet opened, a picked photo became a
          layer, and the backstop took it away a tick later. The + is hidden for them (styles.css); this is the
@@ -545,6 +777,7 @@ window.FM = window.FM || {};
       var wasUp = !!(addSheet && addSheet.classList.contains('open'));
       var grow = !!(addSheet && !wasUp && opts && opts.grow && growOn());
       if (addSheet && !wasUp && (addSheet._grow || addSheet._growAnims || addSheet.classList.contains('add-grow'))) endGrow();   // a circle still closing goes first
+      if (addSheet && !wasUp && addSheet._stretch) endStretch(false);   // queue 1084 b: …and so does a stretch still running back onto the row
       close(); redrawAdd(); syncAddSheetTop();
       if (addSheet._closeTimer) { clearTimeout(addSheet._closeTimer); addSheet._closeTimer = 0; }   // reopened mid-close: cancel the release
       addSheet.classList.remove('closing'); addSheet.style.transition = ''; addSheet.style.transform = '';
@@ -553,7 +786,7 @@ window.FM = window.FM || {};
       if (!addSheet.classList.contains('open')) addSheet.style.animation = '';
       if (grow) addSheet.classList.add('add-grow');   // queue 1084: BEFORE .open — no style pass may see .open without it, or the swing starts
       addSheet.classList.add('open'); document.body.classList.add('add-open');
-      if (grow) growAdd(opts.origin);
+      if (grow && opts.from === 'row') stretchAdd(opts.row); else if (grow) growAdd(opts.origin);   // queue 1084: b from the slim row, a from a point
     }
     /* THE CLOSE SLIDES DOWN (queue 773). Ezra: "when you swipe down to swipe it away or just like tap to close it it doesn't
        slide down on the screen anymore. It just disappears which is tacky make it actually slide down when you slide your
@@ -570,6 +803,12 @@ window.FM = window.FM || {};
       if (addSheet._grow) {
         if (!(+fromY > 0) && growOn()) { shrinkAdd(); return; }
         endGrow();
+      }
+      /* queue 1084 b: a menu the row stretched into closes as the same animations played backwards, onto the row — unless
+         a finger swiped it, or motion is off now: then the stretch goes (its dim fading with the slide) and the old path runs. */
+      if (addSheet._stretch) {
+        if (!(+fromY > 0) && growOn()) { unstretchAdd(); return; }
+        endStretch(true);
       }
       var y = Math.max(0, +fromY || 0);
       addSheet.classList.add('closing');

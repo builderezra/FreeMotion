@@ -154935,6 +154935,375 @@
     }));
   });
 
+  /* ═══ 1084 (half b) — ON A PROJECT WITH LAYERS THE TAP TO ADD A LAYER ROW STRETCHES INTO THE MENU ═══════════════════════
+     Ezra, 6 Oct (REQUESTS.md #1084, verbatim there): "you tap on the tap to add layer bar … the tap to add layer basically
+     expands up and down until it's created that menu like it'll just like expand from where it was on the timeline to fill
+     up the screen area where it's supposed to be". His pick, 7 Oct: "i want b for when u are pressing the add layer, although
+     the preview u sent is buggy and needs work for b" — redrawn as D4b (design/1084-add-anim fe6a1548,
+     tools/design/1084-add-anim/b-row-expands.html and its README's D4b table), sent at 300 and 380 ms, 300 recommended.
+     Built in js/mobile.js stretchAdd / unstretchAdd / endStretch and js/timeline.js openFromRow, behind the SAME switch as
+     half a, so these run inside grow1084 (above) like 1084 a–g.
+     Every reading is of the ANIMATION — its keyframes, and the computed clip-path with every script animation of the stretch
+     seeked to one time — never a class name alone, and seeked because this runner may fire no frames while it is not fronted
+     (the 571/616/964 notes). Boxes are compared with the part of the row inside the menu's box, since that is all a clip on
+     the menu can start from. The plan's tolerance (±2 px) everywhere a box is compared.
+     WRITTEN WITHOUT RUNNING (21 Oct, a lock run had the machine): only node --check. Each one fails on e191b921 (v17.87),
+     where the slim row calls FM.mobile.openAdd() with nothing and the menu swings up — no clip, so the first stretch reading
+     throws. TODO(first run): measure that the row sits inside the menu's box at 390x760 (the setup line says so if not). */
+  const STRETCH1084 = 300;   // js/mobile.js STRETCH_MS: his speed for b. Change the two together.
+  /* A computed inset() clip as the VIEWPORT box it keeps of el (el's border box minus the insets), or { ok: false }. Reads
+     v when given (a keyframe's value), else el's computed clip-path. Chrome writes the shortest form (inset(a b c) and so
+     on), so 1 to 4 lengths are expanded as the shorthand does; the radii after round are not needed here. */
+  function inset1084(el, v) {
+    v = v == null ? (getComputedStyle(el).clipPath || '') : String(v);
+    const m = /^inset\(\s*(.*?)\s*\)$/i.exec(v.trim());
+    if (!m) return { ok: false, raw: v };
+    const lens = m[1].split(/\s+round\s+/i)[0].trim().split(/\s+/).map(function (s) {
+      if (s === '0') return 0;
+      return /^-?[\d.]+(?:e[-+]?\d+)?px$/i.test(s) ? parseFloat(s) : NaN;
+    });
+    if (!lens.length || lens.length > 4 || lens.some(function (n) { return !isFinite(n); })) return { ok: false, raw: v };
+    const t = lens[0], r = lens.length > 1 ? lens[1] : t, b = lens.length > 2 ? lens[2] : t, l = lens.length > 3 ? lens[3] : r;
+    const bx = el.getBoundingClientRect();
+    return { ok: true, top: bx.top + t, right: bx.right - r, bottom: bx.bottom - b, left: bx.left + l, raw: v };
+  }
+  /* CONTROL for every inset reading: the reader, shown known insets on a known box (the full four, and Chrome's three-value
+     form with a negative top, the shape the stretch ends on), reads them back — and finds none where there is none. */
+  function insetControl1084() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;left:5px;top:7px;width:50px;height:60px;clip-path:inset(4px 6px 8px 10px round 3px);pointer-events:none';
+    document.body.appendChild(probe);
+    try {
+      const q = inset1084(probe);
+      if (!q.ok || Math.abs(q.top - 11) > 0.01 || Math.abs(q.right - 49) > 0.01 || Math.abs(q.bottom - 59) > 0.01 || Math.abs(q.left - 15) > 0.01) throw new Error('CONTROL: the inset reader read a known inset(4px 6px 8px 10px) on a 50x60 box at 5,7 as ' + JSON.stringify(q) + ', so nothing below could be read');
+      probe.style.clipPath = 'inset(-40px 0px 0px round 16px 16px 0px 0px)';
+      const n = inset1084(probe);
+      if (!n.ok || Math.abs(n.top + 33) > 0.01 || Math.abs(n.left - 5) > 0.01 || Math.abs(n.right - 55) > 0.01 || Math.abs(n.bottom - 67) > 0.01) throw new Error('CONTROL: the inset reader read inset(-40px 0px 0px) on a 50x60 box at 5,7 as ' + JSON.stringify(n));
+      probe.style.clipPath = 'none';
+      if (inset1084(probe).ok) throw new Error('CONTROL: the inset reader found an inset on a box with no clip');
+    } finally { probe.remove(); }
+  }
+  function box1084(b) { return [b.left, b.top, b.right, b.bottom].map(Math.round).join(',') + ' (left,top,right,bottom)'; }
+  function near1084(a, b, tol) { return Math.abs(a.left - b.left) <= tol && Math.abs(a.top - b.top) <= tol && Math.abs(a.right - b.right) <= tol && Math.abs(a.bottom - b.bottom) <= tol; }
+  // the part of box r inside box s: all a clip on the menu (box s) can start from
+  function vis1084(r, s) { return { left: Math.max(r.left, s.left), top: Math.max(r.top, s.top), right: Math.min(r.right, s.right), bottom: Math.min(r.bottom, s.bottom) }; }
+  // the alpha of a computed colour (rgb() is 1), or NaN when the page writes it some other way
+  function alpha1084(c) {
+    const m = /^rgba?\(([^)]*)\)$/i.exec(String(c || '').trim());
+    if (!m) return NaN;
+    const p = m[1].split(/[\s,\/]+/).filter(Boolean);
+    return p.length > 3 ? parseFloat(p[3]) : 1;
+  }
+  // every SCRIPT animation of the stretch — on the menu, on its contents, on its pieces — never a CSS swing or slide
+  function stretchAnims1084(sheet) {
+    const els = [sheet].concat([].slice.call(sheet.children), [].slice.call(document.querySelectorAll('.add-stretch-edge, .add-stretch-skin, .add-stretch-dim')));
+    return document.getAnimations().filter(function (a) { return a.effect && els.indexOf(a.effect.target) >= 0 && !a.animationName && !a.transitionProperty; });
+  }
+  function seek1084(list, t) { list.forEach(function (a) { a.pause(); a.currentTime = t; }); }
+  /* A project WITH layers at a phone width (the slim row is the screen this half is about), then everything put back.
+     The tap is a finger's: its press (pointerdown closed by a pointerup — the 571 lesson) on the row, then its click.
+     The click goes to whichever add row is in the document at that moment, as a real lift's hit test would. */
+  async function onRows1084(fn) {
+    const sheet = document.getElementById('add-sheet');
+    const keep = FM.scene.layers.slice();
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (homeWasOpen) FM.home.close();
+      return await atPhoneWidth(async function () {
+        FM.scene.layers.length = 0;
+        FM.addShapeLayer('rect'); FM.addShapeLayer('rect');
+        FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 6; });
+        FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+        await sleep(380);
+        const row0 = document.querySelector('.tl-addrow');
+        if (!row0 || row0.classList.contains('tl-addrow--empty')) throw new Error('setup: no slim Tap to add a layer row on a project with layers at a phone width, so this would measure the wrong thing');
+        if (sheet.classList.contains('open')) throw new Error('setup: the add menu is already open');
+        const rowNow = function () { return document.querySelector('.tl-addrow') || row0; };
+        const pulseOf = function () { return rowNow().querySelector('.tl-addrow-pulse'); };
+        const press = function () {
+          const row = rowNow(), b = row.getBoundingClientRect();
+          const x = Math.round(b.left + Math.min(b.width * 0.6, 220)), y = Math.round(b.top + b.height / 2);
+          const o = { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0 };
+          row.dispatchEvent(new PointerEvent('pointerdown', Object.assign({}, o, { buttons: 1 })));
+          row.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, o, { buttons: 0 })));
+          return { x: x, y: y };
+        };
+        const click = function (p) { rowNow().dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: p.x, clientY: p.y, detail: 1 })); };
+        const tap = function () { const p = press(); click(p); return p; };
+        return await fn({ sheet: sheet, rowNow: rowNow, pulseOf: pulseOf, press: press, click: click, tap: tap });
+      });
+    } finally {
+      [].slice.call(document.querySelectorAll('.add-stretch-edge, .add-stretch-skin, .add-stretch-dim')).forEach(function (n) { n.remove(); });
+      FM.scene.layers.length = 0;
+      keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (homeWasOpen && FM.home && FM.home.open) FM.home.open();
+    }
+  }
+  // shut the menu at the phone width and wait out either close (the stretch played back, or the old slide)
+  async function shutRow1084(c) {
+    try { stretchAnims1084(c.sheet).forEach(function (a) { try { a.finish(); } catch (e) {} }); } catch (e) {}
+    try { FM.mobile.closeAdd(); } catch (e) {}
+    await sleep(STRETCH1084 + 300);
+    [].slice.call(document.querySelectorAll('.add-stretch-edge, .add-stretch-skin, .add-stretch-dim')).forEach(function (n) { n.remove(); });
+  }
+
+  /* 1084 h — THE STRETCH ITSELF (his clauses 1 and 3; D4b). Setting on, a project with layers, a tap on the row: the menu
+     does not swing up. A clip-path inset on it starts on the row's own box and grows up AND down to the whole menu over
+     STRETCH1084 ms (keyframes, and the computed clip seeked to 0, half way and the end). While it moves it is opaque and
+     unblurred (D4b fix 2: the old b smeared the timeline through a moving, blurred, see-through sheet). The row's own words
+     are still where the row was as it starts and gone by 40% (fix 3: the row IS the shape). The menu's contents fade in
+     ONCE, over the last 40%, never dipping (fix 1: the flicker). It ends fully open, where the menu rests.
+     Fails on e191b921 at 'with no clip-path stretch on it': the row opens the menu with openAdd() and nothing else. */
+  test('1084 h · setting on, a project with layers: a tap on the Tap to add a layer row stretches that row up and down into the add menu over 300 ms, from its own box to the whole menu', { item: '1084', budgetMs: 15000 }, async function () {
+    insetControl1084();
+    return grow1084(true, () => onRows1084(async function (c) {
+      const sheet = c.sheet;
+      try {
+        const words = ((c.rowNow().querySelector('.tl-addrow-label') || {}).textContent || '').trim();
+        if (!words) throw new Error('setup: the add row has no label to look for');
+        c.tap();
+        // measured in the click's own task, so nothing has moved the row since the stretch read it
+        const rr = c.rowNow().getBoundingClientRect();
+        if (!sheet.classList.contains('open')) throw new Error('the tap on the Tap to add a layer row did not open the add menu');
+        const a = clipAnim1084(sheet);
+        if (!a) throw new Error('the add menu opened from the Tap to add a layer row with no clip-path stretch on it — it still swings up from the bottom (queue 1084 clause 3: the row itself expands up and down until it fills the menu’s place)');
+        const D = a.effect.getComputedTiming().duration;
+        if (Math.abs(D - STRETCH1084) > 1) throw new Error('the row stretches over ' + Math.round(D) + ' ms — the speed sent to him as recommended is ' + STRETCH1084 + ' ms (D4b, 7 Oct)');
+        const css = sheet.getAnimations().filter(function (x) { return x.animationName || x.transitionProperty; }).map(function (x) { return x.animationName || x.transitionProperty; });
+        if (css.length) throw new Error('something else moves the menu while the row stretches (' + css.join(', ') + ') — two motions at once, the swing his request replaces');
+        const sb = sheet.getBoundingClientRect();
+        if (rr.top < sb.top - 0.5 || rr.bottom > sb.bottom + 0.5) throw new Error('setup: the row (' + box1084(rr) + ') is not inside the menu’s box (' + box1084(sb) + '), so its start would be clamped');
+        const vr = vis1084(rr, sb);
+        // ITS KEYFRAMES: the row's own box, to the whole menu
+        const kf = a.effect.getKeyframes();
+        const k0 = inset1084(sheet, kf[0].clipPath), k1 = inset1084(sheet, kf[kf.length - 1].clipPath);
+        if (!k0.ok || !near1084(k0, vr, 2)) throw new Error('the stretch starts from ' + (k0.ok ? box1084(k0) : '‘' + k0.raw + '’') + ', not from the row’s own box ' + box1084(vr) + ' (queue 1084 clause 3: the row ITSELF expands)');
+        if (!k1.ok || k1.top > sb.top + 0.5 || k1.bottom < sb.bottom - 0.5 || k1.left > sb.left + 0.5 || k1.right < sb.right - 0.5) throw new Error('the stretch ends at ' + (k1.ok ? box1084(k1) : '‘' + k1.raw + '’') + ', short of the whole menu ' + box1084(sb) + ' — it would end cut off, then jump open');
+        // …AND WHAT IT SHOWS, seeked
+        const list = stretchAnims1084(sheet);
+        const at = function (t) { seek1084(list, t); return inset1084(sheet); };
+        const q0 = at(0);
+        if (!q0.ok || !near1084(q0, vr, 2)) throw new Error('at the start the menu is clipped to ' + (q0.ok ? box1084(q0) : '‘' + q0.raw + '’') + ', not to the row it stretches from ' + box1084(vr));
+        // the row's own + and words are where the row was as it starts — nothing blank where the row was (D4b fix 3)
+        const skin = document.querySelector('.add-stretch-skin');
+        if (!skin || (skin.textContent || '').indexOf(words) < 0) throw new Error('as the row starts to stretch its words (‘' + words + '’) are not on it — D4b: the row’s own + and words stay on the growing shape at first, so the row is seen to BE the shape');
+        if (!near1084(skin.getBoundingClientRect(), rr, 2) || !(+getComputedStyle(skin).opacity > 0.95)) throw new Error('at the start the row’s words are not where the row was (' + box1084(skin.getBoundingClientRect()) + ', opacity ' + getComputedStyle(skin).opacity + '; the row ' + box1084(rr) + ')');
+        if (getComputedStyle(skin).pointerEvents !== 'none') throw new Error('the row’s words drawn over the stretch can be hit — they would eat taps meant for the menu');
+        // OPAQUE AND UNBLURRED WHILE IT MOVES (D4b fix 2)
+        [0, D / 2].forEach(function (t) {
+          at(t);
+          const cs = getComputedStyle(sheet), al = alpha1084(cs.backgroundColor);
+          if (!(al > 0.99)) throw new Error('at ' + Math.round(t) + ' ms the stretching menu is ' + cs.backgroundColor + ' — see-through while it moves, so the timeline smears behind it (D4b fix 2: an opaque panel)');
+          if (cs.backdropFilter && cs.backdropFilter !== 'none') throw new Error('at ' + Math.round(t) + ' ms the stretching menu blurs what is behind it (' + cs.backdropFilter + ') — never a blur on moving content (D4b fix 2)');
+        });
+        // UP AND DOWN: half way the shape still holds the row and has moved out on each side that has room
+        const qm = at(D / 2);
+        if (!qm.ok || qm.top > vr.top + 0.5 || qm.bottom < vr.bottom - 0.5) throw new Error('half way the shape (' + (qm.ok ? box1084(qm) : qm.raw) + ') no longer holds the row ' + box1084(vr) + ' — it must grow out of it');
+        if (vr.top - sb.top > 4 && !(qm.top < vr.top - 1)) throw new Error('half way the top edge has not moved up from the row (' + Math.round(qm.top) + ' against ' + Math.round(vr.top) + ') — his words: it expands up and down');
+        if (sb.bottom - vr.bottom > 4 && !(qm.bottom > vr.bottom + 1)) throw new Error('half way the bottom edge has not moved down from the row (' + Math.round(qm.bottom) + ' against ' + Math.round(vr.bottom) + ') — his words: it expands up and down');
+        if (!(qm.bottom - qm.top < sb.height - 2)) throw new Error('half way the shape already covers the whole menu — it must grow, not appear');
+        at(0.4 * D);
+        if (!(+getComputedStyle(skin).opacity < 0.05)) throw new Error('40% of the way the row’s words still show (' + getComputedStyle(skin).opacity + ') over the growing menu — they fade over the first 35% (D4b)');
+        // THE CONTENTS FADE IN ONCE, over the last 40%, never dipping (D4b fix 1: no flicker)
+        const kids = [].slice.call(sheet.children);
+        if (!kids.length) throw new Error('setup: the menu has no contents to watch');
+        const last = kids.map(function () { return -1; });
+        for (let i = 0; i <= 10; i++) {
+          const t = D * i / 10;
+          at(t);
+          kids.forEach(function (k, j) {
+            const o = +getComputedStyle(k).opacity, name = k.id || k.className || k.tagName;
+            if (o < last[j] - 0.01) throw new Error('the menu’s ' + name + ' dips from ' + last[j].toFixed(2) + ' to ' + o.toFixed(2) + ' at ' + Math.round(t) + ' ms — it flickers (D4b fix 1: the contents fade in once)');
+            if (t < 0.6 * D - 1 && o > 0.02) throw new Error('at ' + Math.round(t) + ' ms the menu’s ' + name + ' already shows (' + o.toFixed(2) + ') while the shape is still small — the contents fade in over the LAST 40% only (D4b)');
+            last[j] = o;
+          });
+        }
+        const dimKid = kids.filter(function (k) { return !(+getComputedStyle(k).opacity > 0.98); });
+        if (dimKid.length) throw new Error('at the end of the stretch part of the menu is not fully shown (' + dimKid.map(function (k) { return k.id || k.className; }).join(', ') + ')');
+        // ENDS FULLY OPEN: once it has all played nothing of the menu is cut off, and it rests where it rests
+        list.forEach(function (x) { x.finish(); });
+        const cpf = getComputedStyle(sheet).clipPath, qf = inset1084(sheet);
+        if (cpf !== 'none' && !(qf.ok && qf.top <= sb.top + 0.5 && qf.bottom >= sb.bottom - 0.5 && qf.left <= sb.left + 0.5 && qf.right >= sb.right - 0.5)) throw new Error('once the stretch has played the menu is still cut off (' + cpf + ')');
+        const top = parseFloat(sheet.style.getPropertyValue('--add-sheet-top'));
+        if (isFinite(top) && Math.abs(sheet.getBoundingClientRect().top - top) > 1) throw new Error('the stretched menu’s top is at ' + Math.round(sheet.getBoundingClientRect().top) + ', not where it rests (' + top + ')');
+      } finally { await shutRow1084(c); }
+    }));
+  });
+
+  /* 1084 i — CONTROL: THE SWITCH OFF IS THE OLD ROW, EXACTLY (his clause 5, and the default until he says yes, #545). Setting
+     off, the same tap: no clip and none of the stretch's pieces; classes exactly 'open' (the slim row never had the arrival
+     guard); the swing fm-hinge-up at 0.36 s on its own curve with no transition under it; and the row's #616 press band
+     left running — all as e191b921 has it. Then the setting on and the same tap stretches, so the switch is what made the
+     difference. That last line is the one that fails on e191b921 (there is no stretch to switch to). */
+  test('1084 i · CONTROL: with the switch off the Tap to add a layer row opens the add menu on the old swing exactly as before, with no clip, no stretch pieces and its press light left running, and switched on the same tap stretches', { item: '1084', budgetMs: 15000 }, async function () {
+    return grow1084(false, () => onRows1084(async function (c) {
+      const sheet = c.sheet;
+      try {
+        c.tap();
+        if (!sheet.classList.contains('open')) throw new Error('with the switch off the tap on the row did not open the add menu');
+        if (clipAnim1084(sheet) || getComputedStyle(sheet).clipPath !== 'none') throw new Error('with the switch off the menu is still clipped as it opens (' + getComputedStyle(sheet).clipPath + ') — the switch does nothing');
+        const bits = document.querySelectorAll('.add-stretch-edge, .add-stretch-skin, .add-stretch-dim');
+        if (bits.length) throw new Error('with the switch off ' + bits.length + ' piece(s) of the stretch are on screen (' + [].map.call(bits, function (n) { return n.className; }).join(', ') + ')');
+        const cls = [].slice.call(sheet.classList).sort().join(' ');
+        if (cls !== 'open') throw new Error('with the switch off the menu’s classes are ‘' + cls + '’ — the row has always opened it as plain ‘open’ (no arrival guard, no grow class)');
+        const pulse = c.pulseOf();
+        if (!pulse || !pulse.classList.contains('is-pulsing')) throw new Error('with the switch off the row’s press band (#616) was stopped — the old row lets it run its course');
+        if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          const cs = getComputedStyle(sheet);
+          if (cs.animationName !== 'fm-hinge-up' || cs.animationDuration !== '0.36s' || cs.animationTimingFunction !== 'cubic-bezier(0.18, 0.85, 0.28, 1.02)') throw new Error('with the switch off the menu does not swing up as before: ' + cs.animationName + ' ' + cs.animationDuration + ' ' + cs.animationTimingFunction);
+          if (cs.transitionProperty !== 'none' && parseFloat(cs.transitionDuration) > 0) throw new Error('with the switch off a transition (' + cs.transitionProperty + ' ' + cs.transitionDuration + ') runs under the swing — the old row has none there (#706)');
+          if (!sheet.getAnimations().some(function (x) { return x.animationName === 'fm-hinge-up'; })) throw new Error('the swing is named on the menu but nothing runs it');
+        }
+        await shutRow1084(c);
+        // CONTROL: the setting on, and the same tap stretches — so the switch is what made the difference above
+        FM.settings.set(KEY1084, true);
+        c.tap();
+        if (!clipAnim1084(sheet)) throw new Error('CONTROL: with the setting on the same tap on the row did not stretch it into the menu, so the old path above may be all there is (queue 1084 half b)');
+      } finally { await shutRow1084(c); }
+    }));
+  });
+
+  /* 1084 j — CLAUSE 4 (no clashing lights) AND THE CLOSE (D4b). The press lights the row's band (CONTROL: there is a light
+     to hand over); the click that stretches the row stops the band at once, and the light is the shape's moving edge
+     instead: an edge piece that cannot be hit, on the row at the start, on the clip's edge half way (±2 px), gone at the end
+     where the menu's own top rim takes over. No lap runs round the menu (that is the empty screen's), and the arriving menu
+     takes no taps (#981's guard). CLOSE: the SAME clip animation runs backwards (D4b: one curve both ways, nothing
+     toggled); 40% into it the contents are gone while the shape is still most of the menu (they fade out FIRST); it lands
+     back on the row; and afterwards nothing is left. Fails on e191b921 at 'no stretch for its light to hand over to'. */
+  test('1084 j · the row press light hands over to the stretch: its band stops as the row becomes the shape, a lit edge rides the moving edge, and closing plays the same animation backwards onto the row and leaves nothing behind', { item: '1084', budgetMs: 15000 }, async function () {
+    insetControl1084();
+    return grow1084(true, () => onRows1084(async function (c) {
+      const sheet = c.sheet;
+      try {
+        const p = c.press();
+        const lit = c.pulseOf();
+        if (!lit || !lit.classList.contains('is-pulsing')) throw new Error('CONTROL: the press did not light the row’s band (#616), so there is no light here to hand over');
+        c.click(p);
+        const rr = c.rowNow().getBoundingClientRect();
+        const a = clipAnim1084(sheet);
+        if (!a) throw new Error('the row press opened the add menu with no stretch for its light to hand over to (queue 1084 clause 4)');
+        const D = a.effect.getComputedTiming().duration, sb = sheet.getBoundingClientRect(), vr = vis1084(rr, sb);
+        // ONE LIGHT: the band stops the moment the row becomes the shape, and no lap runs round the menu
+        const band = c.pulseOf();
+        if ((lit.classList.contains('is-pulsing') || lit.getAnimations().length) || (band && band.classList.contains('is-pulsing'))) throw new Error('the row’s press band keeps running while the row stretches into the menu — two lights at once (queue 1084 clause 4: rework them so they match)');
+        if (sheet.querySelector('.add-sheet-rim')) throw new Error('a lap of lights runs round the menu’s rim while the row stretches — two shapes of light at once (clause 4)');
+        if (!sheet.classList.contains('is-arriving')) throw new Error('the stretching menu takes taps while it arrives — a double-tap’s second tap would pick whatever card has grown under the finger (#981 review)');
+        // THE LIGHT RIDES THE MOVING EDGE
+        const edge = document.querySelector('.add-stretch-edge');
+        if (!edge) throw new Error('the stretching row has no lit edge — D4b: the row’s dashed border and its glow ride the moving edge');
+        if (getComputedStyle(edge).pointerEvents !== 'none') throw new Error('the lit edge can be hit — it would eat taps meant for the menu');
+        [].forEach.call(document.querySelectorAll('.add-stretch-skin, .add-stretch-dim'), function (n) {
+          if (getComputedStyle(n).pointerEvents !== 'none') throw new Error('a piece of the stretch (' + n.className + ') can be hit — the tap-away must still reach what is under it');
+        });
+        const list = stretchAnims1084(sheet);
+        seek1084(list, 0);
+        if (!near1084(edge.getBoundingClientRect(), vr, 2)) throw new Error('at the start the lit edge is at ' + box1084(edge.getBoundingClientRect()) + ', not on the row ' + box1084(vr));
+        seek1084(list, D / 2);
+        const qm = inset1084(sheet), er = edge.getBoundingClientRect();
+        if (!qm.ok || !near1084(er, qm, 2)) throw new Error('half way the lit edge (' + box1084(er) + ') is not on the shape’s edge (' + (qm.ok ? box1084(qm) : qm.raw) + ')');
+        if (!(+getComputedStyle(edge).opacity > 0.3)) throw new Error('half way the lit edge is ' + getComputedStyle(edge).opacity + ' opaque — it does not show');
+        seek1084(list, D);
+        if (!(+getComputedStyle(edge).opacity < 0.05)) throw new Error('with the menu fully open the lit edge still shows (' + getComputedStyle(edge).opacity + ') — it hands over to the menu’s own top edge');
+        // CLOSE: the SAME animation, backwards
+        list.forEach(function (x) { x.finish(); });
+        FM.mobile.closeAdd();
+        if (sheet.classList.contains('open') || document.body.classList.contains('add-open')) throw new Error('closing left the menu marked open');
+        const s = clipAnim1084(sheet);
+        if (s !== a) throw new Error(s ? 'closing ran a new clip animation — D4b: the close is the SAME animation played backwards, so the curve is identical both ways' : 'closing did not run the stretch back — D4b: the same shape in reverse, back onto the row');
+        if (!(s.playbackRate < 0)) throw new Error('the close does not play the stretch backwards (playbackRate ' + s.playbackRate + ')');
+        const back = stretchAnims1084(sheet);
+        // THE CONTENTS GO FIRST: 40% into the close they are gone, while the shape is still most of the menu
+        seek1084(back, 0.6 * D);
+        const kids = [].slice.call(sheet.children);
+        const shown = kids.filter(function (k) { return +getComputedStyle(k).opacity > 0.02; });
+        if (shown.length) throw new Error('part of the menu (' + shown.map(function (k) { return k.id || k.className; }).join(', ') + ') still shows 40% into the close — its contents fade out FIRST (D4b)');
+        const q6 = inset1084(sheet);
+        if (!q6.ok || !(q6.bottom - q6.top > 0.75 * sb.height)) throw new Error('40% into the close the shape is ' + (q6.ok ? Math.round(q6.bottom - q6.top) + ' px tall' : q6.raw) + ' of a ' + Math.round(sb.height) + ' px menu — the contents go first, THEN the shape shrinks');
+        seek1084(back, 0);
+        const vr2 = vis1084(c.rowNow().getBoundingClientRect(), sb), q0 = inset1084(sheet);
+        if (!q0.ok || !near1084(q0, vr2, 2)) throw new Error('the close ends at ' + (q0.ok ? box1084(q0) : q0.raw) + ', not back on the row ' + box1084(vr2));
+        back.forEach(function (x) { try { x.finish(); } catch (e) {} });
+        await sleep(D + 450);
+        // NOTHING LEFT BEHIND — the same reads that found the pieces above now find none
+        const left = [];
+        if (document.querySelectorAll('.add-stretch-edge, .add-stretch-skin, .add-stretch-dim').length) left.push('a piece of the stretch');
+        if (sheet.getAnimations().length) left.push(sheet.getAnimations().length + ' animation(s) on the menu');
+        if (kids.some(function (k) { return k.getAnimations().length; })) left.push('a fade on its contents');
+        if (getComputedStyle(sheet).clipPath !== 'none') left.push('a clip (' + getComputedStyle(sheet).clipPath + ')');
+        ['add-grow', 'closing', 'open', 'is-arriving'].forEach(function (k) { if (sheet.classList.contains(k)) left.push('.' + k); });
+        if (sheet.style.transform || sheet.style.transition) left.push('an inline ' + (sheet.style.transform ? 'transform ' + sheet.style.transform : 'transition ' + sheet.style.transition));
+        if (sheet.getBoundingClientRect().top < innerHeight - 2) left.push('the menu still on screen (top ' + Math.round(sheet.getBoundingClientRect().top) + ')');
+        if (left.length) throw new Error('after the menu closed, these were left behind: ' + left.join('; '));
+      } finally { await shutRow1084(c); }
+    }));
+  });
+
+  /* 1084 k — A SWIPE STILL SLIDES IT (#773), as '1084 f' holds for the circle. The swipe's own close (the #773 seam,
+     FM._addSheetClose with the finger's distance) on a stretched menu runs no stretch back, holds the menu where the finger
+     left it, starts no swing, and leaves no edge, snapshot or class behind; the dim fades with the slide rather than blink
+     off, and is gone soon after. The next tap stretches again, from the row. Fails on e191b921 at its first line. */
+  test('1084 k · a swipe down still carries a stretched menu away on the old slide from where the finger left it, its dim going with it, and the next tap on the row stretches again', { item: '1084', budgetMs: 15000 }, async function () {
+    insetControl1084();
+    return grow1084(true, () => onRows1084(async function (c) {
+      const sheet = c.sheet;
+      try {
+        c.tap();
+        if (!clipAnim1084(sheet)) throw new Error('the row tap opened the add menu with no stretch — nothing stretched, so there is no stretched menu to swipe away (queue 1084 half b)');
+        stretchAnims1084(sheet).forEach(function (x) { x.finish(); });
+        // the swipe's own close: makeSwipeDown calls closeAdd with how far the finger went (the #773 seam)
+        FM._addSheetClose(120);
+        if (clipAnim1084(sheet)) throw new Error('a swipe down ran the stretch back instead of sliding the menu on down from the finger (#773)');
+        if (sheet.style.transform !== 'translateY(120px)') throw new Error('the swipe’s close did not hold the menu where the finger left it (inline transform ‘' + sheet.style.transform + '’) — the #773 slide');
+        if (getComputedStyle(sheet).clipPath !== 'none') throw new Error('the swiped menu is still clipped (' + getComputedStyle(sheet).clipPath + ')');
+        if (sheet.getAnimations().some(function (an) { return an.animationName === 'fm-hinge-up'; })) throw new Error('closing a stretched menu by a swipe started the swing up again — the menu opening twice (#690)');
+        if (document.querySelector('.add-stretch-edge, .add-stretch-skin') || sheet.classList.contains('add-grow')) throw new Error('the swipe left the stretch’s edge, its snapshot of the row or its class behind');
+        [].forEach.call(document.querySelectorAll('.add-stretch-dim'), function (d) {
+          const f = d.getAnimations().filter(function (an) { const k = an.effect.getKeyframes(); return k.length > 1 && +k[k.length - 1].opacity === 0; })[0];
+          if (!f) throw new Error('the swipe left the dim behind the menu standing, with nothing fading it out');
+        });
+        await sleep(520);
+        if (document.querySelector('.add-stretch-dim')) throw new Error('the dim behind the menu is still there half a second after the swipe');
+        // the next tap stretches again, from the row
+        c.tap();
+        const rr = c.rowNow().getBoundingClientRect();
+        const a2 = clipAnim1084(sheet);
+        if (!a2) throw new Error('after a swipe the next tap on the row did not stretch the menu again');
+        const vr = vis1084(rr, sheet.getBoundingClientRect()), k0 = inset1084(sheet, a2.effect.getKeyframes()[0].clipPath);
+        if (!k0.ok || !near1084(k0, vr, 2)) throw new Error('after a swipe the next stretch starts from ' + (k0.ok ? box1084(k0) : k0.raw) + ', not the row ' + box1084(vr));
+      } finally { await shutRow1084(c); }
+    }));
+  });
+
+  /* 1084 l — LESS MOTION: TODAY'S MENU, as the circle's '1084 c' (mobile.js growOn says no). CONTROL first: with motion
+     allowed the same tap stretches, so the absence below is the motion setting's doing — and that control is where this
+     fails on e191b921. Then a matchMedia stub (descriptor restored) asks for less motion: no clip, no pieces, plain 'open'. */
+  test('1084 l · asked for less motion, the Tap to add a layer row opens the add menu as it does today, with no stretch', { item: '1084', budgetMs: 15000 }, async function () {
+    return grow1084(true, () => onRows1084(async function (c) {
+      const sheet = c.sheet;
+      const mmDesc = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+      const realMM = window.matchMedia;
+      try {
+        c.tap();
+        if (!clipAnim1084(sheet)) throw new Error('CONTROL: with motion allowed and the setting on, the row tap did not stretch the menu — so its absence under less motion would prove nothing');
+        await shutRow1084(c);
+        window.matchMedia = function (q) {
+          if (/prefers-reduced-motion:\s*reduce/.test(q)) return { matches: true, media: q, onchange: null, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {}, dispatchEvent: function () { return false; } };
+          return realMM.call(window, q);
+        };
+        c.tap();
+        if (!sheet.classList.contains('open')) throw new Error('with less motion asked for the row tap did not open the add menu');
+        if (clipAnim1084(sheet) || getComputedStyle(sheet).clipPath !== 'none') throw new Error('with less motion asked for the row still stretches into the menu — a reveal that sweeps the screen is the motion he asked the phone to stop');
+        if (document.querySelector('.add-stretch-edge, .add-stretch-skin, .add-stretch-dim')) throw new Error('with less motion asked for a piece of the stretch is still drawn');
+        const cls = [].slice.call(sheet.classList).sort().join(' ');
+        if (cls !== 'open') throw new Error('with less motion the menu’s classes are ‘' + cls + '’ — today the row opens it as plain ‘open’');
+      } finally {
+        if (mmDesc) Object.defineProperty(window, 'matchMedia', mmDesc); else delete window.matchMedia;
+        await shutRow1084(c);
+      }
+    }));
+  });
+
   /* ═══ queue 985 — THE CARD'S PICTURE DOES NOT LEAN ON THE PREVIEW (17 Oct, the PM's question after v17.58's two refusals) ═══
    * Both refusals were the PICTURE test's control reading a preview canvas an earlier test had left 320×240. The card itself
    * draws its picture at the project's own shape with FM.renderScene (export-card.js drawThumb) and copies #preview only if
