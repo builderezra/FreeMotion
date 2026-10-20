@@ -1372,12 +1372,17 @@ window.FM = window.FM || {};
     return function () { return (FM._exportTransparent || P.background == null) ? null : P.background; };
   }
 
+  /* bughunt6 #12: THE MOST FRAMES A PNG SEQUENCE HOLDS. runFrames refuses more (every frame is zipped in memory); the Export
+     card (js/export-card.js) reads the same number to say so, and grey Export, before he taps it. */
+  const FRAMES_MAX = 900;
+
   FM.exporter = {
     prepareCaches,
     buildAudioMix,
     mediaBack,   // bughunt3 #2: FM.snapshotPNG (js/app.js) waits through it too
     encodeM4A,
     aacSupported,
+    FRAMES_MAX,
     async run(opts) {
       endAudition();   // queue 916 — see endAudition
       if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') {
@@ -2003,8 +2008,12 @@ window.FM = window.FM || {};
       // long/high-res run can reach GBs and OOM the tab — especially mobile Safari. Fail fast with a clear
       // message instead of crashing: cap the frame count AND the projected uncompressed pixel budget.
       const estBytesPerFrame = outW * outH * 4;   // upper bound (real PNG is smaller, but photographic frames get close)
-      if (totalFrames > 900 || totalFrames * estBytesPerFrame > 2 * 1024 * 1024 * 1024) {
-        throw new Error('FRAMES_TOO_BIG');   // caller message: shorten the range, drop the fps, or lower the resolution
+      if (totalFrames > FRAMES_MAX || totalFrames * estBytesPerFrame > 2 * 1024 * 1024 * 1024) {
+        /* bughunt6 #12: SAY WHICH LIMIT. A lower resolution cannot help a sequence over FRAMES_MAX frames, and the one
+           message told him to try it; the caller (js/app.js runExport) now words each limit for itself. */
+        const err = new Error('FRAMES_TOO_BIG');
+        err.fmFrames = totalFrames; err.fmMax = FRAMES_MAX; err.fmOver = totalFrames > FRAMES_MAX ? 'frames' : 'memory';
+        throw err;
       }
       FM._exportCancel = false;
       resetSeekWatch();

@@ -6524,6 +6524,9 @@ window.FM = window.FM || {};
       /* bughunt6 #3: the encoder takes H.264, only not a frame this big. Said after the finally (offerSmallerMp4). */
       else if (e.message === 'VIDEO_TOO_BIG' && e.fmSize) tooBig = e.fmSize;
       else if (e.message === 'CANCELLED') { /* silent */ }
+      /* bughunt6 #12: said by WHICH limit (js/exporter.js runFrames marks it). Over the frame count a lower resolution is
+         no help, so it is not offered; over the memory budget all three still are, in the words below. */
+      else if (e.message === 'FRAMES_TOO_BIG' && e.fmOver === 'frames') alert('That PNG sequence would be ' + e.fmFrames + ' frames, and a PNG sequence holds at most ' + e.fmMax + '. Shorten the range or lower the frame rate and try again.');
       else if (e.message === 'FRAMES_TOO_BIG') alert('That PNG sequence is too large to build in memory. Shorten the range, lower the frame rate, or drop the resolution and try again.');
       else if (e.message === 'NO_ZIP_WRITER') alert('The frame-sequence exporter failed to load. Please hard-refresh and try again.');
       /* queue 674: was `alert('Export failed: ' + e.message)`, which on his phone read "Export failed:

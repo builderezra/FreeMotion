@@ -168610,6 +168610,95 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* (#12) bughunt6 #12: A PNG SEQUENCE OVER 900 FRAMES WAS REFUSED ONLY AFTER EXPORT, WITH ADVICE THAT CANNOT HELP. js/exporter.js
+     runFrames refuses more than 900 frames (or more than 2 GB of frames in memory) before it renders anything, but the
+     Export card said "1200 PNGs in a ZIP" with Export live, and the one refusal told him to shorten the range, lower the frame
+     rate OR DROP THE RESOLUTION, which cannot bring 1200 frames under 900. Projects swapped in the way the #3 test swaps them
+     (isoKeep puts the scene back), the card read off its own summary, note and button after FM.exportCard.sync(), and the
+     export started anyway through the entry the Export button calls (FM._runExport), with window.alert recorded and put back
+     by its descriptor. Small frames (320×180), so the 1200-frame case is over the frame count and nowhere near the memory one.
+     FAILS ON bc67b146: the 40 s card says 1200 PNGs in a ZIP with Export live, and the refusal offers the resolution.
+     CONTROLS, which hold before and after: at 30 s (900 frames, the most there may be) the card says 900 PNGs in a ZIP with
+     Export live; and a 30-frame 7680×4320 sequence (about 4 GB in memory) is refused with the resolution still in the advice,
+     because there it helps. WRITTEN WITHOUT RUNNING (code only, `node --check`). */
+  test('bughunt6 #12 The export card warns before a PNG-frames export goes over 900 frames: a 40 s project at 30 fps with Frames picked says 1200 frames, over the 900-frame limit, with Export greyed, and an export started anyway is refused naming the 900 without offering a lower resolution (CONTROLS: at 30 s the card says 900 PNGs in a ZIP with Export live, and a sequence over the memory budget is still told to drop the resolution)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (typeof FM.showExportDialog !== 'function' || typeof FM._runExport !== 'function') throw new Error('setup: FM.showExportDialog / FM._runExport (the Export dialog and the entry its button calls) are not reachable');
+    if (!FM.exportCard || typeof FM.exportCard.sync !== 'function') throw new Error('setup: the Export card (FM.exportCard) is not loaded');
+    if (!FM.exporter || typeof FM.exporter.runFrames !== 'function' || !FM.zipWrite) throw new Error('setup: the PNG-frames exporter or its ZIP writer is not loaded, so nothing would be refused for the reason under test');
+    const $ = id => document.getElementById(id);
+    const dlg = $('export-dialog'), fmtEl = $('exp-format'), rangeEl = $('exp-range'), resEl = $('exp-res'), fpsEl = $('exp-fps');
+    const go = $('exp-go'), small = $('xa-small'), noteEl = $('xa-note');
+    if (!dlg || !fmtEl || !rangeEl || !resEl || !fpsEl || !go || !small || !noteEl) throw new Error('setup: the Export dialog, its controls or the card’s summary / note / Export button are missing from this build');
+    const own = (o, k) => Object.getOwnPropertyDescriptor(o, k);
+    const put = (o, k, d) => { try { if (d) Object.defineProperty(o, k, d); else delete o[k]; } catch (e) {} };
+    const d0 = { alert: own(window, 'alert') };
+    const keep = { fmt: fmtEl.value, range: rangeEl.value, fps: fpsEl.value, prefs: null, rep: null };
+    try { keep.prefs = localStorage.getItem('fm.exportPrefs'); keep.rep = localStorage.getItem('fm.lastExportReport'); } catch (e) {}
+    const said = [], bad = [];
+    const _isoK = isoKeep();
+    try {
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+      Object.defineProperty(window, 'alert', { configurable: true, writable: true, value: function (m) { said.push(String(m)); } });
+      const project = (w, h, dur, name) => {
+        const S = FM.makeLayer('shape', { name: name, shape: 'rect', x: Math.round(w / 2), y: Math.round(h / 2), shapeW: Math.round(w / 4), shapeH: Math.round(h / 4), fill: '#f4a261', start: 0, duration: dur });
+        S.start = 0; S.duration = dur;
+        FM.scene = scene([S], { project: { width: w, height: h, fps: 30, duration: dur, background: '#102030' } });
+        FM.selectLayer(null); FM.refreshAll();
+        FM.scene.project.duration = dur;
+      };
+      const frames = () => { fmtEl.value = 'frames'; fmtEl.dispatchEvent(new Event('change', { bubbles: true })); rangeEl.value = 'whole'; fpsEl.value = 'project'; resEl.value = '1'; };
+      const card = async () => { FM.exportCard.sync(); await sleep(40); return { small: small.textContent || '', note: noteEl.textContent || '', off: !!go.disabled }; };
+      const PNG = s => /PNG sequence/.test(s);
+
+      /* CONTROL: 30 s at 30 fps is 900 frames, the most a sequence may have */
+      project(320, 180, 30, 'bh6 #12 thirty');
+      await FM.showExportDialog(); await sleep(80);
+      if (dlg.classList.contains('hidden')) throw new Error('setup: the Export dialog did not open');
+      frames();
+      let c = await card();
+      if (fmtEl.value !== 'frames') throw new Error('setup: the export format would not take frames');
+      if (c.small.indexOf('900 PNGs in a ZIP') < 0 || /limit/.test(c.small)) throw new Error('CONTROL: a 30 s Frames export at 30 fps (900 frames, which the exporter makes) reads ' + JSON.stringify(c.small) + ' on the card, not 900 PNGs in a ZIP');
+      if (c.off) throw new Error('CONTROL: Export is greyed for 900 frames, which the exporter makes');
+
+      /* 40 s at 30 fps: 1200 frames */
+      FM.scene.project.duration = 40; FM.scene.layers[0].duration = 40;
+      c = await card();
+      if (c.small.indexOf('over the 900-frame limit') < 0) bad.push('a 40 s Frames export at 30 fps (1200 frames) reads ' + JSON.stringify(c.small) + ' on the card: nothing says it is over the 900-frame limit until Export is tapped');
+      if (!c.off) bad.push('Export is live on the card for 1200 PNG frames, which the exporter can only refuse');
+
+      /* …and started anyway, through the entry the Export button calls: refused by the frame count */
+      said.length = 0;
+      await FM._runExport(); await sleep(60);
+      const fr = said.filter(PNG);
+      if (!fr.length) bad.push('the 1200-frame export, started anyway, said nothing about the PNG sequence (' + (said.length ? said.map(s => JSON.stringify(s.slice(0, 120))).join(' / ') : 'nothing at all') + ')');
+      else {
+        if (!/\b900\b/.test(fr[0])) bad.push('the 1200-frame refusal does not say a sequence holds at most 900 frames: ' + JSON.stringify(fr[0]));
+        if (/resolution/i.test(fr[0])) bad.push('the 1200-frame refusal tells him to drop the resolution, which cannot bring 1200 frames under 900: ' + JSON.stringify(fr[0]));
+      }
+
+      /* CONTROL: over the memory budget at 30 frames (7680×4320, about 133 MB a frame), the resolution is still in the advice */
+      project(7680, 4320, 1, 'bh6 #12 huge');
+      frames();
+      said.length = 0;
+      await FM._runExport(); await sleep(60);
+      const mem = said.filter(PNG);
+      if (!mem.length || !/resolution/i.test(mem[0])) bad.push('CONTROL: a 30-frame 7680×4320 sequence (about 4 GB in memory) was not refused with the advice to drop the resolution, which is what helps there: ' + (said.length ? said.map(s => JSON.stringify(s.slice(0, 120))).join(' / ') : 'nothing was said'));
+    } finally {
+      put(window, 'alert', d0.alert);
+      try { if (!dlg.classList.contains('hidden')) { const x = $('exp-cancel'); if (x) x.click(); else dlg.classList.add('hidden'); } } catch (e) {}
+      try { const ov = $('export-overlay'); if (ov) ov.classList.add('hidden'); } catch (e) {}
+      fmtEl.value = keep.fmt; rangeEl.value = keep.range; fpsEl.value = keep.fps;
+      try {
+        if (keep.prefs == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', keep.prefs);
+        if (keep.rep == null) localStorage.removeItem('fm.lastExportReport'); else localStorage.setItem('fm.lastExportReport', keep.rep);
+      } catch (e) {}
+      _isoK.put();
+      /* the card redrawn for the format and scene put back, so the Export button is not left greyed for the next test */
+      try { if (FM._syncExportFormat) FM._syncExportFormat(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 6 ──
 
 })();
