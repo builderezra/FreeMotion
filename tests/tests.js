@@ -171192,4 +171192,74 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ 1176 leftover (bughunt6 #14's first gap): A NEW BUILD RELOADED THE APP WHILE A PICKED FILE WAS STILL OPENING ═════════════
+     The hold (index.html fmSwBusy) covers a clip once it is in the scene: fmSwTry saves first whenever the clips changed, and
+     waits on a save still writing. Before that, from the pick (the file input, a drop, FM.importFiles) to the add, js/app.js
+     handleFiles awaits the file's loader — seconds for a song decoded end to end, a GIF frame by frame, or the sound taken out
+     of a whole video — and nothing showed busy, so a build landing then reloaded the app and the picked files never arrived.
+     Now handleFiles counts itself in FM._importing until its batch is over, and fmSwBusy reads it. Driven like bughunt7 #6, the
+     hold handed a counter for the reload: one PNG through FM._handleFiles with FM.loadImageFile held on a gate for that file
+     only; while it waits the app is asked whether it is busy and handed a new build; then the loader fails, the import reports
+     it (FM.reportError, stood in for, so no card comes up) and gives up, and the held build must reload by itself.
+     FAILS BEFORE THE FIX: while the file is opening fmSwBusy answers '' and the new build reloads at once.
+     CONTROLS, which hold before and after: the app is idle to start with, the loader was reached (else the test stops as a setup
+     failure), the failure was reported once and nothing was added, and with nothing running a new build reloads at once.
+     Restores FM.loadImageFile, FM.reportError and FM._importing by descriptor and cancels any hold. */
+  test('1176 leftover: an update does not reload the app while a picked file is still opening: with a picture held in its loader the new build waits, and once the import is over the app reloads by itself (CONTROLS: the loader was reached, the failure was reported and nothing was added; an idle app reloads at once)', { item: '1176', budgetMs: 60000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM._handleFiles !== 'function' || typeof FM.loadImageFile !== 'function' || typeof FM.reportError !== 'function') throw new Error('setup: FM._handleFiles, FM.loadImageFile or FM.reportError is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_importing');
+    const dLoad = Object.getOwnPropertyDescriptor(FM, 'loadImageFile'), realLoad = FM.loadImageFile;
+    const dReport = Object.getOwnPropertyDescriptor(FM, 'reportError');
+    const FILE = new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], '1176 opening.png', { type: 'image/png' });
+    const n0 = FM.scene.layers.length;
+    let reloads = 0, entered = 0, reported = 0, fail = null, pending = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const bad = [];
+    try {
+      await settle('the import');
+      const gate = new Promise((res, rej) => { fail = rej; });
+      gate.catch(() => {});
+      FM.loadImageFile = function (f) { if (f === FILE) { entered++; return gate; } return realLoad.apply(this, arguments); };
+      FM.reportError = function () { reported++; };
+      pending = Promise.resolve(FM._handleFiles([FILE]));
+      if (!(await until(() => entered > 0, 4000))) throw new Error('setup: the import never reached its loader (FM.loadImageFile), so nothing was opening');
+      const during = W.busy(), n = FM._importing;
+      reloads = 0;
+      const now = await W(count);
+      const heldNow = !now && !reloads && W.held();
+      fail(new Error('1176 test: the loader was let go'));
+      try { await pending; } catch (e) {}
+      pending = null;
+      await sleep(60);
+      if (!during) bad.push('while a picked file was opening the app counted as idle (FM._importing ' + JSON.stringify(n) + ')');
+      if (!heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app while a picked file was still opening (' + reloads + ' reload), so the file never arrived' : 'was dropped rather than held while a picked file was opening'));
+      if (reported !== 1 || FM.scene.layers.length !== n0) bad.push('CONTROL: the failed load was reported ' + reported + ' times and the scene went from ' + n0 + ' to ' + FM.scene.layers.length + ' layers, not once and unchanged');
+      if (FM._importing) bad.push('after the import was over FM._importing is still ' + JSON.stringify(FM._importing) + ', so every later update would wait for it');
+      if (W.busy()) bad.push('after the import was over the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(() => reloads > 0, 9000))) bad.push('once the import was over, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (fail) fail(new Error('1176 test: cleaned up'));
+      if (pending) { try { await pending; } catch (e) {} }
+      if (dLoad) Object.defineProperty(FM, 'loadImageFile', dLoad); else FM.loadImageFile = realLoad;
+      if (dReport) Object.defineProperty(FM, 'reportError', dReport); else delete FM.reportError;
+      if (dFlag) Object.defineProperty(FM, '_importing', dFlag); else delete FM._importing;
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();

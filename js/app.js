@@ -5745,6 +5745,14 @@ window.FM = window.FM || {};
   async function handleFiles(files, opts) {
     // Consumed here, once, for THIS batch — see audioImport in js/addmenu.js.
     const wantAudio = !!FM._wantAudioOnly; FM._wantAudioOnly = false;
+    /* 1176 leftover (bughunt6 #14's first gap): FROM THE PICK TO THE ADD, A NEW BUILD WAITS. The loaders below take seconds (a
+       song is decoded end to end, a GIF frame by frame, Add ▸ Audio takes the sound out of a whole video) and nothing showed
+       busy, so a build landing then reloaded the app and the files he had picked never arrived. FM._importing counts the
+       batches still opening, and index.html's fmSwBusy reads it; once a clip is in the scene, the hold's own awaited save
+       covers its file (fmSwTry saves first whenever the clips changed). The try is not re-indented, so the lines it wraps
+       keep their history. */
+    FM._importing = (FM._importing || 0) + 1;
+    try {
     const pickedIn = FM.startedIn(), notAdded = [];   // queue 690 (hunt 5): see FM.stillIn above
     /* SIMPLE MODE P1 (DESIGN.md §15.1, §5.2 import stacks). Every layer of one pick carries `pick: {b, i}`, so the Simple
        view can tell "four clips picked together" from a stacked take. With `opts.at` (Simple's +) the files are laid END
@@ -5790,6 +5798,7 @@ window.FM = window.FM || {};
         ? 'Not added — you switched projects while “' + (notAdded[0] && notAdded[0].name || 'that file') + '” was opening'
         : 'Not added — you switched projects while ' + notAdded.length + ' files were opening', 5000);
     }
+    } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   }
 
   /* ---------- export ---------- */

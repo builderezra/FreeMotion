@@ -1287,6 +1287,7 @@
         if (F._exporting) return 'an export is running';
         if (F._exportingAudio) return 'a sound export is running';   // bughunt7 #6: Export sound (WAV / M4A) shows no overlay (js/app.js runAudioOnlyExport)
         if (F._rendering) return 'a sound is still being worked out';   // 1176 leftover: Save audio as WAV, Remove vocals, Reduce noise (js/audio-tools.js, js/noise-reduction.js)
+        if (F._importing) return 'a picked file is still opening';   // 1176 leftover: from the pick to the add (js/app.js handleFiles)
         var ov = document.getElementById('export-overlay'), rd = document.getElementById('export-ready');
         if (ov && !ov.classList.contains('hidden')) return 'an export is running';
         if (rd && !rd.classList.contains('hidden')) return 'an exported file is waiting on Save';
