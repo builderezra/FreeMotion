@@ -4257,8 +4257,134 @@ window.FM = window.FM || {};
   // The regex alone, for the suite: Chrome always has Intl.Segmenter, so the fallback is held against it directly.
   FM._graphemesFallback = function (s) { return String(s == null ? '' : s).match(GRAPHEME_RE) || []; };
 
-  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan, upright) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)   // upright: Text Curve's Stay upright (#966 opts8)
+  /* ═══ bughunt4 #6 — RIGHT-TO-LEFT TEXT UNDER AN ANIMATE PRESET IS LAID OUT AS IT READS ═══════════════════════════════════════
+   * What was wrong. Still, a line is ONE fillText, and the canvas runs the Unicode bidirectional algorithm over it: in a Hebrew or
+   * Arabic line the first word typed is drawn on the RIGHT, and each word reads right to left. drawAnimatedText's flat path, By
+   * Character and By Word, placed its units one after another from the line's LEFT edge in the order they were typed, so the first
+   * word typed landed on the left: By Word an RTL line's words came out in reverse order, By Character every word was spelled
+   * backwards, and the entrance swept in from the end of the sentence. For the layer's whole life, not only during the entrance,
+   * in the preview and the export. By Line was right all along (its one unit is one fillText).
+   * Now a line holding a right-to-left letter is resolved by that same algorithm, cut down to what one line of plain text needs at
+   * the canvas's own left-to-right direction (UAX #9 rules W1–W7, N1–N2, I1, L1 and L2; no explicit embeddings or isolates), and its
+   * units are placed in the visual order it gives. The stagger still counts in typing order, so the first word typed comes in first,
+   * on the right. A line with no right-to-left letter never gets past the first test: every left-to-right text draws as it did.
+   * Not built (a layer with a Word Highlight keeps the old order: the highlight lays its boxes out in typing order, on the still path
+   * too, so moving the units alone would take them off their words; the curved paths, still and animated, also place glyphs in
+   * typing order; Arabic By Character draws each letter unjoined, as it always has). */
+  const BIDI_RTL = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFC\u200F\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
+  // One character's bidirectional class (its first code point's, from UnicodeData's ranges for the scripts text is typed in)
+  function bidiType(g) {
+    const c = g.codePointAt(0);
+    if (c === undefined) return 'ON';
+    if (c >= 0x30 && c <= 0x39) return 'EN';
+    if ((c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A)) return 'L';
+    if (c === 0x2B || c === 0x2D) return 'ES';
+    if (c === 0x23 || c === 0x24 || c === 0x25) return 'ET';
+    if (c === 0x2C || c === 0x2E || c === 0x2F || c === 0x3A) return 'CS';
+    if (c < 0x80) return /\s/.test(g.charAt(0)) ? 'WS' : 'ON';
+    if (/^[\p{Mn}\p{Me}]/u.test(g)) return 'NSM';
+    if (c === 0xA0 || c === 0x202F || c === 0x060C || c === 0x2044 || c === 0xFE50 || c === 0xFE52 || c === 0xFE55 || c === 0xFF0C || c === 0xFF0E || c === 0xFF0F || c === 0xFF1A) return 'CS';
+    if ((c >= 0x0660 && c <= 0x0669) || c === 0x066B || c === 0x066C || (c >= 0x0600 && c <= 0x0605) || c === 0x06DD || c === 0x08E2) return 'AN';
+    if ((c >= 0x06F0 && c <= 0x06F9) || c === 0xB2 || c === 0xB3 || c === 0xB9 || c === 0x2070 || (c >= 0x2074 && c <= 0x2079) || (c >= 0x2080 && c <= 0x2089) || (c >= 0xFF10 && c <= 0xFF19)) return 'EN';
+    if (c === 0x207A || c === 0x207B || c === 0x208A || c === 0x208B || c === 0x2212 || c === 0xFB29 || c === 0xFE62 || c === 0xFE63 || c === 0xFF0B || c === 0xFF0D) return 'ES';
+    if ((c >= 0xA2 && c <= 0xA5) || c === 0xB0 || c === 0xB1 || c === 0x0609 || c === 0x060A || c === 0x066A || (c >= 0x2030 && c <= 0x2034) || (c >= 0x20A0 && c <= 0x20CF) || c === 0x212E || c === 0x2213 || (c >= 0xFF03 && c <= 0xFF05) || c === 0xFFE0 || c === 0xFFE1 || c === 0xFFE5 || c === 0xFFE6) return 'ET';
+    if (c === 0x200F || (c >= 0x0590 && c <= 0x05FF) || (c >= 0x07C0 && c <= 0x085F) || (c >= 0xFB1D && c <= 0xFB4F) || (c >= 0x10800 && c <= 0x10FFF) || (c >= 0x1E800 && c <= 0x1EFFF)) return 'R';
+    if (c === 0x061C || (c >= 0x0600 && c <= 0x07BF) || (c >= 0x0860 && c <= 0x08FF) || (c >= 0xFB50 && c <= 0xFDFF) || (c >= 0xFE70 && c <= 0xFEFF)) return 'AL';
+    if (c === 0x200E) return 'L';
+    if (/^\s/u.test(g)) return 'WS';
+    if (/^[\p{L}\p{N}\p{Mc}]/u.test(g)) return 'L';
+    return 'ON';
+  }
+  /* The embedding level of each character of one line, `gs` its characters (graphemes), at paragraph level 0 (left to right, the
+     canvas's own direction): 0 left to right, 1 right to left, 2 a number inside right-to-left text. */
+  function bidiLevels(gs) {
+    const n = gs.length, orig = gs.map(bidiType), t = orig.slice();
+    /* W1: a mark takes the class of what it follows (the start of the line counts as L) */
+    for (let i = 0; i < n; i++) if (t[i] === 'NSM') t[i] = i ? t[i - 1] : 'L';
+    /* W2: a European digit after Arabic letters is an Arabic number. W3: Arabic letters are R from here on. */
+    let s = 'L';
+    for (let i = 0; i < n; i++) { const c = t[i]; if (c === 'L' || c === 'R' || c === 'AL') s = c; else if (c === 'EN' && s === 'AL') t[i] = 'AN'; }
+    for (let i = 0; i < n; i++) if (t[i] === 'AL') t[i] = 'R';
+    /* W4: one separator between two numbers of a kind joins them */
+    for (let i = 1; i < n - 1; i++) {
+      if ((t[i] === 'ES' || t[i] === 'CS') && t[i - 1] === 'EN' && t[i + 1] === 'EN') t[i] = 'EN';
+      else if (t[i] === 'CS' && t[i - 1] === 'AN' && t[i + 1] === 'AN') t[i] = 'AN';
+    }
+    /* W5: currency and percent signs next to a European number belong to it. W6: any other separator or terminator is neutral. */
+    for (let i = 0; i < n; i++) {
+      if (t[i] !== 'ET') continue;
+      let j = i;
+      while (j < n && t[j] === 'ET') j++;
+      if ((i > 0 && t[i - 1] === 'EN') || (j < n && t[j] === 'EN')) for (let k = i; k < j; k++) t[k] = 'EN';
+      i = j - 1;
+    }
+    for (let i = 0; i < n; i++) if (t[i] === 'ES' || t[i] === 'ET' || t[i] === 'CS') t[i] = 'ON';
+    /* W7: a European number in left-to-right text is left to right */
+    s = 'L';
+    for (let i = 0; i < n; i++) { const c = t[i]; if (c === 'L' || c === 'R') s = c; else if (c === 'EN' && s === 'L') t[i] = 'L'; }
+    /* N1, N2: a run of spaces and punctuation takes the direction on both sides of it when they agree (numbers count as R), else
+       the paragraph's (L); the start and the end of the line count as L */
+    const dir = c => c === 'L' ? 'L' : (c === 'R' || c === 'EN' || c === 'AN') ? 'R' : null;
+    for (let i = 0; i < n; i++) {
+      if (dir(t[i])) continue;
+      let j = i;
+      while (j < n && !dir(t[j])) j++;
+      const a = i > 0 ? dir(t[i - 1]) : 'L', b = j < n ? dir(t[j]) : 'L', v = a === b ? a : 'L';
+      for (let k = i; k < j; k++) t[k] = v;
+      i = j - 1;
+    }
+    /* I1, then L1: white space at the end of the line goes back to the paragraph's level */
+    const lv = t.map(c => c === 'R' ? 1 : (c === 'EN' || c === 'AN') ? 2 : 0);
+    for (let i = n - 1; i >= 0 && orig[i] === 'WS'; i--) lv[i] = 0;
+    return lv;
+  }
+  /* L2: the visual order of items at levels `lv`, left to right — from the highest level down to 1, every run at that level or
+     above is reversed. */
+  function bidiOrder(lv) {
+    const n = lv.length, ord = [];
+    let hi = 0;
+    for (let i = 0; i < n; i++) { ord.push(i); if (lv[i] > hi) hi = lv[i]; }
+    for (let k = hi; k >= 1; k--) {
+      for (let i = 0; i < n; i++) {
+        if (lv[ord[i]] < k) continue;
+        let j = i;
+        while (j < n && lv[ord[j]] >= k) j++;
+        for (let a = i, b = j - 1; a < b; a++, b--) { const q = ord[a]; ord[a] = ord[b]; ord[b] = q; }
+        i = j - 1;
+      }
+    }
+    return ord;
+  }
+  /* Where each unit of one line starts, in the visual order: xs[k] is unit k's left edge, the units laid out left to right from x0
+     with their own advances `widths` (so the line keeps its width and its left edge). A unit is one item at the lowest level of its
+     characters (a word drawn whole lays itself out inside). null when the line has no right-to-left letter or its order is the
+     typing order, and the caller then lays the units out as it always did. */
+  function bidiUnitXs(line, units, widths, x0) {
+    if (units.length < 2 || !BIDI_RTL.test(line)) return null;
+    const gs = graphemes(line), lv = bidiLevels(gs), at = new Uint8Array(line.length);
+    let off = 0;
+    gs.forEach((g, i) => { at.fill(lv[i], off, Math.min(line.length, off + g.length)); off += g.length; });
+    const ul = [];
+    off = 0;
+    units.forEach(u => {
+      let m = 255;
+      for (let k = off; k < off + u.length && k < at.length; k++) if (at[k] < m) m = at[k];
+      ul.push(m === 255 ? 0 : m);
+      off += u.length;
+    });
+    const ord = bidiOrder(ul);
+    if (ord.every((k, i) => k === i)) return null;
+    const xs = new Array(units.length);
+    let x = x0;
+    ord.forEach(k => { xs[k] = x; x += widths[k]; });
+    return xs;
+  }
+  /* suite seam: each character's level, as the animated path reads it */
+  FM._bidiLevels = function (s) { return bidiLevels(graphemes(s)); };
+
+  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan, upright, hlOn) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)   // upright: Text Curve's Stay upright (#966 opts8)
     // plan: textPlanLines' plan for these lines, or null (#966 scramble layout)
+    /* hlOn (bughunt4 #6): the layer carries a Word Highlight, lit or not; its lines keep the typing order (bidiUnitXs says why) */
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
     /* Landing with a bounce rather than an ease — the standard piecewise curve. `drop` is the only
@@ -4458,6 +4584,9 @@ window.FM = window.FM || {};
       const sp = parseFloat(ctx.letterSpacing) || 0;   // global spacing is active; measureText over-counts one trailing gap per unit (#5)
       const lineW = widths.reduce((a, b) => a + b, 0) - (units.length ? sp : 0);
       let x = align === 'center' ? -lineW / 2 : align === 'right' ? -lineW : 0;
+      /* bughunt4 #6: a right-to-left line's units go where it reads, each unit's left edge from bidiUnitXs; null (every line with no
+         right-to-left letter, By Line, and a layer with a Word Highlight) lays them out one after another as before */
+      const bidiX = (unit !== 'line' && !hlOn) ? bidiUnitXs(line, units, widths, x) : null;
       /* #482 12.4 review: on the caret's line, the unit holding Type-On's dark caret (the last, or the first when typing from
          the End) is laid out and animated whole and painted without it — the caret alone paints nothing; a word or a line
          ending in it paints the rest from the same left edge (left-aligned here), shifted by the caret's advance when it leads. */
@@ -4466,6 +4595,7 @@ window.FM = window.FM || {};
          Word Highlight is on the layer or nothing on this line is lit, and then every unit is drawn by the two lines it always was. */
       const hlo = hl ? hlAnimLine(ctx, hl, li, lines.length, units, widths, x, sp, fs, yy, lh) : null;
       units.forEach((u, ui) => {
+        if (bidiX) x = bidiX[ui];
         const w = widths[ui];
         const wDraw = Math.max(0, w - sp);   // visual width = measured minus the over-counted trailing gap; advance still uses w (= inter-unit gap) (#5)
         const { alpha, dx, dy, sc, scx, scy, rot, outA } = animFor(ck.n++, ck);
@@ -23301,7 +23431,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // #966 opts8: Text Curve's Stay upright (st.curveUpright, set only by a Text Curve that asks for it)
       const _cUp = !!(_tEff && _tEff.curveUpright === true);
       if (FM.textHasAnim(layer)) {
-        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null, _plan, _cUp);
+        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null, _plan, _cUp, !!_hl);
       } else {
         const stk = layer.stroke;
         const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)

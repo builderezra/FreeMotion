@@ -165778,6 +165778,85 @@
     });
   });
 
+  /* (#6) RIGHT-TO-LEFT TEXT UNDER AN ANIMATE PRESET WAS LAID OUT IN TYPING ORDER. Still, a text line is one fillText, and the canvas runs
+     the Unicode bidirectional algorithm over it: a Hebrew or Arabic line's first word typed is drawn on the RIGHT. On c99f5b64
+     drawAnimatedText's flat path (By Character, By Word) placed its units from the line's LEFT edge in the order they were typed
+     (x += w), so an RTL line came out mirrored: its words in reverse order By Word, every word spelled backwards By Character, and the
+     entrance sweeping in from the end of the sentence. The lines here are 40 px white text centred at 160 on _bh2Frame's black frame:
+       Hebrew  א, three spaces, בבבבבב — one letter, a gap of about 33 px, six letters. Still, the six letters sit on the left and the
+               one on the right, so the gap is about 54 px right of the ink's middle; laid out in typing order it is as far left of it,
+               about 108 px from where it belongs.
+       Arabic  لا, three spaces, مدرسة, By Word — the same, the short word on the right.
+       Typewriter By Character at 0.25 s with a 0.5 s stagger shows only the first letter typed, א: on the right, past the still gap.
+     Now a line with a right-to-left letter is resolved by the bidirectional algorithm (compositor.js bidiLevels / bidiOrder) and its
+     units are placed in the visual order it gives (bidiUnitXs); the stagger keeps counting in typing order.
+     FAILS BEFORE THE FIX: the Hebrew gap under Fade by character and Fade by word, and the Arabic one under Fade by word, is mirrored
+     about the middle, about 108 px (Arabic about 50) from the still one; under Typewriter א is drawn at the left end.
+     CONTROL: still, the canvas puts the Hebrew and the Arabic gap right of the middle (this browser runs the algorithm, so the test can
+     tell the orders apart) and a Latin line's left of it; the Latin line under every mode, and the Hebrew under Fade by line (one unit,
+     one fillText), have the still gap; every mode's ink spans what the still ink spans (the units' advances add up to the line's);
+     the Fade is on, and finished at 1 s (By Character the last of ten units is in by 9 × 0.05 + 0.3 = 0.75 s); Typewriter draws one
+     letter at 0.25 s.
+     TOL: 4 px on a gap's centre or an ink edge. By Character each glyph is placed alone, which drops any kerning between letters and
+     moves an anti-aliased edge by a fraction of a pixel (#8 measured within 3 px of the still width); the fault is 50 px or more. */
+  test('bughunt4 #6 Right-to-left text under Animate by Character and by Word reads as it does still: a Hebrew line of a one-letter word, three spaces and a six-letter word has its gap where the still line has it under Fade by character and Fade by word, an Arabic line the same by word, and Typewriter by character shows the first letter typed first, on the right (CONTROLS: still, the canvas puts the first word on the right; a Latin line and Fade by line already match; every mode spans the still ink; the Fade is on and finished)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.textHasAnim !== 'function') throw new Error('setup: FM.renderScene / FM.makeLayer / FM.textHasAnim are not reachable');
+    await _bh2With(async function () {
+      const T = 1, TOL = 4;
+      const HEB = '\u05D0   \u05D1\u05D1\u05D1\u05D1\u05D1\u05D1', ARA = '\u0644\u0627   \u0645\u062F\u0631\u0633\u0629', LAT = 'a   bbbbbb';
+      const L = FM.makeLayer('text', { name: 'bh4 #6 title', text: HEB, x: 160, y: 120, fontSize: 40, fontFamily: 'sans-serif', color: '#ffffff', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4;
+      FM.scene.layers = [L];
+      const STILL = { preset: 'none', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.04 };
+      const fade = unit => ({ preset: 'fade', unit: unit, durIn: 0.3, durOut: 0, stagger: 0.05 });
+      /* The ink of `text` under `anim` at t (a pixel brighter than 150 summed over its channels): its first and last columns, its middle,
+         and the widest run of empty columns between them (the gap between the words), its width and its centre. */
+      const ink = (text, anim, t) => {
+        L.text = text; L.textAnim = Object.assign({}, anim); L.effects = [];
+        delete L._wrapCache;
+        const f = _bh2Frame(t), col = new Uint8Array(320);
+        for (let i = 0, n = 0; i < f.d.length; i += 4, n++) if (f.d[i] + f.d[i + 1] + f.d[i + 2] > 150) col[n % 320] = 1;
+        let x0 = -1, x1 = -1;
+        for (let x = 0; x < 320; x++) if (col[x]) { if (x0 < 0) x0 = x; x1 = x; }
+        let gw = 0, gap = -1, run = 0;
+        for (let x = x0 + 1; x0 >= 0 && x <= x1; x++) {
+          if (!col[x]) { run++; continue; }
+          if (run > gw) { gw = run; gap = ((x - run) + (x - 1)) / 2; }
+          run = 0;
+        }
+        return { x0: x0, x1: x1, mid: (x0 + x1) / 2, gap: gap, gw: gw, anim: !!FM.textHasAnim(L) };
+      };
+      const say = r => 'ink at columns ' + r.x0 + '..' + r.x1 + ' (middle ' + r.mid + '), its widest gap ' + r.gw + ' px centred at ' + r.gap;
+      const bad = [];
+
+      /* ── CONTROLS: still, the canvas puts the first word of an RTL line on the right, and a Latin line's on the left. */
+      const sH = ink(HEB, STILL, T), sA = ink(ARA, STILL, T), sL = ink(LAT, STILL, T);
+      if (sH.anim || sA.anim || sL.anim) bad.push('CONTROL: the still layer has an Animate preset by FM.textHasAnim, so “still” is not the still path');
+      if (sH.x0 < 0 || sH.x1 - sH.x0 < 80 || sH.gw < 15) bad.push('CONTROL: still, the Hebrew line is ' + say(sH) + ' — not glyphs either side of a three-space gap, so there is nothing to place');
+      if (!(sH.gap - sH.mid >= 20)) bad.push('CONTROL: still, the Hebrew line is ' + say(sH) + ': its gap is not right of its middle, so this browser does not lay the line out right to left and the orders cannot be told apart');
+      if (sA.x0 < 0 || sA.gw < 15 || !(sA.gap - sA.mid >= 10)) bad.push('CONTROL: still, the Arabic line is ' + say(sA) + ': not two words with the gap right of the middle');
+      if (sL.x0 < 0 || sL.gw < 15 || !(sL.mid - sL.gap >= 20)) bad.push('CONTROL: still, the Latin line is ' + say(sL) + ': not two words with the gap left of the middle');
+      if (bad.length) throw new Error(bad.join(' · '));
+
+      /* ── Fade by character, by word and (CONTROL) by line: the Hebrew gap where the still one is; the Latin line and the spans as still. */
+      [['Fade by character', fade('char')], ['Fade by word', fade('word')], ['Fade by line', fade('line')]].forEach(([name, anim]) => {
+        const h = ink(HEB, anim, T), l = ink(LAT, anim, T);
+        if (!h.anim) bad.push('CONTROL: ' + name + ' is off by FM.textHasAnim, so this frame did not take the animated path');
+        if (Math.abs(l.gap - sL.gap) > TOL) bad.push('CONTROL: the Latin line under ' + name + ' has ' + say(l) + ' where still it has ' + say(sL));
+        if (Math.abs(h.x0 - sH.x0) > TOL || Math.abs(h.x1 - sH.x1) > TOL) bad.push('CONTROL: the Hebrew line under ' + name + ' has ' + say(h) + ' where still it has ' + say(sH) + ' — its units do not add up to the line');
+        if (Math.abs(h.gap - sH.gap) > TOL) bad.push((name === 'Fade by line' ? 'CONTROL: ' : '') + 'the Hebrew line under ' + name + ' has ' + say(h) + ' where still it has ' + say(sH) + (Math.abs((h.gap - h.mid) + (sH.gap - sH.mid)) <= TOL ? ' — mirrored about its middle: its units were laid out from the left in the order they were typed' : ''));
+      });
+      const aw = ink(ARA, fade('word'), T);
+      if (Math.abs(aw.gap - sA.gap) > TOL) bad.push('the Arabic line under Fade by word has ' + say(aw) + ' where still it has ' + say(sA) + (Math.abs((aw.gap - aw.mid) + (sA.gap - sA.mid)) <= TOL ? ' — mirrored about its middle: its words were laid out in the order they were typed' : ''));
+
+      /* ── Typewriter by character: at 0.25 s only the first letter typed is in, and it is on the right. */
+      const tw = ink(HEB, { preset: 'typewriter', unit: 'char', durIn: 0.3, durOut: 0, stagger: 0.5 }, 0.25);
+      if (tw.x0 < 0 || tw.x1 - tw.x0 > 40) bad.push('CONTROL: under Typewriter by character at 0.25 s the ink is at columns ' + tw.x0 + '..' + tw.x1 + ', not one letter');
+      else if (!(tw.x0 > sH.gap)) bad.push('under Typewriter by character at 0.25 s the one letter in (the first typed, א) is at columns ' + tw.x0 + '..' + tw.x1 + ', not right of the still gap at ' + sH.gap + ' where it is drawn still' + (tw.x1 < sH.mid ? ' — at the left end: the entrance runs from the end of the sentence' : ''));
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#4) AN ADJUSTMENT LAYER'S BLEND MODE DID NOTHING. Red footage fills the frame, (255, 0, 0); above it an adjustment layer with
      Invert (amount 1), whose graded plate over red is cyan, (0, 255, 255). On cedde93f both blits of the graded plate (applyAdjustment's
      and applyAdjustmentFilters') are hard-wired to source-over and never read layer.blendMode, so every mode the Mixing card offers
