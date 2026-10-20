@@ -153216,7 +153216,7 @@
      ofElement / ofTemplate on an ordinary project's doc (no route makes one today: this is a guard, proved by planting one) */
   test('948 review an ordinary project whose document carries a stray element pointer keeps its Export and shows no editing bar', { item: '948' }, async function () {
     if (!FM.libEditSync || !FM.projects || !FM.projects.create) throw new Error('setup: FM.libEditSync or FM.projects missing');
-    const wasOpen = FM.home && FM.home.isOpen && FM.home.isOpen(), made = [];
+    const wasOpen = FM.home && FM.home.isOpen && FM.home.isOpen(), made = [], orig = FM.projects.currentId ? FM.projects.currentId() : null;
     try {
       if (wasOpen) FM.home.close();
       await sleep(150);
@@ -153232,7 +153232,11 @@
     } finally {
       try { delete FM.scene.project.ofElement; } catch (e) {}
       try { FM.libEditSync(); } catch (e) {}
-      for (const id of made) { try { await FM.projects.remove(id, { confirmed: true }); } catch (e) {} }
+      /* isolation (20 Oct, the v17.82 checks): back to the project it found BEFORE removing the one it made, as 869 does. Removing
+         the OPEN project opens another, and with several on the device that was not the one it found (the leak report's open
+         project line in the full run; alone the seeded project is the only other, so it never showed). */
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
+      for (const id of made) { try { if (id !== orig) await FM.projects.remove(id, { confirmed: true }); } catch (e) {} }
       if (wasOpen && FM.home && FM.home.open) FM.home.open();
     }
   });
