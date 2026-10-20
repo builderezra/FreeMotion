@@ -4361,7 +4361,7 @@ window.FM = window.FM || {};
        frame as PNG) renders the same frame to a file and asked nothing, so a watch-only copy could still be taken away a frame
        at a time. Refused here with the export notice, before anything is rendered; every caller reaches it through this. */
     if (exportTurnedOff()) return sayExportTurnedOff();
-    const back =(FM.exporter && FM.exporter.mediaBack) ? FM.exporter.mediaBack(FM.scene, s => { if (FM.toast) FM.toast(s, 2500); }) : null;
+    const back = (FM.exporter && FM.exporter.mediaBack) ? FM.exporter.mediaBack(FM.scene, s => { if (FM.toast) FM.toast(s, 2500); }) : null;
     if (back) return back.then(() => snapshotNow(opts));
     return snapshotNow(opts);
   };
