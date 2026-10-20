@@ -174539,4 +174539,151 @@
     }
     if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
   });
+
+  /* ═══ bughunt8 #2b: DUPLICATE, DELETE AND LEAVE ASKED WHICH PROJECT WAS OPEN OF THE POINTER ANOTHER TAB MOVES ═══════════════════════
+     What was wrong. bughunt8 #2 moved the watch-only gates and the packer off FM.projects.currentId(), the shared localStorage
+     fm.currentProject every tab rewrites when it opens a project, onto this tab's own project (FM.storage.openProjectId). The other
+     "is it the open one?" checks still read the pointer: FM.projects.duplicate flushed only for it; FM.projects.remove moved this tab
+     off the deleted project only when the pointer named it (and kept the live scene's clips when it did not); discardDraft,
+     discardDraftAnyway and detachLinked asked the same; and so did the collab engine (C.leave's and C.reopen's fallbacks, pushLocal's
+     lock, offProject, C.share's pid, C.onReset), the bridge's base fallbacks, collab-ui.js currentPid() and the comments count.
+     The other tab is played the way the 915.5Br and bughunt8 #2 tests play it: fm.currentProject is pointed at the other project's
+     id, and afterwards put back on the project this tab has open (what this tab last wrote there). Three doors, a CONTROL in one tab
+     first each time:
+     1. Duplicate: a layer pushed into this tab's open project and not saved, then Duplicate of that project. The copy must hold it.
+     2. Delete: the project open here, deleted while the other tab is elsewhere, must move this tab off it; the project the other tab
+        has open, deleted from here, must leave this tab on his own project.
+     3. Leave (delete my copy) from a guest session with no gpid, on a shared copy open here, while the other tab has another shared
+        copy open: the copy open here goes, and the other tab's stays, unmarked. (The copies have no room to reach: nothing dials.)
+     FAILS BEFORE THE FIX: with the pointer elsewhere, Duplicate copies the document on disk without the unsaved layer; deleting the
+     project open here leaves this tab on it, and deleting the other tab's project moves this tab off his own; Leave marks the other
+     tab's copy left and deletes it, and the copy open here stays on the device, still linked.
+     CONTROLS, which hold before and after: with one tab Duplicate copies the unsaved layer, deleting the open project moves this tab
+     off it, and Leave deletes the copy open here. No tolerance: every quantity is a name, an id or a count. */
+  test('bughunt8 #2b Duplicate, Delete and Leave ask about this tab’s project, not the one another tab opened: with another tab on a project of its own, Duplicate here copies the layer not saved yet, deleting the project open here moves this tab off it, deleting the one the other tab has open leaves this tab where it is, and Leave from a session with no project id deletes the shared copy open here and not the other tab’s (CONTROLS: with one tab each does what it did before)', { item: '1176', budgetMs: 120000 }, async function () {
+    const C = need921S7('Duplicate, Delete and Leave with two tabs');
+    if (typeof FM.projects.duplicate !== 'function' || typeof FM.projects.remove !== 'function' || typeof FM.projects.createLinked !== 'function' || typeof FM.storage.openProjectId !== 'function' || typeof C.leave !== 'function' || typeof C.Session !== 'function' || typeof C.attach !== 'function') throw new Error('setup: FM.projects.duplicate / remove / createLinked, FM.storage.openProjectId, FM.collab.leave, Session or attach is not reachable');
+    const bad = [], made = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    let moved = false;
+    /* another tab opening project `pid`: only the shared pointer moves */
+    const otherTab = function (pid) { moved = true; localStorage.setItem('fm.currentProject', pid); };
+    /* …and closing again: the pointer is what this tab last wrote there, the project it has open */
+    const backTab = function () {
+      if (!moved) return;
+      moved = false;
+      const mine = FM.storage.openProjectId();
+      if (mine) localStorage.setItem('fm.currentProject', mine); else localStorage.removeItem('fm.currentProject');
+    };
+    const here = function () { return FM.storage.openProjectId(); };
+    const cardOf = function (pid) { return FM.projects.list().filter(function (p) { return p.id === pid; })[0] || null; };
+    const has = function (pid) { return !!cardOf(pid); };
+    const nameOf = function (pid) { const c = cardOf(pid); return pid ? '“' + ((c && c.name) || pid) + '”' : 'nothing'; };
+    const ids = function () { return FM.projects.list().map(function (p) { return p.id; }); };
+    /* Duplicate of `pid`: what it answered, how many copies it made, and the layer names the copy's stored document holds */
+    async function dup(pid) {
+      const before = ids();
+      const ok = await FM.projects.duplicate(pid);
+      const fresh = ids().filter(function (id) { return before.indexOf(id) < 0; });
+      fresh.forEach(function (id) { made.push(id); });
+      let doc = null;
+      try { doc = fresh.length === 1 ? JSON.parse(localStorage.getItem('fm.proj.' + fresh[0]) || 'null') : null; } catch (e) { doc = null; }
+      return { ok: ok, n: fresh.length, names: ((doc && doc.layers) || []).map(function (l) { return l && l.name; }) };
+    }
+    /* an Editor's shared copy with no way back to a room (no hub, rid or token), so opening it starts no reconnect */
+    function linked(tag) {
+      const D = { project: { name: 'Ezra’s film bh8-2b ' + tag, width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(layer921('Shared bh8-2b ' + tag))] };
+      const id = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'editor', epoch: 'e-bh8-2b-' + tag, seq: 0, name: 'Sam' }, D);
+      if (!id) throw new Error('setup: could not make the shared copy ' + tag);
+      made.push(id);
+      return { id: id, D: D };
+    }
+    /* this tab opens the copy, and a guest session with NO gpid is attached to it: the fallback is what Leave reads */
+    async function inSession(copy) {
+      await FM.projects.open(copy.id, { confirmed: true });
+      await settle921(80);
+      if (here() !== copy.id) throw new Error('setup: this tab did not open the shared copy ' + copy.id);
+      if (C.session) throw new Error('setup: a session was already attached before this one');
+      const S = C.Session({ adapter: C.bridge, role: 'editor', mid: 'g', base: jclone921(copy.D), epoch: 1 });
+      if (S.gpid) throw new Error('setup: the session came with a gpid, so the fallback under test is not what Leave reads');
+      C.attach(S, { autoTick: false });
+      return S;
+    }
+    await withLabs921(async function () {
+      try {
+        if (wasHome) FM.home.close();
+        const Y = await FM.projects.create({ name: 'bughunt8 #2b the other tab', width: 320, height: 240 });
+        if (!Y) throw new Error('setup: could not make the other tab’s project');
+        made.push(Y);
+        const X = await FM.projects.create({ name: 'bughunt8 #2b his own', width: 320, height: 240 });
+        if (!X) throw new Error('setup: could not make his own project');
+        made.push(X);
+        if (here() !== X) throw new Error('setup: this tab is not on his own project');
+
+        /* ── 1. DUPLICATE: the flush before the copy is made */
+        FM.scene.layers.push(layer921('bh8-2b one tab'));
+        const d1 = await dup(X);
+        if (d1.n !== 1 || d1.names.indexOf('bh8-2b one tab') < 0) bad.push('CONTROL: with one tab Duplicate of the project open here answered ' + d1.ok + ' and made ' + d1.n + ' copy(ies) holding ' + JSON.stringify(d1.names) + ', not one copy with the layer not saved yet');
+        FM.scene.layers.push(layer921('bh8-2b two tabs'));
+        otherTab(Y);
+        const d2 = await dup(X);
+        backTab();
+        if (d2.n !== 1) bad.push('with another tab on a project of its own, Duplicate of the project open here answered ' + d2.ok + ' and made ' + d2.n + ' copies, not one');
+        else if (d2.names.indexOf('bh8-2b two tabs') < 0) bad.push('with another tab on a project of its own, Duplicate of the project open here copied the document on disk without the flush: the copy holds ' + JSON.stringify(d2.names) + ' and not the layer added last');
+
+        /* ── 2. DELETE: which tab is moved off what */
+        const Z0 = await FM.projects.create({ name: 'bughunt8 #2b deleted, one tab', width: 320, height: 240 });
+        if (!Z0) throw new Error('setup: could not make the project to delete with one tab');
+        made.push(Z0);
+        await FM.projects.remove(Z0);
+        if (here() === Z0) bad.push('CONTROL: with one tab, deleting the project open here left this tab on it');
+        const Z = await FM.projects.create({ name: 'bughunt8 #2b deleted here', width: 320, height: 240 });
+        if (!Z) throw new Error('setup: could not make the project to delete');
+        made.push(Z);
+        if (here() !== Z) throw new Error('setup: this tab is not on the project about to be deleted');
+        otherTab(Y);
+        await FM.projects.remove(Z);
+        const z = here();
+        backTab();
+        if (z === Z) bad.push('with another tab on a project of its own, deleting the project open here left this tab on it: its card is gone, and its next save writes it back as a document no card shows');
+        const W = await FM.projects.create({ name: 'bughunt8 #2b open in the other tab', width: 320, height: 240 });
+        if (!W) throw new Error('setup: could not make the other tab’s open project');
+        made.push(W);
+        await FM.projects.open(X, { confirmed: true });
+        if (here() !== X) throw new Error('setup: this tab did not go back to his own project');
+        otherTab(W);
+        await FM.projects.remove(W);
+        const w = here();
+        backTab();
+        if (w !== X) bad.push('deleting from here the project another tab has open took this tab off his own project, to ' + nameOf(w));
+
+        /* ── 3. LEAVE (delete my copy) from a session that carries no gpid */
+        const G0 = linked('0');
+        await inSession(G0);
+        await C.leave({ keep: false });
+        await settle921(80);
+        if (has(G0.id)) bad.push('CONTROL: with one tab, Leave (delete my copy) left the shared copy open here on the device');
+        const G2 = linked('2'), G1 = linked('1');
+        await inSession(G1);
+        otherTab(G2.id);
+        await C.leave({ keep: false });
+        await settle921(80);
+        backTab();
+        const c2 = cardOf(G2.id);
+        if (!c2) bad.push('with another tab on a shared copy of its own, Leave here deleted THAT copy: the session had no gpid and took the shared pointer for the copy it was on');
+        else if (c2.collab && c2.collab.ended) bad.push('with another tab on a shared copy of its own, Leave here marked THAT copy ' + JSON.stringify(c2.collab.ended));
+        if (has(G1.id)) bad.push('with another tab on a shared copy of its own, the copy he left here is still on the device as a linked copy');
+      } finally {
+        backTab();
+        try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+        try { if (C._undoHandover) C._undoHandover(false); } catch (e) {}
+        /* the pointer back on what this tab has open, so the cleanup's own "is orig open?" reads this tab */
+        try { const mine = FM.storage.openProjectId(); if (mine) localStorage.setItem('fm.currentProject', mine); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+        /* a deleted project this tab stayed on (the bug) is written back by the next flush: no card, so take the stray document */
+        made.forEach(function (id) { try { if (!has(id)) localStorage.removeItem('fm.proj.' + id); } catch (e) {} });
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
