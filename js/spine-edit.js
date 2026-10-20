@@ -87,7 +87,14 @@ window.FM = window.FM || {};
     let dl = delta;
     if (d0 - dl < floor) dl = d0 - floor;
     if (rev) {
-      if (sd < Infinity) { const maxDur = (sd - tr0) / sp; if (d0 - dl > maxDur) dl = d0 - maxDur; }
+      /* bughunt7 #4: A REVERSED HEAD GROWS ON THE SPEED CURVE, as Full's grip and Extend do (#1107). A reversed clip opens on the
+         END of its source window, so growing the head walks that end up through the file. This capped it with
+         `(sd - tr0) / sp`, sp the speed at the head, and on a ramp the speed changes along the clip: a rising ramp (0.5x -> 3x)
+         grew until its first frame read past the end of the file, and a falling one (3x -> 0.5x) was stopped short of it.
+         FM.revHeadGrowLimit (js/scene.js) solves it on the real curve, with the arguments the Full grip passes: the layer as it
+         is (this function writes nothing), the move asked for, the source's length and the trimStart. A flat speed gets the
+         answer the division gave. A shrink and a source of unknown length pass through untouched. */
+      if (sd < Infinity && FM.revHeadGrowLimit) dl = FM.revHeadGrowLimit(layer, dl, sd, tr0);
       return { start: s0 + dl, duration: d0 - dl, trimStart: tr0, landed: dl, fxShift: dl };
     }
     if (!isVid) return { start: s0 + dl, duration: d0 - dl, trimStart: keepTrim, landed: dl, fxShift: dl };
@@ -1528,7 +1535,7 @@ window.FM = window.FM || {};
      { name, why }, why being 'type' (not a video, photo or sound), 'video' / 'sound' / 'picture' (the browser raised an error opening it:
      media.js loadVideoFile / loadImageFile reject) or 'read' (it never said how long it is: loadVideoFile's 20 s timeout, read by its
      message). spine-words.js cantAdd says them. A file let go because he switched projects is not the file's fault and is not listed. */
-  S.readPicked = async function (files) {
+  const readPickedNow = async function (files) {
     const pickedIn = FM.startedIn ? FM.startedIn() : null, out = { clips: [], sounds: [], skipped: 0, failed: [] };
     for (const f of files || []) {
       const k = mediaKindOf(f), name = String((f && f.name) || '').trim();
@@ -1545,6 +1552,12 @@ window.FM = window.FM || {};
       } catch (e) { failed(whyOf(e)); if (FM.reportError) FM.reportError('reading “' + (f && f.name) + '”', e); }
     }
     return out;
+  };
+  /* The update hold (index.html fmSwBusy) counts this pick like js/app.js handleFiles: Simple's add commands open their files
+     here before the step runs, and a build landing in that window reloaded the app and the picked files never arrived. */
+  S.readPicked = async function (files) {
+    FM._importing = (FM._importing || 0) + 1;
+    try { return await readPickedNow(files); } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   };
   /* …and how the four add commands say them: with nothing else to add the command refuses with the file's own line; with something added the
      line says what went in, then what did not. Ten seconds and allowed to wrap (refuse / speakDone pass `long`), so a name and its reason can
@@ -2302,11 +2315,15 @@ window.FM = window.FM || {};
       }
     } else if (L.sm && L.sm.tail && Math.abs(dt) > 1e-9) plan.writes.push(() => { S.setFlag(L, 'tail', false); });
     plan.pre.push(async () => {
-      await FM.swapInMedia(id, nrec, { noSave: true, simple: true });
-      for (const t of twins) {
-        let r2 = null; try { r2 = nrec.file ? await FM.loadVideoFile(nrec.file) : null; } catch (e) { r2 = null; }
-        if (r2) await FM.swapInMedia(t.id, r2, { noSave: true, noLib: true, simple: true });
-      }
+      /* …and Replace's own loads, for the clip and its twins, are in the hold too (a reload between them left the twins on the old file). */
+      FM._importing = (FM._importing || 0) + 1;
+      try {
+        await FM.swapInMedia(id, nrec, { noSave: true, simple: true });
+        for (const t of twins) {
+          let r2 = null; try { r2 = nrec.file ? await FM.loadVideoFile(nrec.file) : null; } catch (e) { r2 = null; }
+          if (r2) await FM.swapInMedia(t.id, r2, { noSave: true, noLib: true, simple: true });
+        }
+      } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
     });
     plan.live = line('replaced', S.itemWord(L, R));
     return plan;

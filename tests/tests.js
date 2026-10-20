@@ -172543,4 +172543,182 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ #1176 bughunt6 #5: ALT IN SIMPLE RAN FULL'S KEYS ══════════════════════════════════════════════════════════════════════
+     WHAT WAS WRONG: FM.editor.onKey (js/editor-mode.js) returned false for every key held with Alt (Option on a Mac), so in Simple
+     the key went straight on to Full's keyboard handler in js/app.js, which never reads Alt. Alt+Delete on a main clip ran Full's
+     delete and left a gap where the clip had been; Alt+D cut a main clip's tail with no ripple, so the clip after it stayed put.
+     In Simple a key held with Alt now means what the plain key means there. Driven with real keydown events on window in a
+     throwaway Simple project (A 0-4, B 4-7, C 7-10, a title on B): each plain key is pressed first and the timeline read, then
+     undone; then the same key with Alt, and the timeline must be the one the plain key left.
+     FAILS BEFORE THE FIX: after Alt+Delete C is still at 7 and the title on B is still there (Simple's Delete brings C to 4 and
+     takes the title with B); after Alt+D at 2.5 s B is still at 4 (Simple's D brings it to 2.5).
+     CONTROLS, which hold before and after: the plain keys do Simple's ripple (C at 4, B at 2.5); what Simple shares with Full works
+     the same with Alt held (Alt+Space reaches the play toggle once, as Space does; Alt+⌘Z undoes back to the document byte for
+     byte, as ⌘Z does); and in Full, Alt+D and Alt+Delete are Full's own keys exactly as before: A is cut to 2.5 s with B left at 4,
+     then B goes and C stays at 7 with the title still there. */
+  test('simple fix: in Simple Alt+Delete and Alt+D do what Delete and D do there, the clips closing up with no gap, never Full’s keys; Alt+Space and Alt+⌘Z still play and undo (CONTROL: in Full Alt+D and Alt+Delete are Full’s own as before)', { item: '1176', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smT('On B', 5, 1, W, H), smV('C', 7, 3, W, H), smV('B', 4, 3, W, H), smV('A', 0, 4, W, H)], async function (v) {
+      const bad = [], doc0 = v.doc();
+      const alt = (code, k, mod) => window.dispatchEvent(new KeyboardEvent('keydown', { code: code, key: k || code, altKey: true, metaKey: !!mod, ctrlKey: false, bubbles: true }));
+      const tl = () => FM.scene.layers.map(l => l.name + ' ' + (+l.start || 0).toFixed(6) + '+' + (+l.duration || 0).toFixed(6) + ' tr ' + (+l.trimStart || 0).toFixed(6)).sort().join(' · ');
+      const back = async (withAlt, what) => {
+        if (withAlt) alt('KeyZ', 'z', true); else v.key('KeyZ', 'z', true);
+        await v.idle();
+        if (v.doc() !== doc0) throw new Error(bad.concat([(withAlt ? 'Alt+⌘Z' : '⌘Z') + ' after ' + what + ' did not put the document back as it was']).join(' · '));
+      };
+      /* ── Delete on main clip B: the plain key first (Simple's own answer), then with Alt */
+      FM.selectLayer(v.L('B').id); await v.sleep(30);
+      v.key('Delete'); await v.idle();
+      const del = tl();
+      if (v.L('B') || v.L('On B') || !v.L('C') || v.L('C').start !== 4) throw new Error('CONTROL: Simple’s own Delete did not close up: ' + del + ' (it said “' + v.say() + '”)');
+      await back(false, 'Delete');
+      FM.selectLayer(v.L('B').id); await v.sleep(30);
+      alt('Delete'); await v.idle();
+      const altDel = tl();
+      if (altDel !== del) bad.push('Alt+Delete on main clip B left ' + altDel + ' where Delete leaves ' + del);
+      /* CONTROL: Alt+⌘Z undoes it, as ⌘Z does */
+      await back(true, 'Alt+Delete');
+      /* ── D on main clip A with the playhead at 2.5 s: the plain key, then with Alt */
+      FM.selectLayer(v.L('A').id); FM.time = 2.5; await v.sleep(30);
+      v.key('KeyD', 'd'); await v.idle();
+      const trim = tl();
+      if (Math.abs(v.L('A').duration - 2.5) > 1e-9 || Math.abs(v.L('B').start - 2.5) > 1e-9) throw new Error('CONTROL: Simple’s own D did not trim A and close up: ' + trim + ' (it said “' + v.say() + '”)');
+      await back(false, 'D');
+      FM.selectLayer(v.L('A').id); FM.time = 2.5; await v.sleep(30);
+      alt('KeyD', 'd'); await v.idle();
+      const altTrim = tl();
+      if (altTrim !== trim) bad.push('Alt+D on main clip A at 2.5 s left ' + altTrim + ' where D leaves ' + trim);
+      await back(true, 'Alt+D');
+      /* ── CONTROL: Space is shared with Full, and Alt+Space reaches the same play toggle, once */
+      const tp = FM.togglePlay;
+      let plays = 0;
+      try {
+        FM.togglePlay = function () { plays++; };
+        v.key('Space', ' ');
+        const one = plays;
+        alt('Space', ' ');
+        if (one !== 1 || plays !== 2) bad.push('CONTROL: Space reached the play toggle ' + one + ' time(s) and Alt+Space ' + (plays - one) + ' (each should, once)');
+      } finally { FM.togglePlay = tp; }
+      if (FM.playing && FM.pause) FM.pause();
+      /* ── CONTROL — FULL IS UNCHANGED: there Alt+D and Alt+Delete are Full's own keys, as before (no ripple) */
+      FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(30);
+      FM.selectLayer(v.L('A').id); FM.time = 2.5; await v.sleep(30);
+      alt('KeyD', 'd'); await v.sleep(60);
+      if (Math.abs(v.L('A').duration - 2.5) > 1e-9 || v.L('B').start !== 4) bad.push('CONTROL: in Full Alt+D did not cut A’s tail in place with B left at 4: ' + tl());
+      FM.selectLayer(v.L('B').id); await v.sleep(30);
+      alt('Delete'); await v.sleep(60);
+      if (v.L('B') || !v.L('C') || v.L('C').start !== 7 || !v.L('On B')) bad.push('CONTROL: in Full Alt+Delete was not Full’s delete (B gone, C left at 7, the title kept): ' + tl());
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
+  /* ═══ #1176 bughunt7 #4: SIMPLE GREW A REVERSED CLIP'S HEAD BY THE SPEED AT THE HEAD ══════════════════════════════════════════
+     WHAT WAS WRONG: FM.trimClipEdge (js/spine-edit.js), the maths under every Simple head grow (the grip's preview in
+     js/simple-timeline.js, a main clip's head trim, an item's head trim), capped how far a REVERSED clip's head may grow with
+     (source length - trimStart) / the speed at the head. A reversed clip opens on the END of its source window, so growing the head
+     walks that end up through the file, and on a speed ramp the speed changes along the clip. A rising ramp (0.5x at the head to
+     3x) was let grow until its first frame read past the end of the file; a falling one (3x to 0.5x) was stopped with source still
+     left. Full's grip and Extend cap it on the curve with FM.revHeadGrowLimit (js/scene.js, #1107), and Simple now calls the same
+     with the same arguments. Pure: a 4 s reversed clip at 60 s with trimStart 1.5 over a 20 s file, its head asked to grow 50 s;
+     the first frame of what Simple gives is read through FM.layerLocalTime.
+     FAILS BEFORE THE FIX: the rising ramp grows 33 s and its first frame reads 25 s of the 20 s file; the falling ramp grows only
+     2.17 s and its first frame reads 15 s, with 5 s of the file left.
+     CONTROLS, which hold before and after: a flat 2x reversed clip stops where the division put it (start 54.75, 9.25 s long,
+     within 1e-6: the curve's bisection lands within 50 s / 2^30 of it) with its first frame on the file's end; a flat grow and a
+     ramped grow that fit are given exactly as asked. */
+  test('simple fix: a reversed clip on a rising speed ramp cannot grow its head past the end of its source, and one on a falling ramp may grow until it reaches it (CONTROLS: a flat reversed clip stops where it did; a grow that fits is given as asked)', { item: '1176' }, function () {
+    smNeedP2();
+    const SD = 20;
+    const mk = speed => { const l = FM.makeLayer('video', { name: 'rev', start: 60, duration: 4 }); l.trimStart = 1.5; l.reversed = true; l.speed = speed; return l; };
+    const ramp = (a, b) => ({ kf: [{ t: 60, v: a, e: 'linear' }, { t: 64, v: b, e: 'linear' }] });
+    /* the source second the grown clip's FIRST frame shows (a reversed clip opens on the end of its window) */
+    const firstRead = (l, r) => { const g = Object.assign(JSON.parse(JSON.stringify(l)), { start: r.start, duration: r.duration, trimStart: r.trimStart }); return FM.layerLocalTime(g, g.start); };
+    const f3 = x => (typeof x === 'number' ? x.toFixed(3) : String(x));
+    const bad = [];
+    /* rising 0.5x → 3x: never past the end of the file */
+    const up = mk(ramp(0.5, 3)), ru = FM.trimClipEdge(up, 'head', -50, SD), upAt = firstRead(up, ru);
+    if (!Number.isFinite(upAt) || !(ru.landed < -1)) bad.push('setup: the rising ramp’s head did not grow (' + f3(ru.landed) + ' s) or its first frame did not read (' + f3(upAt) + ')');
+    else if (!(upAt <= SD + 0.01)) bad.push('rising 0.5x → 3x: the head grew ' + f3(-ru.landed) + ' s and its first frame reads ' + f3(upAt) + ' s of a ' + SD + ' s file');
+    else if (!(upAt >= SD - 0.01)) bad.push('rising 0.5x → 3x: the head grew ' + f3(-ru.landed) + ' s and stopped with its first frame at ' + f3(upAt) + ' s, short of the file’s end at ' + SD + ' s');
+    /* falling 3x → 0.5x: as far as the file allows, not stopped short */
+    const dn = mk(ramp(3, 0.5)), rd = FM.trimClipEdge(dn, 'head', -50, SD), dnAt = firstRead(dn, rd);
+    if (!Number.isFinite(dnAt)) bad.push('setup: the falling ramp’s first frame did not read (' + f3(dnAt) + ')');
+    else if (!(Math.abs(dnAt - SD) <= 0.01)) bad.push('falling 3x → 0.5x: the head grew ' + f3(-rd.landed) + ' s and its first frame reads ' + f3(dnAt) + ' s, not the file’s end at ' + SD + ' s (' + f3(SD - dnAt) + ' s of it left unused)');
+    /* CONTROL: a flat 2x reversed clip stops where the division (18.5 s of source / 2) put it */
+    const fl = mk(2), rf = FM.trimClipEdge(fl, 'head', -50, SD);
+    if (Math.abs(rf.start - 54.75) > 1e-6 || Math.abs(rf.duration - 9.25) > 1e-6 || rf.trimStart !== 1.5) bad.push('CONTROL: a flat 2x reversed clip grown 50 s stopped at ' + [rf.start, rf.duration, rf.trimStart].join(' / ') + ', not 54.75 / 9.25 / 1.5 as before');
+    else if (!(Math.abs(firstRead(fl, rf) - SD) <= 1e-5)) bad.push('CONTROL: the flat 2x clip’s first frame reads ' + f3(firstRead(fl, rf)) + ' s, not the file’s end');
+    /* CONTROL: a grow that fits is given exactly as asked, flat and ramped */
+    const ff = FM.trimClipEdge(mk(2), 'head', -2, SD), fr = FM.trimClipEdge(mk(ramp(0.5, 3)), 'head', -2, SD);
+    if (ff.start !== 58 || ff.duration !== 6 || ff.landed !== -2) bad.push('CONTROL: a flat grow of 2 s that fits gave ' + [ff.start, ff.duration, ff.landed].join(' / ') + ', not 58 / 6 / -2');
+    if (fr.start !== 58 || fr.duration !== 6 || fr.landed !== -2) bad.push('CONTROL: a ramped grow of 2 s that fits gave ' + [fr.start, fr.duration, fr.landed].join(' / ') + ', not 58 / 6 / -2');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ simple fix: SIMPLE'S OWN PICKS ARE IN THE UPDATE HOLD TOO ═══════════════════════════════════════════════════════════
+     v17.85 counts js/app.js handleFiles in FM._importing, but Simple's add commands open their picked files through
+     FM.spine.readPicked (js/spine-edit.js) before the step runs, and Simple's Replace loads the new file for a clip and its
+     twins in the plan's pre-step. Neither was counted, so a build landing then reloaded the app and the picked files never
+     arrived. Driven like the 1176 picked-file test: one PNG through readPicked with FM.loadImageFile held on a gate for that
+     file only; while it waits the app is asked whether it is busy and handed a new build; then the loader fails, readPicked
+     lists the file as failed, and the held build must reload by itself.
+     FAILS BEFORE THE FIX: while readPicked's loader waits, fmSwBusy answers '' and the new build reloads at once.
+     CONTROLS, which hold before and after: the app is idle to start with, the loader was reached, the file comes back in
+     readPicked's failed list, and with nothing running a new build reloads at once.
+     Restores FM.loadImageFile, FM.reportError and FM._importing by descriptor and cancels any hold. */
+  test('simple fix: an update does not reload the app while Simple is still opening a picked file: with a picture held in readPicked’s loader the new build waits, and once it gives up the app reloads by itself (CONTROLS: the loader was reached, the file is listed as failed, the counter is back to 0, an idle app reloads at once)', { item: '1176' }, async function () {
+    const W = FM._swReloadWhenIdle;
+    const S = FM.spine;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (!S || typeof S.readPicked !== 'function' || typeof FM.loadImageFile !== 'function' || typeof FM.reportError !== 'function') throw new Error('setup: FM.spine.readPicked, FM.loadImageFile or FM.reportError is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_importing');
+    const dLoad = Object.getOwnPropertyDescriptor(FM, 'loadImageFile'), realLoad = FM.loadImageFile;
+    const dReport = Object.getOwnPropertyDescriptor(FM, 'reportError'), realReport = FM.reportError;
+    const FILE = new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], 'simple opening.png', { type: 'image/png' });
+    let reloads = 0, entered = 0, fail = null, pending = null, got = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const bad = [];
+    try {
+      await settle('the pick');
+      const gate = new Promise((res, rej) => { fail = rej; });
+      gate.catch(() => {});
+      FM.loadImageFile = function (f) { if (f === FILE) { entered++; return gate; } return realLoad.apply(this, arguments); };
+      FM.reportError = function () {};
+      pending = Promise.resolve(S.readPicked([FILE])).then((o) => { got = o; });
+      if (!(await until(() => entered > 0, 4000))) throw new Error('setup: readPicked never reached its loader (FM.loadImageFile), so nothing was opening');
+      const during = W.busy(), n = FM._importing;
+      reloads = 0;
+      const now = await W(count);
+      const heldNow = !now && !reloads && W.held();
+      fail(new Error('simple fix test: the loader was let go'));
+      try { await pending; } catch (e) {}
+      pending = null;
+      await sleep(60);
+      if (!during) bad.push('while Simple was opening a picked file the app counted as idle (FM._importing ' + JSON.stringify(n) + ')');
+      if (!heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app while Simple was still opening a picked file (' + reloads + ' reload), so the file never arrived' : 'was dropped rather than held while Simple was opening a picked file'));
+      if (!got || !got.failed || got.failed.length !== 1) bad.push('CONTROL: readPicked did not list the one file it could not open (' + JSON.stringify(got && got.failed) + ')');
+      if (FM._importing) bad.push('after the pick was over FM._importing is still ' + JSON.stringify(FM._importing) + ', so every later update would wait for it');
+      if (W.busy()) bad.push('after the pick was over the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(() => reloads > 0, 9000))) bad.push('once the pick was over, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (dLoad) Object.defineProperty(FM, 'loadImageFile', dLoad); else FM.loadImageFile = realLoad;
+      if (dReport) Object.defineProperty(FM, 'reportError', dReport); else FM.reportError = realReport;
+      if (dFlag) Object.defineProperty(FM, '_importing', dFlag); else delete FM._importing;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();
