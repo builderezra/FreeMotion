@@ -168699,6 +168699,134 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* (#13) bughunt6 #13: A 17TH AUDIO EFFECT WAS ADDED, THEN LOST. The load sanitiser (js/storage.js sanitizeAudioFx) keeps the
+     first 16 audio effects of a clip on every Undo, Redo, reopen and friend's edit, and the autosave follows, but a tap in the
+     Audio Effects browser, the ⋯ menu's Duplicate and the Paste button all added a 17th with no check; only the Voice path
+     refused (FM.audioVoices.addTo, and its toast: A clip holds 16 audio effects). Each path is driven the way his finger
+     drives it — the browser opened on the clip and an effect tile tapped; the open row's ⋯ and its Duplicate (as the 727
+     test does); the Audio Effects section's Paste with one effect on the clipboard — on a video clip with a media record (the
+     browser refuses a clip it thinks has no sound), in the test's own scene. FM.toast is recorded and put back by its
+     descriptor; the audio clipboard is put back as it was.
+     FAILS ON bc67b146: each of the three paths leaves 17 audio effects on the clip and a history step, and says nothing.
+     CONTROLS, which hold before and after: the sanitiser keeps 16 of 17 (so 16 is the cap an Undo applies), and with 15 on the
+     clip the browser's tap adds the 16th (so the refusals below are the cap, not a tap that never landed). */
+  test('bughunt6 #13 A clip cannot be given a seventeenth audio effect: with 16 on a clip, a tap in the Audio Effects browser, the ⋯ menu’s Duplicate and Paste are each refused in the Voice path’s words (A clip holds 16 audio effects) and add nothing, so no Undo can cut one (CONTROLS: the sanitiser keeps 16 of 17, and with 15 on the clip the browser’s tap adds the 16th)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.audioFxBrowser || typeof FM.audioFxBrowser.open !== 'function' || !FM.audioFxRegistry || !FM.audioVoices) throw new Error('setup: the Audio Effects browser, its registry or FM.audioVoices is not loaded');
+    if (!FM.inspector || typeof FM.inspector.openCategory !== 'function' || !FM.contextMenu) throw new Error('setup: the inspector or the context menu is not reachable');
+    if (!FM.storage || typeof FM.storage._sanitizeLayers !== 'function' || !FM.history || !FM.history._steps) throw new Error('setup: FM.storage._sanitizeLayers or FM.history._steps is missing');
+    const MAX = FM.audioVoices.max;
+    if (MAX !== 16) throw new Error('setup: FM.audioVoices.max is ' + MAX + ', not the 16 this test was written for');
+    /* CONTROL: what an Undo, a reopen or a friend's edit keeps */
+    const probe = [{ type: 'video', audioFx: [] }];
+    for (let i = 0; i < MAX + 1; i++) probe[0].audioFx.push(FM.audioFxRegistry.makeInstance('gain'));
+    FM.storage._sanitizeLayers(probe);
+    if (probe[0].audioFx.length !== MAX) throw new Error('CONTROL: the load sanitiser keeps ' + probe[0].audioFx.length + ' of 17 audio effects, not ' + MAX + ', so ' + MAX + ' is not the cap an Undo applies');
+    const own = (o, k) => Object.getOwnPropertyDescriptor(o, k);
+    const put = (o, k, d) => { try { if (d) Object.defineProperty(o, k, d); else delete o[k]; } catch (e) {} };
+    const d0 = { toast: own(FM, 'toast'), clip: own(FM, 'audioFxClipboard') };
+    const realToast = FM.toast;
+    const toasts = [], bad = [];
+    const aRoot = document.getElementById('afx-browser');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const away = () => {
+      try { if (FM.audioFxBrowser.close) FM.audioFxBrowser.close(); } catch (e) {}
+      try { if (FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+    };
+    try {
+      if (hadHome) FM.home.close();
+      Object.defineProperty(FM, 'toast', { configurable: true, writable: true, value: function (m) {
+        toasts.push(String(m));
+        return realToast ? realToast.apply(this, arguments) : undefined;
+      } });
+      await _bh2With(async function (media) {
+        const V = FM.makeLayer('video', { name: 'bh6 #13 clip', x: 100, y: 100, start: 0, duration: 5 });
+        V.start = 0; V.duration = 5;
+        FM.media.set(V.id, { kind: 'video', el: document.createElement('video'), width: 640, height: 360, duration: 5 });
+        media.push(V.id);
+        FM.scene.layers.push(V);
+        const live = () => FM.layerById(FM.scene, V.id);
+        const count = () => ((live() || {}).audioFx || []).length;
+        /* n plain Gains on the clip, the first one open (the ⋯ menu lives on the open row); a fresh history over it */
+        const fill = n => {
+          const L = live();
+          L.audioFx = [];
+          for (let i = 0; i < n; i++) { const f = FM.audioFxRegistry.makeInstance('gain'); f._expanded = i === 0; L.audioFx.push(f); }
+          FM.selectLayer(L.id); FM.refreshAll(); FM.history.reset();
+        };
+        const refused = () => toasts.some(t => t.indexOf('A clip holds ' + MAX + ' audio effects') === 0);
+        const judge = (what, i0) => {
+          if (count() !== MAX) bad.push('with ' + MAX + ' audio effects on the clip, ' + what + ' left ' + count() + ': the next Undo, reopen or friend’s edit keeps the first ' + MAX + ' and the newest is lost, autosaved');
+          else if (FM.history._steps().index !== i0) bad.push(what + ' added nothing but still made a history step');
+          if (count() === MAX && !refused()) bad.push(what + ' was refused without a word (said: ' + (toasts.length ? toasts.map(t => JSON.stringify(t.slice(0, 90))).join(' / ') : 'nothing') + '), where the Voice path says A clip holds ' + MAX + ' audio effects');
+        };
+        /* the browser opened on the clip, and one ordinary effect tile tapped (a featured card, a recent, or a category's) */
+        const browserTap = async () => {
+          FM.audioFxBrowser.open(live()); await sleep(300);
+          if (!aRoot || aRoot.classList.contains('hidden')) throw new Error('setup: the Audio Effects browser did not open on the clip');
+          let t = aRoot.querySelector('.fxb-featured .fxb-card') || aRoot.querySelector('.fxb-tile:not(.afxb-voice-tile)');
+          if (!t) {
+            const ban = [].slice.call(aRoot.querySelectorAll('.fxb-banner')).filter(b => b.dataset.cat !== 'voice')[0];
+            if (ban) { ban.click(); await sleep(120); t = aRoot.querySelector('.fxb-catview .fxb-tile:not(.afxb-voice-tile)'); }
+          }
+          if (!t) throw new Error('setup: the Audio Effects browser shows no effect tile to tap');
+          t.click(); await sleep(150);
+          away(); await sleep(40);
+        };
+        /* the Audio Effects section of the inspector, on the clip */
+        const audioSection = async () => {
+          FM.inspector.openCategory('audiofx'); FM.inspector.refresh(); await sleep(200);
+          const add = [].slice.call(document.querySelectorAll('.fx-add-btn')).filter(b => b.textContent === '+ Add Audio Effect')[0];
+          const sec = add && add.parentElement;
+          if (!sec) throw new Error('setup: the inspector shows no Audio Effects section for the clip');
+          return sec;
+        };
+
+        /* CONTROL: with 15 the browser's tap adds the 16th */
+        fill(MAX - 1);
+        await browserTap();
+        if (count() !== MAX) throw new Error('CONTROL: with ' + (MAX - 1) + ' audio effects on the clip a tap in the Audio Effects browser left ' + count() + ', not ' + MAX + ', so the refusals below would prove nothing');
+
+        /* 1 · a tap in the browser */
+        fill(MAX);
+        toasts.length = 0;
+        let i0 = FM.history._steps().index;
+        await browserTap();
+        judge('a tap in the Audio Effects browser', i0);
+
+        /* 2 · the open row's ⋯ → Duplicate */
+        fill(MAX);
+        let sec = await audioSection();
+        const more = [].slice.call(sec.querySelectorAll('.fx-icon-btn')).filter(b => b.textContent === '⋯')[0];
+        if (!more) throw new Error('setup: no ⋯ on the open audio effect row');
+        toasts.length = 0;
+        i0 = FM.history._steps().index;
+        more.click(); await sleep(120);
+        const dup = [].slice.call(document.querySelectorAll('#ctx-menu .ctx-item, #ctx-menu button, #ctx-menu [role=menuitem]')).filter(r => /^Duplicate$/.test(r.textContent.trim()))[0];
+        if (!dup) throw new Error('setup: the audio effect’s ⋯ menu has no Duplicate');
+        dup.click(); await sleep(150);
+        away();
+        judge('Duplicate in the ⋯ menu', i0);
+
+        /* 3 · Paste, with one effect on the audio clipboard */
+        fill(MAX);
+        FM.audioFxClipboard = [JSON.parse(JSON.stringify(FM.audioFxRegistry.makeInstance('reverb')))];
+        sec = await audioSection();
+        const paste = [].slice.call(sec.querySelectorAll('.fx-act')).filter(b => b.textContent === 'Paste')[0];
+        if (!paste || paste.disabled) throw new Error('setup: the Audio Effects section has no live Paste with an effect on the clipboard');
+        toasts.length = 0;
+        i0 = FM.history._steps().index;
+        paste.click(); await sleep(150);
+        judge('Paste', i0);
+      }, async () => { away(); });
+    } finally {
+      away();
+      put(FM, 'toast', d0.toast);
+      put(FM, 'audioFxClipboard', d0.clip);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
   // ── end bughunt 6 ──
 
 })();

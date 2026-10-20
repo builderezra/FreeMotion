@@ -80,6 +80,20 @@ window.FM = window.FM || {};
     return t;
   }
 
+  /* bughunt6 #13: A CLIP HOLDS 16 AUDIO EFFECTS (FM.audioVoices.max, which the '966 B1' test pins to what js/storage.js's
+     sanitiser keeps). That sanitiser keeps the first 16 on every Undo, Redo, reopen and friend's edit, so a 17th added past
+     it was lost the next time any of those ran, and the autosave kept it lost. The Voice path already refused past 16; this
+     is the same refusal, in its words, for every other way in: a tap here, and the ⋯ Duplicate and Paste in
+     js/inspector.js. True when `need` more fit; otherwise it says so, and the caller adds nothing. */
+  FM.audioFxRoom = function (layer, need) {
+    const max = (FM.audioVoices && FM.audioVoices.max) || 16;
+    const have = (layer && Array.isArray(layer.audioFx)) ? layer.audioFx.length : 0;
+    const n = Math.max(1, need | 0);
+    if (have + n <= max) return true;
+    if (FM.toast) FM.toast('A clip holds ' + max + ' audio effects — this one has ' + have + (n === 1 ? ' already' : ', and the paste needs ' + n + ' more'), 2600);
+    return false;
+  };
+
   // The ONE add path — exactly one push, then rebuild the audio graph so the effect is audible now.
   function addEffect(id) {
     // Re-resolve from the LIVE scene by id: the overlay caches _layer at open(), but a delete or an undo
@@ -92,6 +106,8 @@ window.FM = window.FM || {};
       if (FM.toast) FM.toast('Audio effects only work on a clip with sound', 2000);
       return;
     }
+    /* bughunt6 #13: past 16 it is refused, as a voice is; the sheet stays open, as it does for a voice that does not fit */
+    if (!FM.audioFxRoom(layer, 1)) return;
     if (!layer.audioFx) layer.audioFx = [];
     layer.audioFx.forEach(e => { e._expanded = false; });   // accordion: the newcomer is the one open editor
     inst._expanded = true;

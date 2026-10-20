@@ -2819,7 +2819,8 @@ window.FM = window.FM || {};
       { label: 'Reset', action: () => { const inst = FM.audioFxRegistry.makeInstance(fx.type); if (inst) { fx.params = inst.params; afterAudioFx(); } } },
       // Duplicate carries the CURRENT settings + keyframes, as the visual stack's does (queue 727, hunt HIGH #10): a
       // fresh default instance is a Reset wearing Duplicate's label — a tuned reverb came back stock, keyframes gone.
-      { label: 'Duplicate', action: () => { const copy = JSON.parse(JSON.stringify(fx, FM.jsonReplacer)); layer.audioFx.splice(idx + 1, 0, copy); afterAudioFx(); } },
+      // bughunt6 #13: refused past 16 audio effects, in the Voice path's words (FM.audioFxRoom, js/audio-fx-browser.js)
+      { label: 'Duplicate', action: () => { if (FM.audioFxRoom && !FM.audioFxRoom(layer, 1)) return; const copy = JSON.parse(JSON.stringify(fx, FM.jsonReplacer)); layer.audioFx.splice(idx + 1, 0, copy); afterAudioFx(); } },
     ];
     // Same favourite affordance as the visual effects' ⋯ menu — audio effects live in their own
     // browser with its own ★ and its own fav list, so this toggles that one. (#62)
@@ -3042,6 +3043,8 @@ window.FM = window.FM || {};
     const pa = el('button', 'fx-act', 'Paste'); pa.disabled = !(FM.audioFxClipboard && FM.audioFxClipboard.length);
     pa.addEventListener('click', () => {
       if (!FM.audioFxClipboard || !FM.audioFxClipboard.length) return;
+      /* bughunt6 #13: refused WHOLE past 16, as a voice is, rather than half kept by the next Undo or reopen */
+      if (FM.audioFxRoom && !FM.audioFxRoom(layer, FM.audioFxClipboard.length)) return;
       if (!layer.audioFx) layer.audioFx = [];
       FM.audioFxClipboard.forEach(e => layer.audioFx.push(JSON.parse(JSON.stringify(e))));
       afterAudioFx();
