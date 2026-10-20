@@ -4120,19 +4120,27 @@ window.FM = window.FM || {};
      (the PM, 17 Oct): LEFT text starts the run where its landed letters start; CENTRED text centres the run on that span; RIGHT text
      ends it where the span ends. A scrambled run is wider or narrower than its landed letters, so left-aligned runs on a centred
      caption made its noise hang off centre while it decoded — that read as a bug, as a jumping line break did. */
+  /* bughunt8 #10 / N1: …and the span is where the landed letters are DRAWN. On a line holding a right-to-left letter the one fillText
+     that draws the landed line lays it out by bidi runs (the first-typed Hebrew letters on the right), and the typing-order prefix
+     put every run on the left: while a Scramble with hidden letters decoded, an RTL caption's revealed words sat on the wrong side
+     and jumped when it landed, and Word Highlight's boxes, measured where the landed line draws them (bidiSpanFn), lit beside them.
+     Such a line's spans now come from bidiSpanFn(ctx, lay, 0), the same model, from the line's left edge; a line with no
+     right-to-left letter (bidiSpanFn answers null) keeps the prefix advances exactly as before. */
   function planRuns(ctx, lay, pl, al) {
     const out = [], p = pl.p, h = pl.h;
     const adv = n => n > 0 ? ctx.measureText(lay.slice(0, n)).width : 0;
+    const bs = bidiSpanFn(ctx, lay, 0);
     let a = -1;
     for (let i = 0; i <= p.length; i++) {
       if (i < p.length && !(h && h[i])) { if (a < 0) a = i; continue; }
       if (a >= 0) {
         const s = p.slice(a, i);
         if (/\S/.test(s)) {
-          const sx = adv(a);
+          const sp = bs ? bs(a, i) : null;
+          const sx = sp ? sp.a : adv(a);
           let x = sx;
           if (al === 'center' || al === 'right' || al === 'end') {
-            const ex = adv(i), w = ctx.measureText(s).width;
+            const ex = sp ? sp.b : adv(i), w = ctx.measureText(s).width;
             x = al === 'center' ? sx + (ex - sx - w) / 2 : ex - w;
           }
           out.push({ s: s, x: x, at: a });

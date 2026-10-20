@@ -174459,4 +174459,82 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ bughunt8 #10 (and the refuter's N1): SCRAMBLE ON A RIGHT-TO-LEFT LINE PAINTED ITS REVEALED LETTERS ON THE WRONG SIDE ════════
+     What was wrong. js/compositor.js planRuns places each stretch of a decoding Scramble's letters that is not hidden inside the span
+     its landed letters take, measured as the typing-order prefix from the line's left edge. The landed line is one fillText, and on
+     a right-to-left line the canvas lays it out by bidi runs: the first-typed Hebrew letters are drawn on the RIGHT. So while a
+     Scramble with hidden letters decoded, an RTL caption's revealed letters sat on the left and jumped across when it landed, and
+     Word Highlight's boxes, measured where the landed line draws them (bidiSpanFn, f6e644f5), lit beside the painted runs. Now a
+     line holding a right-to-left letter takes its spans from bidiSpanFn(ctx, layout, 0), the very model the boxes use.
+     The line is one Hebrew word of 24 letters (alef to the 24th letter of the block, no space, so the whole line is one right-to-left
+     run, drawn reversed from its left edge 0 to its width W): the letters typed at offsets a..i are drawn from W − adv(i) to
+     W − adv(a), adv(n) the width of the first n typed. Left-aligned, 24 px, one line, with Scramble 1 ahead by Letter, resolving in
+     Random order, at Progress 0.5, so landed, scrambling and hidden letters alternate along the line. FM._textPaintLines is the
+     painter's own plan; _slWatch reads where the renderer paints each string (the 966 scramble layout tests' tools).
+     FAILS BEFORE THE FIX: each run is placed from adv(a), the typing-order prefix, so the runs sit mirrored about the middle of the
+     line: a run of the first-typed letters at the far left, where the landed line draws them at the far right.
+     CONTROLS, which hold before and after: mid-decode the line really hides letters and paints more than one run; a Latin line under
+     the same Scramble keeps every run at adv(a), the old place; the renderer paints exactly the plan's runs at the plan's places,
+     from the landed line's own left edge (read off the landed caption).
+     TOLERANCE, reasoned: the plan and the oracle measure the same strings with the same font through ctx.measureText (bidiSpanFn
+     measures the whole run and the typed prefix, as the oracle does), so they agree to float rounding, about 1e-12 px: 1e-6 px, as
+     the 966 alignment test allows; the renderer's places 1e-3 px, as there. The fault is many pixels (a mirror about the middle). */
+  test('bughunt8 #10 Scramble on a right-to-left line paints its letters where the landed line draws them: on a Hebrew line decoding with letters still hidden, every painted run sits in its landed letters’ right-to-left span, and the renderer paints it there (CONTROLS: letters really hidden; a Latin line keeps its runs where they were; the renderer paints the plan)', { item: '1176' }, function () {
+    if (typeof FM._textPaintLines !== 'function' || typeof _slScr !== 'function' || typeof _slCtx !== 'function' || typeof _slWatch !== 'function') throw new Error('setup: FM._textPaintLines or the 966 scramble layout helpers (_slScr, _slCtx, _slWatch) are not reachable');
+    const T = 0.71, W0 = 480, H0 = 120, EPS = 1e-6, PX = 1e-3, bad = [];
+    let HEB = '';
+    for (let k = 0; k < 24; k++) HEB += String.fromCharCode(0x05D0 + k);
+    const LAT = 'abcdefghijklmnopqrstuvwx';
+    const layer = function (text, progress) {
+      const L = FM.makeLayer('text', { text: text, x: 40, y: 60, fontSize: 24, fontFamily: 'sans-serif', wrapWidth: 1000, color: '#ffffff' });
+      L.start = 0; L.duration = 4; L.align = 'left';
+      L.effects = [_slScr({ chars: 1, ahead: 1, order: 2, progress: progress })];
+      return L;
+    };
+    /* the plan's line, checked: one line, its layout the text, letters really hidden, more than one run */
+    const lineOf = function (what, text) {
+      const plan = FM._textPaintLines(layer(text, 0.5), T);
+      if (plan.length !== 1 || plan[0].layout !== text) throw new Error('setup: the ' + what + ' line is laid out as ' + JSON.stringify(plan.map(function (l) { return l.layout; })) + ', not as the one line it is');
+      const l = plan[0];
+      if (!l.hidden.length || l.runs.length < 2) throw new Error('CONTROL: mid-decode the ' + what + ' line hides ' + l.hidden.length + ' letters and paints ' + l.runs.length + ' run(s), so nothing is placed apart from its neighbours');
+      return l;
+    };
+    const c = _slCtx(layer(HEB, 0.5), null);
+    const adv = function (s, n) { return n > 0 ? c.measureText(s.slice(0, n)).width : 0; };
+
+    /* ── the right-to-left line: every run in its landed letters' span, left-aligned from the span's left edge */
+    const h = lineOf('Hebrew', HEB), Wh = c.measureText(HEB).width;
+    let mirrored = 0;
+    h.runs.forEach(function (r) {
+      const i = r.at + r.s.length, want = Wh - adv(HEB, i), old = adv(HEB, r.at);
+      if (Math.abs(r.x - want) > EPS) {
+        bad.push('the Hebrew line’s run of letters ' + r.at + '..' + (i - 1) + ' is painted from ' + r.x.toFixed(3) + ', not ' + want.toFixed(3) + ', where the landed line draws those letters (' + want.toFixed(1) + '..' + (Wh - adv(HEB, r.at)).toFixed(1) + ')');
+        if (Math.abs(r.x - old) <= EPS) mirrored++;
+      }
+    });
+    if (mirrored) bad.push(mirrored + ' of the Hebrew line’s ' + h.runs.length + ' runs are placed from their typing-order prefix, mirrored about the middle of the line: the revealed letters sit on the side the landed line does not draw them, and jump across when it lands');
+
+    /* ── CONTROL: the Latin line keeps every run at its typing-order prefix */
+    const lt = lineOf('Latin', LAT);
+    lt.runs.forEach(function (r) {
+      const want = adv(LAT, r.at);
+      if (Math.abs(r.x - want) > EPS) bad.push('CONTROL: the Latin line’s run at ' + r.at + ' (“' + r.s + '”) is placed at ' + r.x.toFixed(3) + ', not at its old ' + want.toFixed(3));
+    });
+
+    /* ── CONTROL: the renderer paints exactly the plan's runs at the plan's places, from the landed line's own left edge */
+    const land = layer(HEB, 1), fin = FM._textPaintLines(land, T), F = _slWatch([land], T, W0, H0);
+    if (fin.length !== 1 || F.calls.length !== 1) bad.push('CONTROL: the landed Hebrew line is painted in ' + F.calls.length + ' strings for ' + fin.length + ' line(s), not one');
+    else {
+      const ox = F.calls[0].L - fin[0].left, oy = F.calls[0].Y - fin[0].y;
+      const shot = _slWatch([layer(HEB, 0.5)], T, W0, H0);
+      const want = h.runs.map(function (r) { return { s: r.s, L: ox + h.left + r.x, Y: oy + h.y }; });
+      if (shot.calls.length !== want.length) bad.push('CONTROL: the renderer paints ' + shot.calls.length + ' strings on the decoding Hebrew line, the plan ' + want.length + ' runs');
+      else shot.calls.forEach(function (g, k) {
+        const v = want[k];
+        if (g.s !== v.s || Math.abs(g.L - v.L) > PX || Math.abs(g.Y - v.Y) > PX) bad.push('CONTROL: painted string ' + k + ' “' + g.s + '” at ' + g.L.toFixed(3) + ', not the plan’s “' + v.s + '” at ' + v.L.toFixed(3));
+      });
+    }
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
+  });
 })();
