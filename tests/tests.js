@@ -155211,6 +155211,8 @@
         if (sheet.classList.contains('open') || document.body.classList.contains('add-open')) throw new Error('closing left the menu marked open');
         const s = clipAnim1084(sheet);
         if (s !== a) throw new Error(s ? 'closing ran a new clip animation — D4b: the close is the SAME animation played backwards, so the curve is identical both ways' : 'closing did not run the stretch back — D4b: the same shape in reverse, back onto the row');
+        /* reverse() sets a PENDING playback rate (Web Animations): the attribute reads the new rate once the animation is ready */
+        await s.ready;
         if (!(s.playbackRate < 0)) throw new Error('the close does not play the stretch backwards (playbackRate ' + s.playbackRate + ')');
         const back = stretchAnims1084(sheet);
         // THE CONTENTS GO FIRST: 40% into the close they are gone, while the shape is still most of the menu
