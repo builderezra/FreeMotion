@@ -1229,7 +1229,7 @@
   <script src="js/ai-budget.js?v=1"></script>
   <script src="js/ai-mock.js?v=5"></script>
   <script src="js/ai-templates.js?v=3"></script>
-  <script src="js/ai.js?v=11"></script>
+  <script src="js/ai.js?v=12"></script>
   <script src="js/ai-panel.js?v=8"></script>
   <script src="js/ai-chat.js?v=6"></script>   <!-- queue 856: the AI you TALK to; after ai-panel (reuses its key form) -->
   <!-- queue 921 stage S1 — the pure collaboration core. Path grammar, the diff/apply engine and the
@@ -1288,6 +1288,7 @@
         if (F._exportingAudio) return 'a sound export is running';   // bughunt7 #6: Export sound (WAV / M4A) shows no overlay (js/app.js runAudioOnlyExport)
         if (F._rendering) return 'a sound is still being worked out';   // 1176 leftover: Save audio as WAV, Remove vocals, Reduce noise (js/audio-tools.js, js/noise-reduction.js)
         if (F._importing) return 'a picked file is still opening';   // 1176 leftover: from the pick to the add (js/app.js handleFiles)
+        if (F._aiCalls) return 'an AI answer is on its way';   // 1176 leftover: a model request in flight (js/ai.js call)
         var ov = document.getElementById('export-overlay'), rd = document.getElementById('export-ready');
         if (ov && !ov.classList.contains('hidden')) return 'an export is running';
         if (rd && !rd.classList.contains('hidden')) return 'an exported file is waiting on Save';

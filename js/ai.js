@@ -29,7 +29,16 @@ window.FM = window.FM || {};
    * `content` is returned for the same reason: a multi-turn exchange has to replay the assistant's
    * own tool_use block (and its id) back as history, and this used to throw all of that away and
    * return only `block.input`. The defaults are unchanged, so the four existing callers are untouched. */
+  /* 1176 leftover (bughunt6 #14's second gap): A NEW BUILD WAITS FOR AN ANSWER ON ITS WAY. Every model request goes through this
+     one door (the Director's stages, a re-roll, Refine, and the Assistant via FM.ai.call), and a reply takes seconds to most of a
+     minute on his own key; a build landing meanwhile reloaded the app, and the answer, already paid for, was thrown away.
+     FM._aiCalls counts the requests in flight, a retry inside its own, and index.html's fmSwBusy reads it. */
   async function call(model, system, messages, tool, opts) {
+    FM._aiCalls = (FM._aiCalls || 0) + 1;
+    try { return await callNow(model, system, messages, tool, opts); }
+    finally { FM._aiCalls = Math.max(0, (FM._aiCalls || 1) - 1); }
+  }
+  async function callNow(model, system, messages, tool, opts) {
     opts = opts || {};
     var tools = Array.isArray(tool) ? tool : [tool];
     // the mock returns a tool INPUT; wrap it so dry-run and live hand back the same shape (else every

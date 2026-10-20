@@ -171262,4 +171262,65 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ 1176 leftover (bughunt6 #14's second gap): A NEW BUILD RELOADED THE APP WITH AN AI ANSWER ON ITS WAY ═══════════════════
+     Every model request goes through one door, js/ai.js call (the Director's stages, a re-roll, Refine, and the Assistant via
+     FM.ai.call), and a reply takes seconds to most of a minute on his own key. Nothing in the hold (index.html fmSwBusy) knew,
+     so a build landing meanwhile reloaded the app and the answer, already paid for, was thrown away. Now call counts its
+     requests in FM._aiCalls, a retry inside its own, and fmSwBusy reads it. Driven like bughunt7 #6, the hold handed a counter
+     for the reload, with FM.ai.DRY_RUN standing in for the network (the mock answers after `dryDelay`: no key, no tokens, no
+     request): one Interpreter call held 3 s in flight; while it waits the app is asked whether it is busy and handed a new
+     build; once it has answered, the held build must reload by itself.
+     FAILS BEFORE THE FIX: while the request is in flight fmSwBusy answers '' and the new build reloads at once.
+     CONTROLS, which hold before and after: the app is idle to start with, the request really answered with the mock's intent,
+     and with nothing running a new build reloads at once. Restores FM.ai.DRY_RUN and FM._aiCalls and cancels any hold. */
+  test('1176 leftover: an update does not reload the app with an AI answer on its way: with a model request in flight the new build waits, and once the answer is in the app reloads by itself (CONTROLS: the request answered; an idle app reloads at once)', { item: '1176', budgetMs: 60000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (!FM.ai || typeof FM.ai.call !== 'function' || !FM.ai.MODELS || !FM.aiManifest || !FM.aiManifest.tools || !FM.aiManifest.tools.intent || !FM.aiMock) throw new Error('setup: FM.ai.call, FM.ai.MODELS, FM.aiManifest.tools.intent or FM.aiMock is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_aiCalls');
+    const dry0 = FM.ai.DRY_RUN;
+    let reloads = 0, pending = null;
+    const count = () => { reloads++; };
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async (what) => {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    const bad = [];
+    try {
+      await settle('the request');
+      FM.ai.DRY_RUN = true;
+      let answer = null;
+      pending = FM.ai.call(FM.ai.MODELS.intent, 'You are a test.', [{ role: 'user', content: '1176 a title card' }], FM.aiManifest.tools.intent, { maxTokens: 64, dryDelay: 3000, mock: { prompt: '1176 a title card' } })
+        .then(r => { answer = r; }, e => { answer = { error: e }; });
+      await sleep(200);
+      const during = W.busy(), n = FM._aiCalls;
+      reloads = 0;
+      const now = await W(count);
+      const heldNow = !now && !reloads && W.held();
+      await pending; pending = null;
+      await sleep(60);
+      if (!answer || answer.error || !answer.out || typeof answer.out.subject !== 'string') throw new Error('setup: the held request did not answer with the mock’s intent (' + (answer && answer.error ? answer.error.message : JSON.stringify(answer && answer.out)) + '), so nothing was in flight');
+      if (!during) bad.push('while an AI request was in flight the app counted as idle (FM._aiCalls ' + JSON.stringify(n) + ')');
+      if (!heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app with an AI answer on its way (' + reloads + ' reload), so the answer was thrown away' : 'was dropped rather than held while an AI request was in flight'));
+      if (FM._aiCalls) bad.push('after the answer came FM._aiCalls is still ' + JSON.stringify(FM._aiCalls) + ', so every later update would wait for it');
+      if (W.busy()) bad.push('after the answer came the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(() => reloads > 0, 9000))) bad.push('once the answer was in, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      FM.ai.DRY_RUN = dry0;
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (pending) { try { await pending; } catch (e) {} }
+      FM.ai.DRY_RUN = dry0;
+      if (dFlag) Object.defineProperty(FM, '_aiCalls', dFlag); else delete FM._aiCalls;
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();
