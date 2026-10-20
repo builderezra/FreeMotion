@@ -169031,4 +169031,39 @@
     });
   });
 
+  /* ═══ #1092 (hunt HIGH): THE INVITE SAYS WHAT JOINING REVEALS ═══════════════════════════════════════════════════════
+     The owner's device answers a joiner's offer and completes the connection BEFORE the knock card asks him, so whoever
+     holds the link or short code learns his internet address just by trying — even if he then turns them away. The list
+     behind “What gets sent? ›” said they could see “the internet address of each device that joins”: the wrong device,
+     and silent about the refused case. Decided: correct the words (answering only after approval would break one-tap links).
+     FAILS BEFORE THE FIX: the line reads “…the internet address of each device that joins.”
+     CONTROL, which holds before and after: the plain sentence and the other four lines of the list are exactly as they were. */
+  test('1092 Work with friends: the invite says what joining reveals: the privacy list behind What gets sent says anyone with the link or short code sees YOUR internet address just by trying to join, even if you do not let them in, and no longer says it is each joining device’s (CONTROL: the plain sentence and the other four lines are unchanged)', { item: '1092' }, function () {
+    const ui = FM.collab && FM.collab.ui;
+    if (!ui || typeof ui.privacyBlock !== 'function') throw new Error('setup: FM.collab.ui.privacyBlock (the block every Share screen and Settings show) is not reachable');
+    const box = ui.privacyBlock();
+    const plain = box.querySelector('.cs-privplain');
+    const lines = Array.prototype.map.call(box.querySelectorAll('.cs-privfull li'), function (li) { return li.textContent; });
+    const bad = [];
+    const PLAIN = 'Your project goes straight from phone to phone, encrypted. A few free online helpers let the phones find each other — they see your internet address, never your project.';
+    if (!plain || plain.textContent !== PLAIN) bad.push('CONTROL: the plain sentence changed: “' + (plain && plain.textContent) + '”');
+    [
+      'Your project — every edit and every clip — goes straight between the devices, encrypted. The helpers below never see your project.',
+      'To find each other, the devices use free public services: PeerJS, EMQX and HiveMQ pass the first hello between them, and Google and Cloudflare tell each device its internet address.',
+      'Those services see your internet address and when a project is being shared — and so can anyone watching those services.',
+      'Swap codes only skips them all: links and short codes stop working, and you swap codes with each person instead.'
+    ].forEach(function (t) { if (lines.indexOf(t) < 0) bad.push('CONTROL: the list no longer says “' + t + '”'); });
+    if (lines.length !== 5) bad.push('CONTROL: the list has ' + lines.length + ' lines, not 5: ' + JSON.stringify(lines));
+    const line = lines.filter(function (t) { return /link or short code/.test(t); })[0];
+    if (!line) bad.push('the list has no line about whoever holds the link or short code: ' + JSON.stringify(lines));
+    else {
+      if (/each device that joins/i.test(line)) bad.push('it still says “' + line + '” — whoever holds the link learns the OWNER’s address, not each joiner’s');
+      if (!/your internet address/i.test(line)) bad.push('“' + line + '” does not say it is YOUR internet address');
+      if (!/try(ing)? to join/i.test(line)) bad.push('“' + line + '” does not say that trying to join is enough');
+      if (!/even if you don.t let them in/i.test(line)) bad.push('“' + line + '” does not say that turning them away does not stop it');
+    }
+    if (/\brelays?\b/i.test(lines.join(' '))) bad.push('CONTROL: the list says “relay” (967 B4: they are named for what they do)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();

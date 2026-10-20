@@ -2044,7 +2044,9 @@ window.FM = window.FM || {};
     'Your project — every edit and every clip — goes straight between the devices, encrypted. The helpers below never see your project.',
     'To find each other, the devices use free public services: PeerJS, EMQX and HiveMQ pass the first hello between them, and Google and Cloudflare tell each device its internet address.',
     'Those services see your internet address and when a project is being shared — and so can anyone watching those services.',
-    'Anyone with your link or short code can see the internet address of each device that joins.',
+    /* #1092 (hunt HIGH, decided: correct the words, keep one-tap links): the phones connect BEFORE the knock card, so
+       whoever holds the link or code learns HIS address by trying, refused or not — it said "each device that joins". */
+    'Anyone with your link or short code can see your internet address just by trying to join — even if you don’t let them in — the way a direct call shows each phone the other’s address.',
     'Swap codes only skips them all: links and short codes stop working, and you swap codes with each person instead.'
   ];
   const CODES_ONLY_HINT = 'No online helpers — links and short codes stop working, and you swap codes with each person instead.';
