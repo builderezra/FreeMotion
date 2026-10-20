@@ -32012,7 +32012,9 @@
     await withCollab921([layer921('A'), layer921('B')], async function (c) {
       const g = c.addGuest();
       const sent = c.sentTo(g.loop);
-      const realCur = FM.projects.currentId;
+      /* bughunt8 #2b: the lock asks THIS tab's project (FM.storage.openProjectId), not the shared fm.currentProject another tab
+         moves, so that is what is moved here. */
+      const realCur = FM.storage.openProjectId;
       const keep = FM.scene.layers;
       let n = 0;
       try {
@@ -32020,12 +32022,12 @@
            storage.load() is then AWAITED — IndexedDB plus a media hydrate. Nothing on that path is
            jobWrapped and nothing mutes history, so §8.9's barrier is wide open and the 100 ms ticker
            fires straight through it. */
-        FM.projects.currentId = function () { return 'p_921_not_this_one'; };
+        FM.storage.openProjectId = function () { return 'p_921_not_this_one'; };
         FM.scene.layers = [];
         n = c.S.tick('hot');
       } finally {
         FM.scene.layers = keep;
-        FM.projects.currentId = realCur;
+        FM.storage.openProjectId = realCur;
       }
       if (n !== 0) throw new Error('the tick emitted ' + n + ' op(s) while the open project was no longer the one this session was armed on');
       const lr = sent.filter(function (m) { return m.t === 'b'; })
@@ -32094,7 +32096,7 @@
     const C = need921('the session engine');
     await withCollab921([layer921('A'), layer921('B')], async function (c) {
       if (!C.active || C.session !== c.S) throw new Error('CONTROL: no session is attached, so nothing below could be stood down and every assertion here would pass on an empty stage');
-      if (!c.S.pid || c.S.pid !== FM.projects.currentId()) throw new Error('CONTROL: the session is bound to ' + c.S.pid + ' but the open project is ' + FM.projects.currentId() + ' — the guard under test reads exactly that comparison, so this is not the case it is about');
+      if (!c.S.pid || c.S.pid !== FM.storage.openProjectId()) throw new Error('CONTROL: the session is bound to ' + c.S.pid + ' but the project open in this tab is ' + FM.storage.openProjectId() + ' — the guard under test reads exactly that comparison, so this is not the case it is about');
 
       /* The boot's tail, verbatim: nothing was replaced, the document it just finished loading is the
          one this session is on. */
@@ -32109,11 +32111,11 @@
       /* …and the other direction: the guard must not weaken the stand-down it was built around. The
          open project moving on is what "the document was replaced" means on every path that reaches
          here (import and both template routes each create or open a project first). */
-      const realCur = FM.projects.currentId;
+      const realCur = FM.storage.openProjectId;   // bughunt8 #2b: the guard asks THIS tab's project, not the shared pointer
       try {
-        FM.projects.currentId = function () { return 'p_921_not_the_session_project'; };
+        FM.storage.openProjectId = function () { return 'p_921_not_the_session_project'; };
         FM.history.reset();
-      } finally { FM.projects.currentId = realCur; }
+      } finally { FM.storage.openProjectId = realCur; }
       if (C.active || C.session) throw new Error('a history.reset() taken with a DIFFERENT project open left the session attached — it would then diff its armed base against a document it has never seen and upload one project into another room\'s document');
     });
 
@@ -61820,7 +61822,7 @@
     const C = FM.collab;
     if (!C || typeof C.reopen !== 'function') throw new Error('FM.collab.reopen is missing');
     const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
-    const cur0 = FM.projects.currentId;
+    const cur0 = FM.storage.openProjectId;   // bughunt8 #2b: the gate asks THIS tab's project, not the shared pointer
     let res = null;
     try {
       if (wasHome) FM.home.close();
@@ -61841,14 +61843,14 @@
       if (!FM.scene.layers.some(function (l) { return l.name === '996 room only'; })) throw new Error('control: on its own project the room’s snapshot did not land at once — the off-project assertion would mean nothing');
       FM.scene.layers = FM.scene.layers.filter(function (l) { return l.name !== '996 room only'; });
       /* now the app is on another project (what projects.open() leaves for a moment, and a late message finds) */
-      FM.projects.currentId = function () { return 'p_996_elsewhere'; };
+      FM.storage.openProjectId = function () { return 'p_996_elsewhere'; };
       const before = JSON.stringify(FM.scene.layers.map(function (l) { return l.id; }));
       ep.onmessage('ctl', { t: 'snap', D: t996Room(based.project), epoch: 1, seq: 2 });
       const after = JSON.stringify(FM.scene.layers.map(function (l) { return l.id; }));
-      FM.projects.currentId = cur0;
+      FM.storage.openProjectId = cur0;
       if (after !== before) throw new Error('a snapshot heard while another project was open rewrote the open scene: ' + before + ' → ' + after + ' (' + FM.scene.layers.map(function (l) { return l.name; }).join(', ') + ')');
     } finally {
-      FM.projects.currentId = cur0;
+      FM.storage.openProjectId = cur0;
       try { if (res && res.session) { res.session.stop('left'); if (FM.collab.session === res.session) FM.collab.detach(); } } catch (e) {}
       await q915aCleanup(made, orig, wasHome, [], [], []);
     }

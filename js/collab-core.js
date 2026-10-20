@@ -481,7 +481,10 @@ window.FM = window.FM || {};
   C.onReset = function (opts) {
     const s = S();
     if (!s) { undoHandover = false; handoverSession = null; afterReset(); return; }
-    if (!(opts && opts.force) && s.pid && FM.projects && FM.projects.currentId && FM.projects.currentId() === s.pid) return;
+    /* bughunt8 #2b: "the open project" is THIS tab's (FM.storage.openProjectId), as pushLocal asks: read from the shared pointer, any
+       reset here (the boot's own tail, his reload recovery) stood down a session on the project still open here once another tab had
+       opened a project of its own. */
+    if (!(opts && opts.force) && s.pid && FM.storage && FM.storage.openProjectId && FM.storage.openProjectId() === s.pid) return;
     undoHandover = false;
     handoverSession = null;
     /* #967 B3 review: `paused` is only true for people who come back by themselves — the UI tells anybody who joined with a

@@ -21,6 +21,8 @@ window.FM = window.FM || {};
 
   const C = FM.collab = FM.collab || {};
   const P = C.path;
+  /* bughunt8 #2b: the project THIS tab has open, never the shared fm.currentProject that another tab moves when it opens one. */
+  function openPid() { return (FM.storage && FM.storage.openProjectId) ? FM.storage.openProjectId() : null; }
 
   /* §8.8's last clause: "now − lastLocalChangeAt < 250 ms" covers glide momentum, a tickStrip's inertia
      and every timer-driven write that has no pointer behind it. */
@@ -355,7 +357,7 @@ window.FM = window.FM || {};
        of losing it. IndexedDB rather than localStorage, because the linked project document is ALREADY
        in localStorage and a second copy of it there is what makes check 4's room calculation wrong. */
     persistBase: function (state) {
-      const gpid = (C.session && C.session.gpid) || (FM.projects && FM.projects.currentId());
+      const gpid = (C.session && C.session.gpid) || openPid();   // bughunt8 #2b: the copy THIS tab has open
       if (!gpid) return false;
       /* ⚠️ RETURN THE WRITE'S OWN PROMISE (queue 921). `collabPut` is async and turns a quota failure
          into a resolved `false`; dropping it here and answering `true` on the next line meant the one
@@ -364,8 +366,8 @@ window.FM = window.FM || {};
          this one does not — §12.4's whole purpose failed silently. */
       return FM.storage.collabPut('collab:base:' + gpid, { v: 1, gpid: gpid, epoch: state.epoch, seq: state.seq, cid: state.cid || 0, D: state.D, at: Date.now() });
     },
-    readBase: function (gpid) { return FM.storage.collabGet('collab:base:' + (gpid || FM.projects.currentId())); },
-    dropBase: function (gpid) { return FM.storage.collabDel('collab:base:' + (gpid || FM.projects.currentId())); },
+    readBase: function (gpid) { return FM.storage.collabGet('collab:base:' + (gpid || openPid())); },
+    dropBase: function (gpid) { return FM.storage.collabDel('collab:base:' + (gpid || openPid())); },
     installed: function () { return installed; },
     _touch: function () { lastLocalChangeAt = Date.now(); },
     _quiet: function () { lastLocalChangeAt = 0; pointers = 0; keyHeld = false; pointerInInspector = false; }
