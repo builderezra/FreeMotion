@@ -165067,6 +165067,104 @@
     });
   });
 
+  /* (#10b) A GROUP'S BOX LEFT OUT ITS MEMBERS' OWN MIRROR AND UNLINKED SIZE. After #10, groupBoundsLocal and groupRestBoundsLocal span
+     each member from its anchor and text alignment at its uniform scale — but applyLayerTransform also draws it at its unlinked Width /
+     Height (scaleX / scaleY, multiplying the scale) and then mirrors it (flipH / flipV) about its own x / y, and on c99f5b64
+     groupMemberSpan read neither. A group G at 0,0 holds ONE member at x 100, y 200; W is a title's measured width. On c99f5b64:
+       A  a 40 × 30 shape with anchorX 0 and anchorY 1, flipped (⋯ → Flip, both ways), is drawn 60 .. 100 × 200 .. 230 and was boxed
+          100 .. 140 × 170 .. 200 — beside it, not touching it; the pivot a pinch would use (FM.groupPivotMeasured, anchor 0.5) was
+          120, 40 px right of the drawn middle 80; and a tap at x 70, on the shape, fell outside FM.groupBounds.
+       B  a default-anchor 40 × 30 shape at Width 200 % and Height 50 % is drawn 60 .. 140 × 192.5 .. 207.5 and was boxed
+          80 .. 120 × 185 .. 215 — half its width; and anchored at its left edge at Width 200 % it is drawn 100 .. 180, boxed 100 .. 140.
+       C  a left-aligned title, flipped horizontally, is drawn 100 − W .. 100 and was boxed 100 .. 100 + W.
+     FAILS BEFORE THE FIX: every span in A, B and C, A's pivot (120, not 80) and A's tap.
+     CONTROL: a default-anchor 40 × 30 shape is 80 .. 120 × 185 .. 215 linked and unflipped, and the same flipped both ways (a centred
+     box mirrors onto itself), on both commits; and A's and B's red pixels, drawn by FM.renderScene, really cover the spans worked out
+     above, so the box is checked against the picture and not only against this comment.
+     TOL: 1e-6 on the box (it is double-precision sums of these same numbers, rounding near 1e-13; the fault is 7.5 px or more) and 1
+     px on a red edge (a half-covered row at 192.5 or 207.5 is not counted as red, and an edge on a whole column is). */
+  test('bughunt4 #10b A group’s box follows its members’ own Flip and unlinked Width / Height: a flipped shape anchored at its corner is boxed where it is drawn, mirrored about its x / y, and the group pivots about its drawn middle; a shape at Width 200 % and Height 50 % is boxed at that size; a flipped left-aligned title is boxed from x − its width to x (CONTROLS: a default-anchor shape keeps its box linked and unflipped, and flipped; the red pixels drawn cover the spans the box must take)', { item: '1176' }, async function () {
+    if (typeof FM.groupBoundsLocal !== 'function' || typeof FM.groupRestBoundsLocal !== 'function' || typeof FM.groupPivotMeasured !== 'function' || typeof FM.groupBounds !== 'function' || typeof FM.layerSize !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.renderScene !== 'function') throw new Error('setup: FM.groupBoundsLocal / groupRestBoundsLocal / groupPivotMeasured / groupBounds / layerSize / makeLayer / renderScene are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5, EPS = 1e-6, X = 100, Y = 200;
+      /* A fresh group at 0,0 holding only L: the live box at T, the rest box, the pivot a pinch at T would use, the box in the parent's space. */
+      const measure = (L) => {
+        const G = FM.makeLayer('group', { name: 'bh4 #10b group', x: 0, y: 0, start: 0, duration: 4 });
+        G.start = 0; G.duration = 4; G.transform.x = 0; G.transform.y = 0;
+        L.start = 0; L.duration = 4; L.parent = G.id;
+        FM.scene.layers = [G, L];
+        const live = FM.groupBoundsLocal(G, FM.scene, T), rest = FM.groupRestBoundsLocal(G, FM.scene);
+        if (!live || !rest) throw new Error('setup: the group holding ' + L.name + ' measured no box (live ' + JSON.stringify(live) + ', rest ' + JSON.stringify(rest) + ')');
+        return { live: live, rest: rest, pivot: FM.groupPivotMeasured(G, FM.scene, T), gb: FM.groupBounds(G, FM.scene, T) };
+      };
+      const shape = (name) => FM.makeLayer('shape', { name: name, shape: 'rect', x: X, y: Y, shapeW: 40, shapeH: 30, fill: '#ff0000', start: 0, duration: 4 });
+      const r1 = v => Math.round(v * 10) / 10;
+      const say = b => r1(b.minX) + ' .. ' + r1(b.maxX) + ' × ' + r1(b.minY) + ' .. ' + r1(b.maxY);
+      const bad = [];
+      /* Both walks must give [x0, x1] × [y0, y1]. */
+      const span = (what, m, x0, x1, y0, y1) => {
+        [['live', m.live], ['rest', m.rest]].forEach(([k, b]) => {
+          if (Math.abs(b.minX - x0) > EPS || Math.abs(b.maxX - x1) > EPS || Math.abs(b.minY - y0) > EPS || Math.abs(b.maxY - y1) > EPS) bad.push(what + ': the group’s ' + k + ' box is ' + say(b) + ' where the member is drawn ' + r1(x0) + ' .. ' + r1(x1) + ' × ' + r1(y0) + ' .. ' + r1(y1));
+        });
+      };
+      /* The red pixels FM.renderScene draws for the scene measure() left (320 × 240, _bh2Frame): columns x0..x1 and rows y0..y1. */
+      const drawn = () => {
+        const f = _bh2Frame(T);
+        let x0 = -1, x1 = -1, y0 = -1, y1 = -1;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            const x = k % 320, y = (k - x) / 320;
+            if (x0 < 0 || x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y0 < 0 || y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+        return { x0: x0, x1: x1, y0: y0, y1: y1 };
+      };
+      /* CONTROL: the picture really is where the span says (an edge at e is the last red column e − 1, or the first e). */
+      const pic = (what, x0, x1, y0, y1) => {
+        const d = drawn();
+        if (d.x0 < 0 || Math.abs(d.x0 - x0) > 1 || Math.abs(d.x1 + 1 - x1) > 1 || Math.abs(d.y0 - y0) > 1 || Math.abs(d.y1 + 1 - y1) > 1) bad.push('CONTROL: ' + what + ' is drawn at red columns ' + d.x0 + '..' + d.x1 + ', rows ' + d.y0 + '..' + d.y1 + ', not over ' + r1(x0) + ' .. ' + r1(x1) + ' × ' + r1(y0) + ' .. ' + r1(y1) + ' — the renderer does not draw it where this test works it out');
+      };
+
+      /* ── CONTROLS: a default-anchor shape, linked and unflipped, then flipped both ways: today's centred box. */
+      span('CONTROL: a default-anchor 40 × 30 shape', measure(shape('bh4 #10b centred shape')), X - 20, X + 20, Y - 15, Y + 15);
+      const cf = shape('bh4 #10b centred shape, flipped');
+      cf.flipH = true; cf.flipV = true;
+      span('CONTROL: a default-anchor 40 × 30 shape flipped both ways', measure(cf), X - 20, X + 20, Y - 15, Y + 15);
+
+      /* ── A: a shape anchored at its left edge and its bottom, flipped both ways — its box, its picture, the pivot and a tap. */
+      const sa = shape('bh4 #10b corner-anchored shape, flipped');
+      sa.transform.anchorX = 0; sa.transform.anchorY = 1; sa.flipH = true; sa.flipV = true;
+      const ma = measure(sa);
+      span('A: a 40 × 30 shape with anchorX 0, anchorY 1, flipped both ways', ma, X - 40, X, Y, Y + 30);
+      pic('A: the corner-anchored shape flipped both ways', X - 40, X, Y, Y + 30);
+      if (!ma.pivot || Math.abs(ma.pivot.x - (X - 20)) > EPS || Math.abs(ma.pivot.y - (Y + 15)) > EPS) bad.push('A: the group of the flipped corner-anchored shape pivots at ' + (ma.pivot ? r1(ma.pivot.x) + ', ' + r1(ma.pivot.y) : '(none)') + ' where the shape’s drawn middle is ' + (X - 20) + ', ' + (Y + 15) + ' — a pinch scales it about a point beside it');
+      const tapX = X - 30, g = ma.gb;
+      if (!g || !(tapX >= g.x - g.w / 2 && tapX <= g.x + g.w / 2)) bad.push('A: a tap at x ' + tapX + ', on the flipped shape, falls outside the group’s box ' + (g ? r1(g.x - g.w / 2) + ' .. ' + r1(g.x + g.w / 2) : '(none)'));
+
+      /* ── B: a shape at Width 200 % and Height 50 %, centred and then anchored at its left edge. */
+      const sb = shape('bh4 #10b stretched shape');
+      sb.transform.scaleX = 2; sb.transform.scaleY = 0.5;
+      span('B: a 40 × 30 shape at Width 200 %, Height 50 %', measure(sb), X - 40, X + 40, Y - 7.5, Y + 7.5);
+      pic('B: the shape at Width 200 %, Height 50 %', X - 40, X + 40, Y - 7.5, Y + 7.5);
+      const sb2 = shape('bh4 #10b stretched shape anchored at its left edge');
+      sb2.transform.scaleX = 2; sb2.transform.anchorX = 0;
+      span('B: a 40 × 30 shape at Width 200 % with anchorX 0', measure(sb2), X, X + 80, Y - 15, Y + 15);
+      pic('B: the shape at Width 200 % anchored at its left edge', X, X + 80, Y - 15, Y + 15);
+
+      /* ── C: a left-aligned title, flipped horizontally. */
+      const tl = FM.makeLayer('text', { name: 'bh4 #10b left title, flipped', text: 'bh4 title', x: X, y: Y, fontSize: 40, start: 0, duration: 4 });
+      tl.align = 'left'; tl.flipH = true;
+      const sz = FM.layerSize(tl), W = sz.w, H = sz.h;
+      if (!(W > 40)) throw new Error('CONTROL: the title measures ' + W + ' px wide, too close to layerSize’s 10 px floor for its span to say anything');
+      span('C: a left-aligned title of width ' + r1(W) + ', flipped horizontally', measure(tl), X - W, X, Y - H / 2, Y + H / 2);
+
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
   /* (#9) THE ⧉ ISOLATE ON A GROUP SHOWED NOTHING. A full-frame white bar sits ABOVE a group G holding a red 100 × 100 block centred
      at 200,120 (10000 px) and a blue 60 × 60 one at 60,120 (3600 px); with nothing isolated the bar covers both. FM.isolate is what
      the ⧉ button sets: mode 1 "only this layer", mode 2 "this layer on top".

@@ -29427,10 +29427,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return a === 'left' ? w / 2 : a === 'right' ? -w / 2 : 0;
   };
   // One member's extent in its group's child space: size `sz` at scale `sc`, its x/y already offset by any nested group.
-  function groupMemberSpan(l, sz, sc, x, y) {
+  /* bughunt4 #10b: …and as the member is DRAWN, which applyLayerTransform does with its unlinked Width / Height (scaleX / scaleY, on
+     top of `sc`) and then its own mirror (flipH / flipV, about its x / y). Both were left out, so a member at Width 200 % was boxed
+     at half its width, and a flipped one with its anchor off-centre (or a flipped left-aligned title) was boxed on the wrong side
+     of its x: a 40 px shape hinged on its left edge at x 100 and flipped is drawn 60 .. 100 and was boxed 100 .. 140, not touching
+     it. Read at `t` (the group's start, for the rest box). Linked, unflipped: the very sums as before, w · 1 being w. */
+  function groupMemberSpan(l, sz, sc, x, y, t) {
     const tr = l.transform || {}, ax = anchorX(tr), ay = anchorY(tr);
-    const w = sz.w * sc, h = sz.h * sc, sh = FM.textAlignShift(l, w);
-    return { x0: x - w * ax + sh, x1: x + w * (1 - ax) + sh, y0: y - h * ay, y1: y + h * (1 - ay) };
+    const sx = tr.scaleX != null ? FM.evalProp(tr.scaleX, t) : 1, sy = tr.scaleY != null ? FM.evalProp(tr.scaleY, t) : 1;
+    const w = sz.w * sc * (isFinite(sx) ? sx : 1), h = sz.h * sc * (isFinite(sy) ? sy : 1), sh = FM.textAlignShift(l, w);
+    let x0 = x - w * ax + sh, x1 = x + w * (1 - ax) + sh, y0 = y - h * ay, y1 = y + h * (1 - ay);
+    if (l.flipH) { const a = 2 * x - x1; x1 = 2 * x - x0; x0 = a; }
+    if (l.flipV) { const a = 2 * y - y1; y1 = 2 * y - y0; y0 = a; }
+    return { x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0: Math.min(y0, y1), y1: Math.max(y0, y1) };
   }
 
   // Approximate world bbox of a group's members (ignores rotations — good enough for the canvas
@@ -29457,7 +29466,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
         // bughunt4 #10: the member's anchor and text alignment, not x ± w·sc/2 (groupMemberSpan)
-        const m = groupMemberSpan(l, sz, sc, x, y);
+        const m = groupMemberSpan(l, sz, sc, x, y, t);
         any = true;
         minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
         minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
@@ -29529,7 +29538,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const sc = FM.evalProp(l.transform.scale, t) || 1;
         const x = ox + (FM.evalProp(l.transform.x, t) || 0), y = oy + (FM.evalProp(l.transform.y, t) || 0);
         // bughunt4 #10: the same member span as groupBoundsLocal
-        const m = groupMemberSpan(l, sz, sc, x, y);
+        const m = groupMemberSpan(l, sz, sc, x, y, t);
         any = true;
         minX = Math.min(minX, m.x0); maxX = Math.max(maxX, m.x1);
         minY = Math.min(minY, m.y0); maxY = Math.max(maxY, m.y1);
