@@ -184,7 +184,11 @@ window.FM = window.FM || {};
   Object.setPrototypeOf(ID_ALIAS, null);
   function readList(key) { try { const a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.map(id => ID_ALIAS[id] || id).filter(knownId) : []; } catch (e) { return []; } }
   function writeList(key, arr) { try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {} }
-  function pushRecent(id) { const a = readList(RECENTS_KEY).filter(x => x !== id); a.unshift(id); writeList(RECENTS_KEY, a.slice(0, RECENTS_CAP)); }
+  /* 1176 leftover, bughunt6 #15's twin: the recents are written as they are STORED, the way the star now writes the
+     favourites (readStored, below). Built on readList, adding one effect deleted every recent this build does not know, so a
+     newer build's recents were gone after an older one was opened. What is DRAWN is still readList's. The cap counts what is
+     stored, so the list stays the last 8 effects added on any build. */
+  function pushRecent(id) { const a = readStored(RECENTS_KEY).filter(x => x !== id); a.unshift(id); writeList(RECENTS_KEY, a.slice(0, RECENTS_CAP)); }
   function isFav(id) { return readList(FAV_KEY).indexOf(id) >= 0; }
   /* bughunt6 #15: readList filters for SHOWING only. The star used to write readList's answer back, so starring anything
      deleted every favourite this build does not know (after a rollback, or an effect since retired): queue 721's class,

@@ -170011,4 +170011,87 @@
     if (bad.length) throw new Error(bad.join(' AND '));
   });
 
+  /* ═══ 1176 leftover (bughunt6 #15's twin): ADDING AN EFFECT DELETED THE RECENTS THIS BUILD DOES NOT KNOW ══════════════════
+     bughunt6 #15 made the star edit the favourites as they are stored, so starring no longer deletes the favourites this build
+     does not know. The recents kept the same fault: pushRecent, in both browsers (js/fx-browser.js, js/audio-fx-browser.js), wrote
+     back readList's answer, and readList drops every id this build's registry does not have. So one effect added on an older
+     build (after a rollback, or with an effect since retired) deleted from disk every recent a newer build had put there. Both
+     now write the list as it is stored (readStored) and filter only what they draw.
+     Driven through the real add paths: the Effects browser's addEffect (FM.fxBrowser._addEffect, as the 722 test drives it) and
+     a tap on the Audio Effects browser's Recents tile, with localStorage 'fm.fx.recents' and 'fm.afx.recents' written and read
+     straight, and put back as they were.
+     FAILS BEFORE THE FIX: adding Blur leaves ["blur","glow"] stored, and tapping Gain leaves ["gain"]: no-such-effect is gone.
+     CONTROLS, which hold before and after: each add lands (one more effect on the layer, and first in the stored recents), the
+     known recent stays, and what the browsers SHOW leaves the unknown id out (one Recents tile each, the known effect's). */
+  test('1176 leftover: adding an effect keeps the recents this build does not know: with glow and no-such-effect stored as the Effects browser’s recents, adding Blur keeps no-such-effect stored, and the same for the Audio Effects browser with gain (CONTROLS: the add lands first in the recents, the known recent stays, and the unknown one is never shown)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.fxBrowser || typeof FM.fxBrowser.open !== 'function' || typeof FM.fxBrowser._addEffect !== 'function') throw new Error('setup: FM.fxBrowser.open / _addEffect (the Effects browser’s add path) are not reachable');
+    if (!FM.audioFxBrowser || typeof FM.audioFxBrowser.open !== 'function') throw new Error('setup: FM.audioFxBrowser.open is not reachable');
+    if (!FM.fxRegistry.get('blur') || !FM.fxRegistry.get('glow') || FM.fxRegistry.get('no-such-effect')) throw new Error('setup: this build’s effects registry does not have blur and glow, or has a no-such-effect');
+    if (!FM.audioFxRegistry.get('gain') || FM.audioFxRegistry.get('no-such-effect')) throw new Error('setup: this build’s audio registry does not have gain, or has a no-such-effect');
+    const KEYS = ['fm.fx.recents', 'fm.afx.recents', 'fm.fx.presetHint'];
+    const keep = {};
+    KEYS.forEach(k => { try { keep[k] = localStorage.getItem(k); } catch (e) { keep[k] = null; } });
+    const stored = k => { try { const a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+    const fxRoot = document.getElementById('fx-browser'), aRoot = document.getElementById('afx-browser');
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const bad = [];
+    const away = () => {
+      try { if (FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()) FM.fxBrowser.close(); } catch (e) {}
+      try { if (FM.audioFxBrowser.close) FM.audioFxBrowser.close(); } catch (e) {}
+    };
+    try {
+      if (hadHome) FM.home.close();
+      try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (e) {}
+      await _bh2With(async function (media) {
+        /* 1 · the Effects browser, on a shape */
+        const L = FM.makeLayer('shape', { name: '1176 recents', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#f80', start: 0, duration: 6 });
+        L.start = 0; L.duration = 6;
+        FM.scene.layers.push(L);
+        if (!FM.fxRegistry.supportsLayer('blur', L)) throw new Error('setup: Blur cannot be added to a shape in this build');
+        localStorage.setItem('fm.fx.recents', JSON.stringify(['no-such-effect', 'glow']));
+        FM.selectLayer(L.id); FM.refreshAll();
+        FM.fxBrowser.open(L); await sleep(250);
+        if (!fxRoot || fxRoot.classList.contains('hidden')) throw new Error('setup: the Effects browser did not open on the shape');
+        const shownFx = [].slice.call(fxRoot.querySelectorAll('.fxb-recents .fxb-tile')).map(t => t.dataset.fxid || '?');
+        if (shownFx.join(',') !== 'glow') bad.push('CONTROL: with glow and no-such-effect stored, the Effects browser’s Recents shows ' + JSON.stringify(shownFx) + ', not Glow alone');
+        const n0 = (L.effects || []).length;
+        FM.fxBrowser._addEffect('blur'); await sleep(120);
+        away(); await sleep(40);
+        let s = stored('fm.fx.recents');
+        if ((L.effects || []).length !== n0 + 1 || s[0] !== 'blur') bad.push('CONTROL: adding Blur through the Effects browser left ' + (L.effects || []).length + ' effects on the shape (was ' + n0 + ') and ' + JSON.stringify(s) + ' stored, so the add did not land');
+        if (s.indexOf('glow') < 0) bad.push('CONTROL: adding Blur left ' + JSON.stringify(s) + ' stored: the known recent glow was dropped');
+        if (s.indexOf('no-such-effect') < 0) bad.push('adding Blur in the Effects browser left ' + JSON.stringify(s) + ' stored: the recent this build does not know (no-such-effect) was deleted from disk, so a newer build’s recents are gone after one add here');
+
+        /* 2 · the Audio Effects browser, on a clip with sound: its Recents tile tapped */
+        const V = FM.makeLayer('video', { name: '1176 recents clip', x: 100, y: 100, start: 0, duration: 5 });
+        V.start = 0; V.duration = 5;
+        FM.media.set(V.id, { kind: 'video', el: document.createElement('video'), width: 640, height: 360, duration: 5 });
+        media.push(V.id);
+        FM.scene.layers.push(V);
+        localStorage.setItem('fm.afx.recents', JSON.stringify(['no-such-effect', 'gain']));
+        FM.selectLayer(V.id); FM.refreshAll();
+        FM.audioFxBrowser.open(V); await sleep(300);
+        if (!aRoot || aRoot.classList.contains('hidden')) throw new Error('setup: the Audio Effects browser did not open on the clip');
+        const page = aRoot.querySelector('.fxb-pager .fxb-page');
+        const tiles = page ? [].slice.call(page.querySelectorAll('.fxb-tile')) : [];
+        const names = tiles.map(t => ((t.querySelector('.fxb-tile-name') || {}).textContent || '').trim());
+        const gainLabel = FM.audioFxRegistry.get('gain').label;
+        if (names.join(',') !== gainLabel) bad.push('CONTROL: with gain and no-such-effect stored, the Audio Effects browser’s Recents shows ' + JSON.stringify(names) + ', not ' + gainLabel + ' alone');
+        const a0 = (V.audioFx || []).length;
+        if (!tiles.length) throw new Error('setup: the Audio Effects browser’s Recents page has no tile to tap');
+        tiles[0].click(); await sleep(150);
+        away(); await sleep(40);
+        const live = FM.layerById(FM.scene, V.id) || V;
+        s = stored('fm.afx.recents');
+        if ((live.audioFx || []).length !== a0 + 1 || s[0] !== 'gain') bad.push('CONTROL: tapping the Gain recent left ' + (live.audioFx || []).length + ' audio effects on the clip (was ' + a0 + ') and ' + JSON.stringify(s) + ' stored, so the tap did not land');
+        if (s.indexOf('no-such-effect') < 0) bad.push('tapping Gain in the Audio Effects browser left ' + JSON.stringify(s) + ' stored: the recent this build does not know (no-such-effect) was deleted from disk');
+      }, async () => { away(); });
+    } finally {
+      away();
+      KEYS.forEach(k => { try { if (keep[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, keep[k]); } catch (e) {} });
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();
