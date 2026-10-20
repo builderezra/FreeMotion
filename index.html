@@ -1262,7 +1262,7 @@
   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
   <script src="js/collab-qr.js?v=3"></script>
-  <script src="js/collab-ui.js?v=23"></script>
+  <script src="js/collab-ui.js?v=24"></script>
   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
        there is no presence DOM, no listener and no timer. -->
@@ -1270,7 +1270,7 @@
   <!-- queue 921 stage S7 — comments: the paper card, replies, resolve, and a mark on the ruler at each
        comment's time. A library like the rest: collab-ui.js installs it only while Labs is on, and a
        comment never stops an export (only a note with a reminder does). -->
-  <script src="js/collab-comments.js?v=7"></script>
+  <script src="js/collab-comments.js?v=8"></script>
   <script>
     /* bughunt6 #14: A NEW BUILD WAITS UNTIL NOTHING WOULD BE LOST. A release that changes sw.js hands every open copy a new
        worker within seconds of launch, and the controllerchange handler below reloaded on the spot, whatever was going on:

@@ -437,7 +437,15 @@ window.FM = window.FM || {};
 
   /* ═══ 2. THE SHARE PANEL (§19.1) ══════════════════════════════════════════════════════════════ */
 
-  function currentPid() { return (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null; }
+  /* bughunt8 #2b: THE PROJECT THIS TAB HAS OPEN (FM.storage.openProjectId), never the shared fm.currentProject, which every tab
+     rewrites when it opens a project. Every reader below means this tab's: the room a Share files, locks and checkpoints, the
+     linked-copy refusal before an arm, the banner, the resume, the knock card's project. Read from the pointer, with another tab
+     on a project of its own, Share here armed a room under THAT project with this tab's scene, a linked copy open here could be
+     armed as a room of the guest's own, and a resume could start another project's room over the one on screen. */
+  function currentPid() {
+    if (FM.storage && FM.storage.openProjectId) return FM.storage.openProjectId();
+    return (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null;
+  }
   function projectName() {
     const pid = currentPid();
     const list = (FM.projects && FM.projects.list && FM.projects.list()) || [];

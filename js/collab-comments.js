@@ -294,7 +294,9 @@ window.FM = window.FM || {};
     });
   }
   function scan() {
-    const pid = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null;
+    /* bughunt8 #2b: THIS tab's project (FM.storage.openProjectId), not the shared fm.currentProject: every time another tab opened a
+       project, the count of comments he had not read here was zeroed and they were all marked seen. */
+    const pid = (FM.storage && FM.storage.openProjectId) ? FM.storage.openProjectId() : null;
     const proj = FM.scene && FM.scene.project;
     if (!seen || pid !== seenPid || proj !== seenProj) {
       if (!seen || pid !== seenPid) unread = 0;
