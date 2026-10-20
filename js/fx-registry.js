@@ -438,7 +438,7 @@ window.FM = window.FM || {};
     chromaticaberration: 'Colour fringing toward the edges, the way a real lens misfocuses each colour.',
     pixelate: 'Averages the image into blocks.',
     posterize: 'Cuts the colours down to a few flat steps.',
-    threshold: 'Hard two-tone: everything is black or white on either side of a cut.',
+    /* eight colours, one side kept, mixed: #966 opts11 */ threshold: 'Hard two-tone: everything is black or white on either side of a cut — or each colour cut on its own, one side kept as the picture, mixed over it.',
     dither: 'Reduces to few colours but scatters the error, so it reads as more shades than it has.',
     halftone: 'Rebuilds the image out of dots, like newsprint.',
     edge: 'Keeps only the edges and drops the fill.',

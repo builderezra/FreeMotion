@@ -145,7 +145,16 @@ window.FM = window.FM || {};
     { type: 'threshold', label: 'Threshold', color: true, defColor: '#000000', colorLabel: 'Below', color2: true, defColor2: '#ffffff', color2Label: 'Above', params: [
       { key: 'level', label: 'Level', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'softness', label: 'Softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
-    ] },
+      /* #966 opts11 (hunt/fx11, his "more choices always better"): the cut was always made on BRIGHTNESS, into exactly two flat colours
+         over the whole picture. CUTS ON Each colour cuts red, green and blue on their own, so the picture comes out in eight flat colours
+         (the screen-print look) instead of two; KEEP PICTURE leaves one side of the cut as the picture itself — Above: the lights keep
+         their own colour and the darks go to the Below colour (the stencil look), Below the other way round; MIX lays the result over the
+         picture. Brightness, Off and 100 % run the old loops untouched (threshold11 only off them). The colour a kept side no longer
+         uses greys out. */
+      { key: 'chan', label: 'Cuts on', def: 0, options: [[0, 'Brightness'], [1, 'Each colour']], note: 'Each colour cuts red, green and blue on their own: eight flat colours instead of two' },
+      { key: 'keep', label: 'Keep picture', def: 0, options: [[0, 'Off'], [1, 'Above'], [2, 'Below']], note: 'Above: the parts brighter than the Level keep their own colour' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ], colorGate: { by: 'keep', deadAt: 2, deadAtText: 'Below' }, color2Gate: { by: 'keep', deadAt: 1, deadAtText: 'Above' } },
     { type: 'duotone', label: 'Duotone', color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ff9e5e', color2Label: 'Highlights', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0 },
@@ -14094,6 +14103,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._tilesExtend10 = tilesExtend10;   // suite seam (#966 opts10)
+  /* ═══ #966 opts11 (hunt/fx11): helpers behind the eleventh round — Threshold's Cuts on, Keep picture and Mix, Posterize's Band edges
+   * and Hue only, Solarize's Flip colour and Stretch, Sharpen's Halos and Limit halos, Box Blur's Mix and Blend, Remove Object's Shape
+   * and Angle. Each runs only off its controls' defaults, so a default kernel never calls one. ═══ */
+  /* THRESHOLD'S CUTS ON, KEEP PICTURE AND MIX: thresholdPixels' softened loop to the letter (the same cut, the same softness band and
+     smoothstep, the same Below and Above colours), with the share k judged per channel under Each colour (red on red, green on green,
+     blue on blue — eight flat colours from black and white) instead of on the pixel's brightness; under Keep picture the side it names
+     takes the pixel's own colour in place of its swatch (Above: the lights keep theirs, the darks take Below; Below the other way round);
+     and the result mixed over the picture by Mix (100 % is the result itself, 0 the picture; NaN reads 100). */
+  function threshold11(d, cut, softPc, loHex, hiHex, each, keep, mix) {
+    const m = isFinite(mix) ? (mix <= 0 ? 0 : (mix >= 100 ? 1 : mix / 100)) : 1;
+    if (!(m > 0)) return;
+    const A = hexToRGB(loHex), B = hexToRGB(hiHex);
+    const half = Math.max(0, softPc) / 100 * 255 / 2;
+    const kf = L => { if (half <= 0) return L >= cut ? 1 : 0; let k = (L - (cut - half)) / (2 * half); k = k < 0 ? 0 : (k > 1 ? 1 : k); return k * k * (3 - 2 * k); };
+    const keepLo = keep === 2, keepHi = keep === 1;
+    for (let i = 0; i < d.length; i += 4) {
+      const s0 = d[i], s1 = d[i + 1], s2 = d[i + 2];
+      let k0, k1, k2;
+      if (each) { k0 = kf(s0); k1 = kf(s1); k2 = kf(s2); }
+      else { k0 = kf(s0 * 0.299 + s1 * 0.587 + s2 * 0.114); k1 = k0; k2 = k0; }
+      const l0 = keepLo ? s0 : A[0], l1 = keepLo ? s1 : A[1], l2 = keepLo ? s2 : A[2];
+      const h0 = keepHi ? s0 : B[0], h1 = keepHi ? s1 : B[1], h2 = keepHi ? s2 : B[2];
+      const o0 = l0 + (h0 - l0) * k0, o1 = l1 + (h1 - l1) * k1, o2 = l2 + (h2 - l2) * k2;
+      if (m === 1) { d[i] = o0; d[i + 1] = o1; d[i + 2] = o2; }
+      else { d[i] = s0 + (o0 - s0) * m; d[i + 1] = s1 + (o1 - s1) * m; d[i + 2] = s2 + (o2 - s2) * m; }
+    }
+  }
+  FM._threshold11 = threshold11;   // suite seam (#966 opts11)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -21151,6 +21188,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   function thresholdPixels(d, cut, p, t) {
     const softPc = p.softness == null ? 0 : FM.evalProp(p.softness, t);
     const loHex = p.color || '#000000', hiHex = p.color2 || '#ffffff';
+    /* #966 opts11: CUTS ON Each colour (1), KEEP PICTURE Above (1) or Below (2), and MIX under 100 % — any of them runs threshold11, the
+       two loops below with the three laid in; Brightness, Off and 100 % (and all three absent) run the loops below untouched. */
+    const ch11 = p.chan == null ? 0 : (Math.round(FM.evalProp(p.chan, t)) | 0), kp11 = p.keep == null ? 0 : (Math.round(FM.evalProp(p.keep, t)) | 0);
+    const mx11 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+    if (ch11 === 1 || kp11 === 1 || kp11 === 2 || mx11 < 100) { threshold11(d, cut, softPc, loHex, hiHex, ch11 === 1, kp11, mx11); return; }
     if (softPc === 0 && loHex === '#000000' && hiHex === '#ffffff') {
       for (let i = 0; i < d.length; i += 4) {
         const v = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) >= cut ? 255 : 0;

@@ -175263,4 +175263,344 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+  // ── 966 opts11 (hunt/fx11) ──
+  /* ═══ #966: MORE CHOICE, ROUND ELEVEN — six more effects he already has, each commonly reached for and still thin on choice: Threshold,
+   * Posterize, Solarize, Sharpen, Box Blur and Remove Object (hunt/fx11). His words: "polish other effects just giving them more features
+   * … more choices always better … this is the complex version we want as much choice as possible". WRITTEN WITHOUT RUNNING (21 Oct, while
+   * a release shipped on this machine): nothing but `node --check`. Every number below is reasoned from the code it names, the reasoning
+   * beside it; a bound only a run can set says MEASURE beside it. Every test fails on d05c14b7 on its first line by NAMING the missing
+   * control or seam, never with a TypeError. Each effect has round ten's four kinds: (a) its rows, ranges, choices, gates and what the load
+   * sanitiser keeps, clamps and drops, (b) what each new control does, on a fixture that holds what separates right from wrong, (c) at the
+   * defaults the kernel is today's picture byte for byte, (d) a CONTROL — every new control moves the very fixtures (c) holds still.
+   * Threshold and Posterize are not PIXEL_FX kernels: drawThreshold and drawPosterize run them on a clip and applyPixelFx on an adjustment
+   * layer, the same thresholdPixels / posterizePixels both ways, so their pictures go through FM._applyPixelFx (and, in the first test,
+   * FM.renderScene). The helpers carry an _o11 prefix and are this block's own; from the rest of the file it uses only `test`, `sleep` and
+   * E1 (frame, noise, maxDiff, count). ═══ */
+  const _o11Need = (type, keys, seams) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts11 (hunt/fx11) is not built');
+    (seams || []).forEach(s => { if (typeof FM[s] !== 'function') throw new Error('FM.' + s + ' (the #966 opts11 seam) does not exist — #966 opts11 is not built'); });
+    return r;
+  };
+  /* every new key, by effect, and every new control off its default on the effect's own default settings (a colour off its default in
+     every channel) */
+  const _O11_NEW = { threshold: ['chan', 'keep', 'mix'] };
+  const _O11_OFF = { threshold: [{ chan: 1 }, { keep: 1 }, { mix: 50 }] };
+  const _o11P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o11Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  /* a PIXEL_FX kernel straight, with exactly these params (ps 1 unless given; no layer, no box) */
+  const _o11PX = (type, params, W, H, d, t, ps) => {
+    const f = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable');
+    f(d, W, H, params, t == null ? 0.5 : t, ps == null ? 1 : ps);
+    return d;
+  };
+  /* …and through the dispatcher's own pixel step (colours resolved, project px scaled to plate scale ps) — the adjustment-layer path,
+     which for Threshold and Posterize is thresholdPixels / posterizePixels themselves */
+  const _o11Run = (type, params, W, H, d, t, ps) => {
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx is not reachable');
+    FM._applyPixelFx(d, { type: type, params: params }, t == null ? 0.5 : t, W, H, ps == null ? 1 : ps);
+    return d;
+  };
+  /* a busy opaque picture (a colour ramp under a 12 px checker), an opaque block on clear, the grey levels 0–255 one to a column */
+  const _o11Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  const _o11Blk = (W, H) => E1.frame(W, H, (x, y) => (x >= 20 && x < 70 && y >= 10 && y < 50) ? [200, 90, 40, 255] : [0, 0, 0, 0]);
+  const _o11Lv = () => E1.frame(256, 2, x => [x, x, x]);
+  const _o11At = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  const _o11KF = (a, b, t1) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: t1 || 1, v: b, e: 'linear' }] });
+  /* a gradient rect, and the frame rendered through FM.renderScene (a reduced plate when rs is given) */
+  const _o11Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#1040a0', c1: '#f0c060' }; L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o11shot = (layers, t, W, H, rs, bg) => {
+    const c = document.createElement('canvas'); c.width = Math.round(W * (rs || 1)); c.height = Math.round(H * (rs || 1));
+    if (rs) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: bg === undefined ? '#000000' : bg }, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return g.getImageData(0, 0, c.width, c.height).data;
+  };
+  /* a new instance with `give` laid on it, through the load sanitiser on a shape layer: the params it keeps */
+  const _o11San = (type, give) => {
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, give);
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    return got ? got.params : null;
+  };
+  /* Every new row as the panel gets it (round ten's _o10Rows): its label; a slider's range, unit and keyframes, a choice's buttons and the
+     values they store (`vals`, when they are not 0, 1, 2…), or a colour row; its default and its gate (or that nothing greys it out); what a
+     new instance starts with, what a SAVED one with no such key is filled with at render time (FM._fillFxParams, queue 784) and what the fill
+     reads off the kernel (793); and that the load sanitiser keeps each key of `keep` at a value off its default. */
+  const _o11Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.vals || s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else if (s.colour) {
+        if (p.type !== 'color') bad.push(s.key + ' is a ' + p.type + ' row, not a colour');
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      if (typeof s.def === 'number') { const fv = FM._fxFillValue(type, s.key); if (fv !== s.def) bad.push('the render-time fill reads ' + s.key + ' as ' + JSON.stringify(fv) + ' off the kernel, not ' + s.def + ' — 793 would say the panel lies'); }
+      if (s.gate) { if (p.overriddenBy !== s.gate[0] || JSON.stringify(p[s.gate[1]]) !== JSON.stringify(s.gate[2])) bad.push(s.key + ' is gated by ' + JSON.stringify([p.overriddenBy, p[s.gate[1]]]) + ', not ' + JSON.stringify([s.gate[0], s.gate[2]]) + ' (' + s.gate[1] + ')'); }
+      else if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const got = _o11San(type, keep);
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got[k])); });
+    return bad;
+  };
+  /* …and what the load sanitiser does with values off the rows: a number past either end is held at that end, a choice that is not one of
+     the buttons and a colour that is not a colour are left out (absent: the render-time fill then draws the default). `want[k]` undefined
+     means "left out". */
+  const _o11Clamp = (type, give, want) => {
+    const got = _o11San(type, give), bad = [];
+    if (!got) return ['the load sanitiser drops a ' + type + ' carrying ' + JSON.stringify(give)];
+    Object.keys(want).forEach(k => {
+      if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(give[k]) + ' into ' + JSON.stringify(got[k]) + ', not ' + (want[k] === undefined ? 'nothing (it is not a value the row has, so it is left out)' : JSON.stringify(want[k])));
+    });
+    return bad;
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o11Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o11P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o11Pic;
+      const a = _o11Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o11Run(type, _o11Del(P, _O11_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O11_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on a new instance, on that fixture at that moment, through the dispatcher's pixel step */
+  const _o11Moves = (type, over, W, H, pic, t) => E1.count(_o11Run(type, _o11P(type), W, H, pic(W, H), t), _o11Run(type, _o11P(type, over), W, H, pic(W, H), t), 0);
+  /* the cropped readback (a zoomed preview reads only the layer's box) is the whole plate's picture, for a PIXEL_FX kernel */
+  const _o11Crop = (type, over, bad) => { const r = FM._cropIdentity(type, _o11Blk(96, 72), 96, 72, _o11P(type, over), 0.3, 1); if (!r || r.same !== true) bad.push(type + ' ' + JSON.stringify(over) + ': the cropped readback differs from the whole plate in ' + (r ? r.diff : '?') + ' bytes'); };
+  /* open a layer's (only) effect in the inspector and hand back the editor's body, or null; the caller restores the scene */
+  const _o11Open = async (L) => {
+    FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+    let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    if (!body) {
+      const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+      if (!cat) return null;
+      cat.closest('[class*=cat]').click(); await sleep(140);
+      body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    }
+    return body || null;
+  };
+  /* a greyed row whose OWN label is `label`, read from the row's own <label> (round eight's fix): a colour row starts with its ◆ keyframe
+     button, so "the row's text starts with the label" never matches one */
+  const _o11Greyed = (body, label) => Array.prototype.slice.call(body.querySelectorAll('.fx-overridden')).some(n => {
+    const own = n.querySelector(':scope > label');
+    return ((own || n).textContent || '').replace(/^\s*◆\s*/, '').trim().indexOf(label) === 0;
+  });
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect over a grey ground. CONTROLS: each effect changes the picture against the rect with no effect, and each new control
+     off its default moves the picture through the same compositor, at 1:1. */
+  test('966 opts11 every new control at its default draws what the effect drew without it — each of the round’s effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O11_NEW);
+    TYPES.forEach(type => _o11Need(type, _O11_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const one = params => type => [_o11Rect({ type: type, enabled: true, params: params })];
+    TYPES.forEach(type => {
+      const P = _o11P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o11shot(one(Object.assign({}, P))(type), t, W, H, rs, BG);
+        const b = _o11shot(one(_o11Del(P, _O11_NEW[type]))(type), t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O11_NEW[type].join(' / '));
+        if (rs == null) { const off = _o11shot([_o11Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+      const base = _o11shot(one(Object.assign({}, P))(type), 0.61, W, H, null, BG);
+      _O11_OFF[type].forEach(o => {
+        const n = E1.count(base, _o11shot(one(Object.assign({}, P, o))(type), 0.61, W, H, null, BG), 2);
+        if (n < 100) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE at 1280 and 380: reasoned in the thousands for most; the least is Remove Object's Oval (its box corners and its feather), a few hundred */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Threshold: Cuts on, Keep picture and Mix ---- */
+  /* eight flat pixels, every mix of 60 and 200 in the three channels */
+  const _O11_TH8 = [[60, 60, 60], [200, 60, 60], [60, 200, 60], [60, 60, 200], [200, 200, 60], [200, 60, 200], [60, 200, 200], [200, 200, 200]];
+  const _o11Th = () => E1.frame(_O11_TH8.length, 1, x => _O11_TH8[x]);
+  test('966 opts11 Threshold has Cuts on (Brightness or Each colour, storing 0 and 1, Brightness by default), Keep picture (Off, Above or Below, storing 0–2, Off by default) and Mix (0–100 %, keyframable, 100 by default), none greyed, while its Below colour greys out under Keep picture Below and its Above colour under Above: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Each colour, Below and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('threshold', _O11_NEW.threshold);
+    const bad = _o11Rows('threshold', [
+      { key: 'chan', label: 'Cuts on', options: ['Brightness', 'Each colour'], def: 0 },
+      { key: 'keep', label: 'Keep picture', options: ['Off', 'Above', 'Below'], def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 },
+      { key: 'color', label: 'Below', colour: true, def: '#000000', gate: ['keep', 'deadAt', 2] },
+      { key: 'color2', label: 'Above', colour: true, def: '#ffffff', gate: ['keep', 'deadAt', 1] }], { chan: 1, keep: 2, mix: 40 });
+    bad.push.apply(bad, _o11Clamp('threshold', { mix: 150 }, { mix: 100 }));
+    bad.push.apply(bad, _o11Clamp('threshold', { mix: -5 }, { mix: 0 }));
+    bad.push.apply(bad, _o11Clamp('threshold', { keep: 3, chan: 2 }, { keep: undefined, chan: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* CUTS ON on the eight pixels at the defaults (Level 0.5, a cut at 127.5, Softness 0). Each colour cuts each channel on its own: a 200
+     takes the Above colour's channel, a 60 the Below colour's, so black and white give the eight flat colours — 0 or 255 per channel, the
+     input's own pattern — and navy #102040 (16, 32, 64) with cream #f0e0c0 (240, 224, 192) give each channel its own swatch's channel.
+     CONTROL: on Brightness every pixel is black or white — brightness 60, 102, 142, 76, 184, 118, 158 and 200 against 127.5, so black,
+     black, white, black, white, black, white, white — two colours in all. Softness 20 % under Each colour ramps each channel on its own:
+     the 128 of (128, 60, 60) is k = smoothstep((128 − 102) / 51) = 0.5147 of the way, 131.2 (±1), its 60s stay 0. */
+  test('966 opts11 Threshold Cuts on: Each colour cuts red, green and blue on their own — eight pixels in every mix of 60 and 200 come out in the eight flat colours black and white make, and with a navy and a cream each channel takes its own swatch’s channel — where Brightness (CONTROL) leaves only black and white; Softness ramps each channel on its own', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('threshold', ['chan']);
+    const bad = [], N = _O11_TH8.length;
+    const run = (over, pic, w) => _o11Run('threshold', _o11P('threshold', over), w || N, 1, pic || _o11Th(), 0.5);
+    const lum = run({}), seen = new Set(), LUM = [0, 0, 255, 0, 255, 0, 255, 255];
+    for (let x = 0; x < N; x++) {
+      const c = _o11At(lum, N, x, 0); seen.add(c.slice(0, 3).join());
+      if (!(c[0] === LUM[x] && c[1] === LUM[x] && c[2] === LUM[x])) bad.push('CONTROL: on Brightness pixel (' + _O11_TH8[x].join(', ') + ') reads (' + c.slice(0, 3).join(', ') + '), not ' + (LUM[x] ? 'white' : 'black'));
+    }
+    if (seen.size > 2) bad.push('CONTROL: on Brightness the eight pixels come out in ' + seen.size + ' colours, not two');
+    if (bad.length) throw new Error(bad.join(' · '));
+    const each = run({ chan: 1 });
+    _O11_TH8.forEach((c, x) => { const want = c.map(v => (v > 127.5 ? 255 : 0)), got = _o11At(each, N, x, 0).slice(0, 3); if (got.join() !== want.join()) bad.push('Each colour: pixel (' + c.join(', ') + ') reads (' + got.join(', ') + '), not (' + want.join(', ') + ')'); });
+    const A = [16, 32, 64], B = [240, 224, 192], sw = run({ chan: 1, color: '#102040', color2: '#f0e0c0' });
+    _O11_TH8.forEach((c, x) => { const want = c.map((v, k) => (v > 127.5 ? B[k] : A[k])), got = _o11At(sw, N, x, 0).slice(0, 3); if (got.join() !== want.join()) bad.push('Each colour with navy and cream: pixel (' + c.join(', ') + ') reads (' + got.join(', ') + '), not (' + want.join(', ') + ')'); });
+    const soft = run({ chan: 1, softness: 20 }, E1.frame(1, 1, () => [128, 60, 60]), 1);
+    if (Math.abs(soft[0] - 131.2) > 1 || soft[1] !== 0 || soft[2] !== 0) bad.push('Each colour at Softness 20 %: (128, 60, 60) reads (' + Array.prototype.slice.call(soft, 0, 3).join(', ') + '), not (131.2, 0, 0)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* KEEP PICTURE on the same eight pixels, black and white. Above: the four over the cut (the 2nd, 4th, 6th and 7th from 0) keep their own
+     colour byte for byte and the four under it take the Below colour, black; Below: the four under it keep theirs and the four over it take
+     the Above colour, white. Under Each colour it goes channel by channel: (200, 60, 60) keeps its 200 and its 60s go black (Above), or
+     keeps its 60s and its 200 goes white (Below). The colour a kept side no longer uses does nothing — a red Above colour under Above, a
+     red Below colour under Below, changes no byte — where under Off (CONTROL) a red Above colour repaints exactly the four lights. */
+  test('966 opts11 Threshold Keep picture: Above keeps the lights in their own colour byte for byte and sends the darks to the Below colour, Below the other way round, channel by channel under Each colour — and the colour the kept side no longer uses changes nothing, where under Off (CONTROL) it repaints its side', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('threshold', ['keep', 'chan']);
+    const bad = [], N = _O11_TH8.length, LIGHT = [false, false, true, false, true, false, true, true];
+    const run = over => _o11Run('threshold', _o11P('threshold', over), N, 1, _o11Th(), 0.5);
+    const off = run({}), offRed = run({ color2: '#ff0000' });
+    let moved = 0; for (let x = 0; x < N; x++) if (_o11At(off, N, x, 0).join() !== _o11At(offRed, N, x, 0).join()) moved++;
+    if (moved !== 4) throw new Error('CONTROL: under Off a red Above colour repaints ' + moved + ' of the eight pixels, not the four lights — nothing below can be read');
+    const ab = run({ keep: 1 }), be = run({ keep: 2 });
+    _O11_TH8.forEach((c, x) => {
+      const a = _o11At(ab, N, x, 0).slice(0, 3).join(), b = _o11At(be, N, x, 0).slice(0, 3).join();
+      const wa = LIGHT[x] ? c.join() : '0,0,0', wb = LIGHT[x] ? '255,255,255' : c.join();
+      if (a !== wa) bad.push('Above: pixel (' + c.join(', ') + ') reads (' + a + '), not (' + wa + ')');
+      if (b !== wb) bad.push('Below: pixel (' + c.join(', ') + ') reads (' + b + '), not (' + wb + ')');
+    });
+    const ea = run({ keep: 1, chan: 1 }), eb = run({ keep: 2, chan: 1 });
+    _O11_TH8.forEach((c, x) => {
+      const a = _o11At(ea, N, x, 0).slice(0, 3).join(), b = _o11At(eb, N, x, 0).slice(0, 3).join();
+      const wa = c.map(v => (v > 127.5 ? v : 0)).join(), wb = c.map(v => (v > 127.5 ? 255 : v)).join();
+      if (a !== wa) bad.push('Above under Each colour: pixel (' + c.join(', ') + ') reads (' + a + '), not (' + wa + ')');
+      if (b !== wb) bad.push('Below under Each colour: pixel (' + c.join(', ') + ') reads (' + b + '), not (' + wb + ')');
+    });
+    if (E1.maxDiff(run({ keep: 1, color2: '#ff0000' }), ab) !== 0) bad.push('under Above a red Above colour still changes the picture');
+    if (E1.maxDiff(run({ keep: 2, color: '#ff0000' }), be) !== 0) bad.push('under Below a red Below colour still changes the picture');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* MIX on the busy picture: at 50 % every channel sits half way between the picture and the whole result (the same settings at 100 %,
+     CONTROL: over a thousand pixels away from the picture), within a level — on the plain two-tone, under Keep picture Above and under
+     Each colour with Softness 30 %; at 0 % the picture byte for byte; a Mix keyed 0 → 100 over a second draws 50 % at 0.5 s. */
+  test('966 opts11 Threshold Mix: at 50 % every pixel sits half way between the picture and the whole result — the two-tone, Keep picture, Each colour — at 0 % it is the picture byte for byte, and a keyed Mix draws its value (CONTROL: each whole result is far from the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('threshold', ['mix']);
+    const W = 96, H = 72, bad = [], pic = _o11Pic(W, H);
+    const run = over => _o11Run('threshold', _o11P('threshold', over), W, H, _o11Pic(W, H), 0.5);
+    [{}, { keep: 1 }, { chan: 1, softness: 30 }].forEach(o => {
+      const full = run(o), half = run(Object.assign({ mix: 50 }, o));
+      if (E1.count(full, pic, 2) < 1000) bad.push('CONTROL: ' + JSON.stringify(o) + ' at 100 % moves only ' + E1.count(full, pic, 2) + ' pixels of the picture');
+      let worst = 0;
+      for (let i = 0; i < pic.length; i++) { if ((i & 3) === 3) continue; const e = Math.abs(half[i] - (pic[i] + (full[i] - pic[i]) * 0.5)); if (e > worst) worst = e; }
+      if (worst > 1) bad.push(JSON.stringify(o) + ' at Mix 50 % is up to ' + worst.toFixed(1) + ' levels from half way between the picture and the whole result');
+    });
+    if (E1.maxDiff(run({ mix: 0 }), pic) !== 0) bad.push('at Mix 0 % the picture moved by up to ' + E1.maxDiff(run({ mix: 0 }), pic) + ' levels');
+    if (E1.maxDiff(run({ mix: _o11KF(0, 100) }), run({ mix: 50 })) !== 0) bad.push('a Mix keyed 0 → 100 does not draw 50 % at 0.5 s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts11 Threshold at Brightness, Off and Mix 100 % draws byte for byte what it drew without them — another Level, Softness, two colours, both, a block on clear, a half-size plate, another moment — and its copy of the loops is the loops themselves there (CONTROL: Each colour, Keep picture and Mix 50 % each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('threshold', _O11_NEW.threshold, ['_threshold11']);
+    const bad = _o11Ident('threshold', [{}, { over: { level: 0.3 } }, { over: { softness: 30 } }, { over: { color: '#102040', color2: '#f0e0c0' } }, { over: { softness: 20, color: '#300000' } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    [{}, { softness: 25 }, { color: '#102040', color2: '#f0e0c0', level: 0.62 }].forEach(o => {
+      const P = _o11P('threshold', o), old = _o11Run('threshold', P, 96, 72, _o11Pic(96, 72)), seam = _o11Pic(96, 72);
+      FM._threshold11(seam, P.level * 255, P.softness, P.color, P.color2, false, 0, 100);
+      if (E1.maxDiff(old, seam) !== 0) bad.push(JSON.stringify(o) + ': threshold11 at Brightness, Off and 100 % is up to ' + E1.maxDiff(old, seam) + ' levels away from the kernel’s own loops');
+    });
+    let n;
+    [[{ chan: 1 }, 'Each colour'], [{ keep: 1 }, 'Keep picture Above'], [{ mix: 50 }, 'Mix 50 %']].forEach(([o, what]) => { if ((n = _o11Moves('threshold', o, 96, 72, _o11Pic, 0.5)) < 500) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- the panel ---- */
+  /* THE GATES, as the inspector draws them, each row read by its own <label> (_o11Greyed). Threshold's Below colour is live on a new one and
+     greys out under Keep picture Below, its Above colour under Above. CONTROL: each editor shows the row's label, so its state was read. */
+  test('966 opts11 the gates in the inspector: Threshold’s Below colour greys out under Keep picture Below and its Above colour under Above — and each is live on a new one', { item: '966', budgetMs: 60000 }, async function () {
+    const CASES = [
+      ['threshold', 'Below', false, { keep: 2 }, true],
+      ['threshold', 'Above', false, { keep: 1 }, true]];
+    CASES.forEach(c => _o11Need(c[0], _O11_NEW[c[0]]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const [type, label, ga, b, gb] of CASES) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type); fx._expanded = true; L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        let body = await _o11Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(label) < 0) { bad.push('CONTROL: the ' + type + ' editor has no “' + label + '”, so its gate was not measured'); continue; }
+        if (_o11Greyed(body, label) !== ga) bad.push(type + ': on a new one “' + label + '” is ' + (ga ? 'not greyed out' : 'greyed out'));
+        Object.assign(fx.params, b); FM.inspector.refresh(); await sleep(60);
+        body = document.querySelector('.fx-row.fx-open .fx-ed-body') || await _o11Open(L);
+        if (!body) { bad.push(type + ': the editor closed after ' + JSON.stringify(b) + ', so nothing more was measured'); continue; }
+        if (_o11Greyed(body, label) !== gb) bad.push(type + ': with ' + JSON.stringify(b) + ' “' + label + '” is ' + (gb ? 'still live' : 'still greyed out'));
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT A PHONE (round ten's check, for this round's effects). ship.sh runs the suite a second time at 380 px, so this is a
+     phone check on every release. Each editor, opened in the inspector, scrolls nothing sideways and keeps every control inside the panel.
+     CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
+  test('966 opts11 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = { threshold: 'Keep picture' };
+    Object.keys(NEW).forEach(type => _o11Need(type, _O11_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o11Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts11 ──
 })();
