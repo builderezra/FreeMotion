@@ -170819,4 +170819,53 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* (#8) STARRING A SOUND EFFECT OR A FILTER DELETED THE FAVOURITES THIS BUILD DOES NOT KNOW. bughunt6 #15's fault, in the two
+     browsers it did not reach: js/sfx.js toggleFav wrote back readFavs' answer, which keeps only ids byId finds, and js/filters.js
+     toggleFave wrote back readFaves', which keeps only ids FM.filters.get finds. So one star after a rollback (or with a sound or
+     filter since retired) deleted those favourites from disk for good. Both stars now edit the list as it is stored and filter
+     only what they show, as bughunt6 #15 and v87's recents fix do. The stored lists are written and read straight (localStorage
+     'fm.sfx.fav' and 'fm.filterFaves', put back as they were), the stars toggled through the functions every ★ calls
+     (FM.sfx.toggleFav, FM.filters.toggleFave), on the first two sounds and the first two filters this build has.
+     FAILS BEFORE THE FIX: starring the second sound leaves [first, second] stored and starring the second filter leaves
+     [second, first]: the unknown no-such ids are gone.
+     CONTROLS, which hold before and after: the star still answers on, then off; the stored known favourite stays; and what each
+     browser SHOWS still leaves the unknown id out (isFav / isFave say no, favs / faves do not list it). */
+  test('bughunt7 #8 Starring a sound effect or a filter keeps favourites this build does not know: with a known one and a no-such id stored, starring and unstarring another keeps the no-such id in the stored favourites, in the Sound effects list and in the Filters browser (CONTROLS: the star answers on then off, the known favourite stays, and the unknown one is never shown as a favourite)', { item: '1176' }, function () {
+    if (!FM.sfx || typeof FM.sfx.toggleFav !== 'function' || typeof FM.sfx.isFav !== 'function' || typeof FM.sfx.favs !== 'function' || typeof FM.sfx.list !== 'function' || typeof FM.sfx.byId !== 'function') throw new Error('setup: FM.sfx.toggleFav / isFav / favs / list / byId (what every ★ in the Sound effects list calls) are not reachable');
+    if (!FM.filters || typeof FM.filters.toggleFave !== 'function' || typeof FM.filters.isFave !== 'function' || typeof FM.filters.faves !== 'function' || typeof FM.filters.get !== 'function' || !Array.isArray(FM.FILTERS)) throw new Error('setup: FM.filters.toggleFave / isFave / faves / get or FM.FILTERS are not reachable');
+    const sounds = FM.sfx.list(), filters = FM.FILTERS;
+    if (sounds.length < 2 || filters.length < 2) throw new Error('setup: this build has ' + sounds.length + ' sounds and ' + filters.length + ' filters, not two of each to star');
+    if (FM.sfx.byId('no-such-sound') || FM.filters.get('no-such-filter')) throw new Error('setup: this build has a no-such-sound or a no-such-filter');
+    const KEYS = ['fm.sfx.fav', 'fm.filterFaves'];
+    const keep = {};
+    KEYS.forEach(k => { try { keep[k] = localStorage.getItem(k); } catch (e) { keep[k] = null; } });
+    const stored = k => { try { const a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+    const bad = [];
+    try {
+      [
+        { key: 'fm.sfx.fav', known: sounds[0].id, other: sounds[1].id, none: 'no-such-sound', where: 'the Sound effects list', star: id => FM.sfx.toggleFav(id), is: id => FM.sfx.isFav(id), shown: () => FM.sfx.favs() },
+        { key: 'fm.filterFaves', known: filters[0].id, other: filters[1].id, none: 'no-such-filter', where: 'the Filters browser', star: id => FM.filters.toggleFave(id), is: id => FM.filters.isFave(id), shown: () => FM.filters.faves().map(f => f && f.id) }
+      ].forEach(B => {
+        localStorage.setItem(B.key, JSON.stringify([B.known, B.none]));
+        /* CONTROL: what is shown leaves the unknown id out, and keeps the known one */
+        if (B.is(B.none) || B.shown().indexOf(B.none) >= 0) bad.push('CONTROL: ' + B.where + ' shows ' + B.none + ' as a favourite, an id this build has nothing for');
+        if (!B.is(B.known)) bad.push('CONTROL: ' + B.where + ' does not show the stored ' + B.known + ' as a favourite');
+        const on = B.star(B.other);
+        if (on !== true) bad.push('CONTROL: starring ' + B.other + ' in ' + B.where + ' answered ' + on + ', not on');
+        let s = stored(B.key);
+        if (s.indexOf(B.none) < 0) bad.push('starring ' + B.other + ' in ' + B.where + ' left ' + JSON.stringify(s) + ' stored: the favourite this build does not know (' + B.none + ') was deleted from disk');
+        if (s.indexOf(B.known) < 0 || s.indexOf(B.other) < 0) bad.push('starring ' + B.other + ' in ' + B.where + ' left ' + JSON.stringify(s) + ', not ' + B.known + ' and ' + B.other + ' among them');
+        const off = B.star(B.other);
+        if (off !== false) bad.push('CONTROL: unstarring ' + B.other + ' in ' + B.where + ' answered ' + off + ', not off');
+        s = stored(B.key);
+        if (s.indexOf(B.none) < 0) bad.push('unstarring ' + B.other + ' in ' + B.where + ' left ' + JSON.stringify(s) + ': ' + B.none + ' was deleted');
+        if (s.indexOf(B.other) >= 0 || s.indexOf(B.known) < 0) bad.push('unstarring ' + B.other + ' in ' + B.where + ' left ' + JSON.stringify(s) + ', where ' + B.other + ' should be gone and ' + B.known + ' kept');
+        if (B.is(B.none) || B.shown().indexOf(B.none) >= 0) bad.push('CONTROL: after the stars ' + B.where + ' shows ' + B.none + ' as a favourite');
+      });
+    } finally {
+      KEYS.forEach(k => { try { if (keep[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, keep[k]); } catch (e) {} });
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
 })();

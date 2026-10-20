@@ -781,6 +781,16 @@ window.FM = window.FM || {};
     } catch (e) { return []; }
   }
   function writeFaves(ids) { try { localStorage.setItem(FAVE_KEY, JSON.stringify(ids)); } catch (e) {} }
+  /* bughunt7 #8 (bughunt6 #15's fault, here): readFaves filters for SHOWING only. The star wrote readFaves' answer back, so
+     starring any filter deleted every favourite this build does not know (after a rollback, a filter since retired, or a saved
+     filter whose record is not there yet). The star now edits the list as it is STORED: every string kept whatever it names,
+     anything that is not a string dropped. What is drawn is still readFaves', so a dead id still never draws a tile. */
+  function readStoredFaves() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(FAVE_KEY) || '[]');
+      return Array.isArray(raw) ? raw.filter(function (id) { return typeof id === 'string'; }) : [];
+    } catch (e) { return []; }
+  }
 
   FM.filters = {
     sections: function () {
@@ -792,7 +802,7 @@ window.FM = window.FM || {};
        is the order he asked for, and appending would put it at the bottom of the favourites. */
     toggleFave: function (id) {
       if (!this.get(id)) return false;
-      const cur = readFaves(), at = cur.indexOf(id);
+      const cur = readStoredFaves(), at = cur.indexOf(id);
       if (at >= 0) cur.splice(at, 1); else cur.unshift(id);
       writeFaves(cur);
       return at < 0;
