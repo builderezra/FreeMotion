@@ -2337,6 +2337,12 @@ window.FM = window.FM || {};
     input.addEventListener('change', async () => {
       const file = input.files && input.files[0]; input.remove();
       if (!file) return;
+      /* 1176 leftover: FROM THE PICK, NOT FROM THE PARSE. importObject counts itself in FM._importing (bughunt8 #4), but the file
+         was read and parsed before it began, seconds for a big file on a phone, and a template or element file never reaches it at
+         all (importParsed hands it to the store's own importObject, whose dataURLToFile and font work nothing counted). A build
+         landing meanwhile reloaded the app and the file he had picked never arrived. Counted here from the pick to the finally,
+         the unreadable file's early return included; importObject's own count nests inside this one. */
+      FM._importing = (FM._importing || 0) + 1;
       try {
         let obj = null;
         try { obj = JSON.parse(await file.text()); }
@@ -2345,6 +2351,7 @@ window.FM = window.FM || {};
         // once the file has been checked, which is queue 673's whole point.
         await FM.storage.importParsed(obj, onDone);   // #948 fix 4: a template or element file goes to its own tab instead
       } catch (e) { if (FM.toast) FM.toast('Could not read that project file'); }
+      finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
     });
     document.body.appendChild(input); input.click();
   };

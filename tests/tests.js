@@ -175037,4 +175037,228 @@
     });
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ 1176 leftover (bughunt8 #4's doors): A NEW BUILD RELOADED THE APP WHILE A PICKED PROJECT FILE OR BACKUP WAS STILL BEING READ ═══
+     What was wrong. bughunt8 #4 made importObject and restoreBackup count themselves in FM._importing (which index.html fmSwBusy
+     reads), but the two change handlers that hand them a picked file read the whole file and parse it first: js/storage.js
+     importFile (Import a project file) and js/settings.js Restore from a backup both did JSON.parse(await file.text()) before either
+     count began, and a file with its clips embedded is tens of megabytes, read for seconds on a phone. A build landing then reloaded
+     the app and the file he had just picked never arrived, with nothing said. And a template or element file (#948 fix 4) never
+     reaches importObject at all: importParsed hands it to importLibraryObject and the store's own importObject, whose dataURLToFile
+     and font work nothing counted. Now each change handler counts itself from just after the pick to its finally, every early
+     return included; the inner counts nest inside it (1, 2, 1, 0), and for a template or element file the outer count is the one.
+     Driven like the 1176 leftover test of Replace media: only the OS picker sheet is stood in for (the click of a file input does
+     nothing), the app's own input is found in the page, handed a File through a DataTransfer and sent its change event, and the
+     hold is handed a counter for the reload, never the real one. The read is held on a gate (Blob text, for that step's file only,
+     matched by name), and while it waits the app is asked whether it is busy and handed a new build:
+       (A) Import a project file, through FM.storage.importFile: then the read gives a project, and the import goes on.
+       (B) The same door, and the read fails: the toast says the file is not readable as a project.
+       (C) The same door with a template file, read at once, and FM.templates.importObject held on a gate instead: then the
+           stand-in store refuses it with a reason of its own, and that reason is the toast, so nothing is added to Templates.
+       (D) Restore from a backup, through its Settings button: then the read gives a one-project backup, which is restored.
+       (E) The same door, and the read fails: the toast says the file is not readable, and no restore starts.
+     After each, the held build must reload by itself. Saves are let finish before each question (FM.storage.settled).
+     FAILS BEFORE THE FIX: on 97ef9e40, while each read waits, and while the template store works, FM._importing is 0, fmSwBusy
+     answers '' and the new build reloads at once.
+     CONTROL: with nothing running a new build reloads at once. And, before and after the fix: the app is idle before each step;
+     each held read (and the held template store) was reached, else the test stops as a setup failure; (A) imported the project and
+     ran its onDone once; (B) and (E) said the file was not readable and added nothing; (C)'s toast is the stand-in's reason;
+     (D) restored the project, said so and left him on the project he was on; and FM._importing is 0 after each. No tolerance:
+     every quantity is a flag, a count or a message. Restores Blob text, the file input's click, FM.toast, FM.templates.importObject
+     and FM._importing by descriptor, closes Settings, cancels any hold and deletes the projects it made. */
+  test('1176 leftover: an update does not reload the app while a picked project file or backup is still being read: while Import a project file reads a project, reads a file that turns out unreadable and adds a template, and while Restore from a backup reads a backup and an unreadable file, the new build waits, and once each is over the app reloads by itself (CONTROLS: each read was reached; the project was imported, the backup restored, the template store answered and each unreadable file said so; an idle app reloads at once)', { item: '1176', budgetMs: 120000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM.storage.importFile !== 'function' || typeof FM.storage.restoreBackup !== 'function' || !FM.settings || typeof FM.settings.open !== 'function' || !FM.templates || typeof FM.templates.importObject !== 'function' || typeof FM.templates.list !== 'function' || typeof FM.toast !== 'function' || typeof Blob.prototype.text !== 'function' || typeof DataTransfer !== 'function') throw new Error('setup: FM.storage.importFile / restoreBackup, FM.settings.open, FM.templates.importObject / list, FM.toast, Blob text or DataTransfer is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_importing');
+    const dText = Object.getOwnPropertyDescriptor(Blob.prototype, 'text'), realText = Blob.prototype.text;
+    const dClick = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'click');
+    const dToast = Object.getOwnPropertyDescriptor(FM, 'toast'), realToast = FM.toast;
+    const dTpl = Object.getOwnPropertyDescriptor(FM.templates, 'importObject');
+    const putText = function () { if (dText) Object.defineProperty(Blob.prototype, 'text', dText); else delete Blob.prototype.text; };
+    const putClick = function () { if (dClick) Object.defineProperty(HTMLInputElement.prototype, 'click', dClick); else delete HTMLInputElement.prototype.click; };
+    const putTpl = function () { if (dTpl) Object.defineProperty(FM.templates, 'importObject', dTpl); else delete FM.templates.importObject; };
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const had = new Set(FM.projects.list().map(function (p) { return p.id; }));
+    const made = [], inputs = [], toasts = [];
+    const fresh = function () { return FM.projects.list().filter(function (p) { return !had.has(p.id) && made.indexOf(p.id) < 0; }).map(function (p) { return p.id; }); };
+    const named = function (n) { return FM.projects.list().some(function (p) { return p.name === n; }); };
+    const ts = Date.now().toString(36);
+    const project = function (name) { return { app: 'freemotion', v: 1, project: { name: name, width: 320, height: 240, fps: 30, duration: 2, background: '#000000' }, layers: [], media: {} }; };
+    let reloads = 0, entered = 0, give = null, fail = null, letTpl = null;
+    const count = function () { reloads++; };
+    const until = async function (ok, ms) { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async function (what) {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(function () { return W.busy() === ''; }, 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+      if (FM._importing) throw new Error('setup (' + what + '): FM._importing is ' + JSON.stringify(FM._importing) + ' with the app idle');
+    };
+    /* the read of the file named `name` held on a gate, until give(text) or fail(error) */
+    const holdRead = function (name) {
+      entered = 0;
+      const gate = new Promise(function (res, rej) { give = res; fail = rej; });
+      gate.catch(function () {});
+      Object.defineProperty(Blob.prototype, 'text', { configurable: true, writable: true, enumerable: dText ? dText.enumerable : true, value: function () {
+        if (this && this.name === name) { entered++; return gate; }
+        return realText.apply(this, arguments);
+      } });
+    };
+    /* only the OS picker sheet is stood in for: `open` makes the app's own file input, which is then handed `file` */
+    const pick = async function (what, open, file) {
+      const before = new Set(Array.from(document.querySelectorAll('body > input[type=file]')));
+      Object.defineProperty(HTMLInputElement.prototype, 'click', { configurable: true, writable: true, value: function () {
+        if (this.type !== 'file') return HTMLElement.prototype.click.apply(this, arguments);
+      } });
+      try { await open(); } finally { putClick(); }
+      const inp = Array.from(document.querySelectorAll('body > input[type=file]')).filter(function (i) { return !before.has(i); }).pop();
+      if (!inp || inp.accept !== '.json,application/json') throw new Error('setup: ' + what + ' did not open its file picker');
+      inputs.push(inp);
+      const dt = new DataTransfer(); dt.items.add(file); inp.files = dt.files;
+      inp.dispatchEvent(new Event('change'));
+    };
+    const openRestore = async function () {
+      FM.settings.open();
+      await sleep(120);
+      const row = [].slice.call(document.querySelectorAll('.set-row')).filter(function (r) { return /Restore from a backup/.test((r.querySelector('.set-label') || {}).textContent || ''); })[0];
+      const btn = row && row.querySelector('button');
+      if (!btn) throw new Error('setup: Settings has no Restore from a backup button');
+      btn.click();
+    };
+    const bad = [];
+    /* the two questions, asked while the door waits */
+    const ask = async function (what) {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      const during = W.busy(), n = FM._importing;
+      reloads = 0;
+      const now = await W(count);
+      const heldNow = !now && !reloads && W.held();
+      if (!during) bad.push('while ' + what + ' the app counted as idle (FM._importing ' + JSON.stringify(n) + ')');
+      if (!heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app while ' + what + ' (' + reloads + ' reload), so the file he had picked never arrived' : 'was dropped rather than held while ' + what));
+    };
+    /* once the door is done: the count back to 0, and the held build reloads by itself */
+    const after = async function (what) {
+      if (!(await until(function () { return !FM._importing; }, 8000))) bad.push('after ' + what + ' FM._importing is still ' + JSON.stringify(FM._importing) + ', so every later update would wait for it');
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(function () { return W.busy() === ''; }, 8000))) bad.push('after ' + what + ' the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(function () { return reloads > 0; }, 9000))) bad.push('once ' + what + ' was over, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+    };
+    try {
+      if (wasHome) FM.home.close();
+      Object.defineProperty(FM, 'toast', { configurable: true, writable: true, enumerable: dToast ? dToast.enumerable : true, value: function (m) {
+        toasts.push(String(m));
+        return realToast.apply(this, arguments);
+      } });
+
+      /* (A) Import a project file: the read held, then given a project */
+      await settle('Import a project file');
+      const nameA = '1176 read ' + ts + ' A.fmotion.json', projA = '1176 read ' + ts + ' A';
+      let doneA = 0;
+      holdRead(nameA);
+      await pick('Import a project file', function () { FM.storage.importFile(function () { doneA++; }); }, new File([JSON.stringify(project(projA))], nameA, { type: 'application/json' }));
+      if (!(await until(function () { return entered > 0; }, 6000))) throw new Error('setup: Import a project file never read the picked file (Blob text), so nothing was being read');
+      await ask('a picked project file was still being read');
+      give(JSON.stringify(project(projA))); give = fail = null;
+      const landedA = await until(function () { return doneA > 0 && !FM._importing; }, 10000);
+      putText();
+      fresh().forEach(function (id) { made.push(id); });
+      if (!landedA || doneA !== 1 || !named(projA)) bad.push('CONTROL: once the read gave the project the import did not land (its onDone ran ' + doneA + ' times, ' + (named(projA) ? 'the project is there' : 'no project is named ' + projA) + ')');
+      await after('the import of a picked project file');
+
+      /* (B) the same door, and the read fails */
+      await settle('Import a project file that cannot be read');
+      const nameB = '1176 read ' + ts + ' B.fmotion.json';
+      const t0B = toasts.length, haveB = FM.projects.list().length;
+      let doneB = 0;
+      holdRead(nameB);
+      await pick('Import a project file', function () { FM.storage.importFile(function () { doneB++; }); }, new File(['{'], nameB, { type: 'application/json' }));
+      if (!(await until(function () { return entered > 0; }, 6000))) throw new Error('setup: Import a project file never read the second picked file (Blob text), so nothing was being read');
+      await ask('a picked project file was still being read, before it turned out unreadable');
+      fail(new Error('1176 test: the read failed')); give = fail = null;
+      const saidB = await until(function () { return toasts.slice(t0B).some(function (m) { return /not readable as a project/.test(m); }); }, 6000);
+      putText();
+      fresh().forEach(function (id) { made.push(id); });
+      if (!saidB) bad.push('CONTROL: a picked project file that could not be read did not say so (toasts ' + JSON.stringify(toasts.slice(t0B)) + ')');
+      if (doneB || FM.projects.list().length !== haveB) bad.push('CONTROL: a picked project file that could not be read still imported something (onDone ran ' + doneB + ' times, projects went from ' + haveB + ' to ' + FM.projects.list().length + ')');
+      await after('a picked project file turned out unreadable');
+
+      /* (C) the same door with a template file: read at once, FM.templates.importObject held instead */
+      await settle('Import a project file with a template file');
+      const nameC = '1176 read ' + ts + ' C.fmtemplate.json';
+      const objC = project('1176 read ' + ts + ' C'); objC.kind = 'template';
+      const WHY = '1176 test: the stand-in template store refused it';
+      const t0C = toasts.length, tplC = FM.templates.list().length;
+      let tplIn = 0, doneC = 0;
+      const tplGate = new Promise(function (res) { letTpl = res; });
+      Object.defineProperty(FM.templates, 'importObject', { configurable: true, writable: true, enumerable: dTpl ? dTpl.enumerable : true, value: function () {
+        tplIn++;
+        return tplGate.then(function () { return { why: WHY }; });
+      } });
+      await pick('Import a project file', function () { FM.storage.importFile(function () { doneC++; }); }, new File([JSON.stringify(objC)], nameC, { type: 'application/json' }));
+      if (!(await until(function () { return tplIn > 0; }, 6000))) throw new Error('setup: a picked template file never reached FM.templates.importObject, so nothing was being added');
+      await ask('a picked template file was still being added to Templates');
+      letTpl(); letTpl = null;
+      const saidC = await until(function () { return toasts.slice(t0C).indexOf(WHY) >= 0; }, 6000);
+      putTpl();
+      if (!saidC) bad.push('CONTROL: the stand-in template store answered, but its reason was not the toast (toasts ' + JSON.stringify(toasts.slice(t0C)) + ')');
+      if (doneC || FM.templates.list().length !== tplC) bad.push('CONTROL: a refused template file still added something (onDone ran ' + doneC + ' times, Templates went from ' + tplC + ' to ' + FM.templates.list().length + ')');
+      await after('a picked template file was added');
+
+      /* (D) Restore from a backup, through its Settings button: the read held, then given a one-project backup */
+      await settle('Restore from a backup');
+      const nameD = '1176 read ' + ts + ' D.fmbackup.json', projD = '1176 read ' + ts + ' D';
+      const objD = { app: 'freemotion', backup: 1, v: 1, count: 1, projects: [project(projD)] };
+      const t0D = toasts.length, onD = FM.projects.currentId();
+      holdRead(nameD);
+      await pick('Restore from a backup', openRestore, new File([JSON.stringify(objD)], nameD, { type: 'application/json' }));
+      if (!(await until(function () { return entered > 0; }, 6000))) throw new Error('setup: Restore from a backup never read the picked file (Blob text), so nothing was being read');
+      await ask('a picked backup was still being read');
+      give(JSON.stringify(objD)); give = fail = null;
+      const saidD = await until(function () { return toasts.slice(t0D).some(function (m) { return /^Restored 1 project\./.test(m); }); }, 10000);
+      putText();
+      fresh().forEach(function (id) { made.push(id); });
+      if (!saidD || !named(projD)) bad.push('CONTROL: once the read gave the backup the restore did not land (' + (named(projD) ? 'the project is there' : 'no project is named ' + projD) + ', toasts ' + JSON.stringify(toasts.slice(t0D)) + ')');
+      if (FM.projects.currentId() !== onD) bad.push('CONTROL: the restore left the editor on ' + FM.projects.currentId() + ', not on the project he was on (' + onD + ')');
+      await after('the restore of a picked backup');
+
+      /* (E) the same door, and the read fails */
+      await settle('Restore from a backup that cannot be read');
+      const nameE = '1176 read ' + ts + ' E.fmbackup.json';
+      const t0E = toasts.length, haveE = FM.projects.list().length;
+      holdRead(nameE);
+      await pick('Restore from a backup', openRestore, new File(['{'], nameE, { type: 'application/json' }));
+      if (!(await until(function () { return entered > 0; }, 6000))) throw new Error('setup: Restore from a backup never read the second picked file (Blob text), so nothing was being read');
+      await ask('a picked backup was still being read, before it turned out unreadable');
+      fail(new Error('1176 test: the read failed')); give = fail = null;
+      const saidE = await until(function () { return toasts.slice(t0E).some(function (m) { return /^That file is not readable/.test(m); }); }, 6000);
+      putText();
+      fresh().forEach(function (id) { made.push(id); });
+      if (!saidE) bad.push('CONTROL: a picked backup that could not be read did not say so (toasts ' + JSON.stringify(toasts.slice(t0E)) + ')');
+      if (toasts.slice(t0E).some(function (m) { return /^Restoring/.test(m); }) || FM.projects.list().length !== haveE) bad.push('CONTROL: a picked backup that could not be read still started a restore (projects went from ' + haveE + ' to ' + FM.projects.list().length + ', toasts ' + JSON.stringify(toasts.slice(t0E)) + ')');
+      await after('a picked backup turned out unreadable');
+
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (fail) { try { fail(new Error('1176 test: cleaned up')); } catch (e) {} }
+      if (letTpl) { try { letTpl(); } catch (e) {} }
+      give = fail = letTpl = null;
+      try { await until(function () { return !FM._importing; }, 8000); } catch (e) {}
+      putText(); putClick(); putTpl();
+      if (dToast) Object.defineProperty(FM, 'toast', dToast); else FM.toast = realToast;
+      if (dFlag) Object.defineProperty(FM, '_importing', dFlag); else delete FM._importing;
+      inputs.forEach(function (i) { try { if (i.isConnected) i.remove(); } catch (e) {} });
+      try { if (FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
+      try { W.cancel(); } catch (e) {}
+      fresh().forEach(function (id) { made.push(id); });
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+      if (FM.hideToast) { try { FM.hideToast(); } catch (e) {} }
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
