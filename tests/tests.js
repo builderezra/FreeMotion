@@ -176503,7 +176503,7 @@
    * blue (a solid rgb(124, 196, 255) ring, that blue for the glyph, rgb(20, 32, 42) inside), on an empty cut and on a set one alike; the
    * ◇'s row holds Done and the four types and nothing else, before and after one is set (no Length, no − / +, no On every cut); a
    * transition set from it is FM.TR_DEFAULT long; a hand-made crossfade has no ◇ and the clip that fades in no Turn into a transition;
-   * Settings in Simple has the switch, off; Settings in Full has none. Then: the setting is off on a device that never chose, and a saved
+   * Settings in Simple has the switch, off; Settings in Full has none. Then: the setting is ON on a device that never chose, and a saved
    * off survives a reload (the #688 whitelist). The default is ON since his 21 Oct "fine with ur choices" rule; it was OFF (#545).
    * FAILS BEFORE THE FIX: on c7c5b23e an empty ◇ is dashed grey (rgb(90, 102, 124) ring on nothing), and with a transition set the row also
    * shows Length, − / + and On every cut; the crossfade has a ◇ and its clip Turn into a transition. On 97ef9e40 there is no ◇ at all.
