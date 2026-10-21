@@ -30221,6 +30221,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (!_measCtx) { _measCanvas = document.createElement('canvas'); _measCtx = _measCanvas.getContext('2d'); }
     return _measCtx;
   }
+  /* ═══ A TEXT LAYER'S SIZE, REMEMBERED BY ITS ID (#768 N2 / H3, the 22 Oct hunt and its refuter) ═══════════════════════
+   * drawLayer's text branch asks FM.layerSize for every visible text layer on EVERY frame (to honour the anchor), and a
+   * caption track's size is the widest and tallest of ALL its cues, so each call sent every cue through FM.textLines. That
+   * function's wrap cache is two slots per layer object, and both misses were guaranteed: K cues cycle through two slots,
+   * and drawLayer hands layerSize a fresh shallow clone of a caption track each frame, so a cache hung on the clone is
+   * thrown away with it. Since v17.01 every new caption track has a wrapWidth, so every cue took the word-by-word fits()
+   * path: roughly a dozen measureText calls per cue per frame, about a thousand a frame for a three-minute Detect-speech
+   * track, with NOTHING selected — and twice that with the track selected, because canvas-edit's box asks again. On his
+   * phone that is main-thread work under every scrub frame.
+   * So the answer is kept here, keyed by layer.id (a clone carries its layer's id, which a cache on the object could not
+   * use) on everything the answer is computed from: the measuring font as the context holds it, its letter and word
+   * spacing, FM.fontGen (an imported face changes measureText without changing the font string — see FM.textLines),
+   * the wrap column, the size and line height the height is built from, and the cue strings themselves, so an edited cue,
+   * a new column or a font change all miss and measure afresh. The value is two numbers, handed back as a new object so
+   * a caller can never edit the remembered one. Bounded: cleared when a 64th id arrives, which a real project only reaches
+   * with dozens of text layers on screen, and then it simply measures as it always did. */
+  const _textSizeMemo = new Map();
 
   /* ═══ THE BOX THE RENDERER ACTUALLY PIVOTS AROUND (queue 628) ════════════════════════════════════
    * NOT the same question as "how big is this layer", and conflating them is the bug.
@@ -30271,13 +30288,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // widest caption (and its line count) instead, falling back to layer.text when there are none. (#4)
       const strs = (layer.captions && layer.captions.length) ? layer.captions.map(cap => cap.text || '') : [layer.text || ''];
       if (textSpacingOK().letter) c.letterSpacing = (layer.letterSpacing || 0) + 'px';   // measureText answers for it; wrapping must too
-      let w = 10, maxLines = 1;
-      strs.forEach(s => { const lines = FM.textLines(c, layer, s); maxLines = Math.max(maxLines, lines.length); lines.forEach(l => { w = Math.max(w, c.measureText(l).width); }); });
       // With a wrap width set, the box IS the column the user dragged — not the widest line that
       // happens to be in it. Otherwise the border would jump inwards the moment a long word left.
-      const ww = Number(layer.wrapWidth);
-      if (isFinite(ww) && ww > 0) w = ww;
-      return { w: w, h: Math.max(10, maxLines * (layer.fontSize || 96) * (layer.lineHeight || 1.15)) };
+      const ww = Number(layer.wrapWidth), wrapped = isFinite(ww) && ww > 0;
+      /* #768 N2: the remembered answer (see _textSizeMemo above). c.font is read BACK rather than rebuilt, because that is
+         the font measureText will actually use (a string the context rejects leaves the previous one in place). */
+      const memoKey = layer.id != null
+        ? [c.font, c.letterSpacing || '', c.wordSpacing || '', FM.fontGen || 0, ww, layer.fontSize || 96, layer.lineHeight || 1.15, strs.length, strs.join('\u001f')].join('\u001f')
+        : null;
+      const memo = memoKey != null ? _textSizeMemo.get(layer.id) : null;
+      if (memo && memo.key === memoKey) return { w: memo.w, h: memo.h };
+      let w = 10, maxLines = 1;
+      /* #768 N2: …and with a column set, the widest line is not measured at all — `w` becomes the column just below, so
+         every one of those measureText calls was thrown away. The line COUNT still needs the wrap. */
+      strs.forEach(s => { const lines = FM.textLines(c, layer, s); maxLines = Math.max(maxLines, lines.length); if (!wrapped) lines.forEach(l => { w = Math.max(w, c.measureText(l).width); }); });
+      if (wrapped) w = ww;
+      const h = Math.max(10, maxLines * (layer.fontSize || 96) * (layer.lineHeight || 1.15));
+      if (memoKey != null) {
+        if (_textSizeMemo.size >= 64 && !_textSizeMemo.has(layer.id)) _textSizeMemo.clear();
+        _textSizeMemo.set(layer.id, { key: memoKey, w: w, h: h });
+      }
+      return { w: w, h: h };
     }
     if (layer.type === 'null') return { w: 100, h: 100 };
     if (layer.type === 'shape') return { w: layer.shapeW || 400, h: layer.shapeH || 300 };

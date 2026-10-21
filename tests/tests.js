@@ -82839,6 +82839,99 @@
     }
   });
 
+  /* #768 N2 / H3 (the hunt's H3, widened by its refuter). drawLayer's text branch asks FM.layerSize for the layer's size on
+   * every frame, and for a caption track that sent EVERY cue through FM.textLines, whose two-slot wrap cache cannot hold 40
+   * cues and sits on a per-frame clone anyway: about a dozen measureText calls per cue per frame with nothing selected,
+   * twice that selected. FM.layerSize now remembers its answer by layer id, and skips the widest-line measure a wrap
+   * column makes pointless.
+   * Counted where the cost is: measureText calls made INSIDE FM.layerSize (a depth flag set by a wrapper) across five
+   * rendered frames of a 40-cue track, about ten words a cue, in a 900 px column.
+   * FAILS BEFORE THE FIX: thousands of calls across the five frames, with nothing selected and again selected.
+   * CONTROLS: layerSize really is asked every frame (so a low count is not silence); an edited cue IS measured afresh and
+   * grows the box, and a new column moves it (the memory is not stale); and a frame drawn from the remembered size is byte
+   * for byte the frame drawn from a fresh measurement (FM.fontGen bumped, which every wrap key carries), with the anchor
+   * off-centre so the size actually moves the text, and with ink on it. */
+  test('768 N2: a caption track on screen is measured once, not re-wrapped cue by cue every frame, selected or not, with the same pixels', { item: '768', budgetMs: 40000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time, hadGen = 'fontGen' in FM, gen0 = FM.fontGen;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const proto = CanvasRenderingContext2D.prototype, mtDesc = Object.getOwnPropertyDescriptor(proto, 'measureText');
+    const realSize = FM.layerSize;
+    let inside = 0, calls = 0, measured = 0;
+    try {
+      if (hadHome) FM.home.close();
+      const words = ['the', 'quick', 'brown', 'fox', 'jumps', 'over', 'a', 'lazy', 'dog', 'while', 'seven', 'small', 'birds', 'sing', 'again'];
+      const cues = [];
+      for (let i = 0; i < 40; i++) {
+        const w = [];
+        for (let k = 0; k < 10; k++) w.push(words[(i * 7 + k * 4) % words.length]);
+        cues.push({ start: i * 3, end: i * 3 + 2.8, text: w.join(' ') + ' ' + i });
+      }
+      const C = FM.makeLayer('text', { name: 'c768n2', x: 540, y: 540, fontSize: 64, start: 0, duration: 120 });
+      C.text = ''; C.captions = cues; C.wrapWidth = 900; C.color = '#ffffff'; C.textAnim = { preset: 'none' };
+      // an off-centre anchor: the size layerSize answers then MOVES the drawn text, so a wrong remembered size shows in the pixels
+      C.transform.anchorX = 0.25; C.transform.anchorY = 0.3;
+      FM.scene = scene([C], { project: { width: 1080, height: 1080, fps: 30, duration: 120, background: '#000000' } });
+      FM.selectLayer(null); FM.refreshAll(); FM.setTime(13.5); await sleep(250);
+      Object.defineProperty(proto, 'measureText', { configurable: true, enumerable: mtDesc.enumerable, writable: true, value: function () { if (inside > 0) measured++; return mtDesc.value.apply(this, arguments); } });
+      FM.layerSize = function () { inside++; calls++; try { return realSize.apply(this, arguments); } finally { inside--; } };
+      const five = async function () {
+        // two warm frames first: the first frame after any change is allowed to measure
+        FM.requestRender(); await frame(); FM.requestRender(); await frame();
+        calls = 0; measured = 0;
+        for (let i = 0; i < 5; i++) { FM.requestRender(); await frame(); }
+        return { calls: calls, measured: measured };
+      };
+      const loose = await five();
+      if (loose.calls < 5) throw new Error('CONTROL: FM.layerSize was asked only ' + loose.calls + ' times across five frames — the draw pass is not reaching it, so a low count below would prove nothing');
+      if (loose.measured >= 40) throw new Error(loose.measured + ' measureText calls inside FM.layerSize across five frames with NOTHING selected (want under 40) — every frame re-wraps all 40 cues of the caption track, main-thread work under every scrub frame on his phone');
+      FM.selectLayer(C.id); await sleep(300);
+      const held = await five();
+      if (held.calls < 5) throw new Error('CONTROL: FM.layerSize was asked only ' + held.calls + ' times across five frames with the track selected');
+      if (held.measured >= 40) throw new Error(held.measured + ' measureText calls inside FM.layerSize across five frames with the track SELECTED (want under 40) — the selection box asks again and every cue is re-wrapped twice a frame');
+      FM.selectLayer(null); await sleep(100);
+      // CONTROL: the memory is not stale. An edited cue is measured afresh and grows the box; a new column moves it.
+      const cue4 = C.captions[4].text, h0 = FM.layerSize(C).h;
+      measured = 0;
+      C.captions[4].text = Array(30).fill('another long line of words').join(' ');
+      const grown = FM.layerSize(C);
+      if (!measured) throw new Error('CONTROL: a cue edited to many more words was not measured at all — its size is being served from before the edit');
+      if (!(grown.h > h0)) throw new Error('CONTROL: a cue grown to many lines left the box ' + grown.h + ' tall (was ' + h0 + ') — a stale size');
+      C.wrapWidth = 700;
+      const narrow = FM.layerSize(C).w;
+      if (narrow !== 700) throw new Error('CONTROL: the box did not follow a new wrap column (' + narrow + ', want 700)');
+      C.wrapWidth = 900; C.captions[4].text = cue4;
+      // CONTROL: the remembered size draws exactly the pixels a fresh measurement does
+      const P = FM.scene.project;
+      const shot = function () {
+        const cv = document.createElement('canvas'); cv.width = P.width; cv.height = P.height;
+        const x = cv.getContext('2d');
+        FM.renderScene(x, FM.scene, FM.time);
+        const d = x.getImageData(0, 0, cv.width, cv.height).data;
+        let h = 2166136261, ink = 0;
+        for (let i = 0; i < d.length; i++) { h = Math.imul(h ^ d[i], 16777619); if ((i & 3) === 0 && d[i] > 128) ink++; }
+        return { hash: h >>> 0, ink: ink };
+      };
+      FM.layerSize(C);   // remembered at the restored column and text
+      const warm = shot();
+      if (warm.ink < 500) throw new Error('CONTROL: the caption drew only ' + warm.ink + ' bright pixels — nothing is being rendered, so the pixel comparison means nothing');
+      FM.fontGen = (FM.fontGen || 0) + 1;   // in the remembered key and in every wrap key: this frame measures from scratch
+      measured = 0;
+      const cold = shot();
+      if (!measured) throw new Error('CONTROL: bumping FM.fontGen did not make the frame measure afresh — the pixel comparison would be remembered against remembered');
+      if (warm.hash !== cold.hash) throw new Error('the frame drawn from the remembered size differs from one measured from scratch (hash ' + warm.hash + ' vs ' + cold.hash + ') — the pixels must stay byte-identical');
+    } finally {
+      Object.defineProperty(proto, 'measureText', mtDesc);
+      FM.layerSize = realSize;
+      if (hadGen) FM.fontGen = gen0; else delete FM.fontGen;
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
   /* ═══ 765 (the keyboard half): A / S / D ON THE SELECTED CLIP, INSIDE AND OUTSIDE. Nine presses through the
      real window keydown path, each on a fresh clip at 2–6s of a 12s project: inside (playhead 4s) A keeps the
      right, D keeps the left, S splits; left of it (1s) S extends the start, A moves it left, D does nothing;
