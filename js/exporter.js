@@ -948,7 +948,7 @@ window.FM = window.FM || {};
       const AT = [1500, 1500 + 5 * F + 517];   // two clicks, neither on a frame boundary, further apart than WIN
       const sig = new Float32Array(N); AT.forEach(a => { sig[a] = 0.9; });
       const chunks = []; let cfg = null, err = null;
-      const enc = new Enc({ output: (c, m) => { chunks.push(c); if (!cfg && m && m.decoderConfig) cfg = m.decoderConfig; }, error: e => { err = e; } });
+      const enc = new Enc({ output: (c, m) => { chunks.push(c); if (!cfg && m && m.decoderConfig) cfg = aacMeta(m, sampleRate, channels).decoderConfig; }, error: e => { err = e; } });   // #215: the decoder is handed a bare ASC too (aacMeta)
       enc.configure({ codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels, bitrate: 160000 });
       for (let off = 0; off < N; off += F) {   // framed exactly as encodeAudio frames the mix
         const planar = new Float32Array(F * channels);
@@ -1018,6 +1018,174 @@ window.FM = window.FM || {};
     finally { try { if (dec && dec.state !== 'closed') dec.close(); } catch (e) {} }
   }
 
+  /* ═══ #215 / #604 / #677 / #1134: SAFARI'S AAC ENCODER DESCRIBES ITS SOUND WRONGLY, AND EVERY IPHONE FILE WAS MUTE FOR IT ═══
+     WebCodecs requires an AAC encoder's decoderConfig.description to be the bare AudioSpecificConfig (ASC): 2 bytes, 11 90
+     for 48 kHz stereo AAC-LC. Safari 26 and 27 hand back Apple's whole magic cookie instead, a 39-byte MPEG-4 ES_Descriptor
+     (03 … 04 … 05 <the ASC> 06 …): WebKit bug 302253, filed Nov 2025 and still NEW; its fix (PR #77282) is in no shipped
+     Safari. mp4-muxer copies the description over its own correct ASC and writes it verbatim into the file's esds, so every
+     iPhone export said "object type 0, 22050 Hz, 0 channels": a track no player can set a decoder up for, which Photos
+     shows as a clip locked on mute. Every witness said Sound ✓, because each was measured before the mux.
+     So the description becomes a bare ASC at the encoder's own output (encodeAudio, and aacPriming's probe):
+       · already an ASC (2+ bytes, an object type other than 0: Chrome's 11 90, a 5-byte explicit-rate one) → untouched,
+         byte for byte, so nothing changes anywhere else, and this goes quiet by itself once WebKit's fix ships;
+       · an ES_Descriptor → WALKED as one, its sizes read, never fixed offsets: 03 (size, ES_ID, the flags and the fields
+         they announce), 04 (size, its 13 fixed bytes), 05 (size): that payload is the ASC;
+       · anything else, or a walk that does not end on a real ASC → the AAC-LC ASC built from the encoder's rate and
+         channels, the one mp4-muxer itself writes. The raw bytes are NEVER passed on.
+     What was done is kept for the report's aac desc line (FM._lastAacDesc). */
+  const ASC_RATES = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350];
+  function lcAsc(sampleRate, channels) {
+    const fi = ASC_RATES.indexOf(sampleRate);
+    const rateBits = fi < 0 ? '1111' + (sampleRate >>> 0).toString(2).padStart(24, '0') : fi.toString(2).padStart(4, '0');
+    let bits = '00010' + rateBits + (channels & 15).toString(2).padStart(4, '0');
+    bits = bits.padEnd(Math.ceil(bits.length / 8) * 8, '0');
+    const out = new Uint8Array(bits.length / 8);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
+    return out;
+  }
+  // A copy of the description's bytes (ArrayBuffer or a view), so nothing that reuses the encoder's buffer can change them.
+  function bytesOf(d) {
+    if (d instanceof ArrayBuffer) return new Uint8Array(d.slice(0));
+    if (ArrayBuffer.isView(d)) return new Uint8Array(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength));
+    return new Uint8Array(0);
+  }
+  // A real ASC has an audio object type other than 0 ("null object"), and 0 is exactly what an ES_Descriptor's 03 reads as.
+  function ascPlausible(b) { return !!b && b.length >= 2 && (b[0] >> 3) !== 0; }
+  /* The DecoderSpecificInfo inside the ES_Descriptor that starts at b[at] (ISO/IEC 14496-1), or null. A descriptor is a tag,
+     a size in 1 to 4 bytes of 7 bits each (0x80 = another byte follows), then that many bytes. Every read is checked against
+     the end of the descriptor holding it, so a short or lying cookie gives null, never garbage. */
+  function dsiOfEsDescriptor(b, at, end) {
+    let i = at;
+    const size = lim => {
+      let n = 0;
+      for (let k = 0; k < 4; k++) { if (i >= lim) return -1; const x = b[i++]; n = n * 128 + (x & 0x7f); if (!(x & 0x80)) return n; }
+      return -1;
+    };
+    if (!(i < end) || b[i++] !== 0x03) return null;
+    let n = size(end);
+    if (n < 0 || i + n > end) return null;
+    const esEnd = i + n;
+    if (i + 3 > esEnd) return null;
+    i += 2;
+    const flags = b[i++];
+    if (flags & 0x80) i += 2;
+    if (flags & 0x40) { if (i >= esEnd) return null; i += 1 + b[i]; }
+    if (flags & 0x20) i += 2;
+    if (!(i < esEnd) || b[i++] !== 0x04) return null;
+    n = size(esEnd);
+    if (n < 0 || i + n > esEnd) return null;
+    const dcEnd = i + n;
+    i += 13;
+    if (!(i < dcEnd) || b[i++] !== 0x05) return null;
+    n = size(dcEnd);
+    if (n < 0 || i + n > dcEnd) return null;
+    return b.slice(i, i + n);
+  }
+  /* (Above: ES_ID is 2 bytes; the flags announce dependsOn_ES_ID 0x80 = 2 bytes, a URL 0x40 = its length + itself, and
+     OCR_ES_Id 0x20 = 2 bytes; the DecoderConfigDescriptor's 13 fixed bytes are objectTypeIndication, streamType,
+     bufferSizeDB 3, maxBitrate 4 and avgBitrate 4.) → { how: 'as-is' | 'repaired' | 'fallback', from, to }, or null when
+     the encoder gave no description at all (mp4-muxer then keeps its own). */
+  function aacAscFor(desc, sampleRate, channels) {
+    if (desc == null) return null;
+    const b = bytesOf(desc);
+    if (ascPlausible(b)) return { how: 'as-is', from: b, to: b };
+    const at = (b.length > 4 && !b[0] && !b[1] && !b[2] && !b[3] && b[4] === 0x03) ? 4 : 0;   // an esds payload still carrying its version and flags
+    const dsi = dsiOfEsDescriptor(b, at, b.length);
+    if (dsi && ascPlausible(dsi)) return { how: 'repaired', from: b, to: dsi };
+    return { how: 'fallback', from: b, to: lcAsc(sampleRate, channels) };
+  }
+  // The meta with a bare ASC as its description: the encoder's own object when it already is one, otherwise a copy.
+  function aacMeta(meta, sampleRate, channels, note) {
+    const dc = meta && meta.decoderConfig;
+    const r = dc ? aacAscFor(dc.description, sampleRate, channels) : null;
+    if (!r) return meta;
+    if (note) note(r);
+    if (r.how === 'as-is') return meta;
+    return Object.assign({}, meta, { decoderConfig: Object.assign({}, dc, { description: r.to.slice().buffer }) });
+  }
+  function hexOf(b, max) { return Array.from(b.subarray(0, max || b.length), x => ' ' + x.toString(16).padStart(2, '0')).join(''); }
+  // The report's aac desc line: what the encoder gave, and what the file was given.
+  function aacDescLine(d) {
+    if (!d) return '- (the encoder gave no description: the muxer wrote its own AAC-LC one)';
+    if (d.how === 'as-is') return d.to.length + ' B' + hexOf(d.to, 8) + ' (as the encoder gave it)';
+    return 'encoder ' + d.from.length + ' B' + hexOf(d.from, 4) + ' → file ' + d.to.length + ' B' + hexOf(d.to, 8) +
+      (d.how === 'repaired' ? ' (Safari\'s AAC encoder, WebKit bug 302253: repaired)'
+                            : ' (not an AudioSpecificConfig: fallback ASC from ' + d.rate + ' Hz / ' + d.ch + ' ch)');
+  }
+
+  /* …AND THE FINISHED FILE IS READ BACK, so it can never again be mute while every witness says Sound ✓ (#215). The repair
+     above trusts the muxer to write what it is given; this does not. After finalize() the file's top-level boxes are walked
+     (ftyp → mdat → moov on the video path, honouring a 64-bit mdat size; moov first on the M4A path) and ONLY the moov is
+     read: a few KB however long the export, never its mdat. In it: the audio track (hdlr soun), its mp4a sample entry, its
+     esds and the DecoderSpecificInfo there, which must be 2 to 5 bytes, an AAC object type, and the mix's own rate and
+     channel count. Anything else is a track no player can decode.
+     → { ok: true | false | null, dsi, read, why }. ok null = it could not be checked (no moov found, or a track that is not
+     AAC): "unknown", never a verdict, and it never marks an export. */
+  const AAC_TYPES = { 1: 'AAC Main', 2: 'AAC-LC', 3: 'AAC SSR', 4: 'AAC LTP', 5: 'HE-AAC', 29: 'HE-AAC v2' };
+  function ascRead(d) {
+    if (!d || d.length < 2) return null;
+    const bits = (s, n) => { let v = 0; for (let k = s; k < s + n; k++) v = v * 2 + (((d[k >> 3] || 0) >> (7 - (k & 7))) & 1); return v; };
+    const aot = bits(0, 5), fi = bits(5, 4);
+    if (fi !== 15) return { aot: aot, rate: ASC_RATES[fi] || 0, ch: bits(9, 4) };
+    if (d.length * 8 < 37) return null;
+    return { aot: aot, rate: bits(9, 24), ch: bits(33, 4) };
+  }
+  function ascName(r) { return r ? (AAC_TYPES[r.aot] || 'object type ' + r.aot) + ', ' + r.rate + ' Hz, ' + r.ch + ' ch' : 'unreadable'; }
+  function boxesIn(b, s, e) {
+    const out = [], dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    let i = s;
+    while (i + 8 <= e) {
+      let n = dv.getUint32(i), h = 8;
+      if (n === 1) { if (i + 16 > e) break; n = dv.getUint32(i + 8) * 4294967296 + dv.getUint32(i + 12); h = 16; }
+      else if (n === 0) n = e - i;
+      if (n < h || i + n > e) break;
+      out.push({ type: String.fromCharCode(b[i + 4], b[i + 5], b[i + 6], b[i + 7]), s: i + h, e: i + n });
+      i += n;
+    }
+    return out;
+  }
+  async function fileAacCheck(blob, sampleRate, channels) {
+    const size = blob.size;
+    let off = 0, moov = null;
+    while (off + 8 <= size) {
+      const h = new Uint8Array(await blob.slice(off, Math.min(size, off + 16)).arrayBuffer());
+      const dv = new DataView(h.buffer);
+      let n = dv.getUint32(0), hl = 8;
+      if (n === 1) { if (h.length < 16) break; n = dv.getUint32(8) * 4294967296 + dv.getUint32(12); hl = 16; }
+      else if (n === 0) n = size - off;
+      if (n < hl || off + n > size) break;
+      if (String.fromCharCode(h[4], h[5], h[6], h[7]) === 'moov') { moov = new Uint8Array(await blob.slice(off + hl, off + n).arrayBuffer()); break; }
+      off += n;
+    }
+    if (!moov) return { ok: null, why: 'no moov box found in the file' };
+    const kids = (box, skip) => boxesIn(moov, box.s + (skip || 0), box.e);
+    const one = (box, type) => box ? kids(box).find(k => k.type === type) : null;
+    const four = at => String.fromCharCode(moov[at], moov[at + 1], moov[at + 2], moov[at + 3]);
+    for (const trak of kids({ s: 0, e: moov.length }).filter(k => k.type === 'trak')) {
+      const mdia = one(trak, 'mdia'), hdlr = one(mdia, 'hdlr');
+      if (!hdlr || hdlr.s + 12 > hdlr.e || four(hdlr.s + 8) !== 'soun') continue;
+      const stsd = one(one(one(mdia, 'minf'), 'stbl'), 'stsd');
+      const entry = stsd ? kids(stsd, 8)[0] : null;
+      if (!entry) return { ok: false, dsi: null, read: null, why: 'its audio track has no sample description' };
+      if (entry.type !== 'mp4a') return { ok: null, why: 'the audio track is ' + entry.type + ', not AAC: not checked' };
+      const ver = entry.s + 10 <= entry.e ? ((moov[entry.s + 8] << 8) | moov[entry.s + 9]) : 0;
+      const esds = kids(entry, ver === 1 ? 44 : ver === 2 ? 64 : 28).find(k => k.type === 'esds');
+      const dsi = esds ? dsiOfEsDescriptor(moov, esds.s + 4, esds.e) : null;
+      if (!dsi) return { ok: false, dsi: null, read: null, why: esds ? 'its esds does not parse' : 'its mp4a carries no esds' };
+      const r = ascRead(dsi);
+      const rateOk = !!r && (r.rate === sampleRate || ((r.aot === 5 || r.aot === 29) && r.rate * 2 === sampleRate));
+      const ok = dsi.length >= 2 && dsi.length <= 5 && !!r && !!AAC_TYPES[r.aot] && rateOk && r.ch === (channels === 8 ? 7 : channels);
+      return { ok: ok, dsi: dsi, read: r, why: ok ? '' : 'the mix is ' + sampleRate + ' Hz, ' + channels + ' ch: no player can decode this track' };
+    }
+    return { ok: false, dsi: null, read: null, why: 'the file has no audio track' };
+  }
+  // The report's file audio line.
+  function fileAacLine(f) {
+    if (!f) return '-';
+    if (f.ok == null) return '- (' + f.why + ')';
+    return (f.dsi ? 'esds ' + f.dsi.length + ' B' + hexOf(f.dsi, 8) + ' = ' + ascName(f.read) : 'no AAC description') + (f.ok ? ' ✓' : ' ✗ ' + f.why);
+  }
+
   /* `out` is where the encoded chunks go — the muxer, or an array. Taking a sink instead of the muxer
      is what lets the soundtrack be encoded BEFORE the muxer exists; see the call site for why that
      matters. */
@@ -1025,6 +1193,7 @@ window.FM = window.FM || {};
     const { audioBuffer, sampleRate, channels } = mix;
     const push = (chunk, meta) => { if (typeof out === 'function') out(chunk, meta); else out.addAudioChunk(chunk, meta); };
     const total = audioBuffer.length;
+    FM._lastAacDesc = null;   // #215: this encode's own record, never the last one's
     // The warm-up, and what it takes to cut it out cleanly (queue 690) — see aacPriming above.
     const prime = total > 0 ? await aacPriming(sampleRate, channels) : 0;
     const skip = prime > 0 ? Math.ceil(prime / AAC_FRAME) : 0;   // whole warm-up frames to drop
@@ -1032,7 +1201,12 @@ window.FM = window.FM || {};
     const got = [];
     let encErr = null;
     const enc = new AudioEncoder({
-      output: (chunk, meta) => { if (skip) got.push({ chunk: chunk, meta: meta }); else push(chunk, meta); },
+      /* #215: every meta passes aacMeta first, so both branches below (and decodedPeak, which reads these metas) carry a bare
+         AudioSpecificConfig and never Safari's cookie; what was done is kept for the report's aac desc line. */
+      output: (chunk, meta) => {
+        meta = aacMeta(meta, sampleRate, channels, r => { FM._lastAacDesc = { how: r.how, from: r.from, to: r.to, rate: sampleRate, ch: channels }; });
+        if (skip) got.push({ chunk: chunk, meta: meta }); else push(chunk, meta);
+      },
       /* An encoder error arrives on this callback, NOT as a rejection from flush() on every browser —
          so a soundtrack could fail here and the export carry on believing it had succeeded. Held and
          rethrown after the flush, where the caller can see it. */
@@ -1330,7 +1504,16 @@ window.FM = window.FM || {};
     muxer.finalize();
     const buf = muxer.target.buffer;
     if (!buf || !buf.byteLength) return { blob: null, reason: 'empty' };
-    return { blob: new Blob([buf], { type: 'audio/mp4' }), reason: '' };
+    const blob = new Blob([buf], { type: 'audio/mp4' });
+    /* #215: the file is read back here too (fileAacCheck). An M4A no player can decode is not worth saving: the caller
+       writes the WAV instead and says so, as for every other M4A failure. */
+    let chk = null;
+    try { chk = await fileAacCheck(blob, mix.sampleRate, mix.channels); } catch (e) { chk = null; }
+    if (chk && chk.ok === false) {
+      console.warn('[export] the M4A’s audio track cannot be decoded: ' + fileAacLine(chk));
+      return { blob: null, reason: 'track-undecodable' };
+    }
+    return { blob: blob, reason: '' };
   }
 
   /* ═══ ONE BLIT, THREE PATHS — AND IT WAS ONLY EVER IN SCOPE FOR ONE (queue 669) ═══════════════
@@ -1442,6 +1625,7 @@ window.FM = window.FM || {};
       FM._lastMixRawPeak = null;
       FM._lastMixGain = null;
       FM._lastMixPeak = null;
+      FM._lastAacDesc = null;   // #215: the report's aac desc line, written by encodeAudio
       /* ⚠️ AND THE NOTE IS CLEARED HERE, IN run(), NOT ONLY IN THE CALLER. js/app.js clears it too, but
        * that is the click handler — so every other entry point (the suite, a re-render, anything added
        * later) would carry the LAST export's warning onto this one's card. That is the same defect as
@@ -1798,6 +1982,21 @@ window.FM = window.FM || {};
        * every existing test on the old road. */
       const outBlob = sink.finish();
       const outName = (opts.name || 'freemotion-export') + '.mp4';
+      /* #215: THE FILE IS READ BACK, NOT TRUSTED (fileAacCheck, beside the repair it checks). A track no player can decode
+         is no sound at all, so it is named like every other loss: the flag, the card's NO SOUND, the report, never Sound ✓.
+         Only the moov is read, so a long export pays a few KB for it, not a second pass over the file. */
+      let fileAac = null;
+      if (mix) {
+        try { fileAac = await fileAacCheck(outBlob, mix.sampleRate, mix.channels); }
+        catch (e) { fileAac = { ok: null, why: 'could not be read: ' + ((e && e.message) || e) }; }
+        if (fileAac.ok === false) {
+          console.warn('[export] the finished file’s audio track cannot be decoded: ' + fileAacLine(fileAac));
+          FM._audioTrackDropped = 'track-undecodable';
+          exportSay('The audio track in the file cannot be played — this file has NO SOUND');
+          if (FM.toast) FM.toast('The audio track in the file cannot be played — this file has NO SOUND', 6000);
+        }
+      }
+      const trackBad = !!(fileAac && fileAac.ok === false);
       if (typeof opts.onReady === 'function') {
         /* ═══ THE CARD MUST SAY WHETHER IT HAS SOUND (queue 215) ══════════════════════════════════
          * This file has FIVE separate audio-loss reports — all-suppressed, mix-silent, mix-failed,
@@ -1832,6 +2031,9 @@ window.FM = window.FM || {};
             'video      ' + outW + 'x' + outH + ' @' + fps + 'fps, ' + Math.max(0, end - start).toFixed(2) + 's',
             'audio      ' + (mix ? 'TRACK WRITTEN' + (audioStats ? ' · ' + audioStats.frames + ' frames · ' + (audioStats.bytes / 1024).toFixed(1) + ' KB · ' + audioStats.seconds.toFixed(2) + 's' : '') : 'NO TRACK'),
             'decoded peak ' + (audioStats ? (audioStats.peak == null ? '- (could not be measured on this browser)' : audioStats.peak.toFixed(3)) : '-'),
+            // #215: what the AAC encoder described its sound as, what the file was given, and what the finished file says
+            'aac desc   ' + (mix ? aacDescLine(FM._lastAacDesc) : '-'),
+            'file audio ' + (mix ? fileAacLine(fileAac) : '-'),
             'dropped    ' + (FM._audioTrackDropped || 'no'),
             'mix peak   ' + (FM._lastMixRawPeak == null ? '-' : FM._lastMixRawPeak.toFixed(3)) +
               (FM._lastMixGain != null && FM._lastMixGain < 1 ? '  (limited: x' + FM._lastMixGain.toFixed(3) + ' at the loudest overlap only)' : ''),
@@ -1871,7 +2073,7 @@ window.FM = window.FM || {};
         await opts.onReady({
           blob: outBlob, name: outName, poster: poster,
           width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start),
-          hasAudio: !!mix, audioDropped: FM._audioTrackDropped || null,
+          hasAudio: !!mix && !trackBad, audioDropped: FM._audioTrackDropped || null,
           resumedPct: resumedPct, resumedParts: resumedParts,
           protected: !recorder ? null : (recorder.recording ? true : recorder.capped ? 'capped' : false),
           save: () => deliver(outBlob, outName),

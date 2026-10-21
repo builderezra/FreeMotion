@@ -6696,6 +6696,8 @@ window.FM = window.FM || {};
         // v14.35, #215: this reason had NO flag at all, so an export whose entire soundtrack failed to
         // decode fell through to 'no soundtrack' — the same words a project with no audio gets.
         'all-unreadable': 'none of the audio clips could be read',
+        // #215: the finished file was read back and its audio track is one no player can decode (exporter.js fileAacCheck)
+        'track-undecodable': 'the audio track in the file cannot be played',
       };
       const sound = out.audioDropped ? ('NO SOUND — ' + (AUDIO_WHY[out.audioDropped] || out.audioDropped))
                   : out.hasAudio ? 'Sound ✓'
