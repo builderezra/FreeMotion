@@ -54906,7 +54906,9 @@
        three sibling paths that pick a landing project have always filtered them out; this one did not. */
     if (!FM.projects || !FM.projects.list) return;
     const src = FM.projects.remove.toString().replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    const i = src.indexOf('curId()');
+    /* bughunt8 #2b: the open-project check reads this tab's id (tabId()) since v17.90, the shared pointer (curId()) before it. */
+    const marks = ['tabId()', 'curId()'].map(function (m) { return src.indexOf(m); }).filter(function (x) { return x >= 0; });
+    const i = marks.length ? Math.min.apply(null, marks) : -1;
     if (i < 0) throw new Error('remove() no longer decides where to land, so this test is measuring the wrong function');
     const tail = src.slice(i);
     if (!/elementDraft/.test(tail) || !/templateDraft/.test(tail))
