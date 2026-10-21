@@ -118,8 +118,14 @@ window.FM = window.FM || {};
     { type: 'posterize', label: 'Posterize', params: [
       { key: 'levels', label: 'Levels', min: 2, max: 16, step: 1, def: 5 },
       { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
-      { key: 'channels', label: 'Quantise', def: 0, options: [[0, 'RGB'], [1, 'Luma only']] },
-      { key: 'gamma', label: 'Band spacing', min: 0.2, max: 4, step: 0.05, def: 1 },
+      /* #966 opts11 (hunt/fx11, his "more choices always better"): the steps were always hard, and only the tone or the three channels
+         could be stepped. HUE ONLY steps the hue round the wheel into Levels evenly spaced hues and keeps every pixel's own brightness and
+         saturation (a sunset turns into a few flat bands of colour, its shading untouched) — Band spacing shapes the tone, so it greys out
+         there; BAND EDGES rolls each step smoothly into the next instead of cutting (the soft cel-shaded look; 100 % is a gentle staircase).
+         RGB, Luma only and 0 % run the old loops untouched (posterize11 only off them). */
+      { key: 'channels', label: 'Quantise', def: 0, options: [[0, 'RGB'], [1, 'Luma only'], [2, 'Hue only']] },
+      { key: 'gamma', label: 'Band spacing', min: 0.2, max: 4, step: 0.05, def: 1, overriddenBy: 'channels', liveWhen: [0, 1] },
+      { key: 'soft', label: 'Band edges', min: 0, max: 100, step: 1, def: 0, unit: '%', note: '0 hard steps · 100 each step rolls smoothly into the next' },
     ] },
     { type: 'mirror', label: 'Mirror', params: [
       { key: 'mode', label: 'Direction', def: 0, options: [[0, 'Left → Right'], [1, 'Right → Left'], [2, 'Top → Bottom'], [3, 'Bottom → Top']] },
@@ -14131,6 +14137,44 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._threshold11 = threshold11;   // suite seam (#966 opts11)
+  /* POSTERIZE'S BAND EDGES AND HUE ONLY: posterizePixels' loop to the letter (the same Levels and step, the same Band spacing, the same
+     Luma only scaling, the same Mix), with each value's place in the steps — x = value / step, or (value / 255)^(1 / spacing) x (Levels − 1)
+     — sent to its step by stepAt: rounded at Band edges 0, and above 0 rolled from one step to the next by a smoothstep across the middle
+     Band-edges share of each step (at 100 % across the whole step, so the output climbs as a staircase with flat landings at each step
+     and every value in between). HUE ONLY moves only the hue: into Levels evenly spaced hues round the wheel (0°, 360° / Levels …, through
+     the same stepAt, so Band edges softens those too), keeping the pixel's own largest and smallest channel — its HSV value and
+     saturation, exactly — and leaving a grey, which has no hue, untouched. Band spacing is a tone curve and plays no part in it. */
+  function posterize11(d, q, mix, ch, gm, soft) {
+    const s = isFinite(soft) ? (soft <= 0 ? 0 : (soft >= 100 ? 1 : soft / 100)) : 0;
+    const n1 = q - 1, step = 255 / n1, ig = 1 / Math.max(0.05, gm), m = mix < 0 ? 0 : (mix > 1 ? 1 : mix);
+    const stepAt = x => { const n = Math.floor(x), f = x - n; if (s <= 0) return f >= 0.5 ? n + 1 : n; let u = (f - (0.5 - s / 2)) / s; u = u < 0 ? 0 : (u > 1 ? 1 : u); return n + u * u * (3 - 2 * u); };
+    const quant = v => (gm === 1 ? stepAt(v / step) * step : 255 * Math.pow(stepAt(Math.pow(v / 255, ig) * n1) / n1, gm));
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      let nr, ng, nb;
+      if (ch === 2) {
+        const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b), c = mx - mn;
+        if (!(c > 0)) continue;
+        let h = mx === r ? (g - b) / c : (mx === g ? (b - r) / c + 2 : (r - g) / c + 4);
+        if (h < 0) h += 6;
+        let hq = stepAt(h / 6 * q) / q * 6;
+        if (hq >= 6) hq -= 6;
+        const sx = Math.floor(hq), xx = c * (1 - Math.abs(hq % 2 - 1));
+        if (sx === 0) { nr = mx; ng = mn + xx; nb = mn; }
+        else if (sx === 1) { nr = mn + xx; ng = mx; nb = mn; }
+        else if (sx === 2) { nr = mn; ng = mx; nb = mn + xx; }
+        else if (sx === 3) { nr = mn; ng = mn + xx; nb = mx; }
+        else if (sx === 4) { nr = mn + xx; ng = mn; nb = mx; }
+        else { nr = mx; ng = mn; nb = mn + xx; }
+      } else if (ch === 1) {
+        const l = 0.299 * r + 0.587 * g + 0.114 * b;
+        const sc = l > 0.5 ? quant(l) / l : 1;
+        nr = r * sc; ng = g * sc; nb = b * sc;
+      } else { nr = quant(r); ng = quant(g); nb = quant(b); }
+      d[i] = r + (nr - r) * m; d[i + 1] = g + (ng - g) * m; d[i + 2] = b + (nb - b) * m;
+    }
+  }
+  FM._posterize11 = posterize11;   // suite seam (#966 opts11)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -21121,6 +21165,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const mix = p.mix == null ? 1 : FM.evalProp(p.mix, t);
     const ch = p.channels == null ? 0 : (Math.round(FM.evalProp(p.channels, t)) | 0);
     const gm = p.gamma == null ? 1 : FM.evalProp(p.gamma, t);
+    /* #966 opts11: QUANTISE Hue only (2) or BAND EDGES above 0 runs posterize11, the loops below with the two laid in; RGB, Luma only and
+       0 % (and Band edges absent) run the loops below untouched. */
+    const sf11 = p.soft == null ? 0 : FM.evalProp(p.soft, t);
+    if (ch === 2 || sf11 > 0) { posterize11(d, q, mix, ch, gm, sf11); return; }
     if (mix === 1 && ch === 0 && gm === 1) {
       for (let i = 0; i < d.length; i += 4) { d[i] = Math.round(Math.round(d[i] / step) * step); d[i + 1] = Math.round(Math.round(d[i + 1] / step) * step); d[i + 2] = Math.round(Math.round(d[i + 2] / step) * step); }
       return;

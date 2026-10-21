@@ -175286,8 +175286,8 @@
   };
   /* every new key, by effect, and every new control off its default on the effect's own default settings (a colour off its default in
      every channel) */
-  const _O11_NEW = { threshold: ['chan', 'keep', 'mix'] };
-  const _O11_OFF = { threshold: [{ chan: 1 }, { keep: 1 }, { mix: 50 }] };
+  const _O11_NEW = { threshold: ['chan', 'keep', 'mix'], posterize: ['soft'] };
+  const _O11_OFF = { threshold: [{ chan: 1 }, { keep: 1 }, { mix: 50 }], posterize: [{ soft: 60 }, { channels: 2 }] };
   const _o11P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
   const _o11Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
   /* a PIXEL_FX kernel straight, with exactly these params (ps 1 unless given; no layer, no box) */
@@ -175544,13 +175544,117 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ---- Posterize: Band edges and Hue only ---- */
+  /* a saturated hue sweep across the plate (0° at the left edge, so red at both ends), lighter downward — every hue the wheel has */
+  const _o11Hues = (W, H) => E1.frame(W, H, (x, y) => {
+    const h = (x / W) * 360, l = 0.3 + 0.45 * (y / H), c = (1 - Math.abs(2 * l - 1)) * 0.95, hp = h / 60, xx = c * (1 - Math.abs(hp % 2 - 1));
+    let r = 0, g = 0, b = 0;
+    if (hp < 1) { r = c; g = xx; } else if (hp < 2) { r = xx; g = c; } else if (hp < 3) { g = c; b = xx; } else if (hp < 4) { g = xx; b = c; } else if (hp < 5) { r = xx; b = c; } else { r = c; b = xx; }
+    const m = l - c / 2;
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  });
+  /* a pixel's hue in degrees (NaN for a grey), the usual hexcone */
+  const _o11Hue = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), c = mx - mn; if (!(c > 0)) return NaN; let h = mx === r ? (g - b) / c : (mx === g ? (b - r) / c + 2 : (r - g) / c + 4); if (h < 0) h += 6; return h * 60; };
+  test('966 opts11 Posterize has Band edges (0–100 %, keyframable, 0 by default, never greyed) and a third Quantise choice, Hue only (storing 2), under which Band spacing greys out: a new one starts at RGB and 0 %, a saved one without Band edges is filled with 0, the load sanitiser keeps Hue only and 40, holds 150 at 100 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('posterize', _O11_NEW.posterize);
+    const bad = _o11Rows('posterize', [
+      { key: 'soft', label: 'Band edges', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'channels', label: 'Quantise', options: ['RGB', 'Luma only', 'Hue only'], def: 0 },
+      { key: 'gamma', label: 'Band spacing', min: 0.2, max: 4, unit: '', def: 1, gate: ['channels', 'liveWhen', [0, 1]] }], { soft: 40, channels: 2 });
+    bad.push.apply(bad, _o11Clamp('posterize', { soft: 150 }, { soft: 100 }));
+    bad.push.apply(bad, _o11Clamp('posterize', { channels: 3 }, { channels: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BAND EDGES on the grey levels (level v at column v), Levels 5 — a step of 63.75 — RGB, Mix 1, Band spacing 1, so a column's place in the
+     steps is x = v / 63.75. CONTROL (0 %): every column is one of the five step values 0, 64, 128, 191 and 255. At 100 % each step rolls into
+     the next by smoothstep(x − floor x): the ramp never steps back, it takes well over a hundred values, the four band middles (32, 96, 159,
+     223) come out within a level of themselves (smoothstep(½) = ½) and the five landings (0, 64, 128, 191, 255) exactly as at 0 %. At 50 %
+     the roll spans only the middle half of each step, so every column whose x is within 0.24 of a whole step reads exactly what 0 % gives
+     it; the ramp between still climbs, and never steps back. Luma only rolls the same on greys (within a level); a Band edges keyed 0 → 100
+     draws 50 % at 0.5 s. */
+  test('966 opts11 Posterize Band edges: at 100 % the five hard steps of a grey ramp roll smoothly into each other — never stepping back, over a hundred values, each band middle where it was and each landing on its step — and at 50 % only the middle half of each step rolls, the rest exactly the hard steps; Luma only rolls the same and a keyed Band edges draws its value (CONTROL: at 0 % the ramp is five values)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('posterize', ['soft']);
+    const bad = [];
+    const run = over => _o11Run('posterize', _o11P('posterize', over), 256, 2, _o11Lv(), 0.5);
+    const hard = run({}), STEPS = [0, 64, 128, 191, 255];
+    const vals = d => { const s = new Set(); for (let v = 0; v < 256; v++) s.add(d[v * 4]); return s; };
+    const hv = vals(hard);
+    if (hv.size !== 5 || STEPS.some(v => !hv.has(v))) throw new Error('CONTROL: at Band edges 0 % the ramp takes ' + hv.size + ' values (' + Array.from(hv).join(', ') + '), not the five steps — the worked values below do not hold');
+    const climbs = (d, what) => { for (let v = 1; v < 256; v++) if (d[v * 4] < d[(v - 1) * 4]) { bad.push(what + ': grey ' + v + ' reads ' + d[v * 4] + ', below grey ' + (v - 1) + '’s ' + d[(v - 1) * 4] + ' — the ramp steps back'); return; } };
+    const s100 = run({ soft: 100 });
+    climbs(s100, 'Band edges 100 %');
+    if (vals(s100).size < 100) bad.push('at Band edges 100 % the ramp takes only ' + vals(s100).size + ' values — the steps are not rolling into each other');
+    [32, 96, 159, 223].forEach(v => { if (Math.abs(s100[v * 4] - v) > 1) bad.push('at Band edges 100 % the band middle ' + v + ' reads ' + s100[v * 4]); });
+    STEPS.forEach(v => { if (s100[v * 4] !== hard[v * 4]) bad.push('at Band edges 100 % the landing ' + v + ' reads ' + s100[v * 4] + ', not ' + hard[v * 4]); });
+    const s50 = run({ soft: 50 });
+    climbs(s50, 'Band edges 50 %');
+    let held = 0, rolled = 0;
+    for (let v = 0; v < 256; v++) {
+      const x = v / 63.75, f = x - Math.floor(x);
+      if (f <= 0.24 || f >= 0.76) { held++; if (s50[v * 4] !== hard[v * 4]) { bad.push('at Band edges 50 % grey ' + v + ' (' + f.toFixed(3) + ' of the way through its step) reads ' + s50[v * 4] + ', not the hard step’s ' + hard[v * 4]); break; } }
+      else if (s50[v * 4] !== hard[v * 4]) rolled++;
+    }
+    if (held < 100 || rolled < 50) bad.push('at Band edges 50 % ' + held + ' columns sit on a landing and ' + rolled + ' roll — not the half and half a 50 % roll gives');
+    const luma = _o11Run('posterize', _o11P('posterize', { soft: 100, channels: 1 }), 256, 2, _o11Lv(), 0.5);
+    if (E1.maxDiff(luma, s100) > 1) bad.push('under Luma only a grey ramp at Band edges 100 % is up to ' + E1.maxDiff(luma, s100) + ' levels from RGB’s — a grey should roll the same');
+    if (E1.maxDiff(run({ soft: _o11KF(0, 100) }), s50) !== 0) bad.push('a Band edges keyed 0 → 100 does not draw 50 % at 0.5 s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* HUE ONLY on the hue sweep at Levels 6, so the hues it steps to are 0°, 60° … 300° — red, yellow, green, cyan, blue and magenta. Every
+     pixel keeps its own largest and smallest channel, exactly (its HSV value and saturation), and with six steps its hue lands exactly on
+     a primary or a secondary, so each of its channels IS its old largest or its old smallest; the hue it lands on is the nearest of the six,
+     within 30° of its own. A grey ramp is untouched byte for byte (a grey has no hue). Band spacing plays no part: 2.5 draws exactly 1's
+     picture. CONTROL: RGB moves the largest or smallest channel of thousands of the sweep's pixels; and at Band edges 100 % the hues roll
+     between the six — over 30 distinct hues where 0 % has six. Mix 50 % sits half way (within a level). */
+  test('966 opts11 Posterize Hue only: at Levels 6 every pixel of a hue sweep lands exactly on the nearest of red, yellow, green, cyan, blue and magenta while keeping its own brightest and darkest channel, a grey ramp is untouched, Band spacing counts for nothing, Band edges rolls the hues and Mix sits half way (CONTROL: RGB changes the brightest or darkest channel of thousands of pixels)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('posterize', ['soft']);
+    const ch = ((FM.fxRegistry.paramsOf('posterize') || []).filter(p => p.key === 'channels')[0] || {}).options || [];
+    if (!ch.some(o => o[0] === 2 && o[1] === 'Hue only')) throw new Error('Posterize’s Quantise has no Hue only (2) — #966 opts11 (hunt/fx11) is not built');
+    const W = 96, H = 72, bad = [], pic = _o11Hues(W, H);
+    const run = over => _o11Run('posterize', _o11P('posterize', Object.assign({ levels: 6 }, over)), W, H, _o11Hues(W, H), 0.5);
+    const mm = (d, i) => [Math.max(d[i], d[i + 1], d[i + 2]), Math.min(d[i], d[i + 1], d[i + 2])];
+    const rgb = run({});
+    let movedC = 0; for (let i = 0; i < pic.length; i += 4) { const a = mm(pic, i), b = mm(rgb, i); if (a[0] !== b[0] || a[1] !== b[1]) movedC++; }
+    if (movedC < 2000) throw new Error('CONTROL: on RGB only ' + movedC + ' pixels change their brightest or darkest channel — the sweep cannot show what Hue only keeps');
+    const hue = run({ channels: 2 });
+    let n = 0;
+    for (let i = 0; i < pic.length; i += 4) {
+      const a = mm(pic, i), b = mm(hue, i), H0 = _o11Hue(pic[i], pic[i + 1], pic[i + 2]), H1 = _o11Hue(hue[i], hue[i + 1], hue[i + 2]);
+      const onPS = [0, 1, 2].every(c => hue[i + c] === a[0] || hue[i + c] === a[1]);
+      let dh = Math.abs(H1 - H0); if (dh > 180) dh = 360 - dh;
+      if ((a[0] !== b[0] || a[1] !== b[1] || !onPS || !(dh <= 30.5)) && a[0] > a[1] && n++ < 4) bad.push('pixel ' + (i >> 2) + ' (' + Array.prototype.slice.call(pic, i, i + 3).join(', ') + ', hue ' + H0.toFixed(1) + '°) reads (' + Array.prototype.slice.call(hue, i, i + 3).join(', ') + ', hue ' + H1.toFixed(1) + '°)');
+    }
+    if (n > 4) bad.push(n + ' pixels in all are not their own brightest and darkest channel on the nearest of the six hues');
+    if (E1.maxDiff(_o11Run('posterize', _o11P('posterize', { levels: 6, channels: 2 }), 256, 2, _o11Lv(), 0.5), _o11Lv()) !== 0) bad.push('Hue only moved a grey');
+    if (E1.maxDiff(run({ channels: 2, gamma: 2.5 }), hue) !== 0) bad.push('under Hue only a Band spacing of 2.5 changes the picture');
+    const hueSet = d => { const s = new Set(); for (let i = 0; i < d.length; i += 4) { const h = _o11Hue(d[i], d[i + 1], d[i + 2]); if (h === h && Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) >= 60) s.add(Math.round(h)); } return s; };
+    if (hueSet(hue).size > 6) bad.push('at Band edges 0 % Hue only gives ' + hueSet(hue).size + ' distinct hues, not six');
+    if (hueSet(run({ channels: 2, soft: 100 })).size < 30) bad.push('at Band edges 100 % Hue only gives only ' + hueSet(run({ channels: 2, soft: 100 })).size + ' distinct hues — the hues are not rolling between the six');
+    const half = run({ channels: 2, mix: 0.5 });
+    let worst = 0; for (let i = 0; i < pic.length; i++) { if ((i & 3) === 3) continue; const e = Math.abs(half[i] - (pic[i] + (hue[i] - pic[i]) * 0.5)); if (e > worst) worst = e; }
+    if (worst > 1) bad.push('Hue only at Mix 0.5 is up to ' + worst.toFixed(1) + ' levels from half way');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts11 Posterize at RGB or Luma only and Band edges 0 % draws byte for byte what it drew without Band edges — Levels 2, 3 and 12, half Mix, Luma only, a Band spacing, all three, a block on clear, a half-size plate, another moment (CONTROL: Band edges and Hue only each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('posterize', _O11_NEW.posterize, ['_posterize11']);
+    const bad = _o11Ident('posterize', [{}, { over: { levels: 2 } }, { over: { levels: 3 } }, { over: { levels: 12 } }, { over: { mix: 0.5 } }, { over: { channels: 1 } }, { over: { gamma: 2.2 } }, { over: { channels: 1, gamma: 0.6, mix: 0.7 } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    let n;
+    [[{ soft: 60 }, 'Band edges 60 %'], [{ channels: 2 }, 'Hue only']].forEach(([o, what]) => { if ((n = _o11Moves('posterize', o, 96, 72, _o11Pic, 0.5)) < 500) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
   /* ---- the panel ---- */
   /* THE GATES, as the inspector draws them, each row read by its own <label> (_o11Greyed). Threshold's Below colour is live on a new one and
-     greys out under Keep picture Below, its Above colour under Above. CONTROL: each editor shows the row's label, so its state was read. */
-  test('966 opts11 the gates in the inspector: Threshold’s Below colour greys out under Keep picture Below and its Above colour under Above — and each is live on a new one', { item: '966', budgetMs: 60000 }, async function () {
+     greys out under Keep picture Below, its Above colour under Above; Posterize's Band spacing is live on a new one (RGB) and greys out under
+     Hue only. CONTROL: each editor shows the row's label, so its state was read. */
+  test('966 opts11 the gates in the inspector: Threshold’s Below colour greys out under Keep picture Below and its Above colour under Above, and Posterize’s Band spacing under Hue only — and each is live on a new one', { item: '966', budgetMs: 60000 }, async function () {
     const CASES = [
       ['threshold', 'Below', false, { keep: 2 }, true],
-      ['threshold', 'Above', false, { keep: 1 }, true]];
+      ['threshold', 'Above', false, { keep: 1 }, true],
+      ['posterize', 'Band spacing', false, { channels: 2 }, true]];
     CASES.forEach(c => _o11Need(c[0], _O11_NEW[c[0]]));
     const keep = FM.scene.layers.slice(), bad = [];
     try {
@@ -175577,7 +175681,7 @@
      phone check on every release. Each editor, opened in the inspector, scrolls nothing sideways and keeps every control inside the panel.
      CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
   test('966 opts11 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
-    const NEW = { threshold: 'Keep picture' };
+    const NEW = { threshold: 'Keep picture', posterize: 'Band edges' };
     Object.keys(NEW).forEach(type => _o11Need(type, _O11_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];
     try {
