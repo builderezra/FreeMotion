@@ -70,7 +70,11 @@ window.FM = window.FM || {};
     const r = cv.getBoundingClientRect(), wr = overlay.parentElement.getBoundingClientRect();
     overlay.style.left = (r.left - wr.left) + 'px'; overlay.style.top = (r.top - wr.top) + 'px';
     overlay.style.width = r.width + 'px'; overlay.style.height = r.height + 'px';
-    const sig = [box.x, box.y, box.w, box.h, r.width, r.height].join(',');
+    /* #966 opts11: the region the kernel paints out is the box, or the oval inside it, turned by Angle about its centre (+ clockwise),
+       read as the kernel reads them, and in the signature, so a keyed Angle repaints as the playhead moves */
+    const fp = active.fx.params, ov = (fp.shape == null ? 0 : (Math.round(FM.evalProp(fp.shape, FM.time)) | 0)) === 1;
+    let an = fp.angle == null ? 0 : +FM.evalProp(fp.angle, FM.time); if (!isFinite(an)) an = 0;
+    const sig = [box.x, box.y, box.w, box.h, r.width, r.height, ov, an].join(',');
     if (sig === lastSig) return;   // rAF loop only needs to reposition unless something moved
     lastSig = sig;
     const dpr = window.devicePixelRatio || 1, W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
@@ -81,12 +85,14 @@ window.FM = window.FM || {};
     const bx = box.x / 100 * r.width, by = box.y / 100 * r.height, bw = box.w / 100 * r.width, bh = box.h / 100 * r.height;
     // dim everything, then punch a hole where the box is
     g.fillStyle = 'rgba(6,9,14,.62)'; g.fillRect(0, 0, r.width, r.height);
+    const turned = ov || an !== 0;   /* Box at 0° keeps the two rect calls it always made */
+    const region = () => { g.beginPath(); g.save(); g.translate(bx + bw / 2, by + bh / 2); g.rotate(an * Math.PI / 180); if (ov) g.ellipse(0, 0, bw / 2, bh / 2, 0, 0, 2 * Math.PI); else g.rect(-bw / 2, -bh / 2, bw, bh); g.restore(); };
     g.save(); g.globalCompositeOperation = 'destination-out';
-    g.fillRect(bx, by, bw, bh);
+    if (turned) { region(); g.fill(); } else g.fillRect(bx, by, bw, bh);
     g.restore();
     // outline + handles
     g.strokeStyle = '#fff'; g.lineWidth = 2;
-    g.strokeRect(bx, by, bw, bh);
+    if (turned) { region(); g.stroke(); } else g.strokeRect(bx, by, bw, bh);
     g.fillStyle = '#fff';
     HANDLES.forEach(h => { const rr = (h[0].length === 2) ? 6 : 5; g.beginPath(); g.arc(bx + h[1] * bw, by + h[2] * bh, rr, 0, 6.2832); g.fill(); });
   }

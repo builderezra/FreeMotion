@@ -405,8 +405,8 @@ window.FM = window.FM || {};
    * Kept here rather than in FM.EFFECTS so the compositor catalogue stays about rendering. */
   const DESCRIPTIONS = {
     blur: 'Softens everything evenly, like a lens out of focus.',
-    boxblur: 'A cheaper, squarer blur — faster than Gaussian, slightly boxy up close.',
-    sharpen: 'Hardens edges to bring detail back. Push it far and edges start to halo.',
+    /* mixed, a glow, a soft focus: #966 opts11 */ boxblur: 'A cheaper, squarer blur — faster than Gaussian, slightly boxy up close. Mix it with the sharp picture, or lay it over as a glow or a soft focus.',
+    /* one side of the halo, or none: #966 opts11 */ sharpen: 'Hardens edges to bring detail back. Push it far and edges start to halo — keep just the dark side of each, or hold them back altogether.',
     zoomblur: 'Streaks outward from a centre point, like a fast zoom during the shot.',
     spinblur: 'Streaks in a circle around a centre point — motion from a spin.',
     lensblur: 'Defocus with real lens character: turn up Highlight bloom and bright points swell into discs of the aperture shape you pick.',
@@ -437,8 +437,8 @@ window.FM = window.FM || {};
     rgbsplit: 'Separates the red, green and blue channels so they sit slightly apart.',
     chromaticaberration: 'Colour fringing toward the edges, the way a real lens misfocuses each colour.',
     pixelate: 'Averages the image into blocks.',
-    posterize: 'Cuts the colours down to a few flat steps.',
-    threshold: 'Hard two-tone: everything is black or white on either side of a cut.',
+    /* soft steps, the hue alone: #966 opts11 */ posterize: 'Cuts the colours down to a few flat steps — hard or rolling softly into each other, and the hue alone if you like.',
+    /* eight colours, one side kept, mixed: #966 opts11 */ threshold: 'Hard two-tone: everything is black or white on either side of a cut — or each colour cut on its own, one side kept as the picture, mixed over it.',
     dither: 'Reduces to few colours but scatters the error, so it reads as more shades than it has.',
     halftone: 'Rebuilds the image out of dots, like newsprint.',
     edge: 'Keeps only the edges and drops the fill.',
@@ -559,7 +559,7 @@ window.FM = window.FM || {};
     solidmatte: 'Replaces everything the layer covers with one flat colour, keeping only its shape.',
     mattechoker: 'Eats into or fattens the layer’s edge by a few pixels — for tightening a key that left a rim.',
     /* as light or shade, one side only: #966 opts8 */ mattefringe: 'Draws a coloured band along the layer’s edge — painted, as light or as shade, all round or on one side only.',
-    touchup: 'Paints out a rectangle of the frame using the pixels around it — for a logo, a boom mic, a sign.',
+    /* a box or an oval, turned: #966 opts11 */ touchup: 'Paints out a rectangle of the frame using the pixels around it — for a logo, a boom mic, a sign. A box or an oval, turned to any angle.',
 
     // Repeat
     gridrepeat: 'Repeats the layer in a grid.',
@@ -596,7 +596,7 @@ window.FM = window.FM || {};
     /* Clock speed and Leading zero: #966 opts7 */ timecode: 'Shows the running time of the clip, in the format you pick — at any speed, for a time-lapse clock, with or without its leading zero.',
 
     // Stylize / other
-    solarize: 'Inverts everything above a brightness cut, the way overexposed film does.',
+    /* in a colour, at full contrast: #966 opts11 */ solarize: 'Inverts everything above a brightness cut, the way overexposed film does — into a colour if you like, and stretched to full contrast.',
     channelremap: 'Swaps the red, green and blue channels around. The fastest way to a completely alien palette.',
 
     // 3D — every one of these turns the layer into a solid and wraps its own pixels on as the skin

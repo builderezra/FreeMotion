@@ -118,8 +118,14 @@ window.FM = window.FM || {};
     { type: 'posterize', label: 'Posterize', params: [
       { key: 'levels', label: 'Levels', min: 2, max: 16, step: 1, def: 5 },
       { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
-      { key: 'channels', label: 'Quantise', def: 0, options: [[0, 'RGB'], [1, 'Luma only']] },
-      { key: 'gamma', label: 'Band spacing', min: 0.2, max: 4, step: 0.05, def: 1 },
+      /* #966 opts11 (hunt/fx11, his "more choices always better"): the steps were always hard, and only the tone or the three channels
+         could be stepped. HUE ONLY steps the hue round the wheel into Levels evenly spaced hues and keeps every pixel's own brightness and
+         saturation (a sunset turns into a few flat bands of colour, its shading untouched) — Band spacing shapes the tone, so it greys out
+         there; BAND EDGES rolls each step smoothly into the next instead of cutting (the soft cel-shaded look; 100 % is a gentle staircase).
+         RGB, Luma only and 0 % run the old loops untouched (posterize11 only off them). */
+      { key: 'channels', label: 'Quantise', def: 0, options: [[0, 'RGB'], [1, 'Luma only'], [2, 'Hue only']] },
+      { key: 'gamma', label: 'Band spacing', min: 0.2, max: 4, step: 0.05, def: 1, overriddenBy: 'channels', liveWhen: [0, 1] },
+      { key: 'soft', label: 'Band edges', min: 0, max: 100, step: 1, def: 0, unit: '%', note: '0 hard steps · 100 each step rolls smoothly into the next' },
     ] },
     { type: 'mirror', label: 'Mirror', params: [
       { key: 'mode', label: 'Direction', def: 0, options: [[0, 'Left → Right'], [1, 'Right → Left'], [2, 'Top → Bottom'], [3, 'Bottom → Top']] },
@@ -145,7 +151,16 @@ window.FM = window.FM || {};
     { type: 'threshold', label: 'Threshold', color: true, defColor: '#000000', colorLabel: 'Below', color2: true, defColor2: '#ffffff', color2Label: 'Above', params: [
       { key: 'level', label: 'Level', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'softness', label: 'Softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
-    ] },
+      /* #966 opts11 (hunt/fx11, his "more choices always better"): the cut was always made on BRIGHTNESS, into exactly two flat colours
+         over the whole picture. CUTS ON Each colour cuts red, green and blue on their own, so the picture comes out in eight flat colours
+         (the screen-print look) instead of two; KEEP PICTURE leaves one side of the cut as the picture itself — Above: the lights keep
+         their own colour and the darks go to the Below colour (the stencil look), Below the other way round; MIX lays the result over the
+         picture. Brightness, Off and 100 % run the old loops untouched (threshold11 only off them). The colour a kept side no longer
+         uses greys out. */
+      { key: 'chan', label: 'Cuts on', def: 0, options: [[0, 'Brightness'], [1, 'Each colour']], note: 'Each colour cuts red, green and blue on their own: eight flat colours instead of two' },
+      { key: 'keep', label: 'Keep picture', def: 0, options: [[0, 'Off'], [1, 'Above'], [2, 'Below']], note: 'Above: the parts brighter than the Level keep their own colour' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ], colorGate: { by: 'keep', deadAt: 2, deadAtText: 'Below' }, color2Gate: { by: 'keep', deadAt: 1, deadAtText: 'Above' } },
     { type: 'duotone', label: 'Duotone', color: true, defColor: '#241a52', colorLabel: 'Shadows', color2: true, defColor2: '#ff9e5e', color2Label: 'Highlights', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0 },
@@ -161,7 +176,13 @@ window.FM = window.FM || {};
       { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0 },
       { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'mode', label: 'Flips on', def: 0, options: [[0, 'Each colour'], [1, 'Brightness']] },
-    ] },
+      /* #966 opts11 (hunt/fx11, his "more choices always better"): what flipped always turned to its plain negative, and what was left
+         was a dark, flat picture (at the default nothing ever comes out above mid-grey). FLIP COLOUR (the colour row) tints the flipped
+         tones — they turn to their negative in that colour (Man Ray's coloured solarisation; white is the plain negative) and nothing below
+         the cut moves — and STRETCH spreads the result over the whole range, so the brightest a hard flip can leave becomes white (the
+         Solarize-then-Auto-levels look). White and Off run the old lines untouched (solarize11 only off them). */
+      { key: 'stretch', label: 'Stretch', def: 0, options: [[0, 'Off'], [1, 'On']], note: 'Spreads what is left over the whole range: the solarised picture at full contrast' },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Flip colour' },
     { type: 'gamma', label: 'Gamma', params: [
       { key: 'gamma', label: 'Gamma', min: 0.1, max: 10, step: 0.05, def: 1.8 },
       { key: 'red', label: 'Red', min: 0.2, max: 5, step: 0.02, def: 1 },
@@ -214,6 +235,13 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Radius', min: 1, max: 8, step: 1, def: 1, unit: 'px' },
       { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 },
       { key: 'mode', label: 'Sharpens', def: 0, options: [[0, 'Colour'], [1, 'Brightness only']] },
+      /* #966 opts11 (hunt/fx11, his "more choices always better"): every edge it sharpened grew a bright rim on its light side and a dark
+         one on its dark side, as far past the pixels round it as Amount pushed. HALOS keeps only one of the two — Dark only draws just the
+         dark side of every edge (no bright outline round a face or a sky line: the darken-only sharpen), Light only just the light side —
+         and LIMIT HALOS holds each sharpened pixel inside the lightest and darkest of the pixels it was sharpened against (100 %: an edge
+         gets steeper but never overshoots). Both and 0 % run the old lines untouched (sharpen11 only off them). */
+      { key: 'halo', label: 'Halos', def: 0, options: [[0, 'Both'], [1, 'Dark only'], [2, 'Light only']], note: 'Dark only draws just the dark side of every edge — no bright rims' },
+      { key: 'limit', label: 'Limit halos', min: 0, max: 100, step: 1, def: 0, unit: '%', note: '100 % never goes past the lightest or darkest pixel beside it' },
     ] },
     { type: 'thermal', label: 'Heat Map', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -430,6 +458,13 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Radius', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
       { key: 'aspect', label: 'Vertical amount', min: 0, max: 200, step: 5, def: 100, unit: '%' },
       { key: 'passes', label: 'Smoothness', min: 1, max: 4, step: 1, def: 1 },
+      /* #966 opts11 (hunt/fx11, his "more choices always better"): the blur could only replace the picture. MIX keeps some of the sharp
+         picture under it, and BLEND lays the blurred copy over the sharp one in Screen (a glow: the lights bloom and nothing darkens) or
+         Soft light (the Orton soft-focus look: the picture keeps its detail under a dreamy haze) — Gaussian Blur's three, with the same
+         stored numbers (#482 15.7), on a box blur that can smear one way. Normal and 100 % run the old lines untouched (boxBlur11 only
+         off them). */
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Screen'], [2, 'Soft light']], note: 'Screen lays the blur on as a glow, Soft light as a soft focus' },
     ] },
     { type: 'spinblur', label: 'Spin Blur', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -1913,6 +1948,13 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Fill', def: 0, options: [[0, 'Patch'], [1, 'Blur'], [2, 'Mosaic']] },
       { key: 'feather', label: 'Feather', min: 0, max: 60, step: 1, def: 12, unit: 'px' },
       { key: 'strength', label: 'Strength', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×', overriddenBy: 'mode', liveWhen: [1, 2] },   // queue 904: blur radius and mosaic block were fixed; Patch uses neither
+      /* #966 opts11 (hunt/fx11, his "more choices always better"): the region was always an upright box, so a round logo, a face or a
+         caption on a slope took a box of the picture with it. SHAPE Oval paints out only the oval inside the box (its feather measured
+         from the oval's edge), and ANGLE turns the box or oval about its centre (+ clockwise, as Censor's does) — Censor's two words, on
+         the content-aware fill: Patch, Blur and Mosaic work inside the turned shape as they do inside the box. Box and 0° run the old
+         lines untouched (touchup11 only off them). */
+      { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Box'], [1, 'Oval']] },
+      { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 0, unit: '°', note: 'Turns the box or oval, for a logo or a caption on a slope' },
     ] },
     // ---- Copy Background: this layer shows a live copy of everything rendered BELOW it, clipped to
     // its own shape. Add colour/blur/grade effects on top → they cover the whole scene beneath. A
@@ -8593,6 +8635,11 @@ window.FM = window.FM || {};
       let sfMix = p.mix == null ? 1 : FM.evalProp(p.mix, t);
       if (sfMix < 0) sfMix = 0; if (sfMix > 1) sfMix = 1; if (sfMix <= 0) return;
       const sfLuma = (p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0)) === 1;
+      /* #966 opts11: FLIP COLOUR (the colour row; white, and absent, is the plain negative) and STRETCH — a colour off white, or Stretch
+         On, runs solarize11, the lines below with the two laid in; white and Off run the lines below untouched. */
+      const sfT11 = hexToRGB(typeof p.color === 'string' && p.color ? p.color : '#ffffff');
+      const sfS11 = (p.stretch == null ? 0 : (Math.round(FM.evalProp(p.stretch, t)) | 0)) === 1;
+      if (sfT11[0] !== 255 || sfT11[1] !== 255 || sfT11[2] !== 255 || sfS11) { solarize11(d, thr, sfSoft, sfMix, sfLuma, sfT11, sfS11); return; }
       if (sfSoft === 0 && sfMix === 1 && !sfLuma) {
         for (let i = 0; i < d.length; i += 4) {
           if (d[i] > thr) d[i] = 255 - d[i];
@@ -8895,6 +8942,10 @@ window.FM = window.FM || {};
       let thr = p.threshold == null ? 0 : FM.evalProp(p.threshold, t);
       if (thr < 0) thr = 0; if (thr > 64) thr = 64;
       const luma = (p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0)) === 1;
+      /* #966 opts11: HALOS (Dark only 1, Light only 2) and LIMIT HALOS — either off its default runs sharpen11, every pixel through the
+         very taps, Skip flat areas test and sums of the lines below with the two laid in; Both and 0 % run the lines below untouched. */
+      const hl11 = p.halo == null ? 0 : (Math.round(FM.evalProp(p.halo, t)) | 0), lm11 = p.limit == null ? 0 : FM.evalProp(p.limit, t);
+      if (hl11 === 1 || hl11 === 2 || lm11 > 0) { sharpen11(d, s, W, H, amt, r, thr, luma, hl11, lm11); return; }
       /* THE BORDER IS SHARPENED TOO (queue 986, hunt C41). The loops below read r pixels either side, so they stop r short of
          every edge, and on full-frame footage that left an r-pixel frame round the picture unsharpened — at Radius 8 a soft
          8px band down every side of the export. A tap that would fall off the frame reads the nearest pixel inside it
@@ -9587,7 +9638,7 @@ window.FM = window.FM || {};
        silently opt this kernel OUT of the plate scaling that #691 just gave it, and a box blur that
        stopped matching the export is a worse bug than the one being fixed. Reading it this way keeps
        `boxblur.length` at 5. */
-    boxblur: function(d,W,H,p,t){ var bbBB=arguments[6]; var bbr=Math.round(FM.evalProp(p.radius,t)||0); if(bbr<1)return; if(bbr>40)bbr=40;
+    boxblur: function(d,W,H,p,t){ var bbBB=arguments[6]; /* #966 opts11: MIX under 100 % or BLEND Screen (1) / Soft light (2) runs boxBlur11 (this very blur, then the blurred copy laid over the sharp one); Normal and 100 % run the lines below untouched */ var bbMx11=p.mix==null?100:FM.evalProp(p.mix,t), bbBl11=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); if(bbMx11<100||bbBl11===1||bbBl11===2){ boxBlur11(d,W,H,p,t,bbBB,bbMx11,bbBl11); return; } var bbr=Math.round(FM.evalProp(p.radius,t)||0); if(bbr<1)return; if(bbr>40)bbr=40;
       // Locked to a perfectly square kernel and a single pass: no horizontal-only smear, no
       // vertical-only, and no way off its hard boxy falloff. ASPECT scales the VERTICAL radius against
       // the horizontal (0 = a pure horizontal smear). PASSES repeats the whole thing — a box blur run
@@ -12389,6 +12440,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Feather smoothstep-ramps the edge so the patch doesn't cut hard. Deterministic (no random/time)
     // so preview and export render identically.
     touchup: function(d,W,H,p,t){
+      /* #966 opts11: SHAPE Oval (1) or an ANGLE off 0° runs touchup11 (these very fills on the box read off the plate turned, laid back
+         inside the turned box or oval); Box and 0° run the lines below untouched. */
+      var toSh11=p.shape==null?0:(Math.round(FM.evalProp(p.shape,t))|0), toAn11=p.angle==null?0:FM.evalProp(p.angle,t);
+      if(toSh11===1||(toAn11!==0&&isFinite(toAn11))){ touchup11(d,W,H,p,t,toSh11===1,toAn11); return; }
       var toX=p.x==null?30:FM.evalProp(p.x,t), toY=p.y==null?40:FM.evalProp(p.y,t);
       var toW=p.w==null?40:FM.evalProp(p.w,t), toHt=p.h==null?15:FM.evalProp(p.h,t);
       var rx=Math.round(toX/100*W), ry=Math.round(toY/100*H), rw=Math.round(toW/100*W), rh=Math.round(toHt/100*H);
@@ -14094,6 +14149,202 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._tilesExtend10 = tilesExtend10;   // suite seam (#966 opts10)
+  /* ═══ #966 opts11 (hunt/fx11): helpers behind the eleventh round — Threshold's Cuts on, Keep picture and Mix, Posterize's Band edges
+   * and Hue only, Solarize's Flip colour and Stretch, Sharpen's Halos and Limit halos, Box Blur's Mix and Blend, Remove Object's Shape
+   * and Angle. Each runs only off its controls' defaults, so a default kernel never calls one. ═══ */
+  /* THRESHOLD'S CUTS ON, KEEP PICTURE AND MIX: thresholdPixels' softened loop to the letter (the same cut, the same softness band and
+     smoothstep, the same Below and Above colours), with the share k judged per channel under Each colour (red on red, green on green,
+     blue on blue — eight flat colours from black and white) instead of on the pixel's brightness; under Keep picture the side it names
+     takes the pixel's own colour in place of its swatch (Above: the lights keep theirs, the darks take Below; Below the other way round);
+     and the result mixed over the picture by Mix (100 % is the result itself, 0 the picture; NaN reads 100). */
+  function threshold11(d, cut, softPc, loHex, hiHex, each, keep, mix) {
+    const m = isFinite(mix) ? (mix <= 0 ? 0 : (mix >= 100 ? 1 : mix / 100)) : 1;
+    if (!(m > 0)) return;
+    const A = hexToRGB(loHex), B = hexToRGB(hiHex);
+    const half = Math.max(0, softPc) / 100 * 255 / 2;
+    const kf = L => { if (half <= 0) return L >= cut ? 1 : 0; let k = (L - (cut - half)) / (2 * half); k = k < 0 ? 0 : (k > 1 ? 1 : k); return k * k * (3 - 2 * k); };
+    const keepLo = keep === 2, keepHi = keep === 1;
+    for (let i = 0; i < d.length; i += 4) {
+      const s0 = d[i], s1 = d[i + 1], s2 = d[i + 2];
+      let k0, k1, k2;
+      if (each) { k0 = kf(s0); k1 = kf(s1); k2 = kf(s2); }
+      else { k0 = kf(s0 * 0.299 + s1 * 0.587 + s2 * 0.114); k1 = k0; k2 = k0; }
+      const l0 = keepLo ? s0 : A[0], l1 = keepLo ? s1 : A[1], l2 = keepLo ? s2 : A[2];
+      const h0 = keepHi ? s0 : B[0], h1 = keepHi ? s1 : B[1], h2 = keepHi ? s2 : B[2];
+      const o0 = l0 + (h0 - l0) * k0, o1 = l1 + (h1 - l1) * k1, o2 = l2 + (h2 - l2) * k2;
+      if (m === 1) { d[i] = o0; d[i + 1] = o1; d[i + 2] = o2; }
+      else { d[i] = s0 + (o0 - s0) * m; d[i + 1] = s1 + (o1 - s1) * m; d[i + 2] = s2 + (o2 - s2) * m; }
+    }
+  }
+  FM._threshold11 = threshold11;   // suite seam (#966 opts11)
+  /* POSTERIZE'S BAND EDGES AND HUE ONLY: posterizePixels' loop to the letter (the same Levels and step, the same Band spacing, the same
+     Luma only scaling, the same Mix), with each value's place in the steps — x = value / step, or (value / 255)^(1 / spacing) x (Levels − 1)
+     — sent to its step by stepAt: rounded at Band edges 0, and above 0 rolled from one step to the next by a smoothstep across the middle
+     Band-edges share of each step (at 100 % across the whole step, so the output climbs as a staircase with flat landings at each step
+     and every value in between). HUE ONLY moves only the hue: into Levels evenly spaced hues round the wheel (0°, 360° / Levels …, through
+     the same stepAt, so Band edges softens those too), keeping the pixel's own largest and smallest channel — its HSV value and
+     saturation, exactly — and leaving a grey, which has no hue, untouched. Band spacing is a tone curve and plays no part in it. */
+  function posterize11(d, q, mix, ch, gm, soft) {
+    const s = isFinite(soft) ? (soft <= 0 ? 0 : (soft >= 100 ? 1 : soft / 100)) : 0;
+    const n1 = q - 1, step = 255 / n1, ig = 1 / Math.max(0.05, gm), m = mix < 0 ? 0 : (mix > 1 ? 1 : mix);
+    const stepAt = x => { const n = Math.floor(x), f = x - n; if (s <= 0) return f >= 0.5 ? n + 1 : n; let u = (f - (0.5 - s / 2)) / s; u = u < 0 ? 0 : (u > 1 ? 1 : u); return n + u * u * (3 - 2 * u); };
+    const quant = v => (gm === 1 ? stepAt(v / step) * step : 255 * Math.pow(stepAt(Math.pow(v / 255, ig) * n1) / n1, gm));
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      let nr, ng, nb;
+      if (ch === 2) {
+        const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b), c = mx - mn;
+        if (!(c > 0)) continue;
+        let h = mx === r ? (g - b) / c : (mx === g ? (b - r) / c + 2 : (r - g) / c + 4);
+        if (h < 0) h += 6;
+        let hq = stepAt(h / 6 * q) / q * 6;
+        if (hq >= 6) hq -= 6;
+        const sx = Math.floor(hq), xx = c * (1 - Math.abs(hq % 2 - 1));
+        if (sx === 0) { nr = mx; ng = mn + xx; nb = mn; }
+        else if (sx === 1) { nr = mn + xx; ng = mx; nb = mn; }
+        else if (sx === 2) { nr = mn; ng = mx; nb = mn + xx; }
+        else if (sx === 3) { nr = mn; ng = mn + xx; nb = mx; }
+        else if (sx === 4) { nr = mn + xx; ng = mn; nb = mx; }
+        else { nr = mx; ng = mn; nb = mn + xx; }
+      } else if (ch === 1) {
+        const l = 0.299 * r + 0.587 * g + 0.114 * b;
+        const sc = l > 0.5 ? quant(l) / l : 1;
+        nr = r * sc; ng = g * sc; nb = b * sc;
+      } else { nr = quant(r); ng = quant(g); nb = quant(b); }
+      d[i] = r + (nr - r) * m; d[i + 1] = g + (ng - g) * m; d[i + 2] = b + (nb - b) * m;
+    }
+  }
+  FM._posterize11 = posterize11;   // suite seam (#966 opts11)
+  /* SOLARIZE'S FLIP COLOUR AND STRETCH: the kernel's lines to the letter (the same cut, the same Softness ramp w, the same Flips on — each
+     channel on its own value, or all three on the pixel's brightness — and the same Mix k = w x Mix), with the negative a flipped channel
+     turns toward taken in the Flip colour: (255 − value) x colour / 255, so white is the plain negative and what does not flip never
+     moves. STRETCH then multiplies the solarised pixel by 255 / max(cut, 255 − cut) — the brightest a hard flip can leave, which becomes
+     white (x 2 at the default cut, so 127 and 128 both come out at 254) — before Mix lays it over the picture; the bytes clamp what a
+     softened flip pushes past 255. Unstretched it is the kernel's own k-form, so at white it is the kernel byte for byte. */
+  function solarize11(d, thr, soft, mix, luma, tint, stretch) {
+    const band = soft * 255, f = [tint[0] / 255, tint[1] / 255, tint[2] / 255];
+    const w = v => (band <= 0 ? (v > thr ? 1 : 0) : (v <= thr ? 0 : (v >= thr + band ? 1 : (v - thr) / band)));
+    const top = thr > 255 - thr ? thr : 255 - thr, G = stretch && top > 0 ? 255 / top : 1;
+    for (let i = 0; i < d.length; i += 4) {
+      const kl = luma ? w(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) : 0;
+      for (let c = 0; c < 3; c++) {
+        const j = i + c, v = d[j], wv = luma ? kl : w(v), neg = (255 - v) * f[c];
+        if (G === 1) { const k = wv * mix; if (k > 0) d[j] = v + (neg - v) * k; }
+        else d[j] = v + ((v + (neg - v) * wv) * G - v) * mix;
+      }
+    }
+  }
+  FM._solarize11 = solarize11;   // suite seam (#966 opts11)
+  /* SHARPEN'S HALOS AND LIMIT HALOS: every pixel of the plate through the kernel's own arithmetic — its four taps Radius pixels up, down,
+     left and right, each held to the plate's edge (the kernel's edge rule, which inside the frame changes nothing), its Skip flat areas test
+     on the brightness difference, and its sharpened value: the pixel x (1 + 4 Amount) minus the four taps x Amount, channel by channel, or
+     under Brightness only the pixel plus the brightness difference x Amount on all three. Then HALOS drops the side it does not keep — Dark
+     only leaves a pixel the sharpening would lighten as it was, Light only one it would darken — and LIMIT HALOS pulls what is left that
+     share of the way back inside the lightest and darkest of the pixel and its four taps, channel by channel. A skipped pixel and the alpha
+     are never written. At Both and 0 % this is the kernel byte for byte. */
+  function sharpen11(d, s, W, H, amt, r, thr, luma, halo, limit) {
+    const lim = limit > 0 ? (limit < 100 ? limit / 100 : 1) : 0;
+    const lu = k => s[k] * 0.299 + s[k + 1] * 0.587 + s[k + 2] * 0.114;
+    for (let y = 0; y < H; y++) {
+      const yu = (y - r < 0 ? 0 : y - r) * W, yd = (y + r > H - 1 ? H - 1 : y + r) * W, yr = y * W;
+      for (let x = 0; x < W; x++) {
+        const i = (yr + x) * 4, iu = (yu + x) * 4, id = (yd + x) * 4;
+        const il = (yr + (x - r < 0 ? 0 : x - r)) * 4, ir = (yr + (x + r > W - 1 ? W - 1 : x + r)) * 4;
+        const delta = lu(i) * 4 - (lu(iu) + lu(id) + lu(il) + lu(ir));
+        if (thr > 0 && Math.abs(delta) < thr * 4) continue;
+        const add = delta * amt;
+        for (let c = 0; c < 3; c++) {
+          const j = i + c, v = s[j];
+          let o = luma ? v + add : v * (1 + 4 * amt) - (s[iu + c] + s[id + c] + s[il + c] + s[ir + c]) * amt;
+          if ((halo === 1 && o > v) || (halo === 2 && o < v)) o = v;
+          if (lim > 0) {
+            const a = s[iu + c], b = s[id + c], e = s[il + c], f = s[ir + c];
+            let lo = v, hi = v;
+            if (a < lo) lo = a; if (b < lo) lo = b; if (e < lo) lo = e; if (f < lo) lo = f;
+            if (a > hi) hi = a; if (b > hi) hi = b; if (e > hi) hi = e; if (f > hi) hi = f;
+            const cl = o < lo ? lo : (o > hi ? hi : o);
+            o += (cl - o) * lim;
+          }
+          d[j] = o;
+        }
+      }
+    }
+  }
+  FM._sharpen11 = sharpen11;   // suite seam (#966 opts11)
+  /* BOX BLUR'S MIX AND BLEND: the kernel's own blur, untouched (the kernel itself, run on the plate with Mix and Blend taken away and the
+     same layer box, so its row and column skipping and its passes are exactly what they are), then the blurred copy laid over the sharp
+     picture the way Gaussian Blur's Mix and Blend lay theirs (blurPlateKernel, #482 15.7): premultiplied, Normal the blurred copy itself,
+     Screen and Soft light the W3C blend of the blurred copy (source) over the sharp one (backdrop) through the same BLUR_BLEND functions,
+     and Mix fading from the sharp picture to that. A Radius under 1 blurs nothing and lays nothing over (the kernel's own early return);
+     Mix 0 is the picture. Where neither copy has any alpha the pixel is clear, as blurPlateKernel leaves it. */
+  function boxBlur11(d, W, H, p, t, bb, mix, blend) {
+    if (!(Math.round(FM.evalProp(p.radius, t) || 0) >= 1)) return;
+    const m = isFinite(mix) ? (mix <= 0 ? 0 : (mix >= 100 ? 1 : mix / 100)) : 1;
+    if (!(m > 0)) return;
+    const bf = (blend === 1 || blend === 2) ? BLUR_BLEND[blend] : null;
+    const src = d.slice(), q = Object.assign({}, p);
+    delete q.mix; delete q.blend;
+    PIXEL_FX.boxblur(d, W, H, q, t, undefined, bb);
+    for (let j = 0; j < d.length; j += 4) {
+      const Aa = src[j + 3] / 255, Ba = d[j + 3] / 255;
+      if (Aa === 0 && Ba === 0) { d[j] = d[j + 1] = d[j + 2] = 0; continue; }
+      let xr = d[j] * Ba, xg = d[j + 1] * Ba, xb = d[j + 2] * Ba, xa = d[j + 3];
+      if (bf) {
+        const ar = src[j] / 255, ag = src[j + 1] / 255, ab = src[j + 2] / 255;
+        const one = (bp, ac, bc) => (1 - Aa) * bp + (1 - Ba) * ac * Aa * 255 + Aa * Ba * 255 * bf(bc, ac);
+        xr = one(xr, ar, d[j] / 255); xg = one(xg, ag, d[j + 1] / 255); xb = one(xb, ab, d[j + 2] / 255);
+        xa = (Ba + Aa * (1 - Ba)) * 255;
+      }
+      const pr = src[j] * Aa, pg = src[j + 1] * Aa, pb = src[j + 2] * Aa, pa = src[j + 3];
+      const oa = pa + (xa - pa) * m;
+      if (oa <= 0.001) { d[j] = d[j + 1] = d[j + 2] = d[j + 3] = 0; continue; }
+      const f = 255 / oa;
+      d[j] = (pr + (xr - pr) * m) * f; d[j + 1] = (pg + (xg - pg) * m) * f; d[j + 2] = (pb + (xb - pb) * m) * f; d[j + 3] = oa;
+    }
+  }
+  FM._boxBlur11 = boxBlur11;   // suite seam (#966 opts11)
+  /* REMOVE OBJECT'S SHAPE AND ANGLE: the box placed as the kernel places it (X, Y, Width and Height as % of the plate, each rounded to a
+     pixel) is read off the plate turned by −Angle about its centre into a buffer of its own with a one-pixel ring round it — each buffer
+     pixel the plate pixel under its centre, held to the plate's edge — and the kernel itself is run on that buffer with its region the box
+     and Feather 0, so Patch (the ring is its border), Blur and Mosaic are exactly what they are. The result is laid back over every plate
+     pixel whose centre falls inside the turned box (or, under Oval, inside the oval inscribed in it): the buffer pixel under it, mixed in
+     by the kernel's feather ramp (a smoothstep of the distance in from the edge over Feather), the distance measured from the turned box's
+     edge or, under Oval, from the oval's — (1 − ρ) of its shorter half-axis, ρ the pixel's radius in the oval. Unturned the buffer is an
+     exact copy of the box, so an Oval at 0° and Feather 0 is the Box's own pixels inside the oval and the picture outside it. */
+  function touchup11(d, W, H, p, t, oval, angDeg) {
+    const X = p.x == null ? 30 : FM.evalProp(p.x, t), Y = p.y == null ? 40 : FM.evalProp(p.y, t);
+    const BW = p.w == null ? 40 : FM.evalProp(p.w, t), BH = p.h == null ? 15 : FM.evalProp(p.h, t);
+    const bx = Math.round(X / 100 * W), by = Math.round(Y / 100 * H), bw = Math.round(BW / 100 * W), bh = Math.round(BH / 100 * H);
+    if (!(bw >= 2) || !(bh >= 2)) return;
+    let F = Math.round(p.feather == null ? 12 : FM.evalProp(p.feather, t)); if (!(F > 0)) F = 0;
+    const ang = isFinite(angDeg) ? angDeg : 0, th = ang * Math.PI / 180, c = Math.cos(th), s = Math.sin(th);
+    const hx = bw / 2, hy = bh / 2, cx = bx + hx, cy = by + hy, LW = bw + 2, LH = bh + 2, L = new Uint8ClampedArray(LW * LH * 4);
+    for (let j = 0; j < LH; j++) for (let i = 0; i < LW; i++) {
+      const ux = bx - 1 + i + 0.5 - cx, uy = by - 1 + j + 0.5 - cy;
+      let px = Math.floor(cx + ux * c - uy * s), py = Math.floor(cy + ux * s + uy * c);
+      px = px < 0 ? 0 : (px >= W ? W - 1 : px); py = py < 0 ? 0 : (py >= H ? H - 1 : py);
+      const si = (py * W + px) * 4, li = (j * LW + i) * 4;
+      L[li] = d[si]; L[li + 1] = d[si + 1]; L[li + 2] = d[si + 2]; L[li + 3] = d[si + 3];
+    }
+    PIXEL_FX.touchup(L, LW, LH, { x: 100 / LW, y: 100 / LH, w: bw * 100 / LW, h: bh * 100 / LH, mode: Math.round(FM.evalProp(p.mode, t) || 0), feather: 0, strength: p.strength == null ? 1 : FM.evalProp(p.strength, t) }, t);
+    const ex = Math.abs(hx * c) + Math.abs(hy * s), ey = Math.abs(hx * s) + Math.abs(hy * c), half = hx < hy ? hx : hy;
+    const x0 = Math.max(0, Math.floor(cx - ex) - 1), x1 = Math.min(W - 1, Math.ceil(cx + ex) + 1);
+    const y0 = Math.max(0, Math.floor(cy - ey) - 1), y1 = Math.min(H - 1, Math.ceil(cy + ey) + 1);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+      const lx = dx * c + dy * s + hx, ly = dy * c - dx * s + hy;
+      if (!(lx >= 0 && lx < bw && ly >= 0 && ly < bh)) continue;
+      let de;
+      if (oval) { const u = (lx - hx) / hx, v = (ly - hy) / hy, rho = Math.sqrt(u * u + v * v); if (rho > 1) continue; de = (1 - rho) * half; }
+      else de = Math.min(lx + 0.5, bw - lx + 0.5, ly + 0.5, bh - ly + 0.5, x + 1, W - x, y + 1, H - y);   /* the kernel's own distance (toK): 1-based from the box's edge, the frame's edge where it clips the box, so at 0° the two agree and an Angle keyed through 0 does not jump */
+      let k = 1;
+      if (F > 0 && de < F) { const q = de / F; k = q * q * (3 - 2 * q); }
+      if (!(k > 0)) continue;
+      const li = (((ly | 0) + 1) * LW + (lx | 0) + 1) * 4, di = (y * W + x) * 4;
+      for (let ch = 0; ch < 4; ch++) d[di + ch] = k >= 1 ? L[li + ch] : d[di + ch] + (L[li + ch] - d[di + ch]) * k;
+    }
+  }
+  FM._touchup11 = touchup11;   // suite seam (#966 opts11)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -21084,6 +21335,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const mix = p.mix == null ? 1 : FM.evalProp(p.mix, t);
     const ch = p.channels == null ? 0 : (Math.round(FM.evalProp(p.channels, t)) | 0);
     const gm = p.gamma == null ? 1 : FM.evalProp(p.gamma, t);
+    /* #966 opts11: QUANTISE Hue only (2) or BAND EDGES above 0 runs posterize11, the loops below with the two laid in; RGB, Luma only and
+       0 % (and Band edges absent) run the loops below untouched. */
+    const sf11 = p.soft == null ? 0 : FM.evalProp(p.soft, t);
+    if (ch === 2 || sf11 > 0) { posterize11(d, q, mix, ch, gm, sf11); return; }
     if (mix === 1 && ch === 0 && gm === 1) {
       for (let i = 0; i < d.length; i += 4) { d[i] = Math.round(Math.round(d[i] / step) * step); d[i + 1] = Math.round(Math.round(d[i + 1] / step) * step); d[i + 2] = Math.round(Math.round(d[i + 2] / step) * step); }
       return;
@@ -21151,6 +21406,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   function thresholdPixels(d, cut, p, t) {
     const softPc = p.softness == null ? 0 : FM.evalProp(p.softness, t);
     const loHex = p.color || '#000000', hiHex = p.color2 || '#ffffff';
+    /* #966 opts11: CUTS ON Each colour (1), KEEP PICTURE Above (1) or Below (2), and MIX under 100 % — any of them runs threshold11, the
+       two loops below with the three laid in; Brightness, Off and 100 % (and all three absent) run the loops below untouched. */
+    const ch11 = p.chan == null ? 0 : (Math.round(FM.evalProp(p.chan, t)) | 0), kp11 = p.keep == null ? 0 : (Math.round(FM.evalProp(p.keep, t)) | 0);
+    const mx11 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+    if (ch11 === 1 || kp11 === 1 || kp11 === 2 || mx11 < 100) { threshold11(d, cut, softPc, loHex, hiHex, ch11 === 1, kp11, mx11); return; }
     if (softPc === 0 && loHex === '#000000' && hiHex === '#ffffff') {
       for (let i = 0; i < d.length; i += 4) {
         const v = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) >= cut ? 255 : 0;

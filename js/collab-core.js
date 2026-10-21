@@ -123,8 +123,13 @@ window.FM = window.FM || {};
      Rev 28 (v17.85, bug hunt 7 #3 and its leftovers): the sanitiser stops cutting a clip's trimStart, start, effect / audio /
      mask key times and caption word starts at 3600 s (trimStart up to FM.LIMITS.duration x the top speed, the rest to
      3600 + FM.LIMITS.duration). A rev-27 owner's tidy-up and fix ops would cut a rev-28 guest's long clip back to an hour,
-     and a rev-27 guest's reopen would send the cuts as owed edits, so the two must not join. fp_2 in the fixture pins it. */
-  C.SCHEMA_REV = 28;
+     and a rev-27 guest's reopen would send the cuts as owed edits, so the two must not join. fp_2 in the fixture pins it.
+     Rev 29 (v17.91, #966 idle work round eleven): new controls on six existing effects: Threshold `chan`, `keep` and `mix`,
+     Posterize `soft` and a third `channels` button (2, Hue only), Solarize `stretch` and `color`, Sharpen `halo` and `limit`,
+     Box Blur `mix` and `blend`, Remove Object `shape` and `angle`. Every default draws what the effect drew before, but a
+     rev-28 sanitiser drops the new keys (and `channels` 2), so the two would normalise one project differently. The registry
+     term now hashes a button row's values as well (the round 11 review): a row that gained a button moved no hashed fact. */
+  C.SCHEMA_REV = 29;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -324,7 +329,9 @@ window.FM = window.FM || {};
     if (FM.storage._clampProjectDims) FM.storage._clampProjectDims(PJ);
     const defs = (FM.fxRegistry.all() || []).map(function (e) {
       return [e.type, (e.params || []).map(function (p) {
-        return [p.key, p.type, p.default, p.legacy, p.min, p.max, p.keyframable !== false ? 1 : 0];
+        /* …and a button row's VALUES (#966 opts11): the sanitiser keeps a segment value only if it is one of them (storage.js
+           safeFxParam), so a row that gains, loses or renumbers a button normalises an old project differently. Labels are not hashed. */
+        return [p.key, p.type, p.default, p.legacy, p.min, p.max, p.keyframable !== false ? 1 : 0, (p.options || []).map(function (o) { return o[0]; })];
       })];
     }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
     /* …AND THE AUDIO EFFECTS' (#482 batch 3 review). Only FM.fxRegistry was hashed, and the fixture's one audio effect is
@@ -343,7 +350,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =4487778860768040;   // SCHEMA_REV 28 on v17.84 + bug hunt 7 and its leftovers (#1176): the sanitiser keeps a clip's trimStart, start, key times and caption word starts past 3600 s, and fp_2 in the fixture pins those bounds. Pinned 20 Oct with fp.js at rev 28.
+  C.SCHEMA_FP =5902942737566653;   // SCHEMA_REV 29 on v17.90 + #966 round eleven: twelve new effect keys, Posterize's third button, and the registry term now hashes each button row's values. Pinned 21 Oct with fp.js at rev 29.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════

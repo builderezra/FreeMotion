@@ -5655,7 +5655,7 @@
         /* A control ADDED AFTER these hashes were frozen stays at its default here — that default is what every saved project
            gets, and each such control carries its own byte-identity test. Pushing it to 75% would change the picture for a
            reason that has nothing to do with masks. Listed by name so a new one is a visible edit, not a silent pass. */
-        const ADDED_AFTER_560 = { dropshadow: ['opacity', 'spread', 'smooth'] };   // queue 904, v16.48 · #482 6.3: Spread, Smoothness
+        const ADDED_AFTER_560 = { dropshadow: ['opacity', 'spread', 'smooth'], boxblur: ['mix'] };   // queue 904, v16.48 · #482 6.3: Spread, Smoothness · #966 opts11: Box Blur's Mix
         /* A range WIDENED after the hashes were frozen keeps its old top here (#482 6.3: Distance 60 -> 300, Softness 20 -> 80),
            so 75% is still the 45 px and 15 px these pictures were drawn with. */
         const MAX_AT_560 = { dropshadow: { distance: 60, softness: 20 } };
@@ -175263,4 +175263,774 @@
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+  // ── 966 opts11 (hunt/fx11) ──
+  /* ═══ #966: MORE CHOICE, ROUND ELEVEN — six more effects he already has, each commonly reached for and still thin on choice: Threshold,
+   * Posterize, Solarize, Sharpen, Box Blur and Remove Object (hunt/fx11). His words: "polish other effects just giving them more features
+   * … more choices always better … this is the complex version we want as much choice as possible". WRITTEN WITHOUT RUNNING (21 Oct, while
+   * a release shipped on this machine): nothing but `node --check`. Every number below is reasoned from the code it names, the reasoning
+   * beside it; a bound only a run can set says MEASURE beside it. Every test fails on v17.90's code (e5f45a50) on its first line by NAMING the missing
+   * control or seam, never with a TypeError. Each effect has round ten's four kinds: (a) its rows, ranges, choices, gates and what the load
+   * sanitiser keeps, clamps and drops, (b) what each new control does, on a fixture that holds what separates right from wrong, (c) at the
+   * defaults the kernel is today's picture byte for byte, (d) a CONTROL — every new control moves the very fixtures (c) holds still.
+   * Threshold and Posterize are not PIXEL_FX kernels: drawThreshold and drawPosterize run them on a clip and applyPixelFx on an adjustment
+   * layer, the same thresholdPixels / posterizePixels both ways, so their pictures go through FM._applyPixelFx (and, in the first test,
+   * FM.renderScene). The helpers carry an _o11 prefix and are this block's own; from the rest of the file it uses only `test`, `sleep` and
+   * E1 (frame, noise, maxDiff, count). ═══ */
+  const _o11Need = (type, keys, seams) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts11 (hunt/fx11) is not built');
+    (seams || []).forEach(s => { if (typeof FM[s] !== 'function') throw new Error('FM.' + s + ' (the #966 opts11 seam) does not exist — #966 opts11 is not built'); });
+    return r;
+  };
+  /* every new key, by effect, and every new control off its default on the effect's own default settings (a colour off its default in
+     every channel) */
+  const _O11_NEW = { threshold: ['chan', 'keep', 'mix'], posterize: ['soft'], solarize: ['stretch', 'color'], sharpen: ['halo', 'limit'], boxblur: ['mix', 'blend'], touchup: ['shape', 'angle'] };
+  const _O11_OFF = { threshold: [{ chan: 1 }, { keep: 1 }, { mix: 50 }], posterize: [{ soft: 60 }, { channels: 2 }], solarize: [{ stretch: 1 }, { color: '#4080c0' }], sharpen: [{ halo: 1 }, { limit: 100 }], boxblur: [{ mix: 50 }, { blend: 1 }], touchup: [{ shape: 1 }, { angle: 30 }] };
+  /* …and, for the compositor test only, the settings an effect is shown on there (the same on both sides of every comparison). Remove
+     Object's default Patch reproduces a straight gradient exactly — inverse-distance weights between its left and right border are linear
+     — so on the gradient rect it would change nothing; its Mosaic at Strength 3 does. */
+  const _O11_BASE = { touchup: { mode: 2, strength: 3 } };
+  const _o11P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o11Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  /* a PIXEL_FX kernel straight, with exactly these params (ps 1 unless given; no layer, no box) */
+  const _o11PX = (type, params, W, H, d, t, ps) => {
+    const f = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable');
+    f(d, W, H, params, t == null ? 0.5 : t, ps == null ? 1 : ps);
+    return d;
+  };
+  /* …and through the dispatcher's own pixel step (colours resolved, project px scaled to plate scale ps) — the adjustment-layer path,
+     which for Threshold and Posterize is thresholdPixels / posterizePixels themselves */
+  const _o11Run = (type, params, W, H, d, t, ps) => {
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx is not reachable');
+    FM._applyPixelFx(d, { type: type, params: params }, t == null ? 0.5 : t, W, H, ps == null ? 1 : ps);
+    return d;
+  };
+  /* a busy opaque picture (a colour ramp under a 12 px checker), an opaque block on clear, the grey levels 0–255 one to a column */
+  const _o11Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  const _o11Blk = (W, H) => E1.frame(W, H, (x, y) => (x >= 20 && x < 70 && y >= 10 && y < 50) ? [200, 90, 40, 255] : [0, 0, 0, 0]);
+  const _o11Lv = () => E1.frame(256, 2, x => [x, x, x]);
+  const _o11At = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  const _o11KF = (a, b, t1) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: t1 || 1, v: b, e: 'linear' }] });
+  /* a gradient rect, and the frame rendered through FM.renderScene (a reduced plate when rs is given) */
+  const _o11Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#1040a0', c1: '#f0c060' }; L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o11shot = (layers, t, W, H, rs, bg) => {
+    const c = document.createElement('canvas'); c.width = Math.round(W * (rs || 1)); c.height = Math.round(H * (rs || 1));
+    if (rs) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: bg === undefined ? '#000000' : bg }, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return g.getImageData(0, 0, c.width, c.height).data;
+  };
+  /* a new instance with `give` laid on it, through the load sanitiser on a shape layer: the params it keeps */
+  const _o11San = (type, give) => {
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, give);
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    return got ? got.params : null;
+  };
+  /* Every new row as the panel gets it (round ten's _o10Rows): its label; a slider's range, unit and keyframes, a choice's buttons and the
+     values they store (`vals`, when they are not 0, 1, 2…), or a colour row; its default and its gate (or that nothing greys it out); what a
+     new instance starts with, what a SAVED one with no such key is filled with at render time (FM._fillFxParams, queue 784) and what the fill
+     reads off the kernel (793); and that the load sanitiser keeps each key of `keep` at a value off its default. */
+  const _o11Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.vals || s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else if (s.colour) {
+        if (p.type !== 'color') bad.push(s.key + ' is a ' + p.type + ' row, not a colour');
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      if (typeof s.def === 'number') { const fv = FM._fxFillValue(type, s.key); if (fv !== s.def) bad.push('the render-time fill reads ' + s.key + ' as ' + JSON.stringify(fv) + ' off the kernel, not ' + s.def + ' — 793 would say the panel lies'); }
+      if (s.gate) { if (p.overriddenBy !== s.gate[0] || JSON.stringify(p[s.gate[1]]) !== JSON.stringify(s.gate[2])) bad.push(s.key + ' is gated by ' + JSON.stringify([p.overriddenBy, p[s.gate[1]]]) + ', not ' + JSON.stringify([s.gate[0], s.gate[2]]) + ' (' + s.gate[1] + ')'); }
+      else if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const got = _o11San(type, keep);
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got[k])); });
+    return bad;
+  };
+  /* …and what the load sanitiser does with values off the rows: a number past either end is held at that end, a choice that is not one of
+     the buttons and a colour that is not a colour are left out (absent: the render-time fill then draws the default). `want[k]` undefined
+     means "left out". */
+  const _o11Clamp = (type, give, want) => {
+    const got = _o11San(type, give), bad = [];
+    if (!got) return ['the load sanitiser drops a ' + type + ' carrying ' + JSON.stringify(give)];
+    Object.keys(want).forEach(k => {
+      if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(give[k]) + ' into ' + JSON.stringify(got[k]) + ', not ' + (want[k] === undefined ? 'nothing (it is not a value the row has, so it is left out)' : JSON.stringify(want[k])));
+    });
+    return bad;
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o11Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o11P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o11Pic;
+      const a = _o11Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o11Run(type, _o11Del(P, _O11_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O11_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on a new instance, on that fixture at that moment, through the dispatcher's pixel step */
+  const _o11Moves = (type, over, W, H, pic, t) => E1.count(_o11Run(type, _o11P(type), W, H, pic(W, H), t), _o11Run(type, _o11P(type, over), W, H, pic(W, H), t), 0);
+  /* the cropped readback (a zoomed preview reads only the layer's box) is the whole plate's picture, for a PIXEL_FX kernel */
+  const _o11Crop = (type, over, bad) => { const r = FM._cropIdentity(type, _o11Blk(96, 72), 96, 72, _o11P(type, over), 0.3, 1); if (!r || r.same !== true) bad.push(type + ' ' + JSON.stringify(over) + ': the cropped readback differs from the whole plate in ' + (r ? r.diff : '?') + ' bytes'); };
+  /* open a layer's (only) effect in the inspector and hand back the editor's body, or null; the caller restores the scene */
+  const _o11Open = async (L) => {
+    FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+    let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    if (!body) {
+      const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+      if (!cat) return null;
+      cat.closest('[class*=cat]').click(); await sleep(140);
+      body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    }
+    return body || null;
+  };
+  /* a greyed row whose OWN label is `label`, read from the row's own <label> (round eight's fix): a colour row starts with its ◆ keyframe
+     button, so "the row's text starts with the label" never matches one */
+  const _o11Greyed = (body, label) => Array.prototype.slice.call(body.querySelectorAll('.fx-overridden')).some(n => {
+    const own = n.querySelector(':scope > label');
+    return ((own || n).textContent || '').replace(/^\s*◆\s*/, '').trim().indexOf(label) === 0;
+  });
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect over a grey ground (on the settings _O11_BASE names, if any). CONTROLS: each effect changes the picture against the
+     rect with no effect, and each new control off its default moves the picture through the same compositor, at 1:1. */
+  test('966 opts11 every new control at its default draws what the effect drew without it — each of the round’s effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O11_NEW);
+    TYPES.forEach(type => _o11Need(type, _O11_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const one = params => type => [_o11Rect({ type: type, enabled: true, params: params })];
+    TYPES.forEach(type => {
+      const P = _o11P(type, _O11_BASE[type]);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o11shot(one(Object.assign({}, P))(type), t, W, H, rs, BG);
+        const b = _o11shot(one(_o11Del(P, _O11_NEW[type]))(type), t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O11_NEW[type].join(' / '));
+        if (rs == null) { const off = _o11shot([_o11Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');   /* measured 21 Oct, the same at 1280 and 380: 493 (Remove Object) to 7000 (Threshold) */
+      const base = _o11shot(one(Object.assign({}, P))(type), 0.61, W, H, null, BG);
+      _O11_OFF[type].forEach(o => {
+        const n = E1.count(base, _o11shot(one(Object.assign({}, P, o))(type), 0.61, W, H, null, BG), 2);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* measured 21 Oct, the same at 1280 and 380: Remove Object's Oval 270 (its box corners and its feather) and Angle 616, Sharpen Halos 3293, Threshold Keep picture 3535, the rest 5340 to 7000 — the bound is half the least */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Threshold: Cuts on, Keep picture and Mix ---- */
+  /* eight flat pixels, every mix of 60 and 200 in the three channels */
+  const _O11_TH8 = [[60, 60, 60], [200, 60, 60], [60, 200, 60], [60, 60, 200], [200, 200, 60], [200, 60, 200], [60, 200, 200], [200, 200, 200]];
+  const _o11Th = () => E1.frame(_O11_TH8.length, 1, x => _O11_TH8[x]);
+  test('966 opts11 Threshold has Cuts on (Brightness or Each colour, storing 0 and 1, Brightness by default), Keep picture (Off, Above or Below, storing 0–2, Off by default) and Mix (0–100 %, keyframable, 100 by default), none greyed, while its Below colour greys out under Keep picture Below and its Above colour under Above: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Each colour, Below and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('threshold', _O11_NEW.threshold);
+    const bad = _o11Rows('threshold', [
+      { key: 'chan', label: 'Cuts on', options: ['Brightness', 'Each colour'], def: 0 },
+      { key: 'keep', label: 'Keep picture', options: ['Off', 'Above', 'Below'], def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 },
+      { key: 'color', label: 'Below', colour: true, def: '#000000', gate: ['keep', 'deadAt', 2] },
+      { key: 'color2', label: 'Above', colour: true, def: '#ffffff', gate: ['keep', 'deadAt', 1] }], { chan: 1, keep: 2, mix: 40 });
+    bad.push.apply(bad, _o11Clamp('threshold', { mix: 150 }, { mix: 100 }));
+    bad.push.apply(bad, _o11Clamp('threshold', { mix: -5 }, { mix: 0 }));
+    bad.push.apply(bad, _o11Clamp('threshold', { keep: 3, chan: 2 }, { keep: undefined, chan: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* CUTS ON on the eight pixels at the defaults (Level 0.5, a cut at 127.5, Softness 0). Each colour cuts each channel on its own: a 200
+     takes the Above colour's channel, a 60 the Below colour's, so black and white give the eight flat colours — 0 or 255 per channel, the
+     input's own pattern — and navy #102040 (16, 32, 64) with cream #f0e0c0 (240, 224, 192) give each channel its own swatch's channel.
+     CONTROL: on Brightness every pixel is black or white — brightness 60, 102, 142, 76, 184, 118, 158 and 200 against 127.5, so black,
+     black, white, black, white, black, white, white — two colours in all. Softness 20 % under Each colour ramps each channel on its own:
+     the 128 of (128, 60, 60) is k = smoothstep((128 − 102) / 51) = 0.5147 of the way, 131.2 (±1), its 60s stay 0. */
+  test('966 opts11 Threshold Cuts on: Each colour cuts red, green and blue on their own — eight pixels in every mix of 60 and 200 come out in the eight flat colours black and white make, and with a navy and a cream each channel takes its own swatch’s channel — where Brightness (CONTROL) leaves only black and white; Softness ramps each channel on its own', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('threshold', ['chan']);
+    const bad = [], N = _O11_TH8.length;
+    const run = (over, pic, w) => _o11Run('threshold', _o11P('threshold', over), w || N, 1, pic || _o11Th(), 0.5);
+    const lum = run({}), seen = new Set(), LUM = [0, 0, 255, 0, 255, 0, 255, 255];
+    for (let x = 0; x < N; x++) {
+      const c = _o11At(lum, N, x, 0); seen.add(c.slice(0, 3).join());
+      if (!(c[0] === LUM[x] && c[1] === LUM[x] && c[2] === LUM[x])) bad.push('CONTROL: on Brightness pixel (' + _O11_TH8[x].join(', ') + ') reads (' + c.slice(0, 3).join(', ') + '), not ' + (LUM[x] ? 'white' : 'black'));
+    }
+    if (seen.size > 2) bad.push('CONTROL: on Brightness the eight pixels come out in ' + seen.size + ' colours, not two');
+    if (bad.length) throw new Error(bad.join(' · '));
+    const each = run({ chan: 1 });
+    _O11_TH8.forEach((c, x) => { const want = c.map(v => (v > 127.5 ? 255 : 0)), got = _o11At(each, N, x, 0).slice(0, 3); if (got.join() !== want.join()) bad.push('Each colour: pixel (' + c.join(', ') + ') reads (' + got.join(', ') + '), not (' + want.join(', ') + ')'); });
+    const A = [16, 32, 64], B = [240, 224, 192], sw = run({ chan: 1, color: '#102040', color2: '#f0e0c0' });
+    _O11_TH8.forEach((c, x) => { const want = c.map((v, k) => (v > 127.5 ? B[k] : A[k])), got = _o11At(sw, N, x, 0).slice(0, 3); if (got.join() !== want.join()) bad.push('Each colour with navy and cream: pixel (' + c.join(', ') + ') reads (' + got.join(', ') + '), not (' + want.join(', ') + ')'); });
+    const soft = run({ chan: 1, softness: 20 }, E1.frame(1, 1, () => [128, 60, 60]), 1);
+    if (Math.abs(soft[0] - 131.2) > 1 || soft[1] !== 0 || soft[2] !== 0) bad.push('Each colour at Softness 20 %: (128, 60, 60) reads (' + Array.prototype.slice.call(soft, 0, 3).join(', ') + '), not (131.2, 0, 0)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* KEEP PICTURE on the same eight pixels, black and white. Above: the four over the cut (the 2nd, 4th, 6th and 7th from 0) keep their own
+     colour byte for byte and the four under it take the Below colour, black; Below: the four under it keep theirs and the four over it take
+     the Above colour, white. Under Each colour it goes channel by channel: (200, 60, 60) keeps its 200 and its 60s go black (Above), or
+     keeps its 60s and its 200 goes white (Below). The colour a kept side no longer uses does nothing — a red Above colour under Above, a
+     red Below colour under Below, changes no byte — where under Off (CONTROL) a red Above colour repaints exactly the four lights. */
+  test('966 opts11 Threshold Keep picture: Above keeps the lights in their own colour byte for byte and sends the darks to the Below colour, Below the other way round, channel by channel under Each colour — and the colour the kept side no longer uses changes nothing, where under Off (CONTROL) it repaints its side', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('threshold', ['keep', 'chan']);
+    const bad = [], N = _O11_TH8.length, LIGHT = [false, false, true, false, true, false, true, true];
+    const run = over => _o11Run('threshold', _o11P('threshold', over), N, 1, _o11Th(), 0.5);
+    const off = run({}), offRed = run({ color2: '#ff0000' });
+    let moved = 0; for (let x = 0; x < N; x++) if (_o11At(off, N, x, 0).join() !== _o11At(offRed, N, x, 0).join()) moved++;
+    if (moved !== 4) throw new Error('CONTROL: under Off a red Above colour repaints ' + moved + ' of the eight pixels, not the four lights — nothing below can be read');
+    const ab = run({ keep: 1 }), be = run({ keep: 2 });
+    _O11_TH8.forEach((c, x) => {
+      const a = _o11At(ab, N, x, 0).slice(0, 3).join(), b = _o11At(be, N, x, 0).slice(0, 3).join();
+      const wa = LIGHT[x] ? c.join() : '0,0,0', wb = LIGHT[x] ? '255,255,255' : c.join();
+      if (a !== wa) bad.push('Above: pixel (' + c.join(', ') + ') reads (' + a + '), not (' + wa + ')');
+      if (b !== wb) bad.push('Below: pixel (' + c.join(', ') + ') reads (' + b + '), not (' + wb + ')');
+    });
+    const ea = run({ keep: 1, chan: 1 }), eb = run({ keep: 2, chan: 1 });
+    _O11_TH8.forEach((c, x) => {
+      const a = _o11At(ea, N, x, 0).slice(0, 3).join(), b = _o11At(eb, N, x, 0).slice(0, 3).join();
+      const wa = c.map(v => (v > 127.5 ? v : 0)).join(), wb = c.map(v => (v > 127.5 ? 255 : v)).join();
+      if (a !== wa) bad.push('Above under Each colour: pixel (' + c.join(', ') + ') reads (' + a + '), not (' + wa + ')');
+      if (b !== wb) bad.push('Below under Each colour: pixel (' + c.join(', ') + ') reads (' + b + '), not (' + wb + ')');
+    });
+    if (E1.maxDiff(run({ keep: 1, color2: '#ff0000' }), ab) !== 0) bad.push('under Above a red Above colour still changes the picture');
+    if (E1.maxDiff(run({ keep: 2, color: '#ff0000' }), be) !== 0) bad.push('under Below a red Below colour still changes the picture');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* MIX on the busy picture: at 50 % every channel sits half way between the picture and the whole result (the same settings at 100 %,
+     CONTROL: over a thousand pixels away from the picture), within a level — on the plain two-tone, under Keep picture Above and under
+     Each colour with Softness 30 %; at 0 % the picture byte for byte; a Mix keyed 0 → 100 over a second draws 50 % at 0.5 s. */
+  test('966 opts11 Threshold Mix: at 50 % every pixel sits half way between the picture and the whole result — the two-tone, Keep picture, Each colour — at 0 % it is the picture byte for byte, and a keyed Mix draws its value (CONTROL: each whole result is far from the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('threshold', ['mix']);
+    const W = 96, H = 72, bad = [], pic = _o11Pic(W, H);
+    const run = over => _o11Run('threshold', _o11P('threshold', over), W, H, _o11Pic(W, H), 0.5);
+    [{}, { keep: 1 }, { chan: 1, softness: 30 }].forEach(o => {
+      const full = run(o), half = run(Object.assign({ mix: 50 }, o));
+      if (E1.count(full, pic, 2) < 1000) bad.push('CONTROL: ' + JSON.stringify(o) + ' at 100 % moves only ' + E1.count(full, pic, 2) + ' pixels of the picture');
+      let worst = 0;
+      for (let i = 0; i < pic.length; i++) { if ((i & 3) === 3) continue; const e = Math.abs(half[i] - (pic[i] + (full[i] - pic[i]) * 0.5)); if (e > worst) worst = e; }
+      if (worst > 1) bad.push(JSON.stringify(o) + ' at Mix 50 % is up to ' + worst.toFixed(1) + ' levels from half way between the picture and the whole result');
+    });
+    if (E1.maxDiff(run({ mix: 0 }), pic) !== 0) bad.push('at Mix 0 % the picture moved by up to ' + E1.maxDiff(run({ mix: 0 }), pic) + ' levels');
+    if (E1.maxDiff(run({ mix: _o11KF(0, 100) }), run({ mix: 50 })) !== 0) bad.push('a Mix keyed 0 → 100 does not draw 50 % at 0.5 s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts11 Threshold at Brightness, Off and Mix 100 % draws byte for byte what it drew without them — another Level, Softness, two colours, both, a block on clear, a half-size plate, another moment — and its copy of the loops is the loops themselves there (CONTROL: Each colour, Keep picture and Mix 50 % each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('threshold', _O11_NEW.threshold, ['_threshold11']);
+    const bad = _o11Ident('threshold', [{}, { over: { level: 0.3 } }, { over: { softness: 30 } }, { over: { color: '#102040', color2: '#f0e0c0' } }, { over: { softness: 20, color: '#300000' } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    [{}, { softness: 25 }, { color: '#102040', color2: '#f0e0c0', level: 0.62 }].forEach(o => {
+      const P = _o11P('threshold', o), old = _o11Run('threshold', P, 96, 72, _o11Pic(96, 72)), seam = _o11Pic(96, 72);
+      FM._threshold11(seam, P.level * 255, P.softness, P.color, P.color2, false, 0, 100);
+      if (E1.maxDiff(old, seam) !== 0) bad.push(JSON.stringify(o) + ': threshold11 at Brightness, Off and 100 % is up to ' + E1.maxDiff(old, seam) + ' levels away from the kernel’s own loops');
+    });
+    let n;
+    [[{ chan: 1 }, 'Each colour'], [{ keep: 1 }, 'Keep picture Above'], [{ mix: 50 }, 'Mix 50 %']].forEach(([o, what]) => { if ((n = _o11Moves('threshold', o, 96, 72, _o11Pic, 0.5)) < 500) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Posterize: Band edges and Hue only ---- */
+  /* a saturated hue sweep across the plate (0° at the left edge, so red at both ends), lighter downward — every hue the wheel has */
+  const _o11Hues = (W, H) => E1.frame(W, H, (x, y) => {
+    const h = (x / W) * 360, l = 0.3 + 0.45 * (y / H), c = (1 - Math.abs(2 * l - 1)) * 0.95, hp = h / 60, xx = c * (1 - Math.abs(hp % 2 - 1));
+    let r = 0, g = 0, b = 0;
+    if (hp < 1) { r = c; g = xx; } else if (hp < 2) { r = xx; g = c; } else if (hp < 3) { g = c; b = xx; } else if (hp < 4) { g = xx; b = c; } else if (hp < 5) { r = xx; b = c; } else { r = c; b = xx; }
+    const m = l - c / 2;
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  });
+  /* a pixel's hue in degrees (NaN for a grey), the usual hexcone */
+  const _o11Hue = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), c = mx - mn; if (!(c > 0)) return NaN; let h = mx === r ? (g - b) / c : (mx === g ? (b - r) / c + 2 : (r - g) / c + 4); if (h < 0) h += 6; return h * 60; };
+  test('966 opts11 Posterize has Band edges (0–100 %, keyframable, 0 by default, never greyed) and a third Quantise choice, Hue only (storing 2), under which Band spacing greys out: a new one starts at RGB and 0 %, a saved one without Band edges is filled with 0, the load sanitiser keeps Hue only and 40, holds 150 at 100 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('posterize', _O11_NEW.posterize);
+    const bad = _o11Rows('posterize', [
+      { key: 'soft', label: 'Band edges', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'channels', label: 'Quantise', options: ['RGB', 'Luma only', 'Hue only'], def: 0 },
+      { key: 'gamma', label: 'Band spacing', min: 0.2, max: 4, unit: '', def: 1, gate: ['channels', 'liveWhen', [0, 1]] }], { soft: 40, channels: 2 });
+    bad.push.apply(bad, _o11Clamp('posterize', { soft: 150 }, { soft: 100 }));
+    bad.push.apply(bad, _o11Clamp('posterize', { channels: 3 }, { channels: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BAND EDGES on the grey levels (level v at column v), Levels 5 — a step of 63.75 — RGB, Mix 1, Band spacing 1, so a column's place in the
+     steps is x = v / 63.75. CONTROL (0 %): every column is one of the five step values 0, 64, 128, 191 and 255. At 100 % each step rolls into
+     the next by smoothstep(x − floor x): the ramp never steps back, it takes well over a hundred values, the four band middles (32, 96, 159,
+     223) come out within a level of themselves (smoothstep(½) = ½) and the five landings (0, 64, 128, 191, 255) exactly as at 0 %. At 50 %
+     the roll spans only the middle half of each step, so every column whose x is within 0.24 of a whole step reads exactly what 0 % gives
+     it; the ramp between still climbs, and never steps back. Luma only rolls the same on greys (within a level); a Band edges keyed 0 → 100
+     draws 50 % at 0.5 s. */
+  test('966 opts11 Posterize Band edges: at 100 % the five hard steps of a grey ramp roll smoothly into each other — never stepping back, over a hundred values, each band middle where it was and each landing on its step — and at 50 % only the middle half of each step rolls, the rest exactly the hard steps; Luma only rolls the same and a keyed Band edges draws its value (CONTROL: at 0 % the ramp is five values)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('posterize', ['soft']);
+    const bad = [];
+    const run = over => _o11Run('posterize', _o11P('posterize', over), 256, 2, _o11Lv(), 0.5);
+    const hard = run({}), STEPS = [0, 64, 128, 191, 255];
+    const vals = d => { const s = new Set(); for (let v = 0; v < 256; v++) s.add(d[v * 4]); return s; };
+    const hv = vals(hard);
+    if (hv.size !== 5 || STEPS.some(v => !hv.has(v))) throw new Error('CONTROL: at Band edges 0 % the ramp takes ' + hv.size + ' values (' + Array.from(hv).join(', ') + '), not the five steps — the worked values below do not hold');
+    const climbs = (d, what) => { for (let v = 1; v < 256; v++) if (d[v * 4] < d[(v - 1) * 4]) { bad.push(what + ': grey ' + v + ' reads ' + d[v * 4] + ', below grey ' + (v - 1) + '’s ' + d[(v - 1) * 4] + ' — the ramp steps back'); return; } };
+    const s100 = run({ soft: 100 });
+    climbs(s100, 'Band edges 100 %');
+    if (vals(s100).size < 100) bad.push('at Band edges 100 % the ramp takes only ' + vals(s100).size + ' values — the steps are not rolling into each other');
+    [32, 96, 159, 223].forEach(v => { if (Math.abs(s100[v * 4] - v) > 1) bad.push('at Band edges 100 % the band middle ' + v + ' reads ' + s100[v * 4]); });
+    STEPS.forEach(v => { if (s100[v * 4] !== hard[v * 4]) bad.push('at Band edges 100 % the landing ' + v + ' reads ' + s100[v * 4] + ', not ' + hard[v * 4]); });
+    const s50 = run({ soft: 50 });
+    climbs(s50, 'Band edges 50 %');
+    let held = 0, rolled = 0;
+    for (let v = 0; v < 256; v++) {
+      const x = v / 63.75, f = x - Math.floor(x);
+      if (f <= 0.24 || f >= 0.76) { held++; if (s50[v * 4] !== hard[v * 4]) { bad.push('at Band edges 50 % grey ' + v + ' (' + f.toFixed(3) + ' of the way through its step) reads ' + s50[v * 4] + ', not the hard step’s ' + hard[v * 4]); break; } }
+      else if (s50[v * 4] !== hard[v * 4]) rolled++;
+    }
+    if (held < 100 || rolled < 50) bad.push('at Band edges 50 % ' + held + ' columns sit on a landing and ' + rolled + ' roll — not the half and half a 50 % roll gives');
+    const luma = _o11Run('posterize', _o11P('posterize', { soft: 100, channels: 1 }), 256, 2, _o11Lv(), 0.5);
+    if (E1.maxDiff(luma, s100) > 1) bad.push('under Luma only a grey ramp at Band edges 100 % is up to ' + E1.maxDiff(luma, s100) + ' levels from RGB’s — a grey should roll the same');
+    if (E1.maxDiff(run({ soft: _o11KF(0, 100) }), s50) !== 0) bad.push('a Band edges keyed 0 → 100 does not draw 50 % at 0.5 s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* HUE ONLY on the hue sweep at Levels 6, so the hues it steps to are 0°, 60° … 300° — red, yellow, green, cyan, blue and magenta. Every
+     pixel keeps its own largest and smallest channel, exactly (its HSV value and saturation), and with six steps its hue lands exactly on
+     a primary or a secondary, so each of its channels IS its old largest or its old smallest; the hue it lands on is the nearest of the six,
+     within 30° of its own. A grey ramp is untouched byte for byte (a grey has no hue). Band spacing plays no part: 2.5 draws exactly 1's
+     picture. CONTROL: RGB moves the largest or smallest channel of thousands of the sweep's pixels; and at Band edges 100 % the hues roll
+     between the six — over 30 distinct hues where 0 % has six. Mix 50 % sits half way (within a level). */
+  test('966 opts11 Posterize Hue only: at Levels 6 every pixel of a hue sweep lands exactly on the nearest of red, yellow, green, cyan, blue and magenta while keeping its own brightest and darkest channel, a grey ramp is untouched, Band spacing counts for nothing, Band edges rolls the hues and Mix sits half way (CONTROL: RGB changes the brightest or darkest channel of thousands of pixels)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('posterize', ['soft']);
+    const ch = ((FM.fxRegistry.paramsOf('posterize') || []).filter(p => p.key === 'channels')[0] || {}).options || [];
+    if (!ch.some(o => o[0] === 2 && o[1] === 'Hue only')) throw new Error('Posterize’s Quantise has no Hue only (2) — #966 opts11 (hunt/fx11) is not built');
+    const W = 96, H = 72, bad = [], pic = _o11Hues(W, H);
+    const run = over => _o11Run('posterize', _o11P('posterize', Object.assign({ levels: 6 }, over)), W, H, _o11Hues(W, H), 0.5);
+    const mm = (d, i) => [Math.max(d[i], d[i + 1], d[i + 2]), Math.min(d[i], d[i + 1], d[i + 2])];
+    const rgb = run({});
+    let movedC = 0; for (let i = 0; i < pic.length; i += 4) { const a = mm(pic, i), b = mm(rgb, i); if (a[0] !== b[0] || a[1] !== b[1]) movedC++; }
+    if (movedC < 2000) throw new Error('CONTROL: on RGB only ' + movedC + ' pixels change their brightest or darkest channel — the sweep cannot show what Hue only keeps');
+    const hue = run({ channels: 2 });
+    let n = 0;
+    for (let i = 0; i < pic.length; i += 4) {
+      const a = mm(pic, i), b = mm(hue, i), H0 = _o11Hue(pic[i], pic[i + 1], pic[i + 2]), H1 = _o11Hue(hue[i], hue[i + 1], hue[i + 2]);
+      const onPS = [0, 1, 2].every(c => hue[i + c] === a[0] || hue[i + c] === a[1]);
+      let dh = Math.abs(H1 - H0); if (dh > 180) dh = 360 - dh;
+      if ((a[0] !== b[0] || a[1] !== b[1] || !onPS || !(dh <= 30.5)) && a[0] > a[1] && n++ < 4) bad.push('pixel ' + (i >> 2) + ' (' + Array.prototype.slice.call(pic, i, i + 3).join(', ') + ', hue ' + H0.toFixed(1) + '°) reads (' + Array.prototype.slice.call(hue, i, i + 3).join(', ') + ', hue ' + H1.toFixed(1) + '°)');
+    }
+    if (n > 4) bad.push(n + ' pixels in all are not their own brightest and darkest channel on the nearest of the six hues');
+    if (E1.maxDiff(_o11Run('posterize', _o11P('posterize', { levels: 6, channels: 2 }), 256, 2, _o11Lv(), 0.5), _o11Lv()) !== 0) bad.push('Hue only moved a grey');
+    if (E1.maxDiff(run({ channels: 2, gamma: 2.5 }), hue) !== 0) bad.push('under Hue only a Band spacing of 2.5 changes the picture');
+    const hueSet = d => { const s = new Set(); for (let i = 0; i < d.length; i += 4) { const h = _o11Hue(d[i], d[i + 1], d[i + 2]); if (h === h && Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) >= 60) s.add(Math.round(h)); } return s; };
+    if (hueSet(hue).size > 6) bad.push('at Band edges 0 % Hue only gives ' + hueSet(hue).size + ' distinct hues, not six');
+    if (hueSet(run({ channels: 2, soft: 100 })).size < 30) bad.push('at Band edges 100 % Hue only gives only ' + hueSet(run({ channels: 2, soft: 100 })).size + ' distinct hues — the hues are not rolling between the six');
+    const half = run({ channels: 2, mix: 0.5 });
+    let worst = 0; for (let i = 0; i < pic.length; i++) { if ((i & 3) === 3) continue; const e = Math.abs(half[i] - (pic[i] + (hue[i] - pic[i]) * 0.5)); if (e > worst) worst = e; }
+    if (worst > 1) bad.push('Hue only at Mix 0.5 is up to ' + worst.toFixed(1) + ' levels from half way');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts11 Posterize at RGB or Luma only and Band edges 0 % draws byte for byte what it drew without Band edges — Levels 2, 3 and 12, half Mix, Luma only, a Band spacing, all three, a block on clear, a half-size plate, another moment (CONTROL: Band edges and Hue only each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('posterize', _O11_NEW.posterize, ['_posterize11']);
+    const bad = _o11Ident('posterize', [{}, { over: { levels: 2 } }, { over: { levels: 3 } }, { over: { levels: 12 } }, { over: { mix: 0.5 } }, { over: { channels: 1 } }, { over: { gamma: 2.2 } }, { over: { channels: 1, gamma: 0.6, mix: 0.7 } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    let n;
+    [[{ soft: 60 }, 'Band edges 60 %'], [{ channels: 2 }, 'Hue only']].forEach(([o, what]) => { if ((n = _o11Moves('posterize', o, 96, 72, _o11Pic, 0.5)) < 500) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Solarize: Flip colour and Stretch ---- */
+  test('966 opts11 Solarize has Stretch (Off or On, storing 0 and 1, Off by default) and a Flip colour (white), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps On and #4080c0 and leaves out a choice that is not a button and a colour that is not one', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('solarize', _O11_NEW.solarize);
+    const bad = _o11Rows('solarize', [
+      { key: 'stretch', label: 'Stretch', options: ['Off', 'On'], def: 0 },
+      { key: 'color', label: 'Flip colour', colour: true, def: '#ffffff' }], { stretch: 1, color: '#4080c0' });
+    bad.push.apply(bad, _o11Clamp('solarize', { stretch: 2 }, { stretch: undefined }));
+    bad.push.apply(bad, _o11Clamp('solarize', { color: 'zz' }, { color: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* FLIP COLOUR on the grey levels at the defaults (Flips above 0.5, a cut at 127.5, Softness 0, Mix 1). White (CONTROL) is the plain flip:
+     every grey up to 127 stays itself and every grey from 128 becomes 255 − v. Under #4080c0 (64, 128, 192) the greys up to 127 still stay
+     themselves, byte for byte, and a grey v from 128 becomes its negative in that colour, (255 − v) x (64, 128, 192) / 255 — grey 200 reads
+     (13.8, 27.6, 41.4) — within a level, on Each colour and on Brightness alike (a grey's brightness is itself). Mix 50 % sits half way
+     between the picture and that; a colour keyed white → #4080c0 over a second is #a0c0e0 at 0.5 s (resolveFxColors' channel lerp) and
+     draws exactly what #a0c0e0 draws. */
+  test('966 opts11 Solarize Flip colour: under a steel blue every grey above the cut turns to its negative in that colour — grey 200 reads (13.8, 27.6, 41.4) — and every grey below it stays itself byte for byte, on Each colour and on Brightness, Mix lays it on half way and a keyed colour draws its colour of the moment (CONTROL: white is the plain negative, 255 − v)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('solarize', ['color']);
+    const bad = [], T = [64, 128, 192];
+    const run = over => _o11Run('solarize', _o11P('solarize', over), 256, 2, _o11Lv(), 0.5);
+    const white = run({});
+    for (let v = 0; v < 256; v++) { const want = v <= 127 ? v : 255 - v; if (white[v * 4] !== want || white[v * 4 + 1] !== want || white[v * 4 + 2] !== want) throw new Error('CONTROL: under a white Flip colour grey ' + v + ' reads ' + white[v * 4] + ', not ' + want + ' — the kernel is not the flip this test reasons from'); }
+    const check = (d, what) => {
+      let n = 0;
+      for (let v = 0; v < 256; v++) {
+        const got = [d[v * 4], d[v * 4 + 1], d[v * 4 + 2]], want = v <= 127 ? [v, v, v] : T.map(c => (255 - v) * c / 255);
+        const off = v <= 127 ? got.some(q => q !== v) : got.some((q, c) => Math.abs(q - want[c]) > 1);
+        if (off && n++ < 3) bad.push(what + ': grey ' + v + ' reads (' + got.join(', ') + '), not (' + want.map(q => q.toFixed(1)).join(', ') + ')');
+      }
+      if (n > 3) bad.push(what + ': ' + n + ' greys in all are off');
+    };
+    const cool = run({ color: '#4080c0' });
+    check(cool, 'Each colour under #4080c0');
+    check(run({ color: '#4080c0', mode: 1 }), 'Brightness under #4080c0');
+    const half = run({ color: '#4080c0', mix: 0.5 }), lv = _o11Lv();
+    let worst = 0; for (let i = 0; i < lv.length; i++) { if ((i & 3) === 3) continue; const e = Math.abs(half[i] - (lv[i] + (cool[i] - lv[i]) * 0.5)); if (e > worst) worst = e; }
+    if (worst > 1) bad.push('under #4080c0 at Mix 0.5 a grey is up to ' + worst.toFixed(1) + ' levels from half way');
+    if (E1.maxDiff(run({ color: _o11KF('#ffffff', '#4080c0') }), run({ color: '#a0c0e0' })) !== 0) bad.push('a Flip colour keyed white → #4080c0 does not draw #a0c0e0 at 0.5 s');
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
+  });
+
+  /* STRETCH on the grey levels, white. At the default cut (127.5) the brightest a hard flip leaves is 127.5, so the picture is doubled:
+     grey v up to 127 reads 2v and grey v from 128 reads 2 x (255 − v), exactly — 127 and 128 both 254, 0 and 255 both 0 — where Off (CONTROL)
+     never goes above 127. At Flips above 0.25 (a cut at 63.75) the most left is 191.25, so x 4/3: v up to 63 reads 4v/3 and v from 64 reads
+     4(255 − v)/3, grey 64 254.7 (±1). Stretch under a Flip colour stretches the tinted flip; Mix 50 % sits half way. */
+  test('966 opts11 Solarize Stretch: the solarised grey ramp is spread over the whole range — doubled at the default cut, so greys 127 and 128 both read 254 and 0 and 255 both 0, and four-thirds at a quarter cut — under a Flip colour too, and Mix lays it on half way (CONTROL: Off never goes above 127)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('solarize', ['stretch']);
+    const bad = [];
+    const run = over => _o11Run('solarize', _o11P('solarize', over), 256, 2, _o11Lv(), 0.5);
+    let top = 0; const off = run({}); for (let v = 0; v < 256; v++) top = Math.max(top, off[v * 4]);
+    if (top !== 127) throw new Error('CONTROL: with Stretch Off the solarised ramp reaches ' + top + ', not 127 — the worked values below do not hold');
+    const s2 = run({ stretch: 1 });
+    for (let v = 0; v < 256; v++) { const want = v <= 127 ? 2 * v : 2 * (255 - v); if (s2[v * 4] !== want || s2[v * 4 + 2] !== want) { bad.push('Stretch at the default cut: grey ' + v + ' reads ' + s2[v * 4] + ', not ' + want); break; } }
+    const q = run({ stretch: 1, threshold: 0.25 });
+    for (let v = 0; v < 256; v++) { const want = (v <= 63 ? v : 255 - v) * 4 / 3; if (Math.abs(q[v * 4] - want) > 1) { bad.push('Stretch at Flips above 0.25: grey ' + v + ' reads ' + q[v * 4] + ', not ' + want.toFixed(1)); break; } }
+    const T = [64, 128, 192], tc = run({ stretch: 1, color: '#4080c0' });
+    for (let v = 128; v < 256; v += 8) { const want = T.map(c => 2 * (255 - v) * c / 255), got = [tc[v * 4], tc[v * 4 + 1], tc[v * 4 + 2]]; if (got.some((g, c) => Math.abs(g - want[c]) > 1)) { bad.push('Stretch under #4080c0: grey ' + v + ' reads (' + got.join(', ') + '), not (' + want.map(w => w.toFixed(1)).join(', ') + ')'); break; } }
+    const half = run({ stretch: 1, mix: 0.5 }), lv = _o11Lv();
+    let worst = 0; for (let i = 0; i < lv.length; i++) { if ((i & 3) === 3) continue; const e = Math.abs(half[i] - (lv[i] + (s2[i] - lv[i]) * 0.5)); if (e > worst) worst = e; }
+    if (worst > 1) bad.push('Stretch at Mix 0.5 is up to ' + worst.toFixed(1) + ' levels from half way');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts11 Solarize at white and Stretch Off draws byte for byte what it drew without them — another cut, Softness, half Mix, Brightness, all of them, a block on clear, a half-size plate, another moment — its copy of the lines is the lines themselves there, and the cropped readback with either on is the whole plate’s (CONTROL: a Flip colour and Stretch each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('solarize', _O11_NEW.solarize, ['_solarize11']);
+    const bad = _o11Ident('solarize', [{}, { over: { threshold: 0.3 } }, { over: { softness: 0.4 } }, { over: { mix: 0.6 } }, { over: { mode: 1 } }, { over: { mode: 1, softness: 0.2, mix: 0.5 } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    [{}, { softness: 0.3, mix: 0.7 }, { mode: 1, softness: 0.2, threshold: 0.4 }].forEach(o => {
+      const P = _o11P('solarize', o), old = _o11PX('solarize', P, 96, 72, _o11Pic(96, 72)), seam = _o11Pic(96, 72);
+      FM._solarize11(seam, P.threshold * 255, P.softness, P.mix, P.mode === 1, [255, 255, 255], false);
+      if (E1.maxDiff(old, seam) !== 0) bad.push(JSON.stringify(o) + ': solarize11 at white and Off is up to ' + E1.maxDiff(old, seam) + ' levels away from the kernel’s own lines');
+    });
+    let n;
+    [[{ color: '#4080c0' }, 'a #4080c0 Flip colour'], [{ stretch: 1 }, 'Stretch']].forEach(([o, what]) => { if ((n = _o11Moves('solarize', o, 96, 72, _o11Pic, 0.5)) < 500) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels'); });
+    [{ stretch: 1 }, { color: '#4080c0' }, { stretch: 1, color: '#c08040', softness: 0.3 }].forEach(o => _o11Crop('solarize', o, bad));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Sharpen: Halos and Limit halos ---- */
+  test('966 opts11 Sharpen has Halos (Both, Dark only or Light only, storing 0–2, Both by default) and Limit halos (0–100 %, keyframable, 0 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Light only and 60, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('sharpen', _O11_NEW.sharpen);
+    const bad = _o11Rows('sharpen', [
+      { key: 'halo', label: 'Halos', options: ['Both', 'Dark only', 'Light only'], def: 0 },
+      { key: 'limit', label: 'Limit halos', min: 0, max: 100, unit: '%', def: 0 }], { halo: 2, limit: 60 });
+    bad.push.apply(bad, _o11Clamp('sharpen', { limit: 150 }, { limit: 100 }));
+    bad.push.apply(bad, _o11Clamp('sharpen', { limit: -5 }, { limit: 0 }));
+    bad.push.apply(bad, _o11Clamp('sharpen', { halo: 3 }, { halo: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* HALOS on a hard step, 32 x 6, grey 80 left of column 16 and 180 from it, at the defaults (Amount 1.5, Radius 1, no skipping). A flat
+     pixel is 7v − 4v x 1.5 = v, so only the two edge columns move: column 15 is 80 x 7 − (3 x 80 + 180) x 1.5 = −70 (black) and column 16
+     is 180 x 7 − (3 x 180 + 80) x 1.5 = 330 (white). CONTROL Both: 0 and 255. Dark only keeps the dip and leaves 16 at 180; Light only keeps
+     the rim and leaves 15 at 80; every other pixel is the step itself, and Brightness only gives the same numbers on a grey edge. */
+  const _o11Step = () => E1.frame(32, 6, x => (x < 16 ? [80, 80, 80] : [180, 180, 180]));
+  test('966 opts11 Sharpen Halos: on a hard grey step the sharpened edge is a black dip and a white rim (CONTROL: Both), Dark only keeps the dip and leaves the light side as it was, Light only keeps the rim and leaves the dark side as it was, every other pixel untouched — on Colour and on Brightness only', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('sharpen', ['halo']);
+    const bad = [];
+    const row = d => { const r = []; for (let x = 0; x < 32; x++) r.push(d[(2 * 32 + x) * 4]); return r; };
+    const want = (c15, c16) => { const r = []; for (let x = 0; x < 32; x++) r.push(x === 15 ? c15 : (x === 16 ? c16 : (x < 16 ? 80 : 180))); return r; };
+    [0, 1].forEach(mode => {
+      const run = over => _o11PX('sharpen', _o11P('sharpen', Object.assign({ mode: mode }, over)), 32, 6, _o11Step(), 0.5);
+      const both = row(run({}));
+      if (both.join() !== want(0, 255).join()) throw new Error('CONTROL: under Both (mode ' + mode + ') the step’s middle row reads ' + both.join(' ') + ' — not the dip to 0 and the rim to 255 this test reasons from');
+      const dk = row(run({ halo: 1 })), lt = row(run({ halo: 2 }));
+      if (dk.join() !== want(0, 180).join()) bad.push('Dark only (mode ' + mode + ') reads ' + dk.slice(12, 20).join(' ') + ' across the edge (columns 12–19), not 80 80 80 0 180 180 180 180');
+      if (lt.join() !== want(80, 255).join()) bad.push('Light only (mode ' + mode + ') reads ' + lt.slice(12, 20).join(' ') + ' across the edge (columns 12–19), not 80 80 80 80 255 180 180 180');
+      const all = run({ halo: 1 });
+      for (let i = 3; i < all.length; i += 4) if (all[i] !== 255) { bad.push('Dark only touched the alpha'); break; }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* LIMIT HALOS on a soft step, 24 x 6, greys 80 up to column 7, then 85, 100, 130, 160, 175, and 180 from column 13. At the defaults
+     column 7 overshoots to 72.5, 8 to 70, 9 to 77.5, 11 to 182.5, 12 to 190 and 13 to 187.5 (10, on the straight middle, stays 130).
+     At 100 % each is held inside the lightest and darkest of itself and its four taps — 80, 80, 85, 130, 175, 180, 180 — so the edge still
+     steepens (8, 9, 11 and 12 move) and nothing overshoots; at 50 % each lands half way, 76.3, 75, 81.3, 130, 178.8, 185, 183.8 (±1). Every
+     pixel of the plate at 100 % sits inside its own neighbourhood's range (CONTROL: at 0 % some fall over 5 levels outside it). A keyed
+     Limit halos 0 → 100 draws 50 % at 0.5 s. */
+  const _O11_SOFT = [80, 80, 80, 80, 80, 80, 80, 80, 85, 100, 130, 160, 175, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180];
+  const _o11Soft = () => E1.frame(24, 6, x => [_O11_SOFT[x], _O11_SOFT[x], _O11_SOFT[x]]);
+  test('966 opts11 Sharpen Limit halos: at 100 % a soft edge still steepens but no pixel goes past the lightest or darkest of itself and its four neighbours — 80, 80, 85, 130, 175, 180, 180 across it — at 50 % each lands half way, and a keyed Limit halos draws its value (CONTROL: at 0 % the edge overshoots both ways)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('sharpen', ['limit']);
+    const bad = [], W = 24, H = 6, src = _o11Soft();
+    const run = over => _o11PX('sharpen', _o11P('sharpen', over), W, H, _o11Soft(), 0.5);
+    const row = d => { const r = []; for (let x = 0; x < W; x++) r.push(d[(2 * W + x) * 4]); return r; };
+    const outside = d => { let worst = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const at = (xx, yy) => src[((yy < 0 ? 0 : (yy > H - 1 ? H - 1 : yy)) * W + (xx < 0 ? 0 : (xx > W - 1 ? W - 1 : xx))) * 4];
+      const nb = [at(x, y), at(x - 1, y), at(x + 1, y), at(x, y - 1), at(x, y + 1)], v = d[(y * W + x) * 4];
+      const e = Math.max(Math.min.apply(null, nb) - v, v - Math.max.apply(null, nb), 0); if (e > worst) worst = e; } return worst; };
+    const zero = run({});
+    if (!(outside(zero) > 5)) throw new Error('CONTROL: at Limit halos 0 % no pixel overshoots its neighbourhood by more than 5 levels (' + outside(zero) + ') — the fixture cannot show what the limit holds back');
+    const full = run({ limit: 100 }), half = run({ limit: 50 });
+    const W100 = _O11_SOFT.slice(), W50 = _O11_SOFT.slice();
+    [[7, 80, 76.25], [8, 80, 75], [9, 85, 81.25], [10, 130, 130], [11, 175, 178.75], [12, 180, 185], [13, 180, 183.75]].forEach(([x, a, b]) => { W100[x] = a; W50[x] = b; });
+    const rf = row(full), rh = row(half);
+    if (rf.join() !== W100.join()) bad.push('at 100 % the middle row reads ' + rf.slice(6, 15).join(' ') + ' across the edge (columns 6–14), not ' + W100.slice(6, 15).join(' '));
+    if (rh.some((v, x) => Math.abs(v - W50[x]) > 1)) bad.push('at 50 % the middle row reads ' + rh.slice(6, 15).join(' ') + ' across the edge, not ' + W50.slice(6, 15).map(v => +v.toFixed(2)).join(' '));
+    if (outside(full) > 0) bad.push('at 100 % a pixel still sits ' + outside(full) + ' levels outside its own neighbourhood');
+    if (E1.count(full, src, 0) < 20) bad.push('at 100 % only ' + E1.count(full, src, 0) + ' pixels move — the edge no longer steepens');
+    if (E1.maxDiff(run({ limit: _o11KF(0, 100) }), half) !== 0) bad.push('a Limit halos keyed 0 → 100 does not draw 50 % at 0.5 s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts11 Sharpen at Both and Limit halos 0 % draws byte for byte what it drew without them — a wider Radius, Skip flat areas, Brightness only, all three, a strong Amount, a block on clear, a half-size plate, another moment — its copy of the kernel is the kernel itself there, and the cropped readback with either on is the whole plate’s (CONTROL: Dark only and Limit halos each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('sharpen', _O11_NEW.sharpen, ['_sharpen11']);
+    const bad = _o11Ident('sharpen', [{}, { over: { radius: 3 } }, { over: { threshold: 20 } }, { over: { mode: 1 } }, { over: { radius: 2, mode: 1, threshold: 8 } }, { over: { amount: 3 } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    [[{}, 1, 0, false], [{ radius: 3, threshold: 12 }, 3, 12, false], [{ mode: 1, radius: 2 }, 2, 0, true]].forEach(([o, r, thr, luma]) => {
+      const P = _o11P('sharpen', o), old = _o11PX('sharpen', P, 96, 72, _o11Pic(96, 72)), seam = _o11Pic(96, 72);
+      FM._sharpen11(seam, _o11Pic(96, 72), 96, 72, P.amount, r, thr, luma, 0, 0);
+      if (E1.maxDiff(old, seam) !== 0) bad.push(JSON.stringify(o) + ': sharpen11 at Both and 0 % is up to ' + E1.maxDiff(old, seam) + ' levels away from the kernel itself');
+    });
+    let n;
+    [[{ halo: 1 }, 'Dark only'], [{ limit: 100 }, 'Limit halos 100 %']].forEach(([o, what]) => { if ((n = _o11Moves('sharpen', o, 96, 72, _o11Pic, 0.5)) < 500) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels'); });
+    [{ halo: 1 }, { limit: 100 }, { halo: 2, limit: 50, radius: 3 }].forEach(o => _o11Crop('sharpen', o, bad));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Box Blur: Mix and Blend ---- */
+  test('966 opts11 Box Blur has Mix (0–100 %, keyframable, 100 by default) and Blend (Normal, Screen or Soft light — Gaussian Blur’s three, storing 0–2, Normal by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and Soft light, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('boxblur', _O11_NEW.boxblur);
+    const bad = _o11Rows('boxblur', [
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 },
+      { key: 'blend', label: 'Blend', options: ['Normal', 'Screen', 'Soft light'], def: 0 }], { mix: 40, blend: 2 });
+    bad.push.apply(bad, _o11Clamp('boxblur', { mix: 150 }, { mix: 100 }));
+    bad.push.apply(bad, _o11Clamp('boxblur', { mix: -5 }, { mix: 0 }));
+    bad.push.apply(bad, _o11Clamp('boxblur', { blend: 3 }, { blend: undefined }));
+    /* one stored number, one meaning: the very choices Gaussian Blur's Blend stores, so a value means the same blend on both */
+    const opt = type => JSON.stringify(((FM.fxRegistry.paramsOf(type) || []).filter(p => p.key === 'blend')[0] || {}).options);
+    if (opt('boxblur') !== opt('blur')) bad.push('Box Blur’s Blend is ' + opt('boxblur') + ', not Gaussian Blur’s ' + opt('blur'));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* MIX AND BLEND on the busy picture (opaque), at the defaults (Radius 8, Vertical amount 100 %, Smoothness 1). The whole blur B is the
+     kernel at Normal 100 % (CONTROL: it darkens over 500 channels of the bright checker cells by more than 2 levels — a blur pulls a light
+     cell toward its dark neighbours). Mix 50 % sits half way between the picture P and B, within a level; Mix 0 % is P byte for byte; a Mix
+     keyed 0 → 100 draws 50 % at 0.5 s. Screen is the W3C screen of B over P, 255 x (b + p − b p), within a level, so no channel comes out
+     darker than the picture; Soft light is the W3C soft light of B (source) over P (backdrop) — BLUR_BLEND's own formula, copied in
+     _o11SL — within a level. */
+  const _o11SL = (s, d) => { if (s <= 0.5) return d - (1 - 2 * s) * d * (1 - d); const D = d <= 0.25 ? ((16 * d - 12) * d + 4) * d : Math.sqrt(d); return d + (2 * s - 1) * (D - d); };
+  test('966 opts11 Box Blur Mix and Blend: Mix 50 % sits half way between the picture and the whole blur, Mix 0 % is the picture byte for byte, a keyed Mix draws its value, Screen lays the blur over the picture as W3C Screen does so nothing gets darker, and Soft light as W3C Soft light (CONTROL: the whole blur darkens the bright cells)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('boxblur', _O11_NEW.boxblur);
+    const W = 96, H = 72, bad = [], P = _o11Pic(W, H);
+    const run = over => _o11PX('boxblur', _o11P('boxblur', over), W, H, _o11Pic(W, H), 0.5);
+    const B = run({});
+    let darker = 0; for (let i = 0; i < P.length; i++) { if ((i & 3) === 3) continue; if (B[i] < P[i] - 2) darker++; }
+    if (darker < 500) throw new Error('CONTROL: the whole blur darkens only ' + darker + ' channels of the picture by more than 2 levels — the fixture cannot show what Screen keeps');
+    const near = (d, f, what) => { let worst = 0, at = -1; for (let i = 0; i < P.length; i++) { if ((i & 3) === 3) continue; const e = Math.abs(d[i] - f(P[i], B[i])); if (e > worst) { worst = e; at = i >> 2; } } if (worst > 1) bad.push(what + ' is up to ' + worst.toFixed(1) + ' levels from its formula (pixel ' + at + ')'); };
+    near(run({ mix: 50 }), (p, b) => p + (b - p) * 0.5, 'Mix 50 %');
+    if (E1.maxDiff(run({ mix: 0 }), P) !== 0) bad.push('at Mix 0 % the picture moved by up to ' + E1.maxDiff(run({ mix: 0 }), P) + ' levels');
+    if (E1.maxDiff(run({ mix: _o11KF(0, 100) }), run({ mix: 50 })) !== 0) bad.push('a Mix keyed 0 → 100 does not draw 50 % at 0.5 s');
+    const S = run({ blend: 1 });
+    near(S, (p, b) => 255 * (b / 255 + p / 255 - (b / 255) * (p / 255)), 'Screen');
+    let dk = 0; for (let i = 0; i < P.length; i++) { if ((i & 3) === 3) continue; if (S[i] < P[i] - 1) dk++; }
+    if (dk) bad.push('under Screen ' + dk + ' channels came out darker than the picture');
+    near(run({ blend: 2 }), (p, b) => 255 * _o11SL(b / 255, p / 255), 'Soft light');
+    near(run({ blend: 1, mix: 50 }), (p, b) => p + (255 * (b / 255 + p / 255 - (b / 255) * (p / 255)) - p) * 0.5, 'Screen at Mix 50 %');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ON A BLOCK ON CLEAR (the layer's own alpha matters): under Screen the glow spreading over the clear plate beside the block is the plain
+     blur there byte for byte (the sharp layer has nothing there to screen against), while inside the block nothing gets darker; and the
+     kernel handed the layer's box (its row and column skipping, #692) draws exactly what it draws without one, under Screen at Mix 60 % and
+     under Soft light. CONTROL: the blur spreads past the block (some clear pixel gains alpha). */
+  test('966 opts11 Box Blur on a block on clear: under Screen the glow over the clear plate beside the block is the plain blur byte for byte and nothing inside the block gets darker, and handed the layer’s box the kernel draws what it draws without one, Mix and Blend on (CONTROL: the blur spreads past the block)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('boxblur', _O11_NEW.boxblur);
+    const W = 96, H = 72, bad = [], src = _o11Blk(W, H);
+    const run = (over, bb) => { const d = _o11Blk(W, H); FM._FX_TABLES.PIXEL_FX.boxblur(d, W, H, _o11P('boxblur', over), 0.5, 1, bb); return d; };
+    const plain = run({}), scr = run({ blend: 1 });
+    let spread = 0, offOut = 0, darkIn = 0;
+    for (let i = 0; i < src.length; i += 4) {
+      if (src[i + 3] === 0) { if (plain[i + 3] > 0) spread++; if (plain[i] !== scr[i] || plain[i + 1] !== scr[i + 1] || plain[i + 2] !== scr[i + 2] || plain[i + 3] !== scr[i + 3]) offOut++; }
+      else for (let c = 0; c < 3; c++) if (scr[i + c] < src[i + c] - 1) { darkIn++; break; }
+    }
+    if (spread < 200) throw new Error('CONTROL: the blur spreads onto only ' + spread + ' clear pixels — the fixture cannot show the glow');
+    if (offOut) bad.push('under Screen ' + offOut + ' clear pixels beside the block are not the plain blur');
+    if (darkIn) bad.push('under Screen ' + darkIn + ' pixels of the block came out darker');
+    const BB = { x: 20, y: 10, w: 50, h: 40 };
+    [{ blend: 1, mix: 60 }, { blend: 2 }, { mix: 30, aspect: 0, passes: 2 }].forEach(o => { const m = E1.maxDiff(run(o, BB), run(o)); if (m !== 0) bad.push(JSON.stringify(o) + ': handed the layer’s box the kernel is up to ' + m + ' levels away from the same without it'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts11 Box Blur at Normal and Mix 100 % draws byte for byte what it drew without them — a small and a large Radius, a sideways smear, a smoother tall one, Radius 0, a block on clear, a half-size plate, another moment — and the cropped readback with either on is the whole plate’s (CONTROL: Mix 50 % and Screen each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('boxblur', _O11_NEW.boxblur, ['_boxBlur11']);
+    const bad = _o11Ident('boxblur', [{}, { over: { radius: 3 } }, { over: { radius: 20 } }, { over: { aspect: 0 } }, { over: { aspect: 150, passes: 3 } }, { over: { radius: 0 } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    let n;
+    [[{ mix: 50 }, 'Mix 50 %'], [{ blend: 1 }, 'Screen']].forEach(([o, what]) => { if ((n = _o11Moves('boxblur', o, 96, 72, _o11Pic, 0.5)) < 500) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels'); });
+    [{ mix: 50 }, { blend: 1 }, { blend: 2, mix: 70, aspect: 0 }].forEach(o => _o11Crop('boxblur', o, bad));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Remove Object: Shape and Angle ---- */
+  test('966 opts11 Remove Object has Shape (Box or Oval — Censor’s words, storing 0 and 1, Box by default) and Angle (−180° to 180°, keyframable, 0 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Oval and −30, holds 400 at 180 and −999 at −180 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('touchup', _O11_NEW.touchup, ['_touchup11']);
+    const bad = _o11Rows('touchup', [
+      { key: 'shape', label: 'Shape', options: ['Box', 'Oval'], def: 0 },
+      { key: 'angle', label: 'Angle', min: -180, max: 180, unit: '°', def: 0 }], { shape: 1, angle: -30 });
+    bad.push.apply(bad, _o11Clamp('touchup', { angle: 400 }, { angle: 180 }));
+    bad.push.apply(bad, _o11Clamp('touchup', { angle: -999 }, { angle: -180 }));
+    bad.push.apply(bad, _o11Clamp('touchup', { shape: 2 }, { shape: undefined }));
+    /* the same words and the same stored numbers as Censor's Shape, so the two read alike */
+    const opt = (type, k) => JSON.stringify(((FM.fxRegistry.paramsOf(type) || []).filter(p => p.key === k)[0] || {}).options);
+    if (opt('touchup', 'shape') !== opt('censor', 'shape')) bad.push('Remove Object’s Shape is ' + opt('touchup', 'shape') + ', not Censor’s ' + opt('censor', 'shape'));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* OVAL, unturned, Feather 0, on the busy picture at 200 x 150: the box is X 20 Y 20 Width 60 Height 50 %, so (40, 30) 120 x 75 px, its
+     centre (100, 67.5), its half-axes 60 and 37.5, the whole box and its one-pixel ring well inside the plate. Unturned, touchup11's buffer
+     is an exact copy of the box and ring, and the kernel run on it fills exactly what it fills on the plate — Patch from the same border
+     pixels at the same distances, Blur and Mosaic over the same region with the same radius and blocks — so in every fill every pixel well
+     inside the oval (ρ² under 0.97, ρ the pixel centre's radius in it) is the Box's own pixel, byte for byte, and every pixel well outside it
+     (ρ² over 1.03) is the picture, byte for byte. CONTROL: under Box hundreds of those outside pixels — the box's corners — are filled. */
+  test('966 opts11 Remove Object Oval: unturned and unfeathered, in Patch, Blur and Mosaic alike, every pixel inside the oval is the Box’s own pixel byte for byte and every pixel outside it is the picture byte for byte (CONTROL: the Box fills its corners)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('touchup', ['shape']);
+    const W = 200, H = 150, bad = [], pic = _o11Pic(W, H), G = { x: 20, y: 20, w: 60, h: 50, feather: 0 };
+    const run = over => _o11PX('touchup', _o11P('touchup', Object.assign({}, G, over)), W, H, _o11Pic(W, H), 0.5);
+    [0, 1, 2].forEach(mode => {
+      const box = run({ mode: mode }), ov = run({ mode: mode, shape: 1 });
+      let corners = 0, inOff = 0, outOff = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const u = (x + 0.5 - 100) / 60, v = (y + 0.5 - 67.5) / 37.5, r2 = u * u + v * v, i = (y * W + x) * 4;
+        const same = (a, b) => a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2] && a[i + 3] === b[i + 3];
+        if (r2 < 0.97) { if (!same(ov, box)) inOff++; }
+        else if (r2 > 1.03) { if (!same(ov, pic)) outOff++; if (!same(box, pic)) corners++; }
+      }
+      if (corners < 300) bad.push('CONTROL: under Box (fill ' + mode + ') only ' + corners + ' pixels outside the oval are filled — the corners cannot show what Oval leaves');
+      if (inOff) bad.push('fill ' + mode + ': ' + inOff + ' pixels inside the oval differ from the Box’s');
+      if (outOff) bad.push('fill ' + mode + ': ' + outOff + ' pixels outside the oval are not the picture');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ANGLE on a flat grey 200 x 150 plate (128) crossed by a red bar (220, 40, 40) turned 30° clockwise about (100, 75): every pixel whose
+     centre has |u| ≤ 30 and |v| ≤ 4, u = dx cos 30° + dy sin 30° and v = dy cos 30° − dx sin 30° about that point. Remove Object, Patch,
+     Feather 0, an 80 x 20 box centred there (X 30, Y 43.33, Width 40, Height 13.33 %) at Angle 30: the bar lies wholly inside the turned
+     box, 10 px and more short of its ends and 6 px short of its sides, so the one-pixel ring the patch is built from is all grey and every
+     pixel of the plate comes out grey 128 (±1). The same box at Angle 0 (CONTROL), or turned the other way (−30°), leaves the bar's ends red
+     — over 30 pixels each. An Oval at 30° (the bar's corners at ρ² = 0.75² + 0.4² = 0.72) removes it too. Blur and Mosaic at 30° change
+     nothing farther than a pixel and a half outside the turned box, and do change the bar. An Angle keyed 0 → 60 over a second draws 30° at
+     0.5 s. */
+  const _o11Bar = () => E1.frame(200, 150, (x, y) => {
+    const dx = x + 0.5 - 100, dy = y + 0.5 - 75, c = Math.cos(Math.PI / 6), s = Math.sin(Math.PI / 6), u = dx * c + dy * s, v = dy * c - dx * s;
+    return (Math.abs(u) <= 30 && Math.abs(v) <= 4) ? [220, 40, 40] : [128, 128, 128];
+  });
+  test('966 opts11 Remove Object Angle: an 80 by 20 box turned 30 degrees paints out a red bar turned the same way, leaving the whole plate grey, and so does an oval, where the unturned box (CONTROL) and one turned the other way leave its ends red; Blur and Mosaic change nothing outside the turned box, and a keyed Angle draws its value', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('touchup', ['angle']);
+    const W = 200, H = 150, bad = [], G = { x: 30, y: 100 * 65 / 150, w: 40, h: 100 * 20 / 150, feather: 0, mode: 0 };
+    const run = over => _o11PX('touchup', _o11P('touchup', Object.assign({}, G, over)), W, H, _o11Bar(), 0.5);
+    const red = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 150 && d[i + 1] < 100) n++; return n; };
+    if (red(_o11Bar()) < 400) throw new Error('setup: the bar is only ' + red(_o11Bar()) + ' pixels');
+    const a0 = run({}), aw = run({ angle: -30 });
+    if (red(a0) < 30) throw new Error('CONTROL: the unturned box leaves only ' + red(a0) + ' red pixels of the turned bar — it cannot show what turning the box does');
+    if (red(aw) < 30) bad.push('turned the other way (−30°) the box leaves only ' + red(aw) + ' red pixels — Angle does not turn clockwise, as Censor’s does');
+    const grey = (d, what) => { let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - 128) > 1 || Math.abs(d[i + 1] - 128) > 1 || Math.abs(d[i + 2] - 128) > 1 || d[i + 3] !== 255) n++; if (n) bad.push(what + ': ' + n + ' pixels are not grey 128'); };
+    const a30 = run({ angle: 30 });
+    grey(a30, 'a box at 30°');
+    grey(run({ angle: 30, shape: 1 }), 'an oval at 30°');
+    [1, 2].forEach(mode => {
+      const d = run({ angle: 30, mode: mode }), src = _o11Bar();
+      let outside = 0, inside = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const dx = x + 0.5 - 100, dy = y + 0.5 - 75, c = Math.cos(Math.PI / 6), s = Math.sin(Math.PI / 6), u = dx * c + dy * s, v = dy * c - dx * s, i = (y * W + x) * 4;
+        const moved = d[i] !== src[i] || d[i + 1] !== src[i + 1] || d[i + 2] !== src[i + 2] || d[i + 3] !== src[i + 3];
+        if (Math.abs(u) > 41.5 || Math.abs(v) > 11.5) { if (moved) outside++; } else if (moved) inside++;
+      }
+      if (outside) bad.push('fill ' + mode + ' at 30°: ' + outside + ' pixels outside the turned box changed');
+      if (inside < 100) bad.push('fill ' + mode + ' at 30°: only ' + inside + ' pixels inside the turned box changed');
+    });
+    if (E1.maxDiff(run({ angle: _o11KF(0, 60) }), a30) !== 0) bad.push('an Angle keyed 0 → 60 does not draw 30° at 0.5 s');
+    /* the round 11 review: off 0° the feather was measured half a pixel short of the kernel's own, so a keyed Angle passing 0 jumped */
+    [12, 2].forEach(F => { const P0 = _o11P('touchup', { x: 20, y: 20, w: 60, h: 50, feather: F }), z = _o11PX('touchup', P0, W, H, _o11Pic(W, H), 0.5), e = _o11PX('touchup', Object.assign({}, P0, { angle: 1e-4 }), W, H, _o11Pic(W, H), 0.5), m = E1.maxDiff(z, e); if (m > 1) bad.push('Feather ' + F + ': an Angle a hair off 0° draws up to ' + m + ' levels away from 0° — a keyed Angle jumps as it passes 0'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts11 Remove Object at Box and 0° draws byte for byte what it drew without Shape and Angle — Blur, Mosaic, Feather 0, a stronger Blur, a bigger box, a block on clear, a half-size plate, another moment (CONTROL: Oval and an Angle each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('touchup', _O11_NEW.touchup, ['_touchup11']);
+    const bad = _o11Ident('touchup', [{}, { over: { mode: 1 } }, { over: { mode: 2 } }, { over: { feather: 0 } }, { over: { mode: 1, strength: 2 } }, { over: { x: 5, y: 10, w: 90, h: 80 } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    let n;
+    [[{ shape: 1 }, 'Oval', 700], [{ angle: 30 }, 'Angle 30°', 1000]].forEach(([o, what, min]) => { if ((n = _o11Moves('touchup', o, 192, 144, _o11Pic, 0.5)) < min) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels' /* measured 21 Oct, the same at 1280 and 380: Oval 1471, Angle 30° 2188 — each bound about half */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- the panel ---- */
+  /* THE GATES, as the inspector draws them, each row read by its own <label> (_o11Greyed). Threshold's Below colour is live on a new one and
+     greys out under Keep picture Below, its Above colour under Above; Posterize's Band spacing is live on a new one (RGB) and greys out under
+     Hue only. CONTROL: each editor shows the row's label, so its state was read. */
+  test('966 opts11 the gates in the inspector: Threshold’s Below colour greys out under Keep picture Below and its Above colour under Above, and Posterize’s Band spacing under Hue only — and each is live on a new one', { item: '966', budgetMs: 60000 }, async function () {
+    const CASES = [
+      ['threshold', 'Below', false, { keep: 2 }, true],
+      ['threshold', 'Above', false, { keep: 1 }, true],
+      ['posterize', 'Band spacing', false, { channels: 2 }, true]];
+    CASES.forEach(c => _o11Need(c[0], _O11_NEW[c[0]]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const [type, label, ga, b, gb] of CASES) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type); fx._expanded = true; L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        let body = await _o11Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(label) < 0) { bad.push('CONTROL: the ' + type + ' editor has no “' + label + '”, so its gate was not measured'); continue; }
+        if (_o11Greyed(body, label) !== ga) bad.push(type + ': on a new one “' + label + '” is ' + (ga ? 'not greyed out' : 'greyed out'));
+        Object.assign(fx.params, b); FM.inspector.refresh(); await sleep(60);
+        body = document.querySelector('.fx-row.fx-open .fx-ed-body') || await _o11Open(L);
+        if (!body) { bad.push(type + ': the editor closed after ' + JSON.stringify(b) + ', so nothing more was measured'); continue; }
+        if (_o11Greyed(body, label) !== gb) bad.push(type + ': with ' + JSON.stringify(b) + ' “' + label + '” is ' + (gb ? 'still live' : 'still greyed out'));
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT A PHONE (round ten's check, for this round's effects). ship.sh runs the suite a second time at 380 px, so this is a
+     phone check on every release. Each editor, opened in the inspector, scrolls nothing sideways and keeps every control inside the panel.
+     CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
+  test('966 opts11 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = { threshold: 'Keep picture', posterize: 'Band edges', solarize: 'Stretch', sharpen: 'Limit halos', boxblur: 'Blend', touchup: 'Angle' };
+    Object.keys(NEW).forEach(type => _o11Need(type, _O11_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o11Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts11 ──
 })();
