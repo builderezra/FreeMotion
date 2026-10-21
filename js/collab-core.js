@@ -350,7 +350,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =4487778860768040;   // SCHEMA_REV 28 on v17.84 + bug hunt 7 and its leftovers (#1176): the sanitiser keeps a clip's trimStart, start, key times and caption word starts past 3600 s, and fp_2 in the fixture pins those bounds. Pinned 20 Oct with fp.js at rev 28.
+  C.SCHEMA_FP =5902942737566653;   // SCHEMA_REV 29 on v17.90 + #966 round eleven: twelve new effect keys, Posterize's third button, and the registry term now hashes each button row's values. Pinned 21 Oct with fp.js at rev 29.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
