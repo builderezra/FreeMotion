@@ -423,7 +423,7 @@ window.FM = window.FM || {};
        ONE DOOR ASKS FOR IT: js/timeline.js openFromArea (the empty project's area, its big +, Enter on it) passes
        { grow: true, origin: {x, y} } — the finger, or for a key the +'s centre (the slim row's door, openFromRow, asks for
        the stretch below instead). Every other caller passes nothing and gets the old path, untouched. The setting is
-       FM.settings 'addMenuGrow' (off unless he turns it on, #545); reduced motion never grows — the menu arrives exactly as
+       FM.settings 'addMenuGrow' (on by default since his 21 Oct rule; off gives today's slide-up); reduced motion never grows — the menu arrives exactly as
        it does today.
        HOW: `.add-grow` goes on BEFORE `.open`, so no style pass ever sees `.open` without it (that would start the swing,
        fm-hinge-up); `#add-sheet.open.add-grow` (styles.css) turns the swing and the slide off, so the sheet sits where it

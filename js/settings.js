@@ -72,12 +72,12 @@ window.FM = window.FM || {};
     collabCodesOnly: false,
     /* QUEUE 1084: on a phone, the Add menu on an empty project grows out of where you tapped (a circle, 260 ms) instead of
        swinging up from the bottom. His words: "just have a toggle switch to change the two modes in the settings" — the
-       old slide-up stays one tap away. OFF by default until he has seen it (#545: never ship a look he has not seen — the
-       frames went to him with v17.59, 17 Oct; the plan's "ON by default" was the logger's, not his words): turning it on is
-       his, and making it the default is a one-line change once he says so. Read live by js/mobile.js when the menu opens;
-       a local look, nothing about it travels or is saved in a project. In load()'s whitelist below, or it would be the #688
-       bug again. */
-    addMenuGrow: false,
+       old slide-up stays one tap away. It was OFF by default until he had seen it (#545; the frames went to him with v17.59).
+       ON since his 21 Oct words, "im pretty fine with ur choices then correcting later if i think its bad": the review page's
+       recommended answer (on, the row stretch at 300 ms) ships, and he corrects it there or with this switch. Read live by
+       js/mobile.js when the menu opens; a local look, nothing about it travels or is saved in a project. In load()'s
+       whitelist below, or it would be the #688 bug again. */
+    addMenuGrow: true,
     /* SIMPLE 2.7 (#1122 clause 2, his pick A): More transition controls. His sheet showed the ◇ and None · Crossfade · Dip to black ·
        Dip to white; the row's Length and On every cut, and Turn into a transition on a hand-made crossfade (with its ◇), are looks he
        has not seen. They were built OFF (#545); since his 21 Oct words, "im pretty fine with ur choices then correcting later if i think

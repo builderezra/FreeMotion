@@ -154589,7 +154589,7 @@
      and "just have a toggle switch to change the two modes in the settings". His pick, 7 Oct: "i want the circle one for when
      a project is empty" (a, 260 ms). Half b (the add row stretching, on a project with layers) waits on his OK of its redraw,
      so the slim row keeps the slide-up and nothing here asks it to grow.
-     The setting is FM.settings 'addMenuGrow', ON by default (the plan). Every reading is of the ANIMATION — its keyframes,
+     The setting is FM.settings 'addMenuGrow', ON by default (since his 21 Oct rule; OFF before it). Every reading is of the ANIMATION — its keyframes,
      seeked — and the computed clip-path, never a class name alone; seeked because this runner may fire no frames while it is
      not fronted (the 571/616/964 notes). Phone checks mean something at a phone width only, so every one runs inside
      onEmptyArea964 / onEmpty981, which narrow the frame themselves (both suite passes). */
@@ -154893,11 +154893,11 @@
       const sfOff = FM.settings.get('systemFonts');
       loadWith(Object.assign({}, base, { systemFonts: true }));
       if (sfOff !== false || FM.settings.get('systemFonts') !== true) throw new Error('CONTROL: a reload did not bring Show system fonts back as saved (' + sfOff + ', ' + FM.settings.get('systemFonts') + '), so this reload proves nothing');
-      /* OFF for a phone that never chose (#545, 17 Oct): a new look ships only after he has seen it — the frames went to him
-         with v17.59 — so today's slide-up stays until he turns this on, and on by default is the one-line follow-up. */
+      /* ON for a phone that never chose, since his 21 Oct words ("im pretty fine with ur choices then correcting later if i
+         think its bad"): the review page's recommended answer ships, and he corrects it with this switch. It was OFF (#545). */
       const fresh = loadWith(base);
-      if (fresh !== false) throw new Error('a phone that never chose has the Add menu animation setting ' + JSON.stringify(fresh) + ' — it must start OFF, today’s slide-up, until he has seen the new one (#545)');
-      if (loadWith(null) !== false) throw new Error('with no saved settings at all the Add menu animation setting is not off');
+      if (fresh !== true) throw new Error('a phone that never chose has the Add menu animation setting ' + JSON.stringify(fresh) + ' — it must start ON (his 21 Oct rule: the recommended answer ships, he corrects it)');
+      if (loadWith(null) !== true) throw new Error('with no saved settings at all the Add menu animation setting is not on');
       FM.settings.set(KEY1084, true);
       let stored = null;
       try { stored = JSON.parse(localStorage.getItem(KEY))[KEY1084]; } catch (e) {}
@@ -154905,7 +154905,7 @@
       FM.settings.init();
       if (FM.settings.get(KEY1084) !== true) throw new Error('turned on, saved, and back OFF after a reload — load() dropped it (the #688 whitelist bug)');
       if (loadWith(Object.assign({}, base, { addMenuGrow: false })) !== false) throw new Error('saved off, it came back on');
-      if (loadWith(Object.assign({}, base, { addMenuGrow: 'on' })) !== false) throw new Error('a hand-edited value that is not true or false was taken instead of the default');
+      if (loadWith(Object.assign({}, base, { addMenuGrow: 'off' })) !== true) throw new Error('a hand-edited value that is not true or false was taken instead of the default (on)');
       // THE SWITCH: in the phone's Settings, reading the saved value; not on PC, where this menu never opens
       loadWith(Object.assign({}, base, { addMenuGrow: false }));
       await atPhoneWidth(async function () {
