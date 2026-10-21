@@ -175268,7 +175268,7 @@
    * Posterize, Solarize, Sharpen, Box Blur and Remove Object (hunt/fx11). His words: "polish other effects just giving them more features
    * … more choices always better … this is the complex version we want as much choice as possible". WRITTEN WITHOUT RUNNING (21 Oct, while
    * a release shipped on this machine): nothing but `node --check`. Every number below is reasoned from the code it names, the reasoning
-   * beside it; a bound only a run can set says MEASURE beside it. Every test fails on d05c14b7 on its first line by NAMING the missing
+   * beside it; a bound only a run can set says MEASURE beside it. Every test fails on v17.90's code (e5f45a50) on its first line by NAMING the missing
    * control or seam, never with a TypeError. Each effect has round ten's four kinds: (a) its rows, ranges, choices, gates and what the load
    * sanitiser keeps, clamps and drops, (b) what each new control does, on a fixture that holds what separates right from wrong, (c) at the
    * defaults the kernel is today's picture byte for byte, (d) a CONTROL — every new control moves the very fixtures (c) holds still.
@@ -175431,11 +175431,11 @@
         if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O11_NEW[type].join(' / '));
         if (rs == null) { const off = _o11shot([_o11Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
       }));
-      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');   /* measured 21 Oct, the same at 1280 and 380: 493 (Remove Object) to 7000 (Threshold) */
       const base = _o11shot(one(Object.assign({}, P))(type), 0.61, W, H, null, BG);
       _O11_OFF[type].forEach(o => {
         const n = E1.count(base, _o11shot(one(Object.assign({}, P, o))(type), 0.61, W, H, null, BG), 2);
-        if (n < 100) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE at 1280 and 380: reasoned in the thousands for most; the least is Remove Object's Oval (its box corners and its feather), a few hundred */);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* measured 21 Oct, the same at 1280 and 380: Remove Object's Oval 270 (its box corners and its feather) and Angle 616, Sharpen Halos 3293, Threshold Keep picture 3535, the rest 5340 to 7000 — the bound is half the least */);
       });
     });
     if (bad.length) throw new Error(bad.join(' · '));
@@ -175968,7 +175968,7 @@
     _o11Need('touchup', _O11_NEW.touchup, ['_touchup11']);
     const bad = _o11Ident('touchup', [{}, { over: { mode: 1 } }, { over: { mode: 2 } }, { over: { feather: 0 } }, { over: { mode: 1, strength: 2 } }, { over: { x: 5, y: 10, w: 90, h: 80 } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
     let n;
-    [[{ shape: 1 }, 'Oval', 100], [{ angle: 30 }, 'Angle 30°', 500]].forEach(([o, what, min]) => { if ((n = _o11Moves('touchup', o, 192, 144, _o11Pic, 0.5)) < min) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels' /* MEASURE: reasoned in the thousands for both */); });
+    [[{ shape: 1 }, 'Oval', 700], [{ angle: 30 }, 'Angle 30°', 1000]].forEach(([o, what, min]) => { if ((n = _o11Moves('touchup', o, 192, 144, _o11Pic, 0.5)) < min) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels' /* measured 21 Oct, the same at 1280 and 380: Oval 1471, Angle 30° 2188 — each bound about half */); });
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
