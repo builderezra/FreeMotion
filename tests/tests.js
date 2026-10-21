@@ -175286,8 +175286,8 @@
   };
   /* every new key, by effect, and every new control off its default on the effect's own default settings (a colour off its default in
      every channel) */
-  const _O11_NEW = { threshold: ['chan', 'keep', 'mix'], posterize: ['soft'] };
-  const _O11_OFF = { threshold: [{ chan: 1 }, { keep: 1 }, { mix: 50 }], posterize: [{ soft: 60 }, { channels: 2 }] };
+  const _O11_NEW = { threshold: ['chan', 'keep', 'mix'], posterize: ['soft'], solarize: ['stretch', 'color'] };
+  const _O11_OFF = { threshold: [{ chan: 1 }, { keep: 1 }, { mix: 50 }], posterize: [{ soft: 60 }, { channels: 2 }], solarize: [{ stretch: 1 }, { color: '#4080c0' }] };
   const _o11P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
   const _o11Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
   /* a PIXEL_FX kernel straight, with exactly these params (ps 1 unless given; no layer, no box) */
@@ -175646,6 +175646,84 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ---- Solarize: Flip colour and Stretch ---- */
+  test('966 opts11 Solarize has Stretch (Off or On, storing 0 and 1, Off by default) and a Flip colour (white), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps On and #4080c0 and leaves out a choice that is not a button and a colour that is not one', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('solarize', _O11_NEW.solarize);
+    const bad = _o11Rows('solarize', [
+      { key: 'stretch', label: 'Stretch', options: ['Off', 'On'], def: 0 },
+      { key: 'color', label: 'Flip colour', colour: true, def: '#ffffff' }], { stretch: 1, color: '#4080c0' });
+    bad.push.apply(bad, _o11Clamp('solarize', { stretch: 2 }, { stretch: undefined }));
+    bad.push.apply(bad, _o11Clamp('solarize', { color: 'zz' }, { color: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* FLIP COLOUR on the grey levels at the defaults (Flips above 0.5, a cut at 127.5, Softness 0, Mix 1). White (CONTROL) is the plain flip:
+     every grey up to 127 stays itself and every grey from 128 becomes 255 − v. Under #4080c0 (64, 128, 192) the greys up to 127 still stay
+     themselves, byte for byte, and a grey v from 128 becomes its negative in that colour, (255 − v) x (64, 128, 192) / 255 — grey 200 reads
+     (13.8, 27.6, 41.4) — within a level, on Each colour and on Brightness alike (a grey's brightness is itself). Mix 50 % sits half way
+     between the picture and that; a colour keyed white → #4080c0 over a second is #a0c0e0 at 0.5 s (resolveFxColors' channel lerp) and
+     draws exactly what #a0c0e0 draws. */
+  test('966 opts11 Solarize Flip colour: under a steel blue every grey above the cut turns to its negative in that colour — grey 200 reads (13.8, 27.6, 41.4) — and every grey below it stays itself byte for byte, on Each colour and on Brightness, Mix lays it on half way and a keyed colour draws its colour of the moment (CONTROL: white is the plain negative, 255 − v)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('solarize', ['color']);
+    const bad = [], T = [64, 128, 192];
+    const run = over => _o11Run('solarize', _o11P('solarize', over), 256, 2, _o11Lv(), 0.5);
+    const white = run({});
+    for (let v = 0; v < 256; v++) { const want = v <= 127 ? v : 255 - v; if (white[v * 4] !== want || white[v * 4 + 1] !== want || white[v * 4 + 2] !== want) throw new Error('CONTROL: under a white Flip colour grey ' + v + ' reads ' + white[v * 4] + ', not ' + want + ' — the kernel is not the flip this test reasons from'); }
+    const check = (d, what) => {
+      let n = 0;
+      for (let v = 0; v < 256; v++) {
+        const got = [d[v * 4], d[v * 4 + 1], d[v * 4 + 2]], want = v <= 127 ? [v, v, v] : T.map(c => (255 - v) * c / 255);
+        const off = v <= 127 ? got.some(q => q !== v) : got.some((q, c) => Math.abs(q - want[c]) > 1);
+        if (off && n++ < 3) bad.push(what + ': grey ' + v + ' reads (' + got.join(', ') + '), not (' + want.map(q => q.toFixed(1)).join(', ') + ')');
+      }
+      if (n > 3) bad.push(what + ': ' + n + ' greys in all are off');
+    };
+    const cool = run({ color: '#4080c0' });
+    check(cool, 'Each colour under #4080c0');
+    check(run({ color: '#4080c0', mode: 1 }), 'Brightness under #4080c0');
+    const half = run({ color: '#4080c0', mix: 0.5 }), lv = _o11Lv();
+    let worst = 0; for (let i = 0; i < lv.length; i++) { if ((i & 3) === 3) continue; const e = Math.abs(half[i] - (lv[i] + (cool[i] - lv[i]) * 0.5)); if (e > worst) worst = e; }
+    if (worst > 1) bad.push('under #4080c0 at Mix 0.5 a grey is up to ' + worst.toFixed(1) + ' levels from half way');
+    if (E1.maxDiff(run({ color: _o11KF('#ffffff', '#4080c0') }), run({ color: '#a0c0e0' })) !== 0) bad.push('a Flip colour keyed white → #4080c0 does not draw #a0c0e0 at 0.5 s');
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
+  });
+
+  /* STRETCH on the grey levels, white. At the default cut (127.5) the brightest a hard flip leaves is 127.5, so the picture is doubled:
+     grey v up to 127 reads 2v and grey v from 128 reads 2 x (255 − v), exactly — 127 and 128 both 254, 0 and 255 both 0 — where Off (CONTROL)
+     never goes above 127. At Flips above 0.25 (a cut at 63.75) the most left is 191.25, so x 4/3: v up to 63 reads 4v/3 and v from 64 reads
+     4(255 − v)/3, grey 64 254.7 (±1). Stretch under a Flip colour stretches the tinted flip; Mix 50 % sits half way. */
+  test('966 opts11 Solarize Stretch: the solarised grey ramp is spread over the whole range — doubled at the default cut, so greys 127 and 128 both read 254 and 0 and 255 both 0, and four-thirds at a quarter cut — under a Flip colour too, and Mix lays it on half way (CONTROL: Off never goes above 127)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('solarize', ['stretch']);
+    const bad = [];
+    const run = over => _o11Run('solarize', _o11P('solarize', over), 256, 2, _o11Lv(), 0.5);
+    let top = 0; const off = run({}); for (let v = 0; v < 256; v++) top = Math.max(top, off[v * 4]);
+    if (top !== 127) throw new Error('CONTROL: with Stretch Off the solarised ramp reaches ' + top + ', not 127 — the worked values below do not hold');
+    const s2 = run({ stretch: 1 });
+    for (let v = 0; v < 256; v++) { const want = v <= 127 ? 2 * v : 2 * (255 - v); if (s2[v * 4] !== want || s2[v * 4 + 2] !== want) { bad.push('Stretch at the default cut: grey ' + v + ' reads ' + s2[v * 4] + ', not ' + want); break; } }
+    const q = run({ stretch: 1, threshold: 0.25 });
+    for (let v = 0; v < 256; v++) { const want = (v <= 63 ? v : 255 - v) * 4 / 3; if (Math.abs(q[v * 4] - want) > 1) { bad.push('Stretch at Flips above 0.25: grey ' + v + ' reads ' + q[v * 4] + ', not ' + want.toFixed(1)); break; } }
+    const T = [64, 128, 192], tc = run({ stretch: 1, color: '#4080c0' });
+    for (let v = 128; v < 256; v += 8) { const want = T.map(c => 2 * (255 - v) * c / 255), got = [tc[v * 4], tc[v * 4 + 1], tc[v * 4 + 2]]; if (got.some((g, c) => Math.abs(g - want[c]) > 1)) { bad.push('Stretch under #4080c0: grey ' + v + ' reads (' + got.join(', ') + '), not (' + want.map(w => w.toFixed(1)).join(', ') + ')'); break; } }
+    const half = run({ stretch: 1, mix: 0.5 }), lv = _o11Lv();
+    let worst = 0; for (let i = 0; i < lv.length; i++) { if ((i & 3) === 3) continue; const e = Math.abs(half[i] - (lv[i] + (s2[i] - lv[i]) * 0.5)); if (e > worst) worst = e; }
+    if (worst > 1) bad.push('Stretch at Mix 0.5 is up to ' + worst.toFixed(1) + ' levels from half way');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts11 Solarize at white and Stretch Off draws byte for byte what it drew without them — another cut, Softness, half Mix, Brightness, all of them, a block on clear, a half-size plate, another moment — its copy of the lines is the lines themselves there, and the cropped readback with either on is the whole plate’s (CONTROL: a Flip colour and Stretch each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('solarize', _O11_NEW.solarize, ['_solarize11']);
+    const bad = _o11Ident('solarize', [{}, { over: { threshold: 0.3 } }, { over: { softness: 0.4 } }, { over: { mix: 0.6 } }, { over: { mode: 1 } }, { over: { mode: 1, softness: 0.2, mix: 0.5 } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    [{}, { softness: 0.3, mix: 0.7 }, { mode: 1, softness: 0.2, threshold: 0.4 }].forEach(o => {
+      const P = _o11P('solarize', o), old = _o11PX('solarize', P, 96, 72, _o11Pic(96, 72)), seam = _o11Pic(96, 72);
+      FM._solarize11(seam, P.threshold * 255, P.softness, P.mix, P.mode === 1, [255, 255, 255], false);
+      if (E1.maxDiff(old, seam) !== 0) bad.push(JSON.stringify(o) + ': solarize11 at white and Off is up to ' + E1.maxDiff(old, seam) + ' levels away from the kernel’s own lines');
+    });
+    let n;
+    [[{ color: '#4080c0' }, 'a #4080c0 Flip colour'], [{ stretch: 1 }, 'Stretch']].forEach(([o, what]) => { if ((n = _o11Moves('solarize', o, 96, 72, _o11Pic, 0.5)) < 500) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels'); });
+    [{ stretch: 1 }, { color: '#4080c0' }, { stretch: 1, color: '#c08040', softness: 0.3 }].forEach(o => _o11Crop('solarize', o, bad));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
   /* ---- the panel ---- */
   /* THE GATES, as the inspector draws them, each row read by its own <label> (_o11Greyed). Threshold's Below colour is live on a new one and
      greys out under Keep picture Below, its Above colour under Above; Posterize's Band spacing is live on a new one (RGB) and greys out under
@@ -175681,7 +175759,7 @@
      phone check on every release. Each editor, opened in the inspector, scrolls nothing sideways and keeps every control inside the panel.
      CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
   test('966 opts11 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
-    const NEW = { threshold: 'Keep picture', posterize: 'Band edges' };
+    const NEW = { threshold: 'Keep picture', posterize: 'Band edges', solarize: 'Stretch' };
     Object.keys(NEW).forEach(type => _o11Need(type, _O11_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];
     try {

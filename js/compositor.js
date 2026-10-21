@@ -176,7 +176,13 @@ window.FM = window.FM || {};
       { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0 },
       { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'mode', label: 'Flips on', def: 0, options: [[0, 'Each colour'], [1, 'Brightness']] },
-    ] },
+      /* #966 opts11 (hunt/fx11, his "more choices always better"): what flipped always turned to its plain negative, and what was left
+         was a dark, flat picture (at the default nothing ever comes out above mid-grey). FLIP COLOUR (the colour row) tints the flipped
+         tones — they turn to their negative in that colour (Man Ray's coloured solarisation; white is the plain negative) and nothing below
+         the cut moves — and STRETCH spreads the result over the whole range, so the brightest a hard flip can leave becomes white (the
+         Solarize-then-Auto-levels look). White and Off run the old lines untouched (solarize11 only off them). */
+      { key: 'stretch', label: 'Stretch', def: 0, options: [[0, 'Off'], [1, 'On']], note: 'Spreads what is left over the whole range: the solarised picture at full contrast' },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Flip colour' },
     { type: 'gamma', label: 'Gamma', params: [
       { key: 'gamma', label: 'Gamma', min: 0.1, max: 10, step: 0.05, def: 1.8 },
       { key: 'red', label: 'Red', min: 0.2, max: 5, step: 0.02, def: 1 },
@@ -8608,6 +8614,11 @@ window.FM = window.FM || {};
       let sfMix = p.mix == null ? 1 : FM.evalProp(p.mix, t);
       if (sfMix < 0) sfMix = 0; if (sfMix > 1) sfMix = 1; if (sfMix <= 0) return;
       const sfLuma = (p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0)) === 1;
+      /* #966 opts11: FLIP COLOUR (the colour row; white, and absent, is the plain negative) and STRETCH — a colour off white, or Stretch
+         On, runs solarize11, the lines below with the two laid in; white and Off run the lines below untouched. */
+      const sfT11 = hexToRGB(typeof p.color === 'string' && p.color ? p.color : '#ffffff');
+      const sfS11 = (p.stretch == null ? 0 : (Math.round(FM.evalProp(p.stretch, t)) | 0)) === 1;
+      if (sfT11[0] !== 255 || sfT11[1] !== 255 || sfT11[2] !== 255 || sfS11) { solarize11(d, thr, sfSoft, sfMix, sfLuma, sfT11, sfS11); return; }
       if (sfSoft === 0 && sfMix === 1 && !sfLuma) {
         for (let i = 0; i < d.length; i += 4) {
           if (d[i] > thr) d[i] = 255 - d[i];
@@ -14175,6 +14186,26 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._posterize11 = posterize11;   // suite seam (#966 opts11)
+  /* SOLARIZE'S FLIP COLOUR AND STRETCH: the kernel's lines to the letter (the same cut, the same Softness ramp w, the same Flips on — each
+     channel on its own value, or all three on the pixel's brightness — and the same Mix k = w x Mix), with the negative a flipped channel
+     turns toward taken in the Flip colour: (255 − value) x colour / 255, so white is the plain negative and what does not flip never
+     moves. STRETCH then multiplies the solarised pixel by 255 / max(cut, 255 − cut) — the brightest a hard flip can leave, which becomes
+     white (x 2 at the default cut, so 127 and 128 both come out at 254) — before Mix lays it over the picture; the bytes clamp what a
+     softened flip pushes past 255. Unstretched it is the kernel's own k-form, so at white it is the kernel byte for byte. */
+  function solarize11(d, thr, soft, mix, luma, tint, stretch) {
+    const band = soft * 255, f = [tint[0] / 255, tint[1] / 255, tint[2] / 255];
+    const w = v => (band <= 0 ? (v > thr ? 1 : 0) : (v <= thr ? 0 : (v >= thr + band ? 1 : (v - thr) / band)));
+    const top = thr > 255 - thr ? thr : 255 - thr, G = stretch && top > 0 ? 255 / top : 1;
+    for (let i = 0; i < d.length; i += 4) {
+      const kl = luma ? w(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) : 0;
+      for (let c = 0; c < 3; c++) {
+        const j = i + c, v = d[j], wv = luma ? kl : w(v), neg = (255 - v) * f[c];
+        if (G === 1) { const k = wv * mix; if (k > 0) d[j] = v + (neg - v) * k; }
+        else d[j] = v + ((v + (neg - v) * wv) * G - v) * mix;
+      }
+    }
+  }
+  FM._solarize11 = solarize11;   // suite seam (#966 opts11)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {

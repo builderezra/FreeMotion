@@ -596,7 +596,7 @@ window.FM = window.FM || {};
     /* Clock speed and Leading zero: #966 opts7 */ timecode: 'Shows the running time of the clip, in the format you pick — at any speed, for a time-lapse clock, with or without its leading zero.',
 
     // Stylize / other
-    solarize: 'Inverts everything above a brightness cut, the way overexposed film does.',
+    /* in a colour, at full contrast: #966 opts11 */ solarize: 'Inverts everything above a brightness cut, the way overexposed film does — into a colour if you like, and stretched to full contrast.',
     channelremap: 'Swaps the red, green and blue channels around. The fastest way to a completely alien palette.',
 
     // 3D — every one of these turns the layer into a solid and wraps its own pixels on as the skin
