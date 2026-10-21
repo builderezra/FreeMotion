@@ -2089,6 +2089,7 @@ window.FM = window.FM || {};
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         if (releaseVideos) releaseVideos();   // queue 690 — any strip that waited on the export is drawn now
         FM._exporting = false;
+        if (FM.releaseTiltPools) FM.releaseTiltPools();   // bughunt8 #9: the export-sized tilt plates go back (compositor.js)
         /* Throw the saved chunks away on a finished file and on Cancel — the first has nothing left to
          * resume, and the second is someone saying they no longer want it. Any OTHER exit keeps them:
          * an exception on the way out is precisely the case this whole file exists for, and deleting
@@ -2189,6 +2190,7 @@ window.FM = window.FM || {};
         FM._exportTransparent = false;
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         FM._exporting = false;
+        if (FM.releaseTiltPools) FM.releaseTiltPools();   // bughunt8 #9: as the video export's finally
       }
     },
 
@@ -2263,6 +2265,7 @@ window.FM = window.FM || {};
         FM._exportTransparent = false;
         exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
         FM._exporting = false;
+        if (FM.releaseTiltPools) FM.releaseTiltPools();   // bughunt8 #9: as the video export's finally
       }
     },
   };

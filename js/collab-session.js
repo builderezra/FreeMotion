@@ -235,8 +235,10 @@ window.FM = window.FM || {};
          921 suites' plainAdapter, a test's stand-in) is never on screen, so the open project says nothing about it — the
          first build of this gate dropped 921 S2's join-window replay that way (the cloud pre-flight, preflight-996) */
       if (!A.doc || A.doc() !== FM.scene) return false;
-      if (!S.pid || !FM.projects || !FM.projects.currentId) return false;
-      if (FM.projects.currentId() === S.pid) return false;
+      /* bughunt8 #2b: the project THIS tab has open (FM.storage.openProjectId), not the shared fm.currentProject: with another tab on a
+         project of its own, every snapshot and batch the room sent was kept out of the shared project open here. */
+      if (!S.pid || !FM.storage || !FM.storage.openProjectId) return false;
+      if (FM.storage.openProjectId() === S.pid) return false;
       S.stats.offProject = (S.stats.offProject || 0) + 1;
       return true;
     }
@@ -311,7 +313,9 @@ window.FM = window.FM || {};
          emptied. A few ticks later the OTHER project is uploaded into the room as `li`s.
          `projects.open()` now stands the session down before it tears the scene, and this is the lock
          on that door, because an ordering one line long is a thing anyone could move. */
-      if (S.pid && FM.projects && FM.projects.currentId && FM.projects.currentId() !== S.pid) return 0;
+      /* bughunt8 #2b: …and "the open project" is THIS tab's: asked of the shared pointer, nothing he did here reached the room once
+         another tab had opened a project of its own. */
+      if (S.pid && FM.storage && FM.storage.openProjectId && FM.storage.openProjectId() !== S.pid) return 0;
       if (A.normalizeDerived) A.normalizeDerived();  // §11.1 — deterministic, so it is a no-op on peers
       P.stampIds(doc());                             // §5.4 — before every diff
       let res = diffNow(scope);
@@ -2090,7 +2094,7 @@ window.FM = window.FM || {};
     const host = C.Host({ base: base, invariants: inv, ownerInfo: o.ownerInfo, now: o.now, rand: o.rand });
     const S = Session({ adapter: A, role: 'owner', mid: 'o', host: host, now: o.now, rand: o.rand, midFloor: Math.max(+o.midFloor || 0, midsUsed(base)) });
     S.tidied = tidied;
-    S.pid = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null;
+    S.pid = (FM.storage && FM.storage.openProjectId) ? FM.storage.openProjectId() : null;   // bughunt8 #2b: the project THIS tab is sharing, not the one another tab opened last
     /* §15: the owner serves media AND receives it (a guest adding a clip), so the controller is the
        same one on both sides. The room id keys the resume parts; before S6 mints one, the project is
        as unique and as stable. */
@@ -2259,7 +2263,9 @@ window.FM = window.FM || {};
        wrong session, or one crossed pair of buttons, is all that would take — so the refusal lives
        here rather than in the panel that will call it. */
     if (s.isOwner) { C.end(); return Promise.resolve(null); }
-    const gpid = s.gpid || (FM.projects && FM.projects.currentId());
+    /* bughunt8 #2b: with no gpid on the session, the copy THIS tab has open, not the shared pointer: with another tab on a shared copy
+       of its own, Leave here marked THAT copy left and deleted (or detached) it, and the copy left here stayed linked. */
+    const gpid = s.gpid || (FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null);
     /* …and the destructive branch may only ever run on a copy THIS DEVICE made as a guest. A project
        whose card carries no `collab` record is not a linked copy, whatever the session believes. */
     const card = ((FM.projects && FM.projects.list()) || []).filter(function (p) { return p.id === gpid; })[0];
@@ -2289,7 +2295,10 @@ window.FM = window.FM || {};
      as somebody's resume point, and a deleted copy is nobody's. The open copy is flushed first, so a layer added in the
      last 600 ms is in the doc remove reads, and its clip goes with the rest. Resolves null. */
   C.dropCopy = function (gpid, sid) {
-    if (FM.projects && FM.projects.currentId && FM.projects.currentId() === gpid && FM.storage && FM.storage.flushSync) {
+    /* bughunt8 #2: "the open copy" is the one THIS tab has open (FM.storage.openProjectId), not the shared fm.currentProject a second
+       tab moves; asked of that pointer, a Leave with another tab on a project of its own skipped the flush and kept a clip added in
+       the last 600 ms on the device. */
+    if (FM.storage && FM.storage.openProjectId && FM.storage.openProjectId() === gpid && FM.storage.flushSync) {
       try { FM.storage.flushSync(); } catch (e) {}
     }
     return Promise.resolve(FM.projects.remove(gpid)).then(function () {
@@ -2307,12 +2316,14 @@ window.FM = window.FM || {};
     const o = opts || {};
     const ep = o.link;
     const A = o.adapter || C.bridge;
-    const gpid = o.gpid || (FM.projects && FM.projects.currentId());
+    const gpid = o.gpid || (FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null);   // bughunt8 #2b: the copy THIS tab has open
     return Promise.resolve(A.readBase ? A.readBase(gpid) : null).then(function (stored) {
       /* ⚠️ #996: THE BASE IS READ ASYNC, AND HE CAN OPEN ANOTHER PROJECT WHILE IT IS. Attaching then put a session for the
          linked copy over whatever was open instead: its snapshot was diffed against THAT project and written into it.
          Still the linked copy, or no session at all (null is already "nothing to reopen" to every caller). */
-      if (FM.projects && FM.projects.currentId && FM.projects.currentId() !== gpid) return null;
+      /* bughunt8 #2b: still open in THIS tab — asked of the shared pointer, another tab opening a project of its own dropped this
+         tab's reconnect to the copy it still has open. */
+      if (FM.storage && FM.storage.openProjectId && FM.storage.openProjectId() !== gpid) return null;
       let saved = stored;
       /* S6: a guest that never had two quiet seconds to persist a base (§12.4) still has a linked copy
          and a token, and the reconnect must not strand it. With no base there is nothing to diff

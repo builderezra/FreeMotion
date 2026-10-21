@@ -754,6 +754,12 @@ window.FM = window.FM || {};
           input.addEventListener('change', async () => {
             const file = input.files && input.files[0]; input.remove();
             if (!file) return;
+            /* 1176 leftover: FROM THE PICK, NOT FROM THE PARSE. restoreBackup counts itself in FM._importing (bughunt8 #4), but the
+               backup, tens of megabytes with its clips embedded, was read and parsed before it began, and a build landing then
+               reloaded the app with nothing restored and nothing said. Counted here from the pick to the finally, both early returns
+               included; restoreBackup's own count nests inside this one. The try is not re-indented, so its lines keep their history. */
+            FM._importing = (FM._importing || 0) + 1;
+            try {
             let obj = null;
             try { obj = JSON.parse(await file.text()); }
             catch (e) { if (FM.toast) FM.toast('That file is not readable — it may be truncated.', 5000); return; }
@@ -766,6 +772,7 @@ window.FM = window.FM || {};
             if (FM.toast) FM.toast(msg, 8000);
             // queue 915 clause 4: FM.home.refresh did not exist, so this line did nothing and the grid stayed stale
             if (FM.home && FM.home.refresh) FM.home.refresh();
+            } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
           });
           document.body.appendChild(input); input.click();
         }),

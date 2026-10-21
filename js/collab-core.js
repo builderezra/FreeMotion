@@ -481,7 +481,10 @@ window.FM = window.FM || {};
   C.onReset = function (opts) {
     const s = S();
     if (!s) { undoHandover = false; handoverSession = null; afterReset(); return; }
-    if (!(opts && opts.force) && s.pid && FM.projects && FM.projects.currentId && FM.projects.currentId() === s.pid) return;
+    /* bughunt8 #2b: "the open project" is THIS tab's (FM.storage.openProjectId), as pushLocal asks: read from the shared pointer, any
+       reset here (the boot's own tail, his reload recovery) stood down a session on the project still open here once another tab had
+       opened a project of its own. */
+    if (!(opts && opts.force) && s.pid && FM.storage && FM.storage.openProjectId && FM.storage.openProjectId() === s.pid) return;
     undoHandover = false;
     handoverSession = null;
     /* #967 B3 review: `paused` is only true for people who come back by themselves — the UI tells anybody who joined with a
@@ -535,7 +538,10 @@ window.FM = window.FM || {};
    * `rememberRights` writes role and roExport there), so it holds offline, after the owner ends it, and from Home.
    * Every door asks this one question (storage.js, home.js, app.js, collab-session.js C.leave, collab-ui.js). */
   C.watchOnly = function (pid) {
-    const id = pid || (FM.projects && FM.projects.currentId ? FM.projects.currentId() : null);
+    /* bughunt8 #2: with no id, THIS tab's open project (as C.isLinkedCopy asks), never the shared fm.currentProject that a second
+       tab moves: every door that asks with no id (storage.js exportFile, the bridge's keepsNoVersion with no session) was asking
+       about whatever the other tab had opened last. */
+    const id = pid || (FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null);
     if (!id) return false;
     const s = C.session;
     if (s && !s.isOwner && s.gpid === id && !s.ended && s.active !== false && s.roomSettings) {

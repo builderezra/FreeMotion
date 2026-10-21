@@ -508,7 +508,11 @@
     if (FM.renderScene) {
       const isoWas = FM.isolate;
       const held = (FM.scene.layers || []).filter(function (l) { return l && l._cropEditing; });
+      /* bughunt8 #7: …and the effects sheet's previewed stack (FM._fxPreview) and the held ◐ (FM._fxCompare), which the file never
+         holds either (the compositor drops them under FM._exporting); held aside for this render and put back in the finally. */
+      const pvWas = FM._fxPreview, cmpWas = FM._fxCompare;
       FM.isolate = null;
+      FM._fxPreview = null; FM._fxCompare = null;
       held.forEach(function (l) { l._cropEditing = false; });
       try {
         const t = FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time || 0) : (FM.time || 0);
@@ -518,6 +522,7 @@
         try { g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, c.width, c.height); } catch (x) {}
       } finally {
         FM.isolate = isoWas;
+        FM._fxPreview = pvWas; FM._fxCompare = cmpWas;
         held.forEach(function (l) { l._cropEditing = true; });
       }
     }

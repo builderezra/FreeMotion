@@ -32012,7 +32012,9 @@
     await withCollab921([layer921('A'), layer921('B')], async function (c) {
       const g = c.addGuest();
       const sent = c.sentTo(g.loop);
-      const realCur = FM.projects.currentId;
+      /* bughunt8 #2b: the lock asks THIS tab's project (FM.storage.openProjectId), not the shared fm.currentProject another tab
+         moves, so that is what is moved here. */
+      const realCur = FM.storage.openProjectId;
       const keep = FM.scene.layers;
       let n = 0;
       try {
@@ -32020,12 +32022,12 @@
            storage.load() is then AWAITED — IndexedDB plus a media hydrate. Nothing on that path is
            jobWrapped and nothing mutes history, so §8.9's barrier is wide open and the 100 ms ticker
            fires straight through it. */
-        FM.projects.currentId = function () { return 'p_921_not_this_one'; };
+        FM.storage.openProjectId = function () { return 'p_921_not_this_one'; };
         FM.scene.layers = [];
         n = c.S.tick('hot');
       } finally {
         FM.scene.layers = keep;
-        FM.projects.currentId = realCur;
+        FM.storage.openProjectId = realCur;
       }
       if (n !== 0) throw new Error('the tick emitted ' + n + ' op(s) while the open project was no longer the one this session was armed on');
       const lr = sent.filter(function (m) { return m.t === 'b'; })
@@ -32094,7 +32096,7 @@
     const C = need921('the session engine');
     await withCollab921([layer921('A'), layer921('B')], async function (c) {
       if (!C.active || C.session !== c.S) throw new Error('CONTROL: no session is attached, so nothing below could be stood down and every assertion here would pass on an empty stage');
-      if (!c.S.pid || c.S.pid !== FM.projects.currentId()) throw new Error('CONTROL: the session is bound to ' + c.S.pid + ' but the open project is ' + FM.projects.currentId() + ' — the guard under test reads exactly that comparison, so this is not the case it is about');
+      if (!c.S.pid || c.S.pid !== FM.storage.openProjectId()) throw new Error('CONTROL: the session is bound to ' + c.S.pid + ' but the project open in this tab is ' + FM.storage.openProjectId() + ' — the guard under test reads exactly that comparison, so this is not the case it is about');
 
       /* The boot's tail, verbatim: nothing was replaced, the document it just finished loading is the
          one this session is on. */
@@ -32109,11 +32111,11 @@
       /* …and the other direction: the guard must not weaken the stand-down it was built around. The
          open project moving on is what "the document was replaced" means on every path that reaches
          here (import and both template routes each create or open a project first). */
-      const realCur = FM.projects.currentId;
+      const realCur = FM.storage.openProjectId;   // bughunt8 #2b: the guard asks THIS tab's project, not the shared pointer
       try {
-        FM.projects.currentId = function () { return 'p_921_not_the_session_project'; };
+        FM.storage.openProjectId = function () { return 'p_921_not_the_session_project'; };
         FM.history.reset();
-      } finally { FM.projects.currentId = realCur; }
+      } finally { FM.storage.openProjectId = realCur; }
       if (C.active || C.session) throw new Error('a history.reset() taken with a DIFFERENT project open left the session attached — it would then diff its armed base against a document it has never seen and upload one project into another room\'s document');
     });
 
@@ -54904,7 +54906,9 @@
        three sibling paths that pick a landing project have always filtered them out; this one did not. */
     if (!FM.projects || !FM.projects.list) return;
     const src = FM.projects.remove.toString().replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    const i = src.indexOf('curId()');
+    /* bughunt8 #2b: the open-project check reads this tab's id (tabId()) since v17.90, the shared pointer (curId()) before it. */
+    const marks = ['tabId()', 'curId()'].map(function (m) { return src.indexOf(m); }).filter(function (x) { return x >= 0; });
+    const i = marks.length ? Math.min.apply(null, marks) : -1;
     if (i < 0) throw new Error('remove() no longer decides where to land, so this test is measuring the wrong function');
     const tail = src.slice(i);
     if (!/elementDraft/.test(tail) || !/templateDraft/.test(tail))
@@ -61820,7 +61824,7 @@
     const C = FM.collab;
     if (!C || typeof C.reopen !== 'function') throw new Error('FM.collab.reopen is missing');
     const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
-    const cur0 = FM.projects.currentId;
+    const cur0 = FM.storage.openProjectId;   // bughunt8 #2b: the gate asks THIS tab's project, not the shared pointer
     let res = null;
     try {
       if (wasHome) FM.home.close();
@@ -61841,14 +61845,14 @@
       if (!FM.scene.layers.some(function (l) { return l.name === '996 room only'; })) throw new Error('control: on its own project the room’s snapshot did not land at once — the off-project assertion would mean nothing');
       FM.scene.layers = FM.scene.layers.filter(function (l) { return l.name !== '996 room only'; });
       /* now the app is on another project (what projects.open() leaves for a moment, and a late message finds) */
-      FM.projects.currentId = function () { return 'p_996_elsewhere'; };
+      FM.storage.openProjectId = function () { return 'p_996_elsewhere'; };
       const before = JSON.stringify(FM.scene.layers.map(function (l) { return l.id; }));
       ep.onmessage('ctl', { t: 'snap', D: t996Room(based.project), epoch: 1, seq: 2 });
       const after = JSON.stringify(FM.scene.layers.map(function (l) { return l.id; }));
-      FM.projects.currentId = cur0;
+      FM.storage.openProjectId = cur0;
       if (after !== before) throw new Error('a snapshot heard while another project was open rewrote the open scene: ' + before + ' → ' + after + ' (' + FM.scene.layers.map(function (l) { return l.name; }).join(', ') + ')');
     } finally {
-      FM.projects.currentId = cur0;
+      FM.storage.openProjectId = cur0;
       try { if (res && res.session) { res.session.stop('left'); if (FM.collab.session === res.session) FM.collab.detach(); } } catch (e) {}
       await q915aCleanup(made, orig, wasHome, [], [], []);
     }
@@ -173651,6 +173655,1612 @@
     if (!/^dropped\s+track-undecodable$/m.test(r.report)) bad.push('the report reads ' + JSON.stringify(line215(r.report, 'dropped')));
     if (!/^file audio\s+esds 39 B 03 80 80 80 22 00 00 00 = object type 0, 22050 Hz, 0 ch ✗ /m.test(r.report)) bad.push('the report reads ' + JSON.stringify(line215(r.report, 'file audio')));
     if (!r.toasts.some(function (t) { return /NO SOUND/.test(t); })) bad.push('nothing said so on screen: ' + JSON.stringify(r.toasts));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ═══ bughunt8 #1 (#1091's doors): SAVE AS ELEMENT WALKED A WATCH-ONLY COPY'S CLIPS OUT ═════════════════════════════════════════
+     What was wrong. bughunt7 #2 made Copy, Save audio as WAV and Save my version ask the export gate's question (FM.exportTurnedOff),
+     and the row right under Copy selected in the ⧉ menu asked nothing: js/app.js FM.saveElementPrompt → js/storage.js
+     FM.elements.save → packLayers copies every selected clip's FILE into an elem: pack, which Leave never deletes and Elements →
+     Export file writes out as a .fmelement.json. Three doors reach it: the ⧉ menu's Save as element…, the layer ⋯ menu's Save
+     selection as element… (the desktop right-click on a clip opens the same items, FM.layerMenuItems) and the Elements browser's
+     empty-state button. Now the prompt asks the gate first and says its notice, and FM.elements.save refuses a watch-only copy of
+     this tab's project by itself.
+     The rig is the 1091 test's third case: a Viewer's linked copy with one picture stored under its layer, no session, its card
+     saying the owner turned exporting off (patchCollab roExport false), then on for the CONTROL. window.prompt is stood in for, so a
+     door that gets as far as asking for a name is answered and counted. A pack is counted by the elem: keys in the store
+     (FM.storage.listMediaKeys), and read back for the clip's file. The browser's empty state shows its button only while the device
+     has no element at all, so the Elements index is held at [] for that one door and put back, raw, right after the tap (the save
+     reads the index only after its IndexedDB write, so it never sees the held one).
+     FAILS BEFORE THE FIX: with exporting off each door asks for a name and writes an elem: pack holding the watched clip's file,
+     with no notice, and FM.elements.save answers true.
+     CONTROL, which holds before and after: with exporting off the copy is watch-only and the export gate says so; with exporting on
+     each door asks for a name once, writes one pack holding the clip's file and brings up no card, and FM.elements.save answers
+     true. No tolerance: every quantity is a count. */
+  test('bughunt8 #1 Save as element cannot take a watch-only copy away: with exporting off the ⧉ menu’s Save as element…, the layer menu’s Save selection as element… and the Elements browser’s button each bring up the export notice and write no element, and FM.elements.save refuses (CONTROL: with exporting on each door saves one element holding the clip’s file)', { item: '1176', budgetMs: 120000 }, async function () {
+    const C = need921S7('Save as element on a watch-only copy');
+    if (typeof FM.saveElementPrompt !== 'function' || !FM.elements || typeof FM.elements.save !== 'function' || typeof FM.elements.getPack !== 'function' || typeof FM.layerMenuItems !== 'function' || !FM.elementsBrowser || typeof FM.elementsBrowser.open !== 'function' || typeof FM.storage.listMediaKeys !== 'function' || typeof FM.exportTurnedOff !== 'function') throw new Error('setup: FM.saveElementPrompt, FM.elements (save, getPack), FM.layerMenuItems, FM.elementsBrowser.open, FM.storage.listMediaKeys or FM.exportTurnedOff is not reachable');
+    const lmBtn = document.getElementById('btn-layermenu');
+    if (!lmBtn) throw new Error('setup: #btn-layermenu (the ⧉ menu) is gone');
+    const bad = [], made = [], elems = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const realPrompt = window.prompt;
+    let asked = 0, idxRaw = null, idxHeld = false;
+    const holdIndex = () => { idxRaw = localStorage.getItem('fm.elements'); idxHeld = true; localStorage.setItem('fm.elements', '[]'); };
+    const putIndex = () => { if (!idxHeld) return; idxHeld = false; if (idxRaw === null) localStorage.removeItem('fm.elements'); else localStorage.setItem('fm.elements', idxRaw); };
+    const keys = async () => (await FM.storage.listMediaKeys('elem:')) || [];
+    /* A card that comes up within `ms`, answered: true for the export notice (OK), its title for any other, false for none. */
+    async function notice(ms) {
+      const t0 = Date.now();
+      while (Date.now() - t0 < ms) {
+        const q = ask967b3();
+        if (q) {
+          const said = /Exporting is turned off/.test(q.title + ' ' + q.msg);
+          if (said) q.ok.click(); else (q.cancel || q.ok).click();
+          await settle921(60);
+          return said ? true : 'a card titled “' + q.title + '”';
+        }
+        await settle921(40);
+      }
+      return false;
+    }
+    /* One door: what it asked, the card it brought up, and the packs it wrote (and how many of them hold a clip's file). */
+    async function tryDoor(open) {
+      const k0 = await keys();
+      asked = 0;
+      await open();
+      const card = await notice(1200);
+      let fresh = [];
+      const t0 = Date.now();
+      while (true) {
+        fresh = (await keys()).filter(function (k) { return k0.indexOf(k) < 0; });
+        if (fresh.length || Date.now() - t0 > (asked ? 3000 : 300)) break;
+        await settle921(60);
+      }
+      let withFile = 0;
+      for (const k of fresh) {
+        elems.push(k.slice(5));
+        const p = await FM.elements.getPack(k.slice(5));
+        if (p && p.media && Object.keys(p.media).some(function (id) { return p.media[id] && p.media[id].file; })) withFile++;
+      }
+      return { card: card, asked: asked, packs: fresh.length, withFile: withFile };
+    }
+    const doors = [
+      ['the ⧉ menu’s Save as element…', async function () {
+        lmBtn.click(); await settle921(140);
+        const it = Array.prototype.slice.call(document.querySelectorAll('#ctx-menu .ctx-item')).filter(function (n) { return /Save as element/.test(n.textContent || ''); })[0];
+        if (!it) { FM.contextMenu.hide(); throw new Error('setup: the ⧉ menu has no Save as element… row'); }
+        if (it.classList.contains('disabled')) { FM.contextMenu.hide(); throw new Error('setup: the ⧉ menu’s Save as element… is greyed out, so the selection did not take'); }
+        it.click();
+      }],
+      ['the layer menu’s Save selection as element…', async function () {
+        const it = (FM.layerMenuItems(FM.selectedLayer(FM.scene)) || []).filter(function (i) { return i && /Save selection as element/.test(i.label || ''); })[0];
+        if (!it) throw new Error('setup: the layer menu has no Save selection as element… row');
+        it.action();
+      }],
+      ['the Elements browser’s button', async function () {
+        holdIndex();
+        try {
+          FM.elementsBrowser.open(); await settle921(80);
+          const b = document.querySelector('#el-browser .elb-empty-go');
+          if (!b) { FM.elementsBrowser.close(); throw new Error('setup: with no element on the device and a layer selected the Elements browser shows no Save … as an element button'); }
+          b.click();
+        } finally { putIndex(); }
+      }]
+    ];
+    async function allDoors(lid) {
+      FM.scene.selectedId = lid; FM.scene.selectedIds = [lid];
+      if (FM.syncSelectionChrome) FM.syncSelectionChrome();
+      const out = [];
+      for (const [name, open] of doors) { const r = await tryDoor(open); r.name = name; out.push(r); }
+      const k0 = await keys();
+      const L = FM.layerById(FM.scene, lid);
+      const direct = await FM.elements.save('bughunt8 #1 element, direct', [L]);
+      const fresh = (await keys()).filter(function (k) { return k0.indexOf(k) < 0; });
+      fresh.forEach(function (k) { elems.push(k.slice(5)); });
+      return { doors: out, direct: direct, directPacks: fresh.length };
+    }
+    await withLabs921(async function (ui) {
+      try {
+        if (wasHome) FM.home.close();
+        window.prompt = function () { asked++; return 'bughunt8 #1 element'; };
+        const D = { project: { name: 'Ezra’s film bh8-1', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(mediaLayer921('Watch bh8-1', 'image'))] };
+        const gpid = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'viewer', epoch: 'e-bh8-1', seq: 0, name: 'Sam' }, D);
+        if (!gpid) throw new Error('setup: could not make the shared copy');
+        made.push(gpid);
+        await FM.projects.open(gpid);
+        const lid = FM.scene.layers[0].id;
+        await q921give(lid, await q921png([30, 200, 30], 'bh8-1.png'), 'image', 0);
+        FM.projects.patchCollab(gpid, { roExport: false });
+        await settle921(80);
+        if (C.session) throw new Error('setup: a session is attached to the copy that is meant to have none');
+
+        /* 1. Exporting off: the copy is watch-only, and no door may pack it. */
+        if (!C.watchOnly(gpid) || !FM.exportTurnedOff()) throw new Error('setup: the Viewer’s copy with exporting off is not watch-only (FM.collab.watchOnly ' + C.watchOnly(gpid) + ', FM.exportTurnedOff ' + FM.exportTurnedOff() + ')');
+        const off = await allDoors(lid);
+        off.doors.forEach(function (r) {
+          if (r.packs) bad.push('with exporting off ' + r.name + ' wrote ' + r.packs + ' element pack' + (r.withFile ? ', holding the watched clip’s file,' : '') + ' — ready to export as a file or drop into a project of their own');
+          if (r.card !== true) bad.push('with exporting off ' + r.name + ' brought up ' + (r.card || 'no card') + ', not the export notice' + (r.asked ? ', and asked for a name' : ''));
+        });
+        if (off.direct || off.directPacks) bad.push('with exporting off FM.elements.save answered ' + off.direct + ' and wrote ' + off.directPacks + ' pack of the watched layer');
+
+        /* 2. CONTROL: the same copy with exporting ON — each door saves one element with the clip's file, and says nothing. */
+        FM.projects.patchCollab(gpid, { roExport: true });
+        if (C.watchOnly(gpid) || FM.exportTurnedOff()) throw new Error('setup: the Viewer’s copy with exporting on is watch-only');
+        const on = await allDoors(lid);
+        on.doors.forEach(function (r) {
+          if (r.asked !== 1 || r.packs !== 1 || r.withFile !== 1) bad.push('CONTROL: with exporting on ' + r.name + ' asked for a name ' + r.asked + ' times and wrote ' + r.packs + ' pack(s), ' + r.withFile + ' with the clip’s file, not once, one and one');
+          if (r.card) bad.push('CONTROL: with exporting on ' + r.name + ' brought up ' + r.card);
+        });
+        if (on.direct !== true || on.directPacks !== 1) bad.push('CONTROL: with exporting on FM.elements.save answered ' + on.direct + ' and wrote ' + on.directPacks + ' pack(s), not true and one');
+      } finally {
+        putIndex();
+        window.prompt = realPrompt;
+        try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+        try { if (FM.elementsBrowser && FM.elementsBrowser.close) FM.elementsBrowser.close(); } catch (e) {}
+        const a = ask967b3(); if (a) (a.cancel || a.ok).click();
+        try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+        try { ui.close(); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], elems, []);
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ bughunt8 #2 (and the refuter's N2): THE WATCH-ONLY GATES ASKED ABOUT THE PROJECT ANOTHER TAB HAD OPENED ═══════════════════
+     What was wrong. FM.exportTurnedOff (js/app.js), FM.collab.watchOnly with no id (js/collab-core.js) and FM.storage.exportFile
+     (js/storage.js, through watchOnly(null)) read FM.projects.currentId(): the shared localStorage fm.currentProject, which every tab
+     rewrites when it opens a project, not this tab's own project (FM.storage.openProjectId). So a watch-only copy open here passed
+     Export, Copy, Save audio as WAV, the still and Save project file the moment a second tab opened a project of its own, and his
+     own project here was refused while a watch-only copy was open in another tab. The packer had the same root (N2):
+     packFromProject flushed, and read clips from memory, only for curId(), so with a second tab elsewhere it packed this tab's
+     open project from disk alone.
+     The other tab is played the way the 915.5Br test plays it: fm.currentProject is pointed at the other project's id, and put back.
+     Forward: this tab has a Viewer's watch-only copy W open (no session, its card saying roExport false) and the pointer names a
+     project X of his own. Reverse: this tab has X open and the pointer names W. Each time: FM.exportTurnedOff(), FM.collab.watchOnly()
+     with no id, and FM.storage.exportFile (a JSON blob counted at URL.createObjectURL, the download's click stood in for) with the
+     card it brings up. N2, in the reverse case: a picture layer pushed into X's scene and not saved, its picture in memory only
+     (FM.media, never written to the store), then FM._packFromProject(X) must hold that layer and its picture.
+     FAILS BEFORE THE FIX: forward, exportTurnedOff and watchOnly() are false and the copy's project file is saved with no notice;
+     reverse, both are true, his file is refused with the notice, and the pack has neither the layer nor the picture.
+     CONTROLS, which hold before and after: with the pointer on this tab's own project (one tab) W is refused and X exports, as
+     before, and a pack then takes a later unsaved rename; FM.collab.watchOnly with an id answers true for W and false for X
+     throughout. No tolerance: every quantity is a flag, a count or a name. */
+  test('bughunt8 #2 The watch-only gates ask about this tab’s project, not the one another tab opened: with a watch-only copy open here and another tab on a project of its own, the export gate, FM.collab.watchOnly and Save project file still refuse it; with his own project open here and the copy in another tab, they let it export, and packing it takes the unsaved layer and its picture in memory (CONTROLS: with one tab the answers are as before; watchOnly with an id is unchanged)', { item: '1176', budgetMs: 120000 }, async function () {
+    const C = need921S7('the watch-only gates with two tabs');
+    if (typeof FM.exportTurnedOff !== 'function' || typeof C.watchOnly !== 'function' || typeof FM.storage.exportFile !== 'function' || typeof FM.storage.openProjectId !== 'function' || typeof FM._packFromProject !== 'function' || typeof FM.loadImageFile !== 'function') throw new Error('setup: FM.exportTurnedOff, FM.collab.watchOnly, FM.storage.exportFile / openProjectId, FM._packFromProject or FM.loadImageFile is not reachable');
+    const bad = [], made = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const ownURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    let blobs = 0, ptr0 = null, moved = false, lid = null;
+    /* another tab opening project `pid`: only the shared pointer moves */
+    const otherTab = function (pid) { if (!moved) { ptr0 = localStorage.getItem('fm.currentProject'); moved = true; } localStorage.setItem('fm.currentProject', pid); };
+    const backTab = function () { if (!moved) return; moved = false; if (ptr0 === null) localStorage.removeItem('fm.currentProject'); else localStorage.setItem('fm.currentProject', ptr0); };
+    const gates = function () { return { off: !!FM.exportTurnedOff(), wo: !!C.watchOnly() }; };
+    /* Save project file once: the files it made, and the card it brought up (true: the export notice). */
+    async function saveFile() {
+      const b0 = blobs;
+      await FM.storage.exportFile();
+      await settle921(60);
+      const q = ask967b3();
+      let card = false;
+      if (q) { card = /Exporting is turned off/.test(q.title + ' ' + q.msg) ? true : 'a card titled “' + q.title + '”'; (q.cancel || q.ok).click(); await settle921(40); }
+      return { made: blobs - b0, card: card };
+    }
+    /* what a pack of X holds of the layer `id`: its name, and whether its picture came with it */
+    async function packOf(pid, id) {
+      const got = await FM._packFromProject(pid, false);
+      const L = got && got.pack && (got.pack.layers || []).filter(function (l) { return l && l.id === id; })[0];
+      const m = got && got.pack && got.pack.media && got.pack.media[id];
+      return { name: L ? L.name : null, file: !!(m && m.file) };
+    }
+    await withLabs921(async function (ui) {
+      try {
+        if (wasHome) FM.home.close();
+        Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: function (b) { if (b && b.type === 'application/json') blobs++; return ownURL.value.apply(URL, arguments); } });
+        Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+        const X = await FM.projects.create({ name: 'bughunt8 #2 his own', width: 320, height: 240 });
+        if (!X) throw new Error('setup: could not make his own project');
+        made.push(X);
+        const D = { project: { name: 'Ezra’s film bh8-2', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(layer921('Watch bh8-2'))] };
+        const W = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'viewer', epoch: 'e-bh8-2', seq: 0, name: 'Sam' }, D);
+        if (!W) throw new Error('setup: could not make the shared copy');
+        made.push(W);
+        FM.projects.patchCollab(W, { roExport: false });
+        if (!C.watchOnly(W) || C.watchOnly(X)) throw new Error('setup: FM.collab.watchOnly answers ' + C.watchOnly(W) + ' for the copy and ' + C.watchOnly(X) + ' for his own project, not true and false');
+
+        /* ── FORWARD: the watch-only copy open in this tab. */
+        await FM.projects.open(W);
+        await settle921(80);
+        if (C.session) throw new Error('setup: a session is attached to the copy that is meant to have none');
+        if (FM.storage.openProjectId() !== W) throw new Error('setup: this tab did not open the watch-only copy');
+        const f1 = gates(), s1 = await saveFile();
+        if (!f1.off || !f1.wo) bad.push('CONTROL: with one tab the watch-only copy open here is not refused (exportTurnedOff ' + f1.off + ', watchOnly() ' + f1.wo + ')');
+        if (s1.made || s1.card !== true) bad.push('CONTROL: with one tab Save project file on the watch-only copy made ' + s1.made + ' file(s) and brought up ' + (s1.card || 'no card') + ', not none and the export notice');
+        otherTab(X);
+        const f2 = gates(), s2 = await saveFile();
+        backTab();
+        if (!f2.off) bad.push('with another tab on a project of its own, the watch-only copy open here passes the export gate (FM.exportTurnedOff is false), so Export, Copy, Save audio as WAV and the still take it away');
+        if (!f2.wo) bad.push('with another tab on a project of its own, FM.collab.watchOnly() with no id says the copy open here is not watch-only');
+        if (s2.made) bad.push('with another tab on a project of its own, Save project file saved the watch-only copy open here as a file (' + s2.made + ')');
+        if (s2.card !== true) bad.push('with another tab on a project of its own, Save project file on the watch-only copy brought up ' + (s2.card || 'no card') + ', not the export notice');
+
+        /* ── REVERSE: his own project open in this tab, the watch-only copy in the other. */
+        await FM.projects.open(X);
+        await settle921(80);
+        if (FM.storage.openProjectId() !== X) throw new Error('setup: this tab did not open his own project');
+        const r1 = gates(), t1 = await saveFile();
+        if (r1.off || r1.wo) bad.push('CONTROL: with one tab his own project is refused (exportTurnedOff ' + r1.off + ', watchOnly() ' + r1.wo + ')');
+        if (t1.made !== 1 || t1.card) bad.push('CONTROL: with one tab Save project file on his own project made ' + t1.made + ' file(s) and brought up ' + (t1.card || 'no card') + ', not one file and no card');
+        /* N2's fixture: a picture layer in his scene, not saved, its picture in memory only */
+        const L = FM.makeLayer('image', { name: 'bh8-2 unsaved', start: 0, duration: 2 });
+        L.start = 0; L.duration = 2;
+        lid = L.id;
+        const png = await q921png([200, 30, 30], 'bh8-2.png');
+        const rec = await FM.loadImageFile(png);
+        if (!rec) throw new Error('setup: the picture did not load');
+        rec.file = rec.file || png;
+        FM.media.set(lid, rec);
+        FM.scene.layers.push(L);
+        otherTab(W);
+        const r2 = gates(), t2 = await saveFile();
+        const p2 = await packOf(X, lid);
+        backTab();
+        if (r2.off) bad.push('with the watch-only copy open in another tab, his own project here fails the export gate (FM.exportTurnedOff is true), so his Export, Copy, Save audio as WAV and still are refused');
+        if (r2.wo) bad.push('with the watch-only copy open in another tab, FM.collab.watchOnly() with no id says his own project here is watch-only');
+        if (t2.made !== 1) bad.push('with the watch-only copy open in another tab, Save project file on his own project made ' + t2.made + ' file(s), not one');
+        if (t2.card) bad.push('with the watch-only copy open in another tab, Save project file on his own project brought up ' + t2.card);
+        if (p2.name !== 'bh8-2 unsaved') bad.push('with another tab on another project, packing his open project left out the layer not saved yet (the pack has ' + JSON.stringify(p2.name) + '): it was read from disk without the flush');
+        if (!p2.file) bad.push('with another tab on another project, packing his open project left out the picture held in memory: its clips were read from the store alone');
+        /* CONTROL: with one tab a pack takes a later unsaved rename, as it always did */
+        L.name = 'bh8-2 renamed, not saved';
+        const p1 = await packOf(X, lid);
+        if (p1.name !== 'bh8-2 renamed, not saved' || !p1.file) bad.push('CONTROL: with one tab the pack of his open project holds ' + JSON.stringify(p1.name) + (p1.file ? ' with' : ' without') + ' its picture, not the unsaved rename with its picture');
+        if (!C.watchOnly(W) || C.watchOnly(X)) bad.push('CONTROL: FM.collab.watchOnly with an id now answers ' + C.watchOnly(W) + ' for the copy and ' + C.watchOnly(X) + ' for his own project, not true and false');
+      } finally {
+        backTab();
+        Object.defineProperty(URL, 'createObjectURL', ownURL);
+        if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+        else delete HTMLAnchorElement.prototype.click;
+        const a = ask967b3(); if (a) (a.cancel || a.ok).click();
+        try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+        try { ui.close(); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+        if (lid) { try { FM.media.remove(lid); } catch (e) {} }
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ bughunt8 #4: A NEW BUILD RELOADED THE APP IN THE MIDDLE OF A RESTORE OR AN IMPORT ══════════════════════════════════════════
+     What was wrong. js/storage.js restoreBackup puts each project of a backup back through importObject, which makes the project and
+     then decodes its embedded clips one after another (applyScene: dataURLToFile, then the loader, up to 20 s each on a phone), and
+     nothing the update hold reads (index.html fmSwBusy) counted any of it. A build landing mid-restore saved the entry being restored
+     with only the clips decoded so far, never restored the rest, never put him back in his own project, and a second Restore would
+     duplicate what had landed. A single Import project file lost its not-yet-decoded clips the same way. Now restoreBackup counts in
+     FM._importing for its whole length, the gaps between entries included, and importObject counts itself.
+     Driven like the 1176 leftover tests of the hold (a picked file still opening): the hold is handed a counter for the reload, never
+     the real one, and FM.loadImageFile is held on a gate for one named picture only. (1) A two-entry backup, each entry one picture
+     layer with its picture embedded: while entry one's picture is held the app is asked whether it is busy and handed a new build;
+     the restore's onProgress reads FM._importing as entry two starts (after entry one is over, before entry two begins); then the
+     gate opens, the restore runs to its end, and the held build must reload by itself. (2) The same for one project file through
+     importObject. Saves are let finish before each question (FM.storage.settled), so a save still writing cannot answer for it.
+     FAILS BEFORE THE FIX: while each picture decodes fmSwBusy answers '' and the new build reloads at once; between the two entries
+     FM._importing is 0.
+     CONTROLS, which hold before and after: the app is idle before each step; each held decode was reached (else a setup failure);
+     both entries were restored and the restore put him back in his project; the import landed; FM._importing is back where it was
+     after each; and with nothing running a new build reloads at once. No tolerance: every quantity is a flag or a count. */
+  test('bughunt8 #4 An update does not reload the app in the middle of Restore from backup or Import project file: while a restored entry’s picture decodes, between two entries and while an imported file’s picture decodes the new build waits, and once each is over the app reloads by itself (CONTROLS: each decode was reached, both entries came back and the restore put him back in his project, the import landed; an idle app reloads at once)', { item: '1176', budgetMs: 90000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM.storage.restoreBackup !== 'function' || typeof FM.storage.importObject !== 'function' || typeof FM.loadImageFile !== 'function') throw new Error('setup: FM.storage.restoreBackup / importObject or FM.loadImageFile is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_importing');
+    const dLoad = Object.getOwnPropertyDescriptor(FM, 'loadImageFile'), realLoad = FM.loadImageFile;
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const had = new Set(FM.projects.list().map(function (p) { return p.id; }));
+    const made = [];
+    let reloads = 0, entered = 0, open = null, pending = null;
+    const count = function () { reloads++; };
+    const until = async function (ok, ms) { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async function (what) {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(function () { return W.busy() === ''; }, 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+    };
+    /* FM.loadImageFile held for the picture named `name` only, until open() */
+    const hold = function (name) {
+      entered = 0;
+      const gate = new Promise(function (r) { open = r; });
+      FM.loadImageFile = function (f) {
+        const self = this, args = arguments;
+        if (f && f.name === name) { entered++; return gate.then(function () { return realLoad.apply(self, args); }); }
+        return realLoad.apply(this, arguments);
+      };
+    };
+    const cv = document.createElement('canvas'); cv.width = 8; cv.height = 8;
+    const cg = cv.getContext('2d'); cg.fillStyle = '#c03030'; cg.fillRect(0, 0, 8, 8);
+    const url = cv.toDataURL('image/png');
+    /* one project file: a picture layer with its picture embedded, as Save project file writes it */
+    const entry = function (tag) {
+      const L = FM.makeLayer('image', { name: 'bh8-4 picture ' + tag, start: 0, duration: 2 });
+      L.start = 0; L.duration = 2;
+      const o = { app: 'freemotion', v: 1, project: { name: 'bughunt8 #4 ' + tag, width: 320, height: 240, fps: 30, duration: 2, background: '#000000' }, layers: [jclone921(L)], media: {} };
+      o.media[L.id] = { kind: 'image', name: 'bh8-4 ' + tag + '.png', dataURL: url };
+      return o;
+    };
+    const fresh = function () { return FM.projects.list().filter(function (p) { return !had.has(p.id) && made.indexOf(p.id) < 0; }).map(function (p) { return p.id; }); };
+    const bad = [];
+    try {
+      if (wasHome) FM.home.close();
+      const n0 = FM._importing || 0;
+
+      /* (1) Restore from backup: two entries, entry one's picture held. */
+      await settle('the restore');
+      hold('bh8-4 one.png');
+      let between = null;
+      pending = FM.storage.restoreBackup({ app: 'freemotion', backup: 1, v: 1, count: 2, projects: [entry('one'), entry('two')] }, function (i) { if (i === 2) between = FM._importing || 0; });
+      if (!(await until(function () { return entered > 0; }, 6000))) throw new Error('setup: the restore never reached entry one’s picture (FM.loadImageFile), so nothing was decoding');
+      if (FM.storage.settled) await FM.storage.settled();
+      const during = W.busy(), n1 = FM._importing;
+      reloads = 0;
+      const now1 = await W(count);
+      const held1 = !now1 && !reloads && W.held();
+      open();
+      const r = await pending; pending = null;
+      fresh().forEach(function (id) { made.push(id); });
+      if (FM.storage.settled) await FM.storage.settled();
+      if (!during) bad.push('while a restored entry’s picture was decoding the app counted as idle (FM._importing ' + JSON.stringify(n1) + ')');
+      if (!held1) bad.push('a new build ' + (reloads ? 'reloaded the app in the middle of Restore from backup (' + reloads + ' reload), so the entry was saved with its clips half decoded and the rest never restored' : 'was dropped rather than held during Restore from backup'));
+      if (!(between > n0)) bad.push('between the two entries of the restore FM._importing was ' + JSON.stringify(between) + ', so a build landing there would reload with entry two never restored and him left in entry one');
+      if (!r || !r.ok || r.restored !== 2) bad.push('CONTROL: the restore answered ' + JSON.stringify(r) + ', not both entries restored');
+      if (FM.projects.currentId() !== orig) bad.push('CONTROL: the restore left the editor on ' + FM.projects.currentId() + ', not back on his project ' + orig);
+      if ((FM._importing || 0) !== n0) bad.push('after the restore FM._importing is ' + JSON.stringify(FM._importing) + ', not ' + n0 + ', so every later update would wait for it');
+      if (!(await until(function () { return W.busy() === ''; }, 8000))) bad.push('after the restore the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(function () { return reloads > 0; }, 9000))) bad.push('once the restore was over, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+      if (dLoad) Object.defineProperty(FM, 'loadImageFile', dLoad); else FM.loadImageFile = realLoad;
+
+      /* (2) Import project file: one file, its picture held. */
+      await settle('the import');
+      hold('bh8-4 three.png');
+      pending = FM.storage.importObject(entry('three'), null, { quiet: true, confirmed: true });
+      if (!(await until(function () { return entered > 0; }, 6000))) throw new Error('setup: the import never reached its picture (FM.loadImageFile), so nothing was decoding');
+      if (FM.storage.settled) await FM.storage.settled();
+      const during2 = W.busy(), n2 = FM._importing;
+      reloads = 0;
+      const now2 = await W(count);
+      const held2 = !now2 && !reloads && W.held();
+      open();
+      const ok2 = await pending; pending = null;
+      fresh().forEach(function (id) { made.push(id); });
+      if (FM.storage.settled) await FM.storage.settled();
+      if (!during2) bad.push('while an imported project file’s picture was decoding the app counted as idle (FM._importing ' + JSON.stringify(n2) + ')');
+      if (!held2) bad.push('a new build ' + (reloads ? 'reloaded the app in the middle of Import project file (' + reloads + ' reload), so the project was saved with its clips half decoded' : 'was dropped rather than held during Import project file'));
+      if (ok2 !== true) bad.push('CONTROL: the import answered ' + JSON.stringify(ok2) + ', not true');
+      if ((FM._importing || 0) !== n0) bad.push('after the import FM._importing is ' + JSON.stringify(FM._importing) + ', not ' + n0);
+      if (!(await until(function () { return W.busy() === ''; }, 8000))) bad.push('after the import the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(function () { return reloads > 0; }, 9000))) bad.push('once the import was over, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+      if (dLoad) Object.defineProperty(FM, 'loadImageFile', dLoad); else FM.loadImageFile = realLoad;
+
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (open) open();
+      if (pending) { try { await pending; } catch (e) {} }
+      if (dLoad) Object.defineProperty(FM, 'loadImageFile', dLoad); else FM.loadImageFile = realLoad;
+      if (dFlag) Object.defineProperty(FM, '_importing', dFlag); else delete FM._importing;
+      fresh().forEach(function (id) { made.push(id); });
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ bughunt8 #5: THE GROUP BOX'S HULL CHANGED HOW SAVED PROJECTS DRAW ══════════════════════════════════════════════════════════
+     What was wrong. 644bd3c8 (1176 leftover: a group's box takes in its members as drawn) made FM.groupRestBoundsLocal the hull of
+     each member turned, sheared, set in depth and through a nested group's matrix. Right for the selection box, a tap and a pinch's
+     pivot, but two render paths read that box: compositor.js tiltPivot takes R, the unit the perspective of every leant group is
+     worked out in, from it; and FM.groupPivot falls back to it for a group that is scaled, turned or leant with no pivot stored
+     (the AI Director's keys, a scale behaviour, a group last scaled before queue 690's third hunt). So on f6e644f5 and on 644bd3c8
+     the same saved group drew differently. Now those two callers take the box as it was before the hull (the rest box's upright
+     sums, FM.groupRestBoundsLocal(g, scene, true)) and the hull stays for what he touches.
+     The members, on _bh2Frame's 320 × 240 frame: a red 40 × 40 square at 60,120 (40..80 × 100..140) and a blue 160 × 10 bar at
+     240,120 turned 90°, drawn 235..245 × 40..200. The upright sums box the bar 160..320 × 115..125, so the group's box is 40..320 ×
+     100..140: pivot 180,120, R 140. The hull is 40..245 × 40..200: pivot 142.5,120, R 102.5.
+       (A) The group, at 0,0, leant 60° about Y, no pivot stored. renderMesh draws a flat point d px from the pivot (unit d / R) at
+           pivot + d · cos 60° · 3.2 / (3.2 + (d / R) · sin 60°), so red runs X(40 − P) .. X(80 − P): 84.0 .. 118.0 about the sums
+           (as f6e644f5 drew it), 72.2 .. 105.1 about the hull. A twin whose bar lies flat (160 × 10 unturned, so its hull IS the
+           sums box) is how f6e644f5 drew this group, on any build.
+       (B) The same members in a group with a Scale behaviour (Oscillate, Amount 0.5, Phase 270°, 0.05 Hz: about 0.506 at 0.5 s, read
+           off FM.behaviorValue), not leant, no pivot stored: red runs P + s · (40 − P) .. P + s · (80 − P), 109.1 .. 129.4 about the
+           sums and 90.6 .. 110.9 about the hull.
+     FAILS BEFORE THE FIX: FM.groupPivot answers 142.5,120 for both groups, (A)'s red is at about 72..105 and differs from the
+     twin's by about 12 px, and (B)'s red is at about 91..111.
+     CONTROLS, which hold before and after: the twin draws red about 84..118; untilted and unscaled the red square is 40..79 × 100..139;
+     the lean ran (red narrowed and drawn); the behaviour really scales (s between 0.4 and 0.6) and neither group stores a pivot;
+     and the selection box (FM.groupBoundsLocal at 0.5 s, and FM.groupRestBoundsLocal with no third argument) still encloses the
+     turned bar where it is drawn, 235..245 × 40..200.
+     TOLERANCES, reasoned (not measured: code-only session): 2 px on a leant red edge against its worked-out place and 1.5 px between
+     the group and its twin, both as bughunt4 #3c allows (a column counts as red from about 70 % covered, and the 8 × 8 mesh is laid
+     over a different alpha box in each, bending a leant edge by up to half a pixel); 1 px on an upright edge (#10b's rule); 1e-9 on
+     the pivot (sums and halves of small integers, exact in double precision). The faults are 11.8 px and more. */
+  test('bughunt8 #5 A group draws as it did before the box took in its members’ turns: leant 60° about Y with a bar turned 90° beside a square, and with no pivot stored, it turns about the upright box and with its R, exactly as a twin whose bar lies flat, and a group with a Scale behaviour scales about that box too (CONTROLS: the twin; the square untilted; the lean and the behaviour really run; the selection box still encloses the turned bar)', { item: '1176' }, async function () {
+    if (typeof FM.renderScene !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.groupPivot !== 'function' || typeof FM.groupBoundsLocal !== 'function' || typeof FM.groupRestBoundsLocal !== 'function' || typeof FM.behaviorValue !== 'function') throw new Error('setup: FM.renderScene / makeLayer / groupPivot / groupBoundsLocal / groupRestBoundsLocal / behaviorValue are not reachable');
+    await _bh2With(async function () {
+      const T = 0.5, NEAR = 2, TOL = 1.5, EPS = 1e-9, SUMS = 180, HULL = 142.5;
+      FM.time = T;
+      FM.scene.project = { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' };
+      const grp = function (name) {
+        const g = FM.makeLayer('group', { name: name, x: 0, y: 0, start: 0, duration: 4 });
+        g.start = 0; g.duration = 4; g.transform.x = 0; g.transform.y = 0;
+        return g;
+      };
+      const shape = function (name, x, w, h, fill, parent) {
+        const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 120, shapeW: w, shapeH: h, fill: fill, start: 0, duration: 4 });
+        L.start = 0; L.duration = 4; L.parent = parent;
+        return L;
+      };
+      /* the group G with the red square and the blue bar, turned 90° or lying flat (the twin) */
+      const make = function (name, turned) {
+        const G = grp(name);
+        const bar = shape(name + ': blue bar', 240, 160, 10, '#0000ff', G.id);
+        if (turned) bar.transform.rotation = 90;
+        FM.scene.layers = [G, shape(name + ': red square', 60, 40, 40, '#ff0000', G.id), bar];
+        return G;
+      };
+      const reds = function (f) {
+        let n = 0, x0 = -1, x1 = -1, y0 = -1, y1 = -1;
+        for (let i = 0, k = 0; i < f.d.length; i += 4, k++) {
+          if (f.d[i] > 180 && f.d[i + 1] < 70 && f.d[i + 2] < 70) {
+            n++;
+            const x = k % 320, y = (k - x) / 320;
+            if (x0 < 0 || x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y0 < 0 || y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+        return { n: n, x0: x0, x1: x1, y0: y0, y1: y1 };
+      };
+      const say = function (r) { return r.n + ' red px at columns ' + r.x0 + '..' + r.x1 + ', rows ' + r.y0 + '..' + r.y1; };
+      const sayP = function (p) { return p ? '(' + (Math.round(p.x * 100) / 100) + ', ' + (Math.round(p.y * 100) / 100) + ')' : '(none)'; };
+      /* renderMesh's projection of a flat point d px from the pivot, leant 60° about Y at R */
+      const lean = function (P, R, d) { const c = Math.cos(Math.PI / 3), s = Math.sin(Math.PI / 3); return P + d * c * 3.2 / (3.2 + (d / R) * s); };
+      const bad = [];
+
+      /* ── CONTROLS: untilted and unscaled the red square is where it is put; the selection box takes the turned bar in. */
+      const G0 = make('bh8 #5 group at rest', true);
+      const r0 = reds(_bh2Frame(T));
+      if (Math.abs(r0.x0 - 40) > 1 || Math.abs(r0.x1 - 79) > 1 || Math.abs(r0.y0 - 100) > 1 || Math.abs(r0.y1 - 139) > 1) throw new Error('CONTROL: untilted the red square is ' + say(r0) + ', not 40..79 × 100..139 — the fixture is not the one worked out above');
+      [['the live box at 0.5 s (FM.groupBoundsLocal)', FM.groupBoundsLocal(G0, FM.scene, T)], ['the rest box (FM.groupRestBoundsLocal with no third argument)', FM.groupRestBoundsLocal(G0, FM.scene)]].forEach(function (pair) {
+        const b = pair[1];
+        if (!b || b.minX > 40 + 1e-6 || b.maxX < 245 - 1e-6 || b.minY > 40 + 1e-6 || b.maxY < 200 - 1e-6) bad.push('CONTROL: the group’s selection box, ' + pair[0] + ', is ' + (b ? b.minX.toFixed(1) + '..' + b.maxX.toFixed(1) + ' × ' + b.minY.toFixed(1) + '..' + b.maxY.toFixed(1) : '(none)') + ' and does not take in the turned bar drawn at 235..245 × 40..200');
+      });
+
+      /* ── (A) leant 60° about Y with no pivot stored, and its twin whose bar lies flat. */
+      const GT = make('bh8 #5 leant twin, bar flat', false);
+      GT.transform.rotationY = 60;
+      const rt = reds(_bh2Frame(T));
+      const GA = make('bh8 #5 leant group, bar turned', true);
+      GA.transform.rotationY = 60;
+      const pa = FM.groupPivot(GA, FM.scene, T);
+      const ra = reds(_bh2Frame(T));
+      const wantL = lean(SUMS, 140, 40 - SUMS), wantR = lean(SUMS, 140, 80 - SUMS), hullL = lean(HULL, 102.5, 40 - HULL), hullR = lean(HULL, 102.5, 80 - HULL);
+      if (GA.pivot || GT.pivot) throw new Error('setup: a leant group stores a pivot (' + JSON.stringify(GA.pivot || GT.pivot) + '), so its fallback is not what is measured');
+      if (ra.n < 300 || ra.x1 - ra.x0 + 1 > 36) throw new Error('CONTROL: leant 60° about Y the red square is ' + say(ra) + ' — not narrowed from its 40 px, so the tilt route did not run');
+      if (Math.abs(rt.x0 - wantL) > NEAR || Math.abs(rt.x1 + 1 - wantR) > NEAR) bad.push('CONTROL: the leant twin (its bar flat, so its hull is the upright box) draws red at ' + say(rt) + ', not about ' + wantL.toFixed(1) + '..' + wantR.toFixed(1) + ' (pivot 180, R 140)');
+      if (!pa || Math.abs(pa.x - SUMS) > EPS || Math.abs(pa.y - 120) > EPS) bad.push('(A) the leant group with no pivot stored turns about ' + sayP(pa) + ', not (180, 120), the middle of the box it was drawn with' + (pa && Math.abs(pa.x - HULL) <= 1e-6 ? ' — the middle of the hull, which only the selection box should use' : ''));
+      if (Math.abs(ra.x0 - wantL) > NEAR || Math.abs(ra.x1 + 1 - wantR) > NEAR) bad.push('(A) the leant group draws red at ' + say(ra) + ', not about ' + wantL.toFixed(1) + '..' + wantR.toFixed(1) + ' as it was drawn before the hull' + (Math.abs(ra.x0 - hullL) <= NEAR ? ' — it leans about the hull (pivot 142.5, R 102.5: about ' + hullL.toFixed(1) + '..' + hullR.toFixed(1) + ')' : ''));
+      if (Math.abs(ra.x0 - rt.x0) > TOL || Math.abs(ra.x1 - rt.x1) > TOL) bad.push('(A) the leant group draws red at ' + say(ra) + ' where its twin with the bar lying flat, the same upright box, draws ' + say(rt) + ' — turning one member changed how the whole group leans');
+
+      /* ── (B) a Scale behaviour, not leant, no pivot stored. */
+      const GB = make('bh8 #5 group with a scale behaviour', true);
+      GB.behaviors = [{ type: 'oscillate', prop: 'scale', enabled: true, params: { amp: 0.5, freq: 0.05, phase: 270 } }];
+      const sB = FM.behaviorValue(GB, 'scale', FM.evalProp(GB.transform.scale, T), T);
+      if (!(sB > 0.4 && sB < 0.6)) throw new Error('CONTROL: the Scale behaviour gives ' + sB + ' at 0.5 s, not about 0.506, so the group is not scaled as worked out');
+      const pb = FM.groupPivot(GB, FM.scene, T);
+      const rb = reds(_bh2Frame(T));
+      if (GB.pivot) throw new Error('setup: the group with a scale behaviour stores a pivot (' + JSON.stringify(GB.pivot) + ')');
+      const bL = SUMS + sB * (40 - SUMS), bR = SUMS + sB * (80 - SUMS), hbL = HULL + sB * (40 - HULL);
+      if (!pb || Math.abs(pb.x - SUMS) > EPS || Math.abs(pb.y - 120) > EPS) bad.push('(B) the group with a Scale behaviour and no pivot stored scales about ' + sayP(pb) + ', not (180, 120)');
+      if (rb.n < 100 || Math.abs(rb.x0 - bL) > 1 || Math.abs(rb.x1 + 1 - bR) > 1) bad.push('(B) the group with a Scale behaviour draws red at ' + say(rb) + ', not about ' + bL.toFixed(1) + '..' + bR.toFixed(1) + ' (scaled ' + sB.toFixed(3) + ' about 180, 120)' + (Math.abs(rb.x0 - hbL) <= 1 ? ' — it scales about the hull’s middle, 142.5' : ''));
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
+
+  /* ═══ bughunt8 #6: EXTEND ON A FORWARD SPEED-RAMPED CLIP WROTE A NEGATIVE trimStart ══════════════════════════════════════════════
+     What was wrong. js/app.js FM.extendClipTo (the rail's and the key's extend to playhead), forward head branch: when the pull ran
+     off the start of the source it re-solved the head as −trimStart / speedAt(the head he asked for), the speed at ONE point, not
+     over the span the head really travels, and wrote trimStart + (the source that span consumes) unclamped. AU1 / #1107 fixed the
+     reversed branch only; the left grip (js/timeline.js) bisects on the curve and clamps at 0. The refuter's path: ramp keys at 10 s
+     (0.5x) and 20 s (4x), linear, on a video clip 10..20 with trimStart 0; the head trimmed in to 15 (trimStart becomes the source
+     10..15 consumed, 0.5·5 + 0.35·5²/2 = 6.875 s); then Extend with the playhead at 2. The speed at 2 is 0.5 (held before the first
+     key), so the re-solve took the head to 15 − 6.875 / 0.5 = 1.25, and the source 1.25..15 consumes is 0.5·8.75 + 6.875 = 11.25 s:
+     trimStart −4.375, a head that asks for source before the file (frozen picture), and the next Undo of anything clamped it to 0
+     and moved every frame. Now it bisects as the grip does: the head stops where the source runs out, at 10 (the source 10..15 is
+     exactly the 6.875 s before trimStart), and trimStart is never below 0.
+     FAILS BEFORE THE FIX: trimStart −4.375 and the head at 1.25 s, before 10.
+     CONTROLS, which hold before and after: the head trim really wrote 6.875; a flat 2x clip 15..20 with trimStart 6 extended to 2
+     stops at 12 with trimStart 0 and its end at 20 (the exact division); on the same ramp, an Extend to 12 that does not run out
+     takes 5.175 s of source (0.5·3 + 0.35·(5² − 2²)/2) and leaves trimStart 1.7, the head at 12. Every clip keeps its end at 20.
+     TOLERANCE, reasoned (not measured: code-only session): the integral is FM.layerSourceAdvance's float32 trapezoid table at
+     120 Hz, exact on each straight piece of the ramp and off by at most 0.35·(1/120)²/8 ≈ 3e-6 s across the key at 10, with float32
+     holding about 7 digits of 7 s; 30 halvings of a 13.75 s bracket leave 1.3e-8 s. So about 1e-5 s at worst; the faults are 4.375 s
+     and 8.75 s. 1e-3 s sits between. The flat case is a single exact division: 1e-9. */
+  test('bughunt8 #6 Extend on a forward speed-ramped clip stops where its source runs out: a clip on a 0.5x to 4x ramp, trimmed in to 15 s and extended to a playhead at 2 s, keeps trimStart at 0 or above with its head at 10 s, never before the start of its source (CONTROLS: a flat clip extends as before; an Extend that does not run out is unchanged)', { item: '1176' }, function () {
+    if (typeof FM.extendClipTo !== 'function' || typeof FM.headSourceDelta !== 'function' || typeof FM.layerLocalTime !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('setup: FM.extendClipTo / headSourceDelta / layerLocalTime / makeLayer is not reachable');
+    const TOL = 1e-3, EX = 1e-9, bad = [];
+    const clip = function (name, speed) {
+      const L = FM.makeLayer('video', { name: name, start: 10, duration: 10 });
+      L.start = 10; L.duration = 10; L.trimStart = 0; L.reversed = false;
+      L.speed = speed;
+      return L;
+    };
+    const ramp = function () { return { kf: [{ t: 10, v: 0.5, e: 'linear' }, { t: 20, v: 4, e: 'linear' }] }; };
+    const say = function (L) { return 'start ' + (+L.start).toFixed(4) + ', duration ' + (+L.duration).toFixed(4) + ', trimStart ' + (+L.trimStart).toFixed(4); };
+
+    /* the refuter's path */
+    const A = clip('bh8 #6 ramped clip', ramp());
+    const head = FM.headSourceDelta(A, 5);
+    if (!(Math.abs(head - 6.875) <= TOL)) throw new Error('CONTROL: trimming the ramped clip’s head in by 5 s consumes ' + head + ' s of source, not 6.875 — the ramp is not the one worked out above');
+    A.start = 15; A.duration = 5; A.trimStart = head;
+    FM.extendClipTo(A, 2);
+    if (!(A.trimStart >= 0)) bad.push('extended to a playhead at 2 s, the ramped clip wrote ' + say(A) + ': a trimStart below 0 asks for source before the file, and the next Undo clamps it and moves every frame' + (Math.abs(A.trimStart + 4.375) <= 0.01 ? ' (the re-solve used the speed at 2 s, 0.5x, for source played at up to 2.25x)' : ''));
+    if (!(Math.abs(A.start - 10) <= TOL)) bad.push('extended to a playhead at 2 s, the ramped clip’s head is at ' + (+A.start).toFixed(4) + ' s, not 10 s where its source runs out (' + say(A) + ')');
+    if (!(Math.abs(A.trimStart) <= TOL)) bad.push('extended until its source ran out, the ramped clip’s trimStart is ' + (+A.trimStart).toFixed(4) + ', not 0');
+    const first = FM.layerLocalTime(A, A.start);
+    if (!(typeof first === 'number' && first >= -EX)) bad.push('the ramped clip’s first frame reads source ' + first + ' s, before the start of the file');
+    if (!(Math.abs(A.start + A.duration - 20) <= EX)) bad.push('CONTROL: the ramped clip’s end moved to ' + (A.start + A.duration) + ', not 20');
+
+    /* CONTROL: a flat 2x clip runs out the same way, by the exact division */
+    const F = clip('bh8 #6 flat clip', 2);
+    F.start = 15; F.duration = 5; F.trimStart = 6;
+    FM.extendClipTo(F, 2);
+    if (!(Math.abs(F.start - 12) <= EX && Math.abs(F.duration - 8) <= EX && Math.abs(F.trimStart) <= EX)) bad.push('CONTROL: the flat 2x clip extended to 2 s is ' + say(F) + ', not start 12, duration 8, trimStart 0');
+
+    /* CONTROL: on the same ramp, an Extend that does not run out of source */
+    const B = clip('bh8 #6 ramped clip, short pull', ramp());
+    B.start = 15; B.duration = 5; B.trimStart = 6.875;
+    FM.extendClipTo(B, 12);
+    if (!(Math.abs(B.start - 12) <= TOL && Math.abs(B.trimStart - 1.7) <= TOL && Math.abs(B.start + B.duration - 20) <= EX)) bad.push('CONTROL: the ramped clip extended to 12 s (5.175 s of source, inside the 6.875 s it has) is ' + say(B) + ', not start 12, trimStart 1.7, end 20');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ bughunt8 #7: THE HOME CARD, THE STILL AND THE EXPORT CARD'S PICTURE BAKED IN A PREVIEWED EFFECT ═══════════════════════════
+     What was wrong. makeThumb (js/storage.js, every Home card picture), snapshotNow (js/app.js, the camera button's PNG and This
+     frame) and the Export card's picture (js/export-card.js drawThumb) hold FM.isolate and the crop tool's flag aside for their one
+     render, and not the two other view-only overrides documented as using the same arrangement: the effects sheet's previewed stack
+     (FM._fxPreview) and the held ◐ (FM._fxCompare). The compositor drops both only under FM._exporting, which none of the three
+     sets, so a card the 12 s autosave or Home's capture took while the sheet was previewing an effect showed an effect he never
+     added. Now all three null both beside the isolate and put them back in the same finally.
+     The 1176 isolate test's rig: a 320 × 240 project, a red 64 × 64 square in its bottom-right corner, FM.renderScene wrapped to
+     record what the two overrides hold whenever it draws the project anywhere but #preview. The previewed stack is an Invert on the
+     square (red becomes cyan) and the ◐ is held on it. The card through FM.templates.cardFor on the open project, the still through
+     FM.snapshotPNG (the PNG is counted at URL.createObjectURL and its download's click does nothing), the Export card's picture
+     through FM.exportCard.opened() (then closed()).
+     FAILS BEFORE THE FIX: each of the three renders with the previewed Invert and the ◐ still set, and the card shows the square
+     cyan, the previewed Invert.
+     CONTROLS, which hold before and after: each of the three really rendered (else a setup failure), the still made one PNG, and
+     after each the previewed stack and the ◐ are back exactly as they were, so the sheet he is looking at does not change.
+     COLOUR THRESHOLDS, as the 1176 isolate test reasons them: the card is a JPEG at quality 0.8, read as a 5 × 5 average well inside
+     a 64 px block; red is above 180 with green and blue below 90, and its Invert, cyan (0, 255, 255), is nowhere near that. */
+  test('bughunt8 #7 The Home card, the still and the Export card’s picture leave out an effect only being previewed: with the effects sheet previewing an Invert on the red square and the ◐ held on it, each renders with neither, and the card shows the square red (CONTROLS: each really rendered, the still made one PNG, and the preview and the ◐ are back in place after each)', { item: '1176' }, async function () {
+    if (!FM.templates || typeof FM.templates.cardFor !== 'function' || typeof FM.snapshotPNG !== 'function' || !FM.exportCard || typeof FM.exportCard.opened !== 'function' || typeof FM.exportCard.closed !== 'function') throw new Error('setup: FM.templates.cardFor (makeThumb), FM.snapshotPNG or FM.exportCard.opened / closed is not reachable');
+    const P = FM.scene.project;
+    const keep = { w: P.width, h: P.height, d: P.duration, hasBg: Object.prototype.hasOwnProperty.call(P, 'background'), bg: P.background, t: FM.time };
+    const layers0 = FM.scene.layers.slice();
+    const pv0 = FM._fxPreview, cmp0 = FM._fxCompare;
+    const realRender = FM.renderScene;
+    const ownURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    const bad = [], seen = { card: [], still: [], xcard: [] };
+    let who = null, pngs = 0;
+    try {
+      P.width = 320; P.height = 240; P.duration = 4; P.background = '#102030';
+      FM.scene.layers.length = 0;
+      const mark = FM.makeLayer('shape', { name: 'bh8 #7 mark', shape: 'rect', x: 256, y: 192, shapeW: 64, shapeH: 64, fill: '#ff0000' });
+      mark.start = 0; mark.duration = 4;
+      FM.scene.layers.push(mark);
+      FM.time = 1;
+      const pvSet = { id: mark.id, list: [{ type: 'invert', enabled: true, params: { amount: 1 } }] }, cmpSet = { id: mark.id };
+      FM._fxPreview = pvSet; FM._fxCompare = cmpSet;
+      Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: function (b) { if (b && b.type === 'image/png') pngs++; return ownURL.value.apply(URL, arguments); } });
+      Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+      FM.renderScene = function (ctx, scn) {
+        const c = ctx && ctx.canvas;
+        if (who && c && c.id !== 'preview' && scn && scn.layers && scn.layers.indexOf(mark) >= 0) seen[who].push({ pv: FM._fxPreview || null, cmp: FM._fxCompare || null });
+        return realRender.apply(this, arguments);
+      };
+      const back = function (what) {
+        if (FM._fxPreview !== pvSet || FM._fxCompare !== cmpSet) bad.push('CONTROL: after ' + what + ' the previewed stack is ' + JSON.stringify(FM._fxPreview || null) + ' and the ◐ ' + JSON.stringify(FM._fxCompare || null) + ', not put back as they were, so the sheet he is looking at changed');
+      };
+      let url = null;
+      who = 'card';
+      try { url = FM.templates.cardFor(FM.projects.currentId()); } finally { who = null; }
+      back('drawing the Home card');
+      who = 'still';
+      try { await FM.snapshotPNG(); } finally { who = null; }
+      for (let i = 0; i < 50 && !pngs; i++) await sleep(20);
+      back('saving the still');
+      who = 'xcard';
+      try { FM.exportCard.opened(); } finally { who = null; try { FM.exportCard.closed(); } catch (e) {} }
+      back('drawing the Export card’s picture');
+      FM.renderScene = realRender;
+
+      [['card', 'the Home card'], ['still', 'the still (Save current frame as PNG)'], ['xcard', 'the Export card’s picture']].forEach(function (pair) {
+        const s = seen[pair[0]];
+        if (!s.length) { bad.push('CONTROL: ' + pair[1] + ' was not rendered at all, so nothing was measured'); return; }
+        if (s.some(function (x) { return x.pv; })) bad.push(pair[1] + ' was rendered with the effects sheet’s previewed Invert still set (FM._fxPreview), so it shows an effect he never added');
+        if (s.some(function (x) { return x.cmp; })) bad.push(pair[1] + ' was rendered with the ◐ still held (FM._fxCompare), so it shows the square with its filters taken off');
+      });
+      if (pngs !== 1) bad.push('CONTROL: the still made ' + pngs + ' PNG(s), not one');
+      if (typeof url !== 'string' || url.indexOf('data:image/jpeg') !== 0) throw new Error('setup: the card is not a JPEG picture (' + String(url).slice(0, 40) + '), so a stored picture came back or none was made');
+      const img = new Image(); img.src = url;
+      await new Promise(function (r) { img.onload = r; img.onerror = r; });
+      const cv = document.createElement('canvas'); cv.width = img.naturalWidth || 1; cv.height = img.naturalHeight || 1;
+      const g = cv.getContext('2d'); g.drawImage(img, 0, 0);
+      const x = Math.round(0.8 * cv.width), y = Math.round(0.8 * cv.height), d = g.getImageData(x - 2, y - 2, 5, 5).data;
+      let r = 0, gr = 0, b = 0;
+      for (let i = 0; i < d.length; i += 4) { r += d[i]; gr += d[i + 1]; b += d[i + 2]; }
+      const rp = [Math.round(r / 25), Math.round(gr / 25), Math.round(b / 25)];
+      if (!(rp[0] > 180 && rp[1] < 90 && rp[2] < 90)) bad.push('the Home card shows rgb(' + rp + ') where the red square is, not red' + (rp[0] < 90 && rp[1] > 180 && rp[2] > 180 ? ': the previewed Invert, an effect he never added' : ''));
+    } finally {
+      FM.renderScene = realRender;
+      FM._fxPreview = pv0; FM._fxCompare = cmp0;
+      Object.defineProperty(URL, 'createObjectURL', ownURL);
+      if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+      else delete HTMLAnchorElement.prototype.click;
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      P.width = keep.w; P.height = keep.h; P.duration = keep.d; FM.time = keep.t;
+      if (keep.hasBg) P.background = keep.bg; else delete P.background;
+      if (FM.requestRender) FM.requestRender();
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ bughunt8 #8: AN AI REQUEST THAT NEVER ANSWERED COULD NOT BE LET GO ═════════════════════════════════════════════════════════
+     What was wrong. js/ai.js call counts every model request in FM._aiCalls, which the update hold reads (index.html fmSwBusy), and
+     the fetch had no AbortController and no time limit; FM.ai.cancel only set state.abort, read between a run's steps. A request
+     stalled on a half-open connection held every app update for as long as the browser let it hang, and Cancel could not release
+     it. Now each FM.ai.call carries one controller: Cancel aborts every request on its way, and a ceiling (FM.ai.TIMEOUT_MS, three
+     minutes) aborts one that runs past it, and the request throws, so call's finally gives the count back.
+     Driven like the 1176 leftover test of the hold with an AI answer on its way: FM.ai.DRY_RUN stands in for the network (the mock
+     answers after `dryDelay`: no key, no tokens, no request), and a 20 s dryDelay stands in for a request that hangs. (a) One held
+     request, then FM.ai.cancel(): it must throw within a second, as cancelled, and FM._aiCalls go back. (b) FM.ai.TIMEOUT_MS set to
+     400 ms and one held request: it must throw within three seconds with an error that says it took too long (not a cancel), and
+     FM._aiCalls go back.
+     FAILS BEFORE THE FIX: neither request ends before its 20 s are up (Cancel does not reach it and there is no ceiling), so
+     FM._aiCalls stays at 1 through both waits.
+     CONTROLS, which hold before and after: while each request is held FM._aiCalls counts it (1 more), and an ordinary dry request
+     with a 300 ms delay answers with the mock's intent and gives its count back. The waits are reasoned, not measured: the stop is
+     a timer or a call away (milliseconds), and the fault is the whole 20 s; 1 s and 3 s sit between. Restores FM.ai.DRY_RUN,
+     FM.ai.TIMEOUT_MS and FM._aiCalls by descriptor. */
+  test('bughunt8 #8 An AI request that never answers can be let go: with a model request held in flight, Cancel ends it at once and gives back its count, and one that runs past the ceiling (FM.ai.TIMEOUT_MS) is stopped and says it took too long (CONTROLS: a held request is counted; an ordinary request still answers)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.ai || typeof FM.ai.call !== 'function' || typeof FM.ai.cancel !== 'function' || !FM.ai.MODELS || !FM.aiManifest || !FM.aiManifest.tools || !FM.aiManifest.tools.intent || !FM.aiMock) throw new Error('setup: FM.ai.call / cancel, FM.ai.MODELS, FM.aiManifest.tools.intent or FM.aiMock is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_aiCalls');
+    const dTimeout = Object.getOwnPropertyDescriptor(FM.ai, 'TIMEOUT_MS');
+    const dry0 = FM.ai.DRY_RUN;
+    const bad = [];
+    const ask = function (delay) {
+      const box = { done: false, out: null, err: null };
+      box.p = FM.ai.call(FM.ai.MODELS.intent, 'You are a test.', [{ role: 'user', content: 'bughunt8 #8 a title card' }], FM.aiManifest.tools.intent, { maxTokens: 64, dryDelay: delay, mock: { prompt: 'bughunt8 #8 a title card' } })
+        .then(function (r) { box.out = r; box.done = true; }, function (e) { box.err = e; box.done = true; });
+      return box;
+    };
+    const until = async function (ok, ms) { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(50); return ok(); };
+    try {
+      FM.ai.DRY_RUN = true;
+      const n0 = FM._aiCalls || 0;
+
+      /* ── CONTROL: an ordinary dry request answers and gives its count back. */
+      const c = ask(300);
+      await until(function () { return c.done; }, 4000);
+      if (!c.done || c.err || !c.out || !c.out.out || typeof c.out.out.subject !== 'string') throw new Error('setup: an ordinary dry request did not answer with the mock’s intent (' + (c.err ? c.err.message : JSON.stringify(c.out && c.out.out)) + ')');
+      if ((FM._aiCalls || 0) !== n0) bad.push('CONTROL: after an ordinary request answered FM._aiCalls is ' + FM._aiCalls + ', not ' + n0);
+
+      /* ── (a) Cancel. */
+      const a = ask(20000);
+      await sleep(200);
+      const na = FM._aiCalls || 0;
+      if (na !== n0 + 1) bad.push('CONTROL: a request held in flight is not counted (FM._aiCalls ' + na + ', not ' + (n0 + 1) + ')');
+      FM.ai.cancel();
+      await until(function () { return a.done; }, 1000);
+      if (!a.done) bad.push('Cancel did not end a request held in flight: a second later it is still waiting, so its answer can hold every update until the browser gives up on it');
+      else if (!a.err) bad.push('after Cancel the held request answered as if nothing happened (' + JSON.stringify(a.out && a.out.out) + ')');
+      else if (!a.err.cancelled) bad.push('after Cancel the held request threw “' + a.err.message + '”, not marked as cancelled, so the Director would report a failure instead of a cancel');
+      if ((FM._aiCalls || 0) !== n0) bad.push('after Cancel FM._aiCalls is ' + FM._aiCalls + ', not ' + n0 + ', so the update hold still waits for an answer that is never coming');
+
+      /* ── (b) The ceiling. */
+      Object.defineProperty(FM.ai, 'TIMEOUT_MS', { configurable: true, writable: true, enumerable: true, value: 400 });
+      const b = ask(20000);
+      await until(function () { return b.done; }, 3000);
+      if (!b.done) bad.push('a request held past the ceiling (FM.ai.TIMEOUT_MS 400 ms) was still waiting 3 s later: nothing stops a request that never answers');
+      else if (!b.err) bad.push('a request held past the ceiling answered (' + JSON.stringify(b.out && b.out.out) + ') instead of being stopped');
+      else if (b.err.cancelled || !/did not answer/i.test(b.err.message || '')) bad.push('a request stopped by the ceiling threw “' + b.err.message + '”' + (b.err.cancelled ? ', marked as cancelled,' : '') + ' — not that it took too long');
+      if ((FM._aiCalls || 0) !== n0) bad.push('after the ceiling FM._aiCalls is ' + FM._aiCalls + ', not ' + n0);
+    } finally {
+      FM.ai.DRY_RUN = dry0;
+      if (dTimeout) Object.defineProperty(FM.ai, 'TIMEOUT_MS', dTimeout); else delete FM.ai.TIMEOUT_MS;
+      if (dFlag) Object.defineProperty(FM, '_aiCalls', dFlag); else delete FM._aiCalls;
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ bughunt8 #9: THE TILT PLATES WERE KEPT FOR THE LIFE OF THE PAGE ════════════════════════════════════════════════════════════
+     What was wrong. js/compositor.js draw3DTiltLayer's plate pair (_t3Pool) and the three pools of the passes that follow a tilt
+     plate past the frame (_pfPoolT, _wpPoolT, _cfPoolT) are re-sized to the last plate drawn through them and never released, so
+     after an export with a leant layer they held export-sized canvases (up to about 80 MB a pool for 1080 × 1920) until something
+     leant was drawn again — kept with the layer deleted, the project closed or Home open, against WebKit's canvas-memory cap on his
+     phone. Now FM.releaseTiltPools sets every one of them to 0 × 0 and empties the pools, and the exporter calls it as each export
+     ends and projects.open as the project changes; FM._tiltPoolPixels says how many pixels they hold.
+     In a project made for this test (320 × 240), a red square hinged on its left edge at x 280 and leant 70° about Y (#3b's square:
+     its plate grows past the frame) with a Drop Shadow on it. (1) Drawn once: the pools hold pixels. (2) The real PNG-frames export
+     of one frame (FM.exporter.runFrames; its zip and download are stood in for): while it renders the pools hold pixels, and once it
+     has ended they hold none. (3) Drawn again, then another project opened: they hold none.
+     FAILS BEFORE THE FIX: FM._tiltPoolPixels is missing, nothing releases the pools, and after the export and after the switch the
+     plates are still held.
+     CONTROLS, which hold on the fixed tree: drawing the leant square really fills the pools, and so does the export's own frame (so
+     an empty pool afterwards is a release, not a pool that was never used); the export ran (one zip). No tolerance: counts. */
+  test('bughunt8 #9 The tilt plates are given back: after an export of a leant layer, and when another project is opened, the tilt pools hold no pixels (CONTROLS: drawing the leant layer and the export’s own frame really fill them; the export ran)', { item: '1176', budgetMs: 60000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.runFrames !== 'function' || !FM.zipWrite || typeof FM.zipWrite.create !== 'function' || typeof FM.renderScene !== 'function') throw new Error('setup: the PNG-frames exporter (FM.exporter.runFrames, FM.zipWrite) or FM.renderScene is not reachable');
+    const bad = [], made = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const ownURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const ownClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    const realRender = FM.renderScene;
+    const pixels = function () { return typeof FM._tiltPoolPixels === 'function' ? FM._tiltPoolPixels() : null; };
+    let zips = 0;
+    try {
+      if (wasHome) FM.home.close();
+      if (typeof FM._tiltPoolPixels !== 'function' || typeof FM.releaseTiltPools !== 'function') bad.push('the tilt pools cannot be read (FM._tiltPoolPixels) and nothing gives them back (FM.releaseTiltPools): after an export or a project switch the leant layer’s plates stay held for the life of the page');
+      const X = await FM.projects.create({ name: 'bughunt8 #9 leant', width: 320, height: 240 });
+      if (!X) throw new Error('setup: could not make the test’s project');
+      made.push(X);
+      FM.scene.project.duration = 2;
+      const L = FM.makeLayer('shape', { name: 'bh8 #9 leant square', shape: 'rect', x: 280, y: 120, shapeW: 100, shapeH: 100, fill: '#ff0000', start: 0, duration: 2 });
+      L.start = 0; L.duration = 2;
+      L.transform.anchorX = 0; L.transform.rotationY = 70;
+      L.effects = [{ type: 'dropshadow', enabled: true, params: _o4P('dropshadow') }];
+      FM.scene.layers.push(L);
+
+      /* (1) drawn once: the pools fill */
+      _bh2Frame(0.5);
+      const p1 = pixels();
+      if (p1 !== null && !(p1 > 0)) bad.push('CONTROL: drawing the leant square left the tilt pools empty (' + p1 + ' px), so a release cannot be told from a pool never used');
+
+      /* (2) the real PNG-frames export of one frame */
+      Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: function (b) { if (b && /zip/.test(b.type || '')) zips++; return 'blob:bughunt8-9'; } });
+      Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, writable: true, value: function () {} });
+      let during = 0;
+      FM.renderScene = function () { const r = realRender.apply(this, arguments); if (FM._exporting) { const n = pixels(); if (n > during) during = n; } return r; };
+      let exErr = null;
+      try { await FM.exporter.runFrames({ scale: 1, fps: 10, from: 0, to: 0.1, name: 'bughunt8-9', format: 'png', onProgress: function () {} }); } catch (e) { exErr = e; }
+      FM.renderScene = realRender;
+      if (exErr) throw new Error('setup: the PNG-frames export failed (' + (exErr && exErr.message) + '), so nothing was measured');
+      if (zips !== 1) bad.push('CONTROL: the PNG-frames export made ' + zips + ' zip(s), not one, so it did not run to its end');
+      if (p1 !== null && !(during > 0)) bad.push('CONTROL: the export’s own frame of the leant square left the tilt pools empty, so the export did not draw through them');
+      const p2 = pixels();
+      if (p2 !== null && p2 !== 0) bad.push('after the export of the leant square ended, the tilt pools still hold ' + p2 + ' px of plates, which nothing will give back until something leant is drawn again');
+
+      /* (3) drawn again, then another project opened */
+      _bh2Frame(0.5);
+      const p3 = pixels();
+      const Y = await FM.projects.create({ name: 'bughunt8 #9 elsewhere', width: 320, height: 240 });
+      if (Y) made.push(Y);
+      const p4 = pixels();
+      if (p3 !== null && !(p3 > 0)) bad.push('CONTROL: drawing the leant square again left the tilt pools empty (' + p3 + ' px)');
+      if (p4 !== null && p4 !== 0) bad.push('after another project was opened, the tilt pools still hold ' + p4 + ' px of the last project’s plates');
+    } finally {
+      FM.renderScene = realRender;
+      Object.defineProperty(URL, 'createObjectURL', ownURL);
+      if (ownClick) Object.defineProperty(HTMLAnchorElement.prototype, 'click', ownClick);
+      else delete HTMLAnchorElement.prototype.click;
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ bughunt8 #10 (and the refuter's N1): SCRAMBLE ON A RIGHT-TO-LEFT LINE PAINTED ITS REVEALED LETTERS ON THE WRONG SIDE ════════
+     What was wrong. js/compositor.js planRuns places each stretch of a decoding Scramble's letters that is not hidden inside the span
+     its landed letters take, measured as the typing-order prefix from the line's left edge. The landed line is one fillText, and on
+     a right-to-left line the canvas lays it out by bidi runs: the first-typed Hebrew letters are drawn on the RIGHT. So while a
+     Scramble with hidden letters decoded, an RTL caption's revealed letters sat on the left and jumped across when it landed, and
+     Word Highlight's boxes, measured where the landed line draws them (bidiSpanFn, f6e644f5), lit beside the painted runs. Now a
+     line holding a right-to-left letter takes its spans from bidiSpanFn(ctx, layout, 0), the very model the boxes use.
+     The line is one Hebrew word of 24 letters (alef to the 24th letter of the block, no space, so the whole line is one right-to-left
+     run, drawn reversed from its left edge 0 to its width W): the letters typed at offsets a..i are drawn from W − adv(i) to
+     W − adv(a), adv(n) the width of the first n typed. Left-aligned, 24 px, one line, with Scramble 1 ahead by Letter, resolving in
+     Random order, at Progress 0.5, so landed, scrambling and hidden letters alternate along the line. FM._textPaintLines is the
+     painter's own plan; _slWatch reads where the renderer paints each string (the 966 scramble layout tests' tools).
+     FAILS BEFORE THE FIX: each run is placed from adv(a), the typing-order prefix, so the runs sit mirrored about the middle of the
+     line: a run of the first-typed letters at the far left, where the landed line draws them at the far right.
+     CONTROLS, which hold before and after: mid-decode the line really hides letters and paints more than one run; a Latin line under
+     the same Scramble keeps every run at adv(a), the old place; the renderer paints exactly the plan's runs at the plan's places,
+     from the landed line's own left edge (read off the landed caption).
+     TOLERANCE, reasoned: the plan and the oracle measure the same strings with the same font through ctx.measureText (bidiSpanFn
+     measures the whole run and the typed prefix, as the oracle does), so they agree to float rounding, about 1e-12 px: 1e-6 px, as
+     the 966 alignment test allows; the renderer's places 1e-3 px, as there. The fault is many pixels (a mirror about the middle). */
+  test('bughunt8 #10 Scramble on a right-to-left line paints its letters where the landed line draws them: on a Hebrew line decoding with letters still hidden, every painted run sits in its landed letters’ right-to-left span, and the renderer paints it there (CONTROLS: letters really hidden; a Latin line keeps its runs where they were; the renderer paints the plan)', { item: '1176' }, function () {
+    if (typeof FM._textPaintLines !== 'function' || typeof _slScr !== 'function' || typeof _slCtx !== 'function' || typeof _slWatch !== 'function') throw new Error('setup: FM._textPaintLines or the 966 scramble layout helpers (_slScr, _slCtx, _slWatch) are not reachable');
+    const T = 0.71, W0 = 480, H0 = 120, EPS = 1e-6, PX = 1e-3, bad = [];
+    let HEB = '';
+    for (let k = 0; k < 24; k++) HEB += String.fromCharCode(0x05D0 + k);
+    const LAT = 'abcdefghijklmnopqrstuvwx';
+    const layer = function (text, progress) {
+      const L = FM.makeLayer('text', { text: text, x: 40, y: 60, fontSize: 24, fontFamily: 'sans-serif', wrapWidth: 1000, color: '#ffffff' });
+      L.start = 0; L.duration = 4; L.align = 'left';
+      L.effects = [_slScr({ chars: 1, ahead: 1, order: 2, progress: progress })];
+      return L;
+    };
+    /* the plan's line, checked: one line, its layout the text, letters really hidden, more than one run */
+    const lineOf = function (what, text) {
+      const plan = FM._textPaintLines(layer(text, 0.5), T);
+      if (plan.length !== 1 || plan[0].layout !== text) throw new Error('setup: the ' + what + ' line is laid out as ' + JSON.stringify(plan.map(function (l) { return l.layout; })) + ', not as the one line it is');
+      const l = plan[0];
+      if (!l.hidden.length || l.runs.length < 2) throw new Error('CONTROL: mid-decode the ' + what + ' line hides ' + l.hidden.length + ' letters and paints ' + l.runs.length + ' run(s), so nothing is placed apart from its neighbours');
+      return l;
+    };
+    const c = _slCtx(layer(HEB, 0.5), null);
+    const adv = function (s, n) { return n > 0 ? c.measureText(s.slice(0, n)).width : 0; };
+
+    /* ── the right-to-left line: every run in its landed letters' span, left-aligned from the span's left edge */
+    const h = lineOf('Hebrew', HEB), Wh = c.measureText(HEB).width;
+    let mirrored = 0;
+    h.runs.forEach(function (r) {
+      const i = r.at + r.s.length, want = Wh - adv(HEB, i), old = adv(HEB, r.at);
+      if (Math.abs(r.x - want) > EPS) {
+        bad.push('the Hebrew line’s run of letters ' + r.at + '..' + (i - 1) + ' is painted from ' + r.x.toFixed(3) + ', not ' + want.toFixed(3) + ', where the landed line draws those letters (' + want.toFixed(1) + '..' + (Wh - adv(HEB, r.at)).toFixed(1) + ')');
+        if (Math.abs(r.x - old) <= EPS) mirrored++;
+      }
+    });
+    if (mirrored) bad.push(mirrored + ' of the Hebrew line’s ' + h.runs.length + ' runs are placed from their typing-order prefix, mirrored about the middle of the line: the revealed letters sit on the side the landed line does not draw them, and jump across when it lands');
+
+    /* ── CONTROL: the Latin line keeps every run at its typing-order prefix */
+    const lt = lineOf('Latin', LAT);
+    lt.runs.forEach(function (r) {
+      const want = adv(LAT, r.at);
+      if (Math.abs(r.x - want) > EPS) bad.push('CONTROL: the Latin line’s run at ' + r.at + ' (“' + r.s + '”) is placed at ' + r.x.toFixed(3) + ', not at its old ' + want.toFixed(3));
+    });
+
+    /* ── CONTROL: the renderer paints exactly the plan's runs at the plan's places, from the landed line's own left edge */
+    const land = layer(HEB, 1), fin = FM._textPaintLines(land, T), F = _slWatch([land], T, W0, H0);
+    if (fin.length !== 1 || F.calls.length !== 1) bad.push('CONTROL: the landed Hebrew line is painted in ' + F.calls.length + ' strings for ' + fin.length + ' line(s), not one');
+    else {
+      const ox = F.calls[0].L - fin[0].left, oy = F.calls[0].Y - fin[0].y;
+      const shot = _slWatch([layer(HEB, 0.5)], T, W0, H0);
+      const want = h.runs.map(function (r) { return { s: r.s, L: ox + h.left + r.x, Y: oy + h.y }; });
+      if (shot.calls.length !== want.length) bad.push('CONTROL: the renderer paints ' + shot.calls.length + ' strings on the decoding Hebrew line, the plan ' + want.length + ' runs');
+      else shot.calls.forEach(function (g, k) {
+        const v = want[k];
+        if (g.s !== v.s || Math.abs(g.L - v.L) > PX || Math.abs(g.Y - v.Y) > PX) bad.push('CONTROL: painted string ' + k + ' “' + g.s + '” at ' + g.L.toFixed(3) + ', not the plan’s “' + v.s + '” at ' + v.L.toFixed(3));
+      });
+    }
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
+  });
+
+  /* ═══ bughunt8 #2b: DUPLICATE, DELETE AND LEAVE ASKED WHICH PROJECT WAS OPEN OF THE POINTER ANOTHER TAB MOVES ═══════════════════════
+     What was wrong. bughunt8 #2 moved the watch-only gates and the packer off FM.projects.currentId(), the shared localStorage
+     fm.currentProject every tab rewrites when it opens a project, onto this tab's own project (FM.storage.openProjectId). The other
+     "is it the open one?" checks still read the pointer: FM.projects.duplicate flushed only for it; FM.projects.remove moved this tab
+     off the deleted project only when the pointer named it (and kept the live scene's clips when it did not); discardDraft,
+     discardDraftAnyway and detachLinked asked the same; and so did the collab engine (C.leave's and C.reopen's fallbacks, pushLocal's
+     lock, offProject, C.share's pid, C.onReset), the bridge's base fallbacks, collab-ui.js currentPid() and the comments count.
+     The other tab is played the way the 915.5Br and bughunt8 #2 tests play it: fm.currentProject is pointed at the other project's
+     id, and afterwards put back on the project this tab has open (what this tab last wrote there). Three doors, a CONTROL in one tab
+     first each time:
+     1. Duplicate: a layer pushed into this tab's open project and not saved, then Duplicate of that project. The copy must hold it.
+     2. Delete: the project open here, deleted while the other tab is elsewhere, must move this tab off it; the project the other tab
+        has open, deleted from here, must leave this tab on his own project, untouched: the same document object, with a layer not
+        saved yet still on screen (review F2: an id check alone passed on the old code whenever the first card was his own project,
+        which the old switch then tore down and opened again).
+     3. Leave (delete my copy) from a guest session with no gpid, on a shared copy open here, while the other tab has another shared
+        copy open: the copy open here goes, and the other tab's stays, unmarked. (The copies have no room to reach: nothing dials.)
+     FAILS BEFORE THE FIX: with the pointer elsewhere, Duplicate copies the document on disk without the unsaved layer; deleting the
+     project open here leaves this tab on it, and deleting the other tab's project moves this tab off his own (or, when the first
+     card is his own, reloads it: the document object and the unsaved layer are replaced); Leave marks the other
+     tab's copy left and deletes it, and the copy open here stays on the device, still linked.
+     CONTROLS, which hold before and after: with one tab Duplicate copies the unsaved layer, deleting the open project moves this tab
+     off it, and Leave deletes the copy open here. No tolerance: every quantity is a name, an id or a count. */
+  test('bughunt8 #2b Duplicate, Delete and Leave ask about this tab’s project, not the one another tab opened: with another tab on a project of its own, Duplicate here copies the layer not saved yet, deleting the project open here moves this tab off it, deleting the one the other tab has open leaves this tab where it is, and Leave from a session with no project id deletes the shared copy open here and not the other tab’s (CONTROLS: with one tab each does what it did before)', { item: '1176', budgetMs: 120000 }, async function () {
+    const C = need921S7('Duplicate, Delete and Leave with two tabs');
+    if (typeof FM.projects.duplicate !== 'function' || typeof FM.projects.remove !== 'function' || typeof FM.projects.createLinked !== 'function' || typeof FM.storage.openProjectId !== 'function' || typeof C.leave !== 'function' || typeof C.Session !== 'function' || typeof C.attach !== 'function') throw new Error('setup: FM.projects.duplicate / remove / createLinked, FM.storage.openProjectId, FM.collab.leave, Session or attach is not reachable');
+    const bad = [], made = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    let moved = false;
+    /* another tab opening project `pid`: only the shared pointer moves */
+    const otherTab = function (pid) { moved = true; localStorage.setItem('fm.currentProject', pid); };
+    /* …and closing again: the pointer is what this tab last wrote there, the project it has open */
+    const backTab = function () {
+      if (!moved) return;
+      moved = false;
+      const mine = FM.storage.openProjectId();
+      if (mine) localStorage.setItem('fm.currentProject', mine); else localStorage.removeItem('fm.currentProject');
+    };
+    const here = function () { return FM.storage.openProjectId(); };
+    const cardOf = function (pid) { return FM.projects.list().filter(function (p) { return p.id === pid; })[0] || null; };
+    const has = function (pid) { return !!cardOf(pid); };
+    const nameOf = function (pid) { const c = cardOf(pid); return pid ? '“' + ((c && c.name) || pid) + '”' : 'nothing'; };
+    const ids = function () { return FM.projects.list().map(function (p) { return p.id; }); };
+    /* Duplicate of `pid`: what it answered, how many copies it made, and the layer names the copy's stored document holds */
+    async function dup(pid) {
+      const before = ids();
+      const ok = await FM.projects.duplicate(pid);
+      const fresh = ids().filter(function (id) { return before.indexOf(id) < 0; });
+      fresh.forEach(function (id) { made.push(id); });
+      let doc = null;
+      try { doc = fresh.length === 1 ? JSON.parse(localStorage.getItem('fm.proj.' + fresh[0]) || 'null') : null; } catch (e) { doc = null; }
+      return { ok: ok, n: fresh.length, names: ((doc && doc.layers) || []).map(function (l) { return l && l.name; }) };
+    }
+    /* an Editor's shared copy with no way back to a room (no hub, rid or token), so opening it starts no reconnect */
+    function linked(tag) {
+      const D = { project: { name: 'Ezra’s film bh8-2b ' + tag, width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(layer921('Shared bh8-2b ' + tag))] };
+      const id = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'editor', epoch: 'e-bh8-2b-' + tag, seq: 0, name: 'Sam' }, D);
+      if (!id) throw new Error('setup: could not make the shared copy ' + tag);
+      made.push(id);
+      return { id: id, D: D };
+    }
+    /* this tab opens the copy, and a guest session with NO gpid is attached to it: the fallback is what Leave reads */
+    async function inSession(copy) {
+      await FM.projects.open(copy.id, { confirmed: true });
+      await settle921(80);
+      if (here() !== copy.id) throw new Error('setup: this tab did not open the shared copy ' + copy.id);
+      if (C.session) throw new Error('setup: a session was already attached before this one');
+      const S = C.Session({ adapter: C.bridge, role: 'editor', mid: 'g', base: jclone921(copy.D), epoch: 1 });
+      if (S.gpid) throw new Error('setup: the session came with a gpid, so the fallback under test is not what Leave reads');
+      C.attach(S, { autoTick: false });
+      return S;
+    }
+    await withLabs921(async function () {
+      try {
+        if (wasHome) FM.home.close();
+        const Y = await FM.projects.create({ name: 'bughunt8 #2b the other tab', width: 320, height: 240 });
+        if (!Y) throw new Error('setup: could not make the other tab’s project');
+        made.push(Y);
+        const X = await FM.projects.create({ name: 'bughunt8 #2b his own', width: 320, height: 240 });
+        if (!X) throw new Error('setup: could not make his own project');
+        made.push(X);
+        if (here() !== X) throw new Error('setup: this tab is not on his own project');
+
+        /* ── 1. DUPLICATE: the flush before the copy is made */
+        FM.scene.layers.push(layer921('bh8-2b one tab'));
+        const d1 = await dup(X);
+        if (d1.n !== 1 || d1.names.indexOf('bh8-2b one tab') < 0) bad.push('CONTROL: with one tab Duplicate of the project open here answered ' + d1.ok + ' and made ' + d1.n + ' copy(ies) holding ' + JSON.stringify(d1.names) + ', not one copy with the layer not saved yet');
+        FM.scene.layers.push(layer921('bh8-2b two tabs'));
+        otherTab(Y);
+        const d2 = await dup(X);
+        backTab();
+        if (d2.n !== 1) bad.push('with another tab on a project of its own, Duplicate of the project open here answered ' + d2.ok + ' and made ' + d2.n + ' copies, not one');
+        else if (d2.names.indexOf('bh8-2b two tabs') < 0) bad.push('with another tab on a project of its own, Duplicate of the project open here copied the document on disk without the flush: the copy holds ' + JSON.stringify(d2.names) + ' and not the layer added last');
+
+        /* ── 2. DELETE: which tab is moved off what */
+        const Z0 = await FM.projects.create({ name: 'bughunt8 #2b deleted, one tab', width: 320, height: 240 });
+        if (!Z0) throw new Error('setup: could not make the project to delete with one tab');
+        made.push(Z0);
+        await FM.projects.remove(Z0);
+        if (here() === Z0) bad.push('CONTROL: with one tab, deleting the project open here left this tab on it');
+        const Z = await FM.projects.create({ name: 'bughunt8 #2b deleted here', width: 320, height: 240 });
+        if (!Z) throw new Error('setup: could not make the project to delete');
+        made.push(Z);
+        if (here() !== Z) throw new Error('setup: this tab is not on the project about to be deleted');
+        otherTab(Y);
+        await FM.projects.remove(Z);
+        const z = here();
+        backTab();
+        if (z === Z) bad.push('with another tab on a project of its own, deleting the project open here left this tab on it: its card is gone, and its next save writes it back as a document no card shows');
+        const W = await FM.projects.create({ name: 'bughunt8 #2b open in the other tab', width: 320, height: 240 });
+        if (!W) throw new Error('setup: could not make the other tab’s open project');
+        made.push(W);
+        await FM.projects.open(X, { confirmed: true });
+        if (here() !== X) throw new Error('setup: this tab did not go back to his own project');
+        /* What this tab holds before the delete: the document object and a layer not saved yet. The old switch opened the
+           first card, and when that card is X itself open(X) is not cut short (the pointer names W), so X is torn down and
+           loaded again: the id alone would pass. Both of these are replaced by any reload, whatever the index order. */
+        const keepP = FM.scene.project, keepL = layer921('bh8-2b not saved, still on screen');
+        FM.scene.layers.push(keepL);
+        otherTab(W);
+        await FM.projects.remove(W);
+        const w = here(), wDoc = FM.scene.project === keepP, wLayer = FM.scene.layers.indexOf(keepL) >= 0;
+        backTab();
+        if (w !== X) bad.push('deleting from here the project another tab has open took this tab off his own project, to ' + nameOf(w));
+        else if (!wDoc || !wLayer) bad.push('deleting from here the project another tab has open tore his own project down and opened it again (' + (wDoc ? '' : 'its document was replaced') + (wDoc || wLayer ? '' : ', ') + (wLayer ? '' : 'the layer not saved yet is not the one on screen') + '): his undo goes with that, and a live session is stood down');
+
+        /* ── 3. LEAVE (delete my copy) from a session that carries no gpid */
+        const G0 = linked('0');
+        await inSession(G0);
+        await C.leave({ keep: false });
+        await settle921(80);
+        if (has(G0.id)) bad.push('CONTROL: with one tab, Leave (delete my copy) left the shared copy open here on the device');
+        const G2 = linked('2'), G1 = linked('1');
+        await inSession(G1);
+        otherTab(G2.id);
+        await C.leave({ keep: false });
+        await settle921(80);
+        backTab();
+        const c2 = cardOf(G2.id);
+        if (!c2) bad.push('with another tab on a shared copy of its own, Leave here deleted THAT copy: the session had no gpid and took the shared pointer for the copy it was on');
+        else if (c2.collab && c2.collab.ended) bad.push('with another tab on a shared copy of its own, Leave here marked THAT copy ' + JSON.stringify(c2.collab.ended));
+        if (has(G1.id)) bad.push('with another tab on a shared copy of its own, the copy he left here is still on the device as a linked copy');
+      } finally {
+        backTab();
+        try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+        try { if (C._undoHandover) C._undoHandover(false); } catch (e) {}
+        /* the pointer back on what this tab has open, so the cleanup's own "is orig open?" reads this tab */
+        try { const mine = FM.storage.openProjectId(); if (mine) localStorage.setItem('fm.currentProject', mine); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+        /* a deleted project this tab stayed on (the bug) is written back by the next flush: no card, so take the stray document */
+        made.forEach(function (id) { try { if (!has(id)) localStorage.removeItem('fm.proj.' + id); } catch (e) {} });
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ bughunt8 #2c: THE REST OF THE “IS IT THE ONE OPEN HERE?” CHECKS #1176 MOVED, WITH ANOTHER TAB ON A PROJECT OF ITS OWN ═══════
+     What it guards. 6739671e..faf84581 moved every check that means the project THIS tab has open off FM.projects.currentId(), the
+     shared localStorage fm.currentProject every tab rewrites when it opens a project, onto this tab's own (tabId() in storage.js,
+     FM.storage.openProjectId() everywhere else). bughunt8 #2b catches Duplicate, remove()'s switch and C.leave's fallback; 921 S2
+     and 996 catch pushLocal's lock, C.onReset and offProject. The review of the change (F1) found the rest with no test that fails
+     when one of them is put back on the pointer, and this is that test. The other tab is played as #2 and #2b play it: with his
+     own project X open here, fm.currentProject is pointed at another project, then put back on what this tab has open. No
+     network: no session dials, a reconnect's link is a fake object, and Share on a loopback page is refused by relayGate.
+     Seven doors, a CONTROL in one tab each time, and the site each assertion guards:
+     1. The comments count (collab-comments.js scan's pid). Sam's comment counts 1; the pointer moves and his second arrives: 2.
+     2. The bridge's base fallbacks with no session (collab-bridge.js openPid, one assertion for each of the three): persistBase()
+        files the base under X, not under the other tab's Y, which holds a decoy; readBase() with no id reads X's, not the decoy;
+        dropBase() with no id drops X's and leaves the decoy.
+     3. A reconnect through a fake link and a stand-in readBase (collab-session.js C.reopen): with gpid X it still attaches (its
+        #996 gate); with no gpid it asks for X's base (its fallback).
+     4. Delete's keep-set (storage.js remove, its live-scene clause). A clip on screen here and not saved yet, whose id a project
+        V's stored document also names (a linked copy carries the host's ids), with a record in the store. The other tab has V
+        open and V is deleted from here: the record is kept. A record only V names goes (the control that the delete ran).
+     5. Detach (storage.js detachLinked). (a) The shared copy open here, with a layer not saved yet, detached while the other tab
+        is elsewhere: the new copy holds the layer (its flush), and it is what this tab has open. (b) The shared copy open in the
+        OTHER tab, detached from here: this tab stays on X (its wasOpen).
+     6. Drafts. A draft open here: discardDraft refuses it and keeps its document and card (discardDraft's check), and
+        discardDraftAnyway takes the switch-away route, so this tab ends off the draft and the draft is gone (discardDraftAnyway's
+        check).
+     7. Share (U.share, then armShare, then C.share), with X open and the pointer on Y: the session is bound to X (C.share's
+        S.pid), and the room is filed under X and not under Y (collab-ui.js currentPid, which armShare's lock, room and save
+        point read). With a shared copy open here and the pointer on a plain project, Share arms nothing (currentPid again, in
+        U.share's and armShare's refusal of somebody else's copy).
+     NOT SEPARATELY REACHABLE: detachLinked's last line (`tabId() !== nid` before its own open). With the copy open here, remove()
+     has already moved this tab onto the new copy (it is first in the index), so this tab and the pointer agree by then; with the
+     copy open elsewhere wasOpen is false and the line does nothing. 5(a)'s "this tab is on the new copy" is the outcome it serves.
+     currentPid()'s other readers (the resume, the banner, the knock card) are the same one function, so 7 guards them as one.
+     Not asserted on purpose: discardDraft of a draft open only in ANOTHER tab now goes ahead (the review's F3: not a regression,
+     and not a behaviour to pin).
+     FAILS BEFORE THE FIX, each with that one site read from the pointer: 1 the count is 0, not 2 (the move reads as another
+     project, and both comments are marked seen); 2 the base is filed under Y, read as the decoy, and the decoy is the one
+     dropped; 3 the reconnect with gpid X attaches nothing, and the one with no gpid asks for Y's base; 4 the record of the clip
+     on screen is deleted; 5(a) the new copy lacks the layer, 5(b) this tab is moved off X onto the new copy; 6 discardDraft
+     deletes the draft open here under the open editor, and discardDraftAnyway takes the not-open route and leaves this tab on
+     the draft; 7 the session is bound to Y, the room is filed under Y, and the shared copy is armed as a room of the guest's own.
+     CONTROLS, which hold before and after: with one tab Sam's comment counts 1; a base is filed, read and dropped under X; a
+     reconnect with no gpid attaches to X; deleting another project keeps a clip on screen and deletes a record only it named;
+     detaching the copy open here copies the unsaved layer and lands on the copy; discardDraft refuses the draft open here and
+     discardDraftAnyway deletes it from somewhere else; Share arms X with X's room; Share on a shared copy arms nothing. Share's
+     control runs AFTER its two-tab arm: collab-ui keeps the last room in memory (useRoom), so a room made for X first would let
+     the two-tab arm skip the save the assertion reads. No tolerance: every quantity is an id, a name, a count or a flag. */
+  test('bughunt8 #2c with another tab on a project of its own, the rest of the checks that mean the project open in THIS tab ask this tab: the comments count is kept, a base is filed, read and dropped under the project open here, a reconnect to it is not dropped, deleting the other tab’s project keeps the clips on screen here, Detach flushes and moves this tab onto the new copy (and leaves it alone when the copy is open elsewhere), a draft open here is refused by discardDraft and switched away from by discardDraftAnyway, and Share binds the session and the room to the project open here and arms no shared copy (CONTROLS: with one tab each does what it did before)', { item: '1176', budgetMs: 180000 }, async function () {
+    const C = need921S7('the rest of the open-project checks with two tabs');
+    if (typeof FM.storage.openProjectId !== 'function' || typeof FM.storage.collabPut !== 'function' || typeof FM.storage.collabGet !== 'function' || typeof FM.storage.collabDel !== 'function' || typeof FM.storage.collabKeys !== 'function' || typeof FM.projects.remove !== 'function' || typeof FM.projects.createLinked !== 'function' || typeof FM.projects.detachLinked !== 'function' || typeof FM.projects.discardDraft !== 'function' || typeof FM.projects.discardDraftAnyway !== 'function' || typeof C.reopen !== 'function' || typeof C.bridge.persistBase !== 'function' || typeof C.bridge.readBase !== 'function' || typeof C.bridge.dropBase !== 'function' || typeof C.comments.unread !== 'function' || typeof C.comments.onChange !== 'function' || typeof C.ui.share !== 'function') throw new Error('setup: FM.storage.openProjectId / collabPut / collabGet / collabDel / collabKeys, FM.projects.remove / createLinked / detachLinked / discardDraft / discardDraftAnyway, FM.collab.reopen, the bridge base calls, the comments count or the Share panel is not reachable');
+    const bad = [], made = [], recs = [];
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const ts = Date.now().toString(36);
+    let moved = false;
+    /* another tab opening project `pid`: only the shared pointer moves */
+    const otherTab = function (pid) { moved = true; localStorage.setItem('fm.currentProject', pid); };
+    /* …and closing again: the pointer is what this tab last wrote there, the project it has open */
+    const backTab = function () {
+      if (!moved) return;
+      moved = false;
+      const mine = FM.storage.openProjectId();
+      if (mine) localStorage.setItem('fm.currentProject', mine); else localStorage.removeItem('fm.currentProject');
+    };
+    const here = function () { return FM.storage.openProjectId(); };
+    const cardOf = function (pid) { return FM.projects.list().filter(function (p) { return p.id === pid; })[0] || null; };
+    const has = function (pid) { return !!cardOf(pid); };
+    const nameOf = function (pid) { const c = pid ? cardOf(pid) : null; return pid ? '“' + ((c && c.name) || pid) + '”' : 'nothing'; };
+    const hasRoom = function (pid) { try { return localStorage.getItem('fm.collab.host.' + pid) !== null; } catch (e) { return false; } };
+    const say = function (v) { return JSON.stringify(v === undefined ? null : v).replace(/"/g, "'"); };
+    /* the layer names a project's stored document holds */
+    const docNames = function (pid) {
+      let d = null;
+      try { d = JSON.parse(localStorage.getItem('fm.proj.' + pid) || 'null'); } catch (e) { d = null; }
+      return ((d && d.layers) || []).map(function (l) { return l && l.name; });
+    };
+    /* an Editor's shared copy with no way back to a room (no hub, rid or token), so opening it starts no reconnect */
+    function linked(tag) {
+      const D = { project: { name: 'Ezra’s film bh8-2c ' + tag, width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [jclone921(layer921('Shared bh8-2c ' + tag))] };
+      const id = FM.projects.createLinked({ hostName: 'Ezra', hostColor: '#a3e635', mid: 'm1', role: 'editor', epoch: 'e-bh8-2c-' + tag, seq: 0, name: 'Sam' }, D);
+      if (!id) throw new Error('setup: could not make the shared copy ' + tag);
+      made.push(id);
+      return id;
+    }
+    async function openHere(pid, what) {
+      await FM.projects.open(pid, { confirmed: true });
+      await settle921(80);
+      if (here() !== pid) throw new Error('setup: this tab did not open ' + what);
+    }
+    /* a hidden workspace an element is built in, made and opened here */
+    async function draft(tag) {
+      const id = await FM.projects.create({ name: 'bughunt8 #2c draft ' + tag, width: 320, height: 240, elementDraft: true });
+      if (!id) throw new Error('setup: could not make the draft ' + tag);
+      made.push(id);
+      if (here() !== id) throw new Error('setup: this tab is not on the draft ' + tag);
+      return id;
+    }
+    /* every room, save point and base that an arm or the bridge wrote under a project this test made */
+    async function dropRooms() {
+      made.forEach(function (id) { try { localStorage.removeItem('fm.collab.host.' + id); } catch (e) {} });
+      for (let m = 0; m < made.length; m++) {
+        try {
+          const left = await FM.storage.collabKeys('collab:ckpt:' + made[m] + ':');
+          for (let i = 0; i < left.length; i++) await FM.storage.collabDel(left[i]);
+          await FM.storage.collabDel('collab:base:' + made[m]);
+        } catch (e) {}
+      }
+    }
+    await withLabs921(async function (ui) {
+      try {
+        if (wasHome) FM.home.close();
+        const Y = await FM.projects.create({ name: 'bughunt8 #2c the other tab', width: 320, height: 240 });
+        if (!Y) throw new Error('setup: could not make the other tab’s project');
+        made.push(Y);
+        const X = await FM.projects.create({ name: 'bughunt8 #2c his own', width: 320, height: 240 });
+        if (!X) throw new Error('setup: could not make his own project');
+        made.push(X);
+        await settle921(60);
+        if (here() !== X) throw new Error('setup: this tab is not on his own project');
+        if (C.session) throw new Error('setup: a session is attached before anything here made one');
+        const toX = async function () {
+          if (here() !== X) await FM.projects.open(X, { confirmed: true });
+          await settle921(60);
+          if (here() !== X) throw new Error('setup: this tab could not go back to his own project');
+        };
+
+        /* ── 1. THE COMMENTS COUNT (collab-comments.js scan) */
+        if (!C.comments.installed()) throw new Error('setup: the comments are not installed with Work with friends on, so nothing is counted');
+        if (C.comments.isOpen()) C.comments.close();
+        C.comments.paintMarks();
+        const P1 = FM.scene.project;
+        if (!Array.isArray(P1.comments)) P1.comments = [];
+        const fromSam = function (n) { return { id: 'c_bh82c_' + n + '_' + ts, text: 'Sam’s comment ' + n, by: { mid: 'm7', name: 'Sam', color: '#a3e635' }, replies: [] }; };
+        P1.comments.push(fromSam(1));
+        C.comments.onChange();
+        const u1 = C.comments.unread();
+        if (u1 !== 1) bad.push('CONTROL: with one tab a comment from Sam counts ' + u1 + ', not 1, so the count with two tabs cannot be read');
+        else {
+          otherTab(Y);
+          P1.comments.push(fromSam(2));
+          C.comments.onChange();
+          const u2 = C.comments.unread();
+          backTab();
+          if (u2 !== 2) bad.push('with another tab on a project of its own, the count of comments not read here is ' + u2 + ', not 2: the scan took the other tab opening a project for this tab opening another one, zeroed the count and marked both seen (collab-comments.js scan)');
+        }
+        P1.comments = P1.comments.filter(function (c) { return !(c && typeof c.id === 'string' && c.id.indexOf('c_bh82c_') === 0); });
+
+        /* ── 2. THE BRIDGE'S BASE FALLBACKS, NO SESSION (collab-bridge.js openPid) */
+        if (C.session) throw new Error('setup: a session is attached, so the bridge reads its gpid and not the fallback');
+        const baseKey = function (pid) { return 'collab:base:' + pid; };
+        const baseRec = function (pid, epoch) { return { v: 1, gpid: pid, epoch: epoch, seq: 0, cid: 0, D: { project: {}, layers: [] }, at: Date.now() }; };
+        const epochOf = async function (pid) { const r = await FM.storage.collabGet(baseKey(pid)); return r ? r.epoch : null; };
+        const p0 = await C.bridge.persistBase({ epoch: 'bh8-2c one tab', seq: 1, D: { project: {}, layers: [] } });
+        const b0 = await epochOf(X), rb0 = await C.bridge.readBase();
+        await C.bridge.dropBase();
+        const g0 = await epochOf(X);
+        if (!p0 || b0 !== 'bh8-2c one tab' || !rb0 || rb0.epoch !== 'bh8-2c one tab' || g0 !== null) bad.push('CONTROL: with one tab the base was filed under the project open here as ' + say(b0) + ' (persistBase answered ' + say(p0) + '), read back as ' + say(rb0 && rb0.epoch) + ' and left as ' + say(g0) + ' after the drop');
+        await FM.storage.collabPut(baseKey(Y), baseRec(Y, 'bh8-2c decoy'));
+        otherTab(Y);
+        await C.bridge.persistBase({ epoch: 'bh8-2c filed here', seq: 2, D: { project: {}, layers: [] } });
+        const bX = await epochOf(X), bY = await epochOf(Y);
+        await FM.storage.collabPut(baseKey(X), baseRec(X, 'bh8-2c read here'));
+        await FM.storage.collabPut(baseKey(Y), baseRec(Y, 'bh8-2c decoy'));
+        const rb = await C.bridge.readBase();
+        await C.bridge.dropBase();
+        const dX = await epochOf(X), dY = await epochOf(Y);
+        backTab();
+        if (bX !== 'bh8-2c filed here' || bY !== 'bh8-2c decoy') bad.push('with another tab on a project of its own, persistBase with no session filed the base ' + (bY === 'bh8-2c filed here' ? 'under the other tab’s project' : 'somewhere else') + ' (the project open here holds ' + say(bX) + ', the other tab’s ' + say(bY) + '): collab-bridge.js persistBase’s fallback');
+        if (!rb || rb.epoch !== 'bh8-2c read here') bad.push('with another tab on a project of its own, readBase with no id read ' + say(rb && rb.epoch) + ', not the base of the project open here: collab-bridge.js readBase’s fallback');
+        if (dX !== null || dY !== 'bh8-2c decoy') bad.push('with another tab on a project of its own, dropBase with no id ' + (dY === null ? 'dropped the other tab’s base' : 'did not drop the base of the project open here') + ' (here ' + say(dX) + ', the other tab’s ' + say(dY) + '): collab-bridge.js dropBase’s fallback');
+        await FM.storage.collabDel(baseKey(X));
+        await FM.storage.collabDel(baseKey(Y));
+
+        /* ── 3. A RECONNECT (collab-session.js C.reopen), through a fake link: nothing leaves */
+        const asked = [];
+        const based = { project: jclone921(FM.scene.project), layers: jclone921(FM.scene.layers) };
+        const A3 = Object.create(C.bridge);
+        A3.readBase = function (g) { asked.push(g || null); return Promise.resolve({ D: jclone921(based), epoch: 1, seq: 0, cid: 0 }); };
+        /* reconnect with `gpid` (or none): which base it asked for, and which project the session it attached is on */
+        const reopen = async function (gpid) {
+          const o = { link: t996Link(), adapter: A3, role: 'editor', mid: 'g', autoTick: false };
+          if (gpid) o.gpid = gpid;
+          const n = asked.length;
+          let res = null, err = null;
+          try { res = await C.reopen(o); } catch (e) { err = e; }
+          const out = { asked: asked.slice(n), on: (res && res.session) ? (res.gpid || '?') : null, err: err ? String(err && err.message || err) : null };
+          try { if (res && res.session) { res.session.stop('left'); if (C.session === res.session) C.detach(); } } catch (e) {}
+          try { if (C._undoHandover) C._undoHandover(false); } catch (e) {}
+          return out;
+        };
+        const o0 = await reopen(null);
+        if (o0.on !== X || o0.asked[0] !== X) bad.push('CONTROL: with one tab a reconnect with no project id asked for the base of ' + nameOf(o0.asked[0]) + ' and attached to ' + nameOf(o0.on) + (o0.err ? ' (' + o0.err + ')' : '') + ', not the project open here');
+        otherTab(Y);
+        const o1 = await reopen(X);
+        const o2 = await reopen(null);
+        backTab();
+        if (o1.on !== X) bad.push('with another tab on a project of its own, the reconnect to the project still open here attached ' + nameOf(o1.on) + (o1.err ? ' (' + o1.err + ')' : '') + ': C.reopen’s #996 gate asked the shared pointer whether it was still open, so another tab opening anything drops this tab’s reconnect');
+        if (o2.asked[0] !== X) bad.push('with another tab on a project of its own, a reconnect with no project id asked for the base of ' + nameOf(o2.asked[0]) + ', not the project open here (C.reopen’s fallback)' + (o2.on ? ', and attached to ' + nameOf(o2.on) : ''));
+
+        /* ── 4. DELETE'S KEEP-SET (storage.js remove): a clip on screen here, not saved yet, whose id another document names */
+        const V0 = await FM.projects.create({ name: 'bughunt8 #2c deleted, one tab', width: 320, height: 240 });
+        if (!V0) throw new Error('setup: could not make the project to delete with one tab');
+        made.push(V0);
+        const V = await FM.projects.create({ name: 'bughunt8 #2c deleted, open in the other tab', width: 320, height: 240 });
+        if (!V) throw new Error('setup: could not make the project the other tab has open');
+        made.push(V);
+        await toX();
+        const live0 = layer921('bh8-2c on screen, one tab'), live = layer921('bh8-2c on screen, two tabs');
+        const only0 = 'l_bh82c_only0_' + ts, only = 'l_bh82c_only_' + ts;
+        const storedDoc = function (name, lids) { return JSON.stringify({ project: { name: name, width: 320, height: 240, duration: 3 }, layers: lids.map(function (id) { return { id: id, type: 'image', start: 0, duration: 2 }; }), selectedId: null, selectedIds: [] }); };
+        localStorage.setItem('fm.proj.' + V0, storedDoc('bughunt8 #2c deleted, one tab', [live0.id, only0]));
+        localStorage.setItem('fm.proj.' + V, storedDoc('bughunt8 #2c deleted, open in the other tab', [live.id, only]));
+        const f4 = await q915aPng('bh82c', '#264653');
+        const k4 = [live0.id, only0, live.id, only];
+        k4.forEach(function (k) { recs.push(k); });
+        for (const k of k4) await q915aPut(k, { file: f4, kind: 'image' });
+        /* nothing pending: no autosave can write the two clips below into his document before the deletes read it */
+        FM.storage.flushSync();
+        FM.scene.layers.push(live0, live);
+        await FM.projects.remove(V0);
+        const raw0 = await q915aRaw();
+        if (raw0[only0]) bad.push('CONTROL: with one tab, deleting a project left a record only it named, so the deletes here may not run at all');
+        else if (!raw0[live0.id]) bad.push('CONTROL: with one tab, deleting another project deleted the record of a clip on screen here and not saved yet');
+        const keep4 = FM.scene.project;
+        otherTab(V);
+        await FM.projects.remove(V);
+        const h4 = here(), same4 = FM.scene.project === keep4, raw1 = await q915aRaw();
+        backTab();
+        /* A save of his project with the clip in it before the delete read the documents would make the live scene irrelevant.
+           Only when nothing reloaded it: the old switch (remove()'s own, guarded by #2b) flushes X AFTER the keep-set was read. */
+        const xDoc = localStorage.getItem('fm.proj.' + X) || '';
+        if (h4 === X && same4 && xDoc.indexOf(live.id) >= 0) bad.push('setup: his project was saved with the clip before the delete read it, so the live scene was not what decided');
+        else if (raw1[only]) bad.push('setup: deleting the project the other tab has open left a record only it named, so the delete may not have run');
+        else if (!raw1[live.id]) bad.push('with another tab on the project being deleted, deleting it from here deleted the record of a clip on screen in this tab and not saved yet: remove() left the live scene out of its keep-set because the shared pointer named the project being deleted (storage.js remove), so that clip comes back blank');
+        FM.scene.layers = FM.scene.layers.filter(function (l) { return !(l && (l.id === live0.id || l.id === live.id)); });
+
+        /* ── 5. DETACH (storage.js detachLinked): a shared copy made his own */
+        const unsaved = function (tag) { const L = layer921('bh8-2c not saved ' + tag); FM.scene.layers.push(L); return L.name; };
+        const E0 = linked('d0');
+        await openHere(E0, 'the shared copy to detach with one tab');
+        const n0 = unsaved('d0');
+        const e0 = await FM.projects.detachLinked(E0);
+        if (e0) made.push(e0);
+        if (!e0 || docNames(e0).indexOf(n0) < 0 || here() !== e0) bad.push('CONTROL: with one tab, detaching the shared copy open here made ' + nameOf(e0) + ' holding ' + say(e0 ? docNames(e0) : null) + ' and left this tab on ' + nameOf(here()) + ', not a copy holding the layer not saved yet with this tab on it');
+        const E1 = linked('d1');
+        await openHere(E1, 'the shared copy to detach with two tabs');
+        const n1 = unsaved('d1');
+        otherTab(Y);
+        const e1 = await FM.projects.detachLinked(E1);
+        const h5 = here();
+        backTab();
+        if (e1) made.push(e1);
+        if (!e1) bad.push('with another tab on a project of its own, detaching the shared copy open here made no copy');
+        else {
+          if (docNames(e1).indexOf(n1) < 0) bad.push('with another tab on a project of its own, detaching the shared copy open here copied the document on disk without the flush: the new copy holds ' + say(docNames(e1)) + ' and not the layer added last (storage.js detachLinked’s flush)');
+          if (h5 !== e1) bad.push('with another tab on a project of its own, detaching the shared copy open here left this tab on ' + nameOf(h5) + ', not on the copy that is now his');
+        }
+        await toX();
+        const E2 = linked('d2');
+        otherTab(E2);
+        const e2 = await FM.projects.detachLinked(E2);
+        const h6 = here();
+        backTab();
+        if (e2) made.push(e2);
+        if (!e2) bad.push('setup: detaching the shared copy the other tab has open made no copy');
+        else if (h6 !== X) bad.push('detaching from here the shared copy another tab has open took this tab off his own project, to ' + nameOf(h6) + ' (storage.js detachLinked’s wasOpen asked the shared pointer)');
+
+        /* ── 6. DRAFTS (storage.js discardDraft and discardDraftAnyway): a draft open here */
+        const D0 = await draft('one tab');
+        const k0 = await FM.projects.discardDraft(D0);
+        if (k0 !== false || !has(D0)) bad.push('CONTROL: with one tab, discardDraft of the draft open here answered ' + say(k0) + ' and ' + (has(D0) ? 'kept' : 'deleted') + ' it, not false and kept');
+        const a0 = await FM.projects.discardDraftAnyway(D0);
+        if (here() === D0 || has(D0)) bad.push('CONTROL: with one tab, discardDraftAnyway of the draft open here answered ' + say(a0) + ', ' + (here() === D0 ? 'left this tab on it' : 'moved this tab off it') + ' and ' + (has(D0) ? 'kept' : 'deleted') + ' it, not moved off and deleted');
+        const D1 = await draft('two tabs, refused');
+        otherTab(Y);
+        const k1 = await FM.projects.discardDraft(D1);
+        const k1doc = localStorage.getItem('fm.proj.' + D1) !== null, k1card = has(D1);
+        backTab();
+        if (k1 !== false || !k1doc || !k1card) bad.push('with another tab on a project of its own, discardDraft of the draft open here answered ' + say(k1) + ', ' + (k1card ? 'kept' : 'deleted') + ' its card and ' + (k1doc ? 'kept' : 'deleted') + ' its document, while this tab still has it open (storage.js discardDraft’s check)');
+        const D2 = has(D1) ? D1 : await draft('two tabs, deleted');
+        if (here() !== D2) throw new Error('setup: this tab is not on the draft to delete');
+        otherTab(Y);
+        const a2 = await FM.projects.discardDraftAnyway(D2);
+        const h7 = here();
+        backTab();
+        if (h7 === D2) bad.push('with another tab on a project of its own, discardDraftAnyway of the draft open here took the route for a draft that is not open and left this tab on it (' + (has(D2) ? 'refused: ' + say(a2) : 'its document and clips deleted under the open editor') + '): storage.js discardDraftAnyway’s check');
+        else if (has(D2)) bad.push('with another tab on a project of its own, discardDraftAnyway moved this tab off the draft open here and kept the draft (' + say(a2) + ')');
+
+        /* ── 7. SHARE (U.share, armShare, C.share): the session and the room are the project open here */
+        await toX();
+        if (C.session) throw new Error('setup: a session is attached before Share');
+        if (hasRoom(X) || hasRoom(Y)) throw new Error('setup: a room is already filed under one of the two projects');
+        otherTab(Y);
+        await ui.share();
+        const s7 = C.session, p7 = (s7 && s7.isOwner) ? s7.pid : null;
+        const rX = hasRoom(X), rY = hasRoom(Y);
+        backTab();
+        try { ui.close(); } catch (e) {}
+        try { C.end(); } catch (e) {}
+        if (!s7) bad.push('with another tab on a project of its own, Share here armed nothing');
+        else {
+          if (p7 !== X) bad.push('with another tab on a project of its own, Share here bound the session to ' + nameOf(p7) + ', not to the project open here (collab-session.js C.share’s S.pid): the lock that keeps a session to its project then refuses every edit made here');
+          if (!rX || rY) bad.push('with another tab on a project of its own, Share here filed the room under ' + (rY ? nameOf(Y) : 'nothing') + (rX ? ' as well as under the project open here' : '') + ' (collab-ui.js currentPid, which armShare’s lock, room and save point read): the room was the other tab’s project while this tab’s scene was shared');
+        }
+        await ui.share();
+        const s8 = C.session, p8 = (s8 && s8.isOwner) ? s8.pid : null, r8 = hasRoom(X);
+        try { ui.close(); } catch (e) {}
+        try { C.end(); } catch (e) {}
+        if (p8 !== X || !r8) bad.push('CONTROL: with one tab, Share here armed ' + nameOf(p8) + (r8 ? ' with' : ' without') + ' a room filed under the project open here');
+        await dropRooms();
+        const G3 = linked('s3');
+        await openHere(G3, 'the shared copy to Share from');
+        await ui.share();
+        const c0 = !!C.session;
+        try { ui.close(); } catch (e) {}
+        if (c0) { bad.push('CONTROL: with one tab, Share on the shared copy open here armed it'); try { C.end(); } catch (e) {} }
+        otherTab(Y);
+        await ui.share();
+        const c1 = C.session ? (C.session.pid || '?') : null;
+        backTab();
+        try { ui.close(); } catch (e) {}
+        if (c1) { bad.push('with another tab on a project of its own, Share on the shared copy open here ARMED it (the session is on ' + nameOf(c1) + '): collab-ui.js currentPid read the other tab’s card, which is not a shared copy, so somebody else’s project became a room of the guest’s own'); try { C.end(); } catch (e) {} }
+      } finally {
+        backTab();
+        try { ui.close(); } catch (e) {}
+        try { if (C.session) { if (C.session.isOwner) C.end(); else { C.session.stop('left'); C.detach(); } } } catch (e) {}
+        try { if (C._undoHandover) C._undoHandover(false); } catch (e) {}
+        /* rooms first, so nothing resumes or asks about a project about to be deleted */
+        await dropRooms();
+        try {
+          const q = document.getElementById('fm-ask'), t = q && q.querySelector('.fm-ask-title');
+          if (q && !q.classList.contains('hidden') && t && /^(Carry on sharing|Stop sharing)/.test(t.textContent)) q.querySelector('.fm-ask-cancel').click();
+        } catch (e) {}
+        /* the pointer back on what this tab has open, so the cleanup's own "is orig open?" reads this tab */
+        try { const mine = FM.storage.openProjectId(); if (mine) localStorage.setItem('fm.currentProject', mine); } catch (e) {}
+        await q915aCleanup(made, orig, wasHome, [], [], []);
+        /* a project deleted under this tab (the bug) is written back by its next flush: no card, so take the stray document */
+        made.forEach(function (id) { try { if (!has(id)) localStorage.removeItem('fm.proj.' + id); } catch (e) {} });
+        for (const k of recs) { try { await q915aDel(k); } catch (e) {} }
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1176 leftover (bughunt8 #4's doors): A NEW BUILD RELOADED THE APP WHILE A PICKED PROJECT FILE OR BACKUP WAS STILL BEING READ ═══
+     What was wrong. bughunt8 #4 made importObject and restoreBackup count themselves in FM._importing (which index.html fmSwBusy
+     reads), but the two change handlers that hand them a picked file read the whole file and parse it first: js/storage.js
+     importFile (Import a project file) and js/settings.js Restore from a backup both did JSON.parse(await file.text()) before either
+     count began, and a file with its clips embedded is tens of megabytes, read for seconds on a phone. A build landing then reloaded
+     the app and the file he had just picked never arrived, with nothing said. And a template or element file (#948 fix 4) never
+     reaches importObject at all: importParsed hands it to importLibraryObject and the store's own importObject, whose dataURLToFile
+     and font work nothing counted. Now each change handler counts itself from just after the pick to its finally, every early
+     return included; the inner counts nest inside it (1, 2, 1, 0), and for a template or element file the outer count is the one.
+     Driven like the 1176 leftover test of Replace media: only the OS picker sheet is stood in for (the click of a file input does
+     nothing), the app's own input is found in the page, handed a File through a DataTransfer and sent its change event, and the
+     hold is handed a counter for the reload, never the real one. The read is held on a gate (Blob text, for that step's file only,
+     matched by name), and while it waits the app is asked whether it is busy and handed a new build:
+       (A) Import a project file, through FM.storage.importFile: then the read gives a project, and the import goes on.
+       (B) The same door, and the read fails: the toast says the file is not readable as a project.
+       (C) The same door with a template file, read at once, and FM.templates.importObject held on a gate instead: then the
+           stand-in store refuses it with a reason of its own, and that reason is the toast, so nothing is added to Templates.
+       (D) Restore from a backup, through its Settings button: then the read gives a one-project backup, which is restored.
+       (E) The same door, and the read fails: the toast says the file is not readable, and no restore starts.
+     After each, the held build must reload by itself. Saves are let finish before each question (FM.storage.settled).
+     FAILS BEFORE THE FIX: on 97ef9e40, while each read waits, and while the template store works, FM._importing is 0, fmSwBusy
+     answers '' and the new build reloads at once.
+     CONTROL: with nothing running a new build reloads at once. And, before and after the fix: the app is idle before each step;
+     each held read (and the held template store) was reached, else the test stops as a setup failure; (A) imported the project and
+     ran its onDone once; (B) and (E) said the file was not readable and added nothing; (C)'s toast is the stand-in's reason;
+     (D) restored the project, said so and left him on the project he was on; and FM._importing is 0 after each. No tolerance:
+     every quantity is a flag, a count or a message. Restores Blob text, the file input's click, FM.toast, FM.templates.importObject
+     and FM._importing by descriptor, closes Settings, cancels any hold and deletes the projects it made. */
+  test('1176 leftover: an update does not reload the app while a picked project file or backup is still being read: while Import a project file reads a project, reads a file that turns out unreadable and adds a template, and while Restore from a backup reads a backup and an unreadable file, the new build waits, and once each is over the app reloads by itself (CONTROLS: each read was reached; the project was imported, the backup restored, the template store answered and each unreadable file said so; an idle app reloads at once)', { item: '1176', budgetMs: 120000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    if (typeof FM.storage.importFile !== 'function' || typeof FM.storage.restoreBackup !== 'function' || !FM.settings || typeof FM.settings.open !== 'function' || !FM.templates || typeof FM.templates.importObject !== 'function' || typeof FM.templates.list !== 'function' || typeof FM.toast !== 'function' || typeof Blob.prototype.text !== 'function' || typeof DataTransfer !== 'function') throw new Error('setup: FM.storage.importFile / restoreBackup, FM.settings.open, FM.templates.importObject / list, FM.toast, Blob text or DataTransfer is not reachable');
+    const dFlag = Object.getOwnPropertyDescriptor(FM, '_importing');
+    const dText = Object.getOwnPropertyDescriptor(Blob.prototype, 'text'), realText = Blob.prototype.text;
+    const dClick = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'click');
+    const dToast = Object.getOwnPropertyDescriptor(FM, 'toast'), realToast = FM.toast;
+    const dTpl = Object.getOwnPropertyDescriptor(FM.templates, 'importObject');
+    const putText = function () { if (dText) Object.defineProperty(Blob.prototype, 'text', dText); else delete Blob.prototype.text; };
+    const putClick = function () { if (dClick) Object.defineProperty(HTMLInputElement.prototype, 'click', dClick); else delete HTMLInputElement.prototype.click; };
+    const putTpl = function () { if (dTpl) Object.defineProperty(FM.templates, 'importObject', dTpl); else delete FM.templates.importObject; };
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const had = new Set(FM.projects.list().map(function (p) { return p.id; }));
+    const made = [], inputs = [], toasts = [];
+    const fresh = function () { return FM.projects.list().filter(function (p) { return !had.has(p.id) && made.indexOf(p.id) < 0; }).map(function (p) { return p.id; }); };
+    const named = function (n) { return FM.projects.list().some(function (p) { return p.name === n; }); };
+    const ts = Date.now().toString(36);
+    const project = function (name) { return { app: 'freemotion', v: 1, project: { name: name, width: 320, height: 240, fps: 30, duration: 2, background: '#000000' }, layers: [], media: {} }; };
+    let reloads = 0, entered = 0, give = null, fail = null, letTpl = null;
+    const count = function () { reloads++; };
+    const until = async function (ok, ms) { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    const settle = async function (what) {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(function () { return W.busy() === ''; }, 8000))) throw new Error('setup (' + what + '): the app was not idle to start with (' + W.busy() + ')');
+      if (FM._importing) throw new Error('setup (' + what + '): FM._importing is ' + JSON.stringify(FM._importing) + ' with the app idle');
+    };
+    /* the read of the file named `name` held on a gate, until give(text) or fail(error) */
+    const holdRead = function (name) {
+      entered = 0;
+      const gate = new Promise(function (res, rej) { give = res; fail = rej; });
+      gate.catch(function () {});
+      Object.defineProperty(Blob.prototype, 'text', { configurable: true, writable: true, enumerable: dText ? dText.enumerable : true, value: function () {
+        if (this && this.name === name) { entered++; return gate; }
+        return realText.apply(this, arguments);
+      } });
+    };
+    /* only the OS picker sheet is stood in for: `open` makes the app's own file input, which is then handed `file` */
+    const pick = async function (what, open, file) {
+      const before = new Set(Array.from(document.querySelectorAll('body > input[type=file]')));
+      Object.defineProperty(HTMLInputElement.prototype, 'click', { configurable: true, writable: true, value: function () {
+        if (this.type !== 'file') return HTMLElement.prototype.click.apply(this, arguments);
+      } });
+      try { await open(); } finally { putClick(); }
+      const inp = Array.from(document.querySelectorAll('body > input[type=file]')).filter(function (i) { return !before.has(i); }).pop();
+      if (!inp || inp.accept !== '.json,application/json') throw new Error('setup: ' + what + ' did not open its file picker');
+      inputs.push(inp);
+      const dt = new DataTransfer(); dt.items.add(file); inp.files = dt.files;
+      inp.dispatchEvent(new Event('change'));
+    };
+    const openRestore = async function () {
+      FM.settings.open();
+      await sleep(120);
+      const row = [].slice.call(document.querySelectorAll('.set-row')).filter(function (r) { return /Restore from a backup/.test((r.querySelector('.set-label') || {}).textContent || ''); })[0];
+      const btn = row && row.querySelector('button');
+      if (!btn) throw new Error('setup: Settings has no Restore from a backup button');
+      btn.click();
+    };
+    const bad = [];
+    /* the two questions, asked while the door waits */
+    const ask = async function (what) {
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      const during = W.busy(), n = FM._importing;
+      reloads = 0;
+      const now = await W(count);
+      const heldNow = !now && !reloads && W.held();
+      if (!during) bad.push('while ' + what + ' the app counted as idle (FM._importing ' + JSON.stringify(n) + ')');
+      if (!heldNow) bad.push('a new build ' + (reloads ? 'reloaded the app while ' + what + ' (' + reloads + ' reload), so the file he had picked never arrived' : 'was dropped rather than held while ' + what));
+    };
+    /* once the door is done: the count back to 0, and the held build reloads by itself */
+    const after = async function (what) {
+      if (!(await until(function () { return !FM._importing; }, 8000))) bad.push('after ' + what + ' FM._importing is still ' + JSON.stringify(FM._importing) + ', so every later update would wait for it');
+      if (FM.storage && FM.storage.settled) await FM.storage.settled();
+      if (!(await until(function () { return W.busy() === ''; }, 8000))) bad.push('after ' + what + ' the app still counts as busy (' + W.busy() + ')');
+      else if (!(await until(function () { return reloads > 0; }, 9000))) bad.push('once ' + what + ' was over, the held reload never happened by itself');
+      try { W.cancel(); } catch (e) {}
+    };
+    try {
+      if (wasHome) FM.home.close();
+      Object.defineProperty(FM, 'toast', { configurable: true, writable: true, enumerable: dToast ? dToast.enumerable : true, value: function (m) {
+        toasts.push(String(m));
+        return realToast.apply(this, arguments);
+      } });
+
+      /* (A) Import a project file: the read held, then given a project */
+      await settle('Import a project file');
+      const nameA = '1176 read ' + ts + ' A.fmotion.json', projA = '1176 read ' + ts + ' A';
+      let doneA = 0;
+      holdRead(nameA);
+      await pick('Import a project file', function () { FM.storage.importFile(function () { doneA++; }); }, new File([JSON.stringify(project(projA))], nameA, { type: 'application/json' }));
+      if (!(await until(function () { return entered > 0; }, 6000))) throw new Error('setup: Import a project file never read the picked file (Blob text), so nothing was being read');
+      await ask('a picked project file was still being read');
+      give(JSON.stringify(project(projA))); give = fail = null;
+      const landedA = await until(function () { return doneA > 0 && !FM._importing; }, 10000);
+      putText();
+      fresh().forEach(function (id) { made.push(id); });
+      if (!landedA || doneA !== 1 || !named(projA)) bad.push('CONTROL: once the read gave the project the import did not land (its onDone ran ' + doneA + ' times, ' + (named(projA) ? 'the project is there' : 'no project is named ' + projA) + ')');
+      await after('the import of a picked project file');
+
+      /* (B) the same door, and the read fails */
+      await settle('Import a project file that cannot be read');
+      const nameB = '1176 read ' + ts + ' B.fmotion.json';
+      const t0B = toasts.length, haveB = FM.projects.list().length;
+      let doneB = 0;
+      holdRead(nameB);
+      await pick('Import a project file', function () { FM.storage.importFile(function () { doneB++; }); }, new File(['{'], nameB, { type: 'application/json' }));
+      if (!(await until(function () { return entered > 0; }, 6000))) throw new Error('setup: Import a project file never read the second picked file (Blob text), so nothing was being read');
+      await ask('a picked project file was still being read, before it turned out unreadable');
+      fail(new Error('1176 test: the read failed')); give = fail = null;
+      const saidB = await until(function () { return toasts.slice(t0B).some(function (m) { return /not readable as a project/.test(m); }); }, 6000);
+      putText();
+      fresh().forEach(function (id) { made.push(id); });
+      if (!saidB) bad.push('CONTROL: a picked project file that could not be read did not say so (toasts ' + JSON.stringify(toasts.slice(t0B)) + ')');
+      if (doneB || FM.projects.list().length !== haveB) bad.push('CONTROL: a picked project file that could not be read still imported something (onDone ran ' + doneB + ' times, projects went from ' + haveB + ' to ' + FM.projects.list().length + ')');
+      await after('a picked project file turned out unreadable');
+
+      /* (C) the same door with a template file: read at once, FM.templates.importObject held instead */
+      await settle('Import a project file with a template file');
+      const nameC = '1176 read ' + ts + ' C.fmtemplate.json';
+      const objC = project('1176 read ' + ts + ' C'); objC.kind = 'template';
+      const WHY = '1176 test: the stand-in template store refused it';
+      const t0C = toasts.length, tplC = FM.templates.list().length;
+      let tplIn = 0, doneC = 0;
+      const tplGate = new Promise(function (res) { letTpl = res; });
+      Object.defineProperty(FM.templates, 'importObject', { configurable: true, writable: true, enumerable: dTpl ? dTpl.enumerable : true, value: function () {
+        tplIn++;
+        return tplGate.then(function () { return { why: WHY }; });
+      } });
+      await pick('Import a project file', function () { FM.storage.importFile(function () { doneC++; }); }, new File([JSON.stringify(objC)], nameC, { type: 'application/json' }));
+      if (!(await until(function () { return tplIn > 0; }, 6000))) throw new Error('setup: a picked template file never reached FM.templates.importObject, so nothing was being added');
+      await ask('a picked template file was still being added to Templates');
+      letTpl(); letTpl = null;
+      const saidC = await until(function () { return toasts.slice(t0C).indexOf(WHY) >= 0; }, 6000);
+      putTpl();
+      if (!saidC) bad.push('CONTROL: the stand-in template store answered, but its reason was not the toast (toasts ' + JSON.stringify(toasts.slice(t0C)) + ')');
+      if (doneC || FM.templates.list().length !== tplC) bad.push('CONTROL: a refused template file still added something (onDone ran ' + doneC + ' times, Templates went from ' + tplC + ' to ' + FM.templates.list().length + ')');
+      await after('a picked template file was added');
+
+      /* (D) Restore from a backup, through its Settings button: the read held, then given a one-project backup */
+      await settle('Restore from a backup');
+      const nameD = '1176 read ' + ts + ' D.fmbackup.json', projD = '1176 read ' + ts + ' D';
+      const objD = { app: 'freemotion', backup: 1, v: 1, count: 1, projects: [project(projD)] };
+      const t0D = toasts.length, onD = FM.projects.currentId();
+      holdRead(nameD);
+      await pick('Restore from a backup', openRestore, new File([JSON.stringify(objD)], nameD, { type: 'application/json' }));
+      if (!(await until(function () { return entered > 0; }, 6000))) throw new Error('setup: Restore from a backup never read the picked file (Blob text), so nothing was being read');
+      await ask('a picked backup was still being read');
+      give(JSON.stringify(objD)); give = fail = null;
+      const saidD = await until(function () { return toasts.slice(t0D).some(function (m) { return /^Restored 1 project\./.test(m); }); }, 10000);
+      putText();
+      fresh().forEach(function (id) { made.push(id); });
+      if (!saidD || !named(projD)) bad.push('CONTROL: once the read gave the backup the restore did not land (' + (named(projD) ? 'the project is there' : 'no project is named ' + projD) + ', toasts ' + JSON.stringify(toasts.slice(t0D)) + ')');
+      if (FM.projects.currentId() !== onD) bad.push('CONTROL: the restore left the editor on ' + FM.projects.currentId() + ', not on the project he was on (' + onD + ')');
+      await after('the restore of a picked backup');
+
+      /* (E) the same door, and the read fails */
+      await settle('Restore from a backup that cannot be read');
+      const nameE = '1176 read ' + ts + ' E.fmbackup.json';
+      const t0E = toasts.length, haveE = FM.projects.list().length;
+      holdRead(nameE);
+      await pick('Restore from a backup', openRestore, new File(['{'], nameE, { type: 'application/json' }));
+      if (!(await until(function () { return entered > 0; }, 6000))) throw new Error('setup: Restore from a backup never read the second picked file (Blob text), so nothing was being read');
+      await ask('a picked backup was still being read, before it turned out unreadable');
+      fail(new Error('1176 test: the read failed')); give = fail = null;
+      const saidE = await until(function () { return toasts.slice(t0E).some(function (m) { return /^That file is not readable/.test(m); }); }, 6000);
+      putText();
+      fresh().forEach(function (id) { made.push(id); });
+      if (!saidE) bad.push('CONTROL: a picked backup that could not be read did not say so (toasts ' + JSON.stringify(toasts.slice(t0E)) + ')');
+      if (toasts.slice(t0E).some(function (m) { return /^Restoring/.test(m); }) || FM.projects.list().length !== haveE) bad.push('CONTROL: a picked backup that could not be read still started a restore (projects went from ' + haveE + ' to ' + FM.projects.list().length + ', toasts ' + JSON.stringify(toasts.slice(t0E)) + ')');
+      await after('a picked backup turned out unreadable');
+
+      /* ── CONTROL: with nothing running a new build reloads at once */
+      await settle('the control');
+      reloads = 0;
+      const idle = await W(count);
+      if (!idle || reloads !== 1) bad.push('CONTROL: with nothing running the update did not reload at once (' + reloads + ' reload, ' + W.busy() + ')');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      if (fail) { try { fail(new Error('1176 test: cleaned up')); } catch (e) {} }
+      if (letTpl) { try { letTpl(); } catch (e) {} }
+      give = fail = letTpl = null;
+      try { await until(function () { return !FM._importing; }, 8000); } catch (e) {}
+      putText(); putClick(); putTpl();
+      if (dToast) Object.defineProperty(FM, 'toast', dToast); else FM.toast = realToast;
+      if (dFlag) Object.defineProperty(FM, '_importing', dFlag); else delete FM._importing;
+      inputs.forEach(function (i) { try { if (i.isConnected) i.remove(); } catch (e) {} });
+      try { if (FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
+      try { W.cancel(); } catch (e) {}
+      fresh().forEach(function (id) { made.push(id); });
+      try { if (FM.storage && FM.storage.settled) await FM.storage.settled(); } catch (e) {}
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+      if (FM.hideToast) { try { FM.hideToast(); } catch (e) {} }
+    }
     if (bad.length) throw new Error(bad.join(' · '));
   });
 })();

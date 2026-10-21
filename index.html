@@ -266,7 +266,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.89</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.90</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1147,10 +1147,10 @@
   <script src="js/perf-probe.js?v=12"></script>
   <script src="js/drawn-x.js?v=1"></script>
   <script src="js/variant.js?v=3"></script>   <!-- queue 974: every animation with options plays one AT RANDOM (FM.variant); before timeline/home/app -->
-  <script src="js/settings.js?v=55"></script>
+  <script src="js/settings.js?v=56"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
-  <script src="js/collab-core.js?v=49"></script>
+  <script src="js/collab-core.js?v=51"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=132"></script>
   <script src="js/spine-words.js?v=13"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
@@ -1163,7 +1163,7 @@
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=5"></script>
   <script src="js/gl-color.js?v=5"></script>
-  <script src="js/compositor.js?v=245"></script>
+  <script src="js/compositor.js?v=246"></script>
   <script src="js/fx-registry.js?v=33"></script>
   <script src="js/filters.js?v=24"></script>
   <script src="js/fx-presets.js?v=12"></script>
@@ -1182,7 +1182,7 @@
   <script src="js/panelsize.js?v=2"></script>   <!-- queue 927: Notes and Shortcuts/tips grow BIG from a grab corner; before both panels -->
   <script src="js/notepad.js?v=11"></script>
   <script src="js/popfrom.js?v=11"></script>
-  <script src="js/export-card.js?v=3"></script>   <!-- queue 985: the Export card, option A — a view over the export dialog's own controls -->
+  <script src="js/export-card.js?v=4"></script>   <!-- queue 985: the Export card, option A — a view over the export dialog's own controls -->
   <script src="js/draw-tool.js?v=39"></script>
   <script src="js/point-edit.js?v=22"></script>
   <script src="js/crop-tool.js?v=13"></script>
@@ -1199,7 +1199,7 @@
   <script src="js/audio-fx-live.js?v=17"></script>
   <script src="js/audio-fx-browser.js?v=17"></script>
   <script src="js/history.js?v=43"></script>
-  <script src="js/storage.js?v=75"></script>
+  <script src="js/storage.js?v=78"></script>
   <script src="js/export-resume.js?v=10"></script>
   <script src="js/medialib.js?v=9"></script>
   <script src="js/template-fill.js?v=4"></script>
@@ -1209,7 +1209,7 @@
   <script src="js/graph-editor.js?v=19"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
-  <script src="js/exporter.js?v=137"></script>
+  <script src="js/exporter.js?v=138"></script>
   <script src="js/sample.js?v=11"></script>
   <script src="js/contextmenu.js?v=49"></script>
   <script src="js/ask.js?v=4"></script>
@@ -1218,7 +1218,7 @@
   <script src="js/captions.js?v=64"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=7"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=496"></script>
+  <script src="js/app.js?v=497"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->
@@ -1233,7 +1233,7 @@
   <script src="js/ai-budget.js?v=1"></script>
   <script src="js/ai-mock.js?v=5"></script>
   <script src="js/ai-templates.js?v=3"></script>
-  <script src="js/ai.js?v=12"></script>
+  <script src="js/ai.js?v=13"></script>
   <script src="js/ai-panel.js?v=8"></script>
   <script src="js/ai-chat.js?v=6"></script>   <!-- queue 856: the AI you TALK to; after ai-panel (reuses its key form) -->
   <!-- queue 921 stage S1 — the pure collaboration core. Path grammar, the diff/apply engine and the
@@ -1248,8 +1248,8 @@
        All three are inert until something hands a session a link, which in S2 only the test rig does. -->
   <script src="js/collab-signal.js?v=5"></script>
   <script src="js/collab-link.js?v=9"></script>
-  <script src="js/collab-session.js?v=21"></script>
-  <script src="js/collab-bridge.js?v=17"></script>
+  <script src="js/collab-session.js?v=23"></script>
+  <script src="js/collab-bridge.js?v=18"></script>
   <!-- queue 921 stage S4 — media. The manifest, the chunked transfer over the bulk channel, the 4 MiB
        resume parts under `collab:`, fonts, and the two honest answers (out of room, still arriving).
        A library like the rest: it does nothing at all until a session installs a controller on it. -->
@@ -1262,7 +1262,7 @@
   <!-- queue 921 stage S6 — the QR code for an invite link. Hand-written, ~200 lines, defines FM.collab.qr
        and nothing else; it draws only when the Share panel's [QR] is pressed. -->
   <script src="js/collab-qr.js?v=3"></script>
-  <script src="js/collab-ui.js?v=23"></script>
+  <script src="js/collab-ui.js?v=24"></script>
   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
        there is no presence DOM, no listener and no timer. -->
@@ -1270,7 +1270,7 @@
   <!-- queue 921 stage S7 — comments: the paper card, replies, resolve, and a mark on the ruler at each
        comment's time. A library like the rest: collab-ui.js installs it only while Labs is on, and a
        comment never stops an export (only a note with a reminder does). -->
-  <script src="js/collab-comments.js?v=7"></script>
+  <script src="js/collab-comments.js?v=8"></script>
   <script>
     /* bughunt6 #14: A NEW BUILD WAITS UNTIL NOTHING WOULD BE LOST. A release that changes sw.js hands every open copy a new
        worker within seconds of launch, and the controllerchange handler below reloaded on the spot, whatever was going on:

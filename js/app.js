@@ -4393,9 +4393,14 @@ window.FM = window.FM || {};
     const isoWas = FM.isolate; FM.isolate = null;
     const cropHeld = FM.scene.layers.filter(l => l && l._cropEditing);
     cropHeld.forEach(l => { l._cropEditing = false; });
+    /* bughunt8 #7: …and the effects sheet's previewed stack (FM._fxPreview) and the held ◐ (FM._fxCompare), the same kind of view
+       state, which the compositor drops only under FM._exporting: a still saved while the sheet previewed an effect held it. */
+    const pvWas = FM._fxPreview, cmpWas = FM._fxCompare;
+    FM._fxPreview = null; FM._fxCompare = null;
     try { FM.renderScene(full.getContext('2d'), FM.scene, t); }
     finally {
       FM.isolate = isoWas; cropHeld.forEach(l => { l._cropEditing = true; });
+      FM._fxPreview = pvWas; FM._fxCompare = cmpWas;
       exportSoloRestore(soloRestore);
     }
     const c = document.createElement('canvas');
@@ -5112,12 +5117,24 @@ window.FM = window.FM || {};
         const spL = ramped ? FM.speedAt(layer, layer.start + delta) : sp;   // still needed to re-solve a clamped delta
         let srcD = FM.headSourceDelta ? FM.headSourceDelta(layer, delta) : delta * spL;
         if (layer.type === 'video' && (layer.trimStart || 0) + srcD < 0) {
-          delta = -(layer.trimStart || 0) / spL;                            // approximate re-solve, then re-integrate exactly
+          /* bughunt8 #6: RE-SOLVED ON THE CURVE, as the left grip does (timeline.js). This divided by the speed AT the head he asked
+             for, which is not the speed over the span the head really travels: with ramp keys at 10 s (0.5x) and 20 s (4x), a clip
+             10..20 trimmed in to 15 and extended to a playhead at 2 used 0.5x for source played at up to 2.25x, landed its head at
+             1.25 s and wrote trimStart -4.375 (a frozen head, and the next Undo of anything clamped it to 0 and moved every frame).
+             The source consumed only grows as the head goes back, so bisect for the head that uses exactly what is left before
+             trimStart; a flat speed keeps the exact division. And trimStart is never written below 0, as the grip writes it. */
+          const tr = layer.trimStart || 0;
+          if (!ramped || !FM.speedAdvanceOver) delta = -tr / spL;
+          else {
+            let lo = delta, hi = 0;
+            for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (FM.speedAdvanceOver(layer, mid, 0) > tr) lo = mid; else hi = mid; }
+            delta = hi;
+          }
           srcD = FM.headSourceDelta ? FM.headSourceDelta(layer, delta) : delta * spL;
         }
         layer.start = layer.start + delta;
         layer.duration = layer.duration - delta;
-        if (layer.type === 'video') layer.trimStart = (layer.trimStart || 0) + srcD;
+        if (layer.type === 'video') layer.trimStart = Math.max(0, (layer.trimStart || 0) + srcD);
       }
     }
     // belt-and-braces: a non-finite number must NEVER reach the scene — it cascades into every layout
@@ -5633,6 +5650,12 @@ window.FM = window.FM || {};
   };
   // Save the current selection as a reusable ELEMENT (insertable from Add → Object/Element).
   FM.saveElementPrompt = async function () {
+    /* bughunt8 #1 (#1091's doors): SAVE AS ELEMENT ASKS THE EXPORT GATE'S QUESTION TOO. An element pack carries every selected clip's
+       file (storage.js packLayers), lives under its own elem: key that Leave never touches, and Elements → Export file writes it out,
+       so a watch-only copy could be walked away as an element. The ⧉ menu's Save as element…, the layer ⋯ menu's (and its right-click
+       twin's) Save selection as element… and the Elements browser's empty-state button all come here: refused with the export notice
+       before anything is asked or packed. FM.elements.save refuses on its own as well, for any caller this misses. */
+    if (exportTurnedOff()) return sayExportTurnedOff();
     const ids = FM.selectionIds();
     const layers = FM.scene.layers.filter(l => ids.includes(l.id));
     if (!layers.length) { if (FM.toast) FM.toast('Select the layers to save first'); return; }
@@ -5898,7 +5921,10 @@ window.FM = window.FM || {};
     const C = FM.collab;
     if (!C) return false;
     if (C.active && C.canExport && !C.canExport()) return true;
-    const pid = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null;
+    /* bughunt8 #2: THIS TAB's project (FM.storage.openProjectId), not the shared fm.currentProject, which a second tab moves
+       whenever it opens a project: read from that pointer, a watch-only copy here exported once another tab opened a project of
+       their own, and his own project here was refused while a watch-only copy was open in another tab. */
+    const pid = (FM.storage && FM.storage.openProjectId) ? FM.storage.openProjectId() : null;
     return !!(C.watchOnly && C.watchOnly(pid));
   }
   function sayExportTurnedOff() {

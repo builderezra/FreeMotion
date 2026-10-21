@@ -2025,7 +2025,7 @@ window.FM = window.FM || {};
     return true;
   }
   FM.storage.exportFile = async function () {
-    if (watchOnlyRefusal(null)) return false;
+    if (watchOnlyRefusal(tabId())) return false;   // bughunt8 #2: the project this tab is saving, not the shared pointer
     let db = null;
     try {
       saveProjectFile(await serializeWith(FM.scene, async function (layerId) {
@@ -2230,6 +2230,15 @@ window.FM = window.FM || {};
     if (!obj || obj.app !== 'freemotion' || !obj.backup || !Array.isArray(obj.projects)) {
       return { ok: false, reason: 'That is not a FreeMotion backup file.' };
     }
+    /* bughunt8 #4: A NEW BUILD WAITS FOR THE WHOLE RESTORE. Each entry decodes its embedded clips one after another (applyScene, up
+       to 20 s each on a phone), and nothing the update hold reads (index.html fmSwBusy) was counting: a build landing mid-restore
+       saved the entry being restored with only the clips decoded so far (their bytes were only in the parsed file), never restored
+       the rest, never put him back in his own project, and a second Restore duplicated what had landed. Counted in FM._importing
+       from here to the finally, across every entry AND the gaps between them (counting each entry alone would let the reload land
+       between two) and the move back to his project. importObject counts itself as well; inside here that is one deeper. The try
+       is not re-indented, so its lines keep their history. */
+    FM._importing = (FM._importing || 0) + 1;
+    try {
     /* ⚠️ queue 915 clause 4: AND PUT HIM BACK WHERE HE WAS. importObject goes through projects.create(),
        which switches the open project once per entry — so a restore left the EDITOR on the last restored
        project while Home's OPEN badge still sat on his own, and a restore from inside a project dropped
@@ -2258,6 +2267,7 @@ window.FM = window.FM || {};
       try { await FM.projects.open(back, { confirmed: true }); } catch (e) {}
     }
     return { ok: restored > 0, restored: restored, drafts: drafts, failed: failed, total: obj.projects.length };
+    } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   };
 
   /* ═══ WHAT IS WRONG WITH THIS FILE, IN WORDS (queue 673) ══════════════════════════════════════
@@ -2292,6 +2302,11 @@ window.FM = window.FM || {};
   FM.storage.importObject = async function (obj, onDone, opts) {
     const problem = FM.storage.sceneFileProblem(obj);
     if (problem) { if (FM.toast) FM.toast(problem, 5000); return false; }
+    /* bughunt8 #4: …and Import project file the same way: from the new project to the save that keeps it, through applyScene's
+       decodes, counted in FM._importing (which index.html's fmSwBusy reads), so a build landing meanwhile waits instead of saving
+       the project with the clips decoded so far and reloading. The try is not re-indented, so its lines keep their history. */
+    FM._importing = (FM._importing || 0) + 1;
+    try {
     const kind = opts && opts.draft;   // queue 915 clause 8: only restoreBackup passes this, and only these two values
     if (FM.projects) {
       const pid = await FM.projects.create(Object.assign({ name: (obj.project && obj.project.name ? obj.project.name : 'Imported project'), width: obj.project && obj.project.width, height: obj.project && obj.project.height },
@@ -2314,6 +2329,7 @@ window.FM = window.FM || {};
     if (FM.toast && !(opts && opts.quiet)) FM.toast(importWarnings.length ? 'Project imported. ' + importWarnings.join(' ') : 'Project imported', importWarnings.length ? 12000 : undefined);
     if (onDone) onDone();
     return true;
+    } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   };
 
   FM.storage.importFile = function (onDone) {   // onDone runs ONLY on a successful import (not on picker-cancel)
@@ -2321,6 +2337,12 @@ window.FM = window.FM || {};
     input.addEventListener('change', async () => {
       const file = input.files && input.files[0]; input.remove();
       if (!file) return;
+      /* 1176 leftover: FROM THE PICK, NOT FROM THE PARSE. importObject counts itself in FM._importing (bughunt8 #4), but the file
+         was read and parsed before it began, seconds for a big file on a phone, and a template or element file never reaches it at
+         all (importParsed hands it to the store's own importObject, whose dataURLToFile and font work nothing counted). A build
+         landing meanwhile reloaded the app and the file he had picked never arrived. Counted here from the pick to the finally,
+         the unreadable file's early return included; importObject's own count nests inside this one. */
+      FM._importing = (FM._importing || 0) + 1;
       try {
         let obj = null;
         try { obj = JSON.parse(await file.text()); }
@@ -2329,6 +2351,7 @@ window.FM = window.FM || {};
         // once the file has been checked, which is queue 673's whole point.
         await FM.storage.importParsed(obj, onDone);   // #948 fix 4: a template or element file goes to its own tab instead
       } catch (e) { if (FM.toast) FM.toast('Could not read that project file'); }
+      finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
     });
     document.body.appendChild(input); input.click();
   };
@@ -2492,10 +2515,16 @@ window.FM = window.FM || {};
          (js/export-card.js drawThumb) and the still (FM.snapshotPNG) do, so the preview he is looking at does not change. */
       const isoWas = FM.isolate;
       const cropHeld = (FM.scene.layers || []).filter(l => l && l._cropEditing);
+      /* bughunt8 #7: …and the other two view-only overrides that "use the same arrangement FM.isolate already uses": the effects
+         sheet's previewed stack (FM._fxPreview) and the held ◐ (FM._fxCompare). The compositor drops them only under FM._exporting,
+         which a card never sets, so a card the 12 s autosave or Home's capture took while the sheet was previewing baked effects
+         he had not added into the picture. Held aside for this one render too, and put back in the same finally. */
+      const pvWas = FM._fxPreview, cmpWas = FM._fxCompare;
       FM.isolate = null;
+      FM._fxPreview = null; FM._fxCompare = null;
       cropHeld.forEach(l => { l._cropEditing = false; });
       try { FM.renderScene(src.getContext('2d'), FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time); }
-      finally { FM.isolate = isoWas; cropHeld.forEach(l => { l._cropEditing = true; }); }
+      finally { FM.isolate = isoWas; FM._fxPreview = pvWas; FM._fxCompare = cmpWas; cropHeld.forEach(l => { l._cropEditing = true; }); }
       while (src.width >= tw * 2) {   // halve until within 2× of target — each step averages real pixels
         const half = document.createElement('canvas');
         half.width = Math.max(tw, Math.round(src.width / 2)); half.height = Math.max(th, Math.round(src.height / 2));
@@ -2878,6 +2907,7 @@ window.FM = window.FM || {};
       // OUTGOING project's layer ids and nothing else ever clears them (only the exporter did), so
       // the store grew for the whole session and a re-used id could inherit a stranger's frame.
       if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
+      if (FM.releaseTiltPools) FM.releaseTiltPools();   // bughunt8 #9: the outgoing project's tilt plates go back (compositor.js)
       if (FM._resetPlayQuality) FM._resetPlayQuality();   // queue 690: the playback quality learned on the outgoing project is not evidence about this one
       if (FM.viewport) FM.viewport.reset();   // fresh project → fresh view (preview pan/zoom is never saved)
       FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.scene.layers = []; FM.time = 0;
@@ -2958,7 +2988,9 @@ window.FM = window.FM || {};
        a clip that could not be copied, take the half-copy back out (every key below is one this call
        minted a moment ago — nothing of his is touched) and say false. */
     async duplicate(id) {
-      if (id === curId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();   // duplicating the OPEN project must copy the last 600ms of edits, not the stale doc
+      /* bughunt8 #2b: "the OPEN project" is THIS tab's (tabId), not the shared fm.currentProject a second tab moves: with another tab
+         on a project of its own, Duplicate here skipped the flush and the copy missed the last 600 ms of edits. */
+      if (id === tabId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();   // duplicating the OPEN project must copy the last 600ms of edits, not the stale doc
       const doc = readJSON('fm.proj.' + id, null); if (!doc) return false;
       /* THE BODY IS duplicateFrom (queue 921 S0). Behaviour-identical: `duplicate` still reads the doc off
          disk and still answers true/false; everything below the read happens there. Split because collab
@@ -3117,7 +3149,7 @@ window.FM = window.FM || {};
          restarts that timer, so during continuous work the doc stays stale indefinitely, and "the
          owner stopped sharing" arrives when he is not looking at the screen. Inside the function
          rather than at the call sites, for the reason `createLinked`'s own note gives. */
-      if (gpid === curId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();
+      if (gpid === tabId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();   // bughunt8 #2b: the copy THIS tab has open, not the shared pointer
       const doc = readJSON('fm.proj.' + gpid, null);
       if (!doc) return null;
       const src = this.list().find(p => p.id === gpid) || {};
@@ -3129,9 +3161,12 @@ window.FM = window.FM || {};
       const idx = this.list();
       const e = idx.find(p => p.id === nid);
       if (e) { delete e.collab; this.saveIndex(idx); }
-      const wasOpen = curId() === gpid;
+      /* bughunt8 #2b: open in THIS tab, not named by the shared pointer: with another tab elsewhere, the copy this tab had open was
+         deleted under it and it was never moved onto his own copy; with the linked copy open in another tab, this tab was taken off
+         its own project. */
+      const wasOpen = tabId() === gpid;
       await this.remove(gpid);
-      if (wasOpen && curId() !== nid) await this.open(nid);
+      if (wasOpen && tabId() !== nid) await this.open(nid);
       return nid;
     },
     rename(id, name) {
@@ -3168,7 +3203,9 @@ window.FM = window.FM || {};
        complaining about. So this deletion has no such branch, and is only safe on a draft that is NOT
        current — every caller switches away first, and this refuses if that was not done. */
     async discardDraft(id) {
-      if (!id || id === curId()) return false;
+      /* bughunt8 #2b: "current" is the draft THIS tab has open (tabId). Asked of the shared pointer, a draft open here was deleted
+         (its doc and its clips) whenever another tab had opened something since, and one open only in another tab was refused. */
+      if (!id || id === tabId()) return false;
       const doc = readJSON('fm.proj.' + id, null);
       try {
         const db = await openDB();
@@ -3184,11 +3221,12 @@ window.FM = window.FM || {};
     /* DELETE A DRAFT EVEN WHEN IT IS THE ONE YOU HAVE OPEN (queue 617 clause 4).
      * Ezra: *"You have to manually delete them you can't do the select delete, I figured it out"* …
      * *"But as long as there's one left I can't delete it"*.
-     * He was exactly right, and the cause is one line: `discardDraft` returns false for `curId()`, by
-     * design, because deleting the current document leaves the current-project pointer dangling and
-     * the next boot mints "My project". So he could delete his way down the list and the last one —
-     * whichever he happened to have open — refused forever, with a toast telling HIM to go and open
-     * something else first.
+     * He was exactly right, and the cause is one line: `discardDraft` returns false for the draft THIS
+     * tab has open (`tabId()`; until bughunt8 #2b it asked `curId()`, the shared pointer), by design,
+     * because deleting the document open here leaves the editor on a project with no card (when this
+     * was written, the pointer dangled and the next boot minted "My project"). So he could delete his
+     * way down the list and the last one — whichever he happened to have open — refused forever, with
+     * a toast telling HIM to go and open something else first.
      * ⚠️ THE ORDER IS THE WHOLE TRICK, and `commitDraft` below already learned it the hard way: switch
      * away FIRST, then discard. The other order simply leaves the draft behind.
      * ⚠️ AND `remove()` IS NOT THE ANSWER, tempting as it looks. It handles the current project by
@@ -3206,7 +3244,7 @@ window.FM = window.FM || {};
      * the caller says so in words he can act on. */
     async discardDraftAnyway(id) {
       if (!id) return { ok: false, why: 'noid' };
-      if (id !== curId()) return { ok: await this.discardDraft(id), why: '' };
+      if (id !== tabId()) return { ok: await this.discardDraft(id), why: '' };   // bughunt8 #2b: open in THIS tab, not named by the shared pointer
       if (FM.storage && FM.storage.flushSync) FM.storage.flushSync();
       const others = this.list().filter(p => p.id !== id);
       const target = (others.filter(p => !p.elementDraft && !p.templateDraft)[0] || others[0] || {}).id;
@@ -3240,7 +3278,7 @@ window.FM = window.FM || {};
           const d = readJSON(lk, null);
           if (d && Array.isArray(d.layers)) d.layers.forEach(l => { if (l && l.id) elsewhere.add(l.id); });
         }
-        if (id !== curId()) ((FM.scene && FM.scene.layers) || []).forEach(l => { if (l && l.id) elsewhere.add(l.id); });
+        if (id !== tabId()) ((FM.scene && FM.scene.layers) || []).forEach(l => { if (l && l.id) elsewhere.add(l.id); });   // bughunt8 #2b: the live scene is THIS tab's project
         const ckptPrefix = 'collab:ckpt:' + id + ':';
         const allKeys = await idbKeys(db);
         for (const k of allKeys) {
@@ -3263,7 +3301,10 @@ window.FM = window.FM || {};
       try { localStorage.removeItem('fm.collab.host.' + id); } catch (e) {}   // …and the room it was shared from
       try { localStorage.removeItem('fm.proj.' + id); } catch (e) {}
       this.saveIndex(this.list().filter(p => p.id !== id));
-      if (id === curId()) {
+      /* bughunt8 #2b: the project THIS tab has open (tabId), not the shared fm.currentProject. Asked of the pointer, deleting the
+         project open here while another tab was elsewhere left this tab on it (its next save wrote the doc back with no card), and
+         deleting the one another tab had opened last took this tab off its own project. */
+      if (id === tabId()) {
         /* ⚠️ queue 834 (u7): A DRAFT WORKSPACE IS NOT SOMEWHERE TO LAND. `list()` includes the hidden
            workspaces that an element or a template is edited in, so deleting the project you had open
            could quietly drop you INSIDE one — nothing on Home shows as open, and anything you then add
@@ -3381,11 +3422,14 @@ window.FM = window.FM || {};
     return (P && P.width > 0 && P.height > 0) ? { width: P.width, height: P.height } : null;
   }
   async function packFromProject(projectId, wantProject) {
-    const id = projectId || curId();
+    /* bughunt8 #2 (the refuter's N2): "the open project" is THIS tab's (tabId), not the shared fm.currentProject. With a second tab
+       on another project, packing this tab's open project skipped the flush and read its clips from IndexedDB alone, so the pack
+       missed the last 600 ms of edits and any clip not stored yet (Back up every project, Home's Save as template / element). */
+    const id = projectId || tabId();
     /* #1091: a watch-only copy is never packed — not into a template, an element or a backup (each caller already says
        when there is nothing to pack, and the backup names it as not included). */
     if (FM.collab && FM.collab.watchOnly && FM.collab.watchOnly(id)) return null;
-    if (id === curId()) FM.storage.flushSync();     // the doc on disk must be what he just saw
+    if (id === tabId()) FM.storage.flushSync();     // the doc on disk must be what he just saw
     const doc = readJSON('fm.proj.' + id, null); if (!doc) return null;
     /* ⚠️ AN EMPTY LAYER LIST IS NOT THE PACKER'S BUSINESS, and assuming it was broke template saving
        the moment these four routes were merged. An ELEMENT with no layers is meaningless, so
@@ -3421,7 +3465,7 @@ window.FM = window.FM || {};
     try {
       const db = await openDB();
       for (const l of pack.layers) {
-        const mem = (id === curId()) ? FM.media.get(l.id) : null;
+        const mem = (id === tabId()) ? FM.media.get(l.id) : null;   // bughunt8 #2: this tab's clips are the ones in memory
         if (mem && mem.file) pack.media[l.id] = { file: mem.file, kind: mem.kind };
         else { const rec = await idbGetMedia(db, l.id); if (rec && rec.file) pack.media[l.id] = { file: rec.file, kind: rec.kind }; }   // queue 915 phase A: a pack (template, element, backup) carries the FILE, never a pointer into this device's store
       }
@@ -3605,7 +3649,7 @@ window.FM = window.FM || {};
       } catch (e) { return false; }
       if (!put) return false;
       const idx = this.list();
-      const card = (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null);   // template cards keep an inline thumb (few templates); read the project's from IDB
+      const card = (await FM.projects.getThumb(id)) || (id === tabId() ? makeThumb() : null);   // template cards keep an inline thumb (few templates); read the project's from IDB. bughunt8 #2: makeThumb draws THIS tab's scene
       idx.unshift({ id: tid, name: name, width: pack.project.width, height: pack.project.height, duration: pack.project.duration, thumb: card });
       /* THE INDEX WRITE CAN FAIL, AND SAYING "saved" ANYWAY IS THE WORST OUTCOME (BUG-HUNT).
          writeJSON swallows a quota failure — it returns false and calls warnQuota, which only toasts
@@ -3618,7 +3662,8 @@ window.FM = window.FM || {};
       if (!writeJSON(TPL_INDEX, idx)) { try { const db2 = await openDB(); await idbDel(db2, 'tpl:' + tid); db2.close(); } catch (e) {} return false; }
       return true;
     },
-    cardFor(projectId) { const e = FM.projects.list().find(p => p.id === projectId); return (e && e.thumb) || (projectId === curId() ? makeThumb() : null); },
+    /* bughunt8 #2: makeThumb draws THIS tab's scene, so only this tab's project may be pictured by it */
+    cardFor(projectId) { const e = FM.projects.list().find(p => p.id === projectId); return (e && e.thumb) || (projectId === tabId() ? makeThumb() : null); },
     async getPack(tid) { try { const db = await openDB(); const p = await idbGet(db, 'tpl:' + tid); db.close(); return p; } catch (e) { return null; } },
     /* SAVE A TEMPLATE AS A SHAREABLE FILE (queue 343 clause 4). Ezra chose this over links, verbatim:
        *"maybe not links then and instead just project files that people can download like what's
@@ -3951,6 +3996,10 @@ window.FM = window.FM || {};
     // Save the given layers (the current selection) as a reusable element.
     async save(name, layers) {
       if (!layers || !layers.length) return false;
+      /* bughunt8 #1: …and the selection route never packs a WATCH-ONLY copy (FM.collab.watchOnly of THIS tab's project, which also
+         answers for a live session), as packFromProject already refuses the Home route. The prompt says why (js/app.js
+         FM.saveElementPrompt); this is the floor for any caller that does not ask first. */
+      if (FM.collab && FM.collab.watchOnly && FM.collab.watchOnly(tabId())) return false;
       const eid = newId('e');
       const pack = packLayers(layers);
       pack.canvas = elementCanvasOf(FM.scene.project);   // the canvas these layers sit on — see packFromProject (queue 690, HUNT-e)
@@ -4014,7 +4063,7 @@ window.FM = window.FM || {};
       } catch (e) { return false; }
       if (!put) return false;
       const idx = this.list();
-      idx.unshift({ id: eid, name: name, count: pack.layers.length, thumb: (await FM.projects.getThumb(id)) || (id === curId() ? makeThumb() : null) });
+      idx.unshift({ id: eid, name: name, count: pack.layers.length, thumb: (await FM.projects.getThumb(id)) || (id === tabId() ? makeThumb() : null) });   // bughunt8 #2: makeThumb draws this tab's scene
       if (!writeJSON(ELEM_INDEX, idx)) { try { const db2 = await openDB(); await idbDel(db2, 'elem:' + eid); db2.close(); } catch (e) {} return false; }   // see templates.save
       return true;
     },
@@ -4070,8 +4119,8 @@ window.FM = window.FM || {};
       const ok = await this.insert(eid);
       /* NOTHING TO EDIT — AND THIS LINE USED TO STRAND A DRAFT EVERY TIME, which is queue 617 clause 1.
          Its comment said "do not strand a draft" and it stranded one on every failed open, because
-         `create()` ends with `await this.open(id)` — so the workspace it just minted IS the current
-         project — and `discardDraft` REFUSES on the current project by design (`id === curId()`
+         `create()` ends with `await this.open(id)` — so the workspace it just minted IS the project
+         open in this tab — and `discardDraft` REFUSES on that project by design (`id === tabId()`
          returns false). The cleanup called the one function that cannot run here.
          MEASURED (tests/_617drafts.html): openForEdit returned null and left `p_…` behind with its
          `ofElement` set. It strands one per element rather than one per tap — the second open matches

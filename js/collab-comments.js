@@ -280,10 +280,12 @@ window.FM = window.FM || {};
    * Opening the card spends the count.
    * "New" is measured against what was here when this project was opened: ids already in the document then are seen, so
    * opening a project with twenty comments counts none of them, and an undo that brings one back is not news either.
-   * THE PROJECT, NOT JUST ITS ID: opening another one sets the current id BEFORE its document loads (storage.js open), so a
-   * scan in between would read the OLD comments under the new id and the new ones as twenty arrivals — the document
-   * object changing is the other half of "another project". A new object under the same id (an undo, a snapshot) only
-   * re-reads what is seen, and keeps the count. */
+   * THE PROJECT, NOT JUST ITS ID. The id is this tab's own (FM.storage.openProjectId), which storage.js load() sets in the
+   * same synchronous stretch that puts the loaded document in place, so no scan falls between the two. Until bughunt8 #2b it
+   * was the shared fm.currentProject, which open() moves before it tears the old document down — a scan in between would
+   * read the OLD comments under the new id and the new ones as twenty arrivals — and that is why the document object is
+   * compared too. It still is, as the other half of "another project": a new object under the same id (an undo, a snapshot)
+   * only re-reads what is seen, and keeps the count. */
   function key(c, r) { return r ? 'r:' + c.id + ':' + r.id : 'c:' + c.id; }
   function see(c, r) { if (seen && c && typeof c.id === 'string') seen[key(c, r)] = 1; }
   function eachItem(fn) {
@@ -294,7 +296,9 @@ window.FM = window.FM || {};
     });
   }
   function scan() {
-    const pid = (FM.projects && FM.projects.currentId) ? FM.projects.currentId() : null;
+    /* bughunt8 #2b: THIS tab's project (FM.storage.openProjectId), not the shared fm.currentProject: every time another tab opened a
+       project, the count of comments he had not read here was zeroed and they were all marked seen. */
+    const pid = (FM.storage && FM.storage.openProjectId) ? FM.storage.openProjectId() : null;
     const proj = FM.scene && FM.scene.project;
     if (!seen || pid !== seenPid || proj !== seenProj) {
       if (!seen || pid !== seenPid) unread = 0;
