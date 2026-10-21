@@ -175286,8 +175286,12 @@
   };
   /* every new key, by effect, and every new control off its default on the effect's own default settings (a colour off its default in
      every channel) */
-  const _O11_NEW = { threshold: ['chan', 'keep', 'mix'], posterize: ['soft'], solarize: ['stretch', 'color'], sharpen: ['halo', 'limit'], boxblur: ['mix', 'blend'] };
-  const _O11_OFF = { threshold: [{ chan: 1 }, { keep: 1 }, { mix: 50 }], posterize: [{ soft: 60 }, { channels: 2 }], solarize: [{ stretch: 1 }, { color: '#4080c0' }], sharpen: [{ halo: 1 }, { limit: 100 }], boxblur: [{ mix: 50 }, { blend: 1 }] };
+  const _O11_NEW = { threshold: ['chan', 'keep', 'mix'], posterize: ['soft'], solarize: ['stretch', 'color'], sharpen: ['halo', 'limit'], boxblur: ['mix', 'blend'], touchup: ['shape', 'angle'] };
+  const _O11_OFF = { threshold: [{ chan: 1 }, { keep: 1 }, { mix: 50 }], posterize: [{ soft: 60 }, { channels: 2 }], solarize: [{ stretch: 1 }, { color: '#4080c0' }], sharpen: [{ halo: 1 }, { limit: 100 }], boxblur: [{ mix: 50 }, { blend: 1 }], touchup: [{ shape: 1 }, { angle: 30 }] };
+  /* …and, for the compositor test only, the settings an effect is shown on there (the same on both sides of every comparison). Remove
+     Object's default Patch reproduces a straight gradient exactly — inverse-distance weights between its left and right border are linear
+     — so on the gradient rect it would change nothing; its Mosaic at Strength 3 does. */
+  const _O11_BASE = { touchup: { mode: 2, strength: 3 } };
   const _o11P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
   const _o11Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
   /* a PIXEL_FX kernel straight, with exactly these params (ps 1 unless given; no layer, no box) */
@@ -175410,15 +175414,15 @@
 
   /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
      (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
-     on a gradient rect over a grey ground. CONTROLS: each effect changes the picture against the rect with no effect, and each new control
-     off its default moves the picture through the same compositor, at 1:1. */
+     on a gradient rect over a grey ground (on the settings _O11_BASE names, if any). CONTROLS: each effect changes the picture against the
+     rect with no effect, and each new control off its default moves the picture through the same compositor, at 1:1. */
   test('966 opts11 every new control at its default draws what the effect drew without it — each of the round’s effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 60000 }, function () {
     const TYPES = Object.keys(_O11_NEW);
     TYPES.forEach(type => _o11Need(type, _O11_NEW[type]));
     const bad = [], W = 160, H = 120, BG = '#808080';
     const one = params => type => [_o11Rect({ type: type, enabled: true, params: params })];
     TYPES.forEach(type => {
-      const P = _o11P(type);
+      const P = _o11P(type, _O11_BASE[type]);
       let moved = 0;
       [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
         const a = _o11shot(one(Object.assign({}, P))(type), t, W, H, rs, BG);
@@ -175877,6 +175881,95 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ---- Remove Object: Shape and Angle ---- */
+  test('966 opts11 Remove Object has Shape (Box or Oval — Censor’s words, storing 0 and 1, Box by default) and Angle (−180° to 180°, keyframable, 0 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Oval and −30, holds 400 at 180 and −999 at −180 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('touchup', _O11_NEW.touchup, ['_touchup11']);
+    const bad = _o11Rows('touchup', [
+      { key: 'shape', label: 'Shape', options: ['Box', 'Oval'], def: 0 },
+      { key: 'angle', label: 'Angle', min: -180, max: 180, unit: '°', def: 0 }], { shape: 1, angle: -30 });
+    bad.push.apply(bad, _o11Clamp('touchup', { angle: 400 }, { angle: 180 }));
+    bad.push.apply(bad, _o11Clamp('touchup', { angle: -999 }, { angle: -180 }));
+    bad.push.apply(bad, _o11Clamp('touchup', { shape: 2 }, { shape: undefined }));
+    /* the same words and the same stored numbers as Censor's Shape, so the two read alike */
+    const opt = (type, k) => JSON.stringify(((FM.fxRegistry.paramsOf(type) || []).filter(p => p.key === k)[0] || {}).options);
+    if (opt('touchup', 'shape') !== opt('censor', 'shape')) bad.push('Remove Object’s Shape is ' + opt('touchup', 'shape') + ', not Censor’s ' + opt('censor', 'shape'));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* OVAL, unturned, Feather 0, on the busy picture at 200 x 150: the box is X 20 Y 20 Width 60 Height 50 %, so (40, 30) 120 x 75 px, its
+     centre (100, 67.5), its half-axes 60 and 37.5, the whole box and its one-pixel ring well inside the plate. Unturned, touchup11's buffer
+     is an exact copy of the box and ring, and the kernel run on it fills exactly what it fills on the plate — Patch from the same border
+     pixels at the same distances, Blur and Mosaic over the same region with the same radius and blocks — so in every fill every pixel well
+     inside the oval (ρ² under 0.97, ρ the pixel centre's radius in it) is the Box's own pixel, byte for byte, and every pixel well outside it
+     (ρ² over 1.03) is the picture, byte for byte. CONTROL: under Box hundreds of those outside pixels — the box's corners — are filled. */
+  test('966 opts11 Remove Object Oval: unturned and unfeathered, in Patch, Blur and Mosaic alike, every pixel inside the oval is the Box’s own pixel byte for byte and every pixel outside it is the picture byte for byte (CONTROL: the Box fills its corners)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('touchup', ['shape']);
+    const W = 200, H = 150, bad = [], pic = _o11Pic(W, H), G = { x: 20, y: 20, w: 60, h: 50, feather: 0 };
+    const run = over => _o11PX('touchup', _o11P('touchup', Object.assign({}, G, over)), W, H, _o11Pic(W, H), 0.5);
+    [0, 1, 2].forEach(mode => {
+      const box = run({ mode: mode }), ov = run({ mode: mode, shape: 1 });
+      let corners = 0, inOff = 0, outOff = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const u = (x + 0.5 - 100) / 60, v = (y + 0.5 - 67.5) / 37.5, r2 = u * u + v * v, i = (y * W + x) * 4;
+        const same = (a, b) => a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2] && a[i + 3] === b[i + 3];
+        if (r2 < 0.97) { if (!same(ov, box)) inOff++; }
+        else if (r2 > 1.03) { if (!same(ov, pic)) outOff++; if (!same(box, pic)) corners++; }
+      }
+      if (corners < 300) bad.push('CONTROL: under Box (fill ' + mode + ') only ' + corners + ' pixels outside the oval are filled — the corners cannot show what Oval leaves');
+      if (inOff) bad.push('fill ' + mode + ': ' + inOff + ' pixels inside the oval differ from the Box’s');
+      if (outOff) bad.push('fill ' + mode + ': ' + outOff + ' pixels outside the oval are not the picture');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ANGLE on a flat grey 200 x 150 plate (128) crossed by a red bar (220, 40, 40) turned 30° clockwise about (100, 75): every pixel whose
+     centre has |u| ≤ 30 and |v| ≤ 4, u = dx cos 30° + dy sin 30° and v = dy cos 30° − dx sin 30° about that point. Remove Object, Patch,
+     Feather 0, an 80 x 20 box centred there (X 30, Y 43.33, Width 40, Height 13.33 %) at Angle 30: the bar lies wholly inside the turned
+     box, 10 px and more short of its ends and 6 px short of its sides, so the one-pixel ring the patch is built from is all grey and every
+     pixel of the plate comes out grey 128 (±1). The same box at Angle 0 (CONTROL), or turned the other way (−30°), leaves the bar's ends red
+     — over 30 pixels each. An Oval at 30° (the bar's corners at ρ² = 0.75² + 0.4² = 0.72) removes it too. Blur and Mosaic at 30° change
+     nothing farther than a pixel and a half outside the turned box, and do change the bar. An Angle keyed 0 → 60 over a second draws 30° at
+     0.5 s. */
+  const _o11Bar = () => E1.frame(200, 150, (x, y) => {
+    const dx = x + 0.5 - 100, dy = y + 0.5 - 75, c = Math.cos(Math.PI / 6), s = Math.sin(Math.PI / 6), u = dx * c + dy * s, v = dy * c - dx * s;
+    return (Math.abs(u) <= 30 && Math.abs(v) <= 4) ? [220, 40, 40] : [128, 128, 128];
+  });
+  test('966 opts11 Remove Object Angle: an 80 by 20 box turned 30 degrees paints out a red bar turned the same way, leaving the whole plate grey, and so does an oval, where the unturned box (CONTROL) and one turned the other way leave its ends red; Blur and Mosaic change nothing outside the turned box, and a keyed Angle draws its value', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('touchup', ['angle']);
+    const W = 200, H = 150, bad = [], G = { x: 30, y: 100 * 65 / 150, w: 40, h: 100 * 20 / 150, feather: 0, mode: 0 };
+    const run = over => _o11PX('touchup', _o11P('touchup', Object.assign({}, G, over)), W, H, _o11Bar(), 0.5);
+    const red = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 150 && d[i + 1] < 100) n++; return n; };
+    if (red(_o11Bar()) < 400) throw new Error('setup: the bar is only ' + red(_o11Bar()) + ' pixels');
+    const a0 = run({}), aw = run({ angle: -30 });
+    if (red(a0) < 30) throw new Error('CONTROL: the unturned box leaves only ' + red(a0) + ' red pixels of the turned bar — it cannot show what turning the box does');
+    if (red(aw) < 30) bad.push('turned the other way (−30°) the box leaves only ' + red(aw) + ' red pixels — Angle does not turn clockwise, as Censor’s does');
+    const grey = (d, what) => { let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - 128) > 1 || Math.abs(d[i + 1] - 128) > 1 || Math.abs(d[i + 2] - 128) > 1 || d[i + 3] !== 255) n++; if (n) bad.push(what + ': ' + n + ' pixels are not grey 128'); };
+    const a30 = run({ angle: 30 });
+    grey(a30, 'a box at 30°');
+    grey(run({ angle: 30, shape: 1 }), 'an oval at 30°');
+    [1, 2].forEach(mode => {
+      const d = run({ angle: 30, mode: mode }), src = _o11Bar();
+      let outside = 0, inside = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const dx = x + 0.5 - 100, dy = y + 0.5 - 75, c = Math.cos(Math.PI / 6), s = Math.sin(Math.PI / 6), u = dx * c + dy * s, v = dy * c - dx * s, i = (y * W + x) * 4;
+        const moved = d[i] !== src[i] || d[i + 1] !== src[i + 1] || d[i + 2] !== src[i + 2] || d[i + 3] !== src[i + 3];
+        if (Math.abs(u) > 41.5 || Math.abs(v) > 11.5) { if (moved) outside++; } else if (moved) inside++;
+      }
+      if (outside) bad.push('fill ' + mode + ' at 30°: ' + outside + ' pixels outside the turned box changed');
+      if (inside < 100) bad.push('fill ' + mode + ' at 30°: only ' + inside + ' pixels inside the turned box changed');
+    });
+    if (E1.maxDiff(run({ angle: _o11KF(0, 60) }), a30) !== 0) bad.push('an Angle keyed 0 → 60 does not draw 30° at 0.5 s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts11 Remove Object at Box and 0° draws byte for byte what it drew without Shape and Angle — Blur, Mosaic, Feather 0, a stronger Blur, a bigger box, a block on clear, a half-size plate, another moment (CONTROL: Oval and an Angle each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('touchup', _O11_NEW.touchup, ['_touchup11']);
+    const bad = _o11Ident('touchup', [{}, { over: { mode: 1 } }, { over: { mode: 2 } }, { over: { feather: 0 } }, { over: { mode: 1, strength: 2 } }, { over: { x: 5, y: 10, w: 90, h: 80 } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    let n;
+    [[{ shape: 1 }, 'Oval', 100], [{ angle: 30 }, 'Angle 30°', 500]].forEach(([o, what, min]) => { if ((n = _o11Moves('touchup', o, 192, 144, _o11Pic, 0.5)) < min) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels' /* MEASURE: reasoned in the thousands for both */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
   /* ---- the panel ---- */
   /* THE GATES, as the inspector draws them, each row read by its own <label> (_o11Greyed). Threshold's Below colour is live on a new one and
      greys out under Keep picture Below, its Above colour under Above; Posterize's Band spacing is live on a new one (RGB) and greys out under
@@ -175912,7 +176005,7 @@
      phone check on every release. Each editor, opened in the inspector, scrolls nothing sideways and keeps every control inside the panel.
      CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
   test('966 opts11 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
-    const NEW = { threshold: 'Keep picture', posterize: 'Band edges', solarize: 'Stretch', sharpen: 'Limit halos', boxblur: 'Blend' };
+    const NEW = { threshold: 'Keep picture', posterize: 'Band edges', solarize: 'Stretch', sharpen: 'Limit halos', boxblur: 'Blend', touchup: 'Angle' };
     Object.keys(NEW).forEach(type => _o11Need(type, _O11_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];
     try {

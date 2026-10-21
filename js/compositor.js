@@ -1948,6 +1948,13 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Fill', def: 0, options: [[0, 'Patch'], [1, 'Blur'], [2, 'Mosaic']] },
       { key: 'feather', label: 'Feather', min: 0, max: 60, step: 1, def: 12, unit: 'px' },
       { key: 'strength', label: 'Strength', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×', overriddenBy: 'mode', liveWhen: [1, 2] },   // queue 904: blur radius and mosaic block were fixed; Patch uses neither
+      /* #966 opts11 (hunt/fx11, his "more choices always better"): the region was always an upright box, so a round logo, a face or a
+         caption on a slope took a box of the picture with it. SHAPE Oval paints out only the oval inside the box (its feather measured
+         from the oval's edge), and ANGLE turns the box or oval about its centre (+ clockwise, as Censor's does) — Censor's two words, on
+         the content-aware fill: Patch, Blur and Mosaic work inside the turned shape as they do inside the box. Box and 0° run the old
+         lines untouched (touchup11 only off them). */
+      { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Box'], [1, 'Oval']] },
+      { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 0, unit: '°', note: 'Turns the box or oval, for a logo or a caption on a slope' },
     ] },
     // ---- Copy Background: this layer shows a live copy of everything rendered BELOW it, clipped to
     // its own shape. Add colour/blur/grade effects on top → they cover the whole scene beneath. A
@@ -12433,6 +12440,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Feather smoothstep-ramps the edge so the patch doesn't cut hard. Deterministic (no random/time)
     // so preview and export render identically.
     touchup: function(d,W,H,p,t){
+      /* #966 opts11: SHAPE Oval (1) or an ANGLE off 0° runs touchup11 (these very fills on the box read off the plate turned, laid back
+         inside the turned box or oval); Box and 0° run the lines below untouched. */
+      var toSh11=p.shape==null?0:(Math.round(FM.evalProp(p.shape,t))|0), toAn11=p.angle==null?0:FM.evalProp(p.angle,t);
+      if(toSh11===1||(toAn11!==0&&isFinite(toAn11))){ touchup11(d,W,H,p,t,toSh11===1,toAn11); return; }
       var toX=p.x==null?30:FM.evalProp(p.x,t), toY=p.y==null?40:FM.evalProp(p.y,t);
       var toW=p.w==null?40:FM.evalProp(p.w,t), toHt=p.h==null?15:FM.evalProp(p.h,t);
       var rx=Math.round(toX/100*W), ry=Math.round(toY/100*H), rw=Math.round(toW/100*W), rh=Math.round(toHt/100*H);
@@ -14292,6 +14303,48 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._boxBlur11 = boxBlur11;   // suite seam (#966 opts11)
+  /* REMOVE OBJECT'S SHAPE AND ANGLE: the box placed as the kernel places it (X, Y, Width and Height as % of the plate, each rounded to a
+     pixel) is read off the plate turned by −Angle about its centre into a buffer of its own with a one-pixel ring round it — each buffer
+     pixel the plate pixel under its centre, held to the plate's edge — and the kernel itself is run on that buffer with its region the box
+     and Feather 0, so Patch (the ring is its border), Blur and Mosaic are exactly what they are. The result is laid back over every plate
+     pixel whose centre falls inside the turned box (or, under Oval, inside the oval inscribed in it): the buffer pixel under it, mixed in
+     by the kernel's feather ramp (a smoothstep of the distance in from the edge over Feather), the distance measured from the turned box's
+     edge or, under Oval, from the oval's — (1 − ρ) of its shorter half-axis, ρ the pixel's radius in the oval. Unturned the buffer is an
+     exact copy of the box, so an Oval at 0° and Feather 0 is the Box's own pixels inside the oval and the picture outside it. */
+  function touchup11(d, W, H, p, t, oval, angDeg) {
+    const X = p.x == null ? 30 : FM.evalProp(p.x, t), Y = p.y == null ? 40 : FM.evalProp(p.y, t);
+    const BW = p.w == null ? 40 : FM.evalProp(p.w, t), BH = p.h == null ? 15 : FM.evalProp(p.h, t);
+    const bx = Math.round(X / 100 * W), by = Math.round(Y / 100 * H), bw = Math.round(BW / 100 * W), bh = Math.round(BH / 100 * H);
+    if (!(bw >= 2) || !(bh >= 2)) return;
+    let F = Math.round(p.feather == null ? 12 : FM.evalProp(p.feather, t)); if (!(F > 0)) F = 0;
+    const ang = isFinite(angDeg) ? angDeg : 0, th = ang * Math.PI / 180, c = Math.cos(th), s = Math.sin(th);
+    const hx = bw / 2, hy = bh / 2, cx = bx + hx, cy = by + hy, LW = bw + 2, LH = bh + 2, L = new Uint8ClampedArray(LW * LH * 4);
+    for (let j = 0; j < LH; j++) for (let i = 0; i < LW; i++) {
+      const ux = bx - 1 + i + 0.5 - cx, uy = by - 1 + j + 0.5 - cy;
+      let px = Math.floor(cx + ux * c - uy * s), py = Math.floor(cy + ux * s + uy * c);
+      px = px < 0 ? 0 : (px >= W ? W - 1 : px); py = py < 0 ? 0 : (py >= H ? H - 1 : py);
+      const si = (py * W + px) * 4, li = (j * LW + i) * 4;
+      L[li] = d[si]; L[li + 1] = d[si + 1]; L[li + 2] = d[si + 2]; L[li + 3] = d[si + 3];
+    }
+    PIXEL_FX.touchup(L, LW, LH, { x: 100 / LW, y: 100 / LH, w: bw * 100 / LW, h: bh * 100 / LH, mode: Math.round(FM.evalProp(p.mode, t) || 0), feather: 0, strength: p.strength == null ? 1 : FM.evalProp(p.strength, t) }, t);
+    const ex = Math.abs(hx * c) + Math.abs(hy * s), ey = Math.abs(hx * s) + Math.abs(hy * c), half = hx < hy ? hx : hy;
+    const x0 = Math.max(0, Math.floor(cx - ex) - 1), x1 = Math.min(W - 1, Math.ceil(cx + ex) + 1);
+    const y0 = Math.max(0, Math.floor(cy - ey) - 1), y1 = Math.min(H - 1, Math.ceil(cy + ey) + 1);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+      const lx = dx * c + dy * s + hx, ly = dy * c - dx * s + hy;
+      if (!(lx >= 0 && lx < bw && ly >= 0 && ly < bh)) continue;
+      let de;
+      if (oval) { const u = (lx - hx) / hx, v = (ly - hy) / hy, rho = Math.sqrt(u * u + v * v); if (rho > 1) continue; de = (1 - rho) * half; }
+      else de = Math.min(lx, bw - lx, ly, bh - ly);
+      let k = 1;
+      if (F > 0 && de < F) { const q = de / F; k = q * q * (3 - 2 * q); }
+      if (!(k > 0)) continue;
+      const li = (((ly | 0) + 1) * LW + (lx | 0) + 1) * 4, di = (y * W + x) * 4;
+      for (let ch = 0; ch < 4; ch++) d[di + ch] = k >= 1 ? L[li + ch] : d[di + ch] + (L[li + ch] - d[di + ch]) * k;
+    }
+  }
+  FM._touchup11 = touchup11;   // suite seam (#966 opts11)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {

@@ -559,7 +559,7 @@ window.FM = window.FM || {};
     solidmatte: 'Replaces everything the layer covers with one flat colour, keeping only its shape.',
     mattechoker: 'Eats into or fattens the layer’s edge by a few pixels — for tightening a key that left a rim.',
     /* as light or shade, one side only: #966 opts8 */ mattefringe: 'Draws a coloured band along the layer’s edge — painted, as light or as shade, all round or on one side only.',
-    touchup: 'Paints out a rectangle of the frame using the pixels around it — for a logo, a boom mic, a sign.',
+    /* a box or an oval, turned: #966 opts11 */ touchup: 'Paints out a rectangle of the frame using the pixels around it — for a logo, a boom mic, a sign. A box or an oval, turned to any angle.',
 
     // Repeat
     gridrepeat: 'Repeats the layer in a grid.',
