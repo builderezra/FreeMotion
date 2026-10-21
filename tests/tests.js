@@ -160070,18 +160070,20 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
-  /* CORE COLOUR over an opaque black layer, so every band only adds light: Width 20, no glow. Off the core, at (200, 192), the beam adds
-     0.8 of its colour (255, 64, 85): (204, 51, 68). On the core, (200, 200), the core adds 0.95 of its own on top: white takes it to
-     (255, 255, 255), cyan (0, 255, 255) to (204, 255, 255), and black adds nothing, so the core is gone and the middle is the beam's own
-     (204, 51, 68). Off the core every core colour leaves the beam as it was. A cyan core lights green above 200 only where it is: 0.22 x 20
-     = 4.4 px across, as B37 measures the white one. ±4 for the canvas's rounding. */
-  test('966 opts6 Laser Beam Core colour: over black the middle of a white-cored beam is white, a cyan core makes it (204, 255, 255), a black core leaves the beam’s own (204, 51, 68) there — the core is gone — off the core the beam is (204, 51, 68) whatever the core, and the cyan core is the white one’s 4.4 px across', { item: '966', budgetMs: 60000 }, function () {
+  /* CORE COLOUR over an opaque black layer: Width 20, no glow. Off the core, at (200, 192), the beam adds 0.8 of its colour (255, 64, 85):
+     (204, 51, 68). On the core, (200, 200): white is still ADDED at 0.95, which takes it to (255, 255, 255) as it always did; any other
+     core colour is LAID OVER the beam at 0.95 (the review page's question 1, recommended, decided under his 21 Oct rule), so cyan
+     (0, 255, 255) reads (10, 245, 246) — cyan, where adding it burned (204, 255, 255), nearly white — and black reads (10, 3, 3): the
+     core is the black picked, where adding it left the beam's own. Off the core every core colour leaves the beam as it was. A cyan core
+     lights green above 200 only where it is: 0.22 x 20 = 4.4 px across, as B37 measures the white one. ±4 for the canvas's rounding.
+     FAILS BEFORE THE FIX: cyan reads (204, 255, 255) and black (204, 51, 68). */
+  test('966 opts6 Laser Beam Core colour: over black the middle of a white-cored beam is white, a cyan core shows cyan (10, 245, 246) and a black one black (10, 3, 3) — the colour picked, not added — off the core the beam is (204, 51, 68) whatever the core, and the cyan core is the white one’s 4.4 px across', { item: '966', budgetMs: 60000 }, function () {
     _o6Need('laserbeam', ['color2']);
     const bad = [], W = 400, H = 400;
     const black = g => { g.fillStyle = '#000000'; g.fillRect(0, 0, W, H); };
     const run = core => _o6LB(_o4P('laserbeam', { width: 20, glow: 0, color2: core }), 0, { paint: black });
     const BEAM = [204, 51, 68, 255];
-    [['#ffffff', [255, 255, 255, 255]], ['#00ffff', [204, 255, 255, 255]], ['#000000', BEAM]].forEach(([core, want]) => {
+    [['#ffffff', [255, 255, 255, 255]], ['#00ffff', [10, 245, 246, 255]], ['#000000', [10, 3, 3, 255]]].forEach(([core, want]) => {
       const d = run(core), mid = _o4Px(d, W, 200, 200), off = _o4Px(d, W, 200, 192);
       if (!_o4Near(mid, want, 4)) bad.push('with a ' + core + ' core the middle of the beam reads ' + mid.join(',') + ', not ' + want.join(','));
       if (!_o4Near(off, BEAM, 4)) bad.push('with a ' + core + ' core the beam off its core reads ' + off.join(',') + ', not the beam’s own ' + BEAM.join(','));
@@ -160107,9 +160109,8 @@
     const base = _o6LB(_o4P('laserbeam', { width: 12 }), 0, { paint: paint });
     let n;
     if ((n = E1.count(_o6LB(_o4P('laserbeam', { width: 12, draw: 60 }), 0, { paint: paint }), base, 4)) < 500) bad.push('CONTROL: Draw on 60 moves only ' + n + ' pixels');
-    /* A BLUE core, not cyan: the core ADDS its light (the test above), and on the default red beam (255, 64, 85) with Glow 70 the red
-       is already full under the core, so a cyan core burns exactly as white as a white one — measured 18 Oct: 0 pixels moved. Blue
-       adds no green, so the core turns magenta where white made it white. */
+    /* A BLUE core (kept from 18 Oct, when the core ADDED its light and a cyan one burned exactly as white as white: 0 pixels moved).
+       Since the core is laid over the beam (his 21 Oct rule) any colour off white moves it; blue still does, so the bound stands. */
     if ((n = E1.count(_o6LB(_o4P('laserbeam', { width: 12, color2: '#0000ff' }), 0, { paint: paint }), base, 4)) < 600) bad.push('CONTROL: a blue core moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 1292 */);
     if (bad.length) throw new Error(bad.join(' · '));
   });

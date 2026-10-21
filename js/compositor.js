@@ -28105,6 +28105,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           lbBand(B, x1, y1, ex, ey, w * 2.6, glow * 0.22 * strength, colour);
         }
         lbBand(B, x1, y1, ex, ey, w, 0.8 * strength, colour);
+        /* THE CORE SHOWS THE COLOUR PICKED (the review page's question 1, its recommended answer, decided under his 21 Oct "fine with
+           ur choices" rule): a core colour is laid OVER the beam, not added to it, so a cyan core on the red beam reads cyan where it
+           used to burn white. White, or none, is still added, which is what it always drew, byte for byte. */
+        if (core.toLowerCase() !== '#ffffff') B.globalCompositeOperation = 'source-over';
         lbBand(B, x1, y1, ex, ey, Math.max(1, w * 0.22), 0.95 * strength, core);
       }
     }
