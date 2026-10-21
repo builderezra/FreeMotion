@@ -72075,6 +72075,53 @@
     }
   }
 
+  /* #768 H1 (PHONE: scrubbing with a layer selected is jumpy; the 22 Oct hunt and its refuter). With a layer selected the category grid
+   * is up through the whole scrub, and each card runs two infinite animations (cat-shine's background-position and cat-glow's
+   * box-shadow) that repaint every frame. They now pause while the timeline moves (body.fm-moving, from noteMotion) or plays.
+   * FAILS BEFORE THE FIX: mid-scrub every card animation is still running.
+   * CONTROLS: at rest at least two run (the detector and the grid work), they all run again once the moving stops, and after a pause. */
+  test('768 H1: the category cards stop repainting while the timeline moves or plays, and run again at rest', { item: '768', budgetMs: 40000 }, async function () {
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    const cardAnims = state => document.getAnimations().filter(a => {
+      const tg = a.effect && a.effect.target;
+      if (!tg || !tg.closest || !tg.closest('#inspector-panel .cat-card')) return false;
+      if (a.effect.getTiming().iterations !== Infinity) return false;
+      return a.playState === state;
+    }).length;
+    try {
+      if (hadHome) FM.home.close();
+      if (wasSimple) FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's768h1', shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 120, fill: '#f0f' }); L.start = 0; L.duration = 6;
+        FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+        FM.selectLayer(L.id);
+        try { if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory('home'); } catch (e) {}
+        FM.refreshAll(); await sleep(300);
+        FM.setTime(3); await sleep(1100);                                     // past MOTION_IDLE (700 ms): nothing moving
+        const rest = cardAnims('running');
+        if (rest < 2) throw new Error('CONTROL A: only ' + rest + ' card animations running at rest — the detector or the grid is broken, so nothing below means anything');
+        let mid = -1;
+        for (let i = 1; i <= 24; i++) { FM.setTime(3 + i * 0.05); await sleep(16); if (i === 12) mid = cardAnims('running'); }
+        if (mid !== 0) throw new Error(mid + ' card animations still repainting every frame mid-scrub (want 0; ' + rest + ' at rest) — on his phone that is the grid redrawing under every step');
+        let back = 0; const until = performance.now() + 4000;
+        while (performance.now() < until) { back = cardAnims('running'); if (back >= rest) break; await sleep(100); }
+        if (back < rest) throw new Error('CONTROL B: only ' + back + ' of ' + rest + ' card animations ran again after the scrub stopped — the look at rest is lost');
+        FM.play(); await sleep(250); const during = cardAnims('running'); FM.pause(); await sleep(1100);
+        if (during !== 0) throw new Error(during + ' card animations repainting during playback (want 0)');
+        if (cardAnims('running') < rest) throw new Error('CONTROL C: the cards did not run again after pause');
+      });
+    } finally {
+      if (FM.playing) FM.pause();
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      if (wasSimple) FM.editor.apply('simple', { force: true, quiet: true });
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
   /* #1131 (#692; the lag hunt's refuter, R2, 21 Oct). noteMotion reset its frame count on the gap from one render's END to the next
    * one's end, which contains the render itself, so a scene whose frame costs over MOTION_GAP (500 ms) never latched motion and was
    * dragged at full size. His 19 Aug scene is about 765 ms a frame at full size.

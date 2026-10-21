@@ -226,9 +226,13 @@ window.FM = window.FM || {};
    * dropped a rung. MOTION_IDLE has to outlast ONE slow frame too — a 216ms frame was measured, and
    * at 200ms the idle timer fired mid-drag and snapped back to full resolution. (#123) */
   const MOTION_FRAMES = 3, MOTION_GAP = 500, MOTION_IDLE = 700;
-  let _inMotion = false, _mFrames = 0, _mLast = 0, _mIdle = null;
+  let _inMotion = false, _mFrames = 0, _mLast = 0, _mIdle = null, _movingCls = false;   // _movingCls: #768 H1, body.fm-moving
   function noteMotion(ms) {
     if (FM.playing) return;                       // playback has its own measurement below
+    /* #768 (the 22 Oct hunt's refuter, H1): body.fm-moving while anything re-renders. styles.css pauses the category cards' two
+       infinite animations under it (and under fm-playing): on a phone they repaint every frame, the work it sheds under load, and
+       with a layer selected the grid is up for the whole scrub. The idle timeout below clears it, so it cannot stick. */
+    if (!_movingCls) { _movingCls = true; document.body.classList.add('fm-moving'); }
     const now = performance.now();
     const gap = _mLast ? (now - _mLast) : 0;
     /* #1131 (the lag hunt's refuter, R2, 21 Oct): what resets the count is the IDLE time before this render began, not the gap from
@@ -246,6 +250,7 @@ window.FM = window.FM || {};
     clearTimeout(_mIdle);
     _mIdle = setTimeout(() => {
       _mFrames = 0;
+      if (_movingCls) { _movingCls = false; document.body.classList.remove('fm-moving'); }   // #768 H1: the cards run again
       if (_inMotion) { _inMotion = false; resizeCanvas(); }   // stopped → repaint sharp
     }, MOTION_IDLE);
   }
