@@ -2414,12 +2414,23 @@ window.FM = window.FM || {};
             if (plan.action === 'seek') {
               m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++;
               FM._noteSyncSeek(m);
-            } else if (plan.action === 'trim') FM.playbackStats.trims++;
+              /* #845 (the audio hunt's refuter, N1): a drift seek jumps a waveform that is PLAYING to an arbitrary sample, the click
+                 play() and wrapTo() de-click, missed here since v6.05. Silent for this tick, and declickGain brings it back over 45 ms,
+                 through el.volume or, on an iPhone, the level stage the reconcile below writes every tick. */
+              m._resumedAt = now; try { m.el.volume = 0; } catch (e) {}
+            } else if (plan.action === 'trim' && !m._mes) FM.playbackStats.trims++;
+            /* #845 (#663, his iPhone): an element routed into Web Audio (m._mes: an effect, a boost, or an iPhone level) is never
+               rate-trimmed. WebKit mishandles every rate write on one: older builds keep reading the element's sound at its own rate
+               into a one-second buffer drained at 1x, so it runs dry or overflows (bug 240405, "choppy"); newer ones tear the tap down
+               and rebuild it on each write, a gap every time, and the pitch-kept path is still choppy (bug 311000, reopened June
+               2026). So a routed clip holds its base rate exactly, and drift past the seek threshold is corrected by the seek alone,
+               de-clicked above. A clip that is not routed is trimmed exactly as before. */
+            const want = m._mes ? base : plan.rate;
             const baseMoved = Math.abs((m._baseRate == null ? base : m._baseRate) - base) > 1e-4;
             m._baseRate = base;
-            if (Math.abs((m.el.playbackRate || 1) - plan.rate) > 1e-4 &&
+            if (Math.abs((m.el.playbackRate || 1) - want) > 1e-4 &&
                 (baseMoved || plan.action === 'seek' || now - (m._rateAt || 0) >= RATE_WRITE_GAP)) {
-              m.el.playbackRate = plan.rate; m._rateAt = now; FM.playbackStats.rateWrites++;
+              m.el.playbackRate = want; m._rateAt = now; FM.playbackStats.rateWrites++;
             }
             /* The error the controller actually acted on, bias removed. Rolling window, not a
                first-600 cap (queue 491) — see FM._noteSyncError.

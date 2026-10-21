@@ -71877,7 +71877,7 @@
       const L = FM.makeLayer('video', { name: 'tone', start: 0, duration: 12, trimStart: 0, speed: 1, volume: 1 });
       FM.scene.layers.push(L); FM.scene.project.duration = 12;
       const el = spinUpEl(12, o.latency, o.spin);
-      FM.media.set(L.id, { kind: 'video', el: el, width: 320, height: 240, duration: 12 });
+      FM.media.set(L.id, Object.assign({ kind: 'video', el: el, width: 320, height: 240, duration: 12 }, o.rec || {}));   // rec: #845 (a routed record)
       FM.playing = false; FM.setTime(0); await sleep(40);
       const t0 = performance.now();
       FM.playing = true; el.play();
@@ -71886,6 +71886,7 @@
         FM.setTime((performance.now() - t0) / 1000);
         if (!FM._syncMediaToClock) throw new Error('FM._syncMediaToClock is not exposed — this test cannot reach the controller');
         FM._syncMediaToClock(); ticks++;
+        if (o.each) o.each(el, i);   // #845: what the tick left behind, read before the next one
         await sleep(75);
         if (o.at && i === o.at) o.then(el);
       }
@@ -71923,6 +71924,33 @@
     if (r.el.maxRate <= 1.01 && r.el.seeks <= 1) {
       throw new Error('150 ms of real drift was injected well after warm-up and the controller did nothing (max rate ' + r.el.maxRate.toFixed(4) + ', ' + r.el.seeks + ' seeks) — the warm-up gate has become "never correct" and the sound would drift away from the picture');
     }
+  });
+
+  /* #845 (#663, his iPhone; the audio hunt and its refuter, 21 Oct). An element routed into Web Audio (m._mes) must never be
+   * rate-trimmed: WebKit drops or warps its sound on every write (bugs 240405, 311000).
+   * FAILS BEFORE THE FIX: the routed run trims to 1.1, exactly as the native one does.
+   * CONTROL: the same lag on a native clip is still trimmed, so the lag reached the controller and the native path stays honest. */
+  test('845 a clip routed through Web Audio is never rate-trimmed: 150 ms of lag after warm-up leaves its playbackRate at exactly 1, while the same lag on a native clip is still trimmed', { item: '845' }, async function () {
+    const lag = el => { el.currentTime = Math.max(0, el.currentTime - 0.15); };
+    const c = await q148Run({ latency: 0.09, spin: 0.3, ticks: 24, at: 11, then: lag });
+    if (!(c.el.rateWrites > 0)) throw new Error('CONTROL: the native clip was not trimmed either (' + c.el.rateWrites + ' rate writes), so this test proves nothing');
+    const r = await q148Run({ latency: 0.09, spin: 0.3, ticks: 24, at: 11, then: lag, rec: { _mes: { connect() {}, disconnect() {} } } });
+    if (r.el.rateWrites !== 0 || Math.abs(r.el.maxRate - 1) > 1e-6) throw new Error('the routed clip had playbackRate written ' + r.el.rateWrites + ' times, up to ' + r.el.maxRate.toFixed(4) + ' — on an iPhone every rate write to an element feeding Web Audio drops or warps its sound (WebKit 240405, 311000)');
+  });
+
+  /* #845 (the refuter's N1): the drift seek was the one place left that jumps a PLAYING waveform with no fade; play() and a loop wrap
+   * both open at volume 0 and let declickGain lift it (queue 148).
+   * FAILS BEFORE THE FIX: on the seek's own tick the element is at full volume.
+   * CONTROL: a drift seek really happened after the lag went in (the fake counts every currentTime write). */
+  test('845 a drift seek on a playing clip is de-clicked: the tick that jumps it leaves it at volume 0 and the next tick brings it back', { item: '845' }, async function () {
+    let after = -1, atSeek = null, later = null;
+    const r = await q148Run({ latency: 0.09, spin: 0.3, ticks: 24, at: 11,
+      then: el => { el.currentTime = Math.max(0, el.currentTime - 0.6); after = el.seeks; },
+      each: el => { if (after >= 0 && atSeek == null && el.seeks > after) atSeek = el.volume; else if (atSeek != null && later == null) later = el.volume; } });
+    if (after < 0) throw new Error('setup: the lag was never injected');
+    if (atSeek == null) throw new Error('CONTROL: 600 ms of lag after warm-up was never corrected by a seek (' + r.el.seeks + ' seeks in all), so this test proves nothing');
+    if (!(atSeek < 0.05)) throw new Error('the drift seek jumped the playing sound at volume ' + atSeek.toFixed(3) + ' — an unfaded jump to an arbitrary sample is a click, the one play() and a loop wrap already avoid');
+    if (!(later > atSeek)) throw new Error('after the de-clicked seek the volume did not come back up (' + later + ')');
   });
 
   /* Queue 202 — is the ladder actually WIRED to playback? A different question from whether it decides
