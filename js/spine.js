@@ -187,10 +187,10 @@ window.FM = window.FM || {};
     return x;
   };
 
-  /* MORE TRANSITION CONTROLS (#545: a look he has not seen ships OFF, and he is asked on the review page). His sheet (pick A,
+  /* MORE TRANSITION CONTROLS (#545, then his 21 Oct "fine with ur choices" rule: ON, and he corrects it on the review page). His sheet (pick A,
      tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions) showed the ◇ and None · Crossfade · Dip to
      black · Dip to white. Everything else 2.7 built is behind Settings → Simple editor → More transition controls (FM.settings
-     'simpleTransitionExtras', OFF by default): the row's Length − / +, On every cut, the ◇ on a hand-made crossfade and its Turn into a
+     'simpleTransitionExtras', ON by default): the row's Length − / +, On every cut, the ◇ on a hand-made crossfade and its Turn into a
      transition. It is a view setting of THIS device, read by the tray (js/simple-tools.js) and the ◇ lane (js/simple-timeline.js) only:
      the commands and the document are the same either way. With it off a NEW transition is FM.TR_DEFAULT long (the row passes no
      length), and changing the type of one keeps the length it has. */

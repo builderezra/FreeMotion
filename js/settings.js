@@ -80,10 +80,11 @@ window.FM = window.FM || {};
     addMenuGrow: false,
     /* SIMPLE 2.7 (#1122 clause 2, his pick A): More transition controls. His sheet showed the ◇ and None · Crossfade · Dip to black ·
        Dip to white; the row's Length and On every cut, and Turn into a transition on a hand-made crossfade (with its ◇), are looks he
-       has not seen, so they ship OFF (#545) and he is asked on the review page. Read live by js/spine.js (FM.spine.trExtras); its
-       row shows only while the Simple editor is on screen, so Full's Settings is exactly as before. Read by load() on its own line
-       below, or it would be the #688 bug again. */
-    simpleTransitionExtras: false,
+       has not seen. They were built OFF (#545); since his 21 Oct words, "im pretty fine with ur choices then correcting later if i think
+       its bad", the recommended answer ships ON and the review page keeps the question for his correction. Read live by js/spine.js
+       (FM.spine.trExtras); its row shows only while the Simple editor is on screen, so Full's Settings is exactly as before. Read by
+       load() on its own line below, or it would be the #688 bug again. */
+    simpleTransitionExtras: true,
   };
   const DURATIONS = [0.5, 1, 2, 3, 5, 10, 15];
 

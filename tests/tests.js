@@ -176504,7 +176504,7 @@
    * ◇'s row holds Done and the four types and nothing else, before and after one is set (no Length, no − / +, no On every cut); a
    * transition set from it is FM.TR_DEFAULT long; a hand-made crossfade has no ◇ and the clip that fades in no Turn into a transition;
    * Settings in Simple has the switch, off; Settings in Full has none. Then: the setting is off on a device that never chose, and a saved
-   * on survives a reload (the #688 whitelist).
+   * off survives a reload (the #688 whitelist). The default is ON since his 21 Oct "fine with ur choices" rule; it was OFF (#545).
    * FAILS BEFORE THE FIX: on c7c5b23e an empty ◇ is dashed grey (rgb(90, 102, 124) ring on nothing), and with a transition set the row also
    * shows Length, − / + and On every cut; the crossfade has a ◇ and its clip Turn into a transition. On 97ef9e40 there is no ◇ at all.
    * CONTROL: the switch in Settings, turned on with a click, brings Length, − / + and On every cut into the row that is open, the crossfade
@@ -176576,9 +176576,9 @@
       try { base = JSON.parse(raw0 || '{}') || {}; } catch (e) { base = {}; }
       delete base[TR27_KEY];
       localStorage.setItem('fm.settings', JSON.stringify(base)); FM.settings.init();
-      if (FM.settings.get(TR27_KEY) !== false) throw new Error('a device that never chose has More transition controls ' + JSON.stringify(FM.settings.get(TR27_KEY)) + ': it must start OFF (#545)');
-      FM.settings.set(TR27_KEY, true); FM.settings.init();
-      if (FM.settings.get(TR27_KEY) !== true) throw new Error('turned on, saved, and off again after a reload: load() dropped it (the #688 whitelist bug)');
+      if (FM.settings.get(TR27_KEY) !== true) throw new Error('a device that never chose has More transition controls ' + JSON.stringify(FM.settings.get(TR27_KEY)) + ': it must start ON (his 21 Oct rule: the recommended answer ships on, he corrects it)');
+      FM.settings.set(TR27_KEY, false); FM.settings.init();
+      if (FM.settings.get(TR27_KEY) !== false) throw new Error('turned off, saved, and on again after a reload: load() dropped it (the #688 whitelist bug)');
     } finally {
       try { if (raw0 == null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', raw0); } catch (e) {}
       FM.settings.init();
