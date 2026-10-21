@@ -1314,6 +1314,15 @@ window.FM = window.FM || {};
       if (Math.abs(cur - target) < (exact ? 0.001 : (0.5 / (FM.scene.project.fps || 30)))) return;
       try { m.el.currentTime = target; } catch (e) {}
     });
+    /* Simple 2.7 (#1122, DESIGN §12.1): …and the picture of a clip in a transition, outside its own window. The exporter reads the same
+       list (FM.transitionSeeks, js/spine.js), so the two cannot disagree. It is [] on every project without a transition. */
+    if (FM.transitionSeeks) FM.transitionSeeks(FM.scene, FM.time).forEach(s => {
+      const m = FM.media.get(s.layer.id);
+      if (!m || !m.el || (FM.seekBusy && FM.seekBusy(m))) return;
+      const target = FM.frameSeekTarget ? FM.frameSeekTarget(s.local, m.duration) : Math.min(Math.max(s.local, 0), Math.max(0, (m.duration || 0) - 0.001));
+      if (Math.abs((m.el.currentTime || 0) - target) < (exact ? 0.001 : (0.5 / (FM.scene.project.fps || 30)))) return;
+      try { m.el.pause(); m.el.muted = true; m.el.currentTime = target; } catch (e) {}
+    });
   };
 
   // Small status toast. AUTO-HIDES by default (omitting ms used to mean sticky — which left every
@@ -2261,6 +2270,18 @@ window.FM = window.FM || {};
           || (FM.soloSilenced && FM.soloSilenced(layer));
         if (local == null || hiddenHere) {
           if (local == null && !hiddenHere && prerollAtSeam(layer, m, now)) return;   // the next half of a split, starting early and muted (queue 690)
+          /* Simple 2.7 (#1122, DESIGN §12.1): a clip OUTSIDE its own window but inside a transition's overhang is silent (sound is
+             picture-only, it hard-cuts at the cut as ever) and seeked for its picture the way a scrub is, from the same list the paused
+             preview and the exporter read. No transition, no entry: the line below runs as it always did. */
+          if (local == null && !hiddenHere && FM.transitionSeeks) {
+            const sk = FM.transitionSeeks(FM.scene, FM.time).find(x => x.layer === layer);
+            if (sk && !(FM.seekBusy && FM.seekBusy(m))) {
+              try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {}
+              const tg = FM.frameSeekTarget ? FM.frameSeekTarget(sk.local, m.duration) : Math.min(Math.max(sk.local, 0), Math.max(0, (m.duration || 0) - 0.001));
+              if (Math.abs((m.el.currentTime || 0) - tg) >= 0.5 / (FM.scene.project.fps || 30)) { try { m.el.currentTime = tg; } catch (e) {} }
+              return;
+            }
+          }
           try { if (!m.el.paused) m.el.pause(); m.el.muted = true; } catch (e) {} return;
         }
         try {

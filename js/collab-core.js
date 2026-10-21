@@ -129,7 +129,11 @@ window.FM = window.FM || {};
      Box Blur `mix` and `blend`, Remove Object `shape` and `angle`. Every default draws what the effect drew before, but a
      rev-28 sanitiser drops the new keys (and `channels` 2), so the two would normalise one project differently. The registry
      term now hashes a button row's values as well (the round 11 review): a row that gained a button moved no hashed fact. */
-  C.SCHEMA_REV = 29;
+  /* Rev 30 (v17.92, Simple 2.7, #1122): the sanitiser keeps a clip's `trIn` ({ type, d }: crossfade, dipblack or dipwhite, 0.1 to
+     3 s, on a video, image or shape that is not sound only; extra keys dropped). A rev-29 build drops it, so the two would normalise
+     one project differently. FM.SM_V moves 1 → 2 with it. fp_3 to fp_10 in the fixture pin each clause, both length edges included.
+     Its own comment, so the block above stays the Full releases'. */
+  C.SCHEMA_REV = 30;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -263,6 +267,24 @@ window.FM = window.FM || {};
       captions: [{ start: 0, end: 5000, text: 'a b', words: [0, 4000] }],
       masks: [{ id: 'fpm2', mode: 'add', path: { kf: [{ t: 5000, v: [[0, 0], [8, 0], [8, 8]], e: 'linear' }, { t: 1e12, v: [[0, 0], [8, 0], [8, 8]], e: 'linear' }] } }],
       effects: [{ type: 'blur', enabled: true, params: { radius: { kf: [{ t: -1e12, v: 1, e: 'linear' }, { t: 5000, v: 2, e: 'linear' }] } } }]
+    }, {
+      /* Rev 30: the transition into a clip. Kept: a shape's at the top length with an extra key (dropped), an image's at the bottom
+         length. Dropped: an unknown type, a length just past either edge, a text layer's, a sound-only clip's, one that is not an object. */
+      id: 'fp_3', type: 'shape', name: 'T3', start: 0, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, trIn: { type: 'dipwhite', d: 3, x: 1 }
+    }, {
+      id: 'fp_4', type: 'image', name: 'T4', start: 4, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, trIn: { type: 'crossfade', d: 0.1 }
+    }, {
+      id: 'fp_5', type: 'image', name: 'T5', start: 8, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, trIn: { type: 'wipe', d: 1 }
+    }, {
+      id: 'fp_6', type: 'video', name: 'T6', start: 12, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, trIn: { type: 'dipblack', d: 3.01 }
+    }, {
+      id: 'fp_7', type: 'video', name: 'T7', start: 16, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, trIn: { type: 'crossfade', d: 0.09 }
+    }, {
+      id: 'fp_8', type: 'text', name: 'T8', start: 20, duration: 4, text: 'c', transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, trIn: { type: 'crossfade', d: 1 }
+    }, {
+      id: 'fp_9', type: 'video', name: 'T9', start: 24, duration: 4, audioOnly: true, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, trIn: { type: 'crossfade', d: 1 }
+    }, {
+      id: 'fp_10', type: 'image', name: 'T10', start: 28, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, trIn: 'crossfade'
     }];
   };
   /* …and a project carrying Simple's project keys (SCHEMA_REV 8): `home` any string ≤ 32 is kept, `v` clamped, junk dropped. */

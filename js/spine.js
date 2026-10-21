@@ -18,7 +18,7 @@ window.FM = window.FM || {};
 
   /* The version of the `sm` rules this build writes. Changes ONLY with a collab SCHEMA_REV bump — collab-core.js hashes it
      into the schema fingerprint, so a build that moved one without the other cannot join a room (§2.3). */
-  FM.SM_V = 1;
+  FM.SM_V = 2;   // Simple 2.7 (#1122): with SCHEMA_REV 30, for trIn
   const S = FM.spine = FM.spine || {};
   S.SM_V = FM.SM_V;
   const words = () => FM.spineWords || {};
@@ -66,6 +66,7 @@ window.FM = window.FM || {};
     (Array.isArray(copies) ? copies : [copies]).forEach(c => {
       if (!c) return;
       delete c.pick;
+      delete c.trIn;   // 2.7 (§12.2, §13 #16): a transition belongs to ONE cut, and a copy is never at it
       if (c.sm && typeof c.sm === 'object') {
         delete c.sm.main; delete c.sm.tail; delete c.sm.tailEnd;
         if (!Object.keys(c.sm).length) delete c.sm;
@@ -78,10 +79,122 @@ window.FM = window.FM || {};
      video. `sm.tail` and its `tailEnd` stay on the half that now ends where the clip ended (B); the head keeps `stay`. Without this a split
      in Full left two items claiming the end of the track (AU22-3). Called by FM.splitLayer with the two halves. */
   S.onSplit = function (head, tail) {
+    /* 2.7 (§12.1, §0.4 N3): a transition sits at the HEAD's cut, so the later half (a copy of the clip, cut at the split, where
+       there is no transition) does not carry it. Only a Simple-made field: a Full-made project splits exactly as before. */
+    if (tail && typeof tail === 'object' && 'trIn' in tail) delete tail.trIn;
     if (!head || !head.sm || typeof head.sm !== 'object') return;
     delete head.sm.tail; delete head.sm.tailEnd;
     if (!Object.keys(head.sm).length) delete head.sm;
   };
+
+  /* ═══ TRANSITIONS BETWEEN TWO MAIN CLIPS (release 2.7, #1122 clause 2, his pick A; DESIGN §12.1, D13 A: a transition NEVER makes
+     the video shorter). Ported from hunt/simple-transitions (js/transitions.js there), here so no new script is loaded.
+   *
+   * `inc.trIn = { type, d }` on the incoming main clip. Over [cut − d/2, cut + d/2) (cut = inc.start) the renderer shows the outgoing
+   * clip past its out-point and the incoming clip before its in-point, blended. Clip times never change, so the main-track maths is
+   * untouched, and THE SHARED GATES ARE NOT WIDENED (Q10): FM.isLayerVisibleAt and FM.layerLocalTime keep their exact windows — a
+   * transition draws through a proxy of the layer (the renderer's one transition pass, js/compositor.js) and seeks its picture through
+   * FM.transitionSeeks, which the exporter and the paused preview share.
+   *
+   * FULL DRAWS EXACTLY AS BEFORE ON EVERY PROJECT WITHOUT A TRANSITION. FM.transitionAt returns null at its first line unless the project
+   * carries `project.sm.adopted === true` (written only by Simple's adoption), and then null unless a layer carries a valid `trIn` — a
+   * field nothing but Simple's Transition row and Turn into a transition writes. On null the renderer, the exporter and the preview's
+   * seeks take exactly the path they took before; FM.layerOpacity multiplies nothing unless the layer is a proxy (`__trA`).
+   *
+   * FM.transitionAt reads STORED FLAGS ONLY (never the classifier, whose answer depends on media records and can differ on a guest
+   * before loading): layers with `sm.main` and `trIn`, on an adopted project. It owns validity: null unless `out` and `inc` are
+   * consecutive main pictures whose seam is a join (never across a gap, an overlap or a card), and d_eff = min(trIn.d,
+   * ½·min(out.duration, inc.duration)) so the windows on neighbouring cuts can never overlap (§13 #20). The stored `d` is never
+   * rewritten by a trim, so undoing a trim brings the old length back.
+   *
+   * Sound is picture-only: audio hard-cuts at the cut exactly as it does today; the overhang elements are seeked for their picture
+   * and stay muted. A matching audio crossfade is a Later item with its own picture for him. */
+  FM.TR_TYPES = ['crossfade', 'dipblack', 'dipwhite'];
+  FM.TR_MIN = 0.1; FM.TR_MAX = 3; FM.TR_DEFAULT = 0.5;
+  const TR_VISUAL = { video: 1, image: 1, shape: 1 };
+  const isMainPic = l => !!(l && l.sm && l.sm.main === true && TR_VISUAL[l.type] && l.visible !== false && l.audioOnly !== true);
+  const trEps = scene => 0.5 / ((scene.project && scene.project.fps) || 30);
+
+  /* the outgoing clip of `inc`: the main picture whose end is within half a frame of inc.start, the lowest in the stack if several;
+     null unless the seam is a clean join (no third main clip runs across the cut) */
+  FM.transitionOutOf = function (scene, inc) {
+    const L = scene.layers, e = trEps(scene);
+    let out = null;
+    for (let j = 0; j < L.length; j++) {
+      const o = L[j];
+      if (o === inc || !isMainPic(o)) continue;
+      if (Math.abs(o.start + o.duration - inc.start) <= e) out = o;
+    }
+    if (!out) return null;
+    for (let j = 0; j < L.length; j++) {   // an overlap or a third main clip across the cut is a blend, not a join
+      const o = L[j];
+      if (o === inc || o === out || !isMainPic(o)) continue;
+      if (o.start < inc.start - e && o.start + o.duration > inc.start + e) return null;
+    }
+    return out;
+  };
+  FM.transitionDEff = function (tr, out, inc) { return Math.min(+tr.d || 0, 0.5 * Math.min(out.duration, inc.duration)); };
+
+  FM.transitionAt = function (scene, t) {
+    if (!scene || !scene.layers || !scene.project || !scene.project.sm || scene.project.sm.adopted !== true) return null;
+    const L = scene.layers;
+    for (let i = 0; i < L.length; i++) {
+      const inc = L[i], tr = inc && inc.trIn;
+      if (!tr || !isMainPic(inc) || FM.TR_TYPES.indexOf(tr.type) < 0 || !(+tr.d > 0)) continue;
+      const out = FM.transitionOutOf(scene, inc); if (!out) continue;
+      const d = FM.transitionDEff(tr, out, inc), cut = inc.start;
+      if (!(d > 1e-9) || t < cut - d / 2 || t >= cut + d / 2) continue;
+      const p = Math.max(0, Math.min(1, (t - (cut - d / 2)) / d));
+      const top = L.indexOf(out) < L.indexOf(inc) ? out : inc;   // the renderer draws from the end of the list to the start: the lower index goes on top
+      const r = { out: out, inc: inc, type: tr.type, d: d, cut: cut, p: p, top: top, aOut: 1, aInc: 1, dip: null, dipA: 0 };
+      if (tr.type === 'crossfade') { if (top === inc) r.aInc = p; else r.aOut = 1 - p; }
+      else { r.dip = tr.type === 'dipwhite' ? '#ffffff' : '#000000'; r.dipA = 1 - Math.abs(2 * p - 1); if (p < 0.5) r.aInc = 0; else r.aOut = 0; }
+      return r;
+    }
+    return null;
+  };
+
+  /* the source time a clip's picture shows at project time t, extended past its own window along the same line (a held first or last
+     frame when the source has no more): FM.layerLocalTime inside the clip, otherwise the extension at its first or last speed */
+  FM.handleLocalTime = function (layer, t) {
+    const inside = FM.layerLocalTime(layer, t);
+    const m = FM.media && FM.media.get ? FM.media.get(layer.id) : null, mdur = m && m.duration > 0 ? m.duration : Infinity;
+    const dir = layer.reversed ? -1 : 1;
+    let src;
+    if (inside != null) src = inside;
+    else if (t < layer.start) src = FM.layerLocalTime(layer, layer.start) - dir * (layer.start - t) * FM.speedAt(layer, layer.start);
+    else { const e = layer.start + layer.duration - 1e-9; src = FM.layerLocalTime(layer, e) + dir * (t - (layer.start + layer.duration)) * FM.speedAt(layer, e); }
+    return Math.max(0, Math.min(mdur, src));
+  };
+
+  /* the picture seeks a transition asks for at time t: [{ layer, local }], only for a video OUTSIDE its own window (inside it the
+     ordinary seek applies). The exporter and the paused preview both read THIS, so they cannot disagree. [] on every project
+     without a transition. */
+  FM.transitionSeeks = function (scene, t) {
+    const tr = FM.transitionAt(scene, t); if (!tr) return [];
+    const out = [];
+    [tr.out, tr.inc].forEach(l => { if (l.type === 'video' && FM.layerLocalTime(l, t) == null) out.push({ layer: l, local: FM.handleLocalTime(l, t) }); });
+    return out;
+  };
+
+  /* the renderer's proxy of a layer in a transition: a shallow copy whose own window reaches t (so the unwidened gate passes it),
+     carrying the alpha FM.layerOpacity multiplies in. Never stored: it lives for one draw. */
+  FM.transitionProxy = function (layer, tr, t) {
+    const a = layer === tr.out ? tr.aOut : tr.aInc;
+    const x = Object.assign({}, layer, { __trA: a });
+    if (t < layer.start) { x.duration = layer.duration + (layer.start - t); x.start = t; }
+    else if (t >= layer.start + layer.duration) x.duration = t - layer.start + 1e-6;
+    return x;
+  };
+
+  /* MORE TRANSITION CONTROLS (#545: a look he has not seen ships OFF, and he is asked on the review page). His sheet (pick A,
+     tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions) showed the ◇ and None · Crossfade · Dip to
+     black · Dip to white. Everything else 2.7 built is behind Settings → Simple editor → More transition controls (FM.settings
+     'simpleTransitionExtras', OFF by default): the row's Length − / +, On every cut, the ◇ on a hand-made crossfade and its Turn into a
+     transition. It is a view setting of THIS device, read by the tray (js/simple-tools.js) and the ◇ lane (js/simple-timeline.js) only:
+     the commands and the document are the same either way. With it off a NEW transition is FM.TR_DEFAULT long (the row passes no
+     length), and changing the type of one keeps the length it has. */
+  S.trExtras = function () { return !!(FM.settings && FM.settings.get && FM.settings.get('simpleTransitionExtras') === true); };
 
   /* ═══ HOW A LINE NAMES AN ITEM (§8.9): "Clip N" (a split's later pieces "Clip Nb", 2.7), a text's first words, else its kind — never layer.name. */
   S.itemWord = function (layer, R) {

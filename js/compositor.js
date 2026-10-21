@@ -29964,6 +29964,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (L.type === 'group') return null;   // a group that is not a unit rasterises nothing of its own
       return FM.isLayerVisibleAt(L, t) ? L : null;
     });
+    /* THE ONE TRANSITION PASS (Simple 2.7, #1122; DESIGN §12.1, §0.4 N2: a transition set in Simple draws here, so preview = export in
+       both editors). FM.transitionAt (js/spine.js) is null on every project that is not Simple-adopted or carries no `trIn`, and then
+       every layer below takes exactly the draw it took before. */
+    const _trn = FM.transitionAt ? FM.transitionAt(scene, t) : null;
     for (let i = scene.layers.length - 1; i >= 0; i--) {
       const L = scene.layers[i];
       if (soloActive && !L.solo) continue;
@@ -29975,7 +29979,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(target, L, t, scene); }
       else {
         if (FM.needsBgSnap(L) && FM.isLayerVisibleAt(L, t)) snapBackdrop(target, L);   // grab the backdrop-so-far for Copy Background / Light Wrap
-        drawLayer(target, L, t, scene);
+        if (_trn && (L === _trn.out || L === _trn.inc)) {
+          /* a clip in the transition draws through its proxy (its own window reaching t, the blend's alpha); a dip's hidden half is not
+             drawn, and the dip colour goes over the pair right after the one on top, so a layer above the pair (a title) is not dipped */
+          if ((L === _trn.out ? _trn.aOut : _trn.aInc) > 0) drawLayer(target, FM.transitionProxy(L, _trn, t), t, scene);
+          if (L === _trn.top && _trn.dip && _trn.dipA > 0) {
+            target.save(); baseT(target); target.globalAlpha = _trn.dipA; target.fillStyle = _trn.dip;
+            target.fillRect(-4 * P.width, -4 * P.height, 9 * P.width, 9 * P.height); target.restore();
+          }
+        } else drawLayer(target, L, t, scene);
       }
     }
     // Isolate mode 2: the chosen layer goes on last, so it reads above everything without its real

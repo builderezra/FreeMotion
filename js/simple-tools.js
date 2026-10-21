@@ -44,6 +44,8 @@ window.FM = window.FM || {};
     reverse: '<path d="M11 6l-7 6 7 6zM20 6l-7 6 7 6z"/>',
     soundout: '<path d="M9 5L4.5 8.5H2v7h2.5L9 19z"/><path d="M13 12h8M18 9l3 3-3 3"/>',
     soundback: '<path d="M9 5L4.5 8.5H2v7h2.5L9 19z"/><path d="M21 12h-8M16 9l-3 3 3 3"/>',
+    /* 2.7: Turn into a transition */
+    transition: '<rect x="3.5" y="6" width="10" height="12" rx="1.5"/><rect x="10.5" y="6" width="10" height="12" rx="1.5" stroke-dasharray="2.4 2"/>',
     fade: '<path d="M3.5 18.5L20.5 5.5M3.5 18.5V8M7 18.5v-5M10.5 18.5v-3M14 18.5v-1"/>',
     mute: '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M16 9.5l4.5 5M20.5 9.5l-4.5 5"/>'
   };
@@ -78,6 +80,7 @@ window.FM = window.FM || {};
     return hgt(band) >= Math.ceil(need - 0.01);
   }
   const isSimple = () => !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+  const trExtras = () => !!(FM.spine && FM.spine.trExtras && FM.spine.trExtras());   // 2.7: More transition controls (js/spine.js, #545)
   function el(tag, cls, text) { const d = document.createElement(tag); if (cls) d.className = cls; if (text != null) d.textContent = text; return d; }
 
   /* The two rows live in ONE wrapper (#sm-bar), moved between layouts: phone → under the Simple timeline's rows; PC → the
@@ -139,6 +142,17 @@ window.FM = window.FM || {};
     };
     window.addEventListener('resize', reroom);
     if (window.MutationObserver) new MutationObserver(reroom).observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    /* 2.7 (#545): More transition controls flipped in Settings while Simple is on screen: the ◇s and an open Transition row are drawn
+       again at once (the tray's signature carries the switch too). Any other setting changing does nothing here. */
+    if (FM.settings && FM.settings.onChange) {
+      let ex = trExtras();
+      FM.settings.onChange(() => {
+        const now = trExtras();
+        if (now === ex) return;
+        ex = now; lastSig = '';
+        if (isSimple() && FM.simpleTimeline && FM.simpleTimeline.rebuild) FM.simpleTimeline.rebuild();
+      });
+    }
     buildTools();
     /* Simple's ⋯ (§8.2): Close all gaps when there is one, then everything else in Full's own ⋯ strip. Capture phase, and
        only while Simple is on screen, so Full's ⋯ is exactly today's. */
@@ -278,6 +292,10 @@ window.FM = window.FM || {};
       /* §8.2: a clip next to a gap or an overlap offers Close gap / Fix too (the seam chip's command) */
       /* its key names the seam it closes, so a double click never runs on into the next seam (the guard in tool()) */
       const seamTool = (e, s) => ({ id: 'seam', key: 'seam:' + e.id + ':' + s.kind, label: s.kind === 'gap' ? (w.closeGap || 'Close gap') : (w.fix || 'Fix'), icon: 'check', run: () => S.cmd.closeSeam(e.id) });
+      /* 2.7 (DESIGN :522, §12.1): a clip that fades in over the one before it (a crossfade seam) offers Turn into a transition; the ◇ on
+         that crossfade selects it. Only there: the Transition row itself opens from the ◇ above a join, never from this tray (pick A).
+         Only with More transition controls on (S.trExtras, #545): his sheet never showed it. */
+      if (sb && sb.kind === 'blend' && S.cmd.turnTransition && trExtras()) out.push({ id: 'turnTr', key: 'turnTr:' + id, label: w.turnTr || 'Turn into a transition', icon: 'transition', run: () => S.cmd.turnTransition(id) });
       if (sb && (sb.kind === 'gap' || sb.kind === 'overlap') && !sb.covered) out.push(seamTool(R.main[i], sb));
       else if (sa && (sa.kind === 'gap' || sa.kind === 'overlap') && !sa.covered) out.push(seamTool(na, sa));
       out.push(more, del);
@@ -394,7 +412,27 @@ window.FM = window.FM || {};
     else if (S.canTakeSound(R, id)) out.push(tool({ id: 'takeSound', label: w.takeSound || 'Take sound out', icon: 'soundout', run: () => again(S.cmd.takeSoundOut(id)) }));
     return out;
   }
-  const ROWS = { speed: speedRow, volume: volumeRow, fade: fadeRow, audio: audioRow };
+  /* 2.7 THE TRANSITION ROW (#1122 clause 2, his pick A: tools/design/plans/simple-mode/transition-options/sheet.jpg on
+     plans/simple-transitions): opened by the ◇ above a cut (js/simple-timeline.js), for the clip AFTER the cut. Done · None · Crossfade ·
+     Dip to black · Dip to white, as on his sheet, on a phone and on a PC alike. With More transition controls on (S.trExtras, #545: his
+     sheet never showed them), once one is set, its length (− and + by 0.1 s, 0.1 to 3 s) and On every cut follow. A type is pressed with
+     no length, so a new transition is FM.TR_DEFAULT long and a changed one keeps its own. Each press is one command, one undo step, like
+     Speed, Volume and Fade (2.3). */
+  function transitionRow(R, id) {
+    const S = FM.spine, w = W(), out = [rowBack()];
+    if (!FM.layerById(FM.scene, id)) return out;
+    const cur = () => { const L = FM.layerById(FM.scene, id); return L && L.trIn ? L.trIn : null; };
+    const types = [['none', w.trNone || 'None'], ['crossfade', w.trCrossfade || 'Crossfade'], ['dipblack', w.trDipBlack || 'Dip to black'], ['dipwhite', w.trDipWhite || 'Dip to white']];
+    types.forEach(t => out.push(tool({ id: 'tr-' + t[0], label: t[1], icon: null, pressed: (cur() ? cur().type : 'none') === t[0], run: () => S.cmd.transition(id, t[0]) })));
+    if (cur() && trExtras()) {
+      out.push(el('div', 'sm-quiet sm-fade-l', (w.trLength || 'Length') + ' ' + cur().d.toFixed(1) + ' s'));
+      out.push(tool({ id: 'trMinus', label: '−', icon: null, title: w.trShorter || 'Shorter by 0.1 s', run: () => { const c = cur(); if (c) S.cmd.transition(id, c.type, c.d - 0.1); } }));
+      out.push(tool({ id: 'trPlus', label: '+', icon: null, title: w.trLonger || 'Longer by 0.1 s', run: () => { const c = cur(); if (c) S.cmd.transition(id, c.type, c.d + 0.1); } }));
+      out.push(tool({ id: 'trAll', label: w.trEvery || 'On every cut', icon: null, run: () => S.cmd.transitionAll(id) }));
+    }
+    return out;
+  }
+  const ROWS = { speed: speedRow, volume: volumeRow, fade: fadeRow, audio: audioRow, transition: transitionRow };
 
   function quietLine(R) {
     const clips = R.main.filter(e => !e.slot), sum = (FM.spineWords && FM.spineWords.summary) ? FM.spineWords.summary(clips.length, R.trackEnd || 0) : '';
@@ -585,7 +623,7 @@ window.FM = window.FM || {};
          made in the same refresh (Text, Sound effects, Record voice) is synced first from the timeline's previous read, which
          has never heard of it, and drew the overlay tray (Into row, Crop) under a text or a sound; the rebuild's own sync then
          computed the same signature and kept it. Its kind from the fresh read differs, so the tray is drawn again. */
-      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, rowSig, FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
+      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, roomy, rowSig, trExtras(), FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly, JSON.stringify(l.trIn || null)].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
       if (sig === lastSig) return;
       lastSig = sig;
       /* THE PRESSED TOOL KEEPS FOCUS (§3.12 1a, §8.10 item 6; review finding 27): a press that changes the clip rebuilds the
