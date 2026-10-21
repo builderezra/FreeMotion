@@ -82932,6 +82932,69 @@
     }
   });
 
+  /* #768 H2 (the 22 Oct hunt and its refuter). The clip-action row's middle buttons swap with the playhead's side of the
+   * selected clip (trim / split / trim inside it, move / extend outside), and syncPlayhead watched for the crossing by
+   * calling refresh(), which empties the whole panel and rebuilds every category card, inside the scrub's touch move; on
+   * the phone the sheet then re-docked with a forced layout. A scrub across the selected clip (the one row under his thumb
+   * on the phone) crosses both its edges, so it hitched twice. Now only the row is swapped.
+   * The playhead is put left of the clip and the panel refreshed FIRST (the refuter's addition), so the grid element held
+   * below is the one the scrub starts with; then FM.scrubTime (the path both timeline scrubs use) walks 0.5 → 3.5 s across
+   * a clip at 1–3 s in 30 steps, a frame each.
+   * FAILS BEFORE THE FIX: two full rebuilds during the scrub, and the grid held at the start has been thrown away.
+   * CONTROLS: the row still follows the playhead: Move left before the clip, Split inside it, Move right past it. */
+  test('768 H2: scrubbing across the selected clip’s edges swaps only its action row and keeps the category grid', { item: '768', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    const realRefresh = FM.inspector.refresh;
+    let refreshes = 0;
+    try {
+      if (hadHome) FM.home.close();
+      if (wasSimple) FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's768h2', shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 120, fill: '#0f0', start: 1, duration: 2 });
+        // a floor layer 0–6 s keeps the project 6 s long: refreshAll fits the project to the last clip's end, and the playhead has to reach 3.5 s
+        const floor = FM.makeLayer('shape', { name: 'floor768h2', shape: 'rect', x: -500, y: -500, shapeW: 10, shapeH: 10, fill: '#000', start: 0, duration: 6 });
+        FM.scene = scene([floor, L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+        FM.selectLayer(L.id);
+        try { if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory('home'); } catch (e) {}
+        FM.refreshAll(); await sleep(250);
+        FM.setTime(0.5); FM.inspector.refresh(); await sleep(150);
+        // a glide an earlier test left running moves the playhead on every frame: place it again once it has stopped
+        if (Math.abs(FM.time - 0.5) > 1e-3) { FM.setTime(0.5); FM.inspector.refresh(); await sleep(100); }
+        const root = document.getElementById('inspector');
+        const grid = root && root.querySelector(':scope > .cat-wrap');
+        if (!grid) throw new Error('setup: no category grid under the selected clip — this is not the panel he scrubs under');
+        const titles = () => Array.prototype.map.call(root.querySelectorAll(':scope > .quick-row .qr-btn'), b => b.title).join(' | ');
+        const before = titles();
+        if (!/Move clip left to the playhead/.test(before)) throw new Error('CONTROL: at 0.5 s, left of the clip, the row does not offer Move clip left (' + before + ')');
+        FM.inspector.refresh = function () { refreshes++; return realRefresh.apply(this, arguments); };
+        let inside = '';
+        for (let i = 1; i <= 30; i++) {
+          FM.scrubTime(0.5 + i * 0.1);
+          await frame();
+          if (i === 15) inside = titles();
+        }
+        FM.inspector.refresh = realRefresh;
+        const after = titles();
+        if (FM.time < 3.4) throw new Error('setup: the playhead stopped at ' + FM.time + ' s and never crossed the clip end');
+        if (!/Split at playhead/.test(inside)) throw new Error('CONTROL: at 2 s, inside the clip, the row does not offer Split (' + inside + ') — the buttons stopped following the playhead');
+        if (!/Move clip right to the playhead/.test(after)) throw new Error('CONTROL: at 3.5 s, past the clip, the row does not offer Move clip right (' + after + ') — the buttons stopped following the playhead');
+        if (refreshes) throw new Error('the whole inspector was rebuilt ' + refreshes + ' times inside one scrub across the selected clip (want 0) — every card, its icon and its shimmer redrawn, and on the phone the sheet re-docked, inside a touch move');
+        if (!grid.isConnected) throw new Error('the category grid held before the scrub was thrown away and rebuilt (want the same element) — only the clip-action row depends on the playhead');
+      });
+    } finally {
+      FM.inspector.refresh = realRefresh;
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      if (wasSimple) FM.editor.apply('simple', { force: true, quiet: true });
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
   /* ═══ 765 (the keyboard half): A / S / D ON THE SELECTED CLIP, INSIDE AND OUTSIDE. Nine presses through the
      real window keydown path, each on a fresh clip at 2–6s of a 12s project: inside (playhead 4s) A keeps the
      right, D keeps the left, S splits; left of it (1s) S extends the start, A moves it left, D does nothing;
