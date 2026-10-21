@@ -231,7 +231,10 @@ window.FM = window.FM || {};
     if (FM.playing) return;                       // playback has its own measurement below
     const now = performance.now();
     const gap = _mLast ? (now - _mLast) : 0;
-    if (now - _mLast > MOTION_GAP) _mFrames = 0;
+    /* #1131 (the lag hunt's refuter, R2, 21 Oct): what resets the count is the IDLE time before this render began, not the gap from
+       the last render's end to this one's end, which contains this render. A frame dearer than MOTION_GAP never counted as motion,
+       so the heavy scene, the one that needs relief, was scrubbed and dragged at full size and the ladder was never asked. */
+    if (now - ms - _mLast > MOTION_GAP) _mFrames = 0;
     _mLast = now;
     _mFrames++;
     if (!_inMotion && _mFrames >= MOTION_FRAMES) { _inMotion = true; resizeCanvas(); }

@@ -72055,6 +72055,43 @@
     }
   }
 
+  /* #1131 (#692; the lag hunt's refuter, R2, 21 Oct). noteMotion reset its frame count on the gap from one render's END to the next
+   * one's end, which contains the render itself, so a scene whose frame costs over MOTION_GAP (500 ms) never latched motion and was
+   * dragged at full size. His 19 Aug scene is about 765 ms a frame at full size.
+   * FAILS BEFORE THE FIX: every 800 ms render reads as a pause, the count resets to 1, motion never latches.
+   * CONTROLS: four 40 ms renders latch it (the driver works), and it lets go after the idle wait. */
+  test('1131 a frame that takes most of a second still counts as motion — dragging a heavy scene sheds pixels like a light one does', { item: '1131', budgetMs: 30000 }, async function () {
+    if (typeof FM.requestRender !== 'function' || typeof FM._perfState !== 'function') throw new Error('seams missing: FM.requestRender / FM._perfState');
+    const real = FM.renderScene, mode0 = FM.settings.get('playbackQuality'), wasPlaying = FM.playing;
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const idle = () => sleep(900);   // past MOTION_IDLE (700 ms): any latch from before has let go
+    const drive = async (burnMs, n) => {
+      FM.renderScene = function () { const t0 = performance.now(); while (performance.now() - t0 < burnMs) { /* burn */ } };
+      try { for (let i = 0; i < n; i++) { FM.requestRender(); await frame(); } return FM._perfState(); }
+      finally { FM.renderScene = real; }
+    };
+    try {
+      if (FM.pause) FM.pause();
+      FM.settings.set('playbackQuality', 'smooth');   // his phone's mode: the latch alone shrinks the canvas
+      await idle();
+      if (FM._perfState().inMotion) throw new Error('CONTROL: still in motion from an earlier test');
+      const px0 = FM._perfState().canvasPx;
+      const light = await drive(40, 4);
+      if (!light.inMotion) throw new Error('CONTROL: four back-to-back 40 ms renders did not latch motion — the driver is broken, nothing below means anything');
+      await idle();
+      if (FM._perfState().inMotion) throw new Error('CONTROL: motion did not let go after the idle wait');
+      const heavy = await drive(800, 4);
+      if (!heavy.inMotion) throw new Error('four back-to-back 800 ms renders never counted as motion: noteMotion timed from the end of one render to the end of the next, so the render itself read as a pause over MOTION_GAP (500 ms) — a heavy scene is scrubbed at full resolution and the quality ladder never runs');
+      if (!(heavy.canvasPx < px0)) throw new Error('motion latched but the canvas did not shrink (' + px0 + ' -> ' + heavy.canvasPx + ')');
+    } finally {
+      FM.renderScene = real; FM.playing = wasPlaying;
+      FM.settings.set('playbackQuality', mode0 || 'auto');
+      await idle();
+      if (FM._resetPlayQuality) FM._resetPlayQuality();
+      if (FM.resizeCanvas) FM.resizeCanvas();
+    }
+  });
+
   test('the quality ladder sheds pixels under sustained load, and the frames actually speed up (queue 202)', { item: '202' }, async function () {
     if (typeof FM._perfState !== 'function') throw new Error('FM._perfState is missing — the ladder cannot be observed');
     const r = await q202Ladder({ costMs: 100, samples: 14 });
