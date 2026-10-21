@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 21 Oct at v17.87
+> ## 📌 WHAT I NEED FROM YOU — updated 21 Oct at v17.88
 >
-> **State:** v17.87 — **three fixes in the Simple editor** (#1176): Alt keys do what Simple's own keys do, a reversed clip on a speed ramp stops at the end of its video, and an update waits while Simple opens your files. The Full editor is unchanged (the lock run checks it). Nothing to do on your side.
+> **State:** v17.88 — **the PC's hidden back button, your pick B** (#1083): the ‹ Projects pill in the top-left corner of the video on a PC. The Add menu's row stretch (#1084 b) is built, switched off until you say. Ticked: the Export card (#985), who left a note (#987), the muted test browser (#1070). One question for you is on the review page: turn the Add menu grow on, and 300 or 380 ms?
+>
+> v17.87 — **three fixes in the Simple editor** (#1176): Alt keys do what Simple's own keys do, a reversed clip on a speed ramp stops at the end of its video, and an update waits while Simple opens your files. The Full editor is unchanged (the lock run checks it). Nothing to do on your side.
 >
 > v17.86 — **right-to-left text everywhere, leant layers keep their shadows and glows past the frame, and an update never reloads while a file is opening** (#1176): Hebrew and Arabic on curves and under Word Highlight; a group's box around turned members; every import door and AI edit in the update hold. Nothing to do on your side.
 >
@@ -34533,7 +34535,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 
 - [ ] **980 — BUILDING PHASE 1 (his D15 A, 1 Oct — planned first, from the revised plan): the simple “CapCut / Premiere Pro” editor alongside today's “After Effects” one — a quick switch, project conversion, and two-mode live collab** (28 Sep, ~23:39 AWST, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       Moved from INBOX.md whole, as the logging chat wrote it:
 
 
@@ -34857,6 +34859,8 @@ re-opened #480, which I had marked done and had not fixed.
       > 5. Pace gates every agent start, as before. The slot stays empty until v17.86 ships or the weekly reaches the line (~04:00).
       📍 **(builder, 21 Oct, ~00:30) Logged before the check it plans:** the parking line quoted above is the PM's plan, and the classifier already reads it, so #980 shows as waiting on him from this commit, ahead of the check. The check (each remaining part against the tree, once the Simple release hunt/smfix has shipped) follows; if any part turns out buildable without him, it is written here as UNBLOCKED with that part named, and #980 is READY again.
       📍 **(builder, 21 Oct, ~03:00) Correction to the line above — it was wrong.** It said #980 shows as waiting on him from that commit. It does not: the classifier reads the lift word that line itself contains anywhere in the entry, and that overrides every parking line, earlier or later, so #980 stayed READY (v17.86 stamped it so). The fix is in the classifier, not here: a lift should only cancel the parking lines before it, the way an answer does (the audit of 21 Oct found #982 caught by the same rule). That ships in the next Full release, with the #980 check and, if it holds, its own parking line after this one.
+      📍 **(builder, 21 Oct) The #980 check, read against the tree at v17.87:** Phases 1 and 2 are on main (the last of them, 2.7's one-tap Export, is in js/app.js showExportDialog). Phase 3 is built and NOT on main: hunt/sm3-land ac90b589 and hunt/sm3-fix 5eb2e79f (with sheet 2's work on hunt/sm3-sheet2 391cdf9a), checked with git merge-base. It ships after his answers to the two Simple sheets and its own lock run. Phases 4–5 (live arranging) are held by design (AUDIT-FULL-UNTOUCHED.md, 1 Oct). Phase 6's transitions are his pick A in #1122 (built on hunt/simple-transitions ca85b2a5, not on main, sequenced after Phase 3); Phases 7–8 are later. The back arrow's label shipped with the default "Projects", his answer still open. The three Simple fixes that did not need him went out in v17.87. Nothing else here can be built without his answers.
+      ⏸ **21 Oct — BUILT OUT UNTIL HE answers the two Simple sheets:** https://claude.ai/artifact/28YyDXR72UMot1mSuMYMen (seven picks) and https://claude.ai/artifact/CHrmawBUzs72dEcsnqK1hA (four picks).
 
 
 - [x] **981 — Empty project: the add menu pops up STRAIGHT AWAY when he taps “Tap here to start creating” (no wait — the menu is see-through, so the animation still shows underneath), and the glowing white border lines appear on the add menu's edges as it opens** (29 Sep, in the builder chat — his words)
@@ -34870,7 +34874,7 @@ re-opened #480, which I had marked done and had not fixed.
 
 
 - [ ] **982 — Home: the Join button becomes a simple ICON instead of the word “Join” — the top bar is getting cluttered** (29 Sep, in the builder chat — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **His words (verbatim):** *"Change the join button in the home menu to just be a simple icon instead of saying join, because its getting cluttered."*
       Clauses (his):
       1. [ ] Home's Join button (the worded pill beside Select, #967 batch 2 / v17.08) becomes a simple icon…
@@ -34907,8 +34911,8 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **v17.13 — SHIPPED** (queue 984): measured — it was PC only: opening the captions menu hid the Add menu's column and the timeline widened into it (973→1280px at 1280) while the editor floated over the canvas and its caption list dropped over the timeline. Now the captions menu fills the Add menu's box exactly and the timeline keeps its place and size; every captions control is inside the box (it scrolls). Review fixes: starting captions from a plain text's Aa → Detect speech switches to the captions menu; sheets inside the box cover it edge to edge. The phone is unchanged (its editor is full-screen and the timeline is hidden there, not opened).
 
 
-- [ ] **985 — The Export menu's settings should make sense at first glance to someone who doesn't know how exporting works — keep every function; learn from CapCut, don't copy it** (29 Sep, in the builder chat — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **985 — The Export menu's settings should make sense at first glance to someone who doesn't know how exporting works — keep every function; learn from CapCut, don't copy it** (29 Sep, in the builder chat — his words)
+      ✅ **DONE, ticked at v17.88:** the Export card (v17.58, js/export-card.js and #export-dialog .xa-card): every one of the 34 old settings has a home (tools/design/985/mapping.md); the #917 finding 7 fix is in; option A, the PM's call under his rule; the 21 Oct audit.
       **His words (verbatim):** *"the export menus settings are honestly a bit daunting for someone who doesnt know how it works. I dont want to lose any function but i want it to actually make sense at first glance. Capcut does a really good job of this but dont fully copy"*
       Clauses (his):
       1. [x] ✅ v17.58 — The Export menu's settings are daunting for someone who doesn't know how it works — make them make sense at first glance. (Option A: it opens on what you'll get.)
@@ -34961,8 +34965,8 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **v17.16 — CLOSED** (queue 986): batch 2 fixed C7, C11, C13, C16, C17, C18, C40, C52, C60 and every remaining canvas-filter site (mask/pen-mask/Luma Matte feathers, 3D shading, Temporal Denoise, Light Wrap, camera focus blur, adjustment grades); the review's seven findings (Glow over a grade, the pen-mask feather, a defocused layer's shadow, per-effect clamping, ramps in Find Edges/Emboss, Starfield's cache, small feathers at 0.28) fixed. All 26 done across v17.14 and v17.16.
 
 
-- [ ] **987 — In a collab edit, each note shows a colour indicator of WHO left it** (29 Sep, in the builder chat — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **987 — In a collab edit, each note shows a colour indicator of WHO left it** (29 Sep, in the builder chat — his words)
+      ✅ **DONE, ticked at v17.88:** who left a note (v17.57): js/notepad.js stamps note.by in a live session and draws the author's face; the host fills it from the member record (collab-host.js stampNotes); three 987 tests; option C, the PM's call under his rule; the 21 Oct audit.
       **His words (verbatim):** *"If you’re doing a collab edit - there should be a colour indicator based on who left the note."*
       Clauses (his):
       1. [x] ✅ v17.57 — When a project is being edited together (Work with friends)…
@@ -35814,8 +35818,8 @@ re-opened #480, which I had marked done and had not fixed.
       🔨 **v17.40 (13 Oct):** B1 landed — ChatGPT's 14 commits with the land list's fixes (land-b1 via wip/v17.40-port). Left open (partial) for the oldest-first gate.
       🔨 **v17.44 (14 Oct):** B2 + B3 landed with the land list's fixes (fix-land-b3: Unsharp Mask Protect colour off by default + schema rev 9, RGB Split's floor gone, F1 at every site) and answers-1130 4a–4e, via c41-fb2b. The 55 new tests 55/55 at 1280 and 380 before the ship. Still open (partial).
 
-- [ ] **1070 — The test browsers play sound through his speakers: add --mute-audio** (5 Oct, ~22:28 AWST, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1070 — The test browsers play sound through his speakers: add --mute-audio** (5 Oct, ~22:28 AWST, via INBOX — his words)
+      ✅ **DONE, ticked at v17.88:** test runs make no sound: --mute-audio in tests/_cdp.py (v17.24) and tests/_win_pass.py (v17.57), with tools/test-port.sh naming any launcher without it; the 21 Oct audit.
       Moved from INBOX.md whole:
       ### 05 Oct 2026, ~22:28 AWST — Test browsers play sound through his speakers: add --mute-audio
 
@@ -35835,7 +35839,7 @@ re-opened #480, which I had marked done and had not fixed.
       Not ticked yet only because ship.sh closes items oldest-first (#980, #1065, #1068 are open below it).
       🔨 **v17.57 — the last loud one fixed, and a check so none can come back.** The 16 Oct audit found one launcher the 7 Oct check missed because it came later: `tests/_win_pass.py`, which starts the WINDOWS Chrome for the tests that need an AAC encoder (the laptop's Linux Chrome has none), had no `--mute-audio` — and that Chrome plays straight through his laptop's speakers. It has the flag now, and `tools/test-port.sh` (run by ship.sh) names any launcher under tests/ that starts a headless Chrome without it, with a control that a fixture launcher without it IS named. REMAINS OPEN only for the queue order (#980 is open below it); nothing is left to build.
 - [ ] **1071 — Move the work to his more powerful Windows laptop (another time, not tonight), after a clean reset; keep his files** (5 Oct, ~22:40 and ~22:50 AWST, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       Moved from INBOX.md whole:
       ### 05 Oct 2026, ~22:40 AWST — Move the work to his more powerful laptop (another time, not tonight)
 
@@ -35902,6 +35906,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 Builder's order (6 Oct): the lock first, then ONE release with port/wsl + the rules-audit B1–B5 tools (#1073, after the PM's port review fixes), then Simple 1.2 onward. The Mac stays the only shipper until that release is live and the WSL suite is green or NOT-RUN-only.
       📍 **7 Oct ~01:40 — v17.24 (the port + audit release) is built and saved as branch release/v17.24 (ca51a60f) but NOT live:** three ship tries — one refused by a too-strict baseline gate (fixed, with test-port cases failing first), two frozen by this Mac running out of memory (#1085). ~~ASK: quit the ChatGPT and Codex apps~~ — done by the PM on his behalf (01:3x); the 4th try still crawled (~8 tests/min against ~52, 80 MB free pages, swap 8 GB) and was stopped cleanly at 02:10 — nothing committed.
       ✅ ~~ASK (7 Oct ~02:15): this Mac cannot run the full suite now. A (recommended): push release/v17.24 and let the laptop ship it — that is the switch-over; B: restart the Mac and ship right after boot; C: fix the suite's growth (#1085) first, hours. The builder keeps the Mac quiet meanwhile.~~ DONE 7 Oct: the PM chose A for him; the laptop shipped v17.24 (05d06c53) and the Linux baselines (470ee20e).
+      ⏸ **21 Oct — BUILT OUT UNTIL HE says whether the laptop was checked for the virus his friend found, or its drive reset (clauses 4–5), or that he is fine skipping it.** Clauses 1–2 are done (the laptop is the shipping machine since 7 Oct; the 21 Oct audit); clause 3 partly. The PM asked him in chat.
 - [ ] **1072 — His second (free) Claude account gets a tutorials job, on a lower model, monitored** (6 Oct, ~00:10 AWST, via INBOX — his words)
       **STATUS: 📌 NOTE — nothing to build**
       Moved from INBOX.md whole:
@@ -36073,9 +36078,10 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ HE ANSWERED the ❓ASK (6 Oct ~10:50): "B". Waits its turn behind #980.
       📍 16 Oct audit: the 6 Oct build (`1083-back` 037927ff) had never left the Mac's branch list; pushed as `hunt/1083-back` and being ported onto today's code now, with the cases it did not cover (an open dialog or sheet, fullscreen and preview, Simple on PC). Then its three tests and a picture at 1280×800 and 1024×700 beside the sheet he picked from.
       🔨 **16 Oct — BUILT and first-run green, waits on one Simple line** (hunt/1083-port 0b263541): the pill, its hide rules and four tests pass at 1280 and 380, and the built pill was sent beside his pick B (https://claude.ai/artifact/KXUcmn8rg6oui58sw54aBL). It could not ride v17.58: hiding it while Simple is on screen names Simple's body class, and the Full-unchanged lock treats any release that does as a Simple release, which must ship alone and prove Full unchanged, while this one changes Full on purpose. So the hide moves into Simple's own CSS (`body.ed-simple .corner-back { display: none; }`) and rides the next Simple release (Phase 3, with its lock run); then #1083 ships without naming Simple. BUILT OUT UNTIL the next Simple release lands.
+      📍 **v17.88 (21 Oct): SHIPPED in Full** — ported from hunt/1083-port (0b263541, 7b6f5cc7) onto main: #btn-back-corner, his B values unchanged, lit by a real mouse in the 180x120 corner, dark under every dialog, sheet, tool and hide rule; '‹ Back' inside a group; a live session's people strip steps right of the lit pill (the PM's call). Five 1083 tests. Left: the line that hides it in the Simple editor, which ships with the next Simple release (the PM's call (a)); then this ticks.
 
 - [ ] **1084 — Phone: the Add menu grows out of where you tapped (a second animation mode, with a Settings toggle)** (6 Oct, ~14:35 AWST, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       Moved from INBOX.md whole:
       ### 06 Oct 2026, ~14:35 AWST — Phone: the Add menu grows out of where you tapped (a second animation mode, with a Settings toggle)
 
@@ -36133,6 +36139,8 @@ re-opened #480, which I had marked done and had not fixed.
       📍 16 Oct audit: half a is code only (a circle that grows from the tap over 260 ms, the Settings toggle, the old slide-up kept exactly as it is) and comes after #964, which v17.57 settled on Aurora from the bottom middle, so a's hand-over is to that one press. Half b still waits on his OK of the redrawn D4b and its speed.
       🔨 **16 Oct — half a BUILT, code only, not yet run** (hunt/1084a-grow d3852306, on v17.57): on a phone the Add menu grows as a circle from where he tapped (260 ms) and runs back there on close; a Settings switch, "Add menu grows from your tap", is on by default and off gives today's slide-up exactly; reduced motion gets today's menu. Seven new tests. Next: its first run, then frames of the growth at 380 beside the prototype he picked from (#545). Taste calls to show with them: the rim's lap is replaced by two lit rings riding the circle's edge, in the rim's colours.
       ✅ **v17.59 — half a SHIPPED, switched OFF until he says yes** (#545: the frames only reached him with this release, and the PM stopped the first v17.59 ship, which had it on by default). First run green at 380 and 1280, the real-finger test included, and the #964 / #974 / #981 empty-area tests still pass beside it. Frames sent (three tap spots, 0 / 60 / 130 / 200 ms, from the app at 380): https://claude.ai/artifact/S2F6RG2GcCPvXJFziBoGUo, with the two choices named for him to change in a word (the rim lap now rides the circle's edge; whether it becomes the default). He can try it in Settings › “Add menu grows from your tap”. ❓ASK (on that page): make it the default? (A one-line change: `addMenuGrow: true` in js/settings.js and the 1084 e test.) REMAINS OPEN for that, half b (his OK on the redrawn D4b and its speed) and the queue order.
+      📍 **v17.88 (21 Oct): half b BUILT, switched off** — the row stretches up and down into the menu over 300 ms (js/mobile.js stretchAdd / unstretchAdd, STRETCH_MS), with the dim behind it as in the 7 Oct drawing (STRETCH_DIM), the row's glow handing over to the moving edge, behind the same addMenuGrow switch as half a; tests 1084 h–l. Asked on the review page (the PM's call, one line with the 7 Oct drawing): turn the grow on, and 300 or 380 ms?
+      ⏸ **21 Oct — BUILT OUT UNTIL HE says whether to turn the Add menu grow on, and 300 or 380 ms for the row stretch.**
 
 - [ ] **1085 — The test page reserves about 8.7 GB over one suite run: find the leak and fail a run past a memory budget (hunt MEDIUM #1085)** (6 Oct, ~18:10 — the PC Claude's report via the PM; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**

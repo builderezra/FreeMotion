@@ -3241,6 +3241,23 @@ window.FM = window.FM || {};
       fxTeardown(lap, 200);
     }
   }
+  /* ---- QUEUE 1084 (half b): ON A PROJECT WITH LAYERS THE ROW ITSELF STRETCHES INTO THE MENU ----
+     His pick, 7 Oct: "i want b for when u are pressing the add layer" — the redrawn D4b, built in js/mobile.js stretchAdd.
+     This is the slim row's door; mobile.js decides (the Settings switch, a phone, motion allowed), so with the switch off
+     this IS the plain openAdd() the row always made, and nothing below runs.
+     CLAUSE 4, ONE LIGHT: the row's press band (#616, lit on pointerdown) stops the moment the row becomes the shape; the
+     shape's moving edge (.add-stretch-edge) starts lit in the band's colours and carries that light out into the menu,
+     instead of the band running on underneath it. No rim lap either (that is the empty screen's, menuRim).
+     And the arriving menu takes no taps for as long as it is still arriving (guardArrival, as the empty screen's does). */
+  function openFromRow(row, pulse) {
+    if (!(FM.mobile && FM.mobile.openAdd)) return;
+    const sheet = document.getElementById('add-sheet');
+    const wasOpen = !!(sheet && sheet.classList.contains('open'));
+    FM.mobile.openAdd({ grow: true, from: 'row', row: row });
+    if (wasOpen || !sheet || !sheet.classList.contains('open') || !sheet.classList.contains('add-grow')) return;
+    guardArrival(sheet);
+    if (pulse) pulse.classList.remove('is-pulsing');
+  }
   /* A double-tap's second tap comes within this of the first one's lift (the usual platform window). The guard never
      lifts sooner, so the plain 220 ms slide under reduced motion protects a double-tap as well as the 360 ms swing —
      measured with real touches at 390x844: with 220 ms a second press 229 ms after the first lift picked Custom shape. */
@@ -3380,7 +3397,7 @@ window.FM = window.FM || {};
       if (phone) {
         // queue 1084: on the empty screen the menu grows from the finger — or, for a key (no finger), from this row's big +
         if (empty) openFromArea(growOrigin(e, row));   // queue 981: at once, with the lights on the menu's edges (the empty screen only)
-        else if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd();
+        else openFromRow(row, pulse);   // queue 1084 b: the row stretches into the menu (switch on); off, the plain openAdd() it always was
       }
       else if (FM.selectLayer) FM.selectLayer(null);
     };

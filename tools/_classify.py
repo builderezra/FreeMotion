@@ -135,11 +135,18 @@ def classify(body):
     # So the answer only silences what precedes it. When there is no answer, `tail` is the whole body and
     # this is exactly the old rule.
     tail = _reply_re(body, strict=True).split(body)[-1] if answered else body   # after his LAST answer, whichever wording or format
+    # A LIFT IS A POINT IN TIME TOO (21 Oct). `unblocked` was read anywhere in the entry and beat every parking line, earlier or
+    # later, so a "BUILT OUT UNTIL HE …" written AFTER an old UNBLOCKED never parked the entry (#982: UNBLOCKED 11 Oct, then a
+    # 16 Oct parking line, stamped READY), and a builder's note that only mentioned the word kept #980 READY (the 21 Oct audit).
+    # A lift now silences what precedes it, exactly as his answer does: the parking line is read after the later of the two.
+    ptail = body.split('UNBLOCKED')[-1] if unblocked else body
+    if len(ptail) > len(tail):
+        ptail = tail
     return ('only long-term ideas left' if hedged_only else
             'standing note (no build)' if _standing(body) else
             'held by Ezra' if (HELD.search(body) and not lifted) else
             'waiting on the logging chat' if (PLAN_PENDING.search(body) and 'PLAN LANDED' not in body) else
-            'built out — waiting on him' if (not unblocked and BUILT_OUT.search(tail)) else
+            'built out — waiting on him' if BUILT_OUT.search(ptail) else
             'blocked on Ezra' if (not unblocked and (needs_eye or BLOCKED.search(tail))) else
             'needs its own session' if BIG.search(body) else 'ACTIONABLE')
 
@@ -604,6 +611,13 @@ _CASES = [
     ('- [ ] **95 — x**\n      ⏸ BUILT OUT UNTIL HE pastes it.\n      UNBLOCKED 3 Sep: he said skip the paste and guess.',
      'ACTIONABLE',
      'UNBLOCKED lifts a built-out line like it lifts a block'),
+    # …but only the lines BEFORE it (21 Oct): #982's shape, an old lift and a newer parking line, must park.
+    ('- [ ] **982 — x**\n      UNBLOCKED 11 Oct: decided under his rule.\n      ⏸ 16 Oct: BUILT OUT UNTIL HE answers the sheet.',
+     'built out — waiting on him',
+     'a parking line written after an old UNBLOCKED parks the entry, as one written after his answer does (#982)'),
+    ('- [ ] **980 — x**\n      a note: if a part is buildable it is written here as UNBLOCKED.\n      ⏸ BUILT OUT UNTIL HE answers the two sheets.',
+     'built out — waiting on him',
+     'a note that only mentions the lift word, followed by a parking line, parks (#980, 21 Oct)'),
     ('- [ ] **8 — Standing reminder** about the thing', 'standing note (no build)',
      'a standing note in the HEADER is not work'),
     ('- [ ] **957 — x**\n      ⏳ PLAN PENDING: the logging chat is drawing the plan', 'waiting on the logging chat',
