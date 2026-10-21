@@ -14336,7 +14336,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!(lx >= 0 && lx < bw && ly >= 0 && ly < bh)) continue;
       let de;
       if (oval) { const u = (lx - hx) / hx, v = (ly - hy) / hy, rho = Math.sqrt(u * u + v * v); if (rho > 1) continue; de = (1 - rho) * half; }
-      else de = Math.min(lx, bw - lx, ly, bh - ly);
+      else de = Math.min(lx + 0.5, bw - lx + 0.5, ly + 0.5, bh - ly + 0.5, x + 1, W - x, y + 1, H - y);   /* the kernel's own distance (toK): 1-based from the box's edge, the frame's edge where it clips the box, so at 0° the two agree and an Angle keyed through 0 does not jump */
       let k = 1;
       if (F > 0 && de < F) { const q = de / F; k = q * q * (3 - 2 * q); }
       if (!(k > 0)) continue;

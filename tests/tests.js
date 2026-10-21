@@ -175959,6 +175959,8 @@
       if (inside < 100) bad.push('fill ' + mode + ' at 30°: only ' + inside + ' pixels inside the turned box changed');
     });
     if (E1.maxDiff(run({ angle: _o11KF(0, 60) }), a30) !== 0) bad.push('an Angle keyed 0 → 60 does not draw 30° at 0.5 s');
+    /* the round 11 review: off 0° the feather was measured half a pixel short of the kernel's own, so a keyed Angle passing 0 jumped */
+    [12, 2].forEach(F => { const P0 = _o11P('touchup', { x: 20, y: 20, w: 60, h: 50, feather: F }), z = _o11PX('touchup', P0, W, H, _o11Pic(W, H), 0.5), e = _o11PX('touchup', Object.assign({}, P0, { angle: 1e-4 }), W, H, _o11Pic(W, H), 0.5), m = E1.maxDiff(z, e); if (m > 1) bad.push('Feather ' + F + ': an Angle a hair off 0° draws up to ' + m + ' levels away from 0° — a keyed Angle jumps as it passes 0'); });
     if (bad.length) throw new Error(bad.join(' · '));
   });
 

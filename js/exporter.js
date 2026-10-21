@@ -269,6 +269,10 @@ window.FM = window.FM || {};
       const m = FM.media.get(layer.id);
       if (m) ps.push(seekVideo(m, local, layer.name || layer.type || layer.id));
     });
+    /* Simple 2.7 (#1122, DESIGN §12.1): a clip in a transition, outside its own window, is seeked for its picture (its handle; a held
+       edge frame past the source). The paused preview reads the SAME list (FM.transitionSeeks), so the two cannot disagree. It is []
+       on every project without a transition, and until Simple 2.7 ships it does not exist, so this adds nothing to any other export. */
+    if (FM.transitionSeeks) FM.transitionSeeks(scene, t).forEach(s => { const m = FM.media.get(s.layer.id); if (m) ps.push(seekVideo(m, s.local, s.layer.name || s.layer.type || s.layer.id)); });
     await Promise.all(ps);
   }
 
@@ -1561,6 +1565,8 @@ window.FM = window.FM || {};
 
   FM.exporter = {
     prepareCaches,
+    /* suite seam (Simple 2.7): the frame path's own seek, so a test can run it without encoding */
+    seekAllVideos,
     buildAudioMix,
     mediaBack,   // bughunt3 #2: FM.snapshotPNG (js/app.js) waits through it too
     encodeM4A,
