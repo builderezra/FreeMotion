@@ -175286,8 +175286,8 @@
   };
   /* every new key, by effect, and every new control off its default on the effect's own default settings (a colour off its default in
      every channel) */
-  const _O11_NEW = { threshold: ['chan', 'keep', 'mix'], posterize: ['soft'], solarize: ['stretch', 'color'], sharpen: ['halo', 'limit'] };
-  const _O11_OFF = { threshold: [{ chan: 1 }, { keep: 1 }, { mix: 50 }], posterize: [{ soft: 60 }, { channels: 2 }], solarize: [{ stretch: 1 }, { color: '#4080c0' }], sharpen: [{ halo: 1 }, { limit: 100 }] };
+  const _O11_NEW = { threshold: ['chan', 'keep', 'mix'], posterize: ['soft'], solarize: ['stretch', 'color'], sharpen: ['halo', 'limit'], boxblur: ['mix', 'blend'] };
+  const _O11_OFF = { threshold: [{ chan: 1 }, { keep: 1 }, { mix: 50 }], posterize: [{ soft: 60 }, { channels: 2 }], solarize: [{ stretch: 1 }, { color: '#4080c0' }], sharpen: [{ halo: 1 }, { limit: 100 }], boxblur: [{ mix: 50 }, { blend: 1 }] };
   const _o11P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
   const _o11Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
   /* a PIXEL_FX kernel straight, with exactly these params (ps 1 unless given; no layer, no box) */
@@ -175804,6 +175804,79 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ---- Box Blur: Mix and Blend ---- */
+  test('966 opts11 Box Blur has Mix (0–100 %, keyframable, 100 by default) and Blend (Normal, Screen or Soft light — Gaussian Blur’s three, storing 0–2, Normal by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and Soft light, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('boxblur', _O11_NEW.boxblur);
+    const bad = _o11Rows('boxblur', [
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 },
+      { key: 'blend', label: 'Blend', options: ['Normal', 'Screen', 'Soft light'], def: 0 }], { mix: 40, blend: 2 });
+    bad.push.apply(bad, _o11Clamp('boxblur', { mix: 150 }, { mix: 100 }));
+    bad.push.apply(bad, _o11Clamp('boxblur', { mix: -5 }, { mix: 0 }));
+    bad.push.apply(bad, _o11Clamp('boxblur', { blend: 3 }, { blend: undefined }));
+    /* one stored number, one meaning: the very choices Gaussian Blur's Blend stores, so a value means the same blend on both */
+    const opt = type => JSON.stringify(((FM.fxRegistry.paramsOf(type) || []).filter(p => p.key === 'blend')[0] || {}).options);
+    if (opt('boxblur') !== opt('blur')) bad.push('Box Blur’s Blend is ' + opt('boxblur') + ', not Gaussian Blur’s ' + opt('blur'));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* MIX AND BLEND on the busy picture (opaque), at the defaults (Radius 8, Vertical amount 100 %, Smoothness 1). The whole blur B is the
+     kernel at Normal 100 % (CONTROL: it darkens over 500 channels of the bright checker cells by more than 2 levels — a blur pulls a light
+     cell toward its dark neighbours). Mix 50 % sits half way between the picture P and B, within a level; Mix 0 % is P byte for byte; a Mix
+     keyed 0 → 100 draws 50 % at 0.5 s. Screen is the W3C screen of B over P, 255 x (b + p − b p), within a level, so no channel comes out
+     darker than the picture; Soft light is the W3C soft light of B (source) over P (backdrop) — BLUR_BLEND's own formula, copied in
+     _o11SL — within a level. */
+  const _o11SL = (s, d) => { if (s <= 0.5) return d - (1 - 2 * s) * d * (1 - d); const D = d <= 0.25 ? ((16 * d - 12) * d + 4) * d : Math.sqrt(d); return d + (2 * s - 1) * (D - d); };
+  test('966 opts11 Box Blur Mix and Blend: Mix 50 % sits half way between the picture and the whole blur, Mix 0 % is the picture byte for byte, a keyed Mix draws its value, Screen lays the blur over the picture as W3C Screen does so nothing gets darker, and Soft light as W3C Soft light (CONTROL: the whole blur darkens the bright cells)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('boxblur', _O11_NEW.boxblur);
+    const W = 96, H = 72, bad = [], P = _o11Pic(W, H);
+    const run = over => _o11PX('boxblur', _o11P('boxblur', over), W, H, _o11Pic(W, H), 0.5);
+    const B = run({});
+    let darker = 0; for (let i = 0; i < P.length; i++) { if ((i & 3) === 3) continue; if (B[i] < P[i] - 2) darker++; }
+    if (darker < 500) throw new Error('CONTROL: the whole blur darkens only ' + darker + ' channels of the picture by more than 2 levels — the fixture cannot show what Screen keeps');
+    const near = (d, f, what) => { let worst = 0, at = -1; for (let i = 0; i < P.length; i++) { if ((i & 3) === 3) continue; const e = Math.abs(d[i] - f(P[i], B[i])); if (e > worst) { worst = e; at = i >> 2; } } if (worst > 1) bad.push(what + ' is up to ' + worst.toFixed(1) + ' levels from its formula (pixel ' + at + ')'); };
+    near(run({ mix: 50 }), (p, b) => p + (b - p) * 0.5, 'Mix 50 %');
+    if (E1.maxDiff(run({ mix: 0 }), P) !== 0) bad.push('at Mix 0 % the picture moved by up to ' + E1.maxDiff(run({ mix: 0 }), P) + ' levels');
+    if (E1.maxDiff(run({ mix: _o11KF(0, 100) }), run({ mix: 50 })) !== 0) bad.push('a Mix keyed 0 → 100 does not draw 50 % at 0.5 s');
+    const S = run({ blend: 1 });
+    near(S, (p, b) => 255 * (b / 255 + p / 255 - (b / 255) * (p / 255)), 'Screen');
+    let dk = 0; for (let i = 0; i < P.length; i++) { if ((i & 3) === 3) continue; if (S[i] < P[i] - 1) dk++; }
+    if (dk) bad.push('under Screen ' + dk + ' channels came out darker than the picture');
+    near(run({ blend: 2 }), (p, b) => 255 * _o11SL(b / 255, p / 255), 'Soft light');
+    near(run({ blend: 1, mix: 50 }), (p, b) => p + (255 * (b / 255 + p / 255 - (b / 255) * (p / 255)) - p) * 0.5, 'Screen at Mix 50 %');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ON A BLOCK ON CLEAR (the layer's own alpha matters): under Screen the glow spreading over the clear plate beside the block is the plain
+     blur there byte for byte (the sharp layer has nothing there to screen against), while inside the block nothing gets darker; and the
+     kernel handed the layer's box (its row and column skipping, #692) draws exactly what it draws without one, under Screen at Mix 60 % and
+     under Soft light. CONTROL: the blur spreads past the block (some clear pixel gains alpha). */
+  test('966 opts11 Box Blur on a block on clear: under Screen the glow over the clear plate beside the block is the plain blur byte for byte and nothing inside the block gets darker, and handed the layer’s box the kernel draws what it draws without one, Mix and Blend on (CONTROL: the blur spreads past the block)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('boxblur', _O11_NEW.boxblur);
+    const W = 96, H = 72, bad = [], src = _o11Blk(W, H);
+    const run = (over, bb) => { const d = _o11Blk(W, H); FM._FX_TABLES.PIXEL_FX.boxblur(d, W, H, _o11P('boxblur', over), 0.5, 1, bb); return d; };
+    const plain = run({}), scr = run({ blend: 1 });
+    let spread = 0, offOut = 0, darkIn = 0;
+    for (let i = 0; i < src.length; i += 4) {
+      if (src[i + 3] === 0) { if (plain[i + 3] > 0) spread++; if (plain[i] !== scr[i] || plain[i + 1] !== scr[i + 1] || plain[i + 2] !== scr[i + 2] || plain[i + 3] !== scr[i + 3]) offOut++; }
+      else for (let c = 0; c < 3; c++) if (scr[i + c] < src[i + c] - 1) { darkIn++; break; }
+    }
+    if (spread < 200) throw new Error('CONTROL: the blur spreads onto only ' + spread + ' clear pixels — the fixture cannot show the glow');
+    if (offOut) bad.push('under Screen ' + offOut + ' clear pixels beside the block are not the plain blur');
+    if (darkIn) bad.push('under Screen ' + darkIn + ' pixels of the block came out darker');
+    const BB = { x: 20, y: 10, w: 50, h: 40 };
+    [{ blend: 1, mix: 60 }, { blend: 2 }, { mix: 30, aspect: 0, passes: 2 }].forEach(o => { const m = E1.maxDiff(run(o, BB), run(o)); if (m !== 0) bad.push(JSON.stringify(o) + ': handed the layer’s box the kernel is up to ' + m + ' levels away from the same without it'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts11 Box Blur at Normal and Mix 100 % draws byte for byte what it drew without them — a small and a large Radius, a sideways smear, a smoother tall one, Radius 0, a block on clear, a half-size plate, another moment — and the cropped readback with either on is the whole plate’s (CONTROL: Mix 50 % and Screen each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('boxblur', _O11_NEW.boxblur, ['_boxBlur11']);
+    const bad = _o11Ident('boxblur', [{}, { over: { radius: 3 } }, { over: { radius: 20 } }, { over: { aspect: 0 } }, { over: { aspect: 150, passes: 3 } }, { over: { radius: 0 } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    let n;
+    [[{ mix: 50 }, 'Mix 50 %'], [{ blend: 1 }, 'Screen']].forEach(([o, what]) => { if ((n = _o11Moves('boxblur', o, 96, 72, _o11Pic, 0.5)) < 500) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels'); });
+    [{ mix: 50 }, { blend: 1 }, { blend: 2, mix: 70, aspect: 0 }].forEach(o => _o11Crop('boxblur', o, bad));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
   /* ---- the panel ---- */
   /* THE GATES, as the inspector draws them, each row read by its own <label> (_o11Greyed). Threshold's Below colour is live on a new one and
      greys out under Keep picture Below, its Above colour under Above; Posterize's Band spacing is live on a new one (RGB) and greys out under
@@ -175839,7 +175912,7 @@
      phone check on every release. Each editor, opened in the inspector, scrolls nothing sideways and keeps every control inside the panel.
      CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
   test('966 opts11 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
-    const NEW = { threshold: 'Keep picture', posterize: 'Band edges', solarize: 'Stretch', sharpen: 'Limit halos' };
+    const NEW = { threshold: 'Keep picture', posterize: 'Band edges', solarize: 'Stretch', sharpen: 'Limit halos', boxblur: 'Blend' };
     Object.keys(NEW).forEach(type => _o11Need(type, _O11_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];
     try {

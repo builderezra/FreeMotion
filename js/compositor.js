@@ -458,6 +458,13 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Radius', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
       { key: 'aspect', label: 'Vertical amount', min: 0, max: 200, step: 5, def: 100, unit: '%' },
       { key: 'passes', label: 'Smoothness', min: 1, max: 4, step: 1, def: 1 },
+      /* #966 opts11 (hunt/fx11, his "more choices always better"): the blur could only replace the picture. MIX keeps some of the sharp
+         picture under it, and BLEND lays the blurred copy over the sharp one in Screen (a glow: the lights bloom and nothing darkens) or
+         Soft light (the Orton soft-focus look: the picture keeps its detail under a dreamy haze) — Gaussian Blur's three, with the same
+         stored numbers (#482 15.7), on a box blur that can smear one way. Normal and 100 % run the old lines untouched (boxBlur11 only
+         off them). */
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Screen'], [2, 'Soft light']], note: 'Screen lays the blur on as a glow, Soft light as a soft focus' },
     ] },
     { type: 'spinblur', label: 'Spin Blur', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -9624,7 +9631,7 @@ window.FM = window.FM || {};
        silently opt this kernel OUT of the plate scaling that #691 just gave it, and a box blur that
        stopped matching the export is a worse bug than the one being fixed. Reading it this way keeps
        `boxblur.length` at 5. */
-    boxblur: function(d,W,H,p,t){ var bbBB=arguments[6]; var bbr=Math.round(FM.evalProp(p.radius,t)||0); if(bbr<1)return; if(bbr>40)bbr=40;
+    boxblur: function(d,W,H,p,t){ var bbBB=arguments[6]; /* #966 opts11: MIX under 100 % or BLEND Screen (1) / Soft light (2) runs boxBlur11 (this very blur, then the blurred copy laid over the sharp one); Normal and 100 % run the lines below untouched */ var bbMx11=p.mix==null?100:FM.evalProp(p.mix,t), bbBl11=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); if(bbMx11<100||bbBl11===1||bbBl11===2){ boxBlur11(d,W,H,p,t,bbBB,bbMx11,bbBl11); return; } var bbr=Math.round(FM.evalProp(p.radius,t)||0); if(bbr<1)return; if(bbr>40)bbr=40;
       // Locked to a perfectly square kernel and a single pass: no horizontal-only smear, no
       // vertical-only, and no way off its hard boxy falloff. ASPECT scales the VERTICAL radius against
       // the horizontal (0 = a pure horizontal smear). PASSES repeats the whole thing — a box blur run
@@ -14253,6 +14260,38 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._sharpen11 = sharpen11;   // suite seam (#966 opts11)
+  /* BOX BLUR'S MIX AND BLEND: the kernel's own blur, untouched (the kernel itself, run on the plate with Mix and Blend taken away and the
+     same layer box, so its row and column skipping and its passes are exactly what they are), then the blurred copy laid over the sharp
+     picture the way Gaussian Blur's Mix and Blend lay theirs (blurPlateKernel, #482 15.7): premultiplied, Normal the blurred copy itself,
+     Screen and Soft light the W3C blend of the blurred copy (source) over the sharp one (backdrop) through the same BLUR_BLEND functions,
+     and Mix fading from the sharp picture to that. A Radius under 1 blurs nothing and lays nothing over (the kernel's own early return);
+     Mix 0 is the picture. Where neither copy has any alpha the pixel is clear, as blurPlateKernel leaves it. */
+  function boxBlur11(d, W, H, p, t, bb, mix, blend) {
+    if (!(Math.round(FM.evalProp(p.radius, t) || 0) >= 1)) return;
+    const m = isFinite(mix) ? (mix <= 0 ? 0 : (mix >= 100 ? 1 : mix / 100)) : 1;
+    if (!(m > 0)) return;
+    const bf = (blend === 1 || blend === 2) ? BLUR_BLEND[blend] : null;
+    const src = d.slice(), q = Object.assign({}, p);
+    delete q.mix; delete q.blend;
+    PIXEL_FX.boxblur(d, W, H, q, t, undefined, bb);
+    for (let j = 0; j < d.length; j += 4) {
+      const Aa = src[j + 3] / 255, Ba = d[j + 3] / 255;
+      if (Aa === 0 && Ba === 0) { d[j] = d[j + 1] = d[j + 2] = 0; continue; }
+      let xr = d[j] * Ba, xg = d[j + 1] * Ba, xb = d[j + 2] * Ba, xa = d[j + 3];
+      if (bf) {
+        const ar = src[j] / 255, ag = src[j + 1] / 255, ab = src[j + 2] / 255;
+        const one = (bp, ac, bc) => (1 - Aa) * bp + (1 - Ba) * ac * Aa * 255 + Aa * Ba * 255 * bf(bc, ac);
+        xr = one(xr, ar, d[j] / 255); xg = one(xg, ag, d[j + 1] / 255); xb = one(xb, ab, d[j + 2] / 255);
+        xa = (Ba + Aa * (1 - Ba)) * 255;
+      }
+      const pr = src[j] * Aa, pg = src[j + 1] * Aa, pb = src[j + 2] * Aa, pa = src[j + 3];
+      const oa = pa + (xa - pa) * m;
+      if (oa <= 0.001) { d[j] = d[j + 1] = d[j + 2] = d[j + 3] = 0; continue; }
+      const f = 255 / oa;
+      d[j] = (pr + (xr - pr) * m) * f; d[j + 1] = (pg + (xg - pg) * m) * f; d[j + 2] = (pb + (xb - pb) * m) * f; d[j + 3] = oa;
+    }
+  }
+  FM._boxBlur11 = boxBlur11;   // suite seam (#966 opts11)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {

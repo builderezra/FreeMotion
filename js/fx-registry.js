@@ -405,7 +405,7 @@ window.FM = window.FM || {};
    * Kept here rather than in FM.EFFECTS so the compositor catalogue stays about rendering. */
   const DESCRIPTIONS = {
     blur: 'Softens everything evenly, like a lens out of focus.',
-    boxblur: 'A cheaper, squarer blur — faster than Gaussian, slightly boxy up close.',
+    /* mixed, a glow, a soft focus: #966 opts11 */ boxblur: 'A cheaper, squarer blur — faster than Gaussian, slightly boxy up close. Mix it with the sharp picture, or lay it over as a glow or a soft focus.',
     /* one side of the halo, or none: #966 opts11 */ sharpen: 'Hardens edges to bring detail back. Push it far and edges start to halo — keep just the dark side of each, or hold them back altogether.',
     zoomblur: 'Streaks outward from a centre point, like a fast zoom during the shot.',
     spinblur: 'Streaks in a circle around a centre point — motion from a spin.',
