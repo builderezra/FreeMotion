@@ -173360,4 +173360,297 @@
     } finally { chip.remove(); }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ 215 SAFARI AAC COOKIE (#215 / #604 / #677 / #1134): the file must carry a bare AudioSpecificConfig ════════════════════
+   * Safari 26 and 27's AudioEncoder hands back Apple's 39-byte magic cookie, a whole MPEG-4 ES_Descriptor, as
+   * decoderConfig.description, where WebCodecs requires the bare 2-byte ASC (WebKit bug 302253, status NEW; its fix, PR #77282,
+   * is in no shipped Safari). mp4-muxer wrote it verbatim into esds, so the iPhone's files read as object type 0, 22050 Hz,
+   * 0 channels: a track no player can open, which Photos shows as locked on mute.
+   * WHERE THE COOKIE'S BYTES COME FROM: WebKit bug 302253's own report (48 kHz mono), as quoted and walked byte by byte in the
+   * 21 Oct refutation of hunt #215 (refute215-report.md, section a): 03 80 80 80 22 | 00 00 | 00 | 04 80 80 80 14 | 40 14 00 18
+   * 00 + 8 zeros | 05 80 80 80 02 | 11 88 | 06 80 80 80 01 02, 39 bytes. Here the ASC is 11 90 (stereo), what the same encoder
+   * gives for this export's 48 kHz stereo mix, in the same place; the length stays 39.
+   * THE STUB, test-only: a fresh AudioEncoder class per case (aacPriming caches its measurement by constructor) that emits
+   * real EncodedAudioChunks with junk payloads and the given description on the first chunk, as WebKit does. No AAC encoder
+   * is needed, so these RUN on Linux Chrome. Two branches each: no AudioDecoder (no priming cut), and a stub AudioDecoder
+   * that hears the probe's two clicks 2112 samples late, so aacPriming measures 2112 and dropPriming cuts 3 frames. */
+  const COOKIE215 = [0x03, 0x80, 0x80, 0x80, 0x22, 0x00, 0x00, 0x00,
+    0x04, 0x80, 0x80, 0x80, 0x14, 0x40, 0x14, 0x00, 0x18, 0x00, 0, 0, 0, 0, 0, 0, 0, 0,
+    0x05, 0x80, 0x80, 0x80, 0x02, 0x11, 0x90,
+    0x06, 0x80, 0x80, 0x80, 0x01, 0x02];
+  const ASC5_215 = [0x17, 0x80, 0x5d, 0xc0, 0x10];   // AAC-LC, rate index 15 then an explicit 24-bit 48000, 2 channels
+  const JUNK215 = [0x05, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06];   // 7 bytes, object type 0, and no 03 to walk
+  // A compact ES_Descriptor (1-byte sizes) announcing all three optional fields (dependsOn, a 3-letter URL, OCR). Its 05 holds
+  // ASC5_215 starting 30 bytes in; a reader that takes the Safari cookie's offset (31) gets 80 5d instead.
+  function compactCookie215() {
+    const D = function (tag, p) { return [tag, p.length].concat(p); };
+    const dcd = D(0x04, [0x40, 0x15, 0, 0, 0, 0, 1, 0xf4, 0, 0, 1, 0xf4, 0].concat(D(0x05, ASC5_215)));
+    return D(0x03, [0x00, 0x01, 0xe0, 0x00, 0x02, 0x03, 0x61, 0x62, 0x63, 0x00, 0x03].concat(dcd, D(0x06, [0x02])));
+  }
+  function hex215(a) { return Array.from(a || [], function (x) { return x.toString(16).padStart(2, '0'); }).join(' '); }
+  function bytes215(d) {
+    if (d == null) return null;
+    return Array.from(ArrayBuffer.isView(d) ? new Uint8Array(d.buffer, d.byteOffset, d.byteLength) : new Uint8Array(d));
+  }
+  // The esds DecoderSpecificInfo of a finished MP4, read by the test itself: the box found by its letters, then 03 → 04 → 05.
+  function esdsDsi215(buf) {
+    for (let i = 4; i + 8 <= buf.length; i++) {
+      if (buf[i] !== 0x65 || buf[i + 1] !== 0x73 || buf[i + 2] !== 0x64 || buf[i + 3] !== 0x73) continue;
+      let p = i + 8;
+      const sz = function () { let n = 0, x = 0x80; while (x & 0x80) { x = buf[p++]; n = n * 128 + (x & 0x7f); } return n; };
+      if (buf[p++] !== 0x03) return null;
+      sz(); p += 2;
+      const f = buf[p++];
+      if (f & 0x80) p += 2;
+      if (f & 0x40) p += 1 + buf[p];
+      if (f & 0x20) p += 2;
+      if (buf[p++] !== 0x04) return null;
+      sz(); p += 13;
+      if (buf[p++] !== 0x05) return null;
+      const n = sz();
+      return Array.from(buf.subarray(p, p + n));
+    }
+    return null;
+  }
+  function stubAE215(desc) {
+    return class StubAE215 {
+      constructor(init) { this.init = init; this.n = 0; this.cfg = null; this.state = 'unconfigured'; this.encodeQueueSize = 0; }
+      static isConfigSupported(c) { return Promise.resolve({ supported: true, config: c }); }
+      configure(c) { this.cfg = c; this.state = 'configured'; }
+      encode(ad) {
+        const first = this.n++ === 0;
+        const chunk = new EncodedAudioChunk({ type: 'key', timestamp: ad.timestamp, duration: Math.round(ad.numberOfFrames / ad.sampleRate * 1e6), data: new Uint8Array([0x21, 0x10, 0x04, 0x60, 0x8c, 0x1c, this.n & 255, 0]) });
+        const meta = first ? { decoderConfig: { codec: 'mp4a.40.2', sampleRate: this.cfg.sampleRate, numberOfChannels: this.cfg.numberOfChannels, description: new Uint8Array(desc).buffer } } : {};
+        this.init.output(chunk, meta);
+      }
+      flush() { return Promise.resolve(); }
+      close() { this.state = 'closed'; }
+      reset() {}
+    };
+  }
+  // records the description each decoder is configured with; on flush it plays back the probe's two clicks 2112 samples late
+  function stubAD215(configured) {
+    return class StubAD215 {
+      constructor(init) { this.init = init; this.n = 0; this.state = 'unconfigured'; }
+      static isConfigSupported(c) { return Promise.resolve({ supported: true, config: c }); }
+      configure(c) { configured.push(c ? bytes215(c.description) : null); this.state = 'configured'; }
+      decode() { this.n++; }
+      flush() {
+        const F = 1024, len = this.n * F, d = new Float32Array(len);
+        [1500 + 2112, 1500 + 5 * F + 517 + 2112].forEach(function (i) { if (i < len) d[i] = 0.9; });
+        if (len) this.init.output(new AudioData({ format: 'f32-planar', sampleRate: 48000, numberOfFrames: len, numberOfChannels: 1, timestamp: 0, data: d }));
+        return Promise.resolve();
+      }
+      close() { this.state = 'closed'; }
+      reset() {}
+    };
+  }
+  // FM's own encode path (FM._encodeAudio) into a real in-memory Mp4Muxer (aac, 48000, 2 ch), finalized and read back
+  async function aac215Encode(desc, priming) {
+    if (typeof FM._encodeAudio !== 'function') throw new Error('FM._encodeAudio (the encode seam) is missing');
+    if (!window.Mp4Muxer || !window.Mp4Muxer.Muxer) throw new Error('the muxer is not loaded');
+    if (typeof EncodedAudioChunk !== 'function' || typeof AudioData !== 'function') notRunHere('needs EncodedAudioChunk and AudioData (WebCodecs) in this browser');
+    const RA = window.AudioEncoder, RD = window.AudioDecoder, had = Object.prototype.hasOwnProperty.call(FM, '_lastAacDesc'), d0 = FM._lastAacDesc;
+    const primed = [];
+    window.AudioEncoder = stubAE215(desc);
+    window.AudioDecoder = priming ? stubAD215(primed) : undefined;
+    try {
+      const mux = new window.Mp4Muxer.Muxer({ target: new window.Mp4Muxer.ArrayBufferTarget(), audio: { codec: 'aac', numberOfChannels: 2, sampleRate: 48000 }, fastStart: 'in-memory' });
+      const ab = new AudioBuffer({ length: 12 * 1024, numberOfChannels: 2, sampleRate: 48000 });
+      for (let c = 0; c < 2; c++) { const ch = ab.getChannelData(c); for (let i = 0; i < ch.length; i++) ch[i] = Math.sin(i / 20) * 0.3; }
+      const metas = [];
+      let n = 0;
+      await FM._encodeAudio(function (c, m) { n++; if (m && m.decoderConfig) metas.push(m.decoderConfig); mux.addAudioChunk(c, m); }, { audioBuffer: ab, sampleRate: 48000, channels: 2 });
+      mux.finalize();
+      return { dsi: esdsDsi215(new Uint8Array(mux.target.buffer)), metas: metas, chunks: n, primed: primed, note: FM._lastAacDesc };
+    } finally {
+      window.AudioEncoder = RA; window.AudioDecoder = RD;
+      if (had) FM._lastAacDesc = d0; else delete FM._lastAacDesc;
+    }
+  }
+  // one description through both branches → what went wrong, and the report record each left
+  async function aac215Both(desc, want, what) {
+    const bad = [], notes = [];
+    for (const priming of [false, true]) {
+      const tag = what + (priming ? ', with the priming cut' : ', without the priming cut');
+      const r = await aac215Encode(desc, priming);
+      if (priming && !(r.primed.length >= 1 && r.chunks === 10)) throw new Error('setup: the priming branch did not run for ' + what + ' (' + r.primed.length + ' priming decoder(s) configured, ' + r.chunks + ' chunks kept of 13), so dropPriming was never tested');
+      if (!priming && r.chunks !== 12) throw new Error('setup: ' + r.chunks + ' chunks reached the muxer without the priming cut, not 12');
+      notes.push(r.note);
+      if (!r.dsi) { bad.push(tag + ': the file has no esds DecoderSpecificInfo at all'); continue; }
+      if (hex215(r.dsi) !== hex215(want)) bad.push(tag + ': the file esds holds ' + r.dsi.length + ' B ' + hex215(r.dsi.slice(0, 8)) + ', not ' + want.length + ' B ' + hex215(want));
+      const got = r.metas[0] ? bytes215(r.metas[0].description) : null;
+      if (!got || hex215(got) !== hex215(want)) bad.push(tag + ': the chunk meta the muxer and decodedPeak read carries ' + (got ? got.length + ' B ' + hex215(got.slice(0, 8)) : 'no description') + ', not ' + hex215(want));
+      if (priming) {
+        const p = r.primed[0];
+        if (!p || hex215(p) !== hex215(want)) bad.push(tag + ': the priming probe configured its decoder with ' + (p ? p.length + ' B ' + hex215(p.slice(0, 8)) : 'no description') + ', not ' + hex215(want));
+      }
+    }
+    return { bad: bad, notes: notes };
+  }
+  function note215(n, how, what) {
+    if (!n) return what + ': nothing recorded what was done to the description, so the report cannot say it';
+    if (n.how !== how) return what + ': the record for the report says ' + n.how + ', not ' + how;
+    return '';
+  }
+
+  test('215 Safari AAC cookie - the 39-byte ES_Descriptor is cut to its own 2-byte AudioSpecificConfig before the muxer and the decoders, with and without the priming cut', { item: '215', budgetMs: 60000 }, async function () {
+    const bad = [];
+    const cases = [
+      { what: 'the Safari cookie', desc: COOKIE215, want: [0x11, 0x90] },
+      { what: 'a compact cookie with every optional field', desc: compactCookie215(), want: ASC5_215 },
+    ];
+    for (const c of cases) {
+      const r = await aac215Both(c.desc, c.want, c.what);
+      bad.push.apply(bad, r.bad);
+      r.notes.forEach(function (n) { const w = note215(n, 'repaired', c.what); if (w) bad.push(w); });
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('215 Safari AAC cookie - CONTROL: a correct 2-byte 11 90 and a 5-byte explicit-rate ASC reach the file byte for byte, and the report record says as given', { item: '215', budgetMs: 60000 }, async function () {
+    const bad = [];
+    const cases = [
+      { what: 'Chrome 11 90', desc: [0x11, 0x90] },
+      { what: 'a 5-byte explicit-rate ASC', desc: ASC5_215 },
+    ];
+    for (const c of cases) {
+      const r = await aac215Both(c.desc, c.desc, c.what);
+      bad.push.apply(bad, r.bad);
+      r.notes.forEach(function (n) { const w = note215(n, 'as-is', c.what); if (w) bad.push(w); });
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('215 Safari AAC cookie - 7 bytes that are neither an ASC nor an ES_Descriptor never reach the file: the ASC built from 48000 Hz and 2 channels does, and the record says fallback', { item: '215', budgetMs: 60000 }, async function () {
+    const r = await aac215Both(JUNK215, [0x11, 0x90], '7 bytes of junk');
+    const bad = r.bad.slice();
+    r.notes.forEach(function (n) {
+      const w = note215(n, 'fallback', '7 bytes of junk');
+      if (w) bad.push(w);
+      else if (n.rate !== 48000 || n.ch !== 2) bad.push('the fallback record names ' + n.rate + ' Hz / ' + n.ch + ' ch, not 48000 Hz / 2 ch');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE WHOLE EXPORT: FM.exporter.run on the AX2 codec-rename idea, test-only — VideoEncoder and the muxer's video track become
+     VP9 (Linux Chrome has no H.264 encoder) while the audio track stays AAC, so the file really carries an esds; AudioEncoder is
+     stubAE215, and AudioDecoder is taken away so no junk payload is decoded. `inject` is the seam for the post-mux check: the
+     muxer's addAudioChunk puts those raw bytes back as the description on the way in, PAST the app's repair, as a build without
+     the repair would. The ready card is the real one (FM._showExportReady), read, then discarded. */
+  async function aac215Run(desc, inject) {
+    const RV = window.VideoEncoder, RA = window.AudioEncoder, RD = window.AudioDecoder, RM = window.Mp4Muxer;
+    if (typeof RV !== 'function' || !RM || !RM.Muxer || typeof EncodedAudioChunk !== 'function') notRunHere('needs VideoEncoder, EncodedAudioChunk and the muxer in this browser');
+    const vOk = await RV.isConfigSupported({ codec: 'vp09.00.10.08', width: 64, height: 64, bitrate: 1e6, framerate: 10 }).catch(function () { return { supported: false }; });
+    if (!vOk.supported) notRunHere('this browser has no VP9 encoder, so there is no video codec to run the export on');
+    const mapV = function (c) { return (c && /^avc/.test(c.codec)) ? { codec: 'vp09.00.10.08', width: c.width, height: c.height, bitrate: c.bitrate, framerate: c.framerate } : c; };
+    class VE extends RV { configure(c) { return super.configure(mapV(c)); } static isConfigSupported(c) { return RV.isConfigSupported(mapV(c)); } }
+    const raw = inject ? new Uint8Array(inject) : null;
+    class Mux extends RM.Muxer {
+      constructor(o) { if (o.video) o.video = Object.assign({}, o.video, { codec: 'vp9' }); super(o); }
+      addAudioChunk(c, m, t) {
+        if (raw && m && m.decoderConfig) m = Object.assign({}, m, { decoderConfig: Object.assign({}, m.decoderConfig, { description: raw.slice().buffer }) });
+        return super.addAudioChunk(c, m, t);
+      }
+    }
+    window.VideoEncoder = VE; window.AudioEncoder = stubAE215(desc); window.AudioDecoder = undefined;
+    window.Mp4Muxer = { Muxer: Mux, ArrayBufferTarget: RM.ArrayBufferTarget, StreamTarget: RM.StreamTarget, FileSystemWritableFileStreamTarget: RM.FileSystemWritableFileStreamTarget };
+    try { return await aac215Export(); }
+    finally { window.VideoEncoder = RV; window.AudioEncoder = RA; window.AudioDecoder = RD; window.Mp4Muxer = RM; }
+  }
+  async function aac215Export() {
+    const P = FM.scene.project;
+    const saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height, toast: FM.toast, rep: null };
+    try { saved.rep = localStorage.getItem('fm.lastExportReport'); } catch (e) {}
+    const media0 = isoMediaSnap();
+    const card = document.getElementById('export-ready'), cardHidden = card ? card.classList.contains('hidden') : true;
+    const noteEl = document.getElementById('export-note'), note0 = noteEl ? { t: noteEl.textContent, c: noteEl.className } : null;
+    const rAF = function () { return new Promise(function (r) { requestAnimationFrame(function () { r(); }); }); };
+    const toasts = [];
+    try {
+      FM.toast = function (m) { toasts.push(String(m)); };
+      P.duration = 0.5; P.width = 64; P.height = 64;
+      FM.scene.layers.length = 0;
+      const box = FM.makeLayer('shape', { name: 'box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5' });
+      box.start = 0; box.duration = 0.5; FM.scene.layers.push(box);
+      const song = FM.makeLayer('video', { name: 'song' });
+      song.start = 0; song.duration = 0.5; song.trimStart = 0; song.trimEnd = 0.5;
+      FM.scene.layers.push(song);
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = ac.createBuffer(2, Math.floor(48000 * 0.5), 48000);
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 30) * 0.4; }
+      try { ac.close(); } catch (e) {}
+      FM.media.set(song.id, { file: new Blob(['a']), duration: 0.5, audioBuffer: buf });
+      FM._audioTrackDropped = null;
+      let ready = null, meta = null;
+      await FM.exporter.run({ fps: 10, scale: 1, name: 'aac215', onReady: async function (r) {
+        ready = r;
+        const shown = FM._showExportReady(r);
+        await rAF(); await rAF();
+        const el = document.getElementById('xr-meta');
+        meta = el ? el.textContent : null;
+        const no = document.getElementById('xr-discard');
+        if (no) no.click();
+        await shown;
+      } });
+      let report = ''; try { report = localStorage.getItem('fm.lastExportReport') || ''; } catch (e) {}
+      const bytes = ready && ready.blob ? new Uint8Array(await ready.blob.arrayBuffer()) : new Uint8Array(0);
+      return { ready: ready, card: meta, report: report, toasts: toasts, dropped: FM._audioTrackDropped, dsi: esdsDsi215(bytes) };
+    } finally {
+      FM.toast = saved.toast; FM.scene.layers = saved.layers; P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
+      try { if (saved.rep == null) localStorage.removeItem('fm.lastExportReport'); else localStorage.setItem('fm.lastExportReport', saved.rep); } catch (e) {}
+      FM._audioTrackDropped = null;
+      if (card && cardHidden) card.classList.add('hidden');
+      if (noteEl && note0) { noteEl.textContent = note0.t; noteEl.className = note0.c; }
+      if (FM.refreshAll) FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+      isoMediaPut(media0);
+    }
+  }
+  function line215(rep, label) { const m = new RegExp('^' + label + '.*$', 'm').exec(rep || ''); return m ? m[0] : '(no ' + label + ' line)'; }
+
+  test('215 Safari AAC cookie - a whole export: the report names what the encoder gave and what the file got (as given, repaired, fallback), the file passes its check and the card says Sound ✓', { item: '215', budgetMs: 180000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    if (typeof FM._showExportReady !== 'function') throw new Error('FM._showExportReady (the ready card) is not reachable');
+    const cases = [
+      { what: 'Chrome 11 90', desc: [0x11, 0x90], line: /^aac desc\s+2 B 11 90 \(as the encoder gave it\)$/m },
+      { what: 'the Safari cookie', desc: COOKIE215, line: /^aac desc\s+encoder 39 B 03 80 80 80 → file 2 B 11 90 \(Safari's AAC encoder, WebKit bug 302253: repaired\)$/m },
+      { what: '7 bytes of junk', desc: JUNK215, line: /^aac desc\s+encoder 7 B 05 01 02 03 → file 2 B 11 90 \(not an AudioSpecificConfig: fallback ASC from 48000 Hz \/ 2 ch\)$/m },
+    ];
+    const bad = [];
+    for (const c of cases) {
+      const r = await aac215Run(c.desc, null);
+      if (!r.ready || !r.ready.blob) throw new Error(c.what + ': the export produced no file');
+      if (hex215(r.dsi) !== '11 90') bad.push(c.what + ': the file esds holds ' + (r.dsi ? r.dsi.length + ' B ' + hex215(r.dsi.slice(0, 8)) : 'nothing') + ', not 11 90');
+      if (r.dropped) bad.push(c.what + ': a healthy export was flagged ' + r.dropped);
+      if (!r.ready.hasAudio) bad.push(c.what + ': the card is told hasAudio false for a healthy file');
+      if (!r.card || r.card.indexOf('Sound ✓') < 0) bad.push(c.what + ': the card reads ' + JSON.stringify(r.card) + ', not Sound ✓');
+      if (!c.line.test(r.report)) bad.push(c.what + ': the report reads ' + JSON.stringify(line215(r.report, 'aac desc')));
+      if (!/^file audio\s+esds 2 B 11 90 = AAC-LC, 48000 Hz, 2 ch ✓$/m.test(r.report)) bad.push(c.what + ': the report reads ' + JSON.stringify(line215(r.report, 'file audio')));
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('215 Safari AAC cookie - the post-mux check: with the raw cookie put back past the repair, the export is marked track-undecodable and the card stops saying Sound ✓', { item: '215', budgetMs: 120000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    if (typeof FM._showExportReady !== 'function') throw new Error('FM._showExportReady (the ready card) is not reachable');
+    // CONTROL: the same rig with nothing put back. A healthy file passes the check, and the card says Sound ✓.
+    const ok = await aac215Run([0x11, 0x90], null);
+    if (!ok.ready || !ok.ready.blob) throw new Error('CONTROL: the export produced no file');
+    if (hex215(ok.dsi) !== '11 90') throw new Error('CONTROL: the file esds holds ' + hex215(ok.dsi) + ', not 11 90, so the rig itself is broken');
+    if (ok.dropped || !ok.ready.hasAudio || !ok.card || ok.card.indexOf('Sound ✓') < 0) throw new Error('CONTROL: a healthy file failed the check: dropped ' + ok.dropped + ', hasAudio ' + ok.ready.hasAudio + ', card ' + JSON.stringify(ok.card));
+    // THE CASE: the encoder's own 11 90, swapped for the raw 39-byte cookie on its way into the muxer
+    const r = await aac215Run([0x11, 0x90], COOKIE215);
+    if (!r.ready || !r.ready.blob) throw new Error('the export produced no file: the check must name the loss, never sink the render');
+    if (!r.dsi || r.dsi.length !== 39) throw new Error('setup: the seam did not put the 39-byte cookie into the file (its esds holds ' + hex215(r.dsi) + '), so this proves nothing');
+    const bad = [];
+    if (r.dropped !== 'track-undecodable') bad.push('the export was flagged ' + JSON.stringify(r.dropped) + ', not track-undecodable');
+    if (r.ready.hasAudio) bad.push('the card is told hasAudio true for a file whose audio track no player can decode');
+    if (r.ready.audioDropped !== 'track-undecodable') bad.push('the card got audioDropped ' + JSON.stringify(r.ready.audioDropped));
+    if (!r.card || r.card.indexOf('Sound ✓') >= 0 || r.card.indexOf('NO SOUND — the audio track in the file cannot be played') < 0) bad.push('the card reads ' + JSON.stringify(r.card));
+    if (!/^dropped\s+track-undecodable$/m.test(r.report)) bad.push('the report reads ' + JSON.stringify(line215(r.report, 'dropped')));
+    if (!/^file audio\s+esds 39 B 03 80 80 80 22 00 00 00 = object type 0, 22050 Hz, 0 ch ✗ /m.test(r.report)) bad.push('the report reads ' + JSON.stringify(line215(r.report, 'file audio')));
+    if (!r.toasts.some(function (t) { return /NO SOUND/.test(t); })) bad.push('nothing said so on screen: ' + JSON.stringify(r.toasts));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
