@@ -11165,7 +11165,7 @@ window.FM = window.FM || {};
       /* #966 opts3: OPENS From middle and BORDER WIDTH (project px, pxToPlate scales it) go through wipe966, whose cut is the two
          branches below to the bit. One side and 0 px run them untouched. An absent Border colour is white, the row's default. */
       var wp_mid = (p.split == null ? 0 : (Math.round(FM.evalProp(p.split, t)) | 0)) === 1, wp_bd = p.border == null ? 0 : (FM.evalProp(p.border, t) || 0);
-      if(wp_mid || wp_bd > 0){ wipe966(d, W, H, wp_prog, wp_flip, wp_cx, wp_cy, wp_dx, wp_dy, wp_den, wp_inv, wp_sf, wp_mid, wp_bd, p.color == null ? [255, 255, 255] : hexToRGB(p.color)); return; }
+      if(wp_mid || wp_bd > 0){ wipe966(d, W, H, wp_prog, wp_flip, wp_cx, wp_cy, wp_dx, wp_dy, wp_den, wp_inv, wp_sf, wp_mid, wp_bd > 0 ? wp_bd * borderSlide966(wp_prog, wp_flip) : wp_bd, p.color == null ? [255, 255, 255] : hexToRGB(p.color)); return; }   /* the border slides off as the wipe finishes (borderSlide966) */
       if(wp_sf > 0){ for(var wq_y=0; wq_y<H; wq_y++){ var wq_row = wq_y*W; var wq_py = (wq_y-wp_cy)*wp_dy; for(var wq_x=0; wq_x<W; wq_x++){ var wq_proj = ((wq_x-wp_cx)*wp_dx + wq_py)*wp_inv + 0.5;
           var wq_c = (wp_prog*(wp_den + wp_sf) - wq_proj*wp_den)/wp_sf;   /* the feather travels from fully off-frame at progress 0 to fully past it at 1, so 0 still shows nothing and 1 everything */ if(wp_flip) wq_c = 1 - wq_c; if(wq_c >= 1) continue; var wq_i = (wq_row+wq_x)*4+3; d[wq_i] = wq_c <= 0 ? 0 : d[wq_i]*wq_c; } } return; }
       for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_flip ? wp_proj <= wp_prog : wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
@@ -11186,7 +11186,7 @@ window.FM = window.FM || {};
       /* #966 opts4: BORDER WIDTH (project px, pxToPlate scales it) goes through radialWipe966, whose cut is radialWipe12's and the two
          loops below to the bit. 0 px runs them untouched. An absent Border colour is white, the row's default. */
       var rw_bd = p.border == null ? 0 : (FM.evalProp(p.border, t) || 0);
-      if(rw_bd > 0) return radialWipe966(d, W, H, rw_prog, rw_startRad, rw_cx, rw_cy, rw_sf, rw_dir, rw_n, rw_flip, rw_bd, p.color == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.color, t)));
+      if(rw_bd > 0) return radialWipe966(d, W, H, rw_prog, rw_startRad, rw_cx, rw_cy, rw_sf, rw_dir, rw_n, rw_flip, rw_bd * borderSlide966(rw_prog, rw_flip), p.color == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.color, t)));   /* the border slides off as the wipe finishes (borderSlide966) */
       if(rw_dir !== 0 || rw_n !== 1 || rw_flip) return radialWipe12(d, W, H, rw_prog, rw_startRad, rw_cx, rw_cy, rw_sf, rw_dir, rw_n, rw_flip);
       if(rw_sf > 0){ if(rw_prog >= 1) return; if(rw_prog <= 0){ for(var rz=3; rz<d.length; rz+=4) d[rz]=0; return; } for(var rq_y=0; rq_y<H; rq_y++){ var rq_dy = rq_y - rw_cy; for(var rq_x=0; rq_x<W; rq_x++){ var rq_dx = rq_x - rw_cx;
           var rq_f = (Math.atan2(rq_dy, rq_dx) - rw_startRad) % rw_TAU; if(rq_f<0) rq_f += rw_TAU; rq_f /= rw_TAU;
@@ -13117,6 +13117,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * shown part grows out both ways from the line through the centre and Progress 1 still shows it all. BORDER WIDTH `bd` (plate px)
    * then paints the pixels still showing within bd of the edge — measured from the edge's half-way line, s px into the shown side —
    * the Border colour `bc`, anti-aliased over a pixel at its inner side; the alpha is never touched by the border. */
+  /* THE BORDER SLIDES OFF AS THE WIPE FINISHES (the review page's question 2, its recommended answer, decided under his 21 Oct "fine with
+     ur choices" rule). Each wipe returns before its border at Progress 1 (0 under Invert), where there is no edge, so the band used to
+     sit full width against the edge on the last frame and be gone on the next. Over the last tenth of the travel it now narrows to
+     nothing, eased: the factor its Border width is multiplied by. 1 for the rest of the travel, so every earlier frame is what it was. */
+  function borderSlide966(prog, flip) {
+    const rem = flip ? prog : 1 - prog;
+    if (!(rem < 0.1)) return 1;
+    const u = rem > 0 ? rem / 0.1 : 0;
+    return u * u * (3 - 2 * u);
+  }
+  FM._borderSlide966 = borderSlide966;   // suite seam (the review page's question 2)
   function wipe966(d, W, H, prog, flip, cx, cy, dx, dy, den, inv, sf, mid, bd, bc) {
     const E = mid ? den * 0.5 : den;
     for (let y = 0; y < H; y++) {
@@ -25665,7 +25676,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     /* #966 opts5: BORDER WIDTH (plate px here, pxToPlate has scaled it). Above 0 the pass below runs inside shapeWipe966 instead, with
        the border laid on after each pixel's alpha is decided; at 0 the loop below is the old one, untouched. */
     let bd = b966N(p, 'border', 0, t); if (bd > 100) bd = 100;
-    if (bd > 0) { shapeWipe966(d, W, H, shape, A, cx, cy, cs, sn, asp, sf, rho, flip, bd, p.color == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.color, t))); return; }
+    if (bd > 0) { shapeWipe966(d, W, H, shape, A, cx, cy, cs, sn, asp, sf, rho, flip, bd * borderSlide966(prog, flip), p.color == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.color, t))); return; }   // the border slides off as the wipe finishes (borderSlide966)
     for (let y = 0; y < H; y++) {
       const vy = y + 0.5 - cy, row = y * W;
       for (let x = 0; x < W; x++) {

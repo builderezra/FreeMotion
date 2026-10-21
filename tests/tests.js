@@ -159376,6 +159376,30 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* THE BORDER SLIDES OFF AS THE WIPE FINISHES (the review page's question 2, recommended; decided under his 21 Oct "fine with ur
+     choices" rule). Each wipe returns before its border at Progress 1 (0 under Invert), so the band sat full width against the edge on the
+     last frame and was gone on the next. Now it narrows to nothing over the last tenth: on the 96 x 72 fixture a 12 px red border at 99 %
+     must move at most a fifth of the pixels it moves at 85 % — on Wipe it is the same 12 x 72 band at both today — and under Invert the
+     same at 1 % against 15 %. Wipe at 95 % is half way, between 0.3 and 0.75 of its 85 % band, so it slides rather than jumps.
+     FAILS BEFORE THE FIX: every wipe's band is full width at 99 % (Wipe and Radial Wipe move as many pixels as at 85 %).
+     CONTROL: at 85 % each border moves a few hundred pixels, so the comparison has something to compare. */
+  test('966 picks a Wipe, Radial Wipe and Shape Wipe border slides off as the wipe finishes: at 99 % it is a sliver of its 85 % band, under Invert the same at the start, and Wipe at 95 % is half way', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], W = 96, H = 72;
+    if (typeof FM._borderSlide966 !== 'function') throw new Error('FM._borderSlide966 (the slide-off) does not exist');
+    const band = (type, prog, inv) => _o4Moves(type, {}, { progress: prog, invert: inv ? 1 : 0 }, { progress: prog, invert: inv ? 1 : 0, border: 12, color: '#ff0000' }, W, H, _o4Pic, 0.5);
+    ['wipe', 'radialwipe', 'shapewipe'].forEach(type => {
+      const full = band(type, 0.85, false), end = band(type, 0.99, false);
+      if (full < 300) bad.push('CONTROL: ' + type + ' at 85 % moves only ' + full + ' pixels with a 12 px border');
+      else if (end > 0.2 * full) bad.push(type + ' at 99 % still moves ' + end + ' pixels against ' + full + ' at 85 % — the band is still there on the last frames and vanishes in one');
+      const ifull = band(type, 0.15, true), iend = band(type, 0.01, true);
+      if (ifull < 300) bad.push('CONTROL: ' + type + ' under Invert at 15 % moves only ' + ifull + ' pixels');
+      else if (iend > 0.2 * ifull) bad.push(type + ' under Invert at 1 % still moves ' + iend + ' pixels against ' + ifull + ' at 15 %');
+    });
+    const w85 = band('wipe', 0.85, false), w95 = band('wipe', 0.95, false);
+    if (!(w95 >= 0.3 * w85 && w95 <= 0.75 * w85)) bad.push('Wipe at 95 % moves ' + w95 + ' pixels against ' + w85 + ' at 85 % — it should be half way off, sliding, not all or nothing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
   /* ---- Topo Bands: Flow speed ---- */
   test('966 opts5 Topo Bands has Flow speed (−10 to 10 bands a second, keyframable), 0 by default: a new one starts there, a saved one without it is filled with the same, the load sanitiser keeps 2.5, and it stays in the crop list (tone and time only)', { item: '966', budgetMs: 60000 }, function () {
     _o5Need('contourstrips', ['flow'], ['_topoShift966', '_topoFlow966']);
