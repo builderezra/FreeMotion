@@ -82772,6 +82772,73 @@
     }
   });
 
+  /* #768 H6 (the 22 Oct hunt and its refuter). The test above starts its swipe on the RULER. With a layer selected on the
+   * phone the timeline shows that one clip's row, so his thumb lands on the CLIP, and that swipe runs the clipTap branch,
+   * which never began the scrub probe: its release cancelled, no report was written, and Settings → Your last scrub kept
+   * showing an older gesture, so the one paste he is asked for could describe the wrong swipe.
+   * Driven like the test above: a real touch pointerdown on the selected clip itself, 24 moves of 5 px to the left, the
+   * release, all with the SAME pointerId (pointerup checks foreignPointer). The report key is cleared first, so a report
+   * found afterwards was written by this gesture.
+   * FAILS BEFORE THE FIX: time moves, but no report exists.
+   * CONTROLS: time moved (the gesture engaged, so a report is owed); the report names the selection and says the swipe came
+   * from the clip; and a VERTICAL pan from the same clip writes none (it is a pan of the layer list, not a scrub). */
+  test('768 H6: a scrub that starts on the selected clip writes its own scrub report, and a vertical pan from the clip writes none', { item: '768', budgetMs: 30000 }, async function () {
+    if (!FM._scrubProbe) throw new Error('FM._scrubProbe is missing — nothing records the scrub');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    const clear = () => { try { localStorage.removeItem('fm.lastScrubReport'); } catch (e) {} };
+    try {
+      if (hadHome) FM.home.close();
+      if (wasSimple) FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's768h6', shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 120, fill: '#f0f', start: 0, duration: 6 });
+        FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+        FM.selectLayer(L.id); FM.refreshAll(); await sleep(300);
+        FM.setTime(3); FM.requestRender(); await sleep(150);
+        const tl = document.getElementById('timeline');
+        const clipOf = () => document.querySelector('#timeline .clip[data-id="' + L.id + '"]');
+        const clip = clipOf();
+        if (!clip) throw new Error('setup: the selected clip is not on the timeline, so there is nothing to start the swipe on');
+        const tr = tl.getBoundingClientRect(), cr = clip.getBoundingClientRect();
+        const y = Math.round(cr.top + cr.height / 2), x0 = Math.round(tr.right - 40), t0 = FM.time;
+        const opts = (x, yy) => ({ bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x, clientY: yy == null ? y : yy, button: 0, buttons: 1 });
+        clear();
+        clip.dispatchEvent(new PointerEvent('pointerdown', opts(x0)));
+        for (let i = 1; i <= 24; i++) { tl.dispatchEvent(new PointerEvent('pointermove', opts(x0 - i * 5))); await sleep(16); }
+        tl.dispatchEvent(new PointerEvent('pointerup', Object.assign(opts(x0 - 120), { buttons: 0 })));
+        await sleep(500);
+        if (Math.abs(FM.time - t0) < 0.2) throw new Error('setup: the swipe on the clip did not move time (' + t0 + ' → ' + FM.time + ') — the gesture did not engage, so no report is owed');
+        const rep = FM._scrubProbe.last();
+        if (!rep) throw new Error('a sideways swipe that started ON the selected clip moved the playhead ' + (FM.time - t0).toFixed(2) + ' s and wrote no scrub report — Settings → Your last scrub still shows an older gesture, so his paste would describe a different swipe');
+        if (!/selection\s+shape/.test(rep)) throw new Error('the report does not say a shape was selected:\n' + rep);
+        if (!/from the clip/.test(rep)) throw new Error('the report does not say the swipe came from the clip:\n' + rep);
+        const frames = /frames\s+(\d+) over/.exec(rep);
+        if (!frames || +frames[1] < 10) throw new Error('too few frames sampled (' + (frames && frames[1]) + ') — a hitch would be missed:\n' + rep);
+        // CONTROL: a vertical pan from the same clip pans the layer list; it is not a scrub and must not write a report
+        await sleep(300);
+        clear();
+        const clip2 = clipOf();
+        if (!clip2) throw new Error('setup: the clip left the timeline after the scrub');
+        const cr2 = clip2.getBoundingClientRect(), y2 = Math.round(cr2.top + cr2.height / 2), xv = Math.round(tr.left + tr.width / 2);
+        clip2.dispatchEvent(new PointerEvent('pointerdown', opts(xv, y2)));
+        for (let i = 1; i <= 12; i++) { tl.dispatchEvent(new PointerEvent('pointermove', opts(xv, y2 + i * 5))); await sleep(16); }
+        tl.dispatchEvent(new PointerEvent('pointerup', Object.assign(opts(xv, y2 + 60), { buttons: 0 })));
+        await sleep(500);
+        const rep2 = FM._scrubProbe.last();
+        if (rep2) throw new Error('CONTROL: a VERTICAL pan that started on the clip wrote a scrub report — a pan of the layer list would then be read as a scrub:\n' + rep2);
+      });
+    } finally {
+      try { FM._scrubProbe.cancel(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      if (wasSimple) FM.editor.apply('simple', { force: true, quiet: true });
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
   /* ═══ 765 (the keyboard half): A / S / D ON THE SELECTED CLIP, INSIDE AND OUTSIDE. Nine presses through the
      real window keydown path, each on a fresh clip at 2–6s of a 12s project: inside (playhead 4s) A keeps the
      right, D keeps the left, S splits; left of it (1s) S extends the start, A moves it left, D does nothing;
