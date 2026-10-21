@@ -71938,6 +71938,26 @@
     if (r.el.rateWrites !== 0 || Math.abs(r.el.maxRate - 1) > 1e-6) throw new Error('the routed clip had playbackRate written ' + r.el.rateWrites + ' times, up to ' + r.el.maxRate.toFixed(4) + ' — on an iPhone every rate write to an element feeding Web Audio drops or warps its sound (WebKit 240405, 311000)');
   });
 
+  /* #845 (the 22 Oct pre-ship review's B2 and its refuter): a routed clip is never rate-trimmed, so without another correction a lag
+   * inside the trim band (45–350 ms) stayed for the rest of the clip. Now a routed lag over 0.1 s (or out of the band for a second) is
+   * corrected by the de-clicked seek. The fake element turns a 0.15 s pull into about 0.27 s of lag (its latency and seek stall).
+   * FAILS BEFORE THE FIX: the routed clip ends about 0.18 s further behind than before the lag.
+   * CONTROL: with no lag a routed clip never seeks (in-band jitter does not), and the rate is never written either way. */
+  test('845 a routed clip that falls behind is pulled back by a de-clicked seek, never by its rate, and one that keeps time never seeks', { item: '845', budgetMs: 30000 }, async function () {
+    const route = { _mes: { connect() {}, disconnect() {} } };
+    const calm = await q148Run({ latency: 0.09, spin: 0.3, ticks: 30, rec: route });
+    if (calm.el.seeks !== 0) throw new Error('CONTROL: a routed clip keeping time was seeked ' + calm.el.seeks + ' times — in-band jitter must not seek');
+    const errs = [];
+    const r = await q148Run({ latency: 0.09, spin: 0.3, ticks: 40, at: 11, rec: route,
+      then: el => { el.currentTime = Math.max(0, el.currentTime - 0.15); },
+      each: (el, i) => { errs[i] = FM.time - el.currentTime; } });
+    const med = a => { const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
+    const before = med(errs.slice(6, 11)), after = med(errs.slice(34, 40));
+    if (!(isFinite(before) && isFinite(after))) throw new Error('setup: the lag was not sampled (' + before + ', ' + after + ')');
+    if (Math.abs(after - before) > 0.06) throw new Error('a routed clip pulled about 0.27 s behind ends ' + (after - before).toFixed(3) + ' s further behind than before — the trim band is a place its sound stays late for good');
+    if (r.el.rateWrites !== 0) throw new Error('the routed clip had playbackRate written ' + r.el.rateWrites + ' times while it was pulled back');
+  });
+
   /* #845 (the refuter's N1): the drift seek was the one place left that jumps a PLAYING waveform with no fade; play() and a loop wrap
    * both open at volume 0 and let declickGain lift it (queue 148).
    * FAILS BEFORE THE FIX: on the seek's own tick the element is at full volume.
@@ -154875,7 +154895,7 @@
     }));
   });
 
-  test('1084 e · the setting is off for a phone that never chose, saves when he turns it on and off, survives a reload, and its switch is in the phone’s Settings only', { item: '1084', budgetMs: 12000 }, async function () {
+  test('1084 e · the setting is ON for a phone that never chose (his 21 Oct rule), and for one that saved the old default before it, saves when he turns it on and off, survives a reload, and its switch is in the phone’s Settings only', { item: '1084', budgetMs: 12000 }, async function () {
     const KEY = 'fm.settings';
     let raw0 = null;
     try { raw0 = localStorage.getItem(KEY); } catch (e) {}
@@ -154904,10 +154924,15 @@
       if (stored !== true) throw new Error('turning the setting on did not save it (stored ' + JSON.stringify(stored) + ')');
       FM.settings.init();
       if (FM.settings.get(KEY1084) !== true) throw new Error('turned on, saved, and back OFF after a reload — load() dropped it (the #688 whitelist bug)');
-      if (loadWith(Object.assign({}, base, { addMenuGrow: false })) !== false) throw new Error('saved off, it came back on');
+      if (loadWith(Object.assign({}, base, { addMenuGrow: false, settingsRev: 2 })) !== false) throw new Error('saved off, it came back on');
+      /* A PHONE THAT SAVED ANY SETTING BETWEEN v17.59 AND v17.91 stores addMenuGrow false — the old default, written by save() with the
+         whole state, not a choice (the 22 Oct review's refuter). Without the settings revision the ON default never reaches it.
+         FAILS BEFORE THE FIX: that blob reads false. */
+      const old1084 = Object.assign({}, base, { addMenuGrow: false }); delete old1084.settingsRev;
+      if (loadWith(old1084) !== true) throw new Error('a phone that saved settings before this release (addMenuGrow false, no settings revision) keeps the old slide-up: the ON default never reaches it');
       if (loadWith(Object.assign({}, base, { addMenuGrow: 'off' })) !== true) throw new Error('a hand-edited value that is not true or false was taken instead of the default (on)');
       // THE SWITCH: in the phone's Settings, reading the saved value; not on PC, where this menu never opens
-      loadWith(Object.assign({}, base, { addMenuGrow: false }));
+      loadWith(Object.assign({}, base, { addMenuGrow: false, settingsRev: 2 }));
       await atPhoneWidth(async function () {
         FM.settings.open();
         await sleep(80);
@@ -159385,7 +159410,6 @@
      CONTROL: at 85 % each border moves a few hundred pixels, so the comparison has something to compare. */
   test('966 picks a Wipe, Radial Wipe and Shape Wipe border slides off as the wipe finishes: at 99 % it is a sliver of its 85 % band, under Invert the same at the start, and Wipe at 95 % is half way', { item: '966', budgetMs: 60000 }, function () {
     const bad = [], W = 96, H = 72;
-    if (typeof FM._borderSlide966 !== 'function') throw new Error('FM._borderSlide966 (the slide-off) does not exist');
     const band = (type, prog, inv) => _o4Moves(type, {}, { progress: prog, invert: inv ? 1 : 0 }, { progress: prog, invert: inv ? 1 : 0, border: 12, color: '#ff0000' }, W, H, _o4Pic, 0.5);
     ['wipe', 'radialwipe', 'shapewipe'].forEach(type => {
       const full = band(type, 0.85, false), end = band(type, 0.99, false);

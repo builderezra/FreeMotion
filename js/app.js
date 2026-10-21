@@ -2413,14 +2413,23 @@ window.FM = window.FM || {};
                "worst" figure the report prints. Computed once, here, from the bias the controller is
                actually acting on. */
             const step = FM._syncBiasStep(m, rawErr, FM._syncMayLearn(m, rawErr));   // a stall is corrected, not learned (queue 690)
-            const plan = FM.mediaSyncPlan(step.deBiased, base, m._syncAt == null ? Infinity : now - m._syncAt);
+            let plan = FM.mediaSyncPlan(step.deBiased, base, m._syncAt == null ? Infinity : now - m._syncAt);
+            /* #845 (the pre-ship review's B2 and its refuter, 22 Oct): a routed clip is never rate-trimmed (below), so the trim band
+               would be a place its sound stays late for good — a 200 ms stall left it 200 ms behind until the clip ended. There, a lag
+               over 0.1 s, or one that has stayed out of the dead band for a second, is corrected by the (de-clicked) seek instead, no
+               more often than SEEK_MIN_GAP. In-band jitter never seeks. */
+            if (m._mes && plan.action === 'trim') {
+              if (!m._mesOutAt) m._mesOutAt = now;
+              if ((Math.abs(step.deBiased) > 0.1 || now - m._mesOutAt >= 1000) && !(m._syncAt != null && now - m._syncAt < SEEK_MIN_GAP)) plan = { action: 'seek', rate: base };
+            } else if (m._mesOutAt) m._mesOutAt = 0;
             if (plan.action === 'seek') {
               m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++;
               FM._noteSyncSeek(m);
               /* #845 (the audio hunt's refuter, N1): a drift seek jumps a waveform that is PLAYING to an arbitrary sample, the click
-                 play() and wrapTo() de-click, missed here since v6.05. Silent for this tick, and declickGain brings it back over 45 ms,
-                 through el.volume or, on an iPhone, the level stage the reconcile below writes every tick. */
-              m._resumedAt = now; try { m.el.volume = 0; } catch (e) {}
+                 play() and wrapTo() de-click, missed here since v6.05. The restart fades in over 45 ms (declickGain) through el.volume;
+                 on an iPhone, where el.volume cannot be set, only a clip with a level stage (m._boost) fades, and an effect-only clip
+                 at 100 % has none, so there the restart is not softened (the review's N6: a hard zero first would be its own click). */
+              m._resumedAt = now; m._mesOutAt = 0; try { m.el.volume = 0; } catch (e) {}
             } else if (plan.action === 'trim' && !m._mes) FM.playbackStats.trims++;
             /* #845 (#663, his iPhone): an element routed into Web Audio (m._mes: an effect, a boost, or an iPhone level) is never
                rate-trimmed. WebKit mishandles every rate write on one: older builds keep reading the element's sound at its own rate
