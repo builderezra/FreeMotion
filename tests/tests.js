@@ -5655,7 +5655,7 @@
         /* A control ADDED AFTER these hashes were frozen stays at its default here — that default is what every saved project
            gets, and each such control carries its own byte-identity test. Pushing it to 75% would change the picture for a
            reason that has nothing to do with masks. Listed by name so a new one is a visible edit, not a silent pass. */
-        const ADDED_AFTER_560 = { dropshadow: ['opacity', 'spread', 'smooth'] };   // queue 904, v16.48 · #482 6.3: Spread, Smoothness
+        const ADDED_AFTER_560 = { dropshadow: ['opacity', 'spread', 'smooth'], boxblur: ['mix'] };   // queue 904, v16.48 · #482 6.3: Spread, Smoothness · #966 opts11: Box Blur's Mix
         /* A range WIDENED after the hashes were frozen keeps its old top here (#482 6.3: Distance 60 -> 300, Softness 20 -> 80),
            so 75% is still the 45 px and 15 px these pictures were drawn with. */
         const MAX_AT_560 = { dropshadow: { distance: 60, softness: 20 } };
