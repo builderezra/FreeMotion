@@ -175286,8 +175286,8 @@
   };
   /* every new key, by effect, and every new control off its default on the effect's own default settings (a colour off its default in
      every channel) */
-  const _O11_NEW = { threshold: ['chan', 'keep', 'mix'], posterize: ['soft'], solarize: ['stretch', 'color'] };
-  const _O11_OFF = { threshold: [{ chan: 1 }, { keep: 1 }, { mix: 50 }], posterize: [{ soft: 60 }, { channels: 2 }], solarize: [{ stretch: 1 }, { color: '#4080c0' }] };
+  const _O11_NEW = { threshold: ['chan', 'keep', 'mix'], posterize: ['soft'], solarize: ['stretch', 'color'], sharpen: ['halo', 'limit'] };
+  const _O11_OFF = { threshold: [{ chan: 1 }, { keep: 1 }, { mix: 50 }], posterize: [{ soft: 60 }, { channels: 2 }], solarize: [{ stretch: 1 }, { color: '#4080c0' }], sharpen: [{ halo: 1 }, { limit: 100 }] };
   const _o11P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
   const _o11Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
   /* a PIXEL_FX kernel straight, with exactly these params (ps 1 unless given; no layer, no box) */
@@ -175724,6 +175724,86 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ---- Sharpen: Halos and Limit halos ---- */
+  test('966 opts11 Sharpen has Halos (Both, Dark only or Light only, storing 0–2, Both by default) and Limit halos (0–100 %, keyframable, 0 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Light only and 60, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('sharpen', _O11_NEW.sharpen);
+    const bad = _o11Rows('sharpen', [
+      { key: 'halo', label: 'Halos', options: ['Both', 'Dark only', 'Light only'], def: 0 },
+      { key: 'limit', label: 'Limit halos', min: 0, max: 100, unit: '%', def: 0 }], { halo: 2, limit: 60 });
+    bad.push.apply(bad, _o11Clamp('sharpen', { limit: 150 }, { limit: 100 }));
+    bad.push.apply(bad, _o11Clamp('sharpen', { limit: -5 }, { limit: 0 }));
+    bad.push.apply(bad, _o11Clamp('sharpen', { halo: 3 }, { halo: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* HALOS on a hard step, 32 x 6, grey 80 left of column 16 and 180 from it, at the defaults (Amount 1.5, Radius 1, no skipping). A flat
+     pixel is 7v − 4v x 1.5 = v, so only the two edge columns move: column 15 is 80 x 7 − (3 x 80 + 180) x 1.5 = −70 (black) and column 16
+     is 180 x 7 − (3 x 180 + 80) x 1.5 = 330 (white). CONTROL Both: 0 and 255. Dark only keeps the dip and leaves 16 at 180; Light only keeps
+     the rim and leaves 15 at 80; every other pixel is the step itself, and Brightness only gives the same numbers on a grey edge. */
+  const _o11Step = () => E1.frame(32, 6, x => (x < 16 ? [80, 80, 80] : [180, 180, 180]));
+  test('966 opts11 Sharpen Halos: on a hard grey step the sharpened edge is a black dip and a white rim (CONTROL: Both), Dark only keeps the dip and leaves the light side as it was, Light only keeps the rim and leaves the dark side as it was, every other pixel untouched — on Colour and on Brightness only', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('sharpen', ['halo']);
+    const bad = [];
+    const row = d => { const r = []; for (let x = 0; x < 32; x++) r.push(d[(2 * 32 + x) * 4]); return r; };
+    const want = (c15, c16) => { const r = []; for (let x = 0; x < 32; x++) r.push(x === 15 ? c15 : (x === 16 ? c16 : (x < 16 ? 80 : 180))); return r; };
+    [0, 1].forEach(mode => {
+      const run = over => _o11PX('sharpen', _o11P('sharpen', Object.assign({ mode: mode }, over)), 32, 6, _o11Step(), 0.5);
+      const both = row(run({}));
+      if (both.join() !== want(0, 255).join()) throw new Error('CONTROL: under Both (mode ' + mode + ') the step’s middle row reads ' + both.join(' ') + ' — not the dip to 0 and the rim to 255 this test reasons from');
+      const dk = row(run({ halo: 1 })), lt = row(run({ halo: 2 }));
+      if (dk.join() !== want(0, 180).join()) bad.push('Dark only (mode ' + mode + ') reads ' + dk.slice(12, 20).join(' ') + ' across the edge (columns 12–19), not 80 80 80 0 180 180 180 180');
+      if (lt.join() !== want(80, 255).join()) bad.push('Light only (mode ' + mode + ') reads ' + lt.slice(12, 20).join(' ') + ' across the edge (columns 12–19), not 80 80 80 80 255 180 180 180');
+      const all = run({ halo: 1 });
+      for (let i = 3; i < all.length; i += 4) if (all[i] !== 255) { bad.push('Dark only touched the alpha'); break; }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* LIMIT HALOS on a soft step, 24 x 6, greys 80 up to column 7, then 85, 100, 130, 160, 175, and 180 from column 13. At the defaults
+     column 7 overshoots to 72.5, 8 to 70, 9 to 77.5, 11 to 182.5, 12 to 190 and 13 to 187.5 (10, on the straight middle, stays 130).
+     At 100 % each is held inside the lightest and darkest of itself and its four taps — 80, 80, 85, 130, 175, 180, 180 — so the edge still
+     steepens (8, 9, 11 and 12 move) and nothing overshoots; at 50 % each lands half way, 76.3, 75, 81.3, 130, 178.8, 185, 183.8 (±1). Every
+     pixel of the plate at 100 % sits inside its own neighbourhood's range (CONTROL: at 0 % some fall over 5 levels outside it). A keyed
+     Limit halos 0 → 100 draws 50 % at 0.5 s. */
+  const _O11_SOFT = [80, 80, 80, 80, 80, 80, 80, 80, 85, 100, 130, 160, 175, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180];
+  const _o11Soft = () => E1.frame(24, 6, x => [_O11_SOFT[x], _O11_SOFT[x], _O11_SOFT[x]]);
+  test('966 opts11 Sharpen Limit halos: at 100 % a soft edge still steepens but no pixel goes past the lightest or darkest of itself and its four neighbours — 80, 80, 85, 130, 175, 180, 180 across it — at 50 % each lands half way, and a keyed Limit halos draws its value (CONTROL: at 0 % the edge overshoots both ways)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('sharpen', ['limit']);
+    const bad = [], W = 24, H = 6, src = _o11Soft();
+    const run = over => _o11PX('sharpen', _o11P('sharpen', over), W, H, _o11Soft(), 0.5);
+    const row = d => { const r = []; for (let x = 0; x < W; x++) r.push(d[(2 * W + x) * 4]); return r; };
+    const outside = d => { let worst = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const at = (xx, yy) => src[((yy < 0 ? 0 : (yy > H - 1 ? H - 1 : yy)) * W + (xx < 0 ? 0 : (xx > W - 1 ? W - 1 : xx))) * 4];
+      const nb = [at(x, y), at(x - 1, y), at(x + 1, y), at(x, y - 1), at(x, y + 1)], v = d[(y * W + x) * 4];
+      const e = Math.max(Math.min.apply(null, nb) - v, v - Math.max.apply(null, nb), 0); if (e > worst) worst = e; } return worst; };
+    const zero = run({});
+    if (!(outside(zero) > 5)) throw new Error('CONTROL: at Limit halos 0 % no pixel overshoots its neighbourhood by more than 5 levels (' + outside(zero) + ') — the fixture cannot show what the limit holds back');
+    const full = run({ limit: 100 }), half = run({ limit: 50 });
+    const W100 = _O11_SOFT.slice(), W50 = _O11_SOFT.slice();
+    [[7, 80, 76.25], [8, 80, 75], [9, 85, 81.25], [10, 130, 130], [11, 175, 178.75], [12, 180, 185], [13, 180, 183.75]].forEach(([x, a, b]) => { W100[x] = a; W50[x] = b; });
+    const rf = row(full), rh = row(half);
+    if (rf.join() !== W100.join()) bad.push('at 100 % the middle row reads ' + rf.slice(6, 15).join(' ') + ' across the edge (columns 6–14), not ' + W100.slice(6, 15).join(' '));
+    if (rh.some((v, x) => Math.abs(v - W50[x]) > 1)) bad.push('at 50 % the middle row reads ' + rh.slice(6, 15).join(' ') + ' across the edge, not ' + W50.slice(6, 15).map(v => +v.toFixed(2)).join(' '));
+    if (outside(full) > 0) bad.push('at 100 % a pixel still sits ' + outside(full) + ' levels outside its own neighbourhood');
+    if (E1.count(full, src, 0) < 20) bad.push('at 100 % only ' + E1.count(full, src, 0) + ' pixels move — the edge no longer steepens');
+    if (E1.maxDiff(run({ limit: _o11KF(0, 100) }), half) !== 0) bad.push('a Limit halos keyed 0 → 100 does not draw 50 % at 0.5 s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts11 Sharpen at Both and Limit halos 0 % draws byte for byte what it drew without them — a wider Radius, Skip flat areas, Brightness only, all three, a strong Amount, a block on clear, a half-size plate, another moment — its copy of the kernel is the kernel itself there, and the cropped readback with either on is the whole plate’s (CONTROL: Dark only and Limit halos each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o11Need('sharpen', _O11_NEW.sharpen, ['_sharpen11']);
+    const bad = _o11Ident('sharpen', [{}, { over: { radius: 3 } }, { over: { threshold: 20 } }, { over: { mode: 1 } }, { over: { radius: 2, mode: 1, threshold: 8 } }, { over: { amount: 3 } }, { pic: _o11Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    [[{}, 1, 0, false], [{ radius: 3, threshold: 12 }, 3, 12, false], [{ mode: 1, radius: 2 }, 2, 0, true]].forEach(([o, r, thr, luma]) => {
+      const P = _o11P('sharpen', o), old = _o11PX('sharpen', P, 96, 72, _o11Pic(96, 72)), seam = _o11Pic(96, 72);
+      FM._sharpen11(seam, _o11Pic(96, 72), 96, 72, P.amount, r, thr, luma, 0, 0);
+      if (E1.maxDiff(old, seam) !== 0) bad.push(JSON.stringify(o) + ': sharpen11 at Both and 0 % is up to ' + E1.maxDiff(old, seam) + ' levels away from the kernel itself');
+    });
+    let n;
+    [[{ halo: 1 }, 'Dark only'], [{ limit: 100 }, 'Limit halos 100 %']].forEach(([o, what]) => { if ((n = _o11Moves('sharpen', o, 96, 72, _o11Pic, 0.5)) < 500) bad.push('CONTROL: ' + what + ' moves only ' + n + ' pixels'); });
+    [{ halo: 1 }, { limit: 100 }, { halo: 2, limit: 50, radius: 3 }].forEach(o => _o11Crop('sharpen', o, bad));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
   /* ---- the panel ---- */
   /* THE GATES, as the inspector draws them, each row read by its own <label> (_o11Greyed). Threshold's Below colour is live on a new one and
      greys out under Keep picture Below, its Above colour under Above; Posterize's Band spacing is live on a new one (RGB) and greys out under
@@ -175759,7 +175839,7 @@
      phone check on every release. Each editor, opened in the inspector, scrolls nothing sideways and keeps every control inside the panel.
      CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
   test('966 opts11 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
-    const NEW = { threshold: 'Keep picture', posterize: 'Band edges', solarize: 'Stretch' };
+    const NEW = { threshold: 'Keep picture', posterize: 'Band edges', solarize: 'Stretch', sharpen: 'Limit halos' };
     Object.keys(NEW).forEach(type => _o11Need(type, _O11_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];
     try {

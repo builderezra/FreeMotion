@@ -406,7 +406,7 @@ window.FM = window.FM || {};
   const DESCRIPTIONS = {
     blur: 'Softens everything evenly, like a lens out of focus.',
     boxblur: 'A cheaper, squarer blur — faster than Gaussian, slightly boxy up close.',
-    sharpen: 'Hardens edges to bring detail back. Push it far and edges start to halo.',
+    /* one side of the halo, or none: #966 opts11 */ sharpen: 'Hardens edges to bring detail back. Push it far and edges start to halo — keep just the dark side of each, or hold them back altogether.',
     zoomblur: 'Streaks outward from a centre point, like a fast zoom during the shot.',
     spinblur: 'Streaks in a circle around a centre point — motion from a spin.',
     lensblur: 'Defocus with real lens character: turn up Highlight bloom and bright points swell into discs of the aperture shape you pick.',

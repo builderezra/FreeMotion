@@ -235,6 +235,13 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Radius', min: 1, max: 8, step: 1, def: 1, unit: 'px' },
       { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 },
       { key: 'mode', label: 'Sharpens', def: 0, options: [[0, 'Colour'], [1, 'Brightness only']] },
+      /* #966 opts11 (hunt/fx11, his "more choices always better"): every edge it sharpened grew a bright rim on its light side and a dark
+         one on its dark side, as far past the pixels round it as Amount pushed. HALOS keeps only one of the two — Dark only draws just the
+         dark side of every edge (no bright outline round a face or a sky line: the darken-only sharpen), Light only just the light side —
+         and LIMIT HALOS holds each sharpened pixel inside the lightest and darkest of the pixels it was sharpened against (100 %: an edge
+         gets steeper but never overshoots). Both and 0 % run the old lines untouched (sharpen11 only off them). */
+      { key: 'halo', label: 'Halos', def: 0, options: [[0, 'Both'], [1, 'Dark only'], [2, 'Light only']], note: 'Dark only draws just the dark side of every edge — no bright rims' },
+      { key: 'limit', label: 'Limit halos', min: 0, max: 100, step: 1, def: 0, unit: '%', note: '100 % never goes past the lightest or darkest pixel beside it' },
     ] },
     { type: 'thermal', label: 'Heat Map', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -8921,6 +8928,10 @@ window.FM = window.FM || {};
       let thr = p.threshold == null ? 0 : FM.evalProp(p.threshold, t);
       if (thr < 0) thr = 0; if (thr > 64) thr = 64;
       const luma = (p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0)) === 1;
+      /* #966 opts11: HALOS (Dark only 1, Light only 2) and LIMIT HALOS — either off its default runs sharpen11, every pixel through the
+         very taps, Skip flat areas test and sums of the lines below with the two laid in; Both and 0 % run the lines below untouched. */
+      const hl11 = p.halo == null ? 0 : (Math.round(FM.evalProp(p.halo, t)) | 0), lm11 = p.limit == null ? 0 : FM.evalProp(p.limit, t);
+      if (hl11 === 1 || hl11 === 2 || lm11 > 0) { sharpen11(d, s, W, H, amt, r, thr, luma, hl11, lm11); return; }
       /* THE BORDER IS SHARPENED TOO (queue 986, hunt C41). The loops below read r pixels either side, so they stop r short of
          every edge, and on full-frame footage that left an r-pixel frame round the picture unsharpened — at Radius 8 a soft
          8px band down every side of the export. A tap that would fall off the frame reads the nearest pixel inside it
@@ -14206,6 +14217,42 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._solarize11 = solarize11;   // suite seam (#966 opts11)
+  /* SHARPEN'S HALOS AND LIMIT HALOS: every pixel of the plate through the kernel's own arithmetic — its four taps Radius pixels up, down,
+     left and right, each held to the plate's edge (the kernel's edge rule, which inside the frame changes nothing), its Skip flat areas test
+     on the brightness difference, and its sharpened value: the pixel x (1 + 4 Amount) minus the four taps x Amount, channel by channel, or
+     under Brightness only the pixel plus the brightness difference x Amount on all three. Then HALOS drops the side it does not keep — Dark
+     only leaves a pixel the sharpening would lighten as it was, Light only one it would darken — and LIMIT HALOS pulls what is left that
+     share of the way back inside the lightest and darkest of the pixel and its four taps, channel by channel. A skipped pixel and the alpha
+     are never written. At Both and 0 % this is the kernel byte for byte. */
+  function sharpen11(d, s, W, H, amt, r, thr, luma, halo, limit) {
+    const lim = limit > 0 ? (limit < 100 ? limit / 100 : 1) : 0;
+    const lu = k => s[k] * 0.299 + s[k + 1] * 0.587 + s[k + 2] * 0.114;
+    for (let y = 0; y < H; y++) {
+      const yu = (y - r < 0 ? 0 : y - r) * W, yd = (y + r > H - 1 ? H - 1 : y + r) * W, yr = y * W;
+      for (let x = 0; x < W; x++) {
+        const i = (yr + x) * 4, iu = (yu + x) * 4, id = (yd + x) * 4;
+        const il = (yr + (x - r < 0 ? 0 : x - r)) * 4, ir = (yr + (x + r > W - 1 ? W - 1 : x + r)) * 4;
+        const delta = lu(i) * 4 - (lu(iu) + lu(id) + lu(il) + lu(ir));
+        if (thr > 0 && Math.abs(delta) < thr * 4) continue;
+        const add = delta * amt;
+        for (let c = 0; c < 3; c++) {
+          const j = i + c, v = s[j];
+          let o = luma ? v + add : v * (1 + 4 * amt) - (s[iu + c] + s[id + c] + s[il + c] + s[ir + c]) * amt;
+          if ((halo === 1 && o > v) || (halo === 2 && o < v)) o = v;
+          if (lim > 0) {
+            const a = s[iu + c], b = s[id + c], e = s[il + c], f = s[ir + c];
+            let lo = v, hi = v;
+            if (a < lo) lo = a; if (b < lo) lo = b; if (e < lo) lo = e; if (f < lo) lo = f;
+            if (a > hi) hi = a; if (b > hi) hi = b; if (e > hi) hi = e; if (f > hi) hi = f;
+            const cl = o < lo ? lo : (o > hi ? hi : o);
+            o += (cl - o) * lim;
+          }
+          d[j] = o;
+        }
+      }
+    }
+  }
+  FM._sharpen11 = sharpen11;   // suite seam (#966 opts11)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
