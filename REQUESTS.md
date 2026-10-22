@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 21 Oct at v17.91
+> ## 📌 WHAT I NEED FROM YOU — updated 21 Oct at v17.92
 >
-> **State:** v17.91 — **more choice on six more effects** (#966, round eleven): Threshold can cut each colour on its own, keep the picture on one side of the cut and mix; Posterize can soften its band edges and band only the hue; Solarize can stretch and flip to a colour; Sharpen can halo only dark or only light and limit its halos; Box Blur can mix and blend; Remove Object can paint out an oval, at an angle. Every one starts exactly as before. **Still one check from you:** export something short with sound on your iPhone, save it, and play it in Photos (v17.89's fix).
+> **State:** v17.92 — **transitions in the Simple editor, your pick A** (#1122): a blue ◇ above each cut between two clips; tap it for None, Crossfade, Dip to black or Dip to white. The video never gets shorter. The extra controls (a length, On every cut, turning a hand-made crossfade into a transition) are ON, decided under your 21 Oct "fine with ur choices" rule; switch them off in Settings → Simple editor if you would rather, or say so on the review page. The ‹ Projects pill no longer shows in Simple (#1083). The Full editor is unchanged (the lock run checks it). **Still one check from you:** export something short with sound on your iPhone, save it, and play it in Photos (v17.89's fix).
+>
+> v17.91 — **more choice on six more effects** (#966, round eleven): Threshold can cut each colour on its own, keep the picture on one side of the cut and mix; Posterize can soften its band edges and band only the hue; Solarize can stretch and flip to a colour; Sharpen can halo only dark or only light and limit its halos; Box Blur can mix and blend; Remove Object can paint out an oval, at an angle. Every one starts exactly as before. **Still one check from you:** export something short with sound on your iPhone, save it, and play it in Photos (v17.89's fix).
 >
 > v17.90 — **the eighth bug hunt's fixes, and two tabs no longer mix up which project is open** (#1176). **Still one check from you:** export something short with sound on your iPhone, save it, and play it in Photos (v17.89's fix).
 >
@@ -36719,6 +36721,7 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **HE ANSWERED 11 Oct, ~10:05 AWST (#1130):** "if an issue then fix" — fix the slow swipe that raises a Reset menu in Full too.
       🔨 **11 Oct, ~15:00 — his answer built (code + test, no browser yet):** `hunt/answers-1130` 327974c9 drops S4d's Simple-only condition, so a slow swipe that starts on a category card raises no Reset menu in Full either; test `1122 Full too: a slow swipe…` at phone and wide (control: a still hold still raises it). Ships in a Full release; clauses 1–2 ride the Simple releases.
       📍 **Moved here from #1136 (20 Oct hand-off audit):** the Full slow-swipe fix (327974c9, answer 3) never landed.
+      📍 **v17.92 (21 Oct): Simple 2.7, his pick A, ships** (`hunt/sm6p`): the solid blue ◇ above each cut between two main clips, and the Transition row None · Crossfade · Dip to black · Dip to white at 0.5 s; the video never gets shorter and the sound still cuts at the cut. A project holding a transition is stamped FM.SM_V 2, so an older build opens it read-only in Simple. ON, decided under his 21 Oct 'fine with ur choices' rule (Settings → Simple editor → More transition controls; the review page keeps the question): Length −/+, On every cut, the ◇ on a hand-made crossfade and Turn into a transition. Two pre-ship reviews with refuters (21 Oct): the exporter's seek rode in v17.91 (the laptop's lock cannot measure exporter.js), Full's settings whitelist line stays Full's, Rev 30 sits in its own comment, and fp_3 to fp_10 pin every clause of the trIn rule. Collab schema rev 30. The Full-unchanged lock passed on this exact tree before it shipped.
 
 - [ ] **1123 — Ezra: the list of every question for him, and the old Simple artifact** (10 Oct, ~17:55 AWST, via INBOX — HIS WORDS, filed by the logger)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
@@ -37808,3 +37811,30 @@ re-opened #480, which I had marked done and had not fixed.
       - **Applies now to:** the combined review page's open questions, including #1084 (stretch ON, 300 ms, with the dim); #1175 (keep all three new effects, which is the "more choice" default); the two OFF looks (switch on whichever was marked recommended); the Simple sheets' picks, including sm6's extras (switch them on); #982 (close it, the recommended option); the Filter layer icon (the recommended drawing).
       - **Still his, because only his hands or his files can do them:** the iPhone export → Photos sound check; the laptop virus scan or reset question (#1071); any edit to his own global CLAUDE.md; money, accounts and passwords.
       📍 **Builder, 22 Oct:** applied on branches, each decision to be named in its release's POLISH line: Simple 2.7's More transition controls ON (hunt/sm6p, ships as v17.92); #1084's grow ON, Laser Beam's core shows the colour picked, and the Wipe borders slide off at the end (hunt/picks, after the #845 audio guard). #1175's batch already shipped in v17.61 and #982 is closed with the picks release. The Filter layer tile waits on one check: its Full-only guard names FM.editor, a Simple hook.
+
+- [ ] **1180 — A FreeMotion logo made of timeline pieces (the "Edit Grid" F), then a build-up loading animation** (22 Oct, ~00:15 AWST, via INBOX — his words)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+      **His words, verbatim:** "Draft up a logo design from the circled image where it's basically like an F created from like timeline stuff. I feel like that looks cool and could be a really sick design and like it could even have like a very cool loading screen animation coming in where like I don't know but like you could just be very well very cool with all of the layers moving in ways that like where it's like building it I don't know definitely that would be sick and yeah, just come up with a draft for that come up with heaps of different options for me to choose from make some animations after I decide which ones I like. Best of the animation goes into it wait for me to decide which one's best."
+      **His image:** a sheet of 10 AI-made FreeMotion logo ideas. He circled 04 "EDIT GRID": three grey rounded clip bars (long, medium, short square) stacked left-aligned to make an F, a white playhead line through them with a ▶ on top, and "FreeMotion / EDITING, EVOLVED". Saved at C:\Users\build\.claude\uploads\038c53db-a288-427b-b4c4-2509b19d3eaf\ad60fed0-image.jpg (Windows side).
+      Clauses (his):
+      1. [x] Draft a logo from the circled image: an F made of timeline pieces. Done by the PM chat 22 Oct: 12 options on one canvas, each big, with the wordmark, and at 20 px. https://claude.ai/artifact/4ot9bNBsNL6HCv6Nei8QN7
+      2. [x] Heaps of options to choose from. The 12 are: 01 Edit Grid (his, refined), 02 Spine (the playhead IS the F's stem; RECOMMENDED: clearest F at icon size), 03 Tracks, 04 Split, 05 Keyframes, 06 Clip colours, 07 Trim, 08 Waveform, 09 Outline, 10 Knockout, 11 Motion trail, 12 App icon (02 on a tile, teal #29d9bb = the app's --accent).
+      3. [ ] **WAIT FOR HIS PICK** ("wait for me to decide"). This is the one design item his 21 Oct "fine with ur choices" rule does NOT cover, because he said to wait.
+      4. [ ] After he picks: animation options for a loading screen where the layers "build" the logo, each drawn and shown to him. Directions to draw:
+         - (a) clips slide in onto their tracks one by one and snap, then the playhead drops in;
+         - (b) the playhead sweeps left to right and the clips "record" in behind it;
+         - (c) clips fall from above and stack, with a bounce;
+         - (d) a split: one long clip is cut by the playhead into the F's pieces;
+         - (e) keyframe diamonds pop, then the bars grow out of them;
+         - (f) a scrub: the F rewinds and plays like a timeline.
+      5. [ ] The best animation goes into the app as the loading screen, after he decides. Today the app opens with an intro film (splash-v2.mp4, see #1096). The new one should be CSS/SVG, not a video, so it costs no memory (#1096's point).
+      **His follow-up, ~00:35, verbatim:** "Just try making a bunch more that are very close to my circled one but playing with colours and grading a lot. Spend a lot of time and effort"
+      - [x] Done by the PM chat 00:45. 32 studies on the same canvas, all on his exact circled geometry, in four boards:
+        - A, greys and metals: baseline, sheen, brushed silver, chrome, gunmetal, graphite bloom, frosted glass, light mode;
+        - B, teal (the app's own #29d9bb): steps, glowing playhead, teal to blue, mint glow, glass, duotone, neon outline, deep ocean;
+        - C, colour grades: teal and orange, sunset, aurora, cyber, warm film, cool night, holographic, ember;
+        - D, one gradient across the whole F: teal to violet, light from above, spotlight, sunset sweep, "played" in teal (left of the playhead coloured, like a progress bar), played in white, aurora rising, iridescent.
+      - Still waiting on his pick.
+      **Also:** a logo is part of the visual-identity pass in BEFORE-PUBLISHING.md (the UI is modelled on Alight Motion and must be made our own before a public release). Add the logo work to that list when it is picked, as progress on it.
+      **Who builds:** the PM chat draws the options (no build). The builder builds the picked animation and the loading-screen change after his pick.
+      ⏸ **22 Oct — BUILT OUT UNTIL HE picks a logo** from the PM chat's canvas (https://claude.ai/artifact/4ot9bNBsNL6HCv6Nei8QN7: 12 options and 32 studies on his circled geometry). He said to wait for his decision, so his 21 Oct "fine with ur choices" rule does not apply here. After his pick, the builder draws the loading-animation options (clause 4).

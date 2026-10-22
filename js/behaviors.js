@@ -299,6 +299,9 @@ window.FM = window.FM || {};
   // Opacity resolves through the same pipeline, clamped to [0,1]. Matches the old inline expression
   // clamp01(FM.evalProp(layer.transform.opacity, t)) exactly when the layer has no behaviors.
   FM.layerOpacity = function (layer, t) {
-    return clamp01(FM.behaviorValue(layer, 'opacity', FM.evalProp(layer.transform.opacity, t), t));
+    const a = clamp01(FM.behaviorValue(layer, 'opacity', FM.evalProp(layer.transform.opacity, t), t));
+    /* Simple 2.7 (#1122, DESIGN §12.1): the renderer's proxy of a clip in a transition carries its blend as `__trA` (js/spine.js
+       FM.transitionProxy). No layer of the document ever has it, so every other layer gets `a` itself, exactly as before. */
+    return layer.__trA == null ? a : a * layer.__trA;
   };
 })(window.FM);

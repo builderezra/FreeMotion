@@ -78,6 +78,13 @@ window.FM = window.FM || {};
        a local look, nothing about it travels or is saved in a project. In load()'s whitelist below, or it would be the #688
        bug again. */
     addMenuGrow: false,
+    /* SIMPLE 2.7 (#1122 clause 2, his pick A): More transition controls. His sheet showed the ◇ and None · Crossfade · Dip to black ·
+       Dip to white; the row's Length and On every cut, and Turn into a transition on a hand-made crossfade (with its ◇), are looks he
+       has not seen. They were built OFF (#545); since his 21 Oct words, "im pretty fine with ur choices then correcting later if i think
+       its bad", the recommended answer ships ON and the review page keeps the question for his correction. Read live by js/spine.js
+       (FM.spine.trExtras); its row shows only while the Simple editor is on screen, so Full's Settings is exactly as before. Read by
+       load() on its own line below, or it would be the #688 bug again. */
+    simpleTransitionExtras: true,
   };
   const DURATIONS = [0.5, 1, 2, 3, 5, 10, 15];
 
@@ -116,6 +123,7 @@ window.FM = window.FM || {};
       /* …and `collabCodesOnly` (S6) with them, the same day it was added — a privacy switch that reset to
          OFF on every launch would be the #688 bug with a worse consequence than a colour. */
       ['demoMode', 'showTouches', 'systemFonts', 'homeLight', 'collabLabs', 'collabCursors', 'collabSelections', 'collabCodesOnly', 'addMenuGrow'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });   // addMenuGrow: queue 1084
+      if (typeof saved.simpleTransitionExtras === 'boolean') state.simpleTransitionExtras = saved.simpleTransitionExtras;   /* Simple 2.7 (#1122): its own line, so the whitelist above stays Full's */
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
       // hand-editable storage, and this string is handed straight to a canvas fillStyle
@@ -480,6 +488,20 @@ window.FM = window.FM || {};
       jumpBtn.addEventListener('click', () => { const r = document.getElementById('set-reports'); if (r && r._open) r._open(true); if (r && r.scrollIntoView) r.scrollIntoView({ block: 'start', behavior: 'smooth' }); });   // #967 batch 2: the reports are one folded row — it opens first
       jump.append(jumpHead, jumpBtn);
       body.appendChild(group(jump));
+    }
+
+    /* ═══ SIMPLE EDITOR — Simple's own switches (Simple 2.7, #1122 clause 2; #545) ════════════════════════════════════════
+     * Built ONLY while the Simple editor is on screen in a project, so in Full (and on Home) this panel is exactly what it was:
+     * the Full-unchanged lock measures it. It sits under the project's own rows because it is about the editor he is in. The
+     * words are Simple's (js/spine-words.js, `settings`); toggleRow's apply() tells js/simple-tools.js, which redraws the ◇s
+     * and an open Transition row at once. */
+    if (inProject && FM.editor && FM.editor.isSimple && FM.editor.isSimple()) {
+      const sw = (FM.spineWords && FM.spineWords.settings) || {};
+      const hint = typeof sw.trExtrasHint === 'function' ? sw.trExtrasHint(FM.TR_DEFAULT) : '';
+      const sg = group(toggleRow(sw.trExtras || 'More transition controls', hint, 'simpleTransitionExtras'));
+      sg.id = 'set-simple';
+      sg.insertBefore(el('div', 'set-grouptitle', sw.group || 'Simple editor'), sg.firstChild);
+      body.appendChild(sg);
     }
 
     /* ═══ WORK WITH FRIENDS — THE LABS GROUP (queue 921 S3, §19.8; moved up and titled by #967 batch 2) ═════════════════

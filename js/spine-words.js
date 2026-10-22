@@ -46,7 +46,12 @@ window.FM = window.FM || {};
     },
     settings: {   // only under D22 B (a Settings row gating the cog block)
       label: 'Simple editor',
-      hint: 'See any project as clips — an early look.'   // NOT 'still being tested': #967's rule keeps that phrase on Work with friends alone (test 967 B4 1). Phase 2: 'Edit clip after clip — an early look.'
+      /* NOT 'still being tested': #967's rule keeps that phrase on Work with friends alone (test 967 B4 1). Phase 2: 'Edit clip after clip — an early look.' */
+      hint: 'See any project as clips — an early look.',
+      /* 2.7 (#1122, #545): Simple's own group in Settings, shown only while Simple is on screen in a project (js/settings.js) */
+      group: 'Simple editor',
+      trExtras: 'More transition controls',
+      trExtrasHint: d => 'Length and On every cut in the Transition row, and Turn into a transition where one clip already fades into the next. Off: a new transition is ' + d + ' s.'
     },
     sections: {
       captions: 'Captions', text: 'Text', overlay: 'Overlay', effect: 'Effects', behind: 'Behind',
@@ -137,7 +142,12 @@ window.FM = window.FM || {};
       soundTaken: 'Sound taken out · it sits on the clip as its own track', alreadyOut: 'Its sound is already out · Put sound back first',
       noSound: 'This clip has no sound to take out', noTwin: 'No sound was taken out of this clip', soundBack: 'Sound back in the clip',
       clipsMuted: 'Clip sound is off', clipsHeard: 'Clip sound is back on',
-      replaced: name => name + ' replaced'
+      replaced: name => name + ' replaced',
+      /* release 2.7: transitions (#1122, his pick A) */
+      trNone: 'No transition', noTransition: 'A transition needs two clips that meet, with nothing between them',
+      trSet: (type, d) => ({ crossfade: 'Crossfade', dipblack: 'Dip to black', dipwhite: 'Dip to white' }[type] || 'Transition') + ' ' + d.toFixed(1) + ' s',
+      trAll: n => 'Same transition on all ' + n + ' cuts', trDropped: n => n === 1 ? 'removed a transition' : 'removed ' + n + ' transitions',
+      trTurned: 'Now a crossfade transition'
     },
     tools: {   // Phase 2 (D10): the tray row and the project tools; one name each, never "Edit" (§8.4)
       clips: 'Clips', text: 'Text', sound: 'Sound', overlay: 'Overlay',
@@ -156,7 +166,10 @@ window.FM = window.FM || {};
       /* release 2.3 */
       audio: 'Audio', audioTitle: 'Speed, volume, reverse and the clip’s sound', speed: 'Speed', volume: 'Volume', replace: 'Replace', reverse: 'Reverse', forwards: 'Play forwards', takeSound: 'Take sound out', putSound: 'Put sound back',
       fade: 'Fade', fadeIn: 'In', fadeOut: 'Out', useOneSpeed: 'Use one speed', speedRamped: 'Speed changes over the clip',
-      speedLabel: 'Speed', volumeLabel: 'Volume in percent', muteClips: 'Clip sound', muteOn: 'Mute clip sound', muteOff: 'Clip sound is off, tap to turn it on'
+      speedLabel: 'Speed', volumeLabel: 'Volume in percent', muteClips: 'Clip sound', muteOn: 'Mute clip sound', muteOff: 'Clip sound is off, tap to turn it on',
+      /* release 2.7: the ◇'s Transition row, and Turn into a transition on a crossfade (#1122, his pick A) */
+      transition: 'Transition', turnTr: 'Turn into a transition', trNone: 'None', trCrossfade: 'Crossfade', trDipBlack: 'Dip to black', trDipWhite: 'Dip to white',
+      trLength: 'Length', trEvery: 'On every cut', trShorter: 'Shorter by 0.1 s', trLonger: 'Longer by 0.1 s'
     },
     a11y: {
       timeline: 'Timeline',
@@ -166,7 +179,10 @@ window.FM = window.FM || {};
         return (own ? own + ', ' + i : 'Clip ' + i) + ' of ' + n + ', ' + len.toFixed(1) + ' s' + (follow ? ', ' + follow + (follow === 1 ? ' thing follows it' : ' things follow it') : '');
       },
       gap: function (s) { return s.toFixed(1) + ' second gap, Close gap'; },
-      overlap: function (s) { return 'Overlap ' + s.toFixed(1) + ' s, Fix'; }
+      overlap: function (s) { return 'Overlap ' + s.toFixed(1) + ' s, Fix'; },
+      /* 2.7: the ◇ above a cut, and the ◇ on a crossfade */
+      transition: function (type, d) { const k = { crossfade: 'crossfade', dipblack: 'dip to black', dipwhite: 'dip to white' }[type]; return 'Transition: ' + (k ? k + ' ' + (+d || 0).toFixed(1) + ' s' : 'none'); },
+      transitionBlend: 'Crossfade: turn into a transition'
     },
     items: {   // FM.spine.itemWord: never layer.name (§8.9 "Naming items in lines")
       clip: 'Clip', sticker: 'the sticker', image: 'the image', videoTop: 'the video on top', song: 'the song',

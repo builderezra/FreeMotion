@@ -180,8 +180,7 @@
   "title": "Add a crossfade between two clips",
   "group": "Look",
   "mode": "simple",
-  "needs": "On every cut",
-  "hidden": true
+  "needs": "On every cut"
  },
  {
   "file": "simple/11-drag-clips-in-simple.md",
@@ -202,7 +201,6 @@
   "title": "Dip to black",
   "group": "Look",
   "mode": "simple",
-  "needs": "On every cut",
-  "hidden": true
+  "needs": "On every cut"
  }
 ]

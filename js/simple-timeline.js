@@ -19,7 +19,7 @@ window.FM = window.FM || {};
   const SECTIONS = ['captions', 'text', 'overlay', 'behind'];   // top → bottom inside the sections box (stacking order)
   const GLYPH = { captions: 'Cc', text: 'Aa', overlay: '◧', behind: '▤' };
   const RULER = 18, MAIN_H = 56, SOUND_H = 32, LANE = 32;
-  let root = null, scroller = null, inner = null, rulerEl = null, secEl = null, mainEl = null, soundEl = null, sayEl = null, liveEl = null;
+  let root = null, scroller = null, inner = null, rulerEl = null, secEl = null, mainEl = null, soundEl = null, sayEl = null, liveEl = null, trEl = null;
   let lastProg = -1, userScrollAt = 0, settleT = 0, R = null, strips = new Map();
 
   const pps = () => (FM.timeline && FM.timeline.pxPerSec) ? FM.timeline.pxPerSec() : 100;
@@ -37,6 +37,11 @@ window.FM = window.FM || {};
     scroller = root.querySelector('#sm-scroll'); inner = root.querySelector('#sm-inner');
     rulerEl = root.querySelector('#sm-ruler'); secEl = root.querySelector('#sm-sections');
     mainEl = root.querySelector('#sm-main'); soundEl = root.querySelector('#sm-sound');
+    /* 2.7 (#1122, his pick A): THE ◇s' OWN LANE, made here, the first time Simple draws, rather than in index.html. It comes BEFORE the
+       sections in the document, so it paints UNDER every item there (a title or an overlay at a cut is still what a press lands on);
+       styles.css lets a press through the sections' empty boxes to it. */
+    trEl = root.querySelector('#sm-trlane');
+    if (!trEl && secEl && secEl.parentNode) { trEl = el('div'); trEl.id = 'sm-trlane'; secEl.parentNode.insertBefore(trEl, secEl); }
     sayEl = document.getElementById('sm-say'); liveEl = document.getElementById('sm-live');
     // the playhead is FIXED at 50vw and the content scrolls under it, exactly as in Full
     scroller.addEventListener('scroll', () => {
@@ -552,6 +557,7 @@ window.FM = window.FM || {};
 
       // ── the clip row ──
       mainEl.textContent = '';
+      if (trEl) trEl.textContent = '';
       const clips = R.main.filter(e => !e.slot);
       clips.forEach((e, i) => {
         const l = byId.get(e.id); if (!l) return;
@@ -605,6 +611,41 @@ window.FM = window.FM || {};
         chip.addEventListener('click', ev => { ev.stopPropagation(); if (FM.spine.cmd) FM.spine.cmd.closeSeam(e.id); });   // Phase 2: Close gap / Fix
         mainEl.appendChild(chip);
       });
+      /* 2.7 THE ◇ (#1122 clause 2, his pick A; DESIGN §8.2 "Transition ◇", Phase 6 "◇ at each cut"): one above every cut that is a clean
+         join between two pictures, every one the same solid blue as on his sheet, set or not (styles.css; the set one's name says what it
+         holds, and .sm-chip-tr-on marks it). A tap selects the clip after the cut and opens its Transition row (js/simple-tools.js). A ◇ on
+         a CROSSFADE (a blend seam, DESIGN :522) sits at the middle of the overlap and selects the clip that fades in, whose tray then offers
+         Turn into a transition: that one only with More transition controls on (S.trExtras, #545: his sheet never showed it). They sit in
+         their own lane just above the clip row (#sm-trlane), clear of the trim grips, and paint under the sections' items. */
+      if (trEl) {
+        const trTop = mainEl.offsetTop - 36, aw = W().a11y || {}, extras = !!(FM.spine.trExtras && FM.spine.trExtras());
+        R.main.forEach((e, i) => {
+          const l = byId.get(e.id), s = e.seam;
+          if (e.slot || i < 1 || !l || !s) return;
+          let chip = null;
+          if (s.kind === 'blend') {
+            if (!extras) return;
+            chip = el('button', 'sm-chip sm-chip-tr sm-chip-tr-blend', '◇');
+            chip.dataset.trBlend = e.id;
+            chip.style.left = xOf(e.start + s.amt / 2) + 'px';
+            const nm = aw.transitionBlend || 'Crossfade: turn into a transition';
+            chip.setAttribute('aria-label', nm); chip.title = nm;
+            chip.addEventListener('click', ev => { ev.stopPropagation(); FM.selectLayer(e.id); });
+          } else if (FM.spine.joinInto && FM.spine.joinInto(R, e.id, byId)) {
+            const tr = l.trIn || null;
+            chip = el('button', 'sm-chip sm-chip-tr' + (tr ? ' sm-chip-tr-on' : ''), '◇');
+            chip.dataset.tr = e.id;
+            chip.style.left = xOf(e.start) + 'px';
+            const nm = aw.transition ? aw.transition(tr && tr.type, tr && tr.d) : 'Transition';
+            chip.setAttribute('aria-label', nm); chip.title = nm;
+            chip.addEventListener('click', ev => { ev.stopPropagation(); FM.selectLayer(e.id); if (FM.simpleTools && FM.simpleTools.openRow) FM.simpleTools.openRow('transition', e.id); });
+          }
+          if (!chip) return;
+          chip.type = 'button';
+          chip.style.top = trTop + 'px';
+          trEl.appendChild(chip);
+        });
+      }
       // + at the end of the clip row: pick files, laid END TO END from the end of the main track (§15.1)
       const add = el('button', 'sm-add', '+');
       add.type = 'button';

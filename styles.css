@@ -12105,6 +12105,10 @@ html[data-pb-cursor="ew"], html[data-pb-cursor="ew"] * { cursor: ew-resize !impo
    ⋯ · ✂ · (gap) · |◀ (D18 A): ⧉ gives its slot to ✂, and ◐ keeps its slot INVISIBLE so |◀ sits where it sits in Full.
    PC: ‹ ✂ |◀. Under D18 B, make the #btn-addside rule `display: none !important` at every width. */
 body.ed-simple #btn-layermenu, body.ed-simple #t-sel, body.ed-simple #key-rail { display: none !important; }
+/* Full's hidden corner pill (#1083, his pick B: "‹ Projects" on PC hover) is not Simple's: Simple has its own top bar and its
+   own way out. Its hide lives HERE, in Simple's block, because the Full-unchanged lock lets only a Simple release add a line
+   naming Simple — so #1083 itself (v17.88) names nothing of Simple, and app.js's cornerOff() reads this display: none as off. */
+body.ed-simple .corner-back { display: none !important; }
 body.ed-simple #btn-addside { visibility: hidden !important; pointer-events: none; }
 @media (min-width: 701px) { body.ed-simple #btn-addside { display: none !important; } }
 /* Full-only doors in the view options (§8.8, T21): the Layers panel and Add camera (a camera is Full-only, §5.2) */
@@ -12167,6 +12171,20 @@ body.ed-simple #sm-timeline { display: flex; }
 }
 .sm-chip-gap { background: #2a1f14; color: #ffb454; border: 1.5px solid #ffb454; }
 .sm-chip-overlap { background: #2a1418; color: #ff6b6b; border: 1.5px solid #ff6b6b; }
+/* 2.7 THE ◇ (#1122 clause 2, his pick A: a ◇ above each cut, the Transition row in the tray). It lives in its own lane just above the clip
+   row (#sm-trlane, made by js/simple-timeline.js before #sm-sections), clear of the trim grips. z-index auto, so it paints in document
+   order: UNDER the sections' items, and a title or an overlay at a cut is still what a press lands on.
+   EVERY ◇ IS THE SAME SOLID BLUE, a cut with a transition and one without, exactly as on his sheet (#545: a look he has not seen does
+   not ship, and the dashed grey empty ◇ was one): #14202a inside, a 1.5 px solid #7cc4ff ring and an outline ◇ in the same blue,
+   measured off A-phone-380.png. Which cut holds a transition is said by its name (aria-label, title) and by the row it opens;
+   .sm-chip-tr-on still marks it for the suite and paints nothing. */
+body.ed-simple #sm-trlane { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+body.ed-simple .sm-chip-tr { z-index: auto; background: #14202a; color: #7cc4ff; border: 1.5px solid #7cc4ff; font-size: 14px; }
+/* …and a press reaches it: the sections and their lanes take no pointer events of their own, only what is drawn in them does. A real
+   press at the ◇'s centre hit the empty #sm-sections box, which comes later in the document and covers the lane (found on the old
+   branch by walking the crossfade tutorial; its T8b hit-tests it with real input). */
+body.ed-simple #sm-sections, body.ed-simple #sm-sections .sm-secstack, body.ed-simple #sm-sections .sm-sec, body.ed-simple #sm-sections .sm-lane { pointer-events: none; }
+body.ed-simple #sm-sections .sm-item, body.ed-simple #sm-sections .sm-grip, body.ed-simple #sm-sections .sm-glyph { pointer-events: auto; }
 .sm-add { position: absolute; top: 10px; width: 36px; height: 36px; border-radius: 10px; border: 1.5px dashed #8b97ab; background: transparent; color: #cfd6e2; font: 400 22px/1 system-ui, sans-serif; cursor: pointer; }
 .sm-more { position: sticky; left: calc(100% - 40px); top: 0; float: right; margin-top: 4px; min-width: 32px; height: 24px; border-radius: 12px; background: #1d2533; color: #cfd6e2; font: 700 10px/24px system-ui, sans-serif; text-align: center; }
 #sm-say { flex: 0 0 52px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-top: 1px solid var(--line); font: 600 12.5px/1.25 system-ui, sans-serif; color: #dfe6f0; box-sizing: border-box; }

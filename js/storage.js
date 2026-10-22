@@ -1694,6 +1694,15 @@ window.FM = window.FM || {};
       if (!ok) delete l.pick;
       else if (Object.keys(p).length !== 2) l.pick = { b: p.b, i: p.i };
     }
+    /* 2.7 (§12.1, #1122): the transition into this clip, { type, d }, set only by Simple. A known type and a length of 0.1 to 3 s, on a
+       picture layer (never an adjustment, a camera, a group or a sound); anything else goes, and extra keys are dropped. A layer
+       without `trIn` (every Full-made one) is untouched. */
+    if ('trIn' in l) {
+      const tq = l.trIn, ok = isPlainObj(tq) && (FM.TR_TYPES || ['crossfade', 'dipblack', 'dipwhite']).indexOf(tq.type) >= 0 && typeof tq.d === 'number' && isFinite(tq.d) && tq.d >= 0.1 && tq.d <= 3
+        && (l.type === 'video' || l.type === 'image' || l.type === 'shape') && l.audioOnly !== true;
+      if (!ok) delete l.trIn;
+      else if (Object.keys(tq).length !== 2) l.trIn = { type: tq.type, d: tq.d };
+    }
     if (!('sm' in l)) return;
     const sm = l.sm;
     if (!isPlainObj(sm)) { delete l.sm; return; }
