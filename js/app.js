@@ -26,8 +26,22 @@ window.FM = window.FM || {};
 
   /* ---------- rendering ---------- */
   let ghostC = null;
+  /* #768 H7 (the 22 Oct hunt and its refuter): ONION SKIN STEPS ASIDE WHILE THE TIMELINE IS SCRUBBED, AND COMES BACK WHEN IT STOPS.
+     The ghosts are two more renders of the selected layer, with all its effects, at t ± 0.2 s, on every frame: on a scrub with
+     onion skin on that is three renders a frame where the rest of the app does one, under his thumb on the phone. So while
+     the timeline is being scrubbed they are held back, and drawn again on the frame the scrub settles on.
+     WHAT COUNTS AS A SCRUB is FM.scrubTime, the coalesced path every finger scrub uses (the lane, the clip, the ruler, the
+     fling's glide, the scroll-scrub), and only from its SECOND step inside MOTION_GAP of the one before: a one-off
+     jump to a caption cue (also FM.scrubTime) is not a scrub, and draws its ghosts at once as before. Not body.fm-moving or
+     _inMotion: both are set by ANY run of renders (the effect browser's preview, a slider, a project opening), so onion skin
+     would blink off for whatever followed them, and a picture taken within 700 ms of an ordinary render would lose its ghosts.
+     WHEN IT STOPS: FM.setTime (a deliberate place, the fling's settle among them) ends the hold and draws them at once; and the
+     motion idle timer in noteMotion, which already repaints sharp when a drag stops, ends it too and draws them if they were
+     held. At rest nothing has changed: no scrub, no hold, the same two ghosts on every frame. */
+  let _scrubHeld = false, _scrubLast = 0, _ghostsHeld = false;
   // Onion skin: faint tinted ghosts of the selected animated layer at t±Δ (past=cyan, future=red).
-  function drawOnionSkin() {
+  function drawOnionSkin(hold) {
+    if (!hold) _ghostsHeld = false;
     const sel = FM.selectedLayer(FM.scene);
     if (!sel) return;
     // Walk the parent chain so a layer driven by an animated parent/null also gets ghosts, and so
@@ -36,6 +50,7 @@ window.FM = window.FM || {};
     while (pid && !seen.has(pid)) { seen.add(pid); const pl = FM.scene.layers.find(l => l.id === pid); if (!pl) break; chain.push(pl); pid = pl.parent; }
     const animated = l => Object.keys(l.transform).some(k => FM.isAnimated(l.transform[k]));
     if (!animated(sel) && !chain.some(animated)) return;  // nothing moving (self or rig) → skip
+    if (hold) { _ghostsHeld = true; return; }   // #768 H7: mid-scrub; noteMotion's idle timer draws them when it stops
     const P = FM.scene.project;
     if (!ghostC) ghostC = document.createElement('canvas');
     /* The ghost plate belongs on the TARGET's pixel grid, like every plate in the compositor (v9.26).
@@ -121,7 +136,7 @@ window.FM = window.FM || {};
     }
     try { FM.renderScene(ctx, FM.scene, FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time) : FM.time); }
     finally { FM._typingCue = null; }
-    if (FM.onionSkin && !FM.playing) drawOnionSkin();
+    if (FM.onionSkin && !FM.playing) drawOnionSkin(_scrubHeld);   // #768 H7: held back while the timeline is scrubbed
     if (FM.showGuides) drawGuides();
     if (FM.canvasEdit) FM.canvasEdit.update();
     /* queue 921 S0: the other people's cursors, selections and playheads are drawn AFTER the frame and
@@ -251,7 +266,9 @@ window.FM = window.FM || {};
     _mIdle = setTimeout(() => {
       _mFrames = 0;
       if (_movingCls) { _movingCls = false; document.body.classList.remove('fm-moving'); }   // #768 H1: the cards run again
+      _scrubHeld = false; _scrubLast = 0;                    // #768 H7: the scrub has stopped
       if (_inMotion) { _inMotion = false; resizeCanvas(); }   // stopped → repaint sharp
+      if (_ghostsHeld && !FM.playing) render();               // #768 H7: …with the onion-skin ghosts the scrub held back (resizeCanvas's own render may already have)
     }, MOTION_IDLE);
   }
 
@@ -1873,6 +1890,7 @@ window.FM = window.FM || {};
      * file alone rely on the picture being on the canvas by the time setTime returns, and deferring it
      * to a rAF would change all of them to chase one measurement. Timing it costs nothing and changes
      * nothing. */
+    _scrubHeld = false; _scrubLast = 0;   // #768 H7: a deliberate place ends a scrub, and this frame draws the onion-skin ghosts
     const _t0 = performance.now();
     render();
     noteMotion(performance.now() - _t0);
@@ -1889,6 +1907,8 @@ window.FM = window.FM || {};
   FM.scrubTime = function (t, noSnap) {
     if (!FM.playing && !noSnap) t = FM.snapFrame(t);
     FM.time = Math.max(0, Math.min(FM.scene.project.duration, t));
+    /* #768 H7: the second step of a run (inside MOTION_GAP of the last) makes this a scrub, and onion skin holds its ghosts */
+    if (!FM.playing) { const now = performance.now(); if (_scrubLast && now - _scrubLast <= MOTION_GAP) _scrubHeld = true; _scrubLast = now; }
     if (!FM.playing && !videoSeekQueued) {
       videoSeekQueued = true;
       requestAnimationFrame(() => { videoSeekQueued = false; if (!FM.playing) FM.seekVideosToTime(); });

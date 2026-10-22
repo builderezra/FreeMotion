@@ -83376,6 +83376,60 @@
     }
   });
 
+  /* #768 H7 (the 22 Oct hunt and its refuter). With onion skin on, every frame renders the selected animated layer twice more,
+   * at t - 0.2 s and t + 0.2 s with all its effects, for the ghosts: on a scrub that is three renders a frame. Now the ghosts
+   * are held back while the timeline is scrubbed (FM.scrubTime, from its second step) and drawn when it stops.
+   * Counted where the cost is: FM.renderScene calls made while app.js has FM._mfGhost up (the ghost renders, and only
+   * those), per frame, across a 12-step FM.scrubTime scrub of a keyframed shape, the wrapper's descriptor put back exactly.
+   * FAILS BEFORE THE FIX: two ghost renders on every frame of the scrub.
+   * CONTROLS: at rest a frame draws the two ghosts (so a zero below is not a broken detector); the scrub really rendered its
+   * frames; the ghosts come back BY THEMSELVES once the scrub stops, with no input; and a one-off FM.scrubTime jump (a
+   * caption cue tapped) draws them at once, as before. The first step of the scrub is not judged: one step is a jump. */
+  test('768 H7: with onion skin on, a scrub renders the selected layer once a frame instead of three times, and its ghosts come back by themselves when the scrub stops', { item: '768', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time, onion0 = !!FM.onionSkin;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const rsDesc = Object.getOwnPropertyDescriptor(FM, 'renderScene'), realRS = FM.renderScene;
+    let ghosts = 0, mains = 0;
+    try {
+      if (hadHome) FM.home.close();
+      if (FM.pause) FM.pause();
+      if (FM.timeline && FM.timeline._clearFling) FM.timeline._clearFling();
+      const L = FM.makeLayer('shape', { name: 's768h7', shape: 'rect', x: 300, y: 540, shapeW: 200, shapeH: 200, fill: '#f0f', start: 0, duration: 6 });
+      L.transform.x = { kf: [{ t: 0, v: 200, e: 'linear' }, { t: 6, v: 880, e: 'linear' }] };   // onion skin draws only a layer that moves
+      FM.scene = scene([L], { project: { width: 1080, height: 1080, fps: 30, duration: 6, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll(); FM.setTime(2);
+      FM.onionSkin = true;
+      await sleep(900);   // past the motion idle time: nothing is moving or held
+      Object.defineProperty(FM, 'renderScene', { configurable: true, enumerable: rsDesc.enumerable, writable: true, value: function (c, sc) { if (FM._mfGhost) ghosts++; else if (sc === FM.scene) mains++; return realRS.apply(this, arguments); } });
+      ghosts = 0; FM.requestRender(); await frame();
+      if (ghosts !== 2) throw new Error('CONTROL: at rest one frame drew ' + ghosts + ' ghost renders, not the two onion skin draws - the detector or the setup is broken, so a zero below would prove nothing');
+      ghosts = 0; mains = 0;
+      const per = [];
+      for (let i = 1; i <= 12; i++) { const g0 = ghosts; FM.scrubTime(2 + i * 0.1); await frame(); per.push(ghosts - g0); }
+      if (Math.abs(FM.time - 3.2) > 0.05) throw new Error('setup: the scrub left the playhead at ' + FM.time + ' s, not 3.2 s');
+      if (mains < 8) throw new Error('CONTROL: only ' + mains + ' frames were rendered across a 12-step scrub - the scrub is not reaching the canvas');
+      const during = per.slice(1).reduce((a, b) => a + b, 0);
+      if (during) throw new Error(during + ' onion-skin ghost renders across ' + (per.length - 1) + ' scrub frames after the first (want 0; per frame ' + per.join(', ') + ') - the selected layer is rendered three times a frame under his thumb while the timeline moves');
+      ghosts = 0;
+      const until = performance.now() + 3000;
+      while (performance.now() < until && ghosts < 2) await sleep(50);
+      if (ghosts < 2) throw new Error('CONTROL: 3 s after the scrub stopped the ghosts had not come back (' + ghosts + ' ghost renders) - onion skin is lost at rest');
+      // CONTROL: a one-off jump (a caption cue tapped goes through FM.scrubTime) is not a scrub: its frame has its ghosts
+      await sleep(900);
+      ghosts = 0; FM.scrubTime(1); await frame();
+      if (ghosts !== 2) throw new Error('CONTROL: a single FM.scrubTime jump drew ' + ghosts + ' ghost renders, not 2 - a jump is not a scrub and must keep its ghosts');
+    } finally {
+      if (rsDesc) Object.defineProperty(FM, 'renderScene', rsDesc); else FM.renderScene = realRS;
+      FM.onionSkin = onion0;
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
   /* ═══ 765 (the keyboard half): A / S / D ON THE SELECTED CLIP, INSIDE AND OUTSIDE. Nine presses through the
      real window keydown path, each on a fresh clip at 2–6s of a 12s project: inside (playhead 4s) A keeps the
      right, D keeps the left, S splits; left of it (1s) S extends the start, A moves it left, D does nothing;
