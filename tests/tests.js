@@ -83227,6 +83227,63 @@
     }
   });
 
+  /* #768 H4 (the 22 Oct hunt, built as its refuter's memo variant). Every render with a layer selected ran placeRotKnob: both
+   * knob classes off, three getBoundingClientRect reads (the stage, the knob, the box: a forced layout straight after the
+   * box's styles were written), and a class back on whenever the knob is off the stage, which is every layer reaching the
+   * top of his 9:16 frame. With dispScale's own read that is four per frame, under a layer that does not move at all. Now
+   * the knob is measured again only when what places it changed.
+   * Counted where the cost is: getBoundingClientRect calls made INSIDE FM.canvasEdit.update (a depth flag set by a wrapper,
+   * the prototype's descriptor put back exactly), on each update of a 12-step FM.scrubTime scrub under a banner across the top
+   * of a 9:16 frame at phone width, whose knob queue 690 puts under it. An update on which the preview's backing store
+   * changed (a quality step when the motion latches) is a real change of the box's scale and is not counted.
+   * FAILS BEFORE THE FIX: four calls on every update of the scrub, after the first.
+   * CONTROLS: enough still updates ran to judge; the knob kept its place under the banner; and a layer that MOVES still has
+   * its knob re-placed: moved to the middle of the frame it goes back above the box, moved back to the top it goes under. */
+  test('768 H4: a scrub under a selected layer that does not move measures the rotate knob once, not on every frame, and a layer that moves still has its knob re-placed', { item: '768', budgetMs: 40000 }, async function () {
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const saved = FM.scene, t00 = FM.time;
+    const proto = Element.prototype, gbDesc = Object.getOwnPropertyDescriptor(proto, 'getBoundingClientRect');
+    const ceDesc = Object.getOwnPropertyDescriptor(FM.canvasEdit, 'update'), realUpdate = FM.canvasEdit.update;
+    const cv = document.getElementById('preview');
+    let inside = 0, rects = 0, lastSig = '';
+    const per = [];
+    try {
+      if (FM._resetPlayQuality) FM._resetPlayQuality();   // a tier an earlier test taught the ladder would re-scale the box mid-scrub
+      if (FM.timeline && FM.timeline._clearFling) FM.timeline._clearFling();
+      await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's768h4', shape: 'rect', x: 540, y: 150, shapeW: 1080, shapeH: 300, fill: '#3050c0', start: 0, duration: 6 });
+        await hb4Scene([L], { width: 1080, height: 1920 });
+        FM.selectLayer(L.id); FM.setTime(1); await hb4Wait(450);
+        const box = document.getElementById('select-box'), knob = box && box.querySelector('.sb-rot');
+        if (!knob || box.style.display === 'none') throw new Error('setup: the selection box is not showing on the selected banner');
+        if (!knob.classList.contains('sb-rot-below')) throw new Error('setup: the banner across the top of the 9:16 frame does not have its rotate knob under it (' + knob.className + ') - this is not the placement queue 690 makes, so the count below would not be about it');
+        Object.defineProperty(proto, 'getBoundingClientRect', { configurable: true, enumerable: gbDesc.enumerable, writable: true, value: function () { if (inside > 0) rects++; return gbDesc.value.apply(this, arguments); } });
+        Object.defineProperty(FM.canvasEdit, 'update', { configurable: true, enumerable: ceDesc ? ceDesc.enumerable : true, writable: true, value: function () {
+          const sig = cv.width + 'x' + cv.height + '@' + cv.__fmRS, r0 = rects;
+          inside++;
+          try { return realUpdate.apply(this, arguments); }
+          finally { inside--; per.push({ n: rects - r0, still: sig === lastSig }); lastSig = sig; }
+        } });
+        for (let i = 1; i <= 12; i++) { FM.scrubTime(1 + i * 0.1); await frame(); }
+        Object.defineProperty(proto, 'getBoundingClientRect', gbDesc);
+        if (ceDesc) Object.defineProperty(FM.canvasEdit, 'update', ceDesc); else FM.canvasEdit.update = realUpdate;
+        if (Math.abs(FM.time - 2.2) > 0.05) throw new Error('setup: the scrub left the playhead at ' + FM.time + ' s, not 2.2 s');
+        const still = per.slice(1).filter(p => p.still).map(p => p.n);
+        if (still.length < 6) throw new Error('CONTROL: only ' + still.length + ' still updates of the selection box ran across a 12-frame scrub (' + per.length + ' in all) - too few to judge');
+        if (Math.max.apply(null, still) > 1) throw new Error('the selection box called getBoundingClientRect ' + still.join(', ') + ' times on the updates of a scrub under a layer that does not move (want at most 1 each after the first) - the rotate knob is taken off, measured against the stage and put back on every frame, a forced layout and two class flips under every scrub frame on his phone');
+        if (!knob.classList.contains('sb-rot-below')) throw new Error('CONTROL: after the scrub the banner knob is ' + knob.className + ', no longer under the banner where queue 690 puts it');
+        L.transform.y = 960; FM.requestRender(); await frame(); await frame();
+        if (knob.classList.contains('sb-rot-below') || knob.classList.contains('sb-rot-in')) throw new Error('CONTROL: moved to the middle of the frame, the banner kept its knob placement (' + knob.className + ') - a remembered placement was served for a box that moved');
+        L.transform.y = 150; FM.requestRender(); await frame(); await frame();
+        if (!knob.classList.contains('sb-rot-below')) throw new Error('CONTROL: moved back to the top of the frame, the banner knob is ' + knob.className + ', not under it again');
+      }, 380);
+    } finally {
+      Object.defineProperty(proto, 'getBoundingClientRect', gbDesc);
+      if (ceDesc) Object.defineProperty(FM.canvasEdit, 'update', ceDesc); else FM.canvasEdit.update = realUpdate;
+      hb4Restore(saved); FM.setTime(t00);
+    }
+  });
+
   /* ═══ 765 (the keyboard half): A / S / D ON THE SELECTED CLIP, INSIDE AND OUTSIDE. Nine presses through the
      real window keydown path, each on a fresh clip at 2–6s of a 12s project: inside (playhead 4s) A keeps the
      right, D keeps the left, S splits; left of it (1s) S extends the start, A moves it left, D does nothing;
