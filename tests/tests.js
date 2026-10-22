@@ -82854,7 +82854,7 @@
   test('768 N2: a caption track on screen is measured once, not re-wrapped cue by cue every frame, selected or not, with the same pixels', { item: '768', budgetMs: 40000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
-    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time, hadGen = 'fontGen' in FM, gen0 = FM.fontGen;
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time;   /* fontGen is left bumped on purpose (the review's N2-c): it costs one fresh measure of each text on the next frame */
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     const proto = CanvasRenderingContext2D.prototype, mtDesc = Object.getOwnPropertyDescriptor(proto, 'measureText');
     const realSize = FM.layerSize;
@@ -82924,7 +82924,6 @@
     } finally {
       Object.defineProperty(proto, 'measureText', mtDesc);
       FM.layerSize = realSize;
-      if (hadGen) FM.fontGen = gen0; else delete FM.fontGen;
       FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();

@@ -612,6 +612,9 @@ window.FM = window.FM || {};
       kfDots(kfDrag).forEach(d => d.classList.remove('kf-dragging'));
       kfDrag = null;
     }
+    /* #768 H6 (the 22 Oct review's refuter, H6-a): a clip scrub torn down here ends its scrub report too, or the probe ran on until
+       the next pointerup anywhere. Only a clip scrub's own: a second finger can make a clipTap during a lane scrub. */
+    if (clipTap && clipTap.axis === 'x') scrubProbe.cancel();
     if (clipTap) { if (clipTap.holdTimer) clearTimeout(clipTap.holdTimer); clipTap = null; }   // orphaned hold timer could grab the WRONG clip later
     return had;
   }
@@ -5250,7 +5253,9 @@ window.FM = window.FM || {};
                begins at the moment the swipe commits to the x axis, which is also the moment the hold timer above has been
                cleared and the gesture can no longer become a clip move. A vertical pan never begins it. The release
                (pointerup, below) settles it into a report. */
-            if (clipTap.axis === 'x') scrubProbe.begin(scrubMeta('clip'));
+            /* …not while it plays (the refuter's new LOW): the lane's scrub pauses playback (beginScrub) and a clip's does not, so the
+               report would time the playback, not the scrub he is asked to paste */
+            if (clipTap.axis === 'x' && !FM.playing) scrubProbe.begin(scrubMeta('clip'));
           }
           if (clipTap.axis === 'y') {
             /* …AND SAMPLE ITS VELOCITY, so the release glides (queue 690). Queue 415 gave the vertical pan its glide —
