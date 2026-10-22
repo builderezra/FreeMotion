@@ -805,19 +805,32 @@ echo "── 23 Oct: the suite in Windows Chrome, and what goes red ONLY there (
 # His words, 7 Oct: "and also find issues with windows". A STUB 'chrome' (FM_WIN_CHROME) fetches the wrapper page it is handed
 # (logging the run.html address the wrapper frames), then POSTs a crafted verdict chosen by the run's ?only=, so every
 # judgement is seen without a browser. The wrapper's own script (it answers the driver requests no page can) runs in node.
-WSD="$TMP/ws"; mkdir -p "$WSD/tests"; cp tests/_win_pass.py tests/_win_suite.py "$WSD/tests/"
+WSD="$TMP/ws"; mkdir -p "$WSD/tests"; cp tests/_win_pass.py tests/_win_suite.py tests/_platform.py "$WSD/tests/"
 cat > "$WSD/stubchrome" <<'STUB'
 #!/usr/bin/env python3
 import html, json, os, re, sys, urllib.parse, urllib.request
+# one script, two browsers: as 'stublinux' it is the Linux control (FM_CHROME), as 'stubchrome' Windows Chrome (FM_WIN_CHROME)
+side = 'linux' if os.path.basename(sys.argv[0]) == 'stublinux' else 'windows'
+log = os.environ['WS_LOG'] + ('.lin' if side == 'linux' else '')
 url = sys.argv[-1]; u = urllib.parse.urlparse(url); q = urllib.parse.parse_qs(u.query)
 only = (q.get('only') or [''])[0]
+open(log + '.argv', 'a').write(' '.join(sys.argv[1:-1]) + '\n')
 body = urllib.request.urlopen(url).read().decode()
 src = html.unescape(re.search(r'src="([^"]*)"', body).group(1))
-open(os.environ['WS_LOG'], 'a').write('%s|%s|%s\n' % (only, src, 'only=' in u.query))
+open(log, 'a').write('%s|%s|%s\n' % (only, src, 'only=' in u.query))
 post = lambda o: urllib.request.urlopen(urllib.request.Request('http://%s/__win/result?id=%s' % (u.netloc, q['id'][0]), data=json.dumps(o).encode(), method='POST'))
 ua = 'Mozilla/5.0 (Windows NT 10.0) HeadlessChrome/154 stub'
 R = lambda name, ok=False, error='', notRun='', pending=False: {'name': name, 'ok': ok, 'error': error, 'notRun': notRun, 'pending': pending}
-if only == 'mix':
+if side == 'linux':
+    if only == 'mix':
+        post({'sum': 'Regression 4/7 ✗ FILTERED', 'ua': 'X11 Linux stub', 'notRun': [], 'asked': {'asks input': ['input'], 'asks gc': ['gc']},
+              'ran': [R('win only', ok=True), R('both red', error='same on both'), R('lin notrun', notRun='needs an AAC audio encoder'),
+                      R('asks input', notRun='needs real input from tests/_cdp.py'), R('asks gc', error='the driver could not collect garbage'),
+                      R('cdp words', error='run it through tests/_cdp.py or it fails'), R('plain pass', ok=True),
+                      R('aac only here', notRun='needs an AAC audio encoder'), R('pend', pending=True, error='not built yet')]})
+    elif only != 'lsilent':
+        post({'sum': 'Regression 1/1 ✓', 'ua': 'X11 Linux stub', 'notRun': [], 'asked': {}, 'ran': [R('plain pass', ok=True)]})
+elif only == 'mix':
     post({'sum': 'Regression 3/9 ✗ FILTERED', 'ua': ua, 'notRun': [], 'asked': {'asks input': ['input'], 'asks gc': ['gc']},
           'ran': [R('win only', error='the label is cut off at 1280'), R('both red', error='same on both'),
                   R('lin notrun', error='the track is silent'), R('asks input', notRun='needs real input from tests/_cdp.py'),
@@ -832,7 +845,7 @@ elif only == 'silent':
 else:
     post({'sum': 'Regression 2/2 ✓', 'ua': ua, 'notRun': [], 'asked': {}, 'ran': [R('plain pass', ok=True), R('another', ok=True)]})
 STUB
-chmod +x "$WSD/stubchrome"
+chmod +x "$WSD/stubchrome"; cp "$WSD/stubchrome" "$WSD/stublinux"; chmod +x "$WSD/stublinux"
 # the Linux side, as ship.sh keeps it: a stderr line, then tests/_cdp.py's JSON. 'win only and longer' is red there — a
 # LONGER name that starts with 'win only', which must not make 'win only' red on Linux.
 { echo 'some stderr line'; cat <<'J'
@@ -840,7 +853,8 @@ chmod +x "$WSD/stubchrome"
  "notRun": [{"name": "lin notrun", "item": "", "reason": "needs an AAC audio encoder"}, {"name": "aac only here", "item": "", "reason": "needs an AAC audio encoder"}]}
 J
 } > "$WSD/lin.out"
-ws() { (cd "$WSD" && WS_LOG="$WSD/log" FM_WIN_TMP='C:\Windows\Temp' FM_WIN_CHROME="${WS_CHROME:-$WSD/stubchrome}" python3 tests/_win_suite.py --timeout 1 "$@" 2>&1); }
+ws() { (cd "$WSD" && WS_LOG="$WSD/log" FM_WIN_TMP='C:\Windows\Temp' FM_WIN_CHROME="${WS_CHROME:-$WSD/stubchrome}" FM_CHROME="$WSD/stublinux" \
+  python3 tests/_win_suite.py --timeout 1 "$@" 2>&1); }
 out="$(ws --only mix --against lin.out --out mix.json)"; rc=$?
 [ "$rc" = 1 ] && printf '%s' "$out" | grep -q '^   WINDOWS ONLY: win only — the label is cut off' \
   && ok "a test red in Windows Chrome and green in Linux Chrome is named WINDOWS ONLY with its error → exit 1" || bad "mix: rc=$rc — $(printf '%s' "$out" | tail -4)"
@@ -885,6 +899,28 @@ L0="$(wc -l < "$WSD/log")"; out="$(WS_CHROME=none ws --only green)"; rc=$?
 (cd "$WSD" && FM_WIN_CHROME=none python3 tests/_win_suite.py --available >/dev/null 2>&1); rc1=$?
 (cd "$WSD" && FM_WIN_CHROME="$WSD/stubchrome" python3 tests/_win_suite.py --available >/dev/null 2>&1); rc2=$?
 [ "$rc1" = 1 ] && [ "$rc2" = 0 ] && ok "--available says 1 with no Windows Chrome and 0 with one" || bad "--available: none=$rc1 stub=$rc2"
+# THE CONTROL: the same wrapper and tests in this machine's Linux Chrome first, so a red that comes from running without the
+# driver, or from the wrapper, is red on BOTH sides and never reads as a Windows issue
+out="$(ws --only mix --linux-control --out ctl.json)"; rc=$?
+[ "$rc" = 1 ] && grep -qx 'mix|/tests/run.html?only=mix|True' "$WSD/log.lin" && printf '%s' "$out" | grep -q '^   WINDOWS ONLY: win only' \
+  && ok "--linux-control runs the same wrapper in Linux Chrome, and a test green there and red in Windows Chrome is WINDOWS ONLY" || bad "control: rc=$rc — $(printf '%s' "$out" | tail -4)"
+python3 - "$WSD/ctl.json" <<'PY' && ok "…against the control's own per-test list: red on both, Linux NOT RUN, needs the driver and runs only here as before" || bad "control verdicts: $(head -c 700 "$WSD/ctl.json")"
+import json, sys
+d = json.load(open(sys.argv[1]))
+n = lambda k: sorted(x['name'] for x in d[k])
+assert n('windowsOnly') == ['win only'] and n('redBoth') == ['both red'] and n('linuxNotRun') == ['lin notrun'], d
+assert n('needsDriver') == ['asks gc', 'cdp words'] and n('linuxUnknown') == [] and n('onlyWindowsRan') == ['aac only here'], d
+assert d['control'] == 'linux' and 'Regression 4/7' in d['controlSummary'], d
+PY
+w="$(tail -1 "$WSD/log.argv")"; l="$(tail -1 "$WSD/log.lin.argv")"
+case "$w" in *primaryHoverType=2*) wm=1 ;; *) wm=0 ;; esac
+case "$w" in *--hide-scrollbars*) wh=1 ;; *) wh=0 ;; esac
+case "$l" in *--hide-scrollbars*primaryHoverType=2*|*primaryHoverType=2*--hide-scrollbars*) lf=1 ;; *) lf=0 ;; esac
+case "$w$l" in *--mute-audio*--mute-audio*) mu=1 ;; *) mu=0 ;; esac
+[ "$wm$wh$lf$mu" = 1011 ] && ok "…both sides get a mouse and no sound; Linux gets its _platform flags, Windows keeps its own scrollbars" || bad "launch flags (mouse/scrollbars/linux/mute = $wm$wh$lf$mu): windows=[$w] linux=[$l]"
+L0="$(wc -l < "$WSD/log")"; out="$(ws --only lsilent --linux-control)"; rc=$?
+[ "$rc" = 2 ] && printf '%s' "$out" | grep -q 'the Linux control: no verdict' && [ "$(wc -l < "$WSD/log")" = "$L0" ] \
+  && ok "a Linux control with no verdict → exit 2, nothing judged, and Windows Chrome is never launched" || bad "silent control: rc=$rc — $out"
 # THE WRAPPER'S OWN SCRIPT, in node with a fake runner page: it must answer real input with the driver's NOTRUN reply and a
 # garbage collection with an error (both at once, not after a 30 s wait), never grant a CPU throttle, name each test that
 # asked, and post the verdict with that list. A test that asked nothing is not named (the control).
@@ -897,12 +933,13 @@ const app = { __fmLastTest: 'asks input', __fmWantInput: { seq: 3, steps: [] } }
 const sum = { textContent: 'Loading app' };
 const runWin = { __fmResults: null, __fmNotRun: [] };
 const runDoc = { getElementById: (id) => id === 'app' ? { contentWindow: app } : id === 'sum' ? sum : null };
-global.document = { getElementById: () => ({ contentDocument: runDoc, contentWindow: runWin }) };
-global.navigator = { userAgent: 'node' };
 let posted = null, tick = null;
-global.fetch = (u, o) => { posted = { u: u, body: JSON.parse(o.body) }; return Promise.resolve(); };
-global.setInterval = (fn) => { tick = fn; return 1; };
-(0, eval)(js);
+/* the page's globals are handed in as parameters, so node's own fetch / navigator are never touched */
+new Function('document', 'navigator', 'fetch', 'setInterval', js)(
+  { getElementById: () => ({ contentDocument: runDoc, contentWindow: runWin }) },
+  { userAgent: 'node' },
+  (u, o) => { posted = { u: u, body: JSON.parse(o.body) }; return Promise.resolve(); },
+  (fn) => { tick = fn; return 1; });
 tick();
 assert.strictEqual(app.__fmInputDone, 3, 'real input was not answered');
 assert.ok(/^NOTRUN: /.test(app.__fmInputErr), 'the input reply is not the NOTRUN form tests.js reads: ' + app.__fmInputErr);

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """FIND WHAT GOES WRONG ONLY ON WINDOWS: THE SUITE, OR A SLICE OF IT, IN WINDOWS CHROME ON THIS LAPTOP (#1098 clause 3, 23 Oct).
 
-    python3 tests/_win_suite.py --only '<substring>' [--width 1280] [--against <Linux driver result>] [--out win.json]
-    python3 tests/_win_suite.py --against .claude/ship/suite-desktop.out --out .claude/win-suite.json      # the whole suite
-    python3 tests/_win_suite.py --after '<name>' --upto '<name>'      # a slice in suite order, as tests/run.html takes it
+    python3 tests/_win_suite.py --linux-control --out .claude/win-suite.json         # the whole suite, both sides (recommended)
+    python3 tests/_win_suite.py --linux-control --only '<substring>' [--width 1280]  # a slice of it
+    python3 tests/_win_suite.py --after '<name>' --upto '<name>' --linux-control     # a slice in suite order, as run.html takes it
+    python3 tests/_win_suite.py --only '<substring>' --against <a Linux tests/_cdp.py result>   # compare with a driver run
     python3 tests/_win_suite.py --available                          # exit 0 when a Windows Chrome is reachable, 1 when not
+
+Never beside a ship, a mutation or another suite (the laptop's timing tests are the point of those): it is a full suite run.
 
 His words, 7 Oct, while the laptop shipped v17.24: "yeah i guess slowing it to work like the phone makes sense because you are
 testing it for phone users. i guess you can switch between to see its pc potential. and also find issues with windows".
@@ -24,27 +27,43 @@ boundary, so a test that asks the driver for something cannot be judged here —
   and each such test's name is recorded under "asked". A red from a test that asked, or whose error names tests/_cdp.py, is
   filed "needs the driver", never as a Windows issue.
 
-WHAT IT SAYS. With --against (tests/_cdp.py's JSON of a Linux run of the same tests — what ship.sh keeps as
-.claude/ship/suite-desktop.out or suite-phone.out), every red here is one of:
+THE CONTROL (--linux-control, recommended). The same wrapper, the same tests and the same flags run first in THIS machine's
+Linux headless Chrome (tests/_platform.py's binary and its GL and mouse flags, as tests/_cdp.py launches it). Both sides then
+lack the driver in exactly the same way, so a red that comes from running without it, or from the wrapper itself, is red on
+both and never reads as a Windows issue — the only difference left is the browser's OS. Both sides get the Mac's mouse
+(--blink-settings, as _platform gives Linux): his PC has one, and a headless Chrome reports none, which would leave every PC-
+layout test NOT RUN. Windows keeps its own scrollbars, GPU and fonts: those ARE the differences this is looking for.
+
+WHAT IT SAYS. Against the control (or --against: tests/_cdp.py's JSON of a Linux run of the same tests, what ship.sh keeps
+as .claude/ship/suite-desktop.out or suite-phone.out), every red here is one of:
   WINDOWS ONLY      red in Windows Chrome, green in Linux Chrome — the finding this exists for
   red on both       red in Linux Chrome too: a plain red, not a Windows one
   Linux NOT RUN     Linux could not run it (an AAC test, a finger test), so there is nothing to compare
-  Linux unknown     the Linux result is a filtered run with no per-test list ("ran") and does not name it
+  Linux unknown     the Linux result has no per-test list ("ran"), is a filtered run, and does not name it
   needs the driver  see above
-plus the tests NOT RUN here (with their reasons) and the tests only Windows could run. Without --against every red that
-did not need the driver is listed as "red in Windows Chrome", to compare by hand.
+plus the tests NOT RUN here (with their reasons) and the tests only Windows could run. With neither, every red that did not
+need the driver is listed as RED HERE, to compare by hand. The pinned picture tests say NOT RUN in Windows Chrome until
+tools/record-baselines.sh has recorded a Windows baseline (tests.js pinned(): FM_OS is 'windows' there).
 
-Report only: ship.sh does not run this, and nothing refuses on it. Exit 0 = judged, nothing WINDOWS ONLY (without --against:
-no red that did not need the driver); 1 = at least one; 2 = nothing judged (no Windows Chrome, no verdict from the page, a run
-that matched no test, or an --against file with no driver result in it). tools/test-port.sh proves it on a stub Chrome.
+Report only: ship.sh does not run this, and nothing refuses on it. Exit 0 = judged, nothing WINDOWS ONLY (with no Linux side:
+no RED HERE); 1 = at least one; 2 = nothing judged (no Windows or Linux Chrome, no verdict from a page, a run that matched no
+test, or an --against file with no driver result in it). tools/test-port.sh proves it on stub Chromes.
 """
-import argparse, html, http.server, json, os, re, socket, subprocess, sys, tempfile, threading, time, urllib.parse, uuid
+import argparse, html, http.server, json, os, re, shutil, socket, subprocess, sys, tempfile, threading, time, urllib.parse, uuid
 
 sys.dont_write_bytecode = True   # importing _win_pass must not leave a tests/__pycache__ in the tree for a ship's git add -A
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _win_pass as W   # noqa: E402 — chrome(), wintemp(), end_browser(), chrome_info(), describe(), flat()
+import _platform as P   # noqa: E402 — the Linux control's Chrome and flags, exactly as tests/_cdp.py launches it
 
 DRIVER_ERR = re.compile(r'tests/_cdp\.py|__fmWant')
+# what tests/_cdp.py gives every test Chrome that is about the HARNESS, not the OS: both sides get these
+COMMON = ['--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--mute-audio',
+          '--autoplay-policy=no-user-gesture-required', '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
+          '--disable-features=WebRtcHideLocalIpsWithMdns', '--allow-loopback-in-peer-connection']
+# the Mac's mouse (tests/_platform.py chrome_extra_flags gives Linux the same): his PC has one, a headless Chrome reports none
+MOUSE = '--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2'
 WRAP = '''<!doctype html><meta charset="utf-8"><title>win suite</title>
 <iframe id="r" style="position:absolute;left:0;top:0;width:%(w)dpx;height:900px;border:0" src="%(src)s"></iframe>
 <script>
@@ -158,18 +177,38 @@ def grace(a):
     return 30 if a.timeout >= 60 else 2
 
 
-def launch(a, exe, port, results, seen):
+def end_linux(p, prof):
+    # OUR Linux Chrome only: the one we started, then anything still carrying this run's own random profile path
+    try:
+        p.terminate()
+        p.wait(timeout=10)
+    except Exception:
+        p.kill()
+    try:
+        subprocess.run(['pkill', '-f', '--', '--user-data-dir=' + prof], capture_output=True, timeout=30)
+    except Exception:
+        pass
+    shutil.rmtree(prof, ignore_errors=True)
+
+
+def launch(a, side, exe, port, results, seen):
     rid = uuid.uuid4().hex[:10]
     tag = 'fm-winsuite-' + rid
-    wintmp = W.wintemp() + '\\' + tag
     # the top URL carries the same only/after/upto: tests.js reads the TOP window's query first (tests.js, ?only= handling)
     q = [('id', rid)] + [(k, v) for k, v in (('only', a.only), ('after', a.after), ('upto', a.upto)) if v]
     url = 'http://localhost:%d/__win/suite?%s' % (port, urllib.parse.urlencode(q))
-    errpath = os.path.join(tempfile.gettempdir(), tag + '.err')
+    size = '--window-size=%d,950' % (a.width + 20)
+    if side == 'windows':
+        prof = W.wintemp() + '\\' + tag
+        errpath = os.path.join(tempfile.gettempdir(), tag + '.err')
+        args, env = [exe] + COMMON + [MOUSE, '--user-data-dir=' + prof, size, url], None
+    else:
+        prof = tempfile.mkdtemp(prefix='fm-winsuite-lin-')
+        errpath = os.path.join(tempfile.gettempdir(), tag + '-lin.err')
+        args = [exe] + COMMON + P.gl_flags() + P.chrome_extra_flags() + ['--user-data-dir=' + prof, size, url]
+        env = P.chrome_env(prof)
     ef = open(errpath, 'wb')
-    p = subprocess.Popen([exe, '--headless=new', '--user-data-dir=' + wintmp, '--no-first-run', '--no-default-browser-check',
-                          '--disable-extensions', '--mute-audio', '--window-size=%d,950' % (a.width + 20), url],
-                         stdout=subprocess.DEVNULL, stderr=ef)
+    p = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=ef, env=env)
     t0 = time.time()
     exited = ''
     try:
@@ -178,11 +217,14 @@ def launch(a, exe, port, results, seen):
                 exited = 'with code %s after %ds' % (p.returncode, time.time() - t0)
             time.sleep(0.2)
     finally:
-        W.end_browser(tag, wintmp)
-        try:
-            p.wait(timeout=10)
-        except Exception:
-            p.kill()
+        if side == 'windows':
+            W.end_browser(tag, prof)
+            try:
+                p.wait(timeout=10)
+            except Exception:
+                p.kill()
+        else:
+            end_linux(p, prof)
         ef.close()
     try:
         with open(errpath, 'rb') as f:
@@ -266,13 +308,41 @@ def judge(r, lin_of):
     return out
 
 
+def what_of(a):
+    return ' '.join('%s=%s' % (k, v) for k, v in (('only', a.only), ('after', a.after), ('upto', a.upto)) if v) or 'the whole suite'
+
+
+def run_side(a, side, exe, port, results, seen):
+    """One run of the wrapper in one browser. Returns (result or None, why there is none, diag, relaunched)."""
+    rid, diag = launch(a, side, exe, port, results, seen)
+    relaunched = ''
+    # ONE relaunch, only for a Chrome that never asked for the page — nothing ran, so this is the first run, not a retry
+    if rid not in results and not diag['wrapperFetched']:
+        relaunched = W.describe(diag)
+        print('   relaunch (%s) — %s; launching Chrome once more' % (side, relaunched[:240]), flush=True)
+        first = diag
+        rid, diag = launch(a, side, exe, port, results, seen)
+        diag['firstLaunch'] = first
+    r = results.get(rid)
+    if not isinstance(r, dict) or r.get('error') or not isinstance(r.get('ran'), list):
+        why = (('no verdict: ' + W.flat(r['error'])[:300] + (' (last test: %s)' % W.flat(r.get('last'))[:160] if r.get('last') else ''))
+               if isinstance(r, dict) and r.get('error') else
+               'the runner gave no per-test list — it says: ' + (W.flat(r.get('sum'))[:300] or 'nothing') if isinstance(r, dict) else
+               'no verdict within %ds — %s' % (a.timeout + grace(a), W.describe(diag)))
+        return None, why, diag, relaunched
+    if not r['ran']:
+        return None, 'no test matched ' + what_of(a), diag, relaunched
+    return r, '', diag, relaunched
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--only', default='', help='substring of the test names to run (tests/run.html ?only=); empty = all')
     ap.add_argument('--after', default='')
     ap.add_argument('--upto', default='')
     ap.add_argument('--width', type=int, default=1280)
-    ap.add_argument('--timeout', type=int, default=0, help='seconds for the whole run (default 7200, or 1200 with a filter)')
+    ap.add_argument('--timeout', type=int, default=0, help='seconds for each run (default 7200, or 1200 with a filter)')
+    ap.add_argument('--linux-control', action='store_true', help='run the same wrapper in Linux Chrome first and compare with it')
     ap.add_argument('--against', default=None, help="tests/_cdp.py's JSON of a Linux run of the same tests")
     ap.add_argument('--out', default=None)
     ap.add_argument('--root', default='.', help='the tree to serve (default: here)')
@@ -282,8 +352,11 @@ def main():
     if a.available:
         print(exe or 'no Windows Chrome reachable from here')
         return 0 if exe else 1
+    if a.against and a.linux_control:
+        ap.error('--against or --linux-control, not both')
     if not a.timeout:
         a.timeout = 1200 if (a.only or a.after or a.upto) else 7200
+    what = what_of(a)
     lin_of = None
     if a.against:
         try:
@@ -297,46 +370,45 @@ def main():
     if not exe:
         print('win suite: no Windows Chrome reachable from here — nothing judged')
         return 2
+    lexe = None
+    if a.linux_control:
+        lexe = P.find_chrome()
+        if not lexe:
+            print('win suite: no Linux Chrome for the control (tests/_platform.py found none) — nothing judged')
+            return 2
     results, seen = {}, {}
-    srv, port = serve(os.path.abspath(a.root), results, seen, a)
-    ci = W.chrome_info(exe)
-    what = ' '.join('%s=%s' % (k, v) for k, v in (('only', a.only), ('after', a.after), ('upto', a.upto)) if v) or 'the whole suite'
-    print('   Windows Chrome: %s, version %s%s — %s at %d px' % (ci['exe'], ci['version'],
-          ', an update (new_chrome.exe) is waiting beside it' if ci['pendingUpdate'] else '', what, a.width), flush=True)
     t0 = time.time()
-    relaunched = ''
-    try:
-        rid, diag = launch(a, exe, port, results, seen)
-        # ONE relaunch, only for a Chrome that never asked for the page — nothing ran, so this is the first run, not a retry
-        if rid not in results and not diag['wrapperFetched']:
-            relaunched = W.describe(diag)
-            print('   relaunch — %s; launching Chrome once more' % relaunched[:240], flush=True)
-            first = diag
-            rid, diag = launch(a, exe, port, results, seen)
-            diag['firstLaunch'] = first
-    finally:
-        srv.shutdown()
-    r = results.get(rid)
-    res = {'what': what, 'width': a.width, 'chrome': ci, 'diag': diag, 'relaunched': relaunched, 'against': a.against,
-           'seconds': round(time.time() - t0)}
-    if not isinstance(r, dict) or r.get('error') or not isinstance(r.get('ran'), list):
-        why = (('no verdict: ' + W.flat(r['error'])[:300] + (' (last test: %s)' % W.flat(r.get('last'))[:160] if r.get('last') else ''))
-               if isinstance(r, dict) and r.get('error') else
-               'the runner gave no per-test list — it says: ' + (W.flat(r.get('sum'))[:300] or 'nothing') if isinstance(r, dict) else
-               'no verdict from Windows Chrome within %ds — %s' % (a.timeout + grace(a), W.describe(diag)))
+    ci = W.chrome_info(exe)
+    res = {'what': what, 'width': a.width, 'chrome': ci, 'against': a.against, 'control': 'linux' if lexe else ''}
+
+    def nothing(why):
         res['error'] = why
+        res['seconds'] = round(time.time() - t0)
         if a.out:
             with open(a.out, 'w', encoding='utf-8') as f:
                 json.dump(res, f, indent=1, ensure_ascii=False)
         print('win suite: nothing judged — ' + why)
         return 2
-    if not r['ran']:
-        res['error'] = 'no test matched ' + what
-        if a.out:
-            with open(a.out, 'w', encoding='utf-8') as f:
-                json.dump(res, f, indent=1, ensure_ascii=False)
-        print('win suite: nothing judged — no test matched %s' % what)
-        return 2
+
+    srv, port = serve(os.path.abspath(a.root), results, seen, a)
+    try:
+        if lexe:
+            print('   the Linux control first (the same wrapper and tests in %s) — %s at %d px' % (lexe, what, a.width), flush=True)
+            ctl, why, res['controlDiag'], res['controlRelaunched'] = run_side(a, 'linux', lexe, port, results, seen)
+            if ctl is None:
+                return nothing('the Linux control: ' + why + ' (Windows Chrome was not launched)')
+            res['controlSummary'] = W.flat(ctl.get('sum'))[:300]
+            lin_of = linux_side({'ran': ctl['ran'], 'notRun': ctl.get('notRun') or [], 'summary': ctl.get('sum', '')})
+            print('   Linux control: %s' % res['controlSummary'], flush=True)
+        print('   Windows Chrome: %s, version %s%s — %s at %d px' % (ci['exe'], ci['version'],
+              ', an update (new_chrome.exe) is waiting beside it' if ci['pendingUpdate'] else '', what, a.width), flush=True)
+        r, why, res['diag'], relaunched = run_side(a, 'windows', exe, port, results, seen)
+        res['relaunched'] = relaunched
+        if r is None:
+            return nothing('Windows Chrome: ' + why)
+    finally:
+        srv.shutdown()
+    res['seconds'] = round(time.time() - t0)
     j = judge(r, lin_of)
     res.update(j)
     res['summary'] = W.flat(r.get('sum'))[:300]
