@@ -262,13 +262,15 @@ window.FM = window.FM || {};
      was dropped (FM.seekBusy), so the time it had before the strip is stale: the paused preview then showed the strip's last frame, or
      an old one, until the next scrub. Put it where the playhead now wants it, as the preview's own seek would (FM.frameSeekTarget),
      and only this element, inside its own seek lock, so an export (which holds the lock for the whole file) cannot be touched. While
-     playing, or with no layer of this clip under the playhead, the old time stands. */
+     playing, or with no layer of this clip under the playhead, the old time stands.
+     #202 S1 (the pre-ship review and its refuter, 22 Oct): where the playhead now wants it is FM.playheadSeekTarget (js/app.js), the
+     ONE answer the cold-clip prime's put-back reads too, so the two cannot drift apart. It used to be worked out here a second time:
+     from the first layer of this record whether or not that layer was under the playhead, and with the element's own duration as a
+     fallback the preview's seek never uses. Asked only if it exists, so this file never depends on app.js having loaded. */
   function stripRestoreTarget(m, wasTime) {
-    if (FM.playing || !FM.scene || !FM.layerLocalTime) return wasTime;
-    const L = (FM.scene.layers || []).find(function (l) { return l && l.type === 'video' && FM.media && FM.media.get(l.id) === m; });
-    const local = L ? FM.layerLocalTime(L, FM.time) : null;
-    if (local == null) return wasTime;
-    return FM.frameSeekTarget(local, (isFinite(m.duration) && m.duration > 0) ? m.duration : (m.el && m.el.duration) || 0);
+    if (FM.playing || typeof FM.playheadSeekTarget !== 'function') return wasTime;
+    const t = FM.playheadSeekTarget(m);
+    return t == null ? wasTime : t;
   }
 
   async function _extractStrip(m, count) {

@@ -1279,35 +1279,90 @@ window.FM = window.FM || {};
   };
   FM.pastSourceEnd = function (m, local) { return local != null && local >= FM.sourceEnd(m); };
 
-  /* `opts.exact` (queue 690, fifth hunt) is for the ONE caller whose element can sit anywhere inside a frame:
-     FM.pause, stopping a clip that was PLAYING. Every other caller moves between frames on the grid, where
-     the half-frame guard below is exact; a playing element stops wherever its own clock was, so an element
-     10 ms short of the target would pass that guard while still showing the frame before it. */
   /* #202 H1, THE iPHONE HALF (the PM, 22 Oct: cover both cases rather than ask him to test which). On an iPhone, WebKit loads only
-     metadata until something plays an element, and whether a SEEK alone loads it is not known here. So about 700 ms after the seek
-     above, an element that still has no frame and is not seeking is primed ONCE: muted play(), then pause(), then the seek again.
-     Never while playing or exporting, never on an element a build holds (FM.seekBusy), never for a clip that has left the project,
-     once per element (a new load, 'emptied', allows one more), and muted and volume are put back exactly as they were. */
+     metadata until something plays an element, and whether a SEEK alone loads it is not known here. So about 700 ms after the paused
+     seek in FM.seekVideosToTime below, an element that still has no frame is primed ONCE: muted play(), then pause(), then the seek
+     again. Never while playing or exporting, never on an element a build holds (FM.seekBusy), never for a clip that has left the
+     project, once per element (a new load, 'emptied', allows one more), and muted and volume are put back exactly as they were.
+     The pre-ship review of it and that review's refuter (22 Oct, #202 S1-S3; the refuter's corrections won) found three ways the
+     first cut could leave the wrong thing behind, each answered where it happens below: the frame it puts the clip back on (S1), a
+     seek that never completes (S2), and the Hear button playing the same element (S3). */
   const PRIME_AFTER_MS = 700;
-  function primeIfStillCold(m, target) {
+
+  /* WHERE THE PREVIEW'S OWN SEEK WOULD PUT THIS CLIP'S ELEMENT FOR THE PLAYHEAD AS IT IS NOW (#202 S1, the review's fix as its refuter
+     made it precise). Two things borrow an element and then put it back: the prime below, and the filmstrip (js/frames.js
+     stripRestoreTarget). The prime used to write the target captured when it was ARMED. Every later call inside the 700 ms returns
+     early while the timer is pending, and back() only runs when play() settles, which on an iPhone is the minute after an import, when
+     he scrubs to look. So a scrub, a quick Play then Pause (FM.pause's exact seek: its el.pause() rejects the prime's play() straight
+     into back(), after that seek) or a transition's seek made in that time was overwritten with the frame the clip was imported on,
+     and the paused picture sat there until the next scrub.
+     So both now ask this, at the moment they write: the first video layer of this record under the playhead, the same
+     FM.layerLocalTime, and the same target as FM.seekVideosToTime (seekTargetFor, one expression for the two). null when no layer of
+     it is under the playhead, and then the prime writes nothing: a clip the scrub has left, or one seen only through a transition
+     outside its own window, keeps what the seek that owns it last wrote. Not FM.seekVideosToTime({exact:true}) itself (the refuter):
+     that re-seeks every layer and arms more primes. */
+  function seekTargetFor(m, local) {
+    return FM.frameSeekTarget ? FM.frameSeekTarget(local, m.duration)
+                              : Math.min(Math.max(local, 0), Math.max(0, (m.duration || 0) - 0.001));
+  }
+  FM.playheadSeekTarget = function (m) {
+    if (!m || !FM.scene || !FM.media || !FM.layerLocalTime) return null;
+    const layers = FM.scene.layers || [];
+    for (let i = 0; i < layers.length; i++) {
+      const l = layers[i];
+      if (!l || l.type !== 'video' || FM.media.get(l.id) !== m) continue;
+      const local = FM.layerLocalTime(l, FM.time);
+      if (local != null) return seekTargetFor(m, local);
+    }
+    return null;
+  };
+
+  /* IS THIS CLIP BEING HEARD RIGHT NOW (#202 S3)? The Hear button (js/audio-fx-live.js audition) plays the clip's OWN element, unmuted,
+     while FM.playing stays false, so nothing kept the prime off it: a prime that fired during Hear muted the element and back() then
+     paused it, and Hear tapped while the prime's play() was settling was paused by back(). Either way Hear went silent with Stop still
+     showing. Asked PER CLIP, never as auditioning() with no argument: that is true while ANY clip is heard (the refuter's warning),
+     and back() standing down for another clip's Hear would leave this element playing, muted, for good, the one outcome this prime
+     must never have. auditioning(layer) reads the module's own state and is called through its object, as everything else calls it. */
+  function heardNow(m) {
+    const A = FM.audioFxLive;
+    if (!A || typeof A.auditioning !== 'function' || !FM.scene) return false;
+    return (FM.scene.layers || []).some(function (l) { return !!l && FM.media.get(l.id) === m && A.auditioning(l); });
+  }
+
+  function primeIfStillCold(m) {
     const el = m.el;
     if (!el || el._fmPrimed || el._fmPrimeT || typeof el.play !== 'function') return;
     el._fmPrimeT = setTimeout(function () {
       el._fmPrimeT = 0;
+      /* #202 S2 (the refuter's version of the review's fix). The timer used to give up on an element still SEEKING, and the guard in
+         FM.seekVideosToTime never re-arms one that is seeking (a re-seek would cancel its own decode), so a seek that never completes,
+         one of the two likely shapes of a WebKit seek on a clip it holds at metadata, disarmed the prime for good in exactly the case
+         it exists for. Dropping the bail outright would also prime every first seek that is merely slower than 700 ms (a 4K clip, a
+         hot laptop mid-suite), so a seeking element gets ONE more wait and is then primed anyway, if it still has no frame: a stuck
+         seek at about 1.4 s, an ordinary slow one never. The flag lives for that one re-arm only, read and cleared here, so a chain
+         that ended for another reason (Play pressed during the second wait) cannot leave the next one without its extra wait. */
+      const waited = !!el._fmPrimeWaited;
+      el._fmPrimeWaited = false;
       if (m.el !== el || el._fmPrimed) return;
       if (FM.playing || FM._exporting || (FM.seekBusy && FM.seekBusy(m))) return;
-      if (!(el.readyState < 2) || el.seeking) return;   // it loaded on the seek (or is still seeking): nothing to prime
+      if (!el.paused || heardNow(m)) return;   // #202 S3: something else is playing it (Hear, or anything), or Hear has this clip
       if (!FM.scene || !(FM.scene.layers || []).some(function (l) { return FM.media.get(l.id) === m; })) return;
+      if (!(el.readyState < 2)) return;   // it loaded on the seek: nothing to prime
+      if (el.seeking && !waited) { el._fmPrimeWaited = true; primeIfStillCold(m); return; }   // #202 S2: one more wait, then prime
       el._fmPrimed = true;
       try { el.addEventListener('emptied', function () { el._fmPrimed = false; }, { once: true }); } catch (e) {}
       const wasMuted = el.muted, wasVol = el.volume;
       try { el.muted = true; } catch (e) {}
       const back = function () {
-        if (FM.playing) return;   // he pressed Play meanwhile: the transport owns the element now
+        /* He pressed Play meanwhile (the transport owns the element now), or Hear started on THIS clip while play() settled (#202 S3:
+           Hear unmuted it and is playing it, and its stopAudition puts muted, time and volume back). Another clip's Hear is no reason. */
+        if (FM.playing || heardNow(m)) return;
         try { el.pause(); } catch (e) {}
         try { el.muted = wasMuted; } catch (e) {}
         try { el.volume = wasVol; } catch (e) {}
-        if (!FM._exporting && !(FM.seekBusy && FM.seekBusy(m))) { try { el.currentTime = target; } catch (e) {} }
+        if (FM._exporting || (FM.seekBusy && FM.seekBusy(m))) return;
+        const t = FM.playheadSeekTarget(m);   // #202 S1: the playhead's frame NOW, not the one it was armed with
+        if (t != null) { try { el.currentTime = t; } catch (e) {} }
       };
       let p = null;
       try { p = el.play(); } catch (e) { p = null; }
@@ -1316,6 +1371,10 @@ window.FM = window.FM || {};
   }
   FM._primeAfterMs = PRIME_AFTER_MS;   // suite seam (#202)
 
+  /* `opts.exact` (queue 690, fifth hunt) is for the ONE caller whose element can sit anywhere inside a frame:
+     FM.pause, stopping a clip that was PLAYING. Every other caller moves between frames on the grid, where
+     the half-frame guard below is exact; a playing element stops wherever its own clock was, so an element
+     10 ms short of the target would pass that guard while still showing the frame before it. */
   FM.seekVideosToTime = function (opts) {
     const exact = !!(opts && opts.exact);
     FM.scene.layers.forEach(layer => {
@@ -1340,8 +1399,7 @@ window.FM = window.FM || {};
        * every parked playhead), was never changed: stepping with . read 0,1,1,3,4,4,6,7,7 …, frames 2, 5,
        * 8 … never appeared and the one before each showed twice, and the frame he parked on and cut at
        * was not the frame that exports there. Same target as the export now, so the two agree. */
-      const target = FM.frameSeekTarget ? FM.frameSeekTarget(local, m.duration)
-                                        : Math.min(Math.max(local, 0), Math.max(0, (m.duration || 0) - 0.001));
+      const target = seekTargetFor(m, local);   // the one expression FM.playheadSeekTarget shares (#202 S1)
       /* DON'T RE-SEEK TO WHERE WE ALREADY ARE (queue 125). This write was unconditional, and writing
        * currentTime restarts the element's seek algorithm — which means CANCELLING a decode that was
        * already in flight. It matters because scrubTime snaps to the frame grid first, so a slow
@@ -1360,7 +1418,7 @@ window.FM = window.FM || {};
       const noFrame = m.el.readyState < 2 && !m.el.seeking;
       if (!noFrame && Math.abs(cur - target) < (exact ? 0.001 : (0.5 / (FM.scene.project.fps || 30)))) return;
       try { m.el.currentTime = target; } catch (e) {}
-      if (noFrame) primeIfStillCold(m, target);   // #202: …and if a seek does not load it, one muted play() will
+      if (noFrame) primeIfStillCold(m);   // #202: …and if a seek does not load it, one muted play() will
     });
     /* Simple 2.7 (#1122, DESIGN §12.1): …and the picture of a clip in a transition, outside its own window. The exporter reads the same
        list (FM.transitionSeeks, js/spine.js), so the two cannot disagree. It is [] on every project without a transition. */
