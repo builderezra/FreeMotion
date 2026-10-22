@@ -83238,13 +83238,18 @@
    * changed (a quality step when the motion latches) is a real change of the box's scale and is not counted.
    * FAILS BEFORE THE FIX: four calls on every update of the scrub, after the first.
    * CONTROLS: enough still updates ran to judge; the knob kept its place under the banner; and a layer that MOVES still has
-   * its knob re-placed: moved to the middle of the frame it goes back above the box, moved back to the top it goes under. */
+   * its knob re-placed: moved to the middle of the frame it goes back above the box, moved back to the top it goes under.
+   * AND THE STAGE'S OWN SIZE (the coordinator's gap): a 3:1 preview, bound by its width, with the stage shrunk evenly about
+   * it, so neither the preview nor the box moves: the knob must go where placeRotKnob's rule, worked out here from boxes
+   * measured here, puts it (under the banner), and back above it when the stage is put back. FAILS ON THE FIRST VERSION
+   * (55db275e): its key saw nothing change, and the knob stayed above the box with the stage's top edge over it. */
   test('768 H4: a scrub under a selected layer that does not move measures the rotate knob once, not on every frame, and a layer that moves still has its knob re-placed', { item: '768', budgetMs: 40000 }, async function () {
     const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
     const saved = FM.scene, t00 = FM.time;
     const proto = Element.prototype, gbDesc = Object.getOwnPropertyDescriptor(proto, 'getBoundingClientRect');
     const ceDesc = Object.getOwnPropertyDescriptor(FM.canvasEdit, 'update'), realUpdate = FM.canvasEdit.update;
     const cv = document.getElementById('preview');
+    const st0 = document.getElementById('stage'), stageM0 = { t: st0 ? st0.style.marginTop : '', b: st0 ? st0.style.marginBottom : '' };
     let inside = 0, rects = 0, lastSig = '';
     const per = [];
     try {
@@ -83276,8 +83281,43 @@
         if (knob.classList.contains('sb-rot-below') || knob.classList.contains('sb-rot-in')) throw new Error('CONTROL: moved to the middle of the frame, the banner kept its knob placement (' + knob.className + ') - a remembered placement was served for a box that moved');
         L.transform.y = 150; FM.requestRender(); await frame(); await frame();
         if (!knob.classList.contains('sb-rot-below')) throw new Error('CONTROL: moved back to the top of the frame, the banner knob is ' + knob.className + ', not under it again');
+        /* CONTROL, THE STAGE'S OWN SIZE (the coordinator's gap on the first version). A 3:1 project is bound by its width on the
+           phone, so it sits centred with room above and below; the stage is then shrunk EVENLY (equal margins on #stage, the
+           only item of #main's grid), which moves neither the preview nor the layer's box while the stage's top edge comes
+           down past the knob. The knob must then sit where an unremembered placement puts it, worked out here by placeRotKnob's
+           own rule (the top spot measured before, its mirror through the box's centre, both against the stage measured now,
+           8 px in). The remembered key of the first version saw nothing change here, so it kept the knob above the box. */
+        const knobAt = () => knob.classList.contains('sb-rot-below') ? 'sb-rot-below' : knob.classList.contains('sb-rot-in') ? 'sb-rot-in' : 'above';
+        const wait = async (want) => { const until = performance.now() + 1500; while (knobAt() !== want && performance.now() < until) { FM.requestRender(); await frame(); } return knobAt(); };
+        const W = FM.makeLayer('shape', { name: 's768h4w', shape: 'rect', x: 900, y: 100, shapeW: 1800, shapeH: 200, fill: '#3050c0', start: 0, duration: 6 });
+        await hb4Scene([W], { width: 1800, height: 600 });
+        FM.selectLayer(W.id); FM.setTime(1); await hb4Wait(450);
+        const stage = document.getElementById('stage');
+        if (!stage || box.style.display === 'none') throw new Error('setup: no stage, or no selection box on the 3:1 banner');
+        if (knobAt() !== 'above') throw new Error('setup: on the 3:1 project the banner knob is ' + knobAt() + ', not above the box in the room over the preview');
+        const sr0 = stage.getBoundingClientRect(), pr0 = cv.getBoundingClientRect(), kr0 = knob.getBoundingClientRect();
+        const k0 = { x: kr0.left + kr0.width / 2, y: kr0.top + kr0.height / 2 };
+        const room = Math.min(pr0.top - sr0.top, sr0.bottom - pr0.bottom);
+        if (!(room >= 40)) throw new Error('setup: the 3:1 preview has only ' + Math.round(room) + ' px of stage above or below it (stage ' + Math.round(sr0.top) + '..' + Math.round(sr0.bottom) + ', preview ' + Math.round(pr0.top) + '..' + Math.round(pr0.bottom) + ') - it is not bound by its width, so an even shrink would resize it');
+        const d = Math.floor(room - 10);
+        stage.style.marginTop = d + 'px'; stage.style.marginBottom = d + 'px';
+        await frame(); await frame();
+        const sr1 = stage.getBoundingClientRect(), pr1 = cv.getBoundingClientRect();
+        if (Math.abs(sr1.top - (sr0.top + d)) > 1.5 || Math.abs(sr1.bottom - (sr0.bottom - d)) > 1.5) throw new Error('setup: the stage did not shrink evenly by ' + d + ' px a side (' + Math.round(sr0.top) + '..' + Math.round(sr0.bottom) + ' to ' + Math.round(sr1.top) + '..' + Math.round(sr1.bottom) + ')');
+        if (['left', 'top', 'width', 'height'].some(k => Math.abs(pr1[k] - pr0[k]) > 0.5)) throw new Error('setup: the preview moved or resized when the stage shrank evenly (' + hb4J([pr0.top, pr0.height]) + ' to ' + hb4J([pr1.top, pr1.height]) + ') - that case the remembered key already sees, so this would not test the stage');
+        const M = 8, seen = (x, y) => x >= sr1.left + M && x <= sr1.right - M && y >= sr1.top + M && y <= sr1.bottom - M;
+        const br = box.getBoundingClientRect(), c = { x: br.left + br.width / 2, y: br.top + br.height / 2 };
+        const want = seen(k0.x, k0.y) ? 'above' : seen(2 * c.x - k0.x, 2 * c.y - k0.y) ? 'sb-rot-below' : 'sb-rot-in';
+        if (want !== 'sb-rot-below') throw new Error('setup: with the stage shrunk, placeRotKnob’s rule puts the knob ' + want + ', not under the banner - the shrink did not take the stage’s top edge past the knob');
+        const got = await wait(want);
+        if (got !== want) throw new Error('the stage shrank evenly by ' + d + ' px a side and its top edge came down past the rotate knob, but the knob is still ' + got + ' (an unremembered placement puts it ' + want + ') - a remembered placement was served for a stage that changed size, with the preview and the box where they were');
+        stage.style.marginTop = stageM0.t; stage.style.marginBottom = stageM0.b;
+        const back = await wait('above');
+        if (back !== 'above') throw new Error('CONTROL: the stage put back to its size, the knob is ' + back + ', not back above the banner in the room over the preview');
       }, 380);
     } finally {
+      const st = document.getElementById('stage');
+      if (st) { st.style.marginTop = stageM0.t; st.style.marginBottom = stageM0.b; }
       Object.defineProperty(proto, 'getBoundingClientRect', gbDesc);
       if (ceDesc) Object.defineProperty(FM.canvasEdit, 'update', ceDesc); else FM.canvasEdit.update = realUpdate;
       hb4Restore(saved); FM.setTime(t00);
@@ -83296,7 +83336,10 @@
    * CONTROLS: the panel was not rebuilt during the scrub (the same elements); X followed the playhead; X, whose number changed,
    * was measured on every step and ends FITTED (its type stepped down and its text inside its box); and Volume's box is the
    * readout of the clip that is selected. The first step is not judged: a box built before it was laid out has not been
-   * measured yet, and is fitted there. */
+   * measured yet, and is fitted there.
+   * AND THE BOX'S OWN WIDTH (the coordinator's gap): Y's box narrowed with no window resize must be fitted again for its new
+   * width (its unchanged number stepped down and inside the box), and back to full size when widened. FAILS ON THE FIRST
+   * VERSION (55db275e): the same text kept the fit it had for the old width. */
   test('768 H5: a scrub under Move and Transform or Volume leaves the value boxes whose number did not change alone, and a box whose number changed is still fitted', { item: '768', budgetMs: 40000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
@@ -83328,7 +83371,8 @@
       if (hadHome) FM.home.close();
       if (FM.timeline && FM.timeline._clearFling) FM.timeline._clearFling();
       await atPhoneWidth(async function () {
-        const L = FM.makeLayer('shape', { name: 's768h5', shape: 'rect', x: 540, y: 960, shapeW: 120, shapeH: 120, fill: '#4af', start: 0, duration: 6 });
+        // Y is short (5.0) so it fits its box at full size: the narrowing control below needs a box with room to lose
+        const L = FM.makeLayer('shape', { name: 's768h5', shape: 'rect', x: 540, y: 5, shapeW: 120, shapeH: 120, fill: '#4af', start: 0, duration: 6 });
         L.transform.x = { kf: [{ t: 0, v: -98765.4, e: 'linear' }, { t: 6, v: -12345.6, e: 'linear' }] };
         FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
         FM.selectLayer(L.id); FM.refreshAll(); FM.setTime(1);
@@ -83348,6 +83392,31 @@
         const xr = per.slice(1).filter(p => p[0] > 0).length;
         if (xr < per.length - 1) throw new Error('CONTROL: the X box, whose number changed on every step, was measured on only ' + xr + ' of ' + (per.length - 1) + ' steps - a changed value is not being fitted');
         if (!xv.style.fontSize || xv.scrollWidth > xv.clientWidth + 1) throw new Error('CONTROL: the X box reads ' + xv.textContent + ' and ends with font size ' + (xv.style.fontSize || 'unset') + ', ' + xv.scrollWidth + ' px of text in ' + xv.clientWidth + ' px - its long changing number was not fitted to its box');
+        /* CONTROL, THE BOX'S OWN WIDTH (the coordinator's gap on the first version). Y's number stands still; its box is
+           narrowed with NO window resize (its .mt-vbox given a fixed width in the row) to three quarters of what its text needs
+           at full size, and a scrub step runs. An unremembered fit steps the type down until the text is inside the box, so
+           it must end inside it, stepped down; widened back, the fit is the full size again. The first version (55db275e)
+           kept the fit it had for the old width because the text was the same, and the number ran out of the narrowed box. */
+        const yBox = yv.parentElement;
+        if (yv.style.fontSize) throw new Error('setup: the Y box (' + yv.textContent + ') was already stepped down to ' + yv.style.fontSize + ' at full width, so it has no room to lose');
+        const yr = document.createRange(); yr.selectNodeContents(yv);
+        const tw = yr.getBoundingClientRect().width, ycs = getComputedStyle(yv);
+        const edge = parseFloat(ycs.paddingLeft) + parseFloat(ycs.paddingRight) + parseFloat(ycs.borderLeftWidth) + parseFloat(ycs.borderRightWidth);
+        const w1 = Math.ceil(tw * 0.75 + edge), cw0 = yv.clientWidth;
+        const keepY = { flex: yBox.style.flex, width: yBox.style.width };
+        const fits = () => yv.scrollWidth <= yv.clientWidth + 1;
+        const settle = async (ok) => { const until = performance.now() + 1500; while (!ok() && performance.now() < until) await frame(); };
+        try {
+          yBox.style.flex = '0 0 ' + w1 + 'px'; yBox.style.width = w1 + 'px';
+          await frame(); await frame();
+          if (!(yv.clientWidth < cw0 - 4)) throw new Error('setup: the Y box did not narrow (' + cw0 + ' to ' + yv.clientWidth + ' px)');
+          FM.scrubTime(FM.time + 0.1); await frame();   // a scrub step: the refresh the first version skipped this box on
+          await settle(() => fits() && !!yv.style.fontSize);
+          if (!fits() || !yv.style.fontSize) throw new Error('the Y box was narrowed from ' + cw0 + ' to ' + yv.clientWidth + ' px with no window resize, and its unchanged number ' + yv.textContent + ' was not fitted again: ' + yv.scrollWidth + ' px of text in ' + yv.clientWidth + ' px at font size ' + (yv.style.fontSize || 'unset') + ' - a fit remembered for the old width');
+        } finally { yBox.style.flex = keepY.flex; yBox.style.width = keepY.width; }
+        await frame(); await frame();
+        await settle(() => !yv.style.fontSize);
+        if (yv.style.fontSize) throw new Error('CONTROL: the Y box widened back to ' + yv.clientWidth + ' px still has its type stepped down to ' + yv.style.fontSize + ' - it was not fitted again at its full width');
         // Volume: a clip at a steady 100 %
         const V = FM.makeLayer('video', { name: 's768h5v' });
         V.start = 0; V.duration = 6; V.volume = 1;

@@ -1051,8 +1051,16 @@ window.FM = window.FM || {};
      resizes the preview inside it, and a crop or a re-fit changes it too. Any change measures afresh, exactly as before.
      Only a real measurement is remembered: a knob not laid out (an early return below), a hidden box and a rotate drag
      all forget, so the next frame measures. Where the inputs are unchanged the classes are already the ones this would
-     put back, so nothing on screen differs. */
+     put back, so nothing on screen differs.
+     THE STAGE'S OWN SIZE (the coordinator's gap on the first version): the preview's box does not see every stage change.
+     A preview bound by its WIDTH (a landscape project on the phone) sits centred in the stage with room above and below,
+     so a stage that grows or shrinks EVENLY about it leaves the preview exactly where it was while the stage's top and
+     bottom edges, which the knob is judged against, move. So a change of the stage's size forgets the placement too:
+     stageResized() below (the one door every stage resizer already calls, queue 284) clears the key, and the
+     ResizeObserver in init() now watches #stage itself as well as the preview and its wrap. That is no read per frame:
+     the observer is told after layout, and only when the size really changed. */
   let _knobKey = '';
+  function stageResized() { _knobKey = ''; update(); }   // #768 H4: a stage that changed size re-places the knob
   function placeRotKnob(g) {
     if (!rotKnob || !box || box.style.display === 'none') { _knobKey = ''; return; }
     if (drag && drag.mode === 'rotate') { _knobKey = ''; return; }
@@ -1188,6 +1196,10 @@ window.FM = window.FM || {};
         const ro = new ResizeObserver(() => FM.canvasEdit.stageResized());
         ro.observe(canvas);
         if (wrap) ro.observe(wrap);
+        /* #768 H4: and the stage itself, whose edges the rotate knob is judged against: an even stage resize about a
+           width-bound preview moves neither the preview nor its wrap (see placeRotKnob) */
+        const stageEl = document.getElementById('stage');
+        if (stageEl) ro.observe(stageEl);
       }
     },
     update: update,
@@ -1195,6 +1207,6 @@ window.FM = window.FM || {};
        waiting to be noticed, because nothing here can observe that reliably. One named entry point so
        the next thing that resizes the stage has somewhere obvious to call, instead of every resizer
        growing its own copy of "and also nudge the selection box". */
-    stageResized: update,
+    stageResized: stageResized,   // #768 H4: update() after forgetting the rotate knob's remembered placement
   };
 })(window.FM);

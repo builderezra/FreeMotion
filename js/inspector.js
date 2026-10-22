@@ -4909,6 +4909,21 @@ window.FM = window.FM || {};
      fitted before it is fitted again on its next refresh, exactly as every refresh did before (see refresh in mtVBox). */
   let _vboxFitGen = 0;
   window.addEventListener('resize', () => { _vboxFitGen++; });
+  /* #768 H5, THE BOX'S OWN WIDTH (the coordinator's gap on the first version): the window is not the only thing that changes
+     a value box's room. The panel or the row it sits in can narrow or widen with no window resize, and a box whose number
+     stood still was then left fitted for the old width (before H5, the next scrub step happened to fit it again). Reading
+     its width on every refresh would put back the very layout read H5 took out, so ONE ResizeObserver watches every box
+     that has been fitted: it is told after layout, only when a box's size really changed, and a box whose width is not the
+     one it was fitted at is fitted again then and there (fitVal never changes the box's own width: .mt-vbox is flex 1 with
+     min-width 0 and the value is width 100%, so the refit cannot feed back into the observer). A box taken out of the page
+     reads as size 0 to the observer, which lets it go, so a rebuilt panel's old boxes are not held. */
+  const _vboxRO = (typeof ResizeObserver === 'function') ? new ResizeObserver(entries => {
+    entries.forEach(en => {
+      const v = en.target;
+      if (!v.isConnected) { _vboxRO.unobserve(v); v._fitWatched = false; v._fitFor = null; return; }
+      if (v._refitIfResized) v._refitIfResized();
+    });
+  }) : null;
   // A value box: shows the number (drag horizontally to scrub, tap to type) + a label beneath.
   function mtVBox(labelText, getVal, setVal, opts) {
     opts = opts || {}; const dp = opts.dp != null ? opts.dp : 1;
@@ -4974,6 +4989,8 @@ window.FM = window.FM || {};
       const room = val.clientWidth;
       if (!room) { if (!val._fitQueued) { val._fitQueued = true; requestAnimationFrame(() => { val._fitQueued = false; if (val.isConnected && val.clientWidth) fitVal(); }); } return; }
       val._fitFor = val.textContent + '\u0000' + _vboxFitGen;
+      val._fitRoom = room;   // #768 H5: the width it was fitted at; the observer above fits it again at any other
+      if (_vboxRO && !val._fitWatched) { val._fitWatched = true; _vboxRO.observe(val); }
       if (val.scrollWidth <= room) return;
       const cs = getComputedStyle(val);
       const inner = room - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
@@ -4982,13 +4999,16 @@ window.FM = window.FM || {};
       if (!(textW > 0) || !(inner > 0)) return;
       val.style.fontSize = Math.max(10, Math.floor(parseFloat(cs.fontSize) * inner / textW * 10) / 10) + 'px';
     };
+    // #768 H5: the observer's call: a box now laid out at a width other than the one it was fitted at is fitted again (not while typed in)
+    val._refitIfResized = () => { const w = val.clientWidth; if (w && w !== val._fitRoom && !val.isContentEditable) fitVal(); };
     /* #768 H5 (the 22 Oct hunt and its refuter): A BOX WHOSE NUMBER DID NOT CHANGE IS LEFT ALONE. With Move & Transform or
        Volume open, every scrub step runs FM.inspector.syncTransform → refreshAllBoxes → this, for every box: the text
        rewritten (a DOM mutation even when it is the same), the font size cleared and clientWidth and scrollWidth read, a
        forced layout per box per touch move (about two a frame on his phone), for a layer whose numbers cannot change. So
        when the text this would write is the text the box already shows AND was last fitted for, there is nothing to do:
        the same text in the same room fits the same way, and the aria values are the same number. The room changes with the
-       window (_vboxFitGen, above), so a resize fits again on the next refresh as before; a box that has never been
+       window (_vboxFitGen, above), so a resize fits again on the next refresh as before, and with the box's own width (the
+       observer, above), which fits it again the moment that width changes; a box that has never been
        measured (built before it was laid out, so fitVal found no room) has no _fitFor and is fitted by the next refresh as
        before; a box being typed in takes the old path untouched. A box whose number changed is written and fitted exactly
        as it always was. */
