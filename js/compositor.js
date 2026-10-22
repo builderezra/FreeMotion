@@ -30655,14 +30655,30 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * ⚠️ It now shares ONE walk with `groupBoundsLocal` instead of carrying a byte-identical copy of it.
    * The copy is how this drifted: #630 taught the renderer a pivot and there was a second, silent
    * implementation of the same geometry sitting here that nobody had to update. */
-  FM.groupBounds = function (group, scene, t) {
+  /* ═══ #768 H8 (the 22 Oct hunt and its refuter): A SELECTED GROUP'S MEMBERS ARE WALKED ONCE A FRAME, NOT THREE TIMES ═══
+     With a group selected, every render's selection box (canvas-edit boxFor) asked FM.groupPivot for the anchor dot and then
+     this for the box, and this asked FM.groupPivot again. A group at 100 % and 0° (pivotFree: every group he makes, until he
+     scales or turns it) answers groupPivot by MEASURING, FM.groupPivotMeasured, which is FM.groupBoundsLocal again: three walks
+     of every layer in the scene, with FM.layerSize for each member, per frame, under every scrub frame.
+     The third walk measured the box already in hand: for a free group with a time, groupPivotMeasured is groupBoundsLocal at
+     that same group, scene and time (the same walk, so the same numbers; the cycle guard is in the same state for both, as
+     the first call has taken its own mark off again), then pivotIn on it when its width is a number, else null. So that is
+     read off `b` here, by the same rule, and is exactly what FM.groupPivot answered. A group that is not free (stored pivot,
+     or the rest box), or no time, still asks FM.groupPivot. `out`, optional, is handed the pivot FM.groupPivot would answer
+     (null included) as out.pivot, so boxFor's anchor dot takes it from here instead of making the first walk itself. The
+     box, the dot and the picture are the same numbers as before. */
+  FM.groupBounds = function (group, scene, t, out) {
     const b = FM.groupBoundsLocal(group, scene, t);
     if (!b) return null;
     const gx = FM.evalProp(group.transform.x, t) || 0, gy = FM.evalProp(group.transform.y, t) || 0;
     const gs = FM.evalProp(group.transform.scale, t) || 1;
     // The pivot the RENDERER uses (stored, or the rest box's) — not one read off this live box, or the outline
     // would slide about exactly the way the picture used to (queue 690, third hunt).
-    const p = FM.groupPivot(group, scene, t) || pivotIn(group, b);
+    const raw = (group.type === 'group' && typeof t === 'number' && isFinite(t) && pivotFree(group))
+      ? ((b.w >= 0) ? pivotIn(group, b) : null)
+      : FM.groupPivot(group, scene, t);
+    if (out) out.pivot = raw;
+    const p = raw || pivotIn(group, b);
     const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
     /* bughunt4 #1: the renderer now mirrors, stretches and shears the members about the pivot too (applyParentChain), so the
        box's centre goes through the same S·K·F about P and its size takes the stretch. The shear of the box itself is drawn

@@ -83430,6 +83430,107 @@
     }
   });
 
+  /* #768 H8 (the 22 Oct hunt and its refuter). With a group selected, every render's selection box asked FM.groupPivot for the
+   * anchor dot (a group at 100 % and 0° answers by measuring its members: FM.groupBoundsLocal), then FM.groupBounds for the box
+   * (FM.groupBoundsLocal again), which asked FM.groupPivot again (a third walk): three walks of every layer, FM.layerSize for
+   * each member, per frame. Now FM.groupBounds reads a free group's pivot off the box it has just measured and hands it to the
+   * dot: one walk.
+   * Counted where the cost is: calls to FM.groupBoundsLocal and FM.groupRestBoundsLocal (both walks of the members) made INSIDE
+   * FM.canvasEdit.update, per update, across six rendered frames, the three wrappers' descriptors put back exactly.
+   * FAILS BEFORE THE FIX: three walks on every update for a group he has not scaled or turned.
+   * CONTROLS: the box, its centre and the anchor dot are where the members put them, worked out here from FM.layerSize alone
+   * (a free group, and a group at 150 % that pivots about its rest box, which is also walked less: at most two); the box on
+   * screen is the one boxFor gives; and a frame of the scaled group, drawn about its pivot, is byte for byte the same with
+   * the group selected as with nothing selected. */
+  test('768 H8: a selected group walks its members once a frame, not three times, and its box, its anchor dot and the picture are the same', { item: '768', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const dLocal = Object.getOwnPropertyDescriptor(FM, 'groupBoundsLocal'), dRest = Object.getOwnPropertyDescriptor(FM, 'groupRestBoundsLocal');
+    const ceDesc = Object.getOwnPropertyDescriptor(FM.canvasEdit, 'update'), realUpdate = FM.canvasEdit.update;
+    let inside = 0, walks = 0;
+    const walker = d => ({ configurable: true, enumerable: d.enumerable, writable: true, value: function () { if (inside > 0) walks++; return d.value.apply(this, arguments); } });
+    const unwrap = () => {
+      Object.defineProperty(FM, 'groupBoundsLocal', dLocal); Object.defineProperty(FM, 'groupRestBoundsLocal', dRest);
+      if (ceDesc) Object.defineProperty(FM.canvasEdit, 'update', ceDesc); else FM.canvasEdit.update = realUpdate;
+    };
+    // the walks made inside each selection-box update across `n` rendered frames
+    const count = async (n) => {
+      const per = [];
+      Object.defineProperty(FM, 'groupBoundsLocal', walker(dLocal)); Object.defineProperty(FM, 'groupRestBoundsLocal', walker(dRest));
+      Object.defineProperty(FM.canvasEdit, 'update', { configurable: true, enumerable: ceDesc ? ceDesc.enumerable : true, writable: true, value: function () {
+        const w0 = walks;
+        inside++;
+        try { return realUpdate.apply(this, arguments); } finally { inside--; per.push(walks - w0); }
+      } });
+      try { for (let i = 0; i < n; i++) { FM.requestRender(); await frame(); } } finally { unwrap(); }
+      return per;
+    };
+    const member = (name, x, y, w, h, gid) => { const l = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: y, shapeW: w, shapeH: h, fill: '#ff8800', start: 0, duration: 6 }); l.parent = gid; return l; };
+    const build = (scale) => {
+      const G = FM.makeLayer('group', { name: 'g768h8' }); G.start = 0; G.duration = 6;
+      G.transform.x = 40; G.transform.y = 20; G.transform.scale = scale;   // written directly: no pivot is stored, so a scaled group pivots about its rest box
+      const A = member('a768h8', 300, 400, 100, 100, G.id), B = member('b768h8', 700, 600, 200, 100, G.id);
+      FM.scene = scene([G, A, B], { project: { width: 1080, height: 1080, fps: 30, duration: 6, background: '#000000' } });
+      // where the members put the box and the dot, from FM.layerSize alone (default anchors 0.5 / 0.5)
+      const sa = FM.layerSize(A), sb = FM.layerSize(B);
+      const x0 = Math.min(300 - sa.w / 2, 700 - sb.w / 2), x1 = Math.max(300 + sa.w / 2, 700 + sb.w / 2);
+      const y0 = Math.min(400 - sa.h / 2, 600 - sb.h / 2), y1 = Math.max(400 + sa.h / 2, 600 + sb.h / 2);
+      const P = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
+      return { G: G, want: { cx: 40 + P.x, cy: 20 + P.y, w: (x1 - x0) * scale, h: (y1 - y0) * scale } };
+    };
+    const near = (a, b) => Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(b));
+    const checkBox = (G, e, what) => {
+      const g = FM.canvasEdit.boxFor(G, FM.time);
+      if (!g) throw new Error('setup: no selection box for the ' + what);
+      const ds = g.w / e.w, bad = [];
+      if (!near(g.h, e.h * ds)) bad.push('height ' + g.h + ' (want ' + e.h * ds + ')');
+      if (!near(g.cx, e.cx * ds) || !near(g.cy, e.cy * ds)) bad.push('centre ' + g.cx + ', ' + g.cy + ' (want ' + e.cx * ds + ', ' + e.cy * ds + ')');
+      if (!g.hasPivot || !near(g.anchorX, e.cx * ds) || !near(g.anchorY, e.cy * ds)) bad.push('anchor dot ' + g.anchorX + ', ' + g.anchorY + ' (want ' + e.cx * ds + ', ' + e.cy * ds + ')');
+      const box = document.getElementById('select-box');
+      if (!box || box.style.display === 'none' || Math.abs(parseFloat(box.style.width) - g.w) > 0.01 || Math.abs(parseFloat(box.style.height) - g.h) > 0.01) bad.push('the box on screen is ' + (box ? box.style.width + ' x ' + box.style.height + ' (' + box.style.display + ')' : 'missing') + ', not the ' + g.w + ' x ' + g.h + ' boxFor gives');
+      if (bad.length) throw new Error('CONTROL: the ' + what + ' selection box is not where its members put it: ' + bad.join('; '));
+    };
+    const hash = () => {
+      const P = FM.scene.project, c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      const x = c.getContext('2d');
+      FM.renderScene(x, FM.scene, FM.time);
+      const d = x.getImageData(0, 0, c.width, c.height).data;
+      let h = 2166136261, ink = 0;
+      for (let i = 0; i < d.length; i++) { h = Math.imul(h ^ d[i], 16777619); if ((i & 3) === 0 && d[i] > 128) ink++; }
+      return { hash: h >>> 0, ink: ink };
+    };
+    try {
+      if (hadHome) FM.home.close();
+      if (FM.pause) FM.pause();
+      // a group he has not scaled or turned: its pivot is measured, and that measurement was made three times a frame
+      const free = build(1);
+      FM.selectLayer(free.G.id); FM.refreshAll(); FM.setTime(1); await sleep(250);
+      const per = await count(6);
+      if (per.length < 4) throw new Error('CONTROL: the selection box was updated only ' + per.length + ' times across six rendered frames - the count below would prove nothing');
+      if (Math.max.apply(null, per) > 1) throw new Error('the selected group walked its members ' + per.join(', ') + ' times on the selection box updates of six frames (want 1 each) - its pivot for the anchor dot, its box, and its pivot again for the box, every layer and every member size, per frame under a scrub');
+      checkBox(free.G, free.want, 'unscaled group');
+      // a group at 150 %, pivoting about its rest box: the same box and dot, walked at most twice, and the same picture
+      const big = build(1.5);
+      FM.selectLayer(null); FM.refreshAll(); FM.setTime(1); await sleep(150);
+      const h0 = hash();
+      if (h0.ink < 10000) throw new Error('CONTROL: the scaled group drew only ' + h0.ink + ' bright pixels - nothing is being rendered, so the picture comparison means nothing');
+      FM.selectLayer(big.G.id); FM.refreshAll(); await sleep(250);
+      const perBig = await count(6);
+      if (perBig.length < 4 || Math.max.apply(null, perBig) > 2) throw new Error('the selected group at 150 % walked its members ' + perBig.join(', ') + ' times on the selection box updates of six frames (want at most 2 each)');
+      checkBox(big.G, big.want, 'scaled group');
+      const h1 = hash();
+      if (h1.hash !== h0.hash) throw new Error('CONTROL: the frame of the scaled group differs with it selected (hash ' + h1.hash + ' vs ' + h0.hash + ') - the picture must stay byte-identical');
+    } finally {
+      unwrap();
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
   /* ═══ 765 (the keyboard half): A / S / D ON THE SELECTED CLIP, INSIDE AND OUTSIDE. Nine presses through the
      real window keydown path, each on a fresh clip at 2–6s of a 12s project: inside (playhead 4s) A keeps the
      right, D keeps the left, S splits; left of it (1s) S extends the start, A moves it left, D does nothing;

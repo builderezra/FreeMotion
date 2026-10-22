@@ -872,7 +872,13 @@ window.FM = window.FM || {};
      * once the pivot became real there was still nothing on the canvas to find.
      * A group's children render at `g + P + R·S·(L − P)`, so the pivot itself (L = P) lands at exactly
      * `g + P` — no rotation, no scale, nothing to undo. That is the whole calculation. */
-    const gpiv = (layer.type === 'group' && FM.groupPivot) ? FM.groupPivot(layer, FM.scene, t) : null;
+    /* #768 H8: a group's box and its pivot come from ONE walk of its members. FM.groupBounds hands back, as out.pivot, the very
+       pivot FM.groupPivot answers (see the note on it in compositor.js), so the dot no longer measures the members on its own
+       before the box measures them again. With no box (an empty group) the dot asks FM.groupPivot as before: a stored pivot
+       still shows there. */
+    const gOut = layer.type === 'group' ? {} : null;
+    const gbox = (gOut && FM.groupBounds) ? FM.groupBounds(layer, FM.scene, t, gOut) : null;
+    const gpiv = (layer.type === 'group' && FM.groupPivot) ? (gbox ? gOut.pivot : FM.groupPivot(layer, FM.scene, t)) : null;
     let apx = cx + (gpiv ? gpiv.x : 0), apy = cy + (gpiv ? gpiv.y : 0);
     let general = null;   // bughunt4 #1b: a parent that is no turn-and-scale (see below)
     if (layer.parent) {   // parented: the box must sit where the COMPOSITOR draws the layer (world), not at its raw local coords
@@ -927,7 +933,7 @@ window.FM = window.FM || {};
     // instead of a meaningless 100px square at the group's 0,0 origin. Centre-anchored by construction.
     let bw = s.w * scX * ds, bh = s.h * scY * ds, bcx = cx, bcy = cy;
     if (layer.type === 'group' && FM.groupBounds) {
-      const gb = FM.groupBounds(layer, FM.scene, t);
+      const gb = gbox;   // #768 H8: measured once, above, with the pivot
       if (gb) { bw = gb.w * ds; bh = gb.h * ds; bcx = gb.x; bcy = gb.y; ax = 0.5; ay = 0.5; }
     }
     /* THROUGH THE CAMERA, LAST (queue 690, third hunt). Everything above is where the layer sits among the
