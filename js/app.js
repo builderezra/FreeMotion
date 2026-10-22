@@ -1319,7 +1319,13 @@ window.FM = window.FM || {};
        * The exporter has had exactly this guard since #15 (js/exporter.js) — the preview never did.
        * Half a frame at 30fps, so a genuine step to the next frame always passes. */
       const cur = m.el.currentTime || 0;
-      if (Math.abs(cur - target) < (exact ? 0.001 : (0.5 / (FM.scene.project.fps || 30)))) return;
+      /* …UNLESS NOTHING HAS EVER ASKED THIS ELEMENT FOR A FRAME (#202, the 22 Oct hunt's refuter, H1). A clip lands at local 0 and
+         its element sits at 0, so the guard skipped the one seek that would load it: readyState 1, the compositor draws nothing, the
+         filmstrip gives up at 3 s and the 15 s toast blames a good file. The exporter's guard (js/exporter.js seekVideo) already
+         requires a frame. A seek in flight is left alone (re-seeking would cancel its own decode), and `undefined < 2` is false, so a
+         stand-in with no readyState still counts as warm. */
+      const noFrame = m.el.readyState < 2 && !m.el.seeking;
+      if (!noFrame && Math.abs(cur - target) < (exact ? 0.001 : (0.5 / (FM.scene.project.fps || 30)))) return;
       try { m.el.currentTime = target; } catch (e) {}
     });
     /* Simple 2.7 (#1122, DESIGN §12.1): …and the picture of a clip in a transition, outside its own window. The exporter reads the same

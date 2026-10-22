@@ -60419,6 +60419,89 @@
     }
   });
 
+  /* #202 H1 (the 22 Oct hunt's refuter's best change). A clip that lands at local 0 sits on its element's 0, so the paused seek's
+   * "already there" guard (queue 125) skipped the one seek that would load it: readyState 1, a black canvas, a filmstrip that gives up
+   * at 3 s, and a 15 s "No picture" toast on a good file. The guard now skips only an element that has its frame.
+   * FAILS BEFORE THE FIX: the cold element (readyState 1, no seek in flight) gets 0 seeks.
+   * CONTROLS: a decoded element on frame 0 is not re-seeked (queue 125's guard), one already seeking is left alone, and a stand-in
+   * with no readyState (the perf-seek-guard fake) still counts as warm. */
+  test('202 a clip parked on its first frame with no frame decoded is asked for one: the paused seek skips only an element that has its frame', { item: '202' }, function () {
+    const keep = FM.scene.layers.slice(), keepT = FM.time;
+    const run = (rs, seeking) => {
+      const writes = [];
+      const el = { duration: 10, readyState: rs, seeking: seeking, paused: true, muted: true, pause() {} };
+      Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) { writes.push(v); this._t = v; }, configurable: true });
+      const L = FM.makeLayer('video', { start: 0, duration: 5 }); L.type = 'video'; L.trimStart = 0; L.speed = 1;
+      FM.scene.layers = [L];
+      FM.media.set(L.id, { kind: 'video', el: el, duration: 10, width: 64, height: 48, stripFrames: [] });   // no filmstrip build, so seekBusy stays false
+      FM.time = 0;
+      try { FM.seekVideosToTime(); } finally { FM.media.remove(L.id); }
+      return writes;
+    };
+    try {
+      const warm = run(4, false);
+      if (warm.length) throw new Error('CONTROL: a decoded element already on frame 0 was re-seeked ' + warm.length + ' time(s) — queue 125’s guard is broken');
+      const flying = run(1, true);
+      if (flying.length) throw new Error('CONTROL: an element still seeking was re-seeked, cancelling its own decode');
+      const bare = run(undefined, undefined);
+      if (bare.length) throw new Error('CONTROL: a stand-in with no readyState (the perf-seek-guard fake) was re-seeked — that test would break');
+      const cold = run(1, false);
+      if (cold.length !== 1) throw new Error('a clip on its first frame at readyState 1 with no seek in flight got ' + cold.length + ' seek(s) — nothing asks it for a frame, so on an iPhone the canvas stays black, the filmstrip gives up at 3 s and the No picture toast fires on a good file');
+      if (Math.abs(cold[0] - FM.frameSeekTarget(0, 10)) > 1e-9) throw new Error('the seek went to ' + cold[0] + ', not inside frame 0');
+    } finally { FM.scene.layers = keep; FM.time = keepT; if (FM.refreshAll) FM.refreshAll(); }
+  });
+
+  /* a stand-in video element for the filmstrip: events by hand, a 'seeked' a tick after every seek, every currentTime write kept */
+  function fakeStripEl202(rs) {
+    const on = {}, writes = [];
+    const el = { readyState: rs, duration: 4, muted: false, paused: true, videoWidth: 64, videoHeight: 48, pause() {}, writes: writes,
+      addEventListener(t, f) { (on[t] = on[t] || []).push(f); }, removeEventListener(t, f) { on[t] = (on[t] || []).filter(g => g !== f); },
+      fire(t) { (on[t] || []).slice().forEach(f => f()); }, listening(t) { return !!(on[t] && on[t].length); } };
+    Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) { writes.push(v); this._t = v; setTimeout(() => el.fire('seeked'), 0); }, configurable: true });
+    return el;
+  }
+
+  /* #202 N1. The filmstrip set the flag that makes FM.seekBusy true BEFORE waiting (up to 3 s) for a clip to become decodable, so
+   * every scrub in that time was dropped, and on an iPhone, where a seek may be what loads a clip, nothing could load it.
+   * FAILS BEFORE THE FIX: seekBusy is true while the strip only waits.
+   * CONTROL: once the clip is decodable and the strip drives it, seekBusy is true at its first seek; and the wait has really begun. */
+  test('202 the filmstrip does not hold a clip busy while it only waits for it to decode, and does while it drives it', { item: '202', budgetMs: 20000 }, async function () {
+    if (typeof FM.buildClipStrip !== 'function') throw new Error('FM.buildClipStrip is not exposed');
+    const el = fakeStripEl202(0), m = { kind: 'video', el: el, duration: 4, width: 64, height: 48 };
+    const p = FM.buildClipStrip(m, 2);
+    const until = performance.now() + 8000;
+    while (!el.listening('loadeddata') && performance.now() < until) await sleep(20);
+    if (!el.listening('loadeddata')) { m._released = true; el.fire('emptied'); await p; throw new Error('setup: the strip never reached its wait for the clip to decode'); }
+    const waitingBusy = FM.seekBusy(m);
+    let drivingBusy = null;
+    Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) { if (drivingBusy === null) drivingBusy = FM.seekBusy(m); this._t = v; setTimeout(() => el.fire('seeked'), 0); }, configurable: true });
+    el.readyState = 2; el.fire('loadeddata');
+    await p;
+    if (waitingBusy) throw new Error('while the filmstrip only waited for the clip to decode, FM.seekBusy said true — every scrub in that time was dropped, and nothing could ask an iPhone clip for its frame');
+    if (drivingBusy !== true) throw new Error('CONTROL: at the strip’s first seek FM.seekBusy said ' + drivingBusy + ' — the strip drives the element without holding it');
+  });
+
+  /* #202 H3. The filmstrip put the element back where it was BEFORE the strip, but a scrub that came in while the strip held it was
+   * dropped, so the paused preview kept a stale frame until the next scrub. It now lands where the playhead wants it.
+   * FAILS BEFORE THE FIX: the last seek is the old 1.0 s.
+   * CONTROL: the strip really seeked (two frames) before it put the element back. */
+  test('202 after the filmstrip the clip is left on the playhead’s frame, not where it was before the strip', { item: '202', budgetMs: 20000 }, async function () {
+    if (typeof FM.buildClipStrip !== 'function') throw new Error('FM.buildClipStrip is not exposed');
+    const keep = FM.scene.layers.slice(), keepT = FM.time, wasPlaying = FM.playing;
+    const el = fakeStripEl202(2); el._t = 1.0;
+    const L = FM.makeLayer('video', { start: 0, duration: 4 }); L.type = 'video'; L.trimStart = 0; L.speed = 1;
+    const m = { kind: 'video', el: el, duration: 4, width: 64, height: 48 };
+    try {
+      FM.playing = false;
+      FM.scene.layers = [L]; FM.media.set(L.id, m);
+      FM.time = 2.0;   // the playhead moved while the element still sat at 1.0 (the scrub that the strip's hold dropped)
+      await FM.buildClipStrip(m, 2);
+      if (el.writes.length < 3) throw new Error('CONTROL: the strip made ' + el.writes.length + ' seek(s), not its 2 frames and the put-back');
+      const last = el.writes[el.writes.length - 1], want = FM.frameSeekTarget(2.0, 4);
+      if (Math.abs(last - want) > 1e-6) throw new Error('after the filmstrip the clip was put back at ' + last + ' s, not the playhead’s ' + want + ' s — the paused preview shows a stale frame until the next scrub');
+    } finally { FM.media.remove(L.id); FM.scene.layers = keep; FM.time = keepT; FM.playing = wasPlaying; if (FM.refreshAll) FM.refreshAll(); }
+  });
+
   test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
     var keep = FM.scene.layers.slice(), keepT = FM.time;
     var fps = FM.scene.project.fps || 30;
