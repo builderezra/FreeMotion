@@ -1171,6 +1171,10 @@ body.home-open .dh-stick, body.home-open .dh-body, body.home-open .dh-whack path
 .cat-card-disabled { animation: none; box-shadow: none; }
 /* Nothing moves for anyone who has asked the OS for less motion; the gradient stays. */
 @media (prefers-reduced-motion: reduce) { .cat-card, .cat-card::before { animation: none; } }
+/* #768 (the 22 Oct hunt's refuter, H1): while the timeline MOVES (a scrub, a drag, a glide: body.fm-moving, set by app.js noteMotion and
+   cleared 700 ms after the last moving frame) or PLAYS, the cards' shimmer and glow pause where they are. On a phone they repaint every
+   frame — the work it sheds under load — and with a layer selected the grid is up through the whole scrub. They are seen at rest. */
+body.fm-moving .cat-card, body.fm-moving .cat-card::before, body.fm-playing .cat-card, body.fm-playing .cat-card::before { animation-play-state: paused; }
 .cat-num { position: absolute; top: 5px; left: 7px; font-size: 10px; font-weight: 700; line-height: 1; color: var(--text-faint); font-variant-numeric: tabular-nums; opacity: .8; }
 .cat-card:hover .cat-num { color: var(--accent); }
 /* THE NUMBER IS A KEY, AND A PHONE HAS NO KEYS (queue 797, found by using the app at 380px with touch on). Keys 1-9

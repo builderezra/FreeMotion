@@ -72,12 +72,17 @@ window.FM = window.FM || {};
     collabCodesOnly: false,
     /* QUEUE 1084: on a phone, the Add menu on an empty project grows out of where you tapped (a circle, 260 ms) instead of
        swinging up from the bottom. His words: "just have a toggle switch to change the two modes in the settings" — the
-       old slide-up stays one tap away. OFF by default until he has seen it (#545: never ship a look he has not seen — the
-       frames went to him with v17.59, 17 Oct; the plan's "ON by default" was the logger's, not his words): turning it on is
-       his, and making it the default is a one-line change once he says so. Read live by js/mobile.js when the menu opens;
-       a local look, nothing about it travels or is saved in a project. In load()'s whitelist below, or it would be the #688
-       bug again. */
-    addMenuGrow: false,
+       old slide-up stays one tap away. It was OFF by default until he had seen it (#545; the frames went to him with v17.59).
+       ON since his 21 Oct words, "im pretty fine with ur choices then correcting later if i think its bad": the review page's
+       recommended answer (on, the row stretch at 300 ms) ships, and he corrects it there or with this switch. Read live by
+       js/mobile.js when the menu opens; a local look, nothing about it travels or is saved in a project. In load()'s
+       whitelist below, or it would be the #688 bug again. */
+    addMenuGrow: true,
+    /* THE SETTINGS' OWN REVISION (#1084, the pre-ship review's refuter, 22 Oct). save() writes the whole state, so every phone that
+       saved ANY setting between v17.59 and v17.91 stores addMenuGrow false — the old default, not a choice he made. load() takes a
+       saved addMenuGrow only from a blob that carries this revision, so the ON default reaches those phones, and every choice made
+       from here on (saved with the revision) is kept. */
+    settingsRev: 2,
     /* SIMPLE 2.7 (#1122 clause 2, his pick A): More transition controls. His sheet showed the ◇ and None · Crossfade · Dip to black ·
        Dip to white; the row's Length and On every cut, and Turn into a transition on a hand-made crossfade (with its ◇), are looks he
        has not seen. They were built OFF (#545); since his 21 Oct words, "im pretty fine with ur choices then correcting later if i think
@@ -126,6 +131,7 @@ window.FM = window.FM || {};
       if (typeof saved.simpleTransitionExtras === 'boolean') state.simpleTransitionExtras = saved.simpleTransitionExtras;   /* Simple 2.7 (#1122): its own line, so the whitelist above stays Full's */
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
+      if (!(saved.settingsRev >= 2)) state.addMenuGrow = DEFAULTS.addMenuGrow;   // #1084: an older blob's addMenuGrow is the old default, not his choice (settingsRev)
       // hand-editable storage, and this string is handed straight to a canvas fillStyle
       if (saved.shapeColor === 'random' || /^#[0-9a-f]{6}$/i.test(String(saved.shapeColor || ''))) {
         state.shapeColor = saved.shapeColor === 'random' ? 'random' : String(saved.shapeColor).toLowerCase();

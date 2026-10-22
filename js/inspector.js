@@ -7659,7 +7659,20 @@ window.FM = window.FM || {};
       noopFollowPlayhead();
       if (view !== 'home' || !root || quickSideSig == null) return;
       const sig = homeRowSig();
-      if (sig != null && sig !== quickSideSig) this.refresh();
+      if (sig == null || sig === quickSideSig) return;
+      /* #768 H2 (the 22 Oct hunt and its refuter): ON A CROSSING, ONLY THE ROW THAT CHANGED IS REBUILT. This runs inside the
+         scrub's pointermove (FM.scrubTime → updateReadout), and refresh() emptied the whole panel there: every category card
+         and its SVG icon rebuilt, the cards' shimmer restarted from the top, and on the phone mobile.js's wrapper then docked
+         the sheet, which measures the timeline's rows and so forced a full layout of the freshly built sheet, all inside one
+         touch move. On the phone a selected clip is the one row under his thumb, so a scrub across it crosses both its edges
+         and hitches twice: "jumpy". Nothing else on the panel depends on the playhead's side of the clip (the grid is the
+         same either side; the clip keys re-sync on every step in updatePlayhead), so for ONE selected layer whose row is on
+         screen the row alone is swapped, and quickRow stamps quickSideSig itself. A multi-selection's row lives inside
+         .align-row and anything else (a different layer, no row) takes the full refresh exactly as before. */
+      const layer = FM.selectedLayer(FM.scene), mine = layer ? layer.id + ':' : null;
+      const row = mine && sig.indexOf(mine) === 0 && quickSideSig.indexOf(mine) === 0 ? root.querySelector(':scope > .quick-row') : null;
+      if (row) { row.replaceWith(quickRow(layer)); return; }
+      this.refresh();
     },
     // Number keys 1..N (a layer selected): open the Nth category card in the grid's order.
     openCategoryByIndex(i) {

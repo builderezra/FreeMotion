@@ -11165,7 +11165,7 @@ window.FM = window.FM || {};
       /* #966 opts3: OPENS From middle and BORDER WIDTH (project px, pxToPlate scales it) go through wipe966, whose cut is the two
          branches below to the bit. One side and 0 px run them untouched. An absent Border colour is white, the row's default. */
       var wp_mid = (p.split == null ? 0 : (Math.round(FM.evalProp(p.split, t)) | 0)) === 1, wp_bd = p.border == null ? 0 : (FM.evalProp(p.border, t) || 0);
-      if(wp_mid || wp_bd > 0){ wipe966(d, W, H, wp_prog, wp_flip, wp_cx, wp_cy, wp_dx, wp_dy, wp_den, wp_inv, wp_sf, wp_mid, wp_bd, p.color == null ? [255, 255, 255] : hexToRGB(p.color)); return; }
+      if(wp_mid || wp_bd > 0){ wipe966(d, W, H, wp_prog, wp_flip, wp_cx, wp_cy, wp_dx, wp_dy, wp_den, wp_inv, wp_sf, wp_mid, wp_bd > 0 ? wp_bd * borderSlide966(wp_prog, wp_flip) : wp_bd, p.color == null ? [255, 255, 255] : hexToRGB(p.color)); return; }   /* the border slides off as the wipe finishes (borderSlide966) */
       if(wp_sf > 0){ for(var wq_y=0; wq_y<H; wq_y++){ var wq_row = wq_y*W; var wq_py = (wq_y-wp_cy)*wp_dy; for(var wq_x=0; wq_x<W; wq_x++){ var wq_proj = ((wq_x-wp_cx)*wp_dx + wq_py)*wp_inv + 0.5;
           var wq_c = (wp_prog*(wp_den + wp_sf) - wq_proj*wp_den)/wp_sf;   /* the feather travels from fully off-frame at progress 0 to fully past it at 1, so 0 still shows nothing and 1 everything */ if(wp_flip) wq_c = 1 - wq_c; if(wq_c >= 1) continue; var wq_i = (wq_row+wq_x)*4+3; d[wq_i] = wq_c <= 0 ? 0 : d[wq_i]*wq_c; } } return; }
       for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_flip ? wp_proj <= wp_prog : wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
@@ -11186,7 +11186,7 @@ window.FM = window.FM || {};
       /* #966 opts4: BORDER WIDTH (project px, pxToPlate scales it) goes through radialWipe966, whose cut is radialWipe12's and the two
          loops below to the bit. 0 px runs them untouched. An absent Border colour is white, the row's default. */
       var rw_bd = p.border == null ? 0 : (FM.evalProp(p.border, t) || 0);
-      if(rw_bd > 0) return radialWipe966(d, W, H, rw_prog, rw_startRad, rw_cx, rw_cy, rw_sf, rw_dir, rw_n, rw_flip, rw_bd, p.color == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.color, t)));
+      if(rw_bd > 0) return radialWipe966(d, W, H, rw_prog, rw_startRad, rw_cx, rw_cy, rw_sf, rw_dir, rw_n, rw_flip, rw_bd * borderSlide966(rw_prog, rw_flip), p.color == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.color, t)));   /* the border slides off as the wipe finishes (borderSlide966) */
       if(rw_dir !== 0 || rw_n !== 1 || rw_flip) return radialWipe12(d, W, H, rw_prog, rw_startRad, rw_cx, rw_cy, rw_sf, rw_dir, rw_n, rw_flip);
       if(rw_sf > 0){ if(rw_prog >= 1) return; if(rw_prog <= 0){ for(var rz=3; rz<d.length; rz+=4) d[rz]=0; return; } for(var rq_y=0; rq_y<H; rq_y++){ var rq_dy = rq_y - rw_cy; for(var rq_x=0; rq_x<W; rq_x++){ var rq_dx = rq_x - rw_cx;
           var rq_f = (Math.atan2(rq_dy, rq_dx) - rw_startRad) % rw_TAU; if(rq_f<0) rq_f += rw_TAU; rq_f /= rw_TAU;
@@ -13117,6 +13117,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * shown part grows out both ways from the line through the centre and Progress 1 still shows it all. BORDER WIDTH `bd` (plate px)
    * then paints the pixels still showing within bd of the edge — measured from the edge's half-way line, s px into the shown side —
    * the Border colour `bc`, anti-aliased over a pixel at its inner side; the alpha is never touched by the border. */
+  /* THE BORDER SLIDES OFF AS THE WIPE FINISHES (the review page's question 2, its recommended answer, decided under his 21 Oct "fine with
+     ur choices" rule). Each wipe returns before its border at Progress 1 (0 under Invert), where there is no edge, so the band used to
+     sit full width against the edge on the last frame and be gone on the next. Over the last tenth of the travel it now narrows to
+     nothing, eased: the factor its Border width is multiplied by. 1 for the rest of the travel, so every earlier frame is what it was. */
+  function borderSlide966(prog, flip) {
+    const rem = flip ? prog : 1 - prog;
+    if (!(rem < 0.1)) return 1;
+    const u = rem > 0 ? rem / 0.1 : 0;
+    return u * u * (3 - 2 * u);
+  }
+  FM._borderSlide966 = borderSlide966;   // suite seam (the review page's question 2)
   function wipe966(d, W, H, prog, flip, cx, cy, dx, dy, den, inv, sf, mid, bd, bc) {
     const E = mid ? den * 0.5 : den;
     for (let y = 0; y < H; y++) {
@@ -25665,7 +25676,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     /* #966 opts5: BORDER WIDTH (plate px here, pxToPlate has scaled it). Above 0 the pass below runs inside shapeWipe966 instead, with
        the border laid on after each pixel's alpha is decided; at 0 the loop below is the old one, untouched. */
     let bd = b966N(p, 'border', 0, t); if (bd > 100) bd = 100;
-    if (bd > 0) { shapeWipe966(d, W, H, shape, A, cx, cy, cs, sn, asp, sf, rho, flip, bd, p.color == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.color, t))); return; }
+    if (bd > 0) { shapeWipe966(d, W, H, shape, A, cx, cy, cs, sn, asp, sf, rho, flip, bd * borderSlide966(prog, flip), p.color == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.color, t))); return; }   // the border slides off as the wipe finishes (borderSlide966)
     for (let y = 0; y < H; y++) {
       const vy = y + 0.5 - cy, row = y * W;
       for (let x = 0; x < W; x++) {
@@ -28105,6 +28116,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           lbBand(B, x1, y1, ex, ey, w * 2.6, glow * 0.22 * strength, colour);
         }
         lbBand(B, x1, y1, ex, ey, w, 0.8 * strength, colour);
+        /* THE CORE SHOWS THE COLOUR PICKED (the review page's question 1, its recommended answer, decided under his 21 Oct "fine with
+           ur choices" rule): a core colour is laid OVER the beam, not added to it, so a cyan core on the red beam reads cyan where it
+           used to burn white. White, or none, is still added, which is what it always drew, byte for byte. */
+        if (core.toLowerCase() !== '#ffffff') B.globalCompositeOperation = 'source-over';
         lbBand(B, x1, y1, ex, ey, Math.max(1, w * 0.22), 0.95 * strength, core);
       }
     }
@@ -30206,6 +30221,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (!_measCtx) { _measCanvas = document.createElement('canvas'); _measCtx = _measCanvas.getContext('2d'); }
     return _measCtx;
   }
+  /* ═══ A TEXT LAYER'S SIZE, REMEMBERED BY ITS ID (#768 N2 / H3, the 22 Oct hunt and its refuter) ═══════════════════════
+   * drawLayer's text branch asks FM.layerSize for every visible text layer on EVERY frame (to honour the anchor), and a
+   * caption track's size is the widest and tallest of ALL its cues, so each call sent every cue through FM.textLines. That
+   * function's wrap cache is two slots per layer object, and both misses were guaranteed: K cues cycle through two slots,
+   * and drawLayer hands layerSize a fresh shallow clone of a caption track each frame, so a cache hung on the clone is
+   * thrown away with it. Since v17.01 every new caption track has a wrapWidth, so every cue took the word-by-word fits()
+   * path: roughly a dozen measureText calls per cue per frame, about a thousand a frame for a three-minute Detect-speech
+   * track, with NOTHING selected — and twice that with the track selected, because canvas-edit's box asks again. On his
+   * phone that is main-thread work under every scrub frame.
+   * So the answer is kept here, keyed by layer.id (a clone carries its layer's id, which a cache on the object could not
+   * use) on everything the answer is computed from: the measuring font as the context holds it, its letter and word
+   * spacing, FM.fontGen (an imported face changes measureText without changing the font string — see FM.textLines),
+   * the wrap column, the size and line height the height is built from, and the cue strings themselves, so an edited cue,
+   * a new column or a font change all miss and measure afresh. The value is two numbers, handed back as a new object so
+   * a caller can never edit the remembered one. Bounded: cleared when a 64th id arrives, which a real project only reaches
+   * with dozens of text layers on screen, and then it simply measures as it always did. */
+  const _textSizeMemo = new Map();
 
   /* ═══ THE BOX THE RENDERER ACTUALLY PIVOTS AROUND (queue 628) ════════════════════════════════════
    * NOT the same question as "how big is this layer", and conflating them is the bug.
@@ -30256,13 +30288,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // widest caption (and its line count) instead, falling back to layer.text when there are none. (#4)
       const strs = (layer.captions && layer.captions.length) ? layer.captions.map(cap => cap.text || '') : [layer.text || ''];
       if (textSpacingOK().letter) c.letterSpacing = (layer.letterSpacing || 0) + 'px';   // measureText answers for it; wrapping must too
-      let w = 10, maxLines = 1;
-      strs.forEach(s => { const lines = FM.textLines(c, layer, s); maxLines = Math.max(maxLines, lines.length); lines.forEach(l => { w = Math.max(w, c.measureText(l).width); }); });
       // With a wrap width set, the box IS the column the user dragged — not the widest line that
       // happens to be in it. Otherwise the border would jump inwards the moment a long word left.
-      const ww = Number(layer.wrapWidth);
-      if (isFinite(ww) && ww > 0) w = ww;
-      return { w: w, h: Math.max(10, maxLines * (layer.fontSize || 96) * (layer.lineHeight || 1.15)) };
+      const ww = Number(layer.wrapWidth), wrapped = isFinite(ww) && ww > 0;
+      /* #768 N2: the remembered answer (see _textSizeMemo above). c.font is read BACK rather than rebuilt, because that is
+         the font measureText will actually use (a string the context rejects leaves the previous one in place). */
+      const memoKey = layer.id != null
+        ? [c.font, c.letterSpacing || '', c.wordSpacing || '', FM.fontGen || 0, ww, layer.fontSize || 96, layer.lineHeight || 1.15, strs.length, strs.join('\u001f')].join('\u001f')
+        : null;
+      const memo = memoKey != null ? _textSizeMemo.get(layer.id) : null;
+      if (memo && memo.key === memoKey) return { w: memo.w, h: memo.h };
+      let w = 10, maxLines = 1;
+      /* #768 N2: …and with a column set, the widest line is not measured at all — `w` becomes the column just below, so
+         every one of those measureText calls was thrown away. The line COUNT still needs the wrap. */
+      strs.forEach(s => { const lines = FM.textLines(c, layer, s); maxLines = Math.max(maxLines, lines.length); if (!wrapped) lines.forEach(l => { w = Math.max(w, c.measureText(l).width); }); });
+      if (wrapped) w = ww;
+      const h = Math.max(10, maxLines * (layer.fontSize || 96) * (layer.lineHeight || 1.15));
+      if (memoKey != null) {
+        if (_textSizeMemo.size >= 64 && !_textSizeMemo.has(layer.id)) _textSizeMemo.clear();
+        _textSizeMemo.set(layer.id, { key: memoKey, w: w, h: h });
+      }
+      return { w: w, h: h };
     }
     if (layer.type === 'null') return { w: 100, h: 100 };
     if (layer.type === 'shape') return { w: layer.shapeW || 400, h: layer.shapeH || 300 };

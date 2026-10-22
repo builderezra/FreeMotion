@@ -612,6 +612,9 @@ window.FM = window.FM || {};
       kfDots(kfDrag).forEach(d => d.classList.remove('kf-dragging'));
       kfDrag = null;
     }
+    /* #768 H6 (the 22 Oct review's refuter, H6-a): a clip scrub torn down here ends its scrub report too, or the probe ran on until
+       the next pointerup anywhere. Only a clip scrub's own: a second finger can make a clipTap during a lane scrub. */
+    if (clipTap && clipTap.axis === 'x') scrubProbe.cancel();
     if (clipTap) { if (clipTap.holdTimer) clearTimeout(clipTap.holdTimer); clipTap = null; }   // orphaned hold timer could grab the WRONG clip later
     return had;
   }
@@ -4061,7 +4064,7 @@ window.FM = window.FM || {};
       const lines = [
         'FreeMotion scrub report ' + new Date().toISOString().replace('T', ' ').slice(0, 19) + (ver ? ' ' + ver.trim() : ''),
         'device      ' + innerWidth + 'x' + innerHeight + ' @' + (devicePixelRatio || 1) + 'x  ' + (navigator.userAgent || '').replace(/Mozilla\/5\.0 /, '').slice(0, 90),
-        'selection   ' + (meta.selected || 'none') + '   panel ' + (meta.panel || '?') + (meta.fx ? ' + effects browser' : ''),
+        'selection   ' + (meta.selected || 'none') + '   panel ' + (meta.panel || '?') + (meta.fx ? ' + effects browser' : '') + (meta.origin ? '   from the ' + meta.origin : ''),
         'project     ' + (meta.layers == null ? '?' : meta.layers) + ' layers, ' + (meta.effects == null ? '?' : meta.effects) + ' effects on the selected layer',
         'frames      ' + t.length + ' over ' + Math.round(t[t.length - 1] - t[0]) + 'ms of scrub (+250ms tail)',
         'frame gap   median ' + med.toFixed(1) + 'ms, worst ' + worst.toFixed(1) + 'ms',
@@ -4073,11 +4076,20 @@ window.FM = window.FM || {};
     return { begin: begin, settle: settle, cancel: cancel, isLive: isLive, last: function () { try { return localStorage.getItem('fm.lastScrubReport') || ''; } catch (e) { return ''; } } };
   })();
   FM._scrubProbe = scrubProbe;   // seam: the suite drives a real scrub and reads the report back
-  function beginScrub(e) {
-    (function () {
-      const sel = FM.scene && FM.scene.selectedId ? FM.layerById(FM.scene, FM.scene.selectedId) : null;
-      scrubProbe.begin({ selected: sel ? sel.type + (sel.effects && sel.effects.length ? ' with effects' : '') : 'none', panel: (FM.inspector && FM.inspector.currentView) ? FM.inspector.currentView() : '?', fx: !!(FM.fxBrowser && FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()), layers: FM.scene && FM.scene.layers ? FM.scene.layers.length : null, effects: sel && sel.effects ? sel.effects.length : 0 });
-    })();
+  /* ═══ WHAT A SCRUB REPORT SAYS ABOUT ITS GESTURE, IN ONE PLACE (#768 H6, the 22 Oct hunt and its refuter). This lived
+   * inline in beginScrub, and beginScrub is only the LANE's and the ruler's start (and the keyframe hand-off's). A sideways
+   * swipe that starts ON A CLIP runs the clipTap branch of the window pointermove instead, which never began the probe, so
+   * that gesture wrote no report at all and Settings → Your last scrub went on showing an OLDER lane scrub. On his phone a
+   * selected layer collapses the timeline to its one row (the solo view), so the clip is exactly where his thumb lands: the
+   * likeliest version of the gesture he is asked to paste was the one never recorded. Both starts now take their meta from
+   * here, so what a report says about the selection, the panel and the project cannot drift between the two. `origin` is
+   * new: it says which start this was, so a paste names the path it measured. */
+  function scrubMeta(origin) {
+    const sel = FM.scene && FM.scene.selectedId ? FM.layerById(FM.scene, FM.scene.selectedId) : null;
+    return { selected: sel ? sel.type + (sel.effects && sel.effects.length ? ' with effects' : '') : 'none', panel: (FM.inspector && FM.inspector.currentView) ? FM.inspector.currentView() : '?', fx: !!(FM.fxBrowser && FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()), layers: FM.scene && FM.scene.layers ? FM.scene.layers.length : null, effects: sel && sel.effects ? sel.effects.length : 0, origin: origin || 'timeline' };
+  }
+  function beginScrub(e, origin) {
+    scrubProbe.begin(scrubMeta(origin));
     stopMomentum();                                     // a fresh grab kills any in-flight glide
     stopScrollMomentum();                               // …the vertical one too (queue 415)
     dragging = true;
@@ -5234,7 +5246,17 @@ window.FM = window.FM || {};
            * It has to be done by hand: #timeline carries touch-action:none, so the browser will never
            * scroll it natively. Same axis lock the empty-lane path uses 90 lines below — commit at 5px,
            * and horizontal needs only to tie because scrubbing is the primary action here. */
-          if (!clipTap.axis && (adx > 5 || ady > 5)) clipTap.axis = (ady > adx + 4) ? 'y' : 'x';
+          if (!clipTap.axis && (adx > 5 || ady > 5)) {
+            clipTap.axis = (ady > adx + 4) ? 'y' : 'x';
+            /* #768 H6: …AND A SIDEWAYS ONE IS A SCRUB, SO IT IS RECORDED LIKE ONE. The lane begins the probe on its
+               pointerdown (beginScrub) and lets the release decide; here the press might still be a tap or a hold, so it
+               begins at the moment the swipe commits to the x axis, which is also the moment the hold timer above has been
+               cleared and the gesture can no longer become a clip move. A vertical pan never begins it. The release
+               (pointerup, below) settles it into a report. */
+            /* …not while it plays (the refuter's new LOW): the lane's scrub pauses playback (beginScrub) and a clip's does not, so the
+               report would time the playback, not the scrub he is asked to paste */
+            if (clipTap.axis === 'x' && !FM.playing) scrubProbe.begin(scrubMeta('clip'));
+          }
           if (clipTap.axis === 'y') {
             /* …AND SAMPLE ITS VELOCITY, so the release glides (queue 690). Queue 415 gave the vertical pan its glide —
                "Scrolling up and down on timeline should have some glide to it like dragging left and right" — but only
@@ -5356,7 +5378,7 @@ window.FM = window.FM || {};
              doing nothing, exactly as before. */
           if (k.finger && !pinch && timelineEl) {
             scrub = { startX: k.downX, startY: k.downY, baseTime: FM.time, startScrollTop: timelineEl.scrollTop, axis: null, moved: false, downTime: snapT(timeFromX(k.downX)), fromLane: false };
-            beginScrub(e);
+            beginScrub(e, 'keyframe');
           } else return;
         }
         if (kfDrag) {
@@ -5441,7 +5463,12 @@ window.FM = window.FM || {};
           const fresh = (upT - (scrub.lastT || 0)) < 90;
           startMomentum(fresh ? (scrub.vTime || 0) : 0);
         }
-        if (scrub && scrub.axis === 'x' && scrub.moved) scrubProbe.settle(); else scrubProbe.cancel();   // queue 768: only a real horizontal scrub is a reading
+        /* queue 768: only a real horizontal scrub is a reading — from the lane, or (#768 H6) from a clip. The clip's half HAS
+           to be decided on this line, not in the clipTap branch below where the rest of that gesture's release lives: this
+           line runs first, `scrub` is null on a clip scrub, and cancel() empties the samples and drops `live`, so a settle()
+           placed down there would find nothing left to settle and the report would still never be written (the refuter's
+           catch on the hunt's first version of this fix). */
+        if ((scrub && scrub.axis === 'x' && scrub.moved) || (clipTap && clipTap.axis === 'x' && clipTap.moved)) scrubProbe.settle(); else scrubProbe.cancel();
         dragging = false; scrub = null;
         if (clipTap) {
           const ct = clipTap; clipTap = null;

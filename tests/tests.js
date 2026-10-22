@@ -71877,7 +71877,7 @@
       const L = FM.makeLayer('video', { name: 'tone', start: 0, duration: 12, trimStart: 0, speed: 1, volume: 1 });
       FM.scene.layers.push(L); FM.scene.project.duration = 12;
       const el = spinUpEl(12, o.latency, o.spin);
-      FM.media.set(L.id, { kind: 'video', el: el, width: 320, height: 240, duration: 12 });
+      FM.media.set(L.id, Object.assign({ kind: 'video', el: el, width: 320, height: 240, duration: 12 }, o.rec || {}));   // rec: #845 (a routed record)
       FM.playing = false; FM.setTime(0); await sleep(40);
       const t0 = performance.now();
       FM.playing = true; el.play();
@@ -71886,6 +71886,7 @@
         FM.setTime((performance.now() - t0) / 1000);
         if (!FM._syncMediaToClock) throw new Error('FM._syncMediaToClock is not exposed — this test cannot reach the controller');
         FM._syncMediaToClock(); ticks++;
+        if (o.each) o.each(el, i);   // #845: what the tick left behind, read before the next one
         await sleep(75);
         if (o.at && i === o.at) o.then(el);
       }
@@ -71923,6 +71924,53 @@
     if (r.el.maxRate <= 1.01 && r.el.seeks <= 1) {
       throw new Error('150 ms of real drift was injected well after warm-up and the controller did nothing (max rate ' + r.el.maxRate.toFixed(4) + ', ' + r.el.seeks + ' seeks) — the warm-up gate has become "never correct" and the sound would drift away from the picture');
     }
+  });
+
+  /* #845 (#663, his iPhone; the audio hunt and its refuter, 21 Oct). An element routed into Web Audio (m._mes) must never be
+   * rate-trimmed: WebKit drops or warps its sound on every write (bugs 240405, 311000).
+   * FAILS BEFORE THE FIX: the routed run trims to 1.1, exactly as the native one does.
+   * CONTROL: the same lag on a native clip is still trimmed, so the lag reached the controller and the native path stays honest. */
+  test('845 a clip routed through Web Audio is never rate-trimmed: 150 ms of lag after warm-up leaves its playbackRate at exactly 1, while the same lag on a native clip is still trimmed', { item: '845' }, async function () {
+    const lag = el => { el.currentTime = Math.max(0, el.currentTime - 0.15); };
+    const c = await q148Run({ latency: 0.09, spin: 0.3, ticks: 24, at: 11, then: lag });
+    if (!(c.el.rateWrites > 0)) throw new Error('CONTROL: the native clip was not trimmed either (' + c.el.rateWrites + ' rate writes), so this test proves nothing');
+    const r = await q148Run({ latency: 0.09, spin: 0.3, ticks: 24, at: 11, then: lag, rec: { _mes: { connect() {}, disconnect() {} } } });
+    if (r.el.rateWrites !== 0 || Math.abs(r.el.maxRate - 1) > 1e-6) throw new Error('the routed clip had playbackRate written ' + r.el.rateWrites + ' times, up to ' + r.el.maxRate.toFixed(4) + ' — on an iPhone every rate write to an element feeding Web Audio drops or warps its sound (WebKit 240405, 311000)');
+  });
+
+  /* #845 (the 22 Oct pre-ship review's B2 and its refuter): a routed clip is never rate-trimmed, so without another correction a lag
+   * inside the trim band (45–350 ms) stayed for the rest of the clip. Now a routed lag over 0.1 s (or out of the band for a second) is
+   * corrected by the de-clicked seek. The fake element turns a 0.15 s pull into about 0.27 s of lag (its latency and seek stall).
+   * FAILS BEFORE THE FIX: the routed clip ends about 0.18 s further behind than before the lag.
+   * CONTROL: with no lag a routed clip never seeks (in-band jitter does not), and the rate is never written either way. */
+  test('845 a routed clip that falls behind is pulled back by a de-clicked seek, never by its rate, and one that keeps time never seeks', { item: '845', budgetMs: 30000 }, async function () {
+    const route = { _mes: { connect() {}, disconnect() {} } };
+    const calm = await q148Run({ latency: 0.09, spin: 0.3, ticks: 30, rec: route });
+    if (calm.el.seeks !== 0) throw new Error('CONTROL: a routed clip keeping time was seeked ' + calm.el.seeks + ' times — in-band jitter must not seek');
+    const errs = [];
+    const r = await q148Run({ latency: 0.09, spin: 0.3, ticks: 40, at: 11, rec: route,
+      then: el => { el.currentTime = Math.max(0, el.currentTime - 0.15); },
+      each: (el, i) => { errs[i] = FM.time - el.currentTime; } });
+    const med = a => { const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
+    const before = med(errs.slice(6, 11)), after = med(errs.slice(34, 40));
+    if (!(isFinite(before) && isFinite(after))) throw new Error('setup: the lag was not sampled (' + before + ', ' + after + ')');
+    if (Math.abs(after - before) > 0.06) throw new Error('a routed clip pulled about 0.27 s behind ends ' + (after - before).toFixed(3) + ' s further behind than before — the trim band is a place its sound stays late for good');
+    if (r.el.rateWrites !== 0) throw new Error('the routed clip had playbackRate written ' + r.el.rateWrites + ' times while it was pulled back');
+  });
+
+  /* #845 (the refuter's N1): the drift seek was the one place left that jumps a PLAYING waveform with no fade; play() and a loop wrap
+   * both open at volume 0 and let declickGain lift it (queue 148).
+   * FAILS BEFORE THE FIX: on the seek's own tick the element is at full volume.
+   * CONTROL: a drift seek really happened after the lag went in (the fake counts every currentTime write). */
+  test('845 a drift seek on a playing clip is de-clicked: the tick that jumps it leaves it at volume 0 and the next tick brings it back', { item: '845' }, async function () {
+    let after = -1, atSeek = null, later = null;
+    const r = await q148Run({ latency: 0.09, spin: 0.3, ticks: 24, at: 11,
+      then: el => { el.currentTime = Math.max(0, el.currentTime - 0.6); after = el.seeks; },
+      each: el => { if (after >= 0 && atSeek == null && el.seeks > after) atSeek = el.volume; else if (atSeek != null && later == null) later = el.volume; } });
+    if (after < 0) throw new Error('setup: the lag was never injected');
+    if (atSeek == null) throw new Error('CONTROL: 600 ms of lag after warm-up was never corrected by a seek (' + r.el.seeks + ' seeks in all), so this test proves nothing');
+    if (!(atSeek < 0.05)) throw new Error('the drift seek jumped the playing sound at volume ' + atSeek.toFixed(3) + ' — an unfaded jump to an arbitrary sample is a click, the one play() and a loop wrap already avoid');
+    if (!(later > atSeek)) throw new Error('after the de-clicked seek the volume did not come back up (' + later + ')');
   });
 
   /* Queue 202 — is the ladder actually WIRED to playback? A different question from whether it decides
@@ -72026,6 +72074,90 @@
       if (FM.timeline) FM.timeline.rebuild();
     }
   }
+
+  /* #768 H1 (PHONE: scrubbing with a layer selected is jumpy; the 22 Oct hunt and its refuter). With a layer selected the category grid
+   * is up through the whole scrub, and each card runs two infinite animations (cat-shine's background-position and cat-glow's
+   * box-shadow) that repaint every frame. They now pause while the timeline moves (body.fm-moving, from noteMotion) or plays.
+   * FAILS BEFORE THE FIX: mid-scrub every card animation is still running.
+   * CONTROLS: at rest at least two run (the detector and the grid work), they all run again once the moving stops, and after a pause. */
+  test('768 H1: the category cards stop repainting while the timeline moves or plays, and run again at rest', { item: '768', budgetMs: 40000 }, async function () {
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    const cardAnims = state => document.getAnimations().filter(a => {
+      const tg = a.effect && a.effect.target;
+      if (!tg || !tg.closest || !tg.closest('#inspector-panel .cat-card')) return false;
+      if (a.effect.getTiming().iterations !== Infinity) return false;
+      return a.playState === state;
+    }).length;
+    try {
+      if (hadHome) FM.home.close();
+      if (wasSimple) FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's768h1', shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 120, fill: '#f0f' }); L.start = 0; L.duration = 6;
+        FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+        FM.selectLayer(L.id);
+        try { if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory('home'); } catch (e) {}
+        FM.refreshAll(); await sleep(300);
+        FM.setTime(3); await sleep(1100);                                     // past MOTION_IDLE (700 ms): nothing moving
+        const rest = cardAnims('running');
+        if (rest < 2) throw new Error('CONTROL A: only ' + rest + ' card animations running at rest — the detector or the grid is broken, so nothing below means anything');
+        let mid = -1;
+        for (let i = 1; i <= 24; i++) { FM.setTime(3 + i * 0.05); await sleep(16); if (i === 12) mid = cardAnims('running'); }
+        if (mid !== 0) throw new Error(mid + ' card animations still repainting every frame mid-scrub (want 0; ' + rest + ' at rest) — on his phone that is the grid redrawing under every step');
+        let back = 0; const until = performance.now() + 4000;
+        while (performance.now() < until) { back = cardAnims('running'); if (back >= rest) break; await sleep(100); }
+        if (back < rest) throw new Error('CONTROL B: only ' + back + ' of ' + rest + ' card animations ran again after the scrub stopped — the look at rest is lost');
+        FM.play(); await sleep(250); const during = cardAnims('running'); FM.pause(); await sleep(1100);
+        if (during !== 0) throw new Error(during + ' card animations repainting during playback (want 0)');
+        if (cardAnims('running') < rest) throw new Error('CONTROL C: the cards did not run again after pause');
+      });
+    } finally {
+      if (FM.playing) FM.pause();
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      if (wasSimple) FM.editor.apply('simple', { force: true, quiet: true });
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
+  /* #1131 (#692; the lag hunt's refuter, R2, 21 Oct). noteMotion reset its frame count on the gap from one render's END to the next
+   * one's end, which contains the render itself, so a scene whose frame costs over MOTION_GAP (500 ms) never latched motion and was
+   * dragged at full size. His 19 Aug scene is about 765 ms a frame at full size.
+   * FAILS BEFORE THE FIX: every 800 ms render reads as a pause, the count resets to 1, motion never latches.
+   * CONTROLS: four 40 ms renders latch it (the driver works), and it lets go after the idle wait. */
+  test('1131 a frame that takes most of a second still counts as motion — dragging a heavy scene sheds pixels like a light one does', { item: '1131', budgetMs: 30000 }, async function () {
+    if (typeof FM.requestRender !== 'function' || typeof FM._perfState !== 'function') throw new Error('seams missing: FM.requestRender / FM._perfState');
+    const real = FM.renderScene, mode0 = FM.settings.get('playbackQuality'), wasPlaying = FM.playing;
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const idle = () => sleep(900);   // past MOTION_IDLE (700 ms): any latch from before has let go
+    const drive = async (burnMs, n) => {
+      FM.renderScene = function () { const t0 = performance.now(); while (performance.now() - t0 < burnMs) { /* burn */ } };
+      try { for (let i = 0; i < n; i++) { FM.requestRender(); await frame(); } return FM._perfState(); }
+      finally { FM.renderScene = real; }
+    };
+    try {
+      if (FM.pause) FM.pause();
+      FM.settings.set('playbackQuality', 'smooth');   // his phone's mode: the latch alone shrinks the canvas
+      await idle();
+      if (FM._perfState().inMotion) throw new Error('CONTROL: still in motion from an earlier test');
+      const px0 = FM._perfState().canvasPx;
+      const light = await drive(40, 4);
+      if (!light.inMotion) throw new Error('CONTROL: four back-to-back 40 ms renders did not latch motion — the driver is broken, nothing below means anything');
+      await idle();
+      if (FM._perfState().inMotion) throw new Error('CONTROL: motion did not let go after the idle wait');
+      const heavy = await drive(800, 4);
+      if (!heavy.inMotion) throw new Error('four back-to-back 800 ms renders never counted as motion: noteMotion timed from the end of one render to the end of the next, so the render itself read as a pause over MOTION_GAP (500 ms) — a heavy scene is scrubbed at full resolution and the quality ladder never runs');
+      if (!(heavy.canvasPx < px0)) throw new Error('motion latched but the canvas did not shrink (' + px0 + ' -> ' + heavy.canvasPx + ')');
+    } finally {
+      FM.renderScene = real; FM.playing = wasPlaying;
+      FM.settings.set('playbackQuality', mode0 || 'auto');
+      await idle();
+      if (FM._resetPlayQuality) FM._resetPlayQuality();
+      if (FM.resizeCanvas) FM.resizeCanvas();
+    }
+  });
 
   test('the quality ladder sheds pixels under sustained load, and the frames actually speed up (queue 202)', { item: '202' }, async function () {
     if (typeof FM._perfState !== 'function') throw new Error('FM._perfState is missing — the ladder cannot be observed');
@@ -82634,6 +82766,228 @@
       });
     } finally {
       FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
+  /* #768 H6 (the 22 Oct hunt and its refuter). The test above starts its swipe on the RULER. With a layer selected on the
+   * phone the timeline shows that one clip's row, so his thumb lands on the CLIP, and that swipe runs the clipTap branch,
+   * which never began the scrub probe: its release cancelled, no report was written, and Settings → Your last scrub kept
+   * showing an older gesture, so the one paste he is asked for could describe the wrong swipe.
+   * Driven like the test above: a real touch pointerdown on the selected clip itself, 24 moves of 5 px to the left, the
+   * release, all with the SAME pointerId (pointerup checks foreignPointer). The report key is cleared first, so a report
+   * found afterwards was written by this gesture.
+   * FAILS BEFORE THE FIX: time moves, but no report exists.
+   * CONTROLS: time moved (the gesture engaged, so a report is owed); the report names the selection and says the swipe came
+   * from the clip; and a VERTICAL pan from the same clip writes none (it is a pan of the layer list, not a scrub). */
+  test('768 H6: a scrub that starts on the selected clip writes its own scrub report, and a vertical pan from the clip writes none', { item: '768', budgetMs: 30000 }, async function () {
+    if (!FM._scrubProbe) throw new Error('FM._scrubProbe is missing — nothing records the scrub');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    const clear = () => { try { localStorage.removeItem('fm.lastScrubReport'); } catch (e) {} };
+    try {
+      if (hadHome) FM.home.close();
+      if (wasSimple) FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's768h6', shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 120, fill: '#f0f', start: 0, duration: 6 });
+        FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+        FM.selectLayer(L.id); FM.refreshAll(); await sleep(300);
+        FM.setTime(3); FM.requestRender(); await sleep(150);
+        const tl = document.getElementById('timeline');
+        const clipOf = () => document.querySelector('#timeline .clip[data-id="' + L.id + '"]');
+        const clip = clipOf();
+        if (!clip) throw new Error('setup: the selected clip is not on the timeline, so there is nothing to start the swipe on');
+        const tr = tl.getBoundingClientRect(), cr = clip.getBoundingClientRect();
+        const y = Math.round(cr.top + cr.height / 2), x0 = Math.round(tr.right - 40), t0 = FM.time;
+        const opts = (x, yy) => ({ bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x, clientY: yy == null ? y : yy, button: 0, buttons: 1 });
+        clear();
+        clip.dispatchEvent(new PointerEvent('pointerdown', opts(x0)));
+        for (let i = 1; i <= 24; i++) { tl.dispatchEvent(new PointerEvent('pointermove', opts(x0 - i * 5))); await sleep(16); }
+        tl.dispatchEvent(new PointerEvent('pointerup', Object.assign(opts(x0 - 120), { buttons: 0 })));
+        await sleep(500);
+        if (Math.abs(FM.time - t0) < 0.2) throw new Error('setup: the swipe on the clip did not move time (' + t0 + ' → ' + FM.time + ') — the gesture did not engage, so no report is owed');
+        const rep = FM._scrubProbe.last();
+        if (!rep) throw new Error('a sideways swipe that started ON the selected clip moved the playhead ' + (FM.time - t0).toFixed(2) + ' s and wrote no scrub report — Settings → Your last scrub still shows an older gesture, so his paste would describe a different swipe');
+        if (!/selection\s+shape/.test(rep)) throw new Error('the report does not say a shape was selected:\n' + rep);
+        if (!/from the clip/.test(rep)) throw new Error('the report does not say the swipe came from the clip:\n' + rep);
+        const frames = /frames\s+(\d+) over/.exec(rep);
+        if (!frames || +frames[1] < 10) throw new Error('too few frames sampled (' + (frames && frames[1]) + ') — a hitch would be missed:\n' + rep);
+        // CONTROL: a vertical pan from the same clip pans the layer list; it is not a scrub and must not write a report
+        await sleep(300);
+        clear();
+        const clip2 = clipOf();
+        if (!clip2) throw new Error('setup: the clip left the timeline after the scrub');
+        const cr2 = clip2.getBoundingClientRect(), y2 = Math.round(cr2.top + cr2.height / 2), xv = Math.round(tr.left + tr.width / 2);
+        clip2.dispatchEvent(new PointerEvent('pointerdown', opts(xv, y2)));
+        for (let i = 1; i <= 12; i++) { tl.dispatchEvent(new PointerEvent('pointermove', opts(xv, y2 + i * 5))); await sleep(16); }
+        tl.dispatchEvent(new PointerEvent('pointerup', Object.assign(opts(xv, y2 + 60), { buttons: 0 })));
+        await sleep(500);
+        const rep2 = FM._scrubProbe.last();
+        if (rep2) throw new Error('CONTROL: a VERTICAL pan that started on the clip wrote a scrub report — a pan of the layer list would then be read as a scrub:\n' + rep2);
+      });
+    } finally {
+      try { FM._scrubProbe.cancel(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      if (wasSimple) FM.editor.apply('simple', { force: true, quiet: true });
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
+  /* #768 N2 / H3 (the hunt's H3, widened by its refuter). drawLayer's text branch asks FM.layerSize for the layer's size on
+   * every frame, and for a caption track that sent EVERY cue through FM.textLines, whose two-slot wrap cache cannot hold 40
+   * cues and sits on a per-frame clone anyway: about a dozen measureText calls per cue per frame with nothing selected,
+   * twice that selected. FM.layerSize now remembers its answer by layer id, and skips the widest-line measure a wrap
+   * column makes pointless.
+   * Counted where the cost is: measureText calls made INSIDE FM.layerSize (a depth flag set by a wrapper) across five
+   * rendered frames of a 40-cue track, about ten words a cue, in a 900 px column.
+   * FAILS BEFORE THE FIX: thousands of calls across the five frames, with nothing selected and again selected.
+   * CONTROLS: layerSize really is asked every frame (so a low count is not silence); an edited cue IS measured afresh and
+   * grows the box, and a new column moves it (the memory is not stale); and a frame drawn from the remembered size is byte
+   * for byte the frame drawn from a fresh measurement (FM.fontGen bumped, which every wrap key carries), with the anchor
+   * off-centre so the size actually moves the text, and with ink on it. */
+  test('768 N2: a caption track on screen is measured once, not re-wrapped cue by cue every frame, selected or not, with the same pixels', { item: '768', budgetMs: 40000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time;   /* fontGen is left bumped on purpose (the review's N2-c): it costs one fresh measure of each text on the next frame */
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const proto = CanvasRenderingContext2D.prototype, mtDesc = Object.getOwnPropertyDescriptor(proto, 'measureText');
+    const realSize = FM.layerSize;
+    let inside = 0, calls = 0, measured = 0;
+    try {
+      if (hadHome) FM.home.close();
+      const words = ['the', 'quick', 'brown', 'fox', 'jumps', 'over', 'a', 'lazy', 'dog', 'while', 'seven', 'small', 'birds', 'sing', 'again'];
+      const cues = [];
+      for (let i = 0; i < 40; i++) {
+        const w = [];
+        for (let k = 0; k < 10; k++) w.push(words[(i * 7 + k * 4) % words.length]);
+        cues.push({ start: i * 3, end: i * 3 + 2.8, text: w.join(' ') + ' ' + i });
+      }
+      const C = FM.makeLayer('text', { name: 'c768n2', x: 540, y: 540, fontSize: 64, start: 0, duration: 120 });
+      C.text = ''; C.captions = cues; C.wrapWidth = 900; C.color = '#ffffff'; C.textAnim = { preset: 'none' };
+      // an off-centre anchor: the size layerSize answers then MOVES the drawn text, so a wrong remembered size shows in the pixels
+      C.transform.anchorX = 0.25; C.transform.anchorY = 0.3;
+      FM.scene = scene([C], { project: { width: 1080, height: 1080, fps: 30, duration: 120, background: '#000000' } });
+      FM.selectLayer(null); FM.refreshAll(); FM.setTime(13.5); await sleep(250);
+      Object.defineProperty(proto, 'measureText', { configurable: true, enumerable: mtDesc.enumerable, writable: true, value: function () { if (inside > 0) measured++; return mtDesc.value.apply(this, arguments); } });
+      FM.layerSize = function () { inside++; calls++; try { return realSize.apply(this, arguments); } finally { inside--; } };
+      const five = async function () {
+        // two warm frames first: the first frame after any change is allowed to measure
+        FM.requestRender(); await frame(); FM.requestRender(); await frame();
+        calls = 0; measured = 0;
+        for (let i = 0; i < 5; i++) { FM.requestRender(); await frame(); }
+        return { calls: calls, measured: measured };
+      };
+      const loose = await five();
+      if (loose.calls < 5) throw new Error('CONTROL: FM.layerSize was asked only ' + loose.calls + ' times across five frames — the draw pass is not reaching it, so a low count below would prove nothing');
+      if (loose.measured >= 40) throw new Error(loose.measured + ' measureText calls inside FM.layerSize across five frames with NOTHING selected (want under 40) — every frame re-wraps all 40 cues of the caption track, main-thread work under every scrub frame on his phone');
+      FM.selectLayer(C.id); await sleep(300);
+      const held = await five();
+      if (held.calls < 5) throw new Error('CONTROL: FM.layerSize was asked only ' + held.calls + ' times across five frames with the track selected');
+      if (held.measured >= 40) throw new Error(held.measured + ' measureText calls inside FM.layerSize across five frames with the track SELECTED (want under 40) — the selection box asks again and every cue is re-wrapped twice a frame');
+      FM.selectLayer(null); await sleep(100);
+      // CONTROL: the memory is not stale. An edited cue is measured afresh and grows the box; a new column moves it.
+      const cue4 = C.captions[4].text, h0 = FM.layerSize(C).h;
+      measured = 0;
+      C.captions[4].text = Array(30).fill('another long line of words').join(' ');
+      const grown = FM.layerSize(C);
+      if (!measured) throw new Error('CONTROL: a cue edited to many more words was not measured at all — its size is being served from before the edit');
+      if (!(grown.h > h0)) throw new Error('CONTROL: a cue grown to many lines left the box ' + grown.h + ' tall (was ' + h0 + ') — a stale size');
+      C.wrapWidth = 700;
+      const narrow = FM.layerSize(C).w;
+      if (narrow !== 700) throw new Error('CONTROL: the box did not follow a new wrap column (' + narrow + ', want 700)');
+      C.wrapWidth = 900; C.captions[4].text = cue4;
+      // CONTROL: the remembered size draws exactly the pixels a fresh measurement does
+      const P = FM.scene.project;
+      const shot = function () {
+        const cv = document.createElement('canvas'); cv.width = P.width; cv.height = P.height;
+        const x = cv.getContext('2d');
+        FM.renderScene(x, FM.scene, FM.time);
+        const d = x.getImageData(0, 0, cv.width, cv.height).data;
+        let h = 2166136261, ink = 0;
+        for (let i = 0; i < d.length; i++) { h = Math.imul(h ^ d[i], 16777619); if ((i & 3) === 0 && d[i] > 128) ink++; }
+        return { hash: h >>> 0, ink: ink };
+      };
+      FM.layerSize(C);   // remembered at the restored column and text
+      const warm = shot();
+      if (warm.ink < 500) throw new Error('CONTROL: the caption drew only ' + warm.ink + ' bright pixels — nothing is being rendered, so the pixel comparison means nothing');
+      FM.fontGen = (FM.fontGen || 0) + 1;   // in the remembered key and in every wrap key: this frame measures from scratch
+      measured = 0;
+      const cold = shot();
+      if (!measured) throw new Error('CONTROL: bumping FM.fontGen did not make the frame measure afresh — the pixel comparison would be remembered against remembered');
+      if (warm.hash !== cold.hash) throw new Error('the frame drawn from the remembered size differs from one measured from scratch (hash ' + warm.hash + ' vs ' + cold.hash + ') — the pixels must stay byte-identical');
+    } finally {
+      Object.defineProperty(proto, 'measureText', mtDesc);
+      FM.layerSize = realSize;
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
+  /* #768 H2 (the 22 Oct hunt and its refuter). The clip-action row's middle buttons swap with the playhead's side of the
+   * selected clip (trim / split / trim inside it, move / extend outside), and syncPlayhead watched for the crossing by
+   * calling refresh(), which empties the whole panel and rebuilds every category card, inside the scrub's touch move; on
+   * the phone the sheet then re-docked with a forced layout. A scrub across the selected clip (the one row under his thumb
+   * on the phone) crosses both its edges, so it hitched twice. Now only the row is swapped.
+   * The playhead is put left of the clip and the panel refreshed FIRST (the refuter's addition), so the grid element held
+   * below is the one the scrub starts with; then FM.scrubTime (the path both timeline scrubs use) walks 0.5 → 3.5 s across
+   * a clip at 1–3 s in 30 steps, a frame each.
+   * FAILS BEFORE THE FIX: two full rebuilds during the scrub, and the grid held at the start has been thrown away.
+   * CONTROLS: the row still follows the playhead: Move left before the clip, Split inside it, Move right past it. */
+  test('768 H2: scrubbing across the selected clip’s edges swaps only its action row and keeps the category grid', { item: '768', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    const realRefresh = FM.inspector.refresh;
+    let refreshes = 0;
+    try {
+      if (hadHome) FM.home.close();
+      if (wasSimple) FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's768h2', shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 120, fill: '#0f0', start: 1, duration: 2 });
+        // a floor layer 0–6 s keeps the project 6 s long: refreshAll fits the project to the last clip's end, and the playhead has to reach 3.5 s
+        const floor = FM.makeLayer('shape', { name: 'floor768h2', shape: 'rect', x: -500, y: -500, shapeW: 10, shapeH: 10, fill: '#000', start: 0, duration: 6 });
+        FM.scene = scene([floor, L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+        FM.selectLayer(L.id);
+        try { if (FM.inspector && FM.inspector.openCategory) FM.inspector.openCategory('home'); } catch (e) {}
+        FM.refreshAll(); await sleep(250);
+        FM.setTime(0.5); FM.inspector.refresh(); await sleep(150);
+        // a glide an earlier test left running moves the playhead on every frame: place it again once it has stopped
+        if (Math.abs(FM.time - 0.5) > 1e-3) { FM.setTime(0.5); FM.inspector.refresh(); await sleep(100); }
+        const root = document.getElementById('inspector');
+        const grid = root && root.querySelector(':scope > .cat-wrap');
+        if (!grid) throw new Error('setup: no category grid under the selected clip — this is not the panel he scrubs under');
+        const titles = () => Array.prototype.map.call(root.querySelectorAll(':scope > .quick-row .qr-btn'), b => b.title).join(' | ');
+        const before = titles();
+        if (!/Move clip left to the playhead/.test(before)) throw new Error('CONTROL: at 0.5 s, left of the clip, the row does not offer Move clip left (' + before + ')');
+        FM.inspector.refresh = function () { refreshes++; return realRefresh.apply(this, arguments); };
+        let inside = '';
+        for (let i = 1; i <= 30; i++) {
+          FM.scrubTime(0.5 + i * 0.1);
+          await frame();
+          if (i === 15) inside = titles();
+        }
+        FM.inspector.refresh = realRefresh;
+        const after = titles();
+        if (FM.time < 3.4) throw new Error('setup: the playhead stopped at ' + FM.time + ' s and never crossed the clip end');
+        if (!/Split at playhead/.test(inside)) throw new Error('CONTROL: at 2 s, inside the clip, the row does not offer Split (' + inside + ') — the buttons stopped following the playhead');
+        if (!/Move clip right to the playhead/.test(after)) throw new Error('CONTROL: at 3.5 s, past the clip, the row does not offer Move clip right (' + after + ') — the buttons stopped following the playhead');
+        if (refreshes) throw new Error('the whole inspector was rebuilt ' + refreshes + ' times inside one scrub across the selected clip (want 0) — every card, its icon and its shimmer redrawn, and on the phone the sheet re-docked, inside a touch move');
+        if (!grid.isConnected) throw new Error('the category grid held before the scrub was thrown away and rebuilt (want the same element) — only the clip-action row depends on the playhead');
+      });
+    } finally {
+      FM.inspector.refresh = realRefresh;
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      if (wasSimple) FM.editor.apply('simple', { force: true, quiet: true });
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await sleep(80);
@@ -154524,7 +154878,7 @@
      and "just have a toggle switch to change the two modes in the settings". His pick, 7 Oct: "i want the circle one for when
      a project is empty" (a, 260 ms). Half b (the add row stretching, on a project with layers) waits on his OK of its redraw,
      so the slim row keeps the slide-up and nothing here asks it to grow.
-     The setting is FM.settings 'addMenuGrow', ON by default (the plan). Every reading is of the ANIMATION — its keyframes,
+     The setting is FM.settings 'addMenuGrow', ON by default (since his 21 Oct rule; OFF before it). Every reading is of the ANIMATION — its keyframes,
      seeked — and the computed clip-path, never a class name alone; seeked because this runner may fire no frames while it is
      not fronted (the 571/616/964 notes). Phone checks mean something at a phone width only, so every one runs inside
      onEmptyArea964 / onEmpty981, which narrow the frame themselves (both suite passes). */
@@ -154810,7 +155164,7 @@
     }));
   });
 
-  test('1084 e · the setting is off for a phone that never chose, saves when he turns it on and off, survives a reload, and its switch is in the phone’s Settings only', { item: '1084', budgetMs: 12000 }, async function () {
+  test('1084 e · the setting is ON for a phone that never chose (his 21 Oct rule), and for one that saved the old default before it, saves when he turns it on and off, survives a reload, and its switch is in the phone’s Settings only', { item: '1084', budgetMs: 12000 }, async function () {
     const KEY = 'fm.settings';
     let raw0 = null;
     try { raw0 = localStorage.getItem(KEY); } catch (e) {}
@@ -154828,21 +155182,26 @@
       const sfOff = FM.settings.get('systemFonts');
       loadWith(Object.assign({}, base, { systemFonts: true }));
       if (sfOff !== false || FM.settings.get('systemFonts') !== true) throw new Error('CONTROL: a reload did not bring Show system fonts back as saved (' + sfOff + ', ' + FM.settings.get('systemFonts') + '), so this reload proves nothing');
-      /* OFF for a phone that never chose (#545, 17 Oct): a new look ships only after he has seen it — the frames went to him
-         with v17.59 — so today's slide-up stays until he turns this on, and on by default is the one-line follow-up. */
+      /* ON for a phone that never chose, since his 21 Oct words ("im pretty fine with ur choices then correcting later if i
+         think its bad"): the review page's recommended answer ships, and he corrects it with this switch. It was OFF (#545). */
       const fresh = loadWith(base);
-      if (fresh !== false) throw new Error('a phone that never chose has the Add menu animation setting ' + JSON.stringify(fresh) + ' — it must start OFF, today’s slide-up, until he has seen the new one (#545)');
-      if (loadWith(null) !== false) throw new Error('with no saved settings at all the Add menu animation setting is not off');
+      if (fresh !== true) throw new Error('a phone that never chose has the Add menu animation setting ' + JSON.stringify(fresh) + ' — it must start ON (his 21 Oct rule: the recommended answer ships, he corrects it)');
+      if (loadWith(null) !== true) throw new Error('with no saved settings at all the Add menu animation setting is not on');
       FM.settings.set(KEY1084, true);
       let stored = null;
       try { stored = JSON.parse(localStorage.getItem(KEY))[KEY1084]; } catch (e) {}
       if (stored !== true) throw new Error('turning the setting on did not save it (stored ' + JSON.stringify(stored) + ')');
       FM.settings.init();
       if (FM.settings.get(KEY1084) !== true) throw new Error('turned on, saved, and back OFF after a reload — load() dropped it (the #688 whitelist bug)');
-      if (loadWith(Object.assign({}, base, { addMenuGrow: false })) !== false) throw new Error('saved off, it came back on');
-      if (loadWith(Object.assign({}, base, { addMenuGrow: 'on' })) !== false) throw new Error('a hand-edited value that is not true or false was taken instead of the default');
+      if (loadWith(Object.assign({}, base, { addMenuGrow: false, settingsRev: 2 })) !== false) throw new Error('saved off, it came back on');
+      /* A PHONE THAT SAVED ANY SETTING BETWEEN v17.59 AND v17.91 stores addMenuGrow false — the old default, written by save() with the
+         whole state, not a choice (the 22 Oct review's refuter). Without the settings revision the ON default never reaches it.
+         FAILS BEFORE THE FIX: that blob reads false. */
+      const old1084 = Object.assign({}, base, { addMenuGrow: false }); delete old1084.settingsRev;
+      if (loadWith(old1084) !== true) throw new Error('a phone that saved settings before this release (addMenuGrow false, no settings revision) keeps the old slide-up: the ON default never reaches it');
+      if (loadWith(Object.assign({}, base, { addMenuGrow: 'off' })) !== true) throw new Error('a hand-edited value that is not true or false was taken instead of the default (on)');
       // THE SWITCH: in the phone's Settings, reading the saved value; not on PC, where this menu never opens
-      loadWith(Object.assign({}, base, { addMenuGrow: false }));
+      loadWith(Object.assign({}, base, { addMenuGrow: false, settingsRev: 2 }));
       await atPhoneWidth(async function () {
         FM.settings.open();
         await sleep(80);
@@ -159311,6 +159670,29 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* THE BORDER SLIDES OFF AS THE WIPE FINISHES (the review page's question 2, recommended; decided under his 21 Oct "fine with ur
+     choices" rule). Each wipe returns before its border at Progress 1 (0 under Invert), so the band sat full width against the edge on the
+     last frame and was gone on the next. Now it narrows to nothing over the last tenth: on the 96 x 72 fixture a 12 px red border at 99 %
+     must move at most a fifth of the pixels it moves at 85 % — on Wipe it is the same 12 x 72 band at both today — and under Invert the
+     same at 1 % against 15 %. Wipe at 95 % is half way, between 0.3 and 0.75 of its 85 % band, so it slides rather than jumps.
+     FAILS BEFORE THE FIX: every wipe's band is full width at 99 % (Wipe and Radial Wipe move as many pixels as at 85 %).
+     CONTROL: at 85 % each border moves a few hundred pixels, so the comparison has something to compare. */
+  test('966 picks a Wipe, Radial Wipe and Shape Wipe border slides off as the wipe finishes: at 99 % it is a sliver of its 85 % band, under Invert the same at the start, and Wipe at 95 % is half way', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], W = 96, H = 72;
+    const band = (type, prog, inv) => _o4Moves(type, {}, { progress: prog, invert: inv ? 1 : 0 }, { progress: prog, invert: inv ? 1 : 0, border: 12, color: '#ff0000' }, W, H, _o4Pic, 0.5);
+    ['wipe', 'radialwipe', 'shapewipe'].forEach(type => {
+      const full = band(type, 0.85, false), end = band(type, 0.99, false);
+      if (full < 300) bad.push('CONTROL: ' + type + ' at 85 % moves only ' + full + ' pixels with a 12 px border');
+      else if (end > 0.2 * full) bad.push(type + ' at 99 % still moves ' + end + ' pixels against ' + full + ' at 85 % — the band is still there on the last frames and vanishes in one');
+      const ifull = band(type, 0.15, true), iend = band(type, 0.01, true);
+      if (ifull < 300) bad.push('CONTROL: ' + type + ' under Invert at 15 % moves only ' + ifull + ' pixels');
+      else if (iend > 0.2 * ifull) bad.push(type + ' under Invert at 1 % still moves ' + iend + ' pixels against ' + ifull + ' at 15 %');
+    });
+    const w85 = band('wipe', 0.85, false), w95 = band('wipe', 0.95, false);
+    if (!(w95 >= 0.3 * w85 && w95 <= 0.75 * w85)) bad.push('Wipe at 95 % moves ' + w95 + ' pixels against ' + w85 + ' at 85 % — it should be half way off, sliding, not all or nothing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
   /* ---- Topo Bands: Flow speed ---- */
   test('966 opts5 Topo Bands has Flow speed (−10 to 10 bands a second, keyframable), 0 by default: a new one starts there, a saved one without it is filled with the same, the load sanitiser keeps 2.5, and it stays in the crop list (tone and time only)', { item: '966', budgetMs: 60000 }, function () {
     _o5Need('contourstrips', ['flow'], ['_topoShift966', '_topoFlow966']);
@@ -160005,18 +160387,20 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
-  /* CORE COLOUR over an opaque black layer, so every band only adds light: Width 20, no glow. Off the core, at (200, 192), the beam adds
-     0.8 of its colour (255, 64, 85): (204, 51, 68). On the core, (200, 200), the core adds 0.95 of its own on top: white takes it to
-     (255, 255, 255), cyan (0, 255, 255) to (204, 255, 255), and black adds nothing, so the core is gone and the middle is the beam's own
-     (204, 51, 68). Off the core every core colour leaves the beam as it was. A cyan core lights green above 200 only where it is: 0.22 x 20
-     = 4.4 px across, as B37 measures the white one. ±4 for the canvas's rounding. */
-  test('966 opts6 Laser Beam Core colour: over black the middle of a white-cored beam is white, a cyan core makes it (204, 255, 255), a black core leaves the beam’s own (204, 51, 68) there — the core is gone — off the core the beam is (204, 51, 68) whatever the core, and the cyan core is the white one’s 4.4 px across', { item: '966', budgetMs: 60000 }, function () {
+  /* CORE COLOUR over an opaque black layer: Width 20, no glow. Off the core, at (200, 192), the beam adds 0.8 of its colour (255, 64, 85):
+     (204, 51, 68). On the core, (200, 200): white is still ADDED at 0.95, which takes it to (255, 255, 255) as it always did; any other
+     core colour is LAID OVER the beam at 0.95 (the review page's question 1, recommended, decided under his 21 Oct rule), so cyan
+     (0, 255, 255) reads (10, 245, 246) — cyan, where adding it burned (204, 255, 255), nearly white — and black reads (10, 3, 3): the
+     core is the black picked, where adding it left the beam's own. Off the core every core colour leaves the beam as it was. A cyan core
+     lights green above 200 only where it is: 0.22 x 20 = 4.4 px across, as B37 measures the white one. ±4 for the canvas's rounding.
+     FAILS BEFORE THE FIX: cyan reads (204, 255, 255) and black (204, 51, 68). */
+  test('966 opts6 Laser Beam Core colour: over black the middle of a white-cored beam is white, a cyan core shows cyan (10, 245, 246) and a black one black (10, 3, 3) — the colour picked, not added — off the core the beam is (204, 51, 68) whatever the core, and the cyan core is the white one’s 4.4 px across', { item: '966', budgetMs: 60000 }, function () {
     _o6Need('laserbeam', ['color2']);
     const bad = [], W = 400, H = 400;
     const black = g => { g.fillStyle = '#000000'; g.fillRect(0, 0, W, H); };
     const run = core => _o6LB(_o4P('laserbeam', { width: 20, glow: 0, color2: core }), 0, { paint: black });
     const BEAM = [204, 51, 68, 255];
-    [['#ffffff', [255, 255, 255, 255]], ['#00ffff', [204, 255, 255, 255]], ['#000000', BEAM]].forEach(([core, want]) => {
+    [['#ffffff', [255, 255, 255, 255]], ['#00ffff', [10, 245, 246, 255]], ['#000000', [10, 3, 3, 255]]].forEach(([core, want]) => {
       const d = run(core), mid = _o4Px(d, W, 200, 200), off = _o4Px(d, W, 200, 192);
       if (!_o4Near(mid, want, 4)) bad.push('with a ' + core + ' core the middle of the beam reads ' + mid.join(',') + ', not ' + want.join(','));
       if (!_o4Near(off, BEAM, 4)) bad.push('with a ' + core + ' core the beam off its core reads ' + off.join(',') + ', not the beam’s own ' + BEAM.join(','));
@@ -160042,9 +160426,8 @@
     const base = _o6LB(_o4P('laserbeam', { width: 12 }), 0, { paint: paint });
     let n;
     if ((n = E1.count(_o6LB(_o4P('laserbeam', { width: 12, draw: 60 }), 0, { paint: paint }), base, 4)) < 500) bad.push('CONTROL: Draw on 60 moves only ' + n + ' pixels');
-    /* A BLUE core, not cyan: the core ADDS its light (the test above), and on the default red beam (255, 64, 85) with Glow 70 the red
-       is already full under the core, so a cyan core burns exactly as white as a white one — measured 18 Oct: 0 pixels moved. Blue
-       adds no green, so the core turns magenta where white made it white. */
+    /* A BLUE core (kept from 18 Oct, when the core ADDED its light and a cyan one burned exactly as white as white: 0 pixels moved).
+       Since the core is laid over the beam (his 21 Oct rule) any colour off white moves it; blue still does, so the bound stands. */
     if ((n = E1.count(_o6LB(_o4P('laserbeam', { width: 12, color2: '#0000ff' }), 0, { paint: paint }), base, 4)) < 600) bad.push('CONTROL: a blue core moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 1292 */);
     if (bad.length) throw new Error(bad.join(' · '));
   });

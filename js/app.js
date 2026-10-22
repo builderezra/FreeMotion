@@ -226,12 +226,19 @@ window.FM = window.FM || {};
    * dropped a rung. MOTION_IDLE has to outlast ONE slow frame too — a 216ms frame was measured, and
    * at 200ms the idle timer fired mid-drag and snapped back to full resolution. (#123) */
   const MOTION_FRAMES = 3, MOTION_GAP = 500, MOTION_IDLE = 700;
-  let _inMotion = false, _mFrames = 0, _mLast = 0, _mIdle = null;
+  let _inMotion = false, _mFrames = 0, _mLast = 0, _mIdle = null, _movingCls = false;   // _movingCls: #768 H1, body.fm-moving
   function noteMotion(ms) {
     if (FM.playing) return;                       // playback has its own measurement below
+    /* #768 (the 22 Oct hunt's refuter, H1): body.fm-moving while anything re-renders. styles.css pauses the category cards' two
+       infinite animations under it (and under fm-playing): on a phone they repaint every frame, the work it sheds under load, and
+       with a layer selected the grid is up for the whole scrub. The idle timeout below clears it, so it cannot stick. */
+    if (!_movingCls) { _movingCls = true; document.body.classList.add('fm-moving'); }
     const now = performance.now();
     const gap = _mLast ? (now - _mLast) : 0;
-    if (now - _mLast > MOTION_GAP) _mFrames = 0;
+    /* #1131 (the lag hunt's refuter, R2, 21 Oct): what resets the count is the IDLE time before this render began, not the gap from
+       the last render's end to this one's end, which contains this render. A frame dearer than MOTION_GAP never counted as motion,
+       so the heavy scene, the one that needs relief, was scrubbed and dragged at full size and the ladder was never asked. */
+    if (now - ms - _mLast > MOTION_GAP) _mFrames = 0;
     _mLast = now;
     _mFrames++;
     if (!_inMotion && _mFrames >= MOTION_FRAMES) { _inMotion = true; resizeCanvas(); }
@@ -243,6 +250,7 @@ window.FM = window.FM || {};
     clearTimeout(_mIdle);
     _mIdle = setTimeout(() => {
       _mFrames = 0;
+      if (_movingCls) { _movingCls = false; document.body.classList.remove('fm-moving'); }   // #768 H1: the cards run again
       if (_inMotion) { _inMotion = false; resizeCanvas(); }   // stopped → repaint sharp
     }, MOTION_IDLE);
   }
@@ -2410,16 +2418,36 @@ window.FM = window.FM || {};
                "worst" figure the report prints. Computed once, here, from the bias the controller is
                actually acting on. */
             const step = FM._syncBiasStep(m, rawErr, FM._syncMayLearn(m, rawErr));   // a stall is corrected, not learned (queue 690)
-            const plan = FM.mediaSyncPlan(step.deBiased, base, m._syncAt == null ? Infinity : now - m._syncAt);
+            let plan = FM.mediaSyncPlan(step.deBiased, base, m._syncAt == null ? Infinity : now - m._syncAt);
+            /* #845 (the pre-ship review's B2 and its refuter, 22 Oct): a routed clip is never rate-trimmed (below), so the trim band
+               would be a place its sound stays late for good — a 200 ms stall left it 200 ms behind until the clip ended. There, a lag
+               over 0.1 s, or one that has stayed out of the dead band for a second, is corrected by the (de-clicked) seek instead, no
+               more often than SEEK_MIN_GAP. In-band jitter never seeks. */
+            if (m._mes && plan.action === 'trim') {
+              if (!m._mesOutAt) m._mesOutAt = now;
+              if ((Math.abs(step.deBiased) > 0.1 || now - m._mesOutAt >= 1000) && !(m._syncAt != null && now - m._syncAt < SEEK_MIN_GAP)) plan = { action: 'seek', rate: base };
+            } else if (m._mesOutAt) m._mesOutAt = 0;
             if (plan.action === 'seek') {
               m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++;
               FM._noteSyncSeek(m);
-            } else if (plan.action === 'trim') FM.playbackStats.trims++;
+              /* #845 (the audio hunt's refuter, N1): a drift seek jumps a waveform that is PLAYING to an arbitrary sample, the click
+                 play() and wrapTo() de-click, missed here since v6.05. The restart fades in over 45 ms (declickGain) through el.volume;
+                 on an iPhone, where el.volume cannot be set, only a clip with a level stage (m._boost) fades, and an effect-only clip
+                 at 100 % has none, so there the restart is not softened (the review's N6: a hard zero first would be its own click). */
+              m._resumedAt = now; m._mesOutAt = 0; try { m.el.volume = 0; } catch (e) {}
+            } else if (plan.action === 'trim' && !m._mes) FM.playbackStats.trims++;
+            /* #845 (#663, his iPhone): an element routed into Web Audio (m._mes: an effect, a boost, or an iPhone level) is never
+               rate-trimmed. WebKit mishandles every rate write on one: older builds keep reading the element's sound at its own rate
+               into a one-second buffer drained at 1x, so it runs dry or overflows (bug 240405, "choppy"); newer ones tear the tap down
+               and rebuild it on each write, a gap every time, and the pitch-kept path is still choppy (bug 311000, reopened June
+               2026). So a routed clip holds its base rate exactly, and drift past the seek threshold is corrected by the seek alone,
+               de-clicked above. A clip that is not routed is trimmed exactly as before. */
+            const want = m._mes ? base : plan.rate;
             const baseMoved = Math.abs((m._baseRate == null ? base : m._baseRate) - base) > 1e-4;
             m._baseRate = base;
-            if (Math.abs((m.el.playbackRate || 1) - plan.rate) > 1e-4 &&
+            if (Math.abs((m.el.playbackRate || 1) - want) > 1e-4 &&
                 (baseMoved || plan.action === 'seek' || now - (m._rateAt || 0) >= RATE_WRITE_GAP)) {
-              m.el.playbackRate = plan.rate; m._rateAt = now; FM.playbackStats.rateWrites++;
+              m.el.playbackRate = want; m._rateAt = now; FM.playbackStats.rateWrites++;
             }
             /* The error the controller actually acted on, bias removed. Rolling window, not a
                first-600 cap (queue 491) — see FM._noteSyncError.
