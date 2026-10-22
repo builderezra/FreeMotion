@@ -4905,6 +4905,10 @@ window.FM = window.FM || {};
     mtSet(layer, key, Math.round(v));
   }
 
+  /* #768 H5: a window resize changes the room every value box has (--insp-w follows the window), so it bumps this, and a box
+     fitted before it is fitted again on its next refresh, exactly as every refresh did before (see refresh in mtVBox). */
+  let _vboxFitGen = 0;
+  window.addEventListener('resize', () => { _vboxFitGen++; });
   // A value box: shows the number (drag horizontally to scrub, tap to type) + a label beneath.
   function mtVBox(labelText, getVal, setVal, opts) {
     opts = opts || {}; const dp = opts.dp != null ? opts.dp : 1;
@@ -4965,9 +4969,11 @@ window.FM = window.FM || {};
        and steps the type down only when it has to; a value that fits keeps the full 18px. The first
        call runs before the box is in the document (clientWidth 0), so it re-measures on the next frame. */
     const fitVal = () => {
+      val._fitFor = null;   // #768 H5: what this box was last fitted for (see refresh); nothing until it is really measured
       val.style.fontSize = '';
       const room = val.clientWidth;
       if (!room) { if (!val._fitQueued) { val._fitQueued = true; requestAnimationFrame(() => { val._fitQueued = false; if (val.isConnected && val.clientWidth) fitVal(); }); } return; }
+      val._fitFor = val.textContent + '\u0000' + _vboxFitGen;
       if (val.scrollWidth <= room) return;
       const cs = getComputedStyle(val);
       const inner = room - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
@@ -4976,10 +4982,22 @@ window.FM = window.FM || {};
       if (!(textW > 0) || !(inner > 0)) return;
       val.style.fontSize = Math.max(10, Math.floor(parseFloat(cs.fontSize) * inner / textW * 10) / 10) + 'px';
     };
+    /* #768 H5 (the 22 Oct hunt and its refuter): A BOX WHOSE NUMBER DID NOT CHANGE IS LEFT ALONE. With Move & Transform or
+       Volume open, every scrub step runs FM.inspector.syncTransform → refreshAllBoxes → this, for every box: the text
+       rewritten (a DOM mutation even when it is the same), the font size cleared and clientWidth and scrollWidth read, a
+       forced layout per box per touch move (about two a frame on his phone), for a layer whose numbers cannot change. So
+       when the text this would write is the text the box already shows AND was last fitted for, there is nothing to do:
+       the same text in the same room fits the same way, and the aria values are the same number. The room changes with the
+       window (_vboxFitGen, above), so a resize fits again on the next refresh as before; a box that has never been
+       measured (built before it was laid out, so fitVal found no room) has no _fitFor and is fitted by the next refresh as
+       before; a box being typed in takes the old path untouched. A box whose number changed is written and fitted exactly
+       as it always was. */
     const refresh = () => {
+      const s = fmtS();
+      if (!val.isContentEditable && val._fitFor === s + '\u0000' + _vboxFitGen && val.textContent === s) return;
       val.setAttribute('aria-valuenow', String(round(getVal(), dp)));
-      val.setAttribute('aria-valuetext', fmtS());
-      if (!val.isContentEditable) { val.textContent = fmtS(); fitVal(); }
+      val.setAttribute('aria-valuetext', s);
+      if (!val.isContentEditable) { val.textContent = s; fitVal(); }
     };
     refresh(); box.appendChild(val); box.appendChild(lab);
     // Per-slider keyframe diamond (Ezra: "Every single Individual slider needs to have its own key

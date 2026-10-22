@@ -83284,6 +83284,98 @@
     }
   });
 
+  /* #768 H5 (the 22 Oct hunt and its refuter). With Move & Transform or Volume open, every scrub step ran syncTransform →
+   * refreshAllBoxes → each value box's refresh: its text rewritten, its font size cleared, and clientWidth and scrollWidth
+   * read, a forced layout per box per touch move, even for a box whose number cannot change. Now a box whose text is the
+   * text it already shows, and was fitted for, is left alone.
+   * Counted where the cost is: clientWidth and scrollWidth reads on .mt-vbox-val elements (Element.prototype's two getters
+   * wrapped, their descriptors put back exactly) made inside each of ten FM.scrubTime steps, at 320 px where the X / Y / Z
+   * boxes are 59 px wide. X runs far off the canvas (-98765.4 to -12345.6 across the clip), so its number is long and
+   * changes on every step; Y and Z stand still. Then the same scrub with Volume open on a clip at a steady 100 %.
+   * FAILS BEFORE THE FIX: every still box is measured on every step (two reads each), under both panels.
+   * CONTROLS: the panel was not rebuilt during the scrub (the same elements); X followed the playhead; X, whose number changed,
+   * was measured on every step and ends FITTED (its type stepped down and its text inside its box); and Volume's box is the
+   * readout of the clip that is selected. The first step is not judged: a box built before it was laid out has not been
+   * measured yet, and is fitted there. */
+  test('768 H5: a scrub under Move and Transform or Volume leaves the value boxes whose number did not change alone, and a box whose number changed is still fitted', { item: '768', budgetMs: 40000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time, mode0 = FM._mtMode, axis0 = FM._mtAxis;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const proto = Element.prototype;
+    const cwDesc = Object.getOwnPropertyDescriptor(proto, 'clientWidth'), swDesc = Object.getOwnPropertyDescriptor(proto, 'scrollWidth');
+    let counting = false;
+    const reads = new Map();
+    const spy = d => ({ configurable: true, enumerable: d.enumerable, set: d.set, get: function () { if (counting && this.classList && this.classList.contains('mt-vbox-val')) reads.set(this, (reads.get(this) || 0) + 1); return d.get.call(this); } });
+    const unspy = () => { counting = false; Object.defineProperty(proto, 'clientWidth', cwDesc); Object.defineProperty(proto, 'scrollWidth', swDesc); };
+    // ten steps of 0.1 s from `from`, each counted on its own; returns, per step, the reads on each element of `vals`
+    const scrub = async (vals, from) => {
+      const per = [];
+      Object.defineProperty(proto, 'clientWidth', spy(cwDesc)); Object.defineProperty(proto, 'scrollWidth', spy(swDesc));
+      try {
+        for (let i = 1; i <= 10; i++) {
+          reads.clear(); counting = true;
+          FM.scrubTime(from + i * 0.1);
+          counting = false;
+          per.push(vals.map(v => reads.get(v) || 0));
+          await frame();
+        }
+      } finally { unspy(); }
+      return per;
+    };
+    const after1 = (per, k) => per.slice(1).reduce((a, p) => a + p[k], 0);
+    try {
+      if (hadHome) FM.home.close();
+      if (FM.timeline && FM.timeline._clearFling) FM.timeline._clearFling();
+      await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's768h5', shape: 'rect', x: 540, y: 960, shapeW: 120, shapeH: 120, fill: '#4af', start: 0, duration: 6 });
+        L.transform.x = { kf: [{ t: 0, v: -98765.4, e: 'linear' }, { t: 6, v: -12345.6, e: 'linear' }] };
+        FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+        FM.selectLayer(L.id); FM.refreshAll(); FM.setTime(1);
+        FM.inspector.openCategory('transform'); FM._mtAxis = 'xy'; FM._mtMode = 'move'; FM.inspector.refresh();
+        await sleep(350);
+        const boxOf = name => { const b = [...document.querySelectorAll('.mt-panel .mt-vbox')].find(n => (n.querySelector('.mt-vbox-lab') || {}).textContent === name); return b ? b.querySelector('.mt-vbox-val') : null; };
+        const xv = boxOf('X'), yv = boxOf('Y'), zv = boxOf('Z');
+        if (!xv || !yv || !zv) throw new Error('setup: Move and Transform does not show its X, Y and Z boxes');
+        const x0 = xv.textContent, y0 = yv.textContent, z0 = zv.textContent;
+        const per = await scrub([xv, yv, zv], 1);
+        if (!xv.isConnected || !yv.isConnected || !zv.isConnected) throw new Error('setup: the Move and Transform panel was rebuilt during the scrub, so its boxes were new ones');
+        if (Math.abs(FM.time - 2) > 0.05) throw new Error('setup: the scrub left the playhead at ' + FM.time + ' s, not 2 s');
+        if (yv.textContent !== y0 || zv.textContent !== z0) throw new Error('setup: Y or Z changed during the scrub (' + y0 + ' / ' + z0 + ' to ' + yv.textContent + ' / ' + zv.textContent + ')');
+        if (xv.textContent === x0) throw new Error('CONTROL: the X box still reads ' + x0 + ' after the playhead moved a second along its keyframes - it is not following the playhead');
+        const still = after1(per, 1) + after1(per, 2);
+        if (still) throw new Error('the Y and Z boxes, whose numbers did not change, were measured ' + still + ' times across ' + (per.length - 1) + ' scrub steps (want 0; per step ' + per.map(p => p[1] + '+' + p[2]).join(', ') + ') - every step cleared their font size and read their width, a forced layout per box per touch move on his phone');
+        const xr = per.slice(1).filter(p => p[0] > 0).length;
+        if (xr < per.length - 1) throw new Error('CONTROL: the X box, whose number changed on every step, was measured on only ' + xr + ' of ' + (per.length - 1) + ' steps - a changed value is not being fitted');
+        if (!xv.style.fontSize || xv.scrollWidth > xv.clientWidth + 1) throw new Error('CONTROL: the X box reads ' + xv.textContent + ' and ends with font size ' + (xv.style.fontSize || 'unset') + ', ' + xv.scrollWidth + ' px of text in ' + xv.clientWidth + ' px - its long changing number was not fitted to its box');
+        // Volume: a clip at a steady 100 %
+        const V = FM.makeLayer('video', { name: 's768h5v' });
+        V.start = 0; V.duration = 6; V.volume = 1;
+        FM.scene = scene([V], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+        FM.selectLayer(V.id); FM.refreshAll(); FM.setTime(1);
+        FM.inspector.openCategory('volume');
+        await sleep(350);
+        const vv = document.querySelector('.vol-panel .mt-vbox-val');
+        if (!vv) throw new Error('setup: the Volume panel has no value box');
+        if (!/100/.test(vv.textContent)) throw new Error('CONTROL: the Volume box reads ' + vv.textContent + ', not the 100 % of the selected clip');
+        const v0 = vv.textContent;
+        const perV = await scrub([vv], 1);
+        if (!vv.isConnected) throw new Error('setup: the Volume panel was rebuilt during the scrub');
+        if (vv.textContent !== v0) throw new Error('setup: the Volume box changed during the scrub (' + v0 + ' to ' + vv.textContent + ')');
+        const vs = after1(perV, 0);
+        if (vs) throw new Error('the Volume box, whose number did not change, was measured ' + vs + ' times across ' + (perV.length - 1) + ' scrub steps (want 0) - every step under the Volume panel cleared its font size and read its width');
+      }, 320);
+    } finally {
+      unspy();
+      FM._mtMode = mode0; FM._mtAxis = axis0;
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      try { FM.inspector.openCategory('home'); } catch (e) {}
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
   /* ═══ 765 (the keyboard half): A / S / D ON THE SELECTED CLIP, INSIDE AND OUTSIDE. Nine presses through the
      real window keydown path, each on a fresh clip at 2–6s of a 12s project: inside (playhead 4s) A keeps the
      right, D keeps the left, S splits; left of it (1s) S extends the start, A moves it left, D does nothing;
