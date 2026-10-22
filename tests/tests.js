@@ -60451,6 +60451,48 @@
     } finally { FM.scene.layers = keep; FM.time = keepT; if (FM.refreshAll) FM.refreshAll(); }
   });
 
+  /* #202 H1's iPhone half (the PM's call, 22 Oct). If a seek does not load an element (iOS loads only metadata until something
+   * plays it), the paused seek primes it once ~700 ms later: muted play(), pause(), the seek again, muted and volume put back.
+   * FAILS BEFORE THE FIX: the element that only loads on play() is never played, so it still has no frame.
+   * CONTROL: an element that loads on the seek alone is never primed, and nothing primes while playing. */
+  test('202 a clip that a seek does not load is primed once with a muted play and put back paused, unmuted and on its frame; one that loads on the seek is not', { item: '202', budgetMs: 15000 }, async function () {
+    if (typeof FM._primeAfterMs !== 'number') throw new Error('the cold-clip prime (FM._primeAfterMs) does not exist');
+    const keep = FM.scene.layers.slice(), keepT = FM.time, wasPlaying = FM.playing;
+    const mk = loadsOnSeek => {
+      const el = { readyState: 1, seeking: false, duration: 10, paused: true, muted: false, volume: 0.8, plays: 0, writes: [],
+        addEventListener() {}, removeEventListener() {},
+        play() { this.plays++; this.paused = false; this.readyState = 2; return Promise.resolve(); }, pause() { this.paused = true; } };
+      Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) { this.writes.push(v); this._t = v; if (loadsOnSeek) this.readyState = 2; }, configurable: true });
+      return el;
+    };
+    const run = async (loadsOnSeek, playing) => {
+      const el = mk(loadsOnSeek);
+      const L = FM.makeLayer('video', { start: 0, duration: 5 }); L.type = 'video'; L.trimStart = 0; L.speed = 1;
+      FM.scene.layers = [L];
+      FM.media.set(L.id, { kind: 'video', el: el, duration: 10, width: 64, height: 48, stripFrames: [] });
+      FM.time = 0; FM.playing = false;
+      FM.seekVideosToTime();
+      if (playing) FM.playing = true;
+      await sleep(FM._primeAfterMs + 400);
+      FM.playing = false;
+      FM.media.remove(L.id);
+      return el;
+    };
+    try {
+      const seekLoads = await run(true, false);
+      if (seekLoads.plays !== 0) throw new Error('CONTROL: an element that loaded on the seek was played ' + seekLoads.plays + ' time(s) — the prime is for one a seek does not load');
+      const busy = await run(false, true);
+      if (busy.plays !== 0) throw new Error('CONTROL: an element was primed while the project was playing — the transport owns it then');
+      const cold = await run(false, false);
+      if (cold.plays !== 1) throw new Error('an element that only loads when played was played ' + cold.plays + ' time(s) — on an iPhone a seek may not load it, so the clip stays black until he presses Play');
+      if (!cold.paused) throw new Error('the primed element was left playing');
+      if (cold.muted !== false || cold.volume !== 0.8) throw new Error('muted and volume were not put back (' + cold.muted + ', ' + cold.volume + ')');
+      if (cold.readyState < 2) throw new Error('the primed element still has no frame');
+      const last = cold.writes[cold.writes.length - 1];
+      if (cold.writes.length < 2 || Math.abs(last - FM.frameSeekTarget(0, 10)) > 1e-9) throw new Error('after the prime the element was not put back on its frame (writes ' + JSON.stringify(cold.writes) + ')');
+    } finally { FM.playing = wasPlaying; FM.scene.layers = keep; FM.time = keepT; if (FM.refreshAll) FM.refreshAll(); }
+  });
+
   /* a stand-in video element for the filmstrip: events by hand, a 'seeked' a tick after every seek, every currentTime write kept */
   function fakeStripEl202(rs) {
     const on = {}, writes = [];

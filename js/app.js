@@ -1283,6 +1283,39 @@ window.FM = window.FM || {};
      FM.pause, stopping a clip that was PLAYING. Every other caller moves between frames on the grid, where
      the half-frame guard below is exact; a playing element stops wherever its own clock was, so an element
      10 ms short of the target would pass that guard while still showing the frame before it. */
+  /* #202 H1, THE iPHONE HALF (the PM, 22 Oct: cover both cases rather than ask him to test which). On an iPhone, WebKit loads only
+     metadata until something plays an element, and whether a SEEK alone loads it is not known here. So about 700 ms after the seek
+     above, an element that still has no frame and is not seeking is primed ONCE: muted play(), then pause(), then the seek again.
+     Never while playing or exporting, never on an element a build holds (FM.seekBusy), never for a clip that has left the project,
+     once per element (a new load, 'emptied', allows one more), and muted and volume are put back exactly as they were. */
+  const PRIME_AFTER_MS = 700;
+  function primeIfStillCold(m, target) {
+    const el = m.el;
+    if (!el || el._fmPrimed || el._fmPrimeT || typeof el.play !== 'function') return;
+    el._fmPrimeT = setTimeout(function () {
+      el._fmPrimeT = 0;
+      if (m.el !== el || el._fmPrimed) return;
+      if (FM.playing || FM._exporting || (FM.seekBusy && FM.seekBusy(m))) return;
+      if (!(el.readyState < 2) || el.seeking) return;   // it loaded on the seek (or is still seeking): nothing to prime
+      if (!FM.scene || !(FM.scene.layers || []).some(function (l) { return FM.media.get(l.id) === m; })) return;
+      el._fmPrimed = true;
+      try { el.addEventListener('emptied', function () { el._fmPrimed = false; }, { once: true }); } catch (e) {}
+      const wasMuted = el.muted, wasVol = el.volume;
+      try { el.muted = true; } catch (e) {}
+      const back = function () {
+        if (FM.playing) return;   // he pressed Play meanwhile: the transport owns the element now
+        try { el.pause(); } catch (e) {}
+        try { el.muted = wasMuted; } catch (e) {}
+        try { el.volume = wasVol; } catch (e) {}
+        if (!FM._exporting && !(FM.seekBusy && FM.seekBusy(m))) { try { el.currentTime = target; } catch (e) {} }
+      };
+      let p = null;
+      try { p = el.play(); } catch (e) { p = null; }
+      if (p && typeof p.then === 'function') p.then(back, back); else back();
+    }, PRIME_AFTER_MS);
+  }
+  FM._primeAfterMs = PRIME_AFTER_MS;   // suite seam (#202)
+
   FM.seekVideosToTime = function (opts) {
     const exact = !!(opts && opts.exact);
     FM.scene.layers.forEach(layer => {
@@ -1327,6 +1360,7 @@ window.FM = window.FM || {};
       const noFrame = m.el.readyState < 2 && !m.el.seeking;
       if (!noFrame && Math.abs(cur - target) < (exact ? 0.001 : (0.5 / (FM.scene.project.fps || 30)))) return;
       try { m.el.currentTime = target; } catch (e) {}
+      if (noFrame) primeIfStillCold(m, target);   // #202: …and if a seek does not load it, one muted play() will
     });
     /* Simple 2.7 (#1122, DESIGN §12.1): …and the picture of a clip in a transition, outside its own window. The exporter reads the same
        list (FM.transitionSeeks, js/spine.js), so the two cannot disagree. It is [] on every project without a transition. */
