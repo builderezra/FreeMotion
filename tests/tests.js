@@ -177045,10 +177045,12 @@
   const _O12_NEW = {
     gamma: ['range', 'mix'],
     vibrance: ['boost', 'shadows'],
+    crossprocess: ['skin', 'keep'],
   };
   const _O12_OFF = {
     gamma: [{ range: 1 }, { mix: 50 }],
     vibrance: [{ boost: 1 }, { boost: 2 }],
+    crossprocess: [{ skin: 100 }, { keep: 100 }],
   };
   const _o12P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
   const _o12Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
@@ -177323,11 +177325,90 @@
   });
   /* ---- end Vibrance ---- */
 
+  /* ---- Cross Process: Protect skin and Keep brightness ---- */
+  /* how skin-coloured a pixel is, written out from Teal & Orange's Protect skin window (#482 polish 5.3): hue full from 0° to 40°, easing
+     by half a cosine to nothing at −20° and 60°; HSV saturation full 0.2–0.8, nothing under 0.08 or over 0.9; V full from 0.2 */
+  const _o12Skin = c => {
+    const r = c[0], g = c[1], b = c[2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), ch = mx - mn;
+    if (!(ch > 0)) return 0;
+    let hu = mx === r ? (g - b) / ch : (mx === g ? (b - r) / ch + 2 : (r - g) / ch + 4); if (hu < 0) hu += 6; hu *= 60;
+    const sx = ((hu % 360) + 180) % 360 - 180;
+    const hw = sx >= 0 && sx <= 40 ? 1 : (sx > -20 && sx < 0 ? 0.5 + 0.5 * Math.cos(Math.PI * sx / 20) : (sx > 40 && sx < 60 ? 0.5 + 0.5 * Math.cos(Math.PI * (sx - 40) / 20) : 0));
+    const sS = ch / mx, sV = mx / 255;
+    const mS = sS < 0.08 ? 0 : (sS < 0.2 ? (sS - 0.08) / 0.12 : (sS <= 0.8 ? 1 : (sS < 0.9 ? (0.9 - sS) / 0.1 : 0)));
+    const mV = sV < 0.08 ? 0 : (sV < 0.2 ? (sV - 0.08) / 0.12 : 1);
+    return hw * mS * mV;
+  };
+  test('966 opts12 Cross Process has Protect skin and Keep brightness (0–100 %, keyframable, 0 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    _o12Need('crossprocess', _O12_NEW.crossprocess);
+    const bad = _o12Rows('crossprocess', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'keep', label: 'Keep brightness', min: 0, max: 100, unit: '%', def: 0 }], { skin: 40, keep: 70 });
+    bad.push.apply(bad, _o12Clamp('crossprocess', { skin: 150, keep: -5 }, { skin: 100, keep: 0 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Two full skin tones (a light one at 21°, and #8d5524, deep brown skin at 28°, the colour Teal & Orange's window was widened for), a
+     yellowish one at 50° (half a skin tone), a blue, a green and a grey. Worked for Slide at the default 0.6: the light skin tone's blue
+     drops 22 levels (0.392 bends to 0.279, then to the power 1.1, 0.246; 0.6 of the way). At 100 % a full skin tone is the picture itself
+     and what is not skin is the graded picture itself; at 50 % each is half its weight of the way back. On hunt/768c's code Protect skin
+     is ignored, so the skin tones come out graded. */
+  const _O12_CP = [[208, 138, 100], [141, 85, 36], [200, 183, 100], [40, 90, 200], [60, 160, 80], [128, 128, 128]];
+  test('966 opts12 Cross Process Protect skin: at 100 % two skin tones come out as the picture byte for byte in both Films while a blue, a green and a grey keep the grade byte for byte, a half skin tone comes half way back, and at 50 % every pixel comes back half its skin weight (CONTROL: at 0 % the grade moves the light skin tone at least 8 levels)', { item: '966', budgetMs: 60000 }, function () {
+    const N = _O12_CP.length, bad = [], pic = _o12Row(_O12_CP);
+    const run = (over) => _o12Run('crossprocess', _o12P('crossprocess', over), N, 1, pic(), 0.5);
+    [0, 1].forEach(film => {
+      const g0 = run({ variant: film }), FILM = film ? 'Negative' : 'Slide';
+      if (film === 0) { const mv = _o12Off(_o12At(g0, N, 0, 0), _O12_CP[0]); if (mv < 8) bad.push('CONTROL: Slide moves the light skin tone only ' + mv + ' levels, so holding it back proves little'); }
+      [100, 50].forEach(sk => {
+        const got = run({ variant: film, skin: sk });
+        _O12_CP.forEach((c, x) => {
+          const w = _o12Skin(c) * sk / 100, gr = _o12At(g0, N, x, 0), px = _o12At(got, N, x, 0);
+          const want = _o12U8(gr[0] + (c[0] - gr[0]) * w, gr[1] + (c[1] - gr[1]) * w, gr[2] + (c[2] - gr[2]) * w);
+          const exact = w === 1 || w === 0, e = _o12Off(px, want);
+          if (exact ? e !== 0 : e > 1) bad.push(FILM + ' at ' + sk + ' %: (' + c.join(', ') + '), skin weight ' + _o12Skin(c).toFixed(2) + ', reads (' + px.slice(0, 3).join(', ') + '), not (' + want.join(', ') + ')');
+        });
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked for Slide at the default 0.6: grey 128 grades to about (148, 140, 104), its brightness up 10; grey 200 up 6; the picture's
+     middle tones — most of it — come up 4 to 10 levels. Keep brightness 100 puts each pixel back at its own brightness (setLum255, only
+     the colour moves), so the brightness of every pixel is the picture's to within the half-level rounding of each channel. On hunt/768c's
+     code Keep brightness is ignored and the brightness moves. */
+  test('966 opts12 Cross Process Keep brightness: at 100 % every pixel of a busy picture keeps its own brightness to within a level in both Films while Slide still moves its colour, and with Protect skin 100 too a full skin tone is the picture byte for byte (CONTROL: at 0 % the grade moves the brightness of a thousand pixels by more than 3 levels)', { item: '966', budgetMs: 60000 }, function () {
+    const W = 96, H = 72, bad = [], pic = _o12Pic(W, H);
+    const run = over => _o12Run('crossprocess', _o12P('crossprocess', over), W, H, _o12Pic(W, H), 0.5);
+    let moved = 0;
+    const g0 = run({});
+    for (let i = 0; i < g0.length; i += 4) if (Math.abs(_o12Luma(g0, i) - _o12Luma(pic, i)) > 3) moved++;
+    if (moved < 1000) bad.push('CONTROL: Slide moves the brightness of only ' + moved + ' of 6912 pixels by more than 3 levels' /* MEASURE: reasoned, not run */);
+    [0, 1].forEach(film => {
+      const got = run({ variant: film, keep: 100 });
+      let worst = 0, at = -1;
+      for (let i = 0; i < got.length; i += 4) { const e = Math.abs(_o12Luma(got, i) - _o12Luma(pic, i)); if (e > worst) { worst = e; at = i / 4; } }
+      if (worst > 1) bad.push((film ? 'Negative' : 'Slide') + ' at Keep brightness 100 %: pixel ' + at + ' is ' + worst.toFixed(2) + ' levels from its own brightness');
+      if (film === 0) { const n = E1.count(got, pic, 2); if (n < 1000) bad.push('Slide at Keep brightness 100 % changes only ' + n + ' pixels by more than 2 levels — the colour move is gone too'); }
+    });
+    const both = _o12Run('crossprocess', _o12P('crossprocess', { skin: 100, keep: 100 }), 2, 1, _o12Row([_O12_CP[0], _O12_CP[1]])(), 0.5);
+    [0, 1].forEach(x => { const e = _o12Off(_o12At(both, 2, x, 0), _O12_CP[x]); if (e !== 0) bad.push('with Protect skin and Keep brightness both 100 %, the skin tone (' + _O12_CP[x].join(', ') + ') is ' + e + ' levels from itself'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts12 Cross Process at Protect skin and Keep brightness 0 % draws byte for byte what it drew without them — at its defaults, on Negative, at full strength with a strong cast and a weak curve, keyframed, and on a half-size plate (CONTROL: Protect skin and Keep brightness each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o12Need('crossprocess', _O12_NEW.crossprocess);
+    const bad = _o12Ident('crossprocess', [{}, { over: { variant: 1 } }, { over: { amount: 1, lift: 200, gain: 40 } }, { over: { amount: _o12KF(0.2, 1) }, t: 0.37 }, { ps: 0.5 }, { pic: _o12Row(_O12_CP), W: _O12_CP.length, H: 1 }]);
+    /* reasoned bounds: Protect skin reaches the warm part of the picture (red above green, the dark checker squares — about a thousand
+       pixels), Keep brightness nearly all of it */
+    [[{ skin: 100 }, 300], [{ keep: 100 }, 1000]].forEach(([o, least]) => { const n = _o12Moves('crossprocess', o, 96, 72, _o12Pic, 0.5); if (n < least) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Cross Process ---- */
+
   /* the round's editors, new rows and all, fit the inspector (round eleven's fit test) */
   test('966 opts12 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
     const NEW = {
       gamma: 'Affects',
       vibrance: 'Boosts',
+      crossprocess: 'Keep brightness',
     };
     Object.keys(NEW).forEach(type => _o12Need(type, _O12_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];

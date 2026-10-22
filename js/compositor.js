@@ -1470,6 +1470,13 @@ window.FM = window.FM || {};
       { key: 'variant', label: 'Film', def: 0, options: [[0, 'Slide (punchy)'], [1, 'Negative (pastel)']] },
       { key: 'lift', label: 'Colour cast', min: 0, max: 300, step: 5, def: 100, unit: '%' },
       { key: 'gain', label: 'Curve', min: 0, max: 300, step: 5, def: 100, unit: '%' },
+      /* #966 opts12 (hunt/fx12, his "more choices always better"): the film look took faces with everything else — Slide turns skin
+         orange-red, Negative turns it green-grey — and it moved the picture's brightness along with its colour. PROTECT SKIN holds
+         skin-coloured pixels back from it (Teal & Orange's skin window, the same hues, saturation and brightness), and KEEP BRIGHTNESS
+         puts every pixel back at its own brightness, so the film becomes a colour move only. Both 0 run the old loops untouched
+         (crossProcess12 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     /* #482 polish 1.2. The drift was welded (t*0.15, a fixed ±12/±10% wander), so a leak could never hold still; it was
        one colour, always screened, and never flickered. Leak edge is the colour at the rim: ABSENT it follows Leak, so a
@@ -12075,6 +12082,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         if(toKk>0){ setLum255(r3,g3,b3,r2*0.299+g2*0.587+b2*0.114,toOut); r3+=(toOut[0]-r3)*toKk; g3+=(toOut[1]-g3)*toKk; b3+=(toOut[2]-b3)*toKk; }
         d[j]=r3<0?0:(r3>255?255:r3); d[j+1]=g3<0?0:(g3>255?255:g3); d[j+2]=b3<0?0:(b3>255?255:b3); } }; })(),
     crossprocess: (function(){ function cv(v,lift,gain){ var x=v/255; x=x+lift*Math.sin(x*Math.PI); if(x<0)x=0; x=Math.pow(x,gain); return x*255; } return function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
+      /* #966 opts12: PROTECT SKIN or KEEP BRIGHTNESS above 0 runs crossProcess12 (this very kernel with the two taken away, then the two laid over its result); both 0 run the lines below untouched */
+      var cpSk12=p.skin==null?0:FM.evalProp(p.skin,t), cpKp12=p.keep==null?0:FM.evalProp(p.keep,t); if(cpSk12>0||cpKp12>0){ crossProcess12(d,W,H,p,t,cpSk12,cpKp12); return; }
       // The whole look lived in six hardcoded constants, so Amount could only crossfade between the
       // footage and that ONE fixed C-41 curve. LIFT scales the per-channel S-bend (0 = none, so the
       // crossed colour cast goes away and only the gamma remains); GAIN scales how far each channel's
@@ -14426,6 +14435,41 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._vibrance12 = vibrance12;   // suite seam (#966 opts12)
+  /* How skin-coloured a pixel is, 0–1: Teal & Orange's Protect skin window (#482 polish 5.3) worked out per pixel instead of read off its
+     table — the hue window TOS (full from 0° to 40°, easing by half a cosine to nothing at −20° and 60°) times the HSV saturation window
+     (full 0.2–0.8, nothing under 0.08 or over 0.9) times not near-black (V full from 0.2, nothing under 0.08). A grey has no hue: 0. */
+  function skinW12(r, g, b) {
+    const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b), ch = mx - mn;
+    if (!(ch > 0)) return 0;
+    let hu = mx === r ? (g - b) / ch : (mx === g ? (b - r) / ch + 2 : (r - g) / ch + 4); if (hu < 0) hu += 6; hu *= 60;
+    const sx = ((hu % 360) + 180) % 360 - 180;
+    const hw = sx >= 0 && sx <= 40 ? 1 : (sx > -20 && sx < 0 ? 0.5 + 0.5 * Math.cos(Math.PI * sx / 20) : (sx > 40 && sx < 60 ? 0.5 + 0.5 * Math.cos(Math.PI * (sx - 40) / 20) : 0));
+    if (!(hw > 0)) return 0;
+    const sS = ch / mx, sV = mx / 255;
+    const mS = sS < 0.08 ? 0 : (sS < 0.2 ? (sS - 0.08) / 0.12 : (sS <= 0.8 ? 1 : (sS < 0.9 ? (0.9 - sS) / 0.1 : 0)));
+    const mV = sV < 0.08 ? 0 : (sV < 0.2 ? (sV - 0.08) / 0.12 : 1);
+    return hw * mS * mV;
+  }
+  /* CROSS PROCESS'S PROTECT SKIN AND KEEP BRIGHTNESS: the kernel itself, untouched (run on the plate with the two taken away, so Film,
+     Colour cast, Curve and Amount are exactly what they are), then every pixel it graded (any alpha; it skips a clear one, and so does
+     this) moved back toward the picture by Protect skin x how skin-coloured the PICTURE's pixel is (skinW12 — at 100 % a full skin tone
+     is the picture byte for byte), and then toward the graded pixel put back at the picture's own brightness by Keep brightness
+     (setLum255, Teal & Orange's and Colour Balance's Keep brightness: 100 % is a colour move only). Both read 0–100 % (held there). */
+  function crossProcess12(d, W, H, p, t, skin, keep) {
+    const sk = skin > 0 ? (skin < 100 ? skin / 100 : 1) : 0, kp = keep > 0 ? (keep < 100 ? keep / 100 : 1) : 0;
+    const src = d.slice(), q = Object.assign({}, p), out = [0, 0, 0];
+    delete q.skin; delete q.keep;
+    PIXEL_FX.crossprocess(d, W, H, q, t);
+    for (let j = 0; j < d.length; j += 4) {
+      if (src[j + 3] === 0) continue;
+      const r = src[j], g = src[j + 1], b = src[j + 2];
+      let r3 = d[j], g3 = d[j + 1], b3 = d[j + 2];
+      if (sk > 0) { const m = skinW12(r, g, b) * sk; if (m > 0) { r3 += (r - r3) * m; g3 += (g - g3) * m; b3 += (b - b3) * m; } }
+      if (kp > 0) { setLum255(r3, g3, b3, r * 0.299 + g * 0.587 + b * 0.114, out); r3 += (out[0] - r3) * kp; g3 += (out[1] - g3) * kp; b3 += (out[2] - b3) * kp; }
+      d[j] = r3; d[j + 1] = g3; d[j + 2] = b3;
+    }
+  }
+  FM._crossProcess12 = crossProcess12;   // suite seam (#966 opts12)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {

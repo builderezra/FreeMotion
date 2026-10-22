@@ -469,7 +469,7 @@ window.FM = window.FM || {};
     lightleak: 'A wash of light across the frame, like a leak onto film.',
     tealorange: 'The blockbuster grade: shadows toward teal, skin toward orange.',
     /* the silver tinted, skin held back: #966 opts10 */ bleachbypass: 'High-contrast, low-saturation — the bleach-bypass film process, its silver tinted any colour, faces kept warm if you like.',
-    crossprocess: 'The colour shifts of developing film in the wrong chemistry.',
+    /* faces held back, brightness kept: #966 opts12 */ crossprocess: 'The colour shifts of developing film in the wrong chemistry — with faces held back from it and the brightness kept if you like.',
     nightvision: 'Green phosphor, grain and a soft vignette.',
     sketch: 'Redraws the image as pencil lines.',
     copybg: 'Copies the layers underneath into this one, so it can be distorted or masked as a unit.',
