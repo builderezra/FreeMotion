@@ -801,6 +801,133 @@ cmp -s "$TPD/v0" "$TPD/v1" && ok "…and with no finger-pass result every line s
 [ "$(grep -c '^ *fingers "\$P1"' tools/prove.sh)" -ge 2 ] && [ "$(grep -c '^ *fingers "\$P2"' tools/prove.sh)" -ge 2 ] && grep -q -- '--merge-touch' tools/prove.sh \
   && ok "prove.sh runs the finger pass on the tree AND the reverted side, at its width and in the 380 re-check" || bad "prove.sh does not hand its finger NORUNs to tests/_touch_pass.py on both sides"
 echo
+echo "── 23 Oct: the suite in Windows Chrome, and what goes red ONLY there (tests/_win_suite.py, #1098 clause 3) ──"
+# His words, 7 Oct: "and also find issues with windows". A STUB 'chrome' (FM_WIN_CHROME) fetches the wrapper page it is handed
+# (logging the run.html address the wrapper frames), then POSTs a crafted verdict chosen by the run's ?only=, so every
+# judgement is seen without a browser. The wrapper's own script (it answers the driver requests no page can) runs in node.
+WSD="$TMP/ws"; mkdir -p "$WSD/tests"; cp tests/_win_pass.py tests/_win_suite.py "$WSD/tests/"
+cat > "$WSD/stubchrome" <<'STUB'
+#!/usr/bin/env python3
+import html, json, os, re, sys, urllib.parse, urllib.request
+url = sys.argv[-1]; u = urllib.parse.urlparse(url); q = urllib.parse.parse_qs(u.query)
+only = (q.get('only') or [''])[0]
+body = urllib.request.urlopen(url).read().decode()
+src = html.unescape(re.search(r'src="([^"]*)"', body).group(1))
+open(os.environ['WS_LOG'], 'a').write('%s|%s|%s\n' % (only, src, 'only=' in u.query))
+post = lambda o: urllib.request.urlopen(urllib.request.Request('http://%s/__win/result?id=%s' % (u.netloc, q['id'][0]), data=json.dumps(o).encode(), method='POST'))
+ua = 'Mozilla/5.0 (Windows NT 10.0) HeadlessChrome/154 stub'
+R = lambda name, ok=False, error='', notRun='', pending=False: {'name': name, 'ok': ok, 'error': error, 'notRun': notRun, 'pending': pending}
+if only == 'mix':
+    post({'sum': 'Regression 3/9 ✗ FILTERED', 'ua': ua, 'notRun': [], 'asked': {'asks input': ['input'], 'asks gc': ['gc']},
+          'ran': [R('win only', error='the label is cut off at 1280'), R('both red', error='same on both'),
+                  R('lin notrun', error='the track is silent'), R('asks input', notRun='needs real input from tests/_cdp.py'),
+                  R('asks gc', error='the driver could not collect garbage'), R('cdp words', error='run it through tests/_cdp.py or it fails'),
+                  R('plain pass', ok=True), R('aac only here', ok=True), R('pend', pending=True, error='not built yet')]})
+elif only == 'green':
+    post({'sum': 'Regression 1/1 ✓ FILTERED', 'ua': ua, 'notRun': [], 'asked': {}, 'ran': [R('plain pass', ok=True)]})
+elif only == 'none':
+    post({'sum': 'Regression 0/0 ✓ FILTERED', 'ua': ua, 'notRun': [], 'asked': {}, 'ran': []})
+elif only == 'silent':
+    sys.stderr.write('stub: GPU process exited unexpectedly\n')
+else:
+    post({'sum': 'Regression 2/2 ✓', 'ua': ua, 'notRun': [], 'asked': {}, 'ran': [R('plain pass', ok=True), R('another', ok=True)]})
+STUB
+chmod +x "$WSD/stubchrome"
+# the Linux side, as ship.sh keeps it: a stderr line, then tests/_cdp.py's JSON. 'win only and longer' is red there — a
+# LONGER name that starts with 'win only', which must not make 'win only' red on Linux.
+{ echo 'some stderr line'; cat <<'J'
+{"ok": false, "summary": "Regression 6/8 ✗", "failures": ["FAILboth red — same on both", "FAILwin only and longer — x"],
+ "notRun": [{"name": "lin notrun", "item": "", "reason": "needs an AAC audio encoder"}, {"name": "aac only here", "item": "", "reason": "needs an AAC audio encoder"}]}
+J
+} > "$WSD/lin.out"
+ws() { (cd "$WSD" && WS_LOG="$WSD/log" FM_WIN_TMP='C:\Windows\Temp' FM_WIN_CHROME="${WS_CHROME:-$WSD/stubchrome}" python3 tests/_win_suite.py --timeout 1 "$@" 2>&1); }
+out="$(ws --only mix --against lin.out --out mix.json)"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$out" | grep -q '^   WINDOWS ONLY: win only — the label is cut off' \
+  && ok "a test red in Windows Chrome and green in Linux Chrome is named WINDOWS ONLY with its error → exit 1" || bad "mix: rc=$rc — $(printf '%s' "$out" | tail -4)"
+python3 - "$WSD/mix.json" <<'PY' && ok "…red on both, Linux NOT RUN, needs the driver (asked, or its error names tests/_cdp.py), NOT RUN here, runs only here and pending each go to their own list" || bad "mix verdicts: $(head -c 700 "$WSD/mix.json")"
+import json, sys
+d = json.load(open(sys.argv[1]))
+n = lambda k: sorted(x['name'] for x in d[k])
+assert n('windowsOnly') == ['win only'], d['windowsOnly']
+assert n('redBoth') == ['both red'] and n('linuxNotRun') == ['lin notrun'] and n('linuxUnknown') == [], d
+assert n('needsDriver') == ['asks gc', 'cdp words'], d['needsDriver']
+assert [x['asked'] for x in d['needsDriver'] if x['name'] == 'asks gc'] == [['gc']], d['needsDriver']
+assert n('notRunHere') == ['asks input'] and d['notRunHere'][0]['asked'] == ['input'], d['notRunHere']
+assert n('onlyWindowsRan') == ['aac only here'] and d['pass'] == 2 and d['pending'] == 1 and d['red'] == [], d
+PY
+grep -qx 'mix|/tests/run.html?only=mix|True' "$WSD/log" && ok "…the wrapper frames tests/run.html with the same ?only= the top page carries" || bad "mix src: $(cat "$WSD/log")"
+sed -n '2,$p' "$WSD/lin.out" | python3 -c 'import json,sys; d=json.load(sys.stdin); d["summary"]="Regression 6/8 ✗ FILTERED(only=mix, 8 of 3100)"; print(json.dumps(d))' > "$WSD/linf.out"
+out="$(ws --only mix --against linf.out --out mixf.json)"; rc=$?
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert [x["name"] for x in d["linuxUnknown"]]==["win only"] and d["windowsOnly"]==[], d' "$WSD/mixf.json" 2>/dev/null && [ "$rc" = 0 ] \
+  && ok "…against a FILTERED Linux run with no per-test list, a test it does not name is Linux unknown, never WINDOWS ONLY (exit 0)" || bad "filtered Linux side: rc=$rc $(head -c 400 "$WSD/mixf.json" 2>/dev/null)"
+sed -n '2,$p' "$WSD/lin.out" | python3 -c 'import json,sys; d=json.load(sys.stdin); d["summary"]+=" FILTERED"; d["ran"]=[{"name":"win only","ok":False,"pending":False,"notRun":""}]; print(json.dumps(d))' > "$WSD/linr.out"
+out="$(ws --only mix --against linr.out --out mixr.json)"; rc=$?
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert [x["name"] for x in d["redBoth"]]==["win only"] and [x["name"] for x in d["linuxUnknown"]]==["both red"], d' "$WSD/mixr.json" 2>/dev/null \
+  && ok "…with the Linux run's own per-test list (ran) that list decides: red there is red on both, absent is unknown" || bad "ran-list Linux side: rc=$rc $(head -c 400 "$WSD/mixr.json" 2>/dev/null)"
+out="$(ws --only mix --out mixn.json)"; rc=$?
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert sorted(x["name"] for x in d["red"])==["both red","lin notrun","win only"] and d["windowsOnly"]==[], d' "$WSD/mixn.json" 2>/dev/null && [ "$rc" = 1 ] \
+  && printf '%s' "$out" | grep -q '^   RED HERE: win only' && ok "without --against every red that did not need the driver is RED HERE, to compare by hand (exit 1)" || bad "no Linux side: rc=$rc — $(printf '%s' "$out" | tail -3)"
+out="$(ws --only green --against lin.out)"; rc=$?
+[ "$rc" = 0 ] && printf '%s' "$out" | grep -q '1 pass, 0 WINDOWS ONLY' && ok "control: all green in Windows Chrome → exit 0, 0 WINDOWS ONLY" || bad "green: rc=$rc — $(printf '%s' "$out" | tail -2)"
+out="$(ws --only none --against lin.out)"; rc=$?
+[ "$rc" = 2 ] && printf '%s' "$out" | grep -q 'no test matched only=none' && ok "a run that matched no test → exit 2 (nothing judged), never 'nothing WINDOWS ONLY'" || bad "none: rc=$rc — $out"
+out="$(ws --only silent --out silent.json)"; rc=$?
+[ "$rc" = 2 ] && printf '%s' "$out" | grep -q 'the page loaded' && printf '%s' "$out" | grep -q 'GPU process' && [ "$(grep -c '^silent|' "$WSD/log")" = 1 ] \
+  && ok "a page that loaded and said nothing → exit 2 saying so and what Chrome printed, launched once (never a blind retry)" || bad "silent: rc=$rc launches=$(grep -c '^silent|' "$WSD/log") — $out"
+out="$(ws --after first --upto last --against lin.out)"; rc=$?
+grep -qx '|/tests/run.html?after=first&upto=last|False' "$WSD/log" && [ "$rc" = 0 ] && ok "a slice (--after / --upto) reaches run.html as its own ?after=&upto=, escaped in the frame's address" || bad "slice src: rc=$rc $(tail -2 "$WSD/log")"
+out="$(ws --against lin.out)"; rc=$?
+grep -qx '|/tests/run.html|False' "$WSD/log" && [ "$rc" = 0 ] && ok "no filter → the whole suite: run.html with no query, and no only= on the top page either" || bad "whole suite src: rc=$rc $(tail -1 "$WSD/log")"
+out="$(ws --only green --against no-such.out)"; rc=$?
+[ "$rc" = 2 ] && printf '%s' "$out" | grep -q 'no Linux driver result' && ok "an --against file with no driver result → exit 2, nothing judged" || bad "bad --against: rc=$rc — $out"
+L0="$(wc -l < "$WSD/log")"; out="$(WS_CHROME=none ws --only green)"; rc=$?
+[ "$rc" = 2 ] && [ "$(wc -l < "$WSD/log")" = "$L0" ] && ok "no Windows Chrome → exit 2, nothing launched" || bad "no chrome: rc=$rc — $out"
+(cd "$WSD" && FM_WIN_CHROME=none python3 tests/_win_suite.py --available >/dev/null 2>&1); rc1=$?
+(cd "$WSD" && FM_WIN_CHROME="$WSD/stubchrome" python3 tests/_win_suite.py --available >/dev/null 2>&1); rc2=$?
+[ "$rc1" = 1 ] && [ "$rc2" = 0 ] && ok "--available says 1 with no Windows Chrome and 0 with one" || bad "--available: none=$rc1 stub=$rc2"
+# THE WRAPPER'S OWN SCRIPT, in node with a fake runner page: it must answer real input with the driver's NOTRUN reply and a
+# garbage collection with an error (both at once, not after a 30 s wait), never grant a CPU throttle, name each test that
+# asked, and post the verdict with that list. A test that asked nothing is not named (the control).
+(cd "$WSD" && python3 -c 'import sys; sys.path.insert(0, "tests"); import _win_suite as S; print(S.WRAP % {"w": 1280, "id": "abc", "ms": 600000, "s": 600, "src": "/tests/run.html"})') > "$WSD/wrap.html"
+cat > "$WSD/wrap.js" <<'NODE'
+const fs = require('fs'), assert = require('assert');
+const html = fs.readFileSync(process.argv[2], 'utf8');
+const js = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
+const app = { __fmLastTest: 'asks input', __fmWantInput: { seq: 3, steps: [] } };
+const sum = { textContent: 'Loading app' };
+const runWin = { __fmResults: null, __fmNotRun: [] };
+const runDoc = { getElementById: (id) => id === 'app' ? { contentWindow: app } : id === 'sum' ? sum : null };
+global.document = { getElementById: () => ({ contentDocument: runDoc, contentWindow: runWin }) };
+global.navigator = { userAgent: 'node' };
+let posted = null, tick = null;
+global.fetch = (u, o) => { posted = { u: u, body: JSON.parse(o.body) }; return Promise.resolve(); };
+global.setInterval = (fn) => { tick = fn; return 1; };
+(0, eval)(js);
+tick();
+assert.strictEqual(app.__fmInputDone, 3, 'real input was not answered');
+assert.ok(/^NOTRUN: /.test(app.__fmInputErr), 'the input reply is not the NOTRUN form tests.js reads: ' + app.__fmInputErr);
+app.__fmLastTest = 'asks gc'; app.__fmWantGc = { seq: 7 }; tick();
+assert.strictEqual(app.__fmGcDone, 7, 'the collection was not answered');
+assert.ok(app.__fmGc && app.__fmGc.err && app.__fmGc.seq === 7, 'the collection reply carries no error');
+app.__fmLastTest = 'asks cpu'; app.__fmWantCpu = { rate: 2.2, until: Date.now() + 30000 }; tick();
+assert.strictEqual(app.__fmCpuRate, undefined, 'a CPU throttle was granted - no page can give one');
+app.__fmWantCpu = null; app.__fmLastTest = 'asks nothing'; tick();
+assert.strictEqual(posted, null, 'posted before the runner said anything');
+sum.textContent = 'Regression 1/1 ✓'; runWin.__fmResults = [{ name: 'asks nothing', ok: true, error: '' }]; tick();
+assert.ok(posted && posted.u === '/__win/result?id=abc', 'no verdict posted');
+assert.deepStrictEqual(Object.keys(posted.body.asked).sort(), ['asks cpu', 'asks gc', 'asks input'], JSON.stringify(posted.body.asked));
+assert.deepStrictEqual(posted.body.asked['asks input'], ['input']);
+assert.deepStrictEqual(posted.body.ran, [{ name: 'asks nothing', ok: true, pending: false, error: '', notRun: '' }]);
+console.log('wrapper ok');
+NODE
+if command -v node >/dev/null 2>&1; then
+  o="$(node "$WSD/wrap.js" "$WSD/wrap.html" 2>&1)"
+  [ "$o" = "wrapper ok" ] && ok "the wrapper answers input (NOTRUN) and a collection (an error) at once, grants no throttle, and names exactly the tests that asked" || bad "wrapper script: $(printf '%s' "$o" | head -4)"
+else
+  bad "node is not installed — the wrapper's script could not be checked"
+fi
+grep -q 'NOTRUN: ' tests/tests.js && grep -q '__fmInputErr' tests/tests.js && ok "…and tests.js still reads a NOTRUN: input reply as NOT RUN HERE" || bad "tests/tests.js no longer reads __fmInputErr's NOTRUN: form — the wrapper's input reply would turn into a red"
+echo
 echo "── ship.sh runs THIS test whenever a file it proves changes (6 Oct, the port audit, minor) ──"
 # A release that edited only tools/_shipgates.py (the feature gate, and the sh() that makes a failed git a refusal) shipped
 # with no self-test at all: ship.sh runs this file only when a file in its trigger list changes, and the list was written by
