@@ -60419,6 +60419,239 @@
     }
   });
 
+  /* #202 H1 (the 22 Oct hunt's refuter's best change). A clip that lands at local 0 sits on its element's 0, so the paused seek's
+   * "already there" guard (queue 125) skipped the one seek that would load it: readyState 1, a black canvas, a filmstrip that gives up
+   * at 3 s, and a 15 s "No picture" toast on a good file. The guard now skips only an element that has its frame.
+   * FAILS BEFORE THE FIX: the cold element (readyState 1, no seek in flight) gets 0 seeks.
+   * CONTROLS: a decoded element on frame 0 is not re-seeked (queue 125's guard), one already seeking is left alone, and a stand-in
+   * with no readyState (the perf-seek-guard fake) still counts as warm. */
+  test('202 a clip parked on its first frame with no frame decoded is asked for one: the paused seek skips only an element that has its frame', { item: '202' }, function () {
+    const keep = FM.scene.layers.slice(), keepT = FM.time;
+    const run = (rs, seeking) => {
+      const writes = [];
+      const el = { duration: 10, readyState: rs, seeking: seeking, paused: true, muted: true, pause() {} };
+      Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) { writes.push(v); this._t = v; }, configurable: true });
+      const L = FM.makeLayer('video', { start: 0, duration: 5 }); L.type = 'video'; L.trimStart = 0; L.speed = 1;
+      FM.scene.layers = [L];
+      FM.media.set(L.id, { kind: 'video', el: el, duration: 10, width: 64, height: 48, stripFrames: [] });   // no filmstrip build, so seekBusy stays false
+      FM.time = 0;
+      try { FM.seekVideosToTime(); } finally { FM.media.remove(L.id); }
+      return writes;
+    };
+    try {
+      const warm = run(4, false);
+      if (warm.length) throw new Error('CONTROL: a decoded element already on frame 0 was re-seeked ' + warm.length + ' time(s) — queue 125’s guard is broken');
+      const flying = run(1, true);
+      if (flying.length) throw new Error('CONTROL: an element still seeking was re-seeked, cancelling its own decode');
+      const bare = run(undefined, undefined);
+      if (bare.length) throw new Error('CONTROL: a stand-in with no readyState (the perf-seek-guard fake) was re-seeked — that test would break');
+      const cold = run(1, false);
+      if (cold.length !== 1) throw new Error('a clip on its first frame at readyState 1 with no seek in flight got ' + cold.length + ' seek(s) — nothing asks it for a frame, so on an iPhone the canvas stays black, the filmstrip gives up at 3 s and the No picture toast fires on a good file');
+      if (Math.abs(cold[0] - FM.frameSeekTarget(0, 10)) > 1e-9) throw new Error('the seek went to ' + cold[0] + ', not inside frame 0');
+    } finally { FM.scene.layers = keep; FM.time = keepT; if (FM.refreshAll) FM.refreshAll(); }
+  });
+
+  /* #202 H1's iPhone half (the PM's call, 22 Oct). If a seek does not load an element (iOS loads only metadata until something
+   * plays it), the paused seek primes it once ~700 ms later: muted play(), pause(), the seek again, muted and volume put back.
+   * FAILS BEFORE THE FIX: the element that only loads on play() is never played, so it still has no frame.
+   * CONTROL: an element that loads on the seek alone is never primed, and nothing primes while playing.
+   *
+   * #202 S1-S4 (the pre-ship review and its refuter, 22 Oct; the refuter's corrections won). Three more runs, each red on e65608c4
+   * (the first cut of the prime) and green with the fixes. On e90531d8 (v17.93, no prime at all) the test is already red at the cold
+   * clip above (0 plays), and each of the three would be too, at its first check, which needs the prime to have run:
+   *  (a) A SCRUB IN THE WAIT (S1). The prime put the element back on the target captured when it was ARMED, so a scrub made in the
+   *      700 ms wait (or FM.pause's exact seek, or a transition's) was overwritten with the frame the clip was imported on. Two cold
+   *      clips and a scrub to 1 s: the one under the new playhead ends on THAT frame, and the one the scrub left gets no write at all
+   *      from the prime (no layer of it is under the playhead, so FM.playheadSeekTarget is null).
+   *  (b) A SEEK THAT NEVER COMPLETES (S2). The timer gave up on an element still seeking and nothing re-armed it, so a WebKit seek that
+   *      stays pending disarmed the prime in one of the two shapes it was written for. The stuck element is now primed once, after
+   *      ONE more wait. CONTROL: a seek that is only slow (it lands 200 ms after the first wait) is never primed, so this is a second
+   *      wait and not a dropped bail, which would prime every first seek slower than 700 ms.
+   *  (c) HEAR (S3), with the REAL FM.audioFxLive.audition on the stand-ins, as 916.2 does, so no stub to restore. A clip being heard
+   *      when the timer fires is not primed (its Hear play() is refused here, so the element still reads paused and only the per-clip
+   *      check can keep the prime off it). Hear tapped while the prime's play() is settling is not paused by back(). An element that
+   *      something else is already playing is left alone. CONTROL, and the refuter's warning: ANOTHER clip being heard neither keeps
+   *      this clip's prime off nor leaves it playing, which is what asking auditioning() with no argument would do.
+   * Every reading is taken BEFORE the stand-in leaves FM.media: remove() pauses the element (js/media.js release), which made the first
+   * cut's 'left playing' check unable to fail.
+   * S4: the wait is FM._primeAfterMs, or 700 ms where that seam is absent, so a tree without the prime fails by what it DOES (0 plays
+   * at the cold clip) rather than on a seam check, which prove.sh's weak-proof words do not recognise. */
+  test('202 a clip that a seek does not load is primed once with a muted play and put back paused, unmuted and on its frame; one that loads on the seek is not', { item: '202', budgetMs: 30000 }, async function () {
+    const P = typeof FM._primeAfterMs === 'number' ? FM._primeAfterMs : 700;
+    const A = FM.audioFxLive;
+    if (!A || typeof A.audition !== 'function' || typeof A.auditioning !== 'function' || typeof A.stopAudition !== 'function') throw new Error('setup: this build has no Hear audition (FM.audioFxLive.audition), so the Hear runs cannot be measured');
+    const keep = FM.scene.layers.slice(), keepT = FM.time, wasPlaying = FM.playing;
+    /* how the stand-in loads: 'seek' on the seek; 'play' only when played; 'stuck' a seek that never completes (seeking stays true at
+       readyState 1); 'slow' a seek that lands P + 200 ms after it was made; 'refuse' never, and its play() is refused, as an iPhone
+       can refuse Hear's; 'hold' when played, with a play() promise that settles only on release() */
+    const mk = how => {
+      const el = { readyState: 1, seeking: false, duration: 10, paused: true, ended: false, muted: false, volume: 0.8, playbackRate: 1,
+        plays: 0, writes: [], held: [],
+        addEventListener() {}, removeEventListener() {},
+        play() {
+          this.plays++;
+          if (how === 'refuse') return Promise.reject(new Error('play() refused'));
+          this.paused = false; this.readyState = 2; this.seeking = false;
+          if (how === 'hold') { const held = this.held; return new Promise(r => held.push(r)); }
+          return Promise.resolve();
+        },
+        pause() { this.paused = true; },
+        release() { this.held.splice(0).forEach(r => r()); } };
+      Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) {
+        this.writes.push(v); this._t = v;
+        if (how === 'seek') this.readyState = 2;
+        if (how === 'stuck' && this.readyState < 2) this.seeking = true;
+        if (how === 'slow' && this.readyState < 2) { this.seeking = true; setTimeout(() => { el.seeking = false; el.readyState = 2; }, P + 200); }
+      }, configurable: true });
+      return el;
+    };
+    const snap = el => ({ plays: el.plays, paused: el.paused, muted: el.muted, volume: el.volume, readyState: el.readyState, writes: el.writes.slice() });
+    /* lay the stand-ins out as video layers from 0 s, park the playhead at 0 and make the paused seek that arms the prime */
+    let live = [];
+    const rig = specs => {
+      live = specs.map(s => {
+        const L = FM.makeLayer('video', { start: 0, duration: s.dur || 5 });
+        L.type = 'video'; L.start = 0; L.duration = s.dur || 5; L.trimStart = 0; L.speed = 1;
+        return { el: mk(s.how), L: L };
+      });
+      FM.scene.layers = live.map(o => o.L);
+      live.forEach(o => FM.media.set(o.L.id, { kind: 'video', el: o.el, duration: 10, width: 64, height: 48, stripFrames: [] }));
+      FM.time = 0; FM.playing = false;
+      FM.seekVideosToTime();
+      return live;
+    };
+    const unrig = () => { FM.playing = false; live.forEach(o => FM.media.remove(o.L.id)); live = []; A.stopAudition(); };
+    try {
+      {
+        const o = rig([{ how: 'seek' }])[0];
+        await sleep(P + 400);
+        const s = snap(o.el); unrig();
+        if (s.plays !== 0) throw new Error('CONTROL: an element that loaded on the seek was played ' + s.plays + ' time(s) — the prime is for one a seek does not load');
+      }
+      {
+        const o = rig([{ how: 'play' }])[0];
+        FM.playing = true;
+        await sleep(P + 400);
+        const s = snap(o.el); unrig();
+        if (s.plays !== 0) throw new Error('CONTROL: an element was primed while the project was playing — the transport owns it then');
+      }
+      {
+        const o = rig([{ how: 'play' }])[0];
+        await sleep(P + 400);
+        const s = snap(o.el); unrig();
+        if (s.plays !== 1) throw new Error('an element that only loads when played was played ' + s.plays + ' time(s) — on an iPhone a seek may not load it, so the clip stays black until he presses Play');
+        if (!s.paused) throw new Error('the primed element was left playing');
+        if (s.muted !== false || s.volume !== 0.8) throw new Error('muted and volume were not put back (' + s.muted + ', ' + s.volume + ')');
+        if (s.readyState < 2) throw new Error('the primed element still has no frame');
+        const last = s.writes[s.writes.length - 1];
+        if (s.writes.length < 2 || Math.abs(last - FM.frameSeekTarget(0, 10)) > 1e-9) throw new Error('after the prime the element was not put back on its frame (writes ' + JSON.stringify(s.writes) + ')');
+      }
+      /* (a) S1: he scrubs to 1 s inside the wait, the way a scrub does it (FM.time, then the paused seek). x is under the new
+         playhead; y (half a second long) is left behind. */
+      {
+        const r = rig([{ how: 'play', dur: 5 }, { how: 'play', dur: 0.5 }]);
+        FM.time = 1; FM.seekVideosToTime();
+        await sleep(P + 400);
+        const sx = snap(r[0].el), sy = snap(r[1].el); unrig();
+        if (sx.plays !== 1 || sy.plays !== 1) throw new Error('CONTROL: the two cold clips were primed ' + sx.plays + ' and ' + sy.plays + ' time(s), not once each, so where the prime puts them back is not measured');
+        const want = FM.frameSeekTarget(1, 10), xl = sx.writes[sx.writes.length - 1];
+        if (sx.writes.length < 3 || Math.abs(xl - want) > 1e-9) throw new Error('after a scrub to 1 s during the wait the prime left the clip at the last of its writes ' + JSON.stringify(sx.writes) + ', not on the playhead’s ' + want + ' s — the paused picture snaps back to the frame the prime was armed with');
+        if (sy.writes.length !== 1) throw new Error('the prime wrote ' + JSON.stringify(sy.writes.slice(1)) + ' to a clip the scrub had left, with no layer of it under the playhead — that moves a picture its own seek owns');
+      }
+      /* (b) S2: the first stand-in's seek never completes; the second's lands 200 ms after the first wait. 600 ms of slack, not 400,
+         because the second wait is armed only when the first fires, so a late first timer pushes it back by as much. */
+      {
+        const r = rig([{ how: 'stuck' }, { how: 'slow' }]);
+        await sleep(2 * P + 600);
+        const ss = snap(r[0].el), sl = snap(r[1].el); unrig();
+        if (sl.plays !== 0) throw new Error('CONTROL: a seek that landed ' + (P + 200) + ' ms after it was made was primed anyway (' + sl.plays + ' play(s)) — a seek that is only slower than ' + P + ' ms must get its second wait, not a muted play');
+        if (ss.plays !== 1) throw new Error('an element whose seek never completes was played ' + ss.plays + ' time(s) in ' + (2 * P + 600) + ' ms — the prime gave up on seeking and nothing re-armed it, so on an iPhone that holds the seek pending the clip stays black until he presses Play');
+        if (!ss.paused || ss.muted !== false || ss.volume !== 0.8) throw new Error('the primed stuck element was not put back paused with muted and volume as they were (paused ' + ss.paused + ', muted ' + ss.muted + ', volume ' + ss.volume + ')');
+      }
+      /* (c) S3, Hear. First: clip h is being heard (its Hear play() refused, so it still reads paused) when both timers fire; clip b is not. */
+      {
+        const r = rig([{ how: 'refuse' }, { how: 'play' }]), h = r[0], b = r[1];
+        if (A.audition(h.L) !== true || !A.auditioning(h.L)) throw new Error('setup: Hear did not start on the stand-in clip, so nothing below is measured');
+        await sleep(P + 400);
+        const sh = snap(h.el), sb = snap(b.el), still = A.auditioning(h.L); unrig();
+        if (!still) throw new Error('CONTROL: the audition stopped by itself, so the prime did not fire under Hear');
+        if (sb.plays !== 1 || !sb.paused || sb.muted !== false) throw new Error('CONTROL: with ANOTHER clip being heard, this cold clip was played ' + sb.plays + ' time(s) and left ' + (sb.paused ? 'paused' : 'PLAYING') + ' with muted ' + sb.muted + ' — standing every clip down for one clip’s Hear can leave this one playing, muted, for good');
+        if (sh.plays !== 1) throw new Error('a clip being heard was primed (' + (sh.plays - 1) + ' play(s) on top of Hear’s own) — the prime mutes the element and then pauses it, so Hear goes silent with Stop still showing');
+      }
+      /* …then Hear tapped while the prime's play() is still settling */
+      {
+        const e = rig([{ how: 'hold' }])[0];
+        await sleep(P + 400);
+        if (e.el.plays !== 1 || e.el.paused) throw new Error('CONTROL: the prime had not started (' + e.el.plays + ' play(s)) when Hear was tapped, so what its put-back does under Hear is not measured');
+        if (A.audition(e.L) !== true) throw new Error('setup: Hear did not start on the primed clip');
+        e.el.release();
+        await sleep(50);
+        const se = snap(e.el), still = A.auditioning(e.L); unrig();
+        if (!still) throw new Error('CONTROL: the audition stopped by itself, so the prime did not settle under Hear');
+        if (se.paused || se.muted !== false) throw new Error('when the prime’s play() settled under Hear its put-back left the clip ' + (se.paused ? 'PAUSED' : 'playing') + ' with muted ' + se.muted + ' — Hear goes silent with Stop still showing');
+      }
+      /* …and an element something else is already playing */
+      {
+        const q = rig([{ how: 'play' }])[0];
+        q.el.paused = false;
+        await sleep(P + 400);
+        const sq = snap(q.el); unrig();
+        if (sq.plays !== 0 || sq.paused) throw new Error('an element that something else was already playing was primed (' + sq.plays + ' play(s)) and left ' + (sq.paused ? 'PAUSED' : 'playing') + ' — the prime must only ever touch an element that is sitting still');
+      }
+    } finally { unrig(); FM.playing = wasPlaying; FM.scene.layers = keep; FM.time = keepT; if (FM.refreshAll) FM.refreshAll(); }
+  });
+
+  /* a stand-in video element for the filmstrip: events by hand, a 'seeked' a tick after every seek, every currentTime write kept */
+  function fakeStripEl202(rs) {
+    const on = {}, writes = [];
+    const el = { readyState: rs, duration: 4, muted: false, paused: true, videoWidth: 64, videoHeight: 48, pause() {}, writes: writes,
+      addEventListener(t, f) { (on[t] = on[t] || []).push(f); }, removeEventListener(t, f) { on[t] = (on[t] || []).filter(g => g !== f); },
+      fire(t) { (on[t] || []).slice().forEach(f => f()); }, listening(t) { return !!(on[t] && on[t].length); } };
+    Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) { writes.push(v); this._t = v; setTimeout(() => el.fire('seeked'), 0); }, configurable: true });
+    return el;
+  }
+
+  /* #202 N1. The filmstrip set the flag that makes FM.seekBusy true BEFORE waiting (up to 3 s) for a clip to become decodable, so
+   * every scrub in that time was dropped, and on an iPhone, where a seek may be what loads a clip, nothing could load it.
+   * FAILS BEFORE THE FIX: seekBusy is true while the strip only waits.
+   * CONTROL: once the clip is decodable and the strip drives it, seekBusy is true at its first seek; and the wait has really begun. */
+  test('202 the filmstrip does not hold a clip busy while it only waits for it to decode, and does while it drives it', { item: '202', budgetMs: 20000 }, async function () {
+    if (typeof FM.buildClipStrip !== 'function') throw new Error('FM.buildClipStrip is not exposed');
+    const el = fakeStripEl202(0), m = { kind: 'video', el: el, duration: 4, width: 64, height: 48 };
+    const p = FM.buildClipStrip(m, 2);
+    const until = performance.now() + 8000;
+    while (!el.listening('loadeddata') && performance.now() < until) await sleep(20);
+    if (!el.listening('loadeddata')) { m._released = true; el.fire('emptied'); await p; throw new Error('setup: the strip never reached its wait for the clip to decode'); }
+    const waitingBusy = FM.seekBusy(m);
+    let drivingBusy = null;
+    Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) { if (drivingBusy === null) drivingBusy = FM.seekBusy(m); this._t = v; setTimeout(() => el.fire('seeked'), 0); }, configurable: true });
+    el.readyState = 2; el.fire('loadeddata');
+    await p;
+    if (waitingBusy) throw new Error('while the filmstrip only waited for the clip to decode, FM.seekBusy said true — every scrub in that time was dropped, and nothing could ask an iPhone clip for its frame');
+    if (drivingBusy !== true) throw new Error('CONTROL: at the strip’s first seek FM.seekBusy said ' + drivingBusy + ' — the strip drives the element without holding it');
+  });
+
+  /* #202 H3. The filmstrip put the element back where it was BEFORE the strip, but a scrub that came in while the strip held it was
+   * dropped, so the paused preview kept a stale frame until the next scrub. It now lands where the playhead wants it.
+   * FAILS BEFORE THE FIX: the last seek is the old 1.0 s.
+   * CONTROL: the strip really seeked (two frames) before it put the element back. */
+  test('202 after the filmstrip the clip is left on the playhead’s frame, not where it was before the strip', { item: '202', budgetMs: 20000 }, async function () {
+    if (typeof FM.buildClipStrip !== 'function') throw new Error('FM.buildClipStrip is not exposed');
+    const keep = FM.scene.layers.slice(), keepT = FM.time, wasPlaying = FM.playing;
+    const el = fakeStripEl202(2); el._t = 1.0;
+    const L = FM.makeLayer('video', { start: 0, duration: 4 }); L.type = 'video'; L.trimStart = 0; L.speed = 1;
+    const m = { kind: 'video', el: el, duration: 4, width: 64, height: 48 };
+    try {
+      FM.playing = false;
+      FM.scene.layers = [L]; FM.media.set(L.id, m);
+      FM.time = 2.0;   // the playhead moved while the element still sat at 1.0 (the scrub that the strip's hold dropped)
+      await FM.buildClipStrip(m, 2);
+      if (el.writes.length < 3) throw new Error('CONTROL: the strip made ' + el.writes.length + ' seek(s), not its 2 frames and the put-back');
+      const last = el.writes[el.writes.length - 1], want = FM.frameSeekTarget(2.0, 4);
+      if (Math.abs(last - want) > 1e-6) throw new Error('after the filmstrip the clip was put back at ' + last + ' s, not the playhead’s ' + want + ' s — the paused preview shows a stale frame until the next scrub');
+    } finally { FM.media.remove(L.id); FM.scene.layers = keep; FM.time = keepT; FM.playing = wasPlaying; if (FM.refreshAll) FM.refreshAll(); }
+  });
+
   test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
     var keep = FM.scene.layers.slice(), keepT = FM.time;
     var fps = FM.scene.project.fps || 30;

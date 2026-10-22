@@ -258,12 +258,31 @@ window.FM = window.FM || {};
     return { resizeHeight: STRIP_H, resizeWidth: Math.max(1, Math.round(w * STRIP_H / h)), resizeQuality: 'medium' };
   }
 
+  /* WHERE THE STRIP PUTS THE ELEMENT BACK (#202 H3, the 22 Oct hunt's refuter). A scrub that arrived while the strip held this element
+     was dropped (FM.seekBusy), so the time it had before the strip is stale: the paused preview then showed the strip's last frame, or
+     an old one, until the next scrub. Put it where the playhead now wants it, as the preview's own seek would (FM.frameSeekTarget),
+     and only this element, inside its own seek lock, so an export (which holds the lock for the whole file) cannot be touched. While
+     playing, or with no layer of this clip under the playhead, the old time stands.
+     #202 S1 (the pre-ship review and its refuter, 22 Oct): where the playhead now wants it is FM.playheadSeekTarget (js/app.js), the
+     ONE answer the cold-clip prime's put-back reads too, so the two cannot drift apart. It used to be worked out here a second time:
+     from the first layer of this record whether or not that layer was under the playhead, and with the element's own duration as a
+     fallback the preview's seek never uses. Asked only if it exists, so this file never depends on app.js having loaded. */
+  function stripRestoreTarget(m, wasTime) {
+    if (FM.playing || typeof FM.playheadSeekTarget !== 'function') return wasTime;
+    const t = FM.playheadSeekTarget(m);
+    return t == null ? wasTime : t;
+  }
+
   async function _extractStrip(m, count) {
     if (!m || !m.el || m._stripBuilding || m.stripFrames !== undefined) return m && m.stripFrames;
     // Released while it waited in the queue — nobody can draw it now, so hand the queue straight on (queue 690).
     if (m._released) return undefined;
     count = count || 8;
-    m._stripBuilding = true;
+    /* #202 N1 (the 22 Oct hunt's refuter): the flag that makes FM.seekBusy true is set when the strip starts DRIVING the element,
+       not while it only waits for a clip to become decodable (up to 3 s on a slow phone): every scrub in that time was dropped,
+       and if a seek is what loads an iPhone clip, nothing could load it. Re-entry stays shut by the queue, the element's seek lock
+       and stripFrames. */
+    if (m.kind === 'image') m._stripBuilding = true;
     try {
       if (m.kind === 'image') {
         const opt = stripSize(m.el, m);
@@ -271,6 +290,7 @@ window.FM = window.FM || {};
       } else {
         const el = m.el;
         if (el.readyState < 2) await waitDecodable(el);   // wait for it to become decodable (don't spin / retry forever)
+        m._stripBuilding = true;   // #202 N1: from here the strip drives the element's seeks
         const frames = [];
         if (el.readyState >= 2 && !m._released) {
           const dur = (isFinite(m.duration) && m.duration > 0) ? m.duration : (el.duration || 1);
@@ -281,7 +301,7 @@ window.FM = window.FM || {};
             await seekAndPaint(el, Math.min((i + 0.5) * dur / count, Math.max(0, dur - 0.001)));
             try { frames.push(opt ? await createImageBitmap(el, opt) : await createImageBitmap(el)); } catch (e) {}
           }
-          if (!m._released) { try { el.currentTime = wasTime; } catch (e) {} }
+          if (!m._released) { try { el.currentTime = stripRestoreTarget(m, wasTime); } catch (e) {} }
           el.muted = wasMuted;
         }
         if (m._released) {   // a strip of a clip nobody can see any more — give its bitmaps straight back
