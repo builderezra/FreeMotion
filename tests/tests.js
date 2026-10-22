@@ -177044,9 +177044,11 @@
   /* every new key, by effect, and every new control off its default on the effect's own default settings */
   const _O12_NEW = {
     gamma: ['range', 'mix'],
+    vibrance: ['boost', 'shadows'],
   };
   const _O12_OFF = {
     gamma: [{ range: 1 }, { mix: 50 }],
+    vibrance: [{ boost: 1 }, { boost: 2 }],
   };
   const _o12P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
   const _o12Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
@@ -177252,10 +177254,80 @@
   });
   /* ---- end Gamma ---- */
 
+  /* ---- Vibrance: Boosts and Protect shadows ---- */
+  /* the boost vibrance12 gives one pixel with Protect skin and Protect highlights at 0, written out: f = 1 + (k − 1) x w, w the pixel's
+     dullness 1 − (max − min) / 255 (Dull colours, the kernel's own), 1 (Every colour) or its richness (Rich colours), backed off by
+     Protect shadows x (77 − max) / 77 when its brightest channel is under 77; each channel pulled from the pixel's mean by f */
+  const _o12Vib = (c, k, boost, sh) => {
+    const r = c[0], g = c[1], b = c[2], avg = (r + g + b) / 3, mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    const wt = boost === 1 ? 1 : (boost === 2 ? (mx - mn) / 255 : 1 - (mx - mn) / 255);
+    let f = 1 + (k - 1) * wt;
+    const guard = sh > 0 && mx < 77 ? sh * ((77 - mx) / 77) : 0;
+    if (guard > 0) f = 1 + (f - 1) * (1 - Math.min(1, guard));
+    return _o12U8(avg + (r - avg) * f, avg + (g - avg) * f, avg + (b - avg) * f);
+  };
+  const _o12Off = (px, want) => Math.max(Math.abs(px[0] - want[0]), Math.abs(px[1] - want[1]), Math.abs(px[2] - want[2]));
+  test('966 opts12 Vibrance has Boosts (Dull colours, Every colour or Rich colours, storing 0–2, Dull colours by default) and Protect shadows (0–100 %, keyframable, 0 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Rich colours and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o12Need('vibrance', _O12_NEW.vibrance);
+    const bad = _o12Rows('vibrance', [
+      { key: 'boost', label: 'Boosts', options: ['Dull colours', 'Every colour', 'Rich colours'], def: 0 },
+      { key: 'shadows', label: 'Protect shadows', min: 0, max: 100, unit: '%', def: 0 }], { boost: 2, shadows: 40 });
+    bad.push.apply(bad, _o12Clamp('vibrance', { shadows: 150 }, { shadows: 100 }));
+    bad.push.apply(bad, _o12Clamp('vibrance', { shadows: -5 }, { shadows: 0 }));
+    bad.push.apply(bad, _o12Clamp('vibrance', { boost: 3 }, { boost: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at Amount 1.5: the rich red (200, 50, 50) has a mean of 100 and a richness of 150 / 255, so Dull colours pushes its red to
+     100 + 100 x 1.206 = 221 and Every colour to 250 — 29 levels further; the dull pink (140, 110, 110), richness 30 / 255, goes to 149
+     under Dull colours and 141 under Rich colours — 8 levels held back. On hunt/768c's code Boosts is ignored and every column is Dull
+     colours, so Every colour's red reads 221, not 250. */
+  const _O12_VB = [[140, 110, 110], [200, 50, 50], [60, 90, 200], [128, 128, 128], [230, 200, 60], [90, 140, 100]];
+  test('966 opts12 Vibrance Boosts: on six pixels from grey to rich red at Amount 1.5, Dull colours pushes each by 1 + 0.5 x its dullness, Every colour by 1.5 whatever its colour and Rich colours by 1 + 0.5 x its richness — Every colour pushes a rich red 29 levels further than Dull colours and Rich colours holds a dull pink 8 back (CONTROL: Dull colours, the old boost, matches the same arithmetic)', { item: '966', budgetMs: 60000 }, function () {
+    const N = _O12_VB.length, bad = [];
+    const run = bo => _o12Run('vibrance', _o12P('vibrance', { amount: 1.5, boost: bo }), N, 1, _o12Row(_O12_VB)(), 0.5);
+    const got = [0, 1, 2].map(run), NAME = ['Dull colours', 'Every colour', 'Rich colours'];
+    [0, 1, 2].forEach(bo => _O12_VB.forEach((c, x) => {
+      const want = _o12Vib(c, 1.5, bo, 0), px = _o12At(got[bo], N, x, 0), e = _o12Off(px, want);
+      if (e > 1) bad.push((bo === 0 ? 'CONTROL: ' : '') + NAME[bo] + ': (' + c.join(', ') + ') reads (' + px.slice(0, 3).join(', ') + '), not (' + want.join(', ') + ')');
+    }));
+    const rr = _o12At(got[1], N, 1, 0)[0] - _o12At(got[0], N, 1, 0)[0], dp = _o12At(got[0], N, 0, 0)[0] - _o12At(got[2], N, 0, 0)[0];
+    if (!(rr >= 20)) bad.push('Every colour pushes the rich red only ' + rr + ' levels further than Dull colours (29 worked)');
+    if (!(dp >= 5)) bad.push('Rich colours holds the dull pink back only ' + dp + ' levels from Dull colours (8 worked)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at Amount 3: the dark red (40, 0, 0) has a mean of 13.3 and a dullness of 215 / 255, so f = 2.686 and its red goes to 85; at
+     100 % its guard is 37 / 77 = 0.48, f = 1.876 and its red goes to 63 — 22 levels held back. (200, 120, 120) is brighter than 76 and
+     is not guarded at all. On hunt/768c's code Protect shadows is ignored and the dark red reads 85 at 100 %. */
+  const _O12_VS = [[40, 0, 0], [60, 30, 10], [20, 40, 70], [200, 120, 120], [76, 40, 40]];
+  test('966 opts12 Vibrance Protect shadows: at Amount 3 a dark red (40, 0, 0) boosted to 85 at 0 % is held back to 63 at 100 % — every pixel whose brightest channel is under 77 backed off by Protect shadows x (77 − it) / 77, at 50 % half that — while a pixel brighter than that moves not a level (CONTROL: at 0 % the dark pixels take the whole boost)', { item: '966', budgetMs: 60000 }, function () {
+    const N = _O12_VS.length, bad = [];
+    const run = sh => _o12Run('vibrance', _o12P('vibrance', { amount: 3, shadows: sh }), N, 1, _o12Row(_O12_VS)(), 0.5);
+    const g0 = run(0), g50 = run(50), g100 = run(100);
+    [[g0, 0], [g50, 0.5], [g100, 1]].forEach(([got, sh]) => _O12_VS.forEach((c, x) => {
+      const want = _o12Vib(c, 3, 0, sh), px = _o12At(got, N, x, 0), e = _o12Off(px, want);
+      if (e > 1) bad.push((sh === 0 ? 'CONTROL: ' : '') + 'at ' + (sh * 100) + ' %: (' + c.join(', ') + ') reads (' + px.slice(0, 3).join(', ') + '), not (' + want.join(', ') + ')');
+    }));
+    const held = _o12At(g0, N, 0, 0)[0] - _o12At(g100, N, 0, 0)[0];
+    if (!(held >= 12)) bad.push('Protect shadows 100 % holds the dark red back only ' + held + ' levels (22 worked)');
+    const br = _o12Off(_o12At(g100, N, 3, 0), _o12At(g0, N, 3, 0));
+    if (br !== 0) bad.push('Protect shadows moves (200, 120, 120) by ' + br + ' levels — it is brighter than any shadow');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts12 Vibrance at Dull colours and Protect shadows 0 % draws byte for byte what it drew without them — at its defaults, a strong and a weak boost, with Protect skin and Protect highlights, keyframed, and on a half-size plate (CONTROL: Every colour, Rich colours and Protect shadows each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o12Need('vibrance', _O12_NEW.vibrance);
+    const bad = _o12Ident('vibrance', [{}, { over: { amount: 3 } }, { over: { amount: 0.4 } }, { over: { skin: 60, highlights: 40 } }, { over: { amount: _o12KF(0.5, 4) }, t: 0.37 }, { ps: 0.5 }]);
+    /* reasoned bounds: the picture is colourful nearly everywhere, so a boost by another share moves most of its 6912 pixels; Protect
+       shadows only reaches its dark corner (red and green under 77, the dark checker squares — about 300 pixels) */
+    [[{ boost: 1 }, 1000], [{ boost: 2 }, 1000], [{ shadows: 100 }, 100]].forEach(([o, least]) => { const n = _o12Moves('vibrance', o, 96, 72, _o12Pic, 0.5); if (n < least) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Vibrance ---- */
+
   /* the round's editors, new rows and all, fit the inspector (round eleven's fit test) */
   test('966 opts12 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
     const NEW = {
       gamma: 'Affects',
+      vibrance: 'Boosts',
     };
     Object.keys(NEW).forEach(type => _o12Need(type, _O12_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];

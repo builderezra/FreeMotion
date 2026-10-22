@@ -235,6 +235,13 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 8, step: 0.02, def: 1.6 },
       { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'highlights', label: 'Protect highlights', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      /* #966 opts12 (hunt/fx12, his "more choices always better"): the boost always went hardest on the dullest colours and the shadows
+         were boosted like everything else, so a dark corner's noise came up in colour. BOOSTS turns that round — Every colour (plain
+         saturation, still with the protections) or Rich colours (the strong colours get stronger and the muted ones are left nearly
+         alone) — and PROTECT SHADOWS backs the boost off as a pixel nears black, Protect highlights' mirror (from 76 down). Dull colours
+         and 0 % run the old loop untouched (vibrance12 only off them). */
+      { key: 'boost', label: 'Boosts', def: 0, options: [[0, 'Dull colours'], [1, 'Every colour'], [2, 'Rich colours']], note: 'Which colours get the most boost · Every colour is plain saturation' },
+      { key: 'shadows', label: 'Protect shadows', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     { type: 'sharpen', label: 'Sharpen', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.5 },
@@ -8920,6 +8927,10 @@ window.FM = window.FM || {};
       const skin = (p.skin == null ? 0 : FM.evalProp(p.skin, t)) / 100;
       const hi = (p.highlights == null ? 0 : FM.evalProp(p.highlights, t)) / 100;
       const plain = (skin === 0 && hi === 0);
+      /* #966 opts12: BOOSTS Every colour (1) or Rich colours (2), or PROTECT SHADOWS above 0, runs vibrance12, the loop below with the
+         two laid in; Dull colours and 0 % run the loop below untouched. */
+      const vbBo12 = p.boost == null ? 0 : (Math.round(FM.evalProp(p.boost, t)) | 0), vbSh12 = p.shadows == null ? 0 : FM.evalProp(p.shadows, t);
+      if (vbBo12 === 1 || vbBo12 === 2 || vbSh12 > 0) { vibrance12(d, k, skin, hi, vbBo12, vbSh12); return; }
       for (let i = 0; i < d.length; i += 4) {
         const r = d[i], g = d[i + 1], b = d[i + 2], avg = (r + g + b) / 3;
         const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
@@ -14389,6 +14400,32 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._gamma12 = gamma12;   // suite seam (#966 opts12)
+  /* VIBRANCE'S BOOSTS AND PROTECT SHADOWS: the kernel's loop to the letter (the same Amount k, the same pull from the pixel's mean, the same
+     Protect skin wedge and Protect highlights ramp, the strongest guard winning), with the boost f = 1 + (k − 1) x w where w is the
+     pixel's dullness 1 − (max − min) / 255 (Dull colours, the kernel's), 1 (Every colour: plain saturation) or its richness
+     (max − min) / 255 (Rich colours); and PROTECT SHADOWS a third guard, the highlights ramp's mirror — Protect shadows x
+     (77 − max) / 77 for a pixel whose largest channel is under 77, so at 100 % black is not boosted at all. Shadows reads 0–100 % (held
+     there). At Dull colours and 0 % this is the kernel byte for byte. */
+  function vibrance12(d, k, skin, hi, boost, shadows) {
+    const sh = shadows > 0 ? (shadows < 100 ? shadows / 100 : 1) : 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2], avg = (r + g + b) / 3;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      const wt = boost === 1 ? 1 : (boost === 2 ? (mx - mn) / 255 : 1 - (mx - mn) / 255);
+      let f = 1 + (k - 1) * wt;
+      let guard = 0;
+      if (skin > 0 && mx > 0 && r === mx && b === mn) {
+        const hw = (g - b) / (mx - mn || 1);
+        const w = 1 - Math.abs(hw - 0.45) / 0.55;
+        if (w > 0) guard = Math.max(guard, skin * Math.min(1, w));
+      }
+      if (hi > 0 && mx > 178) guard = Math.max(guard, hi * ((mx - 178) / 77));
+      if (sh > 0 && mx < 77) guard = Math.max(guard, sh * ((77 - mx) / 77));
+      if (guard > 0) f = 1 + (f - 1) * (1 - Math.min(1, guard));
+      d[i] = avg + (r - avg) * f; d[i + 1] = avg + (g - avg) * f; d[i + 2] = avg + (b - avg) * f;
+    }
+  }
+  FM._vibrance12 = vibrance12;   // suite seam (#966 opts12)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {

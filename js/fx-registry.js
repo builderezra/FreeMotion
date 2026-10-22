@@ -414,7 +414,7 @@ window.FM = window.FM || {};
     brightness: 'Lifts or drops the whole image evenly.',
     contrast: 'Pushes lights lighter and darks darker, or flattens them together.',
     saturate: 'Strengthens or drains colour without touching brightness.',
-    vibrance: 'Boosts the muted colours and leaves already-vivid ones alone — kinder to skin than Saturation.',
+    /* every colour or the rich ones, the shadows held back: #966 opts12 */ vibrance: 'Boosts the muted colours and leaves already-vivid ones alone — kinder to skin than Saturation. Or boost every colour, or the rich ones most, and hold the shadows back.',
     hue: 'Rotates every colour around the wheel.',
     grayscale: 'Removes colour entirely.',
     sepia: 'Warm monochrome — the old-photograph tone.',
