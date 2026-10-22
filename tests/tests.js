@@ -177022,6 +177022,266 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts11 ──
+  // ── 966 opts12 (hunt/fx12) ──
+  /* ═══ #966: MORE CHOICE, ROUND TWELVE — more effects he already has, each commonly reached for and still thin on choice (hunt/fx12). His
+   * words: "polish other effects just giving them more features … more choices always better … this is the complex version we want as much
+   * choice as possible". WRITTEN WITHOUT RUNNING (23 Oct, before a release's timing tests on this machine): nothing but `node --check`.
+   * Every number below is reasoned from the code it names, the reasoning beside it; a bound only a run can set says MEASURE beside it.
+   * Round eleven's four kinds for each effect: (a) its rows, ranges, choices and what the load sanitiser keeps, clamps and drops, (b) what
+   * each new control does, on a fixture that holds what separates right from wrong, with a CONTROL that the fixture can tell, (c) at the
+   * defaults the kernel is today's picture byte for byte, (d) every new control off its default moves the very fixtures (c) holds still.
+   * The (b) tests do not stop at a missing row: on hunt/768c's code the kernel ignores the new keys and the picture is judged and fails.
+   * All three are PIXEL_FX point ops (PIXEL_ADJ too), so their pictures go through FM._applyPixelFx and, in the first test, FM.renderScene.
+   * The helpers carry an _o12 prefix and are this block's own; from the rest of the file it uses only `test`, `sleep` and E1 (frame,
+   * maxDiff, count). ═══ */
+  const _o12Need = (type, keys) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts12 (hunt/fx12) is not built');
+    return r;
+  };
+  /* every new key, by effect, and every new control off its default on the effect's own default settings */
+  const _O12_NEW = {
+    gamma: ['range', 'mix'],
+  };
+  const _O12_OFF = {
+    gamma: [{ range: 1 }, { mix: 50 }],
+  };
+  const _o12P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o12Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  /* through the dispatcher's own pixel step (colours resolved, project px scaled to plate scale ps) — the adjustment-layer path and the
+     clip's, the same PIXEL_FX kernel */
+  const _o12Run = (type, params, W, H, d, t, ps) => {
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx is not reachable');
+    FM._applyPixelFx(d, { type: type, params: params }, t == null ? 0.5 : t, W, H, ps == null ? 1 : ps);
+    return d;
+  };
+  /* a busy opaque picture (a colour ramp under a 12 px checker), the grey levels 0–255 one to a column, a row of given pixels */
+  const _o12Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  const _o12Lv = () => E1.frame(256, 2, x => [x, x, x]);
+  const _o12Row = list => () => E1.frame(list.length, 1, x => list[x]);
+  const _o12At = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  const _o12KF = (a, b, t1) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: t1 || 1, v: b, e: 'linear' }] });
+  const _o12U8 = (r, g, b) => { const u = new Uint8ClampedArray(3); u[0] = r; u[1] = g; u[2] = b; return [u[0], u[1], u[2]]; };
+  const _o12Luma = (d, i) => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+  /* a gradient rect, and the frame rendered through FM.renderScene (a reduced plate when rs is given) */
+  const _o12Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#1040a0', c1: '#f0c060' }; L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o12shot = (layers, t, W, H, rs, bg) => {
+    const c = document.createElement('canvas'); c.width = Math.round(W * (rs || 1)); c.height = Math.round(H * (rs || 1));
+    if (rs) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: bg === undefined ? '#000000' : bg }, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return g.getImageData(0, 0, c.width, c.height).data;
+  };
+  /* a new instance with `give` laid on it, through the load sanitiser on a shape layer: the params it keeps */
+  const _o12San = (type, give) => {
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, give);
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    return got ? got.params : null;
+  };
+  /* every new row as the panel gets it (round eleven's _o11Rows): its label; a slider's range, unit and keyframes, or a choice's buttons
+     and the values they store; its default and that nothing greys it out; what a new instance starts with, what a SAVED one with no such
+     key is filled with at render time (FM._fillFxParams, queue 784) and what the fill reads off the kernel (793); and that the load
+     sanitiser keeps each key of `keep` at a value off its default */
+  const _o12Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.vals || s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      const fv = FM._fxFillValue(type, s.key); if (fv !== s.def) bad.push('the render-time fill reads ' + s.key + ' as ' + JSON.stringify(fv) + ' off the kernel, not ' + s.def + ' — 793 would say the panel lies');
+      if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const got = _o12San(type, keep);
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got[k])); });
+    return bad;
+  };
+  /* …and what the load sanitiser does with values off the rows: a number past either end is held at that end, a choice that is not one of
+     the buttons is left out (absent: the render-time fill then draws the default). `want[k]` undefined means left out. */
+  const _o12Clamp = (type, give, want) => {
+    const got = _o12San(type, give), bad = [];
+    if (!got) return ['the load sanitiser drops a ' + type + ' carrying ' + JSON.stringify(give)];
+    Object.keys(want).forEach(k => {
+      if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(give[k]) + ' into ' + JSON.stringify(got[k]) + ', not ' + (want[k] === undefined ? 'nothing (it is not a value the row has, so it is left out)' : JSON.stringify(want[k])));
+    });
+    return bad;
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o12Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o12P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o12Pic;
+      const a = _o12Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o12Run(type, _o12Del(P, _O12_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O12_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on a new instance, on that fixture at that moment, through the dispatcher's pixel step */
+  const _o12Moves = (type, over, W, H, pic, t) => E1.count(_o12Run(type, _o12P(type), W, H, pic(W, H), t), _o12Run(type, _o12P(type, over), W, H, pic(W, H), t), 0);
+  /* open a layer's (only) effect in the inspector and hand back the editor's body, or null; the caller restores the scene */
+  const _o12Open = async (L) => {
+    FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+    let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    if (!body) {
+      const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+      if (!cat) return null;
+      cat.closest('[class*=cat]').click(); await sleep(140);
+      body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    }
+    return body || null;
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect over a grey ground. CONTROLS: each effect changes the picture against the rect with no effect, and each new control
+     off its default moves the picture through the same compositor, at 1:1. */
+  test('966 opts12 every new control at its default draws what the effect drew without it — each of the round’s effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O12_NEW);
+    TYPES.forEach(type => _o12Need(type, _O12_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const one = params => type => [_o12Rect({ type: type, enabled: true, params: params })];
+    TYPES.forEach(type => {
+      const P = _o12P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o12shot(one(Object.assign({}, P))(type), t, W, H, rs, BG);
+        const b = _o12shot(one(_o12Del(P, _O12_NEW[type]))(type), t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O12_NEW[type].join(' / '));
+        if (rs == null) { const off = _o12shot([_o12Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+      const base = _o12shot(one(Object.assign({}, P))(type), 0.61, W, H, null, BG);
+      _O12_OFF[type].forEach(o => {
+        const n = E1.count(base, _o12shot(one(Object.assign({}, P, o))(type), 0.61, W, H, null, BG), 2);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels and each control below moves most of them by more than 2 levels (worked beside each effect's tests) */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Gamma: Affects and Mix ---- */
+  /* the kernel's master curve at Gamma g, and one channel's trimmed curve, built exactly as PIXEL_FX.gamma builds them */
+  const _o12GLut = (g, c) => { const gg = Math.max(0.05, g * (c == null ? 1 : c)), iv = 1 / gg, L = new Uint8ClampedArray(256); for (let v = 0; v < 256; v++) L[v] = Math.round(255 * Math.pow(v / 255, iv)); return L; };
+  /* Colour Balance's tonal weights on brightness L (0–1), by Affects: All 1, Darks (1 − L)², Mids 1 − (2L − 1)², Lights L² */
+  const _o12TW = (range, L) => (range === 1 ? (1 - L) * (1 - L) : (range === 2 ? 1 - (2 * L - 1) * (2 * L - 1) : (range === 3 ? L * L : 1)));
+  test('966 opts12 Gamma has Affects (All, Darks, Mids or Lights, storing 0–3, All by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Mids and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o12Need('gamma', _O12_NEW.gamma);
+    const bad = _o12Rows('gamma', [
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { range: 2, mix: 40 });
+    bad.push.apply(bad, _o12Clamp('gamma', { mix: 150 }, { mix: 100 }));
+    bad.push.apply(bad, _o12Clamp('gamma', { mix: -5 }, { mix: 0 }));
+    bad.push.apply(bad, _o12Clamp('gamma', { range: 7 }, { range: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* On the grey levels at the default Gamma 1.8 every grey v goes to v + (curve(v) − v) x share, the share Mix / 100. Worked: grey 64 curves
+     to 118 (255 x 0.251^(1 / 1.8)), so the whole curve is 54 levels from the picture there, and Mix 50 lands at 91. On hunt/768c's code
+     Mix is ignored and grey 64 comes out at 118, 27 levels from 91. */
+  test('966 opts12 Gamma Mix: at 50 % every grey of a 0–255 ramp sits half way between itself and its curved value, at 0 % the ramp is itself byte for byte, and a Mix keyed 0 to 100 draws its value half way (CONTROL: the whole curve is far from the ramp)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], LUT = _o12GLut(1.8);
+    const run = over => _o12Run('gamma', _o12P('gamma', over), 256, 2, _o12Lv(), 0.5);
+    const full = run({}), half = run({ mix: 50 }), none = run({ mix: 0 }), keyed = run({ mix: _o12KF(0, 100) });
+    let far = 0, worst = 0, at = -1;
+    for (let v = 0; v < 256; v++) {
+      far = Math.max(far, Math.abs(_o12At(full, 256, v, 0)[0] - v));
+      const want = _o12U8(v + (LUT[v] - v) * 0.5, 0, 0)[0], got = _o12At(half, 256, v, 0);
+      for (let c = 0; c < 3; c++) { const e = Math.abs(got[c] - want); if (e > worst) { worst = e; at = v; } }
+    }
+    if (far < 40) bad.push('CONTROL: the whole curve moves no grey more than ' + far + ' levels, so half of it proves little');
+    if (worst > 1) bad.push('at Mix 50 grey ' + at + ' reads ' + _o12At(half, 256, at, 0).slice(0, 3).join(', ') + ', not half way to its curve (' + _o12U8(at + (LUT[at] - at) * 0.5, 0, 0)[0] + ') — ' + worst + ' levels off');
+    const m0 = E1.maxDiff(none, _o12Lv());
+    if (m0 !== 0) bad.push('at Mix 0 the ramp moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(keyed, half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at Gamma 1.8: grey 40 curves to 91 (51 levels); Darks weighs it (1 − 0.157)² = 0.711, so 76; Lights 0.025, so 41. Grey 200 curves
+     to 223 (23 levels); Lights weighs it 0.615, so 214; Darks 0.047, so 201. With Red at 2 the red channel takes its own curve (Gamma 3.6:
+     grey 40 to 152) under the same weight — Darks puts grey 40's red at 120. On hunt/768c's code every Affects is All, so Lights moves
+     grey 40 the whole 51 levels. */
+  test('966 opts12 Gamma Affects: Darks, Mids and Lights move every grey of a 0–255 ramp by its curve times the tonal weight of its brightness — a red trim taking its own curve — so Darks opens grey 40 up and leaves grey 200 alone, Lights the other way round (CONTROL: All moves both by their whole curve)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o12Run('gamma', _o12P('gamma', over), 256, 2, _o12Lv(), 0.5);
+    const all = run({});
+    if (Math.abs(_o12At(all, 256, 40, 0)[0] - 40) < 40 || Math.abs(_o12At(all, 256, 200, 0)[0] - 200) < 15) bad.push('CONTROL: under All grey 40 reads ' + _o12At(all, 256, 40, 0)[0] + ' and grey 200 reads ' + _o12At(all, 256, 200, 0)[0] + ' — the curve does not move them far enough to tell the ranges apart');
+    [[1, 'Darks'], [2, 'Mids'], [3, 'Lights']].forEach(([rg, name]) => [null, 2].forEach(red => {
+      const over = red ? { range: rg, red: red } : { range: rg }, got = run(over);
+      const LR = _o12GLut(1.8, red || 1), LG = _o12GLut(1.8);
+      let worst = 0, at = -1;
+      for (let v = 0; v < 256; v++) {
+        const w = _o12TW(rg, (v * 0.299 + v * 0.587 + v * 0.114) / 255);
+        const want = _o12U8(v + (LR[v] - v) * w, v + (LG[v] - v) * w, v + (LG[v] - v) * w), px = _o12At(got, 256, v, 0);
+        for (let c = 0; c < 3; c++) { const e = Math.abs(px[c] - want[c]); if (e > worst) { worst = e; at = v; } }
+      }
+      if (worst > 1) bad.push(name + (red ? ' with Red 2' : '') + ': grey ' + at + ' reads ' + _o12At(got, 256, at, 0).slice(0, 3).join(', ') + ', ' + worst + ' levels from its curve times its tonal weight');
+    }));
+    const dk = run({ range: 1 }), lt = run({ range: 3 });
+    const d40 = _o12At(dk, 256, 40, 0)[0] - 40, l40 = _o12At(lt, 256, 40, 0)[0] - 40, d200 = _o12At(dk, 256, 200, 0)[0] - 200, l200 = _o12At(lt, 256, 200, 0)[0] - 200;
+    if (!(d40 >= 30)) bad.push('Darks lifts grey 40 by only ' + d40 + ' levels (about 36 expected)');
+    if (!(l40 <= 2)) bad.push('Lights lifts grey 40 by ' + l40 + ' levels — it should leave the darks nearly alone (about 1)');
+    if (!(l200 >= 10)) bad.push('Lights lifts grey 200 by only ' + l200 + ' levels (about 14 expected)');
+    if (!(d200 <= 2)) bad.push('Darks lifts grey 200 by ' + d200 + ' levels — it should leave the lights nearly alone (about 1)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts12 Gamma at All and Mix 100 % draws byte for byte what it drew without them — at its defaults, a strong and a weak curve, with channel trims, keyframed, and on a half-size plate (CONTROL: Darks and Mix 50 each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o12Need('gamma', _O12_NEW.gamma);
+    const bad = _o12Ident('gamma', [{}, { over: { gamma: 0.5 } }, { over: { gamma: 3.2 } }, { over: { red: 1.4, blue: 0.7 } }, { over: { gamma: _o12KF(0.6, 2.4) }, t: 0.37 }, { ps: 0.5 }, { pic: _o12Lv, W: 256, H: 2 }]);
+    _O12_OFF.gamma.forEach(o => { const n = _o12Moves('gamma', o, 96, 72, _o12Pic, 0.5); if (n < 1000) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* reasoned: every pixel off black and white has a curve to move along and a share under 1 */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Gamma ---- */
+
+  /* the round's editors, new rows and all, fit the inspector (round eleven's fit test) */
+  test('966 opts12 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = {
+      gamma: 'Affects',
+    };
+    Object.keys(NEW).forEach(type => _o12Need(type, _O12_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o12Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts12 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition

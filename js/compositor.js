@@ -188,6 +188,12 @@ window.FM = window.FM || {};
       { key: 'red', label: 'Red', min: 0.2, max: 5, step: 0.02, def: 1 },
       { key: 'green', label: 'Green', min: 0.2, max: 5, step: 0.02, def: 1 },
       { key: 'blue', label: 'Blue', min: 0.2, max: 5, step: 0.02, def: 1 },
+      /* #966 opts12 (hunt/fx12, his "more choices always better"): the curve always reshaped every tone of the picture at full strength.
+         AFFECTS confines it to the darks, the mids or the lights with Colour Balance's tonal weights ((1 − L)², 1 − (2L − 1)², L², on the
+         pixel's own brightness) — open up the shadows and leave the sky alone — and MIX lays the curved picture over the plain one. All and
+         100 % run the old lines untouched (gamma12 only off them). */
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks reshapes the shadows and leaves the lights alone' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'temperature', label: 'Colour Temperature', params: [
       { key: 'amount', label: 'Temperature', min: -100, max: 100, step: 1, def: 40 },
@@ -8671,6 +8677,10 @@ window.FM = window.FM || {};
       const cr = p.red == null ? 1 : FM.evalProp(p.red, t);
       const cg = p.green == null ? 1 : FM.evalProp(p.green, t);
       const cb = p.blue == null ? 1 : FM.evalProp(p.blue, t);
+      /* #966 opts12: AFFECTS Darks (1), Mids (2) or Lights (3), or MIX under 100 %, runs gamma12, these very curves (the master and each
+         trim, built the way the lines below build them) laid in by the tonal weight and Mix; All and 100 % run the lines below untouched. */
+      const gmRg12 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0), gmMx12 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (gmRg12 === 1 || gmRg12 === 2 || gmRg12 === 3 || gmMx12 < 100) { gamma12(d, g, LUT, cr, cg, cb, gmRg12, gmMx12); return; }
       if (cr === 1 && cg === 1 && cb === 1) {
         for (let i = 0; i < d.length; i += 4) { d[i] = LUT[d[i]]; d[i + 1] = LUT[d[i + 1]]; d[i + 2] = LUT[d[i + 2]]; }
         return;
@@ -14356,6 +14366,29 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._touchup11 = touchup11;   // suite seam (#966 opts11)
+  /* ═══ #966 opts12 (hunt/fx12): helpers behind the twelfth round — Gamma's Affects and Mix, Vibrance's Boosts and Protect shadows,
+   * Cross Process's Protect skin and Keep brightness. Each runs only off its controls' defaults, so a default kernel never calls one. ═══ */
+  /* GAMMA'S AFFECTS AND MIX: the kernel's curves to the letter — the master LUT it built, and each trim's own curve built as its mk builds
+     one (Math.max(0.05, gamma x trim), the same rounding) — with each pixel moved only that share of the way from its own value to its
+     curved one: the tonal weight of Affects on the pixel's brightness L (0–1; Darks (1 − L)², Mids 1 − (2L − 1)², Lights L², All 1),
+     times Mix (100 % is the curve itself, 0 the picture; NaN reads 100). At All and 100 % the share is 1 and this is the kernel. */
+  function gamma12(d, g, LUT, cr, cg, cb, range, mix) {
+    const m = isFinite(mix) ? (mix <= 0 ? 0 : (mix >= 100 ? 1 : mix / 100)) : 1;
+    if (!(m > 0)) return;
+    const mk = c => { if (c === 1) return LUT; const gg = Math.max(0.05, g * c), iv = 1 / gg, L = new Uint8ClampedArray(256); for (let v = 0; v < 256; v++) L[v] = Math.round(255 * Math.pow(v / 255, iv)); return L; };
+    const LR = mk(cr), LG = mk(cg), LB = mk(cb);
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], gr = d[i + 1], b = d[i + 2];
+      let w = m;
+      if (range === 1 || range === 2 || range === 3) {
+        const L = (r * 0.299 + gr * 0.587 + b * 0.114) / 255;
+        w *= range === 1 ? (1 - L) * (1 - L) : (range === 2 ? 1 - (2 * L - 1) * (2 * L - 1) : L * L);
+      }
+      if (w === 1) { d[i] = LR[r]; d[i + 1] = LG[gr]; d[i + 2] = LB[b]; }
+      else { d[i] = r + (LR[r] - r) * w; d[i + 1] = gr + (LG[gr] - gr) * w; d[i + 2] = b + (LB[b] - b) * w; }
+    }
+  }
+  FM._gamma12 = gamma12;   // suite seam (#966 opts12)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
