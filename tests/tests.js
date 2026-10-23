@@ -178061,7 +178061,9 @@
     if (vids.length) throw new Error('#splash still holds a <video> (#' + (vids[0].id || '?') + ') — the film is still the intro');
     const imgs = sp.querySelectorAll('img');
     if (imgs.length) throw new Error('#splash holds an <img> (#' + (imgs[0].id || '?') + ') — the film’s poster, the empty white box of #642, is back');
-    const boot = html.slice(html.indexOf('<body>'), html.indexOf('<div id="app">'));
+    /* Comments load nothing, and the splash block's own comment names the film it replaced (splash-v2.mp4), so they are
+     * stripped before looking for a film the block would load. */
+    const boot = html.slice(html.indexOf('<body>'), html.indexOf('<div id="app">')).replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
     const mp4 = boot.match(/[\w-]+\.mp4/);
     if (mp4) throw new Error('the splash block still loads a film: ' + mp4[0]);
     const svg = sp.querySelector('svg#splash-mark');
@@ -178302,6 +178304,12 @@
         if (ms.display === 'none' || ms.visibility === 'hidden' || ms.opacity !== '1' || !(box.width > 0 && box.height > 0)) throw new Error('in the ' + look + ' look a stylesheet hides the mark (display ' + ms.display + ', visibility ' + ms.visibility + ', opacity ' + ms.opacity + ', ' + Math.round(box.width) + 'x' + Math.round(box.height) + ')');
         if (w.getComputedStyle(sp).opacity !== '1') throw new Error('in the ' + look + ' look the splash is at opacity ' + w.getComputedStyle(sp).opacity + ' before its dissolve');
         const prop = look === 'light' ? 'background-color' : 'opacity';
+        let running = null;
+        const seen = setInterval(function () {
+          if (running === null && sp.classList.contains('splash-out')) {
+            try { running = sp.getAnimations().map(function (a) { return a.transitionProperty || a.animationName || '?'; }).join(', ') || 'none'; } catch (e) { running = '?'; }
+          }
+        }, 20);
         const end = await new Promise(function (res) {
           const to = setTimeout(function () { res(null); }, 12000);
           sp.addEventListener('transitionend', function h(e) {
@@ -178311,8 +178319,9 @@
             res({ sp: w.getComputedStyle(sp).backgroundColor, root: w.getComputedStyle(root).backgroundColor });
           });
         });
+        clearInterval(seen);
         if (look === 'light') {
-          if (!end) throw new Error('in the light look #splash’s background-color never moved over the dissolve — the status strip stays dark over the light Home, then snaps (queue 920)');
+          if (!end) throw new Error('in the light look #splash’s background-color never moved over the dissolve — the status strip stays dark over the light Home, then snaps (queue 920; transitions running on #splash as the dissolve began: ' + (running === null ? 'the dissolve was never seen' : running) + ')');
           if (end.sp !== LIGHT || end.root !== LIGHT) throw new Error('in the light look, at the end of the dissolve, #splash’s colour is ' + end.sp + ' and the canvas is ' + end.root + ', not the light Home’s ' + LIGHT);
         } else {
           if (!end) throw new Error('CONTROL: in the dark look the splash never dissolved within 12 s, so the light reading above has nothing to compare with');
