@@ -96,10 +96,23 @@
        the end frame holds 0.4s and then the splash dissolves into the app exactly as the film's natural end did.
        Skips: same-session reload (sessionStorage), tap/click, Esc-Enter-Space, the 5s cap. Reduced motion, or a browser
        that cannot run SMIL: the END FRAME as a still, no animation, then the hand-over. -->
+  <!-- THE GROUND IS CARD 7's OWN #0b0b0d: the diamonds' strokes and the playhead's backing are #0b0b0d knock-outs drawn
+       for it, so on this ground they vanish as designed. Queue 920's split, as theme-glass.css does for the light Home:
+       the ground you SEE is a background-IMAGE layer, and background-COLOR is what iOS reads for the status strip (a fixed
+       full-screen element's first, else the root's). So in the light look (data-home="light", set by settings.js before
+       load) only the COLOUR ramps to the light Home's #fafdff over the dissolve: the box stays dark under his mark while
+       iOS hands the strip to the light Home, instead of a dark strip over a light Home that snaps when #splash is removed.
+       The canvas rule carries :has(#splash) to tie theme-glass.css's light-Home rule and win on order, so the canvas
+       holds the ground while the splash is up (Home is open under it on a first load). -->
   <style id="splash-css">
-    #splash.splash-kf { background: #111; display: flex; align-items: center; justify-content: center; }
-    html.splash-on.splash-kf-on, html.splash-on.splash-kf-on body { background: #111; }
-    #splash-mark { display: block; width: min(60vw, 44vh, 300px); height: auto; aspect-ratio: 200 / 260; pointer-events: none; }
+    #splash.splash-kf { background-color: #0b0b0d; background-image: linear-gradient(#0b0b0d, #0b0b0d); display: flex; align-items: center; justify-content: center; }
+    html.splash-on.splash-kf-on:has(#splash), html.splash-on.splash-kf-on body { background: #0b0b0d; }
+    #splash.splash-kf.splash-out { transition: opacity .9s cubic-bezier(.45, 0, .55, 1), background-color .9s cubic-bezier(.45, 0, .55, 1); }
+    #splash.splash-kf.splash-out.splash-cut { transition: opacity .28s ease, background-color .28s ease; }
+    html[data-home="light"].splash-kf-out #splash.splash-kf.splash-out { background-color: #fafdff; }
+    html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash), html[data-home="light"].splash-on.splash-kf-on.splash-kf-out body { background-color: #fafdff; transition: background-color .9s cubic-bezier(.45, 0, .55, 1); }
+    html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash.splash-cut), html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash.splash-cut) body { transition: background-color .28s ease; }
+    #splash-mark { display: block; width: min(92vw, 48vh); height: auto; aspect-ratio: 200 / 260; pointer-events: none; }
   </style>
   <div id="splash" class="hidden" aria-hidden="true">
     <svg id="splash-mark" viewBox="0 0 200 260" aria-hidden="true" focusable="false">
@@ -190,6 +203,8 @@
       function dismiss(quick) {
         if (gone) return; gone = true;
         if (quick) { try { svg.pauseAnimations(); } catch (e) {} sp.classList.add('splash-cut'); }
+        // splash-kf-out starts the light look's status-strip ramp (splash-css above) in the same style change as the dissolve.
+        try { document.documentElement.classList.add('splash-kf-out'); } catch (e) {}
         sp.classList.add('splash-out');
         // home.js holds its entry animation until this fires, so the cards arrive as the splash thins out.
         try { document.dispatchEvent(new CustomEvent('fm:splash-dismiss', { detail: { quick: !!quick } })); } catch (e) {}
@@ -198,7 +213,7 @@
           /* Every class the splash put on <html> comes off WITH it (queue 883: one that outlived the splash held the page
              canvas white for the rest of the session — his white bar). 'splash-on-light' is the film's ground ramp; nothing
              adds it now, and it stays in this list so it can never outlive a splash again. */
-          try { document.documentElement.classList.remove('splash-on', 'splash-on-light', 'splash-kf-on'); } catch (e) {}
+          try { document.documentElement.classList.remove('splash-on', 'splash-on-light', 'splash-kf-on', 'splash-kf-out'); } catch (e) {}
         }, quick ? 320 : 1000);
       }
       if (ANIM) {
