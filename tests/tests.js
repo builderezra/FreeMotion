@@ -177446,10 +177446,12 @@
   const _O13_NEW = {
     exposure: ['range', 'mix'],
     temperature: ['skin', 'mix'],
+    channelremap: ['range', 'skin'],
   };
   const _O13_OFF = {
     exposure: [{ range: 1 }, { mix: 50 }],
     temperature: [{ skin: 100 }, { mix: 50 }],
+    channelremap: [{ range: 3 }, { skin: 100 }],
   };
   const _o13P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
   const _o13Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
@@ -177745,11 +177747,67 @@
   });
   /* ---- end Colour Temperature ---- */
 
+  /* ---- Channel Remap: Affects and Protect skin ---- */
+  test('966 opts13 Channel Remap has Affects (All, Darks, Mids or Lights, storing 0–3, All by default) and Protect skin (0–100 %, keyframable, 0 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Lights and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o13Need('channelremap', _O13_NEW.channelremap);
+    const bad = _o13Rows('channelremap', [
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 }], { range: 3, skin: 40 });
+    bad.push.apply(bad, _o13Clamp('channelremap', { skin: 150 }, { skin: 100 }));
+    bad.push.apply(bad, _o13Clamp('channelremap', { skin: -5 }, { skin: 0 }));
+    bad.push.apply(bad, _o13Clamp('channelremap', { range: 7 }, { range: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked on Swap R/B (the default): a dark brown (60, 20, 0) — L = 29.68 / 255 = 0.116 — swaps to (0, 20, 60) and a pale cream
+     (255, 230, 180) — L = 231.775 / 255 = 0.909 — to (180, 230, 255). Darks weighs the brown 0.781 and the cream 0.0083: (13, 20, 47) and
+     (254, 230, 181). Mids 0.411 and 0.331: (35, 20, 25) and (230, 230, 205). Lights 0.0135 and 0.826: (59, 20, 1) and (193, 230, 242).
+     On the base code every Affects is All, so Lights swaps the brown whole. */
+  test('966 opts13 Channel Remap Affects: on Swap R/B a dark brown and a pale cream swap by the tonal weight of their own brightness — Darks turns the brown to 13, 20, 47 and leaves the cream at 254, 230, 181, Lights the other way round (59, 20, 1 and 193, 230, 242), Mids 35, 20, 25 and 230, 230, 205 — and on other swaps, Keep brightness and a Mix every pixel of a busy picture is the swap times its tonal weight to the level (CONTROL: All swaps both whole)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], LIST = [[60, 20, 0], [255, 230, 180]], row = _o13Row(LIST);
+    const run = over => _o13Run('channelremap', _o13P('channelremap', over), 2, 1, row(), 0.5);
+    const want = (got, list, name) => list.forEach((w, x) => { const px = _o13At(got, 2, x, 0).slice(0, 3); if (px.join() !== w.join()) bad.push(name + ': pixel ' + LIST[x].join('/') + ' reads ' + px.join(', ') + ', not ' + w.join(', ')); });
+    want(run({}), [[0, 20, 60], [180, 230, 255]], 'CONTROL under All');
+    want(run({ range: 1 }), [[13, 20, 47], [254, 230, 181]], 'Darks');
+    want(run({ range: 2 }), [[35, 20, 25], [230, 230, 205]], 'Mids');
+    want(run({ range: 3 }), [[59, 20, 1], [193, 230, 242]], 'Lights');
+    [[1, { mode: 4 }], [2, { mode: 6, luma: 1 }], [3, { mix: 0.5 }], [1, { mode: 7 }]].forEach(([rg, extra]) => {
+      const w = _o13Worst('channelremap', _o13P('channelremap'), Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), 0, 0), 0.5);
+      if (w) bad.push('Affects ' + rg + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the swap times its tonal weight)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked on Swap R/B: the light skin tone swaps to (130, 170, 220), the deeper one to (80, 110, 160), the rose to (120, 100, 220), the
+     blue to (200, 90, 40), the green to (80, 170, 60); a grey cannot change. Protect skin 100 keeps both skin tones as they are, brings the
+     rose half way ((170, 100, 170)) and swaps the rest whole; at 50 % the skin tones go half way ((175, 170, 175) and (120, 110, 120)) and
+     the rose three quarters ((145, 100, 195)). On the base code Protect skin is ignored and every face swaps. */
+  test('966 opts13 Channel Remap Protect skin: at 100 % two skin tones keep their own colour byte for byte while a blue and a green swap whole and a rose at the window’s edge swaps half way, at 50 % each pixel swaps 1 − half its skin weight, and with Darks, other swaps and a Mix every pixel of a busy picture is the swap laid in by its tonal weight times 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone swaps to 130, 170, 220)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('channelremap', _o13P('channelremap', over), N, 1, row(), 0.5);
+    const want = (got, list, name) => list.forEach((w, x) => { const px = _o13At(got, N, x, 0).slice(0, 3); if (px.join() !== w.join()) bad.push(name + ': pixel ' + _O13_SKIN[x].join('/') + ' reads ' + px.join(', ') + ', not ' + w.join(', ')); });
+    want(run({}), [[130, 170, 220], [80, 110, 160], [120, 100, 220], [200, 90, 40], [80, 170, 60], [128, 128, 128]], 'CONTROL at 0 %');
+    want(run({ skin: 100 }), [[220, 170, 130], [160, 110, 80], [170, 100, 170], [200, 90, 40], [80, 170, 60], [128, 128, 128]], 'Protect skin 100');
+    want(run({ skin: 50 }), [[175, 170, 175], [120, 110, 120], [145, 100, 195], [200, 90, 40], [80, 170, 60], [128, 128, 128]], 'Protect skin 50');
+    [[0, { skin: 100, mode: 4 }], [1, { skin: 60 }], [3, { skin: 80, mode: 2, mix: 0.6 }]].forEach(([rg, extra]) => {
+      const sk = extra.skin, over = Object.assign(rg ? { range: rg } : {}, extra);
+      const w = _o13Worst('channelremap', _o13P('channelremap'), over, 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin with ' + JSON.stringify(over) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts13 Channel Remap at All and Protect skin 0 % draws byte for byte what it drew without them — at its default swap, on a rotation, on Hue Invert with Keep brightness, at a part Mix, on Swap Sat/Val, keyframed, and on a half-size plate (CONTROL: Lights and Protect skin each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o13Need('channelremap', _O13_NEW.channelremap);
+    const bad = _o13Ident('channelremap', [{}, { over: { mode: 4 } }, { over: { mode: 6, luma: 1 } }, { over: { mix: 0.4 } }, { over: { mode: 7 } }, { over: { mix: _o13KF(0.2, 1) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O13_OFF.channelremap.forEach(o => { const n = _o13Moves('channelremap', o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — Lights holds back every swapped pixel short of white; Protect skin 100 only the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Channel Remap ---- */
+
   /* the round's editors, new rows and all, fit the inspector (round twelve's fit test) */
   test('966 opts13 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
     const NEW = {
       exposure: 'Affects',
       temperature: 'Protect skin',
+      channelremap: 'Affects',
     };
     Object.keys(NEW).forEach(type => _o13Need(type, _O13_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];

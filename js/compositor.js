@@ -1160,6 +1160,12 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Swap', def: 1, options: [[0, 'RGB (identity)'], [1, 'Swap R/B'], [2, 'Swap R/G'], [3, 'Swap G/B'], [4, 'Rotate RGB→GBR'], [5, 'Rotate RGB→BRG'], [6, 'Hue Invert'], [7, 'Swap Sat/Val']] },
       { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'luma', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      /* #966 opts13 (hunt/fx13, his "more choices always better"): the swap always took every tone of the picture and every face in it.
+         AFFECTS confines it to the darks, the mids or the lights with Colour Balance's tonal weights ((1 − L)², 1 − (2L − 1)², L², on the
+         pixel's own brightness) — an alien sky over a real street — and PROTECT SKIN holds skin-coloured pixels back with Teal & Orange's
+         skin window (skinW12), so the people keep their own colour. All and 0 % run the old loop untouched (tone13 only off them). */
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Lights swaps the bright parts and leaves the shadows alone' },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     /* GRADIENT OVERLAY — queue 537. Ezra: *"Gradient overlay effect needs blending options and other
        stuff that you can think of"*.
@@ -11325,7 +11331,13 @@ window.FM = window.FM || {};
         mfidx=mfi*4;
         d[mfidx]=d[mfidx]+(mfr-d[mfidx])*mfC; d[mfidx+1]=d[mfidx+1]+(mfg-d[mfidx+1])*mfC; d[mfidx+2]=d[mfidx+2]+(mfb-d[mfidx+2])*mfC; } },
     // ---- batch 16 (other / color / proc / drawing) ----
-    channelremap: function(d,W,H,p,t){ var crM=(p.mode|0); if(crM<0)crM=0; if(crM>7)crM=7; if(crM===0)return; var crN=W*H*4;
+    channelremap: function(d,W,H,p,t){
+      /* #966 opts13: AFFECTS Darks (1), Mids (2) or Lights (3), or PROTECT SKIN over 0 %, runs tone13 — this very kernel without the two
+         (Swap, Mix and Keep brightness as they are), its result laid in by the tonal weight of each pixel's own brightness and by how far
+         from skin its own colour is; All and 0 % run the loop below untouched. */
+      var crRg13=p.range==null?0:(Math.round(FM.evalProp(p.range,t))|0), crSk13=p.skin==null?0:FM.evalProp(p.skin,t);
+      if(crRg13===1||crRg13===2||crRg13===3||crSk13>0){ tone13(d,W,H,p,t,PIXEL_FX.channelremap,['range','skin'],crRg13,100,crSk13); return; }
+      var crM=(p.mode|0); if(crM<0)crM=0; if(crM>7)crM=7; if(crM===0)return; var crN=W*H*4;
       // Completely binary: 100% of a channel swap or nothing, so it could only ever be a novelty and
       // never the 25% version that survives into a finished grade. MIX is the whole point of the row.
       // LUMA keeps the original brightness through the swap, so it reads as a colour shift rather than

@@ -597,7 +597,7 @@ window.FM = window.FM || {};
 
     // Stylize / other
     /* in a colour, at full contrast: #966 opts11 */ solarize: 'Inverts everything above a brightness cut, the way overexposed film does — into a colour if you like, and stretched to full contrast.',
-    channelremap: 'Swaps the red, green and blue channels around. The fastest way to a completely alien palette.',
+    /* the darks, mids or lights alone, faces kept: #966 opts13 */ channelremap: 'Swaps the red, green and blue channels around. The fastest way to a completely alien palette — over the whole picture or just its darks, mids or lights, faces kept if you like.',
 
     // 3D — every one of these turns the layer into a solid and wraps its own pixels on as the skin
     cube3d: 'Wraps the layer onto a rotating cube.',
