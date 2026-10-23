@@ -75644,44 +75644,6 @@
     } finally { _isoK.put(); }
   });
 
-  /* ═══ QUEUE 646 — THE INTRO GROUND THAT NEVER RAN ════════════════════════════════════════════
-   * Ezra: *"the background doesnt fade from white to the colours it just cuts unlike mobile, try
-   * really hard not to accidentally break anything when fixing please"*.
-   * 🔑 THE RAMP HAD BEEN WRITTEN AND HAD NEVER ONCE RUN. theme-glass.css carries
-   * `html.splash-on-light { background:#111; animation: splash-ground 2.05s ease-in forwards; }`,
-   * which walks the page from #111 to white under the film. The CLASS was never added: index.html read
-   * `LIGHT` at the top of the boot IIFE while its `var` declaration sat fifty lines below, so hoisting
-   * made it `undefined`, the `if` was falsy, and nothing happened. **No error — that is what makes it
-   * the dangerous kind.** So the 900ms dissolve cross-faded a white film into a black page and the
-   * home colours arrived when the class came off: a swap, not a fade.
-   * ⚠️ TESTED AT THE SOURCE, deliberately. The splash runs once per session from an inline script and
-   * deletes itself, so there is no live state left to read — the same limit #642's test hit. */
-  test('#646: the light intro ground is armed before it is read', { item: '646' }, async function () {
-    const html = await (await fetch('index.html?t=' + Date.now())).text();
-    const use = html.indexOf("classList.add('splash-on-light')");
-    if (use < 0) throw new Error("index.html no longer adds 'splash-on-light', so the ground ramp cannot run at all");
-    const decl = html.indexOf('var LIGHT');
-    if (decl < 0) throw new Error('LIGHT is no longer declared in index.html');
-    if (decl > use) throw new Error('LIGHT is declared AFTER the line that reads it (' + decl + ' > ' + use +
-      ') — `var` hoists, so it is undefined at that point, the if is falsy and the ground ramp silently never runs. That is the exact bug this test exists for, and it produces no error.');
-
-    /* AND THE CLASS MUST LAND ON SOMETHING. If the ramp is ever deleted, adding the class becomes a
-       no-op again and this test would still pass on the ordering alone. */
-    const glass = await (await fetch('theme-glass.css?t=' + Date.now())).text();
-    if (!/html\.splash-on-light[^{]*\{[^}]*animation:\s*splash-ground/.test(glass))
-      throw new Error('theme-glass.css no longer ramps the ground for splash-on-light — the class would be landing on nothing');
-    if (!/@keyframes\s+splash-ground/.test(glass))
-      throw new Error('the splash-ground keyframes are gone, so the ramp cannot animate');
-
-    /* ⚠️ AND ONE DECLARATION ONLY. I nearly shipped a second copy of this ground into styles.css before
-       finding the original — two declarations of one ground is how #643's six wordmark masks drifted. */
-    /* comments stripped first — the pointer left in styles.css QUOTES the rule it is pointing at, and
-       a regex that cannot tell a declaration from a comment would fail on the note explaining why the
-       declaration is not there. */
-    const css = (await (await fetch('styles.css?t=' + Date.now())).text()).replace(/\/\*[\s\S]*?\*\//g, '');
-    if (/html\.splash-on-light[^{]*\{[^}]*background:/.test(css))
-      throw new Error('styles.css declares the light splash ground too — theme-glass.css already owns it, and two copies of one ground is exactly how the #643 masks drifted apart');
-  });
 
   /* ═══ QUEUE 643 — THE GLOW MASKS MUST TRACK THE WORDMARK ══════════════════════════════════════
    * Ezra spotted this himself and described it exactly: *"you've got like an M as like the backdrop for
@@ -75746,23 +75708,6 @@
     } finally { sp.remove(); }
   });
 
-  /* Clause 1 of the same report: *"at the start there's like a weird like white box that pops up"*.
-   * An `<img>` with no `src`, sized to the whole viewport, can paint as a placeholder box — so in the
-   * light look the element is REMOVED rather than merely left empty.
-   * ⚠️ ASSERTED AGAINST THE SOURCE, and that is a deliberate second best. The splash runs once per
-   * session from an inline script and is gone from the DOM before any test could watch it, so there is
-   * no live state left to read. Checking the source at least fails if the removal is deleted. */
-  test('#642: the light intro removes the empty poster instead of leaving it', { item: '642' }, async function () {
-    const src = await (await fetch('index.html?t=' + Date.now())).text();
-    const m = src.match(/if\s*\(pos\)\s*\{[^}]*\}/);
-    if (!m) throw new Error('the poster branch is gone from index.html — cannot tell what the intro does with #splash-poster');
-    if (!/pos\.remove\(\)/.test(m[0]))
-      throw new Error('the intro no longer REMOVES #splash-poster: ' + m[0].slice(0, 140) +
-        ' — an empty <img> the size of the viewport is exactly the "weird white box" he reported');
-    // queue 688 clause 2: the old dark film and its poster are gone — BOTH looks remove the element, none gives it a src
-    if (/pos\.src\s*=/.test(m[0]))
-      throw new Error('the poster is being given a src again — the old dark intro is back (queue 688 clause 2 removed it)');
-  });
 
   /* ═══ QUEUE 635 — SLIDERS THAT JUMP TOO FAR, TOO FAST ═════════════════════════════════════════
    * Ezra: *"Pinch bulges slider jumps too much too fast, make its sliders more gradual"* — his THIRD
@@ -82900,36 +82845,6 @@
     }
   });
 
-  /* ═══ 688 clauses 2 + 3 (v15.07): ONE INTRO FILM, AND DARK MODE LANDS ON DARK.
-     The boot script runs once per session before any of this exists, so — as #642's guard does — the
-     first half reads index.html AS SHIPPED, and the second half asks the LIVE stylesheet whether the dark
-     ending actually dims the film (a class name in the source proves nothing if the rule is missing). */
-  test('688: one intro film serves both looks, the old film and its poster are gone, and neither look hides it', { item: '688' }, async function () {
-    /* ⚠️ THIS TEST USED TO REQUIRE THE OPPOSITE (v15.08): that the dark look dim the film to nothing over its last
-     * 1.05s, to spare it the white bloom the film ends on. Ezra on the shipped result: "You've broken the intro loading
-     * screen ... just like flashing black-and-white and white". Measured: the film's opacity was driven to 0 while the
-     * splash was still up, so the animation vanished half a second early and the screen handed over to white. The dim is
-     * withdrawn (queue 776) and this asserts what is true now — one film, played through, hidden by neither look. */
-    const src = await fetch('index.html', { cache: 'no-store' }).then(r => r.text());
-    const boot = src.slice(src.indexOf('splash-vid'), src.indexOf('<div id="app">'));
-    if (/splash\.mp4\?/.test(boot)) throw new Error('index.html still plays splash.mp4 — the OLD loading animation he asked to get rid of');
-    if (/splash-poster\.png/.test(boot)) throw new Error('index.html still sets the old poster');
-    if (!/splash-v2\.mp4/.test(boot)) throw new Error('the new film is not referenced at all');
-    if (/splash-dim/.test(boot)) throw new Error('the dark dim is back in the boot script — it hides the film before the splash dissolves (queue 776)');
-    // the live stylesheet must carry no rule that can blank a PLAYING film, in either look
-    const sp = document.createElement('div'); sp.id = 'splash'; sp.className = 'splash-light splash-dark';
-    const v = document.createElement('video'); v.id = 'splash-vid'; v.className = 'playing splash-dim';
-    v.style.transition = 'none';   // the reads below are synchronous; the film's own .2s/.4s fades would report the START of each fade, not its end
-    sp.appendChild(v); document.body.appendChild(sp);
-    try {
-      const op = getComputedStyle(v).opacity;
-      if (op !== '1') throw new Error('a playing film computes opacity ' + op + ' under splash-dark/splash-dim — a rule can still blank it mid-intro (queue 776)');
-      v.className = 'playing';
-      if (getComputedStyle(v).opacity !== '1') throw new Error('the film is not fully visible while it plays');
-      sp.className = 'splash-light'; v.className = 'playing splash-dim';
-      if (getComputedStyle(v).opacity !== '1') throw new Error('a playing film is blanked in the light look too');
-    } finally { sp.remove(); }
-  });
 
   /* ═══ 706 / 676 (v15.08): THE ADD SHEET ARRIVES ONCE. The sheet's base rule transitions `transform`
      and `.open` animates it with a hinge keyframe — two motions on one property, which Chrome resolves to
@@ -85037,127 +84952,7 @@
     }
   });
 
-  /* ═══ 776: THE INTRO ACTUALLY PLAYS, AND IS NEVER HIDDEN WHILE THE SPLASH IS UP. The suite has only ever read the
-     boot script's MARKUP, which is why v15.08 could dim the film to nothing for the last half-second of the dark look
-     and every test stayed green — "it does not do anything anymore just like flashing black-and-white and white".
-     The boot runs once per session and cannot be replayed here, so this boots the real page in an IFRAME with the
-     session flag cleared, and watches: the film reaches a real currentTime, and its opacity is never driven to zero
-     while the splash is still on screen. Run in both looks, because the dim was dark-only. */
-  test('776: the intro film plays through and is never faded out while the splash is still up', { item: '776', budgetMs: 45000 }, async function () {
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const settings0 = localStorage.getItem('fm.settings');
-    const watch = async (light) => {
-      try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
-      const st = JSON.parse(localStorage.getItem('fm.settings') || '{}'); st.homeLight = light;
-      localStorage.setItem('fm.settings', JSON.stringify(st));
-      const f = document.createElement('iframe');
-      f.style.cssText = 'position:fixed;left:-9999px;top:0;width:390px;height:760px;border:0';
-      f.src = '../index.html?intro776=' + Date.now();
-      document.body.appendChild(f);
-      let maxT = 0, blanked = null, played = false, everVisible = false;
-      try {
-        for (let i = 0; i < 45; i++) {
-          const d = f.contentDocument;
-          if (d) {
-            const sp = d.getElementById('splash'), v = d.getElementById('splash-vid');
-            if (v) {
-              maxT = Math.max(maxT, v.currentTime || 0);
-              if (v.classList.contains('playing')) played = true;
-              const op = parseFloat(d.defaultView.getComputedStyle(v).opacity);
-              const up = sp && !sp.classList.contains('splash-out') && !sp.classList.contains('hidden');
-              if (op > 0.9) everVisible = true;
-              /* ⚠️ ONLY TRUST A ZERO IF THIS FRAME EVER SHOWED THE FILM AT ALL. An iframe the browser is not rendering
-                 does not advance CSS transitions, so its film can read opacity 0 for the whole intro with nothing wrong —
-                 measured exactly that against the live site while the same build played perfectly on screen. Requiring a
-                 1 first makes a false accusation impossible; if the frame never renders, the run says so below instead. */
-              if (up && played && everVisible && op < 0.05 && (v.currentTime || 0) > 0.4 && blanked === null) blanked = +(v.currentTime).toFixed(2);
-            }
-            if (!sp && played) break;   // the splash finished normally
-          }
-          await sleep(100);
-        }
-      } finally { f.remove(); }
-      return { light, maxT: +maxT.toFixed(2), played, blanked, everVisible };
-    };
-    try {
-      for (const light of [false, true]) {
-        const r = await watch(light);
-        const look = light ? 'light' : 'dark';
-        if (!r.played) throw new Error('the ' + look + ' intro never started playing (the film reached ' + r.maxT + 's) — this run cannot judge it, but that is also exactly what a broken intro looks like');
-        if (r.maxT < 0.5) throw new Error('the ' + look + ' intro stopped at ' + r.maxT + 's — it is not playing through');
-        /* ⚠️ NAME BOTH CAUSES (queue 841). This used to blame the browser outright and tell the reader the red was
-           nothing to do with the app, which rules out the case where the APP holds the film transparent — and that
-           is the case a reader most needs to consider, because the sentence invites them to wave the red away as
-           a harness artefact. `everVisible` is set only by the film's own computed opacity, so it cannot tell the
-           two apart; test 688 can, and it is named here so the next reader goes there instead of guessing. */
-        if (!r.everVisible) throw new Error('the ' + look + ' intro never reached full opacity in this frame — either this frame is not being rendered (a known harness artefact) OR the app is holding the film transparent. Test 688 tells the two apart: if it is green, this is the harness');
-        if (r.blanked !== null) throw new Error('the ' + look + ' intro was faded to nothing at ' + r.blanked + 's while the splash was still on screen — the animation disappears and the screen just flashes');
-      }
-    } finally {
-      if (settings0 === null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', settings0);
-      try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
-    }
-  });
 
-  /* ═══ 783 (#688 clause 3, restored): THE DARK LOOK'S INTRO LANDS ON DARK, AND THE LIGHT LOOK STILL LANDS ON WHITE.
-     Measured on the film: the mark moves until ~0.93s, then blooms to a static white card by 1.34s. Under the dark look
-     that card used to dissolve into the dark home (v15.47), and before that v15.08's opacity dim revealed the box's white
-     ground under the film (#776's flash). Boot the real page in an iframe per look and read what is actually ON SCREEN:
-     the film's rendered luminance × its brightness filter × the splash's opacity, every 50ms. Dark: after the mark's
-     animation the effective brightness never exceeds a third, the film was fully visible before that, and the box's
-     ground never turns white. Light: the film reaches full white at full brightness — the control that the dark
-     rule does not leak. */
-  test('783: the dark look\'s intro is never bright after the mark has animated, and the light look\'s still ends white', { item: '783', budgetMs: 45000 }, async function () {
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const settings0 = localStorage.getItem('fm.settings');
-    const cv = document.createElement('canvas'); cv.width = 24; cv.height = 40; const g = cv.getContext('2d', { willReadFrequently: true });
-    const lumOf = (v) => { try { g.drawImage(v, 0, 0, 24, 40); const d = g.getImageData(0, 0, 24, 40).data; let l = 0; for (let i = 0; i < d.length; i += 4) l += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; return l / (d.length / 4) / 255; } catch (e) { return null; } };
-    const watch = async (light) => {
-      try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
-      const st = JSON.parse(localStorage.getItem('fm.settings') || '{}'); st.homeLight = light; localStorage.setItem('fm.settings', JSON.stringify(st));
-      const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;left:-9999px;top:0;width:390px;height:760px;border:0'; f.src = '../index.html?intro783=' + Date.now();
-      document.body.appendChild(f);
-      let peakEarly = 0, peakLate = 0, groundWhite = false, samples = 0, fullBefore = false, anim = null;
-      try {
-        for (let i = 0; i < 90; i++) {
-          const d = f.contentDocument, w = f.contentWindow;
-          if (d) {
-            const sp = d.getElementById('splash'), v = d.getElementById('splash-vid');
-            if (sp && v && v.classList.contains('playing')) {
-              const cs = w.getComputedStyle(v), t = v.currentTime || 0, lum = lumOf(v);
-              if (anim === null) anim = cs.animationName + ' ' + cs.animationDuration;   // the mechanism must be a compositor-driven animation, not a class from JS
-              const br = /brightness\(([\d.]+)\)/.exec(cs.filter || ''); const bright = br ? parseFloat(br[1]) : 1;
-              const eff = (lum == null ? 0 : lum) * parseFloat(cs.opacity) * bright * parseFloat(w.getComputedStyle(sp).opacity);
-              if (lum != null) { samples++; if (t < 0.85) { peakEarly = Math.max(peakEarly, eff); if (parseFloat(cs.opacity) > 0.9 && bright >= 0.99) fullBefore = true; } else peakLate = Math.max(peakLate, eff); }
-              const bg = w.getComputedStyle(sp).backgroundColor, mm = /rgba?\((\d+), (\d+), (\d+)/.exec(bg);
-              if (mm && (+mm[1] + +mm[2] + +mm[3]) > 500) groundWhite = true;
-            }
-            if (!sp && samples) break;
-          }
-          await sleep(50);
-        }
-      } finally { f.remove(); }
-      return { light, peakEarly, peakLate, groundWhite, samples, fullBefore, anim };
-    };
-    try {
-      const dark = await watch(false);
-      if (dark.samples < 8) throw new Error('setup: only ' + dark.samples + ' frames of the dark intro were read — the frame is not rendering, so this run cannot judge it');
-      if (!dark.fullBefore) throw new Error('setup: the dark intro was never at full brightness before 0.85s — the mark\'s animation would be hidden, or the frame never rendered');
-      if (dark.peakLate > 0.35) throw new Error('the dark look\'s intro reaches ' + Math.round(dark.peakLate * 100) + '% white on screen after the mark has animated — the white card dissolves into the dark home (#688 clause 3)');
-      if (dark.groundWhite) throw new Error('the splash box\'s ground turned white under the dark look — the v15.08 flash');
-      /* The boot blocks the main thread ~0.65s across the bloom (recorded 5 Sep), so this loop cannot sample there and a
-         JS-driven darkening lands too late to matter. The mechanism must therefore be an animation the compositor runs
-         from the moment the film starts — asserted by name, because the samples above cannot see the blocked window. */
-      if (!/splash-film-dark/.test(dark.anim || '')) throw new Error('the dark look\'s film carries no compositor-driven darkening animation (' + dark.anim + ') — a class added from JS lands after the bloom because boot blocks the thread');
-      const lightR = await watch(true);
-      if (lightR.samples < 8) throw new Error('setup: only ' + lightR.samples + ' frames of the light intro were read');
-      if (lightR.peakLate < 0.6) throw new Error('control: the light look\'s intro no longer reaches white (' + Math.round(lightR.peakLate * 100) + '%) — the dark rule leaks into the light look');
-      if (/splash-film-dark/.test(lightR.anim || '')) throw new Error('control: the light look\'s film carries the dark darkening animation');
-    } finally {
-      if (settings0 === null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', settings0);
-      try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
-    }
-  });
 
   /* ═══ 754 (hunt MEDIUM #37): EVERY ROW IN THE EFFECT LIST WEARS THE SAME EYE, AND AN OPEN AUDIO ROW KEEPS ITS GRIP.
      An off effect row showed a struck-through eye; an off mask row and an off audio row only faded. And the audio
@@ -86060,30 +85855,6 @@
     }
   });
 
-  /* 639 — the light look. The splash has to choose its film BEFORE js/settings.js exists, so it reads
-     localStorage itself and carries its own copy of the default. Two defaults that must agree, in two
-     files, with no compiler to notice — so a test notices instead.
-     This is not hypothetical: the first version read the key, found nothing on a genuine first run
-     (the settings object is only written once something is saved), fell back to false, and served the
-     OLD intro while every other part of the app went light. */
-  test('639: the splash\u2019s light default matches the app\u2019s', { item: '639' }, async function () {
-    const appDefault = FM.settings && FM.settings.get ? FM.settings.get('homeLight') : null;
-    if (typeof appDefault !== 'boolean') throw new Error('FM.settings.get("homeLight") is not a boolean — the light look has no setting behind it');
-    let html = '';
-    try { html = await (await fetch('index.html', { cache: 'no-store' })).text(); }
-    catch (e) { throw new Error('could not read index.html to compare the splash default: ' + e.message); }
-    const m = html.match(/var\s+LIGHT\s*=\s*(true|false)\s*;/);
-    if (!m) throw new Error('the splash script no longer declares `var LIGHT = true|false` — this test can no longer check that its default matches the app\u2019s');
-    const splashDefault = m[1] === 'true';
-    if (splashDefault !== appDefault) {
-      throw new Error('the splash defaults to LIGHT=' + splashDefault + ' but FM.settings defaults homeLight to ' + appDefault + ' — a first run would get one look\u2019s intro and the other look\u2019s app');
-    }
-    /* AND THE ABSENT-KEY CASE SPECIFICALLY, which is the one that was wrong: the splash must treat a
-       missing key as "never chosen", not as "chosen off". */
-    if (!/typeof\s+__st\.homeLight\s*===\s*'boolean'/.test(html)) {
-      throw new Error('the splash no longer distinguishes a MISSING homeLight from a false one — an absent key means "never chosen", and reading it as false is what served the old intro on a fresh install');
-    }
-  });
 
   test('639: in the light look nothing in the header is invisible', { item: '639' }, async function () {
     const was = !!(FM.settings && FM.settings.get('homeLight'));
@@ -178192,6 +177963,230 @@
       try { if (FM.home && FM.home.isOpen()) FM.home.close(); } catch (e) {}
       try { document.getElementById('stage').dispatchEvent(new MouseEvent('mouseleave')); } catch (e) {}
       await sleep(300);
+    }
+  });
+
+  /* #1180 — HIS OWN LOGO OPENS THE APP. Ezra picked the Keyframes animation (D2 round 2, card 7) on 23 Oct: "i love the
+   * first one". The film is gone from the splash; the mark is inline SVG + SMIL that plays ONCE, holds its end frame and
+   * dissolves into the app the way the film's natural end did. Reduced motion (and a browser without SMIL) gets the end
+   * frame as a still. These read the SHIPPED index.html and boot its splash block in a throwaway frame, so they do not
+   * depend on whether this session's own splash has already played. */
+  async function src1180() {
+    const r = await fetch('index.html?t1180=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('setup: could not read index.html (' + r.status + ')');
+    return r.text();
+  }
+  /* Boots everything between <body> and #app (the splash's style, markup and boot script) in a same-origin frame, with
+   * fm.splashed cleared so it is a first load of the session, and puts this session's flag back afterwards. A recorder
+   * runs BEFORE the boot script so the dismiss event cannot be missed. `reduce` stubs matchMedia in that frame only. */
+  async function boot1180(reduce) {
+    const html = await src1180();
+    const a = html.indexOf('<body>'), b = html.indexOf('<div id="app">');
+    if (a < 0 || b < a) throw new Error('setup: cannot find the splash block between <body> and #app in index.html');
+    const pre = '<script>window.__t0 = performance.now(); window.__rec = [];' +
+      'document.addEventListener(\'fm:splash-dismiss\', function (e) { window.__rec.push({ t: performance.now() - window.__t0, quick: !!(e.detail && e.detail.quick) }); });' +
+      (reduce ? '(function () { var mm = window.matchMedia.bind(window); window.matchMedia = function (q) { if (/prefers-reduced-motion/.test(q)) return { matches: true, media: q, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {} }; return mm(q); }; })();' : '') +
+      '<\/script>';
+    let had = null;
+    try { had = sessionStorage.getItem('fm.splashed'); sessionStorage.removeItem('fm.splashed'); } catch (e) {}
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;left:0;top:0;width:380px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    const done = new Promise(function (res) { f.onload = res; });
+    f.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body>' + pre + html.slice(a + 6, b) + '</body></html>';
+    document.body.appendChild(f);
+    await Promise.race([done, sleep(4000)]);
+    const restore = function () {
+      try { f.remove(); } catch (e) {}
+      try { if (had === null) sessionStorage.removeItem('fm.splashed'); else sessionStorage.setItem('fm.splashed', had); } catch (e) {}
+    };
+    return { f: f, w: f.contentWindow, d: f.contentDocument, restore: restore };
+  }
+  /* The finished frame, read off the animated values: the three clips at their resting x/width, the teal line drawn. */
+  function endFrame1180(svg, where) {
+    const want = [['nC_clip1', 14, 92], ['nC_clip2', 14, 62], ['nC_clip3', 14, 26]];
+    for (const [id, x, wd] of want) {
+      const r = svg.querySelector('#' + id);
+      if (!r) throw new Error(where + ': the Keyframes mark has no #' + id);
+      const gx = r.x.animVal.value, gw = r.width.animVal.value;
+      if (Math.abs(gx - x) > 0.05 || Math.abs(gw - wd) > 0.05) throw new Error(where + ': clip #' + id + ' is at x ' + gx.toFixed(2) + ' width ' + gw.toFixed(2) + ', not its end frame x ' + x + ' width ' + wd);
+    }
+  }
+
+  /* 1180 (1) THE SPLASH IS HIS LOGO, NOT A FILM. Proves: #splash in the shipped index.html holds the D2 card-7 Keyframes SVG
+   * (its gradients nC_g/nC_w/nC_t, its three clips, the teal playhead, the name) and no <video>, and the boot script loads
+   * no .mp4.
+   * FAILS BEFORE THE FIX: on the base #splash holds <video id=splash-vid> and the script sets splash-v2.mp4, so it throws
+   * its first sentence with the film's own element. */
+  test('1180 the splash is his Keyframes logo as inline SVG, not the film', { item: '1180' }, async function () {
+    const html = await src1180();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const sp = doc.getElementById('splash');
+    if (!sp) throw new Error('index.html has no #splash at all');
+    const vids = sp.querySelectorAll('video');
+    if (vids.length) throw new Error('#splash still holds a <video> (#' + (vids[0].id || '?') + ') — the film is still the intro');
+    const boot = html.slice(html.indexOf('<body>'), html.indexOf('<div id="app">'));
+    const mp4 = boot.match(/[\w-]+\.mp4/);
+    if (mp4) throw new Error('the splash block still loads a film: ' + mp4[0]);
+    const svg = sp.querySelector('svg#splash-mark');
+    if (!svg) throw new Error('#splash holds no svg#splash-mark — the Keyframes logo is not the intro');
+    if (svg.getAttribute('viewBox') !== '0 0 200 260') throw new Error('the mark viewBox is ' + svg.getAttribute('viewBox') + ', not card 7’s 0 0 200 260');
+    for (const id of ['nC_g', 'nC_w', 'nC_t', 'nC_clip1', 'nC_clip2', 'nC_clip3', 'nC_name']) {
+      if (!svg.querySelector('#' + id)) throw new Error('the mark is missing #' + id + ' — it is not card 7 (Keyframes) of D2 round 2');
+    }
+    if (!svg.querySelector('[fill="#29d9bb"]')) throw new Error('the mark has no teal (#29d9bb) playhead');
+    if (!/FreeMotion/.test(svg.textContent)) throw new Error('the mark does not carry the FreeMotion name');
+    const n = svg.querySelectorAll('animate, animateTransform').length;
+    if (n < 30) throw new Error('the mark carries only ' + n + ' animations — card 7 has 34, so this is not the animated Keyframes logo');
+  });
+
+  /* 1180 (2) IT PLAYS ONCE. Proves: no animation in the mark repeats (no repeatCount / repeatDur), every one freezes on its
+   * last value, and — by behaviour — the clock run past a whole canvas cycle shows the END frame, where the looping canvas
+   * version is back at the start (all three clips at width 0) at 11.1 s, 0.1 s into its third cycle.
+   * FAILS BEFORE THE FIX: the base has no SVG in #splash (the film), so it throws its first sentence. */
+  test('1180 the Keyframes splash plays once and freezes on its end frame, it never loops', { item: '1180' }, async function () {
+    const html = await src1180();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const svg0 = doc.querySelector('#splash svg#splash-mark');
+    if (!svg0) throw new Error('#splash holds no Keyframes SVG — the intro is still the film');
+    const anims = Array.from(svg0.querySelectorAll('animate, animateTransform'));
+    if (!anims.length) throw new Error('the mark has no animations at all');
+    for (const a of anims) {
+      const rc = a.getAttribute('repeatCount'), rd = a.getAttribute('repeatDur');
+      if (rc || rd) throw new Error('an <' + a.localName + ' attributeName=' + a.getAttribute('attributeName') + '> repeats (repeatCount ' + rc + ', repeatDur ' + rd + ') — the canvas loop was copied, not the one-shot');
+      if (a.getAttribute('fill') !== 'freeze') throw new Error('an <' + a.localName + ' attributeName=' + a.getAttribute('attributeName') + '> does not freeze — it would snap back when it ends');
+    }
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;left:0;top:0;width:380px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    const done = new Promise(function (res) { f.onload = res; });
+    f.srcdoc = '<!doctype html><html><body style="margin:0;background:#111">' + svg0.outerHTML + '</body></html>';
+    document.body.appendChild(f);
+    try {
+      await Promise.race([done, sleep(4000)]);
+      const svg = f.contentDocument.getElementById('splash-mark');
+      if (!svg || typeof svg.setCurrentTime !== 'function') throw new Error('setup: the mark did not come up in the probe frame');
+      svg.pauseAnimations();
+      svg.setCurrentTime(0.5);
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const mid = svg.querySelector('#nC_clip1').width.animVal.value;
+      if (mid !== 0) throw new Error('CONTROL: at 0.5 s the first clip is already ' + mid + ' wide — the clock is not being driven, so the end-frame reading below would prove nothing');
+      for (const t of [5.3, 11.1, 30]) {
+        svg.setCurrentTime(t);
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        endFrame1180(svg, 'at ' + t + ' s');
+        const line = svg.querySelector('rect[fill="#29d9bb"]');
+        if (!line || Math.abs(line.height.animVal.value - 96) > 0.05) throw new Error('at ' + t + ' s the teal playhead line is ' + (line ? line.height.animVal.value.toFixed(1) : 'missing') + ' long, not its drawn 96 — the mark went back to its start');
+      }
+    } finally {
+      try { f.remove(); } catch (e) {}
+    }
+  });
+
+  /* 1180 (3) THE HAND-OVER. Proves: on a first load the splash comes up with the mark, does NOT dissolve while it is still
+   * animating (before 3.5 s), then dissolves NATURALLY (splash-out without splash-cut, fm:splash-dismiss with quick false)
+   * before the 5 s cap would cut it, with the mark on its finished frame and its own clock past the 0.4 s hold; then the
+   * splash is removed and every class it put on <html> comes off.
+   * FAILS BEFORE THE FIX: the base boots the film (<video id=splash-vid>), so it throws that the splash is a film. */
+  test('1180 the splash holds the finished logo, then dissolves into the app the way the film did', { item: '1180', budgetMs: 30000 }, async function () {
+    const run = await boot1180(false);
+    try {
+      const d = run.d, w = run.w;
+      const sp = d.getElementById('splash');
+      if (!sp) throw new Error('the booted splash block has no #splash');
+      if (d.querySelector('#splash video')) throw new Error('the splash that came up is a film (<video>), not the Keyframes logo');
+      if (sp.classList.contains('hidden')) throw new Error('on the first load of a session the splash stayed hidden');
+      const svg = d.getElementById('splash-mark');
+      if (!svg) throw new Error('the splash came up without svg#splash-mark');
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (1180 reduced-motion test covers the still)');
+      let outAt = -1, cut = null, clock = -1;
+      for (let i = 0; i < 120; i++) {
+        if (sp.classList.contains('splash-out')) {
+          outAt = w.performance.now() - w.__t0; cut = sp.classList.contains('splash-cut');
+          try { clock = svg.getCurrentTime(); } catch (e) {}
+          break;
+        }
+        await sleep(50);
+      }
+      if (outAt < 0) throw new Error('the splash never began to dissolve within 6 s');
+      if (outAt < 3500) throw new Error('the splash began to dissolve at ' + Math.round(outAt) + ' ms — before the mark had finished (3.3 s) and held (0.4 s)');
+      if (cut) throw new Error('the splash was CUT at ' + Math.round(outAt) + ' ms (splash-cut) — the natural hand-over never came, the 5 s cap or an error did it');
+      if (!(clock >= 3.7)) throw new Error('the dissolve began with the mark’s own clock at ' + clock.toFixed(2) + ' s — the 0.4 s hold on the finished frame was skipped');
+      endFrame1180(svg, 'as the dissolve began');
+      const rec = w.__rec || [];
+      if (rec.length !== 1 || rec[0].quick !== false) throw new Error('fm:splash-dismiss fired ' + rec.length + ' time(s), quick ' + (rec[0] && rec[0].quick) + ' — home.js needs exactly one natural (quick:false) dismiss to time its entrance');
+      for (let i = 0; i < 40 && d.getElementById('splash'); i++) await sleep(50);
+      if (d.getElementById('splash')) throw new Error('#splash was still in the page 2 s after its dissolve began');
+      const cls = d.documentElement.className;
+      if (/\bsplash-(?:on|kf-on|on-light)\b/.test(cls)) throw new Error('a splash class outlived the splash on <html>: ' + cls + ' (queue 883: it holds the page canvas)');
+    } finally {
+      run.restore();
+    }
+  });
+
+  /* 1180 (4) REDUCED MOTION. Proves: with prefers-reduced-motion the splash still shows his logo, as the END frame and with
+   * no animation left in it (clips at rest, the name shown, the keyframe diamonds gone), marks the session as splashed,
+   * and hands over to the app within 2.5 s.
+   * FAILS BEFORE THE FIX: the base returns early under reduced motion and the splash stays hidden, so it throws its first
+   * sentence by behaviour. */
+  test('1180 with reduced motion the splash shows the finished logo as a still, then hands over', { item: '1180', budgetMs: 20000 }, async function () {
+    const run = await boot1180(true);
+    try {
+      const d = run.d, w = run.w;
+      if (!w.matchMedia('(prefers-reduced-motion: reduce)').matches) throw new Error('setup: the reduced-motion stub did not take in the probe frame');
+      const sp = d.getElementById('splash');
+      if (!sp || sp.classList.contains('hidden')) throw new Error('with reduced motion the splash never showed — he gets no logo at all');
+      const svg = d.getElementById('splash-mark');
+      if (!svg) throw new Error('with reduced motion the splash shows no Keyframes mark' + (d.querySelector('#splash video') ? ' (it is the film)' : ''));
+      const left = svg.querySelectorAll('animate, animateTransform').length;
+      if (left) throw new Error('with reduced motion ' + left + ' animations are still in the mark — it moves');
+      const want = { nC_clip1: ['14', '92'], nC_clip2: ['14', '62'], nC_clip3: ['14', '26'] };
+      for (const id in want) {
+        const r = svg.querySelector('#' + id);
+        if (!r || r.getAttribute('x') !== want[id][0] || r.getAttribute('width') !== want[id][1]) throw new Error('with reduced motion #' + id + ' is x ' + (r && r.getAttribute('x')) + ' width ' + (r && r.getAttribute('width')) + ', not the end frame x ' + want[id][0] + ' width ' + want[id][1]);
+      }
+      const name = svg.querySelector('#nC_name');
+      if (!name || name.getAttribute('opacity') !== '1') throw new Error('with reduced motion the FreeMotion name is not shown (opacity ' + (name && name.getAttribute('opacity')) + ')');
+      const dia = svg.querySelectorAll('polygon[fill="#f5f5f7"]');
+      for (const p of dia) {
+        const g = p.closest('g[opacity]');
+        if (g && g.getAttribute('opacity') !== '0') throw new Error('with reduced motion a keyframe diamond is still showing (opacity ' + g.getAttribute('opacity') + ') — the end frame has them gone');
+      }
+      let flag = null;
+      try { flag = sessionStorage.getItem('fm.splashed'); } catch (e) {}
+      if (flag !== '1') throw new Error('with reduced motion the session is not marked splashed, so every reload would show it again');
+      for (let i = 0; i < 50 && d.getElementById('splash'); i++) await sleep(50);
+      if (d.getElementById('splash')) throw new Error('with reduced motion the still never handed over to the app (still up after 2.5 s)');
+    } finally {
+      run.restore();
+    }
+  });
+
+  /* 1180 (5) THE ICONS. Proves: the page's manifest, apple-touch-icon and favicon links carry the bumped ?v=3, the manifest
+   * points at icon-192.png?v=3 and icon-512.png?v=3, and every icon decodes at its size from the versioned url.
+   * FAILS BEFORE THE FIX: the base links carry ?v=2 and the manifest names the icons with no buster, so a phone that cached
+   * the old icons keeps them; it throws on the first link. */
+  test('1180 the manifest and the page point at the D2 icons with their busters bumped', { item: '1180' }, async function () {
+    const html = await src1180();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const want = [['link[rel="manifest"]', 'manifest.json?v=3'], ['link[rel="apple-touch-icon"]', 'apple-touch-icon.png?v=3'], ['link[rel="icon"]', 'icon-192.png?v=3']];
+    for (const [sel, href] of want) {
+      const l = doc.querySelector(sel);
+      if (!l || l.getAttribute('href') !== href) throw new Error(sel + ' is ' + (l ? l.getAttribute('href') : 'missing') + ', not ' + href + ' — a phone that cached the old icon keeps it');
+    }
+    const man = await (await fetch('manifest.json?v=3&t1180=' + Date.now(), { cache: 'no-store' })).json();
+    const icons = (man && man.icons) || [];
+    for (const [src, size] of [['icon-192.png?v=3', '192x192'], ['icon-512.png?v=3', '512x512']]) {
+      const ic = icons.find(i => i.src === src);
+      if (!ic) throw new Error('manifest.json has no icon ' + src + ' (it lists ' + icons.map(i => i.src).join(', ') + ')');
+      if (ic.sizes !== size) throw new Error('manifest.json lists ' + src + ' as ' + ic.sizes + ', not ' + size);
+    }
+    for (const [src, n] of [['icon-192.png?v=3', 192], ['icon-512.png?v=3', 512], ['apple-touch-icon.png?v=3', 180]]) {
+      const img = await new Promise(function (res, rej) {
+        const i = new Image();
+        i.onload = function () { res(i); };
+        i.onerror = function () { rej(new Error('could not load ' + src)); };
+        i.src = src;
+      });
+      if (img.naturalWidth !== n || img.naturalHeight !== n) throw new Error(src + ' is ' + img.naturalWidth + 'x' + img.naturalHeight + ', not ' + n + 'x' + n);
     }
   });
 })();
