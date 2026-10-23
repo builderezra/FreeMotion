@@ -61062,22 +61062,12 @@
     if (XR.prerollFrames(off) !== 0) throw new Error('a DISABLED temporal effect still asked for a pre-roll');
   });
 
-  /* ═══ THE RECORD IS PART OF THE PRODUCT (queue 840, 841, 842) ══════════════════════════════════════
+  /* ═══ THE RECORD IS PART OF THE PRODUCT (queue 841, 842) ══════════════════════════════════════
    * Three findings from re-checking the 5 Sep audit, and none of them changes a pixel: a comment that
    * describes an intro two releases out of date, a test message that rules out the cause it should name,
    * and a test whose NAME claims an assertion it deliberately does not make. Each one has already sent a
-   * reader the wrong way once. Prose has no test, which is exactly why these three are tests. */
-  test('the splash script does not claim the dark ending is withdrawn — it was put back in queue 783 (queue 840)', { item: '840' }, async function () {
-    const r = await fetch('../index.html');
-    if (!r.ok) throw new Error('could not read index.html to check its own comment (' + r.status + ')');
-    const src = await r.text();
-    if (!/timeupdate/.test(src)) throw new Error('control: what was fetched is not index.html — it has no timeupdate handler, so the checks below would pass on anything');
-    if (/THE DARK ENDING IS WITHDRAWN/.test(src))
-      throw new Error('index.html still says "THE DARK ENDING IS WITHDRAWN" in the present tense — queue 783 put it back, and the stale block sent a later reader hunting the wrong cause of the intro flash');
-    if (/played through to its end in\s+both looks/.test(src.replace(/\s+/g, ' ')))
-      throw new Error('index.html still concludes "one film, played through to its end in both looks" — false since v15.63, when the dark look got its own ending again');
-  });
-
+   * reader the wrong way once. Prose has no test, which is exactly why these three are tests. (840's, about the film's
+   * own comment, went with the film in #1180.) */
   test('the intro test does not rule out the app as the cause of a film nobody can see (queue 841)', { item: '841' }, async function () {
     const r = await fetch('../tests/tests.js');
     if (!r.ok) throw new Error('could not read the suite source (' + r.status + ')');
