@@ -479,7 +479,10 @@ window.FM = window.FM || {};
   FM.wireVideoRepaint = function (rec) {
     if (!rec || rec.kind !== 'video' || !rec.el || rec._repaintWired) return;
     rec._repaintWired = true;
-    const repaint = () => { if (FM.requestRender) FM.requestRender(); };
+    /* …but not while PLAYING (#202 H8). The playback tick renders every animation frame itself, and 'canplay' fires each time a
+       playback stall clears, so this was a second full render in the same frame as the tick's own. The `arrived` mark below, which
+       draws a clip that was being skipped as undecodable, is separate and still asks. */
+    const repaint = () => { if (FM.requestRender && !FM.playing) FM.requestRender(); };
     rec.el.addEventListener('loadeddata', repaint);
     rec.el.addEventListener('canplay', repaint);
     /* ⚠️ A DECODE ERROR ARRIVING AFTER METADATA WAS SWALLOWED ENTIRELY (queue 129, 28 Aug).

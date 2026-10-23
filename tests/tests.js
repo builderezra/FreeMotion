@@ -60724,6 +60724,32 @@
     }
   });
 
+  /* #202 H8. 'canplay' fires each time a playback stall clears, and the clip's repaint asked for a render while playing: a second full
+   * render in the same animation frame as the playback tick's own. Counted at FM.requestRender itself, synchronously inside the event,
+   * so a render something else had already queued cannot hide the call.
+   * FAILS BEFORE THE FIX: a 'canplay' and a 'loadeddata' while playing each ask for a render.
+   * CONTROL: paused, the same two events each still ask for one, so the repaint is wired and goes through FM.requestRender. */
+  test('202 a clip that becomes playable while playing does not ask for a second render in the tick’s frame, and still repaints when paused', { item: '202' }, function () {
+    if (typeof FM.wireVideoRepaint !== 'function') throw new Error('FM.wireVideoRepaint is not exposed');
+    const realRender = FM.requestRender, wasPlaying = FM.playing, on = {};
+    let asked = 0;
+    // a decoded stand-in (readyState 4), so the slow-decode watcher arms no timer and no toast
+    const el = { readyState: 4, addEventListener(t, f) { (on[t] = on[t] || []).push(f); }, removeEventListener(t, f) { on[t] = (on[t] || []).filter(g => g !== f); } };
+    const fire = t => (on[t] || []).slice().forEach(f => f());
+    try {
+      FM.wireVideoRepaint({ kind: 'video', el: el, width: 64, height: 48 });
+      FM.requestRender = function () { asked++; };
+      FM.playing = false;
+      fire('canplay'); fire('loadeddata');
+      if (asked !== 2) throw new Error('CONTROL: paused, a canplay and a loadeddata asked for ' + asked + ' render(s), not 2, so the repaint is not wired and nothing below is under test');
+      asked = 0;
+      FM.playing = true;
+      fire('canplay'); fire('loadeddata');
+      FM.playing = false;
+      if (asked) throw new Error('while playing, a canplay and a loadeddata asked for ' + asked + ' render(s) on top of the playback tick, which renders that same frame itself');
+    } finally { FM.requestRender = realRender; FM.playing = wasPlaying; }
+  });
+
   test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
     var keep = FM.scene.layers.slice(), keepT = FM.time;
     var fps = FM.scene.project.fps || 30;
