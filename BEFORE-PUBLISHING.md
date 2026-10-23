@@ -82,7 +82,8 @@ Each of these was built from an AM screenshot and needs an original treatment:
   roles before it leaves Labs. The presence pieces around it (the initials chip on the stage, the coloured
   outlines, the playhead flags on the ruler) are our own drawing and can stay.
 
-Our own already: the logo and splash animation (Ezra's), the effect set and its internals, the
+Our own already: the logo and splash animation (Ezra's: since #1180 the timeline-F mark, D2 "Light from
+above", and its Keyframes intro), the effect set and its internals, the
 slip ghost, the Apple-squircle corner rounding, the media library, and everything under the hood.
 
 _**Swept v4.26 → v4.70 on 2026-08-08** against POLISH-LOG. Only v4.44 above records an AM origin;
@@ -119,10 +120,10 @@ claims an AM origin, and I can't tell from the code whether one was used._
   **It still does not close item 2:** the entire PHONE layout, which is the primary target, is untouched
   by all of that and is still the AM arrangement. The list below stands.
 - **#1180 — the app's own logo now opens the app and sits on the home screen.** The timeline-F mark (D2,
-  "Light from above", his pick on 23 Oct) replaces the copied splash film and the old app icons: the intro is
+  "Light from above", his pick on 23 Oct) replaces the previous splash film and app icons: the intro is
   the Keyframes animation drawn for it (inline SVG, plays once, no download), and `icon-192.png`,
   `icon-512.png` and `apple-touch-icon.png` are the D2 mark. The old films stay in the repo, unloaded.
-  Identity progress: the first thing anyone sees of the app, before any screen, is now ours.
+  Identity progress: the first thing anyone sees of the app, before any screen, is now his own logo.
 
 ## What "done" looks like
 
