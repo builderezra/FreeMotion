@@ -177423,6 +177423,277 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts12 ──
+  // ── 966 opts13 (hunt/fx13) ──
+  /* ═══ #966: MORE CHOICE, ROUND THIRTEEN — more effects he already has, each among the first grades reached for and still thin on choice
+   * (hunt/fx13). His words: "polish other effects just giving them more features … more choices always better … this is the complex
+   * version we want as much choice as possible". WRITTEN WITHOUT RUNNING (23 Oct, a ship may be running on this machine): nothing but
+   * `node --check`. Every number below is reasoned from the code it names, the reasoning beside it; a bound only a run can set says
+   * MEASURE beside it. Round twelve's four kinds for each effect: (a) its rows, ranges, choices and what the load sanitiser keeps, clamps
+   * and drops, (b) what each new control does, on a fixture that holds what separates right from wrong, with a CONTROL that the fixture
+   * can tell, (c) at the defaults the kernel is today's picture byte for byte, (d) every new control off its default moves the very
+   * fixtures (c) holds still. The (b) tests do not stop at a missing row: on the base code the kernel ignores the new keys and the
+   * picture is judged and fails. All three are PIXEL_FX point ops (PIXEL_ADJ too), so their pictures go through FM._applyPixelFx and,
+   * in the first test, FM.renderScene. The helpers carry an _o13 prefix and are this block's own; from the rest of the file it uses only
+   * `test`, `sleep` and E1 (frame, maxDiff, count). ═══ */
+  const _o13Need = (type, keys) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts13 (hunt/fx13) is not built');
+    return r;
+  };
+  /* every new key, by effect, and every new control off its default on the effect's own default settings */
+  const _O13_NEW = {
+    exposure: ['range', 'mix'],
+  };
+  const _O13_OFF = {
+    exposure: [{ range: 1 }, { mix: 50 }],
+  };
+  const _o13P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o13Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  /* through the dispatcher's own pixel step (colours resolved, project px scaled to plate scale ps) — the adjustment-layer path and the
+     clip's, the same PIXEL_FX kernel */
+  const _o13Run = (type, params, W, H, d, t, ps) => {
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx is not reachable');
+    FM._applyPixelFx(d, { type: type, params: params }, t == null ? 0.5 : t, W, H, ps == null ? 1 : ps);
+    return d;
+  };
+  /* a busy opaque picture (a colour ramp under a 12 px checker), the grey levels 0–255 one to a column, a row of given pixels */
+  const _o13Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  const _o13Lv = () => E1.frame(256, 2, x => [x, x, x]);
+  const _o13Row = list => () => E1.frame(list.length, 1, x => list[x]);
+  const _o13At = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  const _o13KF = (a, b, t1) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: t1 || 1, v: b, e: 'linear' }] });
+  const _o13U8 = (r, g, b) => { const u = new Uint8ClampedArray(3); u[0] = r; u[1] = g; u[2] = b; return [u[0], u[1], u[2]]; };
+  /* Colour Balance's tonal weights on brightness L (0–1), by Affects: All 1, Darks (1 − L)², Mids 1 − (2L − 1)², Lights L² — written
+     as tone13 writes them, so the arithmetic below is the kernel's to the last bit */
+  const _o13TW = (range, L) => (range === 1 ? (1 - L) * (1 - L) : (range === 2 ? 1 - (2 * L - 1) * (2 * L - 1) : (range === 3 ? L * L : 1)));
+  const _o13L = (r, g, b) => (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+  /* the share tone13 moves a pixel: Mix (0–100) times the tonal weight times 1 − Protect skin x the skin weight (`sk`, 0–1) — the
+     multiplications in tone13's order */
+  const _o13W = (mix, range, L, skin, sk) => { let w = mix / 100; if (range === 1 || range === 2 || range === 3) w *= _o13TW(range, L); if (skin > 0) w *= 1 - (skin / 100) * sk; return w; };
+  /* each pixel of `pic` laid in from the effect's own kernel result `ker` by the share w(r, g, b) of its own colour: what tone13 draws */
+  const _o13Lay = (pic, ker, wf) => { const o = new Uint8ClampedArray(pic.length); for (let i = 0; i < pic.length; i += 4) { const r = pic[i], g = pic[i + 1], b = pic[i + 2], w = wf(r, g, b); if (w === 1) { o[i] = ker[i]; o[i + 1] = ker[i + 1]; o[i + 2] = ker[i + 2]; } else { o[i] = r + (ker[i] - r) * w; o[i + 1] = g + (ker[i + 1] - g) * w; o[i + 2] = b + (ker[i + 2] - b) * w; } o[i + 3] = ker[i + 3]; } return o; };
+  /* a gradient rect, and the frame rendered through FM.renderScene (a reduced plate when rs is given) */
+  const _o13Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#1040a0', c1: '#f0c060' }; L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o13shot = (layers, t, W, H, rs, bg) => {
+    const c = document.createElement('canvas'); c.width = Math.round(W * (rs || 1)); c.height = Math.round(H * (rs || 1));
+    if (rs) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: bg === undefined ? '#000000' : bg }, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return g.getImageData(0, 0, c.width, c.height).data;
+  };
+  /* a new instance with `give` laid on it, through the load sanitiser on a shape layer: the params it keeps */
+  const _o13San = (type, give) => {
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, give);
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    return got ? got.params : null;
+  };
+  /* every new row as the panel gets it (round twelve's _o12Rows): its label; a slider's range, unit and keyframes, or a choice's buttons
+     and the values they store; its default and that nothing greys it out; what a new instance starts with, what a SAVED one with no such
+     key is filled with at render time (FM._fillFxParams, queue 784) and what the fill reads off the kernel (793); and that the load
+     sanitiser keeps each key of `keep` at a value off its default */
+  const _o13Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.vals || s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      const fv = FM._fxFillValue(type, s.key); if (fv !== s.def) bad.push('the render-time fill reads ' + s.key + ' as ' + JSON.stringify(fv) + ' off the kernel, not ' + s.def + ' — 793 would say the panel lies');
+      if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const got = _o13San(type, keep);
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got[k])); });
+    return bad;
+  };
+  /* …and what the load sanitiser does with values off the rows: a number past either end is held at that end, a choice that is not one of
+     the buttons is left out (absent: the render-time fill then draws the default). `want[k]` undefined means left out. */
+  const _o13Clamp = (type, give, want) => {
+    const got = _o13San(type, give), bad = [];
+    if (!got) return ['the load sanitiser drops a ' + type + ' carrying ' + JSON.stringify(give)];
+    Object.keys(want).forEach(k => {
+      if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(give[k]) + ' into ' + JSON.stringify(got[k]) + ', not ' + (want[k] === undefined ? 'nothing (it is not a value the row has, so it is left out)' : JSON.stringify(want[k])));
+    });
+    return bad;
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o13Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o13P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o13Pic;
+      const a = _o13Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o13Run(type, _o13Del(P, _O13_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O13_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on a new instance, on that fixture at that moment, through the dispatcher's pixel step */
+  const _o13Moves = (type, over, W, H, pic, t) => E1.count(_o13Run(type, _o13P(type), W, H, pic(W, H), t), _o13Run(type, _o13P(type, over), W, H, pic(W, H), t), 0);
+  /* (b) in general: on `pic`, `over` laid on the instance `base` draws, pixel for pixel and to the last level, the kernel's own picture
+     without the new keys laid in by the share wf — the worst pixel and where, or null when every pixel matches */
+  const _o13Worst = (type, base, over, W, H, pic, wf, t) => {
+    const ker = _o13Run(type, _o13Del(Object.assign({}, base, over), _O13_NEW[type]), W, H, pic(W, H), t);
+    const want = _o13Lay(pic(W, H), ker, wf), got = _o13Run(type, Object.assign({}, base, over), W, H, pic(W, H), t);
+    let worst = 0, at = -1;
+    for (let i = 0; i < got.length; i += 4) for (let c = 0; c < 3; c++) { const e = Math.abs(got[i + c] - want[i + c]); if (e > worst) { worst = e; at = i / 4; } }
+    return worst ? { worst: worst, x: at % W, y: (at / W) | 0, got: got.slice(at * 4, at * 4 + 3).join(', '), want: want.slice(at * 4, at * 4 + 3).join(', ') } : null;
+  };
+  /* open a layer's (only) effect in the inspector and hand back the editor's body, or null; the caller restores the scene */
+  const _o13Open = async (L) => {
+    FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+    let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    if (!body) {
+      const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+      if (!cat) return null;
+      cat.closest('[class*=cat]').click(); await sleep(140);
+      body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    }
+    return body || null;
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect over a grey ground. CONTROLS: each effect changes the picture against the rect with no effect, and each new control
+     off its default moves the picture through the same compositor, at 1:1. */
+  test('966 opts13 every new control at its default draws what the effect drew without it — each of the round’s effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O13_NEW);
+    TYPES.forEach(type => _o13Need(type, _O13_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const one = params => type => [_o13Rect({ type: type, enabled: true, params: params })];
+    TYPES.forEach(type => {
+      const P = _o13P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o13shot(one(Object.assign({}, P))(type), t, W, H, rs, BG);
+        const b = _o13shot(one(_o13Del(P, _O13_NEW[type]))(type), t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O13_NEW[type].join(' / '));
+        if (rs == null) { const off = _o13shot([_o13Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+      const base = _o13shot(one(Object.assign({}, P))(type), 0.61, W, H, null, BG);
+      _O13_OFF[type].forEach(o => {
+        const n = E1.count(base, _o13shot(one(Object.assign({}, P, o))(type), 0.61, W, H, null, BG), 2);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels and each control below moves most of them by more than 2 levels (worked beside each effect's tests) */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Exposure: Affects and Mix ---- */
+  /* At the defaults (0.8 EV, Black point 0, no rolloff, Gamma 1, sRGB) the kernel multiplies each byte by 2^0.8 = 1.7411 into the
+     clamped array: grey 40 → 69.64 → 70, grey 200 → 348 → 255. */
+  test('966 opts13 Exposure has Affects (All, Darks, Mids or Lights, storing 0–3, All by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Mids and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o13Need('exposure', _O13_NEW.exposure);
+    const bad = _o13Rows('exposure', [
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { range: 2, mix: 40 });
+    bad.push.apply(bad, _o13Clamp('exposure', { mix: 150 }, { mix: 100 }));
+    bad.push.apply(bad, _o13Clamp('exposure', { mix: -5 }, { mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('exposure', { range: 7 }, { range: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked on the grey levels at the defaults: grey 40 exposes to 70, so Mix 50 lands at 40 + 30 x 0.5 = 55; grey 200 exposes to 255, so
+     Mix 50 lands at 200 + 55 x 0.5 = 227.5, which the clamped array rounds to the even 228. On the base code Mix is ignored and grey 40
+     comes out at 70, 15 levels from 55. */
+  test('966 opts13 Exposure Mix: at 50 % grey 40 of a 0–255 ramp reads 55 and grey 200 reads 228, every grey sits half way between itself and its exposed value to the level, at 0 % the ramp is itself byte for byte, and a Mix keyed 0 to 100 draws its value half way (CONTROL: the whole exposure lifts grey 40 to 70)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('exposure', _o13P('exposure', over), 256, 2, _o13Lv(), 0.5);
+    const full = run({}), half = run({ mix: 50 }), none = run({ mix: 0 }), keyed = run({ mix: _o13KF(0, 100) });
+    if (_o13At(full, 256, 40, 0)[0] !== 70 || _o13At(full, 256, 200, 0)[0] !== 255) bad.push('CONTROL: at Mix 100 grey 40 reads ' + _o13At(full, 256, 40, 0)[0] + ' (70 expected) and grey 200 ' + _o13At(full, 256, 200, 0)[0] + ' (255 expected)');
+    const g40 = _o13At(half, 256, 40, 0), g200 = _o13At(half, 256, 200, 0);
+    if (g40[0] !== 55 || g40[1] !== 55 || g40[2] !== 55) bad.push('at Mix 50 grey 40 reads ' + g40.slice(0, 3).join(', ') + ', not 55, 55, 55');
+    if (g200[0] !== 228 || g200[1] !== 228 || g200[2] !== 228) bad.push('at Mix 50 grey 200 reads ' + g200.slice(0, 3).join(', ') + ', not 228, 228, 228');
+    let worst = 0, at = -1;
+    for (let v = 0; v < 256; v++) {
+      const want = _o13U8(v + (_o13At(full, 256, v, 0)[0] - v) * 0.5, 0, 0)[0], got = _o13At(half, 256, v, 0);
+      for (let c = 0; c < 3; c++) { const e = Math.abs(got[c] - want); if (e > worst) { worst = e; at = v; } }
+    }
+    if (worst > 0) bad.push('at Mix 50 grey ' + at + ' reads ' + _o13At(half, 256, at, 0).slice(0, 3).join(', ') + ', ' + worst + ' levels from half way to its exposed value');
+    const m0 = E1.maxDiff(none, _o13Lv());
+    if (m0 !== 0) bad.push('at Mix 0 the ramp moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(keyed, half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at the defaults: grey 40 (L = 0.157) exposes to 70 (30 levels); Darks weighs it (1 − 0.157)² = 0.711, so 40 + 21.3 = 61;
+     Mids 1 − (0.314 − 1)² = 0.529, so 55.9 → 56; Lights 0.0246, so 40.7 → 41. Grey 200 (L = 0.784) exposes to 255 (55 levels); Lights
+     weighs it 0.615, so 233.8 → 234; Mids 0.677, so 237.2 → 237; Darks 0.0465, so 202.6 → 203. With Black point 20 and Linear light the
+     kernel takes its other two paths (the second loop and the table) and the same weights lay them in. On the base code every Affects is
+     All, so Lights lifts grey 40 the whole 30 levels to 70. */
+  test('966 opts13 Exposure Affects: Darks lifts grey 40 to 61 and grey 200 only to 203, Mids to 56 and 237, Lights to 41 and 234 — every pixel of a busy picture moved its exposure times the tonal weight of its own brightness to the level, on the plain multiply, with a Black point and in Linear light (CONTROL: All lifts grey 40 to 70 and grey 200 to 255)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('exposure', _o13P('exposure', over), 256, 2, _o13Lv(), 0.5);
+    const all = run({});
+    if (_o13At(all, 256, 40, 0)[0] !== 70 || _o13At(all, 256, 200, 0)[0] !== 255) bad.push('CONTROL: under All grey 40 reads ' + _o13At(all, 256, 40, 0)[0] + ' and grey 200 reads ' + _o13At(all, 256, 200, 0)[0] + ' (70 and 255 expected)');
+    [[1, 'Darks', 61, 203], [2, 'Mids', 56, 237], [3, 'Lights', 41, 234]].forEach(([rg, name, w40, w200]) => {
+      const got = run({ range: rg }), a = _o13At(got, 256, 40, 0), b = _o13At(got, 256, 200, 0);
+      if (a[0] !== w40 || a[1] !== w40 || a[2] !== w40) bad.push(name + ' puts grey 40 at ' + a.slice(0, 3).join(', ') + ', not ' + w40);
+      if (b[0] !== w200 || b[1] !== w200 || b[2] !== w200) bad.push(name + ' puts grey 200 at ' + b.slice(0, 3).join(', ') + ', not ' + w200);
+      [{}, { offset: 20 }, { space: 1, stops: 1.3 }, { mix: 60 }].forEach(extra => {
+        const P = _o13P('exposure'), mix = extra.mix == null ? 100 : extra.mix;
+        const w = _o13Worst('exposure', P, Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(mix, rg, _o13L(r, g, b), 0, 0), 0.5);
+        if (w) bad.push(name + ' ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its exposure times its tonal weight' + (extra.mix ? ' times Mix' : '') + ')');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts13 Exposure at All and Mix 100 % draws byte for byte what it drew without them — at its defaults, stopped down and pushed, with a Black point and Highlight rolloff, in Linear light with a Gamma, keyframed, and on a half-size plate (CONTROL: Darks and Mix 50 each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o13Need('exposure', _O13_NEW.exposure);
+    const bad = _o13Ident('exposure', [{}, { over: { stops: -1.5 } }, { over: { stops: 2.4 } }, { over: { offset: 20, rolloff: 40 } }, { over: { space: 1, gamma: 1.4 } }, { over: { stops: _o13KF(-1, 2) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }]);
+    _O13_OFF.exposure.forEach(o => { const n = _o13Moves('exposure', o, 96, 72, _o13Pic, 0.5); if (n < 1000) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* reasoned: every channel under 147 is lifted 0.74 times itself by the full exposure, and Darks or Mix 50 holds it back by a quarter of that or more off black */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Exposure ---- */
+
+  /* the round's editors, new rows and all, fit the inspector (round twelve's fit test) */
+  test('966 opts13 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = {
+      exposure: 'Affects',
+    };
+    Object.keys(NEW).forEach(type => _o13Need(type, _O13_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o13Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts13 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition

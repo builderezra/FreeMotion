@@ -378,6 +378,12 @@ window.FM = window.FM || {};
       { key: 'rolloff', label: 'Highlight rolloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'gamma', label: 'Gamma', min: 0.1, max: 4, step: 0.01, def: 1 },
       { key: 'space', label: 'Work in', def: 0, options: [[0, 'sRGB'], [1, 'Linear light']] },
+      /* #966 opts13 (hunt/fx13, his "more choices always better"): the stops always lit every tone of the picture at full strength.
+         AFFECTS confines them to the darks, the mids or the lights with Colour Balance's tonal weights ((1 − L)², 1 − (2L − 1)², L², on
+         the pixel's own brightness) — lift a dark foreground and leave the sky alone — and MIX lays the exposed picture over the plain
+         one. All and 100 % run the old lines untouched (tone13 only off them). */
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks lifts the shadows and leaves the lights alone' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'fisheye', label: 'Fisheye', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -9437,6 +9443,10 @@ window.FM = window.FM || {};
       }
     },
     exposure: function (d, W, H, p, t) {
+      /* #966 opts13: AFFECTS Darks (1), Mids (2) or Lights (3), or MIX under 100 %, runs tone13 — this very kernel without the two, its
+         result laid in by the tonal weight of each pixel's own brightness and Mix; All and 100 % run the lines below untouched. */
+      const exRg13 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0), exMx13 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (exRg13 === 1 || exRg13 === 2 || exRg13 === 3 || exMx13 < 100) { tone13(d, W, H, p, t, PIXEL_FX.exposure, ['range', 'mix'], exRg13, exMx13, 0); return; }
       const m = Math.pow(2, FM.evalProp(p.stops, t) || 0);
       // OFFSET is a black-point lift/crush, which a pure multiply cannot do at all (multiplying
       // never moves black). ROLLOFF replaces the hard 255 clip with a soft knee, so pushing a stop
@@ -14470,6 +14480,32 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._crossProcess12 = crossProcess12;   // suite seam (#966 opts12)
+  /* ═══ #966 opts13 (hunt/fx13): the helper behind the thirteenth round — Exposure's Affects and Mix, Colour Temperature's Protect skin
+   * and Mix, Channel Remap's Affects and Protect skin. It runs only off those controls' defaults, so a default kernel never calls it. ═══ */
+  /* THE KERNEL ITSELF, LAID IN BY A WEIGHT: the picture is kept, the effect's own kernel `fn` runs on it with the new keys `keys` taken
+     away (so it draws exactly what it draws today), and each pixel is then moved only that share of the way from its own value to the
+     kernel's: Mix (0–100 %, 100 the kernel itself, 0 the picture; NaN reads 100) times the tonal weight of Affects on the pixel's OWN
+     brightness L (0–1; Darks (1 − L)², Mids 1 − (2L − 1)², Lights L², anything else 1) times 1 − Protect skin x skinW12 of the pixel's
+     own colour (0–100 %; NaN reads 0). A share of exactly 1 keeps the kernel's bytes; alpha is the kernel's. Pixel by pixel on the
+     pixel alone, so a cropped plate (692) draws what the whole one draws. */
+  function tone13(d, W, H, p, t, fn, keys, range, mix, skin) {
+    const m = isFinite(mix) ? (mix <= 0 ? 0 : (mix >= 100 ? 1 : mix / 100)) : 1;
+    const s = isFinite(skin) ? (skin <= 0 ? 0 : (skin >= 100 ? 1 : skin / 100)) : 0;
+    if (!(m > 0)) return;
+    const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; });
+    const o = new Uint8ClampedArray(d);
+    fn(d, W, H, q, t);
+    const tw = range === 1 || range === 2 || range === 3;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = o[i], g = o[i + 1], b = o[i + 2];
+      let w = m;
+      if (tw) { const L = (r * 0.299 + g * 0.587 + b * 0.114) / 255; w *= range === 1 ? (1 - L) * (1 - L) : (range === 2 ? 1 - (2 * L - 1) * (2 * L - 1) : L * L); }
+      if (s > 0) w *= 1 - s * skinW12(r, g, b);
+      if (w === 1) continue;
+      d[i] = r + (d[i] - r) * w; d[i + 1] = g + (d[i + 1] - g) * w; d[i + 2] = b + (d[i + 2] - b) * w;
+    }
+  }
+  FM._tone13 = tone13;   // suite seam (#966 opts13)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
