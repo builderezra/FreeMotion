@@ -488,7 +488,7 @@ window.FM = window.FM || {};
     /* fading or solid, and Shadow only: #966 opts7 */ radialshadow: 'Casts a shadow away from a light you place, so it stretches further the further it falls — fading as it goes or solid to its end, behind the layer or on its own.',
     /* coloured light and Shine: #966 opts8 */ bumpmap: 'Shades the picture as though its own brightness were height — flat art picks up relief, lit in any colour, matt or glossy.',
     iridescence: 'An oil-slick sheen that shimmers across the picture. Motion sets how much it moves, Blur how soft it is.',
-    colorbalance: 'Adds or removes each of red, green and blue separately — the direct way to kill a colour cast.',
+    /* faces kept, mixed: #966 opts14 */ colorbalance: 'Adds or removes each of red, green and blue separately — the direct way to kill a colour cast — keeping faces their own colour if you like, mixed over the picture.',
     highlightsshadows: 'Recovers blown highlights and lifts crushed shadows without touching the midtones.',
     /* about any point: #966 opts8 */ gradientoverlay: 'Lays a colour gradient over the layer at any angle — or a round or conic one about any point.',
     faded: 'Lifts the blacks and drains the colour — the washed-out look of old film left in the sun.',

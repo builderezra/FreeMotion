@@ -178023,6 +178023,176 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts13 ──
+  // ── 966 opts14 (hunt/fx14) ──
+  /* ═══ #966: MORE CHOICE, ROUND FOURTEEN — three more grades he already has, each reached for on most shots and still thin on choice
+   * (hunt/fx14). His words: "polish other effects just giving them more features … more choices always better … this is the complex
+   * version we want as much choice as possible". WRITTEN WITHOUT RUNNING (23 Oct, a ship was running on this machine): nothing but
+   * `node --check`. Every number below is reasoned from the code it names, the reasoning beside it; a bound only a run can set says
+   * MEASURE beside it. Round thirteen's four kinds for each effect: (a) its rows and what the load sanitiser keeps, clamps and drops,
+   * (b) what each new control does, on a fixture that holds what separates right from wrong, with a CONTROL, (c) at the defaults the
+   * kernel is today's picture byte for byte, (d) every new control off its default moves the very fixtures (c) holds still. The (b)
+   * tests do not stop at a missing row: on the base code the kernel ignores the new keys and the picture is judged and fails. All three
+   * are PIXEL_FX point grades run through round thirteen's tone13, so this block reuses round thirteen's _o13 helpers (the same file
+   * scope, defined just above) and adds only the ones that read this round's own keys. ═══ */
+  const _o14Need = (type, keys) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts14 (hunt/fx14) is not built');
+    return r;
+  };
+  /* every new key, by effect, and every new control off its default on the effect's own default settings */
+  const _O14_NEW = {
+    colorbalance: ['skin', 'mix'],
+  };
+  const _O14_OFF = {
+    colorbalance: [{ skin: 100 }, { mix: 50 }],
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o14Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o13P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o13Pic;
+      const a = _o13Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o13Run(type, _o13Del(P, _O14_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O14_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on a new instance, on that fixture at that moment, through the dispatcher's pixel step */
+  const _o14Moves = (type, over, W, H, pic, t) => E1.count(_o13Run(type, _o13P(type), W, H, pic(W, H), t), _o13Run(type, _o13P(type, over), W, H, pic(W, H), t), 0);
+  /* (b) in general: on `pic`, `over` laid on the instance `base` draws, pixel for pixel and to the last level, the kernel's own picture
+     without the new keys laid in by the share wf — the worst pixel and where, or null when every pixel matches */
+  const _o14Worst = (type, base, over, W, H, pic, wf, t) => {
+    const ker = _o13Run(type, _o13Del(Object.assign({}, base, over), _O14_NEW[type]), W, H, pic(W, H), t);
+    const want = _o13Lay(pic(W, H), ker, wf), got = _o13Run(type, Object.assign({}, base, over), W, H, pic(W, H), t);
+    let worst = 0, at = -1;
+    for (let i = 0; i < got.length; i += 4) for (let c = 0; c < 3; c++) { const e = Math.abs(got[i + c] - want[i + c]); if (e > worst) { worst = e; at = i / 4; } }
+    return worst ? { worst: worst, x: at % W, y: (at / W) | 0, got: got.slice(at * 4, at * 4 + 3).join(', '), want: want.slice(at * 4, at * 4 + 3).join(', ') } : null;
+  };
+  /* a row of given pixels read back against a list of wanted colours; a null in the list is not read */
+  const _o14Want = (bad, got, pics, list, name) => list.forEach((w, x) => { if (!w) return; const px = _o13At(got, pics.length, x, 0).slice(0, 3); if (px.join() !== w.join()) bad.push(name + ': pixel ' + pics[x].join('/') + ' reads ' + px.join(', ') + ', not ' + w.join(', ')); });
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect over a grey ground. CONTROLS: each effect changes the picture against the rect with no effect, and each new control
+     off its default moves the picture through the same compositor, at 1:1. */
+  test('966 opts14 every new control at its default draws what the effect drew without it — each of the round’s effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O14_NEW);
+    TYPES.forEach(type => _o14Need(type, _O14_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const one = params => type => [_o13Rect({ type: type, enabled: true, params: params })];
+    TYPES.forEach(type => {
+      const P = _o13P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o13shot(one(Object.assign({}, P))(type), t, W, H, rs, BG);
+        const b = _o13shot(one(_o13Del(P, _O14_NEW[type]))(type), t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O14_NEW[type].join(' / '));
+        if (rs == null) { const off = _o13shot([_o13Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+      const base = _o13shot(one(Object.assign({}, P))(type), 0.61, W, H, null, BG);
+      _O14_OFF[type].forEach(o => {
+        const n = E1.count(base, _o13shot(one(Object.assign({}, P, o))(type), 0.61, W, H, null, BG), 2);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels; Mix 50 halves each effect's move, and Protect skin 100 holds back the warm end of the gradient (#f0c060 sits at hue 40°, saturation 0.6) */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Colour Balance: Protect skin and Mix ---- */
+  /* At its defaults (Red 25, Green 0, Blue −25, All, Keep brightness Off, Range width 100) the kernel adds 25/100 x 80 = 20 to red and
+     takes 20 from blue, the very cast round thirteen worked for Colour Temperature, so round thirteen's six pixels and skin weights
+     (_O13_SKIN, _o13Skin = skinW12 to the letter) carry over level for level: the light skin tone balances to (240, 170, 110), the deeper
+     one to (180, 110, 60), the rose to (240, 100, 100), the blue to (60, 90, 180), the green to (80, 170, 60), the grey to (148, 128,
+     108). Protect skin 100 moves each pixel 1 − its skin weight of the way: both skin tones stay the picture, the rose (weight 0.5) goes
+     half way (230, 100, 110), the rest keep the push. At 50 % the light skin tone goes half way, (230, 170, 120), the deeper one (170,
+     110, 70), the rose three quarters, (235, 100, 105). On the base code Protect skin is ignored and both skin tones take the whole push. */
+  test('966 opts14 Colour Balance has Protect skin (0–100 %, keyframable, 0 by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    _o14Need('colorbalance', _O14_NEW.colorbalance);
+    const bad = _o13Rows('colorbalance', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp('colorbalance', { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('colorbalance', { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Colour Balance Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the push byte for byte and a rose at the window’s edge comes half way back, at 50 % each pixel comes back half its skin weight, and with Affects, Range width, Keep brightness and other pushes every pixel of a busy picture is the balance laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone takes the whole 20 levels)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('colorbalance', _o13P('colorbalance', over), N, 1, row(), 0.5);
+    _o14Want(bad, run({}), _O13_SKIN, [[240, 170, 110], [180, 110, 60], [240, 100, 100], [60, 90, 180], [80, 170, 60], [148, 128, 108]], 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], [230, 100, 110], [60, 90, 180], [80, 170, 60], [148, 128, 108]], 'Protect skin 100');
+    _o14Want(bad, run({ skin: 50 }), _O13_SKIN, [[230, 170, 120], [170, 110, 70], [235, 100, 105], [60, 90, 180], [80, 170, 60], [148, 128, 108]], 'Protect skin 50');
+    [{ range: 1 }, { range: 3, soft: 150 }, { preserve: 1 }, { skin: 100, red: -60, green: 30, blue: 40 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin;
+      const w = _o14Worst('colorbalance', _o13P('colorbalance'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the balance laid in by 1 − its skin weight)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at the defaults: Mix 50 puts the light skin tone at (230, 170, 120), the blue at (50, 90, 190) and the grey at (138, 128, 118);
+     with Protect skin 100 as well the light skin tone is the picture and the blue still goes half way. On the base code Mix is ignored. */
+  test('966 opts14 Colour Balance Mix: at 50 % the push goes half way — a grey reads 138, 128, 118 — at 0 % the picture is itself byte for byte, with Protect skin 100 as well a skin tone stays put while a blue goes half way, and a Mix keyed 0 to 100 draws its value half way (CONTROL: at 100 % the grey reads 148, 128, 108)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('colorbalance', _o13P('colorbalance', over), N, 1, row(), 0.5);
+    const at = (d, x) => _o13At(d, N, x, 0).slice(0, 3).join(', ');
+    if (at(run({}), 5) !== '148, 128, 108') bad.push('CONTROL: at Mix 100 the grey reads ' + at(run({}), 5) + ', not 148, 128, 108');
+    const half = run({ mix: 50 });
+    if (at(half, 0) !== '230, 170, 120') bad.push('at Mix 50 the light skin tone reads ' + at(half, 0) + ', not 230, 170, 120');
+    if (at(half, 3) !== '50, 90, 190') bad.push('at Mix 50 the blue reads ' + at(half, 3) + ', not 50, 90, 190');
+    if (at(half, 5) !== '138, 128, 118') bad.push('at Mix 50 the grey reads ' + at(half, 5) + ', not 138, 128, 118');
+    const m0 = E1.maxDiff(run({ mix: 0 }), row());
+    if (m0 !== 0) bad.push('at Mix 0 the row moves up to ' + m0 + ' levels — it should be the picture itself');
+    const both = run({ mix: 50, skin: 100 });
+    if (at(both, 0) !== '220, 170, 130') bad.push('at Mix 50 with Protect skin 100 the light skin tone reads ' + at(both, 0) + ', not the picture 220, 170, 130');
+    if (at(both, 3) !== '50, 90, 190') bad.push('at Mix 50 with Protect skin 100 the blue reads ' + at(both, 3) + ', not 50, 90, 190');
+    const mk = E1.maxDiff(run({ mix: _o13KF(0, 100) }), half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o14Worst('colorbalance', _o13P('colorbalance'), { mix: 35, range: 2, preserve: 1 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with Affects Mids and Keep brightness: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Colour Balance at Protect skin 0 % and Mix 100 % draws byte for byte what it drew without them — at its defaults, on other pushes, on Darks and on Lights with a Range width, with Keep brightness, keyframed, and on a half-size plate (CONTROL: Protect skin and Mix each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o14Need('colorbalance', _O14_NEW.colorbalance);
+    const bad = _o14Ident('colorbalance', [{}, { over: { red: -60, green: 30, blue: 70 } }, { over: { range: 1 } }, { over: { range: 3, soft: 150 } }, { over: { preserve: 1 } }, { over: { red: _o13KF(-50, 80) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O14_OFF.colorbalance.forEach(o => { const n = _o14Moves('colorbalance', o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — Mix 50 moves every pixel's red and blue short of the clip by 10; Protect skin 100 only the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Colour Balance ---- */
+
+  /* the round's editors, new rows and all, fit the inspector (round thirteen's fit test) */
+  test('966 opts14 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = {
+      colorbalance: 'Protect skin',
+    };
+    Object.keys(NEW).forEach(type => _o14Need(type, _O14_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o13Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts14 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition

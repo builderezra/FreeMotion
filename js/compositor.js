@@ -885,7 +885,13 @@ window.FM = window.FM || {};
          had one fixed width. Keep brightness puts every pixel back at its own luma; Range width is an exponent on the
          range weight (100 = the old weights). Both defaults run the old loops. */
       { key: 'preserve', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
-      { key: 'soft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] }] },
+      { key: 'soft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] },
+      /* #966 opts14 (hunt/fx14, his "more choices always better"): the push always took every face in the shot with it, and always
+         at full strength. PROTECT SKIN holds skin-coloured pixels back from it with Teal & Orange's skin window (skinW12, the same hue,
+         saturation and brightness windows) — cool the shadows, keep the faces their own colour — and MIX lays the balanced picture
+         over the plain one. 0 % and 100 % run the old loops untouched (tone13 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' }] },
     { type: 'highlightsshadows', label: 'Highlights & Shadows', params: [{ key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, def: -40 }, { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, def: 50 },
       /* #482 polish 5.2 (answers C47): it was one whole-picture curve that ADDS the same amount to every channel, so +Shadows
          lifted true black to grey (milky blacks) and could not tell a dark shirt from a dark corner. Whites and Blacks move the
@@ -10651,7 +10657,13 @@ window.FM = window.FM || {};
     // ---- batch 11 (multi-param pixel) ----
     // (motionblur moved to CANVAS_FX: the per-pixel 9-tap JS loop cost ~28ms/frame at 1080×1920 —
     //  the same directional smear as 9 GPU draws costs ~1ms. See CANVAS_FX.motionblur.)
-    colorbalance: function(d,W,H,p,t){ var cbR = fparam(p, 'red', 25, t); cbR=cbR<-100?-100:(cbR>100?100:cbR); var cbG = fparam(p, 'green', 0, t); cbG=cbG<-100?-100:(cbG>100?100:cbG); var cbB = fparam(p, 'blue', -25, t); cbB=cbB<-100?-100:(cbB>100?100:cbB); var cbAddR=cbR/100*80, cbAddG=cbG/100*80, cbAddB=cbB/100*80; var cbN=W*H*4;
+    colorbalance: function(d,W,H,p,t){
+      /* #966 opts14: PROTECT SKIN over 0 % or MIX under 100 % runs tone13 — this very kernel without the two (Affects, Keep brightness
+         and Range width as they are), its result laid in by Mix and by how far from skin each pixel's own colour is; 0 % and 100 % run
+         the lines below untouched. */
+      const cbSk14 = p.skin == null ? 0 : FM.evalProp(p.skin, t), cbMx14 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (cbSk14 > 0 || cbMx14 < 100) { tone13(d, W, H, p, t, PIXEL_FX.colorbalance, ['skin', 'mix'], 0, cbMx14, cbSk14); return; }
+      var cbR = fparam(p, 'red', 25, t); cbR=cbR<-100?-100:(cbR>100?100:cbR); var cbG = fparam(p, 'green', 0, t); cbG=cbG<-100?-100:(cbG>100?100:cbG); var cbB = fparam(p, 'blue', -25, t); cbB=cbB<-100?-100:(cbB>100?100:cbB); var cbAddR=cbR/100*80, cbAddG=cbG/100*80, cbAddB=cbB/100*80; var cbN=W*H*4;
       /* AFFECTS (queue 904): colour balance is meant to push shadows, mids and highlights apart — cool shadows under warm highlights is the
          whole grade. A weight by brightness picks the range: shadows (1-L)², highlights L², mids 1-(2L-1)². All runs the old loop exactly. */
       var cbRg=p.range==null?0:(Math.round(FM.evalProp(p.range,t))|0);
