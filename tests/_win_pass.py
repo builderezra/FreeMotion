@@ -27,6 +27,16 @@ the end of Chrome's stderr — in the red's reason and in --out's "diag". The Ch
 beside it (new_chrome.exe) are printed once and kept in --out's "chrome". A Chrome that NEVER ASKED FOR THE PAGE is launched
 once more, printed and kept in --out's "relaunched": the test had not run, so this runs it for the first time. A page that
 loaded and then said nothing is red at once — never re-run (his rule, 5 Oct: no "re-run failed tests once, then ship").
+
+WHEN WINDOWS CANNOT REACH THIS SERVER AT ALL (23 Oct: v17.96's first ship was refused at its very last step with all four AAC
+tests "Chrome never asked for the page", twice each, while a plain TCP connect from Windows to the server's port was refused
+outright; a fresh port bound half an hour later was forwarded again). WSL's localhost forwarding had stopped, which is the
+laptop, not a test, and it cost a whole ship. So before the first Chrome and before any relaunch, Windows is asked to open a TCP
+connection to the server (powershell.exe). If it cannot, this waits for the forwarding on a fresh port each try, up to
+FM_WIN_FORWARD_WAIT seconds (600); if it never comes back, exit 3: the tests it could not reach stay NOT RUN with no verdict
+either way (ship.sh treats that exactly like no Windows Chrome, and the feature gate decides). A red found before it went down
+is still a red (exit 1). Only a real Windows Chrome is checked; FM_WIN_FORWARD=up|down (a comma list, one per check, the last
+repeating) stands in for the check in test-port.sh.
 """
 import argparse, http.server, json, os, socket, subprocess, sys, tempfile, threading, time, urllib.parse, uuid
 
@@ -230,6 +240,52 @@ def grace_of(a):
     return 30 if a.timeout >= 60 else 2     # the page's own deadline is a.timeout; this is for a browser that never loaded it
 
 
+_FWD_CALLS = [0]
+
+
+def needs_forwarding(exe):
+    # only a real Windows Chrome crosses WSL's localhost forwarding; test-port.sh's stub runs here and reaches the server directly
+    return exe.startswith('/mnt/') or bool(os.environ.get('FM_WIN_FORWARD'))
+
+
+def forwarded(port):
+    # can WINDOWS open a TCP connection to this server? (see the docstring: 23 Oct). Unknown is treated as yes, as before.
+    env = os.environ.get('FM_WIN_FORWARD', '')
+    if env:
+        seq = [x.strip() for x in env.split(',') if x.strip()]
+        v = seq[min(_FWD_CALLS[0], len(seq) - 1)] if seq else 'up'
+        _FWD_CALLS[0] += 1
+        return v != 'down'
+    if not os.path.exists(PS):
+        return True
+    cmd = ("$c = New-Object Net.Sockets.TcpClient; try { $t = $c.ConnectAsync('127.0.0.1', %d); "
+           "if ($t.Wait(4000) -and $c.Connected) { 'UP' } else { 'DOWN' } } catch { 'DOWN' } finally { $c.Close() }") % port
+    try:
+        out = subprocess.run([PS, '-NoProfile', '-Command', cmd], capture_output=True, text=True, timeout=60).stdout
+    except Exception:
+        return True
+    return not ('DOWN' in out and 'UP' not in out)
+
+
+def reach(ctx, exe, root, results, seen):
+    # True when Windows reaches the server; while it cannot, wait for the forwarding on a fresh port each try
+    if not needs_forwarding(exe) or forwarded(ctx['port']):
+        return True
+    limit = float(os.environ.get('FM_WIN_FORWARD_WAIT', '600'))
+    print("   · Windows cannot reach this server (127.0.0.1:%d): WSL's localhost forwarding is down — waiting up to %ds for it, "
+          "on a fresh port each try" % (ctx['port'], limit), flush=True)
+    t0 = time.time()
+    while time.time() - t0 < limit:
+        time.sleep(max(0.0, min(15.0, limit - (time.time() - t0))))
+        ctx['srv'].shutdown(); ctx['srv'].server_close()
+        ctx['srv'], ctx['port'] = serve(root, results, seen)
+        if forwarded(ctx['port']):
+            print('   · the forwarding is back after %ds (port %d)' % (time.time() - t0, ctx['port']), flush=True)
+            return True
+    print("   · WSL's localhost forwarding stayed down for %ds" % (time.time() - t0), flush=True)
+    return False
+
+
 def run_one(name, a, exe, port, results, seen):
     rid, diag = launch(name, a, exe, port, results, seen)
     relaunched = ''
@@ -237,6 +293,9 @@ def run_one(name, a, exe, port, results, seen):
     # runs it for the first time — it is not a second try at a test that ran. A page that loaded and then said nothing is RED with
     # no retry: his rule (5 Oct, offered "re-run failed tests once, then ship": no) is never to blind-retry a test.
     if rid not in results and not diag['wrapperFetched']:
+        # …unless Windows cannot reach this server at all: then no Chrome could, and main() waits for the forwarding instead
+        if needs_forwarding(exe) and not forwarded(port):
+            return 'nofwd', describe(diag), '', diag, ''
         relaunched = describe(diag)
         print('   relaunch %s — %s; launching Chrome once more' % (flat(name)[:80], relaunched[:240]), flush=True)
         first = diag
@@ -289,17 +348,34 @@ def main():
         print('· win pass: %d AAC test(s) stay NOT RUN — no Windows Chrome reachable from here' % len(mine))
         return 0
     results, seen = {}, {}
-    srv, port = serve(os.path.abspath(a.root), results, seen)
+    root = os.path.abspath(a.root)
+    srv, port = serve(root, results, seen)
+    ctx = {'srv': srv, 'port': port}
     ci = chrome_info(exe)
     print('   Windows Chrome: %s, version %s%s' % (ci['exe'], ci['version'],
           ', an update (new_chrome.exe) is waiting beside it' if ci['pendingUpdate'] else ''), flush=True)
-    res = {'width': a.width, 'browser': '', 'chrome': ci, 'total': len(mine), 'pass': [], 'red': [], 'notRun': [], 'relaunched': []}
+    res = {'width': a.width, 'browser': '', 'chrome': ci, 'total': len(mine), 'pass': [], 'red': [], 'notRun': [], 'relaunched': [],
+           'forwardingDown': []}
     keep = {}
     try:
+        down = not reach(ctx, exe, root, results, seen)
         for l in mine:
             name = l.split('\t', 1)[0]
+            if down:
+                res['forwardingDown'].append(name)
+                continue
             t0 = time.time()
-            verdict, why, ua, diag, relaunched = run_one(name, a, exe, port, results, seen)
+            verdict, why, ua, diag, relaunched = run_one(name, a, exe, ctx['port'], results, seen)
+            if verdict == 'nofwd':
+                # the test never ran (no Chrome could reach the page): wait for the forwarding, then run it for the first time
+                if reach(ctx, exe, root, results, seen):
+                    verdict, why, ua, diag, relaunched = run_one(name, a, exe, ctx['port'], results, seen)
+                if verdict == 'nofwd':
+                    down = True
+                    res['forwardingDown'].append(name)
+                    print('   NOTRUN %3ds  %s  — Windows could not reach this server (WSL forwarding down): no verdict either way'
+                          % (time.time() - t0, flat(name)[:100]), flush=True)
+                    continue
             res['browser'] = res['browser'] or ua
             res['pass' if verdict == 'pass' else 'red' if verdict == 'red' else 'notRun'].append({'name': name, 'why': why, 'diag': diag})
             if relaunched:
@@ -309,7 +385,7 @@ def main():
             print('   %-6s %3ds  %s%s' % ({'pass': 'pass', 'red': 'RED', 'notrun': 'NOTRUN'}[verdict], time.time() - t0, flat(name)[:100],
                                          '' if verdict == 'pass' else '  — ' + why[:200]), flush=True)
     finally:
-        srv.shutdown()
+        ctx['srv'].shutdown()
     if a.out:
         with open(a.out, 'w', encoding='utf-8') as f:
             json.dump(res, f, indent=1, ensure_ascii=False)
@@ -319,10 +395,12 @@ def main():
             if l.split('\t', 1)[0] in passed:
                 continue
             f.write(keep.get(l, l) + '\n')
-    print('AAC tests in Windows Chrome at %d px (%s): %d pass, %d red, %d still not run, of %d%s' % (
-        a.width, flat(res['browser'])[-40:] or '?', len(res['pass']), len(res['red']), len(res['notRun']), len(mine),
-        ' — %d relaunched because Chrome never asked for the page' % len(res['relaunched']) if res['relaunched'] else ''))
-    return 1 if res['red'] else 0
+    print('AAC tests in Windows Chrome at %d px (%s): %d pass, %d red, %d still not run, of %d%s%s' % (
+        a.width, flat(res['browser'])[-40:] or '?', len(res['pass']), len(res['red']), len(res['notRun']) + len(res['forwardingDown']),
+        len(mine), ' — %d relaunched because Chrome never asked for the page' % len(res['relaunched']) if res['relaunched'] else '',
+        " — %d not reached: WSL's localhost forwarding was down, no verdict either way" % len(res['forwardingDown'])
+        if res['forwardingDown'] else ''))
+    return 1 if res['red'] else 3 if res['forwardingDown'] else 0
 
 
 if __name__ == '__main__':

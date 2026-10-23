@@ -30,8 +30,10 @@ window.FM = window.FM || {};
   // when zoomed (sharp vectors) and may hold only the visible crop — so the project-space extent it
   // covers is canvas.width / __fmRS, not canvas.width. Everything downstream works in project units.
   function projSpan() { return (canvas.width / (canvas.__fmRS || 1)) || FM.scene.project.width || 1; }
+  let _cvRect = null;   // #768 H4: the preview's on-screen box as dispScale last read it; placeRotKnob keys its memory on it
   function dispScale() {
     const r = canvas.getBoundingClientRect();
+    _cvRect = r;
     return r.width / projSpan() || 1;
   }
   // wrap-LOCAL px per project px: the selection box / guides are children of #canvas-wrap, which the
@@ -870,7 +872,13 @@ window.FM = window.FM || {};
      * once the pivot became real there was still nothing on the canvas to find.
      * A group's children render at `g + P + R·S·(L − P)`, so the pivot itself (L = P) lands at exactly
      * `g + P` — no rotation, no scale, nothing to undo. That is the whole calculation. */
-    const gpiv = (layer.type === 'group' && FM.groupPivot) ? FM.groupPivot(layer, FM.scene, t) : null;
+    /* #768 H8: a group's box and its pivot come from ONE walk of its members. FM.groupBounds hands back, as out.pivot, the very
+       pivot FM.groupPivot answers (see the note on it in compositor.js), so the dot no longer measures the members on its own
+       before the box measures them again. With no box (an empty group) the dot asks FM.groupPivot as before: a stored pivot
+       still shows there. */
+    const gOut = layer.type === 'group' ? {} : null;
+    const gbox = (gOut && FM.groupBounds) ? FM.groupBounds(layer, FM.scene, t, gOut) : null;
+    const gpiv = (layer.type === 'group' && FM.groupPivot) ? (gbox ? gOut.pivot : FM.groupPivot(layer, FM.scene, t)) : null;
     let apx = cx + (gpiv ? gpiv.x : 0), apy = cy + (gpiv ? gpiv.y : 0);
     let general = null;   // bughunt4 #1b: a parent that is no turn-and-scale (see below)
     if (layer.parent) {   // parented: the box must sit where the COMPOSITOR draws the layer (world), not at its raw local coords
@@ -925,7 +933,7 @@ window.FM = window.FM || {};
     // instead of a meaningless 100px square at the group's 0,0 origin. Centre-anchored by construction.
     let bw = s.w * scX * ds, bh = s.h * scY * ds, bcx = cx, bcy = cy;
     if (layer.type === 'group' && FM.groupBounds) {
-      const gb = FM.groupBounds(layer, FM.scene, t);
+      const gb = gbox;   // #768 H8: measured once, above, with the pivot
       if (gb) { bw = gb.w * ds; bh = gb.h * ds; bcx = gb.x; bcy = gb.y; ax = 0.5; ay = 0.5; }
     }
     /* THROUGH THE CAMERA, LAST (queue 690, third hunt). Everything above is where the layer sits among the
@@ -1011,7 +1019,7 @@ window.FM = window.FM || {};
       anchorDot.style.display = showA ? 'block' : 'none';
       if (showA) { anchorDot.style.left = g.anchorX + 'px'; anchorDot.style.top = g.anchorY + 'px'; }
     }
-    placeRotKnob();
+    placeRotKnob(g);
   }
 
   /* ⚠️ THE ROTATE KNOB HAS TO BE WHERE A FINGER CAN GET IT (queue 690, fourth hunt). It sits 28 px above the box
@@ -1028,14 +1036,45 @@ window.FM = window.FM || {};
      The rotate drag measures its angle from where the finger went down, so a knob in either spot turns the layer
      the same way. Not re-placed while it is being turned: jumping away from the finger turning it is worse than
      sitting half off the stage for the length of one drag. */
-  function placeRotKnob() {
-    if (!rotKnob || !box || box.style.display === 'none') return;
-    if (drag && drag.mode === 'rotate') return;
+  /* ═══ #768 H4 (the 22 Oct hunt, the refuter's memo variant): THE KNOB IS PLACED AGAIN ONLY WHEN WHAT PLACES IT CHANGED ═══
+     placeRotKnob ran on every render with a layer selected: it took both classes off the knob, read three boxes (the stage,
+     the knob and the selection box, so a forced layout straight after update() had written the box's six styles), and put
+     a class back whenever the knob is off the stage, which is every layer that reaches the top of his 9:16 frame. So a scrub
+     under a layer that does not move paid four getBoundingClientRect calls, a forced layout and two class flips per frame
+     for an answer that cannot change. The hunt's own fix (work the knob's spot out from the box's geometry) needs the
+     screen transform of #canvas-wrap and a stage box that can go stale on a resize, the keyboard or a zoom; the refuter's
+     smaller one is this: remember the inputs of the last real measurement and skip it while they are the same.
+     The inputs are everything the answer is made from: the box's own numbers (where it is, its size, anchor, turn, skew,
+     scale and alignment shift, in wrap pixels: boxFor's `g`, which already carries the preview's scale), the viewport's pan
+     and zoom (the wrap's transform, and --vz, the knob's own counter-scale), the window's size, and the preview's on-screen
+     box, which dispScale has just read for boxFor anyway (so it costs nothing): the stage moving or resizing moves or
+     resizes the preview inside it, and a crop or a re-fit changes it too. Any change measures afresh, exactly as before.
+     Only a real measurement is remembered: a knob not laid out (an early return below), a hidden box and a rotate drag
+     all forget, so the next frame measures. Where the inputs are unchanged the classes are already the ones this would
+     put back, so nothing on screen differs.
+     THE STAGE'S OWN SIZE (the coordinator's gap on the first version): the preview's box does not see every stage change.
+     A preview bound by its WIDTH (a landscape project on the phone) sits centred in the stage with room above and below,
+     so a stage that grows or shrinks EVENLY about it leaves the preview exactly where it was while the stage's top and
+     bottom edges, which the knob is judged against, move. So a change of the stage's size forgets the placement too:
+     stageResized() below (the one door every stage resizer already calls, queue 284) clears the key, and the
+     ResizeObserver in init() now watches #stage itself as well as the preview and its wrap. That is no read per frame:
+     the observer is told after layout, and only when the size really changed. */
+  let _knobKey = '';
+  function stageResized() { _knobKey = ''; update(); }   // #768 H4: a stage that changed size re-places the knob
+  function placeRotKnob(g) {
+    if (!rotKnob || !box || box.style.display === 'none') { _knobKey = ''; return; }
+    if (drag && drag.mode === 'rotate') { _knobKey = ''; return; }
     const stage = document.getElementById('stage');
     if (!stage) return;
+    const vp = FM.viewport || {}, cr = _cvRect;
+    const key = (g && cr) ? [g.cx, g.cy, g.w, g.h, g.ax, g.ay, g.rot, g.skewX, g.skewY, g.scaleX, g.scaleY, g.shift,
+      vp.x, vp.y, vp.scale, cr.left, cr.top, cr.width, cr.height, window.innerWidth, window.innerHeight].join(',') : '';
+    if (key && key === _knobKey) return;
+    _knobKey = '';
     rotKnob.classList.remove('sb-rot-below', 'sb-rot-in');
     const sr = stage.getBoundingClientRect(), kr = rotKnob.getBoundingClientRect(), br = box.getBoundingClientRect();
     if (!(sr.width > 0) || !(kr.width > 0)) return;
+    _knobKey = key;   // #768 H4: measured, so these inputs give this answer again
     const M = 8;   // the dot's own radius plus a little: the whole dot on the stage, not its centre scraping the edge
     const seen = (x, y) => x >= sr.left + M && x <= sr.right - M && y >= sr.top + M && y <= sr.bottom - M;
     const kx = kr.left + kr.width / 2, ky = kr.top + kr.height / 2;
@@ -1157,6 +1196,10 @@ window.FM = window.FM || {};
         const ro = new ResizeObserver(() => FM.canvasEdit.stageResized());
         ro.observe(canvas);
         if (wrap) ro.observe(wrap);
+        /* #768 H4: and the stage itself, whose edges the rotate knob is judged against: an even stage resize about a
+           width-bound preview moves neither the preview nor its wrap (see placeRotKnob) */
+        const stageEl = document.getElementById('stage');
+        if (stageEl) ro.observe(stageEl);
       }
     },
     update: update,
@@ -1164,6 +1207,6 @@ window.FM = window.FM || {};
        waiting to be noticed, because nothing here can observe that reliably. One named entry point so
        the next thing that resizes the stage has somewhere obvious to call, instead of every resizer
        growing its own copy of "and also nudge the selection box". */
-    stageResized: update,
+    stageResized: stageResized,   // #768 H4: update() after forgetting the rotate knob's remembered placement
   };
 })(window.FM);

@@ -672,7 +672,7 @@ fi
 # …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
 # EVERY script tools/test-port.sh exercises is listed, and test-port.sh checks that itself (6 Oct, the port audit): a release
 # that edited only tools/_shipgates.py — the feature gate, and the sh() that makes a failed git a refusal — ran no self-test.
-if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_shipidle.sh tools/_classify.py tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tests/_slow_pass.py tests/_win_pass.py tools/record-baselines.sh 2>/dev/null)" ]; then
+if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_shipidle.sh tools/_classify.py tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tests/_slow_pass.py tests/_win_pass.py tests/_win_suite.py tools/record-baselines.sh 2>/dev/null)" ]; then
   echo "→ the port's gates or the driver changed — proving them before shipping"
   if ! ./tools/test-port.sh; then
     echo "❌ THE PORT'S GATES OR THE DRIVER ARE BROKEN — not committing, not pushing."
@@ -1119,8 +1119,15 @@ win_pass() {   # $1 = width, $2 = a name for its files; reads and rewrites NOTRU
   ship_phase "win-$2"
   printf '%s\n' "$NOTRUN_PASS" > ".claude/ship/notrun-$2.tsv"
   echo "→ the AAC test(s) the ${1}px pass could not run, each alone in Windows Chrome on this laptop…"
-  python3 tests/_win_pass.py --width "$1" --remaining ".claude/ship/notrun-$2.tsv" --out ".claude/ship/win-$2.json" \
-    || { echo "❌ AN AAC TEST IS RED in Windows Chrome at ${1}px (run alone) — not committing, not pushing. The red one is above."; return 1; }
+  python3 tests/_win_pass.py --width "$1" --remaining ".claude/ship/notrun-$2.tsv" --out ".claude/ship/win-$2.json"; _wrc=$?
+  # 3 = Windows could not reach the page at all, WSL's localhost forwarding was down (23 Oct: it refused v17.96's first ship at its
+  # last step, all four "never asked for the page"). No verdict either way, so those tests stay NOT RUN exactly as with no Windows
+  # Chrome, and the feature gate decides. Any other non-zero is a red.
+  if [ "$_wrc" = 3 ]; then
+    echo "· WSL's localhost forwarding stayed down — the AAC test(s) it could not reach stay NOT RUN at ${1}px (no verdict either way)"
+  elif [ "$_wrc" != 0 ]; then
+    echo "❌ AN AAC TEST IS RED in Windows Chrome at ${1}px (run alone) — not committing, not pushing. The red one is above."; return 1
+  fi
   NOTRUN_PASS="$(cat ".claude/ship/notrun-$2.tsv")"
 }
 win_pass 1280 desktop || { _WHY="an AAC test was red in Windows Chrome at 1280px"; exit 1; }

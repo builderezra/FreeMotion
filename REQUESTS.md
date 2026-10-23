@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Oct at v17.95
+> ## 📌 WHAT I NEED FROM YOU — updated 23 Oct at v17.96
 >
-> **State:** v17.95 — tests only, nothing in the app changes: the real-finger tests now behave like your phone (no tap after a long press or a drag, #1097). **Still one check from you:** export something short with sound on your iPhone, save it, and play it in Photos (v17.89's fix).
+> **State:** v17.96 — **scrubbing with a layer selected does less work again, and three effects have new controls** (#768, #966). While you scrub, the rotate knob and the number boxes are left alone unless they changed, onion-skin ghosts hide until you stop, and a selected group is worked out once a frame instead of three times. New: Gamma Affects and Mix, Vibrance Boosts and Protect shadows, Cross Process Protect skin and Keep brightness — all start where the effect already was. A live session needs both devices on v17.96. **Still one check from you:** export something short with sound on your iPhone, save it, and play it in Photos (v17.89's fix).
+>
+> v17.95 — tests only, nothing in the app changes: the real-finger tests now behave like your phone (no tap after a long press or a drag, #1097). **Still one check from you:** export something short with sound on your iPhone, save it, and play it in Photos (v17.89's fix).
 >
 > v17.94 — **a clip you import shows its picture straight away** (#202): a clip that has never shown a frame is asked for one (and, if a seek does not wake it on the iPhone, played silently for a moment and stopped), the filmstrip no longer holds a clip while it only waits for it to load, and it leaves the clip on the playhead's frame. **Still one check from you:** export something short with sound on your iPhone, save it, and play it in Photos (v17.89's fix).
 >
@@ -29190,6 +29192,7 @@ re-opened #480, which I had marked done and had not fixed.
       🔧 **25 Sep, v16.94 (#934):** a likely part of this, found with a REAL finger: with a layer selected, a sideways swipe that started on a keyframe diamond (and the one at the playhead sits mid-timeline) did nothing; and a flick from a clip or a layer name stopped dead on lift. Both fixed. Ask whether scrubbing with a layer selected still feels jumpy.
       📋 **30 Sep (#993 housekeeping):** #657's scrubbing-sample ask lives here now (#657 is closed into this entry) — this report is the sample it wanted. Put it to him in the same sitting as #508's Settings → Your last project open paste: one go on the phone answers both. (Unblock cards 33 and 44 become one.)
       📍 **v17.93 (22 Oct): four fixes from the #768 hunt and its refuter** — H1 the category cards' shimmer and glow pause while the timeline moves or plays (body.fm-moving); H6 a scrub that starts on the clip writes its own "Your last scrub" report, which now says where it started; N2 a caption track is measured once, not re-wrapped cue by cue every frame; H2 crossing the selected clip's edge swaps only its action row instead of rebuilding the inspector. Left: H4, H5, H7, H8, and N1 (Simple-only, the next Simple release).
+      📍 **v17.96 (23 Oct): H4, H5, H7 and H8 from the #768 hunt shipped** (with the PM's two gap fixes, a pre-ship review and its refuter): the rotate knob is measured once per scrub and placed again when the stage changes size; value boxes whose number did not change are left alone, and a box is fitted again when its own width changes; onion ghosts are held while scrubbing (the selected layer is drawn once a frame, not three times); a selected group walks its members once a frame. Left: N1 (Simple-only, the next Simple release). Still his: does scrubbing with a layer selected feel smooth on the phone now.
 - [x] **769 — "The lines when editing points … STILLLLLLL … don't line up with the actual object when you zoom in the canvas"** (2 Sep, phone screenshot at v15.02) ✅ **logged and redirected on arrival: this is #561 re-opened, not a new item.**
       His words: *"The lines when editing points for some reason STILLLLLLL even tho I told you to fix still don't line up with the actual object when you zoom in the canvas"*
       His screenshot: the Person shape at **200%** canvas zoom, panned; Customise Points open; the point squares, hollow rings, curve
@@ -34128,6 +34131,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **ONE review page for rounds three to ten** (18 Oct, the PM's call: six separate sheets were too many; it replaces them): <https://claude.ai/artifact/4EwJ8rfPENpvvJiPyHPDbc>. Every effect starts on Keep; the only real questions at the top are the Laser core, how a Wipe border leaves, and #1175's six picks.
       📍 **PM-verified 7 Oct (via INBOX — the PM's check of the helper's batch 3; NOT his words):** **New effects (#966 idle work, from the helper's R3 specs):** auto In/Out transitions must read `layer._clipStart ?? layer.start` and `layer._clipDuration ?? layer.duration` (a group proxy's start is t-1 and duration 2, compositor.js:18519-18521; follow the splitOf lineage like flashdark :7633-7638); Zoom/Whip pan/Spin must draw through moverSource (:12381-12392), and "Spin" needs a different label ("Spin in/out"); Colour wheels needs a visible default or the "482: every effect does something visible at its own defaults" test refuses the ship; Glitch cut should be an EFFECT_PRESETS entry on the existing Glitch; Particles palette needs its own hash stream (pHash(i*4+3) already sets rotation) and a widened shape clamp (:14359).
       📍 **Moved here from #1154 (20 Oct hand-off audit):** "Trail Time offset on video (frame cache)" was parked as its own item and never logged. It is here so it is not lost.
+      📍 **v17.96 (23 Oct): round twelve shipped** — Gamma Affects (All, Darks, Mids, Lights) and Mix; Vibrance Boosts (Dull colours, Every colour, Rich colours) and Protect shadows; Cross Process Protect skin and Keep brightness. Every default byte-identical; SCHEMA_REV 31 with the fingerprint re-pinned by fp.js; 14 '966 opts12' tests. The inert-slider sweep gained a dusk frame (the pre-ship review's B2) so Protect shadows is not flagged dead.
 
 - [ ] **967 — Live collaboration feels extremely underbaked on his phone: pull it all up, make sure it's all there and working, and make it simple enough for someone who's never used it** (26 Sep, builder chat — his words)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -36317,6 +36321,7 @@ re-opened #480, which I had marked done and had not fixed.
       3. [ ] *"and also find issues with windows"* — run the app (and where possible the suite) in Windows Chrome/Edge on
          this laptop, not only in Linux Chrome under WSL. He has enabled Claude in Chrome here, which can drive his real
          Windows Chrome. Related: #1081 (PC export Save may open the Windows Share window).
+      📍 **v17.96 (23 Oct): clause 3's tool landed (tools only)** — tests/_win_suite.py runs the suite or a slice in Windows Chrome on the laptop, after the same tests in this machine's Linux Chrome (--linux-control), and files each red as WINDOWS ONLY, red on both, or not run; 20 new tools/test-port.sh checks prove it against a stub. The first real run (23 Oct, `--only '482 6.7'` at 1280) posted a verdict on both sides: Linux 2 of 2, Windows 1 of 2 with one WINDOWS ONLY red, filed as #1181. Still owed before the tick: the whole suite through it (two full passes, never beside a ship) and its WINDOWS ONLY list filed as hunt items, or written down as none found.
 
 - [ ] **1099 — Opening a file can freeze the app: caps on layers, effects, keyframes, path points and fonts, and shape checks in the sanitiser (hunt MEDIUM #1099)** (7 Oct ~04:05 AWST — via INBOX, the PM's note on the cloud helper's hunt/import-robustness; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -37826,13 +37831,13 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **Builder, 22 Oct:** applied on branches, each decision to be named in its release's POLISH line: Simple 2.7's More transition controls ON (hunt/sm6p, ships as v17.92); #1084's grow ON, Laser Beam's core shows the colour picked, and the Wipe borders slide off at the end (hunt/picks, after the #845 audio guard). #1175's batch already shipped in v17.61 and #982 is closed with the picks release. The Filter layer tile waits on one check: its Full-only guard names FM.editor, a Simple hook.
 
 - [ ] **1180 — A FreeMotion logo made of timeline pieces (the "Edit Grid" F), then a build-up loading animation** (22 Oct, ~00:15 AWST, via INBOX — his words)
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+      **STATUS: 🟢 READY — nothing is stopping this**
       **His words, verbatim:** "Draft up a logo design from the circled image where it's basically like an F created from like timeline stuff. I feel like that looks cool and could be a really sick design and like it could even have like a very cool loading screen animation coming in where like I don't know but like you could just be very well very cool with all of the layers moving in ways that like where it's like building it I don't know definitely that would be sick and yeah, just come up with a draft for that come up with heaps of different options for me to choose from make some animations after I decide which ones I like. Best of the animation goes into it wait for me to decide which one's best."
       **His image:** a sheet of 10 AI-made FreeMotion logo ideas. He circled 04 "EDIT GRID": three grey rounded clip bars (long, medium, short square) stacked left-aligned to make an F, a white playhead line through them with a ▶ on top, and "FreeMotion / EDITING, EVOLVED". Saved at C:\Users\build\.claude\uploads\038c53db-a288-427b-b4c4-2509b19d3eaf\ad60fed0-image.jpg (Windows side).
       Clauses (his):
       1. [x] Draft a logo from the circled image: an F made of timeline pieces. Done by the PM chat 22 Oct: 12 options on one canvas, each big, with the wordmark, and at 20 px. https://claude.ai/artifact/4ot9bNBsNL6HCv6Nei8QN7
       2. [x] Heaps of options to choose from. The 12 are: 01 Edit Grid (his, refined), 02 Spine (the playhead IS the F's stem; RECOMMENDED: clearest F at icon size), 03 Tracks, 04 Split, 05 Keyframes, 06 Clip colours, 07 Trim, 08 Waveform, 09 Outline, 10 Knockout, 11 Motion trail, 12 App icon (02 on a tile, teal #29d9bb = the app's --accent).
-      3. [ ] **WAIT FOR HIS PICK** ("wait for me to decide"). This is the one design item his 21 Oct "fine with ur choices" rule does NOT cover, because he said to wait.
+      3. [x] **WAIT FOR HIS PICK** ("wait for me to decide"). This is the one design item his 21 Oct "fine with ur choices" rule does NOT cover, because he said to wait.
       4. [ ] After he picks: animation options for a loading screen where the layers "build" the logo, each drawn and shown to him. Directions to draw:
          - (a) clips slide in onto their tracks one by one and snap, then the playhead drops in;
          - (b) the playhead sweeps left to right and the clips "record" in behind it;
@@ -37861,3 +37866,29 @@ re-opened #480, which I had marked done and had not fixed.
          - **Builder:** commit this folder with the next release (ship.sh's add -A does it). It's docs only, outside the lock's hash. Don't delete it.
       2. [x] **D2 animations:** four looping drafts added to the canvas as artboard "D2 · four loading animations": 1 Snap in, 2 Record (the playhead lays the clips down), 3 Light falls, 4 Stack. Each is shown on a phone-sized splash with the FreeMotion wordmark. https://claude.ai/artifact/4ot9bNBsNL6HCv6Nei8QN7
       3. [ ] **WAITING ON HIS PICK** of animation (and logo). Nothing goes into the app until then. When he picks, the builder makes it the splash in CSS/SVG (no mp4; see #1096).
+      📥 **23 Oct 2026, ~11:35 AWST — Ezra PICKS the loading animation (#1180): "Keyframes" on the D2 logo** (via INBOX — his words and the PM's plan):
+      **His words, verbatim:** "i love the first one"
+      He had the canvas's round-2 board open with the **Keyframes** animation selected (number 7 on "D2 · twelve loading animations (round 2)", id prefix nC_) and sent a screenshot of it beside Trim in. "The first one" is Keyframes:
+      1. three white keyframe diamonds pop in at the clips' right ends;
+      2. each clip grows leftward out of its diamond;
+      3. the diamonds shrink away;
+      4. the teal playhead drops in and draws its line;
+      5. the FreeMotion name rises in.
+
+      **So #1180 is unparked.** The animation was built on D2 (Light from above: one white-to-charcoal gradient across the three clips, teal #29d9bb playhead), so D2 is his logo. The PM decided that from the context, and he can correct it.
+
+      **Build (builder):**
+      1. **Loading screen.** Replace the intro film (splash-v2.mp4, which stays loaded all session, see #1096) with the Keyframes SVG/SMIL animation, played once on launch, not looped. Hold the final frame about 0.4 s, then fade into the app.
+         - The source is project/D2-Round2.dc.html on the canvas: https://claude.ai/artifact/4ot9bNBsNL6HCv6Nei8QN7
+         - It's copied to tools/design/logo-1180/canvas/D2-Round2.dc.html (the 7th card, ids nC_).
+         - Keep the reduced-motion path: show the still logo.
+         - Measure that first paint isn't slower than with the film.
+      2. **App icon.** D2 on a full-bleed #0b0b0d tile: tools/design/logo-1180/icons/FreeMotion-D2-Light-From-Above.png (1024 px), or re-render with make_icons.py D2. Generate the manifest 192/512, apple-touch-icon 180 and favicon sizes from it.
+      3. **Wordmark.** "FreeMotion" in Sora 600, with the tagline "EDITING, EVOLVED" as drawn. Use it wherever the splash shows the name.
+      4. **BEFORE-PUBLISHING.md.** Note the new logo and splash as progress on the identity pass.
+      5. **The usual before shipping.** Draw the shipped splash at 380 and 1280, red-first tests (the splash runs once, is removed after, and reduced motion gives the still frame), with his pick recorded.
+      ✅ **HE ANSWERED 23 Oct ~11:35 — UNBLOCKED:** Keyframes on D2. The builder built it code-only on hunt/1180 (the SVG splash played once with a 0.4 s hold and the film's dissolve, a reduced-motion still, the D2 icons at 192/512/180, a BEFORE-PUBLISHING note, five '1180' tests, a first-paint probe); a review and its refuter are running; it ships with the #202 follow-ups as v17.97 (or alone first if those would hold it up). Still to fold in from this plan: the Sora 600 wordmark with EDITING, EVOLVED as drawn, and the favicon sizes.
+- [ ] **1181 — In Windows Chrome a Glow Scan that sweeps Once or waits between sweeps is measured as unknown, so the effect panel would tell him a working effect changes nothing (hunt MEDIUM #1181)** (23 Oct — found by the first real run of #1098's Windows tool; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      `python3 tests/_win_suite.py --linux-control --only '482 6.7'` at 1280 px: the Linux control passed 2 of 2; Windows Chrome 156 (headless, on the laptop) passed 1 of 2 and filed one WINDOWS ONLY red: `482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing…` — a Glow Scan with {loop 1, pause 2, span 1} on a 10 s clip is measured as unknown: its sweep falls between the moments the check looks at.
+      Not yet known: whether the app's does-it-change-anything check samples differently on Windows (a real bug on his PC), or the headless Windows Chrome only times differently (a harness gap). Next: capture the sampled times and per-sample diffs on both sides, the way #1098's tool runs it, before changing anything.

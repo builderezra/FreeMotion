@@ -83227,6 +83227,379 @@
     }
   });
 
+  /* #768 H4 (the 22 Oct hunt, built as its refuter's memo variant). Every render with a layer selected ran placeRotKnob: both
+   * knob classes off, three getBoundingClientRect reads (the stage, the knob, the box: a forced layout straight after the
+   * box's styles were written), and a class back on whenever the knob is off the stage, which is every layer reaching the
+   * top of his 9:16 frame. With dispScale's own read that is four per frame, under a layer that does not move at all. Now
+   * the knob is measured again only when what places it changed.
+   * Counted where the cost is: getBoundingClientRect calls made INSIDE FM.canvasEdit.update (a depth flag set by a wrapper,
+   * the prototype's descriptor put back exactly), on each update of a 12-step FM.scrubTime scrub under a banner across the top
+   * of a 9:16 frame at phone width, whose knob queue 690 puts under it. An update on which the preview's backing store
+   * changed (a quality step when the motion latches) is a real change of the box's scale and is not counted.
+   * FAILS BEFORE THE FIX: four calls on every update of the scrub, after the first.
+   * CONTROLS: enough still updates ran to judge; the knob kept its place under the banner; and a layer that MOVES still has
+   * its knob re-placed: moved to the middle of the frame it goes back above the box, moved back to the top it goes under.
+   * AND THE STAGE'S OWN SIZE (the coordinator's gap): a 3:1 preview, bound by its width, with the stage shrunk evenly about
+   * it, so neither the preview nor the box moves: the knob must go where placeRotKnob's rule, worked out here from boxes
+   * measured here, puts it (under the banner), and back above it when the stage is put back. FAILS ON THE FIRST VERSION
+   * (55db275e): its key saw nothing change, and the knob stayed above the box with the stage's top edge over it. */
+  test('768 H4: a scrub under a selected layer that does not move measures the rotate knob once, not on every frame, and a layer that moves still has its knob re-placed', { item: '768', budgetMs: 40000 }, async function () {
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const saved = FM.scene, t00 = FM.time;
+    const proto = Element.prototype, gbDesc = Object.getOwnPropertyDescriptor(proto, 'getBoundingClientRect');
+    const ceDesc = Object.getOwnPropertyDescriptor(FM.canvasEdit, 'update'), realUpdate = FM.canvasEdit.update;
+    const cv = document.getElementById('preview');
+    const st0 = document.getElementById('stage'), stageM0 = { t: st0 ? st0.style.marginTop : '', b: st0 ? st0.style.marginBottom : '' };
+    let inside = 0, rects = 0, lastSig = '';
+    const per = [];
+    try {
+      if (FM._resetPlayQuality) FM._resetPlayQuality();   // a tier an earlier test taught the ladder would re-scale the box mid-scrub
+      if (FM.timeline && FM.timeline._clearFling) FM.timeline._clearFling();
+      await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's768h4', shape: 'rect', x: 540, y: 150, shapeW: 1080, shapeH: 300, fill: '#3050c0', start: 0, duration: 6 });
+        await hb4Scene([L], { width: 1080, height: 1920 });
+        FM.selectLayer(L.id); FM.setTime(1); await hb4Wait(450);
+        const box = document.getElementById('select-box'), knob = box && box.querySelector('.sb-rot');
+        if (!knob || box.style.display === 'none') throw new Error('setup: the selection box is not showing on the selected banner');
+        if (!knob.classList.contains('sb-rot-below')) throw new Error('setup: the banner across the top of the 9:16 frame does not have its rotate knob under it (' + knob.className + ') - this is not the placement queue 690 makes, so the count below would not be about it');
+        Object.defineProperty(proto, 'getBoundingClientRect', { configurable: true, enumerable: gbDesc.enumerable, writable: true, value: function () { if (inside > 0) rects++; return gbDesc.value.apply(this, arguments); } });
+        Object.defineProperty(FM.canvasEdit, 'update', { configurable: true, enumerable: ceDesc ? ceDesc.enumerable : true, writable: true, value: function () {
+          const sig = cv.width + 'x' + cv.height + '@' + cv.__fmRS, r0 = rects;
+          inside++;
+          try { return realUpdate.apply(this, arguments); }
+          finally { inside--; per.push({ n: rects - r0, still: sig === lastSig }); lastSig = sig; }
+        } });
+        for (let i = 1; i <= 12; i++) { FM.scrubTime(1 + i * 0.1); await frame(); }
+        Object.defineProperty(proto, 'getBoundingClientRect', gbDesc);
+        if (ceDesc) Object.defineProperty(FM.canvasEdit, 'update', ceDesc); else FM.canvasEdit.update = realUpdate;
+        if (Math.abs(FM.time - 2.2) > 0.05) throw new Error('setup: the scrub left the playhead at ' + FM.time + ' s, not 2.2 s');
+        const still = per.slice(1).filter(p => p.still).map(p => p.n);
+        if (still.length < 6) throw new Error('CONTROL: only ' + still.length + ' still updates of the selection box ran across a 12-frame scrub (' + per.length + ' in all) - too few to judge');
+        if (Math.max.apply(null, still) > 1) throw new Error('the selection box called getBoundingClientRect ' + still.join(', ') + ' times on the updates of a scrub under a layer that does not move (want at most 1 each after the first) - the rotate knob is taken off, measured against the stage and put back on every frame, a forced layout and two class flips under every scrub frame on his phone');
+        if (!knob.classList.contains('sb-rot-below')) throw new Error('CONTROL: after the scrub the banner knob is ' + knob.className + ', no longer under the banner where queue 690 puts it');
+        L.transform.y = 960; FM.requestRender(); await frame(); await frame();
+        if (knob.classList.contains('sb-rot-below') || knob.classList.contains('sb-rot-in')) throw new Error('CONTROL: moved to the middle of the frame, the banner kept its knob placement (' + knob.className + ') - a remembered placement was served for a box that moved');
+        L.transform.y = 150; FM.requestRender(); await frame(); await frame();
+        if (!knob.classList.contains('sb-rot-below')) throw new Error('CONTROL: moved back to the top of the frame, the banner knob is ' + knob.className + ', not under it again');
+        /* CONTROL, THE STAGE'S OWN SIZE (the coordinator's gap on the first version). A 3:1 project is bound by its width on the
+           phone, so it sits centred with room above and below; the stage is then shrunk EVENLY (equal margins on #stage, the
+           only item of #main's grid), which moves neither the preview nor the layer's box while the stage's top edge comes
+           down past the knob. The knob must then sit where an unremembered placement puts it, worked out here by placeRotKnob's
+           own rule (the top spot measured before, its mirror through the box's centre, both against the stage measured now,
+           8 px in). The remembered key of the first version saw nothing change here, so it kept the knob above the box. */
+        const knobAt = () => knob.classList.contains('sb-rot-below') ? 'sb-rot-below' : knob.classList.contains('sb-rot-in') ? 'sb-rot-in' : 'above';
+        const wait = async (want) => { const until = performance.now() + 1500; while (knobAt() !== want && performance.now() < until) { FM.requestRender(); await frame(); } return knobAt(); };
+        const W = FM.makeLayer('shape', { name: 's768h4w', shape: 'rect', x: 900, y: 100, shapeW: 1800, shapeH: 200, fill: '#3050c0', start: 0, duration: 6 });
+        await hb4Scene([W], { width: 1800, height: 600 });
+        FM.selectLayer(W.id); FM.setTime(1); await hb4Wait(450);
+        const stage = document.getElementById('stage');
+        if (!stage || box.style.display === 'none') throw new Error('setup: no stage, or no selection box on the 3:1 banner');
+        if (knobAt() !== 'above') throw new Error('setup: on the 3:1 project the banner knob is ' + knobAt() + ', not above the box in the room over the preview');
+        const sr0 = stage.getBoundingClientRect(), pr0 = cv.getBoundingClientRect(), kr0 = knob.getBoundingClientRect();
+        const k0 = { x: kr0.left + kr0.width / 2, y: kr0.top + kr0.height / 2 };
+        const room = Math.min(pr0.top - sr0.top, sr0.bottom - pr0.bottom);
+        if (!(room >= 40)) throw new Error('setup: the 3:1 preview has only ' + Math.round(room) + ' px of stage above or below it (stage ' + Math.round(sr0.top) + '..' + Math.round(sr0.bottom) + ', preview ' + Math.round(pr0.top) + '..' + Math.round(pr0.bottom) + ') - it is not bound by its width, so an even shrink would resize it');
+        const d = Math.floor(room - 10);
+        stage.style.marginTop = d + 'px'; stage.style.marginBottom = d + 'px';
+        await frame(); await frame();
+        const sr1 = stage.getBoundingClientRect(), pr1 = cv.getBoundingClientRect();
+        if (Math.abs(sr1.top - (sr0.top + d)) > 1.5 || Math.abs(sr1.bottom - (sr0.bottom - d)) > 1.5) throw new Error('setup: the stage did not shrink evenly by ' + d + ' px a side (' + Math.round(sr0.top) + '..' + Math.round(sr0.bottom) + ' to ' + Math.round(sr1.top) + '..' + Math.round(sr1.bottom) + ')');
+        if (['left', 'top', 'width', 'height'].some(k => Math.abs(pr1[k] - pr0[k]) > 0.5)) throw new Error('setup: the preview moved or resized when the stage shrank evenly (' + hb4J([pr0.top, pr0.height]) + ' to ' + hb4J([pr1.top, pr1.height]) + ') - that case the remembered key already sees, so this would not test the stage');
+        const M = 8, seen = (x, y) => x >= sr1.left + M && x <= sr1.right - M && y >= sr1.top + M && y <= sr1.bottom - M;
+        const br = box.getBoundingClientRect(), c = { x: br.left + br.width / 2, y: br.top + br.height / 2 };
+        const want = seen(k0.x, k0.y) ? 'above' : seen(2 * c.x - k0.x, 2 * c.y - k0.y) ? 'sb-rot-below' : 'sb-rot-in';
+        if (want !== 'sb-rot-below') throw new Error('setup: with the stage shrunk, placeRotKnob’s rule puts the knob ' + want + ', not under the banner - the shrink did not take the stage’s top edge past the knob');
+        const got = await wait(want);
+        if (got !== want) throw new Error('the stage shrank evenly by ' + d + ' px a side and its top edge came down past the rotate knob, but the knob is still ' + got + ' (an unremembered placement puts it ' + want + ') - a remembered placement was served for a stage that changed size, with the preview and the box where they were');
+        stage.style.marginTop = stageM0.t; stage.style.marginBottom = stageM0.b;
+        const back = await wait('above');
+        if (back !== 'above') throw new Error('CONTROL: the stage put back to its size, the knob is ' + back + ', not back above the banner in the room over the preview');
+      }, 380);
+    } finally {
+      const st = document.getElementById('stage');
+      if (st) { st.style.marginTop = stageM0.t; st.style.marginBottom = stageM0.b; }
+      Object.defineProperty(proto, 'getBoundingClientRect', gbDesc);
+      if (ceDesc) Object.defineProperty(FM.canvasEdit, 'update', ceDesc); else FM.canvasEdit.update = realUpdate;
+      hb4Restore(saved); FM.setTime(t00);
+    }
+  });
+
+  /* #768 H5 (the 22 Oct hunt and its refuter). With Move & Transform or Volume open, every scrub step ran syncTransform →
+   * refreshAllBoxes → each value box's refresh: its text rewritten, its font size cleared, and clientWidth and scrollWidth
+   * read, a forced layout per box per touch move, even for a box whose number cannot change. Now a box whose text is the
+   * text it already shows, and was fitted for, is left alone.
+   * Counted where the cost is: clientWidth and scrollWidth reads on .mt-vbox-val elements (Element.prototype's two getters
+   * wrapped, their descriptors put back exactly) made inside each of ten FM.scrubTime steps, at 320 px where the X / Y / Z
+   * boxes are 59 px wide. X runs far off the canvas (-98765.4 to -12345.6 across the clip), so its number is long and
+   * changes on every step; Y and Z stand still. Then the same scrub with Volume open on a clip at a steady 100 %.
+   * FAILS BEFORE THE FIX: every still box is measured on every step (two reads each), under both panels.
+   * CONTROLS: the panel was not rebuilt during the scrub (the same elements); X followed the playhead; X, whose number changed,
+   * was measured on every step and ends FITTED (its type stepped down and its text inside its box); and Volume's box is the
+   * readout of the clip that is selected. The first step is not judged: a box built before it was laid out has not been
+   * measured yet, and is fitted there.
+   * AND THE BOX'S OWN WIDTH (the coordinator's gap): Y's box narrowed with no window resize must be fitted again for its new
+   * width (its unchanged number stepped down and inside the box), and back to full size when widened. FAILS ON THE FIRST
+   * VERSION (55db275e): the same text kept the fit it had for the old width. */
+  test('768 H5: a scrub under Move and Transform or Volume leaves the value boxes whose number did not change alone, and a box whose number changed is still fitted', { item: '768', budgetMs: 40000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time, mode0 = FM._mtMode, axis0 = FM._mtAxis;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const proto = Element.prototype;
+    const cwDesc = Object.getOwnPropertyDescriptor(proto, 'clientWidth'), swDesc = Object.getOwnPropertyDescriptor(proto, 'scrollWidth');
+    let counting = false;
+    const reads = new Map();
+    const spy = d => ({ configurable: true, enumerable: d.enumerable, set: d.set, get: function () { if (counting && this.classList && this.classList.contains('mt-vbox-val')) reads.set(this, (reads.get(this) || 0) + 1); return d.get.call(this); } });
+    const unspy = () => { counting = false; Object.defineProperty(proto, 'clientWidth', cwDesc); Object.defineProperty(proto, 'scrollWidth', swDesc); };
+    // ten steps of 0.1 s from `from`, each counted on its own; returns, per step, the reads on each element of `vals`
+    const scrub = async (vals, from) => {
+      const per = [];
+      Object.defineProperty(proto, 'clientWidth', spy(cwDesc)); Object.defineProperty(proto, 'scrollWidth', spy(swDesc));
+      try {
+        for (let i = 1; i <= 10; i++) {
+          reads.clear(); counting = true;
+          FM.scrubTime(from + i * 0.1);
+          counting = false;
+          per.push(vals.map(v => reads.get(v) || 0));
+          await frame();
+        }
+      } finally { unspy(); }
+      return per;
+    };
+    const after1 = (per, k) => per.slice(1).reduce((a, p) => a + p[k], 0);
+    try {
+      if (hadHome) FM.home.close();
+      if (FM.timeline && FM.timeline._clearFling) FM.timeline._clearFling();
+      await atPhoneWidth(async function () {
+        // Y is short (5.0) so it fits its box at full size: the narrowing control below needs a box with room to lose
+        const L = FM.makeLayer('shape', { name: 's768h5', shape: 'rect', x: 540, y: 5, shapeW: 120, shapeH: 120, fill: '#4af', start: 0, duration: 6 });
+        L.transform.x = { kf: [{ t: 0, v: -98765.4, e: 'linear' }, { t: 6, v: -12345.6, e: 'linear' }] };
+        FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+        FM.selectLayer(L.id); FM.refreshAll(); FM.setTime(1);
+        FM.inspector.openCategory('transform'); FM._mtAxis = 'xy'; FM._mtMode = 'move'; FM.inspector.refresh();
+        await sleep(350);
+        const boxOf = name => { const b = [...document.querySelectorAll('.mt-panel .mt-vbox')].find(n => (n.querySelector('.mt-vbox-lab') || {}).textContent === name); return b ? b.querySelector('.mt-vbox-val') : null; };
+        const xv = boxOf('X'), yv = boxOf('Y'), zv = boxOf('Z');
+        if (!xv || !yv || !zv) throw new Error('setup: Move and Transform does not show its X, Y and Z boxes');
+        const x0 = xv.textContent, y0 = yv.textContent, z0 = zv.textContent;
+        const per = await scrub([xv, yv, zv], 1);
+        if (!xv.isConnected || !yv.isConnected || !zv.isConnected) throw new Error('setup: the Move and Transform panel was rebuilt during the scrub, so its boxes were new ones');
+        if (Math.abs(FM.time - 2) > 0.05) throw new Error('setup: the scrub left the playhead at ' + FM.time + ' s, not 2 s');
+        if (yv.textContent !== y0 || zv.textContent !== z0) throw new Error('setup: Y or Z changed during the scrub (' + y0 + ' / ' + z0 + ' to ' + yv.textContent + ' / ' + zv.textContent + ')');
+        if (xv.textContent === x0) throw new Error('CONTROL: the X box still reads ' + x0 + ' after the playhead moved a second along its keyframes - it is not following the playhead');
+        const still = after1(per, 1) + after1(per, 2);
+        if (still) throw new Error('the Y and Z boxes, whose numbers did not change, were measured ' + still + ' times across ' + (per.length - 1) + ' scrub steps (want 0; per step ' + per.map(p => p[1] + '+' + p[2]).join(', ') + ') - every step cleared their font size and read their width, a forced layout per box per touch move on his phone');
+        const xr = per.slice(1).filter(p => p[0] > 0).length;
+        if (xr < per.length - 1) throw new Error('CONTROL: the X box, whose number changed on every step, was measured on only ' + xr + ' of ' + (per.length - 1) + ' steps - a changed value is not being fitted');
+        if (!xv.style.fontSize || xv.scrollWidth > xv.clientWidth + 1) throw new Error('CONTROL: the X box reads ' + xv.textContent + ' and ends with font size ' + (xv.style.fontSize || 'unset') + ', ' + xv.scrollWidth + ' px of text in ' + xv.clientWidth + ' px - its long changing number was not fitted to its box');
+        /* CONTROL, THE BOX'S OWN WIDTH (the coordinator's gap on the first version). Y's number stands still; its box is
+           narrowed with NO window resize (its .mt-vbox given a fixed width in the row) to three quarters of what its text needs
+           at full size, and a scrub step runs. An unremembered fit steps the type down until the text is inside the box, so
+           it must end inside it, stepped down; widened back, the fit is the full size again. The first version (55db275e)
+           kept the fit it had for the old width because the text was the same, and the number ran out of the narrowed box. */
+        const yBox = yv.parentElement;
+        if (yv.style.fontSize) throw new Error('setup: the Y box (' + yv.textContent + ') was already stepped down to ' + yv.style.fontSize + ' at full width, so it has no room to lose');
+        const yr = document.createRange(); yr.selectNodeContents(yv);
+        const tw = yr.getBoundingClientRect().width, ycs = getComputedStyle(yv);
+        const edge = parseFloat(ycs.paddingLeft) + parseFloat(ycs.paddingRight) + parseFloat(ycs.borderLeftWidth) + parseFloat(ycs.borderRightWidth);
+        const w1 = Math.ceil(tw * 0.75 + edge), cw0 = yv.clientWidth;
+        const keepY = { flex: yBox.style.flex, width: yBox.style.width };
+        const fits = () => yv.scrollWidth <= yv.clientWidth + 1;
+        const settle = async (ok) => { const until = performance.now() + 1500; while (!ok() && performance.now() < until) await frame(); };
+        try {
+          yBox.style.flex = '0 0 ' + w1 + 'px'; yBox.style.width = w1 + 'px';
+          await frame(); await frame();
+          if (!(yv.clientWidth < cw0 - 4)) throw new Error('setup: the Y box did not narrow (' + cw0 + ' to ' + yv.clientWidth + ' px)');
+          FM.scrubTime(FM.time + 0.1); await frame();   // a scrub step: the refresh the first version skipped this box on
+          await settle(() => fits() && !!yv.style.fontSize);
+          if (!fits() || !yv.style.fontSize) throw new Error('the Y box was narrowed from ' + cw0 + ' to ' + yv.clientWidth + ' px with no window resize, and its unchanged number ' + yv.textContent + ' was not fitted again: ' + yv.scrollWidth + ' px of text in ' + yv.clientWidth + ' px at font size ' + (yv.style.fontSize || 'unset') + ' - a fit remembered for the old width');
+        } finally { yBox.style.flex = keepY.flex; yBox.style.width = keepY.width; }
+        await frame(); await frame();
+        await settle(() => !yv.style.fontSize);
+        if (yv.style.fontSize) throw new Error('CONTROL: the Y box widened back to ' + yv.clientWidth + ' px still has its type stepped down to ' + yv.style.fontSize + ' - it was not fitted again at its full width');
+        // Volume: a clip at a steady 100 %
+        const V = FM.makeLayer('video', { name: 's768h5v' });
+        V.start = 0; V.duration = 6; V.volume = 1;
+        FM.scene = scene([V], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+        FM.selectLayer(V.id); FM.refreshAll(); FM.setTime(1);
+        FM.inspector.openCategory('volume');
+        await sleep(350);
+        const vv = document.querySelector('.vol-panel .mt-vbox-val');
+        if (!vv) throw new Error('setup: the Volume panel has no value box');
+        if (!/100/.test(vv.textContent)) throw new Error('CONTROL: the Volume box reads ' + vv.textContent + ', not the 100 % of the selected clip');
+        const v0 = vv.textContent;
+        const perV = await scrub([vv], 1);
+        if (!vv.isConnected) throw new Error('setup: the Volume panel was rebuilt during the scrub');
+        if (vv.textContent !== v0) throw new Error('setup: the Volume box changed during the scrub (' + v0 + ' to ' + vv.textContent + ')');
+        const vs = after1(perV, 0);
+        if (vs) throw new Error('the Volume box, whose number did not change, was measured ' + vs + ' times across ' + (perV.length - 1) + ' scrub steps (want 0) - every step under the Volume panel cleared its font size and read its width');
+      }, 320);
+    } finally {
+      unspy();
+      FM._mtMode = mode0; FM._mtAxis = axis0;
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      try { FM.inspector.openCategory('home'); } catch (e) {}
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
+  /* #768 H7 (the 22 Oct hunt and its refuter). With onion skin on, every frame renders the selected animated layer twice more,
+   * at t - 0.2 s and t + 0.2 s with all its effects, for the ghosts: on a scrub that is three renders a frame. Now the ghosts
+   * are held back while the timeline is scrubbed (FM.scrubTime, from its second step) and drawn when it stops.
+   * Counted where the cost is: FM.renderScene calls made while app.js has FM._mfGhost up (the ghost renders, and only
+   * those), per frame, across a 12-step FM.scrubTime scrub of a keyframed shape, the wrapper's descriptor put back exactly.
+   * FAILS BEFORE THE FIX: two ghost renders on every frame of the scrub.
+   * CONTROLS: at rest a frame draws the two ghosts (so a zero below is not a broken detector); the scrub really rendered its
+   * frames; the ghosts come back BY THEMSELVES once the scrub stops, with no input; and a one-off FM.scrubTime jump (a
+   * caption cue tapped) draws them at once, as before. The first step of the scrub is not judged: one step is a jump. */
+  test('768 H7: with onion skin on, a scrub renders the selected layer once a frame instead of three times, and its ghosts come back by themselves when the scrub stops', { item: '768', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time, onion0 = !!FM.onionSkin;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const rsDesc = Object.getOwnPropertyDescriptor(FM, 'renderScene'), realRS = FM.renderScene;
+    let ghosts = 0, mains = 0;
+    try {
+      if (hadHome) FM.home.close();
+      if (FM.pause) FM.pause();
+      if (FM.timeline && FM.timeline._clearFling) FM.timeline._clearFling();
+      const L = FM.makeLayer('shape', { name: 's768h7', shape: 'rect', x: 300, y: 540, shapeW: 200, shapeH: 200, fill: '#f0f', start: 0, duration: 6 });
+      L.transform.x = { kf: [{ t: 0, v: 200, e: 'linear' }, { t: 6, v: 880, e: 'linear' }] };   // onion skin draws only a layer that moves
+      FM.scene = scene([L], { project: { width: 1080, height: 1080, fps: 30, duration: 6, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll(); FM.setTime(2);
+      FM.onionSkin = true;
+      await sleep(900);   // past the motion idle time: nothing is moving or held
+      Object.defineProperty(FM, 'renderScene', { configurable: true, enumerable: rsDesc.enumerable, writable: true, value: function (c, sc) { if (FM._mfGhost) ghosts++; else if (sc === FM.scene) mains++; return realRS.apply(this, arguments); } });
+      ghosts = 0; FM.requestRender(); await frame();
+      if (ghosts !== 2) throw new Error('CONTROL: at rest one frame drew ' + ghosts + ' ghost renders, not the two onion skin draws - the detector or the setup is broken, so a zero below would prove nothing');
+      ghosts = 0; mains = 0;
+      const per = [];
+      for (let i = 1; i <= 12; i++) { const g0 = ghosts; FM.scrubTime(2 + i * 0.1); await frame(); per.push(ghosts - g0); }
+      if (Math.abs(FM.time - 3.2) > 0.05) throw new Error('setup: the scrub left the playhead at ' + FM.time + ' s, not 3.2 s');
+      if (mains < 8) throw new Error('CONTROL: only ' + mains + ' frames were rendered across a 12-step scrub - the scrub is not reaching the canvas');
+      const during = per.slice(1).reduce((a, b) => a + b, 0);
+      if (during) throw new Error(during + ' onion-skin ghost renders across ' + (per.length - 1) + ' scrub frames after the first (want 0; per frame ' + per.join(', ') + ') - the selected layer is rendered three times a frame under his thumb while the timeline moves');
+      ghosts = 0;
+      const until = performance.now() + 3000;
+      while (performance.now() < until && ghosts < 2) await sleep(50);
+      if (ghosts < 2) throw new Error('CONTROL: 3 s after the scrub stopped the ghosts had not come back (' + ghosts + ' ghost renders) - onion skin is lost at rest');
+      // CONTROL: a one-off jump (a caption cue tapped goes through FM.scrubTime) is not a scrub: its frame has its ghosts
+      await sleep(900);
+      ghosts = 0; FM.scrubTime(1); await frame();
+      if (ghosts !== 2) throw new Error('CONTROL: a single FM.scrubTime jump drew ' + ghosts + ' ghost renders, not 2 - a jump is not a scrub and must keep its ghosts');
+    } finally {
+      if (rsDesc) Object.defineProperty(FM, 'renderScene', rsDesc); else FM.renderScene = realRS;
+      FM.onionSkin = onion0;
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
+  /* #768 H8 (the 22 Oct hunt and its refuter). With a group selected, every render's selection box asked FM.groupPivot for the
+   * anchor dot (a group at 100 % and 0° answers by measuring its members: FM.groupBoundsLocal), then FM.groupBounds for the box
+   * (FM.groupBoundsLocal again), which asked FM.groupPivot again (a third walk): three walks of every layer, FM.layerSize for
+   * each member, per frame. Now FM.groupBounds reads a free group's pivot off the box it has just measured and hands it to the
+   * dot: one walk.
+   * Counted where the cost is: calls to FM.groupBoundsLocal and FM.groupRestBoundsLocal (both walks of the members) made INSIDE
+   * FM.canvasEdit.update, per update, across six rendered frames, the three wrappers' descriptors put back exactly.
+   * FAILS BEFORE THE FIX: three walks on every update for a group he has not scaled or turned.
+   * CONTROLS: the box, its centre and the anchor dot are where the members put them, worked out here from FM.layerSize alone
+   * (a free group, and a group at 150 % that pivots about its rest box, which is also walked less: at most two); the box on
+   * screen is the one boxFor gives; and a frame of the scaled group, drawn about its pivot, is byte for byte the same with
+   * the group selected as with nothing selected. */
+  test('768 H8: a selected group walks its members once a frame, not three times, and its box, its anchor dot and the picture are the same', { item: '768', budgetMs: 30000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const dLocal = Object.getOwnPropertyDescriptor(FM, 'groupBoundsLocal'), dRest = Object.getOwnPropertyDescriptor(FM, 'groupRestBoundsLocal');
+    const ceDesc = Object.getOwnPropertyDescriptor(FM.canvasEdit, 'update'), realUpdate = FM.canvasEdit.update;
+    let inside = 0, walks = 0;
+    const walker = d => ({ configurable: true, enumerable: d.enumerable, writable: true, value: function () { if (inside > 0) walks++; return d.value.apply(this, arguments); } });
+    const unwrap = () => {
+      Object.defineProperty(FM, 'groupBoundsLocal', dLocal); Object.defineProperty(FM, 'groupRestBoundsLocal', dRest);
+      if (ceDesc) Object.defineProperty(FM.canvasEdit, 'update', ceDesc); else FM.canvasEdit.update = realUpdate;
+    };
+    // the walks made inside each selection-box update across `n` rendered frames
+    const count = async (n) => {
+      const per = [];
+      Object.defineProperty(FM, 'groupBoundsLocal', walker(dLocal)); Object.defineProperty(FM, 'groupRestBoundsLocal', walker(dRest));
+      Object.defineProperty(FM.canvasEdit, 'update', { configurable: true, enumerable: ceDesc ? ceDesc.enumerable : true, writable: true, value: function () {
+        const w0 = walks;
+        inside++;
+        try { return realUpdate.apply(this, arguments); } finally { inside--; per.push(walks - w0); }
+      } });
+      try { for (let i = 0; i < n; i++) { FM.requestRender(); await frame(); } } finally { unwrap(); }
+      return per;
+    };
+    const member = (name, x, y, w, h, gid) => { const l = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: y, shapeW: w, shapeH: h, fill: '#ff8800', start: 0, duration: 6 }); l.parent = gid; return l; };
+    const build = (scale) => {
+      const G = FM.makeLayer('group', { name: 'g768h8' }); G.start = 0; G.duration = 6;
+      G.transform.x = 40; G.transform.y = 20; G.transform.scale = scale;   // written directly: no pivot is stored, so a scaled group pivots about its rest box
+      const A = member('a768h8', 300, 400, 100, 100, G.id), B = member('b768h8', 700, 600, 200, 100, G.id);
+      FM.scene = scene([G, A, B], { project: { width: 1080, height: 1080, fps: 30, duration: 6, background: '#000000' } });
+      // where the members put the box and the dot, from FM.layerSize alone (default anchors 0.5 / 0.5)
+      const sa = FM.layerSize(A), sb = FM.layerSize(B);
+      const x0 = Math.min(300 - sa.w / 2, 700 - sb.w / 2), x1 = Math.max(300 + sa.w / 2, 700 + sb.w / 2);
+      const y0 = Math.min(400 - sa.h / 2, 600 - sb.h / 2), y1 = Math.max(400 + sa.h / 2, 600 + sb.h / 2);
+      const P = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
+      return { G: G, want: { cx: 40 + P.x, cy: 20 + P.y, w: (x1 - x0) * scale, h: (y1 - y0) * scale } };
+    };
+    const near = (a, b) => Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(b));
+    const checkBox = (G, e, what) => {
+      const g = FM.canvasEdit.boxFor(G, FM.time);
+      if (!g) throw new Error('setup: no selection box for the ' + what);
+      const ds = g.w / e.w, bad = [];
+      if (!near(g.h, e.h * ds)) bad.push('height ' + g.h + ' (want ' + e.h * ds + ')');
+      if (!near(g.cx, e.cx * ds) || !near(g.cy, e.cy * ds)) bad.push('centre ' + g.cx + ', ' + g.cy + ' (want ' + e.cx * ds + ', ' + e.cy * ds + ')');
+      if (!g.hasPivot || !near(g.anchorX, e.cx * ds) || !near(g.anchorY, e.cy * ds)) bad.push('anchor dot ' + g.anchorX + ', ' + g.anchorY + ' (want ' + e.cx * ds + ', ' + e.cy * ds + ')');
+      const box = document.getElementById('select-box');
+      if (!box || box.style.display === 'none' || Math.abs(parseFloat(box.style.width) - g.w) > 0.01 || Math.abs(parseFloat(box.style.height) - g.h) > 0.01) bad.push('the box on screen is ' + (box ? box.style.width + ' x ' + box.style.height + ' (' + box.style.display + ')' : 'missing') + ', not the ' + g.w + ' x ' + g.h + ' boxFor gives');
+      if (bad.length) throw new Error('CONTROL: the ' + what + ' selection box is not where its members put it: ' + bad.join('; '));
+    };
+    const hash = () => {
+      const P = FM.scene.project, c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      const x = c.getContext('2d');
+      FM.renderScene(x, FM.scene, FM.time);
+      const d = x.getImageData(0, 0, c.width, c.height).data;
+      let h = 2166136261, ink = 0;
+      for (let i = 0; i < d.length; i++) { h = Math.imul(h ^ d[i], 16777619); if ((i & 3) === 0 && d[i] > 128) ink++; }
+      return { hash: h >>> 0, ink: ink };
+    };
+    try {
+      if (hadHome) FM.home.close();
+      if (FM.pause) FM.pause();
+      // a group he has not scaled or turned: its pivot is measured, and that measurement was made three times a frame
+      const free = build(1);
+      FM.selectLayer(free.G.id); FM.refreshAll(); FM.setTime(1); await sleep(250);
+      const per = await count(6);
+      if (per.length < 4) throw new Error('CONTROL: the selection box was updated only ' + per.length + ' times across six rendered frames - the count below would prove nothing');
+      if (Math.max.apply(null, per) > 1) throw new Error('the selected group walked its members ' + per.join(', ') + ' times on the selection box updates of six frames (want 1 each) - its pivot for the anchor dot, its box, and its pivot again for the box, every layer and every member size, per frame under a scrub');
+      checkBox(free.G, free.want, 'unscaled group');
+      // a group at 150 %, pivoting about its rest box: the same box and dot, walked at most twice, and the same picture
+      const big = build(1.5);
+      FM.selectLayer(null); FM.refreshAll(); FM.setTime(1); await sleep(150);
+      const h0 = hash();
+      if (h0.ink < 10000) throw new Error('CONTROL: the scaled group drew only ' + h0.ink + ' bright pixels - nothing is being rendered, so the picture comparison means nothing');
+      FM.selectLayer(big.G.id); FM.refreshAll(); await sleep(250);
+      const perBig = await count(6);
+      if (perBig.length < 4 || Math.max.apply(null, perBig) > 2) throw new Error('the selected group at 150 % walked its members ' + perBig.join(', ') + ' times on the selection box updates of six frames (want at most 2 each)');
+      checkBox(big.G, big.want, 'scaled group');
+      const h1 = hash();
+      if (h1.hash !== h0.hash) throw new Error('CONTROL: the frame of the scaled group differs with it selected (hash ' + h1.hash + ' vs ' + h0.hash + ') - the picture must stay byte-identical');
+    } finally {
+      unwrap();
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
   /* ═══ 765 (the keyboard half): A / S / D ON THE SELECTED CLIP, INSIDE AND OUTSIDE. Nine presses through the
      real window keydown path, each on a fresh clip at 2–6s of a 12s project: inside (playhead 4s) A keeps the
      right, D keeps the left, S splits; left of it (1s) S extends the start, A moves it left, D does nothing;
@@ -88897,7 +89270,17 @@
       }
       return a;
     };
-    const FRAMES = [subject, hues, haze];
+    /* a DUSK frame (#966 round 12, 23 Oct): dark and coloured, every pixel's largest channel under 77. Vibrance's Protect
+       shadows acts only on a coloured pixel that dark, and none of the three frames above has one (subject's blue stays over
+       108, hues' top channel over 149, haze's over 93), so it read 0.000 here and was flagged dead. Tried last, as haze is. */
+    const dusk = () => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) {
+        a[i] = Math.round(70 * x / W); a[i + 1] = Math.round(60 * y / H); a[i + 2] = (((x >> 3) + (y >> 3)) & 1) ? 50 : 15; a[i + 3] = 255;
+      }
+      return a;
+    };
+    const FRAMES = [subject, hues, haze, dusk];
     const mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; };
 
     const dead = [];
@@ -176649,6 +177032,419 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts11 ──
+  // ── 966 opts12 (hunt/fx12) ──
+  /* ═══ #966: MORE CHOICE, ROUND TWELVE — more effects he already has, each commonly reached for and still thin on choice (hunt/fx12). His
+   * words: "polish other effects just giving them more features … more choices always better … this is the complex version we want as much
+   * choice as possible". WRITTEN WITHOUT RUNNING (23 Oct, before a release's timing tests on this machine): nothing but `node --check`.
+   * Every number below is reasoned from the code it names, the reasoning beside it; a bound only a run can set says MEASURE beside it.
+   * Round eleven's four kinds for each effect: (a) its rows, ranges, choices and what the load sanitiser keeps, clamps and drops, (b) what
+   * each new control does, on a fixture that holds what separates right from wrong, with a CONTROL that the fixture can tell, (c) at the
+   * defaults the kernel is today's picture byte for byte, (d) every new control off its default moves the very fixtures (c) holds still.
+   * The (b) tests do not stop at a missing row: on hunt/768c's code the kernel ignores the new keys and the picture is judged and fails.
+   * All three are PIXEL_FX point ops (PIXEL_ADJ too), so their pictures go through FM._applyPixelFx and, in the first test, FM.renderScene.
+   * The helpers carry an _o12 prefix and are this block's own; from the rest of the file it uses only `test`, `sleep` and E1 (frame,
+   * maxDiff, count). ═══ */
+  const _o12Need = (type, keys) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts12 (hunt/fx12) is not built');
+    return r;
+  };
+  /* every new key, by effect, and every new control off its default on the effect's own default settings */
+  const _O12_NEW = {
+    gamma: ['range', 'mix'],
+    vibrance: ['boost', 'shadows'],
+    crossprocess: ['skin', 'keep'],
+  };
+  const _O12_OFF = {
+    gamma: [{ range: 1 }, { mix: 50 }],
+    vibrance: [{ boost: 1 }, { boost: 2 }],
+    crossprocess: [{ skin: 100 }, { keep: 100 }],
+  };
+  const _o12P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o12Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  /* through the dispatcher's own pixel step (colours resolved, project px scaled to plate scale ps) — the adjustment-layer path and the
+     clip's, the same PIXEL_FX kernel */
+  const _o12Run = (type, params, W, H, d, t, ps) => {
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx is not reachable');
+    FM._applyPixelFx(d, { type: type, params: params }, t == null ? 0.5 : t, W, H, ps == null ? 1 : ps);
+    return d;
+  };
+  /* a busy opaque picture (a colour ramp under a 12 px checker), the grey levels 0–255 one to a column, a row of given pixels */
+  const _o12Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  const _o12Lv = () => E1.frame(256, 2, x => [x, x, x]);
+  const _o12Row = list => () => E1.frame(list.length, 1, x => list[x]);
+  const _o12At = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  const _o12KF = (a, b, t1) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: t1 || 1, v: b, e: 'linear' }] });
+  const _o12U8 = (r, g, b) => { const u = new Uint8ClampedArray(3); u[0] = r; u[1] = g; u[2] = b; return [u[0], u[1], u[2]]; };
+  const _o12Luma = (d, i) => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+  /* a gradient rect, and the frame rendered through FM.renderScene (a reduced plate when rs is given) */
+  const _o12Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#1040a0', c1: '#f0c060' }; L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o12shot = (layers, t, W, H, rs, bg) => {
+    const c = document.createElement('canvas'); c.width = Math.round(W * (rs || 1)); c.height = Math.round(H * (rs || 1));
+    if (rs) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: bg === undefined ? '#000000' : bg }, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return g.getImageData(0, 0, c.width, c.height).data;
+  };
+  /* a new instance with `give` laid on it, through the load sanitiser on a shape layer: the params it keeps */
+  const _o12San = (type, give) => {
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, give);
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    return got ? got.params : null;
+  };
+  /* every new row as the panel gets it (round eleven's _o11Rows): its label; a slider's range, unit and keyframes, or a choice's buttons
+     and the values they store; its default and that nothing greys it out; what a new instance starts with, what a SAVED one with no such
+     key is filled with at render time (FM._fillFxParams, queue 784) and what the fill reads off the kernel (793); and that the load
+     sanitiser keeps each key of `keep` at a value off its default */
+  const _o12Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.vals || s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      const fv = FM._fxFillValue(type, s.key); if (fv !== s.def) bad.push('the render-time fill reads ' + s.key + ' as ' + JSON.stringify(fv) + ' off the kernel, not ' + s.def + ' — 793 would say the panel lies');
+      if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const got = _o12San(type, keep);
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got[k])); });
+    return bad;
+  };
+  /* …and what the load sanitiser does with values off the rows: a number past either end is held at that end, a choice that is not one of
+     the buttons is left out (absent: the render-time fill then draws the default). `want[k]` undefined means left out. */
+  const _o12Clamp = (type, give, want) => {
+    const got = _o12San(type, give), bad = [];
+    if (!got) return ['the load sanitiser drops a ' + type + ' carrying ' + JSON.stringify(give)];
+    Object.keys(want).forEach(k => {
+      if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(give[k]) + ' into ' + JSON.stringify(got[k]) + ', not ' + (want[k] === undefined ? 'nothing (it is not a value the row has, so it is left out)' : JSON.stringify(want[k])));
+    });
+    return bad;
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o12Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o12P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o12Pic;
+      const a = _o12Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o12Run(type, _o12Del(P, _O12_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O12_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on a new instance, on that fixture at that moment, through the dispatcher's pixel step */
+  const _o12Moves = (type, over, W, H, pic, t) => E1.count(_o12Run(type, _o12P(type), W, H, pic(W, H), t), _o12Run(type, _o12P(type, over), W, H, pic(W, H), t), 0);
+  /* open a layer's (only) effect in the inspector and hand back the editor's body, or null; the caller restores the scene */
+  const _o12Open = async (L) => {
+    FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+    let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    if (!body) {
+      const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+      if (!cat) return null;
+      cat.closest('[class*=cat]').click(); await sleep(140);
+      body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    }
+    return body || null;
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect over a grey ground. CONTROLS: each effect changes the picture against the rect with no effect, and each new control
+     off its default moves the picture through the same compositor, at 1:1. */
+  test('966 opts12 every new control at its default draws what the effect drew without it — each of the round’s effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O12_NEW);
+    TYPES.forEach(type => _o12Need(type, _O12_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const one = params => type => [_o12Rect({ type: type, enabled: true, params: params })];
+    TYPES.forEach(type => {
+      const P = _o12P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o12shot(one(Object.assign({}, P))(type), t, W, H, rs, BG);
+        const b = _o12shot(one(_o12Del(P, _O12_NEW[type]))(type), t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O12_NEW[type].join(' / '));
+        if (rs == null) { const off = _o12shot([_o12Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+      const base = _o12shot(one(Object.assign({}, P))(type), 0.61, W, H, null, BG);
+      _O12_OFF[type].forEach(o => {
+        const n = E1.count(base, _o12shot(one(Object.assign({}, P, o))(type), 0.61, W, H, null, BG), 2);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels and each control below moves most of them by more than 2 levels (worked beside each effect's tests) */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Gamma: Affects and Mix ---- */
+  /* the kernel's master curve at Gamma g, and one channel's trimmed curve, built exactly as PIXEL_FX.gamma builds them */
+  const _o12GLut = (g, c) => { const gg = Math.max(0.05, g * (c == null ? 1 : c)), iv = 1 / gg, L = new Uint8ClampedArray(256); for (let v = 0; v < 256; v++) L[v] = Math.round(255 * Math.pow(v / 255, iv)); return L; };
+  /* Colour Balance's tonal weights on brightness L (0–1), by Affects: All 1, Darks (1 − L)², Mids 1 − (2L − 1)², Lights L² */
+  const _o12TW = (range, L) => (range === 1 ? (1 - L) * (1 - L) : (range === 2 ? 1 - (2 * L - 1) * (2 * L - 1) : (range === 3 ? L * L : 1)));
+  test('966 opts12 Gamma has Affects (All, Darks, Mids or Lights, storing 0–3, All by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Mids and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o12Need('gamma', _O12_NEW.gamma);
+    const bad = _o12Rows('gamma', [
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { range: 2, mix: 40 });
+    bad.push.apply(bad, _o12Clamp('gamma', { mix: 150 }, { mix: 100 }));
+    bad.push.apply(bad, _o12Clamp('gamma', { mix: -5 }, { mix: 0 }));
+    bad.push.apply(bad, _o12Clamp('gamma', { range: 7 }, { range: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* On the grey levels at the default Gamma 1.8 every grey v goes to v + (curve(v) − v) x share, the share Mix / 100. Worked: grey 64 curves
+     to 118 (255 x 0.251^(1 / 1.8)), so the whole curve is 54 levels from the picture there, and Mix 50 lands at 91. On hunt/768c's code
+     Mix is ignored and grey 64 comes out at 118, 27 levels from 91. */
+  test('966 opts12 Gamma Mix: at 50 % every grey of a 0–255 ramp sits half way between itself and its curved value, at 0 % the ramp is itself byte for byte, and a Mix keyed 0 to 100 draws its value half way (CONTROL: the whole curve is far from the ramp)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], LUT = _o12GLut(1.8);
+    const run = over => _o12Run('gamma', _o12P('gamma', over), 256, 2, _o12Lv(), 0.5);
+    const full = run({}), half = run({ mix: 50 }), none = run({ mix: 0 }), keyed = run({ mix: _o12KF(0, 100) });
+    let far = 0, worst = 0, at = -1;
+    for (let v = 0; v < 256; v++) {
+      far = Math.max(far, Math.abs(_o12At(full, 256, v, 0)[0] - v));
+      const want = _o12U8(v + (LUT[v] - v) * 0.5, 0, 0)[0], got = _o12At(half, 256, v, 0);
+      for (let c = 0; c < 3; c++) { const e = Math.abs(got[c] - want); if (e > worst) { worst = e; at = v; } }
+    }
+    if (far < 40) bad.push('CONTROL: the whole curve moves no grey more than ' + far + ' levels, so half of it proves little');
+    if (worst > 1) bad.push('at Mix 50 grey ' + at + ' reads ' + _o12At(half, 256, at, 0).slice(0, 3).join(', ') + ', not half way to its curve (' + _o12U8(at + (LUT[at] - at) * 0.5, 0, 0)[0] + ') — ' + worst + ' levels off');
+    const m0 = E1.maxDiff(none, _o12Lv());
+    if (m0 !== 0) bad.push('at Mix 0 the ramp moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(keyed, half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at Gamma 1.8: grey 40 curves to 91 (51 levels); Darks weighs it (1 − 0.157)² = 0.711, so 76; Lights 0.025, so 41. Grey 200 curves
+     to 223 (23 levels); Lights weighs it 0.615, so 214; Darks 0.047, so 201. With Red at 2 the red channel takes its own curve (Gamma 3.6:
+     grey 40 to 152) under the same weight — Darks puts grey 40's red at 120. On hunt/768c's code every Affects is All, so Lights moves
+     grey 40 the whole 51 levels. */
+  test('966 opts12 Gamma Affects: Darks, Mids and Lights move every grey of a 0–255 ramp by its curve times the tonal weight of its brightness — a red trim taking its own curve — so Darks opens grey 40 up and leaves grey 200 alone, Lights the other way round (CONTROL: All moves both by their whole curve)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o12Run('gamma', _o12P('gamma', over), 256, 2, _o12Lv(), 0.5);
+    const all = run({});
+    if (Math.abs(_o12At(all, 256, 40, 0)[0] - 40) < 40 || Math.abs(_o12At(all, 256, 200, 0)[0] - 200) < 15) bad.push('CONTROL: under All grey 40 reads ' + _o12At(all, 256, 40, 0)[0] + ' and grey 200 reads ' + _o12At(all, 256, 200, 0)[0] + ' — the curve does not move them far enough to tell the ranges apart');
+    [[1, 'Darks'], [2, 'Mids'], [3, 'Lights']].forEach(([rg, name]) => [null, 2].forEach(red => {
+      const over = red ? { range: rg, red: red } : { range: rg }, got = run(over);
+      const LR = _o12GLut(1.8, red || 1), LG = _o12GLut(1.8);
+      let worst = 0, at = -1;
+      for (let v = 0; v < 256; v++) {
+        const w = _o12TW(rg, (v * 0.299 + v * 0.587 + v * 0.114) / 255);
+        const want = _o12U8(v + (LR[v] - v) * w, v + (LG[v] - v) * w, v + (LG[v] - v) * w), px = _o12At(got, 256, v, 0);
+        for (let c = 0; c < 3; c++) { const e = Math.abs(px[c] - want[c]); if (e > worst) { worst = e; at = v; } }
+      }
+      if (worst > 1) bad.push(name + (red ? ' with Red 2' : '') + ': grey ' + at + ' reads ' + _o12At(got, 256, at, 0).slice(0, 3).join(', ') + ', ' + worst + ' levels from its curve times its tonal weight');
+    }));
+    const dk = run({ range: 1 }), lt = run({ range: 3 });
+    const d40 = _o12At(dk, 256, 40, 0)[0] - 40, l40 = _o12At(lt, 256, 40, 0)[0] - 40, d200 = _o12At(dk, 256, 200, 0)[0] - 200, l200 = _o12At(lt, 256, 200, 0)[0] - 200;
+    if (!(d40 >= 30)) bad.push('Darks lifts grey 40 by only ' + d40 + ' levels (about 36 expected)');
+    if (!(l40 <= 2)) bad.push('Lights lifts grey 40 by ' + l40 + ' levels — it should leave the darks nearly alone (about 1)');
+    if (!(l200 >= 10)) bad.push('Lights lifts grey 200 by only ' + l200 + ' levels (about 14 expected)');
+    if (!(d200 <= 2)) bad.push('Darks lifts grey 200 by ' + d200 + ' levels — it should leave the lights nearly alone (about 1)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts12 Gamma at All and Mix 100 % draws byte for byte what it drew without them — at its defaults, a strong and a weak curve, with channel trims, keyframed, and on a half-size plate (CONTROL: Darks and Mix 50 each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o12Need('gamma', _O12_NEW.gamma);
+    const bad = _o12Ident('gamma', [{}, { over: { gamma: 0.5 } }, { over: { gamma: 3.2 } }, { over: { red: 1.4, blue: 0.7 } }, { over: { gamma: _o12KF(0.6, 2.4) }, t: 0.37 }, { ps: 0.5 }, { pic: _o12Lv, W: 256, H: 2 }]);
+    _O12_OFF.gamma.forEach(o => { const n = _o12Moves('gamma', o, 96, 72, _o12Pic, 0.5); if (n < 1000) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* reasoned: every pixel off black and white has a curve to move along and a share under 1 */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Gamma ---- */
+
+  /* ---- Vibrance: Boosts and Protect shadows ---- */
+  /* the boost vibrance12 gives one pixel with Protect skin and Protect highlights at 0, written out: f = 1 + (k − 1) x w, w the pixel's
+     dullness 1 − (max − min) / 255 (Dull colours, the kernel's own), 1 (Every colour) or its richness (Rich colours), backed off by
+     Protect shadows x (77 − max) / 77 when its brightest channel is under 77; each channel pulled from the pixel's mean by f */
+  const _o12Vib = (c, k, boost, sh) => {
+    const r = c[0], g = c[1], b = c[2], avg = (r + g + b) / 3, mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    const wt = boost === 1 ? 1 : (boost === 2 ? (mx - mn) / 255 : 1 - (mx - mn) / 255);
+    let f = 1 + (k - 1) * wt;
+    const guard = sh > 0 && mx < 77 ? sh * ((77 - mx) / 77) : 0;
+    if (guard > 0) f = 1 + (f - 1) * (1 - Math.min(1, guard));
+    return _o12U8(avg + (r - avg) * f, avg + (g - avg) * f, avg + (b - avg) * f);
+  };
+  const _o12Off = (px, want) => Math.max(Math.abs(px[0] - want[0]), Math.abs(px[1] - want[1]), Math.abs(px[2] - want[2]));
+  test('966 opts12 Vibrance has Boosts (Dull colours, Every colour or Rich colours, storing 0–2, Dull colours by default) and Protect shadows (0–100 %, keyframable, 0 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Rich colours and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o12Need('vibrance', _O12_NEW.vibrance);
+    const bad = _o12Rows('vibrance', [
+      { key: 'boost', label: 'Boosts', options: ['Dull colours', 'Every colour', 'Rich colours'], def: 0 },
+      { key: 'shadows', label: 'Protect shadows', min: 0, max: 100, unit: '%', def: 0 }], { boost: 2, shadows: 40 });
+    bad.push.apply(bad, _o12Clamp('vibrance', { shadows: 150 }, { shadows: 100 }));
+    bad.push.apply(bad, _o12Clamp('vibrance', { shadows: -5 }, { shadows: 0 }));
+    bad.push.apply(bad, _o12Clamp('vibrance', { boost: 3 }, { boost: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at Amount 1.5: the rich red (200, 50, 50) has a mean of 100 and a richness of 150 / 255, so Dull colours pushes its red to
+     100 + 100 x 1.206 = 221 and Every colour to 250 — 29 levels further; the dull pink (140, 110, 110), richness 30 / 255, goes to 149
+     under Dull colours and 141 under Rich colours — 8 levels held back. On hunt/768c's code Boosts is ignored and every column is Dull
+     colours, so Every colour's red reads 221, not 250. */
+  const _O12_VB = [[140, 110, 110], [200, 50, 50], [60, 90, 200], [128, 128, 128], [230, 200, 60], [90, 140, 100]];
+  test('966 opts12 Vibrance Boosts: on six pixels from grey to rich red at Amount 1.5, Dull colours pushes each by 1 + 0.5 x its dullness, Every colour by 1.5 whatever its colour and Rich colours by 1 + 0.5 x its richness — Every colour pushes a rich red 29 levels further than Dull colours and Rich colours holds a dull pink 8 back (CONTROL: Dull colours, the old boost, matches the same arithmetic)', { item: '966', budgetMs: 60000 }, function () {
+    const N = _O12_VB.length, bad = [];
+    const run = bo => _o12Run('vibrance', _o12P('vibrance', { amount: 1.5, boost: bo }), N, 1, _o12Row(_O12_VB)(), 0.5);
+    const got = [0, 1, 2].map(run), NAME = ['Dull colours', 'Every colour', 'Rich colours'];
+    [0, 1, 2].forEach(bo => _O12_VB.forEach((c, x) => {
+      const want = _o12Vib(c, 1.5, bo, 0), px = _o12At(got[bo], N, x, 0), e = _o12Off(px, want);
+      if (e > 1) bad.push((bo === 0 ? 'CONTROL: ' : '') + NAME[bo] + ': (' + c.join(', ') + ') reads (' + px.slice(0, 3).join(', ') + '), not (' + want.join(', ') + ')');
+    }));
+    const rr = _o12At(got[1], N, 1, 0)[0] - _o12At(got[0], N, 1, 0)[0], dp = _o12At(got[0], N, 0, 0)[0] - _o12At(got[2], N, 0, 0)[0];
+    if (!(rr >= 20)) bad.push('Every colour pushes the rich red only ' + rr + ' levels further than Dull colours (29 worked)');
+    if (!(dp >= 5)) bad.push('Rich colours holds the dull pink back only ' + dp + ' levels from Dull colours (8 worked)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at Amount 3: the dark red (40, 0, 0) has a mean of 13.3 and a dullness of 215 / 255, so f = 2.686 and its red goes to 85; at
+     100 % its guard is 37 / 77 = 0.48, f = 1.876 and its red goes to 63 — 22 levels held back. (200, 120, 120) is brighter than 76 and
+     is not guarded at all. On hunt/768c's code Protect shadows is ignored and the dark red reads 85 at 100 %. */
+  const _O12_VS = [[40, 0, 0], [60, 30, 10], [20, 40, 70], [200, 120, 120], [76, 40, 40]];
+  test('966 opts12 Vibrance Protect shadows: at Amount 3 a dark red (40, 0, 0) boosted to 85 at 0 % is held back to 63 at 100 % — every pixel whose brightest channel is under 77 backed off by Protect shadows x (77 − it) / 77, at 50 % half that — while a pixel brighter than that moves not a level (CONTROL: at 0 % the dark pixels take the whole boost)', { item: '966', budgetMs: 60000 }, function () {
+    const N = _O12_VS.length, bad = [];
+    const run = sh => _o12Run('vibrance', _o12P('vibrance', { amount: 3, shadows: sh }), N, 1, _o12Row(_O12_VS)(), 0.5);
+    const g0 = run(0), g50 = run(50), g100 = run(100);
+    [[g0, 0], [g50, 0.5], [g100, 1]].forEach(([got, sh]) => _O12_VS.forEach((c, x) => {
+      const want = _o12Vib(c, 3, 0, sh), px = _o12At(got, N, x, 0), e = _o12Off(px, want);
+      if (e > 1) bad.push((sh === 0 ? 'CONTROL: ' : '') + 'at ' + (sh * 100) + ' %: (' + c.join(', ') + ') reads (' + px.slice(0, 3).join(', ') + '), not (' + want.join(', ') + ')');
+    }));
+    const held = _o12At(g0, N, 0, 0)[0] - _o12At(g100, N, 0, 0)[0];
+    if (!(held >= 12)) bad.push('Protect shadows 100 % holds the dark red back only ' + held + ' levels (22 worked)');
+    const br = _o12Off(_o12At(g100, N, 3, 0), _o12At(g0, N, 3, 0));
+    if (br !== 0) bad.push('Protect shadows moves (200, 120, 120) by ' + br + ' levels — it is brighter than any shadow');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts12 Vibrance at Dull colours and Protect shadows 0 % draws byte for byte what it drew without them — at its defaults, a strong and a weak boost, with Protect skin and Protect highlights, keyframed, and on a half-size plate (CONTROL: Every colour, Rich colours and Protect shadows each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o12Need('vibrance', _O12_NEW.vibrance);
+    const bad = _o12Ident('vibrance', [{}, { over: { amount: 3 } }, { over: { amount: 0.4 } }, { over: { skin: 60, highlights: 40 } }, { over: { amount: _o12KF(0.5, 4) }, t: 0.37 }, { ps: 0.5 }]);
+    /* reasoned bounds: the picture is colourful nearly everywhere, so a boost by another share moves most of its 6912 pixels; Protect
+       shadows only reaches its dark corner (red and green under 77, the dark checker squares — about 300 pixels) */
+    [[{ boost: 1 }, 1000], [{ boost: 2 }, 1000], [{ shadows: 100 }, 100]].forEach(([o, least]) => { const n = _o12Moves('vibrance', o, 96, 72, _o12Pic, 0.5); if (n < least) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Vibrance ---- */
+
+  /* ---- Cross Process: Protect skin and Keep brightness ---- */
+  /* how skin-coloured a pixel is, written out from Teal & Orange's Protect skin window (#482 polish 5.3): hue full from 0° to 40°, easing
+     by half a cosine to nothing at −20° and 60°; HSV saturation full 0.2–0.8, nothing under 0.08 or over 0.9; V full from 0.2 */
+  const _o12Skin = c => {
+    const r = c[0], g = c[1], b = c[2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), ch = mx - mn;
+    if (!(ch > 0)) return 0;
+    let hu = mx === r ? (g - b) / ch : (mx === g ? (b - r) / ch + 2 : (r - g) / ch + 4); if (hu < 0) hu += 6; hu *= 60;
+    const sx = ((hu % 360) + 180) % 360 - 180;
+    const hw = sx >= 0 && sx <= 40 ? 1 : (sx > -20 && sx < 0 ? 0.5 + 0.5 * Math.cos(Math.PI * sx / 20) : (sx > 40 && sx < 60 ? 0.5 + 0.5 * Math.cos(Math.PI * (sx - 40) / 20) : 0));
+    const sS = ch / mx, sV = mx / 255;
+    const mS = sS < 0.08 ? 0 : (sS < 0.2 ? (sS - 0.08) / 0.12 : (sS <= 0.8 ? 1 : (sS < 0.9 ? (0.9 - sS) / 0.1 : 0)));
+    const mV = sV < 0.08 ? 0 : (sV < 0.2 ? (sV - 0.08) / 0.12 : 1);
+    return hw * mS * mV;
+  };
+  test('966 opts12 Cross Process has Protect skin and Keep brightness (0–100 %, keyframable, 0 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    _o12Need('crossprocess', _O12_NEW.crossprocess);
+    const bad = _o12Rows('crossprocess', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'keep', label: 'Keep brightness', min: 0, max: 100, unit: '%', def: 0 }], { skin: 40, keep: 70 });
+    bad.push.apply(bad, _o12Clamp('crossprocess', { skin: 150, keep: -5 }, { skin: 100, keep: 0 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Two full skin tones (a light one at 21°, and #8d5524, deep brown skin at 28°, the colour Teal & Orange's window was widened for), a
+     yellowish one at 50° (half a skin tone), a blue, a green and a grey. Worked for Slide at the default 0.6: the light skin tone's blue
+     drops 22 levels (0.392 bends to 0.279, then to the power 1.1, 0.246; 0.6 of the way). At 100 % a full skin tone is the picture itself
+     and what is not skin is the graded picture itself; at 50 % each is half its weight of the way back. On hunt/768c's code Protect skin
+     is ignored, so the skin tones come out graded. */
+  const _O12_CP = [[208, 138, 100], [141, 85, 36], [200, 183, 100], [40, 90, 200], [60, 160, 80], [128, 128, 128]];
+  test('966 opts12 Cross Process Protect skin: at 100 % two skin tones come out as the picture byte for byte in both Films while a blue, a green and a grey keep the grade byte for byte, a half skin tone comes half way back, and at 50 % every pixel comes back half its skin weight (CONTROL: at 0 % the grade moves the light skin tone at least 8 levels)', { item: '966', budgetMs: 60000 }, function () {
+    const N = _O12_CP.length, bad = [], pic = _o12Row(_O12_CP);
+    const run = (over) => _o12Run('crossprocess', _o12P('crossprocess', over), N, 1, pic(), 0.5);
+    [0, 1].forEach(film => {
+      const g0 = run({ variant: film }), FILM = film ? 'Negative' : 'Slide';
+      if (film === 0) { const mv = _o12Off(_o12At(g0, N, 0, 0), _O12_CP[0]); if (mv < 8) bad.push('CONTROL: Slide moves the light skin tone only ' + mv + ' levels, so holding it back proves little'); }
+      [100, 50].forEach(sk => {
+        const got = run({ variant: film, skin: sk });
+        _O12_CP.forEach((c, x) => {
+          const w = _o12Skin(c) * sk / 100, gr = _o12At(g0, N, x, 0), px = _o12At(got, N, x, 0);
+          const want = _o12U8(gr[0] + (c[0] - gr[0]) * w, gr[1] + (c[1] - gr[1]) * w, gr[2] + (c[2] - gr[2]) * w);
+          const exact = w === 1 || w === 0, e = _o12Off(px, want);
+          if (exact ? e !== 0 : e > 1) bad.push(FILM + ' at ' + sk + ' %: (' + c.join(', ') + '), skin weight ' + _o12Skin(c).toFixed(2) + ', reads (' + px.slice(0, 3).join(', ') + '), not (' + want.join(', ') + ')');
+        });
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked for Slide at the default 0.6: grey 128 grades to about (148, 140, 104), its brightness up 10; grey 200 up 6; the picture's
+     middle tones — most of it — come up 4 to 10 levels. Keep brightness 100 puts each pixel back at its own brightness (setLum255, only
+     the colour moves), so the brightness of every pixel is the picture's to within the half-level rounding of each channel. On hunt/768c's
+     code Keep brightness is ignored and the brightness moves. */
+  test('966 opts12 Cross Process Keep brightness: at 100 % every pixel of a busy picture keeps its own brightness to within a level in both Films while Slide still moves its colour, and with Protect skin 100 too a full skin tone is the picture byte for byte (CONTROL: at 0 % the grade moves the brightness of a thousand pixels by more than 3 levels)', { item: '966', budgetMs: 60000 }, function () {
+    const W = 96, H = 72, bad = [], pic = _o12Pic(W, H);
+    const run = over => _o12Run('crossprocess', _o12P('crossprocess', over), W, H, _o12Pic(W, H), 0.5);
+    let moved = 0;
+    const g0 = run({});
+    for (let i = 0; i < g0.length; i += 4) if (Math.abs(_o12Luma(g0, i) - _o12Luma(pic, i)) > 3) moved++;
+    if (moved < 1000) bad.push('CONTROL: Slide moves the brightness of only ' + moved + ' of 6912 pixels by more than 3 levels' /* MEASURE: reasoned, not run */);
+    [0, 1].forEach(film => {
+      const got = run({ variant: film, keep: 100 });
+      let worst = 0, at = -1;
+      for (let i = 0; i < got.length; i += 4) { const e = Math.abs(_o12Luma(got, i) - _o12Luma(pic, i)); if (e > worst) { worst = e; at = i / 4; } }
+      if (worst > 1) bad.push((film ? 'Negative' : 'Slide') + ' at Keep brightness 100 %: pixel ' + at + ' is ' + worst.toFixed(2) + ' levels from its own brightness');
+      if (film === 0) { const n = E1.count(got, pic, 2); if (n < 1000) bad.push('Slide at Keep brightness 100 % changes only ' + n + ' pixels by more than 2 levels — the colour move is gone too'); }
+    });
+    const both = _o12Run('crossprocess', _o12P('crossprocess', { skin: 100, keep: 100 }), 2, 1, _o12Row([_O12_CP[0], _O12_CP[1]])(), 0.5);
+    [0, 1].forEach(x => { const e = _o12Off(_o12At(both, 2, x, 0), _O12_CP[x]); if (e !== 0) bad.push('with Protect skin and Keep brightness both 100 %, the skin tone (' + _O12_CP[x].join(', ') + ') is ' + e + ' levels from itself'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts12 Cross Process at Protect skin and Keep brightness 0 % draws byte for byte what it drew without them — at its defaults, on Negative, at full strength with a strong cast and a weak curve, keyframed, and on a half-size plate (CONTROL: Protect skin and Keep brightness each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o12Need('crossprocess', _O12_NEW.crossprocess);
+    const bad = _o12Ident('crossprocess', [{}, { over: { variant: 1 } }, { over: { amount: 1, lift: 200, gain: 40 } }, { over: { amount: _o12KF(0.2, 1) }, t: 0.37 }, { ps: 0.5 }, { pic: _o12Row(_O12_CP), W: _O12_CP.length, H: 1 }]);
+    /* reasoned bounds: Protect skin reaches the warm part of the picture (red above green, the dark checker squares — about a thousand
+       pixels), Keep brightness nearly all of it */
+    [[{ skin: 100 }, 300], [{ keep: 100 }, 1000]].forEach(([o, least]) => { const n = _o12Moves('crossprocess', o, 96, 72, _o12Pic, 0.5); if (n < least) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Cross Process ---- */
+
+  /* the round's editors, new rows and all, fit the inspector (round eleven's fit test) */
+  test('966 opts12 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = {
+      gamma: 'Affects',
+      vibrance: 'Boosts',
+      crossprocess: 'Keep brightness',
+    };
+    Object.keys(NEW).forEach(type => _o12Need(type, _O12_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o12Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts12 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition

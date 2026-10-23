@@ -188,6 +188,12 @@ window.FM = window.FM || {};
       { key: 'red', label: 'Red', min: 0.2, max: 5, step: 0.02, def: 1 },
       { key: 'green', label: 'Green', min: 0.2, max: 5, step: 0.02, def: 1 },
       { key: 'blue', label: 'Blue', min: 0.2, max: 5, step: 0.02, def: 1 },
+      /* #966 opts12 (hunt/fx12, his "more choices always better"): the curve always reshaped every tone of the picture at full strength.
+         AFFECTS confines it to the darks, the mids or the lights with Colour Balance's tonal weights ((1 − L)², 1 − (2L − 1)², L², on the
+         pixel's own brightness) — open up the shadows and leave the sky alone — and MIX lays the curved picture over the plain one. All and
+         100 % run the old lines untouched (gamma12 only off them). */
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks reshapes the shadows and leaves the lights alone' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'temperature', label: 'Colour Temperature', params: [
       { key: 'amount', label: 'Temperature', min: -100, max: 100, step: 1, def: 40 },
@@ -229,6 +235,13 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 8, step: 0.02, def: 1.6 },
       { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'highlights', label: 'Protect highlights', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      /* #966 opts12 (hunt/fx12, his "more choices always better"): the boost always went hardest on the dullest colours and the shadows
+         were boosted like everything else, so a dark corner's noise came up in colour. BOOSTS turns that round — Every colour (plain
+         saturation, still with the protections) or Rich colours (the strong colours get stronger and the muted ones are left nearly
+         alone) — and PROTECT SHADOWS backs the boost off as a pixel nears black, Protect highlights' mirror (from 76 down). Dull colours
+         and 0 % run the old loop untouched (vibrance12 only off them). */
+      { key: 'boost', label: 'Boosts', def: 0, options: [[0, 'Dull colours'], [1, 'Every colour'], [2, 'Rich colours']], note: 'Which colours get the most boost · Every colour is plain saturation' },
+      { key: 'shadows', label: 'Protect shadows', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     { type: 'sharpen', label: 'Sharpen', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.5 },
@@ -1457,6 +1470,13 @@ window.FM = window.FM || {};
       { key: 'variant', label: 'Film', def: 0, options: [[0, 'Slide (punchy)'], [1, 'Negative (pastel)']] },
       { key: 'lift', label: 'Colour cast', min: 0, max: 300, step: 5, def: 100, unit: '%' },
       { key: 'gain', label: 'Curve', min: 0, max: 300, step: 5, def: 100, unit: '%' },
+      /* #966 opts12 (hunt/fx12, his "more choices always better"): the film look took faces with everything else — Slide turns skin
+         orange-red, Negative turns it green-grey — and it moved the picture's brightness along with its colour. PROTECT SKIN holds
+         skin-coloured pixels back from it (Teal & Orange's skin window, the same hues, saturation and brightness), and KEEP BRIGHTNESS
+         puts every pixel back at its own brightness, so the film becomes a colour move only. Both 0 run the old loops untouched
+         (crossProcess12 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     /* #482 polish 1.2. The drift was welded (t*0.15, a fixed ±12/±10% wander), so a leak could never hold still; it was
        one colour, always screened, and never flickered. Leak edge is the colour at the rim: ABSENT it follows Leak, so a
@@ -8671,6 +8691,10 @@ window.FM = window.FM || {};
       const cr = p.red == null ? 1 : FM.evalProp(p.red, t);
       const cg = p.green == null ? 1 : FM.evalProp(p.green, t);
       const cb = p.blue == null ? 1 : FM.evalProp(p.blue, t);
+      /* #966 opts12: AFFECTS Darks (1), Mids (2) or Lights (3), or MIX under 100 %, runs gamma12, these very curves (the master and each
+         trim, built the way the lines below build them) laid in by the tonal weight and Mix; All and 100 % run the lines below untouched. */
+      const gmRg12 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0), gmMx12 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (gmRg12 === 1 || gmRg12 === 2 || gmRg12 === 3 || gmMx12 < 100) { gamma12(d, g, LUT, cr, cg, cb, gmRg12, gmMx12); return; }
       if (cr === 1 && cg === 1 && cb === 1) {
         for (let i = 0; i < d.length; i += 4) { d[i] = LUT[d[i]]; d[i + 1] = LUT[d[i + 1]]; d[i + 2] = LUT[d[i + 2]]; }
         return;
@@ -8910,6 +8934,10 @@ window.FM = window.FM || {};
       const skin = (p.skin == null ? 0 : FM.evalProp(p.skin, t)) / 100;
       const hi = (p.highlights == null ? 0 : FM.evalProp(p.highlights, t)) / 100;
       const plain = (skin === 0 && hi === 0);
+      /* #966 opts12: BOOSTS Every colour (1) or Rich colours (2), or PROTECT SHADOWS above 0, runs vibrance12, the loop below with the
+         two laid in; Dull colours and 0 % run the loop below untouched. */
+      const vbBo12 = p.boost == null ? 0 : (Math.round(FM.evalProp(p.boost, t)) | 0), vbSh12 = p.shadows == null ? 0 : FM.evalProp(p.shadows, t);
+      if (vbBo12 === 1 || vbBo12 === 2 || vbSh12 > 0) { vibrance12(d, k, skin, hi, vbBo12, vbSh12); return; }
       for (let i = 0; i < d.length; i += 4) {
         const r = d[i], g = d[i + 1], b = d[i + 2], avg = (r + g + b) / 3;
         const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
@@ -12054,6 +12082,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         if(toKk>0){ setLum255(r3,g3,b3,r2*0.299+g2*0.587+b2*0.114,toOut); r3+=(toOut[0]-r3)*toKk; g3+=(toOut[1]-g3)*toKk; b3+=(toOut[2]-b3)*toKk; }
         d[j]=r3<0?0:(r3>255?255:r3); d[j+1]=g3<0?0:(g3>255?255:g3); d[j+2]=b3<0?0:(b3>255?255:b3); } }; })(),
     crossprocess: (function(){ function cv(v,lift,gain){ var x=v/255; x=x+lift*Math.sin(x*Math.PI); if(x<0)x=0; x=Math.pow(x,gain); return x*255; } return function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
+      /* #966 opts12: PROTECT SKIN or KEEP BRIGHTNESS above 0 runs crossProcess12 (this very kernel with the two taken away, then the two laid over its result); both 0 run the lines below untouched */
+      var cpSk12=p.skin==null?0:FM.evalProp(p.skin,t), cpKp12=p.keep==null?0:FM.evalProp(p.keep,t); if(cpSk12>0||cpKp12>0){ crossProcess12(d,W,H,p,t,cpSk12,cpKp12); return; }
       // The whole look lived in six hardcoded constants, so Amount could only crossfade between the
       // footage and that ONE fixed C-41 curve. LIFT scales the per-channel S-bend (0 = none, so the
       // crossed colour cast goes away and only the gamma remains); GAIN scales how far each channel's
@@ -14356,6 +14386,90 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._touchup11 = touchup11;   // suite seam (#966 opts11)
+  /* ═══ #966 opts12 (hunt/fx12): helpers behind the twelfth round — Gamma's Affects and Mix, Vibrance's Boosts and Protect shadows,
+   * Cross Process's Protect skin and Keep brightness. Each runs only off its controls' defaults, so a default kernel never calls one. ═══ */
+  /* GAMMA'S AFFECTS AND MIX: the kernel's curves to the letter — the master LUT it built, and each trim's own curve built as its mk builds
+     one (Math.max(0.05, gamma x trim), the same rounding) — with each pixel moved only that share of the way from its own value to its
+     curved one: the tonal weight of Affects on the pixel's brightness L (0–1; Darks (1 − L)², Mids 1 − (2L − 1)², Lights L², All 1),
+     times Mix (100 % is the curve itself, 0 the picture; NaN reads 100). At All and 100 % the share is 1 and this is the kernel. */
+  function gamma12(d, g, LUT, cr, cg, cb, range, mix) {
+    const m = isFinite(mix) ? (mix <= 0 ? 0 : (mix >= 100 ? 1 : mix / 100)) : 1;
+    if (!(m > 0)) return;
+    const mk = c => { if (c === 1) return LUT; const gg = Math.max(0.05, g * c), iv = 1 / gg, L = new Uint8ClampedArray(256); for (let v = 0; v < 256; v++) L[v] = Math.round(255 * Math.pow(v / 255, iv)); return L; };
+    const LR = mk(cr), LG = mk(cg), LB = mk(cb);
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], gr = d[i + 1], b = d[i + 2];
+      let w = m;
+      if (range === 1 || range === 2 || range === 3) {
+        const L = (r * 0.299 + gr * 0.587 + b * 0.114) / 255;
+        w *= range === 1 ? (1 - L) * (1 - L) : (range === 2 ? 1 - (2 * L - 1) * (2 * L - 1) : L * L);
+      }
+      if (w === 1) { d[i] = LR[r]; d[i + 1] = LG[gr]; d[i + 2] = LB[b]; }
+      else { d[i] = r + (LR[r] - r) * w; d[i + 1] = gr + (LG[gr] - gr) * w; d[i + 2] = b + (LB[b] - b) * w; }
+    }
+  }
+  FM._gamma12 = gamma12;   // suite seam (#966 opts12)
+  /* VIBRANCE'S BOOSTS AND PROTECT SHADOWS: the kernel's loop to the letter (the same Amount k, the same pull from the pixel's mean, the same
+     Protect skin wedge and Protect highlights ramp, the strongest guard winning), with the boost f = 1 + (k − 1) x w where w is the
+     pixel's dullness 1 − (max − min) / 255 (Dull colours, the kernel's), 1 (Every colour: plain saturation) or its richness
+     (max − min) / 255 (Rich colours); and PROTECT SHADOWS a third guard, the highlights ramp's mirror — Protect shadows x
+     (77 − max) / 77 for a pixel whose largest channel is under 77, so at 100 % black is not boosted at all. Shadows reads 0–100 % (held
+     there). At Dull colours and 0 % this is the kernel byte for byte. */
+  function vibrance12(d, k, skin, hi, boost, shadows) {
+    const sh = shadows > 0 ? (shadows < 100 ? shadows / 100 : 1) : 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2], avg = (r + g + b) / 3;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      const wt = boost === 1 ? 1 : (boost === 2 ? (mx - mn) / 255 : 1 - (mx - mn) / 255);
+      let f = 1 + (k - 1) * wt;
+      let guard = 0;
+      if (skin > 0 && mx > 0 && r === mx && b === mn) {
+        const hw = (g - b) / (mx - mn || 1);
+        const w = 1 - Math.abs(hw - 0.45) / 0.55;
+        if (w > 0) guard = Math.max(guard, skin * Math.min(1, w));
+      }
+      if (hi > 0 && mx > 178) guard = Math.max(guard, hi * ((mx - 178) / 77));
+      if (sh > 0 && mx < 77) guard = Math.max(guard, sh * ((77 - mx) / 77));
+      if (guard > 0) f = 1 + (f - 1) * (1 - Math.min(1, guard));
+      d[i] = avg + (r - avg) * f; d[i + 1] = avg + (g - avg) * f; d[i + 2] = avg + (b - avg) * f;
+    }
+  }
+  FM._vibrance12 = vibrance12;   // suite seam (#966 opts12)
+  /* How skin-coloured a pixel is, 0–1: Teal & Orange's Protect skin window (#482 polish 5.3) worked out per pixel instead of read off its
+     table — the hue window TOS (full from 0° to 40°, easing by half a cosine to nothing at −20° and 60°) times the HSV saturation window
+     (full 0.2–0.8, nothing under 0.08 or over 0.9) times not near-black (V full from 0.2, nothing under 0.08). A grey has no hue: 0. */
+  function skinW12(r, g, b) {
+    const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b), ch = mx - mn;
+    if (!(ch > 0)) return 0;
+    let hu = mx === r ? (g - b) / ch : (mx === g ? (b - r) / ch + 2 : (r - g) / ch + 4); if (hu < 0) hu += 6; hu *= 60;
+    const sx = ((hu % 360) + 180) % 360 - 180;
+    const hw = sx >= 0 && sx <= 40 ? 1 : (sx > -20 && sx < 0 ? 0.5 + 0.5 * Math.cos(Math.PI * sx / 20) : (sx > 40 && sx < 60 ? 0.5 + 0.5 * Math.cos(Math.PI * (sx - 40) / 20) : 0));
+    if (!(hw > 0)) return 0;
+    const sS = ch / mx, sV = mx / 255;
+    const mS = sS < 0.08 ? 0 : (sS < 0.2 ? (sS - 0.08) / 0.12 : (sS <= 0.8 ? 1 : (sS < 0.9 ? (0.9 - sS) / 0.1 : 0)));
+    const mV = sV < 0.08 ? 0 : (sV < 0.2 ? (sV - 0.08) / 0.12 : 1);
+    return hw * mS * mV;
+  }
+  /* CROSS PROCESS'S PROTECT SKIN AND KEEP BRIGHTNESS: the kernel itself, untouched (run on the plate with the two taken away, so Film,
+     Colour cast, Curve and Amount are exactly what they are), then every pixel it graded (any alpha; it skips a clear one, and so does
+     this) moved back toward the picture by Protect skin x how skin-coloured the PICTURE's pixel is (skinW12 — at 100 % a full skin tone
+     is the picture byte for byte), and then toward the graded pixel put back at the picture's own brightness by Keep brightness
+     (setLum255, Teal & Orange's and Colour Balance's Keep brightness: 100 % is a colour move only). Both read 0–100 % (held there). */
+  function crossProcess12(d, W, H, p, t, skin, keep) {
+    const sk = skin > 0 ? (skin < 100 ? skin / 100 : 1) : 0, kp = keep > 0 ? (keep < 100 ? keep / 100 : 1) : 0;
+    const src = d.slice(), q = Object.assign({}, p), out = [0, 0, 0];
+    delete q.skin; delete q.keep;
+    PIXEL_FX.crossprocess(d, W, H, q, t);
+    for (let j = 0; j < d.length; j += 4) {
+      if (src[j + 3] === 0) continue;
+      const r = src[j], g = src[j + 1], b = src[j + 2];
+      let r3 = d[j], g3 = d[j + 1], b3 = d[j + 2];
+      if (sk > 0) { const m = skinW12(r, g, b) * sk; if (m > 0) { r3 += (r - r3) * m; g3 += (g - g3) * m; b3 += (b - b3) * m; } }
+      if (kp > 0) { setLum255(r3, g3, b3, r * 0.299 + g * 0.587 + b * 0.114, out); r3 += (out[0] - r3) * kp; g3 += (out[1] - g3) * kp; b3 += (out[2] - b3) * kp; }
+      d[j] = r3; d[j + 1] = g3; d[j + 2] = b3;
+    }
+  }
+  FM._crossProcess12 = crossProcess12;   // suite seam (#966 opts12)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -30655,14 +30769,30 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * ⚠️ It now shares ONE walk with `groupBoundsLocal` instead of carrying a byte-identical copy of it.
    * The copy is how this drifted: #630 taught the renderer a pivot and there was a second, silent
    * implementation of the same geometry sitting here that nobody had to update. */
-  FM.groupBounds = function (group, scene, t) {
+  /* ═══ #768 H8 (the 22 Oct hunt and its refuter): A SELECTED GROUP'S MEMBERS ARE WALKED ONCE A FRAME, NOT THREE TIMES ═══
+     With a group selected, every render's selection box (canvas-edit boxFor) asked FM.groupPivot for the anchor dot and then
+     this for the box, and this asked FM.groupPivot again. A group at 100 % and 0° (pivotFree: every group he makes, until he
+     scales or turns it) answers groupPivot by MEASURING, FM.groupPivotMeasured, which is FM.groupBoundsLocal again: three walks
+     of every layer in the scene, with FM.layerSize for each member, per frame, under every scrub frame.
+     The third walk measured the box already in hand: for a free group with a time, groupPivotMeasured is groupBoundsLocal at
+     that same group, scene and time (the same walk, so the same numbers; the cycle guard is in the same state for both, as
+     the first call has taken its own mark off again), then pivotIn on it when its width is a number, else null. So that is
+     read off `b` here, by the same rule, and is exactly what FM.groupPivot answered. A group that is not free (stored pivot,
+     or the rest box), or no time, still asks FM.groupPivot. `out`, optional, is handed the pivot FM.groupPivot would answer
+     (null included) as out.pivot, so boxFor's anchor dot takes it from here instead of making the first walk itself. The
+     box, the dot and the picture are the same numbers as before. */
+  FM.groupBounds = function (group, scene, t, out) {
     const b = FM.groupBoundsLocal(group, scene, t);
     if (!b) return null;
     const gx = FM.evalProp(group.transform.x, t) || 0, gy = FM.evalProp(group.transform.y, t) || 0;
     const gs = FM.evalProp(group.transform.scale, t) || 1;
     // The pivot the RENDERER uses (stored, or the rest box's) — not one read off this live box, or the outline
     // would slide about exactly the way the picture used to (queue 690, third hunt).
-    const p = FM.groupPivot(group, scene, t) || pivotIn(group, b);
+    const raw = (group.type === 'group' && typeof t === 'number' && isFinite(t) && pivotFree(group))
+      ? ((b.w >= 0) ? pivotIn(group, b) : null)
+      : FM.groupPivot(group, scene, t);
+    if (out) out.pivot = raw;
+    const p = raw || pivotIn(group, b);
     const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
     /* bughunt4 #1: the renderer now mirrors, stretches and shears the members about the pivot too (applyParentChain), so the
        box's centre goes through the same S·K·F about P and its size takes the stretch. The shear of the box itself is drawn

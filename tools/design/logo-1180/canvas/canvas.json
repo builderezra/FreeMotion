@@ -43,6 +43,13 @@
       "w": 1440,
       "x": 0,
       "y": 4360
+    },
+    "D2-Round2.dc.html": {
+      "h": 2000,
+      "title": "D2 · twelve loading animations (round 2)",
+      "w": 1440,
+      "x": 0,
+      "y": 5480
     }
   },
   "createdOnFiles": {
@@ -76,6 +83,13 @@
       "text": "D2 animated — the logo building itself",
       "x": 0,
       "y": 4100
+    },
+    "t4": {
+      "kind": "title1",
+      "maxW": 1440,
+      "text": "Round 2 — four polished, eight new",
+      "x": 0,
+      "y": 5220
     }
   },
   "order": [
@@ -84,7 +98,8 @@
     "Teal.dc.html",
     "Grades.dc.html",
     "Across.dc.html",
-    "D2-Animations.dc.html"
+    "D2-Animations.dc.html",
+    "D2-Round2.dc.html"
   ],
   "pages": [],
   "title": "FreeMotion timeline-F logo options"
