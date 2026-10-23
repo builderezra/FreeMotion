@@ -41,7 +41,7 @@
 <style>html,body{background:#060c0f}</style>
 <link rel="stylesheet" href="styles.css?v=778">
 <link rel="stylesheet" href="theme-glass.css?v=68">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
-<link rel="manifest" href="manifest.json?v=2">
+<link rel="manifest" href="manifest.json?v=3">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
      MY OWN regression: v6.78 added `html, body { overflow-x: hidden; overflow-x: clip; }`, and
@@ -59,8 +59,8 @@
      when the app is added to the Home Screen — it takes effect after he removes and re-adds the app (back up first). -->
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="FreeMotion">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
-<link rel="icon" type="image/png" href="icon-192.png?v=2">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
+<link rel="icon" type="image/png" href="icon-192.png?v=3">
 <!-- iOS standalone launch screens. Ezra: "when i open up freemotion as a web shortcut on my phone
      it flashes white for a second." That white IS iOS: a home-screen web app with no matching
      apple-touch-startup-image gets a blank white launch screen while the page boots, and the media
@@ -85,171 +85,138 @@
      — putting the class in the markup so a refresh could not flash the old layout — is superseded by
      there no longer being an old layout. -->
 <body>
-  <!-- Splash: the FreeMotion logo animation, once per session (fresh tab / PWA cold launch).
-       FIRST in <body> deliberately — it parses + paints BEFORE the ~1.5MB of app scripts, so on a
-       cold load the splash covers the load instead of appearing after it. The video sits on PURE
-       BLACK and nothing else: its own edges are #000, so the letterbox disappears and the mark
-       floats instead of playing inside a visible square. (There used to be a blurred cover-copy
-       behind it for an ambient fill — that fill was what made the square readable, so it's gone,
-       which also saves its download.) The poster is the video's exact first frame, so poster →
-       playback is seamless. Skips: same-session reload (sessionStorage), reduced motion, tap/click,
-       Esc-Enter-Space. Autoplay refused (iOS Low Power Mode) → the poster stands in; a real video
-       ERROR dismisses instantly. Asset urls are assigned by the script only when the splash
-       actually shows, so a skipped splash costs zero bytes. -->
+  <!-- Splash: the app's OWN logo, the Keyframes animation (#1180; his pick on 23 Oct, "i love the first one"), once
+       per session (fresh tab / PWA cold launch). FIRST in <body> deliberately: it parses and paints BEFORE the app's
+       scripts, so on a cold load the splash covers the load instead of appearing after it. It is inline SVG + SMIL, so it
+       costs no download at all — the film it replaces (splash-v2.mp4, kept in the repo, no longer loaded) was 2.8MB.
+       FROM THE CANVAS TO THE APP (tools/design/logo-1180/canvas/D2-Round2.dc.html, card 7, ids nC_): on the canvas it
+       LOOPS. Here every animation runs ONCE (`fill="freeze"`, no repeatCount) on the canvas's own 5.5s timeline, so every
+       keyTime is the designer's; the canvas's loop fade-out (its outer group, opacity 1 -> 0 at 0.86-0.95 of the cycle)
+       is gone, because a one-shot has nothing to loop back to. The last thing to move settles at 0.6 of the cycle (3.3s);
+       the end frame holds 0.4s and then the splash dissolves into the app exactly as the film's natural end did.
+       Skips: same-session reload (sessionStorage), tap/click, Esc-Enter-Space, the 5s cap. Reduced motion, or a browser
+       that cannot run SMIL: the END FRAME as a still, no animation, then the hand-over. -->
+  <style id="splash-css">
+    #splash.splash-kf { background: #111; display: flex; align-items: center; justify-content: center; }
+    html.splash-on.splash-kf-on, html.splash-on.splash-kf-on body { background: #111; }
+    #splash-mark { display: block; width: min(60vw, 44vh, 300px); height: auto; aspect-ratio: 200 / 260; pointer-events: none; }
+  </style>
   <div id="splash" class="hidden" aria-hidden="true">
-    <video id="splash-vid" muted playsinline autoplay preload="auto"></video>
-    <img id="splash-poster" alt="" aria-hidden="true">
+    <svg id="splash-mark" viewBox="0 0 200 260" aria-hidden="true" focusable="false">
+<defs>
+<linearGradient id="nC_g" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="100"><stop offset="0" stop-color="#f5f5f7"/><stop offset="1" stop-color="#3a3a3f"/></linearGradient>
+<radialGradient id="nC_w"><stop offset="0" stop-color="#ffffff" stop-opacity="0.5"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+<radialGradient id="nC_t"><stop offset="0" stop-color="#29d9bb" stop-opacity="0.55"/><stop offset="1" stop-color="#29d9bb" stop-opacity="0"/></radialGradient>
+</defs>
+<g id="nC_mark">
+<g transform="translate(40 30)">
+<rect id="nC_clip1" x="106" y="20" width="0" height="22" rx="5" fill="url(#nC_g)"><animate attributeName="x" values="106;106;10.5;14;14" keyTimes="0;0.16;0.26;0.295;1" calcMode="spline" keySplines="0 0 1 1;0.2 0.9 0.3 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/><animate attributeName="width" values="0;0;95.5;92;92" keyTimes="0;0.16;0.26;0.295;1" calcMode="spline" keySplines="0 0 1 1;0.2 0.9 0.3 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/></rect>
+<rect id="nC_clip2" x="76" y="49" width="0" height="22" rx="5" fill="url(#nC_g)"><animate attributeName="x" values="76;76;11;14;14" keyTimes="0;0.178;0.278;0.313;1" calcMode="spline" keySplines="0 0 1 1;0.2 0.9 0.3 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/><animate attributeName="width" values="0;0;65;62;62" keyTimes="0;0.178;0.278;0.313;1" calcMode="spline" keySplines="0 0 1 1;0.2 0.9 0.3 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/></rect>
+<rect id="nC_clip3" x="40" y="78" width="0" height="22" rx="5" fill="url(#nC_g)"><animate attributeName="x" values="40;40;11.8;14;14" keyTimes="0;0.196;0.296;0.331;1" calcMode="spline" keySplines="0 0 1 1;0.2 0.9 0.3 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/><animate attributeName="width" values="0;0;28.2;26;26" keyTimes="0;0.196;0.296;0.331;1" calcMode="spline" keySplines="0 0 1 1;0.2 0.9 0.3 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/></rect>
+<g transform="translate(106 31)">
+<circle r="13" fill="url(#nC_w)" opacity="0"><animate attributeName="opacity" values="0;0;0.9;0;0" keyTimes="0;0.05;0.08;0.18;1" dur="5.5s" fill="freeze"/></circle>
+<g transform="scale(1)"><animateTransform attributeName="transform" type="scale" values="1;1;2.6;2.6" keyTimes="0;0.065;0.145;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/><polygon points="0,-6 6,0 0,6 -6,0" fill="none" stroke="#f5f5f7" stroke-width="1.1" stroke-linejoin="round" opacity="0"><animate attributeName="opacity" values="0;0;0.75;0;0" keyTimes="0;0.065;0.07;0.145;1" dur="5.5s" fill="freeze"/><animate attributeName="stroke-width" values="1.1;1.1;0.4;0.4" keyTimes="0;0.065;0.145;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/></polygon></g>
+<g opacity="0"><animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.03;0.05;0.39;0.42;1" dur="5.5s" fill="freeze"/><g transform="rotate(-45)"><animateTransform attributeName="transform" type="rotate" values="-45;-45;0;0;45;45" keyTimes="0;0.03;0.1;0.375;0.42;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1;0.5 0 0.75 0;0 0 1 1" dur="5.5s" fill="freeze"/><g transform="scale(0)"><animateTransform attributeName="transform" type="scale" values="0;0;1.3;0.92;1;1;0.82;1.12;1;1;1.16;0;0" keyTimes="0;0.03;0.075;0.095;0.115;0.138;0.16;0.19;0.225;0.35;0.375;0.42;1" calcMode="spline" keySplines="0 0 1 1;0.25 0.8 0.35 1;0.4 0 0.6 1;0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1;0.2 0.8 0.3 1;0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1;0.5 0 0.75 0;0 0 1 1" dur="5.5s" fill="freeze"/><polygon points="0,-6 6,0 0,6 -6,0" fill="#f5f5f7" stroke="#0b0b0d" stroke-width="1.6" stroke-linejoin="round"/></g></g></g>
+</g>
+<g transform="translate(76 60)">
+<circle r="13" fill="url(#nC_w)" opacity="0"><animate attributeName="opacity" values="0;0;0.9;0;0" keyTimes="0;0.068;0.098;0.198;1" dur="5.5s" fill="freeze"/></circle>
+<g transform="scale(1)"><animateTransform attributeName="transform" type="scale" values="1;1;2.6;2.6" keyTimes="0;0.083;0.163;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/><polygon points="0,-6 6,0 0,6 -6,0" fill="none" stroke="#f5f5f7" stroke-width="1.1" stroke-linejoin="round" opacity="0"><animate attributeName="opacity" values="0;0;0.75;0;0" keyTimes="0;0.083;0.088;0.163;1" dur="5.5s" fill="freeze"/><animate attributeName="stroke-width" values="1.1;1.1;0.4;0.4" keyTimes="0;0.083;0.163;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/></polygon></g>
+<g opacity="0"><animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.048;0.068;0.408;0.438;1" dur="5.5s" fill="freeze"/><g transform="rotate(-45)"><animateTransform attributeName="transform" type="rotate" values="-45;-45;0;0;45;45" keyTimes="0;0.048;0.118;0.393;0.438;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1;0.5 0 0.75 0;0 0 1 1" dur="5.5s" fill="freeze"/><g transform="scale(0)"><animateTransform attributeName="transform" type="scale" values="0;0;1.3;0.92;1;1;0.82;1.12;1;1;1.16;0;0" keyTimes="0;0.048;0.093;0.113;0.133;0.156;0.178;0.208;0.243;0.368;0.393;0.438;1" calcMode="spline" keySplines="0 0 1 1;0.25 0.8 0.35 1;0.4 0 0.6 1;0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1;0.2 0.8 0.3 1;0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1;0.5 0 0.75 0;0 0 1 1" dur="5.5s" fill="freeze"/><polygon points="0,-6 6,0 0,6 -6,0" fill="#f5f5f7" stroke="#0b0b0d" stroke-width="1.6" stroke-linejoin="round"/></g></g></g>
+</g>
+<g transform="translate(40 89)">
+<circle r="13" fill="url(#nC_w)" opacity="0"><animate attributeName="opacity" values="0;0;0.9;0;0" keyTimes="0;0.086;0.116;0.216;1" dur="5.5s" fill="freeze"/></circle>
+<g transform="scale(1)"><animateTransform attributeName="transform" type="scale" values="1;1;2.6;2.6" keyTimes="0;0.101;0.181;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/><polygon points="0,-6 6,0 0,6 -6,0" fill="none" stroke="#f5f5f7" stroke-width="1.1" stroke-linejoin="round" opacity="0"><animate attributeName="opacity" values="0;0;0.75;0;0" keyTimes="0;0.101;0.106;0.181;1" dur="5.5s" fill="freeze"/><animate attributeName="stroke-width" values="1.1;1.1;0.4;0.4" keyTimes="0;0.101;0.181;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/></polygon></g>
+<g opacity="0"><animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.066;0.086;0.426;0.456;1" dur="5.5s" fill="freeze"/><g transform="rotate(-45)"><animateTransform attributeName="transform" type="rotate" values="-45;-45;0;0;45;45" keyTimes="0;0.066;0.136;0.411;0.456;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1;0.5 0 0.75 0;0 0 1 1" dur="5.5s" fill="freeze"/><g transform="scale(0)"><animateTransform attributeName="transform" type="scale" values="0;0;1.3;0.92;1;1;0.82;1.12;1;1;1.16;0;0" keyTimes="0;0.066;0.111;0.131;0.151;0.174;0.196;0.226;0.261;0.386;0.411;0.456;1" calcMode="spline" keySplines="0 0 1 1;0.25 0.8 0.35 1;0.4 0 0.6 1;0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1;0.2 0.8 0.3 1;0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1;0.5 0 0.75 0;0 0 1 1" dur="5.5s" fill="freeze"/><polygon points="0,-6 6,0 0,6 -6,0" fill="#f5f5f7" stroke="#0b0b0d" stroke-width="1.6" stroke-linejoin="round"/></g></g></g>
+</g>
+<g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.42;0.45;1" dur="5.5s" fill="freeze"/>
+<g transform="translate(0 -28)"><animateTransform attributeName="transform" type="translate" values="0 -28;0 -28;0 2.5;0 0;0 0" keyTimes="0;0.42;0.485;0.515;1" calcMode="spline" keySplines="0 0 1 1;0.3 0 0.2 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/>
+<circle cx="82" cy="8.5" r="16" fill="url(#nC_t)" opacity="0"><animate attributeName="opacity" values="0;0;1;0;0" keyTimes="0;0.475;0.495;0.6;1" dur="5.5s" fill="freeze"/></circle>
+<rect x="79.5" y="14" width="5" height="0" rx="2.5" fill="#0b0b0d"><animate attributeName="height" values="0;0;96;96" keyTimes="0;0.435;0.545;1" calcMode="spline" keySplines="0 0 1 1;0.45 0 0.2 1;0 0 1 1" dur="5.5s" fill="freeze"/></rect>
+<rect x="80.5" y="14" width="3" height="0" rx="1.5" fill="#29d9bb"><animate attributeName="height" values="0;0;96;96" keyTimes="0;0.435;0.545;1" calcMode="spline" keySplines="0 0 1 1;0.45 0 0.2 1;0 0 1 1" dur="5.5s" fill="freeze"/></rect>
+<polygon points="77,3 89,8.5 77,14" fill="#29d9bb"/>
+</g>
+</g>
+</g>
+<g id="nC_name" opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.5;0.57;1" dur="5.5s" fill="freeze"/><g transform="translate(0 8)"><animateTransform attributeName="transform" type="translate" values="0 8;0 8;0 0;0 0" keyTimes="0;0.5;0.59;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/><text x="100" y="196" text-anchor="middle" font-family="Sora, system-ui, sans-serif" font-size="24" font-weight="600" fill="#f5f5f7">FreeMotion</text></g></g>
+</g>
+    </svg>
     <div id="splash-skip">tap to skip</div>
   </div>
-  <script>
+  <script id="splash-boot">
     /* queue 942: IS THIS THE FIRST LOAD SINCE THE APP WAS OPENED? Ezra, 26 Sep: *"every time you load into the app for the
        first time like in the loading screen plays it puts you in the home menu not in your project"*. The intro plays once per
        browser session (fm.splashed below), so "the loading screen plays" = the session's first load. Recorded HERE, before the
        intro's own early returns (reduced motion skips the film but is still a first load), and read by app.js's boot landing. */
     try { window.FM_FIRST_LOAD = !sessionStorage.getItem('fm.session'); sessionStorage.setItem('fm.session', '1'); } catch (e) { window.FM_FIRST_LOAD = true; }
     (function () {
+      /* #1180: reduced motion no longer skips the intro, it gets the END FRAME as a still (his logo, no movement). */
+      var REDUCE = false;
       try {
         if (sessionStorage.getItem('fm.splashed')) return;
-        if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
         sessionStorage.setItem('fm.splashed', '1');
       } catch (e) { return; }
-      var sp = document.getElementById('splash'), vid = document.getElementById('splash-vid'), skip = document.getElementById('splash-skip');
-      if (!sp || !vid) return;
+      var sp = document.getElementById('splash'), svg = document.getElementById('splash-mark'), skip = document.getElementById('splash-skip');
+      if (!sp || !svg) return;
+      /* The animation's own clock. END_S is the canvas timeline's last movement (the teal glow, 0.6 x 5.5s); HOLD_S is how
+         long the finished mark is held before the hand-over; STILL_MS is how long the still is shown when there is no
+         animation to wait for. */
+      var END_S = 3.3, HOLD_S = 0.4, STILL_MS = 1000;
+      /* CAN THIS BROWSER RUN THE SMIL? iOS Safari and Chrome do. Anything that cannot gets the end frame instead of a blank
+         box: every <animate> is replaced by its own LAST value, which is by construction the frame the animation ends on. */
+      var ANIM = !REDUCE && typeof svg.getCurrentTime === 'function' && typeof svg.setCurrentTime === 'function' && typeof window.SVGAnimationElement !== 'undefined';
+      function endFrame() {
+        var list = svg.querySelectorAll('animate, animateTransform');
+        for (var i = 0; i < list.length; i++) {
+          var a = list[i], el = a.parentNode, vals = String(a.getAttribute('values') || '').split(';'), last = vals[vals.length - 1].trim();
+          if (a.localName === 'animateTransform') el.setAttribute('transform', a.getAttribute('type') + '(' + last + ')');
+          else el.setAttribute(a.getAttribute('attributeName'), last);
+        }
+        for (var j = list.length - 1; j >= 0; j--) list[j].parentNode.removeChild(list[j]);
+      }
+      if (!ANIM) { try { endFrame(); } catch (e) {} }
       if (skip && window.matchMedia && matchMedia('(hover: hover)').matches) skip.textContent = 'click to skip';
+      sp.classList.add('splash-kf');
       sp.classList.remove('hidden');
-      // Canvas and splash go black together (queue 162) — see the note on html.splash-on in styles.css.
-      /* ⚠️ `LIGHT` IS COMPUTED HERE, NOT 50 LINES DOWN (queue 646). It used to be declared with `var`
-         further down this same IIFE and READ here — and `var` hoists, so at this point it was
-         `undefined`, `if (LIGHT)` was falsy, and `splash-on-light` was NEVER ADDED. No error, no
-         warning: hoisting makes the failure completely silent, and the try/catch around it would have
-         swallowed one anyway. The comment below described an intention the code had never once
-         carried out. */
-      var LIGHT = true;
-      try {
-        var __st = JSON.parse(localStorage.getItem('fm.settings') || '{}');
-        if (__st && typeof __st.homeLight === 'boolean') LIGHT = __st.homeLight;
-      } catch (e) {}
-      try {
-        document.documentElement.classList.add('splash-on');
-        /* The canvas/page ground matches the splash for as long as it is up (queue 162). The new film
-           ends WHITE, so under the light look that ground has to end white too — otherwise the last
-           frame is a white rectangle on a black page, which is the very seam queue 162 fixed. */
-        if (LIGHT) document.documentElement.classList.add('splash-on-light');
-      } catch (e) {}
+      // Canvas and splash share one ground for as long as it is up (queue 162) — see html.splash-on in styles.css.
+      try { document.documentElement.classList.add('splash-on', 'splash-kf-on'); } catch (e) {}
+      if (ANIM) { try { svg.setCurrentTime(0); } catch (e) {} }
       var gone = false;
-      // Two speeds, deliberately (v4.92). Ezra: "before the transition ends, make the background go
-      // from black to fade in with the new background design… instead of it feeling like it just goes
-      // from the intro to cutting in, it's a smooth transition."
-      //   - NATURAL end: start fading while the mark is still settling (see the timeupdate handler
-      //     below) and take ~900ms, so the black thins out and the home backdrop blooms up THROUGH
-      //     it. The video is left playing under the fade — pausing froze the last frame mid-dissolve.
-      //   - CUT (tap to skip, a video error, the hard cap): 280ms and the video stops. Making someone
-      //     wait a second after they asked to skip is worse than the cut ever was.
+      // Two speeds, deliberately (v4.92), the same two the film had:
+      //   - NATURAL end: the finished mark has held, and the splash takes ~900ms to dissolve, so the home backdrop blooms
+      //     up THROUGH it.
+      //   - CUT (tap to skip, the hard cap): 280ms and the animation stops. Making someone wait a second after they asked
+      //     to skip is worse than the cut ever was.
       function dismiss(quick) {
         if (gone) return; gone = true;
-        if (quick) { try { vid.pause(); } catch (e) {} sp.classList.add('splash-cut'); }
+        if (quick) { try { svg.pauseAnimations(); } catch (e) {} sp.classList.add('splash-cut'); }
         sp.classList.add('splash-out');
-        // home.js holds its entry animation until this fires, so the cards arrive as the black
-        // thins out instead of playing to nobody behind a still-opaque splash (measured: the whole
-        // stagger used to be over 200ms before the fade even started).
+        // home.js holds its entry animation until this fires, so the cards arrive as the splash thins out.
         try { document.dispatchEvent(new CustomEvent('fm:splash-dismiss', { detail: { quick: !!quick } })); } catch (e) {}
         setTimeout(function () {
           sp.remove();
-          /* BOTH classes come off here, and the second one is queue 883 — HIS WHITE BAR.
-             `splash-on-light` was added at the top of this IIFE and REMOVED NOWHERE IN THE CODEBASE.
-             Its rule is `html.splash-on-light, html.splash-on-light body { animation: splash-ground
-             2.05s ease-in forwards; }` (theme-glass.css:859) and that animation ENDS ON #fff with
-             `forwards`, so it HOLDS the document canvas pure white for the rest of the session — on
-             the home screen, and inside a project, and until the page is reloaded.
-             On the home screen that is invisible: the home paints #f4f6fa over it. INSIDE A PROJECT
-             the editor is near-black, so every strip the editor does not cover shows white — and on
-             iOS with viewport-fit=cover the web view is LARGER than the layout viewport, so there is
-             always a strip at the top. That is the bar he photographed: "when ur in a project theres
-             a white bar at the top that shouldn't be there."
-             ⚠️ THIS IS THE BLACK-BAR BUG FROM queue 135/143 WITH THE COLOUR INVERTED, and index.html's
-             own note at the top of this file says how that one ended: five attempts failed because
-             they went looking for an ELEMENT that was too small. There was no such element then and
-             there is none now — the canvas is not an element, it is painted from <html>, and the only
-             thing wrong is its colour. Measured, in a project, before the fix: html and body both
-             rgb(255,255,255); removing this one class alone returns them to rgb(6,12,15).
-             ⚠️ WHY IT WAS NEVER NOTICED: queue 646 fixed a `var` hoisting bug that had meant
-             `splash-on-light` was NEVER ADDED at all. Until that fix the class did nothing, so nothing
-             ever needed to take it off — and the removal was simply never written when it started
-             working. The ground ramp itself is correct and stays: the film ends white, so under the
-             light look the page has to end white TOO or the last frame is a white rectangle on a black
-             page, which is the seam queue 162 fixed. It just must not outlive the splash. */
-          try { document.documentElement.classList.remove('splash-on', 'splash-on-light'); } catch (e) {}
+          /* Every class the splash put on <html> comes off WITH it (queue 883: one that outlived the splash held the page
+             canvas white for the rest of the session — his white bar). 'splash-on-light' is the film's ground ramp; nothing
+             adds it now, and it stays in this list so it can never outlive a splash again. */
+          try { document.documentElement.classList.remove('splash-on', 'splash-on-light', 'splash-kf-on'); } catch (e) {}
         }, quick ? 320 : 1000);
       }
-      // Begin the hand-off BEFORE the last frame, not on it. `ended` stays as the backstop for a
-      // video whose duration never resolves (streaming, or a metadata-less file).
-      /* ⚠️ HISTORY OF THE DARK ENDING — READ THIS BEFORE DIMMING THE FILM AGAIN (queue 776, then 783; corrected
-         under queue 840). v15.08 faded the film's OPACITY to 0 over its last 1.05s under the dark look, to spare it
-         the white bloom the film ends on. Ezra, on the shipped result: "You've broken the intro loading screen by the
-         way it does not do anything anymore just like flashing black-and-white and white." Fading the film's opacity
-         does not reveal black — it reveals whatever the splash box itself is painting, and that box's own ground ramps
-         to white (theme-glass.css). So the fade uncovered the white it was meant to hide: that is the flash he saw,
-         and it is why v15.08 was withdrawn.
-         ⚠️ **THE DARK ENDING IS NOT WITHDRAWN ANY MORE.** Queue 783 put it back the right way round — as a CSS
-         animation on the film itself (see theme-glass.css and the note below), which lands on dark without ever
-         handing the ground back. This block used to end by claiming one film plays to its end under both looks, which
-         has been false since v15.63; it sent a later reader hunting the wrong cause. */
-      vid.addEventListener('timeupdate', function () {
-        var d = vid.duration;
-        /* THE DARK LOOK LANDS ON DARK (#688 clause 3, queue 783) is a CSS animation on the film itself — see
-           theme-glass.css. Not done here: the main thread is blocked ~0.65s across the bloom while the app initialises
-           (recorded 5 Sep), so a class added on timeupdate lands too late and the compositor paints the white card. */
-        if (d && isFinite(d) && d - vid.currentTime <= 0.9) dismiss();
-      });
-      vid.addEventListener('ended', function () { dismiss(); });
-      vid.addEventListener('error', function () { dismiss(true); });
+      if (ANIM) {
+        // Read the animation's OWN clock rather than a timer: if the boot holds the main thread, the hold still starts
+        // when the mark has really finished.
+        (function watch() {
+          if (gone) return;
+          var t = 0;
+          try { t = svg.getCurrentTime(); } catch (e) {}
+          if (t >= END_S + HOLD_S) dismiss(false);
+          else requestAnimationFrame(watch);
+        })();
+      } else {
+        setTimeout(function () { dismiss(REDUCE); }, STILL_MS);
+      }
       sp.addEventListener('pointerdown', function (e) { e.preventDefault(); dismiss(true); });   // preventDefault kills the synthesized post-touch click (it punched through to editor controls)
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') dismiss(true); });
       setTimeout(function () { dismiss(true); }, 5000);            // hard cap — nothing holds the editor hostage
-      // NO poster attribute on the <video>: iOS renders its own play control over a video that has a
-      // poster and is not playing, and with a 2.8MB file that state can last the whole splash. The
-      // still is a separate <img> underneath instead, and the video only fades in once it is really
-      // playing — so a refused autoplay or a slow load shows the logo, never a play button.
-      /* WHICH FILM (queue 639 / 636). The new intro was made FOR the light look — measured, it starts
-         on #111 and ENDS ON PURE WHITE — so it is paired with it rather than given a switch of its
-         own: one setting turns the whole new look on and off, which is the "way to switch back" he
-         asked for in #636 and is far easier to explain than three toggles.
-         ⚠️ READ STRAIGHT FROM localStorage, because this block runs BEFORE js/settings.js exists —
-         that is the whole point of it being first in <body>. Same key settings.js uses. */
-      /* ⚠️ THE DEFAULT IS DUPLICATED HERE AND IT HAS TO MATCH `DEFAULTS.homeLight` IN js/settings.js.
-         There is no way round the duplication — this block runs before that file exists — but there IS
-         a way to get it wrong, and the first version did: it read the key, found NOTHING on a first
-         run (the settings object is only written once something is saved), and fell back to false. So
-         a brand-new install got the OLD intro while every other part of the app went light. An absent
-         key means "never chosen", not "chosen off". */
-      // LIGHT is computed at the top of this IIFE now — see the note there (queue 646).
-      /* ONE FILM FOR BOTH LOOKS (queue 688 clauses 2 + 3). `splash-light` is the new film's layout (it
-         fills the viewport, queue 642) and is on for everyone now. (`splash-dark` and its dim were removed in queue 776.) The
-         page-ground ramp to white (`splash-on-light`, above) stays light-only — under the dark look the
-         ground is the black the film dims into. */
-      sp.classList.add('splash-light');
-      var pos = document.getElementById('splash-poster');
-      /* NO POSTER ON THE NEW FILM, and that is a measurement rather than an omission. Its first frame
-         is the mark already lit on a #111 ground, and the splash box now IS #111 — so the pre-load
-         state and frame 1 differ only by the mark, which arrives when the video does. The old film
-         needed a poster because its ground and the splash's did not match. Saves a 292KB download. */
-      /* ⚠️ AND WHEN THERE IS NO POSTER, THE ELEMENT GOES (queue 642). Leaving an <img> with no `src`
-         sized to the whole viewport is not free: an empty image can paint as a placeholder box, and
-         "a weird white box that pops up" at the start of the intro is exactly what he reported.
-         Removing it costs nothing — the new film needs no poster, because its first frame is the mark
-         already lit on #111 and the splash box IS #111. */
-      /* THE OLD LOADING ANIMATION IS GONE (queue 688 clause 2). Ezra: "get rid of the old loading screen
-         animation". `splash.mp4` and its poster were the dark look's intro; the new film plays for both
-         looks now and needs no poster (its first frame is the mark already lit on its own ground). */
-      if (pos) { pos.remove(); }   // both looks: the new film needs no poster (queue 688 clause 2)
-      vid.addEventListener('playing', function () { vid.classList.add('playing'); });
-      vid.src = 'splash-v2.mp4?v=1';
-      var p = vid.play();
-      // autoplay refused (iOS Low Power Mode etc.) → the poster shows until the cap;
-      // ALSO retry once when data lands — Safari sometimes allows the second attempt
-      if (p && p.catch) p.catch(function () {
-        vid.addEventListener('canplay', function () { var r = vid.play(); if (r && r.catch) r.catch(function () {}); }, { once: true });
-      });
     })();
   </script>
   <div id="app">
