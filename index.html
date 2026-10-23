@@ -92,8 +92,9 @@
        FROM THE CANVAS TO THE APP (tools/design/logo-1180/canvas/D2-Round2.dc.html, card 7, ids nC_): on the canvas it
        LOOPS. Here every animation runs ONCE (`fill="freeze"`, no repeatCount) on the canvas's own 5.5s timeline, so every
        keyTime is the designer's; the canvas's loop fade-out (its outer group, opacity 1 -> 0 at 0.86-0.95 of the cycle)
-       is gone, because a one-shot has nothing to loop back to. The last thing to move settles at 0.6 of the cycle (3.3s);
-       the end frame holds 0.4s and then the splash dissolves into the app exactly as the film's natural end did.
+       is gone, because a one-shot has nothing to loop back to. The last thing to move is the tagline, EDITING, EVOLVED,
+       rising into place under the name; it settles at 0.61 of the cycle (3.36s). The end frame holds 0.4s and then the
+       splash dissolves into the app exactly as the film's natural end did.
        Skips: same-session reload (sessionStorage), tap/click, Esc-Enter-Space, the 5s cap. Reduced motion, or a browser
        that cannot run SMIL: the END FRAME as a still, no animation, then the hand-over. -->
   <!-- THE GROUND IS CARD 7's OWN #0b0b0d: the diamonds' strokes and the playhead's backing are #0b0b0d knock-outs drawn
@@ -151,6 +152,7 @@
 </g>
 </g>
 <g id="nC_name" opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.5;0.57;1" dur="5.5s" fill="freeze"/><g transform="translate(0 8)"><animateTransform attributeName="transform" type="translate" values="0 8;0 8;0 0;0 0" keyTimes="0;0.5;0.59;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/><text x="100" y="196" text-anchor="middle" font-family="Sora, system-ui, sans-serif" font-size="24" font-weight="600" fill="#f5f5f7">FreeMotion</text></g></g>
+<g id="nC_tag" opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.52;0.59;1" dur="5.5s" fill="freeze"/><g transform="translate(0 6)"><animateTransform attributeName="transform" type="translate" values="0 6;0 6;0 0;0 0" keyTimes="0;0.52;0.61;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/><text x="100" y="218" text-anchor="middle" font-family="Sora, system-ui, sans-serif" font-size="8" letter-spacing="3" fill="#8e8e93">EDITING, EVOLVED</text></g></g>
 </g>
     </svg>
     <div id="splash-skip">tap to skip</div>
@@ -171,10 +173,10 @@
       } catch (e) { return; }
       var sp = document.getElementById('splash'), svg = document.getElementById('splash-mark'), skip = document.getElementById('splash-skip');
       if (!sp || !svg) return;
-      /* The animation's own clock. END_S is the canvas timeline's last movement (the teal glow, 0.6 x 5.5s); HOLD_S is how
-         long the finished mark is held before the hand-over; STILL_MS is how long the still is shown when there is no
-         animation to wait for. */
-      var END_S = 3.3, HOLD_S = 0.4, STILL_MS = 1000;
+      /* The animation's own clock. END_S is the canvas timeline's last movement (the tagline's rise, 0.61 x 5.5s = 3.355s);
+         HOLD_S is how long the finished mark is held before the hand-over; STILL_MS is how long the still is shown when there
+         is no animation to wait for. */
+      var END_S = 3.36, HOLD_S = 0.4, STILL_MS = 1000;
       /* CAN THIS BROWSER RUN THE SMIL? iOS Safari and Chrome do. Anything that cannot gets the end frame instead of a blank
          box: every <animate> is replaced by its own LAST value, which is by construction the frame the animation ends on. */
       var ANIM = !REDUCE && typeof svg.getCurrentTime === 'function' && typeof svg.setCurrentTime === 'function' && typeof window.SVGAnimationElement !== 'undefined';
