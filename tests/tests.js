@@ -178358,10 +178358,12 @@
   const _O15_NEW = {
     levels: ['skin', 'mix'],
     unsharpmask: ['skin', 'range'],
+    tealorange: ['range', 'mix'],
   };
   const _O15_OFF = {
     levels: [{ skin: 100 }, { mix: 50 }],
     unsharpmask: [{ skin: 100 }, { range: 1 }],
+    tealorange: [{ range: 1 }, { mix: 50 }],
   };
   /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
      the new keys taken away (every saved project), each case on its own fixture, moment and plate */
@@ -178544,11 +178546,79 @@
   });
   /* ---- end Unsharp Mask ---- */
 
+  /* ---- Teal & Orange: Affects and Mix ---- */
+  /* At its defaults (Amount 0.6, Split point 50, Crossover 100, Splits by Brightness, Protect skin 0, Balance 0, Keep brightness 0) the
+     kernel takes a grey v to w = (v / 255 − 0.5) x 2 and adds w x 42 x 0.6 to red, w x 8 x 0.6 to green and takes w x 42 x 0.6 from blue,
+     into the clamped array. Grey 40 (w −0.686): (22.71, 36.71, 57.29) → (23, 37, 57); grey 200 (w 0.569): (214.33, 202.73, 185.67) →
+     (214, 203, 186); grey 220 (w 0.725): (238.28, 223.48, 201.72) → (238, 223, 202). Affects weighs each pixel's move by its own
+     brightness, as tone13 does: grey 40 (L 0.157) by Darks (1 − L)² = 0.711 → (27.92, 37.87, 52.08), so (28, 38, 52), Mids 0.529 → (31,
+     38, 49), Lights 0.0246 → (40, 40, 40); grey 220 (L 0.863) by Darks 0.0188 → (220, 220, 220), Mids 0.474 → (229, 221, 211), Lights
+     0.744 → (233, 222, 207). Mix 40 moves every pixel 0.4 of the way: grey 40 to 40 − 17 x 0.4 = 33.2, 38.8, 46.8, so (33, 39, 47), grey
+     200 to (206, 201, 194). On the base code Affects and Mix are ignored and every grey takes the whole grade. */
+  test('966 opts15 Teal & Orange has Affects (All, Darks, Mids or Lights, storing 0–3, All by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Mids and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o15Need('tealorange', _O15_NEW.tealorange);
+    const bad = _o13Rows('tealorange', [
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { range: 2, mix: 40 });
+    bad.push.apply(bad, _o13Clamp('tealorange', { mix: 150 }, { mix: 100 }));
+    bad.push.apply(bad, _o13Clamp('tealorange', { mix: -5 }, { mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('tealorange', { range: 7 }, { range: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts15 Teal & Orange Affects: Darks grades grey 40 to 28, 38, 52 and leaves grey 220 at 220, Mids takes them to 31, 38, 49 and 229, 221, 211, Lights to 40, 40, 40 and 233, 222, 207 — and with Splits by Hue, Protect skin, Balance and Keep brightness, a moved Split point and Crossover, and a Mix every pixel of a busy picture is the grade times the tonal weight of its own brightness to the level (CONTROL: All grades grey 40 to 23, 37, 57 and grey 220 to 238, 223, 202)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('tealorange', _o13P('tealorange', over), 256, 2, _o13Lv(), 0.5);
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    const all = run({});
+    if (px(all, 40) !== '23, 37, 57' || px(all, 220) !== '238, 223, 202') bad.push('CONTROL: under All grey 40 reads ' + px(all, 40) + ' and grey 220 reads ' + px(all, 220) + ' (23, 37, 57 and 238, 223, 202 expected)');
+    [[1, 'Darks', '28, 38, 52', '220, 220, 220'], [2, 'Mids', '31, 38, 49', '229, 221, 211'], [3, 'Lights', '40, 40, 40', '233, 222, 207']].forEach(([rg, name, w40, w220]) => {
+      const got = run({ range: rg });
+      if (px(got, 40) !== w40) bad.push(name + ' puts grey 40 at ' + px(got, 40) + ', not ' + w40);
+      if (px(got, 220) !== w220) bad.push(name + ' puts grey 220 at ' + px(got, 220) + ', not ' + w220);
+      [{}, { mode: 1 }, { skin: 80 }, { balance: -60, keep: 50 }, { amount: 1, pivot: 30, spread: 60 }, { mix: 60 }].forEach(extra => {
+        const mix = extra.mix == null ? 100 : extra.mix;
+        const w = _o15Worst('tealorange', _o13P('tealorange'), Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(mix, rg, _o13L(r, g, b), 0, 0), 0.5);
+        if (w) bad.push(name + ' ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its grade times its tonal weight' + (extra.mix ? ' times Mix' : '') + ')');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts15 Teal & Orange Mix: at 40 % grey 40 of a 0–255 ramp reads 33, 39, 47 and grey 200 reads 206, 201, 194, every grey sits 0.4 of the way between itself and its graded value to the level in each channel, at 0 % the ramp is itself byte for byte, and a Mix keyed 0 to 100 draws its value half way (CONTROL: the whole grade takes grey 40 to 23, 37, 57 and grey 200 to 214, 203, 186)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('tealorange', _o13P('tealorange', over), 256, 2, _o13Lv(), 0.5);
+    const full = run({}), part = run({ mix: 40 }), none = run({ mix: 0 }), keyed = run({ mix: _o13KF(0, 100) }), half = run({ mix: 50 });
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    if (px(full, 40) !== '23, 37, 57' || px(full, 200) !== '214, 203, 186') bad.push('CONTROL: at Mix 100 grey 40 reads ' + px(full, 40) + ' and grey 200 ' + px(full, 200) + ' (23, 37, 57 and 214, 203, 186 expected)');
+    if (px(part, 40) !== '33, 39, 47') bad.push('at Mix 40 grey 40 reads ' + px(part, 40) + ', not 33, 39, 47');
+    if (px(part, 200) !== '206, 201, 194') bad.push('at Mix 40 grey 200 reads ' + px(part, 200) + ', not 206, 201, 194');
+    let worst = 0, at = -1;
+    for (let v = 0; v < 256; v++) {
+      const f = _o13At(full, 256, v, 0), want = _o13U8(v + (f[0] - v) * 0.4, v + (f[1] - v) * 0.4, v + (f[2] - v) * 0.4), got = _o13At(part, 256, v, 0);
+      for (let c = 0; c < 3; c++) { const e = Math.abs(got[c] - want[c]); if (e > worst) { worst = e; at = v; } }
+    }
+    if (worst > 0) bad.push('at Mix 40 grey ' + at + ' reads ' + px(part, at) + ', ' + worst + ' levels from 0.4 of the way to its graded value');
+    const m0 = E1.maxDiff(none, _o13Lv());
+    if (m0 !== 0) bad.push('at Mix 0 the ramp moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(keyed, half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o15Worst('tealorange', _o13P('tealorange'), { mix: 35, mode: 1, keep: 40, skin: 60 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with Splits by Hue, Keep brightness and Protect skin: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts15 Teal & Orange at All and Mix 100 % draws byte for byte what it drew without them — at its defaults, at full Amount, with Splits by Hue, Protect skin, Balance and Keep brightness, a moved Split point and Crossover, keyframed, and on a half-size plate (CONTROL: Darks and Mix 50 each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o15Need('tealorange', _O15_NEW.tealorange);
+    const bad = _o15Ident('tealorange', [{}, { over: { amount: 1 } }, { over: { mode: 1 } }, { over: { skin: 80 } }, { over: { balance: 50, keep: 60 } }, { over: { pivot: 30, spread: 60 } }, { over: { amount: _o13KF(0.2, 1) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }]);
+    _O15_OFF.tealorange.forEach(o => { const n = _o15Moves('tealorange', o, 96, 72, _o13Pic, 0.5); if (n < 1000) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the default grade moves red and blue by 25.2 x |2L − 1| levels, nothing only near L 0.5, and Darks or Mix 50 holds a light or any pixel back by a level or more */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Teal & Orange ---- */
+
   /* the round's editors, new rows and all, fit the inspector (round thirteen's fit test) */
   test('966 opts15 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
     const NEW = {
       levels: 'Protect skin',
       unsharpmask: 'Affects',
+      tealorange: 'Affects',
     };
     Object.keys(NEW).forEach(type => _o15Need(type, _O15_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];

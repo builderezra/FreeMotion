@@ -467,7 +467,7 @@ window.FM = window.FM || {};
     wiggle: 'Drifts the layer around on smooth random noise.',
     /* sideways or up and down, fading: #966 opts10 */ tiles: 'Repeats the clip across the frame. Extend keeps it full size and fills outward \u2014 all round, sideways or up and down, the copies fading away if you like; Grid shrinks it into an n\u00d7n block.',
     lightleak: 'A wash of light across the frame, like a leak onto film.',
-    tealorange: 'The blockbuster grade: shadows toward teal, skin toward orange.',
+    /* by tone, mixed: #966 opts15 */ tealorange: 'The blockbuster grade: shadows toward teal, skin toward orange — on the darks, mids or lights alone if you like, mixed over the picture.',
     /* the silver tinted, skin held back: #966 opts10 */ bleachbypass: 'High-contrast, low-saturation — the bleach-bypass film process, its silver tinted any colour, faces kept warm if you like.',
     /* faces held back, brightness kept: #966 opts12 */ crossprocess: 'The colour shifts of developing film in the wrong chemistry — with faces held back from it and the brightness kept if you like.',
     nightvision: 'Green phosphor, grain and a soft vignette.',

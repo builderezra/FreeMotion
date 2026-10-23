@@ -1497,6 +1497,13 @@ window.FM = window.FM || {};
       { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0, note: '−100 teal only · +100 orange only' },
       { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      /* #966 opts15 (hunt/fx15, his "more choices always better"): the grade always split every tone of the picture, and its strength
+         was only ever Amount, which scales the push before the clip, Protect skin and Keep brightness. AFFECTS confines it to the darks,
+         the mids or the lights with Colour Balance's tonal weights on the pixel's own brightness — teal shadows under untouched
+         highlights — and MIX lays the finished grade (Splits by, Balance and Keep brightness included) over the plain picture. All and
+         100 % run the old loops untouched (tone13 only off them). */
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks grades the shadows teal and leaves the lights alone' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     /* #482 5.7 — FILM. Today's look is slide film developed as a negative (punchy, warm highlights, blue-black shadows); the
        other way round — negative film developed as a slide — is flat, pastel and blue-green. Colour cast and Curve keep
@@ -12122,7 +12129,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         var sx = ((hh % 360) + 180) % 360 - 180;   // −180..180, so 350° reads as −10°
         TOS[hh] = sx >= 0 && sx <= 40 ? 1 : (sx > -20 && sx < 0 ? 0.5 + 0.5 * Math.cos(Math.PI * sx / 20) : (sx > 40 && sx < 60 ? 0.5 + 0.5 * Math.cos(Math.PI * (sx - 40) / 20) : 0));
       }
-      return function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
+      return function(d,W,H,p,t){
+      /* #966 opts15: AFFECTS Darks (1), Mids (2) or Lights (3), or MIX under 100 %, runs tone13 — this very kernel without the two (Amount,
+         Split point, Crossover, Splits by, Protect skin, Balance and Keep brightness as they are), its result laid in by the tonal weight
+         of each pixel's own brightness and Mix; All and 100 % run the lines below untouched. */
+      const toRg15 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0), toMx15 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (toRg15 === 1 || toRg15 === 2 || toRg15 === 3 || toMx15 < 100) { tone13(d, W, H, p, t, PIXEL_FX.tealorange, ['range', 'mix'], toRg15, toMx15, 0); return; }
+      var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
       // The split between warm and cool sat permanently at mid-grey, so whether FACES land in the
       // orange half was decided by how the shot happened to be exposed rather than by any choice.
       // PIVOT moves that dividing line; SPREAD is how sharply it crosses over (a small spread pushes
