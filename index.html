@@ -203,13 +203,13 @@
       }
       if (ANIM) {
         // Read the animation's OWN clock rather than a timer: if the boot holds the main thread, the hold still starts
-        // when the mark has really finished.
+        // when the mark has really finished. Polled on a timer: requestAnimationFrame never fires in a frame that is not painting.
         (function watch() {
           if (gone) return;
           var t = 0;
           try { t = svg.getCurrentTime(); } catch (e) {}
           if (t >= END_S + HOLD_S) dismiss(false);
-          else requestAnimationFrame(watch);
+          else setTimeout(watch, 40);
         })();
       } else {
         setTimeout(function () { dismiss(REDUCE); }, STILL_MS);
