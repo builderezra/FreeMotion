@@ -2109,7 +2109,14 @@ window.FM = window.FM || {};
       { key: 'gamma_' + c, label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1, showWhen: { key: 'channel', is: i + 1 } },
       { key: 'outblack_' + c, label: 'Output black', min: 0, max: 255, step: 1, def: 0, showWhen: { key: 'channel', is: i + 1 } },
       { key: 'outwhite_' + c, label: 'Output white', min: 0, max: 255, step: 1, def: 255, showWhen: { key: 'channel', is: i + 1 } },
-    ]), [])) },
+    ]), [])).concat([
+      /* #966 opts15 (hunt/fx15, his "more choices always better"): the stretch always took every face in the shot with it, and always
+         at full strength. PROTECT SKIN holds skin-coloured pixels back from it with Teal & Orange's skin window (skinW12, the same hue,
+         saturation and brightness windows) — crush the blacks, keep the faces as they were — and MIX lays the levelled picture over the
+         plain one. Both show under whichever channel set is open. 0 % and 100 % run the old loops untouched (tone13 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ]) },
     // Halation — the warm bleed real film gets around clipped highlights, because light scatters off
     // the back of the base and re-exposes the emulsion. Two radii is the whole trick: a tight core
     // that hugs the highlight and a wide wash. Glow / Light Glow have one radius and can't do it.
@@ -8081,6 +8088,11 @@ window.FM = window.FM || {};
 
   const PIXEL_FX = {
     levels: function (d, W, H, p, t) {
+      /* #966 opts15: PROTECT SKIN over 0 % or MIX under 100 % runs tone13 — this very kernel without the two (Channel, the master and the
+         three channel sets as they are), its result laid in by Mix and by how far from skin each pixel's own colour is; 0 % and 100 % run
+         the lines below untouched. */
+      const lvSk15 = p.skin == null ? 0 : FM.evalProp(p.skin, t), lvMx15 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (lvSk15 > 0 || lvMx15 < 100) { tone13(d, W, H, p, t, PIXEL_FX.levels, ['skin', 'mix'], 0, lvMx15, lvSk15); return; }
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
       const inB = p.inblack == null ? 14 : FM.evalProp(p.inblack, t);
       const inW = p.inwhite == null ? 236 : FM.evalProp(p.inwhite, t);
