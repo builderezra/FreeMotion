@@ -2745,7 +2745,18 @@ window.FM = window.FM || {};
            on an ended element rewinds it to zero — which is the bug this guard exists for. Leave it
            paused and silent; the tick applies the same rule every frame from here. */
         if (FM.pastSourceEnd(m, local)) { try { m.el.pause(); m.el.muted = true; } catch (e) {} return; }
-        try { m.el.currentTime = local; m._syncAt = performance.now(); } catch (e) {}
+        /* NOT A SEEK ON EVERY PLAY (#202 H4). This wrote the raw edge `local` unconditionally, while a paused element sits on
+           seekTargetFor(m, local), half a millisecond INSIDE the frame (FM.seekVideosToTime, FM.pause). The two differ by 0.5 ms, so
+           neither Chrome's nor WebKit's same-time shortcut applied: every press of Play was a real decoder seek, a stall at the very
+           moment the sound has to start. Now the same target as the paused seek, and the same guard at its exact width (an element
+           trailing by under half a frame would otherwise start that far off, and the first warm sync sample keeps it as bias). An
+           element with no frame yet is still sought, the guard's noFrame term. The sync clock is stamped either way. */
+        try {
+          const target = seekTargetFor(m, local);
+          const noFrame = m.el.readyState < 2 && !m.el.seeking;
+          if (noFrame || !(Math.abs((m.el.currentTime || 0) - target) < 0.001)) m.el.currentTime = target;
+          m._syncAt = performance.now();
+        } catch (e) {}
         // A new pass learns its own output latency from scratch (queue 148) — the offset from the
         // last one belongs to a different position, and on a phone often to a different device state.
         m._errBias = null; m._rateAt = 0; m._baseRate = null; m._warmCt = null;

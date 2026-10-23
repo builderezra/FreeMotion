@@ -60652,6 +60652,42 @@
     } finally { FM.media.remove(L.id); FM.scene.layers = keep; FM.time = keepT; FM.playing = wasPlaying; if (FM.refreshAll) FM.refreshAll(); }
   });
 
+  /* #202 H4. FM.play wrote the raw frame edge to every clip's element, while a paused element sits half a millisecond inside its
+   * frame (FM.frameSeekTarget, where the paused seek and FM.pause put it), so every press of Play was a real decoder seek at the
+   * moment the sound has to start.
+   * FAILS BEFORE THE FIX: a clip already on the playhead's frame is sought once by Play (s0 + 1, not s0).
+   * CONTROLS: a clip 3 s off the playhead, and one with no frame decoded yet, are still sought by Play, once each. */
+  test('202 Play does not re-seek a clip already on the playhead’s frame, and still seeks one that is off it or has no frame', { item: '202' }, function () {
+    const rig = transportRig();
+    try {
+      const rec = FM.media.get(rig.layer.id);
+      // no filmstrip build, so nothing else seeks the rig's element
+      if (rec && rec.stripFrames === undefined) rec.stripFrames = [];
+      const at = 2, want = FM.frameSeekTarget(at, rig.el.duration);
+      const press = function (pos, rs) {
+        if (FM.playing) FM.pause();
+        FM.time = at;
+        rig.el.readyState = rs;
+        rig.el.currentTime = pos;
+        const s0 = rig.el.seeks;
+        FM.play();
+        const r = { seeks: rig.el.seeks - s0, pos: rig.el._pos, playing: !!FM.playing };
+        // back to a decoded element before the stop, so the pause's own seek arms no prime
+        rig.el.readyState = 4;
+        FM.pause();
+        return r;
+      };
+      const off = press(5, 4);
+      if (!off.playing) throw new Error('CONTROL: Play did not start the rig’s transport, so nothing here is under test');
+      if (off.seeks !== 1) throw new Error('CONTROL: Play sought a clip 3 s off the playhead ' + off.seeks + ' time(s), not once');
+      const cold = press(want, 1);
+      if (cold.seeks !== 1) throw new Error('CONTROL: Play sought a clip with no frame decoded yet ' + cold.seeks + ' time(s), not once, and nothing else asks it to load');
+      const on = press(want, 4);
+      if (on.seeks !== 0) throw new Error('Play sought a clip already on the playhead’s frame ' + on.seeks + ' time(s): it wrote the raw edge ' + at + ' s over the ' + want + ' s it sat on, half a millisecond apart, so every press of Play is a real decoder seek just as the sound has to start');
+      if (Math.abs(off.pos - want) > 1e-9) throw new Error('Play sought an off-frame clip to ' + off.pos + ' s, not inside the frame at ' + want + ' s, where the paused seek and the export put it');
+    } finally { rig.restore(); }
+  });
+
   test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
     var keep = FM.scene.layers.slice(), keepT = FM.time;
     var fps = FM.scene.project.fps || 30;
