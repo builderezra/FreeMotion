@@ -60688,6 +60688,42 @@
     } finally { rig.restore(); }
   });
 
+  /* #202 H7. Opening Effects on a clip asks whether it has sound (js/inspector.js probeAudioSide), and the probe answered by decoding
+   * the whole file (file.arrayBuffer() up to 300 MB, then its entire sound track), a memory spike beside the video decoder on a
+   * phone, while the MP4 / MOV header (FM.soundTrackInFile) already says yes or no in a few KB.
+   * FAILS BEFORE THE FIX: a header-only MP4 that lists a sound track is decoded (and the decode of those bytes answers no).
+   * CONTROL: a file the header reader cannot read (a WAV) is still decoded, so the decode stand-in is really the one the probe calls. */
+  test('202 asking whether a clip has sound reads the MP4 track list first and decodes only a file it cannot read', { item: '202' }, async function () {
+    const keepDecode = FM.decodeAudio, made = [];
+    let decodes = 0;
+    const u32b = n => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+    const asc = s => Array.prototype.map.call(s, c => c.charCodeAt(0));
+    const box = (type, body) => u32b(8 + body.length).concat(asc(type), body);
+    const trak = kind => box('trak', box('mdia', box('hdlr', [0, 0, 0, 0, 0, 0, 0, 0].concat(asc(kind), new Array(13).fill(0)))));
+    const mp4 = kinds => new File([new Uint8Array(box('ftyp', asc('isom').concat([0, 0, 2, 0])).concat(box('moov', [].concat.apply([], kinds.map(trak)))))], '202-h7.mp4', { type: 'video/mp4' });
+    const ask = async function (file) {
+      const L = FM.makeLayer('video', { name: '202 H7' }); made.push(L.id);
+      FM.media.set(L.id, { kind: 'video', width: 64, height: 48, duration: 2, file: file });
+      const before = decodes, said = await FM.probeAudioTrack(L);
+      return { said: said, decodes: decodes - before, cached: FM.hasAudioTrack(L) };
+    };
+    try {
+      if (typeof FM.probeAudioTrack !== 'function' || typeof FM.soundTrackInFile !== 'function') throw new Error('FM.probeAudioTrack / FM.soundTrackInFile are not exposed');
+      // the decode stand-in: a tiny one-channel buffer for the WAV, nothing for anything else (header-only bytes do not decode)
+      FM.decodeAudio = async function (file) { decodes++; return file && file.name === '202-h7.wav' ? { length: 8, numberOfChannels: 1, sampleRate: 8000 } : null; };
+      const wav = await ask(new File([new Uint8Array(asc('RIFF').concat([36, 0, 0, 0], asc('WAVEfmt ')))], '202-h7.wav', { type: 'audio/wav' }));
+      if (wav.decodes !== 1 || wav.said !== true) throw new Error('CONTROL: a WAV, which has no MP4 track list, was decoded ' + wav.decodes + ' time(s) and answered ' + wav.said + ', not once and yes');
+      const loud = await ask(mp4(['vide', 'soun']));
+      if (loud.decodes !== 0) throw new Error('an MP4 whose track list names a sound track was decoded ' + loud.decodes + ' time(s) to ask whether it has sound (and answered ' + loud.said + ') — opening Effects reads the whole file into memory for an answer its header gives in a few KB');
+      if (loud.said !== true || loud.cached !== true) throw new Error('an MP4 listing a sound track answered ' + loud.said + ' (cached ' + loud.cached + '), not yes');
+      const mute = await ask(mp4(['vide']));
+      if (mute.decodes !== 0 || mute.said !== false || mute.cached !== false) throw new Error('an MP4 listing only a picture track was decoded ' + mute.decodes + ' time(s) and answered ' + mute.said + ' (cached ' + mute.cached + '), not 0 times and no');
+    } finally {
+      FM.decodeAudio = keepDecode;
+      made.forEach(id => FM.media.remove(id));
+    }
+  });
+
   test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
     var keep = FM.scene.layers.slice(), keepT = FM.time;
     var fps = FM.scene.project.fps || 30;

@@ -974,6 +974,13 @@ window.FM = window.FM || {};
     if (rec.file.size > WAVE_MAX_BYTES) return null;                       // same tab-safety ceiling as the waveform
     if (rec._audioProbe) return rec._audioProbe;                           // one decode per record, however many callers ask
     rec._audioProbe = (async () => {
+      /* THE TRACK LIST FIRST (#202 H7). Opening Effects asks this (js/inspector.js probeAudioSide), and the decode below reads the
+         WHOLE file into memory (decodeAudio's file.arrayBuffer(), up to the 300 MB ceiling) and decodes its entire sound track, a
+         spike beside the video decoder on a phone, while an MP4 / MOV / M4A header answers the same yes or no in a few KB. A listed
+         sound track reads as yes, which is what every caller already does with "not known yet"; only a file the header reader cannot
+         read (WebM, WAV, a torn header) is decoded, exactly as before. */
+      const listed = FM.soundTrackInFile ? await FM.soundTrackInFile(rec.file) : null;
+      if (listed === true || listed === false) { rec.hasAudioTrack = listed; return listed; }
       const ab = await FM.decodeAudio(rec.file, { rate: PROBE_RATE });
       // Deliberately NOT cached as rec.audioBuffer: that slot means full-fidelity PCM to the exporter
       // and the audio-reactive tools, and an 8 kHz stand-in would silently degrade both.
