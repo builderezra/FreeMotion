@@ -204,6 +204,12 @@ window.FM = window.FM || {};
          default because it is what every saved project and 14 filters draw. Affects uses Colour Balance's tonal weights. */
       { key: 'method', label: 'Method', def: 0, options: [[0, 'Shift'], [1, 'White balance']] },
       { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']] },
+      /* #966 opts13 (hunt/fx13, his "more choices always better"): a warm-up or a cool-down always took every face in the shot with it,
+         and always at full strength. PROTECT SKIN holds skin-coloured pixels back from the cast with Teal & Orange's skin window (the same
+         hue, saturation and brightness windows, worked out per pixel by skinW12) — warm the room, keep the faces their own colour — and
+         MIX lays the graded picture over the plain one. 0 % and 100 % run the old lines untouched (tone13 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'noise', label: 'Noise', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 35, unit: '%' },
@@ -8710,6 +8716,11 @@ window.FM = window.FM || {};
       for (let i = 0; i < d.length; i += 4) { d[i] = LR[d[i]]; d[i + 1] = LG[d[i + 1]]; d[i + 2] = LB[d[i + 2]]; }
     },
     temperature: function (d, W, H, p, t) {
+      /* #966 opts13: PROTECT SKIN over 0 % or MIX under 100 % runs tone13 — this very kernel without the two (Method, Affects and Keep
+         brightness as they are), its result laid in by Mix and by how far from skin each pixel's own colour is; 0 % and 100 % run the
+         lines below untouched. */
+      const tpSk13 = p.skin == null ? 0 : FM.evalProp(p.skin, t), tpMx13 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (tpSk13 > 0 || tpMx13 < 100) { tone13(d, W, H, p, t, PIXEL_FX.temperature, ['skin', 'mix'], 0, tpMx13, tpSk13); return; }
       const a = (FM.evalProp(p.amount, t) || 0) / 100, r = a * 50, b = -a * 50;   // warm: +R -B, cool: opposite
       // TINT is the other half of a white balance — the green/magenta axis. Without it you can only
       // slide along orange/blue, which is why a fluorescent green cast was uncorrectable here.

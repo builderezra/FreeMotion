@@ -421,7 +421,7 @@ window.FM = window.FM || {};
     invert: 'Flips every colour to its opposite, like a film negative.',
     /* the darks, mids or lights alone, mixed: #966 opts12 */ gamma: 'Reshapes the midtones without moving black or white — over the whole picture or just its darks, mids or lights, mixed over it.',
     /* the darks, mids or lights alone, mixed: #966 opts13 */ exposure: 'Brightness in stops, the way a camera meters it — over the whole picture or just its darks, mids or lights, mixed over it.',
-    temperature: 'Warms toward orange or cools toward blue.',
+    /* faces kept, mixed: #966 opts13 */ temperature: 'Warms toward orange or cools toward blue — keeping faces their own colour if you like, mixed over the picture.',
     tint: 'Washes the whole clip toward one colour.',
     /* as rich or as muted, as light or as dark: #966 opts10 */ colorize: 'Replaces the image colour with a single hue, keeping its light and shade — as rich or as muted, as light or as dark as you like.',
     duotone: 'Maps darks to one colour and lights to another.',

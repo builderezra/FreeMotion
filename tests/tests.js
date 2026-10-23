@@ -177445,9 +177445,11 @@
   /* every new key, by effect, and every new control off its default on the effect's own default settings */
   const _O13_NEW = {
     exposure: ['range', 'mix'],
+    temperature: ['skin', 'mix'],
   };
   const _O13_OFF = {
     exposure: [{ range: 1 }, { mix: 50 }],
+    temperature: [{ skin: 100 }, { mix: 50 }],
   };
   const _o13P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
   const _o13Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
@@ -177664,10 +177666,90 @@
   });
   /* ---- end Exposure ---- */
 
+  /* ---- Colour Temperature: Protect skin and Mix ---- */
+  /* skinW12 (js/compositor.js, round twelve) to the letter: Teal & Orange's skin window worked out per pixel — the hue window (full 0°–40°,
+     half a cosine to nothing at −20° and 60°) times the HSV saturation window (full 0.2–0.8, nothing under 0.08 or over 0.9) times not
+     near-black (V full from 0.2, nothing under 0.08); a grey 0 */
+  const _o13Skin = (r, g, b) => {
+    const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b), ch = mx - mn;
+    if (!(ch > 0)) return 0;
+    let hu = mx === r ? (g - b) / ch : (mx === g ? (b - r) / ch + 2 : (r - g) / ch + 4); if (hu < 0) hu += 6; hu *= 60;
+    const sx = ((hu % 360) + 180) % 360 - 180;
+    const hw = sx >= 0 && sx <= 40 ? 1 : (sx > -20 && sx < 0 ? 0.5 + 0.5 * Math.cos(Math.PI * sx / 20) : (sx > 40 && sx < 60 ? 0.5 + 0.5 * Math.cos(Math.PI * (sx - 40) / 20) : 0));
+    if (!(hw > 0)) return 0;
+    const sS = ch / mx, sV = mx / 255;
+    const mS = sS < 0.08 ? 0 : (sS < 0.2 ? (sS - 0.08) / 0.12 : (sS <= 0.8 ? 1 : (sS < 0.9 ? (0.9 - sS) / 0.1 : 0)));
+    const mV = sV < 0.08 ? 0 : (sV < 0.2 ? (sV - 0.08) / 0.12 : 1);
+    return hw * mS * mV;
+  };
+  /* six pixels and their skin weights, worked: a light skin tone (220, 170, 130) — hue 26.7°, saturation 0.41, value 0.86 — 1; a deeper
+     one (160, 110, 80) — 22.5°, 0.5, 0.63 — 1; a rose (220, 100, 120) at hue 350°, half a cosine from the window's edge, 0.5; a blue
+     (40, 90, 200) at 221°, a green (60, 170, 80) at 131° and a grey: 0 */
+  const _O13_SKIN = [[220, 170, 130], [160, 110, 80], [220, 100, 120], [40, 90, 200], [60, 170, 80], [128, 128, 128]];
+  test('966 opts13 Colour Temperature has Protect skin (0–100 %, keyframable, 0 by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    _o13Need('temperature', _O13_NEW.temperature);
+    const bad = _o13Rows('temperature', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp('temperature', { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('temperature', { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at the default (Temperature 40: Shift adds 20 to red and takes 20 from blue): the light skin tone grades to (240, 170, 110), the
+     deeper one to (180, 110, 60), the rose to (240, 100, 100), the blue to (60, 90, 180), the green to (80, 170, 60), the grey to (148, 128,
+     108). Protect skin 100 moves each pixel 1 − its skin weight of the way: both skin tones stay the picture, the rose goes half way
+     (230, 100, 110), the rest keep the grade. At 50 % the light skin tone goes half way, (230, 170, 120), and the rose three quarters,
+     (235, 100, 105). On the base code Protect skin is ignored and both skin tones take the whole cast. */
+  test('966 opts13 Colour Temperature Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the warm-up byte for byte and a rose at the window’s edge comes half way back, at 50 % each pixel comes back half its skin weight, and with White balance, Affects Darks and Keep brightness every pixel of a busy picture is the grade laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone takes the whole 20 levels)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('temperature', _o13P('temperature', over), N, 1, row(), 0.5);
+    const want = (got, list, name) => list.forEach((w, x) => { const px = _o13At(got, N, x, 0).slice(0, 3); if (px.join() !== w.join()) bad.push(name + ': pixel ' + _O13_SKIN[x].join('/') + ' reads ' + px.join(', ') + ', not ' + w.join(', ')); });
+    const full = run({});
+    want(full, [[240, 170, 110], [180, 110, 60], [240, 100, 100], [60, 90, 180], [80, 170, 60], [148, 128, 108]], 'CONTROL at 0 %');
+    want(run({ skin: 100 }), [[220, 170, 130], [160, 110, 80], [230, 100, 110], [60, 90, 180], [80, 170, 60], [148, 128, 108]], 'Protect skin 100');
+    want(run({ skin: 50 }), [[230, 170, 120], [170, 110, 70], [235, 100, 105], [60, 90, 180], [80, 170, 60], [148, 128, 108]], 'Protect skin 50');
+    [{ method: 1 }, { range: 1, amount: -60 }, { preserve: 60, tint: 30 }, { skin: 100, method: 1, range: 3 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin;
+      const w = _o13Worst('temperature', _o13P('temperature'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the grade laid in by 1 − its skin weight)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at the default: Mix 50 puts the light skin tone at (230, 170, 120), the blue at (50, 90, 190) and the grey at (138, 128, 118);
+     with Protect skin 100 as well the light skin tone is the picture and the blue still goes half way. On the base code Mix is ignored. */
+  test('966 opts13 Colour Temperature Mix: at 50 % the warm-up goes half way — a grey reads 138, 128, 118 — at 0 % the picture is itself byte for byte, with Protect skin 100 as well a skin tone stays put while a blue goes half way, and a Mix keyed 0 to 100 draws its value half way (CONTROL: at 100 % the grey reads 148, 128, 108)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('temperature', _o13P('temperature', over), N, 1, row(), 0.5);
+    const at = (d, x) => _o13At(d, N, x, 0).slice(0, 3).join(', ');
+    if (at(run({}), 5) !== '148, 128, 108') bad.push('CONTROL: at Mix 100 the grey reads ' + at(run({}), 5) + ', not 148, 128, 108');
+    const half = run({ mix: 50 });
+    if (at(half, 0) !== '230, 170, 120') bad.push('at Mix 50 the light skin tone reads ' + at(half, 0) + ', not 230, 170, 120');
+    if (at(half, 3) !== '50, 90, 190') bad.push('at Mix 50 the blue reads ' + at(half, 3) + ', not 50, 90, 190');
+    if (at(half, 5) !== '138, 128, 118') bad.push('at Mix 50 the grey reads ' + at(half, 5) + ', not 138, 128, 118');
+    const m0 = E1.maxDiff(run({ mix: 0 }), row());
+    if (m0 !== 0) bad.push('at Mix 0 the row moves up to ' + m0 + ' levels — it should be the picture itself');
+    const both = run({ mix: 50, skin: 100 });
+    if (at(both, 0) !== '220, 170, 130') bad.push('at Mix 50 with Protect skin 100 the light skin tone reads ' + at(both, 0) + ', not the picture 220, 170, 130');
+    if (at(both, 3) !== '50, 90, 190') bad.push('at Mix 50 with Protect skin 100 the blue reads ' + at(both, 3) + ', not 50, 90, 190');
+    const mk = E1.maxDiff(run({ mix: _o13KF(0, 100) }), half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o13Worst('temperature', _o13P('temperature'), { mix: 35, method: 1, tint: -20 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with White balance and a tint: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts13 Colour Temperature at Protect skin 0 % and Mix 100 % draws byte for byte what it drew without them — at its defaults, cooled, with a tint and Keep brightness, on White balance with Affects, keyframed, and on a half-size plate (CONTROL: Protect skin and Mix each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o13Need('temperature', _O13_NEW.temperature);
+    const bad = _o13Ident('temperature', [{}, { over: { amount: -70 } }, { over: { tint: 30, preserve: 60 } }, { over: { method: 1, range: 1 } }, { over: { amount: _o13KF(-50, 80) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O13_OFF.temperature.forEach(o => { const n = _o13Moves('temperature', o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — Mix 50 moves every pixel's blue by 10; Protect skin 100 only the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Colour Temperature ---- */
+
   /* the round's editors, new rows and all, fit the inspector (round twelve's fit test) */
   test('966 opts13 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
     const NEW = {
       exposure: 'Affects',
+      temperature: 'Protect skin',
     };
     Object.keys(NEW).forEach(type => _o13Need(type, _O13_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];
