@@ -178357,9 +178357,11 @@
   /* every new key, by effect, and every new control off its default on the effect's own default settings */
   const _O15_NEW = {
     levels: ['skin', 'mix'],
+    unsharpmask: ['skin', 'range'],
   };
   const _O15_OFF = {
     levels: [{ skin: 100 }, { mix: 50 }],
+    unsharpmask: [{ skin: 100 }, { range: 1 }],
   };
   /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
      the new keys taken away (every saved project), each case on its own fixture, moment and plate */
@@ -178481,10 +178483,72 @@
   });
   /* ---- end Levels ---- */
 
+  /* ---- Unsharp Mask: Protect skin and Affects ---- */
+  /* At its defaults (Amount 1.2, Radius 3, Skip flat areas 0, Protect colour 0) the kernel blurs with a 7-wide box each way (edges held,
+     so on a one-row picture the second pass gives the first pass back) and moves each channel by 1.2 x (itself − its blur), into the
+     clamped array. On a row of four light skin tones A (220, 170, 130) then four blues B (40, 90, 200), A − B = (180, 80, −70), a pixel
+     with k of the other colour in its window moves 1.2 x k / 7 of that difference: x 1 (k 1) to (250.86, 183.71, 118) → (251, 184, 118),
+     x 2 to (255, 197, 106), x 3 to (255, 211, 94); x 4 to (0, 49, 236), x 5 to (0, 63, 224), x 6 to (9, 76, 212); x 0 and x 7 keep
+     their own colour. The skin tone's weight is 1 and the blue's 0, so Protect skin 100 keeps x 0 to 3 the picture and the blues their
+     sharpening, and at 40 % the skin pixels go 0.6 of the way: (239, 178, 123), (241, 186, 116), (241, 195, 108). On the base code
+     Protect skin is ignored and the skin tones take the whole halo. */
+  const _o15Two = (a, b) => () => E1.frame(8, 1, x => (x < 4 ? a : b));
+  test('966 opts15 Unsharp Mask has Protect skin (0–100 %, keyframable, 0 by default) and Affects (All, Darks, Mids or Lights, storing 0–3, All by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and Mids, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o15Need('unsharpmask', _O15_NEW.unsharpmask);
+    const bad = _o13Rows('unsharpmask', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 }], { skin: 40, range: 2 });
+    bad.push.apply(bad, _o13Clamp('unsharpmask', { skin: 150 }, { skin: 100 }));
+    bad.push.apply(bad, _o13Clamp('unsharpmask', { skin: -5 }, { skin: 0 }));
+    bad.push.apply(bad, _o13Clamp('unsharpmask', { range: 7 }, { range: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts15 Unsharp Mask Protect skin: at 100 % the skin tones beside a blue edge come out as the picture byte for byte while the blues keep their halo byte for byte, at 40 % each skin pixel comes 0.4 of the way back, and with more Amount and Radius, Skip flat areas, Protect colour and Affects every pixel of a busy picture is the sharpened picture laid in by 1 − its skin weight to the level (CONTROL: at 0 % the skin tone at the edge reads 255, 211, 94)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], A = [220, 170, 130], B = [40, 90, 200], pics = [A, A, A, A, B, B, B, B], row = _o15Two(A, B);
+    const run = over => _o13Run('unsharpmask', _o13P('unsharpmask', over), 8, 1, row(), 0.5);
+    const blues = [[0, 49, 236], [0, 63, 224], [9, 76, 212], [40, 90, 200]];
+    _o14Want(bad, run({}), pics, [A, [251, 184, 118], [255, 197, 106], [255, 211, 94]].concat(blues), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), pics, [A, A, A, A].concat(blues), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), pics, [A, [239, 178, 123], [241, 186, 116], [241, 195, 108]].concat(blues), 'Protect skin 40');
+    [{ amount: 2.5, radius: 6 }, { threshold: 12 }, { coloursafe: 70 }, { skin: 100, range: 2 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, rg = extra.range || 0;
+      const w = _o15Worst('unsharpmask', _o13P('unsharpmask'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the sharpened picture laid in by 1 − its skin weight' + (rg ? ' times its tonal weight' : '') + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* On a row of four greys 100 then four greys 160 the defaults take x 3 to 100 − 1.2 x 3 x 60 / 7 = 69.14, so 69, and x 4 to 190.86,
+     so 191 (x 0 and x 7 keep their grey). Affects weighs that move by each pixel's own brightness (100 / 255 = 0.392, 160 / 255 = 0.627),
+     as tone13 does: Darks (1 − L)² = 0.369 and 0.139 put them at 100 − 31 x 0.369 = 88.55 → 89 and 164.30 → 164, Mids 0.953 and 0.935 at
+     70.44 → 70 and 188.99 → 189, Lights 0.154 and 0.394 at 95.23 → 95 and 172.20 → 172. On the base code Affects is ignored and both
+     edges take the whole halo. */
+  test('966 opts15 Unsharp Mask Affects: on a 100 to 160 grey edge Darks sharpens the dark side to 89 and the light side to 164, Mids to 70 and 189, Lights to 95 and 172 — and with more Amount and Radius, Skip flat areas and Protect colour every pixel of a busy picture is the sharpened picture times the tonal weight of its own brightness to the level (CONTROL: All takes them to 69 and 191)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], G1 = [100, 100, 100], G2 = [160, 160, 160], pics = [G1, G1, G1, G1, G2, G2, G2, G2], row = _o15Two(G1, G2);
+    const run = over => _o13Run('unsharpmask', _o13P('unsharpmask', over), 8, 1, row(), 0.5);
+    const want = (a, b) => [G1, null, null, [a, a, a], [b, b, b], null, null, G2];
+    _o14Want(bad, run({}), pics, want(69, 191), 'CONTROL under All');
+    [[1, 'Darks', 89, 164], [2, 'Mids', 70, 189], [3, 'Lights', 95, 172]].forEach(([rg, name, a, b]) => {
+      _o14Want(bad, run({ range: rg }), pics, want(a, b), name);
+      [{}, { amount: 2, radius: 10 }, { threshold: 8 }, { coloursafe: 50 }].forEach(extra => {
+        const w = _o15Worst('unsharpmask', _o13P('unsharpmask'), Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), 0, 0), 0.5);
+        if (w) bad.push(name + ' ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its sharpening times its tonal weight)');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts15 Unsharp Mask at Protect skin 0 % and All draws byte for byte what it drew without them — at its defaults, with more Amount and Radius, Skip flat areas, Protect colour, keyframed, and on a half-size plate (CONTROL: Protect skin and Darks each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o15Need('unsharpmask', _O15_NEW.unsharpmask);
+    const bad = _o15Ident('unsharpmask', [{}, { over: { amount: 2.5, radius: 8 } }, { over: { threshold: 12 } }, { over: { coloursafe: 70 } }, { over: { amount: _o13KF(0.4, 2.4) }, t: 0.37 }, { ps: 0.5 }, { pic: _o15Two([100, 100, 100], [160, 160, 160]), W: 8, H: 1 }, { pic: _o15Two([220, 170, 130], [40, 90, 200]), W: 8, H: 1 }]);
+    _O15_OFF.unsharpmask.forEach(o => { const n = _o15Moves('unsharpmask', o, 96, 72, _o13Pic, 0.5); if (n < 300) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the 12 px checker steps blue by 190 levels, so every pixel within 3 of a cell edge (about three quarters of the picture) is sharpened by 10 or more; Protect skin 100 holds back the warm cells among them, Darks every one but the darkest */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Unsharp Mask ---- */
+
   /* the round's editors, new rows and all, fit the inspector (round thirteen's fit test) */
   test('966 opts15 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
     const NEW = {
       levels: 'Protect skin',
+      unsharpmask: 'Affects',
     };
     Object.keys(NEW).forEach(type => _o15Need(type, _O15_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];

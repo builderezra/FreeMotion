@@ -547,7 +547,7 @@ window.FM = window.FM || {};
 
     // Blur
     /* grout or clear gaps: #966 opts8 */ mosaic: 'Averages the picture into large blocks. Coarser and blockier than Pixelate — with grout between the tiles if you like.',
-    unsharpmask: 'Sharpening with a radius — you set how WIDE the detail it hardens is, not just how much.',
+    /* faces kept smooth, by tone: #966 opts15 */ unsharpmask: 'Sharpening with a radius — you set how WIDE the detail it hardens is, not just how much — leaving faces smooth or only the darks, mids or lights hardened if you like.',
     linstreaks: 'Smears the bright parts into straight streaks along an angle.',
     spinstreaks: 'Smears the bright parts into arcs around the centre.',
     zoomstreaks: 'Smears the bright parts outward from the centre, like a zoom during the exposure.',
