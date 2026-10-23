@@ -177833,6 +177833,67 @@
     }
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
+  /* THE WRONG REASON (#966 opts13, the pre-ship review's N1). An effect measured as changing nothing gets a reason when the reason is
+   * knowable from the effect alone, and Channel Remap's says its two channels are already the same on this colour. With Protect skin and
+   * Affects that is no longer the only way to change nothing: Protect skin 100 holds the whole swap back on an orange #e8a33d (232, 163,
+   * 61, hue 35.8°, so its skin weight is 1) whose R and B are 171 levels apart. Both places that write the line are asked: the row as it
+   * is built (the answer planted, as queue 477 plants it) and the settle timer that paints it in place (the measurement stubbed to say
+   * nothing changed, and counted, so the timer is known to have run). CONTROL: at its own defaults the same orange gets the channels
+   * reason from both, so the line is read here and the reason is given. On the code before the fold every case below gets that same
+   * sentence, which is how it fails. */
+  test('966 opts13 Channel Remap does not claim its channels are already the same when Protect skin or Affects is what holds it back', { item: '966', budgetMs: 60000 }, async function () {
+    const SAME = /already the same/, GEN = /changes nothing on this layer/;
+    const CASES = [
+      { say: 'its defaults', over: {}, control: true },
+      { say: 'Protect skin 100 %', over: { skin: 100 } },
+      { say: 'Protect skin 40 %', over: { skin: 40 } },
+      { say: 'Affects Darks', over: { range: 1 } },
+      { say: 'Affects Lights', over: { range: 3 } },
+      { say: 'Protect skin keyed 0 to 100', over: { skin: _o13KF(0, 100) } },
+    ];
+    const real = FM.fxThumbs && FM.fxThumbs.effectDoesNothing;
+    if (typeof real !== 'function') throw new Error('FM.fxThumbs.effectDoesNothing is not reachable, so the settle timer cannot be asked');
+    const keep = FM.scene.layers.slice(), bad = [];
+    let calls = 0;
+    const hint = () => { const h = document.querySelector('.fx-row.fx-open .fx-noop-hint'); return h ? (h.textContent || '').trim() : ''; };
+    const make = (over, planted) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#e8a33d', start: 0, duration: 5 });
+      const fx = FM.fxRegistry.makeInstance('channelremap');
+      Object.assign(fx.params, JSON.parse(JSON.stringify(over)));
+      fx._expanded = true;
+      if (planted) { fx._noop = true; fx._noopKey = 'planted'; }
+      L.effects = [fx];
+      FM.scene.layers = keep.concat([L]);
+      return L;
+    };
+    const judge = (c, where, h) => {
+      const said = h ? '“' + h + '”' : 'no line at all';
+      if (c.control) { if (!SAME.test(h)) bad.push('CONTROL: at ' + c.say + ' the ' + where + ' gave ' + said + ', not the channels reason, so nothing below is proven'); return; }
+      if (!GEN.test(h)) bad.push('at ' + c.say + ' the ' + where + ' gave ' + said + ', not the general changes-nothing line');
+      else if (SAME.test(h)) bad.push('at ' + c.say + ' the ' + where + ' says the channels are already the same on an orange whose R is 232 and B 61, when it is ' + c.say + ' that holds the swap back');
+    };
+    try {
+      FM.fxThumbs.effectDoesNothing = function () { calls++; return true; };
+      for (const c of CASES) {
+        const body = await _o13Open(make(c.over, true));
+        if (!body) { bad.push(c.say + ': the editor did not open, so the row as built was not read'); continue; }
+        judge(c, 'row as built', hint());
+      }
+      for (const c of CASES) {
+        const before = calls;
+        const body = await _o13Open(make(c.over, false));
+        if (!body) { bad.push(c.say + ': the editor did not open, so the settle timer was not read'); continue; }
+        let h = '';
+        for (let n = 0; n < 40 && !(h && calls > before); n++) { await sleep(100); h = hint(); }
+        if (calls === before) { bad.push(c.say + ': the settle timer never measured, so its line was not asked'); continue; }
+        judge(c, 'settle timer', h);
+      }
+    } finally {
+      FM.fxThumbs.effectDoesNothing = real;
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
   // ── end 966 opts13 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
