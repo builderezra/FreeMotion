@@ -95,8 +95,11 @@
        is gone, because a one-shot has nothing to loop back to. The last thing to move is the tagline, EDITING, EVOLVED,
        rising into place under the name; it settles at 0.61 of the cycle (3.36s). The end frame holds 0.4s and then the
        splash dissolves into the app exactly as the film's natural end did.
-       Skips: same-session reload (sessionStorage), tap/click, Esc-Enter-Space, the 5s cap. Reduced motion, or a browser
-       that cannot run SMIL: the END FRAME as a still, no animation, then the hand-over. -->
+       Skips: same-session reload (sessionStorage), tap/click, Esc-Enter-Space, a cap measured from when the animation's
+       clock starts, and an 8s backstop. Reduced motion, or a browser that cannot run SMIL: the END FRAME as a still, no
+       animation, then the hand-over.
+       The wordmark and tagline name Sora first, as the canvas does, but the app ships no Sora (no download, no webfont), so
+       they render in the system font: SF on an iPhone, Segoe on Windows. -->
   <!-- THE GROUND IS CARD 7's OWN #0b0b0d: the diamonds' strokes and the playhead's backing are #0b0b0d knock-outs drawn
        for it, so on this ground they vanish as designed. Queue 920's split, as theme-glass.css does for the light Home:
        the ground you SEE is a background-IMAGE layer, and background-COLOR is what iOS reads for the status strip (a fixed
@@ -219,13 +222,22 @@
         }, quick ? 320 : 1000);
       }
       if (ANIM) {
-        // Read the animation's OWN clock rather than a timer: if the boot holds the main thread, the hold still starts
-        // when the mark has really finished. Polled on a timer: requestAnimationFrame never fires in a frame that is not painting.
+        /* Read the animation's OWN clock rather than a timer: if the boot holds the main thread, the hold still starts
+           when the mark has really finished. Polled on a timer: requestAnimationFrame never fires in a frame that is not
+           painting.
+           THE CLOCK STARTS LATE ON A REAL LAUNCH (the refuter of the 1180 review, B3): an inline SVG's timeline starts from
+           the document's load, after all the app's parser-blocking scripts and its synchronous init, and reads 0 until
+           then. So the cap is measured from the moment the clock STARTS (`started`, the first reading above 0), not from
+           this script: a late load still gets the whole animation, the hold and the natural dissolve. The cap only cuts a
+           clock that started and then ran slow (END_S + HOLD_S of wall time, plus 800ms, without reaching the hold). */
+        var started = 0;
         (function watch() {
           if (gone) return;
           var t = 0;
           try { t = svg.getCurrentTime(); } catch (e) {}
+          if (t > 0 && !started) started = Date.now();
           if (t >= END_S + HOLD_S) dismiss(false);
+          else if (started && Date.now() - started > (END_S + HOLD_S) * 1000 + 800) dismiss(true);
           else setTimeout(watch, 40);
         })();
       } else {
@@ -233,7 +245,11 @@
       }
       sp.addEventListener('pointerdown', function (e) { e.preventDefault(); dismiss(true); });   // preventDefault kills the synthesized post-touch click (it punched through to editor controls)
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') dismiss(true); });
-      setTimeout(function () { dismiss(true); }, 5000);            // hard cap — nothing holds the editor hostage
+      /* The backstop, from this script: nothing holds the editor hostage. The animated path waits 8s, for a clock that
+         never starts (or starts very late); no later, because home.js and storage.js arm 6s fallbacks of their own when
+         Home opens, and those must not play the entrance behind a splash that is still opaque. The still path keeps 5s
+         (it hands over after STILL_MS anyway). */
+      setTimeout(function () { dismiss(true); }, ANIM ? 8000 : 5000);
     })();
   </script>
   <div id="app">
