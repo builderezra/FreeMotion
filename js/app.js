@@ -2184,10 +2184,36 @@ window.FM = window.FM || {};
   const PREROLL_S = 0.4;       // = START_WAIT_MS: the start-up FM.play is prepared to wait for
   const SEAM_CROSS_S = 0.25;   // how far past a cut a tick may land and still be the one that crossed it (ticks have been measured 100 ms apart under load)
   let _syncPrevT = null;       // FM.time at the previous sync tick of THIS pass — null after play and after a wrap, where nothing was crossed
+  /* #663 (the 23 Oct hunt's finding 3 and its refuter). PREROLL_S was sized on desktop, for an element that had played before. The tail
+     half of a split is a FRESH element (reloadMediaTo), and a cold element on a phone can take much longer than 0.4 s to make a sound:
+     FM.play waits up to START_WAIT_COLD_MS for one (#202 H2). Nothing waited here, so the cut opened on a tail still silent, and its
+     first warm sample then learned the start-up as output latency: that half played late for its whole length.
+     So a COLD tail (readyState below 3 or a seek in flight, the test FM.play uses; never one already judged undecodable, never while
+     exporting) gets the same muted pre-roll up to START_WAIT_COLD_MS before its cut. Started playing, not just sought: an iPhone does
+     not load a paused element for playback (the refuter). Once it has played (its play() resolved and its clock moved) it is warm, and
+     while the cut is still more than PREROLL_S away the tick pauses it again, muted, so the ordinary pre-roll restarts it at PREROLL_S
+     from the right sample: the start it was late by never reaches the cut. A warm tail keeps PREROLL_S exactly. A strip never holds a
+     primed tail: the tick stands down for a busy element first, and a strip waits while playing (js/frames.js stripMustWait). */
+  function seamCold(m) {
+    const el = m.el;
+    if (!el || el._fmSeamWarm || m.undecodable || FM._exporting) return false;
+    if (el._fmSeamPriming) return true;   // primed early and not yet seen to run: it keeps the long window until it does
+    return el.readyState < 3 || el.seeking === true;
+  }
   function prerollAtSeam(layer, m, now) {
     if (!FM.playing || !layer.splitOf || layer.reversed) return false;
     const lead = (layer.start || 0) - FM.time;
-    if (!(lead > 0 && lead <= PREROLL_S)) return false;
+    const el = m.el;
+    if (el._fmSeamPriming && el._fmSeamRan && !el.paused && (el.currentTime || 0) > (el._fmSeamFrom || 0) + 0.008) {
+      el._fmSeamPriming = false; el._fmSeamWarm = true;   // #663: it has played, so from here on it is a warm tail
+      try { el.addEventListener('emptied', function () { el._fmSeamWarm = false; }, { once: true }); } catch (e) {}
+    }
+    /* #663 review S3 and its refuter: the long window only for the cut immediately ahead (the half that ends at it has started), so a
+       chain of short split pieces primes one tail at a time beside the audible clip, not every tail within 2 s; and only for an element
+       this pre-roll primed or a paused one, so a tail already playing for another reason (a loop wrap) is parked by the fall-through. */
+    const longOk = seamCold(m) && (el.paused || el._fmSeamPriming) && lead > PREROLL_S && lead <= START_WAIT_COLD_MS / 1000
+      && FM.scene.layers.some(l => l !== layer && l.splitOf === layer.splitOf && Math.abs((l.start || 0) + (l.duration || 0) - (layer.start || 0)) < 1e-3 && FM.time >= (l.start || 0));
+    if (!(lead > 0 && lead <= (longOk ? START_WAIT_COLD_MS / 1000 : PREROLL_S))) return false;
     if (!seamAt(layer, layer.start)) return false;                 // halves pulled apart: an ordinary clip start, faded as ever
     const first = FM.layerLocalTime(layer, layer.start);
     if (first == null) return false;
@@ -2205,9 +2231,11 @@ window.FM = window.FM || {};
         if (FM.pitchForRate) FM.pitchForRate(m.el, rate);
         m.el.playbackRate = rate;
         m.el.currentTime = from; m._syncAt = now;
+        const early = lead > PREROLL_S;   // #663: a cold tail primed before the ordinary pre-roll is watched until it plays (seamCold)
+        if (early) { el._fmSeamPriming = true; el._fmSeamRan = false; el._fmSeamFrom = from; }
         // a fresh pass for the drift controller, exactly as FM.play starts one — it learns this element from the cut on
         m._errBias = null; m._rateAt = 0; m._baseRate = null; m._warmCt = null; m._resumedAt = 0;
-        m.el.play().then(() => { m._playRefusedAt = 0; }, e => { m._playRefusedAt = now; try { if (FM.audioHealth) FM.audioHealth.refused(m, e); } catch (_) {} });
+        m.el.play().then(() => { m._playRefusedAt = 0; if (early) el._fmSeamRan = true; }, e => { m._playRefusedAt = now; try { if (FM.audioHealth) FM.audioHealth.refused(m, e); } catch (_) {} });
       }
     } catch (e) {}
     return true;
@@ -2746,6 +2774,7 @@ window.FM = window.FM || {};
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
       if (!m) return;
+      if (m.el) { m.el._fmSeamWarm = false; m.el._fmSeamPriming = false; }   // #663: warm or primed is per play pass
       const local = FM.layerLocalTime(layer, FM.time);
       if (local == null) { try { m.el.pause(); } catch (e) {} return; }
       // Forward clips play natively; reversed clips are drawn from the frame cache by tick.
@@ -7503,8 +7532,10 @@ window.FM = window.FM || {};
         let lastView = null; try { lastView = localStorage.getItem('fm.view'); } catch (e) {}
         /* queue 942: …but NOT when the app has just been opened. His words: "every time you load into the app for the first
            time like in the loading screen plays it puts you in the home menu not in your project". A reload inside the same
-           session (the version chip's update, a pull-to-refresh) still drops him back where he was — the intro does not play
-           for those either. The project stays loaded behind Home, marked OPEN, one tap away. */
+           session (the version chip's update, a pull-to-refresh) still drops him back where he was. Since #1180 the intro
+           plays once more on a NEW build in the same session (fm.splashed holds the build), but that is not a first load:
+           FM_FIRST_LOAD reads fm.session, so the update chip's reload plays the intro over his project, never over Home.
+           The project stays loaded behind Home, marked OPEN, one tap away. */
         const firstLoad = window.FM_FIRST_LOAD !== false;
         if (firstLoad || !(restored && lastView === 'editor')) FM.home.open();
       }

@@ -106614,6 +106614,134 @@
     }
   });
 
+  /* #663 (the 23 Oct hunt's finding 3 and its refuter). The second half of a split is a fresh element, and PREROLL_S (0.4 s, sized
+   * on desktop for an element that had played before) was all the time it got to start. A cold one on a phone was still silent at
+   * the cut, and its first warm sample then learned the start-up as output latency, so that half played late for its whole length.
+   * Stand-ins on both halves (nothing real plays) and the tick driven by hand, FM._syncMediaToClock with FM.playing set, as the 690
+   * dead-seam test above does. The cut is at 3.00 s.
+   * FAILS BEFORE THE FIX: a cold second half (readyState 1) 1.8 s before the cut is left paused; it is first started 0.4 s before.
+   * CONTROLS: a warm one (readyState 4) is left alone at 1.8 s and 0.5 s and started, muted, from the right sample at 0.35 s; a cold
+   * one 2.2 s out is not started yet; one already judged undecodable, or one met during an export, keeps the 0.4 s. And the hand-over:
+   * once the primed half has played it is paused again, muted, and restarted by the ordinary pre-roll from the right sample.
+   * The fold (the review and its refuter): the hand-over reads readyState 2, so only the warm mark keeps it parked (S1); a half cold
+   * only by a seek in flight is primed and kept playing until its play() settles (S2); a SECOND Play across the cut primes it again,
+   * the warm mark lasts one pass (S4); and in a chain of three pieces the third is not primed while the first plays (S3). */
+  test('663 a cold clip after a split is readied before the cut, up to 2 s early, and a warm one still 0.4 s before', { item: '663', budgetMs: 40000 }, async function () {
+    if (typeof FM._syncMediaToClock !== 'function') throw new Error('FM._syncMediaToClock is not exposed');
+    if (typeof FM.splitLayer !== 'function') throw new Error('FM.splitLayer is missing');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, keepT = FM.time, wasPlaying = FM.playing, wasExporting = FM._exporting, made = [];
+    const CUT = 3;
+    let am = null, bm = null, aEl = null, bEl = null, bUnd = false, cm = null, cEl = null, release = null;
+    const fake = rs => ({ readyState: rs, seeking: false, paused: true, muted: false, volume: 1, playbackRate: 1, duration: 6, currentTime: 0, plays: 0,
+      play() { this.plays++; this.paused = false; return Promise.resolve(); }, pause() { this.paused = true; },
+      addEventListener() {}, removeEventListener() {} });
+    const tickAt = t => { FM.time = t; FM.playing = true; try { FM._syncMediaToClock(); } finally { FM.playing = false; } };
+    const fresh = (rs, und) => { const fa = fake(4), fb = fake(rs); am.el = fa; bm.el = fb; bm.undecodable = !!und; bm._playRefusedAt = 0; am._playRefusedAt = 0; return fb; };
+    const say = fb => 'plays ' + fb.plays + ', ' + (fb.paused ? 'paused' : 'playing') + ', ' + (fb.muted ? 'muted' : 'NOT muted') + ', at ' + (+fb.currentTime).toFixed(3) + ' s';
+    try {
+      window.__fmStep = '663 seam setup';
+      const rec = await FM.loadVideoFile(huntEWav(6, t => 0.3 * Math.sin(2 * Math.PI * 440 * t), 'h663-seam'));
+      const L = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 0, duration: 6 });
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = huntEScene([L], 6);
+      FM.refreshAll();
+      FM.setTime(CUT);
+      await FM.splitLayer(L.id);
+      FM.scene.layers.forEach(l => { if (made.indexOf(l.id) < 0) made.push(l.id); });
+      const A = FM.scene.layers.filter(l => Math.abs(l.start) < 1e-6)[0], B = FM.scene.layers.filter(l => Math.abs(l.start - CUT) < 1e-6)[0];
+      am = A ? FM.media.get(A.id) : null; bm = B ? FM.media.get(B.id) : null;
+      if (!am || !bm || am === bm || !B.splitOf) throw new Error('setup: the split did not make two halves meeting at 3.00 s, each with its own media');
+      aEl = am.el; bEl = bm.el; bUnd = bm.undecodable;
+      const first = FM.layerLocalTime(B, CUT);
+      if (!(first > 0)) throw new Error('setup: the second half has no first sample at the cut (' + first + ')');
+      const rate = Math.min(16, Math.max(0.0625, (FM.evalProp(B.speed, CUT) || 1) * (FM.previewRate || 1)));
+      const near = (fb, lead) => Math.abs((+fb.currentTime) - (first - lead * rate)) < 0.01;
+
+      window.__fmStep = '663 seam warm';
+      let fb = fresh(4);
+      tickAt(CUT - 1.8);
+      if (fb.plays || !fb.paused) throw new Error('CONTROL: a WARM second half was started 1.8 s before the cut (' + say(fb) + ') - a warm one keeps the 0.4 s pre-roll');
+      tickAt(CUT - 0.5);
+      if (fb.plays || !fb.paused) throw new Error('CONTROL: a WARM second half was started 0.5 s before the cut (' + say(fb) + ') - a warm one keeps the 0.4 s pre-roll');
+      tickAt(CUT - 0.35);
+      if (fb.plays !== 1 || fb.paused || !fb.muted || !near(fb, 0.35)) throw new Error('CONTROL: a WARM second half 0.35 s before the cut is not pre-rolled, muted, from ' + (first - 0.35).toFixed(3) + ' s (' + say(fb) + ') - the 690 pre-roll this builds on is not there');
+
+      window.__fmStep = '663 seam cold';
+      fb = fresh(1);
+      tickAt(CUT - 2.2);
+      if (fb.plays || !fb.paused) throw new Error('a COLD second half was started 2.2 s before the cut (' + say(fb) + ') - the early prime is capped at the 2 s FM.play waits for a cold clip');
+      tickAt(CUT - 1.8);
+      if (fb.plays !== 1 || fb.paused || !fb.muted || !near(fb, 1.8)) {
+        throw new Error('a COLD second half (readyState 1, a fresh element as every split makes) is not readied 1.8 s before the cut (' + say(fb) + ', wanted playing, muted, from ' + (first - 1.8).toFixed(3) +
+          ' s) - it waits for the 0.4 s pre-roll sized for a warm desktop element, so on a phone the cut opens silent and the start-up is learned as latency for the rest of the clip');
+      }
+      await sleep(0);
+      fb.currentTime = (+fb.currentTime) + 0.2; fb.readyState = 2;
+      tickAt(CUT - 1.5);
+      if (fb.plays !== 1 || !fb.paused || !fb.muted) throw new Error('once the primed second half has played, 1.5 s before the cut, it is not paused again and muted for the ordinary pre-roll (' + say(fb) + ') - the start it was late by would be carried to the cut');
+      tickAt(CUT - 1.0);
+      if (fb.plays !== 1 || !fb.paused) throw new Error('the primed second half, played once and now paused but still reading readyState 2, was started again 1.0 s before the cut (' + say(fb) + ') - once it has played it is a warm tail and waits for the ordinary pre-roll, or it is primed, parked and primed again until the cut');
+      tickAt(CUT - 0.35);
+      if (fb.plays !== 2 || fb.paused || !fb.muted || !near(fb, 0.35)) throw new Error('the primed, now warm second half is not restarted by the ordinary pre-roll 0.35 s before the cut, muted, from ' + (first - 0.35).toFixed(3) + ' s (' + say(fb) + ')');
+
+      window.__fmStep = '663 seam second pass';
+      FM.time = CUT - 2.5; FM.play(); FM.pause();
+      fb.paused = true; fb.readyState = 1; bm._playRefusedAt = 0;
+      tickAt(CUT - 1.8);
+      if (fb.plays !== 3 || fb.paused || !fb.muted) throw new Error('on a SECOND play across the cut a cold second half is not readied 1.8 s before it (' + say(fb) + ') - the warm mark from the first pass outlived it, so only the first play across each split gets the long pre-roll');
+
+      window.__fmStep = '663 seam seeking';
+      fb = fresh(4); fb.seeking = true;
+      fb.play = function () { this.plays++; this.paused = false; return new Promise(r => { release = r; }); };
+      tickAt(CUT - 1.8);
+      if (fb.plays !== 1 || fb.paused || !fb.muted) throw new Error('a second half cold only by a seek in flight (readyState 4, seeking) is not readied 1.8 s before the cut (' + say(fb) + ') - a seek still running is cold, as FM.play counts it');
+      fb.seeking = false;
+      tickAt(CUT - 1.6);
+      if (fb.plays !== 1 || fb.paused) throw new Error('a primed second half whose seek has ended but whose play() has not settled was paused 1.6 s before the cut (' + say(fb) + ') - it keeps the long window until it is seen to play, or the pending play() is aborted and lands in his report as refused');
+
+      window.__fmStep = '663 seam undecodable';
+      fb = fresh(1, true);
+      tickAt(CUT - 1.8);
+      if (fb.plays || !fb.paused) throw new Error('CONTROL: a second half already judged undecodable was primed 1.8 s before the cut (' + say(fb) + ') - it never starts, so it keeps the 0.4 s');
+
+      window.__fmStep = '663 seam exporting';
+      fb = fresh(1);
+      FM._exporting = true;
+      try { tickAt(CUT - 1.8); } finally { FM._exporting = wasExporting; }
+      if (fb.plays || !fb.paused) throw new Error('CONTROL: a cold second half was primed during an export (' + say(fb) + ') - nothing is primed while exporting');
+
+      window.__fmStep = '663 seam three pieces';
+      const CUT2 = 4.5;
+      am.el = aEl; bm.el = bEl; bm.undecodable = bUnd; bm._playRefusedAt = 0;
+      FM.setTime(CUT2);
+      await FM.splitLayer(B.id);
+      FM.scene.layers.forEach(l => { if (made.indexOf(l.id) < 0) made.push(l.id); });
+      const C = FM.scene.layers.filter(l => Math.abs(l.start - CUT2) < 1e-6)[0];
+      cm = C ? FM.media.get(C.id) : null;
+      if (!cm || cm === bm || cm === am || C.splitOf !== B.splitOf || Math.abs(B.start + B.duration - CUT2) > 1e-6) throw new Error('setup: splitting the second half again did not make a third piece at 4.50 s of the same split, with its own media');
+      cEl = cm.el;
+      const firstC = FM.layerLocalTime(C, CUT2);
+      am.el = fake(4); fb = fake(1); bm.el = fb; bm.undecodable = false;
+      const fc = fake(1); cm.el = fc; cm._playRefusedAt = 0;
+      tickAt(CUT - 0.35);
+      if (fb.plays !== 1 || fb.paused || !fb.muted) throw new Error('CONTROL: in a chain of three pieces the middle one is not pre-rolled 0.35 s before its cut (' + say(fb) + ')');
+      if (fc.plays || !fc.paused) throw new Error('a cold THIRD piece was started ' + (CUT2 - (CUT - 0.35)).toFixed(2) + ' s before its cut while the FIRST piece still plays (' + say(fc) + ') - only the cut immediately ahead gets the early prime, or a chain of short pieces runs a muted decoder for every piece within 2 s beside the audible one');
+      tickAt(CUT + 0.05);
+      if (fc.plays !== 1 || fc.paused || !fc.muted || !(Math.abs((+fc.currentTime) - (firstC - (CUT2 - CUT - 0.05) * rate)) < 0.01)) throw new Error('CONTROL: once the middle piece plays, the cold third piece ' + (CUT2 - CUT - 0.05).toFixed(2) + ' s before its cut is not readied, muted, from the right sample (' + say(fc) + ')');
+    } finally {
+      FM.playing = wasPlaying; FM._exporting = wasExporting;
+      if (release) release();
+      if (am && aEl) am.el = aEl;
+      if (bm && bEl) { bm.el = bEl; bm.undecodable = bUnd; bm._playRefusedAt = 0; }
+      if (cm && cEl) { cm.el = cEl; cm._playRefusedAt = 0; }
+      FM.scene = saved; FM.time = keepT;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
   /* 690 (HUNT-b 3) — ON AN IPHONE THE PREVIEW CUT OFF THE ECHO AND REVERB TAIL; THE EXPORT LETS IT RING. Fixed:
    * js/audio-fx-live.js sync wires element -> level gain -> effects -> limiter (when boosted) -> speakers, the export's
    * order, instead of putting the gain after the effects.
@@ -153839,8 +153967,11 @@
         FM.home.open();
         let got = null;
         for (let i = 0; i < 120 && !got; i++) { await sleep(40); got = store.list().filter(function (x) { return x.name === NAME; })[0] || null; }
-        await sleep(300);
-        const still = FM.projects.list().some(function (p) { return p.id === pid; });
+        /* The draft goes AFTER the element lands, as a removal of its own. A fixed 300 ms here read a slow removal as "two cards
+           for one thing" on a loaded phone pass (v17.98's second ship, 24 Oct; it passed alone). So wait for it to go, up to 3 s:
+           a draft that is never removed still fails, just 3 s later. */
+        let still = true;
+        for (let i = 0; i < 75 && still; i++) { await sleep(40); still = FM.projects.list().some(function (p) { return p.id === pid; }); }
         if (!got) throw new Error('he built ' + NAME + ' from scratch and went Home - no ' + kind + ' called ' + NAME + ' exists' + (still ? '; it is still a draft that only becomes one through ⋯ → Save as ' + kind : ''));
         if (still) throw new Error('going Home saved ' + NAME + ' as ' + (kind === 'element' ? 'an element' : 'a template') + ', but its draft is still there too - two cards for one thing');
         if (store.list().length !== n0 + 1) throw new Error('going Home once made ' + (store.list().length - n0) + ' ' + kind + 's');
@@ -177895,6 +178026,318 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts13 ──
+  // ── 966 opts14 (hunt/fx14) ──
+  /* ═══ #966: MORE CHOICE, ROUND FOURTEEN — three more grades he already has, each reached for on most shots and still thin on choice
+   * (hunt/fx14). His words: "polish other effects just giving them more features … more choices always better … this is the complex
+   * version we want as much choice as possible". WRITTEN WITHOUT RUNNING (23 Oct, a ship was running on this machine): nothing but
+   * `node --check`. Every number below is reasoned from the code it names, the reasoning beside it; a bound only a run can set says
+   * MEASURE beside it. Round thirteen's four kinds for each effect: (a) its rows and what the load sanitiser keeps, clamps and drops,
+   * (b) what each new control does, on a fixture that holds what separates right from wrong, with a CONTROL, (c) at the defaults the
+   * kernel is today's picture byte for byte, (d) every new control off its default moves the very fixtures (c) holds still. The (b)
+   * tests do not stop at a missing row: on the base code the kernel ignores the new keys and the picture is judged and fails. All three
+   * are PIXEL_FX point grades run through round thirteen's tone13, so this block reuses round thirteen's _o13 helpers (the same file
+   * scope, defined just above) and adds only the ones that read this round's own keys. ═══ */
+  const _o14Need = (type, keys) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts14 (hunt/fx14) is not built');
+    return r;
+  };
+  /* every new key, by effect, and every new control off its default on the effect's own default settings */
+  const _O14_NEW = {
+    colorbalance: ['skin', 'mix'],
+    highlightsshadows: ['skin', 'mix'],
+    faded: ['range', 'mix'],
+  };
+  const _O14_OFF = {
+    colorbalance: [{ skin: 100 }, { mix: 50 }],
+    highlightsshadows: [{ skin: 100 }, { mix: 50 }],
+    faded: [{ range: 1 }, { mix: 50 }],
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o14Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o13P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o13Pic;
+      const a = _o13Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o13Run(type, _o13Del(P, _O14_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O14_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on a new instance, on that fixture at that moment, through the dispatcher's pixel step */
+  const _o14Moves = (type, over, W, H, pic, t) => E1.count(_o13Run(type, _o13P(type), W, H, pic(W, H), t), _o13Run(type, _o13P(type, over), W, H, pic(W, H), t), 0);
+  /* (b) in general: on `pic`, `over` laid on the instance `base` draws, pixel for pixel and to the last level, the kernel's own picture
+     without the new keys laid in by the share wf — the worst pixel and where, or null when every pixel matches */
+  const _o14Worst = (type, base, over, W, H, pic, wf, t) => {
+    const ker = _o13Run(type, _o13Del(Object.assign({}, base, over), _O14_NEW[type]), W, H, pic(W, H), t);
+    const want = _o13Lay(pic(W, H), ker, wf), got = _o13Run(type, Object.assign({}, base, over), W, H, pic(W, H), t);
+    let worst = 0, at = -1;
+    for (let i = 0; i < got.length; i += 4) for (let c = 0; c < 3; c++) { const e = Math.abs(got[i + c] - want[i + c]); if (e > worst) { worst = e; at = i / 4; } }
+    return worst ? { worst: worst, x: at % W, y: (at / W) | 0, got: got.slice(at * 4, at * 4 + 3).join(', '), want: want.slice(at * 4, at * 4 + 3).join(', ') } : null;
+  };
+  /* a row of given pixels read back against a list of wanted colours; a null in the list is not read */
+  const _o14Want = (bad, got, pics, list, name) => list.forEach((w, x) => { if (!w) return; const px = _o13At(got, pics.length, x, 0).slice(0, 3); if (px.join() !== w.join()) bad.push(name + ': pixel ' + pics[x].join('/') + ' reads ' + px.join(', ') + ', not ' + w.join(', ')); });
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect over a grey ground. CONTROLS: each effect changes the picture against the rect with no effect, and each new control
+     off its default moves the picture through the same compositor, at 1:1. */
+  test('966 opts14 every new control at its default draws what the effect drew without it — each of the round’s effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O14_NEW);
+    TYPES.forEach(type => _o14Need(type, _O14_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const one = params => type => [_o13Rect({ type: type, enabled: true, params: params })];
+    TYPES.forEach(type => {
+      const P = _o13P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o13shot(one(Object.assign({}, P))(type), t, W, H, rs, BG);
+        const b = _o13shot(one(_o13Del(P, _O14_NEW[type]))(type), t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O14_NEW[type].join(' / '));
+        if (rs == null) { const off = _o13shot([_o13Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+      const base = _o13shot(one(Object.assign({}, P))(type), 0.61, W, H, null, BG);
+      _O14_OFF[type].forEach(o => {
+        const n = E1.count(base, _o13shot(one(Object.assign({}, P, o))(type), 0.61, W, H, null, BG), 2);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels; Mix 50 halves each effect's move, and Protect skin 100 holds back the warm end of the gradient (#f0c060 sits at hue 40°, saturation 0.6) */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Colour Balance: Protect skin and Mix ---- */
+  /* At its defaults (Red 25, Green 0, Blue −25, All, Keep brightness Off, Range width 100) the kernel adds 25/100 x 80 = 20 to red and
+     takes 20 from blue, the very cast round thirteen worked for Colour Temperature, so round thirteen's six pixels and skin weights
+     (_O13_SKIN, _o13Skin = skinW12 to the letter) carry over level for level: the light skin tone balances to (240, 170, 110), the deeper
+     one to (180, 110, 60), the rose to (240, 100, 100), the blue to (60, 90, 180), the green to (80, 170, 60), the grey to (148, 128,
+     108). Protect skin 100 moves each pixel 1 − its skin weight of the way: both skin tones stay the picture, the rose (weight 0.5) goes
+     half way (230, 100, 110), the rest keep the push. At 50 % the light skin tone goes half way, (230, 170, 120), the deeper one (170,
+     110, 70), the rose three quarters, (235, 100, 105). On the base code Protect skin is ignored and both skin tones take the whole push. */
+  test('966 opts14 Colour Balance has Protect skin (0–100 %, keyframable, 0 by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    _o14Need('colorbalance', _O14_NEW.colorbalance);
+    const bad = _o13Rows('colorbalance', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp('colorbalance', { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('colorbalance', { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Colour Balance Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the push byte for byte and a rose at the window’s edge comes half way back, at 50 % each pixel comes back half its skin weight, and with Affects, Range width, Keep brightness and other pushes every pixel of a busy picture is the balance laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone takes the whole 20 levels)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('colorbalance', _o13P('colorbalance', over), N, 1, row(), 0.5);
+    _o14Want(bad, run({}), _O13_SKIN, [[240, 170, 110], [180, 110, 60], [240, 100, 100], [60, 90, 180], [80, 170, 60], [148, 128, 108]], 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], [230, 100, 110], [60, 90, 180], [80, 170, 60], [148, 128, 108]], 'Protect skin 100');
+    _o14Want(bad, run({ skin: 50 }), _O13_SKIN, [[230, 170, 120], [170, 110, 70], [235, 100, 105], [60, 90, 180], [80, 170, 60], [148, 128, 108]], 'Protect skin 50');
+    [{ range: 1 }, { range: 3, soft: 150 }, { preserve: 1 }, { skin: 100, red: -60, green: 30, blue: 40 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin;
+      const w = _o14Worst('colorbalance', _o13P('colorbalance'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the balance laid in by 1 − its skin weight)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at the defaults: Mix 50 puts the light skin tone at (230, 170, 120), the blue at (50, 90, 190) and the grey at (138, 128, 118);
+     with Protect skin 100 as well the light skin tone is the picture and the blue still goes half way. On the base code Mix is ignored. */
+  test('966 opts14 Colour Balance Mix: at 50 % the push goes half way — a grey reads 138, 128, 118 — at 0 % the picture is itself byte for byte, with Protect skin 100 as well a skin tone stays put while a blue goes half way, and a Mix keyed 0 to 100 draws its value half way (CONTROL: at 100 % the grey reads 148, 128, 108)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('colorbalance', _o13P('colorbalance', over), N, 1, row(), 0.5);
+    const at = (d, x) => _o13At(d, N, x, 0).slice(0, 3).join(', ');
+    if (at(run({}), 5) !== '148, 128, 108') bad.push('CONTROL: at Mix 100 the grey reads ' + at(run({}), 5) + ', not 148, 128, 108');
+    const half = run({ mix: 50 });
+    if (at(half, 0) !== '230, 170, 120') bad.push('at Mix 50 the light skin tone reads ' + at(half, 0) + ', not 230, 170, 120');
+    if (at(half, 3) !== '50, 90, 190') bad.push('at Mix 50 the blue reads ' + at(half, 3) + ', not 50, 90, 190');
+    if (at(half, 5) !== '138, 128, 118') bad.push('at Mix 50 the grey reads ' + at(half, 5) + ', not 138, 128, 118');
+    const m0 = E1.maxDiff(run({ mix: 0 }), row());
+    if (m0 !== 0) bad.push('at Mix 0 the row moves up to ' + m0 + ' levels — it should be the picture itself');
+    const both = run({ mix: 50, skin: 100 });
+    if (at(both, 0) !== '220, 170, 130') bad.push('at Mix 50 with Protect skin 100 the light skin tone reads ' + at(both, 0) + ', not the picture 220, 170, 130');
+    if (at(both, 3) !== '50, 90, 190') bad.push('at Mix 50 with Protect skin 100 the blue reads ' + at(both, 3) + ', not 50, 90, 190');
+    const mk = E1.maxDiff(run({ mix: _o13KF(0, 100) }), half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o14Worst('colorbalance', _o13P('colorbalance'), { mix: 35, range: 2, preserve: 1 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with Affects Mids and Keep brightness: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Colour Balance at Protect skin 0 % and Mix 100 % draws byte for byte what it drew without them — at its defaults, on other pushes, on Darks and on Lights with a Range width, with Keep brightness, keyframed, and on a half-size plate (CONTROL: Protect skin and Mix each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o14Need('colorbalance', _O14_NEW.colorbalance);
+    const bad = _o14Ident('colorbalance', [{}, { over: { red: -60, green: 30, blue: 70 } }, { over: { range: 1 } }, { over: { range: 3, soft: 150 } }, { over: { preserve: 1 } }, { over: { red: _o13KF(-50, 80) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O14_OFF.colorbalance.forEach(o => { const n = _o14Moves('colorbalance', o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — Mix 50 moves every pixel's red and blue short of the clip by 10; Protect skin 100 only the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Colour Balance ---- */
+
+  /* ---- Highlights & Shadows: Protect skin and Mix ---- */
+  /* At its defaults (Highlights −40, Shadows 50, the rest at rest) the kernel adds the same amount to all three channels of a pixel:
+     60 x (1 − L)² − 48 x L² on its brightness L, into the clamped array. Grey 60 (L 0.235): 35.11 − 2.66 = +32.4, so 92; grey 240 (L
+     0.941): 0.21 − 42.52 = −42.3, so 198. On round thirteen's six pixels: the light skin tone (L 0.707) falls 18.9 to (201, 151, 111),
+     the deeper one (L 0.477) rises 5.5 to (166, 116, 86), the rose (L 0.542) falls 1.49 to (219, 99, 119), the blue (L 0.343) rises 20.2
+     to (60, 110, 220), the green 3.3 to (63, 173, 83), the grey 2.8 to (131, 131, 131). Protect skin moves each pixel 1 − Protect skin x its skin weight of
+     the way: at 100 % both skin tones are the picture and the blue, the green and the grey keep the whole move; at 50 % the light skin
+     tone goes half way, 220 − 9.5 = 210.5 and so on, which the clamped array rounds to the even 210, 160, 120, the deeper one 163, 113,
+     83, the rose (weight 0.5, so three quarters of its move) 219.25 → 219, 99, 119. The rose at 100 % lands on a tie (219.5) that only a
+     skin weight of exactly 0.5 decides, so it is read in the busy-picture check and not by value. On the base code Protect skin is
+     ignored and both skin tones take the whole move. */
+  test('966 opts14 Highlights & Shadows has Protect skin (0–100 %, keyframable, 0 by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    _o14Need('highlightsshadows', _O14_NEW.highlightsshadows);
+    const bad = _o13Rows('highlightsshadows', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp('highlightsshadows', { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('highlightsshadows', { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Highlights & Shadows Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the lift byte for byte, at 50 % each pixel comes back half its skin weight, and with Local radius, Whites and Blacks, Tonal width, Colour boost and other amounts every pixel of a busy picture is the recovery laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone falls the whole 19 levels)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('highlightsshadows', _o13P('highlightsshadows', over), N, 1, row(), 0.5);
+    _o14Want(bad, run({}), _O13_SKIN, [[201, 151, 111], [166, 116, 86], [219, 99, 119], [60, 110, 220], [63, 173, 83], [131, 131, 131]], 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], null, [60, 110, 220], [63, 173, 83], [131, 131, 131]], 'Protect skin 100');
+    _o14Want(bad, run({ skin: 50 }), _O13_SKIN, [[210, 160, 120], [163, 113, 83], [219, 99, 119], [60, 110, 220], [63, 173, 83], [131, 131, 131]], 'Protect skin 50');
+    [{ radius: 10 }, { whites: 30, blacks: -20 }, { width: 60, sat: 40 }, { skin: 100, shadows: -30, highlights: 60 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin;
+      const w = _o14Worst('highlightsshadows', _o13P('highlightsshadows'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the recovery laid in by 1 − its skin weight)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at the defaults: grey 60 recovers to 92, so Mix 50 lands at 60 + 32 x 0.5 = 76; grey 240 recovers to 198, so 240 − 42 x 0.5 =
+     219. With Protect skin 100 as well the light skin tone is the picture and the blue goes half way, 40 + 20 x 0.5 = 50, 100, 210. On the
+     base code Mix is ignored and grey 60 comes out at 92, 16 levels from 76. */
+  test('966 opts14 Highlights & Shadows Mix: at 50 % grey 60 of a 0–255 ramp reads 76 and grey 240 reads 219, every grey sits half way between itself and its recovered value to the level, at 0 % the ramp is itself byte for byte, with Protect skin 100 as well a skin tone stays put while a blue goes half way, and a Mix keyed 0 to 100 draws its value half way (CONTROL: the whole lift takes grey 60 to 92 and grey 240 to 198)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('highlightsshadows', _o13P('highlightsshadows', over), 256, 2, _o13Lv(), 0.5);
+    const full = run({}), half = run({ mix: 50 }), none = run({ mix: 0 }), keyed = run({ mix: _o13KF(0, 100) });
+    if (_o13At(full, 256, 60, 0)[0] !== 92 || _o13At(full, 256, 240, 0)[0] !== 198) bad.push('CONTROL: at Mix 100 grey 60 reads ' + _o13At(full, 256, 60, 0)[0] + ' (92 expected) and grey 240 ' + _o13At(full, 256, 240, 0)[0] + ' (198 expected)');
+    const g60 = _o13At(half, 256, 60, 0), g240 = _o13At(half, 256, 240, 0);
+    if (g60[0] !== 76 || g60[1] !== 76 || g60[2] !== 76) bad.push('at Mix 50 grey 60 reads ' + g60.slice(0, 3).join(', ') + ', not 76, 76, 76');
+    if (g240[0] !== 219 || g240[1] !== 219 || g240[2] !== 219) bad.push('at Mix 50 grey 240 reads ' + g240.slice(0, 3).join(', ') + ', not 219, 219, 219');
+    let worst = 0, at = -1;
+    for (let v = 0; v < 256; v++) {
+      const want = _o13U8(v + (_o13At(full, 256, v, 0)[0] - v) * 0.5, 0, 0)[0], got = _o13At(half, 256, v, 0);
+      for (let c = 0; c < 3; c++) { const e = Math.abs(got[c] - want); if (e > worst) { worst = e; at = v; } }
+    }
+    if (worst > 0) bad.push('at Mix 50 grey ' + at + ' reads ' + _o13At(half, 256, at, 0).slice(0, 3).join(', ') + ', ' + worst + ' levels from half way to its recovered value');
+    const m0 = E1.maxDiff(none, _o13Lv());
+    if (m0 !== 0) bad.push('at Mix 0 the ramp moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(keyed, half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const N = _O13_SKIN.length, both = _o13Run('highlightsshadows', _o13P('highlightsshadows', { mix: 50, skin: 100 }), N, 1, _o13Row(_O13_SKIN)(), 0.5);
+    _o14Want(bad, both, _O13_SKIN, [[220, 170, 130], null, null, [50, 100, 210]], 'Mix 50 with Protect skin 100');
+    const w = _o14Worst('highlightsshadows', _o13P('highlightsshadows'), { mix: 35, radius: 8, blacks: 20 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with Local radius and Blacks: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Highlights & Shadows at Protect skin 0 % and Mix 100 % draws byte for byte what it drew without them — at its defaults, on other amounts, with Whites and Blacks, a Tonal width, a Local radius and Colour boost, keyframed, and on a half-size plate (CONTROL: Protect skin and Mix each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o14Need('highlightsshadows', _O14_NEW.highlightsshadows);
+    const bad = _o14Ident('highlightsshadows', [{}, { over: { shadows: 90, highlights: -80 } }, { over: { whites: 30, blacks: -20 } }, { over: { width: 50 } }, { over: { radius: 12, sat: 30 } }, { over: { shadows: _o13KF(0, 100) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }]);
+    _O14_OFF.highlightsshadows.forEach(o => { const n = _o14Moves('highlightsshadows', o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the lift is zero only near L 0.53, so Mix 50 moves nearly every pixel; Protect skin 100 only the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Highlights & Shadows ---- */
+
+  /* ---- Faded Film: Affects and Mix ---- */
+  /* At its defaults (Amount 0.6, Milky blacks 26, Colour loss 15 %, Warm / cool 100 %, Contrast loss 100 %, Fade whites 0, a grey Fade
+     colour) the kernel lifts by 26 x 0.6 = 15.6, squeezes about 128 by 1 − 0.25 x 0.6 = 0.85, pulls 0.15 x 0.6 = 0.09 of the way to the
+     pixel's luma, and adds the cast +4.8 red, +1.2 green, −3.6 blue. Grey 40: 15.6 + 40 x 239.4 / 255 = 53.15, squeezed to 64.38, so
+     (66.99, 63.39, 58.59) → (67, 63, 59); grey 220: 222.14 → 208.02, so (213.90, 210.30, 205.50) → (214, 210, 205); grey 100: (116, 112,
+     108). Affects weighs each pixel's move by its own brightness, as tone13 does: grey 40 (L 0.157) by Darks (1 − L)² = 0.711 → (59, 56,
+     54), Mids 0.529 → (54, 52, 50), Lights 0.0246 → (41, 41, 40); grey 220 (L 0.863) by Darks 0.0188 → (220, 220, 220), Mids 0.474 →
+     (217, 215, 213), Lights 0.744 → (216, 213, 209). Mix 50 puts grey 100 at (108, 106, 104), each exactly half way. On the base code
+     Affects and Mix are ignored and every grey takes the whole fade. */
+  test('966 opts14 Faded Film has Affects (All, Darks, Mids or Lights, storing 0–3, All by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Mids and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o14Need('faded', _O14_NEW.faded);
+    const bad = _o13Rows('faded', [
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { range: 2, mix: 40 });
+    bad.push.apply(bad, _o13Clamp('faded', { mix: 150 }, { mix: 100 }));
+    bad.push.apply(bad, _o13Clamp('faded', { mix: -5 }, { mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('faded', { range: 7 }, { range: undefined }));
+    const ps = FM.fxRegistry.get('faded').params || [];
+    if (!ps.length || ps[ps.length - 1].key !== 'fadecol') bad.push('Fade colour is no longer the last row (' + ps.map(p => p.key).join(', ') + ') — the colour row stays last');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Faded Film Affects: Darks fades grey 40 to 59, 56, 54 and leaves grey 220 at 220, Mids takes them to 54, 52, 50 and 217, 215, 213, Lights to 41, 41, 40 and 216, 213, 209 — and with more lift and colour loss, a Fade colour, a cool cast with Contrast loss and Fade whites, and a Mix every pixel of a busy picture is the fade times the tonal weight of its own brightness to the level (CONTROL: All fades grey 40 to 67, 63, 59 and grey 220 to 214, 210, 205)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('faded', _o13P('faded', over), 256, 2, _o13Lv(), 0.5);
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    const all = run({});
+    if (px(all, 40) !== '67, 63, 59' || px(all, 220) !== '214, 210, 205') bad.push('CONTROL: under All grey 40 reads ' + px(all, 40) + ' and grey 220 reads ' + px(all, 220) + ' (67, 63, 59 and 214, 210, 205 expected)');
+    [[1, 'Darks', '59, 56, 54', '220, 220, 220'], [2, 'Mids', '54, 52, 50', '217, 215, 213'], [3, 'Lights', '41, 41, 40', '216, 213, 209']].forEach(([rg, name, w40, w220]) => {
+      const got = run({ range: rg });
+      if (px(got, 40) !== w40) bad.push(name + ' puts grey 40 at ' + px(got, 40) + ', not ' + w40);
+      if (px(got, 220) !== w220) bad.push(name + ' puts grey 220 at ' + px(got, 220) + ', not ' + w220);
+      [{}, { lift: 60, desat: 70 }, { fadecol: '#a0c0e0' }, { tone: -150, crush: 180, rolloff: 40 }, { mix: 60 }].forEach(extra => {
+        const mix = extra.mix == null ? 100 : extra.mix;
+        const w = _o14Worst('faded', _o13P('faded'), Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(mix, rg, _o13L(r, g, b), 0, 0), 0.5);
+        if (w) bad.push(name + ' ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its fade times its tonal weight' + (extra.mix ? ' times Mix' : '') + ')');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Faded Film Mix: at 50 % grey 100 of a 0–255 ramp reads 108, 106, 104, every grey sits half way between itself and its faded value to the level in each channel, at 0 % the ramp is itself byte for byte, and a Mix keyed 0 to 100 draws its value half way (CONTROL: the whole fade takes grey 100 to 116, 112, 108)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('faded', _o13P('faded', over), 256, 2, _o13Lv(), 0.5);
+    const full = run({}), half = run({ mix: 50 }), none = run({ mix: 0 }), keyed = run({ mix: _o13KF(0, 100) });
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    if (px(full, 100) !== '116, 112, 108') bad.push('CONTROL: at Mix 100 grey 100 reads ' + px(full, 100) + ', not 116, 112, 108');
+    if (px(half, 100) !== '108, 106, 104') bad.push('at Mix 50 grey 100 reads ' + px(half, 100) + ', not 108, 106, 104');
+    let worst = 0, at = -1;
+    for (let v = 0; v < 256; v++) {
+      const f = _o13At(full, 256, v, 0), want = _o13U8(v + (f[0] - v) * 0.5, v + (f[1] - v) * 0.5, v + (f[2] - v) * 0.5), got = _o13At(half, 256, v, 0);
+      for (let c = 0; c < 3; c++) { const e = Math.abs(got[c] - want[c]); if (e > worst) { worst = e; at = v; } }
+    }
+    if (worst > 0) bad.push('at Mix 50 grey ' + at + ' reads ' + px(half, at) + ', ' + worst + ' levels from half way to its faded value');
+    const m0 = E1.maxDiff(none, _o13Lv());
+    if (m0 !== 0) bad.push('at Mix 0 the ramp moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(keyed, half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o14Worst('faded', _o13P('faded'), { mix: 35, fadecol: '#3050ff', amount: 1 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with a Fade colour at full Amount: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Faded Film at All and Mix 100 % draws byte for byte what it drew without them — at its defaults, at full Amount, with more lift, colour loss and a cool cast, with Contrast loss and Fade whites, with a Fade colour, keyframed, and on a half-size plate (CONTROL: Darks and Mix 50 each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o14Need('faded', _O14_NEW.faded);
+    const bad = _o14Ident('faded', [{}, { over: { amount: 1 } }, { over: { lift: 70, desat: 60, tone: -120 } }, { over: { crush: 160, rolloff: 30 } }, { over: { fadecol: '#3050ff' } }, { over: { amount: _o13KF(0.2, 1) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }]);
+    _O14_OFF.faded.forEach(o => { const n = _o14Moves('faded', o, 96, 72, _o13Pic, 0.5); if (n < 1000) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the default fade moves every channel by 4 to 25 levels (more at the ends, where the lift and the squeeze add), and Darks or Mix 50 holds a light or any pixel back by a level or more */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Faded Film ---- */
+
+  /* the round's editors, new rows and all, fit the inspector (round thirteen's fit test) */
+  test('966 opts14 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = {
+      colorbalance: 'Protect skin',
+      highlightsshadows: 'Protect skin',
+      faded: 'Affects',
+    };
+    Object.keys(NEW).forEach(type => _o14Need(type, _O14_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o13Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts14 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition
@@ -178543,10 +178986,16 @@
    *           mark's clock as it ends (window.__late1180);
    *   css     links the shipped styles.css and theme-glass.css (the hrefs index.html ships, busters included);
    *   attrs   attributes for <html>, e.g. data-theme and data-home;
-   *   home    adds a visible <div id=home-screen>, as a first load opens Home under the splash. */
+   *   home    adds a visible <div id=home-screen>, as a first load opens Home under the splash;
+   *   stored  a value for fm.splashed before the boot (a string), instead of clearing it (release 1 of #1180: the flag
+   *           holds the build, meta fm-build, which is copied into the frame's head with the charset);
+   *   after   markup put straight after the splash block (a pause, a yielding boot stand-in);
+   *   loadWaitMs  how long to wait for the frame's load before returning (4000 by default).
+   * The frame's own load time, from __t0, is window.__loadAt. */
   async function boot1180(opts) {
     opts = opts || {};
     const html = await src1180();
+    const bm = html.match(/<meta name="fm-build" content="[^"]*">/);
     const a = html.indexOf('<body>'), b = html.indexOf('<div id="app">');
     if (a < 0 || b < a) throw new Error('setup: cannot find the splash block between <body> and #app in index.html');
     let links = '';
@@ -178558,19 +179007,24 @@
       }
     }
     const pre = '<script>window.__t0 = performance.now(); window.__rec = []; window.__snap1180 = ' + String(snap1180) + ';' +
+      'window.addEventListener(\'load\', function () { window.__loadAt = performance.now() - window.__t0; });' +
       'document.addEventListener(\'fm:splash-dismiss\', function (e) { var s = null; try { s = window.__snap1180(); } catch (x) {} window.__rec.push({ t: performance.now() - window.__t0, quick: !!(e.detail && e.detail.quick), snap: s }); });' +
       (opts.reduce ? '(function () { var mm = window.matchMedia.bind(window); window.matchMedia = function (q) { if (/prefers-reduced-motion/.test(q)) return { matches: true, media: q, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {} }; return mm(q); }; })();' : '') +
       '<\/script>';
     const late = opts.lateMs ? '<script>(function () { var t0 = performance.now(); while (performance.now() - t0 < ' + (+opts.lateMs) + ') {} var c = -1; try { c = document.getElementById(\'splash-mark\').getCurrentTime(); } catch (x) {} window.__late1180 = { ms: Math.round(performance.now() - t0), clock: c }; })();<\/script>' : '';
     const home = opts.home ? '<div id="home-screen"></div>' : '';
     let had = null;
-    try { had = sessionStorage.getItem('fm.splashed'); sessionStorage.removeItem('fm.splashed'); } catch (e) {}
+    try {
+      had = sessionStorage.getItem('fm.splashed');
+      if (typeof opts.stored === 'string') sessionStorage.setItem('fm.splashed', opts.stored);
+      else sessionStorage.removeItem('fm.splashed');
+    } catch (e) {}
     const f = document.createElement('iframe');
     f.style.cssText = 'position:fixed;left:0;top:0;width:380px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
     const done = new Promise(function (res) { f.onload = res; });
-    f.srcdoc = '<!doctype html><html' + (opts.attrs ? ' ' + opts.attrs : '') + '><head><meta charset="utf-8">' + links + '</head><body>' + pre + html.slice(a + 6, b) + late + home + '</body></html>';
+    f.srcdoc = '<!doctype html><html' + (opts.attrs ? ' ' + opts.attrs : '') + '><head><meta charset="utf-8">' + (bm ? bm[0] : '') + links + '</head><body>' + pre + html.slice(a + 6, b) + (opts.after || '') + late + home + '</body></html>';
     document.body.appendChild(f);
-    await Promise.race([done, sleep(4000)]);
+    await Promise.race([done, sleep(opts.loadWaitMs || 4000)]);
     const restore = function () {
       try { f.remove(); } catch (e) {}
       try { if (had === null) sessionStorage.removeItem('fm.splashed'); else sessionStorage.setItem('fm.splashed', had); } catch (e) {}
@@ -178741,7 +179195,8 @@
       }
       let flag = null;
       try { flag = sessionStorage.getItem('fm.splashed'); } catch (e) {}
-      if (flag !== '1') throw new Error('with reduced motion the session is not marked splashed, so every reload would show it again');
+      const bmeta = d.querySelector('meta[name="fm-build"]'), wantFlag = bmeta ? bmeta.content : '1';
+      if (flag !== wantFlag) throw new Error('with reduced motion the session is not marked splashed for this build (fm.splashed is ' + flag + ', not ' + wantFlag + '), so every reload would show it again');
       for (let i = 0; i < 50 && d.getElementById('splash'); i++) await sleep(50);
       if (d.getElementById('splash')) throw new Error('with reduced motion the still never handed over to the app (still up after 2.5 s)');
     } finally {
@@ -178811,6 +179266,150 @@
       if (d.getElementById('splash')) throw new Error('#splash was still in the page 2 s after its dissolve began' + said);
     } finally {
       run.restore();
+    }
+  });
+
+  /* 1180 R1 (a) A BOOT THAT YIELDS (release 1 of #1180, cause 4; Ezra 23 Oct: "i cant see the animation"). On his phone the
+   * app's ~100 scripts arrive one by one, so the main thread YIELDS between them and timers run during the boot, while the
+   * load, and with it the mark's clock, comes late. Twenty blob: scripts that each hold the thread for 400 ms stand in for
+   * that: 8 s of boot that yields. Proves: the splash still ends NATURALLY (exactly one fm:splash-dismiss, quick false, no
+   * splash-cut) with the mark's clock past END_S + HOLD_S, and the frame's load really came after 7.5 s.
+   * FAILS BEFORE THE FIX: the base's 8 s backstop counts from the splash script, so it fires in the boot's last gap or
+   * straight after it, before the clock has run: a cut (quick true, splash-cut). */
+  test('1180 a boot that yields for 8 s does not cut the Keyframes splash: it plays from the load and dissolves naturally', { item: '1180', budgetMs: 60000 }, async function () {
+    const code = '(function () { var t0 = performance.now(); while (performance.now() - t0 < 400) {} })();';
+    const urls = [];
+    for (let i = 0; i < 20; i++) urls.push(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
+    const run = await boot1180({ after: urls.map(function (u) { return '<script src="' + u + '"><\/script>'; }).join(''), loadWaitMs: 15000 });
+    try {
+      const d = run.d, w = run.w;
+      if (!d.getElementById('splash')) throw new Error('the booted splash block has no #splash');
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (1180 reduced-motion test covers the still)');
+      for (let i = 0; i < 400 && !(w.__rec && w.__rec.length); i++) await sleep(50);
+      const rec = w.__rec || [];
+      if (!rec.length) throw new Error('after a boot that yields for 8 s the splash never handed over (waited 20 s after the frame load)');
+      const s = rec[0].snap || {};
+      if (rec[0].quick || s.cut) throw new Error('after a boot that yields for 8 s the splash was CUT (quick ' + rec[0].quick + ', splash-cut ' + !!s.cut + ') at ' + Math.round(rec[0].t) + ' ms, with the mark’s clock at ' + (+s.clock).toFixed(2) + ' s: a backstop counted from the script ran out before the animation had played');
+      for (let i = 0; i < 40 && typeof w.__loadAt !== 'number'; i++) await sleep(50);
+      if (!(w.__loadAt > 7500)) throw new Error('setup: the frame loaded at ' + w.__loadAt + ' ms, so the 20 x 400 ms boot stand-in did not hold the load past 7.5 s and this proves nothing');
+      if (!(s.clock >= END_S1180 + HOLD_S1180)) throw new Error('the dissolve began with the mark’s clock at ' + (+s.clock).toFixed(2) + ' s, short of the finished frame and its hold (' + (END_S1180 + HOLD_S1180).toFixed(2) + ' s)');
+      for (let i = 0; i < 40 && d.getElementById('splash'); i++) await sleep(50);
+      if (rec.length !== 1) throw new Error('fm:splash-dismiss fired ' + rec.length + ' times: home.js needs exactly one natural (quick:false) dismiss to time its entrance');
+      if (d.getElementById('splash')) throw new Error('#splash was still in the page 2 s after its dissolve began');
+    } finally {
+      run.restore();
+      urls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} });
+    }
+  });
+
+  /* 1180 R1 (b) ONCE PER BUILD, NOT ONCE PER SESSION (cause 1). The flag was '1', set the moment the splash script ran, so a
+   * resumed iPhone app, the update chip (location.replace keeps sessionStorage), a refresh and a takeover's reload all
+   * skipped the intro. It now holds the build (meta fm-build). Proves, each in a fresh frame booted with that fm.splashed:
+   * v17.97's stored '1' PLAYS (#splash shown), an older build's value plays, a played intro leaves fm.splashed equal to the
+   * build, and the same build's value does NOT play (#splash stays hidden).
+   * FAILS BEFORE THE FIX: the base returns on ANY stored value, so with '1' stored the splash stays hidden and it throws
+   * its first sentence, by behaviour. */
+  test('1180 a new build plays the intro once more in the same session, and a reload of the same build does not', { item: '1180', budgetMs: 30000 }, async function () {
+    const html = await src1180();
+    const m = html.match(/<meta name="fm-build" content="([^"]*)">/);
+    const build = m ? m[1] : null;
+    const bootWith = async function (stored) {
+      const run = await boot1180({ stored: stored });
+      try {
+        const sp = run.d.getElementById('splash');
+        if (!sp) throw new Error('the booted splash block has no #splash');
+        let flag = null;
+        try { flag = sessionStorage.getItem('fm.splashed'); } catch (e) {}
+        return { shown: !sp.classList.contains('hidden'), flag: flag };
+      } finally {
+        run.restore();
+      }
+    };
+    const v97 = await bootWith('1');
+    if (!v97.shown) throw new Error('a session that saw v17.97’s intro (fm.splashed 1) did not play the new build’s: the splash stayed hidden, so a resumed app or the update chip never shows his logo');
+    const older = await bootWith('v0.01');
+    if (!older.shown) throw new Error('a session that saw an older build’s intro (fm.splashed v0.01) did not play this build’s');
+    if (!build) throw new Error('index.html carries no meta fm-build, so the splash has no build to compare with');
+    if (v97.flag !== build || older.flag !== build) throw new Error('a played intro left fm.splashed as ' + v97.flag + ' and ' + older.flag + ', not the build ' + build + ', so the next reload of this build would play it again');
+    const same = await bootWith(build);
+    if (same.shown) throw new Error('a reload of the same build (fm.splashed ' + build + ') played the intro again');
+  });
+
+  /* 1180 R1 (b2) THE BUILD THE SPLASH COMPARES IS THE VERSION ON SCREEN. Proves: index.html's meta fm-build (in <head>)
+   * equals the version label (.ver), so a release that bumps one without the other goes red here, instead of replaying the
+   * intro for a build that did not change, or never playing it for one that did.
+   * FAILS BEFORE THE FIX: the base has no meta fm-build. */
+  test('1180 the fm-build meta names the same version as the on-screen label', { item: '1180' }, async function () {
+    const html = await src1180();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const meta = doc.querySelector('head meta[name="fm-build"]');
+    if (!meta) throw new Error('index.html has no meta fm-build in its <head>');
+    const ver = doc.querySelector('.ver');
+    if (!ver) throw new Error('setup: index.html has no .ver version label');
+    if (meta.getAttribute('content') !== ver.textContent.trim()) throw new Error('meta fm-build is ' + meta.getAttribute('content') + ' but the version label reads ' + ver.textContent.trim() + ': bump both together');
+  });
+
+  /* 1180 R1 (c) A PAUSED CLOCK (cause 3). iOS with Auto-Play Animated Images off pauses every SMIL clock, so getCurrentTime()
+   * stays 0 and the mark's first frame, which is EMPTY, sat as a dark box until the 8 s backstop. pauseAnimations() straight
+   * after the splash block, before the load, stands in for it (svg.animationsPaused() reads true, as it does there).
+   * Proves: the splash hands over within 4 s of the load, NATURALLY (quick false, no splash-cut, one dismiss), and at the
+   * hand-over it shows the END FRAME as a still (no animation left in it, the clips at rest, the name shown).
+   * FAILS BEFORE THE FIX: the base waits for a clock that never moves, and nothing hands over until its 8 s backstop, so it
+   * throws that nothing handed over within 4 s of the load. */
+  test('1180 when the browser pauses SVG animation the splash shows the finished logo as a still, not a dark box until the backstop', { item: '1180', budgetMs: 30000 }, async function () {
+    const run = await boot1180({ after: '<script>try { document.getElementById(\'splash-mark\').pauseAnimations(); } catch (e) {}<\/script>' });
+    try {
+      const d = run.d, w = run.w;
+      const svg = d.getElementById('splash-mark');
+      if (!svg) throw new Error('the booted splash block has no svg#splash-mark');
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (1180 reduced-motion test covers the still)');
+      if (!(typeof svg.animationsPaused === 'function' && svg.animationsPaused())) throw new Error('setup: pauseAnimations() before the load did not take (animationsPaused is false), so this proves nothing');
+      for (let i = 0; i < 80 && !(w.__rec && w.__rec.length); i++) await sleep(50);
+      const rec = w.__rec || [];
+      if (!rec.length) throw new Error('with the clock paused nothing handed over within 4 s of the load: he sees the empty first frame, a dark box, until the backstop');
+      const r = rec[0], s = r.snap || {};
+      if (r.quick || s.cut) throw new Error('with the clock paused the splash was CUT (quick ' + r.quick + ', splash-cut ' + !!s.cut + ') at ' + Math.round(r.t) + ' ms: the still should hand over naturally');
+      if (!s.shown) throw new Error('with the clock paused the splash never showed');
+      if (s.anims) throw new Error('with the clock paused the hand-over came with ' + s.anims + ' animations still in the mark: it showed the paused first frame (empty), not the finished logo');
+      const want = { nC_clip1: ['14', '92'], nC_clip2: ['14', '62'], nC_clip3: ['14', '26'] };
+      for (const id in want) {
+        const c = s.clips[id];
+        if (!c || c[0] !== want[id][0] || c[1] !== want[id][1]) throw new Error('with the clock paused #' + id + ' is x ' + (c && c[0]) + ' width ' + (c && c[1]) + ' at the hand-over, not the end frame x ' + want[id][0] + ' width ' + want[id][1]);
+      }
+      if (s.name !== '1') throw new Error('with the clock paused the FreeMotion name is not shown at the hand-over (opacity ' + s.name + ')');
+      for (let i = 0; i < 50 && d.getElementById('splash'); i++) await sleep(50);
+      if (rec.length !== 1) throw new Error('fm:splash-dismiss fired ' + rec.length + ' times: home.js needs exactly one natural (quick:false) dismiss');
+      if (d.getElementById('splash')) throw new Error('with the clock paused the still never handed over to the app (still up 2.5 s after the dismiss)');
+    } finally {
+      run.restore();
+    }
+  });
+
+  /* 1180 R1 (d) A TAKEOVER WAITS FOR THE INTRO (cause 1's reload). A new service worker that takes over reloads the page
+   * when the app is idle (fmSwReloadWhenIdle), and a reload in the middle of the intro cut his logo off. Proves, on the
+   * live page's own fmSwBusy (FM._swReloadWhenIdle.busy): idle with #splash hidden (the control), BUSY while #splash is up,
+   * and idle again once it is dissolving (splash-out), so the reload waits for the intro and no longer.
+   * FAILS BEFORE THE FIX: the base's fmSwBusy never looks at the splash, so it reads idle while #splash is up and throws
+   * its second sentence, by behaviour. */
+  test('1180 a new build waits for the intro: the update hold counts the app busy while the splash is up', { item: '1180' }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (!W || typeof W.busy !== 'function') throw new Error('setup: FM._swReloadWhenIdle.busy is missing');
+    const until = async (ok, ms) => { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    let el = document.getElementById('splash'), made = false;
+    if (!el) { el = document.createElement('div'); el.id = 'splash'; document.body.appendChild(el); made = true; }
+    const saved = el.className;
+    try {
+      el.className = 'hidden';
+      if (!(await until(() => W.busy() === '', 8000))) throw new Error('setup: with the splash hidden the app already counts as busy (' + W.busy() + '), so the reading below would prove nothing');
+      el.className = 'splash-kf';
+      const up = W.busy();
+      if (!up) throw new Error('while the intro is up (#splash shown) the update hold counts the app as idle, so a new build reloads the page in the middle of his logo');
+      el.className = 'splash-kf splash-out';
+      const out = W.busy();
+      if (out) throw new Error('CONTROL: once the splash is dissolving (splash-out) the app still counts as busy (' + out + '): the reload would wait on a splash that is already going');
+    } finally {
+      el.className = saved;
+      if (made) el.remove();
     }
   });
 

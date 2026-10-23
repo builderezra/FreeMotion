@@ -885,7 +885,13 @@ window.FM = window.FM || {};
          had one fixed width. Keep brightness puts every pixel back at its own luma; Range width is an exponent on the
          range weight (100 = the old weights). Both defaults run the old loops. */
       { key: 'preserve', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
-      { key: 'soft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] }] },
+      { key: 'soft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] },
+      /* #966 opts14 (hunt/fx14, his "more choices always better"): the push always took every face in the shot with it, and always
+         at full strength. PROTECT SKIN holds skin-coloured pixels back from it with Teal & Orange's skin window (skinW12, the same hue,
+         saturation and brightness windows) — cool the shadows, keep the faces their own colour — and MIX lays the balanced picture
+         over the plain one. 0 % and 100 % run the old loops untouched (tone13 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' }] },
     { type: 'highlightsshadows', label: 'Highlights & Shadows', params: [{ key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, def: -40 }, { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, def: 50 },
       /* #482 polish 5.2 (answers C47): it was one whole-picture curve that ADDS the same amount to every channel, so +Shadows
          lifted true black to grey (milky blacks) and could not tell a dark shirt from a dark corner. Whites and Blacks move the
@@ -899,7 +905,13 @@ window.FM = window.FM || {};
       { key: 'blacks', label: 'Blacks', min: -100, max: 100, step: 1, def: 0 },
       { key: 'width', label: 'Tonal width', min: 10, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'radius', label: 'Local radius', min: 0, max: 200, step: 1, def: 0, unit: 'px', note: '0 = whole picture · above 0 = area by area, and black stays black' },
-      { key: 'sat', label: 'Colour boost', min: -100, max: 100, step: 1, def: 0 }] },
+      { key: 'sat', label: 'Colour boost', min: -100, max: 100, step: 1, def: 0 },
+      /* #966 opts14 (hunt/fx14, his "more choices always better"): the lift and the pull always took every face with them — a shadow
+         lift greys a dark face, a highlight pull muddies a lit one — and always at full strength. PROTECT SKIN holds skin-coloured pixels
+         back with Teal & Orange's skin window (skinW12), and MIX lays the recovered picture over the plain one. 0 % and 100 % run the old
+         loop untouched (tone13 only off them), so the 17 library filters built on it draw what they drew. */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' }] },
     { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°', overriddenBy: 'shape', liveWhen: 0 },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
       /* #482 polish 14.1 (answers C45). Every default is the old blur byte for byte; no library filter carries a Tilt Shift.
          Sharp band and Focus X are fractions of the frame, not px, so pxToPlate has nothing to scale. */
@@ -1556,6 +1568,13 @@ window.FM = window.FM || {};
          old look); Warm / cool still adds its cast on top. Contrast loss 100 and Fade whites 0 are the old curve. */
       { key: 'crush', label: 'Contrast loss', min: 0, max: 200, step: 5, def: 100, unit: '%' },
       { key: 'rolloff', label: 'Fade whites', min: 0, max: 100, step: 1, def: 0 },
+      /* #966 opts14 (hunt/fx14, his "more choices always better"): the fade always washed every tone of the picture at once and always
+         at full strength. AFFECTS confines it to the darks, the mids or the lights with Colour Balance's tonal weights ((1 − L)²,
+         1 − (2L − 1)², L², on the pixel's own brightness) — milky blacks under crisp highlights, or only the whites washed out — and MIX
+         lays the faded picture over the plain one. All and 100 % run the old loop untouched (tone13 only off them). Placed before Fade
+         colour so the colour row stays last. */
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks fades the shadows and leaves the lights crisp' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'fadecol', label: 'Fade colour', swatch: true, def: '#808080' },   // a colour row inside `params` (fx-registry paramsOf `swatch`), last like every effect colour
     ] },
     /* #966 opts4: VIEWER — night vision as seen through the device: everything outside one round Scope, or a pair of Binocular
@@ -10651,7 +10670,13 @@ window.FM = window.FM || {};
     // ---- batch 11 (multi-param pixel) ----
     // (motionblur moved to CANVAS_FX: the per-pixel 9-tap JS loop cost ~28ms/frame at 1080×1920 —
     //  the same directional smear as 9 GPU draws costs ~1ms. See CANVAS_FX.motionblur.)
-    colorbalance: function(d,W,H,p,t){ var cbR = fparam(p, 'red', 25, t); cbR=cbR<-100?-100:(cbR>100?100:cbR); var cbG = fparam(p, 'green', 0, t); cbG=cbG<-100?-100:(cbG>100?100:cbG); var cbB = fparam(p, 'blue', -25, t); cbB=cbB<-100?-100:(cbB>100?100:cbB); var cbAddR=cbR/100*80, cbAddG=cbG/100*80, cbAddB=cbB/100*80; var cbN=W*H*4;
+    colorbalance: function(d,W,H,p,t){
+      /* #966 opts14: PROTECT SKIN over 0 % or MIX under 100 % runs tone13 — this very kernel without the two (Affects, Keep brightness
+         and Range width as they are), its result laid in by Mix and by how far from skin each pixel's own colour is; 0 % and 100 % run
+         the lines below untouched. */
+      const cbSk14 = p.skin == null ? 0 : FM.evalProp(p.skin, t), cbMx14 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (cbSk14 > 0 || cbMx14 < 100) { tone13(d, W, H, p, t, PIXEL_FX.colorbalance, ['skin', 'mix'], 0, cbMx14, cbSk14); return; }
+      var cbR = fparam(p, 'red', 25, t); cbR=cbR<-100?-100:(cbR>100?100:cbR); var cbG = fparam(p, 'green', 0, t); cbG=cbG<-100?-100:(cbG>100?100:cbG); var cbB = fparam(p, 'blue', -25, t); cbB=cbB<-100?-100:(cbB>100?100:cbB); var cbAddR=cbR/100*80, cbAddG=cbG/100*80, cbAddB=cbB/100*80; var cbN=W*H*4;
       /* AFFECTS (queue 904): colour balance is meant to push shadows, mids and highlights apart — cool shadows under warm highlights is the
          whole grade. A weight by brightness picks the range: shadows (1-L)², highlights L², mids 1-(2L-1)². All runs the old loop exactly. */
       var cbRg=p.range==null?0:(Math.round(FM.evalProp(p.range,t))|0);
@@ -10671,7 +10696,13 @@ window.FM = window.FM || {};
         return; }
       if(cbRg>0){ for(var cbJ=0;cbJ<cbN;cbJ+=4){ if(d[cbJ+3]<=0)continue; var cbL=(0.299*d[cbJ]+0.587*d[cbJ+1]+0.114*d[cbJ+2])/255, cbW=cbRg===1?(1-cbL)*(1-cbL):cbRg===3?cbL*cbL:1-(2*cbL-1)*(2*cbL-1);
           var cbQ=d[cbJ]+cbAddR*cbW; d[cbJ]=cbQ<0?0:(cbQ>255?255:cbQ); cbQ=d[cbJ+1]+cbAddG*cbW; d[cbJ+1]=cbQ<0?0:(cbQ>255?255:cbQ); cbQ=d[cbJ+2]+cbAddB*cbW; d[cbJ+2]=cbQ<0?0:(cbQ>255?255:cbQ); } return; } for(var cbI=0;cbI<cbN;cbI+=4){ if(d[cbI+3]>0){ var cbVr=d[cbI]+cbAddR; d[cbI]=cbVr<0?0:(cbVr>255?255:cbVr); var cbVg=d[cbI+1]+cbAddG; d[cbI+1]=cbVg<0?0:(cbVg>255?255:cbVg); var cbVb=d[cbI+2]+cbAddB; d[cbI+2]=cbVb<0?0:(cbVb>255?255:cbVb); } } },
-    highlightsshadows: function(d,W,H,p,t){ var hsHi = fparam(p, 'highlights', -40, t); hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh = fparam(p, 'shadows', 50, t); hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4;
+    highlightsshadows: function(d,W,H,p,t){
+      /* #966 opts14: PROTECT SKIN over 0 % or MIX under 100 % runs tone13 — this very kernel without the two (Whites, Blacks, Tonal
+         width, Local radius and Colour boost as they are), its result laid in by Mix and by how far from skin each pixel's own colour
+         is; 0 % and 100 % run the lines below untouched. */
+      const hsSk14 = p.skin == null ? 0 : FM.evalProp(p.skin, t), hsMx14 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (hsSk14 > 0 || hsMx14 < 100) { tone13(d, W, H, p, t, PIXEL_FX.highlightsshadows, ['skin', 'mix'], 0, hsMx14, hsSk14); return; }
+      var hsHi = fparam(p, 'highlights', -40, t); hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh = fparam(p, 'shadows', 50, t); hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4;
       /* #482 polish 5.2 — Whites, Blacks, Tonal width, Local radius, Colour boost (hsGrade, above PIXEL_FX). At their
          defaults none of them is read past this line: the old loop below runs exactly as it always has. */
       var hsRd = hsNum(fparam(p, 'radius', 0, t), 0, 2000, 0), hsWd = hsNum(fparam(p, 'width', 100, t), 10, 100, 100), hsWt = hsNum(fparam(p, 'whites', 0, t), -100, 100, 0), hsBk = hsNum(fparam(p, 'blacks', 0, t), -100, 100, 0), hsCc = hsNum(fparam(p, 'sat', 0, t), -100, 100, 0);
@@ -12751,7 +12782,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
     },
     // ---- batch 21 ----
-    faded: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
+    faded: function(d,W,H,p,t){
+      /* #966 opts14: AFFECTS Darks (1), Mids (2) or Lights (3), or MIX under 100 %, runs tone13 — this very kernel without the two, its
+         result laid in by the tonal weight of each pixel's own brightness and Mix; All and 100 % run the lines below untouched. */
+      const fdRg14 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0), fdMx14 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (fdRg14 === 1 || fdRg14 === 2 || fdRg14 === 3 || fdMx14 < 100) { tone13(d, W, H, p, t, PIXEL_FX.faded, ['range', 'mix'], fdRg14, fdMx14, 0); return; }
+      var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
       // ONE slider drove the black lift, the contrast crush, the desaturation AND the warm cast at
       // once, so milky blacks with the colour intact was unreachable and so was a COOL faded look.
       // TONE going negative is what gives the cool one — the cast offsets simply flip sign.

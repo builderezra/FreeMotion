@@ -50,6 +50,13 @@
       "w": 1440,
       "x": 0,
       "y": 5480
+    },
+    "Keyframes-Handmade.dc.html": {
+      "h": 1446,
+      "title": "Keyframes, done by hand (your pick + 6 takes)",
+      "w": 1440,
+      "x": 0,
+      "y": 7780
     }
   },
   "createdOnFiles": {
@@ -90,6 +97,13 @@
       "text": "Round 2 — four polished, eight new",
       "x": 0,
       "y": 5220
+    },
+    "t5": {
+      "kind": "title1",
+      "maxW": 1440,
+      "text": "Keyframes, by hand — less AI, more feel",
+      "x": 0,
+      "y": 7520
     }
   },
   "order": [
@@ -99,7 +113,8 @@
     "Grades.dc.html",
     "Across.dc.html",
     "D2-Animations.dc.html",
-    "D2-Round2.dc.html"
+    "D2-Round2.dc.html",
+    "Keyframes-Handmade.dc.html"
   ],
   "pages": [],
   "title": "FreeMotion timeline-F logo options"

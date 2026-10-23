@@ -23,6 +23,11 @@
      the top one — so those insets were simply resolving to 0 and doing nothing. -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>FreeMotion</title>
+<!-- THE BUILD THIS PAGE IS (#1180, "i cant see the animation"). The splash plays once per BUILD per session: fm.splashed
+     holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
+     update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
+     version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
+<meta name="fm-build" content="v17.98">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -95,9 +100,10 @@
        is gone, because a one-shot has nothing to loop back to. The last thing to move is the tagline, EDITING, EVOLVED,
        rising into place under the name; it settles at 0.61 of the cycle (3.36s). The end frame holds 0.4s and then the
        splash dissolves into the app exactly as the film's natural end did.
-       Skips: same-session reload (sessionStorage), tap/click, Esc-Enter-Space, a cap measured from when the animation's
-       clock starts, and an 8s backstop. Reduced motion, or a browser that cannot run SMIL: the END FRAME as a still, no
-       animation, then the hand-over.
+       Skips: a reload of the same build in the same session (sessionStorage holds the build, meta fm-build), tap/click,
+       Esc-Enter-Space, a cap measured from when the animation's clock starts, and a 15s ceiling. Reduced motion, a browser
+       that cannot run SMIL, or one that has paused it (iOS with Auto-Play Animated Images off, or a clock that has not
+       started 1s after the load): the END FRAME as a still, no animation, then the hand-over.
        The wordmark and tagline name Sora first, as the canvas does, but the app ships no Sora (no download, no webfont), so
        they render in the system font: SF on an iPhone, Segoe on Windows. -->
   <!-- THE GROUND IS CARD 7's OWN #0b0b0d: the diamonds' strokes and the playhead's backing are #0b0b0d knock-outs drawn
@@ -165,17 +171,24 @@
   </div>
   <script id="splash-boot">
     /* queue 942: IS THIS THE FIRST LOAD SINCE THE APP WAS OPENED? Ezra, 26 Sep: *"every time you load into the app for the
-       first time like in the loading screen plays it puts you in the home menu not in your project"*. The intro plays once per
-       browser session (fm.splashed below), so "the loading screen plays" = the session's first load. Recorded HERE, before the
-       intro's own early returns (reduced motion skips the film but is still a first load), and read by app.js's boot landing. */
+       first time like in the loading screen plays it puts you in the home menu not in your project"*. fm.session marks the
+       session's first load. The intro (fm.splashed below) plays on that load AND once more on a new build in the same session
+       (#1180), which is NOT a first load, so the landing reads fm.session, never the intro. Recorded HERE, before the intro's
+       own early returns, and read by app.js's boot landing. */
     try { window.FM_FIRST_LOAD = !sessionStorage.getItem('fm.session'); sessionStorage.setItem('fm.session', '1'); } catch (e) { window.FM_FIRST_LOAD = true; }
     (function () {
-      /* #1180: reduced motion no longer skips the intro, it gets the END FRAME as a still (his logo, no movement). */
-      var REDUCE = false;
+      /* #1180: reduced motion no longer skips the intro, it gets the END FRAME as a still (his logo, no movement).
+         ONCE PER BUILD, not once per session ("i cant see the animation", 23 Oct): the flag was '1', set the moment this
+         script ran, so a resumed iPhone app, the update chip (location.replace keeps sessionStorage) and a refresh all
+         skipped it. It now holds the build (meta fm-build), and the intro plays when the stored value differs: v17.97's
+         stored '1' plays once on the next release, a reload of the same build stays silent. */
+      var REDUCE = false, BUILD = '1';
       try {
-        if (sessionStorage.getItem('fm.splashed')) return;
+        var bm = document.querySelector('meta[name="fm-build"]');
+        if (bm && bm.content) BUILD = bm.content;
+        if (sessionStorage.getItem('fm.splashed') === BUILD) return;
         REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
-        sessionStorage.setItem('fm.splashed', '1');
+        sessionStorage.setItem('fm.splashed', BUILD);
       } catch (e) { return; }
       var sp = document.getElementById('splash'), svg = document.getElementById('splash-mark'), skip = document.getElementById('splash-skip');
       if (!sp || !svg) return;
@@ -232,14 +245,28 @@
            the document's load, after all the app's parser-blocking scripts and its synchronous init, and reads 0 until
            then. So the cap is measured from the moment the clock STARTS (`started`, the first reading above 0), not from
            this script: a late load still gets the whole animation, the hold and the natural dissolve. The cap only cuts a
-           clock that started and then ran slow (END_S + HOLD_S of wall time, plus 800ms, without reaching the hold). */
-        var started = 0;
+           clock that started and then ran slow (END_S + HOLD_S of wall time, plus 800ms, without reaching the hold).
+           A CLOCK THAT NEVER RUNS (#1180): iOS with Auto-Play Animated Images off pauses every SMIL clock, so it reads 0 for
+           ever and the first frame, which is empty, showed as a dark box until the backstop. Once the page has loaded, a
+           paused timeline (svg.animationsPaused()) or a clock still at 0 one second after the load gets the END FRAME as a
+           still and the natural hand-over STILL_MS later, as reduced motion does. */
+        var started = 0, loadedAt = 0, stilled = false;
+        if (document.readyState === 'complete') loadedAt = Date.now();
+        else window.addEventListener('load', function () { loadedAt = Date.now(); });
+        var toStill = function () {
+          stilled = true;
+          try { endFrame(); } catch (e) {}
+          sp.classList.remove('splash-wait');
+          setTimeout(function () { dismiss(false); }, STILL_MS);
+        };
         (function watch() {
-          if (gone) return;
-          var t = 0;
+          if (gone || stilled) return;
+          var t = 0, paused = false;
           try { t = svg.getCurrentTime(); } catch (e) {}
+          try { paused = !!(loadedAt && typeof svg.animationsPaused === 'function' && svg.animationsPaused()); } catch (e) {}
           if (t > 0 && !started) { started = Date.now(); sp.classList.remove('splash-wait'); }
-          if (t >= END_S + HOLD_S) dismiss(false);
+          if (paused || (!started && loadedAt && Date.now() - loadedAt > 1000)) toStill();
+          else if (t >= END_S + HOLD_S) dismiss(false);
           else if (started && Date.now() - started > (END_S + HOLD_S) * 1000 + 800) dismiss(true);
           else setTimeout(watch, 40);
         })();
@@ -251,10 +278,13 @@
       }
       sp.addEventListener('pointerdown', function (e) { e.preventDefault(); dismiss(true); });   // preventDefault kills the synthesized post-touch click (it punched through to editor controls)
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') dismiss(true); });
-      /* The backstop, from this script: nothing holds the editor hostage. Both paths wait 8s, for a clock that never
-         starts (or a load that comes very late); no later, because home.js and storage.js arm 6s fallbacks of their own when
-         Home opens, and those must not play the entrance behind a splash that is still opaque. */
-      setTimeout(function () { dismiss(true); }, 8000);
+      /* The CEILING, from this script: nothing holds the editor hostage. It was an 8s backstop, and a boot that yields
+         (scripts arriving one by one on a phone) took longer than that to reach the load, so it cut the animation before
+         its clock had even started (#1180). The clock's own cap above and the still now end every ordinary case; this
+         only catches a load that never comes. home.js and storage.js arm 6s fallbacks of their own when Home opens: they
+         fall after the hold whenever Home opens less than 2.2s before the load, the usual order: Home opens after
+         DOMContentLoaded and an IndexedDB read, and the load follows DOMContentLoaded. */
+      setTimeout(function () { dismiss(true); }, 15000);
     })();
   </script>
   <div id="app">
@@ -271,7 +301,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.97</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.98</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1155,7 +1185,7 @@
   <script src="js/settings.js?v=58"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
-  <script src="js/collab-core.js?v=55"></script>
+  <script src="js/collab-core.js?v=56"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=132"></script>
   <script src="js/spine-words.js?v=14"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
@@ -1168,8 +1198,8 @@
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=5"></script>
   <script src="js/gl-color.js?v=5"></script>
-  <script src="js/compositor.js?v=251"></script>
-  <script src="js/fx-registry.js?v=36"></script>
+  <script src="js/compositor.js?v=252"></script>
+  <script src="js/fx-registry.js?v=37"></script>
   <script src="js/filters.js?v=24"></script>
   <script src="js/fx-presets.js?v=12"></script>
   <script src="js/fx-thumbs.js?v=60"></script>
@@ -1223,7 +1253,7 @@
   <script src="js/captions.js?v=64"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=7"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=502"></script>
+  <script src="js/app.js?v=503"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->
@@ -1306,6 +1336,9 @@
         if (vs === 'recording' || vs === 'review') return 'a voice take is not added yet';
         if (F.storage && F.storage.pendingSaves && F.storage.pendingSaves() > 0) return 'a save is still writing';
         if (F._mediaBusy) return 'a media file is still being written';
+        /* #1180: a takeover reload in the middle of the intro cut his logo off; it waits until the splash is dissolving. */
+        var spl = document.getElementById('splash');
+        if (spl && !spl.classList.contains('hidden') && !spl.classList.contains('splash-out')) return 'the intro is still playing';
       } catch (e) { return 'the app could not be asked'; }
       return '';
     }

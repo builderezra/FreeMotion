@@ -5,95 +5,179 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>1180 first paint</title>
 <style>
-  body { margin: 0; font: 13px/1.4 system-ui, sans-serif; background: #111; color: #eee; }
-  #out { white-space: pre-wrap; padding: 12px 16px; }
-  iframe { display: block; width: 380px; max-width: 100%; height: 800px; border: 0; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #111; color: #eee; padding: 12px 16px; }
+  h1 { font-size: 17px; margin: 0 0 8px; }
+  p { margin: 6px 0; color: #bbb; }
+  button { font: inherit; padding: 10px 16px; border-radius: 10px; border: 0; background: #29d9bb; color: #000; margin: 6px 6px 6px 0; }
+  .wrap { overflow-x: auto; max-width: 100%; }
+  table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  th, td { border: 1px solid #333; padding: 3px 5px; text-align: right; white-space: nowrap; }
+  th { background: #1c1c1f; }
+  td.how { text-align: left; }
+  tr.med td { background: #1c2a27; font-weight: 600; }
 </style>
 </head>
 <body>
-<div id="out">running…</div>
-<iframe id="f" title="probe frame"></iframe>
+<h1>#1180 first paint</h1>
+<div id="out">loading…</div>
 <script>
-/* #1180 FIRST-PAINT PROBE (written 23 Oct; NOT run yet — no browser was allowed while the v17.96 ship ran).
-   His ask, through the PM: first paint must be no slower with the Keyframes splash than it was with the film.
-   It loads a page `runs` times in a 380x800 frame, each time as the FIRST load of a session (fm.splashed AND fm.session
-   cleared, so every run is a #942 first load that lands on Home, never a mix of two boots), and reads, in that frame's
-   own clock (ms since its navigation started):
-     first-paint, first-contentful-paint  — the browser's paint timing entries
-     splashVisible  — #splash has lost .hidden (polled every 10 ms, so +-10 ms)
-     clockStart     — the first poll where the mark's SMIL clock (getCurrentTime) reads above 0
-     loadEnd        — the navigation entry's loadEventEnd
-     appReady       — document complete and window.FM present
-     splashOut      — the dissolve began (.splash-out)
-     cut            — 1 if it was the quick cut (.splash-cut) at splashOut, 0 if the natural dissolve
-     clockAtOut     — the mark's clock, in s, at splashOut
-     splashGone     — #splash removed from the page
-   then prints each run and the median of each column.
-   THE NUMBER THAT MATTERS (the refuter of the 1180 review, B3): clockStart - splashVisible is `d`, the empty pre-roll he
-   sees on a cold launch before the animation starts (an inline SVG's timeline starts at the load). If clockStart sits at
-   loadEnd, the clock starts at the load; if it is near splashVisible, at parse. A fast laptop hides it: use DevTools'
-   4-6x CPU throttle, or his phone on the live site. cut should be 0 on every run.
-   USE: serve a COPY of the tree with tools/serve.sh, open /tests/probe-1180-firstpaint.html?runs=7 — that is the new
-   splash. For the film, put the film-era index.html beside it, e.g. `git show b22e449a:index.html > index-film.html`
-   (b22e449a = the base sync of v17.96, the last index.html with splash-v2.mp4), and open
-   /tests/probe-1180-firstpaint.html?runs=7&page=../index-film.html. Compare the medians: first-contentful-paint and
-   splashVisible must be no later on the new splash (both pages paint the splash from the same script position, so
-   this is a sanity check, not the finding). Run the two back to back, alone, on a cool machine. The film has no mark,
-   so clockStart and clockAtOut read '-' there. */
-(async function () {
-  var q = new URLSearchParams(location.search);
-  var page = q.get('page') || '../index.html', runs = Math.max(1, +q.get('runs') || 5);
-  var out = document.getElementById('out'), f = document.getElementById('f'), rows = [];
-  var cols = ['first-paint', 'first-contentful-paint', 'splashVisible', 'clockStart', 'loadEnd', 'appReady', 'splashOut', 'cut', 'clockAtOut', 'splashGone'];
-  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-  function show(extra) {
-    var lines = ['page ' + page + ' — ' + rows.length + '/' + runs + ' runs', cols.join('\t')];
-    rows.forEach(function (r) { lines.push(cols.map(function (c) { return r[c] == null ? '-' : r[c]; }).join('\t')); });
-    if (extra) lines.push(extra);
-    out.textContent = lines.join('\n');
+/* #1180 FIRST-PAINT PROBE, TOP-LEVEL (release 1, 23 Oct; NOT run yet: no browser was allowed while the v17.98 ship ran).
+   Ezra: "i cant see the animation". The first version loaded the app in an IFRAME, which hides the thing most likely to
+   matter on his iPhone: WebKit holds a TOP-LEVEL page's layer tree (nothing is drawn) until its first meaningful paint
+   (WebKit bug 208385), and a frame is never held. So each run now loads the app AS THE PAGE ITSELF, in this tab:
+     1. index.html is fetched fresh, and a <base> (so its relative scripts load from the app's folder) and a small
+        recorder script are put at the top of its <head>;
+     2. fm.splashed and fm.session are cleared, so every run is a session's first load and the intro plays;
+     3. the tab navigates to that copy (a same-origin blob: page, top-level, with its own paint and navigation timing);
+     4. the recorder polls every 10 ms, and when the splash has gone it writes its row to sessionStorage (fp1180) and
+        sends the tab back here (?fp=next), which shows the table and starts the next run.
+   It uses his real projects, exactly as opening the app does. Columns, in the app page's own clock (ms since its
+   navigation started):
+     FCP        first-contentful-paint;        loadEnd   the navigation entry's loadEventEnd;
+     shown      #splash lost .hidden;            clock     the first poll where the mark's clock reads above 0;
+     out        the dissolve began;              how       natural / cut, and 'still' when the end-frame still was used;
+     clockOut   the mark's clock (s) at out;     gone      #splash removed;
+     maxGap     the longest gap (ms) between two animation frames (requestAnimationFrame) from clock to out;
+     reduce     prefers-reduced-motion (1/0);    paused    svg.animationsPaused() at the load (1 = the browser
+                                                           paused SMIL: iOS Auto-Play Animated Images off).
+   READ IT: clock - shown is the empty pre-roll; clock near loadEnd means the clock starts at the load; 'cut' should never
+   appear; paused 1 with how 'still natural' is the fix for the paused clock working. maxGap is what 'natural' cannot
+   show: SMIL is drawn on the main thread, so a boot that holds it right after the load freezes the build-up and the
+   dissolve still reads 'natural'. A maxGap of a few hundred ms or more means he saw a frozen frame, not the animation
+   (release 2 then needs the timing gated on frames, not on the clock).
+   ONLY THIS SITE: ?page= must resolve to this page's own origin, or nothing runs. The page is fetched and re-hosted as
+   a blob: of THIS origin, so a page from anywhere else would run with his projects and settings.
+   USE: open /tests/probe-1180-firstpaint.html?runs=5 on the live site (Safari, or the Home Screen app), tap Start, keep
+   the phone still, screenshot the table. ?page=../index-film.html compares another copy of the page. */
+var KEY = 'fp1180';
+var COLS = [['fcp', 'FCP'], ['loadEnd', 'loadEnd'], ['shown', 'shown'], ['clockStart', 'clock'], ['out', 'out'], ['how', 'how'], ['clockAtOut', 'clockOut'], ['gone', 'gone'], ['maxGap', 'maxGap'], ['reduce', 'reduce'], ['paused', 'paused']];
+function load() { try { return JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
+function save(st) { try { sessionStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} }
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+/* The origin guard: a page is loaded only when it resolves to this page's own origin. Checked at every place a page
+   can enter a run: Start (?page=), runOne (st.page comes back from sessionStorage) and Run again (it re-uses st.page). */
+function sameOrigin(page) { try { return typeof page === 'string' && new URL(page, location.href).origin === location.origin; } catch (e) { return false; } }
+function refuse(out, page) {
+  out.insertAdjacentHTML('beforeend', '<p>Not run: ' + esc(page) + ' is not on this site. This probe only loads a page from ' + esc(location.origin) + '.</p>');
+}
+
+/* Runs INSIDE the app page, first thing in its <head>. Plain ES5, injected as source. */
+function recorder1180(cfg) {
+  var row = {}, done = false, lastFrame = null;
+  function now() { return Math.round(performance.now()); }
+  /* maxGap: the longest stretch with no animation frame, counted only from clockStart until out (a gap that spans
+     clockStart counts from clockStart; the last one runs to out). */
+  function gapTo(t) {
+    if (row.clockStart == null) return;
+    var g = Math.round(t - (lastFrame == null ? row.clockStart : Math.max(lastFrame, row.clockStart)));
+    if (g < 0) g = 0;
+    if (row.maxGap == null || g > row.maxGap) row.maxGap = g;
   }
-  for (var i = 0; i < runs; i++) {
+  function frame(ts) {
+    if (done || row.out != null) return;
+    var t = typeof ts === 'number' ? ts : performance.now();
+    gapTo(t);
+    lastFrame = t;
+    requestAnimationFrame(frame);
+  }
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(frame);
+  function finish(why) {
+    if (done) return; done = true;
+    row.end = why;
+    try { performance.getEntriesByType('paint').forEach(function (e) { if (e.name === 'first-contentful-paint') row.fcp = Math.round(e.startTime); }); } catch (e) {}
+    try { var nav = performance.getEntriesByType('navigation')[0]; if (nav && nav.loadEventEnd > 0) row.loadEnd = Math.round(nav.loadEventEnd); } catch (e) {}
+    try { var b = document.querySelector('meta[name="fm-build"]'); row.build = b ? b.content : '-'; } catch (e) {}
+    setTimeout(function () {
+      try {
+        var st = JSON.parse(sessionStorage.getItem(cfg.key) || 'null');
+        if (st) { st.rows.push(row); sessionStorage.setItem(cfg.key, JSON.stringify(st)); }
+      } catch (e) {}
+      location.replace(cfg.back);
+    }, 300);
+  }
+  var poll = setInterval(function () {
+    var sp = document.getElementById('splash'), mk = document.getElementById('splash-mark'), t = now(), clk = null;
+    if (row.reduce == null && window.matchMedia) row.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0;
+    try { if (mk && typeof mk.getCurrentTime === 'function') clk = mk.getCurrentTime(); } catch (e) {}
+    if (row.shown == null && sp && !sp.classList.contains('hidden')) row.shown = t;
+    if (row.clockStart == null && clk != null && clk > 0) row.clockStart = t;
+    var out = !!(sp && sp.classList.contains('splash-out'));
+    if (row.paused == null && document.readyState === 'complete' && mk && !out) {
+      try { row.paused = (typeof mk.animationsPaused === 'function' && mk.animationsPaused()) ? 1 : 0; } catch (e) { row.paused = '?'; }
+    }
+    if (row.out == null && out) {
+      gapTo(t);
+      row.out = t;
+      var still = mk && !mk.querySelector('animate, animateTransform');
+      row.how = (still ? 'still ' : '') + (sp.classList.contains('splash-cut') ? 'cut' : 'natural');
+      if (clk != null) row.clockAtOut = Math.round(clk * 100) / 100;
+    }
+    if (row.shown != null && !sp && row.gone == null) { row.gone = t; clearInterval(poll); finish('gone'); }
+    if (row.shown == null && document.readyState === 'complete' && sp && sp.classList.contains('hidden') && t > 4000) { row.how = 'never shown'; clearInterval(poll); finish('never shown'); }
+  }, 10);
+  setTimeout(function () { clearInterval(poll); if (!row.how) row.how = 'timed out'; finish('timeout'); }, 25000);
+}
+
+async function runOne(st) {
+  var out = document.getElementById('out');
+  if (!st || !sameOrigin(st.page)) { refuse(out, st ? st.page : '-'); return; }
+  try {
+    var r = await fetch(st.page + (st.page.indexOf('?') < 0 ? '?' : '&') + 'fp1180=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('could not fetch ' + st.page + ' (' + r.status + ')');
+    var html = await r.text();
+    var base = new URL('.', new URL(st.page, location.href)).href;
+    var inj = '<meta charset="utf-8"><base href="' + esc(base) + '"><script>(' + String(recorder1180) + ')(' + JSON.stringify({ back: st.back, key: KEY }) + ');<\/script>';
+    var i = html.indexOf('<head>');
+    html = i < 0 ? inj + html : html.slice(0, i + 6) + inj + html.slice(i + 6);
     try { sessionStorage.removeItem('fm.splashed'); sessionStorage.removeItem('fm.session'); } catch (e) {}
-    var stamp = 'fp1180=' + Date.now() + '-' + i;
-    var r = await new Promise(function (res) {
-      var row = {};
-      var dead = setTimeout(function () { clearInterval(poll); row.timedOut = true; res(row); }, 20000);
-      f.src = page + (page.indexOf('?') < 0 ? '?' : '&') + stamp;
-      var poll = setInterval(function () {
-        var w, d;
-        try { w = f.contentWindow; d = f.contentDocument; } catch (e) { return; }
-        if (!w || !d || String(d.URL).indexOf(stamp) < 0 || !w.performance) return;
-        w.performance.getEntriesByType('paint').forEach(function (e) { row[e.name] = Math.round(e.startTime); });
-        var sp = d.getElementById('splash'), mk = d.getElementById('splash-mark'), now = Math.round(w.performance.now());
-        var clk = null;
-        try { if (mk && typeof mk.getCurrentTime === 'function') clk = mk.getCurrentTime(); } catch (e) {}
-        if (row.splashVisible == null && sp && !sp.classList.contains('hidden')) row.splashVisible = now;
-        if (row.clockStart == null && clk != null && clk > 0) row.clockStart = now;
-        if (row.loadEnd == null) {
-          var nav = w.performance.getEntriesByType && w.performance.getEntriesByType('navigation')[0];
-          if (nav && nav.loadEventEnd > 0) row.loadEnd = Math.round(nav.loadEventEnd);
-        }
-        if (row.splashOut == null && sp && sp.classList.contains('splash-out')) {
-          row.splashOut = now;
-          row.cut = sp.classList.contains('splash-cut') ? 1 : 0;
-          if (clk != null) row.clockAtOut = Math.round(clk * 1000) / 1000;
-        }
-        if (row.appReady == null && d.readyState === 'complete' && w.FM) row.appReady = now;
-        if (row.splashGone == null && row.splashVisible != null && !sp) row.splashGone = now;
-        if (row.splashGone != null && row.appReady != null && row['first-contentful-paint'] != null) { clearInterval(poll); clearTimeout(dead); res(row); }
-      }, 10);
-    });
-    rows.push(r);
-    show();
-    await sleep(500);
+    location.replace(URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' })));
+  } catch (e) {
+    out.insertAdjacentHTML('beforeend', '<p>Run failed: ' + esc(e.message) + '</p>');
   }
-  var med = {};
-  cols.forEach(function (c) {
-    var v = rows.map(function (r) { return r[c]; }).filter(function (x) { return typeof x === 'number'; }).sort(function (a, b) { return a - b; });
-    med[c] = v.length ? v[Math.floor(v.length / 2)] : null;
+}
+
+function table(st) {
+  var rows = st.rows, h = '<p>page ' + esc(st.page) + ' · build ' + esc((rows[0] && rows[0].build) || '-') + ' · ' + rows.length + '/' + st.runs + ' runs · ' + esc(navigator.userAgent.replace(/^Mozilla\/5\.0 /, '')) + '</p>';
+  h += '<div class="wrap"><table><tr><th>#</th>' + COLS.map(function (c) { return '<th>' + c[1] + '</th>'; }).join('') + '</tr>';
+  rows.forEach(function (r, n) {
+    h += '<tr><td>' + (n + 1) + '</td>' + COLS.map(function (c) { var v = r[c[0]]; return '<td' + (c[0] === 'how' ? ' class="how"' : '') + '>' + esc(v == null ? '-' : v) + '</td>'; }).join('') + '</tr>';
   });
-  show('median\t' + cols.map(function (c) { return med[c] == null ? '-' : med[c]; }).join('\t') + '\nJSON ' + JSON.stringify({ page: page, runs: runs, median: med }));
-  window.__probe1180 = { page: page, rows: rows, median: med };
+  if (rows.length > 1) {
+    h += '<tr class="med"><td>med</td>' + COLS.map(function (c) {
+      var v = rows.map(function (r) { return r[c[0]]; }).filter(function (x) { return typeof x === 'number'; }).sort(function (a, b) { return a - b; });
+      return '<td>' + (c[0] === 'how' || !v.length ? '' : v[Math.floor(v.length / 2)]) + '</td>';
+    }).join('') + '</tr>';
+  }
+  return h + '</table></div>';
+}
+
+(function () {
+  var q = new URLSearchParams(location.search), out = document.getElementById('out'), st = load();
+  var back = location.origin + location.pathname + '?fp=next';
+  function startView() {
+    var page = q.get('page') || '../index.html', runs = Math.max(1, Math.min(20, +q.get('runs') || 5));
+    if (!sameOrigin(page)) { out.innerHTML = ''; refuse(out, page); return; }
+    out.innerHTML = '<p>Loads the app as the page itself, ' + runs + ' times, each as a fresh session, and comes back here after each. Keep the phone still until the table is done.</p>' +
+      '<button id="go">Start ' + runs + ' runs</button>' + (st && st.rows && st.rows.length ? '<h1>Last result</h1>' + table(st) : '');
+    document.getElementById('go').onclick = function () {
+      var s = { page: page, runs: runs, rows: [], back: back };
+      save(s); runOne(s);
+    };
+  }
+  if (q.get('fp') === 'next' && st && st.rows) {
+    out.innerHTML = table(st);
+    if (st.rows.length < st.runs) {
+      out.insertAdjacentHTML('beforeend', '<p>Next run in a moment…</p>');
+      setTimeout(function () { runOne(st); }, 800);
+    } else {
+      out.insertAdjacentHTML('beforeend', '<p>Done. Screenshot this table.</p><button id="again">Run again</button>');
+      document.getElementById('again').onclick = function () {
+        if (!sameOrigin(st.page)) { refuse(out, st.page); return; }
+        location.replace(location.origin + location.pathname + '?runs=' + st.runs + '&page=' + encodeURIComponent(st.page));
+      };
+      window.__probe1180 = st;
+    }
+  } else startView();
 })();
 </script>
 </body>

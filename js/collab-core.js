@@ -143,7 +143,12 @@ window.FM = window.FM || {};
      100, default 0) and `mix` (Mix 0 to 100, default 100), Channel Remap `range` (Affects: 0 All, 1 Darks, 2 Mids, 3 Lights)
      and `skin` (Protect skin 0 to 100, default 0). Every default draws what the effect drew before, but a rev-31 sanitiser
      drops the new keys, so the two would normalise one project differently. */
-  C.SCHEMA_REV = 32;
+  /* Rev 33 (v17.98, #966 idle work round fourteen): new controls on three existing effects: Colour Balance `skin` (Protect
+     skin 0 to 100, default 0) and `mix` (Mix 0 to 100, default 100), Highlights & Shadows `skin` (Protect skin 0 to 100,
+     default 0) and `mix` (Mix 0 to 100, default 100), Faded Film `range` (Affects: 0 All, 1 Darks, 2 Mids, 3 Lights) and
+     `mix` (Mix 0 to 100, default 100). Every default draws what the effect drew before, but a rev-32 sanitiser drops the new
+     keys, so the two would normalise one project differently. */
+  C.SCHEMA_REV = 33;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -382,7 +387,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =4236510598834944;   // SCHEMA_REV 32 (v17.97, #966 round thirteen): six new effect params on Exposure, Colour Temperature and Channel Remap. Pinned 23 Oct with fp.js at rev 32; before: 1606784677610289 at rev 31.
+  C.SCHEMA_FP =3676690552475312;   // SCHEMA_REV 33 (v17.98, #966 round fourteen): six new effect params on Colour Balance, Highlights & Shadows and Faded Film. Pinned 23 Oct with fp.js at rev 33; before: 4236510598834944 at rev 32.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
