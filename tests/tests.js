@@ -89270,7 +89270,17 @@
       }
       return a;
     };
-    const FRAMES = [subject, hues, haze];
+    /* a DUSK frame (#966 round 12, 23 Oct): dark and coloured, every pixel's largest channel under 77. Vibrance's Protect
+       shadows acts only on a coloured pixel that dark, and none of the three frames above has one (subject's blue stays over
+       108, hues' top channel over 149, haze's over 93), so it read 0.000 here and was flagged dead. Tried last, as haze is. */
+    const dusk = () => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) {
+        a[i] = Math.round(70 * x / W); a[i + 1] = Math.round(60 * y / H); a[i + 2] = (((x >> 3) + (y >> 3)) & 1) ? 50 : 15; a[i + 3] = 255;
+      }
+      return a;
+    };
+    const FRAMES = [subject, hues, haze, dusk];
     const mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; };
 
     const dead = [];

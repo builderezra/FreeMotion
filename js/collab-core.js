@@ -133,7 +133,12 @@ window.FM = window.FM || {};
      3 s, on a video, image or shape that is not sound only; extra keys dropped). A rev-29 build drops it, so the two would normalise
      one project differently. FM.SM_V moves 1 → 2 with it. fp_3 to fp_10 in the fixture pin each clause, both length edges included.
      Its own comment, so the block above stays the Full releases'. */
-  C.SCHEMA_REV = 30;
+  /* Rev 31 (v17.96, #966 idle work round twelve): new controls on three existing effects: Gamma `range` (Affects: 0 All,
+     1 Darks, 2 Mids, 3 Lights) and `mix` (0 to 100, default 100), Vibrance `boost` (Boosts: 0 Dull colours, 1 Every colour,
+     2 Rich colours) and `shadows` (Protect shadows 0 to 100, default 0), Cross Process `skin` (Protect skin 0 to 100, default 0)
+     and `keep` (Keep brightness 0 to 100, default 0). Every default draws what the effect drew before, but a rev-30 sanitiser
+     drops the new keys, so the two would normalise one project differently. */
+  C.SCHEMA_REV = 31;
 
   C.active = false;      // no session is running
   C.role = 'owner';
