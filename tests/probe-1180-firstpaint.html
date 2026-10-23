@@ -16,24 +16,35 @@
 <script>
 /* #1180 FIRST-PAINT PROBE (written 23 Oct; NOT run yet — no browser was allowed while the v17.96 ship ran).
    His ask, through the PM: first paint must be no slower with the Keyframes splash than it was with the film.
-   It loads a page `runs` times in a 380x800 frame, each time as the FIRST load of a session (fm.splashed cleared), and
-   reads, in that frame's own clock (ms since its navigation started):
+   It loads a page `runs` times in a 380x800 frame, each time as the FIRST load of a session (fm.splashed AND fm.session
+   cleared, so every run is a #942 first load that lands on Home, never a mix of two boots), and reads, in that frame's
+   own clock (ms since its navigation started):
      first-paint, first-contentful-paint  — the browser's paint timing entries
      splashVisible  — #splash has lost .hidden (polled every 10 ms, so +-10 ms)
+     clockStart     — the first poll where the mark's SMIL clock (getCurrentTime) reads above 0
+     loadEnd        — the navigation entry's loadEventEnd
      appReady       — document complete and window.FM present
      splashOut      — the dissolve began (.splash-out)
+     cut            — 1 if it was the quick cut (.splash-cut) at splashOut, 0 if the natural dissolve
+     clockAtOut     — the mark's clock, in s, at splashOut
      splashGone     — #splash removed from the page
    then prints each run and the median of each column.
+   THE NUMBER THAT MATTERS (the refuter of the 1180 review, B3): clockStart - splashVisible is `d`, the empty pre-roll he
+   sees on a cold launch before the animation starts (an inline SVG's timeline starts at the load). If clockStart sits at
+   loadEnd, the clock starts at the load; if it is near splashVisible, at parse. A fast laptop hides it: use DevTools'
+   4-6x CPU throttle, or his phone on the live site. cut should be 0 on every run.
    USE: serve a COPY of the tree with tools/serve.sh, open /tests/probe-1180-firstpaint.html?runs=7 — that is the new
    splash. For the film, put the film-era index.html beside it, e.g. `git show b22e449a:index.html > index-film.html`
    (b22e449a = the base sync of v17.96, the last index.html with splash-v2.mp4), and open
    /tests/probe-1180-firstpaint.html?runs=7&page=../index-film.html. Compare the medians: first-contentful-paint and
-   splashVisible must be no later on the new splash. Run the two back to back, alone, on a cool machine. */
+   splashVisible must be no later on the new splash (both pages paint the splash from the same script position, so
+   this is a sanity check, not the finding). Run the two back to back, alone, on a cool machine. The film has no mark,
+   so clockStart and clockAtOut read '-' there. */
 (async function () {
   var q = new URLSearchParams(location.search);
   var page = q.get('page') || '../index.html', runs = Math.max(1, +q.get('runs') || 5);
   var out = document.getElementById('out'), f = document.getElementById('f'), rows = [];
-  var cols = ['first-paint', 'first-contentful-paint', 'splashVisible', 'appReady', 'splashOut', 'splashGone'];
+  var cols = ['first-paint', 'first-contentful-paint', 'splashVisible', 'clockStart', 'loadEnd', 'appReady', 'splashOut', 'cut', 'clockAtOut', 'splashGone'];
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function show(extra) {
     var lines = ['page ' + page + ' — ' + rows.length + '/' + runs + ' runs', cols.join('\t')];
@@ -42,7 +53,7 @@
     out.textContent = lines.join('\n');
   }
   for (var i = 0; i < runs; i++) {
-    try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
+    try { sessionStorage.removeItem('fm.splashed'); sessionStorage.removeItem('fm.session'); } catch (e) {}
     var stamp = 'fp1180=' + Date.now() + '-' + i;
     var r = await new Promise(function (res) {
       var row = {};
@@ -53,9 +64,20 @@
         try { w = f.contentWindow; d = f.contentDocument; } catch (e) { return; }
         if (!w || !d || String(d.URL).indexOf(stamp) < 0 || !w.performance) return;
         w.performance.getEntriesByType('paint').forEach(function (e) { row[e.name] = Math.round(e.startTime); });
-        var sp = d.getElementById('splash'), now = Math.round(w.performance.now());
+        var sp = d.getElementById('splash'), mk = d.getElementById('splash-mark'), now = Math.round(w.performance.now());
+        var clk = null;
+        try { if (mk && typeof mk.getCurrentTime === 'function') clk = mk.getCurrentTime(); } catch (e) {}
         if (row.splashVisible == null && sp && !sp.classList.contains('hidden')) row.splashVisible = now;
-        if (row.splashOut == null && sp && sp.classList.contains('splash-out')) row.splashOut = now;
+        if (row.clockStart == null && clk != null && clk > 0) row.clockStart = now;
+        if (row.loadEnd == null) {
+          var nav = w.performance.getEntriesByType && w.performance.getEntriesByType('navigation')[0];
+          if (nav && nav.loadEventEnd > 0) row.loadEnd = Math.round(nav.loadEventEnd);
+        }
+        if (row.splashOut == null && sp && sp.classList.contains('splash-out')) {
+          row.splashOut = now;
+          row.cut = sp.classList.contains('splash-cut') ? 1 : 0;
+          if (clk != null) row.clockAtOut = Math.round(clk * 1000) / 1000;
+        }
         if (row.appReady == null && d.readyState === 'complete' && w.FM) row.appReady = now;
         if (row.splashGone == null && row.splashVisible != null && !sp) row.splashGone = now;
         if (row.splashGone != null && row.appReady != null && row['first-contentful-paint'] != null) { clearInterval(poll); clearTimeout(dead); res(row); }
