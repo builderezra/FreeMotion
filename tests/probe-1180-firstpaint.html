@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>1180 first paint</title>
+<style>
+  body { margin: 0; font: 13px/1.4 system-ui, sans-serif; background: #111; color: #eee; }
+  #out { white-space: pre-wrap; padding: 12px 16px; }
+  iframe { display: block; width: 380px; max-width: 100%; height: 800px; border: 0; }
+</style>
+</head>
+<body>
+<div id="out">running…</div>
+<iframe id="f" title="probe frame"></iframe>
+<script>
+/* #1180 FIRST-PAINT PROBE (written 23 Oct; NOT run yet — no browser was allowed while the v17.96 ship ran).
+   His ask, through the PM: first paint must be no slower with the Keyframes splash than it was with the film.
+   It loads a page `runs` times in a 380x800 frame, each time as the FIRST load of a session (fm.splashed cleared), and
+   reads, in that frame's own clock (ms since its navigation started):
+     first-paint, first-contentful-paint  — the browser's paint timing entries
+     splashVisible  — #splash has lost .hidden (polled every 10 ms, so +-10 ms)
+     appReady       — document complete and window.FM present
+     splashOut      — the dissolve began (.splash-out)
+     splashGone     — #splash removed from the page
+   then prints each run and the median of each column.
+   USE: serve a COPY of the tree with tools/serve.sh, open /tests/probe-1180-firstpaint.html?runs=7 — that is the new
+   splash. For the film, put the film-era index.html beside it, e.g. `git show b22e449a:index.html > index-film.html`
+   (b22e449a = the base sync of v17.96, the last index.html with splash-v2.mp4), and open
+   /tests/probe-1180-firstpaint.html?runs=7&page=../index-film.html. Compare the medians: first-contentful-paint and
+   splashVisible must be no later on the new splash. Run the two back to back, alone, on a cool machine. */
+(async function () {
+  var q = new URLSearchParams(location.search);
+  var page = q.get('page') || '../index.html', runs = Math.max(1, +q.get('runs') || 5);
+  var out = document.getElementById('out'), f = document.getElementById('f'), rows = [];
+  var cols = ['first-paint', 'first-contentful-paint', 'splashVisible', 'appReady', 'splashOut', 'splashGone'];
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function show(extra) {
+    var lines = ['page ' + page + ' — ' + rows.length + '/' + runs + ' runs', cols.join('\t')];
+    rows.forEach(function (r) { lines.push(cols.map(function (c) { return r[c] == null ? '-' : r[c]; }).join('\t')); });
+    if (extra) lines.push(extra);
+    out.textContent = lines.join('\n');
+  }
+  for (var i = 0; i < runs; i++) {
+    try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
+    var stamp = 'fp1180=' + Date.now() + '-' + i;
+    var r = await new Promise(function (res) {
+      var row = {};
+      var dead = setTimeout(function () { clearInterval(poll); row.timedOut = true; res(row); }, 20000);
+      f.src = page + (page.indexOf('?') < 0 ? '?' : '&') + stamp;
+      var poll = setInterval(function () {
+        var w, d;
+        try { w = f.contentWindow; d = f.contentDocument; } catch (e) { return; }
+        if (!w || !d || String(d.URL).indexOf(stamp) < 0 || !w.performance) return;
+        w.performance.getEntriesByType('paint').forEach(function (e) { row[e.name] = Math.round(e.startTime); });
+        var sp = d.getElementById('splash'), now = Math.round(w.performance.now());
+        if (row.splashVisible == null && sp && !sp.classList.contains('hidden')) row.splashVisible = now;
+        if (row.splashOut == null && sp && sp.classList.contains('splash-out')) row.splashOut = now;
+        if (row.appReady == null && d.readyState === 'complete' && w.FM) row.appReady = now;
+        if (row.splashGone == null && row.splashVisible != null && !sp) row.splashGone = now;
+        if (row.splashGone != null && row.appReady != null && row['first-contentful-paint'] != null) { clearInterval(poll); clearTimeout(dead); res(row); }
+      }, 10);
+    });
+    rows.push(r);
+    show();
+    await sleep(500);
+  }
+  var med = {};
+  cols.forEach(function (c) {
+    var v = rows.map(function (r) { return r[c]; }).filter(function (x) { return typeof x === 'number'; }).sort(function (a, b) { return a - b; });
+    med[c] = v.length ? v[Math.floor(v.length / 2)] : null;
+  });
+  show('median\t' + cols.map(function (c) { return med[c] == null ? '-' : med[c]; }).join('\t') + '\nJSON ' + JSON.stringify({ page: page, runs: runs, median: med }));
+  window.__probe1180 = { page: page, rows: rows, median: med };
+})();
+</script>
+</body>
+</html>
