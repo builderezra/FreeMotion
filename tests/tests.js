@@ -72443,14 +72443,16 @@
   function settlesLate663(d, wait, ramp) { return s => 0.09 + d * Math.max(0, Math.min(1, (s - wait) / ramp)); }
   function route663() { return { _mes: { connect() {}, disconnect() {} } }; }
   /* One routed run of the q148 harness on a 663 fake: seeks, the gaps between them, adoptions, and how far the element REALLY
-     was from the playhead over the last 30 ticks. `lag` pulls the element 0.2 s back at tick 11 (no seek of its own). */
-  async function run663(mk, ticks, lag) {
+     was from the playhead over the last 30 ticks. `lag` pulls the element 0.2 s back at tick 11 (no seek of its own); `pulls`
+     ({ at: [ticks], by: s }) pulls it back `by` at each of those ticks, a real stall each time. */
+  async function run663(mk, ticks, lag, pulls) {
     let rec = null;
     const offs = [];
     const r = await q148Run({ ticks: ticks, rec: route663(), makeEl: mk,
       at: lag ? 11 : 0, then: el => { void el.currentTime; el._pos = Math.max(0, el._pos - 0.2); },
       each: (el, i) => {
         if (!rec) { const all = FM.media.all(); for (const k in all) { if (all[k] && all[k].el === el) rec = all[k]; } }
+        if (pulls && pulls.at.indexOf(i) >= 0) { void el.currentTime; el._pos = Math.max(0, el._pos - pulls.by); }
         void el.currentTime; offs[i] = FM.time - el._pos;
       } });
     const gaps = [];
@@ -72462,12 +72464,14 @@
 
   /* #663 MEASUREMENT PROBE (the PM's order, 23 Oct: measure before a bound is trusted). The routed harness on 663 fakes whose
    * latency settles d later after every seek, or whose seeks land d short, for d = 0.05, 0.07, 0.09 and 0.24 s, plus the
-   * builder's computed model (latency 0.24, a 2 s ramp from half that restarts on every seek). In measure mode each runs twice:
+   * builder's computed model (latency 0.24, a 2 s ramp from half that restarts on every seek), and in measure mode only two
+   * REAL-lag cases (the pre-ship review's SHOULD-FIX 2 (a)): a constant 0.09 s latency with the element really pulled back 0.12 or
+   * 0.17 s at ticks 11, 35 and 60, so the cost of adopting a repeat is a number beside its benefit. In measure mode each runs twice:
    * with the fix and with FM._mesRepeatIsLatency stubbed to false, which is the v17.93 rule.
    * Normally it runs three short cases and asserts only that each reached the controller, so the probe cannot rot unseen.
    * Add &measure663=1 to the address and it FAILS ON PURPOSE with every number in its message: seeks, the gaps between them in
    * ms, adoptions, and the median |playhead − real position| over the last 30 ticks (a seek that lands short shows up there). */
-  test('663 measure routed seek loop: seeks and their spacing for a routed clip whose latency settles late or whose seeks land short, with and without the fix', { item: '663', budgetMs: 300000 }, async function () {
+  test('663 measure routed seek loop: seeks and their spacing for a routed clip whose latency settles late or whose seeks land short, with and without the fix', { item: '663', budgetMs: 420000 }, async function () {
     let want = false;
     try { want = new URLSearchParams((window.top || window).location.search).get('measure663') === '1'; } catch (e) {}
     const cases = [];
@@ -72476,6 +72480,8 @@
       cases.push({ name: 'lands ' + d + ' s short', mk: () => seekLatEl663(12, () => 0.09, d), lag: true, quick: d === 0.07 });
     }
     cases.push({ name: 'latency 0.24 on a 2 s ramp from half', mk: () => seekLatEl663(12, s => 0.24 * (0.5 + 0.5 * Math.min(1, s / 2))), lag: false, quick: true });
+    cases.push({ name: 'real stalls of 0.12 s at ticks 11, 35, 60', mk: () => seekLatEl663(12, () => 0.09), lag: false, pulls: { at: [11, 35, 60], by: 0.12 }, quick: false });
+    cases.push({ name: 'real stalls of 0.17 s at ticks 11, 35, 60', mk: () => seekLatEl663(12, () => 0.09), lag: false, pulls: { at: [11, 35, 60], by: 0.17 }, quick: false });
     const lines = [];
     const keep = FM._mesRepeatIsLatency;
     for (const c of cases) {
@@ -72484,7 +72490,7 @@
         window.__fmStep = '663 probe: ' + c.name + (on ? ' (fix on)' : ' (fix off)');
         let r;
         if (!on) FM._mesRepeatIsLatency = () => false;
-        try { r = await run663(c.mk, want ? 100 : 40, c.lag); } finally { FM._mesRepeatIsLatency = keep; }
+        try { r = await run663(c.mk, want ? 100 : 40, c.lag, c.pulls); } finally { FM._mesRepeatIsLatency = keep; }
         if (!(r.ticks >= (want ? 90 : 36))) throw new Error('the probe run ' + c.name + ' ticked only ' + r.ticks + ' times, so it measured nothing');
         lines.push(c.name + (on ? ' [fix on]' : ' [fix off]') + ': ' + r.seeks + ' seeks' + (r.gaps.length ? ' (gaps ' + r.gaps.join('/') + ' ms)' : '') +
                    ', ' + r.adopts + ' adopted (' + Math.round(r.adopted * 1000) + ' ms), median |playhead - position| ' + Math.round(r.offMed * 1000) + ' ms, ' + r.ticks + ' ticks');
@@ -72514,6 +72520,18 @@
       if (!(r.offMed < 0.06)) throw new Error('at d = ' + d + ' the element itself ended a median ' + Math.round(r.offMed * 1000) + ' ms off the playhead — the fix kept a real lag as latency');
       if (r.el.rateWrites !== 0) throw new Error('the routed clip had playbackRate written ' + r.el.rateWrites + ' times');
     }
+  });
+
+  /* #663 (the pre-ship refuter's SHOULD-FIX 1, 23 Oct; js/app.js FM._mesRepeatIsLatency). The adoption window a routed seek
+   * opens must close the moment anything else seats the element again: FM.play, a loop wrap, a seam pre-roll and the restart all
+   * stamp m._syncAt, and the routed seek stamps _syncAt and _mesSeekAt from the same now. Without that, the first stall of a NEW
+   * pass inside 5 s of the old seek is adopted as latency with no seek at all, which is the #845 B2 hole. */
+  test('663 a routed seek stops opening the adoption window once play, a loop wrap, a seam pre-roll or a restart seats the element again', { item: '663' }, async function () {
+    if (typeof FM._mesRepeatIsLatency !== 'function') throw new Error('setup: FM._mesRepeatIsLatency is not exposed, so this test cannot reach the rule');
+    const m = { _mes: {}, _mesSeekAt: 1000, _syncAt: 1000, _mesSeekErr: 0.07, _mesAdopted: 0 };
+    if (FM._mesRepeatIsLatency(m, 0.07, 2000) !== true) throw new Error('CONTROL: the same error 1 s after a routed seek was not taken as latency, so this test proves nothing');
+    m._syncAt = 1500;   // FM.play, wrapTo, prerollAtSeam and the restart all stamp _syncAt when they seat the element again
+    if (FM._mesRepeatIsLatency(m, 0.07, 2000) !== false) throw new Error('a routed clip seated again after its seek still had its next error adopted as latency, so a stall on the new pass is kept with no seek (#845 B2)');
   });
 
   /* Queue 202 — is the ladder actually WIRED to playback? A different question from whether it decides

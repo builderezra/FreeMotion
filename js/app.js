@@ -2304,7 +2304,7 @@ window.FM = window.FM || {};
    * re-seeds short again, and so on: a seek about every 1–2 s for as long as the clip plays, and on WebKit every seek on a routed
    * element is a gap while its tap refills. The element was never late at all: each seek put it exactly where it already was.
    * So the SAME error coming back after a routed seek is taken as latency and adopted into the bias, not seeked again:
-   *   · only within MES_REPEAT_MS of a routed seek (any other seek closes the window), and only in the same direction;
+   *   · only within MES_REPEAT_MS of a routed seek, and only while that seek is still what last seated the element (any other seek, FM.play, a loop wrap, a seam pre-roll or a restart all stamp m._syncAt and close the window), and only in the same direction;
    *   · each adoption no bigger than the error that seek was for, to within the dead band — a bigger fault is a new one, seeked;
    *   · in all, no more than SYNC_HARD since that seek.
    * What it keeps: a one-off stall is still pulled back by ONE seek (B2, test 845), because after that seek the re-seed matches
@@ -2313,7 +2313,7 @@ window.FM = window.FM || {};
    * _syncMayLearn is untouched (queue 690 and 916 pin it). */
   const MES_REPEAT_MS = 5000;
   FM._mesRepeatIsLatency = function (m, err, now) {
-    if (!m || !m._mesSeekAt || !(now - m._mesSeekAt < MES_REPEAT_MS)) return false;
+    if (!m || !m._mesSeekAt || m._syncAt !== m._mesSeekAt || !(now - m._mesSeekAt < MES_REPEAT_MS)) return false;
     const was = m._mesSeekErr;
     if (!(isFinite(was) && isFinite(err) && err * was > 0)) return false;
     if (Math.abs(err) > Math.abs(was) + SYNC_DEAD) return false;
