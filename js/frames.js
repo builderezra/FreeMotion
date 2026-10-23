@@ -62,7 +62,9 @@ window.FM = window.FM || {};
 
   // Seek to t and capture as soon as the seek completes. (Avoid post-'seeked' timers:
   // backgrounded tabs clamp setTimeout to ~1s, which would make decoding crawl.)
-  function seekAndPaint(el, t) {
+  /* stop (optional, #663): asked before each re-seek. When it says yes the element is no longer ours (Play
+     took it), so a miss is not retried: the 'seeked' was Play's, and seeking back would move his clip. */
+  function seekAndPaint(el, t, stop) {
     return new Promise(res => {
       let tries = 0, emptied = false;
       const attempt = () => {
@@ -75,7 +77,7 @@ window.FM = window.FM || {};
           // A stale 'seeked' (another consumer's seek landing) or the 500ms cap can leave the
           // element on the WRONG frame — verify we actually arrived, one re-seek per miss.
           // Not on an element that was just EMPTIED: there is no frame left to arrive at.
-          if (!emptied && Math.abs((el.currentTime || 0) - t) > 0.2 && tries < 2) { tries++; attempt(); return; }
+          if (!emptied && !(stop && stop()) && Math.abs((el.currentTime || 0) - t) > 0.2 && tries < 2) { tries++; attempt(); return; }
           res();
         };
         /* The clip was released under this seek (queue 690, hunt f) — its project was left and its src taken
@@ -236,11 +238,41 @@ window.FM = window.FM || {};
   // SERIALIZED through one global queue so a project with many video clips doesn't seek N <video>s at
   // once (that storm spikes CPU/memory + fights the preview compositor for each element).
   let _stripQueue = Promise.resolve();
+  /* #663 (the hunt's finding 1 and its refuter): A FILMSTRIP NEVER TAKES THE ELEMENT OF A CLIP THAT IS PLAYING.
+     The strip steps the clip's OWN <video> eight times, and while it does FM.seekBusy is true, so every tick of playback
+     pauses and mutes that element and stands down. The rows only ASK for a strip while paused, but a strip asked for then
+     ran whenever its turn in the one queue came, Play or no Play: split a clip, press Play to check the cut, and the new
+     tail half (a fresh record, no strip yet) went silent for the second or so its strip took, then restarted cold.
+     So a strip waits for the pause in the queue, BEFORE it takes the element's seek lock (waiting inside the lock would
+     hold up a reversed clip's frame cache for the whole of playback), and one already under way when Play is pressed
+     stops after the frame in hand: its partial frames are closed, muted is put back, the element's time is left to the
+     transport, nothing is stored, and it starts again from the first frame at the next pause. So the promise a row holds
+     settles only on a finished strip (or a released clip), and no caller has to ask twice. An image has nothing to seek
+     and never waits. */
+  const STRIP_ABORTED = {};
+  const STRIP_PLAY_POLL_MS = 250;
+  // #663: the one question every guard below asks — may playback be driving this clip's element right now?
+  function stripMustWait(m) { return m.kind !== 'image' && !!FM.playing && !m._released; }
+  function stripWaitsForPause(m) {
+    if (!stripMustWait(m)) return null;
+    return new Promise(function (go) {
+      (function poll() { if (!stripMustWait(m)) go(); else setTimeout(poll, STRIP_PLAY_POLL_MS); })();
+    });
+  }
+  function stripRun(m, count) {
+    return Promise.resolve(stripWaitsForPause(m))
+      .then(function () { return seekLock(m, function () { return _extractStrip(m, count); }); })
+      .then(function (r) {
+        if (r !== STRIP_ABORTED) return r;
+        // never straight round again: the next try is a timer away, so no slip in the waits can spin the page
+        return new Promise(function (go) { setTimeout(go, STRIP_PLAY_POLL_MS); }).then(function () { return stripRun(m, count); });
+      });
+  }
   FM.buildClipStrip = function (m, count) {
     if (!m || !m.el || m._stripBuilding || m.stripFrames !== undefined) return Promise.resolve(m && m.stripFrames);
     // global queue (one strip at a time across clips) + the per-element seek lock (never interleave
     // with a frame-cache build seeking the same <video> — that corrupted reload-time caches)
-    const p = _stripQueue.then(function () { return seekLock(m, function () { return _extractStrip(m, count); }); });
+    const p = _stripQueue.then(function () { return stripRun(m, count); });
     _stripQueue = p.catch(function () {});   // keep the chain alive even if one build throws
     return p;
   };
@@ -289,24 +321,32 @@ window.FM = window.FM || {};
         try { m.stripFrames = [opt ? await createImageBitmap(m.el, opt) : await createImageBitmap(m.el)]; } catch (e) { m.stripFrames = []; }
       } else {
         const el = m.el;
+        // #663: Play may have started while this waited for the element's seek lock — back to the queue's wait for the pause
+        if (stripMustWait(m)) return STRIP_ABORTED;
         if (el.readyState < 2) await waitDecodable(el);   // wait for it to become decodable (don't spin / retry forever)
+        // #663: …or while it waited for the clip to decode (on an iPhone it may be Play's own seek that decodes it)
+        if (stripMustWait(m)) return STRIP_ABORTED;
         m._stripBuilding = true;   // #202 N1: from here the strip drives the element's seeks
         const frames = [];
+        let played = false;
         if (el.readyState >= 2 && !m._released) {
           const dur = (isFinite(m.duration) && m.duration > 0) ? m.duration : (el.duration || 1);
           const wasTime = el.currentTime, wasMuted = el.muted; el.muted = true;
           const opt = stripSize(el, m);
           for (let i = 0; i < count; i++) {
             if (m._released) break;   // released mid-strip (queue 690): every seek left would wait on nothing
-            await seekAndPaint(el, Math.min((i + 0.5) * dur / count, Math.max(0, dur - 0.001)));
+            if (stripMustWait(m)) { played = true; break; }   // #663: Play was pressed — the element is playback's now
+            await seekAndPaint(el, Math.min((i + 0.5) * dur / count, Math.max(0, dur - 0.001)), () => stripMustWait(m));
+            if (stripMustWait(m)) { played = true; break; }   // #663: Play came during the seek, so no bitmap for a strip being thrown away
             try { frames.push(opt ? await createImageBitmap(el, opt) : await createImageBitmap(el)); } catch (e) {}
           }
-          if (!m._released) { try { el.currentTime = stripRestoreTarget(m, wasTime); } catch (e) {} }
+          // #663: never write the time of an element that is playing — the transport owns it, and the old time is stale
+          if (!m._released && !FM.playing) { try { el.currentTime = stripRestoreTarget(m, wasTime); } catch (e) {} }
           el.muted = wasMuted;
         }
-        if (m._released) {   // a strip of a clip nobody can see any more — give its bitmaps straight back
+        if (m._released || played) {   // a strip of a clip nobody can see any more, or one Play cut short — give its bitmaps straight back
           frames.forEach(f => { if (f && f.close) try { f.close(); } catch (e) {} });
-          return undefined;
+          return m._released ? undefined : STRIP_ABORTED;   // #663: cut short, nothing is stored, so it is built again whole after the pause
         }
         m.stripFrames = frames;   // ALWAYS set (even [] on failure) so the timeline never retries forever
       }

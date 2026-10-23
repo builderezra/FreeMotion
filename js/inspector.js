@@ -2018,7 +2018,7 @@ window.FM = window.FM || {};
       }
       if (!reg.params.length && !isBox) body.appendChild(el('div', 'insp-hint', 'No adjustable parameters.'));
       if (row.classList.contains('fx-noop')) {
-        const why = NOOP_WHY[fx.type];
+        const why = noopWhy(fx);
         body.appendChild(el('div', 'insp-hint fx-noop-hint',
           'This is on, but it changes nothing on this layer at these settings' + (why ? ' — ' + why : '') + '.'));
       }
@@ -3201,6 +3201,14 @@ window.FM = window.FM || {};
     // #966 B51: Auto Grade stretches the range of tones it finds, and one flat colour has none (Colour can still turn a near-grey grey)
     autograde: 'it sets black, white and colour from the range of tones in the picture, and this layer is one flat colour with none — use it on a photo or video, or on an adjustment layer over one',
   };
+  /* THE REASON FOR THIS EFFECT AS SET, or null for the general sentence (#966 opts13). Channel Remap's Affects (`range`) and
+     Protect skin (`skin`) can hold the whole swap back on a colour whose channels differ — Protect skin 100 on an orange —
+     and then "they are already the same" is a wrong reason, which is worse than none. Set and not 0 counts, keyframed too. */
+  function noopWhy(fx) {
+    const q = (fx && fx.params) || {};
+    if (fx.type === 'channelremap' && ((q.range != null && q.range !== 0) || (q.skin != null && q.skin !== 0))) return null;
+    return NOOP_WHY[fx.type];
+  }
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is
      measured until the settings have been still for NOOP_SETTLE, and the row is only redrawn when the
@@ -3271,7 +3279,7 @@ window.FM = window.FM || {};
       if (lfx._noop === true) {
         if (!existing) {
           const body = openRow.querySelector('.fx-ed-body') || openRow.querySelector('.fx-swipe-wrap') || openRow;   // queue 738: the classes the row actually has (.fx-body / .fx-wrap existed nowhere)
-          const why = NOOP_WHY[lfx.type];
+          const why = noopWhy(lfx);
           body.appendChild(el('div', 'insp-hint fx-noop-hint',
             'This is on, but it changes nothing on this layer at these settings' + (why ? ' — ' + why : '') + '.'));
         }

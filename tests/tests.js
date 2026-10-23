@@ -60652,6 +60652,223 @@
     } finally { FM.media.remove(L.id); FM.scene.layers = keep; FM.time = keepT; FM.playing = wasPlaying; if (FM.refreshAll) FM.refreshAll(); }
   });
 
+  /* #663 (the 23 Oct hunt's finding 1 and its refuter). A filmstrip asked for while paused ran whenever its turn in the one strip
+   * queue came, Play or no Play, and drove the clip's OWN element: its seeks, every tick of playback pausing and muting that element
+   * for as long as they took (FM.seekBusy), then a put-back to a stale time. Split a clip and press Play to check the cut, and the
+   * tail half (a fresh record with no strip yet) went silent for a second or so, then restarted cold.
+   * The queue is drained first with a strip of its own, so nothing ahead of this one can hide its seeks.
+   * FAILS BEFORE THE FIX: with FM.playing true the strip seeks the stand-in at once (its 2 frames and the put-back).
+   * CONTROL: the same strip, once playback stops, seeks it and is stored. */
+  test('663 a filmstrip asked for before Play does not seek or hold a playing clip, and builds once playback stops', { item: '663', budgetMs: 40000 }, async function () {
+    if (typeof FM.buildClipStrip !== 'function') throw new Error('FM.buildClipStrip is not exposed');
+    const wasPlaying = FM.playing;
+    const el = fakeStripEl202(2), m = { kind: 'video', el: el, duration: 4, width: 64, height: 48 };
+    const drainEl = fakeStripEl202(2), drain = { kind: 'video', el: drainEl, duration: 4, width: 64, height: 48 };
+    let p = null;
+    try {
+      FM.playing = false;
+      const drained = await Promise.race([FM.buildClipStrip(drain, 1).then(() => true), sleep(15000).then(() => false)]);
+      if (!drained || !Array.isArray(drain.stripFrames)) throw new Error('setup: the strip queue did not drain within 15 s, so nothing below is measured');
+      FM.playing = true;
+      p = FM.buildClipStrip(m, 2);
+      let busy = 0;
+      const until = performance.now() + 300;
+      while (performance.now() < until) { if (FM.seekBusy(m)) busy++; await sleep(20); }
+      const whilePlaying = el.writes.slice();
+      if (whilePlaying.length || busy) throw new Error('while the clip was playing its filmstrip seeked it ' + whilePlaying.length + ' time(s) (' + whilePlaying.map(v => v.toFixed(3)).join(', ') + ') and held it busy on ' + busy + ' sample(s) — every tick of playback pauses and mutes a busy clip, so its sound cuts out until the strip is done');
+      FM.playing = false;
+      const done = await Promise.race([p.then(() => true), sleep(15000).then(() => false)]);
+      if (!done) throw new Error('CONTROL: 15 s after playback stopped the filmstrip had still not finished, so it never builds');
+      if (el.writes.length < 2 || !Array.isArray(m.stripFrames)) throw new Error('CONTROL: once playback stopped the filmstrip made ' + el.writes.length + ' seek(s) and stored ' + m.stripFrames + ' — it no longer builds at all');
+    } finally {
+      FM.playing = wasPlaying;
+      if (p && m.stripFrames === undefined) { m._released = true; el.fire('emptied'); await Promise.race([p, sleep(3000)]); }
+    }
+  });
+
+  /* #663, the other half. A strip already under way when Play is pressed went on to its end: the rest of its seeks and then a
+   * put-back to the time the element had before the strip, on an element playback had just started.
+   * FAILS BEFORE THE FIX: Play pressed at the strip's first seek, and it still makes its second seek and the put-back (3 writes)
+   * and stores the strip.
+   * CONTROL: after the pause the strip is built again, whole. */
+  test('663 a filmstrip under way when Play is pressed stops at once and leaves the clip to playback, then builds whole after the pause', { item: '663', budgetMs: 40000 }, async function () {
+    if (typeof FM.buildClipStrip !== 'function') throw new Error('FM.buildClipStrip is not exposed');
+    const wasPlaying = FM.playing;
+    const el = fakeStripEl202(2), m = { kind: 'video', el: el, duration: 4, width: 64, height: 48 };
+    let armed = true, p = null;
+    /* The arming write also stands in for Play's own seek (FM.play writes every in-window clip's time): the element lands at
+       2.5, far from the strip's 1.0, so the 'seeked' the strip hears is Play's. A strip that re-seeks to its own target then
+       shows up as a second write. Set directly, not through this setter, so it neither recurses nor counts as the strip's. */
+    Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) { el.writes.push(v); this._t = v; if (armed) { armed = false; FM.playing = true; this._t = 2.5; } setTimeout(() => el.fire('seeked'), 0); }, configurable: true });
+    try {
+      FM.playing = false;
+      p = FM.buildClipStrip(m, 2);
+      const until = performance.now() + 15000;
+      while ((armed || FM.seekBusy(m)) && performance.now() < until) await sleep(20);
+      if (armed) throw new Error('setup: the filmstrip never made its first seek, so Play was never pressed under it');
+      await sleep(300);
+      const writes = el.writes.length, stored = m.stripFrames, busy = FM.seekBusy(m), muted = el.muted;
+      if (writes > 1) throw new Error('Play was pressed at the filmstrip’s first seek and it went on to make ' + writes + ' (' + el.writes.map(v => v.toFixed(3)).join(', ') + ') — the rest of the strip and a put-back to a stale time, on a clip that is playing, so its sound cuts out and it restarts cold');
+      if (stored !== undefined) throw new Error('a filmstrip cut short by Play was stored (' + (Array.isArray(stored) ? stored.length + ' frame(s)' : stored) + ') — a part-built strip is never built again');
+      if (busy) throw new Error('after the filmstrip stood down for Play the clip is still held busy, so playback keeps it paused and muted');
+      if (muted) throw new Error('the filmstrip stood down for Play and left the clip muted');
+      FM.playing = false;
+      const done = await Promise.race([p.then(() => true), sleep(15000).then(() => false)]);
+      if (!done) throw new Error('CONTROL: 15 s after playback stopped the cut-short filmstrip had still not been built again');
+      if (el.writes.length < writes + 2 || !Array.isArray(m.stripFrames)) throw new Error('CONTROL: after the pause the filmstrip made ' + (el.writes.length - writes) + ' more seek(s) and stored ' + m.stripFrames + ' — it is not built again whole');
+    } finally {
+      FM.playing = wasPlaying;
+      if (p && m.stripFrames === undefined) { m._released = true; el.fire('emptied'); await Promise.race([p, sleep(3000)]); }
+    }
+  });
+
+  /* #202 H4. FM.play wrote the raw frame edge to every clip's element, while a paused element sits half a millisecond inside its
+   * frame (FM.frameSeekTarget, where the paused seek and FM.pause put it), so every press of Play was a real decoder seek at the
+   * moment the sound has to start.
+   * FAILS BEFORE THE FIX: a clip already on the playhead's frame is sought once by Play (s0 + 1, not s0).
+   * CONTROLS: a clip 3 s off the playhead, and one with no frame decoded yet, are still sought by Play, once each. */
+  test('202 Play does not re-seek a clip already on the playhead’s frame, and still seeks one that is off it or has no frame', { item: '202' }, function () {
+    const rig = transportRig();
+    try {
+      const rec = FM.media.get(rig.layer.id);
+      // no filmstrip build, so nothing else seeks the rig's element
+      if (rec && rec.stripFrames === undefined) rec.stripFrames = [];
+      const at = 2, want = FM.frameSeekTarget(at, rig.el.duration);
+      const press = function (pos, rs) {
+        if (FM.playing) FM.pause();
+        FM.time = at;
+        rig.el.readyState = rs;
+        rig.el.currentTime = pos;
+        const s0 = rig.el.seeks;
+        FM.play();
+        const r = { seeks: rig.el.seeks - s0, pos: rig.el._pos, playing: !!FM.playing };
+        // back to a decoded element before the stop, so the pause's own seek arms no prime
+        rig.el.readyState = 4;
+        FM.pause();
+        return r;
+      };
+      const off = press(5, 4);
+      if (!off.playing) throw new Error('CONTROL: Play did not start the rig’s transport, so nothing here is under test');
+      if (off.seeks !== 1) throw new Error('CONTROL: Play sought a clip 3 s off the playhead ' + off.seeks + ' time(s), not once');
+      const cold = press(want, 1);
+      if (cold.seeks !== 1) throw new Error('CONTROL: Play sought a clip with no frame decoded yet ' + cold.seeks + ' time(s), not once, and nothing else asks it to load');
+      const on = press(want, 4);
+      if (on.seeks !== 0) throw new Error('Play sought a clip already on the playhead’s frame ' + on.seeks + ' time(s): it wrote the raw edge ' + at + ' s over the ' + want + ' s it sat on, half a millisecond apart, so every press of Play is a real decoder seek just as the sound has to start');
+      if (Math.abs(off.pos - want) > 1e-9) throw new Error('Play sought an off-frame clip to ' + off.pos + ' s, not inside the frame at ' + want + ' s, where the paused seek and the export put it');
+    } finally { rig.restore(); }
+  });
+
+  /* #202 H7. Opening Effects on a clip asks whether it has sound (js/inspector.js probeAudioSide), and the probe answered by decoding
+   * the whole file (file.arrayBuffer() up to 300 MB, then its entire sound track), a memory spike beside the video decoder on a
+   * phone, while the MP4 / MOV header (FM.soundTrackInFile) already says yes or no in a few KB.
+   * FAILS BEFORE THE FIX: a header-only MP4 that lists a sound track is decoded (and the decode of those bytes answers no).
+   * CONTROL: a file the header reader cannot read (a WAV) is still decoded, so the decode stand-in is really the one the probe calls. */
+  test('202 asking whether a clip has sound reads the MP4 track list first and decodes only a file it cannot read', { item: '202' }, async function () {
+    const keepDecode = FM.decodeAudio, made = [];
+    let decodes = 0;
+    const u32b = n => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+    const asc = s => Array.prototype.map.call(s, c => c.charCodeAt(0));
+    const box = (type, body) => u32b(8 + body.length).concat(asc(type), body);
+    const trak = kind => box('trak', box('mdia', box('hdlr', [0, 0, 0, 0, 0, 0, 0, 0].concat(asc(kind), new Array(13).fill(0)))));
+    const mp4 = kinds => new File([new Uint8Array(box('ftyp', asc('isom').concat([0, 0, 2, 0])).concat(box('moov', [].concat.apply([], kinds.map(trak)))))], '202-h7.mp4', { type: 'video/mp4' });
+    const ask = async function (file) {
+      const L = FM.makeLayer('video', { name: '202 H7' }); made.push(L.id);
+      FM.media.set(L.id, { kind: 'video', width: 64, height: 48, duration: 2, file: file });
+      const before = decodes, said = await FM.probeAudioTrack(L);
+      return { said: said, decodes: decodes - before, cached: FM.hasAudioTrack(L) };
+    };
+    try {
+      if (typeof FM.probeAudioTrack !== 'function' || typeof FM.soundTrackInFile !== 'function') throw new Error('FM.probeAudioTrack / FM.soundTrackInFile are not exposed');
+      // the decode stand-in: a tiny one-channel buffer for the WAV, nothing for anything else (header-only bytes do not decode)
+      FM.decodeAudio = async function (file) { decodes++; return file && file.name === '202-h7.wav' ? { length: 8, numberOfChannels: 1, sampleRate: 8000 } : null; };
+      const wav = await ask(new File([new Uint8Array(asc('RIFF').concat([36, 0, 0, 0], asc('WAVEfmt ')))], '202-h7.wav', { type: 'audio/wav' }));
+      if (wav.decodes !== 1 || wav.said !== true) throw new Error('CONTROL: a WAV, which has no MP4 track list, was decoded ' + wav.decodes + ' time(s) and answered ' + wav.said + ', not once and yes');
+      const loud = await ask(mp4(['vide', 'soun']));
+      if (loud.decodes !== 0) throw new Error('an MP4 whose track list names a sound track was decoded ' + loud.decodes + ' time(s) to ask whether it has sound (and answered ' + loud.said + ') — opening Effects reads the whole file into memory for an answer its header gives in a few KB');
+      if (loud.said !== true || loud.cached !== true) throw new Error('an MP4 listing a sound track answered ' + loud.said + ' (cached ' + loud.cached + '), not yes');
+      const mute = await ask(mp4(['vide']));
+      if (mute.decodes !== 0 || mute.said !== false || mute.cached !== false) throw new Error('an MP4 listing only a picture track was decoded ' + mute.decodes + ' time(s) and answered ' + mute.said + ' (cached ' + mute.cached + '), not 0 times and no');
+    } finally {
+      FM.decodeAudio = keepDecode;
+      made.forEach(id => FM.media.remove(id));
+    }
+  });
+
+  /* #202 H8. 'canplay' fires each time a playback stall clears, and the clip's repaint asked for a render while playing: a second full
+   * render in the same animation frame as the playback tick's own. Counted at FM.requestRender itself, synchronously inside the event,
+   * so a render something else had already queued cannot hide the call.
+   * FAILS BEFORE THE FIX: a 'canplay' and a 'loadeddata' while playing each ask for a render.
+   * CONTROL: paused, the same two events each still ask for one, so the repaint is wired and goes through FM.requestRender. */
+  test('202 a clip that becomes playable while playing does not ask for a second render in the tick’s frame, and still repaints when paused', { item: '202' }, function () {
+    if (typeof FM.wireVideoRepaint !== 'function') throw new Error('FM.wireVideoRepaint is not exposed');
+    const realRender = FM.requestRender, wasPlaying = FM.playing, on = {};
+    let asked = 0;
+    // a decoded stand-in (readyState 4), so the slow-decode watcher arms no timer and no toast
+    const el = { readyState: 4, addEventListener(t, f) { (on[t] = on[t] || []).push(f); }, removeEventListener(t, f) { on[t] = (on[t] || []).filter(g => g !== f); } };
+    const fire = t => (on[t] || []).slice().forEach(f => f());
+    try {
+      FM.wireVideoRepaint({ kind: 'video', el: el, width: 64, height: 48 });
+      FM.requestRender = function () { asked++; };
+      FM.playing = false;
+      fire('canplay'); fire('loadeddata');
+      if (asked !== 2) throw new Error('CONTROL: paused, a canplay and a loadeddata asked for ' + asked + ' render(s), not 2, so the repaint is not wired and nothing below is under test');
+      asked = 0;
+      FM.playing = true;
+      fire('canplay'); fire('loadeddata');
+      FM.playing = false;
+      if (asked) throw new Error('while playing, a canplay and a loadeddata asked for ' + asked + ' render(s) on top of the playback tick, which renders that same frame itself');
+    } finally { FM.requestRender = realRender; FM.playing = wasPlaying; }
+  });
+
+  /* #202 H2. FM.play held the clock for at most 400 ms for a clip to start. A COLD clip (nothing buffered yet: the first Play after an
+   * import on an iPhone) that took longer was left behind: the clock ran on, the first warm sync sample learned the whole stall as
+   * output latency, and the clip played that far behind the playhead until the next Play.
+   * FAILS BEFORE THE FIX: a cold element (readyState 2) that starts 900 ms after Play plays about half a second behind the clock; and
+   * a cold element whose play() is refused still holds the start for the whole 400 ms.
+   * CONTROLS: a warm element with no stall keeps up with the clock (the rig plays, and its lag reads near 0); a cold element that never
+   * starts does not hold the transport for ever.
+   * AND a clip the app has already judged undecodable (rec.undecodable, queue 129's blank clip) holds the start no longer than a warm
+   * one: it never starts and its play() never settles, so counted as cold it would freeze every press of Play for 2 s. */
+  test('202 Play waits longer for a cold clip to start, not at all for one whose play is refused, and never for ever', { item: '202', budgetMs: 30000 }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const run = async function (rs, how, ms, blank) {
+      const rig = transportRig({ duration: 20 });
+      try {
+        const rec = FM.media.get(rig.layer.id);
+        if (blank && rec) rec.undecodable = true;
+        // no filmstrip build, so nothing else seeks the rig's element
+        if (rec && rec.stripFrames === undefined) rec.stripFrames = [];
+        rig.el.readyState = rs;
+        const realPlay = rig.el.play;
+        if (how === 'refuse') {
+          rig.el.play = function () { const e = new Error('refused by the test'); e.name = 'NotAllowedError'; return Promise.reject(e); };
+        } else if (how) {
+          // the element starts producing `how` ms after play(), as a cold clip does
+          rig.el.play = function () { const p = realPlay.call(rig.el); rig.el._stall = performance.now() + how; return p; };
+        }
+        FM.play();
+        await sleep(ms);
+        const r = { clock: FM.clockNow(), el: rig.el.currentTime, playing: !!FM.playing };
+        r.lag = r.clock - r.el;
+        return r;
+      } finally { rig.restore(); }
+    };
+    try {
+      const warm = await run(4, 0, 1600);
+      if (!warm.playing || !(warm.clock > 1)) throw new Error('CONTROL: a warm clip with no stall did not play (the clock at ' + warm.clock.toFixed(3) + ' s after 1.6 s)');
+      if (Math.abs(warm.lag) > 0.1) throw new Error('CONTROL: a warm clip with no stall sat ' + warm.lag.toFixed(3) + ' s off the clock, so this rig cannot tell a lag from its own noise');
+      const cold = await run(2, 900, 2600);
+      if (cold.lag > 0.15) throw new Error('a cold clip (readyState 2) that started 900 ms after Play played ' + cold.lag.toFixed(3) + ' s behind the playhead: the start wait gave up at 400 ms, the clock ran on without it, and the sync learned the stall as output latency, so it stays that far behind until the next Play');
+      const refused = await run(2, 'refuse', 350);
+      if (!(refused.clock > 0.1)) throw new Error('a cold clip whose play() was refused held the start: 350 ms after Play the clock was at ' + refused.clock.toFixed(3) + ' s. A refused element never advances, so waiting for it only freezes the playhead');
+      const stuck = await run(2, 1e9, 2600);
+      if (!(stuck.clock > 0.2)) throw new Error('CONTROL: a cold clip that never starts held the transport for ever: the clock was at ' + stuck.clock.toFixed(3) + ' s after 2.6 s');
+      const blankRun = await run(2, 1e9, 700, true);
+      if (!(blankRun.clock > 0.15)) throw new Error('a clip the app has already judged undecodable held the start like a cold one: 700 ms after Play the clock was at ' + blankRun.clock.toFixed(3) + ' s. It never decodes, so every press of Play froze for 2 s instead of 0.4 s');
+    } finally { if (hadHome && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open(); }
+  });
+
   test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
     var keep = FM.scene.layers.slice(), keepT = FM.time;
     var fps = FM.scene.project.fps || 30;
@@ -60915,22 +61132,12 @@
     if (XR.prerollFrames(off) !== 0) throw new Error('a DISABLED temporal effect still asked for a pre-roll');
   });
 
-  /* ═══ THE RECORD IS PART OF THE PRODUCT (queue 840, 841, 842) ══════════════════════════════════════
+  /* ═══ THE RECORD IS PART OF THE PRODUCT (queue 841, 842) ══════════════════════════════════════
    * Three findings from re-checking the 5 Sep audit, and none of them changes a pixel: a comment that
    * describes an intro two releases out of date, a test message that rules out the cause it should name,
    * and a test whose NAME claims an assertion it deliberately does not make. Each one has already sent a
-   * reader the wrong way once. Prose has no test, which is exactly why these three are tests. */
-  test('the splash script does not claim the dark ending is withdrawn — it was put back in queue 783 (queue 840)', { item: '840' }, async function () {
-    const r = await fetch('../index.html');
-    if (!r.ok) throw new Error('could not read index.html to check its own comment (' + r.status + ')');
-    const src = await r.text();
-    if (!/timeupdate/.test(src)) throw new Error('control: what was fetched is not index.html — it has no timeupdate handler, so the checks below would pass on anything');
-    if (/THE DARK ENDING IS WITHDRAWN/.test(src))
-      throw new Error('index.html still says "THE DARK ENDING IS WITHDRAWN" in the present tense — queue 783 put it back, and the stale block sent a later reader hunting the wrong cause of the intro flash');
-    if (/played through to its end in\s+both looks/.test(src.replace(/\s+/g, ' ')))
-      throw new Error('index.html still concludes "one film, played through to its end in both looks" — false since v15.63, when the dark look got its own ending again');
-  });
-
+   * reader the wrong way once. Prose has no test, which is exactly why these three are tests. (840's, about the film's
+   * own comment, went with the film in #1180.) */
   test('the intro test does not rule out the app as the cause of a film nobody can see (queue 841)', { item: '841' }, async function () {
     const r = await fetch('../tests/tests.js');
     if (!r.ok) throw new Error('could not read the suite source (' + r.status + ')');
@@ -75497,44 +75704,6 @@
     } finally { _isoK.put(); }
   });
 
-  /* ═══ QUEUE 646 — THE INTRO GROUND THAT NEVER RAN ════════════════════════════════════════════
-   * Ezra: *"the background doesnt fade from white to the colours it just cuts unlike mobile, try
-   * really hard not to accidentally break anything when fixing please"*.
-   * 🔑 THE RAMP HAD BEEN WRITTEN AND HAD NEVER ONCE RUN. theme-glass.css carries
-   * `html.splash-on-light { background:#111; animation: splash-ground 2.05s ease-in forwards; }`,
-   * which walks the page from #111 to white under the film. The CLASS was never added: index.html read
-   * `LIGHT` at the top of the boot IIFE while its `var` declaration sat fifty lines below, so hoisting
-   * made it `undefined`, the `if` was falsy, and nothing happened. **No error — that is what makes it
-   * the dangerous kind.** So the 900ms dissolve cross-faded a white film into a black page and the
-   * home colours arrived when the class came off: a swap, not a fade.
-   * ⚠️ TESTED AT THE SOURCE, deliberately. The splash runs once per session from an inline script and
-   * deletes itself, so there is no live state left to read — the same limit #642's test hit. */
-  test('#646: the light intro ground is armed before it is read', { item: '646' }, async function () {
-    const html = await (await fetch('index.html?t=' + Date.now())).text();
-    const use = html.indexOf("classList.add('splash-on-light')");
-    if (use < 0) throw new Error("index.html no longer adds 'splash-on-light', so the ground ramp cannot run at all");
-    const decl = html.indexOf('var LIGHT');
-    if (decl < 0) throw new Error('LIGHT is no longer declared in index.html');
-    if (decl > use) throw new Error('LIGHT is declared AFTER the line that reads it (' + decl + ' > ' + use +
-      ') — `var` hoists, so it is undefined at that point, the if is falsy and the ground ramp silently never runs. That is the exact bug this test exists for, and it produces no error.');
-
-    /* AND THE CLASS MUST LAND ON SOMETHING. If the ramp is ever deleted, adding the class becomes a
-       no-op again and this test would still pass on the ordering alone. */
-    const glass = await (await fetch('theme-glass.css?t=' + Date.now())).text();
-    if (!/html\.splash-on-light[^{]*\{[^}]*animation:\s*splash-ground/.test(glass))
-      throw new Error('theme-glass.css no longer ramps the ground for splash-on-light — the class would be landing on nothing');
-    if (!/@keyframes\s+splash-ground/.test(glass))
-      throw new Error('the splash-ground keyframes are gone, so the ramp cannot animate');
-
-    /* ⚠️ AND ONE DECLARATION ONLY. I nearly shipped a second copy of this ground into styles.css before
-       finding the original — two declarations of one ground is how #643's six wordmark masks drifted. */
-    /* comments stripped first — the pointer left in styles.css QUOTES the rule it is pointing at, and
-       a regex that cannot tell a declaration from a comment would fail on the note explaining why the
-       declaration is not there. */
-    const css = (await (await fetch('styles.css?t=' + Date.now())).text()).replace(/\/\*[\s\S]*?\*\//g, '');
-    if (/html\.splash-on-light[^{]*\{[^}]*background:/.test(css))
-      throw new Error('styles.css declares the light splash ground too — theme-glass.css already owns it, and two copies of one ground is exactly how the #643 masks drifted apart');
-  });
 
   /* ═══ QUEUE 643 — THE GLOW MASKS MUST TRACK THE WORDMARK ══════════════════════════════════════
    * Ezra spotted this himself and described it exactly: *"you've got like an M as like the backdrop for
@@ -75599,23 +75768,6 @@
     } finally { sp.remove(); }
   });
 
-  /* Clause 1 of the same report: *"at the start there's like a weird like white box that pops up"*.
-   * An `<img>` with no `src`, sized to the whole viewport, can paint as a placeholder box — so in the
-   * light look the element is REMOVED rather than merely left empty.
-   * ⚠️ ASSERTED AGAINST THE SOURCE, and that is a deliberate second best. The splash runs once per
-   * session from an inline script and is gone from the DOM before any test could watch it, so there is
-   * no live state left to read. Checking the source at least fails if the removal is deleted. */
-  test('#642: the light intro removes the empty poster instead of leaving it', { item: '642' }, async function () {
-    const src = await (await fetch('index.html?t=' + Date.now())).text();
-    const m = src.match(/if\s*\(pos\)\s*\{[^}]*\}/);
-    if (!m) throw new Error('the poster branch is gone from index.html — cannot tell what the intro does with #splash-poster');
-    if (!/pos\.remove\(\)/.test(m[0]))
-      throw new Error('the intro no longer REMOVES #splash-poster: ' + m[0].slice(0, 140) +
-        ' — an empty <img> the size of the viewport is exactly the "weird white box" he reported');
-    // queue 688 clause 2: the old dark film and its poster are gone — BOTH looks remove the element, none gives it a src
-    if (/pos\.src\s*=/.test(m[0]))
-      throw new Error('the poster is being given a src again — the old dark intro is back (queue 688 clause 2 removed it)');
-  });
 
   /* ═══ QUEUE 635 — SLIDERS THAT JUMP TOO FAR, TOO FAST ═════════════════════════════════════════
    * Ezra: *"Pinch bulges slider jumps too much too fast, make its sliders more gradual"* — his THIRD
@@ -82753,36 +82905,6 @@
     }
   });
 
-  /* ═══ 688 clauses 2 + 3 (v15.07): ONE INTRO FILM, AND DARK MODE LANDS ON DARK.
-     The boot script runs once per session before any of this exists, so — as #642's guard does — the
-     first half reads index.html AS SHIPPED, and the second half asks the LIVE stylesheet whether the dark
-     ending actually dims the film (a class name in the source proves nothing if the rule is missing). */
-  test('688: one intro film serves both looks, the old film and its poster are gone, and neither look hides it', { item: '688' }, async function () {
-    /* ⚠️ THIS TEST USED TO REQUIRE THE OPPOSITE (v15.08): that the dark look dim the film to nothing over its last
-     * 1.05s, to spare it the white bloom the film ends on. Ezra on the shipped result: "You've broken the intro loading
-     * screen ... just like flashing black-and-white and white". Measured: the film's opacity was driven to 0 while the
-     * splash was still up, so the animation vanished half a second early and the screen handed over to white. The dim is
-     * withdrawn (queue 776) and this asserts what is true now — one film, played through, hidden by neither look. */
-    const src = await fetch('index.html', { cache: 'no-store' }).then(r => r.text());
-    const boot = src.slice(src.indexOf('splash-vid'), src.indexOf('<div id="app">'));
-    if (/splash\.mp4\?/.test(boot)) throw new Error('index.html still plays splash.mp4 — the OLD loading animation he asked to get rid of');
-    if (/splash-poster\.png/.test(boot)) throw new Error('index.html still sets the old poster');
-    if (!/splash-v2\.mp4/.test(boot)) throw new Error('the new film is not referenced at all');
-    if (/splash-dim/.test(boot)) throw new Error('the dark dim is back in the boot script — it hides the film before the splash dissolves (queue 776)');
-    // the live stylesheet must carry no rule that can blank a PLAYING film, in either look
-    const sp = document.createElement('div'); sp.id = 'splash'; sp.className = 'splash-light splash-dark';
-    const v = document.createElement('video'); v.id = 'splash-vid'; v.className = 'playing splash-dim';
-    v.style.transition = 'none';   // the reads below are synchronous; the film's own .2s/.4s fades would report the START of each fade, not its end
-    sp.appendChild(v); document.body.appendChild(sp);
-    try {
-      const op = getComputedStyle(v).opacity;
-      if (op !== '1') throw new Error('a playing film computes opacity ' + op + ' under splash-dark/splash-dim — a rule can still blank it mid-intro (queue 776)');
-      v.className = 'playing';
-      if (getComputedStyle(v).opacity !== '1') throw new Error('the film is not fully visible while it plays');
-      sp.className = 'splash-light'; v.className = 'playing splash-dim';
-      if (getComputedStyle(v).opacity !== '1') throw new Error('a playing film is blanked in the light look too');
-    } finally { sp.remove(); }
-  });
 
   /* ═══ 706 / 676 (v15.08): THE ADD SHEET ARRIVES ONCE. The sheet's base rule transitions `transform`
      and `.open` animates it with a hinge keyframe — two motions on one property, which Chrome resolves to
@@ -84890,127 +85012,7 @@
     }
   });
 
-  /* ═══ 776: THE INTRO ACTUALLY PLAYS, AND IS NEVER HIDDEN WHILE THE SPLASH IS UP. The suite has only ever read the
-     boot script's MARKUP, which is why v15.08 could dim the film to nothing for the last half-second of the dark look
-     and every test stayed green — "it does not do anything anymore just like flashing black-and-white and white".
-     The boot runs once per session and cannot be replayed here, so this boots the real page in an IFRAME with the
-     session flag cleared, and watches: the film reaches a real currentTime, and its opacity is never driven to zero
-     while the splash is still on screen. Run in both looks, because the dim was dark-only. */
-  test('776: the intro film plays through and is never faded out while the splash is still up', { item: '776', budgetMs: 45000 }, async function () {
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const settings0 = localStorage.getItem('fm.settings');
-    const watch = async (light) => {
-      try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
-      const st = JSON.parse(localStorage.getItem('fm.settings') || '{}'); st.homeLight = light;
-      localStorage.setItem('fm.settings', JSON.stringify(st));
-      const f = document.createElement('iframe');
-      f.style.cssText = 'position:fixed;left:-9999px;top:0;width:390px;height:760px;border:0';
-      f.src = '../index.html?intro776=' + Date.now();
-      document.body.appendChild(f);
-      let maxT = 0, blanked = null, played = false, everVisible = false;
-      try {
-        for (let i = 0; i < 45; i++) {
-          const d = f.contentDocument;
-          if (d) {
-            const sp = d.getElementById('splash'), v = d.getElementById('splash-vid');
-            if (v) {
-              maxT = Math.max(maxT, v.currentTime || 0);
-              if (v.classList.contains('playing')) played = true;
-              const op = parseFloat(d.defaultView.getComputedStyle(v).opacity);
-              const up = sp && !sp.classList.contains('splash-out') && !sp.classList.contains('hidden');
-              if (op > 0.9) everVisible = true;
-              /* ⚠️ ONLY TRUST A ZERO IF THIS FRAME EVER SHOWED THE FILM AT ALL. An iframe the browser is not rendering
-                 does not advance CSS transitions, so its film can read opacity 0 for the whole intro with nothing wrong —
-                 measured exactly that against the live site while the same build played perfectly on screen. Requiring a
-                 1 first makes a false accusation impossible; if the frame never renders, the run says so below instead. */
-              if (up && played && everVisible && op < 0.05 && (v.currentTime || 0) > 0.4 && blanked === null) blanked = +(v.currentTime).toFixed(2);
-            }
-            if (!sp && played) break;   // the splash finished normally
-          }
-          await sleep(100);
-        }
-      } finally { f.remove(); }
-      return { light, maxT: +maxT.toFixed(2), played, blanked, everVisible };
-    };
-    try {
-      for (const light of [false, true]) {
-        const r = await watch(light);
-        const look = light ? 'light' : 'dark';
-        if (!r.played) throw new Error('the ' + look + ' intro never started playing (the film reached ' + r.maxT + 's) — this run cannot judge it, but that is also exactly what a broken intro looks like');
-        if (r.maxT < 0.5) throw new Error('the ' + look + ' intro stopped at ' + r.maxT + 's — it is not playing through');
-        /* ⚠️ NAME BOTH CAUSES (queue 841). This used to blame the browser outright and tell the reader the red was
-           nothing to do with the app, which rules out the case where the APP holds the film transparent — and that
-           is the case a reader most needs to consider, because the sentence invites them to wave the red away as
-           a harness artefact. `everVisible` is set only by the film's own computed opacity, so it cannot tell the
-           two apart; test 688 can, and it is named here so the next reader goes there instead of guessing. */
-        if (!r.everVisible) throw new Error('the ' + look + ' intro never reached full opacity in this frame — either this frame is not being rendered (a known harness artefact) OR the app is holding the film transparent. Test 688 tells the two apart: if it is green, this is the harness');
-        if (r.blanked !== null) throw new Error('the ' + look + ' intro was faded to nothing at ' + r.blanked + 's while the splash was still on screen — the animation disappears and the screen just flashes');
-      }
-    } finally {
-      if (settings0 === null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', settings0);
-      try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
-    }
-  });
 
-  /* ═══ 783 (#688 clause 3, restored): THE DARK LOOK'S INTRO LANDS ON DARK, AND THE LIGHT LOOK STILL LANDS ON WHITE.
-     Measured on the film: the mark moves until ~0.93s, then blooms to a static white card by 1.34s. Under the dark look
-     that card used to dissolve into the dark home (v15.47), and before that v15.08's opacity dim revealed the box's white
-     ground under the film (#776's flash). Boot the real page in an iframe per look and read what is actually ON SCREEN:
-     the film's rendered luminance × its brightness filter × the splash's opacity, every 50ms. Dark: after the mark's
-     animation the effective brightness never exceeds a third, the film was fully visible before that, and the box's
-     ground never turns white. Light: the film reaches full white at full brightness — the control that the dark
-     rule does not leak. */
-  test('783: the dark look\'s intro is never bright after the mark has animated, and the light look\'s still ends white', { item: '783', budgetMs: 45000 }, async function () {
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const settings0 = localStorage.getItem('fm.settings');
-    const cv = document.createElement('canvas'); cv.width = 24; cv.height = 40; const g = cv.getContext('2d', { willReadFrequently: true });
-    const lumOf = (v) => { try { g.drawImage(v, 0, 0, 24, 40); const d = g.getImageData(0, 0, 24, 40).data; let l = 0; for (let i = 0; i < d.length; i += 4) l += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; return l / (d.length / 4) / 255; } catch (e) { return null; } };
-    const watch = async (light) => {
-      try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
-      const st = JSON.parse(localStorage.getItem('fm.settings') || '{}'); st.homeLight = light; localStorage.setItem('fm.settings', JSON.stringify(st));
-      const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;left:-9999px;top:0;width:390px;height:760px;border:0'; f.src = '../index.html?intro783=' + Date.now();
-      document.body.appendChild(f);
-      let peakEarly = 0, peakLate = 0, groundWhite = false, samples = 0, fullBefore = false, anim = null;
-      try {
-        for (let i = 0; i < 90; i++) {
-          const d = f.contentDocument, w = f.contentWindow;
-          if (d) {
-            const sp = d.getElementById('splash'), v = d.getElementById('splash-vid');
-            if (sp && v && v.classList.contains('playing')) {
-              const cs = w.getComputedStyle(v), t = v.currentTime || 0, lum = lumOf(v);
-              if (anim === null) anim = cs.animationName + ' ' + cs.animationDuration;   // the mechanism must be a compositor-driven animation, not a class from JS
-              const br = /brightness\(([\d.]+)\)/.exec(cs.filter || ''); const bright = br ? parseFloat(br[1]) : 1;
-              const eff = (lum == null ? 0 : lum) * parseFloat(cs.opacity) * bright * parseFloat(w.getComputedStyle(sp).opacity);
-              if (lum != null) { samples++; if (t < 0.85) { peakEarly = Math.max(peakEarly, eff); if (parseFloat(cs.opacity) > 0.9 && bright >= 0.99) fullBefore = true; } else peakLate = Math.max(peakLate, eff); }
-              const bg = w.getComputedStyle(sp).backgroundColor, mm = /rgba?\((\d+), (\d+), (\d+)/.exec(bg);
-              if (mm && (+mm[1] + +mm[2] + +mm[3]) > 500) groundWhite = true;
-            }
-            if (!sp && samples) break;
-          }
-          await sleep(50);
-        }
-      } finally { f.remove(); }
-      return { light, peakEarly, peakLate, groundWhite, samples, fullBefore, anim };
-    };
-    try {
-      const dark = await watch(false);
-      if (dark.samples < 8) throw new Error('setup: only ' + dark.samples + ' frames of the dark intro were read — the frame is not rendering, so this run cannot judge it');
-      if (!dark.fullBefore) throw new Error('setup: the dark intro was never at full brightness before 0.85s — the mark\'s animation would be hidden, or the frame never rendered');
-      if (dark.peakLate > 0.35) throw new Error('the dark look\'s intro reaches ' + Math.round(dark.peakLate * 100) + '% white on screen after the mark has animated — the white card dissolves into the dark home (#688 clause 3)');
-      if (dark.groundWhite) throw new Error('the splash box\'s ground turned white under the dark look — the v15.08 flash');
-      /* The boot blocks the main thread ~0.65s across the bloom (recorded 5 Sep), so this loop cannot sample there and a
-         JS-driven darkening lands too late to matter. The mechanism must therefore be an animation the compositor runs
-         from the moment the film starts — asserted by name, because the samples above cannot see the blocked window. */
-      if (!/splash-film-dark/.test(dark.anim || '')) throw new Error('the dark look\'s film carries no compositor-driven darkening animation (' + dark.anim + ') — a class added from JS lands after the bloom because boot blocks the thread');
-      const lightR = await watch(true);
-      if (lightR.samples < 8) throw new Error('setup: only ' + lightR.samples + ' frames of the light intro were read');
-      if (lightR.peakLate < 0.6) throw new Error('control: the light look\'s intro no longer reaches white (' + Math.round(lightR.peakLate * 100) + '%) — the dark rule leaks into the light look');
-      if (/splash-film-dark/.test(lightR.anim || '')) throw new Error('control: the light look\'s film carries the dark darkening animation');
-    } finally {
-      if (settings0 === null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', settings0);
-      try { sessionStorage.removeItem('fm.splashed'); } catch (e) {}
-    }
-  });
 
   /* ═══ 754 (hunt MEDIUM #37): EVERY ROW IN THE EFFECT LIST WEARS THE SAME EYE, AND AN OPEN AUDIO ROW KEEPS ITS GRIP.
      An off effect row showed a struck-through eye; an off mask row and an off audio row only faded. And the audio
@@ -85913,30 +85915,6 @@
     }
   });
 
-  /* 639 — the light look. The splash has to choose its film BEFORE js/settings.js exists, so it reads
-     localStorage itself and carries its own copy of the default. Two defaults that must agree, in two
-     files, with no compiler to notice — so a test notices instead.
-     This is not hypothetical: the first version read the key, found nothing on a genuine first run
-     (the settings object is only written once something is saved), fell back to false, and served the
-     OLD intro while every other part of the app went light. */
-  test('639: the splash\u2019s light default matches the app\u2019s', { item: '639' }, async function () {
-    const appDefault = FM.settings && FM.settings.get ? FM.settings.get('homeLight') : null;
-    if (typeof appDefault !== 'boolean') throw new Error('FM.settings.get("homeLight") is not a boolean — the light look has no setting behind it');
-    let html = '';
-    try { html = await (await fetch('index.html', { cache: 'no-store' })).text(); }
-    catch (e) { throw new Error('could not read index.html to compare the splash default: ' + e.message); }
-    const m = html.match(/var\s+LIGHT\s*=\s*(true|false)\s*;/);
-    if (!m) throw new Error('the splash script no longer declares `var LIGHT = true|false` — this test can no longer check that its default matches the app\u2019s');
-    const splashDefault = m[1] === 'true';
-    if (splashDefault !== appDefault) {
-      throw new Error('the splash defaults to LIGHT=' + splashDefault + ' but FM.settings defaults homeLight to ' + appDefault + ' — a first run would get one look\u2019s intro and the other look\u2019s app');
-    }
-    /* AND THE ABSENT-KEY CASE SPECIFICALLY, which is the one that was wrong: the splash must treat a
-       missing key as "never chosen", not as "chosen off". */
-    if (!/typeof\s+__st\.homeLight\s*===\s*'boolean'/.test(html)) {
-      throw new Error('the splash no longer distinguishes a MISSING homeLight from a false one — an absent key means "never chosen", and reading it as false is what served the old intro on a fresh install');
-    }
-  });
 
   test('639: in the light look nothing in the header is invisible', { item: '639' }, async function () {
     const was = !!(FM.settings && FM.settings.get('homeLight'));
@@ -177445,6 +177423,478 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts12 ──
+  // ── 966 opts13 (hunt/fx13) ──
+  /* ═══ #966: MORE CHOICE, ROUND THIRTEEN — more effects he already has, each among the first grades reached for and still thin on choice
+   * (hunt/fx13). His words: "polish other effects just giving them more features … more choices always better … this is the complex
+   * version we want as much choice as possible". WRITTEN WITHOUT RUNNING (23 Oct, a ship may be running on this machine): nothing but
+   * `node --check`. Every number below is reasoned from the code it names, the reasoning beside it; a bound only a run can set says
+   * MEASURE beside it. Round twelve's four kinds for each effect: (a) its rows, ranges, choices and what the load sanitiser keeps, clamps
+   * and drops, (b) what each new control does, on a fixture that holds what separates right from wrong, with a CONTROL that the fixture
+   * can tell, (c) at the defaults the kernel is today's picture byte for byte, (d) every new control off its default moves the very
+   * fixtures (c) holds still. The (b) tests do not stop at a missing row: on the base code the kernel ignores the new keys and the
+   * picture is judged and fails. All three are PIXEL_FX point ops (PIXEL_ADJ too), so their pictures go through FM._applyPixelFx and,
+   * in the first test, FM.renderScene. The helpers carry an _o13 prefix and are this block's own; from the rest of the file it uses only
+   * `test`, `sleep` and E1 (frame, maxDiff, count). ═══ */
+  const _o13Need = (type, keys) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts13 (hunt/fx13) is not built');
+    return r;
+  };
+  /* every new key, by effect, and every new control off its default on the effect's own default settings */
+  const _O13_NEW = {
+    exposure: ['range', 'mix'],
+    temperature: ['skin', 'mix'],
+    channelremap: ['range', 'skin'],
+  };
+  const _O13_OFF = {
+    exposure: [{ range: 1 }, { mix: 50 }],
+    temperature: [{ skin: 100 }, { mix: 50 }],
+    channelremap: [{ range: 3 }, { skin: 100 }],
+  };
+  const _o13P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o13Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  /* through the dispatcher's own pixel step (colours resolved, project px scaled to plate scale ps) — the adjustment-layer path and the
+     clip's, the same PIXEL_FX kernel */
+  const _o13Run = (type, params, W, H, d, t, ps) => {
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx is not reachable');
+    FM._applyPixelFx(d, { type: type, params: params }, t == null ? 0.5 : t, W, H, ps == null ? 1 : ps);
+    return d;
+  };
+  /* a busy opaque picture (a colour ramp under a 12 px checker), the grey levels 0–255 one to a column, a row of given pixels */
+  const _o13Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  const _o13Lv = () => E1.frame(256, 2, x => [x, x, x]);
+  const _o13Row = list => () => E1.frame(list.length, 1, x => list[x]);
+  const _o13At = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  const _o13KF = (a, b, t1) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: t1 || 1, v: b, e: 'linear' }] });
+  const _o13U8 = (r, g, b) => { const u = new Uint8ClampedArray(3); u[0] = r; u[1] = g; u[2] = b; return [u[0], u[1], u[2]]; };
+  /* Colour Balance's tonal weights on brightness L (0–1), by Affects: All 1, Darks (1 − L)², Mids 1 − (2L − 1)², Lights L² — written
+     as tone13 writes them, so the arithmetic below is the kernel's to the last bit */
+  const _o13TW = (range, L) => (range === 1 ? (1 - L) * (1 - L) : (range === 2 ? 1 - (2 * L - 1) * (2 * L - 1) : (range === 3 ? L * L : 1)));
+  const _o13L = (r, g, b) => (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+  /* the share tone13 moves a pixel: Mix (0–100) times the tonal weight times 1 − Protect skin x the skin weight (`sk`, 0–1) — the
+     multiplications in tone13's order */
+  const _o13W = (mix, range, L, skin, sk) => { let w = mix / 100; if (range === 1 || range === 2 || range === 3) w *= _o13TW(range, L); if (skin > 0) w *= 1 - (skin / 100) * sk; return w; };
+  /* each pixel of `pic` laid in from the effect's own kernel result `ker` by the share w(r, g, b) of its own colour: what tone13 draws */
+  const _o13Lay = (pic, ker, wf) => { const o = new Uint8ClampedArray(pic.length); for (let i = 0; i < pic.length; i += 4) { const r = pic[i], g = pic[i + 1], b = pic[i + 2], w = wf(r, g, b); if (w === 1) { o[i] = ker[i]; o[i + 1] = ker[i + 1]; o[i + 2] = ker[i + 2]; } else { o[i] = r + (ker[i] - r) * w; o[i + 1] = g + (ker[i + 1] - g) * w; o[i + 2] = b + (ker[i + 2] - b) * w; } o[i + 3] = ker[i + 3]; } return o; };
+  /* a gradient rect, and the frame rendered through FM.renderScene (a reduced plate when rs is given) */
+  const _o13Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#1040a0', c1: '#f0c060' }; L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o13shot = (layers, t, W, H, rs, bg) => {
+    const c = document.createElement('canvas'); c.width = Math.round(W * (rs || 1)); c.height = Math.round(H * (rs || 1));
+    if (rs) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: bg === undefined ? '#000000' : bg }, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return g.getImageData(0, 0, c.width, c.height).data;
+  };
+  /* a new instance with `give` laid on it, through the load sanitiser on a shape layer: the params it keeps */
+  const _o13San = (type, give) => {
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, give);
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    return got ? got.params : null;
+  };
+  /* every new row as the panel gets it (round twelve's _o12Rows): its label; a slider's range, unit and keyframes, or a choice's buttons
+     and the values they store; its default and that nothing greys it out; what a new instance starts with, what a SAVED one with no such
+     key is filled with at render time (FM._fillFxParams, queue 784) and what the fill reads off the kernel (793); and that the load
+     sanitiser keeps each key of `keep` at a value off its default */
+  const _o13Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.vals || s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      const fv = FM._fxFillValue(type, s.key); if (fv !== s.def) bad.push('the render-time fill reads ' + s.key + ' as ' + JSON.stringify(fv) + ' off the kernel, not ' + s.def + ' — 793 would say the panel lies');
+      if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const got = _o13San(type, keep);
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got[k])); });
+    return bad;
+  };
+  /* …and what the load sanitiser does with values off the rows: a number past either end is held at that end, a choice that is not one of
+     the buttons is left out (absent: the render-time fill then draws the default). `want[k]` undefined means left out. */
+  const _o13Clamp = (type, give, want) => {
+    const got = _o13San(type, give), bad = [];
+    if (!got) return ['the load sanitiser drops a ' + type + ' carrying ' + JSON.stringify(give)];
+    Object.keys(want).forEach(k => {
+      if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(give[k]) + ' into ' + JSON.stringify(got[k]) + ', not ' + (want[k] === undefined ? 'nothing (it is not a value the row has, so it is left out)' : JSON.stringify(want[k])));
+    });
+    return bad;
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o13Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o13P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o13Pic;
+      const a = _o13Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o13Run(type, _o13Del(P, _O13_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O13_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on a new instance, on that fixture at that moment, through the dispatcher's pixel step */
+  const _o13Moves = (type, over, W, H, pic, t) => E1.count(_o13Run(type, _o13P(type), W, H, pic(W, H), t), _o13Run(type, _o13P(type, over), W, H, pic(W, H), t), 0);
+  /* (b) in general: on `pic`, `over` laid on the instance `base` draws, pixel for pixel and to the last level, the kernel's own picture
+     without the new keys laid in by the share wf — the worst pixel and where, or null when every pixel matches */
+  const _o13Worst = (type, base, over, W, H, pic, wf, t) => {
+    const ker = _o13Run(type, _o13Del(Object.assign({}, base, over), _O13_NEW[type]), W, H, pic(W, H), t);
+    const want = _o13Lay(pic(W, H), ker, wf), got = _o13Run(type, Object.assign({}, base, over), W, H, pic(W, H), t);
+    let worst = 0, at = -1;
+    for (let i = 0; i < got.length; i += 4) for (let c = 0; c < 3; c++) { const e = Math.abs(got[i + c] - want[i + c]); if (e > worst) { worst = e; at = i / 4; } }
+    return worst ? { worst: worst, x: at % W, y: (at / W) | 0, got: got.slice(at * 4, at * 4 + 3).join(', '), want: want.slice(at * 4, at * 4 + 3).join(', ') } : null;
+  };
+  /* open a layer's (only) effect in the inspector and hand back the editor's body, or null; the caller restores the scene */
+  const _o13Open = async (L) => {
+    FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+    let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    if (!body) {
+      const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+      if (!cat) return null;
+      cat.closest('[class*=cat]').click(); await sleep(140);
+      body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    }
+    return body || null;
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect over a grey ground. CONTROLS: each effect changes the picture against the rect with no effect, and each new control
+     off its default moves the picture through the same compositor, at 1:1. */
+  test('966 opts13 every new control at its default draws what the effect drew without it — each of the round’s effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O13_NEW);
+    TYPES.forEach(type => _o13Need(type, _O13_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const one = params => type => [_o13Rect({ type: type, enabled: true, params: params })];
+    TYPES.forEach(type => {
+      const P = _o13P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o13shot(one(Object.assign({}, P))(type), t, W, H, rs, BG);
+        const b = _o13shot(one(_o13Del(P, _O13_NEW[type]))(type), t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O13_NEW[type].join(' / '));
+        if (rs == null) { const off = _o13shot([_o13Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+      const base = _o13shot(one(Object.assign({}, P))(type), 0.61, W, H, null, BG);
+      _O13_OFF[type].forEach(o => {
+        const n = E1.count(base, _o13shot(one(Object.assign({}, P, o))(type), 0.61, W, H, null, BG), 2);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels and each control below moves most of them by more than 2 levels (worked beside each effect's tests) */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Exposure: Affects and Mix ---- */
+  /* At the defaults (0.8 EV, Black point 0, no rolloff, Gamma 1, sRGB) the kernel multiplies each byte by 2^0.8 = 1.7411 into the
+     clamped array: grey 40 → 69.64 → 70, grey 200 → 348 → 255. */
+  test('966 opts13 Exposure has Affects (All, Darks, Mids or Lights, storing 0–3, All by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Mids and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o13Need('exposure', _O13_NEW.exposure);
+    const bad = _o13Rows('exposure', [
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { range: 2, mix: 40 });
+    bad.push.apply(bad, _o13Clamp('exposure', { mix: 150 }, { mix: 100 }));
+    bad.push.apply(bad, _o13Clamp('exposure', { mix: -5 }, { mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('exposure', { range: 7 }, { range: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked on the grey levels at the defaults: grey 40 exposes to 70, so Mix 50 lands at 40 + 30 x 0.5 = 55; grey 200 exposes to 255, so
+     Mix 50 lands at 200 + 55 x 0.5 = 227.5, which the clamped array rounds to the even 228. On the base code Mix is ignored and grey 40
+     comes out at 70, 15 levels from 55. */
+  test('966 opts13 Exposure Mix: at 50 % grey 40 of a 0–255 ramp reads 55 and grey 200 reads 228, every grey sits half way between itself and its exposed value to the level, at 0 % the ramp is itself byte for byte, and a Mix keyed 0 to 100 draws its value half way (CONTROL: the whole exposure lifts grey 40 to 70)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('exposure', _o13P('exposure', over), 256, 2, _o13Lv(), 0.5);
+    const full = run({}), half = run({ mix: 50 }), none = run({ mix: 0 }), keyed = run({ mix: _o13KF(0, 100) });
+    if (_o13At(full, 256, 40, 0)[0] !== 70 || _o13At(full, 256, 200, 0)[0] !== 255) bad.push('CONTROL: at Mix 100 grey 40 reads ' + _o13At(full, 256, 40, 0)[0] + ' (70 expected) and grey 200 ' + _o13At(full, 256, 200, 0)[0] + ' (255 expected)');
+    const g40 = _o13At(half, 256, 40, 0), g200 = _o13At(half, 256, 200, 0);
+    if (g40[0] !== 55 || g40[1] !== 55 || g40[2] !== 55) bad.push('at Mix 50 grey 40 reads ' + g40.slice(0, 3).join(', ') + ', not 55, 55, 55');
+    if (g200[0] !== 228 || g200[1] !== 228 || g200[2] !== 228) bad.push('at Mix 50 grey 200 reads ' + g200.slice(0, 3).join(', ') + ', not 228, 228, 228');
+    let worst = 0, at = -1;
+    for (let v = 0; v < 256; v++) {
+      const want = _o13U8(v + (_o13At(full, 256, v, 0)[0] - v) * 0.5, 0, 0)[0], got = _o13At(half, 256, v, 0);
+      for (let c = 0; c < 3; c++) { const e = Math.abs(got[c] - want); if (e > worst) { worst = e; at = v; } }
+    }
+    if (worst > 0) bad.push('at Mix 50 grey ' + at + ' reads ' + _o13At(half, 256, at, 0).slice(0, 3).join(', ') + ', ' + worst + ' levels from half way to its exposed value');
+    const m0 = E1.maxDiff(none, _o13Lv());
+    if (m0 !== 0) bad.push('at Mix 0 the ramp moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(keyed, half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at the defaults: grey 40 (L = 0.157) exposes to 70 (30 levels); Darks weighs it (1 − 0.157)² = 0.711, so 40 + 21.3 = 61;
+     Mids 1 − (0.314 − 1)² = 0.529, so 55.9 → 56; Lights 0.0246, so 40.7 → 41. Grey 200 (L = 0.784) exposes to 255 (55 levels); Lights
+     weighs it 0.615, so 233.8 → 234; Mids 0.677, so 237.2 → 237; Darks 0.0465, so 202.6 → 203. With Black point 20 and Linear light the
+     kernel takes its other two paths (the second loop and the table) and the same weights lay them in. On the base code every Affects is
+     All, so Lights lifts grey 40 the whole 30 levels to 70. */
+  test('966 opts13 Exposure Affects: Darks lifts grey 40 to 61 and grey 200 only to 203, Mids to 56 and 237, Lights to 41 and 234 — every pixel of a busy picture moved its exposure times the tonal weight of its own brightness to the level, on the plain multiply, with a Black point and in Linear light (CONTROL: All lifts grey 40 to 70 and grey 200 to 255)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('exposure', _o13P('exposure', over), 256, 2, _o13Lv(), 0.5);
+    const all = run({});
+    if (_o13At(all, 256, 40, 0)[0] !== 70 || _o13At(all, 256, 200, 0)[0] !== 255) bad.push('CONTROL: under All grey 40 reads ' + _o13At(all, 256, 40, 0)[0] + ' and grey 200 reads ' + _o13At(all, 256, 200, 0)[0] + ' (70 and 255 expected)');
+    [[1, 'Darks', 61, 203], [2, 'Mids', 56, 237], [3, 'Lights', 41, 234]].forEach(([rg, name, w40, w200]) => {
+      const got = run({ range: rg }), a = _o13At(got, 256, 40, 0), b = _o13At(got, 256, 200, 0);
+      if (a[0] !== w40 || a[1] !== w40 || a[2] !== w40) bad.push(name + ' puts grey 40 at ' + a.slice(0, 3).join(', ') + ', not ' + w40);
+      if (b[0] !== w200 || b[1] !== w200 || b[2] !== w200) bad.push(name + ' puts grey 200 at ' + b.slice(0, 3).join(', ') + ', not ' + w200);
+      [{}, { offset: 20 }, { space: 1, stops: 1.3 }, { mix: 60 }].forEach(extra => {
+        const P = _o13P('exposure'), mix = extra.mix == null ? 100 : extra.mix;
+        const w = _o13Worst('exposure', P, Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(mix, rg, _o13L(r, g, b), 0, 0), 0.5);
+        if (w) bad.push(name + ' ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its exposure times its tonal weight' + (extra.mix ? ' times Mix' : '') + ')');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts13 Exposure at All and Mix 100 % draws byte for byte what it drew without them — at its defaults, stopped down and pushed, with a Black point and Highlight rolloff, in Linear light with a Gamma, keyframed, and on a half-size plate (CONTROL: Darks and Mix 50 each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o13Need('exposure', _O13_NEW.exposure);
+    const bad = _o13Ident('exposure', [{}, { over: { stops: -1.5 } }, { over: { stops: 2.4 } }, { over: { offset: 20, rolloff: 40 } }, { over: { space: 1, gamma: 1.4 } }, { over: { stops: _o13KF(-1, 2) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }]);
+    _O13_OFF.exposure.forEach(o => { const n = _o13Moves('exposure', o, 96, 72, _o13Pic, 0.5); if (n < 1000) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* reasoned: every channel under 147 is lifted 0.74 times itself by the full exposure, and Darks or Mix 50 holds it back by a quarter of that or more off black */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Exposure ---- */
+
+  /* ---- Colour Temperature: Protect skin and Mix ---- */
+  /* skinW12 (js/compositor.js, round twelve) to the letter: Teal & Orange's skin window worked out per pixel — the hue window (full 0°–40°,
+     half a cosine to nothing at −20° and 60°) times the HSV saturation window (full 0.2–0.8, nothing under 0.08 or over 0.9) times not
+     near-black (V full from 0.2, nothing under 0.08); a grey 0 */
+  const _o13Skin = (r, g, b) => {
+    const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b), ch = mx - mn;
+    if (!(ch > 0)) return 0;
+    let hu = mx === r ? (g - b) / ch : (mx === g ? (b - r) / ch + 2 : (r - g) / ch + 4); if (hu < 0) hu += 6; hu *= 60;
+    const sx = ((hu % 360) + 180) % 360 - 180;
+    const hw = sx >= 0 && sx <= 40 ? 1 : (sx > -20 && sx < 0 ? 0.5 + 0.5 * Math.cos(Math.PI * sx / 20) : (sx > 40 && sx < 60 ? 0.5 + 0.5 * Math.cos(Math.PI * (sx - 40) / 20) : 0));
+    if (!(hw > 0)) return 0;
+    const sS = ch / mx, sV = mx / 255;
+    const mS = sS < 0.08 ? 0 : (sS < 0.2 ? (sS - 0.08) / 0.12 : (sS <= 0.8 ? 1 : (sS < 0.9 ? (0.9 - sS) / 0.1 : 0)));
+    const mV = sV < 0.08 ? 0 : (sV < 0.2 ? (sV - 0.08) / 0.12 : 1);
+    return hw * mS * mV;
+  };
+  /* six pixels and their skin weights, worked: a light skin tone (220, 170, 130) — hue 26.7°, saturation 0.41, value 0.86 — 1; a deeper
+     one (160, 110, 80) — 22.5°, 0.5, 0.63 — 1; a rose (220, 100, 120) at hue 350°, half a cosine from the window's edge, 0.5; a blue
+     (40, 90, 200) at 221°, a green (60, 170, 80) at 131° and a grey: 0 */
+  const _O13_SKIN = [[220, 170, 130], [160, 110, 80], [220, 100, 120], [40, 90, 200], [60, 170, 80], [128, 128, 128]];
+  test('966 opts13 Colour Temperature has Protect skin (0–100 %, keyframable, 0 by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    _o13Need('temperature', _O13_NEW.temperature);
+    const bad = _o13Rows('temperature', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp('temperature', { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('temperature', { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at the default (Temperature 40: Shift adds 20 to red and takes 20 from blue): the light skin tone grades to (240, 170, 110), the
+     deeper one to (180, 110, 60), the rose to (240, 100, 100), the blue to (60, 90, 180), the green to (80, 170, 60), the grey to (148, 128,
+     108). Protect skin 100 moves each pixel 1 − its skin weight of the way: both skin tones stay the picture, the rose goes half way
+     (230, 100, 110), the rest keep the grade. At 50 % the light skin tone goes half way, (230, 170, 120), and the rose three quarters,
+     (235, 100, 105). On the base code Protect skin is ignored and both skin tones take the whole cast. */
+  test('966 opts13 Colour Temperature Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the warm-up byte for byte and a rose at the window’s edge comes half way back, at 50 % each pixel comes back half its skin weight, and with White balance, Affects Darks and Keep brightness every pixel of a busy picture is the grade laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone takes the whole 20 levels)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('temperature', _o13P('temperature', over), N, 1, row(), 0.5);
+    const want = (got, list, name) => list.forEach((w, x) => { const px = _o13At(got, N, x, 0).slice(0, 3); if (px.join() !== w.join()) bad.push(name + ': pixel ' + _O13_SKIN[x].join('/') + ' reads ' + px.join(', ') + ', not ' + w.join(', ')); });
+    const full = run({});
+    want(full, [[240, 170, 110], [180, 110, 60], [240, 100, 100], [60, 90, 180], [80, 170, 60], [148, 128, 108]], 'CONTROL at 0 %');
+    want(run({ skin: 100 }), [[220, 170, 130], [160, 110, 80], [230, 100, 110], [60, 90, 180], [80, 170, 60], [148, 128, 108]], 'Protect skin 100');
+    want(run({ skin: 50 }), [[230, 170, 120], [170, 110, 70], [235, 100, 105], [60, 90, 180], [80, 170, 60], [148, 128, 108]], 'Protect skin 50');
+    [{ method: 1 }, { range: 1, amount: -60 }, { preserve: 60, tint: 30 }, { skin: 100, method: 1, range: 3 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin;
+      const w = _o13Worst('temperature', _o13P('temperature'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the grade laid in by 1 − its skin weight)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at the default: Mix 50 puts the light skin tone at (230, 170, 120), the blue at (50, 90, 190) and the grey at (138, 128, 118);
+     with Protect skin 100 as well the light skin tone is the picture and the blue still goes half way. On the base code Mix is ignored. */
+  test('966 opts13 Colour Temperature Mix: at 50 % the warm-up goes half way — a grey reads 138, 128, 118 — at 0 % the picture is itself byte for byte, with Protect skin 100 as well a skin tone stays put while a blue goes half way, and a Mix keyed 0 to 100 draws its value half way (CONTROL: at 100 % the grey reads 148, 128, 108)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('temperature', _o13P('temperature', over), N, 1, row(), 0.5);
+    const at = (d, x) => _o13At(d, N, x, 0).slice(0, 3).join(', ');
+    if (at(run({}), 5) !== '148, 128, 108') bad.push('CONTROL: at Mix 100 the grey reads ' + at(run({}), 5) + ', not 148, 128, 108');
+    const half = run({ mix: 50 });
+    if (at(half, 0) !== '230, 170, 120') bad.push('at Mix 50 the light skin tone reads ' + at(half, 0) + ', not 230, 170, 120');
+    if (at(half, 3) !== '50, 90, 190') bad.push('at Mix 50 the blue reads ' + at(half, 3) + ', not 50, 90, 190');
+    if (at(half, 5) !== '138, 128, 118') bad.push('at Mix 50 the grey reads ' + at(half, 5) + ', not 138, 128, 118');
+    const m0 = E1.maxDiff(run({ mix: 0 }), row());
+    if (m0 !== 0) bad.push('at Mix 0 the row moves up to ' + m0 + ' levels — it should be the picture itself');
+    const both = run({ mix: 50, skin: 100 });
+    if (at(both, 0) !== '220, 170, 130') bad.push('at Mix 50 with Protect skin 100 the light skin tone reads ' + at(both, 0) + ', not the picture 220, 170, 130');
+    if (at(both, 3) !== '50, 90, 190') bad.push('at Mix 50 with Protect skin 100 the blue reads ' + at(both, 3) + ', not 50, 90, 190');
+    const mk = E1.maxDiff(run({ mix: _o13KF(0, 100) }), half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o13Worst('temperature', _o13P('temperature'), { mix: 35, method: 1, tint: -20 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with White balance and a tint: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts13 Colour Temperature at Protect skin 0 % and Mix 100 % draws byte for byte what it drew without them — at its defaults, cooled, with a tint and Keep brightness, on White balance with Affects, keyframed, and on a half-size plate (CONTROL: Protect skin and Mix each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o13Need('temperature', _O13_NEW.temperature);
+    const bad = _o13Ident('temperature', [{}, { over: { amount: -70 } }, { over: { tint: 30, preserve: 60 } }, { over: { method: 1, range: 1 } }, { over: { amount: _o13KF(-50, 80) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O13_OFF.temperature.forEach(o => { const n = _o13Moves('temperature', o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — Mix 50 moves every pixel's blue by 10; Protect skin 100 only the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Colour Temperature ---- */
+
+  /* ---- Channel Remap: Affects and Protect skin ---- */
+  test('966 opts13 Channel Remap has Affects (All, Darks, Mids or Lights, storing 0–3, All by default) and Protect skin (0–100 %, keyframable, 0 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Lights and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o13Need('channelremap', _O13_NEW.channelremap);
+    const bad = _o13Rows('channelremap', [
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 }], { range: 3, skin: 40 });
+    bad.push.apply(bad, _o13Clamp('channelremap', { skin: 150 }, { skin: 100 }));
+    bad.push.apply(bad, _o13Clamp('channelremap', { skin: -5 }, { skin: 0 }));
+    bad.push.apply(bad, _o13Clamp('channelremap', { range: 7 }, { range: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked on Swap R/B (the default): a dark brown (60, 20, 0) — L = 29.68 / 255 = 0.116 — swaps to (0, 20, 60) and a pale cream
+     (255, 230, 180) — L = 231.775 / 255 = 0.909 — to (180, 230, 255). Darks weighs the brown 0.781 and the cream 0.0083: (13, 20, 47) and
+     (254, 230, 181). Mids 0.411 and 0.331: (35, 20, 25) and (230, 230, 205). Lights 0.0135 and 0.826: (59, 20, 1) and (193, 230, 242).
+     On the base code every Affects is All, so Lights swaps the brown whole. */
+  test('966 opts13 Channel Remap Affects: on Swap R/B a dark brown and a pale cream swap by the tonal weight of their own brightness — Darks turns the brown to 13, 20, 47 and leaves the cream at 254, 230, 181, Lights the other way round (59, 20, 1 and 193, 230, 242), Mids 35, 20, 25 and 230, 230, 205 — and on other swaps, Keep brightness and a Mix every pixel of a busy picture is the swap times its tonal weight to the level (CONTROL: All swaps both whole)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], LIST = [[60, 20, 0], [255, 230, 180]], row = _o13Row(LIST);
+    const run = over => _o13Run('channelremap', _o13P('channelremap', over), 2, 1, row(), 0.5);
+    const want = (got, list, name) => list.forEach((w, x) => { const px = _o13At(got, 2, x, 0).slice(0, 3); if (px.join() !== w.join()) bad.push(name + ': pixel ' + LIST[x].join('/') + ' reads ' + px.join(', ') + ', not ' + w.join(', ')); });
+    want(run({}), [[0, 20, 60], [180, 230, 255]], 'CONTROL under All');
+    want(run({ range: 1 }), [[13, 20, 47], [254, 230, 181]], 'Darks');
+    want(run({ range: 2 }), [[35, 20, 25], [230, 230, 205]], 'Mids');
+    want(run({ range: 3 }), [[59, 20, 1], [193, 230, 242]], 'Lights');
+    [[1, { mode: 4 }], [2, { mode: 6, luma: 1 }], [3, { mix: 0.5 }], [1, { mode: 7 }]].forEach(([rg, extra]) => {
+      const w = _o13Worst('channelremap', _o13P('channelremap'), Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), 0, 0), 0.5);
+      if (w) bad.push('Affects ' + rg + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the swap times its tonal weight)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked on Swap R/B: the light skin tone swaps to (130, 170, 220), the deeper one to (80, 110, 160), the rose to (120, 100, 220), the
+     blue to (200, 90, 40), the green to (80, 170, 60); a grey cannot change. Protect skin 100 keeps both skin tones as they are, brings the
+     rose half way ((170, 100, 170)) and swaps the rest whole; at 50 % the skin tones go half way ((175, 170, 175) and (120, 110, 120)) and
+     the rose three quarters ((145, 100, 195)). On the base code Protect skin is ignored and every face swaps. */
+  test('966 opts13 Channel Remap Protect skin: at 100 % two skin tones keep their own colour byte for byte while a blue and a green swap whole and a rose at the window’s edge swaps half way, at 50 % each pixel swaps 1 − half its skin weight, and with Darks, other swaps and a Mix every pixel of a busy picture is the swap laid in by its tonal weight times 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone swaps to 130, 170, 220)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('channelremap', _o13P('channelremap', over), N, 1, row(), 0.5);
+    const want = (got, list, name) => list.forEach((w, x) => { const px = _o13At(got, N, x, 0).slice(0, 3); if (px.join() !== w.join()) bad.push(name + ': pixel ' + _O13_SKIN[x].join('/') + ' reads ' + px.join(', ') + ', not ' + w.join(', ')); });
+    want(run({}), [[130, 170, 220], [80, 110, 160], [120, 100, 220], [200, 90, 40], [80, 170, 60], [128, 128, 128]], 'CONTROL at 0 %');
+    want(run({ skin: 100 }), [[220, 170, 130], [160, 110, 80], [170, 100, 170], [200, 90, 40], [80, 170, 60], [128, 128, 128]], 'Protect skin 100');
+    want(run({ skin: 50 }), [[175, 170, 175], [120, 110, 120], [145, 100, 195], [200, 90, 40], [80, 170, 60], [128, 128, 128]], 'Protect skin 50');
+    [[0, { skin: 100, mode: 4 }], [1, { skin: 60 }], [3, { skin: 80, mode: 2, mix: 0.6 }]].forEach(([rg, extra]) => {
+      const sk = extra.skin, over = Object.assign(rg ? { range: rg } : {}, extra);
+      const w = _o13Worst('channelremap', _o13P('channelremap'), over, 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin with ' + JSON.stringify(over) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts13 Channel Remap at All and Protect skin 0 % draws byte for byte what it drew without them — at its default swap, on a rotation, on Hue Invert with Keep brightness, at a part Mix, on Swap Sat/Val, keyframed, and on a half-size plate (CONTROL: Lights and Protect skin each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o13Need('channelremap', _O13_NEW.channelremap);
+    const bad = _o13Ident('channelremap', [{}, { over: { mode: 4 } }, { over: { mode: 6, luma: 1 } }, { over: { mix: 0.4 } }, { over: { mode: 7 } }, { over: { mix: _o13KF(0.2, 1) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O13_OFF.channelremap.forEach(o => { const n = _o13Moves('channelremap', o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — Lights holds back every swapped pixel short of white; Protect skin 100 only the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Channel Remap ---- */
+
+  /* the round's editors, new rows and all, fit the inspector (round twelve's fit test) */
+  test('966 opts13 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = {
+      exposure: 'Affects',
+      temperature: 'Protect skin',
+      channelremap: 'Affects',
+    };
+    Object.keys(NEW).forEach(type => _o13Need(type, _O13_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o13Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  /* THE WRONG REASON (#966 opts13, the pre-ship review's N1). An effect measured as changing nothing gets a reason when the reason is
+   * knowable from the effect alone, and Channel Remap's says its two channels are already the same on this colour. With Protect skin and
+   * Affects that is no longer the only way to change nothing: Protect skin 100 holds the whole swap back on an orange #e8a33d (232, 163,
+   * 61, hue 35.8°, so its skin weight is 1) whose R and B are 171 levels apart. Both places that write the line are asked: the row as it
+   * is built (the answer planted, as queue 477 plants it) and the settle timer that paints it in place (the measurement stubbed to say
+   * nothing changed, and counted, so the timer is known to have run). CONTROL: at its own defaults the same orange gets the channels
+   * reason from both, so the line is read here and the reason is given. On the code before the fold every case below gets that same
+   * sentence, which is how it fails. */
+  test('966 opts13 Channel Remap does not claim its channels are already the same when Protect skin or Affects is what holds it back', { item: '966', budgetMs: 60000 }, async function () {
+    const SAME = /already the same/, GEN = /changes nothing on this layer/;
+    const CASES = [
+      { say: 'its defaults', over: {}, control: true },
+      { say: 'Protect skin 100 %', over: { skin: 100 } },
+      { say: 'Protect skin 40 %', over: { skin: 40 } },
+      { say: 'Affects Darks', over: { range: 1 } },
+      { say: 'Affects Lights', over: { range: 3 } },
+      { say: 'Protect skin keyed 0 to 100', over: { skin: _o13KF(0, 100) } },
+    ];
+    const real = FM.fxThumbs && FM.fxThumbs.effectDoesNothing;
+    if (typeof real !== 'function') throw new Error('FM.fxThumbs.effectDoesNothing is not reachable, so the settle timer cannot be asked');
+    const keep = FM.scene.layers.slice(), bad = [];
+    let calls = 0;
+    const hint = () => { const h = document.querySelector('.fx-row.fx-open .fx-noop-hint'); return h ? (h.textContent || '').trim() : ''; };
+    const make = (over, planted) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#e8a33d', start: 0, duration: 5 });
+      const fx = FM.fxRegistry.makeInstance('channelremap');
+      Object.assign(fx.params, JSON.parse(JSON.stringify(over)));
+      fx._expanded = true;
+      if (planted) { fx._noop = true; fx._noopKey = 'planted'; }
+      L.effects = [fx];
+      FM.scene.layers = keep.concat([L]);
+      return L;
+    };
+    const judge = (c, where, h) => {
+      const said = h ? '“' + h + '”' : 'no line at all';
+      if (c.control) { if (!SAME.test(h)) bad.push('CONTROL: at ' + c.say + ' the ' + where + ' gave ' + said + ', not the channels reason, so nothing below is proven'); return; }
+      if (!GEN.test(h)) bad.push('at ' + c.say + ' the ' + where + ' gave ' + said + ', not the general changes-nothing line');
+      else if (SAME.test(h)) bad.push('at ' + c.say + ' the ' + where + ' says the channels are already the same on an orange whose R is 232 and B 61, when it is ' + c.say + ' that holds the swap back');
+    };
+    try {
+      FM.fxThumbs.effectDoesNothing = function () { calls++; return true; };
+      for (const c of CASES) {
+        const body = await _o13Open(make(c.over, true));
+        if (!body) { bad.push(c.say + ': the editor did not open, so the row as built was not read'); continue; }
+        judge(c, 'row as built', hint());
+      }
+      for (const c of CASES) {
+        const before = calls;
+        const body = await _o13Open(make(c.over, false));
+        if (!body) { bad.push(c.say + ': the editor did not open, so the settle timer was not read'); continue; }
+        let h = '';
+        for (let n = 0; n < 40 && !(h && calls > before); n++) { await sleep(100); h = hint(); }
+        if (calls === before) { bad.push(c.say + ': the settle timer never measured, so its line was not asked'); continue; }
+        judge(c, 'settle timer', h);
+      }
+    } finally {
+      FM.fxThumbs.effectDoesNothing = real;
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts13 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition
@@ -178045,6 +178495,385 @@
       try { if (FM.home && FM.home.isOpen()) FM.home.close(); } catch (e) {}
       try { document.getElementById('stage').dispatchEvent(new MouseEvent('mouseleave')); } catch (e) {}
       await sleep(300);
+    }
+  });
+
+  /* #1180 — HIS OWN LOGO OPENS THE APP. Ezra picked the Keyframes animation (D2 round 2, card 7) on 23 Oct: "i love the
+   * first one". The film is gone from the splash; the mark is inline SVG + SMIL that plays ONCE, holds its end frame and
+   * dissolves into the app the way the film's natural end did. Reduced motion (and a browser without SMIL) gets the end
+   * frame as a still. These read the SHIPPED index.html and boot its splash block in a throwaway frame, so they do not
+   * depend on whether this session's own splash has already played. */
+  async function src1180() {
+    const r = await fetch('index.html?t1180=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('setup: could not read index.html (' + r.status + ')');
+    return r.text();
+  }
+  /* The canvas timeline's last movement (the tagline's rise, keyTime 0.61 of 5.5 s) and the hold on the finished frame:
+   * the same numbers, and the same sum, as END_S and HOLD_S in index.html's splash script, so a clock compared here is
+   * compared exactly as the splash compares it. */
+  const END_S1180 = 3.36, HOLD_S1180 = 0.4;
+  /* The splash's state AT the hand-over. It runs inside the booted frame's own fm:splash-dismiss listener (injected as
+   * source), so a test whose await of the frame's load comes late (a hot or loaded laptop) still sees the still that is
+   * removed 320 ms after the dismiss, instead of reading that it never showed. */
+  function snap1180() {
+    var sp = document.getElementById('splash'), svg = document.getElementById('splash-mark');
+    var s = { shown: !!(sp && !sp.classList.contains('hidden')), cut: !!(sp && sp.classList.contains('splash-cut')), clock: -1, anims: -1, clips: {}, name: null, dia: [] };
+    if (!svg) return s;
+    try { s.clock = svg.getCurrentTime(); } catch (e) {}
+    s.anims = svg.querySelectorAll('animate, animateTransform').length;
+    ['nC_clip1', 'nC_clip2', 'nC_clip3'].forEach(function (id) {
+      var r = svg.querySelector('#' + id);
+      s.clips[id] = r ? [r.getAttribute('x'), r.getAttribute('width')] : null;
+    });
+    var nm = svg.querySelector('#nC_name');
+    s.name = nm ? nm.getAttribute('opacity') : null;
+    Array.prototype.forEach.call(svg.querySelectorAll('polygon[fill="#f5f5f7"]'), function (p) {
+      var g = p.closest('g[opacity]');
+      s.dia.push(g ? g.getAttribute('opacity') : null);
+    });
+    return s;
+  }
+  /* Boots everything between <body> and #app (the splash's style, markup and boot script) in a same-origin frame, with
+   * fm.splashed cleared so it is a first load of the session, and puts this session's flag back afterwards. A recorder
+   * runs BEFORE the boot script so the dismiss event cannot be missed; each entry carries snap1180() taken at that moment.
+   * Options, all for that frame only:
+   *   reduce  stubs matchMedia to report prefers-reduced-motion;
+   *   lateMs  adds a synchronous busy-wait of that many ms AFTER the splash block, standing in for the app's ~100
+   *           parser-blocking scripts and its synchronous init, so the frame's load comes that late; it records the
+   *           mark's clock as it ends (window.__late1180);
+   *   css     links the shipped styles.css and theme-glass.css (the hrefs index.html ships, busters included);
+   *   attrs   attributes for <html>, e.g. data-theme and data-home;
+   *   home    adds a visible <div id=home-screen>, as a first load opens Home under the splash. */
+  async function boot1180(opts) {
+    opts = opts || {};
+    const html = await src1180();
+    const a = html.indexOf('<body>'), b = html.indexOf('<div id="app">');
+    if (a < 0 || b < a) throw new Error('setup: cannot find the splash block between <body> and #app in index.html');
+    let links = '';
+    if (opts.css) {
+      for (const name of ['styles', 'theme-glass']) {
+        const m = html.match(new RegExp('<link rel="stylesheet" href="(' + name + '\\.css[^"]*)"'));
+        if (!m) throw new Error('setup: index.html links no ' + name + '.css');
+        links += '<link rel="stylesheet" href="' + m[1] + '">';
+      }
+    }
+    const pre = '<script>window.__t0 = performance.now(); window.__rec = []; window.__snap1180 = ' + String(snap1180) + ';' +
+      'document.addEventListener(\'fm:splash-dismiss\', function (e) { var s = null; try { s = window.__snap1180(); } catch (x) {} window.__rec.push({ t: performance.now() - window.__t0, quick: !!(e.detail && e.detail.quick), snap: s }); });' +
+      (opts.reduce ? '(function () { var mm = window.matchMedia.bind(window); window.matchMedia = function (q) { if (/prefers-reduced-motion/.test(q)) return { matches: true, media: q, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {} }; return mm(q); }; })();' : '') +
+      '<\/script>';
+    const late = opts.lateMs ? '<script>(function () { var t0 = performance.now(); while (performance.now() - t0 < ' + (+opts.lateMs) + ') {} var c = -1; try { c = document.getElementById(\'splash-mark\').getCurrentTime(); } catch (x) {} window.__late1180 = { ms: Math.round(performance.now() - t0), clock: c }; })();<\/script>' : '';
+    const home = opts.home ? '<div id="home-screen"></div>' : '';
+    let had = null;
+    try { had = sessionStorage.getItem('fm.splashed'); sessionStorage.removeItem('fm.splashed'); } catch (e) {}
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;left:0;top:0;width:380px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    const done = new Promise(function (res) { f.onload = res; });
+    f.srcdoc = '<!doctype html><html' + (opts.attrs ? ' ' + opts.attrs : '') + '><head><meta charset="utf-8">' + links + '</head><body>' + pre + html.slice(a + 6, b) + late + home + '</body></html>';
+    document.body.appendChild(f);
+    await Promise.race([done, sleep(4000)]);
+    const restore = function () {
+      try { f.remove(); } catch (e) {}
+      try { if (had === null) sessionStorage.removeItem('fm.splashed'); else sessionStorage.setItem('fm.splashed', had); } catch (e) {}
+    };
+    return { f: f, w: f.contentWindow, d: f.contentDocument, restore: restore };
+  }
+  /* The finished frame, read off the animated values: the three clips at their resting x/width, the teal line drawn. */
+  function endFrame1180(svg, where) {
+    const want = [['nC_clip1', 14, 92], ['nC_clip2', 14, 62], ['nC_clip3', 14, 26]];
+    for (const [id, x, wd] of want) {
+      const r = svg.querySelector('#' + id);
+      if (!r) throw new Error(where + ': the Keyframes mark has no #' + id);
+      const gx = r.x.animVal.value, gw = r.width.animVal.value;
+      if (Math.abs(gx - x) > 0.05 || Math.abs(gw - wd) > 0.05) throw new Error(where + ': clip #' + id + ' is at x ' + gx.toFixed(2) + ' width ' + gw.toFixed(2) + ', not its end frame x ' + x + ' width ' + wd);
+    }
+  }
+
+  /* 1180 (1) THE SPLASH IS HIS LOGO, NOT A FILM. Proves: #splash in the shipped index.html holds the D2 card-7 Keyframes SVG
+   * (its gradients nC_g/nC_w/nC_t, its three clips, the teal playhead, the name and its tagline EDITING, EVOLVED; card 7
+   * carries 36 animations) and no <video>, no <img> (the film's empty poster, #642's white box), and the boot script loads
+   * no .mp4.
+   * FAILS BEFORE THE FIX: on the base #splash holds <video id=splash-vid> and the script sets splash-v2.mp4, so it throws
+   * its first sentence with the film's own element. */
+  test('1180 the splash is his Keyframes logo as inline SVG, not the film', { item: '1180' }, async function () {
+    const html = await src1180();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const sp = doc.getElementById('splash');
+    if (!sp) throw new Error('index.html has no #splash at all');
+    const vids = sp.querySelectorAll('video');
+    if (vids.length) throw new Error('#splash still holds a <video> (#' + (vids[0].id || '?') + ') — the film is still the intro');
+    const imgs = sp.querySelectorAll('img');
+    if (imgs.length) throw new Error('#splash holds an <img> (#' + (imgs[0].id || '?') + ') — the film’s poster, the empty white box of #642, is back');
+    /* Comments load nothing, and the splash block's own comment names the film it replaced (splash-v2.mp4), so they are
+     * stripped before looking for a film the block would load. */
+    const boot = html.slice(html.indexOf('<body>'), html.indexOf('<div id="app">')).replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const mp4 = boot.match(/[\w-]+\.mp4/);
+    if (mp4) throw new Error('the splash block still loads a film: ' + mp4[0]);
+    const svg = sp.querySelector('svg#splash-mark');
+    if (!svg) throw new Error('#splash holds no svg#splash-mark — the Keyframes logo is not the intro');
+    if (svg.getAttribute('viewBox') !== '0 0 200 260') throw new Error('the mark viewBox is ' + svg.getAttribute('viewBox') + ', not card 7’s 0 0 200 260');
+    for (const id of ['nC_g', 'nC_w', 'nC_t', 'nC_clip1', 'nC_clip2', 'nC_clip3', 'nC_name']) {
+      if (!svg.querySelector('#' + id)) throw new Error('the mark is missing #' + id + ' — it is not card 7 (Keyframes) of D2 round 2');
+    }
+    if (!svg.querySelector('[fill="#29d9bb"]')) throw new Error('the mark has no teal (#29d9bb) playhead');
+    if (!/FreeMotion/.test(svg.textContent)) throw new Error('the mark does not carry the FreeMotion name');
+    if (!/EDITING, EVOLVED/.test(svg.textContent)) throw new Error('the mark has lost card 7’s tagline EDITING, EVOLVED under the name');
+    const n = svg.querySelectorAll('animate, animateTransform').length;
+    if (n < 30) throw new Error('the mark carries only ' + n + ' animations — card 7 has 36, so this is not the animated Keyframes logo');
+  });
+
+  /* 1180 (2) IT PLAYS ONCE. Proves: no animation in the mark repeats (no repeatCount / repeatDur), every one freezes on its
+   * last value, and — by behaviour — the clock run past a whole canvas cycle shows the END frame, where the looping canvas
+   * version is back at the start (all three clips at width 0) at 11.1 s, 0.1 s into its third cycle.
+   * FAILS BEFORE THE FIX: the base has no SVG in #splash (the film), so it throws its first sentence. */
+  test('1180 the Keyframes splash plays once and freezes on its end frame, it never loops', { item: '1180' }, async function () {
+    const html = await src1180();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const svg0 = doc.querySelector('#splash svg#splash-mark');
+    if (!svg0) throw new Error('#splash holds no Keyframes SVG — the intro is still the film');
+    const anims = Array.from(svg0.querySelectorAll('animate, animateTransform'));
+    if (!anims.length) throw new Error('the mark has no animations at all');
+    for (const a of anims) {
+      const rc = a.getAttribute('repeatCount'), rd = a.getAttribute('repeatDur');
+      if (rc || rd) throw new Error('an <' + a.localName + ' attributeName=' + a.getAttribute('attributeName') + '> repeats (repeatCount ' + rc + ', repeatDur ' + rd + ') — the canvas loop was copied, not the one-shot');
+      if (a.getAttribute('fill') !== 'freeze') throw new Error('an <' + a.localName + ' attributeName=' + a.getAttribute('attributeName') + '> does not freeze — it would snap back when it ends');
+    }
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;left:0;top:0;width:380px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    const done = new Promise(function (res) { f.onload = res; });
+    f.srcdoc = '<!doctype html><html><body style="margin:0;background:#111">' + svg0.outerHTML + '</body></html>';
+    document.body.appendChild(f);
+    try {
+      await Promise.race([done, sleep(4000)]);
+      const svg = f.contentDocument.getElementById('splash-mark');
+      if (!svg || typeof svg.setCurrentTime !== 'function') throw new Error('setup: the mark did not come up in the probe frame');
+      svg.pauseAnimations();
+      svg.setCurrentTime(0.5);
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const mid = svg.querySelector('#nC_clip1').width.animVal.value;
+      if (mid !== 0) throw new Error('CONTROL: at 0.5 s the first clip is already ' + mid + ' wide — the clock is not being driven, so the end-frame reading below would prove nothing');
+      for (const t of [5.3, 11.1, 30]) {
+        svg.setCurrentTime(t);
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        endFrame1180(svg, 'at ' + t + ' s');
+        const line = svg.querySelector('rect[fill="#29d9bb"]');
+        if (!line || Math.abs(line.height.animVal.value - 96) > 0.05) throw new Error('at ' + t + ' s the teal playhead line is ' + (line ? line.height.animVal.value.toFixed(1) : 'missing') + ' long, not its drawn 96 — the mark went back to its start');
+      }
+    } finally {
+      try { f.remove(); } catch (e) {}
+    }
+  });
+
+  /* 1180 (3) THE HAND-OVER. Proves: on a first load the splash comes up with the mark, does NOT dissolve while it is still
+   * animating (before END_S + HOLD_S, less 200 ms), then dissolves NATURALLY (splash-out without splash-cut,
+   * fm:splash-dismiss with quick false) before any cap would cut it, with the mark on its finished frame and its own clock
+   * past the 0.4 s hold; then the splash is removed and every class it put on <html> comes off (any splash- class, so a
+   * new one such as splash-kf-out is covered too).
+   * FAILS BEFORE THE FIX: the base boots the film (<video id=splash-vid>), so it throws that the splash is a film. */
+  test('1180 the splash holds the finished logo, then dissolves into the app the way the film did', { item: '1180', budgetMs: 30000 }, async function () {
+    const run = await boot1180({});
+    try {
+      const d = run.d, w = run.w;
+      const sp = d.getElementById('splash');
+      if (!sp) throw new Error('the booted splash block has no #splash');
+      if (d.querySelector('#splash video')) throw new Error('the splash that came up is a film (<video>), not the Keyframes logo');
+      if (sp.classList.contains('hidden')) throw new Error('on the first load of a session the splash stayed hidden');
+      const svg = d.getElementById('splash-mark');
+      if (!svg) throw new Error('the splash came up without svg#splash-mark');
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (1180 reduced-motion test covers the still)');
+      let outAt = -1, cut = null, clock = -1;
+      for (let i = 0; i < 120; i++) {
+        if (sp.classList.contains('splash-out')) {
+          outAt = w.performance.now() - w.__t0; cut = sp.classList.contains('splash-cut');
+          try { clock = svg.getCurrentTime(); } catch (e) {}
+          break;
+        }
+        await sleep(50);
+      }
+      if (outAt < 0) throw new Error('the splash never began to dissolve within 6 s');
+      if (outAt < (END_S1180 + HOLD_S1180) * 1000 - 200) throw new Error('the splash began to dissolve at ' + Math.round(outAt) + ' ms — before the mark had finished (' + END_S1180 + ' s) and held (' + HOLD_S1180 + ' s)');
+      if (cut) throw new Error('the splash was CUT at ' + Math.round(outAt) + ' ms (splash-cut) — the natural hand-over never came, a cap or an error did it');
+      if (!(clock >= END_S1180 + HOLD_S1180)) throw new Error('the dissolve began with the mark’s own clock at ' + clock.toFixed(2) + ' s — the ' + HOLD_S1180 + ' s hold on the finished frame was skipped');
+      endFrame1180(svg, 'as the dissolve began');
+      const rec = w.__rec || [];
+      if (rec.length !== 1 || rec[0].quick !== false) throw new Error('fm:splash-dismiss fired ' + rec.length + ' time(s), quick ' + (rec[0] && rec[0].quick) + ' — home.js needs exactly one natural (quick:false) dismiss to time its entrance');
+      for (let i = 0; i < 40 && d.getElementById('splash'); i++) await sleep(50);
+      if (d.getElementById('splash')) throw new Error('#splash was still in the page 2 s after its dissolve began');
+      const cls = d.documentElement.className;
+      if (/\bsplash-[\w-]+/.test(cls)) throw new Error('a splash class outlived the splash on <html>: ' + cls + ' (queue 883: it holds the page canvas)');
+    } finally {
+      run.restore();
+    }
+  });
+
+  /* 1180 (4) REDUCED MOTION. Proves: with prefers-reduced-motion the splash still shows his logo, as the END frame and with
+   * no animation left in it (clips at rest, the name shown, the keyframe diamonds gone), marks the session as splashed,
+   * and hands over to the app within 2.5 s. The still's state is read from the snapshot taken AT the hand-over inside the
+   * frame (snap1180), never from the page after the test's await of the frame's load: the still is removed 320 ms after
+   * the dismiss, so a late load on a hot laptop would otherwise read that it never showed.
+   * FAILS BEFORE THE FIX: the base returns early under reduced motion and the splash stays hidden, so it throws its first
+   * sentence by behaviour. */
+  test('1180 with reduced motion the splash shows the finished logo as a still, then hands over', { item: '1180', budgetMs: 20000 }, async function () {
+    const run = await boot1180({ reduce: true });
+    try {
+      const d = run.d, w = run.w;
+      if (!w.matchMedia('(prefers-reduced-motion: reduce)').matches) throw new Error('setup: the reduced-motion stub did not take in the probe frame');
+      for (let i = 0; i < 60 && !(w.__rec && w.__rec.length); i++) await sleep(50);
+      const rec = w.__rec || [];
+      const sp = d.getElementById('splash');
+      if (!rec.length) {
+        if (!sp || sp.classList.contains('hidden')) throw new Error('with reduced motion the splash never showed — he gets no logo at all');
+        throw new Error('with reduced motion the still came up but never handed over (no fm:splash-dismiss within 3 s)');
+      }
+      const s = rec[0].snap;
+      if (!s) throw new Error('setup: the hand-over snapshot was not taken in the frame');
+      if (!s.shown) throw new Error('with reduced motion the splash never showed — he gets no logo at all');
+      if (s.anims < 0) throw new Error('with reduced motion the splash shows no Keyframes mark' + (d.querySelector('#splash video') ? ' (it is the film)' : ''));
+      if (s.anims) throw new Error('with reduced motion ' + s.anims + ' animations are still in the mark — it moves');
+      const want = { nC_clip1: ['14', '92'], nC_clip2: ['14', '62'], nC_clip3: ['14', '26'] };
+      for (const id in want) {
+        const r = s.clips[id];
+        if (!r || r[0] !== want[id][0] || r[1] !== want[id][1]) throw new Error('with reduced motion #' + id + ' is x ' + (r && r[0]) + ' width ' + (r && r[1]) + ', not the end frame x ' + want[id][0] + ' width ' + want[id][1]);
+      }
+      if (s.name !== '1') throw new Error('with reduced motion the FreeMotion name is not shown (opacity ' + s.name + ')');
+      if (!s.dia.length) throw new Error('setup: the snapshot found no keyframe diamonds to check');
+      for (const o of s.dia) {
+        if (o !== null && o !== '0') throw new Error('with reduced motion a keyframe diamond is still showing (opacity ' + o + ') — the end frame has them gone');
+      }
+      let flag = null;
+      try { flag = sessionStorage.getItem('fm.splashed'); } catch (e) {}
+      if (flag !== '1') throw new Error('with reduced motion the session is not marked splashed, so every reload would show it again');
+      for (let i = 0; i < 50 && d.getElementById('splash'); i++) await sleep(50);
+      if (d.getElementById('splash')) throw new Error('with reduced motion the still never handed over to the app (still up after 2.5 s)');
+    } finally {
+      run.restore();
+    }
+  });
+
+  /* 1180 (5) THE ICONS. Proves: the page's manifest, apple-touch-icon and favicon links carry the bumped ?v=3, the manifest
+   * points at icon-192.png?v=3 and icon-512.png?v=3, and every icon decodes at its size from the versioned url.
+   * FAILS BEFORE THE FIX: the base links carry ?v=2 and the manifest names the icons with no buster, so a phone that cached
+   * the old icons keeps them; it throws on the first link. */
+  test('1180 the manifest and the page point at the D2 icons with their busters bumped', { item: '1180' }, async function () {
+    const html = await src1180();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const want = [['link[rel="manifest"]', 'manifest.json?v=3'], ['link[rel="apple-touch-icon"]', 'apple-touch-icon.png?v=3'], ['link[rel="icon"]', 'icon-192.png?v=3']];
+    for (const [sel, href] of want) {
+      const l = doc.querySelector(sel);
+      if (!l || l.getAttribute('href') !== href) throw new Error(sel + ' is ' + (l ? l.getAttribute('href') : 'missing') + ', not ' + href + ' — a phone that cached the old icon keeps it');
+    }
+    const man = await (await fetch('manifest.json?v=3&t1180=' + Date.now(), { cache: 'no-store' })).json();
+    const icons = (man && man.icons) || [];
+    for (const [src, size] of [['icon-192.png?v=3', '192x192'], ['icon-512.png?v=3', '512x512']]) {
+      const ic = icons.find(i => i.src === src);
+      if (!ic) throw new Error('manifest.json has no icon ' + src + ' (it lists ' + icons.map(i => i.src).join(', ') + ')');
+      if (ic.sizes !== size) throw new Error('manifest.json lists ' + src + ' as ' + ic.sizes + ', not ' + size);
+    }
+    for (const [src, n] of [['icon-192.png?v=3', 192], ['icon-512.png?v=3', 512], ['apple-touch-icon.png?v=3', 180]]) {
+      const img = await new Promise(function (res, rej) {
+        const i = new Image();
+        i.onload = function () { res(i); };
+        i.onerror = function () { rej(new Error('could not load ' + src)); };
+        i.src = src;
+      });
+      if (img.naturalWidth !== n || img.naturalHeight !== n) throw new Error(src + ' is ' + img.naturalWidth + 'x' + img.naturalHeight + ', not ' + n + 'x' + n);
+    }
+  });
+
+  /* 1180 (6) A LATE LOAD (the refuter of the 1180 review, B3). An inline SVG's timeline starts at the document's load, and
+   * on a real launch the load waits for the app's ~100 parser-blocking scripts and its synchronous init; until then the
+   * clock reads 0. A 2000 ms synchronous busy-wait after the splash block stands in for that, deterministically. Proves:
+   * the splash is NOT cut (no splash-cut, exactly one fm:splash-dismiss and it is quick false) and the mark's own clock is
+   * past END_S + HOLD_S when the dissolve begins. The clock read at the end of the busy-wait is printed (console.info and
+   * every message): above 0 means this engine started the clock at parse, 0 means at load.
+   * FAILS BEFORE THE FIX: the base boots the film (<video>), so it throws that the splash is a film. On the branch before
+   * the clock-based cap (42506d20) the 5 s cap ran from the script, so with the clock starting ~2 s late it cut at a clock
+   * of ~3.0 s: splash-cut, quick true. */
+  test('1180 a late page load does not cut the Keyframes splash short: it starts at the load, holds, and dissolves', { item: '1180', budgetMs: 40000 }, async function () {
+    const run = await boot1180({ lateMs: 2000 });
+    try {
+      const d = run.d, w = run.w;
+      const sp = d.getElementById('splash');
+      if (!sp) throw new Error('the booted splash block has no #splash');
+      if (d.querySelector('#splash video')) throw new Error('the splash that came up is a film (<video>), not the Keyframes logo');
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (1180 reduced-motion test covers the still)');
+      const late = w.__late1180;
+      if (!late) throw new Error('setup: the 2000 ms boot stand-in never ran in the frame');
+      const said = ' (the mark’s clock read ' + (+late.clock).toFixed(3) + ' s at the end of the ' + late.ms + ' ms boot stand-in)';
+      try { console.info('[1180] late load: the clock read ' + (+late.clock).toFixed(3) + ' s at the end of a ' + late.ms + ' ms synchronous boot stand-in'); } catch (e) {}
+      for (let i = 0; i < 200 && !(w.__rec && w.__rec.length); i++) await sleep(50);
+      const rec = w.__rec || [];
+      if (!rec.length) throw new Error('after a load 2 s late the splash never handed over within 10 s' + said);
+      const s = rec[0].snap || {};
+      if (rec[0].quick || s.cut) throw new Error('after a load 2 s late the splash was CUT (quick ' + rec[0].quick + ', splash-cut ' + !!s.cut + ') at ' + Math.round(rec[0].t) + ' ms, with the mark’s clock at ' + (+s.clock).toFixed(2) + ' s — the cap ran out before the animation and its hold' + said);
+      if (!(s.clock >= END_S1180 + HOLD_S1180)) throw new Error('the dissolve began with the mark’s clock at ' + (+s.clock).toFixed(2) + ' s, short of the finished frame and its hold (' + (END_S1180 + HOLD_S1180).toFixed(2) + ' s)' + said);
+      for (let i = 0; i < 40 && d.getElementById('splash'); i++) await sleep(50);
+      if (rec.length !== 1) throw new Error('fm:splash-dismiss fired ' + rec.length + ' times — home.js needs exactly one natural (quick:false) dismiss to time its entrance' + said);
+      if (d.getElementById('splash')) throw new Error('#splash was still in the page 2 s after its dissolve began' + said);
+    } finally {
+      run.restore();
+    }
+  });
+
+  /* 1180 (7) THE LIGHT LOOK'S HAND-OVER, AND NEITHER LOOK HIDES THE MARK (the refuter of the 1180 review, B2; it replaces
+   * #646, the light half of 783, and 688's neither-look-hides-it). The light look is the default, and a first load opens
+   * the light Home under the splash, so theme-glass.css's light-Home rule wants the canvas light. iOS paints the status
+   * strip from a fixed full-screen element's background-COLOR, so the splash must hand that colour to the light Home's
+   * #fafdff as it dissolves, while the ground you SEE (a background-image layer) stays card 7's #0b0b0d under the mark.
+   * Booted with the shipped styles.css and theme-glass.css, <html data-theme=glass data-home=light|dark> and a visible
+   * #home-screen. Proves, in each look: while the splash is up the canvas (<html>) is the splash ground #0b0b0d, #splash's
+   * background-image is the ground, and the mark is displayed at opacity 1 with a size; in the light look, at the end of
+   * #splash's background-color transition, #splash and <html> both read #fafdff; the dark look (the control) is still the
+   * ground at the end of the dissolve.
+   * FAILS BEFORE THE FIX: on the base the canvas under the film is #111 (rgb(17, 17, 17)) or the light Home's colour, not
+   * the ground; on the branch before the light split (42506d20) theme-glass.css's rule outranked the splash's canvas rule,
+   * so <html> read rgb(250, 253, 255) while the splash was up, and #splash had no ground image and no colour ramp. */
+  test('1180 in the light look the splash hands the status-bar colour to the light Home as it dissolves, and neither look hides the mark', { item: '1180', budgetMs: 40000 }, async function () {
+    const GROUND = 'rgb(11, 11, 13)', LIGHT = 'rgb(250, 253, 255)';
+    for (const look of ['light', 'dark']) {
+      const run = await boot1180({ css: true, attrs: 'data-theme="glass" data-home="' + look + '"', home: true });
+      try {
+        const d = run.d, w = run.w, root = d.documentElement;
+        const sp = d.getElementById('splash');
+        if (!sp || sp.classList.contains('hidden')) throw new Error('in the ' + look + ' look the splash never came up');
+        if (!d.getElementById('home-screen')) throw new Error('setup: the frame has no #home-screen under the splash');
+        const canvas = w.getComputedStyle(root).backgroundColor;
+        if (canvas !== GROUND) throw new Error('in the ' + look + ' look, while the splash is up, the page canvas (<html>) is ' + canvas + ', not the splash ground ' + GROUND + ' — a strip the splash does not cover shows a different colour (queue 162)');
+        const img = w.getComputedStyle(sp).backgroundImage;
+        if (!/linear-gradient\(rgb\(11, 11, 13\), rgb\(11, 11, 13\)\)/.test(img)) throw new Error('in the ' + look + ' look the ground you see on #splash is ' + img + ', not a #0b0b0d image layer — the colour iOS reads and the colour he sees are not split (queue 920)');
+        const mk = d.getElementById('splash-mark');
+        if (!mk) throw new Error('in the ' + look + ' look the splash shows no svg#splash-mark');
+        const ms = w.getComputedStyle(mk), box = mk.getBoundingClientRect();
+        if (ms.display === 'none' || ms.visibility === 'hidden' || ms.opacity !== '1' || !(box.width > 0 && box.height > 0)) throw new Error('in the ' + look + ' look a stylesheet hides the mark (display ' + ms.display + ', visibility ' + ms.visibility + ', opacity ' + ms.opacity + ', ' + Math.round(box.width) + 'x' + Math.round(box.height) + ')');
+        if (w.getComputedStyle(sp).opacity !== '1') throw new Error('in the ' + look + ' look the splash is at opacity ' + w.getComputedStyle(sp).opacity + ' before its dissolve');
+        /* On the first 20 ms tick that sees the dissolve, every background-color transition on #splash and <html> is
+           finished at once and the colours are read in the same callback. Waiting 0.9 s for transitionend raced the splash's
+           own removal 1 s after the dissolve begins: a stall in that gap cancels the transition and the test timed out on
+           a hand-over that did happen (the review of the fold, S1). */
+        const end = await new Promise(function (res) {
+          let seen = 0;
+          const to = setTimeout(function () { clearInterval(seen); res(null); }, 12000);
+          seen = setInterval(function () {
+            if (!sp.classList.contains('splash-out')) return;
+            clearInterval(seen); clearTimeout(to);
+            let bg = [];
+            try {
+              bg = sp.getAnimations().concat(root.getAnimations()).filter(function (a) { return a.transitionProperty === 'background-color'; });
+              bg.forEach(function (a) { a.finish(); });
+            } catch (e) {}
+            res({ n: bg.length, sp: w.getComputedStyle(sp).backgroundColor, root: w.getComputedStyle(root).backgroundColor });
+          }, 20);
+        });
+        if (look === 'light') {
+          if (!end) throw new Error('in the light look the splash never began its dissolve within 12 s');
+          if (!end.n) throw new Error('in the light look no background-color transition ran on #splash or <html> as the dissolve began — the status strip stays dark over the light Home, then snaps (queue 920)');
+          if (end.sp !== LIGHT || end.root !== LIGHT) throw new Error('in the light look, at the end of the dissolve, #splash’s colour is ' + end.sp + ' and the canvas is ' + end.root + ', not the light Home’s ' + LIGHT);
+        } else {
+          if (!end) throw new Error('CONTROL: in the dark look the splash never began its dissolve within 12 s, so the light reading above has nothing to compare with');
+          if (end.n || end.sp !== GROUND || end.root !== GROUND) throw new Error('CONTROL: in the dark look, at the end of the dissolve, #splash’s colour is ' + end.sp + ' and the canvas is ' + end.root + ' (' + end.n + ' background-color transition(s)) — the light hand-over leaked into the dark look');
+        }
+      } finally {
+        run.restore();
+      }
     }
   });
 })();

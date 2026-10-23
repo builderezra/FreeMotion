@@ -204,6 +204,12 @@ window.FM = window.FM || {};
          default because it is what every saved project and 14 filters draw. Affects uses Colour Balance's tonal weights. */
       { key: 'method', label: 'Method', def: 0, options: [[0, 'Shift'], [1, 'White balance']] },
       { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']] },
+      /* #966 opts13 (hunt/fx13, his "more choices always better"): a warm-up or a cool-down always took every face in the shot with it,
+         and always at full strength. PROTECT SKIN holds skin-coloured pixels back from the cast with Teal & Orange's skin window (the same
+         hue, saturation and brightness windows, worked out per pixel by skinW12) — warm the room, keep the faces their own colour — and
+         MIX lays the graded picture over the plain one. 0 % and 100 % run the old lines untouched (tone13 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'noise', label: 'Noise', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 35, unit: '%' },
@@ -378,6 +384,12 @@ window.FM = window.FM || {};
       { key: 'rolloff', label: 'Highlight rolloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'gamma', label: 'Gamma', min: 0.1, max: 4, step: 0.01, def: 1 },
       { key: 'space', label: 'Work in', def: 0, options: [[0, 'sRGB'], [1, 'Linear light']] },
+      /* #966 opts13 (hunt/fx13, his "more choices always better"): the stops always lit every tone of the picture at full strength.
+         AFFECTS confines them to the darks, the mids or the lights with Colour Balance's tonal weights ((1 − L)², 1 − (2L − 1)², L², on
+         the pixel's own brightness) — lift a dark foreground and leave the sky alone — and MIX lays the exposed picture over the plain
+         one. All and 100 % run the old lines untouched (tone13 only off them). */
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks lifts the shadows and leaves the lights alone' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'fisheye', label: 'Fisheye', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -1148,6 +1160,12 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Swap', def: 1, options: [[0, 'RGB (identity)'], [1, 'Swap R/B'], [2, 'Swap R/G'], [3, 'Swap G/B'], [4, 'Rotate RGB→GBR'], [5, 'Rotate RGB→BRG'], [6, 'Hue Invert'], [7, 'Swap Sat/Val']] },
       { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'luma', label: 'Keep brightness', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      /* #966 opts13 (hunt/fx13, his "more choices always better"): the swap always took every tone of the picture and every face in it.
+         AFFECTS confines it to the darks, the mids or the lights with Colour Balance's tonal weights ((1 − L)², 1 − (2L − 1)², L², on the
+         pixel's own brightness) — an alien sky over a real street — and PROTECT SKIN holds skin-coloured pixels back with Teal & Orange's
+         skin window (skinW12), so the people keep their own colour. All and 0 % run the old loop untouched (tone13 only off them). */
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Lights swaps the bright parts and leaves the shadows alone' },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     /* GRADIENT OVERLAY — queue 537. Ezra: *"Gradient overlay effect needs blending options and other
        stuff that you can think of"*.
@@ -8704,6 +8722,11 @@ window.FM = window.FM || {};
       for (let i = 0; i < d.length; i += 4) { d[i] = LR[d[i]]; d[i + 1] = LG[d[i + 1]]; d[i + 2] = LB[d[i + 2]]; }
     },
     temperature: function (d, W, H, p, t) {
+      /* #966 opts13: PROTECT SKIN over 0 % or MIX under 100 % runs tone13 — this very kernel without the two (Method, Affects and Keep
+         brightness as they are), its result laid in by Mix and by how far from skin each pixel's own colour is; 0 % and 100 % run the
+         lines below untouched. */
+      const tpSk13 = p.skin == null ? 0 : FM.evalProp(p.skin, t), tpMx13 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (tpSk13 > 0 || tpMx13 < 100) { tone13(d, W, H, p, t, PIXEL_FX.temperature, ['skin', 'mix'], 0, tpMx13, tpSk13); return; }
       const a = (FM.evalProp(p.amount, t) || 0) / 100, r = a * 50, b = -a * 50;   // warm: +R -B, cool: opposite
       // TINT is the other half of a white balance — the green/magenta axis. Without it you can only
       // slide along orange/blue, which is why a fluorescent green cast was uncorrectable here.
@@ -9437,6 +9460,10 @@ window.FM = window.FM || {};
       }
     },
     exposure: function (d, W, H, p, t) {
+      /* #966 opts13: AFFECTS Darks (1), Mids (2) or Lights (3), or MIX under 100 %, runs tone13 — this very kernel without the two, its
+         result laid in by the tonal weight of each pixel's own brightness and Mix; All and 100 % run the lines below untouched. */
+      const exRg13 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0), exMx13 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (exRg13 === 1 || exRg13 === 2 || exRg13 === 3 || exMx13 < 100) { tone13(d, W, H, p, t, PIXEL_FX.exposure, ['range', 'mix'], exRg13, exMx13, 0); return; }
       const m = Math.pow(2, FM.evalProp(p.stops, t) || 0);
       // OFFSET is a black-point lift/crush, which a pure multiply cannot do at all (multiplying
       // never moves black). ROLLOFF replaces the hard 255 clip with a soft knee, so pushing a stop
@@ -11304,7 +11331,13 @@ window.FM = window.FM || {};
         mfidx=mfi*4;
         d[mfidx]=d[mfidx]+(mfr-d[mfidx])*mfC; d[mfidx+1]=d[mfidx+1]+(mfg-d[mfidx+1])*mfC; d[mfidx+2]=d[mfidx+2]+(mfb-d[mfidx+2])*mfC; } },
     // ---- batch 16 (other / color / proc / drawing) ----
-    channelremap: function(d,W,H,p,t){ var crM=(p.mode|0); if(crM<0)crM=0; if(crM>7)crM=7; if(crM===0)return; var crN=W*H*4;
+    channelremap: function(d,W,H,p,t){
+      /* #966 opts13: AFFECTS Darks (1), Mids (2) or Lights (3), or PROTECT SKIN over 0 %, runs tone13 — this very kernel without the two
+         (Swap, Mix and Keep brightness as they are), its result laid in by the tonal weight of each pixel's own brightness and by how far
+         from skin its own colour is; All and 0 % run the loop below untouched. */
+      var crRg13=p.range==null?0:(Math.round(FM.evalProp(p.range,t))|0), crSk13=p.skin==null?0:FM.evalProp(p.skin,t);
+      if(crRg13===1||crRg13===2||crRg13===3||crSk13>0){ tone13(d,W,H,p,t,PIXEL_FX.channelremap,['range','skin'],crRg13,100,crSk13); return; }
+      var crM=(p.mode|0); if(crM<0)crM=0; if(crM>7)crM=7; if(crM===0)return; var crN=W*H*4;
       // Completely binary: 100% of a channel swap or nothing, so it could only ever be a novelty and
       // never the 25% version that survives into a finished grade. MIX is the whole point of the row.
       // LUMA keeps the original brightness through the swap, so it reads as a colour shift rather than
@@ -14470,6 +14503,32 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._crossProcess12 = crossProcess12;   // suite seam (#966 opts12)
+  /* ═══ #966 opts13 (hunt/fx13): the helper behind the thirteenth round — Exposure's Affects and Mix, Colour Temperature's Protect skin
+   * and Mix, Channel Remap's Affects and Protect skin. It runs only off those controls' defaults, so a default kernel never calls it. ═══ */
+  /* THE KERNEL ITSELF, LAID IN BY A WEIGHT: the picture is kept, the effect's own kernel `fn` runs on it with the new keys `keys` taken
+     away (so it draws exactly what it draws today), and each pixel is then moved only that share of the way from its own value to the
+     kernel's: Mix (0–100 %, 100 the kernel itself, 0 the picture; NaN reads 100) times the tonal weight of Affects on the pixel's OWN
+     brightness L (0–1; Darks (1 − L)², Mids 1 − (2L − 1)², Lights L², anything else 1) times 1 − Protect skin x skinW12 of the pixel's
+     own colour (0–100 %; NaN reads 0). A share of exactly 1 keeps the kernel's bytes; alpha is the kernel's. Pixel by pixel on the
+     pixel alone, so a cropped plate (692) draws what the whole one draws. */
+  function tone13(d, W, H, p, t, fn, keys, range, mix, skin) {
+    const m = isFinite(mix) ? (mix <= 0 ? 0 : (mix >= 100 ? 1 : mix / 100)) : 1;
+    const s = isFinite(skin) ? (skin <= 0 ? 0 : (skin >= 100 ? 1 : skin / 100)) : 0;
+    if (!(m > 0)) return;
+    const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; });
+    const o = new Uint8ClampedArray(d);
+    fn(d, W, H, q, t);
+    const tw = range === 1 || range === 2 || range === 3;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = o[i], g = o[i + 1], b = o[i + 2];
+      let w = m;
+      if (tw) { const L = (r * 0.299 + g * 0.587 + b * 0.114) / 255; w *= range === 1 ? (1 - L) * (1 - L) : (range === 2 ? 1 - (2 * L - 1) * (2 * L - 1) : L * L); }
+      if (s > 0) w *= 1 - s * skinW12(r, g, b);
+      if (w === 1) continue;
+      d[i] = r + (d[i] - r) * w; d[i + 1] = g + (d[i + 1] - g) * w; d[i + 2] = b + (d[i + 2] - b) * w;
+    }
+  }
+  FM._tone13 = tone13;   // suite seam (#966 opts13)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {

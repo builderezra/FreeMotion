@@ -2638,6 +2638,9 @@ window.FM = window.FM || {};
    * 400ms comfortably covers the ~200ms measured start-up while staying short enough that a silent
    * or blocked clip does not feel stuck. */
   const START_WAIT_MS = 400;
+  /* …and how long for an element that was COLD at the press (#202 H2: readyState below 3, or a seek in flight, sampled before
+     Play's own seek). Only while it has not advanced, and never once its play() is refused, so a blocked clip still starts at once. */
+  const START_WAIT_COLD_MS = 2000;
   let _startWait = null;
 
   function tick() {
@@ -2648,8 +2651,11 @@ window.FM = window.FM || {};
      * time elapses and the sync controller has nothing to correct — rather than letting the playhead
      * run ahead of the sound and then dragging the sound up to it by playbackRate. */
     if (_startWait) {
-      const started = _startWait.els.some(w => (w.el.currentTime || 0) > w.from + 0.008);
-      if (started || performance.now() > _startWait.until) _startWait = null;
+      const W = _startWait, nowW = performance.now();
+      const started = W.els.some(w => (w.el.currentTime || 0) > w.from + 0.008);
+      /* #202 H2: held while any element is inside its own deadline and was not refused */
+      const holding = W.els.some(w => !(W.refused && W.refused.has(w.el)) && nowW <= w.until);
+      if (started || !holding) _startWait = null;
       else {
         clockAnchor(FM.time);
         render(); FM.timeline.updatePlayhead(); updateReadout();
@@ -2733,6 +2739,9 @@ window.FM = window.FM || {};
     resizeCanvas();                                     // …and re-size the canvas into playback quality
     // Play is the user gesture that unlocks the AudioContext; route the effected clips before they start.
     if (FM.audioFxLive) { FM.audioFxLive.resume(); FM.audioFxLive.syncAll(); }
+    /* #202 H2: the elements that were COLD when Play was pressed, and the ones whose play() this pass was refused. Both are read by
+       the start wait below, and both belong to this pass only, so a late refusal from an earlier Play cannot end a later one's wait. */
+    const coldEls = new Set(), refusedEls = new Set();
     FM.scene.layers.forEach(layer => {
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
@@ -2745,7 +2754,23 @@ window.FM = window.FM || {};
            on an ended element rewinds it to zero — which is the bug this guard exists for. Leave it
            paused and silent; the tick applies the same rule every frame from here. */
         if (FM.pastSourceEnd(m, local)) { try { m.el.pause(); m.el.muted = true; } catch (e) {} return; }
-        try { m.el.currentTime = local; m._syncAt = performance.now(); } catch (e) {}
+        /* NOT A SEEK ON EVERY PLAY (#202 H4). This wrote the raw edge `local` unconditionally, while a paused element sits on
+           seekTargetFor(m, local), half a millisecond INSIDE the frame (FM.seekVideosToTime, FM.pause). The two differ by 0.5 ms, so
+           neither Chrome's nor WebKit's same-time shortcut applied: every press of Play was a real decoder seek, a stall at the very
+           moment the sound has to start. Now the same target as the paused seek, and the same guard at its exact width (an element
+           trailing by under half a frame would otherwise start that far off, and the first warm sync sample keeps it as bias). An
+           element with no frame yet is still sought, the guard's noFrame term. The sync clock is stamped either way. */
+        try {
+          /* #202 H2: COLD = nothing buffered ahead of the playhead yet, or a seek still in flight. Asked BEFORE this pass's own seek,
+             which leaves every real element reading as seeking, so asked after it every element would be cold. `undefined < 3` is
+             false, so a stand-in with no readyState counts as warm. A clip already judged undecodable (queue 129's blank clip) is
+             never cold: it never starts and its play() never settles, so the long wait would freeze every press of Play for 2 s. */
+          if (!m.undecodable && (m.el.readyState < 3 || m.el.seeking === true)) coldEls.add(m.el);
+          const target = seekTargetFor(m, local);
+          const noFrame = m.el.readyState < 2 && !m.el.seeking;
+          if (noFrame || !(Math.abs((m.el.currentTime || 0) - target) < 0.001)) m.el.currentTime = target;
+          m._syncAt = performance.now();
+        } catch (e) {}
         // A new pass learns its own output latency from scratch (queue 148) — the offset from the
         // last one belongs to a different position, and on a phone often to a different device state.
         m._errBias = null; m._rateAt = 0; m._baseRate = null; m._warmCt = null;
@@ -2770,7 +2795,12 @@ window.FM = window.FM || {};
            play() rejecting — NotAllowedError without a gesture, NotSupportedError for a codec, AbortError when the
            element was torn down — and this catch used to swallow every one. "Your last playback" can only say what it
            was told, so it is told. */
-        m.el.play().catch(e => { try { if (FM.audioHealth) FM.audioHealth.refused(m, e); } catch (_) {} });
+        const played = m.el;
+        m.el.play().catch(e => {
+          /* #202 H2: an element whose play() was refused will never advance, so it stops holding the start at once */
+          refusedEls.add(played);
+          try { if (FM.audioHealth) FM.audioHealth.refused(m, e); } catch (_) {}
+        });
       }
     });
     /* WAIT FOR THE SOUND BEFORE THE CLOCK RUNS (queue 95).
@@ -2802,9 +2832,12 @@ window.FM = window.FM || {};
         if (m.kind && m.kind !== 'video' && m.kind !== 'audio') return;
         if (!FM.isLayerVisibleAt(l, FM.time)) return;
         if (!(FM.layerVolume(l, FM.time) > 0)) return;
-        waiters.push({ el: m.el, from: m.el.currentTime || 0 });
+        /* #202 H2: each element holds the start for its OWN time. A cold one gets START_WAIT_COLD_MS: when it outlasted the 400 ms,
+           the clock ran on without it, the first warm sync sample learned the whole stall as output latency, and the clip played
+           that far behind the playhead until the next Play. A warm one keeps the 400 ms. */
+        waiters.push({ el: m.el, from: m.el.currentTime || 0, until: performance.now() + (coldEls.has(m.el) ? START_WAIT_COLD_MS : START_WAIT_MS) });
       });
-      if (waiters.length) _startWait = { until: performance.now() + START_WAIT_MS, els: waiters };
+      if (waiters.length) _startWait = { els: waiters, refused: refusedEls };
     } catch (e) { _startWait = null; }
     // Start the clock here, alongside the audio it has to agree with: audioPlay.start() anchors
     // reversed buffers to audioCtx.currentTime, so both take their origin from the same reading.
