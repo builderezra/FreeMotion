@@ -118,6 +118,11 @@ claims an AM origin, and I can't tell from the code whether one was used._
   because the concern was that someone could read it.
   **It still does not close item 2:** the entire PHONE layout, which is the primary target, is untouched
   by all of that and is still the AM arrangement. The list below stands.
+- **#1180 — the app's own logo now opens the app and sits on the home screen.** The timeline-F mark (D2,
+  "Light from above", his pick on 23 Oct) replaces the copied splash film and the old app icons: the intro is
+  the Keyframes animation drawn for it (inline SVG, plays once, no download), and `icon-192.png`,
+  `icon-512.png` and `apple-touch-icon.png` are the D2 mark. The old films stay in the repo, unloaded.
+  Identity progress: the first thing anyone sees of the app, before any screen, is now ours.
 
 ## What "done" looks like
 
