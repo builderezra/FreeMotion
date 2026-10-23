@@ -72316,7 +72316,7 @@
       FM.scene.layers.length = 0;
       const L = FM.makeLayer('video', { name: 'tone', start: 0, duration: 12, trimStart: 0, speed: 1, volume: 1 });
       FM.scene.layers.push(L); FM.scene.project.duration = 12;
-      const el = spinUpEl(12, o.latency, o.spin);
+      const el = o.makeEl ? o.makeEl() : spinUpEl(12, o.latency, o.spin);   // makeEl: #663, a fake element of the test's own
       FM.media.set(L.id, Object.assign({ kind: 'video', el: el, width: 320, height: 240, duration: 12 }, o.rec || {}));   // rec: #845 (a routed record)
       FM.playing = false; FM.setTime(0); await sleep(40);
       const t0 = performance.now();
@@ -72411,6 +72411,109 @@
     if (atSeek == null) throw new Error('CONTROL: 600 ms of lag after warm-up was never corrected by a seek (' + r.el.seeks + ' seeks in all), so this test proves nothing');
     if (!(atSeek < 0.05)) throw new Error('the drift seek jumped the playing sound at volume ' + atSeek.toFixed(3) + ' — an unfaded jump to an arbitrary sample is a click, the one play() and a loop wrap already avoid');
     if (!(later > atSeek)) throw new Error('after the de-clicked seek the volume did not come back up (' + later + ')');
+  });
+
+  /* #663 (finding 2 of the 23 Oct hunt, its refuter, and the builder's note that the refuter's ramp is not red). A fake element
+   * whose reported clock lags its real position by a latency that depends on how far it has played since its last seek or play:
+   * latAt(s). spinUpEl's ramp runs from position 0 only, so it cannot show a transient that comes back after every seek, which
+   * is what this finding is about. `shortBy` makes every seek land that far short of where it was sent and stay there (the
+   * hunt's first model). e._pos is where the element really is, so a test can tell a real lag from a latency. */
+  function seekLatEl663(dur, latAt, shortBy) {
+    const e = { paused: true, muted: false, volume: 1, readyState: 4, duration: dur,
+                seeks: 0, seekT: [], rateWrites: 0, maxRate: 1, _pos: 0, _from: 0, _at: performance.now(), _rate: 1, _stall: 0 };
+    const adv = () => {
+      const n = performance.now();
+      if (!e.paused) { const f = Math.max(e._at, e._stall); if (n > f) e._pos = Math.min(dur, e._pos + (n - f) / 1000 * e._rate); }
+      e._at = n;
+    };
+    Object.defineProperty(e, 'currentTime', {
+      get() { adv(); return Math.max(0, e._pos - latAt(e._pos - e._from)); },
+      set(v) { adv(); e._pos = Math.max(0, v - (shortBy || 0)); e._from = e._pos; e.seeks++; e.seekT.push(performance.now()); e._stall = performance.now() + 30; },
+    });
+    Object.defineProperty(e, 'playbackRate', {
+      get() { return e._rate; },
+      set(v) { adv(); e._rate = v; e.rateWrites++; if (v > e.maxRate) e.maxRate = v; },
+    });
+    e.play = () => { adv(); e.paused = false; e._from = e._pos; return Promise.resolve(); };
+    e.pause = () => { adv(); e.paused = true; };
+    return e;
+  }
+  /* 0.09 s of latency, and `d` more that arrives only after `wait` s of play since the last seek, over `ramp` s: the warm-up
+     (0.25 s of the element's own time) has taken its seed by then, so the seed is short by exactly d. */
+  function settlesLate663(d, wait, ramp) { return s => 0.09 + d * Math.max(0, Math.min(1, (s - wait) / ramp)); }
+  function route663() { return { _mes: { connect() {}, disconnect() {} } }; }
+  /* One routed run of the q148 harness on a 663 fake: seeks, the gaps between them, adoptions, and how far the element REALLY
+     was from the playhead over the last 30 ticks. `lag` pulls the element 0.2 s back at tick 11 (no seek of its own). */
+  async function run663(mk, ticks, lag) {
+    let rec = null;
+    const offs = [];
+    const r = await q148Run({ ticks: ticks, rec: route663(), makeEl: mk,
+      at: lag ? 11 : 0, then: el => { void el.currentTime; el._pos = Math.max(0, el._pos - 0.2); },
+      each: (el, i) => {
+        if (!rec) { const all = FM.media.all(); for (const k in all) { if (all[k] && all[k].el === el) rec = all[k]; } }
+        void el.currentTime; offs[i] = FM.time - el._pos;
+      } });
+    const gaps = [];
+    for (let i = 1; i < r.el.seekT.length; i++) gaps.push(Math.round(r.el.seekT[i] - r.el.seekT[i - 1]));
+    const tail = offs.slice(-30).filter(isFinite).map(Math.abs).sort((x, y) => x - y);
+    return { el: r.el, ticks: r.ticks, seeks: r.el.seeks, gaps: gaps, adopts: (rec && rec._mesAdopts) || 0,
+             adopted: (rec && rec._mesAdopted) || 0, offMed: tail.length ? tail[tail.length >> 1] : NaN };
+  }
+
+  /* #663 MEASUREMENT PROBE (the PM's order, 23 Oct: measure before a bound is trusted). The routed harness on 663 fakes whose
+   * latency settles d later after every seek, or whose seeks land d short, for d = 0.05, 0.07, 0.09 and 0.24 s, plus the
+   * builder's computed model (latency 0.24, a 2 s ramp from half that restarts on every seek). In measure mode each runs twice:
+   * with the fix and with FM._mesRepeatIsLatency stubbed to false, which is the v17.93 rule.
+   * Normally it runs three short cases and asserts only that each reached the controller, so the probe cannot rot unseen.
+   * Add &measure663=1 to the address and it FAILS ON PURPOSE with every number in its message: seeks, the gaps between them in
+   * ms, adoptions, and the median |playhead − real position| over the last 30 ticks (a seek that lands short shows up there). */
+  test('663 measure routed seek loop: seeks and their spacing for a routed clip whose latency settles late or whose seeks land short, with and without the fix', { item: '663', budgetMs: 300000 }, async function () {
+    let want = false;
+    try { want = new URLSearchParams((window.top || window).location.search).get('measure663') === '1'; } catch (e) {}
+    const cases = [];
+    for (const d of [0.05, 0.07, 0.09, 0.24]) {
+      cases.push({ name: 'settles ' + d + ' s late', mk: () => seekLatEl663(12, settlesLate663(d, 0.5, 0.6)), lag: false, quick: d === 0.07 });
+      cases.push({ name: 'lands ' + d + ' s short', mk: () => seekLatEl663(12, () => 0.09, d), lag: true, quick: d === 0.07 });
+    }
+    cases.push({ name: 'latency 0.24 on a 2 s ramp from half', mk: () => seekLatEl663(12, s => 0.24 * (0.5 + 0.5 * Math.min(1, s / 2))), lag: false, quick: true });
+    const lines = [];
+    const keep = FM._mesRepeatIsLatency;
+    for (const c of cases) {
+      if (!want && !c.quick) continue;
+      for (const on of (want ? [true, false] : [true])) {
+        window.__fmStep = '663 probe: ' + c.name + (on ? ' (fix on)' : ' (fix off)');
+        let r;
+        if (!on) FM._mesRepeatIsLatency = () => false;
+        try { r = await run663(c.mk, want ? 100 : 40, c.lag); } finally { FM._mesRepeatIsLatency = keep; }
+        if (!(r.ticks >= (want ? 90 : 36))) throw new Error('the probe run ' + c.name + ' ticked only ' + r.ticks + ' times, so it measured nothing');
+        lines.push(c.name + (on ? ' [fix on]' : ' [fix off]') + ': ' + r.seeks + ' seeks' + (r.gaps.length ? ' (gaps ' + r.gaps.join('/') + ' ms)' : '') +
+                   ', ' + r.adopts + ' adopted (' + Math.round(r.adopted * 1000) + ' ms), median |playhead - position| ' + Math.round(r.offMed * 1000) + ' ms, ' + r.ticks + ' ticks');
+      }
+    }
+    if (want) throw new Error('MEASURE 663 (asked for with measure663=1; a report, not a fault): ' + lines.join(' | '));
+  });
+
+  /* #663 (finding 2 of the 23 Oct hunt, as its refuter corrected it; js/app.js FM._mesRepeatIsLatency). A routed clip whose
+   * reported clock settles d later after every seek, once the warm-up has taken its seed. The element is never late (e._pos
+   * keeps time), but since v17.93 the routed rule reads the settling as lag, seeks, re-seeds short, and seeks again: on WebKit
+   * every one of those seeks on a routed element is a gap while its tap refills.
+   * FAILS BEFORE THE FIX: computed, not yet run, a seek about every 1.9 s at d = 0.07 (about 4 in 100 ticks) and about every
+   * 1 s at d = 0.15. MEASURE: the bound below is the computed one; set it from the probe above once it has run.
+   * d = 0.15 is over the 0.1 s rule, so it also catches the hunt's first fix (learn under 0.1 s), which loops there.
+   * CONTROLS: the settling reached the controller (at least one seek each), the clip really keeps time (median |playhead −
+   * real position| under 0.06 s, the bar test 845 uses), and the rate is never written. A one-off stall is still pulled back by
+   * one seek: test 845 (a routed clip that falls behind) pins that, unchanged. */
+  test('663 a routed clip whose latency settles later after every seek is seeked once, not every second or two for as long as it plays', { item: '663', budgetMs: 60000 }, async function () {
+    const MEASURE_MAX_SEEKS = 1;   // MEASURE: computed; confirm with the probe (?only=663%20measure&measure663=1)
+    for (const d of [0.07, 0.15]) {
+      window.__fmStep = '663 settles ' + d + ' s late';
+      const r = await run663(() => seekLatEl663(12, settlesLate663(d, 0.5, 0.6)), 100, false);
+      if (!(r.ticks >= 90)) throw new Error('setup: only ' + r.ticks + ' sync ticks at d = ' + d + ', so nothing here is under test');
+      if (r.seeks < 1) throw new Error('CONTROL: a routed clip whose latency settled ' + Math.round(d * 1000) + ' ms later was never seeked at all, so the settling never reached the controller and this test proves nothing');
+      if (r.seeks > MEASURE_MAX_SEEKS) throw new Error('a routed clip whose latency settles ' + Math.round(d * 1000) + ' ms later after each seek was seeked ' + r.seeks + ' times in ' + r.ticks + ' ticks (gaps ' + r.gaps.join('/') + ' ms) while it was never late (median ' + Math.round(r.offMed * 1000) + ' ms off) — every seek re-seeds the latency short and the next one follows; on an iPhone each is a gap');
+      if (!(r.offMed < 0.06)) throw new Error('at d = ' + d + ' the element itself ended a median ' + Math.round(r.offMed * 1000) + ' ms off the playhead — the fix kept a real lag as latency');
+      if (r.el.rateWrites !== 0) throw new Error('the routed clip had playbackRate written ' + r.el.rateWrites + ' times');
+    }
   });
 
   /* Queue 202 — is the ladder actually WIRED to playback? A different question from whether it decides

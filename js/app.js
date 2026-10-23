@@ -2295,6 +2295,30 @@ window.FM = window.FM || {};
     if (!m || m._errBias == null || !isFinite(m._errBias)) return true;   // seeding: the step takes it whole anyway
     return Math.abs(rawErr - m._errBias) <= SYNC_DEAD;
   };
+  /* ═══ A ROUTED SEEK THAT DID NOT FIX IT IS NOT REPEATED (#663, finding 2 of the 23 Oct hunt, as its refuter corrected it) ═══
+   * His words: "audio still cuts in and out on mobile".
+   * A routed clip (m._mes) is never rate-trimmed, so since v17.93 an error over 0.1 s, or one out of the dead band for a second,
+   * is corrected by a seek. A seek throws the bias away and re-seeds it from the first warm sample (FM._noteSyncSeek). If the
+   * element's latency is still settling when that sample is taken, the seed is short by the part still to come; that part then
+   * reads as lag, it is never learned (out of the band, queue 690) and never trimmed (routed), so it is seeked again, the seek
+   * re-seeds short again, and so on: a seek about every 1–2 s for as long as the clip plays, and on WebKit every seek on a routed
+   * element is a gap while its tap refills. The element was never late at all: each seek put it exactly where it already was.
+   * So the SAME error coming back after a routed seek is taken as latency and adopted into the bias, not seeked again:
+   *   · only within MES_REPEAT_MS of a routed seek (any other seek closes the window), and only in the same direction;
+   *   · each adoption no bigger than the error that seek was for, to within the dead band — a bigger fault is a new one, seeked;
+   *   · in all, no more than SYNC_HARD since that seek.
+   * What it keeps: a one-off stall is still pulled back by ONE seek (B2, test 845), because after that seek the re-seed matches
+   * the steady state and the error never comes back. The cost, stated: a second stall the same size and direction inside the
+   * window is kept as latency, so that clip plays up to that much late until the next play, wrap or seek re-seeds it.
+   * _syncMayLearn is untouched (queue 690 and 916 pin it). */
+  const MES_REPEAT_MS = 5000;
+  FM._mesRepeatIsLatency = function (m, err, now) {
+    if (!m || !m._mesSeekAt || !(now - m._mesSeekAt < MES_REPEAT_MS)) return false;
+    const was = m._mesSeekErr;
+    if (!(isFinite(was) && isFinite(err) && err * was > 0)) return false;
+    if (Math.abs(err) > Math.abs(was) + SYNC_DEAD) return false;
+    return Math.abs((m._mesAdopted || 0) + err) <= SYNC_HARD;
+  };
   FM._noteSyncError = function (v, now) {
     const p = FM.playbackStats; if (!p) return;
     const es = p.errs || (p.errs = []), et = p.errT || (p.errT = []);
@@ -2541,13 +2565,22 @@ window.FM = window.FM || {};
                would be a place its sound stays late for good — a 200 ms stall left it 200 ms behind until the clip ended. There, a lag
                over 0.1 s, or one that has stayed out of the dead band for a second, is corrected by the (de-clicked) seek instead, no
                more often than SEEK_MIN_GAP. In-band jitter never seeks. */
+            let mesRule = false;
             if (m._mes && plan.action === 'trim') {
               if (!m._mesOutAt) m._mesOutAt = now;
-              if ((Math.abs(step.deBiased) > 0.1 || now - m._mesOutAt >= 1000) && !(m._syncAt != null && now - m._syncAt < SEEK_MIN_GAP)) plan = { action: 'seek', rate: base };
+              if ((Math.abs(step.deBiased) > 0.1 || now - m._mesOutAt >= 1000) && !(m._syncAt != null && now - m._syncAt < SEEK_MIN_GAP)) { plan = { action: 'seek', rate: base }; mesRule = true; }
+              /* #663 (finding 2 of the 23 Oct hunt, as its refuter corrected it): a routed seek that did not fix it is not repeated.
+                 See FM._mesRepeatIsLatency: the same error back after the re-seed is latency the seed missed, so it joins the bias. */
+              if (mesRule && FM._mesRepeatIsLatency(m, step.deBiased, now)) {
+                m._errBias += step.deBiased; m._mesAdopted = (m._mesAdopted || 0) + step.deBiased; m._mesAdopts = (m._mesAdopts || 0) + 1;
+                m._mesOutAt = 0; plan = { action: 'hold', rate: base }; mesRule = false;
+              }
             } else if (m._mesOutAt) m._mesOutAt = 0;
             if (plan.action === 'seek') {
               m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++;
               FM._noteSyncSeek(m);
+              /* #663: remember what a routed seek was meant to fix, for FM._mesRepeatIsLatency; any other seek closes that window */
+              if (mesRule) { m._mesSeekAt = now; m._mesSeekErr = step.deBiased; m._mesAdopted = 0; } else m._mesSeekAt = 0;
               /* #845 (the audio hunt's refuter, N1): a drift seek jumps a waveform that is PLAYING to an arbitrary sample, the click
                  play() and wrapTo() de-click, missed here since v6.05. The restart fades in over 45 ms (declickGain) through el.volume;
                  on an iPhone, where el.volume cannot be set, only a clip with a level stage (m._boost) fades, and an effect-only clip
