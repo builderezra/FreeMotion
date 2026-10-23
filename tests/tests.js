@@ -106614,6 +106614,93 @@
     }
   });
 
+  /* #663 (the 23 Oct hunt's finding 3 and its refuter). The second half of a split is a fresh element, and PREROLL_S (0.4 s, sized
+   * on desktop for an element that had played before) was all the time it got to start. A cold one on a phone was still silent at
+   * the cut, and its first warm sample then learned the start-up as output latency, so that half played late for its whole length.
+   * Stand-ins on both halves (nothing real plays) and the tick driven by hand, FM._syncMediaToClock with FM.playing set, as the 690
+   * dead-seam test above does. The cut is at 3.00 s.
+   * FAILS BEFORE THE FIX: a cold second half (readyState 1) 1.8 s before the cut is left paused; it is first started 0.4 s before.
+   * CONTROLS: a warm one (readyState 4) is left alone at 1.8 s and 0.5 s and started, muted, from the right sample at 0.35 s; a cold
+   * one 2.2 s out is not started yet; one already judged undecodable, or one met during an export, keeps the 0.4 s. And the hand-over:
+   * once the primed half has played it is paused again, muted, and restarted by the ordinary pre-roll from the right sample. */
+  test('663 a cold clip after a split is readied before the cut, up to 2 s early, and a warm one still 0.4 s before', { item: '663', budgetMs: 40000 }, async function () {
+    if (typeof FM._syncMediaToClock !== 'function') throw new Error('FM._syncMediaToClock is not exposed');
+    if (typeof FM.splitLayer !== 'function') throw new Error('FM.splitLayer is missing');
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, keepT = FM.time, wasPlaying = FM.playing, wasExporting = FM._exporting, made = [];
+    const CUT = 3;
+    let am = null, bm = null, aEl = null, bEl = null, bUnd = false;
+    const fake = rs => ({ readyState: rs, seeking: false, paused: true, muted: false, volume: 1, playbackRate: 1, duration: 6, currentTime: 0, plays: 0,
+      play() { this.plays++; this.paused = false; return Promise.resolve(); }, pause() { this.paused = true; },
+      addEventListener() {}, removeEventListener() {} });
+    const tickAt = t => { FM.time = t; FM.playing = true; try { FM._syncMediaToClock(); } finally { FM.playing = false; } };
+    const fresh = (rs, und) => { const fa = fake(4), fb = fake(rs); am.el = fa; bm.el = fb; bm.undecodable = !!und; bm._playRefusedAt = 0; am._playRefusedAt = 0; return fb; };
+    const say = fb => 'plays ' + fb.plays + ', ' + (fb.paused ? 'paused' : 'playing') + ', ' + (fb.muted ? 'muted' : 'NOT muted') + ', at ' + (+fb.currentTime).toFixed(3) + ' s';
+    try {
+      window.__fmStep = '663 seam setup';
+      const rec = await FM.loadVideoFile(huntEWav(6, t => 0.3 * Math.sin(2 * Math.PI * 440 * t), 'h663-seam'));
+      const L = FM.makeLayer('video', { name: 'song', x: 32, y: 32, start: 0, duration: 6 });
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = huntEScene([L], 6);
+      FM.refreshAll();
+      FM.setTime(CUT);
+      await FM.splitLayer(L.id);
+      FM.scene.layers.forEach(l => { if (made.indexOf(l.id) < 0) made.push(l.id); });
+      const A = FM.scene.layers.filter(l => Math.abs(l.start) < 1e-6)[0], B = FM.scene.layers.filter(l => Math.abs(l.start - CUT) < 1e-6)[0];
+      am = A ? FM.media.get(A.id) : null; bm = B ? FM.media.get(B.id) : null;
+      if (!am || !bm || am === bm || !B.splitOf) throw new Error('setup: the split did not make two halves meeting at 3.00 s, each with its own media');
+      aEl = am.el; bEl = bm.el; bUnd = bm.undecodable;
+      const first = FM.layerLocalTime(B, CUT);
+      if (!(first > 0)) throw new Error('setup: the second half has no first sample at the cut (' + first + ')');
+      const rate = Math.min(16, Math.max(0.0625, (FM.evalProp(B.speed, CUT) || 1) * (FM.previewRate || 1)));
+      const near = (fb, lead) => Math.abs((+fb.currentTime) - (first - lead * rate)) < 0.01;
+
+      window.__fmStep = '663 seam warm';
+      let fb = fresh(4);
+      tickAt(CUT - 1.8);
+      if (fb.plays || !fb.paused) throw new Error('CONTROL: a WARM second half was started 1.8 s before the cut (' + say(fb) + ') - a warm one keeps the 0.4 s pre-roll');
+      tickAt(CUT - 0.5);
+      if (fb.plays || !fb.paused) throw new Error('CONTROL: a WARM second half was started 0.5 s before the cut (' + say(fb) + ') - a warm one keeps the 0.4 s pre-roll');
+      tickAt(CUT - 0.35);
+      if (fb.plays !== 1 || fb.paused || !fb.muted || !near(fb, 0.35)) throw new Error('CONTROL: a WARM second half 0.35 s before the cut is not pre-rolled, muted, from ' + (first - 0.35).toFixed(3) + ' s (' + say(fb) + ') - the 690 pre-roll this builds on is not there');
+
+      window.__fmStep = '663 seam cold';
+      fb = fresh(1);
+      tickAt(CUT - 2.2);
+      if (fb.plays || !fb.paused) throw new Error('a COLD second half was started 2.2 s before the cut (' + say(fb) + ') - the early prime is capped at the 2 s FM.play waits for a cold clip');
+      tickAt(CUT - 1.8);
+      if (fb.plays !== 1 || fb.paused || !fb.muted || !near(fb, 1.8)) {
+        throw new Error('a COLD second half (readyState 1, a fresh element as every split makes) is not readied 1.8 s before the cut (' + say(fb) + ', wanted playing, muted, from ' + (first - 1.8).toFixed(3) +
+          ' s) - it waits for the 0.4 s pre-roll sized for a warm desktop element, so on a phone the cut opens silent and the start-up is learned as latency for the rest of the clip');
+      }
+      await sleep(0);
+      fb.currentTime = (+fb.currentTime) + 0.2; fb.readyState = 4;
+      tickAt(CUT - 1.5);
+      if (fb.plays !== 1 || !fb.paused || !fb.muted) throw new Error('once the primed second half has played, 1.5 s before the cut, it is not paused again and muted for the ordinary pre-roll (' + say(fb) + ') - the start it was late by would be carried to the cut');
+      tickAt(CUT - 0.35);
+      if (fb.plays !== 2 || fb.paused || !fb.muted || !near(fb, 0.35)) throw new Error('the primed, now warm second half is not restarted by the ordinary pre-roll 0.35 s before the cut, muted, from ' + (first - 0.35).toFixed(3) + ' s (' + say(fb) + ')');
+
+      window.__fmStep = '663 seam undecodable';
+      fb = fresh(1, true);
+      tickAt(CUT - 1.8);
+      if (fb.plays || !fb.paused) throw new Error('CONTROL: a second half already judged undecodable was primed 1.8 s before the cut (' + say(fb) + ') - it never starts, so it keeps the 0.4 s');
+
+      window.__fmStep = '663 seam exporting';
+      fb = fresh(1);
+      FM._exporting = true;
+      try { tickAt(CUT - 1.8); } finally { FM._exporting = wasExporting; }
+      if (fb.plays || !fb.paused) throw new Error('CONTROL: a cold second half was primed during an export (' + say(fb) + ') - nothing is primed while exporting');
+    } finally {
+      FM.playing = wasPlaying; FM._exporting = wasExporting;
+      if (am && aEl) am.el = aEl;
+      if (bm && bEl) { bm.el = bEl; bm.undecodable = bUnd; bm._playRefusedAt = 0; }
+      FM.scene = saved; FM.time = keepT;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      try { FM.refreshAll(); } catch (e) {}
+    }
+  });
+
   /* 690 (HUNT-b 3) — ON AN IPHONE THE PREVIEW CUT OFF THE ECHO AND REVERB TAIL; THE EXPORT LETS IT RING. Fixed:
    * js/audio-fx-live.js sync wires element -> level gain -> effects -> limiter (when boosted) -> speakers, the export's
    * order, instead of putting the gain after the effects.
