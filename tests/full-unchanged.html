@@ -595,6 +595,11 @@
     if (opts.restToast) await toastAtRest();
     /* what runs for ever is read the instant before the screen is frozen and recorded, not seconds earlier (9 Oct, step
        1.2's first run at 380: Home's + went into its dock — .hm-in-fab, its drift off — between the two, on one side) */
+    /* …AND NOT INSIDE THE APP'S MOVING WINDOW (22 Oct, v17.95's lock run at 1280: fu1-one-selected read the category cards'
+       infinite animations paused on one side and running on the other). Since v17.93 (#768 H1) the app pauses them for 700 ms
+       after any render (body.fm-moving), and previewState's last render lands about 600 ms before this point, so the reading
+       fell either side of that timer. Wait for the class to clear (2 s at most), the same on both sides: a settle, not a mask. */
+    for (var mvT = Date.now(); D.body && D.body.classList.contains('fm-moving') && Date.now() - mvT < 2000; ) await sleep(50);
     motion = motion.concat(infiniteNow());
     var fr = freezeInfinite();
     try {

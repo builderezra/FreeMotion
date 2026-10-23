@@ -246,6 +246,16 @@ class CDP:
 BROWSER = {"path": "", "product": ""}
 
 
+# A phone sends no compat mouse events after a held or dragged finger; Linux headless Chrome always does (tests/_platform.py).
+# Installed only in a one-finger-test page (FM_TOUCH_PAGE=1). It swallows AT MOST ONE trusted mousedown, mouseup and click —
+# the compat triple Chrome sends at the touchEnd — and only while the driver's flag is fresh (set just before a touchEnd that
+# phone_cancels_tap() rules out as a tap), so a quick still tap, and a tap on a menu the hold just opened, still click. `n`
+# counts what it swallowed, for a reader.
+COMPAT_GUARD = ("(function(){['mousedown','mouseup','click'].forEach(function(t){window.addEventListener(t,function(e){"
+                "var s=window.__fmSwallowCompat;if(e.isTrusted&&s&&Date.now()<s.until&&s[t]>0){s[t]--;s.n=(s.n||0)+1;"
+                "e.stopImmediatePropagation();e.preventDefault();}},true);});})();")
+
+
 def _browser():
     return (BROWSER["path"] + (" " + BROWSER["product"] if BROWSER["product"] else "")).strip()
 
@@ -506,6 +516,10 @@ def main():
         if a.shots:
             os.makedirs(a.shots, exist_ok=True)
             cdp.send("Emulation.setDeviceMetricsOverride", width=a.width, height=a.height, deviceScaleFactor=1, mobile=False)
+        if _platform.TOUCH_PAGE:
+            # THE PHONE'S "NO CLICK AFTER A HOLD OR A DRAG" (tests/_platform.py phone_cancels_tap), installed in every frame
+            # before any of the app's scripts, so its window-capture listeners run FIRST and stop the event for everyone
+            cdp.send("Page.addScriptToEvaluateOnNewDocument", source=COMPAT_GUARD)
         cdp.send("Page.navigate", url=url)
         # THE SUITE IS WRITTEN FOR A BROWSER WITH A MOUSE, AND THAT IS NOW CHECKED, NOT ASSUMED (6 Oct, the WSL port). The
         # Mac's headless Chrome reports (hover: hover) and (pointer: fine): test 991's PC case throws without it, the 976
@@ -678,6 +692,15 @@ def main():
                             x = float(st.get("x", 0)) + q["ox"]
                             y = float(st.get("y", 0)) + q["oy"]
                             if t.startswith("touch"):
+                                # how long this finger has been down and how far it has gone — a gesture may span requests
+                                if t == "touchStart":
+                                    inp["t_down"], inp["p_down"], inp["moved"] = time.time(), (x, y), 0.0
+                                elif inp.get("p_down") and t in ("touchMove", "touchEnd"):
+                                    inp["moved"] = max(inp.get("moved", 0.0), ((x - inp["p_down"][0]) ** 2 + (y - inp["p_down"][1]) ** 2) ** 0.5)
+                                if (t == "touchEnd" and _platform.TOUCH_PAGE and inp.get("t_down") is not None
+                                        and _platform.phone_cancels_tap(time.time() - inp["t_down"], inp.get("moved", 0.0))):
+                                    cdp.eval("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;"
+                                             "if(w){w.__fmSwallowCompat={until:Date.now()+300,mousedown:1,mouseup:1,click:1,n:0};}})()")
                                 if not inp["touch_emu"] and _platform.REAL_TOUCH_VIA_EMULATION:
                                     cdp.send("Emulation.setTouchEmulationEnabled", enabled=True, maxTouchPoints=5)
                                     inp["touch_emu"] = True

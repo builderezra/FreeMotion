@@ -1,0 +1,91 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Across.dc.html": {
+      "h": 1328,
+      "title": "D · One gradient across the whole F",
+      "w": 1724,
+      "x": 1520,
+      "y": 2720
+    },
+    "Grades.dc.html": {
+      "h": 967,
+      "title": "C · Colour grades",
+      "w": 1746,
+      "x": 0,
+      "y": 2720
+    },
+    "Greys.dc.html": {
+      "h": 900,
+      "title": "A · Greys and metals",
+      "w": 1440,
+      "x": 0,
+      "y": 1700
+    },
+    "Main.dc.html": {
+      "h": 1280,
+      "title": "Timeline F — 12 options",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Teal.dc.html": {
+      "h": 900,
+      "title": "B · Teal, the app's colour",
+      "w": 1440,
+      "x": 1520,
+      "y": 1700
+    },
+    "D2-Animations.dc.html": {
+      "h": 820,
+      "title": "D2 · four loading animations",
+      "w": 1440,
+      "x": 0,
+      "y": 4360
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-22T00:20:00+08:00",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "t1": {
+      "kind": "title1",
+      "maxW": 1440,
+      "text": "FreeMotion · an F built from timeline clips",
+      "w": 240,
+      "x": 0,
+      "y": -260
+    },
+    "t2": {
+      "kind": "title1",
+      "maxW": 2960,
+      "text": "Your circled one, regraded — 32 colour and gradient studies",
+      "w": 240,
+      "x": 0,
+      "y": 1420
+    },
+    "t3": {
+      "kind": "title1",
+      "maxW": 1440,
+      "text": "D2 animated — the logo building itself",
+      "x": 0,
+      "y": 4100
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Greys.dc.html",
+    "Teal.dc.html",
+    "Grades.dc.html",
+    "Across.dc.html",
+    "D2-Animations.dc.html"
+  ],
+  "pages": [],
+  "title": "FreeMotion timeline-F logo options"
+}

@@ -199,6 +199,24 @@ def driver_pattern():
 # with a reload as the positive control), so a page per test is the whole of the fix.
 TOUCH_PAGE = IS_LINUX and os.environ.get("FM_TOUCH_PAGE") == "1"
 REAL_TOUCH_VIA_EMULATION = (not IS_LINUX or TOUCH_PAGE) and os.environ.get("FM_FAKE_NO_TOUCH_EMULATION") != "1"
+
+# ⚠️ …AND ON LINUX EVERY TOUCH ENDS IN A CLICK, WHICH NO PHONE DOES (7 Oct, #1097; tests/_holdprobe.py). Measured here with real
+# emulation: a finger held 150, 400, 500, 650, 800, 1000, 1200 or 1600 ms ALWAYS ends in mousedown + mouseup + click(touch) at
+# the touchend, and contextmenu never fires — headless Linux Chrome never recognises a long press. A phone never clicks after a
+# HELD finger (Android Chrome turns a hold past ~500 ms into a long press and cancels the tap; iOS Safari sends no click for a
+# long touch) nor after one that MOVED past the touch slop. The click is not harmless: the keyframe diamond's menu opens at the
+# hold's pointerup and the compat mousedown moved focus off it 7 ms later (the cloud helper's H17), so the four "690 … keyframe
+# diamond" hold tests went red here and green on the Mac. So in a one-finger-test page the driver models the phone: a finger
+# that phone_cancels_tap() says was a long press or a drag ends with its compat mousedown / mouseup / click swallowed by a guard
+# installed in every frame before the app's own scripts (tests/_cdp.py COMPAT_GUARD). A quick still tap still clicks.
+PHONE_LONG_PRESS_S = 0.5    # Android's long-press time; iOS turns a long touch into no click as well
+PHONE_TOUCH_SLOP_PX = 10.0  # ~8 dp on Android; a finger that travels further is a drag, not a tap
+
+
+def phone_cancels_tap(held_s, moved_px):
+    """True when a phone would NOT turn this touch into a tap (no compat mouse events, no click): held for a long press, or
+    moved past the touch slop. Pure, so tools/test-port.sh checks it without a browser."""
+    return held_s >= PHONE_LONG_PRESS_S or moved_px > PHONE_TOUCH_SLOP_PX
 REAL_TOUCH_WHY = ("FM_FAKE_NO_TOUCH_EMULATION=1 (a proof run)" if os.environ.get("FM_FAKE_NO_TOUCH_EMULATION") == "1"
                   else "Linux headless Chrome: turning touch emulation off leaves the page with no mouse" if IS_LINUX else "")
 

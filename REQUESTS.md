@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 22 Oct at v17.94
+> ## 📌 WHAT I NEED FROM YOU — updated 22 Oct at v17.95
 >
-> **State:** v17.94 — **a clip you import shows its picture straight away** (#202): a clip that has never shown a frame is asked for one (and, if a seek does not wake it on the iPhone, played silently for a moment and stopped), the filmstrip no longer holds a clip while it only waits for it to load, and it leaves the clip on the playhead's frame. **Still one check from you:** export something short with sound on your iPhone, save it, and play it in Photos (v17.89's fix).
+> **State:** v17.95 — tests only, nothing in the app changes: the real-finger tests now behave like your phone (no tap after a long press or a drag, #1097). **Still one check from you:** export something short with sound on your iPhone, save it, and play it in Photos (v17.89's fix).
+>
+> v17.94 — **a clip you import shows its picture straight away** (#202): a clip that has never shown a frame is asked for one (and, if a seek does not wake it on the iPhone, played silently for a moment and stopped), the filmstrip no longer holds a clip while it only waits for it to load, and it leaves the clip on the playhead's frame. **Still one check from you:** export something short with sound on your iPhone, save it, and play it in Photos (v17.89's fix).
 >
 > v17.93 — **smoother phone playback and scrubbing, and your recommended picks switched on.** Sound with effects no longer has its speed nudged (the iPhone handles that badly) and a clip that falls behind is pulled back with a soft fade (#845); a heavy scene drops to a lighter preview while you drag (#1131); with a layer selected, scrubbing no longer redraws the glowing category cards, every caption cue or the whole inspector on each step (#768). Decided under your 21 Oct "fine with ur choices" rule — change any of them on the review page or in Settings: the Add menu grows from your tap (#1084); Laser Beam's core shows exactly the colour you pick; a Wipe's border slides off at the end. **Still one check from you:** export something short with sound on your iPhone, save it, and play it in Photos (v17.89's fix).
 >
@@ -36052,8 +36054,7 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **HE ANSWERED 11 Oct, ~11:08 AWST (the block above):** YES — layout A (design/tutorials-tab aefa599f), the 20 Full + 14 Simple drafts (tutorials-drafts 92258bc2), Simple 10 and 13 merged, every step re-checked against the app, textContent only. Built on hunt/1082-tut (3183851f); the helper re-checks the steps.
       🔨 **v17.41 (13 Oct): THE TUTORIALS TAB SHIPPED** (hunt/1082-tut via wip/fb2a1-port): layout A, 20 Full + 13 Simple lessons, Simple 02–04 shown now that 2.1/2.2 are in, lesson 17 rewritten for Work with friends on by default. Left open (partial) for the oldest-first gate.
 
-- [ ] **1083 — PC: a second, hidden back button in the top left that shows on hover (his pick: B, the glass pill ‹ Projects)** (6 Oct, ~10:40 AWST, via INBOX — his words; plan and his pick from the logging chat)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1083 — PC: a second, hidden back button in the top left that shows on hover (his pick: B, the glass pill ‹ Projects)** (6 Oct, ~10:40 AWST, via INBOX — his words; plan and his pick from the logging chat)
       Moved from INBOX.md whole:
       ### 06 Oct 2026, ~10:40 AWST — PC: a second, hidden back button in the top left that shows on hover
 
@@ -36099,9 +36100,9 @@ re-opened #480, which I had marked done and had not fixed.
       🔨 **16 Oct — BUILT and first-run green, waits on one Simple line** (hunt/1083-port 0b263541): the pill, its hide rules and four tests pass at 1280 and 380, and the built pill was sent beside his pick B (https://claude.ai/artifact/KXUcmn8rg6oui58sw54aBL). It could not ride v17.58: hiding it while Simple is on screen names Simple's body class, and the Full-unchanged lock treats any release that does as a Simple release, which must ship alone and prove Full unchanged, while this one changes Full on purpose. So the hide moves into Simple's own CSS (`body.ed-simple .corner-back { display: none; }`) and rides the next Simple release (Phase 3, with its lock run); then #1083 ships without naming Simple. BUILT OUT UNTIL the next Simple release lands.
       📍 **v17.88 (21 Oct): SHIPPED in Full** — ported from hunt/1083-port (0b263541, 7b6f5cc7) onto main: #btn-back-corner, his B values unchanged, lit by a real mouse in the 180x120 corner, dark under every dialog, sheet, tool and hide rule; '‹ Back' inside a group; a live session's people strip steps right of the lit pill (the PM's call). Five 1083 tests. Left: the line that hides it in the Simple editor, which ships with the next Simple release (the PM's call (a)); then this ticks.
       📍 **v17.92 (22 Oct): the Simple half shipped** (body.ed-simple .corner-back hidden, the 1083 simple test) — with v17.88s PC pill (his pick B) both halves are live. Left open, not ticked: the queue gate holds every closure behind #1097, the oldest workable item (its Mac-probe question is with the PM).
+      ✅ **Ticked at v17.95** (shipped in v17.92; held only by the queue gate behind #1097, which this release closes).
 
-- [ ] **1084 — Phone: the Add menu grows out of where you tapped (a second animation mode, with a Settings toggle)** (6 Oct, ~14:35 AWST, via INBOX — his words)
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+- [x] **1084 — Phone: the Add menu grows out of where you tapped (a second animation mode, with a Settings toggle)** (6 Oct, ~14:35 AWST, via INBOX — his words)
       Moved from INBOX.md whole:
       ### 06 Oct 2026, ~14:35 AWST — Phone: the Add menu grows out of where you tapped (a second animation mode, with a Settings toggle)
 
@@ -36162,6 +36163,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v17.88 (21 Oct): half b BUILT, switched off** — the row stretches up and down into the menu over 300 ms (js/mobile.js stretchAdd / unstretchAdd, STRETCH_MS), with the dim behind it as in the 7 Oct drawing (STRETCH_DIM), the row's glow handing over to the moving edge, behind the same addMenuGrow switch as half a; tests 1084 h–l. Asked on the review page (the PM's call, one line with the 7 Oct drawing): turn the grow on, and 300 or 380 ms?
       ⏸ **21 Oct — BUILT OUT UNTIL HE says whether to turn the Add menu grow on, and 300 or 380 ms for the row stretch.**
       📍 **v17.93 (22 Oct): ON — decided under his 21 Oct "fine with ur choices" rule (#1179)**: the review page's recommended answer, on at 300 ms. A settings revision (settingsRev 2) makes the ON default reach phones that had saved settings before it. Settings → Add menu grows from your tap turns it off. Left open, not ticked: the queue gate holds every closure behind #1097, the oldest workable item (its Mac-probe question is with the PM).
+      ✅ **Ticked at v17.95** (shipped in v17.93; held only by the queue gate behind #1097, which this release closes).
 
 - [ ] **1085 — The test page reserves about 8.7 GB over one suite run: find the leak and fail a run past a memory budget (hunt MEDIUM #1085)** (6 Oct, ~18:10 — the PC Claude's report via the PM; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -36268,15 +36270,14 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       dismiss() removes #splash but never empties the <video>, so its decoded frames (media/frame_buffers ~163 MB + webmediaplayer 13 MB) live on. A fix is written and committed on branch suite-mem-fix (597ca2ef, 'the intro film lets go once the splash has gone') — LOCAL to the Mac until pushed; verify on his phone.
 
-- [ ] **1097 — The laptop cannot ship ANY app change until the ~80 real-finger tests run on Linux** (7 Oct — found while writing SWITCHOVER.md; NOT his words; part of the move, #1071)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1097 — The laptop cannot ship ANY app change until the ~80 real-finger tests run on Linux** (7 Oct — found while writing SWITCHOVER.md; NOT his words; part of the move, #1071)
       On Linux headless Chrome those tests report NOT RUN HERE (turning touch emulation off wipes the Mac-like mouse settings), and while any of them is NOT RUN the feature gate refuses every shipped-source change, by design. The Mac can no longer run a full suite (8 GB, #1085). So every Simple-mode release waits on this. Lead: drive hover/pointer through CDP Emulation.setEmulatedMedia and re-apply after each touch batch. Fallback: the Mac runs ONLY the NOT RUN tests for an exact tree and writes an attestation the gate accepts.
       ❓ASK (if Linux cannot do it): may the laptop ship app changes on a Mac-run attestation of just those tests? (SWITCHOVER.md §5)
       🔨 **7 Oct (the laptop builder): BUILT on branch 1097-touch-pages, not shipped yet.** Each finger test the full pass reports
       NOT RUN runs alone in a browser of its own with real emulation (FM_TOUCH_PAGE=1, tests/_touch_pass.py); ship.sh runs that after
       the 1280 and the 380 pass whenever shipped source changed, a red refuses, a green one leaves NOT RUN. MEASURED here: **380 —
       93 of 93 pass** (945 s), the cloud helper's four keyframe-diamond reds included; 1280 — 81 of 81 before WSL restarted, re-running.
-      ❓ **OPEN, and it decides one patch (the PM, 7 Oct):** the Linux harness sends a compat mousedown/mouseup/click after a HELD finger
+      ~~❓ **OPEN, and it decides one patch (the PM, 7 Oct):** the Linux harness sends a compat mousedown/mouseup/click after a HELD finger~~
       (tests/_holdprobe.py: every hold, 150–1600 ms), which a phone never does; the app survives it here. The Mac's answer — the same
       probe, tonight via Ezra's Mac paste, its output pushed to branch **probe/mac-holdprobe** — decides whether
       **tools/design/hunts/1097-phone-cancels-tap.py** (kept, not applied: no click after a hold ≥ 500 ms or a move > 10 px) goes in.
@@ -36286,6 +36287,7 @@ re-opened #480, which I had marked done and had not fixed.
       only the 4 AAC export tests and the 2 QR tests, so the feature gate refuses only a change to the AAC export or the QR code.
       Left open on purpose: the ❓ above (the Mac's tests/_holdprobe.py answer decides the kept phone-cancels-tap patch).
       📍 **REMAINS OPEN (builder, 16 Oct):** only the ❓ above — the Mac's tests/_holdprobe.py answer, which decides the kept phone-cancels-tap patch. The shipping half is done (v17.25), and every laptop ship since runs the finger tests one browser each.
+      ✅ **ANSWERED (22 Oct, the PM, under his 11 Oct and 21 Oct rules — a test-harness call, not his):** the Mac probe is moot (the Mac has not shipped since 7 Oct; the laptop runs the finger tests on every ship), and the kept phone-cancels-tap patch is ADOPTED: no click after a hold of 500 ms or more or a move past 10 px, as a real iPhone or Android. PROVEN 22 Oct 12:51: every finger test, one browser each, 99 of 99 at 1280 and 98 of 98 at 380. 📍 **v17.95: SHIPPED** as its own INSTRUMENT CHANGE release (the pre-ship review: the gate refuses it beside app changes). Ticked.
 
 - [ ] **1098 — Test like the phone, but also see the PC's real speed, and find Windows issues (his answer, 7 Oct, while the laptop shipped v17.24)** (7 Oct, ~09:55 AWST — his words, in the laptop builder's chat)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -37849,3 +37851,13 @@ re-opened #480, which I had marked done and had not fixed.
       **Also:** a logo is part of the visual-identity pass in BEFORE-PUBLISHING.md (the UI is modelled on Alight Motion and must be made our own before a public release). Add the logo work to that list when it is picked, as progress on it.
       **Who builds:** the PM chat draws the options (no build). The builder builds the picked animation and the loading-screen change after his pick.
       ⏸ **22 Oct — BUILT OUT UNTIL HE picks a logo** from the PM chat's canvas (https://claude.ai/artifact/4ot9bNBsNL6HCv6Nei8QN7: 12 options and 32 studies on his circled geometry). He said to wait for his decision, so his 21 Oct "fine with ur choices" rule does not apply here. After his pick, the builder draws the loading-animation options (clause 4).
+      📥 **22 Oct 2026, ~18:05 AWST — Ezra (#1180): keep the logo designs safe, and an animation for D2** (via INBOX — his words):
+      **His words, verbatim:** "make sure those designs arent lost, make an animation for d2"
+      Done by the PM chat:
+      1. [x] **Saved in the repo** at `tools/design/logo-1180/`, uncommitted:
+         - `icons/`: the 44 PNGs and make_icons.py;
+         - `canvas/`: every artboard's source;
+         - `README.md`: the options, the link, and how to re-render.
+         - **Builder:** commit this folder with the next release (ship.sh's add -A does it). It's docs only, outside the lock's hash. Don't delete it.
+      2. [x] **D2 animations:** four looping drafts added to the canvas as artboard "D2 · four loading animations": 1 Snap in, 2 Record (the playhead lays the clips down), 3 Light falls, 4 Stack. Each is shown on a phone-sized splash with the FreeMotion wordmark. https://claude.ai/artifact/4ot9bNBsNL6HCv6Nei8QN7
+      3. [ ] **WAITING ON HIS PICK** of animation (and logo). Nothing goes into the app until then. When he picks, the builder makes it the splash in CSS/SVG (no mp4; see #1096).
