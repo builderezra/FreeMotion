@@ -491,7 +491,7 @@ window.FM = window.FM || {};
     /* faces kept, mixed: #966 opts14 */ colorbalance: 'Adds or removes each of red, green and blue separately — the direct way to kill a colour cast — keeping faces their own colour if you like, mixed over the picture.',
     /* faces kept, mixed: #966 opts14 */ highlightsshadows: 'Recovers blown highlights and lifts crushed shadows without touching the midtones — keeping faces as they are if you like, mixed over the picture.',
     /* about any point: #966 opts8 */ gradientoverlay: 'Lays a colour gradient over the layer at any angle — or a round or conic one about any point.',
-    faded: 'Lifts the blacks and drains the colour — the washed-out look of old film left in the sun.',
+    /* the darks, mids or lights alone, mixed: #966 opts14 */ faded: 'Lifts the blacks and drains the colour — the washed-out look of old film left in the sun — over the whole picture or just its darks, mids or lights, mixed over it.',
     /* part way, and Show selection: #966 opts9 */ replacecolor: 'Finds one colour and swaps it for another — all the way or part way — leaving everything else alone. Show selection shows what it has caught.',
     spotcolor: 'Keeps ONE colour and drains the rest to grey — the red-coat-in-a-black-and-white-film shot.',
     fourcolor: 'Blends four colours from the four corners, for a soft full-frame wash.',

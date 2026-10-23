@@ -1568,6 +1568,13 @@ window.FM = window.FM || {};
          old look); Warm / cool still adds its cast on top. Contrast loss 100 and Fade whites 0 are the old curve. */
       { key: 'crush', label: 'Contrast loss', min: 0, max: 200, step: 5, def: 100, unit: '%' },
       { key: 'rolloff', label: 'Fade whites', min: 0, max: 100, step: 1, def: 0 },
+      /* #966 opts14 (hunt/fx14, his "more choices always better"): the fade always washed every tone of the picture at once and always
+         at full strength. AFFECTS confines it to the darks, the mids or the lights with Colour Balance's tonal weights ((1 − L)²,
+         1 − (2L − 1)², L², on the pixel's own brightness) — milky blacks under crisp highlights, or only the whites washed out — and MIX
+         lays the faded picture over the plain one. All and 100 % run the old loop untouched (tone13 only off them). Placed before Fade
+         colour so the colour row stays last. */
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks fades the shadows and leaves the lights crisp' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'fadecol', label: 'Fade colour', swatch: true, def: '#808080' },   // a colour row inside `params` (fx-registry paramsOf `swatch`), last like every effect colour
     ] },
     /* #966 opts4: VIEWER — night vision as seen through the device: everything outside one round Scope, or a pair of Binocular
@@ -12775,7 +12782,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
     },
     // ---- batch 21 ----
-    faded: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
+    faded: function(d,W,H,p,t){
+      /* #966 opts14: AFFECTS Darks (1), Mids (2) or Lights (3), or MIX under 100 %, runs tone13 — this very kernel without the two, its
+         result laid in by the tonal weight of each pixel's own brightness and Mix; All and 100 % run the lines below untouched. */
+      const fdRg14 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0), fdMx14 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (fdRg14 === 1 || fdRg14 === 2 || fdRg14 === 3 || fdMx14 < 100) { tone13(d, W, H, p, t, PIXEL_FX.faded, ['range', 'mix'], fdRg14, fdMx14, 0); return; }
+      var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
       // ONE slider drove the black lift, the contrast crush, the desaturation AND the warm cast at
       // once, so milky blacks with the colour intact was unreachable and so was a COOL faded look.
       // TONE going negative is what gives the cool one — the cast offsets simply flip sign.

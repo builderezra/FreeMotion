@@ -178045,10 +178045,12 @@
   const _O14_NEW = {
     colorbalance: ['skin', 'mix'],
     highlightsshadows: ['skin', 'mix'],
+    faded: ['range', 'mix'],
   };
   const _O14_OFF = {
     colorbalance: [{ skin: 100 }, { mix: 50 }],
     highlightsshadows: [{ skin: 100 }, { mix: 50 }],
+    faded: [{ range: 1 }, { mix: 50 }],
   };
   /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
      the new keys taken away (every saved project), each case on its own fixture, moment and plate */
@@ -178233,11 +178235,80 @@
   });
   /* ---- end Highlights & Shadows ---- */
 
+  /* ---- Faded Film: Affects and Mix ---- */
+  /* At its defaults (Amount 0.6, Milky blacks 26, Colour loss 15 %, Warm / cool 100 %, Contrast loss 100 %, Fade whites 0, a grey Fade
+     colour) the kernel lifts by 26 x 0.6 = 15.6, squeezes about 128 by 1 − 0.25 x 0.6 = 0.85, pulls 0.15 x 0.6 = 0.09 of the way to the
+     pixel's luma, and adds the cast +4.8 red, +1.2 green, −3.6 blue. Grey 40: 15.6 + 40 x 239.4 / 255 = 53.15, squeezed to 64.38, so
+     (66.99, 63.39, 58.59) → (67, 63, 59); grey 220: 222.14 → 208.02, so (213.90, 210.30, 205.50) → (214, 210, 205); grey 100: (116, 112,
+     108). Affects weighs each pixel's move by its own brightness, as tone13 does: grey 40 (L 0.157) by Darks (1 − L)² = 0.711 → (59, 56,
+     54), Mids 0.529 → (54, 52, 50), Lights 0.0246 → (41, 41, 40); grey 220 (L 0.863) by Darks 0.0188 → (220, 220, 220), Mids 0.474 →
+     (217, 215, 213), Lights 0.744 → (216, 213, 209). Mix 50 puts grey 100 at (108, 106, 104), each exactly half way. On the base code
+     Affects and Mix are ignored and every grey takes the whole fade. */
+  test('966 opts14 Faded Film has Affects (All, Darks, Mids or Lights, storing 0–3, All by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Mids and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o14Need('faded', _O14_NEW.faded);
+    const bad = _o13Rows('faded', [
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { range: 2, mix: 40 });
+    bad.push.apply(bad, _o13Clamp('faded', { mix: 150 }, { mix: 100 }));
+    bad.push.apply(bad, _o13Clamp('faded', { mix: -5 }, { mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('faded', { range: 7 }, { range: undefined }));
+    const ps = FM.fxRegistry.get('faded').params || [];
+    if (!ps.length || ps[ps.length - 1].key !== 'fadecol') bad.push('Fade colour is no longer the last row (' + ps.map(p => p.key).join(', ') + ') — the colour row stays last');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Faded Film Affects: Darks fades grey 40 to 59, 56, 54 and leaves grey 220 at 220, Mids takes them to 54, 52, 50 and 217, 215, 213, Lights to 41, 41, 40 and 216, 213, 209 — and with more lift and colour loss, a Fade colour, a cool cast with Contrast loss and Fade whites, and a Mix every pixel of a busy picture is the fade times the tonal weight of its own brightness to the level (CONTROL: All fades grey 40 to 67, 63, 59 and grey 220 to 214, 210, 205)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('faded', _o13P('faded', over), 256, 2, _o13Lv(), 0.5);
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    const all = run({});
+    if (px(all, 40) !== '67, 63, 59' || px(all, 220) !== '214, 210, 205') bad.push('CONTROL: under All grey 40 reads ' + px(all, 40) + ' and grey 220 reads ' + px(all, 220) + ' (67, 63, 59 and 214, 210, 205 expected)');
+    [[1, 'Darks', '59, 56, 54', '220, 220, 220'], [2, 'Mids', '54, 52, 50', '217, 215, 213'], [3, 'Lights', '41, 41, 40', '216, 213, 209']].forEach(([rg, name, w40, w220]) => {
+      const got = run({ range: rg });
+      if (px(got, 40) !== w40) bad.push(name + ' puts grey 40 at ' + px(got, 40) + ', not ' + w40);
+      if (px(got, 220) !== w220) bad.push(name + ' puts grey 220 at ' + px(got, 220) + ', not ' + w220);
+      [{}, { lift: 60, desat: 70 }, { fadecol: '#a0c0e0' }, { tone: -150, crush: 180, rolloff: 40 }, { mix: 60 }].forEach(extra => {
+        const mix = extra.mix == null ? 100 : extra.mix;
+        const w = _o14Worst('faded', _o13P('faded'), Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(mix, rg, _o13L(r, g, b), 0, 0), 0.5);
+        if (w) bad.push(name + ' ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its fade times its tonal weight' + (extra.mix ? ' times Mix' : '') + ')');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Faded Film Mix: at 50 % grey 100 of a 0–255 ramp reads 108, 106, 104, every grey sits half way between itself and its faded value to the level in each channel, at 0 % the ramp is itself byte for byte, and a Mix keyed 0 to 100 draws its value half way (CONTROL: the whole fade takes grey 100 to 116, 112, 108)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('faded', _o13P('faded', over), 256, 2, _o13Lv(), 0.5);
+    const full = run({}), half = run({ mix: 50 }), none = run({ mix: 0 }), keyed = run({ mix: _o13KF(0, 100) });
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    if (px(full, 100) !== '116, 112, 108') bad.push('CONTROL: at Mix 100 grey 100 reads ' + px(full, 100) + ', not 116, 112, 108');
+    if (px(half, 100) !== '108, 106, 104') bad.push('at Mix 50 grey 100 reads ' + px(half, 100) + ', not 108, 106, 104');
+    let worst = 0, at = -1;
+    for (let v = 0; v < 256; v++) {
+      const f = _o13At(full, 256, v, 0), want = _o13U8(v + (f[0] - v) * 0.5, v + (f[1] - v) * 0.5, v + (f[2] - v) * 0.5), got = _o13At(half, 256, v, 0);
+      for (let c = 0; c < 3; c++) { const e = Math.abs(got[c] - want[c]); if (e > worst) { worst = e; at = v; } }
+    }
+    if (worst > 0) bad.push('at Mix 50 grey ' + at + ' reads ' + px(half, at) + ', ' + worst + ' levels from half way to its faded value');
+    const m0 = E1.maxDiff(none, _o13Lv());
+    if (m0 !== 0) bad.push('at Mix 0 the ramp moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(keyed, half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o14Worst('faded', _o13P('faded'), { mix: 35, fadecol: '#3050ff', amount: 1 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with a Fade colour at full Amount: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Faded Film at All and Mix 100 % draws byte for byte what it drew without them — at its defaults, at full Amount, with more lift, colour loss and a cool cast, with Contrast loss and Fade whites, with a Fade colour, keyframed, and on a half-size plate (CONTROL: Darks and Mix 50 each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o14Need('faded', _O14_NEW.faded);
+    const bad = _o14Ident('faded', [{}, { over: { amount: 1 } }, { over: { lift: 70, desat: 60, tone: -120 } }, { over: { crush: 160, rolloff: 30 } }, { over: { fadecol: '#3050ff' } }, { over: { amount: _o13KF(0.2, 1) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }]);
+    _O14_OFF.faded.forEach(o => { const n = _o14Moves('faded', o, 96, 72, _o13Pic, 0.5); if (n < 1000) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the default fade moves every channel by 4 to 25 levels (more at the ends, where the lift and the squeeze add), and Darks or Mix 50 holds a light or any pixel back by a level or more */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Faded Film ---- */
+
   /* the round's editors, new rows and all, fit the inspector (round thirteen's fit test) */
   test('966 opts14 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
     const NEW = {
       colorbalance: 'Protect skin',
       highlightsshadows: 'Protect skin',
+      faded: 'Affects',
     };
     Object.keys(NEW).forEach(type => _o14Need(type, _O14_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];
