@@ -178373,29 +178373,31 @@
         const ms = w.getComputedStyle(mk), box = mk.getBoundingClientRect();
         if (ms.display === 'none' || ms.visibility === 'hidden' || ms.opacity !== '1' || !(box.width > 0 && box.height > 0)) throw new Error('in the ' + look + ' look a stylesheet hides the mark (display ' + ms.display + ', visibility ' + ms.visibility + ', opacity ' + ms.opacity + ', ' + Math.round(box.width) + 'x' + Math.round(box.height) + ')');
         if (w.getComputedStyle(sp).opacity !== '1') throw new Error('in the ' + look + ' look the splash is at opacity ' + w.getComputedStyle(sp).opacity + ' before its dissolve');
-        const prop = look === 'light' ? 'background-color' : 'opacity';
-        let running = null;
-        const seen = setInterval(function () {
-          if (running === null && sp.classList.contains('splash-out')) {
-            try { running = sp.getAnimations().map(function (a) { return a.transitionProperty || a.animationName || '?'; }).join(', ') || 'none'; } catch (e) { running = '?'; }
-          }
-        }, 20);
+        /* On the first 20 ms tick that sees the dissolve, every background-color transition on #splash and <html> is
+           finished at once and the colours are read in the same callback. Waiting 0.9 s for transitionend raced the splash's
+           own removal 1 s after the dissolve begins: a stall in that gap cancels the transition and the test timed out on
+           a hand-over that did happen (the review of the fold, S1). */
         const end = await new Promise(function (res) {
-          const to = setTimeout(function () { res(null); }, 12000);
-          sp.addEventListener('transitionend', function h(e) {
-            if (e.target !== sp || e.propertyName !== prop) return;
-            sp.removeEventListener('transitionend', h);
-            clearTimeout(to);
-            res({ sp: w.getComputedStyle(sp).backgroundColor, root: w.getComputedStyle(root).backgroundColor });
-          });
+          let seen = 0;
+          const to = setTimeout(function () { clearInterval(seen); res(null); }, 12000);
+          seen = setInterval(function () {
+            if (!sp.classList.contains('splash-out')) return;
+            clearInterval(seen); clearTimeout(to);
+            let bg = [];
+            try {
+              bg = sp.getAnimations().concat(root.getAnimations()).filter(function (a) { return a.transitionProperty === 'background-color'; });
+              bg.forEach(function (a) { a.finish(); });
+            } catch (e) {}
+            res({ n: bg.length, sp: w.getComputedStyle(sp).backgroundColor, root: w.getComputedStyle(root).backgroundColor });
+          }, 20);
         });
-        clearInterval(seen);
         if (look === 'light') {
-          if (!end) throw new Error('in the light look #splash’s background-color never moved over the dissolve — the status strip stays dark over the light Home, then snaps (queue 920; transitions running on #splash as the dissolve began: ' + (running === null ? 'the dissolve was never seen' : running) + ')');
+          if (!end) throw new Error('in the light look the splash never began its dissolve within 12 s');
+          if (!end.n) throw new Error('in the light look no background-color transition ran on #splash or <html> as the dissolve began — the status strip stays dark over the light Home, then snaps (queue 920)');
           if (end.sp !== LIGHT || end.root !== LIGHT) throw new Error('in the light look, at the end of the dissolve, #splash’s colour is ' + end.sp + ' and the canvas is ' + end.root + ', not the light Home’s ' + LIGHT);
         } else {
-          if (!end) throw new Error('CONTROL: in the dark look the splash never dissolved within 12 s, so the light reading above has nothing to compare with');
-          if (end.sp !== GROUND || end.root !== GROUND) throw new Error('CONTROL: in the dark look, at the end of the dissolve, #splash’s colour is ' + end.sp + ' and the canvas is ' + end.root + ' — the light hand-over leaked into the dark look');
+          if (!end) throw new Error('CONTROL: in the dark look the splash never began its dissolve within 12 s, so the light reading above has nothing to compare with');
+          if (end.n || end.sp !== GROUND || end.root !== GROUND) throw new Error('CONTROL: in the dark look, at the end of the dissolve, #splash’s colour is ' + end.sp + ' and the canvas is ' + end.root + ' (' + end.n + ' background-color transition(s)) — the light hand-over leaked into the dark look');
         }
       } finally {
         run.restore();

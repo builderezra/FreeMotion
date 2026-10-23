@@ -113,10 +113,13 @@
     html.splash-on.splash-kf-on:has(#splash), html.splash-on.splash-kf-on body { background: #0b0b0d; }
     #splash.splash-kf.splash-out { transition: opacity .9s cubic-bezier(.45, 0, .55, 1), background-color .9s cubic-bezier(.45, 0, .55, 1); }
     #splash.splash-kf.splash-out.splash-cut { transition: opacity .28s ease, background-color .28s ease; }
-    html[data-home="light"].splash-kf-out #splash.splash-kf.splash-out { background-color: #fafdff; }
-    html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash), html[data-home="light"].splash-on.splash-kf-on.splash-kf-out body { background-color: #fafdff; transition: background-color .9s cubic-bezier(.45, 0, .55, 1); }
-    html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash.splash-cut), html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash.splash-cut) body { transition: background-color .28s ease; }
+    html[data-home="light"].splash-kf-out:has(#home-screen:not(.hidden)) #splash.splash-kf.splash-out { background-color: #fafdff; }
+    html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash):has(#home-screen:not(.hidden)), html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#home-screen:not(.hidden)) body { background-color: #fafdff; transition: background-color .9s cubic-bezier(.45, 0, .55, 1); }
+    html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash.splash-cut):has(#home-screen:not(.hidden)), html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash.splash-cut):has(#home-screen:not(.hidden)) body { transition: background-color .28s ease; }
     #splash-mark { display: block; width: min(92vw, 48vh); height: auto; aspect-ratio: 200 / 260; pointer-events: none; }
+    /* Before the mark's clock starts (the whole boot, on a cold launch) its first frame is empty, so only the dark ground
+       shows: no 'tap to skip' over an empty box (the PM, 23 Oct). A tap still skips: the listener is on #splash. */
+    #splash.splash-wait #splash-skip { visibility: hidden; }
   </style>
   <div id="splash" class="hidden" aria-hidden="true">
     <svg id="splash-mark" viewBox="0 0 200 260" aria-hidden="true" focusable="false">
@@ -198,7 +201,7 @@
       sp.classList.remove('hidden');
       // Canvas and splash share one ground for as long as it is up (queue 162) — see html.splash-on in styles.css.
       try { document.documentElement.classList.add('splash-on', 'splash-kf-on'); } catch (e) {}
-      if (ANIM) { try { svg.setCurrentTime(0); } catch (e) {} }
+      if (ANIM) { try { svg.setCurrentTime(0); } catch (e) {} sp.classList.add('splash-wait'); }
       var gone = false;
       // Two speeds, deliberately (v4.92), the same two the film had:
       //   - NATURAL end: the finished mark has held, and the splash takes ~900ms to dissolve, so the home backdrop blooms
@@ -235,21 +238,23 @@
           if (gone) return;
           var t = 0;
           try { t = svg.getCurrentTime(); } catch (e) {}
-          if (t > 0 && !started) started = Date.now();
+          if (t > 0 && !started) { started = Date.now(); sp.classList.remove('splash-wait'); }
           if (t >= END_S + HOLD_S) dismiss(false);
           else if (started && Date.now() - started > (END_S + HOLD_S) * 1000 + 800) dismiss(true);
           else setTimeout(watch, 40);
         })();
       } else {
-        setTimeout(function () { dismiss(REDUCE); }, STILL_MS);
+        /* The still is held for STILL_MS from the page's LOAD, not from this script: started here it handed over while the
+           boot was still running, so he saw the logo, then a half-booted page, then Home (the review of the fold, S3). */
+        var still = function () { setTimeout(function () { dismiss(REDUCE); }, STILL_MS); };
+        if (document.readyState === 'complete') still(); else window.addEventListener('load', still);
       }
       sp.addEventListener('pointerdown', function (e) { e.preventDefault(); dismiss(true); });   // preventDefault kills the synthesized post-touch click (it punched through to editor controls)
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') dismiss(true); });
-      /* The backstop, from this script: nothing holds the editor hostage. The animated path waits 8s, for a clock that
-         never starts (or starts very late); no later, because home.js and storage.js arm 6s fallbacks of their own when
-         Home opens, and those must not play the entrance behind a splash that is still opaque. The still path keeps 5s
-         (it hands over after STILL_MS anyway). */
-      setTimeout(function () { dismiss(true); }, ANIM ? 8000 : 5000);
+      /* The backstop, from this script: nothing holds the editor hostage. Both paths wait 8s, for a clock that never
+         starts (or a load that comes very late); no later, because home.js and storage.js arm 6s fallbacks of their own when
+         Home opens, and those must not play the entrance behind a splash that is still opaque. */
+      setTimeout(function () { dismiss(true); }, 8000);
     })();
   </script>
   <div id="app">
