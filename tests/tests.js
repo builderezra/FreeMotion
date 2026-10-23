@@ -60652,6 +60652,73 @@
     } finally { FM.media.remove(L.id); FM.scene.layers = keep; FM.time = keepT; FM.playing = wasPlaying; if (FM.refreshAll) FM.refreshAll(); }
   });
 
+  /* #663 (the 23 Oct hunt's finding 1 and its refuter). A filmstrip asked for while paused ran whenever its turn in the one strip
+   * queue came, Play or no Play, and drove the clip's OWN element: its seeks, every tick of playback pausing and muting that element
+   * for as long as they took (FM.seekBusy), then a put-back to a stale time. Split a clip and press Play to check the cut, and the
+   * tail half (a fresh record with no strip yet) went silent for a second or so, then restarted cold.
+   * The queue is drained first with a strip of its own, so nothing ahead of this one can hide its seeks.
+   * FAILS BEFORE THE FIX: with FM.playing true the strip seeks the stand-in at once (its 2 frames and the put-back).
+   * CONTROL: the same strip, once playback stops, seeks it and is stored. */
+  test('663 a filmstrip asked for before Play does not seek or hold a playing clip, and builds once playback stops', { item: '663', budgetMs: 40000 }, async function () {
+    if (typeof FM.buildClipStrip !== 'function') throw new Error('FM.buildClipStrip is not exposed');
+    const wasPlaying = FM.playing;
+    const el = fakeStripEl202(2), m = { kind: 'video', el: el, duration: 4, width: 64, height: 48 };
+    const drainEl = fakeStripEl202(2), drain = { kind: 'video', el: drainEl, duration: 4, width: 64, height: 48 };
+    let p = null;
+    try {
+      FM.playing = false;
+      const drained = await Promise.race([FM.buildClipStrip(drain, 1).then(() => true), sleep(15000).then(() => false)]);
+      if (!drained || !Array.isArray(drain.stripFrames)) throw new Error('setup: the strip queue did not drain within 15 s, so nothing below is measured');
+      FM.playing = true;
+      p = FM.buildClipStrip(m, 2);
+      let busy = 0;
+      const until = performance.now() + 300;
+      while (performance.now() < until) { if (FM.seekBusy(m)) busy++; await sleep(20); }
+      const whilePlaying = el.writes.slice();
+      if (whilePlaying.length || busy) throw new Error('while the clip was playing its filmstrip seeked it ' + whilePlaying.length + ' time(s) (' + whilePlaying.map(v => v.toFixed(3)).join(', ') + ') and held it busy on ' + busy + ' sample(s) — every tick of playback pauses and mutes a busy clip, so its sound cuts out until the strip is done');
+      FM.playing = false;
+      const done = await Promise.race([p.then(() => true), sleep(15000).then(() => false)]);
+      if (!done) throw new Error('CONTROL: 15 s after playback stopped the filmstrip had still not finished, so it never builds');
+      if (el.writes.length < 2 || !Array.isArray(m.stripFrames)) throw new Error('CONTROL: once playback stopped the filmstrip made ' + el.writes.length + ' seek(s) and stored ' + m.stripFrames + ' — it no longer builds at all');
+    } finally {
+      FM.playing = wasPlaying;
+      if (p && m.stripFrames === undefined) { m._released = true; el.fire('emptied'); await Promise.race([p, sleep(3000)]); }
+    }
+  });
+
+  /* #663, the other half. A strip already under way when Play is pressed went on to its end: the rest of its seeks and then a
+   * put-back to the time the element had before the strip, on an element playback had just started.
+   * FAILS BEFORE THE FIX: Play pressed at the strip's first seek, and it still makes its second seek and the put-back (3 writes)
+   * and stores the strip.
+   * CONTROL: after the pause the strip is built again, whole. */
+  test('663 a filmstrip under way when Play is pressed stops at once and leaves the clip to playback, then builds whole after the pause', { item: '663', budgetMs: 40000 }, async function () {
+    if (typeof FM.buildClipStrip !== 'function') throw new Error('FM.buildClipStrip is not exposed');
+    const wasPlaying = FM.playing;
+    const el = fakeStripEl202(2), m = { kind: 'video', el: el, duration: 4, width: 64, height: 48 };
+    let armed = true, p = null;
+    Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) { el.writes.push(v); this._t = v; if (armed) { armed = false; FM.playing = true; } setTimeout(() => el.fire('seeked'), 0); }, configurable: true });
+    try {
+      FM.playing = false;
+      p = FM.buildClipStrip(m, 2);
+      const until = performance.now() + 15000;
+      while ((armed || FM.seekBusy(m)) && performance.now() < until) await sleep(20);
+      if (armed) throw new Error('setup: the filmstrip never made its first seek, so Play was never pressed under it');
+      await sleep(300);
+      const writes = el.writes.length, stored = m.stripFrames, busy = FM.seekBusy(m), muted = el.muted;
+      if (writes > 1) throw new Error('Play was pressed at the filmstrip’s first seek and it went on to make ' + writes + ' (' + el.writes.map(v => v.toFixed(3)).join(', ') + ') — the rest of the strip and a put-back to a stale time, on a clip that is playing, so its sound cuts out and it restarts cold');
+      if (stored !== undefined) throw new Error('a filmstrip cut short by Play was stored (' + (Array.isArray(stored) ? stored.length + ' frame(s)' : stored) + ') — a part-built strip is never built again');
+      if (busy) throw new Error('after the filmstrip stood down for Play the clip is still held busy, so playback keeps it paused and muted');
+      if (muted) throw new Error('the filmstrip stood down for Play and left the clip muted');
+      FM.playing = false;
+      const done = await Promise.race([p.then(() => true), sleep(15000).then(() => false)]);
+      if (!done) throw new Error('CONTROL: 15 s after playback stopped the cut-short filmstrip had still not been built again');
+      if (el.writes.length < writes + 2 || !Array.isArray(m.stripFrames)) throw new Error('CONTROL: after the pause the filmstrip made ' + (el.writes.length - writes) + ' more seek(s) and stored ' + m.stripFrames + ' — it is not built again whole');
+    } finally {
+      FM.playing = wasPlaying;
+      if (p && m.stripFrames === undefined) { m._released = true; el.fire('emptied'); await Promise.race([p, sleep(3000)]); }
+    }
+  });
+
   /* #202 H4. FM.play wrote the raw frame edge to every clip's element, while a paused element sits half a millisecond inside its
    * frame (FM.frameSeekTarget, where the paused seek and FM.pause put it), so every press of Play was a real decoder seek at the
    * moment the sound has to start.
