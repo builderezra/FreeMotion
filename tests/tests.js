@@ -60750,6 +60750,50 @@
     } finally { FM.requestRender = realRender; FM.playing = wasPlaying; }
   });
 
+  /* #202 H2. FM.play held the clock for at most 400 ms for a clip to start. A COLD clip (nothing buffered yet: the first Play after an
+   * import on an iPhone) that took longer was left behind: the clock ran on, the first warm sync sample learned the whole stall as
+   * output latency, and the clip played that far behind the playhead until the next Play.
+   * FAILS BEFORE THE FIX: a cold element (readyState 2) that starts 900 ms after Play plays about half a second behind the clock; and
+   * a cold element whose play() is refused still holds the start for the whole 400 ms.
+   * CONTROLS: a warm element with no stall keeps up with the clock (the rig plays, and its lag reads near 0); a cold element that never
+   * starts does not hold the transport for ever. */
+  test('202 Play waits longer for a cold clip to start, not at all for one whose play is refused, and never for ever', { item: '202', budgetMs: 30000 }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const run = async function (rs, how, ms) {
+      const rig = transportRig({ duration: 20 });
+      try {
+        const rec = FM.media.get(rig.layer.id);
+        // no filmstrip build, so nothing else seeks the rig's element
+        if (rec && rec.stripFrames === undefined) rec.stripFrames = [];
+        rig.el.readyState = rs;
+        const realPlay = rig.el.play;
+        if (how === 'refuse') {
+          rig.el.play = function () { const e = new Error('refused by the test'); e.name = 'NotAllowedError'; return Promise.reject(e); };
+        } else if (how) {
+          // the element starts producing `how` ms after play(), as a cold clip does
+          rig.el.play = function () { const p = realPlay.call(rig.el); rig.el._stall = performance.now() + how; return p; };
+        }
+        FM.play();
+        await sleep(ms);
+        const r = { clock: FM.clockNow(), el: rig.el.currentTime, playing: !!FM.playing };
+        r.lag = r.clock - r.el;
+        return r;
+      } finally { rig.restore(); }
+    };
+    try {
+      const warm = await run(4, 0, 1600);
+      if (!warm.playing || !(warm.clock > 1)) throw new Error('CONTROL: a warm clip with no stall did not play (the clock at ' + warm.clock.toFixed(3) + ' s after 1.6 s)');
+      if (Math.abs(warm.lag) > 0.1) throw new Error('CONTROL: a warm clip with no stall sat ' + warm.lag.toFixed(3) + ' s off the clock, so this rig cannot tell a lag from its own noise');
+      const cold = await run(2, 900, 2600);
+      if (cold.lag > 0.15) throw new Error('a cold clip (readyState 2) that started 900 ms after Play played ' + cold.lag.toFixed(3) + ' s behind the playhead: the start wait gave up at 400 ms, the clock ran on without it, and the sync learned the stall as output latency, so it stays that far behind until the next Play');
+      const refused = await run(2, 'refuse', 350);
+      if (!(refused.clock > 0.1)) throw new Error('a cold clip whose play() was refused held the start: 350 ms after Play the clock was at ' + refused.clock.toFixed(3) + ' s. A refused element never advances, so waiting for it only freezes the playhead');
+      const stuck = await run(2, 1e9, 2600);
+      if (!(stuck.clock > 0.2)) throw new Error('CONTROL: a cold clip that never starts held the transport for ever: the clock was at ' + stuck.clock.toFixed(3) + ' s after 2.6 s');
+    } finally { if (hadHome && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open(); }
+  });
+
   test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
     var keep = FM.scene.layers.slice(), keepT = FM.time;
     var fps = FM.scene.project.fps || 30;
