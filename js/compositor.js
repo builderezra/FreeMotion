@@ -905,7 +905,13 @@ window.FM = window.FM || {};
       { key: 'blacks', label: 'Blacks', min: -100, max: 100, step: 1, def: 0 },
       { key: 'width', label: 'Tonal width', min: 10, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'radius', label: 'Local radius', min: 0, max: 200, step: 1, def: 0, unit: 'px', note: '0 = whole picture · above 0 = area by area, and black stays black' },
-      { key: 'sat', label: 'Colour boost', min: -100, max: 100, step: 1, def: 0 }] },
+      { key: 'sat', label: 'Colour boost', min: -100, max: 100, step: 1, def: 0 },
+      /* #966 opts14 (hunt/fx14, his "more choices always better"): the lift and the pull always took every face with them — a shadow
+         lift greys a dark face, a highlight pull muddies a lit one — and always at full strength. PROTECT SKIN holds skin-coloured pixels
+         back with Teal & Orange's skin window (skinW12), and MIX lays the recovered picture over the plain one. 0 % and 100 % run the old
+         loop untouched (tone13 only off them), so the 17 library filters built on it draw what they drew. */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' }] },
     { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°', overriddenBy: 'shape', liveWhen: 0 },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
       /* #482 polish 14.1 (answers C45). Every default is the old blur byte for byte; no library filter carries a Tilt Shift.
          Sharp band and Focus X are fractions of the frame, not px, so pxToPlate has nothing to scale. */
@@ -10683,7 +10689,13 @@ window.FM = window.FM || {};
         return; }
       if(cbRg>0){ for(var cbJ=0;cbJ<cbN;cbJ+=4){ if(d[cbJ+3]<=0)continue; var cbL=(0.299*d[cbJ]+0.587*d[cbJ+1]+0.114*d[cbJ+2])/255, cbW=cbRg===1?(1-cbL)*(1-cbL):cbRg===3?cbL*cbL:1-(2*cbL-1)*(2*cbL-1);
           var cbQ=d[cbJ]+cbAddR*cbW; d[cbJ]=cbQ<0?0:(cbQ>255?255:cbQ); cbQ=d[cbJ+1]+cbAddG*cbW; d[cbJ+1]=cbQ<0?0:(cbQ>255?255:cbQ); cbQ=d[cbJ+2]+cbAddB*cbW; d[cbJ+2]=cbQ<0?0:(cbQ>255?255:cbQ); } return; } for(var cbI=0;cbI<cbN;cbI+=4){ if(d[cbI+3]>0){ var cbVr=d[cbI]+cbAddR; d[cbI]=cbVr<0?0:(cbVr>255?255:cbVr); var cbVg=d[cbI+1]+cbAddG; d[cbI+1]=cbVg<0?0:(cbVg>255?255:cbVg); var cbVb=d[cbI+2]+cbAddB; d[cbI+2]=cbVb<0?0:(cbVb>255?255:cbVb); } } },
-    highlightsshadows: function(d,W,H,p,t){ var hsHi = fparam(p, 'highlights', -40, t); hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh = fparam(p, 'shadows', 50, t); hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4;
+    highlightsshadows: function(d,W,H,p,t){
+      /* #966 opts14: PROTECT SKIN over 0 % or MIX under 100 % runs tone13 — this very kernel without the two (Whites, Blacks, Tonal
+         width, Local radius and Colour boost as they are), its result laid in by Mix and by how far from skin each pixel's own colour
+         is; 0 % and 100 % run the lines below untouched. */
+      const hsSk14 = p.skin == null ? 0 : FM.evalProp(p.skin, t), hsMx14 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (hsSk14 > 0 || hsMx14 < 100) { tone13(d, W, H, p, t, PIXEL_FX.highlightsshadows, ['skin', 'mix'], 0, hsMx14, hsSk14); return; }
+      var hsHi = fparam(p, 'highlights', -40, t); hsHi=hsHi<-100?-100:hsHi>100?100:hsHi; var hsSh = fparam(p, 'shadows', 50, t); hsSh=hsSh<-100?-100:hsSh>100?100:hsSh; var hsSA=hsSh/100*120, hsHA=hsHi/100*120; var hsN=W*H*4;
       /* #482 polish 5.2 — Whites, Blacks, Tonal width, Local radius, Colour boost (hsGrade, above PIXEL_FX). At their
          defaults none of them is read past this line: the old loop below runs exactly as it always has. */
       var hsRd = hsNum(fparam(p, 'radius', 0, t), 0, 2000, 0), hsWd = hsNum(fparam(p, 'width', 100, t), 10, 100, 100), hsWt = hsNum(fparam(p, 'whites', 0, t), -100, 100, 0), hsBk = hsNum(fparam(p, 'blacks', 0, t), -100, 100, 0), hsCc = hsNum(fparam(p, 'sat', 0, t), -100, 100, 0);

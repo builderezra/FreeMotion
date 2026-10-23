@@ -178044,9 +178044,11 @@
   /* every new key, by effect, and every new control off its default on the effect's own default settings */
   const _O14_NEW = {
     colorbalance: ['skin', 'mix'],
+    highlightsshadows: ['skin', 'mix'],
   };
   const _O14_OFF = {
     colorbalance: [{ skin: 100 }, { mix: 50 }],
+    highlightsshadows: [{ skin: 100 }, { mix: 50 }],
   };
   /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
      the new keys taken away (every saved project), each case on its own fixture, moment and plate */
@@ -178163,10 +178165,79 @@
   });
   /* ---- end Colour Balance ---- */
 
+  /* ---- Highlights & Shadows: Protect skin and Mix ---- */
+  /* At its defaults (Highlights −40, Shadows 50, the rest at rest) the kernel adds the same amount to all three channels of a pixel:
+     60 x (1 − L)² − 48 x L² on its brightness L, into the clamped array. Grey 60 (L 0.235): 35.11 − 2.66 = +32.4, so 92; grey 240 (L
+     0.941): 0.21 − 42.52 = −42.3, so 198. On round thirteen's six pixels: the light skin tone (L 0.707) falls 18.9 to (201, 151, 111),
+     the deeper one (L 0.477) rises 5.5 to (166, 116, 86), the rose (L 0.542) falls 1.49 to (219, 99, 119), the blue (L 0.343) rises 20.2
+     to (60, 110, 220), the green 3.3 to (63, 173, 83), the grey 2.8 to (131, 131, 131). Protect skin moves each pixel 1 − Protect skin x its skin weight of
+     the way: at 100 % both skin tones are the picture and the blue, the green and the grey keep the whole move; at 50 % the light skin
+     tone goes half way, 220 − 9.5 = 210.5 and so on, which the clamped array rounds to the even 210, 160, 120, the deeper one 163, 113,
+     83, the rose (weight 0.5, so three quarters of its move) 219.25 → 219, 99, 119. The rose at 100 % lands on a tie (219.5) that only a
+     skin weight of exactly 0.5 decides, so it is read in the busy-picture check and not by value. On the base code Protect skin is
+     ignored and both skin tones take the whole move. */
+  test('966 opts14 Highlights & Shadows has Protect skin (0–100 %, keyframable, 0 by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    _o14Need('highlightsshadows', _O14_NEW.highlightsshadows);
+    const bad = _o13Rows('highlightsshadows', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp('highlightsshadows', { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('highlightsshadows', { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Highlights & Shadows Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the lift byte for byte, at 50 % each pixel comes back half its skin weight, and with Local radius, Whites and Blacks, Tonal width, Colour boost and other amounts every pixel of a busy picture is the recovery laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone falls the whole 19 levels)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('highlightsshadows', _o13P('highlightsshadows', over), N, 1, row(), 0.5);
+    _o14Want(bad, run({}), _O13_SKIN, [[201, 151, 111], [166, 116, 86], [219, 99, 119], [60, 110, 220], [63, 173, 83], [131, 131, 131]], 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], null, [60, 110, 220], [63, 173, 83], [131, 131, 131]], 'Protect skin 100');
+    _o14Want(bad, run({ skin: 50 }), _O13_SKIN, [[210, 160, 120], [163, 113, 83], [219, 99, 119], [60, 110, 220], [63, 173, 83], [131, 131, 131]], 'Protect skin 50');
+    [{ radius: 10 }, { whites: 30, blacks: -20 }, { width: 60, sat: 40 }, { skin: 100, shadows: -30, highlights: 60 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin;
+      const w = _o14Worst('highlightsshadows', _o13P('highlightsshadows'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the recovery laid in by 1 − its skin weight)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at the defaults: grey 60 recovers to 92, so Mix 50 lands at 60 + 32 x 0.5 = 76; grey 240 recovers to 198, so 240 − 42 x 0.5 =
+     219. With Protect skin 100 as well the light skin tone is the picture and the blue goes half way, 40 + 20 x 0.5 = 50, 100, 210. On the
+     base code Mix is ignored and grey 60 comes out at 92, 16 levels from 76. */
+  test('966 opts14 Highlights & Shadows Mix: at 50 % grey 60 of a 0–255 ramp reads 76 and grey 240 reads 219, every grey sits half way between itself and its recovered value to the level, at 0 % the ramp is itself byte for byte, with Protect skin 100 as well a skin tone stays put while a blue goes half way, and a Mix keyed 0 to 100 draws its value half way (CONTROL: the whole lift takes grey 60 to 92 and grey 240 to 198)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('highlightsshadows', _o13P('highlightsshadows', over), 256, 2, _o13Lv(), 0.5);
+    const full = run({}), half = run({ mix: 50 }), none = run({ mix: 0 }), keyed = run({ mix: _o13KF(0, 100) });
+    if (_o13At(full, 256, 60, 0)[0] !== 92 || _o13At(full, 256, 240, 0)[0] !== 198) bad.push('CONTROL: at Mix 100 grey 60 reads ' + _o13At(full, 256, 60, 0)[0] + ' (92 expected) and grey 240 ' + _o13At(full, 256, 240, 0)[0] + ' (198 expected)');
+    const g60 = _o13At(half, 256, 60, 0), g240 = _o13At(half, 256, 240, 0);
+    if (g60[0] !== 76 || g60[1] !== 76 || g60[2] !== 76) bad.push('at Mix 50 grey 60 reads ' + g60.slice(0, 3).join(', ') + ', not 76, 76, 76');
+    if (g240[0] !== 219 || g240[1] !== 219 || g240[2] !== 219) bad.push('at Mix 50 grey 240 reads ' + g240.slice(0, 3).join(', ') + ', not 219, 219, 219');
+    let worst = 0, at = -1;
+    for (let v = 0; v < 256; v++) {
+      const want = _o13U8(v + (_o13At(full, 256, v, 0)[0] - v) * 0.5, 0, 0)[0], got = _o13At(half, 256, v, 0);
+      for (let c = 0; c < 3; c++) { const e = Math.abs(got[c] - want); if (e > worst) { worst = e; at = v; } }
+    }
+    if (worst > 0) bad.push('at Mix 50 grey ' + at + ' reads ' + _o13At(half, 256, at, 0).slice(0, 3).join(', ') + ', ' + worst + ' levels from half way to its recovered value');
+    const m0 = E1.maxDiff(none, _o13Lv());
+    if (m0 !== 0) bad.push('at Mix 0 the ramp moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(keyed, half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const N = _O13_SKIN.length, both = _o13Run('highlightsshadows', _o13P('highlightsshadows', { mix: 50, skin: 100 }), N, 1, _o13Row(_O13_SKIN)(), 0.5);
+    _o14Want(bad, both, _O13_SKIN, [[220, 170, 130], null, null, [50, 100, 210]], 'Mix 50 with Protect skin 100');
+    const w = _o14Worst('highlightsshadows', _o13P('highlightsshadows'), { mix: 35, radius: 8, blacks: 20 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with Local radius and Blacks: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts14 Highlights & Shadows at Protect skin 0 % and Mix 100 % draws byte for byte what it drew without them — at its defaults, on other amounts, with Whites and Blacks, a Tonal width, a Local radius and Colour boost, keyframed, and on a half-size plate (CONTROL: Protect skin and Mix each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o14Need('highlightsshadows', _O14_NEW.highlightsshadows);
+    const bad = _o14Ident('highlightsshadows', [{}, { over: { shadows: 90, highlights: -80 } }, { over: { whites: 30, blacks: -20 } }, { over: { width: 50 } }, { over: { radius: 12, sat: 30 } }, { over: { shadows: _o13KF(0, 100) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }]);
+    _O14_OFF.highlightsshadows.forEach(o => { const n = _o14Moves('highlightsshadows', o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the lift is zero only near L 0.53, so Mix 50 moves nearly every pixel; Protect skin 100 only the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Highlights & Shadows ---- */
+
   /* the round's editors, new rows and all, fit the inspector (round thirteen's fit test) */
   test('966 opts14 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
     const NEW = {
       colorbalance: 'Protect skin',
+      highlightsshadows: 'Protect skin',
     };
     Object.keys(NEW).forEach(type => _o14Need(type, _O14_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];
