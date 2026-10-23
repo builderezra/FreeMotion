@@ -60756,14 +60756,17 @@
    * FAILS BEFORE THE FIX: a cold element (readyState 2) that starts 900 ms after Play plays about half a second behind the clock; and
    * a cold element whose play() is refused still holds the start for the whole 400 ms.
    * CONTROLS: a warm element with no stall keeps up with the clock (the rig plays, and its lag reads near 0); a cold element that never
-   * starts does not hold the transport for ever. */
+   * starts does not hold the transport for ever.
+   * AND a clip the app has already judged undecodable (rec.undecodable, queue 129's blank clip) holds the start no longer than a warm
+   * one: it never starts and its play() never settles, so counted as cold it would freeze every press of Play for 2 s. */
   test('202 Play waits longer for a cold clip to start, not at all for one whose play is refused, and never for ever', { item: '202', budgetMs: 30000 }, async function () {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
-    const run = async function (rs, how, ms) {
+    const run = async function (rs, how, ms, blank) {
       const rig = transportRig({ duration: 20 });
       try {
         const rec = FM.media.get(rig.layer.id);
+        if (blank && rec) rec.undecodable = true;
         // no filmstrip build, so nothing else seeks the rig's element
         if (rec && rec.stripFrames === undefined) rec.stripFrames = [];
         rig.el.readyState = rs;
@@ -60791,6 +60794,8 @@
       if (!(refused.clock > 0.1)) throw new Error('a cold clip whose play() was refused held the start: 350 ms after Play the clock was at ' + refused.clock.toFixed(3) + ' s. A refused element never advances, so waiting for it only freezes the playhead');
       const stuck = await run(2, 1e9, 2600);
       if (!(stuck.clock > 0.2)) throw new Error('CONTROL: a cold clip that never starts held the transport for ever: the clock was at ' + stuck.clock.toFixed(3) + ' s after 2.6 s');
+      const blankRun = await run(2, 1e9, 700, true);
+      if (!(blankRun.clock > 0.15)) throw new Error('a clip the app has already judged undecodable held the start like a cold one: 700 ms after Play the clock was at ' + blankRun.clock.toFixed(3) + ' s. It never decodes, so every press of Play froze for 2 s instead of 0.4 s');
     } finally { if (hadHome && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open(); }
   });
 

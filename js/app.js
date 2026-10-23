@@ -2763,8 +2763,9 @@ window.FM = window.FM || {};
         try {
           /* #202 H2: COLD = nothing buffered ahead of the playhead yet, or a seek still in flight. Asked BEFORE this pass's own seek,
              which leaves every real element reading as seeking, so asked after it every element would be cold. `undefined < 3` is
-             false, so a stand-in with no readyState counts as warm. */
-          if (m.el.readyState < 3 || m.el.seeking === true) coldEls.add(m.el);
+             false, so a stand-in with no readyState counts as warm. A clip already judged undecodable (queue 129's blank clip) is
+             never cold: it never starts and its play() never settles, so the long wait would freeze every press of Play for 2 s. */
+          if (!m.undecodable && (m.el.readyState < 3 || m.el.seeking === true)) coldEls.add(m.el);
           const target = seekTargetFor(m, local);
           const noFrame = m.el.readyState < 2 && !m.el.seeking;
           if (noFrame || !(Math.abs((m.el.currentTime || 0) - target) < 0.001)) m.el.currentTime = target;
