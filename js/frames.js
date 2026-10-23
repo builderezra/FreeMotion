@@ -62,7 +62,9 @@ window.FM = window.FM || {};
 
   // Seek to t and capture as soon as the seek completes. (Avoid post-'seeked' timers:
   // backgrounded tabs clamp setTimeout to ~1s, which would make decoding crawl.)
-  function seekAndPaint(el, t) {
+  /* stop (optional, #663): asked before each re-seek. When it says yes the element is no longer ours (Play
+     took it), so a miss is not retried: the 'seeked' was Play's, and seeking back would move his clip. */
+  function seekAndPaint(el, t, stop) {
     return new Promise(res => {
       let tries = 0, emptied = false;
       const attempt = () => {
@@ -75,7 +77,7 @@ window.FM = window.FM || {};
           // A stale 'seeked' (another consumer's seek landing) or the 500ms cap can leave the
           // element on the WRONG frame — verify we actually arrived, one re-seek per miss.
           // Not on an element that was just EMPTIED: there is no frame left to arrive at.
-          if (!emptied && Math.abs((el.currentTime || 0) - t) > 0.2 && tries < 2) { tries++; attempt(); return; }
+          if (!emptied && !(stop && stop()) && Math.abs((el.currentTime || 0) - t) > 0.2 && tries < 2) { tries++; attempt(); return; }
           res();
         };
         /* The clip was released under this seek (queue 690, hunt f) — its project was left and its src taken
@@ -334,7 +336,8 @@ window.FM = window.FM || {};
           for (let i = 0; i < count; i++) {
             if (m._released) break;   // released mid-strip (queue 690): every seek left would wait on nothing
             if (stripMustWait(m)) { played = true; break; }   // #663: Play was pressed — the element is playback's now
-            await seekAndPaint(el, Math.min((i + 0.5) * dur / count, Math.max(0, dur - 0.001)));
+            await seekAndPaint(el, Math.min((i + 0.5) * dur / count, Math.max(0, dur - 0.001)), () => stripMustWait(m));
+            if (stripMustWait(m)) { played = true; break; }   // #663: Play came during the seek, so no bitmap for a strip being thrown away
             try { frames.push(opt ? await createImageBitmap(el, opt) : await createImageBitmap(el)); } catch (e) {}
           }
           // #663: never write the time of an element that is playing — the transport owns it, and the old time is stale

@@ -60696,7 +60696,10 @@
     const wasPlaying = FM.playing;
     const el = fakeStripEl202(2), m = { kind: 'video', el: el, duration: 4, width: 64, height: 48 };
     let armed = true, p = null;
-    Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) { el.writes.push(v); this._t = v; if (armed) { armed = false; FM.playing = true; } setTimeout(() => el.fire('seeked'), 0); }, configurable: true });
+    /* The arming write also stands in for Play's own seek (FM.play writes every in-window clip's time): the element lands at
+       2.5, far from the strip's 1.0, so the 'seeked' the strip hears is Play's. A strip that re-seeks to its own target then
+       shows up as a second write. Set directly, not through this setter, so it neither recurses nor counts as the strip's. */
+    Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) { el.writes.push(v); this._t = v; if (armed) { armed = false; FM.playing = true; this._t = 2.5; } setTimeout(() => el.fire('seeked'), 0); }, configurable: true });
     try {
       FM.playing = false;
       p = FM.buildClipStrip(m, 2);
