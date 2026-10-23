@@ -106622,7 +106622,10 @@
    * FAILS BEFORE THE FIX: a cold second half (readyState 1) 1.8 s before the cut is left paused; it is first started 0.4 s before.
    * CONTROLS: a warm one (readyState 4) is left alone at 1.8 s and 0.5 s and started, muted, from the right sample at 0.35 s; a cold
    * one 2.2 s out is not started yet; one already judged undecodable, or one met during an export, keeps the 0.4 s. And the hand-over:
-   * once the primed half has played it is paused again, muted, and restarted by the ordinary pre-roll from the right sample. */
+   * once the primed half has played it is paused again, muted, and restarted by the ordinary pre-roll from the right sample.
+   * The fold (the review and its refuter): the hand-over reads readyState 2, so only the warm mark keeps it parked (S1); a half cold
+   * only by a seek in flight is primed and kept playing until its play() settles (S2); a SECOND Play across the cut primes it again,
+   * the warm mark lasts one pass (S4); and in a chain of three pieces the third is not primed while the first plays (S3). */
   test('663 a cold clip after a split is readied before the cut, up to 2 s early, and a warm one still 0.4 s before', { item: '663', budgetMs: 40000 }, async function () {
     if (typeof FM._syncMediaToClock !== 'function') throw new Error('FM._syncMediaToClock is not exposed');
     if (typeof FM.splitLayer !== 'function') throw new Error('FM.splitLayer is missing');
@@ -106630,7 +106633,7 @@
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene, keepT = FM.time, wasPlaying = FM.playing, wasExporting = FM._exporting, made = [];
     const CUT = 3;
-    let am = null, bm = null, aEl = null, bEl = null, bUnd = false;
+    let am = null, bm = null, aEl = null, bEl = null, bUnd = false, cm = null, cEl = null, release = null;
     const fake = rs => ({ readyState: rs, seeking: false, paused: true, muted: false, volume: 1, playbackRate: 1, duration: 6, currentTime: 0, plays: 0,
       play() { this.plays++; this.paused = false; return Promise.resolve(); }, pause() { this.paused = true; },
       addEventListener() {}, removeEventListener() {} });
@@ -106675,11 +106678,28 @@
           ' s) - it waits for the 0.4 s pre-roll sized for a warm desktop element, so on a phone the cut opens silent and the start-up is learned as latency for the rest of the clip');
       }
       await sleep(0);
-      fb.currentTime = (+fb.currentTime) + 0.2; fb.readyState = 4;
+      fb.currentTime = (+fb.currentTime) + 0.2; fb.readyState = 2;
       tickAt(CUT - 1.5);
       if (fb.plays !== 1 || !fb.paused || !fb.muted) throw new Error('once the primed second half has played, 1.5 s before the cut, it is not paused again and muted for the ordinary pre-roll (' + say(fb) + ') - the start it was late by would be carried to the cut');
+      tickAt(CUT - 1.0);
+      if (fb.plays !== 1 || !fb.paused) throw new Error('the primed second half, played once and now paused but still reading readyState 2, was started again 1.0 s before the cut (' + say(fb) + ') - once it has played it is a warm tail and waits for the ordinary pre-roll, or it is primed, parked and primed again until the cut');
       tickAt(CUT - 0.35);
       if (fb.plays !== 2 || fb.paused || !fb.muted || !near(fb, 0.35)) throw new Error('the primed, now warm second half is not restarted by the ordinary pre-roll 0.35 s before the cut, muted, from ' + (first - 0.35).toFixed(3) + ' s (' + say(fb) + ')');
+
+      window.__fmStep = '663 seam second pass';
+      FM.time = CUT - 2.5; FM.play(); FM.pause();
+      fb.paused = true; fb.readyState = 1; bm._playRefusedAt = 0;
+      tickAt(CUT - 1.8);
+      if (fb.plays !== 3 || fb.paused || !fb.muted) throw new Error('on a SECOND play across the cut a cold second half is not readied 1.8 s before it (' + say(fb) + ') - the warm mark from the first pass outlived it, so only the first play across each split gets the long pre-roll');
+
+      window.__fmStep = '663 seam seeking';
+      fb = fresh(4); fb.seeking = true;
+      fb.play = function () { this.plays++; this.paused = false; return new Promise(r => { release = r; }); };
+      tickAt(CUT - 1.8);
+      if (fb.plays !== 1 || fb.paused || !fb.muted) throw new Error('a second half cold only by a seek in flight (readyState 4, seeking) is not readied 1.8 s before the cut (' + say(fb) + ') - a seek still running is cold, as FM.play counts it');
+      fb.seeking = false;
+      tickAt(CUT - 1.6);
+      if (fb.plays !== 1 || fb.paused) throw new Error('a primed second half whose seek has ended but whose play() has not settled was paused 1.6 s before the cut (' + say(fb) + ') - it keeps the long window until it is seen to play, or the pending play() is aborted and lands in his report as refused');
 
       window.__fmStep = '663 seam undecodable';
       fb = fresh(1, true);
@@ -106691,10 +106711,31 @@
       FM._exporting = true;
       try { tickAt(CUT - 1.8); } finally { FM._exporting = wasExporting; }
       if (fb.plays || !fb.paused) throw new Error('CONTROL: a cold second half was primed during an export (' + say(fb) + ') - nothing is primed while exporting');
+
+      window.__fmStep = '663 seam three pieces';
+      const CUT2 = 4.5;
+      am.el = aEl; bm.el = bEl; bm.undecodable = bUnd; bm._playRefusedAt = 0;
+      FM.setTime(CUT2);
+      await FM.splitLayer(B.id);
+      FM.scene.layers.forEach(l => { if (made.indexOf(l.id) < 0) made.push(l.id); });
+      const C = FM.scene.layers.filter(l => Math.abs(l.start - CUT2) < 1e-6)[0];
+      cm = C ? FM.media.get(C.id) : null;
+      if (!cm || cm === bm || cm === am || C.splitOf !== B.splitOf || Math.abs(B.start + B.duration - CUT2) > 1e-6) throw new Error('setup: splitting the second half again did not make a third piece at 4.50 s of the same split, with its own media');
+      cEl = cm.el;
+      const firstC = FM.layerLocalTime(C, CUT2);
+      am.el = fake(4); fb = fake(1); bm.el = fb; bm.undecodable = false;
+      const fc = fake(1); cm.el = fc; cm._playRefusedAt = 0;
+      tickAt(CUT - 0.35);
+      if (fb.plays !== 1 || fb.paused || !fb.muted) throw new Error('CONTROL: in a chain of three pieces the middle one is not pre-rolled 0.35 s before its cut (' + say(fb) + ')');
+      if (fc.plays || !fc.paused) throw new Error('a cold THIRD piece was started ' + (CUT2 - (CUT - 0.35)).toFixed(2) + ' s before its cut while the FIRST piece still plays (' + say(fc) + ') - only the cut immediately ahead gets the early prime, or a chain of short pieces runs a muted decoder for every piece within 2 s beside the audible one');
+      tickAt(CUT + 0.05);
+      if (fc.plays !== 1 || fc.paused || !fc.muted || !(Math.abs((+fc.currentTime) - (firstC - (CUT2 - CUT - 0.05) * rate)) < 0.01)) throw new Error('CONTROL: once the middle piece plays, the cold third piece ' + (CUT2 - CUT - 0.05).toFixed(2) + ' s before its cut is not readied, muted, from the right sample (' + say(fc) + ')');
     } finally {
       FM.playing = wasPlaying; FM._exporting = wasExporting;
+      if (release) release();
       if (am && aEl) am.el = aEl;
       if (bm && bEl) { bm.el = bEl; bm.undecodable = bUnd; bm._playRefusedAt = 0; }
+      if (cm && cEl) { cm.el = cEl; cm._playRefusedAt = 0; }
       FM.scene = saved; FM.time = keepT;
       made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
       try { FM.refreshAll(); } catch (e) {}

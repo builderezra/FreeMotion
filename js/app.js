@@ -2208,7 +2208,12 @@ window.FM = window.FM || {};
       el._fmSeamPriming = false; el._fmSeamWarm = true;   // #663: it has played, so from here on it is a warm tail
       try { el.addEventListener('emptied', function () { el._fmSeamWarm = false; }, { once: true }); } catch (e) {}
     }
-    if (!(lead > 0 && lead <= (seamCold(m) ? START_WAIT_COLD_MS / 1000 : PREROLL_S))) return false;
+    /* #663 review S3 and its refuter: the long window only for the cut immediately ahead (the half that ends at it has started), so a
+       chain of short split pieces primes one tail at a time beside the audible clip, not every tail within 2 s; and only for an element
+       this pre-roll primed or a paused one, so a tail already playing for another reason (a loop wrap) is parked by the fall-through. */
+    const longOk = seamCold(m) && (el.paused || el._fmSeamPriming) && lead > PREROLL_S && lead <= START_WAIT_COLD_MS / 1000
+      && FM.scene.layers.some(l => l !== layer && l.splitOf === layer.splitOf && Math.abs((l.start || 0) + (l.duration || 0) - (layer.start || 0)) < 1e-3 && FM.time >= (l.start || 0));
+    if (!(lead > 0 && lead <= (longOk ? START_WAIT_COLD_MS / 1000 : PREROLL_S))) return false;
     if (!seamAt(layer, layer.start)) return false;                 // halves pulled apart: an ordinary clip start, faded as ever
     const first = FM.layerLocalTime(layer, layer.start);
     if (first == null) return false;
@@ -2769,6 +2774,7 @@ window.FM = window.FM || {};
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
       if (!m) return;
+      if (m.el) { m.el._fmSeamWarm = false; m.el._fmSeamPriming = false; }   // #663: warm or primed is per play pass
       const local = FM.layerLocalTime(layer, FM.time);
       if (local == null) { try { m.el.pause(); } catch (e) {} return; }
       // Forward clips play natively; reversed clips are drawn from the frame cache by tick.
