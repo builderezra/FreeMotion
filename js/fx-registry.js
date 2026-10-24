@@ -467,7 +467,7 @@ window.FM = window.FM || {};
     wiggle: 'Drifts the layer around on smooth random noise.',
     /* sideways or up and down, fading: #966 opts10 */ tiles: 'Repeats the clip across the frame. Extend keeps it full size and fills outward \u2014 all round, sideways or up and down, the copies fading away if you like; Grid shrinks it into an n\u00d7n block.',
     lightleak: 'A wash of light across the frame, like a leak onto film.',
-    tealorange: 'The blockbuster grade: shadows toward teal, skin toward orange.',
+    /* by tone, mixed: #966 opts15 */ tealorange: 'The blockbuster grade: shadows toward teal, skin toward orange — on the darks, mids or lights alone if you like, mixed over the picture.',
     /* the silver tinted, skin held back: #966 opts10 */ bleachbypass: 'High-contrast, low-saturation — the bleach-bypass film process, its silver tinted any colour, faces kept warm if you like.',
     /* faces held back, brightness kept: #966 opts12 */ crossprocess: 'The colour shifts of developing film in the wrong chemistry — with faces held back from it and the brightness kept if you like.',
     nightvision: 'Green phosphor, grain and a soft vignette.',
@@ -547,7 +547,7 @@ window.FM = window.FM || {};
 
     // Blur
     /* grout or clear gaps: #966 opts8 */ mosaic: 'Averages the picture into large blocks. Coarser and blockier than Pixelate — with grout between the tiles if you like.',
-    unsharpmask: 'Sharpening with a radius — you set how WIDE the detail it hardens is, not just how much.',
+    /* faces kept smooth, by tone: #966 opts15 */ unsharpmask: 'Sharpening with a radius — you set how WIDE the detail it hardens is, not just how much — leaving faces smooth or only the darks, mids or lights hardened if you like.',
     linstreaks: 'Smears the bright parts into straight streaks along an angle.',
     spinstreaks: 'Smears the bright parts into arcs around the centre.',
     zoomstreaks: 'Smears the bright parts outward from the centre, like a zoom during the exposure.',

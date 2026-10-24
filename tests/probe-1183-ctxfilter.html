@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canvas Filter Probe</title>
+<!-- #1183 (hunt MEDIUM): does canvas ctx.filter change pixels in THIS browser? Standalone: no app scripts.
+     Open it in the browser in question and screenshot the table. Nothing is sent anywhere. -->
+<style>
+  :root { --bg: #fff; --fg: #111; --mut: #666; --ok: #0a7a2f; --bad: #b3261e; --line: #ddd; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111; --fg: #eee; --mut: #999; --ok: #5fd38a; --bad: #ff8a80; --line: #333; } }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; margin: 0; padding: 16px; }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+  td, th { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; vertical-align: top; word-break: break-word; }
+  th { color: var(--mut); font-weight: 600; }
+  .ok { color: var(--ok); font-weight: 700; } .bad { color: var(--bad); font-weight: 700; }
+  #ua { color: var(--mut); font-size: 12px; word-break: break-all; }
+</style>
+</head>
+<body>
+<h1>Canvas filter probe (#1183)</h1>
+<div id="ua"></div>
+<table><thead><tr><th style="width:44%">Check</th><th style="width:16%">Result</th><th>Detail</th></tr></thead><tbody id="rows"></tbody></table>
+<script>
+(function () {
+  'use strict';
+  var rows = document.getElementById('rows'), results = [];
+  function row(name, ok, detail) {
+    results.push({ name: name, ok: ok, detail: detail });
+    var tr = document.createElement('tr');
+    var a = document.createElement('td'); a.textContent = name;
+    var b = document.createElement('td'); b.textContent = ok === null ? 'n/a' : (ok ? 'YES' : 'NO');
+    b.className = ok === null ? '' : (ok ? 'ok' : 'bad');
+    var c = document.createElement('td'); c.textContent = detail;
+    tr.appendChild(a); tr.appendChild(b); tr.appendChild(c); rows.appendChild(tr);
+  }
+  var W = 48, H = 48;
+  // The subject: a sharp, off-centre, two-colour square on a dark ground, so blur, colour and hue all have edges and hues to move.
+  function subject() {
+    var s = document.createElement('canvas'); s.width = W; s.height = H;
+    var g = s.getContext('2d');
+    g.fillStyle = '#203040'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#e8d24a'; g.fillRect(10, 12, 18, 18);
+    g.fillStyle = '#c03030'; g.fillRect(28, 12, 8, 18);
+    return s;
+  }
+  function make(kind, wrf) {
+    var opts = wrf === undefined ? undefined : { willReadFrequently: wrf };
+    if (kind === 'offscreen') {
+      if (typeof OffscreenCanvas === 'undefined') return null;
+      var oc = new OffscreenCanvas(W, H); return oc.getContext('2d', opts);
+    }
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    return c.getContext('2d', opts);
+  }
+  function draw(ctx, filter) {
+    ctx.clearRect(0, 0, W, H);
+    ctx.filter = filter;
+    ctx.drawImage(subject(), 0, 0);
+    ctx.filter = 'none';
+    return ctx.getImageData(0, 0, W, H).data;
+  }
+  function diff(a, b) {
+    var n = 0, max = 0;
+    for (var i = 0; i < a.length; i++) { var d = Math.abs(a[i] - b[i]); if (d) { n++; if (d > max) max = d; } }
+    return { bytes: n, max: max };
+  }
+  document.getElementById('ua').textContent = navigator.userAgent;
+  // (1) blur, on every kind of context
+  [['canvas', undefined], ['canvas', false], ['canvas', true], ['offscreen', undefined], ['offscreen', false], ['offscreen', true]].forEach(function (k) {
+    var label = 'blur(4px) changes pixels: ' + (k[0] === 'offscreen' ? 'OffscreenCanvas' : '<canvas>') + (k[1] === undefined ? '' : ', willReadFrequently ' + k[1]);
+    try {
+      var ctx = make(k[0], k[1]);
+      if (!ctx) { row(label, null, 'not available in this browser'); return; }
+      if (!('filter' in ctx)) { row(label, false, 'ctx has no filter property at all'); return; }
+      var d = diff(draw(ctx, 'none'), draw(ctx, 'blur(4px)'));
+      row(label, d.bytes > 0, d.bytes + ' bytes differ, max ' + d.max + '; filter reads back as ' + JSON.stringify(ctx.filter));
+    } catch (e) { row(label, false, 'threw: ' + e.message); }
+  });
+  // (2) the colour filters, on a plain canvas
+  ['brightness(150%)', 'contrast(200%)', 'hue-rotate(90deg)', 'saturate(0%)'].forEach(function (f) {
+    try {
+      var ctx = make('canvas');
+      var d = diff(draw(ctx, 'none'), draw(ctx, f));
+      row(f + ' changes pixels', d.bytes > 0, d.bytes + ' bytes differ, max ' + d.max);
+    } catch (e) { row(f + ' changes pixels', false, 'threw: ' + e.message); }
+  });
+  // (3) determinism: the same filtered frame twice, on a fresh canvas each time, byte for byte
+  ['none', 'blur(4px)', 'hue-rotate(90deg) saturate(150%)'].forEach(function (f) {
+    try {
+      var d = diff(draw(make('canvas'), f), draw(make('canvas'), f));
+      row('same frame twice is identical: ' + f, d.bytes === 0, d.bytes ? d.bytes + ' bytes differ, max ' + d.max : 'byte for byte');
+    } catch (e) { row('same frame twice is identical: ' + f, false, 'threw: ' + e.message); }
+  });
+  // (5) the red test's CONTROL is pixelate + mirror on a TEXT layer, and neither of those goes through ctx.filter. If the text
+  // draws nothing the frame is flat, and a flat frame renders the same in any order. So: does fillText put pixels down?
+  try {
+    var tc = document.createElement('canvas'); tc.width = 140; tc.height = 100;
+    var tg = tc.getContext('2d');
+    tg.fillStyle = '#101820'; tg.fillRect(0, 0, 140, 100);
+    var blank = tg.getImageData(0, 0, 140, 100).data;
+    tg.fillStyle = '#e8d24a'; tg.font = '42px sans-serif'; tg.textBaseline = 'middle'; tg.fillText('Ag7', 53, 44);
+    var td = diff(blank, tg.getImageData(0, 0, 140, 100).data);
+    row('fillText draws (42px sans-serif)', td.bytes > 0, td.bytes + ' bytes differ from the blank ground');
+  } catch (e) { row('fillText draws (42px sans-serif)', false, 'threw: ' + e.message); }
+  // (6) …and does a nearest-neighbour shrink-and-grow (how a pixelate is drawn) change the picture?
+  try {
+    var small = document.createElement('canvas'); small.width = 6; small.height = 6;
+    var sg = small.getContext('2d'); sg.imageSmoothingEnabled = false; sg.drawImage(subject(), 0, 0, 6, 6);
+    var big = make('canvas'); big.imageSmoothingEnabled = false;
+    var before = draw(big, 'none');
+    big.clearRect(0, 0, W, H); big.drawImage(small, 0, 0, W, H);
+    var pd = diff(before, big.getImageData(0, 0, W, H).data);
+    row('nearest-neighbour shrink+grow changes pixels', pd.bytes > 0, pd.bytes + ' bytes differ, max ' + pd.max);
+  } catch (e) { row('nearest-neighbour shrink+grow changes pixels', false, 'threw: ' + e.message); }
+  // (4) GPU: what WebGL reports, if it will say. A 2D canvas has no direct flag; WebGL's renderer is the best available hint.
+  try {
+    var gl = document.createElement('canvas').getContext('webgl');
+    if (!gl) row('WebGL available (GPU hint)', false, 'no WebGL context: likely software rendering');
+    else {
+      var ext = gl.getExtension('WEBGL_debug_renderer_info');
+      var r = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      row('WebGL available (GPU hint)', true, 'renderer: ' + r + (/swiftshader|llvmpipe|software|basic render/i.test(String(r)) ? ' (SOFTWARE)' : ''));
+    }
+  } catch (e) { row('WebGL available (GPU hint)', false, 'threw: ' + e.message); }
+  window.__probe1183 = results;
+})();
+</script>
+</body>
+</html>

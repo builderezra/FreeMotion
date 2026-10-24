@@ -565,6 +565,23 @@ window.FM = window.FM || {};
   }
   FM._clipColorStops = clipColorStops;   // suite seam
   const stripCache = new Map();    // layerId -> {key, canvas}: rendered filmstrip/waveform reuse across rebuilds
+  /* ⚠️ #860 (stress hunt): MARK AND SWEEP, NOT A 40-SLOT FIFO. The cache used to drop its OLDEST entry whenever it held more
+     than 40, and a hit did not move its entry to the back. buildTracks walks the rows in the same order on every pass, so
+     above 40 picture clips each new entry evicted the one the walk would ask for ten rows later: the hit rate was 0 %, and
+     every rebuild (every tap, selection and keyframe edit) re-allocated and re-drew every strip, which is the canvas churn
+     this cache exists to stop. (compositor.js found the same thing: FIFO eviction chased the draw pointer.)
+     Now nothing is evicted by count. At the start of each buildTracks the scene's layers are the MARK, and any entry whose
+     layer is no longer in the scene (deleted, or a project closed) is SWEPT. Not "drawn this pass": the phone's one-row solo
+     view and a collapsed group draw only some rows, and sweeping the rest would repaint them all on the next tap. Every
+     entry kept belongs to a layer that exists, and is the same canvas its row shows, so this holds nothing extra beyond a
+     hidden row's strip. Waveform entries are keyed 'w' + layer id and are marked the same way. */
+  function sweepStripCache() {
+    if (!stripCache.size) return;
+    const live = new Set();
+    FM.scene.layers.forEach(l => { if (l) { live.add(l.id); live.add('w' + l.id); } });
+    stripCache.forEach((v, k) => { if (!live.has(k)) stripCache.delete(k); });
+  }
+  FM._tlStripCacheSize = () => stripCache.size;   // suite seam: what the sweep left behind
   const EASE_LABELS = { linear: 'Linear', easeIn: 'Ease In', easeOut: 'Ease Out', easeInOut: 'Ease In-Out', overshoot: 'Overshoot', anticipate: 'Anticipate' };
 
   // Abandon any in-flight clip/trim/keyframe gesture and RESTORE its pre-gesture values. Pinch-start
@@ -1129,7 +1146,18 @@ window.FM = window.FM || {};
   // and an empty project has zero width. No fit-to-viewport rescaling (which sprang trimmed clips back
   // to full width) and no divide-by-zero. ~SPAN_AT_ZOOM1 seconds fill the lane at zoom 1; zoom scales it.
   const SPAN_AT_ZOOM1 = 5;
-  function pxPerSec() { return (laneViewW() / SPAN_AT_ZOOM1) * zoom; }
+  /* THE DEEPEST ZOOM A PROJECT CAN BE LAID OUT AT (#860 hunt #7). Blink stores a box's width and position as a
+     LayoutUnit, and the largest one is (2^31 - 1)/64, about 33,554,431 px. The strip is the scrollport plus duration × pps,
+     so at 12× on a 1500 px lane (3600 px/s) a project past about 2.6 h asked for more than that: the browser clamps
+     the strip and the clips' positions, and the ruler, the clips and the scroll range stop agreeing. 3.3e7 px of
+     content leaves the scrollport half a million px of room under the limit. Applied HERE, the one place every
+     time-to-pixel conversion goes through, and not only in setZoom: a clip added later makes the project longer
+     while the zoom stays where it was. A short project is unchanged (12 until about 2.6 h at a 1500 px lane). */
+  const LAYOUT_MAX_CONTENT = 3.3e7;
+  function maxZoomAt(lane) { return Math.min(12, LAYOUT_MAX_CONTENT / Math.max(1, viewDur() * lane / SPAN_AT_ZOOM1)); }
+  function maxZoom() { return maxZoomAt(laneViewW()); }
+  function effZoom() { return Math.min(zoom, maxZoom()); }
+  function pxPerSec() { const lane = laneViewW(); return (lane / SPAN_AT_ZOOM1) * Math.min(zoom, maxZoomAt(lane)); }
   FM._tlPxPerSec = pxPerSec;   // suite seam, same as FM._tlHeadW: lets a test derive the content width
   /* The lane width the strip was last sized for (#955). The scroll listener compares it with the lane on screen: a
      difference means the window or the panel changed width since, so the strip's scroll range is stale and any
@@ -2176,8 +2204,7 @@ window.FM = window.FM || {};
             strip.width = stripW; strip.height = 32;
             if (m.stripFrames && m.stripFrames.length) {
               drawFilmstrip(strip, m.stripFrames, m);
-              stripCache.set(layer.id, { key: sKey, canvas: strip });
-              if (stripCache.size > 40) stripCache.delete(stripCache.keys().next().value);   // bounded
+              stripCache.set(layer.id, { key: sKey, canvas: strip });   // bounded by sweepStripCache (#860), not by count
             } else if (m.stripFrames === undefined && !m._stripPending && !FM.playing && FM.buildClipStrip) {
               m._stripPending = true;   // build ONCE; m.stripFrames is then set (even to []) so this never re-fires
               FM.buildClipStrip(m, 8).then(() => { m._stripPending = false; FM.timeline.rebuild(); });
@@ -2207,8 +2234,7 @@ window.FM = window.FM || {};
               wc.className = 'clip-wave';
               wc.width = stripW; wc.height = 32;
               drawWaveform(wc, m.waveform, win, wCssW);
-              stripCache.set('w' + layer.id, { key: wKey, canvas: wc });
-              if (stripCache.size > 40) stripCache.delete(stripCache.keys().next().value);
+              stripCache.set('w' + layer.id, { key: wKey, canvas: wc });   // bounded by sweepStripCache (#860)
             }
             clip.appendChild(wc);
           } else if (!m._wfPending && !m.waveform) {
@@ -3809,6 +3835,7 @@ window.FM = window.FM || {};
   }
 
   function buildTracks() {
+    sweepStripCache();   // #860: first, so every return below (an empty scene included) has swept
     tracksEl.innerHTML = '';
     applyEmptyStart();   // every rebuild, every branch — see isEmptyStart
     /* RESERVE THE CHEVRON COLUMN ONLY WHEN A GROUP EXISTS (queue 295). Every childless layer carries a
@@ -5014,7 +5041,7 @@ window.FM = window.FM || {};
         // abortGestures (not raw nulls): restore half-applied clip/trim/kf edits AND clear the
         // orphaned hold timer that could otherwise grab the WRONG clip on a later tap.
         // A ≡ reorder drag OWNS its finger: a second thumb must not convert it into a pinch.
-        if (pointers.size === 2 && !reorderActive) { dragging = false; scrub = null; abortGestures(); pinch = { startDist: pdist(), startZoom: zoom, anchorTime: timeFromX(pmidX()) }; if (FM.playing) FM.pause(); }
+        if (pointers.size === 2 && !reorderActive) { dragging = false; scrub = null; abortGestures(); pinch = { startDist: pdist(), startZoom: effZoom(), anchorTime: timeFromX(pmidX()) }; if (FM.playing) FM.pause(); }
       }, true);
       window.addEventListener('pointermove', (e) => {
         if (!pointers.has(e.pointerId)) return;
@@ -5885,18 +5912,24 @@ window.FM = window.FM || {};
       // never be seen end to end, so you scrolled blind. 0.02 puts ~250 seconds on screen (Ezra: "you
       // should be able to zoom out of the timeline way more"). Nothing gets more expensive out there:
       // the ruler thins its notches to stay >=5px apart, so a wider view draws FEWER of them.
-      zoom = Math.max(0.02, Math.min(12, z));
+      zoom = Math.max(0.02, Math.min(maxZoom(), z));   // #860 hunt #7: 12, or less where 12 would pass the layout limit (maxZoom)
       const at = (anchorTime != null) ? anchorTime : FM.time;
       this.rebuild();
       if (timelineEl) timelineEl.scrollLeft = Math.max(0, at * pxPerSec());
       this.updatePlayhead();
       const zl = document.getElementById('tl-zoom-label');
       // 2 decimals below 1x — "0.1x / 0.0x / 0.0x" made every zoomed-out step look identical
-      if (zl) zl.textContent = (zoom < 1 ? (Math.round(zoom * 100) / 100) : (Math.round(zoom * 10) / 10)) + '×';
+      const ez = effZoom();
+      if (zl) zl.textContent = (ez < 1 ? (Math.round(ez * 100) / 100) : (Math.round(ez * 10) / 10)) + '×';
     },
-    zoomBy(f, anchorTime) { this.setZoom(zoom * f, anchorTime); },
-    // exposed so the view bar can dim its arrows at the ends of the range (setZoom clamps to 0.02–12)
-    getZoom() { return zoom; },
+    /* From the zoom ON SCREEN (#860 hunt #7): a project that grew past the limit at 12× keeps `zoom` at 12 while it
+       draws at less, and a step out from 12 would change nothing on screen until it fell below that. */
+    zoomBy(f, anchorTime) { this.setZoom(effZoom() * f, anchorTime); },
+    // exposed so the view bar can dim its arrows at the ends of the range (setZoom clamps to 0.02 to maxZoom)
+    getZoom() { return effZoom(); },
+    /* The deepest zoom THIS project can be laid out at: 12, or less once 12 would pass the browser's layout limit
+       (#860 hunt #7). The view bar dims its zoom-in arrow against this, not against a fixed 12. */
+    maxZoom() { return maxZoom(); },
     stopMomentum() { stopMomentum(); },
   };
 })(window.FM);

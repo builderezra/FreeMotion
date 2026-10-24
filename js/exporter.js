@@ -1228,6 +1228,14 @@ window.FM = window.FM || {};
       const planar = new Float32Array(n * channels);   // starts as zeros — which is what the lead is
       const a = Math.max(off, lead);                     // the part of this frame the mix itself fills
       if (off + n > a) for (let c = 0; c < channels; c++) planar.set(chData[c].subarray(a - lead, off + n - lead), c * n + (a - off));
+      /* #860 (5b): BACK-PRESSURE, as the video loop has. This loop used to hand the encoder every frame of the
+         soundtrack in one synchronous pass, so an hour of sound queued 168,750 frames at once. Wait while
+         more than 32 are queued, and let a Cancel stop it here rather than after the whole encode. */
+      while (enc.encodeQueueSize > 32) {
+        if (FM._exporting && FM._exportCancel) { try { enc.close(); } catch (e) {} throw new Error('CANCELLED'); }
+        await nextTick();
+      }
+      if (FM._exporting && FM._exportCancel) { try { enc.close(); } catch (e) {} throw new Error('CANCELLED'); }
       const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round(ts), data: planar });
       enc.encode(ad); ad.close();
       ts += (n / sampleRate) * 1e6;
@@ -1364,15 +1372,41 @@ window.FM = window.FM || {};
     })();
   }
 
-  async function prepareCaches(scene, fps, onStatus) {
+  async function prepareCaches(scene, fps, onStatus, span) {
+    FM._exportThinned = [];   // #860 (1): never the last export's list, even when this one throws before its build loop
     const back = mediaBack(scene, onStatus, () => FM._exportCancel);   // bughunt3 #2 — see mediaBack
     if (back) await back;
     const built = [];   // media whose full-res export cache we (re)built — freed after export so it doesn't sit in memory (#3)
     const mgFrames = FM.matchGradeFrameLayers ? FM.matchGradeFrameLayers(scene) : {};   // #482 15.6: clips a Match Grade measures at other moments
+    /* #860 (1): ONE BYTE ACCOUNT FOR THE WHOLE EXPORT. The 1.5 GB ceiling used to be handed to every reversed / frame-blend
+       clip in full, so three 1080p clips held about 4.8 GB at once. It is shared now across the DISTINCT media records still
+       to build (the two halves of a split share one record and one cache), each cache's real size is taken off what is left,
+       and a clip that gets fewer frames than its length needs is written down so the ready card can say so. */
+    const EXPORT_BYTES = 1610612736;
+    const fcBytes = fc => (fc && fc.w > 0 && fc.h > 0 && fc.count > 0) ? fc.w * fc.h * 4 * fc.count : 0;
+    /* #860 (1): only a clip THIS export draws takes a share. One outside the range (a clip, the loop, the marks) or left out by
+       a solo (the Export card's Hide other layers sets one) is skipped by the compositor, so it is not decoded either. A Match
+       Grade reference still is: it is read at other moments. */
+    const spanFrom = (span && span.from != null) ? span.from : -Infinity, spanTo = (span && span.to != null) ? span.to : Infinity;
+    const soloOn = scene.layers.some(l => l && l.solo);
+    const inExport = l => !(soloOn && !l.solo) && !(FM.groupHidden && FM.groupHidden(l)) && !(l.start >= spanTo || l.start + l.duration <= spanFrom);
+    const pending = new Set();
+    for (const l of scene.layers) {
+      if (l.type !== 'video' || l.visible === false) continue;
+      if (!(l.reversed || (l.frameBlend && (FM.isAnimated(l.speed) || (l.speed || 1) < 1)))) continue;
+      if (!inExport(l) && !mgFrames[l.id]) continue;
+      const r = FM.media.get(l.id);
+      if (r && r.el) pending.add(r);
+    }
+    const accounted = new Set();
+    let remaining = EXPORT_BYTES;
+    const thinned = [];
+    FM._exportThinned = thinned;   // read by the export's ready card (and the suite)
     for (const layer of scene.layers) {
       if (FM._exportCancel) break;   // Cancel during the (potentially minutes-long) decode phase — was only checked in the encode loop, so Cancel did nothing here
       if (layer.type !== 'video') continue;
       const needs = layer.visible !== false && (layer.reversed || (layer.frameBlend && (FM.isAnimated(layer.speed) || (layer.speed || 1) < 1)));   // animated speed is an object — else a ramped frame-blend clip bakes in the stutter on export
+      if (needs && !inExport(layer) && !mgFrames[layer.id]) continue;   // #860 (1): never drawn here, so never decoded
       if (!needs) {
         /* #482 15.6: a Match Grade's Hold at time / Smoothing reads this clip at other moments, and the element only holds the
            frame being exported — so its frames are decoded first. Only MEASURED, never drawn, so any cache will do (a preview
@@ -1403,13 +1437,21 @@ window.FM = window.FM || {};
       // (frames spread across the clip via effFps) instead of crashing; resolution stays full. (#13)
       if (!m.frameCache) {
         if (onStatus) onStatus('Decoding frames…');
+        let left = 0; pending.forEach(r => { if (!accounted.has(r)) left++; });
+        const share = Math.max(1, Math.floor(Math.max(0, remaining) / Math.max(1, left)));   // never 0: frames.js reads 0 as no limit
         await FM.buildFrameCache(m, fps, p => { if (onStatus) onStatus('Decoding frames… ' + Math.round(p * 100) + '%'); },
-          { maxBytes: 1610612736, shouldAbort: () => FM._exportCancel });
+          { maxBytes: share, shouldAbort: () => FM._exportCancel });
         // …and stop HERE. Without this the decode gives up but the export carries on into the audio
         // mix, the AAC probe, the muxer and the codec pick before the frame loop's first cancel check
         // finally throws — so Cancel still looked ignored for seconds after the decode had stopped.
         if (FM._exportCancel) break;
+        const fc = m.frameCache;
+        // a cache at or above the footage's own rate (a 60 fps export of 30 fps video) loses nothing he can see
+        if (fc && fc.count > 0 && fc.duration > 0 && fc.count < Math.round(fc.duration * fps) && (fc.effFps || fc.count / fc.duration) < Math.min(0.9 * fps, 29.5)) {
+          thinned.push({ name: layer.name || m.name || 'clip', effFps: Math.round((fc.effFps || fc.count / fc.duration) * 10) / 10 });
+        }
       }
+      if (!accounted.has(m)) { accounted.add(m); remaining -= fcBytes(m.frameCache); }
       built.push(m);
     }
     // Every export path awaits this before its frame loop, so it doubles as the pre-flight step:
@@ -1671,7 +1713,7 @@ window.FM = window.FM || {};
 
       // smooth slow-mo / reverse: build frame caches at the export fps so the output matches preview
       let exportCaches = [];
-      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s, true))) || []; } catch (e) { console.warn('cache prep failed', e); }
+      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s, true), { from: start, to: end })) || []; } catch (e) { console.warn('cache prep failed', e); }
 
       FM._exporting = true;   // tells the compositor to skip the preview-only hold-frame capture/substitution (#13,#22)
       // Hoisted out of the try so the finally can shut the recorder down before deciding what to keep.
@@ -1780,6 +1822,7 @@ window.FM = window.FM || {};
         try {
           await encodeAudio((chunk, meta) => audioChunks.push({ chunk: chunk, meta: meta }), mix);
         } catch (e) {
+          if (e && e.message === 'CANCELLED') throw e;   // #860 (5b): a Cancel inside the encode is a cancel, not a failed soundtrack
           console.warn('[export] the soundtrack failed to encode — exporting video only', e);
           FM._audioTrackDropped = 'encode-failed';
           // v14.35: toast-only until now, so on a phone this one was painted under the overlay and
@@ -2081,6 +2124,7 @@ window.FM = window.FM || {};
           width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start),
           hasAudio: !!mix && !trackBad, audioDropped: FM._audioTrackDropped || null,
           resumedPct: resumedPct, resumedParts: resumedParts,
+          thinned: (FM._exportThinned || []).slice(),   // #860 (1): clips given fewer frames than their length needs
           protected: !recorder ? null : (recorder.recording ? true : recorder.capped ? 'capped' : false),
           save: () => deliver(outBlob, outName),
         });
@@ -2160,7 +2204,7 @@ window.FM = window.FM || {};
 
       // smooth slow-mo / reverse: build frame caches at the export fps so the GIF matches preview
       let exportCaches = [];
-      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s, true))) || []; } catch (e) { console.warn('cache prep failed', e); }
+      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s, true), { from: start, to: end })) || []; } catch (e) { console.warn('cache prep failed', e); }
 
       const transparent = !!opts.transparent;
       FM._exporting = true;   // skip the compositor's preview-only hold-frame capture (#13,#22)
@@ -2240,7 +2284,7 @@ window.FM = window.FM || {};
       const outCtx = outCanvas.getContext('2d');
 
       let exportCaches = [];
-      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s, true))) || []; } catch (e) { console.warn('cache prep failed', e); }
+      try { exportCaches = (await prepareCaches(scene, fps, s => opts.onProgress && opts.onProgress(0, s, true), { from: start, to: end })) || []; } catch (e) { console.warn('cache prep failed', e); }
 
       const transparent = !!opts.transparent;
       FM._exporting = true;

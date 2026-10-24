@@ -959,7 +959,13 @@ window.FM = window.FM || {};
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Normal'], [2, 'Multiply']], note: 'Normal or Multiply with a dark colour makes an inner shadow' },
       { key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 0, unit: 'px', note: 'Pushes the glow to one side' },
       { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 135, unit: '°', overriddenBy: 'distance', liveAbove: 0 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
-    { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }, { key: 'coloursafe', label: 'Protect colour', min: 0, max: 100, step: 1, def: 0, legacy: 0, unit: '%' }] },   // queue 904: the Threshold Unsharp Mask is named for, as Sharpen has. Protect colour (ChatGPT ca35afb3, queue 482): def 0 as well as legacy 0, so a NEW Unsharp Mask, the Cold Steel and Overdrive filters (built through makeInstance) and every saved one keep the per-channel look; 100 sharpens brightness only
+    { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }, { key: 'coloursafe', label: 'Protect colour', min: 0, max: 100, step: 1, def: 0, legacy: 0, unit: '%' },
+      /* #966 opts15 (hunt/fx15, his "more choices always better"): the sharpening hardened every face in the shot as hard as the
+         detail around it, and every tone alike. PROTECT SKIN holds skin-coloured pixels back from it with Teal & Orange's skin window
+         (skinW12) — crisp hair and fabric, faces left smooth — and AFFECTS confines it to the darks, the mids or the lights with Colour
+         Balance's tonal weights on the pixel's own brightness. 0 % and All run the old loops untouched (tone13 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Lights sharpens the bright detail and leaves the shadows alone' }] },   // queue 904: the Threshold Unsharp Mask is named for, as Sharpen has. Protect colour (ChatGPT ca35afb3, queue 482): def 0 as well as legacy 0, so a NEW Unsharp Mask, the Cold Steel and Overdrive filters (built through makeInstance) and every saved one keep the per-channel look; 100 sharpens brightness only
     /* #482 polish 10.7: a params list now (it was the one-slider shorthand, whose slider was labelled with the effect's own
        name). Grout and Edge shade at 0 are the old tiles; the Grout colour only shows once there is grout. Same storage key. */
     /* #966 opts6 (hunt/966-opts6, his "more choices always better"): the tiles could only stand in level rows, and each took the colour
@@ -1491,6 +1497,13 @@ window.FM = window.FM || {};
       { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0, note: '−100 teal only · +100 orange only' },
       { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      /* #966 opts15 (hunt/fx15, his "more choices always better"): the grade always split every tone of the picture, and its strength
+         was only ever Amount, which scales the push before the clip, Protect skin and Keep brightness. AFFECTS confines it to the darks,
+         the mids or the lights with Colour Balance's tonal weights on the pixel's own brightness — teal shadows under untouched
+         highlights — and MIX lays the finished grade (Splits by, Balance and Keep brightness included) over the plain picture. All and
+         100 % run the old loops untouched (tone13 only off them). */
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks grades the shadows teal and leaves the lights alone' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     /* #482 5.7 — FILM. Today's look is slide film developed as a negative (punchy, warm highlights, blue-black shadows); the
        other way round — negative film developed as a slide — is flat, pastel and blue-green. Colour cast and Curve keep
@@ -2109,7 +2122,14 @@ window.FM = window.FM || {};
       { key: 'gamma_' + c, label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1, showWhen: { key: 'channel', is: i + 1 } },
       { key: 'outblack_' + c, label: 'Output black', min: 0, max: 255, step: 1, def: 0, showWhen: { key: 'channel', is: i + 1 } },
       { key: 'outwhite_' + c, label: 'Output white', min: 0, max: 255, step: 1, def: 255, showWhen: { key: 'channel', is: i + 1 } },
-    ]), [])) },
+    ]), [])).concat([
+      /* #966 opts15 (hunt/fx15, his "more choices always better"): the stretch always took every face in the shot with it, and always
+         at full strength. PROTECT SKIN holds skin-coloured pixels back from it with Teal & Orange's skin window (skinW12, the same hue,
+         saturation and brightness windows) — crush the blacks, keep the faces as they were — and MIX lays the levelled picture over the
+         plain one. Both show under whichever channel set is open. 0 % and 100 % run the old loops untouched (tone13 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ]) },
     // Halation — the warm bleed real film gets around clipped highlights, because light scatters off
     // the back of the base and re-exposes the emulsion. Two radii is the whole trick: a tight core
     // that hugs the highlight and a wide wash. Glow / Light Glow have one radius and can't do it.
@@ -8081,6 +8101,11 @@ window.FM = window.FM || {};
 
   const PIXEL_FX = {
     levels: function (d, W, H, p, t) {
+      /* #966 opts15: PROTECT SKIN over 0 % or MIX under 100 % runs tone13 — this very kernel without the two (Channel, the master and the
+         three channel sets as they are), its result laid in by Mix and by how far from skin each pixel's own colour is; 0 % and 100 % run
+         the lines below untouched. */
+      const lvSk15 = p.skin == null ? 0 : FM.evalProp(p.skin, t), lvMx15 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (lvSk15 > 0 || lvMx15 < 100) { tone13(d, W, H, p, t, PIXEL_FX.levels, ['skin', 'mix'], 0, lvMx15, lvSk15); return; }
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
       const inB = p.inblack == null ? 14 : FM.evalProp(p.inblack, t);
       const inW = p.inwhite == null ? 236 : FM.evalProp(p.inwhite, t);
@@ -10943,7 +10968,13 @@ window.FM = window.FM || {};
       if(igBl===2){ d[igIdx]=igR0*(1-igF+igF*igCr/255); d[igIdx+1]=igG0*(1-igF+igF*igCg/255); d[igIdx+2]=igB0*(1-igF+igF*igCb/255); continue; }   /* …and Multiply darkens through it */
       d[igIdx]=255-(255-igR0)*(255-igGr)/255; d[igIdx+1]=255-(255-igG0)*(255-igGg)/255; d[igIdx+2]=255-(255-igB0)*(255-igGb)/255; } },
     /* Finish each column as its blur is calculated; avoid a second 3-channel frame allocation. */
-    unsharpmask: function(d,W,H,p,t){ var umAmt = fparam(p, 'amount', 1.2, t); umAmt=Math.max(0,Math.min(3,umAmt)); var umR = fparam(p, 'radius', 3, t); umR=Math.round(Math.max(1,Math.min(20,umR))); if(umAmt<=0){return;} /* THRESHOLD (queue 904) — Sharpen's 'Skip flat areas': a pixel whose brightness differs from its blur by less than this is left alone, so grain in sky and skin is not hardened as hard as an edge. 0 is the old behaviour. */ var umThr=p.threshold==null?0:FM.evalProp(p.threshold,t); if(umThr<0)umThr=0; if(umThr>64)umThr=64; var umSafe=p.coloursafe==null?0:FM.evalProp(p.coloursafe,t)/100; umSafe=Math.max(0,Math.min(1,umSafe)); var umN=W*H; var umS=d.slice(); var umTmp=new Float32Array(umN*3); var umBlurPix=new Float32Array(3); var umDiv=2*umR+1; var x,y,c,umP,umI; for(y=0;y<H;y++){ var umRow=y*W; var umAcc0=0,umAcc1=0,umAcc2=0; for(c=0;c<=umR;c++){ umI=(umRow+Math.min(W-1,c))*4; umAcc0+=umS[umI]; umAcc1+=umS[umI+1]; umAcc2+=umS[umI+2]; } var umLeftPx=(umRow)*4; umAcc0+=umS[umLeftPx]*umR; umAcc1+=umS[umLeftPx+1]*umR; umAcc2+=umS[umLeftPx+2]*umR; for(x=0;x<W;x++){ umP=(umRow+x)*3; umTmp[umP]=umAcc0/umDiv; umTmp[umP+1]=umAcc1/umDiv; umTmp[umP+2]=umAcc2/umDiv; var umAddX=Math.min(W-1,x+umR+1); var umSubX=Math.max(0,x-umR); var umAdd=(umRow+umAddX)*4; var umSub=(umRow+umSubX)*4; umAcc0+=umS[umAdd]-umS[umSub]; umAcc1+=umS[umAdd+1]-umS[umSub+1]; umAcc2+=umS[umAdd+2]-umS[umSub+2]; } } for(x=0;x<W;x++){
+    unsharpmask: function(d,W,H,p,t){
+      /* #966 opts15: PROTECT SKIN over 0 % or AFFECTS Darks (1), Mids (2) or Lights (3) runs tone13 — this very kernel without the two
+         (Amount, Radius, Skip flat areas and Protect colour as they are), its result laid in by how far from skin each pixel's own colour
+         is and by the tonal weight of its own brightness; 0 % and All run the lines below untouched. */
+      const umSk15 = p.skin == null ? 0 : FM.evalProp(p.skin, t), umRg15 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0);
+      if (umSk15 > 0 || umRg15 === 1 || umRg15 === 2 || umRg15 === 3) { tone13(d, W, H, p, t, PIXEL_FX.unsharpmask, ['skin', 'range'], umRg15, 100, umSk15); return; }
+      var umAmt = fparam(p, 'amount', 1.2, t); umAmt=Math.max(0,Math.min(3,umAmt)); var umR = fparam(p, 'radius', 3, t); umR=Math.round(Math.max(1,Math.min(20,umR))); if(umAmt<=0){return;} /* THRESHOLD (queue 904) — Sharpen's 'Skip flat areas': a pixel whose brightness differs from its blur by less than this is left alone, so grain in sky and skin is not hardened as hard as an edge. 0 is the old behaviour. */ var umThr=p.threshold==null?0:FM.evalProp(p.threshold,t); if(umThr<0)umThr=0; if(umThr>64)umThr=64; var umSafe=p.coloursafe==null?0:FM.evalProp(p.coloursafe,t)/100; umSafe=Math.max(0,Math.min(1,umSafe)); var umN=W*H; var umS=d.slice(); var umTmp=new Float32Array(umN*3); var umBlurPix=new Float32Array(3); var umDiv=2*umR+1; var x,y,c,umP,umI; for(y=0;y<H;y++){ var umRow=y*W; var umAcc0=0,umAcc1=0,umAcc2=0; for(c=0;c<=umR;c++){ umI=(umRow+Math.min(W-1,c))*4; umAcc0+=umS[umI]; umAcc1+=umS[umI+1]; umAcc2+=umS[umI+2]; } var umLeftPx=(umRow)*4; umAcc0+=umS[umLeftPx]*umR; umAcc1+=umS[umLeftPx+1]*umR; umAcc2+=umS[umLeftPx+2]*umR; for(x=0;x<W;x++){ umP=(umRow+x)*3; umTmp[umP]=umAcc0/umDiv; umTmp[umP+1]=umAcc1/umDiv; umTmp[umP+2]=umAcc2/umDiv; var umAddX=Math.min(W-1,x+umR+1); var umSubX=Math.max(0,x-umR); var umAdd=(umRow+umAddX)*4; var umSub=(umRow+umSubX)*4; umAcc0+=umS[umAdd]-umS[umSub]; umAcc1+=umS[umAdd+1]-umS[umSub+1]; umAcc2+=umS[umAdd+2]-umS[umSub+2]; } } for(x=0;x<W;x++){
       var umAcc0v=0,umAcc1v=0,umAcc2v=0;
       for(c=0;c<=umR;c++){
         umP=(Math.min(H-1,c)*W+x)*3;
@@ -12098,7 +12129,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         var sx = ((hh % 360) + 180) % 360 - 180;   // −180..180, so 350° reads as −10°
         TOS[hh] = sx >= 0 && sx <= 40 ? 1 : (sx > -20 && sx < 0 ? 0.5 + 0.5 * Math.cos(Math.PI * sx / 20) : (sx > 40 && sx < 60 ? 0.5 + 0.5 * Math.cos(Math.PI * (sx - 40) / 20) : 0));
       }
-      return function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
+      return function(d,W,H,p,t){
+      /* #966 opts15: AFFECTS Darks (1), Mids (2) or Lights (3), or MIX under 100 %, runs tone13 — this very kernel without the two (Amount,
+         Split point, Crossover, Splits by, Protect skin, Balance and Keep brightness as they are), its result laid in by the tonal weight
+         of each pixel's own brightness and Mix; All and 100 % run the lines below untouched. */
+      const toRg15 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0), toMx15 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (toRg15 === 1 || toRg15 === 2 || toRg15 === 3 || toMx15 < 100) { tone13(d, W, H, p, t, PIXEL_FX.tealorange, ['range', 'mix'], toRg15, toMx15, 0); return; }
+      var a = fparam(p, 'amount', 0.6, t); if(a<0)a=0; if(a>1)a=1;
       // The split between warm and cool sat permanently at mid-grey, so whether FACES land in the
       // orange half was decided by how the shot happened to be exposed rather than by any choice.
       // PIVOT moves that dividing line; SPREAD is how sharply it crosses over (a small spread pushes

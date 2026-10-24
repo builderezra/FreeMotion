@@ -268,6 +268,7 @@ window.FM = window.FM || {};
      transaction, so nothing can slip between them. False means "not written": the caller writes the file. */
   function idbPutPointer(db, id, ptr) {
     if (!id || isLibKey(id) || !isRef(ptr)) return Promise.resolve(false);
+    _verified.delete(id);   // #860 hunt #8: see idbPut
     return new Promise((res) => {
       let out = false;
       try {
@@ -292,6 +293,7 @@ window.FM = window.FM || {};
   // what "I cannot add long videos, it won't work" looks like from the outside.
   function idbPut(db, key, val) {
     if (isLibKey(key) || isRef(val)) return Promise.resolve(false);   // queue 915: the generic writer never writes a shared copy or a pointer — only idbPutSharedOnce / idbPutPointer do (see above)
+    _verified.delete(key);   // #860 hunt #8: written, so not yet read back: the next save checks it once (see _verified)
     return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => { if (!quietKey(key)) storeWrote(); res(true); }; tx.onerror = () => { warnStore(tx.error, key); res(false); }; tx.onabort = () => { warnStore(tx.error, key); res(false); }; } catch (e) { warnStore(e, key); res(false); } }); }
 
   // Say WHY, with the real numbers, instead of failing mutely. Separate latch from warnQuota so a
@@ -335,6 +337,7 @@ window.FM = window.FM || {};
     if (isLibKey(key)) return Promise.resolve();   // queue 915: no deleter may take a shared copy — clips in any project point at it (phase B still never collects one)
     if (heldByAnother(key)) return Promise.resolve();   // queue 915 phase B: another copy in memory still plays from this record's file — it goes at a later sweep, when nothing holds it
     _stored.delete(key);   // queue 690 (hunt 5): no longer known to be on disk — a clip brought back by undo is noted again on its next save
+    _verified.delete(key);   // #860 hunt #8: …and the next save reads it again rather than skip it
     return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
   function idbKeys(db) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => res([]); } catch (e) { res([]); } }); }
 
@@ -459,7 +462,7 @@ window.FM = window.FM || {};
         if (onlyMissing && FM.media.get(layer.id)) continue;   // still resident — a fresh load, or never released
         try {   // per-layer: ONE corrupt/undecodable blob must not abort the restore of every later layer
           const rec = await idbGetMedia(db, layer.id);   // queue 915 phase A: a reused clip's pointer reads as its file
-          if (rec && rec.file) { found.push(layer.id); _stored.set(layer.id, rec.rev || 0); }
+          if (rec && rec.file) { found.push(layer.id); _stored.set(layer.id, rec.rev || 0); _verified.set(layer.id, rec.rev || 0); }   // #860 hunt #8: read, so a save may skip it
           else lacking.push(layer);
           if (rec && rec.file) {
             const loaded = rec.kind === 'video' ? await FM.loadVideoFile(rec.file) : await FM.loadImageFile(rec.file);
@@ -587,6 +590,18 @@ window.FM = window.FM || {};
    * layer on purpose. Notes live in localStorage because the document does, and the two must land together. */
   const PENDING_KEY = 'fm.mediaPending';
   const _stored = new Map();       // layer id → the file revision this session KNOWS is on disk (a hydrate read it, a save wrote it)
+  /* #860 hunt #8: layer id → the revision a READ in this session found on disk (a hydrate, or a save's own check), with
+     no write to that key since. A save skips only a clip in here (see save). It is not _stored alone because a write
+     that reported success is not yet a record anyone has read: every write (idbPut, idbPutPointer) and every delete
+     (idbDel) forgets the id, so the next save reads a freshly written clip back once before it trusts it. A save also
+     forgets every clip that is not in the document it is for (deleted, with undo able to bring it back): while no
+     stored doc lists it, another window's boot sweep may take its file, so the save that brings it back reads it again. */
+  const _verified = new Map();
+  /* #860 hunt #8: saves since the last one that read every clip's record back (see save). Every FULL_CHECK_EVERY-th
+     save still reads them all, as cheap insurance against a record that went behind this session's back. */
+  const FULL_CHECK_EVERY = 20;
+  let _savesSinceFull = 0;
+  let _failedLast = false;   // #860 hunt #8: the previous save's document write did not land (see save)
   const _toldMissing = new Set();  // said once per launch per clip — not again every time he comes back from Home
   /* Files a save in THIS session is still writing, counted per layer. Leaving a project and coming straight back
      loads it while its import may still be on its way to disk: that clip is late, not lost, and "add it again"
@@ -753,6 +768,33 @@ window.FM = window.FM || {};
       // reset the once-flag only when EVERYTHING wrote — resetting after the scene write alone made
       // a failing index write re-toast "Storage full" every 600ms forever
       if (sceneOk && indexOk && !(_quotaWarned && !warnedBefore)) _quotaWarned = false;
+      /* ═══ A CLIP ALREADY KNOWN TO BE ON DISK IS NOT READ BACK ON EVERY SAVE (#860 hunt #8) ═══════════════════
+       * The loop below read every clip's whole record back from IndexedDB (one readonly transaction each) on every
+       * autosave, to learn what this session mostly already knew: _stored holds the revision a hydrate read or a save
+       * wrote, and idbDel forgets it. With 20 clips that was 20 reads per save, a save every 600 ms of editing.
+       * So a job is skipped when _stored holds its revision AND a read in this session found it on disk at that
+       * revision with nothing written to the key since (_verified). A clip a save has just WRITTEN is read back once
+       * by the next save before it is trusted: a put that reported success is not a record anyone has seen (the
+       * 915.5Br early-tap test drops one on purpose, as a save that has not landed), and that read is what notices.
+       * Skipped, EXCEPT:
+       *  · when THIS save's document write FAILED (_writeFail, set by writeScene just above: refused or stale). Then
+       *    the doc on disk does not list a new clip, so another tab's boot sweep (pruneOrphans reads its keep-set
+       *    from the stored docs, never from the pending notes) can delete the file while _stored still says it is
+       *    there. The per-save read is what puts it back, so on a full store every save still reads.
+       *  · the FIRST save after a failed one (_failedLast): the doc on disk did not list the clip while it failed, so
+       *    a read made then may describe a file that was swept since, and this is the save whose doc lists it again.
+       *  · a clip that was out of the document since a read saw it (deleted, then brought back by undo): no stored
+       *    doc listed it meanwhile, so another window's sweep may have taken its file. Its _verified entry is
+       *    dropped by the first save whose document does not hold it, so the save that brings it back reads it.
+       *  · every FULL_CHECK_EVERY-th save, which reads them all anyway: a record that went some other way behind
+       *    this session's back is written again within that many saves. */
+      const failing = _writeFail != null;
+      const fullCheck = failing || _failedLast || ++_savesSinceFull >= FULL_CHECK_EVERY;
+      _failedLast = failing;
+      if (fullCheck) _savesSinceFull = 0;
+      /* a clip that left the document (deleted, with undo able to bring it back) is in no stored doc, so another window's
+         boot sweep may take its file: forget that a read saw it, and the save that brings it back reads it again */
+      if (_verified.size) { const inDoc = new Set(jobs.map(j => j.id)); _verified.forEach((r, id) => { if (!inDoc.has(id)) _verified.delete(id); }); }
       try {
         /* ⚠️ queue 830: TAKE THE RECORDS BEFORE THE FIRST AWAIT. This loop re-read FM.media for each layer
            AFTER the previous layer's awaits, so anything that cleared the store mid-save silently blanked
@@ -766,6 +808,7 @@ window.FM = window.FM || {};
         const db = await openDB();
         const landed = [];   // queue 690 (hunt 5): each file now on disk at the revision it was saved for
         for (const job of jobs) {
+          if (!fullCheck && _stored.get(job.id) === job.rev && _verified.get(job.id) === job.rev) { landed.push({ id: job.id, rev: job.rev }); continue; }   // #860 hunt #8: read on disk at this revision, nothing written since
           {
             /* ═══ A REPLACED FILE MUST OVERWRITE THE OLD BLOB (queue 668) ═══════════════════════
              * This line used to read `if (!existing) await idbPut(...)`, and it is the ONLY writer of
@@ -795,7 +838,7 @@ window.FM = window.FM || {};
               const asPtr = job.ref ? await idbPutPointer(db, job.id, { ref: job.ref, kind: job.kind, rev: job.rev }) : false;
               const wrote = asPtr || await idbPut(db, job.id, { file: job.file, kind: job.kind, rev: job.rev });
               if (wrote) landed.push({ id: job.id, rev: job.rev });
-            } else landed.push({ id: job.id, rev: job.rev });   // already there at this revision
+            } else { _verified.set(job.id, job.rev); landed.push({ id: job.id, rev: job.rev }); }   // already there at this revision (read just now, so #860 hunt #8's skip may trust it)
           }
         }
         strikePending(landed);

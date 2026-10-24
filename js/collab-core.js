@@ -148,7 +148,12 @@ window.FM = window.FM || {};
      default 0) and `mix` (Mix 0 to 100, default 100), Faded Film `range` (Affects: 0 All, 1 Darks, 2 Mids, 3 Lights) and
      `mix` (Mix 0 to 100, default 100). Every default draws what the effect drew before, but a rev-32 sanitiser drops the new
      keys, so the two would normalise one project differently. */
-  C.SCHEMA_REV = 33;
+  /* Rev 34 (v18.00, #966 idle work round fifteen): new controls on three existing effects: Levels `skin` (Protect skin 0 to
+     100, default 0) and `mix` (Mix 0 to 100, default 100), Unsharp Mask `skin` (Protect skin 0 to 100, default 0) and `range`
+     (Affects: 0 All, 1 Darks, 2 Mids, 3 Lights), Teal & Orange `range` (Affects: 0 All, 1 Darks, 2 Mids, 3 Lights) and `mix`
+     (Mix 0 to 100, default 100). Every default draws what the effect drew before, but a rev-33 sanitiser drops the new keys,
+     so the two would normalise one project differently. */
+  C.SCHEMA_REV = 34;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -387,7 +392,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =3676690552475312;   // SCHEMA_REV 33 (v17.98, #966 round fourteen): six new effect params on Colour Balance, Highlights & Shadows and Faded Film. Pinned 23 Oct with fp.js at rev 33; before: 4236510598834944 at rev 32.
+  C.SCHEMA_FP =5614001361829661;   // SCHEMA_REV 34 (v18.00, #966 round fifteen): six new effect params on Levels, Unsharp Mask and Teal & Orange. Pinned 24 Oct with fp.js at rev 34; before: 3676690552475312 at rev 33.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════

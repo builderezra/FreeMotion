@@ -59415,6 +59415,79 @@
     if (bad.length) throw new Error(bad.join(', ') + ' — these are listed as order-independent and are not, so the tag on their row is a lie');
   });
 
+  /* #1183 (hunt MEDIUM): the test above saw pixelate+mirror render the same either way round ONLY in Windows headless
+     Chrome. This asks the browser itself, with no app code: does ctx.filter move pixels, on a canvas and an OffscreenCanvas,
+     with willReadFrequently both ways, and is a filtered frame the same twice. Standalone twin: tests/probe-1183-ctxfilter.html. */
+  test('1183 canvas filters change pixels in this browser and a filtered frame repeats byte for byte', { item: '1183' }, function () {
+    var W = 48, H = 48;
+    var probe = document.createElement('canvas').getContext('2d');
+    if (!probe || !('filter' in probe)) notRunHere('this browser has no CanvasRenderingContext2D.filter, so there is nothing to measure');
+    var subject = function () {
+      var s = document.createElement('canvas'); s.width = W; s.height = H;
+      var g = s.getContext('2d');
+      g.fillStyle = '#203040'; g.fillRect(0, 0, W, H);
+      g.fillStyle = '#e8d24a'; g.fillRect(10, 12, 18, 18);
+      g.fillStyle = '#c03030'; g.fillRect(28, 12, 8, 18);
+      return s;
+    };
+    var make = function (kind, wrf) {
+      var opts = wrf === undefined ? undefined : { willReadFrequently: wrf };
+      if (kind === 'offscreen') return typeof OffscreenCanvas === 'undefined' ? null : new OffscreenCanvas(W, H).getContext('2d', opts);
+      var c = document.createElement('canvas'); c.width = W; c.height = H;
+      return c.getContext('2d', opts);
+    };
+    var draw = function (ctx, f) {
+      ctx.clearRect(0, 0, W, H);
+      ctx.filter = f;
+      ctx.drawImage(subject(), 0, 0);
+      ctx.filter = 'none';
+      return ctx.getImageData(0, 0, W, H).data;
+    };
+    var bad = [];
+    [['canvas', undefined], ['canvas', false], ['canvas', true], ['offscreen', undefined], ['offscreen', false], ['offscreen', true]].forEach(function (k) {
+      var ctx = make(k[0], k[1]);
+      if (!ctx) return;
+      var label = k[0] + (k[1] === undefined ? '' : ' willReadFrequently=' + k[1]);
+      if (!pxDiff(draw(ctx, 'none'), draw(ctx, 'blur(4px)')).bytes) bad.push('blur(4px) changed nothing on ' + label);
+    });
+    ['brightness(150%)', 'contrast(200%)', 'hue-rotate(90deg)', 'saturate(0%)'].forEach(function (f) {
+      var ctx = make('canvas');
+      if (!pxDiff(draw(ctx, 'none'), draw(ctx, f)).bytes) bad.push(f + ' changed nothing');
+    });
+    ['none', 'blur(4px)', 'hue-rotate(90deg) saturate(150%)'].forEach(function (f) {
+      var d = pxDiff(draw(make('canvas'), f), draw(make('canvas'), f));
+      if (d.bytes) bad.push('the same ' + f + ' frame drawn twice differs in ' + d.bytes + ' bytes');
+    });
+    if (bad.length) throw new Error(bad.join('; ') + ' — ctx.filter is not behaving in this browser, so every picture check that leans on it reads the browser, not the app');
+  });
+
+  /* #1183: the stack-order CONTROL above compares [pixelate, mirror] with [mirror, pixelate] and reads equal if ANY of
+     three parts does nothing here: the Ag7 text draws nothing, pixelate is an identity, or mirror is an identity. The
+     ctx.filter probe cannot tell those apart, and on Windows the suite is the only instrument that runs, so this renders
+     each part on its own through the same FM.renderScene recipe and names the one that is blank. */
+  test('1183 the stack-order control parts each draw something here: the Ag7 text layer, pixelate alone, mirror alone', { item: '1183' }, function () {
+    var W = 140, H = 100;
+    var render = function (fx) {
+      var layers = [];
+      if (fx) {
+        var L = FM.makeLayer('text', { text: 'Ag7', x: W * 0.38, y: H * 0.44, size: 42, color: '#e8d24a', start: 0, duration: 5 });
+        L.effects = fx.map(function (k) { return FM.fxRegistry.makeInstance(k); });
+        layers.push(L);
+      }
+      var c = offscreen(W, H);
+      FM.renderScene(c.getContext('2d'), scene(layers, { project: { width: W, height: H, fps: 30, duration: 5, background: '#101820' } }), 0.4);
+      return c.getContext('2d').getImageData(0, 0, W, H).data;
+    };
+    var ground = render(null), plain = render([]), bad = [];
+    if (!pxDiff(ground, plain).bytes) bad.push('the Ag7 text layer drew nothing on the ground');
+    ['pixelate', 'mirror'].forEach(function (k) {
+      var got = render([k]);
+      if (!pxDiff(ground, got).bytes) bad.push(k + ' alone drew nothing at all');
+      else if (!pxDiff(plain, got).bytes) bad.push(k + ' alone changed nothing');
+    });
+    if (bad.length) throw new Error(bad.join('; ') + ' - so the stack-order CONTROL (pixelate+mirror against mirror+pixelate) cannot see ordering in this browser');
+  });
+
   test('stack order: a row whose position cannot matter says so', { item: 'fx-order' }, async function () {
     await withFilterLayer(async function (L) {
       L.effects = [FM.fxRegistry.makeInstance('blur'), FM.fxRegistry.makeInstance('pixelate')];
@@ -67810,6 +67883,152 @@
     }
   });
 
+  /* #860 (5b): THE SOUNDTRACK ENCODE HAD NO BACK-PRESSURE. The video loop waits while the encoder holds more than
+     8 frames; the AAC loop handed it every frame of the mix in one synchronous pass, so an hour of sound queued
+     168,750 frames at once. The fake drains its queue only when the thread yields (a microtask), which is what a
+     real encoder needs too: today 120 s of sound peaks at 5625 queued, with the wait it stays near 33. */
+  test('860 a long soundtrack is fed to the AAC encoder with back-pressure, not all at once', { item: '860' }, async function () {
+    if (!FM._encodeAudio) throw new Error('FM._encodeAudio is not exposed');
+    var realEnc = window.AudioEncoder, realAD = window.AudioData;
+    var q = 0, maxQ = 0, encoded = 0;
+    try {
+      window.AudioData = function (o) { Object.assign(this, o); this.close = function () {}; };
+      window.AudioEncoder = function (opts) {
+        this.configure = function () {};
+        Object.defineProperty(this, 'encodeQueueSize', { get: function () { return q; } });
+        this.encode = function () { q++; encoded++; if (q > maxQ) maxQ = q; queueMicrotask(function () { q--; }); };
+        this.flush = function () { return Promise.resolve(); };
+        this.close = function () {};
+      };
+      var buf = new Float32Array(5760000);
+      await FM._encodeAudio(function () {}, { sampleRate: 48000, channels: 2,
+        audioBuffer: { length: 5760000, numberOfChannels: 2, getChannelData: function () { return buf; } } });
+      if (encoded < 5625) throw new Error('setup: only ' + encoded + ' frames reached the encoder, expected 5625 for 120 s');
+      if (maxQ > 64) throw new Error('the AAC encoder was handed ' + maxQ + ' frames before the loop let it drain once - an hour of sound would queue 168,750 at once');
+    } finally {
+      window.AudioEncoder = realEnc; window.AudioData = realAD;
+    }
+  });
+
+  /* #860 (1): THE EXPORT FRAME BUDGET WAS PER CLIP WITH NO TOTAL. Every reversed / frame-blend clip with no cache was handed
+     the full 1.5 GB, so three 1080p clips asked for about 4.8 GB between them. The stub SPENDS what it is given (a stub that
+     reports 0 bytes would keep the sum over budget even with the fix). CONTROLS: one clip alone still gets the whole 1.5 GB,
+     and two layers sharing ONE media record (a split) build it once. Then a 4K clip the budget thins to about 4.8 fps must be
+     named in the list the ready card reads. */
+  test('860 export frame caches share one 1.5 GB budget across clips, and a thinned clip is named for the ready card', { item: '860' }, async function () {
+    if (!FM.exporter || typeof FM.exporter.prepareCaches !== 'function') throw new Error('FM.exporter.prepareCaches is not reachable');
+    if (!FM.media || typeof FM.media.set !== 'function') throw new Error('FM.media.set is not exposed');
+    var T = 1610612736, W = 1920, H = 1080, asked = [], recs = [];
+    var d0 = Object.getOwnPropertyDescriptor(FM, 'buildFrameCache');
+    var k = isoKeep();
+    var rec = function (id, w, h) {
+      var r = { kind: 'video', el: { videoWidth: w, videoHeight: h, readyState: 4 }, duration: 10, frameCache: null };
+      FM.media.set(id, r); recs.push(r); return r;
+    };
+    var lay = function (id) { return { id: id, name: id, type: 'video', start: 0, duration: 10, trimStart: 0, visible: true, reversed: true, effects: [], behaviors: [] }; };
+    var scene = function (ls) { return { project: { width: 320, height: 240, fps: 30, duration: 10, background: '#000000' }, layers: ls, selectedId: null, selectedIds: [] }; };
+    FM.buildFrameCache = async function (r, fps, p, o) {
+      var w = r.el.videoWidth, h = r.el.videoHeight;
+      asked.push(o.maxBytes);
+      var c = Math.max(1, Math.floor(o.maxBytes / (w * h * 4)));
+      r.frameCache = { fps: fps, effFps: c / 10, frames: [], count: c, decoded: c, duration: 10, scaled: false, w: w, h: h };
+      return r.frameCache;
+    };
+    try {
+      rec('860b-solo', W, H);
+      await FM.exporter.prepareCaches(scene([lay('860b-solo')]), 30);
+      if (asked.length !== 1 || asked[0] !== T) throw new Error('CONTROL: one clip alone was asked to fit ' + JSON.stringify(asked) + ', not the whole ' + T);
+      asked = [];
+      var shared = rec('860b-split', W, H);
+      FM.media.set('860b-split-tail', shared);
+      await FM.exporter.prepareCaches(scene([lay('860b-split'), lay('860b-split-tail')]), 30);
+      if (asked.length !== 1) throw new Error('CONTROL: two layers sharing one media record built ' + asked.length + ' caches, not one');
+      asked = [];
+      rec('860b-a', W, H); rec('860b-b', W, H); rec('860b-c', W, H);
+      await FM.exporter.prepareCaches(scene([lay('860b-a'), lay('860b-b'), lay('860b-c')]), 30);
+      var sum = asked.reduce(function (a, b) { return a + b; }, 0);
+      if (asked.length !== 3) throw new Error('setup: three reversed clips built ' + asked.length + ' caches');
+      if (sum > T + 3 * W * H * 4) throw new Error('three 1080p reversed clips were each handed ' + JSON.stringify(asked) + ' bytes, ' + (sum / 1073741824).toFixed(2) + ' GB in all, against one 1.5 GB budget');
+      asked = [];
+      rec('860b-4k', 3840, 2160);
+      await FM.exporter.prepareCaches(scene([lay('860b-4k')]), 30);
+      var list = FM._exportThinned || [];
+      var hit = list.filter(function (t) { return t && t.name === '860b-4k'; })[0];
+      if (!hit) throw new Error('a 10 s 4K reversed clip held to ' + (asked[0] ? Math.floor(asked[0] / (3840 * 2160 * 4)) : '?') + ' frames is not named in the thinned list the ready card reads: ' + JSON.stringify(list));
+      if (Math.abs(hit.effFps - 4.8) > 0.15) throw new Error('the thinned list gives the 4K clip ' + hit.effFps + ' fps, not about 4.8');
+    } finally {
+      recs.forEach(function (r) { r.frameCache = null; });
+      if (d0) Object.defineProperty(FM, 'buildFrameCache', d0); else delete FM.buildFrameCache;
+      k.put();
+    }
+  });
+
+  /* #860 (1): A CLIP THIS EXPORT NEVER DRAWS TAKES NO SHARE AND IS NOT DECODED: one outside the range, or left out by a solo
+     (Hide other layers). Either used to halve the budget of the clip that IS in the file. CONTROL: a clip overlapping the
+     range by one second is still built. */
+  test('860 a reversed clip this export never draws (outside the range, or left out by a solo) takes no share of the frame budget', { item: '860' }, async function () {
+    if (!FM.exporter || typeof FM.exporter.prepareCaches !== 'function') throw new Error('FM.exporter.prepareCaches is not reachable');
+    var T = 1610612736, W = 1920, H = 1080, asked = [], who = [], recs = [];
+    var d0 = Object.getOwnPropertyDescriptor(FM, 'buildFrameCache');
+    var k = isoKeep();
+    var rec = function (id) { var r = { kind: 'video', el: { videoWidth: W, videoHeight: H, readyState: 4 }, duration: 10, frameCache: null, id860: id }; FM.media.set(id, r); recs.push(r); return r; };
+    var lay = function (id, start) { return { id: id, name: id, type: 'video', start: start, duration: 10, trimStart: 0, visible: true, reversed: true, effects: [], behaviors: [] }; };
+    var scene = function (ls) { return { project: { width: 320, height: 240, fps: 30, duration: 30, background: '#000000' }, layers: ls, selectedId: null, selectedIds: [] }; };
+    FM.buildFrameCache = async function (r, fps, p, o) {
+      asked.push(o.maxBytes); who.push(r.id860);
+      var c = Math.max(1, Math.floor(o.maxBytes / (W * H * 4)));
+      r.frameCache = { fps: fps, effFps: c / 10, frames: [], count: c, decoded: c, duration: 10, scaled: false, w: W, h: H };
+      return r.frameCache;
+    };
+    try {
+      rec('860c-out'); rec('860c-in');
+      await FM.exporter.prepareCaches(scene([lay('860c-out', 20), lay('860c-in', 0)]), 30, null, { from: 0, to: 10 });
+      if (who.join() !== '860c-in' || asked[0] !== T) throw new Error('a reversed clip at 20-30 s was decoded for an export of 0-10 s: built ' + JSON.stringify(who) + ' with ' + JSON.stringify(asked) + ' bytes, against ' + T + ' for the clip in the file');
+      asked = []; who = [];
+      rec('860c-edge'); rec('860c-in2');
+      await FM.exporter.prepareCaches(scene([lay('860c-edge', 9), lay('860c-in2', 0)]), 30, null, { from: 0, to: 10 });
+      if (who.length !== 2) throw new Error('CONTROL: a clip overlapping the range by one second was not decoded: built ' + JSON.stringify(who));
+      asked = []; who = [];
+      rec('860c-solo'); rec('860c-other');
+      var s1 = lay('860c-solo', 0); s1.solo = true;
+      await FM.exporter.prepareCaches(scene([lay('860c-other', 0), s1]), 30);
+      if (who.join() !== '860c-solo' || asked[0] !== T) throw new Error('with one clip soloed (Hide other layers) the clip the solo leaves out was decoded too: built ' + JSON.stringify(who) + ' with ' + JSON.stringify(asked));
+    } finally {
+      recs.forEach(function (r) { r.frameCache = null; });
+      if (d0) Object.defineProperty(FM, 'buildFrameCache', d0); else delete FM.buildFrameCache;
+      k.put();
+    }
+  });
+
+  /* #860 (1): THE READY CARD SAYS WHICH CLIPS CAME OUT WITH FEWER FRAMES, once, each with its real frame rate.
+     CONTROL: the ordinary export, no thinned clip, adds nothing to the line. */
+  test('860 the export ready card names each thinned clip with its frame rate once, and says nothing when none was thinned', { item: '860' }, async function () {
+    if (typeof FM._showExportReady !== 'function') throw new Error('FM._showExportReady is missing');
+    var overlay = document.getElementById('export-ready');
+    if (!overlay) throw new Error('#export-ready is missing from the document');
+    var wasHidden = overlay.classList.contains('hidden');
+    var rAF = function () { return new Promise(function (r) { requestAnimationFrame(function () { r(); }); }); };
+    var show = async function (thinned) {
+      var p = FM._showExportReady({ blob: { size: 5 * 1048576 }, name: 'x860.mp4', poster: null, width: 1080, height: 1920, fps: 30, seconds: 10,
+        hasAudio: true, thinned: thinned, save: function () { return Promise.resolve(); } });
+      await rAF(); await rAF();
+      var m = document.getElementById('xr-meta').textContent;
+      document.getElementById('xr-discard').click();
+      await p;
+      return m;
+    };
+    try {
+      var plain = await show([]);
+      if (plain.indexOf('1080×1920') < 0) throw new Error('setup: the card did not draw its line: "' + plain + '"');
+      if (/fewer frames/.test(plain)) throw new Error('CONTROL: an export with no thinned clip says "' + plain + '"');
+      var meta = await show([{ name: '860c-4k', effFps: 4.8 }, { name: 'IMG_0042', effFps: 19.4 }]);
+      if (!/ · fewer frames to fit memory: 860c-4k 4\.8 fps, IMG_0042 19\.4 fps/.test(meta)) throw new Error('the card does not name the thinned clips with their frame rates: "' + meta + '"');
+      if ((meta.match(/fewer frames/g) || []).length !== 1) throw new Error('the card says it more than once: "' + meta + '"');
+    } finally {
+      if (wasHidden) overlay.classList.add('hidden');
+    }
+  });
+
   /* The + on the Add-layer row "isn't centred inside the circle" (queue 296). It was the CHARACTER "+",
      and flex centres the line box, not the ink — where a glyph sits inside that box is the font's
      choice, which is why it can look level on one screen and high on another. Same finding as the × and
@@ -68733,6 +68952,106 @@
       if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
       FM.selectLayer(null); FM.refreshAll(); await sleep(100);
+    }
+  });
+
+  /* #1182 (hunt MEDIUM): a Windows PC draws CLASSIC scrollbars that take 15px of layout width, and so does
+     real desktop Linux Chrome. The Mac overlays them, and the laptop suite runs Linux Chrome with
+     --hide-scrollbars, which removes every bar (custom ones too), so the two tests above stayed green
+     there and went red only on his PC.
+     Each test forces a 15px classic bar with a scoped ::-webkit-scrollbar rule on the scrolling element.
+     scrollbar-color: auto on the target and the probe is needed because :root sets scrollbar-color (#775 F1),
+     it inherits, and Chrome 121+ ignores ::-webkit-scrollbar on an element with a non-auto one. A CONTROL
+     probe proves the forced bar really takes 15px. Where the browser draws no bars at all (gutter 0,
+     st.fm1182Bars false), each test asserts the cause instead: the scroller asks for scrollbar-width none. */
+  function force1182(sel) {
+    const st = document.createElement('style');
+    st.textContent = sel + ' { scrollbar-color: auto; } ' + sel + '::-webkit-scrollbar { width: 15px; height: 0; } ' + sel + '::-webkit-scrollbar-thumb { background: #888; } ' +
+      '.fm1182-probe { scrollbar-color: auto; } .fm1182-probe::-webkit-scrollbar { width: 15px; } .fm1182-probe::-webkit-scrollbar-thumb { background: #888; }';
+    document.head.appendChild(st);
+    const probe = document.createElement('div');
+    probe.className = 'fm1182-probe';
+    probe.style.cssText = 'position:fixed;left:0;top:0;width:100px;height:50px;overflow-y:scroll;visibility:hidden;';
+    probe.innerHTML = '<div style="height:200px"></div>';
+    document.body.appendChild(probe);
+    const gutter = probe.offsetWidth - probe.clientWidth;
+    probe.remove();
+    st.fm1182Bars = gutter > 0.5;
+    /* the app hides the bar only where bars take width (html.fm-classic-sb, js/app.js detectClassicScrollbars):
+       mark this page as such a machine for the test, and put the mark back as it was afterwards */
+    const root = document.documentElement, had = root.classList.contains('fm-classic-sb');
+    root.classList.add('fm-classic-sb');
+    st.fm1182Undo = function () { st.remove(); root.classList.toggle('fm-classic-sb', had); };
+    if (st.fm1182Bars && Math.abs(gutter - 15) > 0.5) { st.fm1182Undo(); throw new Error('CONTROL: the forced classic scrollbar takes ' + gutter + 'px, not 15 - this test cannot reproduce a Windows PC here'); }
+    return st;
+  }
+
+  test('1182 under a classic 15px scrollbar the effects browser NEW row still runs to both edges of the sheet', { item: '1182' }, async function () {
+    const layers0 = FM.scene.layers.slice();
+    let st = null;
+    try {
+      return await atPhoneWidth(async function () {
+        st = force1182('#fx-browser .fxb-scroll');
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#c04070' });
+        L.start = 0; L.duration = 5;
+        FM.scene.layers.push(L); FM.selectLayer(L.id); FM.refreshAll();
+        await sleep(160);
+        FM.fxBrowser.open(L);
+        await sleep(300);
+        const sheet = document.getElementById('fx-browser');
+        const scroller = sheet && sheet.querySelector('.fxb-scroll');
+        const row = document.querySelector('#fx-browser .fxb-featured');
+        if (!scroller || !row) throw new Error('the effects browser or its NEW row did not render');
+        if (!st.fm1182Bars) {
+          const sw = getComputedStyle(scroller).scrollbarWidth;
+          if (sw !== 'none') throw new Error('at phone width the effects list still asks for a scrollbar (scrollbar-width ' + sw + '); on a Windows PC that bar takes 15px and clips the NEW row at x 365 of 380');
+          document.documentElement.classList.remove('fm-classic-sb');
+          const swOverlay = getComputedStyle(scroller).scrollbarWidth;
+          if (swOverlay === 'none') throw new Error('on a device whose scrollbars take no width (the iPhone) the effects list hides its scroll indicator too - the only cue that the list scrolls');
+          return;
+        }
+        if (scroller.scrollHeight <= scroller.clientHeight + 1) throw new Error('CONTROL: the effects list does not overflow, so no scrollbar would be drawn - the fixture cannot show the bug');
+        const rr = row.getBoundingClientRect(), sr = sheet.getBoundingClientRect();
+        const inL = sr.left + sheet.clientLeft, inR = inL + sheet.clientWidth;
+        if (rr.left > inL + 1 || rr.right < inR - 1) throw new Error('with a classic scrollbar the NEW row is clipped at x ' + rr.left.toFixed(1) + '..' + rr.right.toFixed(1) + ' inside a sheet spanning ' + inL.toFixed(1) + '..' + inR.toFixed(1));
+      }, 380);
+    } finally {
+      if (st) st.remove();
+      if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(null); FM.refreshAll(); await sleep(100);
+    }
+  });
+
+  test('1182 under a classic 15px scrollbar the big Add-layer + is in the middle of the screen', { item: '1182' }, async function () {
+    const layers0 = FM.scene.layers.slice();
+    let st = null;
+    try {
+      await atPhoneWidth(async function () {
+        st = force1182('#timeline');
+        FM.scene.layers.length = 0;
+        FM.refreshAll(); FM.timeline.rebuild();
+        await sleep(160);
+        const tl = document.getElementById('timeline');
+        const plus = document.querySelector('.tl-addrow--empty .tl-addrow-plus');
+        if (!tl || !plus) throw new Error('the empty project did not show the big Add-layer +');
+        if (!st.fm1182Bars) {
+          const sw = getComputedStyle(tl).scrollbarWidth;
+          if (sw !== 'none') throw new Error('the empty timeline still asks for a scrollbar (scrollbar-width ' + sw + '); on a Windows PC that bar takes 15px and puts the big Add-layer button 7.5px left of the middle');
+          document.documentElement.classList.remove('fm-classic-sb');
+          const swOverlay = getComputedStyle(tl).scrollbarWidth;
+          if (swOverlay === 'none') throw new Error('on a device whose scrollbars take no width (the iPhone) the empty timeline hides its scroll indicator too');
+          return;
+        }
+        if (tl.scrollHeight <= tl.clientHeight + 1) throw new Error('CONTROL: the empty timeline does not overflow, so no scrollbar would be drawn - the fixture cannot show the bug');
+        const pb = plus.getBoundingClientRect();
+        const off = (pb.left + pb.width / 2) - window.innerWidth / 2;
+        if (Math.abs(off) > 1) throw new Error('with a classic scrollbar the big + is ' + off.toFixed(2) + 'px from the middle of the screen (timeline scrollbar takes ' + (tl.offsetWidth - tl.clientWidth) + 'px)');
+      });
+    } finally {
+      if (st) st.remove();
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild();
     }
   });
 
@@ -97848,10 +98167,16 @@
      v17.99's second ship '690 Replace media' hung past the runner's 90 s budget with no step set; an abandoned test runs no
      finally, so it left its own project open and the next two tests failed on that state. `what` lands in window.__fmStep,
      so a hang now names itself. */
+  /* create() and open() can wait on one thing for ever, by design: askLeave, the Storage full question (js/storage.js), which
+     waits for his answer. Nobody answers in a test, so a timeout says when that card is up. */
+  function hcAskNote() {
+    try { if (FM.ask && FM.ask.isOpen && FM.ask.isOpen()) { const t = document.getElementById('fm-ask-title'); return ' (a question is on screen: ' + ((t && t.textContent) || 'untitled') + ')'; } } catch (e) {}
+    return '';
+  }
   function hcWithin(p, ms, what) {
     window.__fmStep = what;
     let t = null;
-    const late = new Promise(function (res, rej) { t = setTimeout(function () { rej(new Error('timed out after ' + ms + ' ms waiting for ' + what)); }, ms); });
+    const late = new Promise(function (res, rej) { t = setTimeout(function () { rej(new Error('timed out after ' + ms + ' ms waiting for ' + what + hcAskNote())); }, ms); });
     return Promise.race([p, late]).finally(function () { clearTimeout(t); });
   }
   async function hcMenuItem(re) {
@@ -97868,6 +98193,7 @@
   }
   async function hcCleanup(made, orig, wasOpen) {
     try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+    try { if (FM.ask && FM.ask.isOpen && FM.ask.isOpen()) { const c = document.querySelector('#fm-ask .fm-ask-cancel'); if (c) c.click(); } } catch (e) {}   // a left-up askLeave answers Stay
     try { if (FM.home._selectionState && FM.home._selectionState().selectMode) { const b = document.getElementById('hm-select-btn'); if (b) b.click(); } } catch (e) {}
     try { if (orig && FM.projects.currentId() !== orig && FM.projects.list().some(function (p) { return p.id === orig; })) await hcWithin(FM.projects.open(orig, { confirmed: true }), 15000, 'cleanup: reopening the project the test started in'); } catch (e) {}
     for (const id of made) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await hcWithin(FM.projects.remove(id), 15000, 'cleanup: removing a project the test made'); } catch (e) {} }
@@ -98213,7 +98539,7 @@
       const f = new VideoFrame(cv, { timestamp: Math.round(k * 1e6 / fps), duration: Math.round(1e6 / fps) });
       enc.encode(f, { keyFrame: k % 10 === 0 }); f.close();
     }
-    await hcWithin(enc.flush(), 30000, 'the encoder to finish the ' + w + ' x ' + h + ' fixture clip ' + name); enc.close();
+    await hcWithin(enc.flush(), 30000, 'the encoder to finish the ' + w + ' x ' + h + ' fixture clip hunt2d-indexed.mp4'); enc.close();
     if (encErr) throw new Error('setup: the fixture clip could not be encoded: ' + encErr);
     muxer.finalize();
     return new File([muxer.target.buffer], 'hunt2d-indexed.mp4', { type: 'video/mp4' });
@@ -99359,7 +99685,7 @@
       const f = new VideoFrame(cv, { timestamp: Math.round(k * 1e6 / 30), duration: Math.round(1e6 / 30) });
       enc.encode(f, { keyFrame: k % 10 === 0 }); f.close();
     }
-    await enc.flush(); enc.close();
+    await hcWithin(enc.flush(), 30000, 'the encoder to finish the ' + w + ' x ' + h + ' fixture clip ' + name); enc.close();
     if (encErr) throw new Error('setup: the fixture clip could not be encoded: ' + encErr);
     muxer.finalize();
     return new File([muxer.target.buffer], name, { type: 'video/mp4', lastModified: Date.now() });
@@ -99544,48 +99870,53 @@
        times that scale (FM.layerSize). So the scale that made the old file fit is applied to a file of a different
        pixel count: a 4K clip swapped in for a 1080p one of the SAME shape comes in twice as wide and twice as tall, and
        he sees only its middle quarter. His phone shoots 4K and 12 MP stills, so nearly every swap does this. Driven
-       with a real finger on the phone ⋯. */
+       with a real finger on the phone ⋯.
+       THE FIXTURE IS HALF THAT, AT THE SAME RATIO: a 540 x 960 clip swapped for a 1080 x 1920 one, in a project whose size
+       he picked (sizePicked, so the first clip is fitted into the 1080 px canvas at twice its size instead of the project
+       taking its size). The fault depends only on the ratio of the two files' pixel sizes, 2 either way. A 2160 x 3840
+       fixture clip is what it used to encode, and that encode hung in the full suite twice (v17.99's second ship, v18.00's
+       first: the encoder never finished its flush, and the hung encoder slowed every test after it). */
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
     const made = [], lib0 = h3aLibSnapshot();
     try {
       if (wasOpen) FM.home.close();
-      made.push(await hcWithin(FM.projects.create({ name: 'HUNT-a replace', width: 1080, height: 1920 }), 15000, 'a new project for the replace'));
+      made.push(await hcWithin(FM.projects.create({ name: 'HUNT-a replace', width: 1080, height: 1920, sizePicked: true }), 15000, 'a new project for the replace'));
       await sleep(250);
       const bordered = function (g, k, w, h) { g.fillStyle = '#00c000'; g.fillRect(0, 0, w, h); const b = Math.round(w * 0.12); g.fillStyle = '#0030ff'; g.fillRect(b, b, w - 2 * b, h - 2 * b); };
-      const hd = await h3aClip(1080, 1920, 4, 'IMG_1001.MOV', function (g, k, w, h) { g.fillStyle = '#d02020'; g.fillRect(0, 0, w, h); });
-      const uhd = await h3aClip(2160, 3840, 3, 'IMG_1002.MOV', bordered);   // his 4K portrait clip: green border, blue middle
-      window.__fmStep = 'importing the 1080p clip';
-      const L = await h3aImport(hd);
+      const small = await h3aClip(540, 960, 4, 'IMG_1001.MOV', function (g, k, w, h) { g.fillStyle = '#d02020'; g.fillRect(0, 0, w, h); });
+      const big = await h3aClip(1080, 1920, 3, 'IMG_1002.MOV', bordered);   // the bigger clip of the same shape: green border, blue middle
+      window.__fmStep = 'importing the 540 x 960 clip';
+      const L = await h3aImport(small);
       const size0 = FM.layerSize(L).w * L.transform.scale;
       if (Math.abs(size0 - 1080) > 11) throw new Error('setup: the first clip does not fill the 1080 px canvas (' + Math.round(size0) + ' px wide)');
       window.__fmStep = 'the phone ⋯ → Replace media… with a real finger';
       await atPhoneWidth(async function () {
         await onScreen924(async function () {
-          const seen = await h3aPicker(uhd, async function () { await h3aLayerMenu(L, /^Replace media/, 'a tap on Replace media…'); });
+          const seen = await h3aPicker(big, async function () { await h3aLayerMenu(L, /^Replace media/, 'a tap on Replace media…'); });
           if (!seen.n) throw new Error('setup: tapping Replace media… opened no file picker');
         });
       }, 360);
-      const m = await hcUntil('the 4K clip to replace the old one', () => { const r = FM.media.get(L.id); return r && r.width === 2160 ? r : null; }, 8000);
+      const m = await hcUntil('the 1080 x 1920 clip to replace the old one', () => { const r = FM.media.get(L.id); return r && r.width === 1080 ? r : null; }, 8000);
       // the timeline re-draws the new clip's filmstrip by seeking its own element; the canvas holds nothing until that is done
-      await hcUntil('the 4K clip to decode a frame and its filmstrip to finish', () => m.el && m.el.readyState >= 2 && !m.el.seeking && !m._stripBuilding && m.stripFrames !== undefined, 10000);
+      await hcUntil('the 1080 x 1920 clip to decode a frame and its filmstrip to finish', () => m.el && m.el.readyState >= 2 && !m.el.seeking && !m._stripBuilding && m.stripFrames !== undefined, 10000);
       await sleep(200);
-      await hcUntil('the 4K clip to hold a decoded frame', () => m.el.readyState >= 2 && !m.el.seeking, 4000);
+      await hcUntil('the 1080 x 1920 clip to hold a decoded frame', () => m.el.readyState >= 2 && !m.el.seeking, 4000);
       const Lnow = FM.layerById(FM.scene, L.id);
       const drawn = FM.layerSize(Lnow).w * Lnow.transform.scale;
       const px = h3aPixel(Lnow.start + 0.02);
       if (Math.abs(drawn - 1080) > 22) {
-        throw new Error('he swapped his 1080 x 1920 clip for a 4K portrait clip of the same shape with Replace media — the new clip came in ' + (drawn / 1080).toFixed(2) +
+        throw new Error('he swapped a 540 x 960 clip for a 1080 x 1920 clip of the same shape with Replace media — the new clip came in ' + (drawn / 1080).toFixed(2) +
           ' times the size, ' + Math.round(drawn) + ' px wide on the 1080 px canvas, so only its middle quarter shows: the left edge of the canvas is ' + h3aName(px.edge) +
-          ' where the clip green border should be. Filling a template slot (Insert your Media) with his own 4K clip or 12 MP photo goes the same way');
+          ' where the clip green border should be. His 1080p clip swapped for his 4K one, or a template slot (Insert your Media) filled with his own 4K clip or 12 MP photo, goes the same way');
       }
       if (h3aName(px.edge) !== 'green') throw new Error('the replaced clip reports the right size but the left edge of the canvas is ' + h3aName(px.edge) + ', not the clip green border');
       /* UNDO puts the old clip back at the old size. The rescale is part of the replace's own undo step, and the undo's
          media swap (FM.restoreReplacedMedia → replaceMediaWith) must not rescale a second time on top of it. */
       FM.history.undo();
-      await hcUntil('undo to bring the 1080p clip back', () => { const r = FM.media.get(L.id); return r && r.width === 1080 ? r : null; }, 8000);
+      await hcUntil('undo to bring the 540 x 960 clip back', () => { const r = FM.media.get(L.id); return r && r.width === 540 ? r : null; }, 8000);
       await sleep(150);
       const Lu = FM.layerById(FM.scene, L.id), back = FM.layerSize(Lu).w * Lu.transform.scale;
-      if (Math.abs(back - 1080) > 11) throw new Error('after Undo the original 1080p clip is back but draws ' + Math.round(back) + ' px wide on the 1080 px canvas — the undo rescaled it a second time');
+      if (Math.abs(back - 1080) > 11) throw new Error('after Undo the original 540 x 960 clip is back but draws ' + Math.round(back) + ' px wide on the 1080 px canvas — the undo rescaled it a second time');
     } finally {
       h3aLibRestore(lib0);
       await hcCleanup(made, orig, wasOpen);
@@ -104983,8 +105314,14 @@
           /* CONTROL: a Spin that cannot move (speed 0) is measured and told so — the check runs in this environment. */
           const still = FM.fxRegistry.makeInstance('spin'); still.params.speed = 0; still._expanded = true;
           const B0 = h6Box('H6 still'); B0.effects = [still];
-          await h6Open(B0, 0); await h6Sleep(1300);
-          if (!/changes nothing/.test(hint())) throw new Error('CONTROL: a Spin at speed 0, which truly changes nothing, got no changes-nothing line after 1.3 s (' + h6Say(hint() || 'no hint') + ') — the check is not running here, so a missing line below would prove nothing');
+          await h6Open(B0, 0);
+          /* Polled, not slept: the check runs on timer slices, and late in a full suite its first answer took longer than the
+             1.3 s this used to sleep (v18.00's first ship; it passes alone). How long it took HERE is then the wait for the main
+             check below, so a line that is absent there is read on the same clock as the one present here. */
+          const tc0 = performance.now();
+          while (!/changes nothing/.test(hint()) && performance.now() - tc0 < 8000) await h6Sleep(100);
+          const tCtl = performance.now() - tc0;
+          if (!/changes nothing/.test(hint())) throw new Error('CONTROL: a Spin at speed 0, which truly changes nothing, got no changes-nothing line after 8 s (' + h6Say(hint() || 'no hint') + ') — the check is not running here, so a missing line below would prove nothing');
           /* His flow: a fresh box, the playhead where the box starts, Effects, Move, tap Spin, Add. */
           const B = h6Box('H6 spin'); B.effects = [];
           const L = await h6Open(B, 0);
@@ -105001,7 +105338,7 @@
           const Ln = FM.layerById(FM.scene, L.id);
           if ((Ln.effects || []).map(e => e.type).join(',') !== 'spin') throw new Error('CONTROL: Add did not put one Spin on the box (effects: ' + (Ln.effects || []).map(e => e.type).join(', ') + ')');
           if (h6OpenRowNames().join(',') !== 'Spin') throw new Error('setup: after Add the open effect is ' + (h6OpenRowNames().join(', ') || 'none') + ', not Spin');
-          await h6Sleep(1300);
+          await h6Sleep(Math.max(1300, 2 * tCtl));
           const atStart = hint();
           /* CONTROL: the Spin he added really turns the box — 1.5 s in, with it and without it, the frame differs. */
           const frame = (fx, t) => {
@@ -117775,7 +118112,11 @@
     const desc = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '');
     let base = null;
     const strays = () => strayEls().filter(el => !base.strays.has(el)).map(desc);
-    const bodySet = () => [].slice.call(document.body.classList).sort();
+    /* fm-moving is left out: it is #768 H1's re-render window, put on by every frame drawn and taken off by its own 700 ms
+       idle timer (js/app.js noteMotion), so whether it is on at a snapshot says when the last frame was drawn, not what the
+       walk left behind. The start snapshot is taken 400 ms after a refresh and each checkpoint 520 ms after one, both inside
+       that window, so the two disagreed whenever one refresh drew a frame and the other did not (the v18.00 slice runs). */
+    const bodySet = () => [].slice.call(document.body.classList).filter(c => c !== 'fm-moving').sort();
     const counts = () => ({ 'lifted buttons (.pop-src)': document.querySelectorAll('.pop-src').length, 'pop-up tails (.pop-tail)': document.querySelectorAll('.pop-tail').length, 'Notes backdrops (.np-scrim)': document.querySelectorAll('.np-scrim').length, 'Settings backdrops (.set-scrim)': document.querySelectorAll('.set-scrim').length });
 
     /* ---- the rest of the page ---- */
@@ -178354,6 +178695,316 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts14 ──
+  // ── 966 opts15 (hunt/fx15) ──
+  /* ═══ #966: MORE CHOICE, ROUND FIFTEEN — three more effects he already has, each reached for on most shots and still thin on choice
+   * (hunt/fx15). His words: "polish other effects just giving them more features … more choices always better … this is the complex
+   * version we want as much choice as possible". WRITTEN WITHOUT RUNNING (23 Oct, a ship was running on this machine): nothing but
+   * `node --check`. Every number below is reasoned from the code it names, the reasoning beside it; a bound only a run can set says
+   * MEASURE beside it. Round fourteen's four kinds for each effect: (a) its rows and what the load sanitiser keeps, clamps and drops,
+   * (b) what each new control does, on a fixture that holds what separates right from wrong, with a CONTROL, (c) at the defaults the
+   * kernel is today's picture byte for byte, (d) every new control off its default moves the very fixtures (c) holds still. The (b)
+   * tests do not stop at a missing row: on the base code the kernel ignores the new keys and the picture is judged and fails. All three
+   * are PIXEL_FX kernels run through round thirteen's tone13, so this block reuses round thirteen's _o13 helpers and round fourteen's
+   * _o14Want (the same file scope, defined just above) and adds only the ones that read this round's own keys. Every comparison of
+   * two pictures is within ONE render path (#1183: the at-defaults checks drift a few levels between paths in Windows Chrome). ═══ */
+  const _o15Need = (type, keys) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts15 (hunt/fx15) is not built');
+    return r;
+  };
+  /* every new key, by effect, and every new control off its default on the effect's own default settings */
+  const _O15_NEW = {
+    levels: ['skin', 'mix'],
+    unsharpmask: ['skin', 'range'],
+    tealorange: ['range', 'mix'],
+  };
+  const _O15_OFF = {
+    levels: [{ skin: 100 }, { mix: 50 }],
+    unsharpmask: [{ skin: 100 }, { range: 1 }],
+    tealorange: [{ range: 1 }, { mix: 50 }],
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o15Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o13P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o13Pic;
+      const a = _o13Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o13Run(type, _o13Del(P, _O15_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O15_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on a new instance, on that fixture at that moment, through the dispatcher's pixel step */
+  const _o15Moves = (type, over, W, H, pic, t) => E1.count(_o13Run(type, _o13P(type), W, H, pic(W, H), t), _o13Run(type, _o13P(type, over), W, H, pic(W, H), t), 0);
+  /* (b) in general: on `pic`, `over` laid on the instance `base` draws, pixel for pixel and to the last level, the kernel's own picture
+     without the new keys laid in by the share wf — the worst pixel and where, or null when every pixel matches */
+  const _o15Worst = (type, base, over, W, H, pic, wf, t) => {
+    const ker = _o13Run(type, _o13Del(Object.assign({}, base, over), _O15_NEW[type]), W, H, pic(W, H), t);
+    const want = _o13Lay(pic(W, H), ker, wf), got = _o13Run(type, Object.assign({}, base, over), W, H, pic(W, H), t);
+    let worst = 0, at = -1;
+    for (let i = 0; i < got.length; i += 4) for (let c = 0; c < 3; c++) { const e = Math.abs(got[i + c] - want[i + c]); if (e > worst) { worst = e; at = i / 4; } }
+    return worst ? { worst: worst, x: at % W, y: (at / W) | 0, got: got.slice(at * 4, at * 4 + 3).join(', '), want: want.slice(at * 4, at * 4 + 3).join(', ') } : null;
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect over a grey ground — both sides through the same compositor path. CONTROLS: each effect changes the picture
+     against the rect with no effect, and each new control off its default moves the picture through the same compositor, at 1:1. */
+  test('966 opts15 every new control at its default draws what the effect drew without it — each of the round’s effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O15_NEW);
+    TYPES.forEach(type => _o15Need(type, _O15_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const one = params => type => [_o13Rect({ type: type, enabled: true, params: params })];
+    TYPES.forEach(type => {
+      const P = _o13P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o13shot(one(Object.assign({}, P))(type), t, W, H, rs, BG);
+        const b = _o13shot(one(_o13Del(P, _O15_NEW[type]))(type), t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O15_NEW[type].join(' / '));
+        if (rs == null) { const off = _o13shot([_o13Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+      const base = _o13shot(one(Object.assign({}, P))(type), 0.61, W, H, null, BG);
+      _O15_OFF[type].forEach(o => {
+        const n = E1.count(base, _o13shot(one(Object.assign({}, P, o))(type), 0.61, W, H, null, BG), 2);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels; Mix 50 halves each effect's move, Protect skin 100 holds back the warm end of the gradient (#f0c060 sits at hue 40°, saturation 0.6), and Affects keeps one third of the tones */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Levels: Protect skin and Mix ---- */
+  /* At its defaults (RGB, Input black 14, Input white 236, Gamma 1, Output 0 to 255, every channel set identity) the kernel maps each
+     channel through one table, lut[v] = Math.round(255 x (v − 14) / 222) held to 0..255 (levelsFill; Math.round, so a half goes up). On
+     round thirteen's six pixels: the light skin tone (220, 170, 130) to (237, 179, 133) — 206, 156, 116 over 222 — the deeper one (160,
+     110, 80) to (168, 110, 76), the rose (220, 100, 120) to (237, 99, 122), the blue (40, 90, 200) to (30, 87, 214), the green (60, 170,
+     80) to (53, 179, 76), the grey 128 to 131. Skin weights (skinW12): 1, 1, 0.5, 0, 0, 0. Protect skin 100 moves each pixel 1 − its skin
+     weight of the way: both skin tones stay the picture, the rest keep the stretch; the rose lands on ties (228.5, 99.5) only an exact
+     0.5 weight decides, so it is read in the busy-picture check and not by value. At 40 % a skin tone goes 0.6 of the way — the light
+     one to 220 + 17 x 0.6 = 230.2, 175.4, 131.8, so (230, 175, 132), the deeper one to (165, 110, 78) — and the rose 0.8 of it, (234, 99,
+     122). On the base code Protect skin is ignored and both skin tones take the whole stretch. */
+  test('966 opts15 Levels has Protect skin (0–100 %, keyframable, 0 by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed and shown under every channel set: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    const r = _o15Need('levels', _O15_NEW.levels);
+    const bad = _o13Rows('levels', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp('levels', { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('levels', { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    (r.params || []).filter(p => p.key === 'skin' || p.key === 'mix').forEach(p => { if (p.showWhen) bad.push(p.key + ' shows only when ' + JSON.stringify(p.showWhen) + ' — it acts on all four sets at once, so it belongs under every one'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts15 Levels Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the stretch byte for byte, at 40 % a skin tone comes 0.4 of the way back and the rose 0.2, and with other input and output points, a Gamma, the channel sets and other levels every pixel of a busy picture is the levelled picture laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone reads 237, 179, 133)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('levels', _o13P('levels', over), N, 1, row(), 0.5);
+    _o14Want(bad, run({}), _O13_SKIN, [[237, 179, 133], [168, 110, 76], [237, 99, 122], [30, 87, 214], [53, 179, 76], [131, 131, 131]], 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], null, [30, 87, 214], [53, 179, 76], [131, 131, 131]], 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O13_SKIN, [[230, 175, 132], [165, 110, 78], [234, 99, 122], [30, 87, 214], [53, 179, 76], [131, 131, 131]], 'Protect skin 40');
+    [{ inblack: 40, inwhite: 200, gamma: 0.7 }, { outblack: 30, outwhite: 220 }, { inblack_r: 30, gamma_b: 1.6, outwhite_g: 230 }, { skin: 100, inblack: 0, inwhite: 180, gamma: 1.4 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin;
+      const w = _o15Worst('levels', _o13P('levels'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the levelled picture laid in by 1 − its skin weight)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Worked at the defaults: Mix 40 moves each pixel 0.4 of the way to its table value — the light skin tone 220 + 17 x 0.4 = 226.8, 173.6,
+     131.2, so (227, 174, 131), the blue (36, 89, 206), the grey 128 + 3 x 0.4 = 129.2, so 129; with Protect skin 100 as well the light skin
+     tone is the picture and the blue still goes 0.4 of the way. On the base code Mix is ignored and the grey comes out at 131. */
+  test('966 opts15 Levels Mix: at 40 % the stretch goes 0.4 of the way — a grey 128 reads 129 and a skin tone 227, 174, 131 — every grey of a 0–255 ramp sits 0.4 of the way to its table value to the level, at 0 % the picture is itself byte for byte, with Protect skin 100 as well a skin tone stays put while a blue goes 0.4 of the way, and a Mix keyed 0 to 100 draws its value half way (CONTROL: at 100 % the grey reads 131)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('levels', _o13P('levels', over), N, 1, row(), 0.5);
+    const at = (d, x) => _o13At(d, N, x, 0).slice(0, 3).join(', ');
+    if (at(run({}), 5) !== '131, 131, 131') bad.push('CONTROL: at Mix 100 the grey reads ' + at(run({}), 5) + ', not 131, 131, 131');
+    _o14Want(bad, run({ mix: 40 }), _O13_SKIN, [[227, 174, 131], null, null, [36, 89, 206], null, [129, 129, 129]], 'Mix 40');
+    _o14Want(bad, run({ mix: 40, skin: 100 }), _O13_SKIN, [[220, 170, 130], null, null, [36, 89, 206]], 'Mix 40 with Protect skin 100');
+    const m0 = E1.maxDiff(run({ mix: 0 }), row());
+    if (m0 !== 0) bad.push('at Mix 0 the row moves up to ' + m0 + ' levels — it should be the picture itself');
+    const ramp = over => _o13Run('levels', _o13P('levels', over), 256, 2, _o13Lv(), 0.5);
+    const full = ramp({}), part = ramp({ mix: 40 });
+    let worst = 0, wat = -1;
+    for (let v = 0; v < 256; v++) {
+      const want = _o13U8(v + (_o13At(full, 256, v, 0)[0] - v) * 0.4, 0, 0)[0], got = _o13At(part, 256, v, 0);
+      for (let c = 0; c < 3; c++) { const e = Math.abs(got[c] - want); if (e > worst) { worst = e; wat = v; } }
+    }
+    if (worst > 0) bad.push('at Mix 40 grey ' + wat + ' reads ' + _o13At(part, 256, wat, 0).slice(0, 3).join(', ') + ', ' + worst + ' levels from 0.4 of the way to its table value');
+    const mk = E1.maxDiff(run({ mix: _o13KF(0, 100) }), run({ mix: 50 }));
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o15Worst('levels', _o13P('levels'), { mix: 35, inblack_b: 40, gamma: 1.5 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with a Blue set and a Gamma: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts15 Levels at Protect skin 0 % and Mix 100 % draws byte for byte what it drew without them — at its defaults, with other input and output points, a Gamma, the channel sets, keyframed, and on a half-size plate (CONTROL: Protect skin and Mix each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o15Need('levels', _O15_NEW.levels);
+    const bad = _o15Ident('levels', [{}, { over: { inblack: 40, inwhite: 200, gamma: 0.7 } }, { over: { outblack: 30, outwhite: 220 } }, { over: { inblack_r: 30, gamma_b: 1.6, outwhite_g: 230 } }, { over: { gamma: _o13KF(0.6, 1.8) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O15_OFF.levels.forEach(o => { const n = _o15Moves('levels', o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the default stretch moves every channel off 14 + 222 x k / 255 by a level or more, so Mix 50 moves nearly every pixel; Protect skin 100 only the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Levels ---- */
+
+  /* ---- Unsharp Mask: Protect skin and Affects ---- */
+  /* At its defaults (Amount 1.2, Radius 3, Skip flat areas 0, Protect colour 0) the kernel blurs with a 7-wide box each way (edges held,
+     so on a one-row picture the second pass gives the first pass back) and moves each channel by 1.2 x (itself − its blur), into the
+     clamped array. On a row of four light skin tones A (220, 170, 130) then four blues B (40, 90, 200), A − B = (180, 80, −70), a pixel
+     with k of the other colour in its window moves 1.2 x k / 7 of that difference: x 1 (k 1) to (250.86, 183.71, 118) → (251, 184, 118),
+     x 2 to (255, 197, 106), x 3 to (255, 211, 94); x 4 to (0, 49, 236), x 5 to (0, 63, 224), x 6 to (9, 76, 212); x 0 and x 7 keep
+     their own colour. The skin tone's weight is 1 and the blue's 0, so Protect skin 100 keeps x 0 to 3 the picture and the blues their
+     sharpening, and at 40 % the skin pixels go 0.6 of the way: (239, 178, 123), (241, 186, 116), (241, 195, 108). On the base code
+     Protect skin is ignored and the skin tones take the whole halo. */
+  const _o15Two = (a, b) => () => E1.frame(8, 1, x => (x < 4 ? a : b));
+  test('966 opts15 Unsharp Mask has Protect skin (0–100 %, keyframable, 0 by default) and Affects (All, Darks, Mids or Lights, storing 0–3, All by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and Mids, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o15Need('unsharpmask', _O15_NEW.unsharpmask);
+    const bad = _o13Rows('unsharpmask', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 }], { skin: 40, range: 2 });
+    bad.push.apply(bad, _o13Clamp('unsharpmask', { skin: 150 }, { skin: 100 }));
+    bad.push.apply(bad, _o13Clamp('unsharpmask', { skin: -5 }, { skin: 0 }));
+    bad.push.apply(bad, _o13Clamp('unsharpmask', { range: 7 }, { range: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts15 Unsharp Mask Protect skin: at 100 % the skin tones beside a blue edge come out as the picture byte for byte while the blues keep their halo byte for byte, at 40 % each skin pixel comes 0.4 of the way back, and with more Amount and Radius, Skip flat areas, Protect colour and Affects every pixel of a busy picture is the sharpened picture laid in by 1 − its skin weight to the level (CONTROL: at 0 % the skin tone at the edge reads 255, 211, 94)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], A = [220, 170, 130], B = [40, 90, 200], pics = [A, A, A, A, B, B, B, B], row = _o15Two(A, B);
+    const run = over => _o13Run('unsharpmask', _o13P('unsharpmask', over), 8, 1, row(), 0.5);
+    const blues = [[0, 49, 236], [0, 63, 224], [9, 76, 212], [40, 90, 200]];
+    _o14Want(bad, run({}), pics, [A, [251, 184, 118], [255, 197, 106], [255, 211, 94]].concat(blues), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), pics, [A, A, A, A].concat(blues), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), pics, [A, [239, 178, 123], [241, 186, 116], [241, 195, 108]].concat(blues), 'Protect skin 40');
+    [{ amount: 2.5, radius: 6 }, { threshold: 12 }, { coloursafe: 70 }, { skin: 100, range: 2 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, rg = extra.range || 0;
+      const w = _o15Worst('unsharpmask', _o13P('unsharpmask'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the sharpened picture laid in by 1 − its skin weight' + (rg ? ' times its tonal weight' : '') + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* On a row of four greys 100 then four greys 160 the defaults take x 3 to 100 − 1.2 x 3 x 60 / 7 = 69.14, so 69, and x 4 to 190.86,
+     so 191 (x 0 and x 7 keep their grey). Affects weighs that move by each pixel's own brightness (100 / 255 = 0.392, 160 / 255 = 0.627),
+     as tone13 does: Darks (1 − L)² = 0.369 and 0.139 put them at 100 − 31 x 0.369 = 88.55 → 89 and 164.30 → 164, Mids 0.953 and 0.935 at
+     70.44 → 70 and 188.99 → 189, Lights 0.154 and 0.394 at 95.23 → 95 and 172.20 → 172. On the base code Affects is ignored and both
+     edges take the whole halo. */
+  test('966 opts15 Unsharp Mask Affects: on a 100 to 160 grey edge Darks sharpens the dark side to 89 and the light side to 164, Mids to 70 and 189, Lights to 95 and 172 — and with more Amount and Radius, Skip flat areas and Protect colour every pixel of a busy picture is the sharpened picture times the tonal weight of its own brightness to the level (CONTROL: All takes them to 69 and 191)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], G1 = [100, 100, 100], G2 = [160, 160, 160], pics = [G1, G1, G1, G1, G2, G2, G2, G2], row = _o15Two(G1, G2);
+    const run = over => _o13Run('unsharpmask', _o13P('unsharpmask', over), 8, 1, row(), 0.5);
+    const want = (a, b) => [G1, null, null, [a, a, a], [b, b, b], null, null, G2];
+    _o14Want(bad, run({}), pics, want(69, 191), 'CONTROL under All');
+    [[1, 'Darks', 89, 164], [2, 'Mids', 70, 189], [3, 'Lights', 95, 172]].forEach(([rg, name, a, b]) => {
+      _o14Want(bad, run({ range: rg }), pics, want(a, b), name);
+      [{}, { amount: 2, radius: 10 }, { threshold: 8 }, { coloursafe: 50 }].forEach(extra => {
+        const w = _o15Worst('unsharpmask', _o13P('unsharpmask'), Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), 0, 0), 0.5);
+        if (w) bad.push(name + ' ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its sharpening times its tonal weight)');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts15 Unsharp Mask at Protect skin 0 % and All draws byte for byte what it drew without them — at its defaults, with more Amount and Radius, Skip flat areas, Protect colour, keyframed, and on a half-size plate (CONTROL: Protect skin and Darks each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o15Need('unsharpmask', _O15_NEW.unsharpmask);
+    const bad = _o15Ident('unsharpmask', [{}, { over: { amount: 2.5, radius: 8 } }, { over: { threshold: 12 } }, { over: { coloursafe: 70 } }, { over: { amount: _o13KF(0.4, 2.4) }, t: 0.37 }, { ps: 0.5 }, { pic: _o15Two([100, 100, 100], [160, 160, 160]), W: 8, H: 1 }, { pic: _o15Two([220, 170, 130], [40, 90, 200]), W: 8, H: 1 }]);
+    _O15_OFF.unsharpmask.forEach(o => { const n = _o15Moves('unsharpmask', o, 96, 72, _o13Pic, 0.5); if (n < 300) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the 12 px checker steps blue by 190 levels, so every pixel within 3 of a cell edge (about three quarters of the picture) is sharpened by 10 or more; Protect skin 100 holds back the warm cells among them, Darks every one but the darkest */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Unsharp Mask ---- */
+
+  /* ---- Teal & Orange: Affects and Mix ---- */
+  /* At its defaults (Amount 0.6, Split point 50, Crossover 100, Splits by Brightness, Protect skin 0, Balance 0, Keep brightness 0) the
+     kernel takes a grey v to w = (v / 255 − 0.5) x 2 and adds w x 42 x 0.6 to red, w x 8 x 0.6 to green and takes w x 42 x 0.6 from blue,
+     into the clamped array. Grey 40 (w −0.686): (22.71, 36.71, 57.29) → (23, 37, 57); grey 200 (w 0.569): (214.33, 202.73, 185.67) →
+     (214, 203, 186); grey 220 (w 0.725): (238.28, 223.48, 201.72) → (238, 223, 202). Affects weighs each pixel's move by its own
+     brightness, as tone13 does: grey 40 (L 0.157) by Darks (1 − L)² = 0.711 → (27.92, 37.87, 52.08), so (28, 38, 52), Mids 0.529 → (31,
+     38, 49), Lights 0.0246 → (40, 40, 40); grey 220 (L 0.863) by Darks 0.0188 → (220, 220, 220), Mids 0.474 → (229, 221, 211), Lights
+     0.744 → (233, 222, 207). Mix 40 moves every pixel 0.4 of the way: grey 40 to 40 − 17 x 0.4 = 33.2, 38.8, 46.8, so (33, 39, 47), grey
+     200 to (206, 201, 194). On the base code Affects and Mix are ignored and every grey takes the whole grade. */
+  test('966 opts15 Teal & Orange has Affects (All, Darks, Mids or Lights, storing 0–3, All by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Mids and 40, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o15Need('tealorange', _O15_NEW.tealorange);
+    const bad = _o13Rows('tealorange', [
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { range: 2, mix: 40 });
+    bad.push.apply(bad, _o13Clamp('tealorange', { mix: 150 }, { mix: 100 }));
+    bad.push.apply(bad, _o13Clamp('tealorange', { mix: -5 }, { mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('tealorange', { range: 7 }, { range: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts15 Teal & Orange Affects: Darks grades grey 40 to 28, 38, 52 and leaves grey 220 at 220, Mids takes them to 31, 38, 49 and 229, 221, 211, Lights to 40, 40, 40 and 233, 222, 207 — and with Splits by Hue, Protect skin, Balance and Keep brightness, a moved Split point and Crossover, and a Mix every pixel of a busy picture is the grade times the tonal weight of its own brightness to the level (CONTROL: All grades grey 40 to 23, 37, 57 and grey 220 to 238, 223, 202)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('tealorange', _o13P('tealorange', over), 256, 2, _o13Lv(), 0.5);
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    const all = run({});
+    if (px(all, 40) !== '23, 37, 57' || px(all, 220) !== '238, 223, 202') bad.push('CONTROL: under All grey 40 reads ' + px(all, 40) + ' and grey 220 reads ' + px(all, 220) + ' (23, 37, 57 and 238, 223, 202 expected)');
+    [[1, 'Darks', '28, 38, 52', '220, 220, 220'], [2, 'Mids', '31, 38, 49', '229, 221, 211'], [3, 'Lights', '40, 40, 40', '233, 222, 207']].forEach(([rg, name, w40, w220]) => {
+      const got = run({ range: rg });
+      if (px(got, 40) !== w40) bad.push(name + ' puts grey 40 at ' + px(got, 40) + ', not ' + w40);
+      if (px(got, 220) !== w220) bad.push(name + ' puts grey 220 at ' + px(got, 220) + ', not ' + w220);
+      [{}, { mode: 1 }, { skin: 80 }, { balance: -60, keep: 50 }, { amount: 1, pivot: 30, spread: 60 }, { mix: 60 }].forEach(extra => {
+        const mix = extra.mix == null ? 100 : extra.mix;
+        const w = _o15Worst('tealorange', _o13P('tealorange'), Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(mix, rg, _o13L(r, g, b), 0, 0), 0.5);
+        if (w) bad.push(name + ' ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its grade times its tonal weight' + (extra.mix ? ' times Mix' : '') + ')');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts15 Teal & Orange Mix: at 40 % grey 40 of a 0–255 ramp reads 33, 39, 47 and grey 200 reads 206, 201, 194, every grey sits 0.4 of the way between itself and its graded value to the level in each channel, at 0 % the ramp is itself byte for byte, and a Mix keyed 0 to 100 draws its value half way (CONTROL: the whole grade takes grey 40 to 23, 37, 57 and grey 200 to 214, 203, 186)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('tealorange', _o13P('tealorange', over), 256, 2, _o13Lv(), 0.5);
+    const full = run({}), part = run({ mix: 40 }), none = run({ mix: 0 }), keyed = run({ mix: _o13KF(0, 100) }), half = run({ mix: 50 });
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    if (px(full, 40) !== '23, 37, 57' || px(full, 200) !== '214, 203, 186') bad.push('CONTROL: at Mix 100 grey 40 reads ' + px(full, 40) + ' and grey 200 ' + px(full, 200) + ' (23, 37, 57 and 214, 203, 186 expected)');
+    if (px(part, 40) !== '33, 39, 47') bad.push('at Mix 40 grey 40 reads ' + px(part, 40) + ', not 33, 39, 47');
+    if (px(part, 200) !== '206, 201, 194') bad.push('at Mix 40 grey 200 reads ' + px(part, 200) + ', not 206, 201, 194');
+    let worst = 0, at = -1;
+    for (let v = 0; v < 256; v++) {
+      const f = _o13At(full, 256, v, 0), want = _o13U8(v + (f[0] - v) * 0.4, v + (f[1] - v) * 0.4, v + (f[2] - v) * 0.4), got = _o13At(part, 256, v, 0);
+      for (let c = 0; c < 3; c++) { const e = Math.abs(got[c] - want[c]); if (e > worst) { worst = e; at = v; } }
+    }
+    if (worst > 0) bad.push('at Mix 40 grey ' + at + ' reads ' + px(part, at) + ', ' + worst + ' levels from 0.4 of the way to its graded value');
+    const m0 = E1.maxDiff(none, _o13Lv());
+    if (m0 !== 0) bad.push('at Mix 0 the ramp moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(keyed, half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o15Worst('tealorange', _o13P('tealorange'), { mix: 35, mode: 1, keep: 40, skin: 60 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with Splits by Hue, Keep brightness and Protect skin: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts15 Teal & Orange at All and Mix 100 % draws byte for byte what it drew without them — at its defaults, at full Amount, with Splits by Hue, Protect skin, Balance and Keep brightness, a moved Split point and Crossover, keyframed, and on a half-size plate (CONTROL: Darks and Mix 50 each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o15Need('tealorange', _O15_NEW.tealorange);
+    const bad = _o15Ident('tealorange', [{}, { over: { amount: 1 } }, { over: { mode: 1 } }, { over: { skin: 80 } }, { over: { balance: 50, keep: 60 } }, { over: { pivot: 30, spread: 60 } }, { over: { amount: _o13KF(0.2, 1) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }]);
+    _O15_OFF.tealorange.forEach(o => { const n = _o15Moves('tealorange', o, 96, 72, _o13Pic, 0.5); if (n < 1000) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the default grade moves red and blue by 25.2 x |2L − 1| levels, nothing only near L 0.5, and Darks or Mix 50 holds a light or any pixel back by a level or more */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Teal & Orange ---- */
+
+  /* the round's editors, new rows and all, fit the inspector (round thirteen's fit test) */
+  test('966 opts15 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = {
+      levels: 'Protect skin',
+      unsharpmask: 'Affects',
+      tealorange: 'Affects',
+    };
+    Object.keys(NEW).forEach(type => _o15Need(type, _O15_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o13Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts15 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition
@@ -179488,6 +180139,320 @@
         }
       } finally {
         run.restore();
+      }
+    }
+  });
+
+  /* ═══ #860 STRESS HUNT (PC, read-only hunt + refuter, 24 Oct): each fault below has a test that fails on c27f576d ═══ */
+
+  /* (#860 hunt #3) HOLDING CTRL+Z / CTRL+SHIFT+Z / CTRL+Y. Each undo or redo restores the whole project synchronously
+     (history.js: parse, sanitise, refreshAll, seek) and Chrome does not coalesce keydowns, so on a big project every key
+     repeat the OS sent while a restore ran was queued and then run, one full restore each: seconds of frozen editor, and it
+     kept stepping back after he let go. Here the restore is a 40 ms busy wait (FM.history.undo / redo stubbed and counted),
+     and ten keydowns are MADE first and then pressed one after another, so each one's timeStamp is the moment it was made:
+     from about the fourth on it has waited more than 100 ms behind the restores before it is handled, as a queued OS repeat
+     has.
+     FAILS ON c27f576d: all ten repeats run, 10 undos, 10 redos by Ctrl+Shift+Z and 10 by Ctrl+Y. After the fix: one to three.
+     CONTROL, which holds before and after: ten separate presses (repeat false) made the same way still undo ten times, so a
+     first press is never dropped however busy the editor is. */
+  test('860 holding Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y does not run every key repeat that queued up behind a slow restore (CONTROL: ten separate presses still undo ten times)', { item: '860' }, async function () {
+    const _isoK = isoKeep(); try {
+    await _bh6KeysToEditor();
+    if (FM.overlayOwnsScreen && FM.overlayOwnsScreen()) throw new Error('setup: a full-screen overlay owns the keyboard (Home or Settings is open), so no key would reach the editor');
+    if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
+    const H = FM.history, undo0 = H.undo, redo0 = H.redo;
+    let nU = 0, nR = 0;
+    const busy = () => { const t = performance.now(); while (performance.now() - t < 40) {} };
+    /* ten keydowns made up front, then pressed on the page one after another */
+    const ten = (key, extra) => {
+      const evs = [];
+      for (let i = 0; i < 10; i++) {
+        evs.push(new KeyboardEvent('keydown', Object.assign({ key: key, code: 'Key' + key.toUpperCase(), ctrlKey: true, bubbles: true, cancelable: true }, extra)));
+      }
+      evs.forEach(ev => document.body.dispatchEvent(ev));
+    };
+    try {
+      H.undo = function () { nU++; busy(); };
+      H.redo = function () { nR++; busy(); };
+      /* CONTROL first: ten separate presses each undo */
+      ten('z', { repeat: false });
+      if (nU !== 10) {
+        throw new Error('CONTROL: ten separate Ctrl+Z presses behind a 40 ms restore ran ' + nU + ' undos, not 10' +
+                        (nU ? ', so a first press was dropped' : ': no key here reaches the editor, so nothing below would mean anything'));
+      }
+      const bad = [];
+      nU = 0; ten('z', { repeat: true });
+      if (!(nU >= 1 && nU <= 3)) bad.push('ten Ctrl+Z key repeats queued behind a 40 ms restore ran ' + nU + ' undos (wanted 1 to 3: the ones still fresh when handled)');
+      nR = 0; ten('Z', { repeat: true, shiftKey: true });
+      if (!(nR >= 1 && nR <= 3)) bad.push('ten Ctrl+Shift+Z key repeats queued behind a 40 ms restore ran ' + nR + ' redos (wanted 1 to 3)');
+      nR = 0; ten('y', { repeat: true });
+      if (!(nR >= 1 && nR <= 3)) bad.push('ten Ctrl+Y key repeats queued behind a 40 ms restore ran ' + nR + ' redos (wanted 1 to 3)');
+      if (bad.length) throw new Error(bad.join('; ') + ' - every stale repeat ran one full restore, so a held key freezes a big project and keeps stepping after it is let go');
+    } finally {
+      H.undo = undo0; H.redo = redo0;
+    }
+    } finally { _isoK.put(); }
+  });
+
+  /* (#860 hunt #2) THE TIMELINE'S FILMSTRIP CACHE ABOVE 40 CLIPS. It was a FIFO of 40 slots, a hit did not move its entry,
+     and buildTracks walks the rows in the same order every pass, so with more than 40 picture clips each new entry evicted
+     the one the walk asks for ten rows later and NO strip was ever reused: every rebuild (every tap, selection and keyframe
+     edit) re-allocated and re-drew every clip bar. Read as canvas IDENTITY across two rebuilds, because reuse is the claim.
+     Each clip's media record carries its strip frame already (stripFrames), so every bar is drawn in the same pass, with no
+     async build. Two settling rebuilds come first: the first pass of a long list can change the lane width (a scrollbar),
+     which is part of the key and would re-draw every bar once for a reason that is not this one.
+     FAILS ON c27f576d: with 50 picture clips 0 of the 50 bars survive a rebuild.
+     CONTROL, which holds before and after: 30 clips (under the old cap) keep all 30.
+     GUARD (after the fix): with 45 of the 50 deleted, the cache holds at most 5 entries, so nothing is kept for a layer
+     that is gone (FM._tlStripCacheSize, the seam the fix adds; it is read only after the reuse assertion). */
+  test('860 with 50 picture clips a timeline rebuild reuses every clip bar it drew instead of repainting them all (CONTROL: 30 clips keep all 30; GUARD: deleted clips leave no bar behind)', { item: '860' }, async function () {
+    const _isoK = isoKeep(); try {
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const plate = document.createElement('canvas'); plate.width = 64; plate.height = 64;
+    { const g = plate.getContext('2d'); g.fillStyle = '#2a9d8f'; g.fillRect(0, 0, 64, 64); }
+    const strips = () => [].slice.call(document.querySelectorAll('#tl-tracks .clip-filmstrip'));
+    const build = (n) => {
+      FM.scene.layers.length = 0;
+      for (let i = 0; i < n; i++) {
+        const L = FM.makeLayer('image', { name: '860 strip ' + i, x: 200, y: 200 });
+        L.start = 0; L.duration = 3;
+        FM.scene.layers.push(L);
+        FM.media.set(L.id, { kind: 'image', el: plate, width: 64, height: 64, duration: 0, stripFrames: [plate] });
+      }
+      FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      FM.refreshAll();
+      FM.timeline.rebuild(); FM.timeline.rebuild();
+    };
+    const reused = (n) => {
+      build(n);
+      const a = strips();
+      if (a.length !== n) throw new Error('setup: ' + n + ' picture clips drew ' + a.length + ' filmstrips, so there is nothing to compare - the harness, not the feature');
+      FM.timeline.rebuild();
+      const b = strips();
+      if (b.length !== n) throw new Error('setup: after a rebuild ' + n + ' picture clips drew ' + b.length + ' filmstrips');
+      const before = new Set(a);
+      return b.filter(cv => before.has(cv)).length;
+    };
+    try {
+      const c30 = reused(30);
+      if (c30 !== 30) throw new Error('CONTROL: with 30 picture clips a rebuild reused ' + c30 + ' of 30 clip bars, so the cache does not reuse at all here and the 50-clip reading below would mean nothing');
+      const c50 = reused(50);
+      if (c50 !== 50) {
+        throw new Error('with 50 picture clips a timeline rebuild reused ' + c50 + ' of 50 clip bars and re-drew the rest: the cache is a FIFO of 40 slots ' +
+                        'and the rows are walked in the same order every pass, so each bar is evicted before it is asked for again');
+      }
+      /* CONTROL, at both widths: a collapsed group hides its 50 members rows, and their bars stay cached, because the sweep
+         marks the scene and not the rows drawn (the phone one-row solo view relies on the same). Two rebuilds, so a sweep
+         of what the previous pass drew is caught too. */
+      const G = FM.makeLayer('group', { name: '860 strip group' });
+      G.start = 0; G.duration = 3; G.collapsed = true;
+      FM.scene.layers.forEach(l => { l.parent = G.id; });
+      FM.scene.layers.unshift(G);
+      FM.refreshAll();
+      FM.timeline.rebuild(); FM.timeline.rebuild();
+      if (strips().length !== 0) throw new Error('setup: with all 50 clips inside a collapsed group the timeline still drew ' + strips().length + ' filmstrips');
+      const kept = FM._tlStripCacheSize();
+      if (kept !== 50) throw new Error('CONTROL: with all 50 clips folded into a collapsed group (no bar drawn) the strip cache kept ' + kept + ' of 50 entries - the sweep drops rows that are only hidden, so opening the group, or leaving the phone solo view, repaints every bar');
+      FM.scene.layers.splice(FM.scene.layers.indexOf(G), 1);
+      FM.scene.layers.forEach(l => { l.parent = null; });
+      FM.scene.layers.length = 5;
+      FM.refreshAll();
+      FM.timeline.rebuild();
+      if (strips().length !== 5) throw new Error('setup: with 5 clips left the timeline drew ' + strips().length + ' filmstrips');
+      if (typeof FM._tlStripCacheSize !== 'function') throw new Error('GUARD: no FM._tlStripCacheSize seam to read the cache size from');
+      const sz = FM._tlStripCacheSize();
+      if (!(sz <= 5)) throw new Error('GUARD: with 45 of 50 clips deleted the strip cache still holds ' + sz + ' entries, so bars are kept for layers that are gone');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      FM.refreshAll();
+      if (FM.timeline) FM.timeline.rebuild();
+    }
+    } finally { _isoK.put(); }
+  });
+
+  /* (#860 hunt #7) THE DEEPEST TIMELINE ZOOM ON A VERY LONG PROJECT. The strip is the scrollport plus duration x pps,
+     and pps is the lane width / 5 x zoom with the zoom allowed up to 12 whatever the length, so a long enough project at
+     12x asks Blink for a box wider than its layout limit ((2^31 - 1)/64, about 33,554,431 px). Past it the browser clamps
+     the strip and the clip positions, and the ruler, the clips and the scroll range stop agreeing. The length is sized
+     from the frame itself (40 M px at 12x), so the reading does not depend on the runner width.
+     FAILS ON 4a8b82c8: the strip asks for about 40 M px. After the fix the zoom is held at the deepest one the project
+     can be laid out at, and the view bar zoom-in arrow is dim there. The width is read twice: once right after the
+     project grows while the timeline is still at 12x from the control (no zoom gesture, as when a clip added later makes
+     a project longer), and once after zooming all the way in again.
+     CONTROLS, which hold before and after: a 60 s project still zooms to exactly 12x, and the rebuild kept the length
+     the test set (so the long project really was laid out).
+     THE LENGTH COMES FROM A CLIP. A project's length is not a setting: every rebuild fits it to the furthest clip end
+     (FM.autoFitDuration, timeline.js rebuild), so a length written straight onto the project came back as the clips' own
+     end (33603 s to 0 s in the first slice run). One shape that spans the project, alone in the scene, sets it. */
+  test('860 at the deepest timeline zoom a very long project stays inside the browser layout limit (CONTROL: a one-minute project still zooms to 12x)', { item: '860' }, async function () {
+    const _isoK = isoKeep(); try {
+    const P = FM.scene.project, d0 = P.duration, z0 = FM.timeline.getZoom();
+    const tl = document.getElementById('timeline');
+    if (!tl) throw new Error('setup: #timeline missing');
+    const LIMIT = 33554431;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
+    const span = FM.makeLayer('shape', { name: '860 span', shape: 'rect', x: 160, y: 120, shapeW: 40, shapeH: 40, fill: '#2a9d8f' });
+    span.start = 0; span.duration = 60;
+    FM.scene.layers.length = 0; FM.scene.layers.push(span);
+    try {
+      P.duration = 60;
+      FM.timeline.setZoom(12, 0); FM.timeline.rebuild();
+      if (P.duration !== 60) throw new Error('setup: the rebuild made the one-minute project ' + P.duration + ' s long, so the span clip does not set its length');
+      if (FM.timeline.getZoom() !== 12) throw new Error('CONTROL: a 60 s project zoomed all the way in reads ' + FM.timeline.getZoom() + 'x, not 12x, so the deepest zoom of a short project changed');
+      const pps12 = FM._tlPxPerSec();
+      if (!(pps12 > 0)) throw new Error('setup: the timeline reads ' + pps12 + ' px per second at 12x, so there is no lane to size the project from');
+      const D = Math.ceil(40e6 / pps12);
+      span.duration = D; P.duration = D;
+      FM.timeline.rebuild();
+      if (P.duration !== D) throw new Error('setup: the rebuild changed the project length from ' + D + ' s to ' + P.duration + ' s, so the long project was never laid out');
+      {
+        const grown = FM._tlPxPerSec() * P.duration + tl.clientWidth;
+        if (!(grown <= LIMIT)) throw new Error('a project that grew to ' + (D / 3600).toFixed(1) + ' h while the timeline stayed at 12x asks for ' + Math.round(grown) + ' px, past the browser layout limit of ' + LIMIT + ' px: a clip added later makes a project longer without any zoom gesture');
+      }
+      FM.timeline.setZoom(12, 0); FM.timeline.rebuild();
+      const port = tl.clientWidth;
+      if (!(port > 0)) throw new Error('setup: the timeline scrollport measured ' + port + ' px');
+      const want = FM._tlPxPerSec() * P.duration + port;
+      if (!(want <= LIMIT)) {
+        throw new Error('a ' + (D / 3600).toFixed(1) + ' h project zoomed all the way in asks for a timeline ' + Math.round(want) + ' px wide, past the browser layout limit of ' + LIMIT +
+                        ' px: the browser clamps the strip and the clip positions there, so the ruler, the clips and the scroll range stop agreeing');
+      }
+      if (FM.syncViewBar) {
+        FM.syncViewBar();
+        const zi = document.getElementById('vb-tlin');
+        if (zi && !zi.classList.contains('dim')) throw new Error('at the deepest zoom this long project allows (' + FM.timeline.getZoom() + 'x) the zoom-in arrow on the view bar is still lit, as if it could zoom in further');
+      }
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0);
+      P.duration = d0;
+      FM.timeline.setZoom(z0, 0); FM.timeline.rebuild();
+      if (FM.syncViewBar) FM.syncViewBar();
+    }
+    } finally { _isoK.put(); }
+  });
+
+  /* (#860 hunt #8) EVERY AUTOSAVE READ EVERY CLIP BACK FROM INDEXEDDB. save() wrote the doc and then, for each clip with a
+     file, opened a readonly transaction and read the clip's whole record back, to learn whether it was on disk at this
+     revision, which this session already knew (_stored: a hydrate read it, a save wrote it, idbDel forgets it). With 20
+     clips that was 20 reads on every autosave. Counted as IDBObjectStore get calls for these 20 clips' keys, over two
+     saves with nothing changed, after saves that landed every file and read each back once (the fix trusts a clip only
+     once a read has seen it on disk). Two saves, and the lower of the two is read, because the fix keeps a full read
+     every 20th save and one of the two may be it.
+     FAILS ON 4a8b82c8: each save reads all 20 back (20 and 20). After the fix: 0.
+     CONTROL first, which holds before and after: with the document write REFUSED (a full store), a clip file deleted
+     from IndexedDB behind the app (not through idbDel, so the session still thinks it is there) is written again by the
+     next save. That read is what heals a file another tab's boot sweep deleted while the doc on disk did not list it.
+     Then two steps the fix must hold (both fail on 49b73aa9, both pass on 4a8b82c8, which reads every clip on every save):
+     a second file deleted the same way while the store is still full is written back by the FIRST save that lands the
+     document again (the doc on disk did not list it while the store was full, so a read made then proves nothing now);
+     and a clip taken out of the document, its file deleted behind the app (as another window's boot sweep may do while
+     no stored doc lists it) and then put back as undo does, is written again by the save that brings it back.
+     GUARD (after the fix): a file deleted the same way with the store NOT full comes back within 40 saves, so the regular
+     full check exists. */
+  test('860 an autosave with nothing new does not read every clip back from storage (CONTROL: with the project refused, a clip file deleted behind the app is written again; GUARD: the regular full check puts one back)', { item: '860', budgetMs: 90000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const realGet = IDBObjectStore.prototype.get, realSet = Storage.prototype.setItem, realToast = FM.toast;
+    const ids = [];
+    const rawDel = key => new Promise((res, rej) => {
+      const r = indexedDB.open('freemotion');
+      r.onerror = () => rej(r.error);
+      r.onsuccess = () => {
+        const db = r.result;
+        try {
+          const tx = db.transaction('media', 'readwrite');
+          tx.objectStore('media').delete(key);
+          tx.oncomplete = () => { db.close(); res(); };
+          tx.onerror = () => { db.close(); rej(tx.error); };
+          tx.onabort = () => { db.close(); rej(tx.error); };
+        } catch (e) { db.close(); rej(e); }
+      };
+    });
+    const onDisk = async id => { const r = await FM.storage.readMedia(id); return !!(r && r.file); };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: '860 save skip', width: 320, height: 240 });
+      if (!pid) throw new Error('setup: New project was refused');
+      made.push(pid);
+      if (FM.storage.openProjectId() !== pid) throw new Error('setup: the new project is not the one this window saves to');
+      const key = 'fm.proj.' + pid;
+      const plate = document.createElement('canvas'); plate.width = 16; plate.height = 16;
+      { const g = plate.getContext('2d'); g.fillStyle = '#e76f51'; g.fillRect(0, 0, 16, 16); }
+      for (let i = 0; i < 20; i++) {
+        const L = FM.makeLayer('image', { name: '860 save ' + i, x: 160, y: 120 });
+        L.start = 0; L.duration = 2;
+        FM.scene.layers.push(L);
+        FM.media.set(L.id, { kind: 'image', el: plate, width: 16, height: 16, duration: 0, file: new Blob(['860 clip ' + i + ' of 20, ' + L.id], { type: 'application/octet-stream' }) });
+        ids.push(L.id);
+      }
+      const idSet = new Set(ids);
+      FM.refreshAll();
+      await FM.storage.settled();
+      await FM.storage.save();
+      for (const id of ids) { if (!(await onDisk(id))) throw new Error('setup: the first save did not land the file of clip ' + id + ', so there is nothing known to be stored'); }
+
+      /* CONTROL: the store refuses the document, a file goes behind the app, and the next save puts it back */
+      const toasts = [];
+      Storage.prototype.setItem = function (k, v) { if (k === key) throw new DOMException('refused by the 860 test', 'QuotaExceededError'); return realSet.call(this, k, v); };
+      FM.toast = function (m) { toasts.push(String(m)); };
+      try {
+        await rawDel(ids[0]);
+        if (await onDisk(ids[0])) throw new Error('setup: the file deleted behind the app is still in IndexedDB');
+        FM.scene.layers[0].name = '860 save 0, renamed while the store is full';
+        await FM.storage.save();
+        if (!FM.storage.lastWriteRefused()) throw new Error('setup: the full store did not refuse the project document, so this control measured nothing');
+        if (!(await onDisk(ids[0]))) {
+          throw new Error('CONTROL: with the project document refused (a full store) a clip file deleted behind the app was NOT written again by the next save: the save trusted what it last knew, and on a full store that is exactly when another tab can sweep the file away');
+        }
+        await rawDel(ids[2]);
+        if (await onDisk(ids[2])) throw new Error('setup: the third file deleted behind the app is still in IndexedDB');
+      } finally { Storage.prototype.setItem = realSet; FM.toast = realToast; }
+      await FM.storage.save();   // the document lands again
+      if (FM.storage.lastWriteRefused()) throw new Error('setup: with the store no longer full the project document was still refused');
+      if (!(await onDisk(ids[2]))) {
+        throw new Error('the first save to land the document after a refused one did not write back a clip file that went while the store was full: it trusted a read made while no stored doc listed the clip, which is when another window can sweep it');
+      }
+      /* deleted, swept by another window (no stored doc lists it, so pruneOrphans may take its file), then brought back as undo does */
+      const L3 = FM.scene.layers.find(l => l.id === ids[3]), at3 = FM.scene.layers.indexOf(L3);
+      if (at3 < 0) throw new Error('setup: clip 3 is not on the timeline');
+      FM.scene.layers.splice(at3, 1); FM.refreshAll();
+      await FM.storage.save();
+      if (FM.storage.lastWriteRefused()) throw new Error('setup: the document without clip 3 was refused');
+      await rawDel(ids[3]);
+      if (await onDisk(ids[3])) throw new Error('setup: the fourth file deleted behind the app is still in IndexedDB');
+      FM.scene.layers.splice(at3, 0, L3); FM.refreshAll();
+      await FM.storage.save();
+      if (!(await onDisk(ids[3]))) {
+        throw new Error('a clip deleted and brought back (as undo does) was not written again by the next save, although its file went while no stored doc listed it: the save trusted a read made before the clip left the document');
+      }
+
+      /* the reading: two saves with nothing changed */
+      let gets = 0;
+      const per = [];
+      IDBObjectStore.prototype.get = function (k) { if (idSet.has(k)) gets++; return realGet.apply(this, arguments); };
+      try {
+        for (let i = 0; i < 2; i++) { gets = 0; await FM.storage.save(); per.push(gets); }
+      } finally { IDBObjectStore.prototype.get = realGet; }
+      if (Math.min(per[0], per[1]) !== 0) {
+        throw new Error('two autosaves in a row with nothing changed read ' + per[0] + ' and ' + per[1] + ' of these 20 clips back from IndexedDB, one transaction each, ' +
+                        'although this session had just written every one of them at that revision: every save re-reads every clip');
+      }
+
+      /* GUARD: the regular full check still exists */
+      await rawDel(ids[1]);
+      if (await onDisk(ids[1])) throw new Error('setup: the second file deleted behind the app is still in IndexedDB');
+      let back = 0;
+      for (let n = 1; n <= 40 && !back; n++) { await FM.storage.save(); if (await onDisk(ids[1])) back = n; }
+      if (!back) throw new Error('GUARD: a clip file deleted behind the app was not written again in 40 saves, so a file lost some other way stays lost while the session thinks it is stored');
+    } finally {
+      IDBObjectStore.prototype.get = realGet; Storage.prototype.setItem = realSet; FM.toast = realToast;
+      try { FM.storage.flushSync(); await FM.storage.save(); } catch (e) {}
+      await hcCleanup(made, orig, wasOpen);
+      for (const id of ids) {
+        try { FM.media.remove(id); } catch (e) {}
+        try { await FM.storage.removeMedia(id); } catch (e) {}
       }
     }
   });

@@ -6967,6 +6967,11 @@ window.FM = window.FM || {};
          a resumed export looked exactly like an ordinary one from here. Four releases built
          crash-resume and nothing has ever told him it worked — which is why the entry cannot be closed
          even though the mechanism is done. It is one clause on a line he already reads. */
+      /* #860 (1): a reversed or frame-blend clip the export's memory budget gave fewer frames than its length needs plays
+         choppier in the file. Said once, here, with each clip's real frame rate. */
+      if (xrm && out.thinned && out.thinned.length) {
+        xrm.textContent += ' · fewer frames to fit memory: ' + out.thinned.map(t => t.name + ' ' + t.effFps + ' fps').join(', ');
+      }
       if (xrm && out.resumedPct > 0) {
         xrm.textContent += ' · picked up from ' + out.resumedPct + '%';
       }
@@ -8331,7 +8336,10 @@ window.FM = window.FM || {};
       const mc = document.getElementById('vb-markclear'); if (mc) mc.classList.toggle('dim', !marked);
       const zi = document.getElementById('vb-tlin'), zo = document.getElementById('vb-tlout');
       const z = FM.timeline && FM.timeline.getZoom ? FM.timeline.getZoom() : null;
-      if (z != null) { if (zi) zi.classList.toggle('dim', z >= 11.99); if (zo) zo.classList.toggle('dim', z <= 0.0201); }
+      /* #860 hunt #7: the deepest zoom is 12 only while the project is short enough to lay out at 12 (FM.timeline.maxZoom),
+         so the zoom-in arrow dims against that and does not stay lit at a maximum it cannot pass */
+      const zMax = FM.timeline && FM.timeline.maxZoom ? FM.timeline.maxZoom() : 12;
+      if (z != null) { if (zi) zi.classList.toggle('dim', z >= zMax - 0.01); if (zo) zo.classList.toggle('dim', z <= 0.0201); }
     };
     /* PC: ONE row, no side rail (queue 168). His words: "on pc we can lokey remove the side bar, put
    * export on the far left of the row with the play buttons…", amended to: back button far left; the
@@ -8621,6 +8629,30 @@ window.FM = window.FM || {};
    * from refreshAll and syncTopBar remain harmless. */
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pcTransportLayout);
   else pcTransportLayout();
+
+  /* ---- DO THIS DEVICE'S SCROLLBARS TAKE WIDTH? (#1182) ---------------------------------------------
+   * A Windows PC (and real desktop Linux Chrome, or a Mac set to always show scrollbars) draws CLASSIC
+   * scrollbars that take 15px of layout; the iPhone and a default Mac overlay theirs and take none. The two
+   * phone-width fixes in styles.css (the effects list, the empty timeline) hide the bar only under
+   * html.fm-classic-sb, so the iPhone keeps its scroll indicator, the only cue that a list scrolls (the PM,
+   * 24 Oct). Measured once on a hidden 100px probe; returns the gutter in px. */
+  function detectClassicScrollbars() {
+    let gutter = 0;
+    try {
+      const probe = document.createElement('div'), inner = document.createElement('div');
+      probe.style.cssText = 'position:absolute;left:-200px;top:0;width:100px;height:50px;overflow-y:scroll;visibility:hidden;';
+      inner.style.height = '200px';
+      probe.appendChild(inner);
+      document.body.appendChild(probe);
+      gutter = probe.offsetWidth - probe.clientWidth;
+      probe.remove();
+    } catch (e) { gutter = 0; }
+    document.documentElement.classList.toggle('fm-classic-sb', gutter > 0.5);
+    return gutter;
+  }
+  FM.detectClassicScrollbars = detectClassicScrollbars;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', detectClassicScrollbars);
+  else detectClassicScrollbars();
 
   /* ---- THE PANEL REACTS TO THE CURSOR (queue 286) ---------------------------------------------
    * Ezra: "on the add menu and layer edit menu on pc a glow should follow ur curser… its not just a
@@ -9730,13 +9762,22 @@ window.FM = window.FM || {};
       /* SIMPLE MODE P1: in Simple, the arranging keys with no Simple command yet say so rather than do Full's thing to a
          main clip (DESIGN.md §15.1). In Full it answers NOTHING: there is no E key (DESIGN.md §0.4 B14). */
       if (!inEdit && FM.editor && FM.editor.onKey && FM.editor.onKey(e)) return;
+      /* ⚠️ #860 (stress hunt): A HELD ⌘Z / ⌘⇧Z / ⌘Y RAN ONE FULL RESTORE PER KEY REPEAT, INCLUDING THE ONES THAT QUEUED UP
+         BEHIND THE LAST RESTORE. undo() and redo() restore synchronously (history.js: parse, sanitise, refreshAll, seek) and
+         Chrome does not coalesce keydowns, so on a big project every repeat the OS sent while the thread was busy ran once it
+         came free: the editor froze for seconds and kept stepping back long after he let go. A repeat is dropped only when it
+         is STALE, older than 100 ms by its own timeStamp (the platform's event time), i.e. it waited behind a restore. A first
+         press is never dropped, and a repeat that arrives on time still steps, so holding the key on a small project feels as
+         it did. Dropped ones are still claimed (preventDefault), so the browser does not act on them instead. */
+      const staleRepeat = e.repeat && (performance.now() - e.timeStamp) > 100;
       if (mod && (e.key === 'z' || e.key === 'Z' || otherScriptLetter(e) === 'z')) {
         if (inEdit && typingText(tgt)) return; // let field text-undo (bughunt6 #7: a text box only)
         e.preventDefault();
+        if (staleRepeat) return;
         if (e.shiftKey) { if (FM.history) FM.history.redo(); } else { if (FM.history) FM.history.undo(); }
         return;
       }
-      if (mod && (e.key === 'y' || e.key === 'Y' || otherScriptLetter(e) === 'y')) { if (inEdit && typingText(tgt)) return; e.preventDefault(); if (FM.history) FM.history.redo(); return; }
+      if (mod && (e.key === 'y' || e.key === 'Y' || otherScriptLetter(e) === 'y')) { if (inEdit && typingText(tgt)) return; e.preventDefault(); if (staleRepeat) return; if (FM.history) FM.history.redo(); return; }
       if (mod && (e.key === 'd' || e.key === 'D')) {
         if (inEdit) return;
         e.preventDefault();

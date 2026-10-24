@@ -2083,6 +2083,18 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    edge of the SCREEN, the way every sideways shelf on a phone does. */
 .fxb-featured { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; margin: 0 -14px; padding: 0 14px 4px; scroll-padding-inline: 14px; }
 .fxb-featured::-webkit-scrollbar { display: none; }
+/* #1182: Windows (and real desktop Linux) Chrome draws CLASSIC scrollbars that take 15px of layout width (the
+   Mac and the iPhone overlay theirs and take none; the laptop suite only sees 0 because it runs Chrome with
+   --hide-scrollbars), so the sheet's own vertical bar cut the edge-to-edge NEW row off at x 365 of 380.
+   No bar on the sheet's scroller AT PHONE WIDTH only: the PC at desktop width keeps the dark bar #775 F1 themed
+   (the browser is an .fxb-sheet there too, so the media query is the only thing that scopes it). And only where
+   bars TAKE width (html.fm-classic-sb, measured by js/app.js): the iPhone's overlay indicator takes none and is
+   the only cue that the list scrolls, so it stays (the PM, 24 Oct). The list still scrolls by wheel, trackpad,
+   touch and keyboard. */
+@media (max-width: 700px) {
+  html.fm-classic-sb #fx-browser .fxb-scroll { scrollbar-width: none; }
+  html.fm-classic-sb #fx-browser .fxb-scroll::-webkit-scrollbar { display: none; }
+}
 .fxb-card { position: relative; flex: 0 0 150px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 0; overflow: hidden; cursor: pointer; }   /* relative so the ★ pins to the CARD, not to the scroller (#62) */
 .fxb-card .fxb-thumb { height: 94px; border-radius: 0; }
 .fxb-card-name { padding: 9px 10px; font-size: 12.5px; font-weight: 600; color: var(--text); }
@@ -3053,6 +3065,13 @@ body.white-chrome #time-readout:active {
 /* touch-action:none so JS owns ALL timeline gestures — horizontal grab-scrub works ANYWHERE (lanes,
    empty space, ruler), not just the ruler. The scrub handler does vertical pan itself when needed. */
 #timeline { position: relative; overflow: auto; touch-action: none; overscroll-behavior: contain; min-height: 0; }
+/* #1182: in the EMPTY project a classic scrollbar (Windows, and real desktop Linux Chrome) took 15px off the
+   right of the timeline, so the big + centred in the remaining box sat 8px left of the middle of the screen.
+   Empty state only, no bar; .tl-addrow--empty only exists at phone width, so this is phone-only already.
+   Overlay-scrollbar layouts (Mac, iPhone) take no width for it and do not move; the laptop suite sees 0
+   only because it runs Chrome with --hide-scrollbars. */
+html.fm-classic-sb #timeline:has(.tl-addrow--empty) { scrollbar-width: none; }
+html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display: none; }
 #tl-inner { position: relative; min-height: 100%; }
 #tl-rulerrow { display: flex; height: 22px; position: sticky; top: 0; z-index: 7; background: var(--panel); }
 .tl-headspace { width: var(--head-w); flex: 0 0 var(--head-w); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line-soft); position: sticky; left: 0; z-index: 9; background: var(--panel); }
