@@ -83595,7 +83595,9 @@
       await sleep(900);   // past the motion idle time: nothing is moving or held
       Object.defineProperty(FM, 'renderScene', { configurable: true, enumerable: rsDesc.enumerable, writable: true, value: function (c, sc) { if (FM._mfGhost) ghosts++; else if (sc === FM.scene) mains++; return realRS.apply(this, arguments); } });
       ghosts = 0; FM.requestRender(); await frame();
-      if (ghosts !== 2) throw new Error('CONTROL: at rest one frame drew ' + ghosts + ' ghost renders, not the two onion skin draws - the detector or the setup is broken, so a zero below would prove nothing');
+      /* at least the two ghosts, not exactly two: a render something else queued (a late idle timer on a busy machine) can
+         land in the same frame window and add a second pair - that is not the bug; zero would be (v17.99's third ship, 24 Oct) */
+      if (ghosts < 2) throw new Error('CONTROL: at rest one frame drew ' + ghosts + ' ghost renders, not the two onion skin draws - the detector or the setup is broken, so a zero below would prove nothing');
       ghosts = 0; mains = 0;
       const per = [];
       for (let i = 1; i <= 12; i++) { const g0 = ghosts; FM.scrubTime(2 + i * 0.1); await frame(); per.push(ghosts - g0); }
@@ -83610,7 +83612,8 @@
       // CONTROL: a one-off jump (a caption cue tapped goes through FM.scrubTime) is not a scrub: its frame has its ghosts
       await sleep(900);
       ghosts = 0; FM.scrubTime(1); await frame();
-      if (ghosts !== 2) throw new Error('CONTROL: a single FM.scrubTime jump drew ' + ghosts + ' ghost renders, not 2 - a jump is not a scrub and must keep its ghosts');
+      // a jump treated as a scrub draws NO ghosts; a second pair from a late queued render is not the fault (see the rest control)
+      if (ghosts < 2) throw new Error('CONTROL: a single FM.scrubTime jump drew ' + ghosts + ' ghost renders, not 2 - a jump is not a scrub and must keep its ghosts');
     } finally {
       if (rsDesc) Object.defineProperty(FM, 'renderScene', rsDesc); else FM.renderScene = realRS;
       FM.onionSkin = onion0;
@@ -97837,8 +97840,19 @@
     finally { fe.style.left = l0; fe.style.top = t0; }
   }
   async function hcUntil(what, fn, ms) {
+    window.__fmStep = 'waiting for ' + what;
     const end = Date.now() + (ms || 4000);
     for (;;) { const v = fn(); if (v) return v; if (Date.now() > end) throw new Error('timed out waiting for ' + what); await sleep(40); }
+  }
+  /* An await that might never settle, given a deadline so it THROWS and the test's finally (hcCleanup) still runs. On
+     v17.99's second ship '690 Replace media' hung past the runner's 90 s budget with no step set; an abandoned test runs no
+     finally, so it left its own project open and the next two tests failed on that state. `what` lands in window.__fmStep,
+     so a hang now names itself. */
+  function hcWithin(p, ms, what) {
+    window.__fmStep = what;
+    let t = null;
+    const late = new Promise(function (res, rej) { t = setTimeout(function () { rej(new Error('timed out after ' + ms + ' ms waiting for ' + what)); }, ms); });
+    return Promise.race([p, late]).finally(function () { clearTimeout(t); });
   }
   async function hcMenuItem(re) {
     return hcUntil('the ⋯ menu', function () {
@@ -97855,8 +97869,8 @@
   async function hcCleanup(made, orig, wasOpen) {
     try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
     try { if (FM.home._selectionState && FM.home._selectionState().selectMode) { const b = document.getElementById('hm-select-btn'); if (b) b.click(); } } catch (e) {}
-    try { if (orig && FM.projects.currentId() !== orig && FM.projects.list().some(function (p) { return p.id === orig; })) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
-    for (const id of made) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await FM.projects.remove(id); } catch (e) {} }
+    try { if (orig && FM.projects.currentId() !== orig && FM.projects.list().some(function (p) { return p.id === orig; })) await hcWithin(FM.projects.open(orig, { confirmed: true }), 15000, 'cleanup: reopening the project the test started in'); } catch (e) {}
+    for (const id of made) { try { if (FM.projects.list().some(function (p) { return p.id === id; })) await hcWithin(FM.projects.remove(id), 15000, 'cleanup: removing a project the test made'); } catch (e) {} }
     try { if (wasOpen) FM.home.open(); else FM.home.close(); } catch (e) {}
     await sleep(200);
   }
@@ -98199,7 +98213,7 @@
       const f = new VideoFrame(cv, { timestamp: Math.round(k * 1e6 / fps), duration: Math.round(1e6 / fps) });
       enc.encode(f, { keyFrame: k % 10 === 0 }); f.close();
     }
-    await enc.flush(); enc.close();
+    await hcWithin(enc.flush(), 30000, 'the encoder to finish the ' + w + ' x ' + h + ' fixture clip ' + name); enc.close();
     if (encErr) throw new Error('setup: the fixture clip could not be encoded: ' + encErr);
     muxer.finalize();
     return new File([muxer.target.buffer], 'hunt2d-indexed.mp4', { type: 'video/mp4' });
@@ -99535,14 +99549,16 @@
     const made = [], lib0 = h3aLibSnapshot();
     try {
       if (wasOpen) FM.home.close();
-      made.push(await FM.projects.create({ name: 'HUNT-a replace', width: 1080, height: 1920 }));
+      made.push(await hcWithin(FM.projects.create({ name: 'HUNT-a replace', width: 1080, height: 1920 }), 15000, 'a new project for the replace'));
       await sleep(250);
       const bordered = function (g, k, w, h) { g.fillStyle = '#00c000'; g.fillRect(0, 0, w, h); const b = Math.round(w * 0.12); g.fillStyle = '#0030ff'; g.fillRect(b, b, w - 2 * b, h - 2 * b); };
       const hd = await h3aClip(1080, 1920, 4, 'IMG_1001.MOV', function (g, k, w, h) { g.fillStyle = '#d02020'; g.fillRect(0, 0, w, h); });
       const uhd = await h3aClip(2160, 3840, 3, 'IMG_1002.MOV', bordered);   // his 4K portrait clip: green border, blue middle
+      window.__fmStep = 'importing the 1080p clip';
       const L = await h3aImport(hd);
       const size0 = FM.layerSize(L).w * L.transform.scale;
       if (Math.abs(size0 - 1080) > 11) throw new Error('setup: the first clip does not fill the 1080 px canvas (' + Math.round(size0) + ' px wide)');
+      window.__fmStep = 'the phone ⋯ → Replace media… with a real finger';
       await atPhoneWidth(async function () {
         await onScreen924(async function () {
           const seen = await h3aPicker(uhd, async function () { await h3aLayerMenu(L, /^Replace media/, 'a tap on Replace media…'); });

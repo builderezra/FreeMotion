@@ -3114,6 +3114,13 @@
     if (ENV === 'settings') { try { localStorage.setItem('fm.settings', JSON.stringify(ENV_SETTINGS)); } catch (e) {} }
     else if (ENV) throw new Error('no environment named ' + ENV);
     step('loading the app');
+    /* THE INTRO IS KEYED ON THE BUILD (#1180, v17.98): index.html plays it when sessionStorage's fm.splashed differs from its
+       <meta name="fm-build">. HEAD and the tree are served from one origin, so their stamps would ping-pong and every boot would
+       play it. Seeded with the served copy's own stamp, every boot of either copy skips it the same way. */
+    try {
+      var bm = /<meta name="fm-build" content="([^"]+)">/.exec(await (await fetch('../index.html', { cache: 'no-store' })).text());
+      if (bm) sessionStorage.setItem('fm.splashed', bm[1]);
+    } catch (e) {}
     var loaded = new Promise(function (r) { frame.addEventListener('load', r, { once: true }); });
     frame.src = '../index.html';
     await loaded;
@@ -3123,7 +3130,8 @@
     if (missing.length) throw new Error('THE APP DID NOT LOAD IN THE PROBE FRAME — FM is missing ' + missing.join(', '));
     w.addEventListener('pagehide', function () { DUMP.errors.push('THE APP FRAME NAVIGATED during: ' + DUMP.step); });
     /* gone — or never shown: with reduced motion the intro does not play and stays hidden (index.html), the 'settings' run */
-    await until('the splash to go', function () { var sp = D.getElementById('splash'); return !sp || sp.classList.contains('hidden'); }, 15000);
+    // 20 s, above the intro's 15 s ceiling (#1180, v17.98)
+    await until('the splash to go', function () { var sp = D.getElementById('splash'); return !sp || sp.classList.contains('hidden'); }, 20000);
     seedRandom(0x980);
     await loadPalette();
     installColourGuard();

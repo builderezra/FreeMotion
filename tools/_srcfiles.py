@@ -10,7 +10,9 @@ DEAD test for exactly that on 5 Sep). Prints one path per line.
 import re, subprocess, sys
 h = sys.argv[1]
 SRC = re.compile(r'^(index\.html|styles\.css|theme-glass\.css|sw\.js|manifest\.json|js/[^/]+\.js)$')
-TRIVIAL = re.compile(r'class="ver"|\?v=[0-9.]+')
+# …and the fm-build stamp (#1180, v17.98): `<meta name="fm-build" content="vX.YY">` is bumped with the label in every
+# release, so without it here every version-only release read as app source and was refused NO TEST (v17.99's first ship).
+TRIVIAL = re.compile(r'class="ver"|\?v=[0-9.]+|name="fm-build" content="v[0-9.]+"')
 def run(*a):
     # A git that FAILS must not read as "no app source changed" (6 Oct): that empty answer is prove.sh's "nothing to prove,
     # exit 0" and spotcheck.sh's "tests-only" — a silent pass. It happens for real off the Mac: git refuses a repo owned by

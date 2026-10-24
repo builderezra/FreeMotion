@@ -366,7 +366,12 @@ _SIMPLE_SHA = {}
 # (and could never get the PASS it was then told to get: it changes Full on purpose). With no override, every #482 batch and
 # hunt fix would have stopped the day Simple shipped. So a line whose only change is the version label or a buster's number
 # is nobody's: a hunk that only re-numbers is skipped, and a line a Simple commit only re-numbered is not Simple's.
-_BUMP = [(re.compile(r'>v\d+(?:\.\d+)*<'), '>v#<'), (re.compile(r'\?v=[0-9][0-9.]*'), '?v=#')]
+# …and the build stamp beside the label (#1180, v17.98): `<meta name="fm-build" content="vX.YY">` keys the intro on the build and a
+# test pins it to the label, so every release bumps it with the label. Unmasked, no index.html was version-only any more (the next
+# instrument-only release refused as 'the instrument as well as the app') and the first Simple release to bump it would have owned
+# the line (rule 5). Masked like the label: only the number is hidden, never the meta's name.
+_BUMP = [(re.compile(r'>v\d+(?:\.\d+)*<'), '>v#<'), (re.compile(r'\?v=[0-9][0-9.]*'), '?v=#'),
+         (re.compile(r'(name="fm-build" content=")v\d+(?:\.\d+)*(")'), r'\1v#\2')]
 # ⚠️ THE SCHEMA STAMP IS NOBODY'S EITHER (13 Oct, hunt HIGH #24). `C.SCHEMA_REV = N;` and `C.SCHEMA_FP = N;` in js/collab-core.js are
 # re-stamped by every release that changes what the sanitiser keeps — every #482 polish batch, every #966 fx batch — and this
 # file's own docstring promises such a bump is NOT a hook. But Simple 1.2 (v17.33) and 1.3 (v17.36) were the last to stamp them,
@@ -1143,6 +1148,10 @@ def selftest():
         fails.append('bump_mask does not hide a ?v= buster')
     if bump_mask('  <script src="js/app.js?v=469"></script>') == bump_mask('  <script src="js/spine.js?v=469"></script>'):
         fails.append('bump_mask hides more than the number (a renamed script reads as a bump)')
+    if bump_mask('<meta name="fm-build" content="v17.98">') != bump_mask('<meta name="fm-build" content="v17.99">'):
+        fails.append('bump_mask does not hide the fm-build stamp (#1180): no index.html would be version-only again')
+    if bump_mask('<meta name="fm-build" content="v17.98">') == bump_mask('<meta name="fm-other" content="v17.98">'):
+        fails.append('bump_mask hides more than the fm-build number (another meta reads as a bump)')
     # the shared files: the review found theme-glass.css loaded by index.html and outside SHARED
     for f in ['js/app.js', 'styles.css', 'theme-glass.css', 'index.html', 'sw.js']:
         if not SHARED.match(f):

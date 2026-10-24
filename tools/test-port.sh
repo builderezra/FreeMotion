@@ -167,6 +167,19 @@ out="$(cd "$G" && PATH="$TMP/badgit:$PATH" python3 "$TMP/buster.py" 2>&1)"; rc=$
 out="$(cd "$G" && python3 "$TMP/buster.py" 2>&1)"; rc=$?
 [ "$rc" = 0 ] && printf '%s' "$out" | grep -q 'js/a.js (still ?v=1)' && ok "control: with a working git it names js/a.js's stale buster" || bad "buster control: rc=$rc $out"
 
+echo "── _srcfiles: a release that only bumps the version label, the fm-build stamp and ?v= busters has nothing to prove (24 Oct, v17.99) ──"
+# v17.98 added <meta name="fm-build" content="vX.YY"> beside the label, bumped by every release. _srcfiles.py's own mask did not
+# know it, so v17.99 (instrument only) read as app source and prove.sh refused it NO TEST. A throwaway repo pins both sides.
+SF="$TMP/srcf"; mkdir -p "$SF/tools"; cp tools/_srcfiles.py "$SF/tools/"
+( cd "$SF" && git init -q . && git config user.email t@t && git config user.name t \
+  && printf '<meta name="fm-build" content="v1.00">\n<span class="ver">v1.00</span>\n<script src="js/a.js?v=1"></script>\n<p>body</p>\n' > index.html \
+  && git add -A && git commit -qm base && sed -i 's/v1\.00/v1.01/g; s/js\/a\.js?v=1/js\/a.js?v=2/' index.html )
+out="$(cd "$SF" && python3 tools/_srcfiles.py --worktree 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "a label + fm-build stamp + buster bump is not app source (nothing to prove)" || bad "_srcfiles read a version-only index.html as app source: rc=$rc out=[$out]"
+( cd "$SF" && sed -i 's/<p>body</<p>BODY</' index.html )
+out="$(cd "$SF" && python3 tools/_srcfiles.py --worktree 2>&1)"
+[ "$out" = "index.html" ] && ok "control: a real index.html change beside the bumps is app source" || bad "_srcfiles control: out=[$out]"
+
 echo "── spotcheck: a control that TIMED OUT on a healthy machine is the release's NO-CONTROL, not 'the machine' (review minor) ──"
 SC="$TMP/spot"; mkdir -p "$SC/tools" "$SC/tests" "$SC/js"
 cp tools/spotcheck.sh tools/_platform.sh tools/_srcfiles.py tools/_spottests.py tools/serve.sh "$SC/tools/"
