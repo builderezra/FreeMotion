@@ -68029,6 +68029,280 @@
     }
   });
 
+  /* #860 hunt #6 fixtures: PREVIEW FRAME CACHES under one budget (FM.previewFrameShare, js/frames.js). Each record is a stub video
+     whose layer is pushed into the open scene HIDDEN, so the account sees what the scene needs while render() and the compositor
+     never draw the fake element. The stub build SPENDS what it is asked for, in 960x540 frames (scaled, as a preview cache is),
+     each a fake bitmap that counts its own close(), so a leak shows; like FM.buildFrameCache it marks the cache `account` only
+     when the build was asked with that option (FM.ensureReverseCache asks with it). put() is the test's whole cleanup: the caches, the stub,
+     then isoKeep (the scene's layers and the records).
+     T is one cache's ceiling (FM.frameCacheLimits().maxBytes) and TOT every preview cache's together (FM.previewFrameTotal: 4T on a
+     PC with the full 384 MB, T on a phone and at the 380 px pass; T on a build that has no total, which is what makes these red there).
+     ISOLATED (review F7): the account counts every layer of the open scene and every preview cache in FM.media, so the scene's layers
+     are swapped for an empty list that holds only the kit's (isoKeep puts the real ones back) and every other record's cache is held
+     aside until put(). The tests run on microtasks only, so nothing draws in between. */
+  function fc860dKit() {
+    var kit = { lim: FM.frameCacheLimits(), W: 960, H: 540, asked: [], recs: [], stash: [] };
+    kit.T = kit.lim.maxBytes;
+    kit.TOT = FM.previewFrameTotal ? FM.previewFrameTotal(kit.lim) : kit.T;
+    kit.F = kit.W * kit.H * 4;
+    kit.d0 = Object.getOwnPropertyDescriptor(FM, 'buildFrameCache');
+    kit.k = isoKeep();
+    kit.scene0 = FM.scene; kit.layers0 = FM.scene.layers;
+    FM.scene.layers = [];
+    var all0 = (FM.media.all && FM.media.all()) || {};
+    for (var key0 in all0) { var m0 = all0[key0]; if (m0 && m0.frameCache) { kit.stash.push({ m: m0, fc: m0.frameCache }); m0.frameCache = null; } }
+    kit.cache = function (c) {
+      var fr = [];
+      for (var i = 0; i < c; i++) fr.push({ closed: 0, close: function () { this.closed++; } });
+      return { fps: 24, effFps: c / 10, frames: fr, count: c, decoded: c, duration: 10, scaled: true, w: kit.W, h: kit.H, account: true };
+    };
+    kit.add = function (id, reversed) {
+      var r = { kind: 'video', el: { videoWidth: kit.W, videoHeight: kit.H, readyState: 4 }, duration: 10, frameCache: null };
+      var l = { id: id, name: id, type: 'video', start: 0, duration: 10, trimStart: 0, visible: false, reversed: !!reversed, effects: [], behaviors: [] };
+      FM.media.set(id, r);
+      kit.recs.push(r);
+      FM.scene.layers.push(l);
+      return { rec: r, layer: l };
+    };
+    kit.drop = function (it) {
+      FM.clearFrameCache(it.rec);
+      var at = FM.scene.layers.indexOf(it.layer);
+      if (at >= 0) FM.scene.layers.splice(at, 1);
+    };
+    kit.held = function () {
+      return kit.recs.reduce(function (s, r) { var fc = r.frameCache; return s + (fc ? fc.w * fc.h * 4 * fc.count : 0); }, 0);
+    };
+    kit.mb = function (b) { return (b / 1048576).toFixed(0) + ' MB'; };
+    /* A PHONE'S TOTAL, on any machine. The suite's 380 px pass is a narrow window on a desktop (a fine pointer with the full 384 MB),
+       so its total is 4T as well, and the rules a phone lives by (spares out of the split, the lend) never came into play at either
+       width: mutate.sh found them SURVIVED (p-spare, p-lend). FM.previewFrameTotal is what the device test answers; a phone's
+       answer is T, so the tests that pin those rules set it. Test 1's device-read control keeps the PC's figure honest. */
+    kit.phone = function () { kit.tot0 = Object.getOwnPropertyDescriptor(FM, 'previewFrameTotal'); FM.previewFrameTotal = function (l) { return (l && l.maxBytes) || 0; }; kit.TOT = kit.T; };
+    FM.buildFrameCache = async function (r, fps, p, o) {
+      kit.asked.push(o.maxBytes);
+      r.frameCache = kit.cache(Math.max(1, Math.floor(o.maxBytes / kit.F)));
+      r.frameCache.account = !!o.account;
+      return r.frameCache;
+    };
+    kit.put = function () {
+      kit.recs.forEach(function (r) { try { FM.clearFrameCache(r); } catch (e) {} });
+      if (kit.d0) Object.defineProperty(FM, 'buildFrameCache', kit.d0); else delete FM.buildFrameCache;
+      kit.stash.forEach(function (s) { if (s.m.frameCache && s.m.frameCache !== s.fc) { try { FM.clearFrameCache(s.m); } catch (e) {} } s.m.frameCache = s.fc; });
+      if (FM.scene === kit.scene0) FM.scene.layers = kit.layers0;   // the same array, untouched: isoKeep below then finds nothing to put back
+      if (kit.tot0) Object.defineProperty(FM, 'previewFrameTotal', kit.tot0);
+      kit.k.put();
+      if (FM.requestRender) FM.requestRender();   // (review G5) the swap drew an empty scene, and isoKeep saw nothing to redraw for
+      if (FM.canvasEdit && FM.canvasEdit.update) FM.canvasEdit.update();
+    };
+    return kit;
+  }
+
+  /* #860 hunt #6: FIVE REVERSED CLIPS SHARE ONE PREVIEW FRAME TOTAL. FM.ensureReverseCache handed every clip the whole of
+     FM.frameCacheLimits().maxBytes (T, 384 MB on a PC), so five reversed clips asked for 5T between them, and ten GIFs and five
+     reversed clips came to about 3.5 GB of bitmaps on his PC. Now one total holds every preview cache (TOT, see the kit), and no
+     one cache takes more than T. The stub SPENDS what it is asked for (one that spent nothing would prove nothing).
+     RED on 2f1e1fa3: each of the five is asked for T, the sum is 5T > TOT + 5 frames (TOT is T there). GREEN with the account: the
+     five are all in the scene and reversed before the first is built, so five are live from the first ask, and each is asked for
+     min(T, floor(TOT / 5)) (the room lent to each is the room left over the clips still waiting, the same again), so the sum is
+     at most TOT.
+     CONTROLS (pass on both): one reversed clip alone is still asked for the whole T; and where the total holds two caches (his
+     PC), two reversed clips are each still asked for the whole T, so sharing costs no frames until the total is reached (review
+     F1: with the total at T, two clips already played at 19.4 fps instead of 24). */
+  test('860 five reversed clips share one preview frame total instead of each holding a whole budget (CONTROL: one or two reversed clips still get a whole budget each)', { item: '860' }, async function () {
+    if (typeof FM.ensureReverseCache !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM.ensureReverseCache or FM.frameCacheLimits is not exposed');
+    if (!FM.media || typeof FM.media.set !== 'function' || !FM.scene || !Array.isArray(FM.scene.layers)) throw new Error('FM.media.set or FM.scene.layers is not reachable');
+    var kit = fc860dKit(), T = kit.T, TOT = kit.TOT, F = kit.F;
+    try {
+      var solo = kit.add('860d-solo', true);
+      await FM.ensureReverseCache(solo.layer);
+      if (kit.asked.length !== 1 || kit.asked[0] !== T) throw new Error('CONTROL: one reversed clip alone was asked to fit ' + JSON.stringify(kit.asked) + ' bytes, not the whole ' + T);
+      kit.drop(solo);
+      kit.asked = [];
+      /* his PC: a fine pointer and the full 384 MB, read from the device here, never from the total under test (a total that had
+         shrunk back to T would otherwise skip the very control that catches it) */
+      var pcFull = !!(window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches) && T >= 384 * 1048576;
+      if (pcFull) {
+        var two = [kit.add('860d-p0', true), kit.add('860d-p1', true)];
+        for (var q = 0; q < 2; q++) await FM.ensureReverseCache(two[q].layer);
+        if (kit.asked.length !== 2 || kit.asked[0] !== T || kit.asked[1] !== T) throw new Error('CONTROL: under a ' + kit.mb(TOT) + ' total two reversed clips were asked to fit ' + JSON.stringify(kit.asked) + ' bytes, not the whole ' + T + ' each: the sharing costs frames before the total is reached');
+        two.forEach(function (it) { kit.drop(it); });
+        kit.asked = [];
+      }
+      var five = [];
+      for (var i = 0; i < 5; i++) five.push(kit.add('860d-r' + i, true));
+      for (var j = 0; j < 5; j++) await FM.ensureReverseCache(five[j].layer);
+      if (kit.asked.length !== 5) throw new Error('setup: five reversed clips built ' + kit.asked.length + ' caches, not five');
+      var sum = kit.asked.reduce(function (a, b) { return a + b; }, 0);
+      if (sum > TOT + 5 * F) throw new Error('five reversed clips were each handed ' + JSON.stringify(kit.asked) + ' bytes, ' + kit.mb(sum) + ' in all, against one ' + kit.mb(TOT) + ' preview total');
+      var held = kit.held();
+      if (held > TOT + 5 * F) throw new Error('five reversed clips hold ' + kit.mb(held) + ' of frames between them, against one ' + kit.mb(TOT) + ' preview total');
+      if (kit.asked.some(function (a) { return a > T; })) throw new Error('a reversed clip was asked to fit more than one cache may take: ' + JSON.stringify(kit.asked) + ' against ' + T);
+    } finally {
+      kit.put();
+    }
+  });
+
+  /* #860 hunt #6: A SIXTH REVERSED CLIP GETS A SMALLER SHARE, AND NONE OF THE FIVE ON SCREEN IS GIVEN BACK. Five reversed clips, all
+     drawn just now, hold the total between them; then a sixth is reversed. The account never gives back a cache the scene still
+     needs (FM.requestPlay would decode it again before the next Play, and that rebuild would give back the next one: thrash), so
+     it THINS the five in place, about one frame in six closed, and the sixth is asked for about TOT / 6.
+     RED on 2f1e1fa3: every clip is asked for T, so the six hold 6T > TOT + 6 frames (TOT is T there). GREEN: the five were built at
+     min(T, floor(TOT / 5)) each, which fills the total, nothing is spare (all six are needed), so each of the five is thinned to
+     floor(floor(TOT / 6) / F) frames and the sixth gets the room that leaves: six of those are at most TOT.
+     CONTROLS (pass on both): each of the five still has a cache whose frames array, count and effective fps agree, with no frame
+     still in it closed; every frame thinned out was closed exactly once (a frame dropped and not closed is a leaked bitmap);
+     and the sixth is asked for at least a quarter of what each of the five was, so the account still lets the work happen. */
+  test('860 a sixth reversed clip gets a smaller share and the five on screen are thinned, not given back (CONTROL: the sixth still gets a usable cache and no bitmap leaks)', { item: '860' }, async function () {
+    if (typeof FM.ensureReverseCache !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM.ensureReverseCache or FM.frameCacheLimits is not exposed');
+    if (!FM.media || typeof FM.media.set !== 'function' || !FM.scene || !Array.isArray(FM.scene.layers)) throw new Error('FM.media.set or FM.scene.layers is not reachable');
+    var kit = fc860dKit(), TOT = kit.TOT, F = kit.F;
+    try {
+      var five = [];
+      for (var i = 0; i < 5; i++) five.push(kit.add('860d-s' + i, true));
+      for (var j = 0; j < 5; j++) await FM.ensureReverseCache(five[j].layer);
+      if (kit.asked.length !== 5) throw new Error('setup: five reversed clips built ' + kit.asked.length + ' caches, not five');
+      var firstAsk = kit.asked[0];
+      var before = five.map(function (it) { return it.rec.frameCache ? it.rec.frameCache.frames.slice() : []; });
+      var now = performance.now();
+      five.forEach(function (it) { it.rec._fcDrawnAt = now; });
+      kit.asked = [];
+      var sixth = kit.add('860d-s5', true);
+      await FM.ensureReverseCache(sixth.layer);
+      if (kit.asked.length !== 1) throw new Error('setup: the sixth reversed clip built ' + kit.asked.length + ' caches, not one');
+      var held = kit.held();
+      if (held > TOT + 6 * F) throw new Error('six reversed clips hold ' + kit.mb(held) + ' of frames between them, against one ' + kit.mb(TOT) + ' preview total (the sixth was asked for ' + kit.mb(kit.asked[0]) + ')');
+      five.forEach(function (it, n) {
+        var fc = it.rec.frameCache;
+        if (!fc || !(fc.count >= 1)) throw new Error('CONTROL: reversed clip ' + n + ', drawn just now, lost its frame cache when a sixth clip was reversed');
+        if (fc.frames.length !== fc.count) throw new Error('reversed clip ' + n + ' holds ' + fc.frames.length + ' frames but says ' + fc.count);
+        if (Math.abs(fc.effFps * fc.duration - fc.count) > 1e-6) throw new Error('reversed clip ' + n + ' maps time at ' + fc.effFps + ' fps for ' + fc.count + ' frames over ' + fc.duration + ' s, so its picture would drift');
+        fc.frames.forEach(function (b, q) { if (b && b.closed) throw new Error('frame ' + q + ' still in reversed clip ' + n + ' cache was closed: it would draw nothing'); });
+        var leaked = before[n].filter(function (b) { return fc.frames.indexOf(b) < 0 && b.closed !== 1; }).length;
+        if (leaked) throw new Error(leaked + ' frames thinned out of reversed clip ' + n + ' were not closed exactly once: leaked bitmaps');
+      });
+      if (!(kit.asked[0] >= 0.25 * firstAsk)) throw new Error('CONTROL: the sixth reversed clip was asked to fit ' + kit.mb(kit.asked[0]) + ', under a quarter of the ' + kit.mb(firstAsk) + ' each of the five got');
+    } finally {
+      kit.put();
+    }
+  });
+
+  /* #860 hunt #6: WHEN THE ROOM IS SHORT, THE LEAST RECENTLY DRAWN CACHE THE SCENE NO LONGER NEEDS IS GIVEN BACK, and only as many as
+     it takes. Four forward (not reversed, so not needed) hidden clips hold caches: A drawn a minute ago, B 30 s ago, X 20 s ago (the
+     three spares, s frames each) and C drawn just now (c frames). They are registered B, A, X, C, so first-in-first-out would give
+     back B and last-in-first-out X: only least-recently-drawn gives back A (review F8). Then clip D is reversed.
+     The sizes come from D's fair share. A spare that may be given back takes no share (review F3), so only D and C are live and
+     fair = min(T, floor(TOT / 2)), which leaves U = TOT - fair for everything else. s = 0.35 U and c = 0.2 U, so the four hold
+     1.25 U, more than U (the room is short of fair: something must go), and with A gone the rest hold 0.9 U, no more than U (the
+     room reaches fair: nothing more may go). GREEN: A goes (every bitmap closed, through FM.clearFrameCache), B, X and C keep every
+     frame, and D is asked for at least fair. RED on 2f1e1fa3: nothing is ever given back, so A keeps its cache.
+     CONTROL (passes on both): C, drawn just now, keeps its whole cache. Then B, X and C are drawn just now too and a fifth clip E is
+     reversed: nothing is stale, so caches are thinned rather than given back, all of them keep a cache, the total holds, and E still
+     gets at least a quarter of a five-way share. */
+  test('860 when the preview frame total is short the least recently drawn cache nobody needs is given back, never one drawn just now', { item: '860' }, async function () {
+    if (typeof FM.ensureReverseCache !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM.ensureReverseCache or FM.frameCacheLimits is not exposed');
+    if (!FM.media || typeof FM.media.set !== 'function' || !FM.scene || !Array.isArray(FM.scene.layers)) throw new Error('FM.media.set or FM.scene.layers is not reachable');
+    var kit = fc860dKit(); kit.phone();   // the rules a phone lives by (see kit.phone)
+    var T = kit.T, TOT = kit.TOT, F = kit.F;
+    try {
+      var fairD = Math.min(T, Math.floor(TOT / 2)), U = TOT - fairD;
+      var s = Math.max(1, Math.floor(0.35 * U / F)), c = Math.max(1, Math.floor(0.2 * U / F));
+      if (!((3 * s + c) * F > U && (2 * s + c) * F <= U)) throw new Error('setup: ' + s + ' and ' + c + ' frames do not make the room short with A and enough without it (U ' + kit.mb(U) + ')');
+      var B = kit.add('860d-b', false), A = kit.add('860d-a', false), X = kit.add('860d-x', false), C = kit.add('860d-c', false);
+      [B, A, X].forEach(function (it) { it.rec.frameCache = kit.cache(s); });
+      C.rec.frameCache = kit.cache(c);
+      var now = performance.now();
+      A.rec._fcDrawnAt = now - 60000;
+      B.rec._fcDrawnAt = now - 30000;
+      X.rec._fcDrawnAt = now - 20000;
+      C.rec._fcDrawnAt = now;
+      var aFrames = A.rec.frameCache.frames.slice();
+      var D = kit.add('860d-d', true);
+      await FM.ensureReverseCache(D.layer);
+      if (kit.asked.length !== 1) throw new Error('setup: the reversed clip built ' + kit.asked.length + ' caches, not one');
+      if (A.rec.frameCache) throw new Error('the cache drawn a minute ago, which nothing in the scene needs, was not given back when a reversed clip needed room: it still holds ' + A.rec.frameCache.count + ' frames, and the reversed clip was asked for ' + kit.mb(kit.asked[0]) + ' of ' + kit.mb(TOT));
+      var open = aFrames.filter(function (b) { return b.closed !== 1; }).length;
+      if (open) throw new Error(open + ' bitmaps of the cache given back were not closed exactly once: a leak');
+      if (!C.rec.frameCache || C.rec.frameCache.count !== c) throw new Error('CONTROL: the cache drawn just now was given back or thinned to make room (' + (C.rec.frameCache ? C.rec.frameCache.count : 0) + ' of ' + c + ' frames left)');
+      [['B, drawn 30 s ago', B], ['X, drawn 20 s ago', X]].forEach(function (p) {
+        var fc = p[1].rec.frameCache;
+        if (!fc || fc.count !== s) throw new Error('the wrong cache or more than it took was given back: ' + p[0] + ' has ' + (fc ? fc.count : 0) + ' of ' + s + ' frames left, while A, drawn a minute ago, was the one to go');
+      });
+      if (!(kit.asked[0] >= fairD)) throw new Error('with A given back the reversed clip was asked to fit only ' + kit.mb(kit.asked[0]) + ', under its fair ' + kit.mb(fairD));
+      var held = kit.held();
+      if (held > TOT + 5 * F) throw new Error('after the reversed clip the clips hold ' + kit.mb(held) + ' against one ' + kit.mb(TOT) + ' total');
+      now = performance.now();
+      B.rec._fcDrawnAt = now;
+      X.rec._fcDrawnAt = now;
+      C.rec._fcDrawnAt = now;
+      kit.asked = [];
+      var E = kit.add('860d-e', true);
+      await FM.ensureReverseCache(E.layer);
+      if (!B.rec.frameCache || !X.rec.frameCache || !C.rec.frameCache || !D.rec.frameCache) throw new Error('CONTROL: a cache drawn just now was given back: B ' + !!B.rec.frameCache + ', X ' + !!X.rec.frameCache + ', C ' + !!C.rec.frameCache + ', D ' + !!D.rec.frameCache);
+      if (!(kit.asked[0] >= 0.25 * Math.min(T, Math.floor(TOT / 5)))) throw new Error('CONTROL: with nothing stale the fifth clip was asked to fit only ' + kit.mb(kit.asked[0]) + ' of ' + kit.mb(TOT));
+      held = kit.held();
+      if (held > TOT + 6 * F) throw new Error('with nothing stale to give back the clips hold ' + kit.mb(held) + ' against one ' + kit.mb(TOT) + ' total');
+    } finally {
+      kit.put();
+    }
+  });
+
+  /* #860 hunt #6 (review F2): ROOM NOBODY ELSE WILL TAKE IS LENT. A short reversed clip already holds a small cache (k frames, drawn
+     just now); then a long one is reversed. Both are live, so fair = min(T, floor(TOT / 2)), but the short one has its cache and will
+     ask for nothing more, so the long one is lent the room it leaves: min(T, TOT - kF). Where the total holds two whole caches (his PC)
+     that is T, the same as fair; where it does not (a phone, the 380 px pass), it is nearly the whole total instead of half of it,
+     which is the 10 s clip beside a 2 s one that the review found held to 97 frames when 146 fitted.
+     RED on 2f1e1fa3: the long clip is asked for T, so the two hold kF + T, past the total of T there. GREEN: it is asked for
+     min(T, TOT - kF), at least fair, and the two fit the total. */
+  test('860 a long reversed clip beside a short one is lent the room the short one cannot use, and the two still fit the total', { item: '860' }, async function () {
+    if (typeof FM.ensureReverseCache !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM.ensureReverseCache or FM.frameCacheLimits is not exposed');
+    if (!FM.media || typeof FM.media.set !== 'function' || !FM.scene || !Array.isArray(FM.scene.layers)) throw new Error('FM.media.set or FM.scene.layers is not reachable');
+    var kit = fc860dKit(); kit.phone();   // the lend only shows where the total is short of two caches: a phone (see kit.phone)
+    var T = kit.T, TOT = kit.TOT, F = kit.F;
+    try {
+      var k = Math.max(1, Math.floor(0.1 * T / F));
+      var S = kit.add('860d-short', true);
+      S.rec.frameCache = kit.cache(k);
+      S.rec._fcDrawnAt = performance.now();
+      var L = kit.add('860d-long', true);
+      await FM.ensureReverseCache(L.layer);
+      if (kit.asked.length !== 1) throw new Error('setup: the long reversed clip built ' + kit.asked.length + ' caches, not one');
+      if (!S.rec.frameCache || S.rec.frameCache.count !== k) throw new Error('CONTROL: the short clip, drawn just now and needed, lost frames to the long one (' + (S.rec.frameCache ? S.rec.frameCache.count : 0) + ' of ' + k + ' left)');
+      var held = kit.held();
+      if (held > TOT + 2 * F) throw new Error('the short and the long reversed clip hold ' + kit.mb(held) + ' between them, against one ' + kit.mb(TOT) + ' preview total (the long one was asked for ' + kit.mb(kit.asked[0]) + ')');
+      var want = Math.min(T, TOT - k * F), fair = Math.min(T, Math.floor(TOT / 2));
+      if (kit.asked[0] < want - F) throw new Error('the long reversed clip was asked to fit ' + kit.mb(kit.asked[0]) + ', where the room the short one leaves is ' + kit.mb(want) + ' (half the total would be ' + kit.mb(fair) + '): the room it cannot use was not lent');
+    } finally {
+      kit.put();
+    }
+  });
+
+  /* #860 hunt #6 (review F6): A THROW WHILE SIZING THE CACHE DOES NOT LEAVE "Preparing frames…" UP FOR GOOD. FM.ensureReverseCache shows
+     a sticky toast (no timeout) and hides it in the finally of its build. The account moved the limits call and the share out of that
+     try, so a throw there (a stubbed or broken FM.frameCacheLimits stands in for any) left the toast on screen with nothing to take it
+     down. That was the account's own first build; the release before it called the limits inside the try already, so this passes
+     there too: it pins the fold, and mutate.sh proves it (a bare FM.frameCacheLimits() call put back between the toast and the try
+     turns it red). GREEN: both run inside the try.
+     CONTROL (passes on both): the toast is down before the call, and the call really threw (the stub was reached). */
+  test('860 a throw while a reversed clip cache is being sized does not leave the Preparing frames toast up', { item: '860' }, async function () {
+    if (typeof FM.ensureReverseCache !== 'function' || typeof FM.hideToast !== 'function') throw new Error('FM.ensureReverseCache or FM.hideToast is not exposed');
+    var toast = document.getElementById('toast');
+    if (!toast) throw new Error('setup: #toast is missing');
+    var kit = fc860dKit(), d0 = Object.getOwnPropertyDescriptor(FM, 'frameCacheLimits'), threw = 0;
+    try {
+      var R = kit.add('860d-throw', true);
+      FM.hideToast();
+      if (!toast.classList.contains('hidden')) throw new Error('CONTROL: the toast is still up after FM.hideToast, so this cannot tell who left it');
+      FM.frameCacheLimits = function () { threw++; throw new Error('860d test: frameCacheLimits stub'); };
+      try { await FM.ensureReverseCache(R.layer); } catch (e) {}
+      if (!threw) throw new Error('CONTROL: FM.ensureReverseCache never asked FM.frameCacheLimits, so nothing was thrown');
+      if (!toast.classList.contains('hidden')) throw new Error('after a throw while sizing the cache the toast is still up, saying ' + JSON.stringify(toast.textContent) + ', with no timeout to take it down');
+    } finally {
+      if (d0) Object.defineProperty(FM, 'frameCacheLimits', d0); else delete FM.frameCacheLimits;
+      FM.hideToast();
+      kit.put();
+    }
+  });
+
   /* The + on the Add-layer row "isn't centred inside the circle" (queue 296). It was the CHARACTER "+",
      and flex centres the line box, not the ink — where a glyph sits inside that box is the font's
      choice, which is why it can look level on one screen and high on another. Same finding as the × and
@@ -72964,7 +73238,8 @@
      the muxer, the report — runs on VP9 + Opus, which every Chromium has. `silent` swaps the audio encoder for one that accepts
      everything and never calls `output` (a browser that makes no sound without saying so). The real iPhone path (AAC) is untouched:
      nothing here is reachable from the app. */
-  async function ax2WithOpusPath(silent, fn) {
+  // `wrap` (hunt HIGH, 24 Oct, encoder stalls): { V: VE => subclass, A: AE => subclass } wraps the mapped encoders further
+  async function ax2WithOpusPath(silent, fn, wrap) {
     const RV = window.VideoEncoder, RA = window.AudioEncoder, RM = window.Mp4Muxer;
     if (typeof RV !== 'function' || typeof RA !== 'function' || !RM || !RM.Muxer) notRunHere('needs VideoEncoder, AudioEncoder and the muxer in this browser');
     const vOk = await RV.isConfigSupported({ codec: 'vp09.00.10.08', width: 64, height: 64, bitrate: 1e6, framerate: 10 }).catch(function () { return { supported: false }; });
@@ -72990,7 +73265,8 @@
         super(o);
       }
     }
-    window.VideoEncoder = VE; window.AudioEncoder = silent ? SilentAE : AE;
+    window.VideoEncoder = (wrap && wrap.V) ? wrap.V(VE) : VE;
+    window.AudioEncoder = silent ? SilentAE : ((wrap && wrap.A) ? wrap.A(AE) : AE);
     window.Mp4Muxer = { Muxer: Mux, ArrayBufferTarget: RM.ArrayBufferTarget, StreamTarget: RM.StreamTarget, FileSystemWritableFileStreamTarget: RM.FileSystemWritableFileStreamTarget };
     try { return await fn(); }
     finally { window.VideoEncoder = RV; window.AudioEncoder = RA; window.Mp4Muxer = RM; }
@@ -73031,6 +73307,246 @@
       isoMediaPut(media0);
     }
   }
+  /* ═══ (hunt HIGH, 24 Oct) AN ENCODER THAT STOPS ANSWERING ENDS THE EXPORT, AND SAYS SO (js/exporter.js encWait) ═══════════════
+     On this laptop's Chrome a 2160x3840 H.264 flush never settled, twice, and nothing in the export had a limit: the dialog would say
+     Exporting… for ever, and Cancel did nothing, because the loop that reads Cancel was never reached again. These drive the app's
+     own FM.exporter.run on the VP9 + Opus path (ax2WithOpusPath), with the encoder wrapped so it stops the way the 4K one did, and
+     the stall window cut to FM._exportStallMs (the app's own is a measured figure no test should wait out). Every stub can be let go,
+     and the finally lets it go and waits for the run, so a run that never settles on an old build is still ended before the next test.
+     RED on bd8c2d5e: each run never settles, and the guard says so. */
+  function encStallSettle(pr, ms) {
+    const out = { settled: false, err: null, val: null };
+    const done = pr.then(function (v) { out.settled = true; out.val = v; }, function (e) { out.settled = true; out.err = e; });
+    return Promise.race([done, sleep(ms)]).then(function () { return out; });
+  }
+  test('1185 an export whose video encoder never finishes its flush ends as a stall that names the size, instead of Exporting for ever', { item: '1185', budgetMs: 90000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const ms0 = FM._exportStallMs;
+    let release = null, pr = null, cpr = null;
+    const wrap = { V: function (VE) { return class extends VE { flush() { super.flush().catch(function () {}); return new Promise(function (r) { release = r; }); } }; } };
+    try {
+      /* CONTROL: the same path, unwrapped, makes a file, so what happens below is the stub's doing and not the harness's */
+      cpr = ax2WithOpusPath(false, ax2Export);
+      const ok = await encStallSettle(cpr, 20000);
+      if (!ok.settled || ok.err || !ok.val || !ok.val.ready || !ok.val.ready.blob) throw new Error('CONTROL: the plain VP9 export made no file (' + (ok.err ? ok.err.message : ok.settled ? 'no file' : 'still running after 20 s') + ')');
+      FM._exportStallMs = 600;
+      pr = ax2WithOpusPath(false, ax2Export, wrap);
+      const r = await encStallSettle(pr, 8000);
+      if (!r.settled) throw new Error('an export whose video encoder never finished its flush was still running after 8 s with a 600 ms stall window: Exporting… stays up for ever, and Cancel with it');
+      if (!r.err || r.err.message !== 'ENCODER_STALLED') throw new Error('the stalled export ended with ' + (r.err ? r.err.message : 'a file') + ', not ENCODER_STALLED');
+      if (r.err.fmWhat !== 'video') throw new Error('the stall was put on the ' + r.err.fmWhat + ' encoder, not the video one');
+      if (!r.err.fmSize || r.err.fmSize.w !== 64 || r.err.fmSize.h !== 64 || r.err.fmSize.stalled !== true) throw new Error('the stall does not say the size it stopped at: ' + JSON.stringify(r.err.fmSize));
+    } finally {
+      FM._exportStallMs = ms0;
+      if (release) release();
+      if (cpr) await encStallSettle(cpr, 20000);
+      if (pr) await encStallSettle(pr, 8000);
+      try { if (FM.exportResume && FM.exportResume.clear) await FM.exportResume.clear(); } catch (e) {}   // a stalled run leaves its crash-resume job; the next export of this project would pick it up
+    }
+  });
+  test('1185 an export whose video encoder stops taking frames ends at once on Cancel, and as a stall without one', { item: '1185', budgetMs: 90000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const ms0 = FM._exportStallMs;
+    let stuck = true, swallow = false, waiting = false, pr = null;
+    const wrap = { V: function (VE) { return class extends VE {
+      get encodeQueueSize() { if (stuck) { waiting = true; return 9; } return super.encodeQueueSize; }
+      encode(f, o) { if (swallow && stuck) return; return super.encode(f, o); }
+    }; } };
+    try {
+      /* 1. Cancel, pressed once the export is held in the encoder's back-pressure wait (the stub has been asked for its queue) */
+      FM._exportStallMs = 60000;
+      pr = ax2WithOpusPath(false, ax2Export, wrap);
+      const tw = performance.now();
+      while (!waiting && performance.now() - tw < 15000) await sleep(20);
+      if (!waiting) throw new Error('setup: the export never asked the encoder for its queue, so it never reached the back-pressure wait');
+      await sleep(150);
+      FM._exportCancel = true;
+      const tc = performance.now();
+      const r1 = await encStallSettle(pr, 5000);
+      if (!r1.settled) throw new Error('Cancel pressed while the export waited on an encoder that took no more frames did nothing in 5 s: the wait never reads Cancel');
+      if (!r1.err || r1.err.message !== 'CANCELLED') throw new Error('Cancel ended the export with ' + (r1.err ? r1.err.message : 'a file') + ', not CANCELLED');
+      if (performance.now() - tc > 2000) throw new Error('Cancel took ' + Math.round(performance.now() - tc) + ' ms to end the export');
+      /* 2. no Cancel, and the encoder puts out nothing at all: a stall, after the window */
+      FM._exportCancel = false;
+      waiting = false; swallow = true; FM._exportStallMs = 600;
+      pr = ax2WithOpusPath(false, ax2Export, wrap);
+      const r2 = await encStallSettle(pr, 8000);
+      if (!r2.settled) throw new Error('an export whose video encoder took no more frames and put out nothing was still running after 8 s with a 600 ms stall window');
+      if (!r2.err || r2.err.message !== 'ENCODER_STALLED' || r2.err.fmWhat !== 'video') throw new Error('the stuck encoder ended the export with ' + (r2.err ? r2.err.message + ' (' + r2.err.fmWhat + ')' : 'a file') + ', not a video ENCODER_STALLED');
+    } finally {
+      FM._exportStallMs = ms0;
+      FM._exportCancel = false;
+      stuck = false;
+      if (pr) await encStallSettle(pr, 8000);
+      FM._exportCancel = false;
+      try { if (FM.exportResume && FM.exportResume.clear) await FM.exportResume.clear(); } catch (e) {}
+    }
+  });
+  /* #1185 (the review and its refuter): A PAGE THAT WAS FROZEN IS NOT A STALLED ENCODER. A hidden tab under Energy Saver, a phone that
+     put the page in the background or a laptop that slept runs nothing here, the codec's output callbacks included, so the first turn
+     back would read the page's own silence as the encoder's and end a working export as a stall (the video offered smaller, a
+     soundtrack dropped). The main thread is blocked here for 1.5 s, longer than the 600 ms window, while the export waits on an encoder
+     that is still taking nothing; for 300 ms after the page comes back, inside the window, it still takes nothing, and then it works.
+     RED on 0bc89120 (the stall rule without the freeze rule): the first turn after the block reads 1.5 s of silence and ends the export
+     as ENCODER_STALLED. GREEN: the long gap between turns starts the count again, and the export finishes. (Passes on bd8c2d5e, which
+     has no stall rule at all.) */
+  test('1185 a page frozen for longer than the stall window mid-export is not taken for a stalled encoder, and the export finishes', { item: '1185', budgetMs: 90000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const ms0 = FM._exportStallMs;
+    /* the first three frames encode for real, so the file has its opening key frame and the encoder has spoken before the page
+       freezes (a stub that swallowed frame 0 left the muxer without a decoder description: a fault of the stub, not of the app) */
+    let stuck = true, waiting = false, pr = null, n = 0;
+    const wrap = { V: function (VE) { return class extends VE {
+      get encodeQueueSize() { if (stuck && n > 3) { waiting = true; return 9; } return super.encodeQueueSize; }
+      encode(f, o) { n++; if (stuck && n > 3) return; return super.encode(f, o); }
+    }; } };
+    try {
+      FM._exportStallMs = 600;
+      pr = ax2WithOpusPath(false, ax2Export, wrap);
+      const tw = performance.now();
+      while (!waiting && performance.now() - tw < 15000) await sleep(20);
+      if (!waiting) throw new Error('setup: the export never asked the encoder for its queue, so it never reached the back-pressure wait');
+      const tb = performance.now();
+      while (performance.now() - tb < 1500) { /* the page is frozen: nothing else runs */ }
+      await sleep(300);
+      stuck = false;
+      const r = await encStallSettle(pr, 10000);
+      if (!r.settled) throw new Error('the export did not finish within 10 s after the page came back');
+      if (r.err) throw new Error('a page frozen for 1.5 s, past the 600 ms window, ended a working export as ' + r.err.message + (r.err.fmWhat ? ' (' + r.err.fmWhat + ')' : '') + ': the silence of the page was read as the silence of the encoder');
+      if (!r.val || !r.val.ready || !r.val.ready.blob) throw new Error('the export made no file');
+    } finally {
+      FM._exportStallMs = ms0;
+      stuck = false;
+      if (pr) await encStallSettle(pr, 8000);
+      try { if (FM.exportResume && FM.exportResume.clear) await FM.exportResume.clear(); } catch (e) {}
+    }
+  });
+  test('1185 a soundtrack whose AAC warm-up probe never finishes still exports with its sound', { item: '1185', budgetMs: 90000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
+    const ms0 = FM._exportStallMs;
+    let release = null, made = 0, pr = null;
+    /* the FIRST audio encoder a run builds is the warm-up probe's (aacPriming runs before the soundtrack's own encoder exists) */
+    const wrap = { A: function (AE) { return class extends AE {
+      constructor(o) { super(o); this._k = made++; }
+      flush() { if (this._k === 0) { super.flush().catch(function () {}); return new Promise(function (r) { release = r; }); } return super.flush(); }
+    }; } };
+    try {
+      FM._exportStallMs = 600;
+      pr = ax2WithOpusPath(false, ax2Export, wrap);
+      const r = await encStallSettle(pr, 10000);
+      if (!r.settled) throw new Error('an export whose AAC warm-up probe never finished was still running after 10 s with a 600 ms stall window: the probe holds the whole export');
+      if (made < 2) throw new Error('setup: the run built ' + made + ' audio encoder(s), so the probe and the soundtrack were not told apart');
+      if (r.err) throw new Error('the export failed: ' + r.err.message);
+      if (!r.val || !r.val.ready || !r.val.ready.blob) throw new Error('the export made no file');
+      if (!r.val.soun) throw new Error('the file has no sound track: a probe that could not measure must only skip the warm-up trim, never the sound');
+    } finally {
+      FM._exportStallMs = ms0;
+      if (release) release();
+      if (pr) await encStallSettle(pr, 8000);
+    }
+  });
+  /* #1185: THE STALL WINDOW IS MEASURED, AND THIS KEEPS IT HONEST. js/exporter.js calls an encoder stalled when nothing has come out of
+     it for FM._encStallMs() while it still has work. That must never catch a slow encoder that is still working, so the window is set
+     from the longest a working encoder here goes without putting anything out, on the heaviest real path: H.264 at 2160 x 3840 (the size
+     that stalled), frames with real detail (a gradient, moving shapes and a noise pattern, so the encoder has work), fed with the
+     export's own back-pressure (no more than 8 queued), at full speed and under a 4x CPU throttle (a phone-speed stand-in, asked of
+     tests/_cdp.py). Silence is counted the way encWait counts it: from the first frame queued to the first chunk, between chunks, and
+     from the flush call (or the last chunk, whichever is later) to the flush settling. The longest of those, times FM._encStallMargin,
+     must fit inside the window. perfNote records both numbers (the driver prints them).
+     ON DEMAND ONLY: it is not even registered without ?fmmeasure=1. A 4K encode inside every suite run is the very thing that hung
+     twice and slowed every test after it, so the suite pins the windows against the recorded numbers instead (the test after this
+     one), and this re-measures when asked; registered always and skipped, it would read NOT RUN in prove.sh and refuse the release.
+     NOT RUN where this browser has no 4K H.264 encoder, where the driver cannot throttle, and where the encoder itself goes silent for
+     60 s during the measurement (the very fault, met here: a measurement of a stopped encoder is no measurement). */
+  if (PIN_QS.get('fmmeasure')) test('1185 the encoder stall window measured again on demand outlasts, with its margin, the longest a working 4K encoder goes silent, at full speed and under a 4x CPU throttle', { item: '1185', budgetMs: 300000 }, async function () {
+    if (typeof VideoEncoder !== 'function' || typeof VideoFrame !== 'function' || typeof OffscreenCanvas !== 'function') notRunHere('needs VideoEncoder, VideoFrame and OffscreenCanvas');
+    if (typeof FM._encStallMs !== 'function' || !(FM._encStallMargin > 0)) throw new Error('FM._encStallMs or FM._encStallMargin is not exposed');
+    const W = 2160, H = 3840, N = 24, codec = 'avc1.640033', bitrate = 20e6;
+    const sup = await VideoEncoder.isConfigSupported({ codec: codec, width: W, height: H, bitrate: bitrate, framerate: 30 }).catch(function () { return { supported: false }; });
+    if (!sup || !sup.supported) notRunHere('this browser has no 4K H.264 encoder to measure');
+    const ms0 = FM._exportStallMs; FM._exportStallMs = 0;
+    const cv = new OffscreenCanvas(W, H), g = cv.getContext('2d');
+    const tile = new OffscreenCanvas(256, 256), tg = tile.getContext('2d'), td = tg.createImageData(256, 256);
+    for (let i = 0; i < td.data.length; i += 4) { const v = (Math.imul(i + 7, 2654435761) >>> 24); td.data[i] = v; td.data[i + 1] = 255 - v; td.data[i + 2] = (v * 3) & 255; td.data[i + 3] = 255; }
+    tg.putImageData(td, 0, 0);
+    const pat = g.createPattern(tile, 'repeat');
+    const paint = function (k) {
+      const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, 'hsl(' + (k * 9) + ',70%,40%)'); gr.addColorStop(1, 'hsl(' + (k * 9 + 140) + ',70%,60%)');
+      g.fillStyle = gr; g.fillRect(0, 0, W, H);
+      g.globalAlpha = 0.35; g.save(); g.translate((k * 37) % 256, (k * 53) % 256); g.fillStyle = pat; g.fillRect(-256, -256, W + 512, H + 512); g.restore(); g.globalAlpha = 1;
+      for (let s = 0; s < 6; s++) { g.fillStyle = 'hsl(' + (s * 60 + k * 5) + ',90%,55%)'; g.beginPath(); g.arc((s * 400 + k * 41) % W, (s * 700 + k * 67) % H, 180 + s * 30, 0, Math.PI * 2); g.fill(); }
+    };
+    const measure = async function () {
+      let last = 0, worst = 0, outs = 0, err = null, first = 0, gap = 0, tail = 0;
+      const t0 = performance.now();
+      const enc = new VideoEncoder({ output: function () { const now = performance.now(); if (last) gap = Math.max(gap, now - last); else first = now - t0; worst = Math.max(worst, now - (last || t0)); last = now; outs++; }, error: function (e) { err = e; } });
+      enc.configure({ codec: codec, width: W, height: H, bitrate: bitrate, framerate: 30 });
+      const silent = function () { return performance.now() - Math.max(last, t0) > 60000; };
+      try {
+        for (let k = 0; k < N; k++) {
+          paint(k);
+          const f = new VideoFrame(cv, { timestamp: Math.round(k * 1e6 / 30), duration: Math.round(1e6 / 30) });
+          enc.encode(f, { keyFrame: k === 0 }); f.close();
+          while (enc.encodeQueueSize > 8 && !err && !silent()) await sleep(5);
+          if (err || silent()) break;
+        }
+        if (err) return { err: String(err) };
+        if (silent()) return { hung: true };
+        const tf = performance.now();
+        let flushed = false;
+        enc.flush().then(function () { flushed = true; }, function (e) { err = e; flushed = true; });
+        while (!flushed && performance.now() - Math.max(last, tf) <= 60000) await sleep(20);
+        if (!flushed) return { hung: true };
+        if (err) return { err: String(err) };
+        tail = performance.now() - Math.max(last, tf);
+        worst = Math.max(worst, tail);
+        return { worst: worst, first: Math.round(first), gap: Math.round(gap), tail: Math.round(tail), outs: outs, total: Math.round(performance.now() - t0) };
+      } finally { try { enc.close(); } catch (e) {} }
+    };
+    let full = null, slow = null, rate = null;
+    try {
+      full = await measure();
+      rate = await cpuRate921(4, 240000);
+      if (rate === 4) slow = await measure();
+    } finally {
+      await cpuRate921(1);
+      FM._exportStallMs = ms0;
+    }
+    if (full && full.hung) notRunHere('the 4K H.264 encoder went silent for 60 s at full speed during the measurement: the fault itself, met here, so there is nothing to measure');
+    if (full && full.err) throw new Error('setup: the 4K encoder failed at full speed: ' + full.err);
+    if (rate !== 4) notRunHere('the driver did not throttle the CPU (got ' + rate + '): run through tests/_cdp.py, which answers __fmWantCpu');
+    if (slow && slow.hung) notRunHere('the 4K H.264 encoder went silent for 60 s under the 4x throttle during the measurement: the fault itself, met here');
+    if (slow && slow.err) throw new Error('setup: the 4K encoder failed under the 4x throttle: ' + slow.err);
+    if (!(full.outs >= N) || !(slow.outs >= N)) throw new Error('setup: the encoder put out ' + full.outs + ' and ' + slow.outs + ' chunks for ' + N + ' frames each, so a silence was not measured over the whole run');
+    perfNote('1185 encoder stall window', 'longest silence of a working 4K H.264 encoder', { phone: slow.worst, pc: full.worst, rate: 4 });
+    perfNote('1185 encoder stall window', 'first frame queued to the first chunk', { phone: slow.first, pc: full.first, rate: 4 });
+    perfNote('1185 encoder stall window', 'longest gap between chunks', { phone: slow.gap, pc: full.gap, rate: 4 });
+    perfNote('1185 encoder stall window', 'flush call (or last chunk) to the flush settling', { phone: slow.tail, pc: full.tail, rate: 4 });
+    /* two windows (js/exporter.js encStallMs): one before the codec's first output, one after it */
+    const M = FM._encStallMargin, parts = JSON.stringify({ full: full, slow: slow });
+    const needFirst = M * Math.max(full.first, slow.first), needAfter = M * Math.max(full.gap, slow.gap, full.tail, slow.tail);
+    if (FM._encStallMs(false) < needFirst) throw new Error('the window before the first chunk is ' + FM._encStallMs(false) + ' ms, but a working 4K encoder here took up to ' + Math.max(full.first, slow.first) + ' ms to put out its first chunk, and the margin asks for ' + needFirst + ' ms: a slow start would be called a stall. Parts: ' + parts);
+    if (FM._encStallMs(true) < needAfter) throw new Error('the window once the encoder runs is ' + FM._encStallMs(true) + ' ms, but a working 4K encoder here went quiet for up to ' + Math.max(full.gap, slow.gap, full.tail, slow.tail) + ' ms between chunks or at the flush, and the margin asks for ' + needAfter + ' ms. Parts: ' + parts);
+  });
+  /* #1185: THE WINDOWS AGAINST THE RECORDED MEASUREMENT, in every run. The measurement above (on demand, six runs on this laptop's
+     Chrome 154, 24 Oct) found a working 4K H.264 encoder silent for up to 14281 ms before its first chunk (it started right after other
+     encoders had been closed; 2.2 to 3.2 s in a fresh page) and for up to 1807 ms once running (between chunks under a 4x throttle; the
+     flush settled within 24 ms of the last chunk). A window under the margin times those would call a slow export that is still working
+     stalled, and end it. This pins the app's own windows (no test override in force) to at least that. Re-measure with
+     ?only=1185%20the%20encoder%20stall%20window%20measured&fmmeasure=1 and move these numbers when the encoder changes. */
+  test('1185 the encoder stall windows are at least the margin times the longest silences a working 4K encoder showed when measured', { item: '1185' }, function () {
+    if (typeof FM._encStallMs !== 'function' || !(FM._encStallMargin > 0)) throw new Error('FM._encStallMs or FM._encStallMargin is not exposed');
+    const MEASURED = { first: 14281, after: 1807 }, M = FM._encStallMargin;
+    const ms0 = FM._exportStallMs;
+    try {
+      FM._exportStallMs = 0;
+      if (!(M >= 3)) throw new Error('the stall margin is ' + M + ': under 3 a working encoder one slow frame behind the measured one would be called stalled');
+      if (!(FM._encStallMs(false) >= M * MEASURED.first)) throw new Error('the window before the first chunk is ' + FM._encStallMs(false) + ' ms, under ' + M + ' x the ' + MEASURED.first + ' ms a working 4K encoder took to start when measured: a slow start would be ended as a stall');
+      if (!(FM._encStallMs(true) >= M * MEASURED.after)) throw new Error('the window once the encoder runs is ' + FM._encStallMs(true) + ' ms, under ' + M + ' x the ' + MEASURED.after + ' ms a working 4K encoder went quiet between chunks when measured');
+      if (!(FM._encStallMs(true) < FM._encStallMs(false))) throw new Error('CONTROL: the window once running (' + FM._encStallMs(true) + ' ms) is not shorter than the start-up one (' + FM._encStallMs(false) + ' ms), so a stall mid-file waits as long as a slow start');
+    } finally { FM._exportStallMs = ms0; }
+  });
+
   test('AX2 an audio encoder that makes no sound and no error: the export drops the empty track, says so, and the report names it (encode-empty)', { item: 'AX2', budgetMs: 60000 }, async function () {
     if (!FM.exporter || typeof FM.exporter.run !== 'function') throw new Error('FM.exporter.run is not reachable');
     const r = await ax2WithOpusPath(true, ax2Export);

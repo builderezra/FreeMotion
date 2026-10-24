@@ -952,7 +952,10 @@ window.FM = window.FM || {};
       const AT = [1500, 1500 + 5 * F + 517];   // two clicks, neither on a frame boundary, further apart than WIN
       const sig = new Float32Array(N); AT.forEach(a => { sig[a] = 0.9; });
       const chunks = []; let cfg = null, err = null;
-      const enc = new Enc({ output: (c, m) => { chunks.push(c); if (!cfg && m && m.decoderConfig) cfg = aacMeta(m, sampleRate, channels).decoderConfig; }, error: e => { err = e; } });   // #215: the decoder is handed a bare ASC too (aacMeta)
+      // (hunt HIGH, 24 Oct) both flushes below wait under the stall rule (encWait): a stall throws, and the catch at the end
+      // answers 0, uncached, as any other probe that cannot measure does
+      const pw = encWatch(), dw = encWatch();
+      const enc = new Enc({ output: (c, m) => { pw.out(); chunks.push(c); if (!cfg && m && m.decoderConfig) cfg = aacMeta(m, sampleRate, channels).decoderConfig; }, error: e => { err = e; pw.error = e; } });   // #215: the decoder is handed a bare ASC too (aacMeta)
       enc.configure({ codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels, bitrate: 160000 });
       for (let off = 0; off < N; off += F) {   // framed exactly as encodeAudio frames the mix
         const planar = new Float32Array(F * channels);
@@ -960,13 +963,13 @@ window.FM = window.FM || {};
         const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: F, numberOfChannels: channels, timestamp: Math.round(off / sampleRate * 1e6), data: planar });
         enc.encode(ad); ad.close();
       }
-      await enc.flush(); enc.close();
+      await encWait(enc, pw, { p: enc.flush(), what: 'audio probe' }); enc.close();
       if (err || !cfg || !chunks.length) return 0;
       const heard = []; let derr = null;
-      const dec = new Dec({ output: ad => { try { const d = new Float32Array(ad.numberOfFrames); ad.copyTo(d, { planeIndex: 0, format: 'f32-planar' }); heard.push(d); } finally { ad.close(); } }, error: e => { derr = e; } });
+      const dec = new Dec({ output: ad => { dw.out(); try { const d = new Float32Array(ad.numberOfFrames); ad.copyTo(d, { planeIndex: 0, format: 'f32-planar' }); heard.push(d); } finally { ad.close(); } }, error: e => { derr = e; dw.error = e; } });
       dec.configure(cfg);
       chunks.forEach(c => dec.decode(c));
-      await dec.flush(); dec.close();
+      await encWait(dec, dw, { p: dec.flush(), what: 'audio probe' }); dec.close();
       if (derr) return 0;
       let len = 0; heard.forEach(d => { len += d.length; });
       const all = new Float32Array(len); let at = 0; heard.forEach(d => { all.set(d, at); at += d.length; });
@@ -978,7 +981,7 @@ window.FM = window.FM || {};
       if (lands[0] < 0 || lands[0] !== lands[1]) return 0;   // unheard, or the two clicks disagree: not a number to act on
       const k = known || {}; k[key] = lands[0]; _primingByEncoder.set(Enc, k);
       return lands[0];
-    } catch (e) { return 0; }
+    } catch (e) { if (e && e.message === 'CANCELLED') throw e; return 0; }   // #1185: a Cancel inside the probe's wait is a cancel
   }
   /* Drops the `skip` warm-up frames, re-times what is left from 0, keeps only the frames the mix fills,
      and cuts the last one's duration to the mix's own end. The decoder description rides the first frame
@@ -1204,17 +1207,19 @@ window.FM = window.FM || {};
     const lead = skip * AAC_FRAME - prime;                         // silence fed first, so the first frame kept starts ON the mix
     const got = [];
     let encErr = null;
+    const aw = encWatch();   // (hunt HIGH, 24 Oct): the stall rule at encWait
     const enc = new AudioEncoder({
       /* #215: every meta passes aacMeta first, so both branches below (and decodedPeak, which reads these metas) carry a bare
          AudioSpecificConfig and never Safari's cookie; what was done is kept for the report's aac desc line. */
       output: (chunk, meta) => {
+        aw.out();
         meta = aacMeta(meta, sampleRate, channels, r => { FM._lastAacDesc = { how: r.how, from: r.from, to: r.to, rate: sampleRate, ch: channels }; });
         if (skip) got.push({ chunk: chunk, meta: meta }); else push(chunk, meta);
       },
       /* An encoder error arrives on this callback, NOT as a rejection from flush() on every browser —
          so a soundtrack could fail here and the export carry on believing it had succeeded. Held and
          rethrown after the flush, where the caller can see it. */
-      error: e => { encErr = e; console.error('audio encode', e); },
+      error: e => { encErr = e; aw.error = e; console.error('audio encode', e); },
     });
     enc.configure({ codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels, bitrate: 160000 });
     const chData = [];
@@ -1231,18 +1236,16 @@ window.FM = window.FM || {};
       /* #860 (5b): BACK-PRESSURE, as the video loop has. This loop used to hand the encoder every frame of the
          soundtrack in one synchronous pass, so an hour of sound queued 168,750 frames at once. Wait while
          more than 32 are queued, and let a Cancel stop it here rather than after the whole encode. */
-      while (enc.encodeQueueSize > 32) {
-        if (FM._exporting && FM._exportCancel) { try { enc.close(); } catch (e) {} throw new Error('CANCELLED'); }
-        await nextTick();
-      }
+      if (enc.encodeQueueSize > 32) await encWait(enc, aw, { done: () => enc.encodeQueueSize <= 32, what: 'audio' });   // Cancel is read in there too
+      if (encErr) throw encErr;
       if (FM._exporting && FM._exportCancel) { try { enc.close(); } catch (e) {} throw new Error('CANCELLED'); }
       const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round(ts), data: planar });
       enc.encode(ad); ad.close();
       ts += (n / sampleRate) * 1e6;
     }
-    await enc.flush();
+    await encWait(enc, aw, { p: enc.flush(), what: 'audio' });
+    if (encErr) throw encErr;   // before close(): an encoder that errored is closed already, and close() would throw over the real error
     enc.close();
-    if (encErr) throw encErr;
     if (skip) {
       let kept = null;
       try { kept = dropPriming(got, skip, total, sampleRate); } catch (e) { console.warn('[export] could not cut the AAC warm-up out — the sound stays as the encoder made it', e); kept = null; }
@@ -1306,6 +1309,68 @@ window.FM = window.FM || {};
     if (!_tickCh) return new Promise(r => setTimeout(r, 0));
     return new Promise(r => { _tickQ.push(r); _tickCh.port2.postMessage(0); });
   }
+
+  /* ═══ (hunt HIGH, 24 Oct) AN ENCODER THAT STOPS ANSWERING ENDS THE EXPORT, AND SAYS SO ═══════════════════════════════════
+   * WebCodecs has no timeout of its own: encoder.flush() and the encodeQueueSize back-pressure loops simply wait. On this
+   * laptop's Chrome a 2160x3840 H.264 flush never settled, twice (the suite's 4K fixture, on v17.99's second ship and v18.00's
+   * first), so his own 4K export could do the same: "Exporting…" for ever, with Cancel dead too, because the loop that reads
+   * Cancel was never reached again. The soundtrack's flush and the two flushes of the AAC warm-up probe had no limit either.
+   * THE RULE IS PROGRESS, NOT A CLOCK. A working codec, however slow (a phone, a 4K frame under load), keeps putting out
+   * chunks; a stopped one puts out none. So a wait is called stalled only when encStallMs() pass with work outstanding (a
+   * flush pending, or more queued than the loop allows) and NOTHING has come out in that time. Cancel is read on every turn of
+   * the wait, and the codec's own error ends it too. On a stall the codec is closed and the wait throws ENCODER_STALLED
+   * (`fmWhat` says which, `fmSize` the size and the next one down when the caller can say), which js/app.js turns into an
+   * offer of that smaller size (offerSmallerMp4), never a quiet downsize; a soundtrack's stall is a failed soundtrack, said
+   * as one; the probe's is no warm-up trim, as when the probe fails today.
+   * THE TWO WINDOWS ARE MEASURED. How long a WORKING encoder goes without putting anything out, on the heaviest real path (H.264 at
+   * 2160 x 3840, frames with real detail, the export's own back-pressure), on this laptop's Chrome 154, six runs on 24 Oct:
+   *   · before its FIRST chunk (starting up): 2.2 to 3.2 s in a fresh page, 7.9 and 14.3 s when it started right after other
+   *     encoders had been closed, 4.5 to 4.9 s under a 4x CPU throttle;
+   *   · between chunks once it runs: at most 0.31 s, and 1.8 s under the throttle (where the page itself paints slower);
+   *   · from the flush call or the last chunk to the flush settling: at most 24 ms.
+   * So the silence that varies is the start-up, and one window for both would be either too short for a slow start or far too
+   * long for a stall mid-file. Times ENC_STALL_MARGIN (5): 71 s before the first chunk, so ENC_FIRST_MS is 90 s; 9 s after it, so
+   * ENC_STALL_MS is 20 s. A stopped encoder costs him at most that long a frozen bar, and Cancel ends it at any moment. The suite pins
+   * both against these numbers ('1185 the encoder stall windows are at least the margin…'); '1185 … measured again …' re-measures
+   * them on demand. */
+  const ENC_STALL_MARGIN = 5;
+  const ENC_FIRST_MS = 90000;   // before the codec's first output
+  const ENC_STALL_MS = 20000;   // after it
+  function encStallMs(started) { return FM._exportStallMs > 0 ? FM._exportStallMs : (started ? ENC_STALL_MS : ENC_FIRST_MS); }   // a test shortens it
+  FM._encStallMs = encStallMs; FM._encStallMargin = ENC_STALL_MARGIN;   // suite seams
+  // A watch rides one codec: its output callback calls out(), its error callback sets error. size(), when set, says the size.
+  function encWatch() { const w = { at: 0, error: null, size: null }; w.out = function () { w.at = performance.now(); }; return w; }
+  // Waits for o.p (a flush) to settle, or for o.done() to be true (a back-pressure wait), under the rule above.
+  async function encWait(enc, watch, o) {
+    const cancelled = o.cancelled || (() => !!(FM._exporting && FM._exportCancel));
+    let from = performance.now(), turn = from;
+    let settled = false, val, perr = null;
+    const pd = o.p ? o.p.then(v => { settled = true; val = v; }, e => { settled = true; perr = e || new Error((o.what || 'codec') + ' flush failed'); }) : null;
+    for (;;) {
+      if (pd ? settled : o.done()) break;
+      if (watch.error) break;   // the codec's own error ends the wait; the caller rethrows it
+      if (cancelled()) { try { enc.close(); } catch (e) {} throw new Error('CANCELLED'); }
+      /* A PAGE THAT WAS FROZEN IS NOT A STALLED ENCODER (#1185 review). A hidden tab under Energy Saver, a phone that put the page
+         in the background, a laptop that slept: nothing ran here, the codec's output callbacks included, so the first turn back
+         would read the page's own silence as the encoder's and end a working export. A turn that comes long after the last one
+         starts the count again, and the encoder has the whole window from there. */
+      const now = performance.now();
+      if (now - turn > Math.max(1000, Math.min(5000, encStallMs(watch.at > 0) / 4))) from = now;   // 5 s with the real windows; never under 1 s, which a turn under load (or a background tab's clamped timer) can reach
+      turn = now;
+      if (now - Math.max(from, watch.at) > encStallMs(watch.at > 0)) {
+        try { enc.close(); } catch (e) {}
+        const s = new Error('ENCODER_STALLED');
+        s.fmWhat = o.what || 'codec';
+        if (watch.size) { try { s.fmSize = await Promise.race([watch.size(), new Promise(r => setTimeout(() => r(null), 5000))]); } catch (e) {} }
+        if (cancelled()) throw new Error('CANCELLED');   // a Cancel during the size lookup is still a cancel, said by nothing
+        throw s;
+      }
+      if (pd) await Promise.race([pd, new Promise(r => setTimeout(r, 100))]); else await nextTick();
+    }
+    if (perr && !watch.error) throw perr;
+    return val;
+  }
+  FM._encWait = encWait;   // suite seam
 
   /* NO AUDITION SURVIVES INTO AN EXPORT (queue 916, clause 2). The audio-effect audition (the Hear
    * button, queue 653) plays a clip's element on its own frame loop with FM.playing false, so pausing
@@ -1415,10 +1480,21 @@ window.FM = window.FM || {};
         const mm = FM.media.get(layer.id);
         if (!mm || !mm.el) continue;
         if (mm._building) { try { await mm._building; } catch (e) {} }
+        /* #860 hunt #6 (review F4): …but not a preview cache the frame account shared out or thinned short of a full build. How
+           many frames that one holds depends on how many clips were sharing during the session, so the same project would measure,
+           and export, differently. Such a one is rebuilt at the full preview size, as a fresh preview would build it alone. */
+        const mgLim = FM.frameCacheLimits ? FM.frameCacheLimits() : { maxDim: 640, maxBytes: 128 * 1024 * 1024 };
+        /* (review G2) by what it HOLDS, not what it was asked for: a cache built under a share that still got every frame a full
+           build would (a short clip) is kept, so a phone does not decode the reference twice for nothing. The full build's count is
+           FM.buildFrameCache's own: every frame of the clip, at most 900, at most what the per-clip budget holds at its size. */
+        const mfc = mm.frameCache;
+        const mfull = mfc ? Math.min(900, Math.max(1, Math.round((mfc.duration || 0) * (mfc.fps || fps))),
+          (mfc.w > 0 && mfc.h > 0) ? Math.max(1, Math.floor(mgLim.maxBytes / (mfc.w * mfc.h * 4))) : Infinity) : 0;
+        if (mfc && mfc.account && mfc.count < mfull) FM.clearFrameCache(mm);
         if (!mm.frameCache) {
           if (onStatus) onStatus('Decoding frames…');
           await FM.buildFrameCache(mm, fps, p => { if (onStatus) onStatus('Decoding frames… ' + Math.round(p * 100) + '%'); },
-            Object.assign({}, FM.frameCacheLimits ? FM.frameCacheLimits() : { maxDim: 640, maxBytes: 128 * 1024 * 1024 }, { shouldAbort: () => FM._exportCancel }));
+            Object.assign({}, mgLim, { shouldAbort: () => FM._exportCancel }));
           if (FM._exportCancel) break;
           built.push(mm);
         }
@@ -1925,9 +2001,12 @@ window.FM = window.FM || {};
        * `if (encErr) throw encErr` after its flush. Same shape, and the asymmetry was the whole of the
        * QA report's point. Thrown after flush() so the encoder is drained first. */
       let vidErr = null;
+      // (hunt HIGH, 24 Oct) the encoder's watch (encWait, above): a stall names this size and the next one down
+      const vw = encWatch();
+      vw.size = async () => { const fits = await largestMp4Size(outW, outH, fps, bitrate); return { w: outW, h: outH, fitW: fits ? fits.w : 0, fitH: fits ? fits.h : 0, custom: custom, stalled: true }; };
       const encoder = new VideoEncoder({
-        output: (chunk, meta) => { muxer.addVideoChunk(chunk, meta); if (recorder) recorder.add(chunk, meta); },
-        error: e => { vidErr = e; console.error('video encode', e); },
+        output: (chunk, meta) => { vw.out(); muxer.addVideoChunk(chunk, meta); if (recorder) recorder.add(chunk, meta); },
+        error: e => { vidErr = e; vw.error = e; console.error('video encode', e); },
       });
       encoder.configure({ codec, width: outW, height: outH, bitrate, framerate: fps });
 
@@ -1982,7 +2061,9 @@ window.FM = window.FM || {};
         // with one anyway, but "almost certainly" is not a thing to hang a file's decodability on.
         encoder.encode(frame, { keyFrame: f % (fps * 2) === 0 || f === resumeFrom });
         frame.close();
-        while (encoder.encodeQueueSize > 8) await nextTick();
+        // back-pressure, under the stall rule: Cancel and the encoder's own error end the wait, and so does no output at all
+        if (encoder.encodeQueueSize > 8) await encWait(encoder, vw, { done: () => encoder.encodeQueueSize <= 8, what: 'video' });
+        if (vidErr) throw vidErr;
         // ONE unconditional yield per frame. Without it this loop only ever returned to the event
         // loop when the encoder fell behind — so on a machine whose encoder keeps up, the whole
         // export was a single unbroken task: measured at 763ms for 360 frames, four progress widths
@@ -1994,7 +2075,7 @@ window.FM = window.FM || {};
         if (opts.onProgress) opts.onProgress((f + 1) / totalFrames, mix ? 'audio + video' : 'video');
       }
 
-      await encoder.flush();
+      await encWait(encoder, vw, { p: encoder.flush(), what: 'video' });   // a flush that never settles is a stall, not an endless Exporting…
       /* Rethrown here rather than inside the callback: a throw from the encoder's own error handler
          does not reach this async function, it becomes an unhandled rejection and the export keeps
          going — which is the same silence in a different costume. */

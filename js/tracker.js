@@ -220,7 +220,14 @@ window.FM = window.FM || {};
     },
 
     // Track the seeded point across the clip and write x/y keyframes.
+    /* #860 hunt #6 (review G4): the body takes a reused preview cache over (account off) while it reads it; this hands it back to the
+       account when the track is over, however it ends, so a reversed clip's cache can be shared and thinned again afterwards. */
     async track(layer, seed, seedT, boxContentPx, onProgress) {
+      const m0 = layer ? FM.media.get(layer.id) : null;
+      try { return await FM.tracker._trackBody(layer, seed, seedT, boxContentPx, onProgress); }
+      finally { const fc = m0 && m0.frameCache; if (fc && fc._trackTook) { fc.account = true; delete fc._trackTook; } }
+    },
+    async _trackBody(layer, seed, seedT, boxContentPx, onProgress) {
       const m = FM.media.get(layer.id);
       if (!m || !m.el) return false;
       const P = FM.scene.project, fps = P.fps || 30;
@@ -235,6 +242,10 @@ window.FM = window.FM || {};
       const budget = trkBudget(clipFrames);
       await FM.buildFrameCache(m, trkFps, null, { maxDim: 440, maxBytes: budget });
       const fc = m.frameCache; if (!fc || !fc.count) return false;
+      /* #860 hunt #6 (review F5): at 24 fps or less buildFrameCache hands back the PREVIEW's own cache, which the preview frame
+         account (FM.previewFrameShare, js/frames.js) may thin or give back while this reads it across awaits. A cache the tracker
+         is reading is the tracker's: with account off the account counts it and never touches it. */
+      if (fc.account) { fc.account = false; fc._trackTook = true; }   // track() hands it back when the track is over
       // cache frames are stored at (fc.w × fc.h); content(media) px → cache px by this ratio
       const cw = fc.w || (m.width), ch = fc.h || (m.height);
       const rx = cw / m.width, ry = ch / m.height;

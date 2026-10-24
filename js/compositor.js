@@ -24639,6 +24639,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // nearest source frames so slow motion looks smooth instead of stuttering on dupes.
         const slow = (FM.speedAt ? FM.speedAt(layer, t) : (layer.speed || 1)) < 1;   // ramped speed is an object — raw compare was always false, so frame-blend never engaged on ramps
         if (m.frameCache && m.frameCache.count && (layer.reversed || (layer.frameBlend && slow) || _mgOff > 0)) {   // _mgOff: Match Grade measuring another moment (#482 15.6)
+          m._fcDrawnAt = performance.now();   // #860 hunt #6: the preview frame account gives back the least recently DRAWN cache (js/frames.js)
           const local = FM.layerLocalTime(layer, t);
           if (local != null) {
             const fc = m.frameCache, fpos = local * (fc.effFps || fc.fps);   // effFps spans the whole clip even past the 900-frame cap

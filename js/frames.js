@@ -205,7 +205,9 @@ window.FM = window.FM || {};
       }
       el.muted = wasMuted;
       try { el.currentTime = wasTime; } catch (e) {}
-      rec.frameCache = { fps, effFps, frames, count, decoded: ok, duration: dur, scaled: scaled, w: tw, h: th };
+      // account: made under the preview frame account (#860 hunt #6, FM.previewFrameShare below), so the account may thin or give it back
+      // ask: the maxBytes it was built under, so the export can tell a shared preview cache from a full one (#860 hunt #6, F4)
+      rec.frameCache = { fps, effFps, frames, count, decoded: ok, duration: dur, scaled: scaled, w: tw, h: th, account: !!opts.account, ask: opts.maxBytes || 0 };
       return rec.frameCache;
       } finally { rec._building = null; }   // clear on THROW too — a mid-build media swap left this a permanently-rejected promise, so reverse/slow-mo never got a cache again
     });
@@ -231,6 +233,142 @@ window.FM = window.FM || {};
       rec.frameCache.frames.forEach(f => { if (f && f.close) try { f.close(); } catch (e) {} });
       rec.frameCache = null;
     }
+  };
+
+  /* #860 hunt #6: ONE BYTE ACCOUNT FOR EVERY PREVIEW FRAME CACHE (Reverse, frame-blend slow motion, a Match Grade or Time Echo
+   * reference). FM.frameCacheLimits().maxBytes used to be handed to EACH clip, so five reversed clips held five times it (about
+   * 1.9 GB of ImageBitmaps on his PC at 384 MB each), and nothing gave any of it back until a clip stopped being reversed or the
+   * project was left. There is now one TOTAL for all of them (FM.previewFrameTotal: four of the per-clip figure on a desktop
+   * with the full 384 MB, 1.5 GiB, the same total the export keeps, js/exporter.js EXPORT_BYTES; the per-clip figure itself
+   * everywhere else, a phone above all, where running out of memory is a crash), and no one cache takes more than the per-clip
+   * figure, as before. FM.ensureReverseCache (js/app.js) asks here how much a new cache may take. So on his PC one to four
+   * reversed clips each get exactly what they always did, and only a fifth starts the sharing. The export is not in this
+   * account: it builds its own full-size copies under its own total (js/exporter.js prepareCaches, #860 (1)) and frees them
+   * when the file is done.
+   *
+   * THE RULE.
+   *   1. The space is split between what is alive: every record the open scene needs a cache for (reversed, or frame-blend at a
+   *      slow or ramped speed, the test FM.requestPlay uses; or measured at other moments, FM.matchGradeFrameLayers), every
+   *      record holding a preview cache or building one that cannot be given back (2a says which can), and the asker.
+   *      fair = total / that count, never more than the per-clip figure. A spare that 2a may give back takes no share: it is
+   *      nobody's (an undone Reverse or a Match Grade turned off leaves one), so it cannot halve what a clip that needs a
+   *      cache gets (review F3).
+   *   2. A new cache takes fair. When the room left is short of fair:
+   *      a. first give back the caches the scene no longer needs, least recently DRAWN first (the compositor stamps
+   *         rec._fcDrawnAt each time it draws from a cache, and a build stamps it too), never one drawn in the last STALE_MS,
+   *         one under the playhead, or one still building. Only as many as it takes to reach fair;
+   *      b. then THIN the caches that hold more than fair, in place: every n-th bitmap is kept, the rest are closed (as
+   *         FM.clearFrameCache closes them), and the effective fps is spread again over the clip (the compositor maps time to a
+   *         frame through effFps, so the clip keeps playing, with fewer frames).
+   *   3. Room nobody else is about to take is LENT: the ask gets the room left divided between itself and the other clips that
+   *      need a cache and have none yet, when that is more than fair, still never more than the per-clip figure. A 10 s clip
+   *      beside a 2 s one is not held to half because the short one cannot use its half (review F2).
+   *   4. A floor of a quarter of fair covers the cases 2b cannot reach (another clip's build still in flight with a larger ask,
+   *      or a motion track's cache), so a new clip always gets a usable cache; the total can then run over by that quarter.
+   *   Only caches the account made itself (fc.account, which FM.buildFrameCache copies from the opts FM.ensureReverseCache
+   *   passes) are ever thinned or given back. A motion track's cache (js/tracker.js) is counted but never touched: the tracker
+   *   reads it frame by frame while it runs, and clears it itself when it is done. When a track reuses a preview cache (at 24 fps
+   *   or less the two match), the tracker takes it over (account off), so the account cannot close a bitmap it is reading.
+   *
+   * WHY IT CANNOT THRASH. Nothing the scene still needs is ever given back, so the account never causes a decode. Giving back a
+   * needed cache would: FM.requestPlay rebuilds every missing cache before it plays, so with six reversed clips and room for five,
+   * each Play would rebuild the one given back last time, and that rebuild would give back the next one, every Play, for ever.
+   * A clip past what the total holds makes all of them a little choppier instead, once, with no decode. What 2a gives back is
+   * nobody's any more: FM.requestPlay does not build it, and a Match Grade or Time Echo reference is counted as needed in 1.
+   * Thinning only ever happens when a new cache is asked for, never per frame, so it cannot loop either.
+   * Returns the byte budget for FM.buildFrameCache's maxBytes: never 0, which that function reads as no limit. */
+  const STALE_MS = 5000;
+  function fcBytes(fc) { return (fc && fc.w > 0 && fc.h > 0 && fc.count > 0) ? fc.w * fc.h * 4 * fc.count : 0; }
+  function needsFrameCache(l) {
+    if (!l || l.type !== 'video') return false;
+    if (l.reversed) return true;
+    if (!l.frameBlend) return false;
+    const ramped = (typeof FM.isAnimated === 'function') ? FM.isAnimated(l.speed) : !!(l.speed && typeof l.speed === 'object');
+    return ramped || (l.speed || 1) < 1;
+  }
+  // Keep `keep` of the cache's frames, evenly over the clip, and close the others. Frame j of the result is the source frame
+  // nearest j / keep of the way through, the same place a fresh build of `keep` frames would have taken it from.
+  function thinFrameCache(fc, maxBytes) {
+    const per = fc.w * fc.h * 4, n = fc.count;
+    if (!(per > 0) || !(n > 1)) return;
+    const keep = Math.max(1, Math.floor(maxBytes / per));
+    if (keep >= n) return;
+    const old = fc.frames || [], next = new Array(keep), kept = new Uint8Array(n);
+    let ok = 0;
+    for (let j = 0; j < keep; j++) {
+      const i = Math.min(n - 1, Math.round(j * n / keep));
+      next[j] = old[i] || null;
+      kept[i] = 1;
+      if (next[j]) ok++;
+    }
+    for (let i = 0; i < n; i++) { const b = old[i]; if (!kept[i] && b && b.close) { try { b.close(); } catch (e) {} } }
+    fc.frames = next;
+    fc.count = keep;
+    fc.decoded = ok;
+    fc.effFps = keep / Math.max(1e-6, fc.duration || 0);
+    fc.thinned = true;
+  }
+  FM._thinFrameCache = thinFrameCache;   // suite seam (#860 hunt #6)
+  // The one total (rule above): four of the per-clip figure on a fine-pointer machine with the full 384 MB, the figure itself elsewhere.
+  FM.previewFrameTotal = function (limits) {
+    const per = (limits && limits.maxBytes) || 0;
+    const fine = !window.matchMedia || window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    return (fine && per >= 384 * 1024 * 1024) ? per * 4 : per;
+  };
+  FM.previewFrameShare = function (rec, limits) {
+    const per = (limits && limits.maxBytes) || 0;
+    const total = FM.previewFrameTotal(limits);
+    if (!(per > 0) || !FM.media || typeof FM.media.all !== 'function') return per;
+    const store = FM.media.all() || {};
+    const now = performance.now();
+    const layers = (FM.scene && FM.scene.layers) || [], t = FM.time;
+    let mg = null;
+    try { mg = FM.matchGradeFrameLayers ? FM.matchGradeFrameLayers(FM.scene) : null; } catch (e) { mg = null; }
+    const needed = new Set([rec]), atHead = new Set();
+    for (const l of layers) {
+      if (!l || l.type !== 'video') continue;
+      const m = FM.media.get(l.id);
+      if (!m || m._released) continue;
+      if (needsFrameCache(l) || (mg && mg[l.id])) needed.add(m);
+      if (l.visible !== false && t >= l.start && t <= l.start + l.duration) atHead.add(m);
+    }
+    const holders = new Set();
+    for (const k in store) {
+      const m = store[k];
+      if (!m || m === rec || m._released) continue;
+      if ((m.frameCache && m.frameCache.scaled) || (!m.frameCache && m._fcAsk > 0)) holders.add(m);
+    }
+    const bytesOf = m => (m.frameCache ? fcBytes(m.frameCache) : (m._fcAsk || 0));
+    const spareOk = m => m.frameCache && m.frameCache.account && !needed.has(m) && !atHead.has(m) && !m._building && now - (m._fcDrawnAt || 0) >= STALE_MS;
+    const live = new Set(needed);
+    holders.forEach(m => { if (!spareOk(m)) live.add(m); });   // 1: a spare that may be given back takes no share
+    let held = 0;
+    holders.forEach(m => { held += bytesOf(m); });
+    const fair = Math.min(per, Math.floor(total / live.size));
+    if (total - held < fair) {
+      const spare = Array.from(holders).filter(spareOk).sort((a, b) => (a._fcDrawnAt || 0) - (b._fcDrawnAt || 0));
+      for (const m of spare) {
+        if (total - held >= fair) break;
+        held -= bytesOf(m);
+        FM.clearFrameCache(m);
+        holders.delete(m);
+      }
+    }
+    if (total - held < fair) {
+      holders.forEach(m => {
+        const fc = m.frameCache;
+        if (!fc || !fc.scaled || !fc.account || m._building || fcBytes(fc) <= fair) return;
+        held -= fcBytes(fc);
+        thinFrameCache(fc, fair);
+        held += fcBytes(fc);
+      });
+    }
+    // 3: lend the room the other clips still waiting for a cache will not take
+    let pending = 0;
+    needed.forEach(m => { if (m === rec || (!m.frameCache && !m._building && !(m._fcAsk > 0))) pending++; });
+    const room = total - held;
+    const share = Math.min(per, Math.max(fair, Math.floor(room / Math.max(1, pending))));
+    return Math.max(1, Math.floor(fair / 4), Math.min(share, room));
   };
 
   // Small filmstrip of DISTINCT frames for a clip's timeline bar (AM-style). Cheap + cached on the

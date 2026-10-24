@@ -1853,8 +1853,21 @@ window.FM = window.FM || {};
     const fps = Math.min(FM.scene.project.fps || 30, 24);
     FM.toast('Preparing frames…', 0);   // sticky progress toast — hidden by the finally below
     // Preview: downscale + byte-cap so a long reversed/slow clip can't OOM-kill mobile Safari.
-    try { await FM.buildFrameCache(m, fps, p => FM.toast('Preparing frames… ' + Math.round(p * 100) + '%', 0), FM.frameCacheLimits()); }
-    finally { FM.hideToast(); }
+    /* #860 hunt #6: the byte cap is this clip's SHARE of one total for every preview frame cache (FM.previewFrameShare, js/frames.js,
+       which holds the rule). One clip alone still gets all of frameCacheLimits().maxBytes. _fcAsk tells a build that starts while
+       this one runs how much this one is about to spend. Inside the try, so a throw there cannot leave the sticky toast up. */
+    try {
+      const lim = FM.frameCacheLimits();
+      const opts = { maxDim: lim.maxDim, maxBytes: FM.previewFrameShare ? FM.previewFrameShare(m, lim) : lim.maxBytes, account: true };
+      /* (review G3) …and reserves only what this clip can use: every frame of it at its cache size, the count FM.buildFrameCache
+         takes. A short clip handed a big share would otherwise hold the rest of it away from a long one asking at the same moment
+         (a project opening with both reversed), so the lend could never reach the long one. */
+      const sw = (m.el && m.el.videoWidth) || 0, sh = (m.el && m.el.videoHeight) || 0, k = (sw > 0 && sh > 0) ? Math.min(1, lim.maxDim / Math.max(sw, sh)) : 0;
+      const need = k > 0 ? Math.max(1, Math.round(sw * k)) * Math.max(1, Math.round(sh * k)) * 4 * Math.min(900, Math.max(1, Math.round((m.duration || 0) * fps))) : 0;
+      m._fcAsk = need > 0 ? Math.min(opts.maxBytes, need) : opts.maxBytes;
+      await FM.buildFrameCache(m, fps, p => FM.toast('Preparing frames… ' + Math.round(p * 100) + '%', 0), opts);
+    } finally { m._fcAsk = 0; FM.hideToast(); }
+    if (m.frameCache) m._fcDrawnAt = performance.now();   // a cache just built counts as just drawn, so the next ask cannot give it back
     render();
   };
 
@@ -6852,6 +6865,10 @@ window.FM = window.FM || {};
       else if (e.message === 'NO_VIDEO_CODEC') alert('This browser\u2019s video encoder does not support any of the H.264 settings FreeMotion can write, so an MP4 cannot be made here.\n\nChrome, Edge and Safari all work. If you are on Firefox or an older Android browser, try one of those \u2014 or export a GIF or a PNG sequence instead, which do not need the video encoder.');
       /* bughunt6 #3: the encoder takes H.264, only not a frame this big. Said after the finally (offerSmallerMp4). */
       else if (e.message === 'VIDEO_TOO_BIG' && e.fmSize) tooBig = e.fmSize;
+      /* (hunt HIGH, 24 Oct) the video encoder stopped answering (js/exporter.js encWait): the same offer of the next size down,
+         in its own words, never a quiet downsize. With no smaller size to offer, it says what happened and what to try. */
+      else if (e.message === 'ENCODER_STALLED' && e.fmSize && e.fmSize.fitW > 0) tooBig = e.fmSize;
+      else if (e.message === 'ENCODER_STALLED') alert('The video encoder on this device stopped answering during the export, so the file was not made.\n\nTry a smaller size, or close other tabs and export again.');
       else if (e.message === 'CANCELLED') { /* silent */ }
       /* bughunt6 #12: said by WHICH limit (js/exporter.js runFrames marks it). Over the frame count a lower resolution is
          no help, so it is not offered; over the memory budget all three still are, in the words below. */
@@ -6877,9 +6894,13 @@ window.FM = window.FM || {};
    * does; Not now changes nothing. The one-tap export (`sx`) has no size list here, so it is told the size only. */
   async function offerSmallerMp4(t, sx) {
     const was = t.w + '×' + t.h, fits = t.fitW + '×' + t.fitH;
-    const say = was + ' is too big for an MP4 on this device. The largest it can make is ' + fits + ' (same shape).';
+    /* t.stalled (hunt HIGH, 24 Oct): the encoder TOOK this size and then stopped answering partway through, so it is not "too big"
+       by the encoder's own answer; the next size down is the one to try. */
+    const say = t.stalled
+      ? 'The video encoder on this device stopped answering during the ' + was + ' export, so the file was not made. The next size down is ' + fits + ' (same shape).'
+      : was + ' is too big for an MP4 on this device. The largest it can make is ' + fits + ' (same shape).';
     if (sx || !FM.ask) { alert(say + '\n\nPick a smaller size and export again.'); return; }
-    const go = await FM.ask({ title: 'Too big for an MP4', message: say + ' Export at that size?', ok: 'Export at ' + fits, cancel: 'Not now' });
+    const go = await FM.ask({ title: t.stalled ? 'The export stopped' : 'Too big for an MP4', message: say + ' Export at that size?', ok: 'Export at ' + fits, cancel: 'Not now' });
     if (go !== true) return;
     const P = FM.scene.project, sel = document.getElementById('exp-res');
     const cw = document.getElementById('exp-cw'), ch = document.getElementById('exp-ch');

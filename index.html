@@ -27,7 +27,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.00">
+<meta name="fm-build" content="v18.01">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -301,7 +301,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.00</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.01</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1198,7 +1198,7 @@
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=5"></script>
   <script src="js/gl-color.js?v=5"></script>
-  <script src="js/compositor.js?v=253"></script>
+  <script src="js/compositor.js?v=254"></script>
   <script src="js/fx-registry.js?v=38"></script>
   <script src="js/filters.js?v=24"></script>
   <script src="js/fx-presets.js?v=12"></script>
@@ -1227,8 +1227,8 @@
   <script src="js/touchup-tool.js?v=5"></script>
   <script src="js/eyedropper.js?v=2"></script>
   <script src="js/text-edit.js?v=27"></script>
-  <script src="js/tracker.js?v=11"></script>
-  <script src="js/frames.js?v=23"></script>
+  <script src="js/tracker.js?v=12"></script>
+  <script src="js/frames.js?v=24"></script>
   <script src="js/audio-fx.js?v=22"></script>
   <script src="js/audio-play.js?v=69"></script>
   <script src="js/audio-fx-live.js?v=17"></script>
@@ -1244,7 +1244,7 @@
   <script src="js/graph-editor.js?v=19"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
-  <script src="js/exporter.js?v=140"></script>
+  <script src="js/exporter.js?v=141"></script>
   <script src="js/sample.js?v=11"></script>
   <script src="js/contextmenu.js?v=49"></script>
   <script src="js/ask.js?v=4"></script>
@@ -1253,7 +1253,7 @@
   <script src="js/captions.js?v=64"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=7"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=504"></script>
+  <script src="js/app.js?v=505"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->
