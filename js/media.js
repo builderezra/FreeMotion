@@ -691,7 +691,35 @@ window.FM = window.FM || {};
      layer already holds, so the account counted the original against its own copy, and a split sticker's tail came out at half the
      size of its head. A copy of a GIF the scene already holds decodes at that one's size (gifTwin), taking no share of its own, so
      the two always match. And Replace media, or its undo, does not count the record it is about to put away (`skip`). */
-  function sameGifFile(a, b) { return a === b || !!(a && b && a.size === b.size && (a.type || '') === (b.type || '') && (a.name || '') === (b.name || '')); }
+  /* (#860 hunt #6, review G7; the PM's call) …AND TWO DIFFERENT GIFS ARE NEVER ONE FILE. "The same GIF" used to mean the same name, size
+     and type, so two stickers both called sticker.gif of one byte length were taken for one: the second decoded at the first's size,
+     and the export, which keeps one copy per file, could draw ONE GIF's frames for BOTH layers in his file. Now it means the same
+     CONTENT: a SHA-256 of every byte, taken once per Blob where a decode already holds the bytes, and kept in gifDigests. Every byte,
+     not the first and last few KB: two GIFs cut from one source share the header, the palette, the first frames and the trailer and
+     differ only in the middle, which is the realistic false match a partial hash keeps. Where crypto.subtle is missing (it needs a
+     secure context) a full-length FNV-1a stands in. A file never hashed matches nothing but itself. */
+  const gifDigests = new WeakMap();
+  async function gifDigest(file, bytes) {
+    if (!file || typeof file !== 'object') return null;
+    if (gifDigests.has(file)) return gifDigests.get(file);
+    let hex = null;
+    try {
+      if (window.crypto && crypto.subtle && typeof crypto.subtle.digest === 'function') {
+        const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+        hex = Array.prototype.map.call(d, x => (x < 16 ? '0' : '') + x.toString(16)).join('');
+      }
+    } catch (e) { hex = null; }
+    if (!hex) { let h = 0x811c9dc5; for (let i = 0; i < bytes.length; i++) { h ^= bytes[i]; h = Math.imul(h, 0x01000193); } hex = 'fnv' + (h >>> 0).toString(16) + ':' + bytes.length; }
+    gifDigests.set(file, hex);
+    return hex;
+  }
+  FM._gifDigest = gifDigest;   // suite seam (G7)
+  function sameGifFile(a, b) {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    const da = gifDigests.get(a), db = gifDigests.get(b);
+    return !!(da && db && da === db);
+  }
   function gifTwin(file, skip) {
     const layers = (FM.scene && FM.scene.layers) || [];
     for (const l of layers) {
@@ -797,6 +825,7 @@ window.FM = window.FM || {};
     const b = new Uint8Array(await file.arrayBuffer());
     const g = parseGif(b);
     if (!g || g.frames.length < 2 || !(g.width > 0 && g.height > 0)) return null;
+    await gifDigest(file, b);   // (G7) its identity, before gifTwin asks whether the scene already holds it
     const W = g.width, H = g.height, n = g.frames.length;
     // a header claiming a picture this big is damaged (or hostile) — the arrays below would be gigabytes
     if (W * H > 64e6 || g.frames.some(f => f.w * f.h > 64e6)) throw new Error('a GIF of ' + W + 'x' + H + ' is too big to animate');
@@ -880,6 +909,7 @@ window.FM = window.FM || {};
     const g = parseGif(b);
     if (!g || g.frames.length < 2 || !(g.width > 0 && g.height > 0)) return null;
     if (g.width * g.height > 64e6 || g.frames.some(f => f.w * f.h > 64e6)) return null;
+    await gifDigest(file, b);   // (G7) cached per Blob: a file the preview decoded is not hashed twice
     return { b: b, g: g };
   }
   FM.gifFullSize = async function (file) {

@@ -68340,10 +68340,10 @@
       kit.fakes++;
       return Promise.resolve({ width: src.width, height: src.height, closed: 0, close: function () { this.closed++; } });
     };
-    kit.fileOf = function (n, tag) {
+    kit.fileOf = function (n, tag, pal) {   // pal (G7): another palette makes another GIF of the same size; the same n and pal make the same bytes, and since G7 the same GIF
       var fr = [];
       for (var i = 0; i < n; i++) fr.push({ x: i % 2, y: 0, w: 1, h: 1, disposal: 1, transparent: -1, delay: 10, px: function () { return 1; } });
-      var bytes = h3aGifBytes(kit.W, kit.H, [[0, 0, 0], [230, 30, 30], [30, 60, 230], [30, 200, 40]], fr);
+      var bytes = h3aGifBytes(kit.W, kit.H, pal || [[0, 0, 0], [230, 30, 30], [30, 60, 230], [30, 200, 40]], fr);
       return { name: tag + '.gif', type: 'image/gif', size: bytes.length, arrayBuffer: function () { return Promise.resolve(bytes.buffer); } };
     };
     kit.decode = function (n, tag, opts) { return FM._decodeGifAnimation(kit.fileOf(n, tag), opts); };
@@ -68611,6 +68611,66 @@
     }
   });
 
+  /* #860 hunt #6, the GIF half (review G7; the PM's call): TWO DIFFERENT GIFS ARE NEVER TAKEN FOR ONE FILE. "The same GIF" meant the same
+     name, size and type, so two stickers both called sticker.gif of one byte length were one file to the app: the second decoded at the
+     first one's size, and the export (one copy per file) drew ONE GIF's frames for BOTH layers in his file. Now a GIF is its content,
+     a SHA-256 of every byte (js/media.js gifDigest).
+       1. The hard case, on the identity itself: two 100 KB files with the same name, size and type that agree in their first 64 KB
+          and last 4 KB and differ in one byte in the middle (two GIFs cut from one source), which a partial hash would call one.
+       2. Through the export: two GIFs of one name, size and type that differ in their palette, each squeezed in the preview (a
+          phone's total, kit.phone, with a GIF decoded earlier filling it): the second is not taken for the first one's twin, and the
+          export gives each its own copy.
+     RED on de060600: stage 1 calls them one file. CONTROL: one GIF used twice (a Split: two records of the same file) still shares
+     one export copy, and a file is the same GIF as itself. */
+  test('860 two different GIFs that share a name, a size and a type keep their own frames in the export, and two that match only at their ends are still two files (CONTROL: one GIF used twice still shares one copy)', { item: '860', budgetMs: 120000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.sameGifFile !== 'function' || typeof FM._gifTwin !== 'function') throw new Error('FM._decodeGifAnimation, FM.sameGifFile or FM._gifTwin is not exposed');
+    if (!FM.exporter || typeof FM.exporter.prepareCaches !== 'function' || typeof FM.exporter.releaseGifCopies !== 'function') throw new Error('FM.exporter.prepareCaches or releaseGifCopies is not exposed');
+    /* 1. the hard case, on the identity itself */
+    var A = new Uint8Array(100000);
+    for (var i = 0; i < A.length; i++) A[i] = (i * 31 + 7) & 255;
+    var B = A.slice(); B[80000] ^= 0x5a;   // the middle: past the first 64 KB (65536) and before the last 4 KB (95904)
+    var ends = true;
+    for (var j = 0; j < 65536; j++) if (A[j] !== B[j]) ends = false;
+    for (var q = A.length - 4096; q < A.length; q++) if (A[q] !== B[q]) ends = false;
+    if (!ends) throw new Error('setup: the two files do not agree in their first 64 KB and last 4 KB, so this is not the hard case');
+    var fa = { name: 'sticker.gif', type: 'image/gif', size: A.length }, fb = { name: 'sticker.gif', type: 'image/gif', size: B.length };
+    if (FM._gifDigest) { await FM._gifDigest(fa, A); await FM._gifDigest(fb, B); }
+    if (FM.sameGifFile(fa, fb)) throw new Error('two files with the same name, size and type that agree in their first 64 KB and last 4 KB and differ in the middle are taken for one GIF: the export can draw one for the other');
+    if (!FM.sameGifFile(fa, fa)) throw new Error('CONTROL: a file is not the same GIF as itself');
+    /* 2. through the export */
+    var kit = gif860Kit().phone(), per = kit.per, n = kit.bigN;
+    var mk = function (pal) {
+      var fr = [];
+      for (var k = 0; k < n; k++) fr.push({ x: k % 2, y: 0, w: 1, h: 1, disposal: 1, transparent: -1, delay: 10, px: function () { return 1; } });
+      var bytes = h3aGifBytes(kit.W, kit.H, pal, fr);
+      return { name: 'sticker.gif', type: 'image/gif', size: bytes.length, arrayBuffer: function () { return Promise.resolve(bytes.buffer); } };
+    };
+    var lay = function (id) { return { id: id, name: id, type: 'image', start: 0, duration: 5, trimStart: 0, visible: true, effects: [], behaviors: [] }; };
+    var sceneOf = function (ids) { return { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' }, selectedId: null, selectedIds: [], layers: ids.map(lay) }; };
+    try {
+      kit.plant('860g-g7-fill', per);
+      var f1 = mk([[0, 0, 0], [230, 30, 30], [30, 60, 230], [30, 200, 40]]), f2 = mk([[0, 0, 0], [30, 230, 30], [230, 60, 30], [200, 30, 40]]);
+      if (f1.size !== f2.size) throw new Error('setup: the two GIFs are ' + f1.size + ' and ' + f2.size + ' bytes, not one size');
+      var a1 = await FM._decodeGifAnimation(f1);
+      var r1 = kit.hold('860g-g7-a', a1, { file: f1 });
+      var a2 = await FM._decodeGifAnimation(f2);
+      if (!a1 || !a2 || !(a1.width < kit.W) || !(a2.width < kit.W)) throw new Error('setup: the two GIFs were not both squeezed in the preview (' + (a1 ? a1.width : 'none') + ', ' + (a2 ? a2.width : 'none') + ' of ' + kit.W + '), so the export would make no copy of either');
+      if (FM._gifTwin(f2) === r1) throw new Error('a different GIF that shares the name, size and type of one the scene holds was taken for its twin, and would be decoded at the size of the other');
+      var r2 = kit.hold('860g-g7-b', a2, { file: f2 });
+      await FM.exporter.prepareCaches(sceneOf(['860g-g7-a', '860g-g7-b']), 30);
+      if (!r1._exportAnim || !r2._exportAnim) throw new Error('setup: the export made no copy for ' + (!r1._exportAnim ? 'the first' : 'the second') + ' GIF, so whose frames it draws was not read');
+      if (r1._exportAnim === r2._exportAnim) throw new Error('two different GIFs that share a name, a size and a type were given ONE export copy: the exported file shows the same frames on both layers');
+      FM.exporter.releaseGifCopies();
+      /* CONTROL: one GIF used twice, as a Split leaves it (two records of the same file), shares one copy */
+      var r3 = kit.hold('860g-g7-c', a1, { file: f1 });
+      await FM.exporter.prepareCaches(sceneOf(['860g-g7-a', '860g-g7-c']), 30);
+      if (!r1._exportAnim || r1._exportAnim !== r3._exportAnim) throw new Error('CONTROL: one GIF used twice (two records of one file) was not given one shared export copy');
+    } finally {
+      try { FM.exporter.releaseGifCopies(); } catch (e) {}
+      kit.put();
+    }
+  });
+
   /* #860 hunt #6, the GIF half F3 (the PM's decision, 24 Oct, his to correct): A GIF THE PREVIEW HOLDS SMALLER IS EXPORTED AT ITS FULL
      SIZE. The GIF frame total can decode a GIF smaller for the preview (here on a phone's total, kit.phone: a GIF decoded earlier fills
      it, so the big one gets the quarter-share floor), and the export drew those very frames, so the squeeze reached his file. Now the
@@ -68738,7 +68798,7 @@
         for (var i = 0; i < gifs.length; i++) {
           var n = Math.ceil(gifs[i][0] * cap / kit.F);
           if (n > 1000) throw new Error('setup: a GIF needing ' + gifs[i][0] + ' x the ceiling here would take ' + n + ' frames, past the decoder 1000');
-          var file = kit.fileOf(n, gifs[i][1]);
+          var file = kit.fileOf(n, gifs[i][1], gifs[i][2]);
           var pv = await FM._decodeGifAnimation(file);
           if (!pv || pv.frames.length !== n || !(pv.width < kit.W)) throw new Error('setup: GIF ' + gifs[i][1] + ' came out ' + (pv ? pv.frames.length + ' frames at ' + pv.width + 'x' + pv.height : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + kit.W);
           out.push({ tag: gifs[i][1], n: n, pv: kit.bytes(pv), rec: kit.hold(gifs[i][1], pv, { file: file }) });
@@ -68769,7 +68829,8 @@
       if (!(g.ea.bytes > g.pv) || g.ea.frames !== g.n) throw new Error('on a phone the export copy (' + ph.mb(g.ea.bytes) + ', ' + g.ea.frames + ' frames) is not larger than the preview copy (' + ph.mb(g.pv) + ') with every frame');
       if (!g.named || g.named.w !== g.ea.w || g.named.h !== g.ea.h) throw new Error('on a phone the GIF sent out at ' + g.ea.w + 'x' + g.ea.h + ', short of its full ' + ph.W + 'x' + ph.H + ', is not named at that size: ' + JSON.stringify(g.named));
       /* 2. two GIFs on a phone, together */
-      var two = await run(true, [[0.75, '860g-cap-a'], [0.75, '860g-cap-b']]);
+      /* two DIFFERENT GIFs (another palette each): byte for byte the same file would be one GIF since G7, sharing one copy */
+      var two = await run(true, [[0.75, '860g-cap-a', [[0, 0, 0], [230, 30, 30], [30, 60, 230], [30, 200, 40]]], [0.75, '860g-cap-b', [[0, 0, 0], [30, 230, 30], [230, 60, 30], [200, 30, 40]]]]);
       var sum = two.out.reduce(function (s, o) { return s + (o.ea ? o.ea.bytes : o.pv); }, 0);
       if (sum > two.cap) throw new Error('on a phone two GIFs went out into ' + two.out.map(function (o) { return o.ea ? two.mb(o.ea.bytes) : 'its preview copy'; }).join(' and ') + ', ' + two.mb(sum) + ' together, past the ' + two.mb(two.cap) + ' ceiling: the ceiling holds each copy, not all of them');
       if (two.out.some(function (o) { return !o.ea || !o.named; })) throw new Error('CONTROL: of two GIFs on a phone, each needing 0.75 of the ceiling, one got no copy or was not named: ' + JSON.stringify(two.out.map(function (o) { return { ea: o.ea, named: !!o.named }; })));
