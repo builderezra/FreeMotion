@@ -68906,6 +68906,499 @@
     }
   });
 
+  /* #860 hunt #6, the GIF half (review G5): THIS FRAME (PNG) DRAWS A GIF THE PREVIEW HOLDS SMALLER AT ITS FULL SIZE, OR SAYS IT COULD
+     NOT. The still (FM.snapshotPNG: the Export dialog's This frame (PNG) and the toolbar's camera) rendered with no prepare step, so it
+     drew the preview's squeezed copy of a GIF and said nothing, where the video exports decode their own full-size copy. On a phone's
+     total (kit.phone, a GIF decoded earlier filling it) a big GIF is squeezed in the preview; beside it is a 4-frame GIF at its full
+     size. Three stills at 0.1 s, the PNG caught at toBlob and at the download (hunt2dCatchDownloads), FM.toast recorded:
+       1. the export's own total: the big GIF is drawn from a full-size copy (517 x 509, every frame), nothing is said, and after the
+          still the copy is off the record with every frame closed exactly once;
+       2. the total shrunk (FM._exportBytes, the suite seam) to what the preview copy holds: drawn from the preview copy, and the toast
+          after the save says Frame saved · smaller to fit memory: <name> <w>×<h>, the ready card's words;
+       3. a render that throws: the copy made for it is still closed and off the record, and the still's flag is down.
+     RED on 221694de: 1 draws the squeezed preview copy. CONTROLS: the 4-frame GIF is drawn from its own preview copy and never decoded
+     again; the still that fits says nothing; each still saved one PNG; the preview's own copy (rec.anim) is untouched throughout.
+     (review F5) Two pins, green on 541b9835 too: 0, with nothing squeezed in the frame, the still is synchronous (snapshotPNG hands back
+     nothing) and decodes nothing; and a third squeezed GIF that starts at 3 s is neither decoded (1) nor named (2) at 0.1 s, where 2b
+     names it at 3.1 s (its control). They catch a still that decodes with nothing squeezed and one that ignores the on-screen rule. */
+  test('860 This frame (PNG) draws a GIF the preview holds smaller at its full size and frees that copy after, a throw included, and says it in the ready card words where it still cannot fit (CONTROL: a GIF that fits draws full size and says nothing)', { item: '860', budgetMs: 180000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.snapshotPNG !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('FM._decodeGifAnimation, FM.snapshotPNG or FM.makeLayer is not exposed');
+    var kit = gif860Kit().phone().spy(), per = kit.per, n = kit.bigN, P = FM.scene.project, d0 = P.duration, t0 = FM.time;
+    var had = Object.prototype.hasOwnProperty.call(FM, '_exportBytes'), eb0 = FM._exportBytes;
+    var tb0 = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'toBlob');
+    var toast0 = Object.getOwnPropertyDescriptor(FM, 'toast'), rs0 = Object.getOwnPropertyDescriptor(FM, 'renderScene');
+    var dfs0 = Object.getOwnPropertyDescriptor(FM, 'decodeGifFullSize');
+    var afaKit = FM.animFrameAt;   // the kit's spy: it answers null, so no fake bitmap is ever drawn
+    var realRender = FM.renderScene, realDecode = FM.decodeGifFullSize;
+    var dl = hunt2dCatchDownloads(), said = [], decoded = [], decCalls = [], drawn = null, inStill = 0, boom = false;
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    try {
+      HTMLCanvasElement.prototype.toBlob = function (cb, type) { setTimeout(function () { cb(new Blob([new Uint8Array(8)], { type: type || 'image/png' })); }, 0); };
+      FM.toast = function (msg) { said.push(String(msg)); };
+      /* the still's own render: a canvas of the project's size that is not in the page, handed the open scene */
+      FM.renderScene = function (ctx, scn) {
+        var c = ctx && ctx.canvas;
+        var mine = !!(drawn && c && !c.isConnected && scn === FM.scene && c.width === P.width && c.height === P.height);
+        if (mine && boom) throw new Error('860g-still: the render threw');
+        if (mine) inStill++;
+        try { return realRender.apply(this, arguments); } finally { if (mine) inStill--; }
+      };
+      FM.animFrameAt = function (a) { if (inStill && drawn) drawn.push(a); return afaKit.apply(this, arguments); };
+      if (typeof realDecode === 'function') FM.decodeGifFullSize = function (f) { decCalls.push(String(f && f.name)); return realDecode.apply(this, arguments).then(function (a) { if (a) decoded.push(a); return a; }); };
+      var sfile = kit.fileOf(4, '860g-st-small');
+      var sm = await FM._decodeGifAnimation(sfile);
+      if (!sm || sm.frames.length !== 4 || sm.width !== kit.W || sm.height !== kit.H) throw new Error('setup: a 4-frame GIF decoded alone came out ' + (sm ? sm.frames.length + ' frames at ' + sm.width + 'x' + sm.height : 'as nothing') + ', not 4 frames at its full ' + kit.W + 'x' + kit.H);
+      kit.show('860g-st-small', sm, sfile);
+      kit.plant('860g-st-fill', per);
+      var file = kit.fileOf(n, '860g-st-big');
+      var sq = await FM._decodeGifAnimation(file);
+      if (!sq || sq.frames.length !== n || !(sq.width < kit.W)) throw new Error('setup: the big GIF came out ' + (sq ? sq.frames.length + ' frames at ' + sq.width + 'x' + sq.height : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + kit.W);
+      var before = sq.frames.slice();
+      var B = kit.show('860g-st-big', sq, file);
+      /* (review F5 b) a third GIF, squeezed as well (another palette, so another GIF), that is not on screen at the still's 0.1 s: it starts at 3 s */
+      var lfile = kit.fileOf(n, '860g-st-late', [[0, 0, 0], [200, 200, 30], [30, 60, 230], [30, 200, 40]]);
+      var lq = await FM._decodeGifAnimation(lfile);
+      if (!lq || lq.frames.length !== n || !(lq.width < kit.W)) throw new Error('setup: the late GIF came out ' + (lq ? lq.frames.length + ' frames at ' + lq.width + 'x' + lq.height : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + kit.W);
+      var LT = kit.show('860g-st-late', lq, lfile);
+      LT.layer.start = 3; LT.layer.duration = 2;
+      P.duration = Math.max(d0 || 0, 5); FM.time = 0.1;
+      var snap = async function () {
+        drawn = [];
+        var files0 = dl.files.length, said0 = said.length, dec0 = decoded.length, calls0 = decCalls.length, err = null;
+        try { await FM.snapshotPNG(); } catch (e) { err = e; }
+        var got = drawn; drawn = null;
+        for (var i = 0; i < 100 && !err && dl.files.length === files0; i++) await sleep(20);
+        return { drawn: got, err: err, files: dl.files.length - files0, copies: decoded.slice(dec0), calls: decCalls.slice(calls0),
+          lost: said.slice(said0).filter(function (s) { return /to fit memory/.test(s); }) };
+      };
+      var offScreen = function (what, s) {
+        if (s.calls.indexOf('860g-st-late.gif') >= 0) throw new Error(what + ' decoded a full-size copy of 860g-st-late, a GIF that starts at 3 s and is not in the frame at 0.1 s');
+        if (s.lost.some(function (x) { return /860g-st-late/.test(x); })) throw new Error(what + ' named 860g-st-late, a GIF not in the frame at 0.1 s: said ' + JSON.stringify(s.lost));
+      };
+      /* 0. (review F5 a) NOTHING SQUEEZED ON SCREEN: the big GIF hidden, so the 4-frame GIF at its full size is alone in the frame (the late
+         GIF is squeezed, but starts at 3 s). The still is synchronous, as it always was: snapshotPNG hands back nothing, not a promise,
+         and nothing is decoded. CONTROL: it rendered (the 4-frame GIF drawn from its preview copy) and saved one PNG. */
+      delete FM._exportBytes;
+      B.layer.visible = false;
+      drawn = [];
+      var calls00 = decCalls.length, files00 = dl.files.length, r0 = null;
+      try { r0 = FM.snapshotPNG(); } finally { B.layer.visible = true; }
+      var got0 = drawn; drawn = null;
+      if (r0 && typeof r0.then === 'function') { try { await r0; } catch (e) {} }
+      if (r0 !== undefined) throw new Error('This frame (PNG) with no GIF held smaller in the frame returned ' + ((r0 && typeof r0.then === 'function') ? 'a promise' : String(r0)) + ', where it renders at once, synchronously, as before');
+      if (decCalls.length !== calls00) throw new Error('This frame (PNG) with no GIF held smaller in the frame decoded ' + decCalls.slice(calls00).join(', '));
+      if (got0.indexOf(sm) < 0) throw new Error('CONTROL: the synchronous still did not draw the 4-frame GIF from its preview copy, so it did not render');
+      for (var w0 = 0; w0 < 100 && dl.files.length === files00; w0++) await sleep(20);
+      if (dl.files.length - files00 !== 1) throw new Error('CONTROL: the synchronous still saved ' + (dl.files.length - files00) + ' PNGs, not one');
+      var freed = function (what, copies) {
+        if ('_exportAnim' in B.rec) throw new Error('after ' + what + ' the GIF record still holds the copy the still decoded, so the next export could draw a closed bitmap');
+        copies.forEach(function (c) {
+          var open = c.frames.filter(function (f) { return !f.closed; }).length, twice = c.frames.filter(function (f) { return f.closed > 1; }).length;
+          if (open) throw new Error('after ' + what + ' ' + open + ' of the ' + c.frames.length + ' frames of the full-size copy the still decoded were never closed: a whole GIF of bitmaps kept for nothing');
+          if (twice) throw new Error('after ' + what + ' ' + twice + ' frames of the copy the still decoded were closed more than once');
+        });
+        if (FM._drawingStill) throw new Error('after ' + what + ' FM._drawingStill is still up, so the preview would go on drawing an export copy');
+        if (B.rec.anim !== sq || sq.frames.length !== before.length || sq.frames.some(function (f, z) { return f !== before[z] || f.closed; })) throw new Error('CONTROL: ' + what + ' changed or closed the GIF the preview holds (rec.anim)');
+      };
+      /* 1. the export's own total: drawn at full size, nothing said, freed */
+      delete FM._exportBytes;
+      var s1 = await snap();
+      if (s1.err) throw new Error('the still threw: ' + (s1.err && s1.err.message));
+      if (!s1.drawn.length) throw new Error('setup: the still drew no GIF frame at all');
+      if (s1.files !== 1) throw new Error('CONTROL: the still saved ' + s1.files + ' PNGs, not one');
+      if (s1.drawn.indexOf(sq) >= 0) throw new Error('This frame (PNG) drew the big GIF from the copy the preview holds, ' + sq.width + 'x' + sq.height + ', where its own size is ' + kit.W + 'x' + kit.H + ': the preview squeeze reached the saved frame');
+      if (s1.drawn.indexOf(sm) < 0) throw new Error('CONTROL: the 4-frame GIF already at full size in the preview was not drawn from its own preview copy');
+      var c1 = s1.drawn.filter(function (a) { return a !== sm; });
+      if (!c1.length || c1.some(function (a) { return !a || a.width !== kit.W || a.height !== kit.H || !a.frames || a.frames.length !== n; })) throw new Error('the still drew the big GIF from ' + (c1.length ? c1.map(function (a) { return a ? a.width + 'x' + a.height + ' with ' + (a.frames ? a.frames.length : 0) + ' frames' : 'nothing'; }).join(', ') : 'no copy at all') + ', not one copy at its full ' + kit.W + 'x' + kit.H + ' with all ' + n + ' frames');
+      offScreen('a still at 0.1 s with room for every copy', s1);
+      if (s1.copies.length !== 1 || s1.copies[0] !== c1[0]) throw new Error('the still decoded ' + s1.copies.length + ' copies, not one for the big GIF alone (the 4-frame GIF needs none)');
+      if (s1.lost.length) throw new Error('CONTROL: a still whose GIFs all fit at full size said ' + JSON.stringify(s1.lost));
+      freed('a still that fit', s1.copies);
+      /* 2. no room past the preview copy: drawn from it, and said in the ready card's words */
+      FM._exportBytes = kit.bytes(sq);
+      var s2 = await snap();
+      if (s2.err) throw new Error('the still threw: ' + (s2.err && s2.err.message));
+      if (s2.files !== 1) throw new Error('CONTROL: the still saved ' + s2.files + ' PNGs, not one');
+      if (s2.copies.length) throw new Error('with only what the preview copy holds in the export total, the still decoded a copy of ' + s2.copies[0].width + 'x' + s2.copies[0].height + ' anyway');
+      if (s2.drawn.indexOf(sq) < 0) throw new Error('CONTROL: with no room for a larger copy the still did not draw the preview copy of the big GIF');
+      offScreen('a still at 0.1 s with no room past the preview copy', s2);
+      var want = 'Frame saved · smaller to fit memory: 860g-st-big ' + sq.width + '×' + sq.height;
+      if (s2.lost.length !== 1 || s2.lost[0] !== want) throw new Error('a still that drew the big GIF at ' + sq.width + 'x' + sq.height + ', smaller than its own ' + kit.W + 'x' + kit.H + ', did not say so in the ready card words: said ' + JSON.stringify(s2.lost) + ', not ' + JSON.stringify(want));
+      freed('a still kept smaller', []);
+      /* 2b. CONTROL for the late GIF (review F5 b): at 3.1 s it IS in the frame, and the same still with the same total names it, so its
+         absence at 0.1 s is the on-screen rule and nothing else */
+      FM.time = 3.1;
+      var s2b = await snap();
+      FM.time = 0.1;
+      if (s2b.err) throw new Error('the still at 3.1 s threw: ' + (s2b.err && s2b.err.message));
+      if (s2b.files !== 1) throw new Error('CONTROL: the still at 3.1 s saved ' + s2b.files + ' PNGs, not one');
+      if (!s2b.lost.some(function (x) { return /860g-st-late/.test(x); })) throw new Error('CONTROL: at 3.1 s, with the late GIF in the frame and no room past the preview copies, the still did not name it: said ' + JSON.stringify(s2b.lost));
+      freed('a still at 3.1 s', s2b.copies);
+      /* 3. a render that throws: the copy is freed all the same */
+      delete FM._exportBytes;
+      boom = true;
+      var s3 = await snap();
+      boom = false;
+      if (!s3.err || !/the render threw/.test(String(s3.err.message))) throw new Error('CONTROL: the still whose render throws did not throw (' + (s3.err ? s3.err.message : 'no error') + ')');
+      if (s3.copies.length !== 1) throw new Error('CONTROL: the still whose render throws decoded ' + s3.copies.length + ' copies, not one, so freeing it was not measured');
+      if (s3.files) throw new Error('CONTROL: a still whose render threw saved a PNG all the same');
+      freed('a still whose render threw', s3.copies);
+    } finally {
+      drawn = null; boom = false;
+      FM.animFrameAt = afaKit;   // the kit's spy, which kit.put() then puts back
+      if (rs0) Object.defineProperty(FM, 'renderScene', rs0); else FM.renderScene = realRender;
+      if (dfs0) Object.defineProperty(FM, 'decodeGifFullSize', dfs0); else delete FM.decodeGifFullSize;
+      if (toast0) Object.defineProperty(FM, 'toast', toast0); else delete FM.toast;
+      if (tb0) Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', tb0); else delete HTMLCanvasElement.prototype.toBlob;
+      dl.stop();
+      if (had) FM._exportBytes = eb0; else delete FM._exportBytes;
+      P.duration = d0; FM.time = t0;
+      kit.put();
+    }
+  });
+
+  /* #860 hunt #6, the GIF half (review G6): A GIF OR PNG-SEQUENCE EXPORT THAT KEPT A GIF SMALLER SAYS SO WHEN IT FINISHES. Those two
+     have no ready card, so the MP4 card's ' · smaller to fit memory: <name> <w>×<h>' was never said for them: the export ended on
+     Done — saved to your Downloads. and nothing else. Driven through the entry the Export button calls (FM._runExport) for both
+     formats, on a 160 x 120 project 0.2 s long at 10 fps, with a big GIF squeezed in the preview (kit.phone, a GIF decoded earlier
+     filling the total) and the export total shrunk (FM._exportBytes, the suite seam) to what that preview copy holds, so the export
+     keeps it smaller and names it ({ gif: true }). The finish line, and the toast that stays once the overlay has gone (FM.toast
+     recorded), must carry the card's words. RED on 221694de: the line is Done — saved to your Downloads. and no toast says anything.
+     CONTROL: with the export's own total the GIF goes out at full size, the list names nothing, and the line is exactly as before with
+     no toast; each export saved one file. */
+  test('860 a GIF or PNG-sequence export that kept a GIF smaller to fit memory says so when it finishes, in the ready card words (CONTROL: an export that kept nothing smaller says only that it is done)', { item: '860', budgetMs: 180000 }, async function () {
+    if (typeof FM._runExport !== 'function' || typeof FM._decodeGifAnimation !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('FM._runExport, FM._decodeGifAnimation or FM.makeLayer is not exposed');
+    var fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range');
+    var status = document.getElementById('export-status'), overlay = document.getElementById('export-overlay');
+    if (!fmtEl || !rangeEl || !status || !overlay) throw new Error('setup: #exp-format, #exp-range, #export-status or #export-overlay is missing from the document');
+    var kit = gif860Kit().phone().spy(), per = kit.per, n = kit.bigN, P = FM.scene.project;
+    var keep = { d: P.duration, w: P.width, h: P.height, fps: P.fps, fmt: fmtEl.value, range: rangeEl.value, solo: (typeof FM._exportSoloId === 'function') ? FM._exportSoloId() : null };
+    var PK = 'fm.exportPrefs', prefs0 = null;
+    try { prefs0 = localStorage.getItem(PK); } catch (e) {}
+    var had = Object.prototype.hasOwnProperty.call(FM, '_exportBytes'), eb0 = FM._exportBytes;
+    var toast0 = Object.getOwnPropertyDescriptor(FM, 'toast'), said = [];
+    var dl = hunt2dCatchDownloads();
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    try {
+      FM.toast = function (msg) { said.push(String(msg)); };
+      kit.plant('860g-done-fill', per);
+      var file = kit.fileOf(n, '860g-done');
+      var sq = await FM._decodeGifAnimation(file);
+      if (!sq || sq.frames.length !== n || !(sq.width < kit.W)) throw new Error('setup: the big GIF came out ' + (sq ? sq.frames.length + ' frames at ' + sq.width + 'x' + sq.height : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + kit.W);
+      kit.show('860g-done', sq, file);
+      P.width = 160; P.height = 120; P.fps = 10; P.duration = 0.2;
+      var run = async function (fmt) {
+        fmtEl.value = fmt; rangeEl.value = 'whole';
+        if (FM._setExportSoloId) FM._setExportSoloId(null);
+        var said0 = said.length, files0 = dl.files.length;
+        await FM._runExport();
+        var line = status.textContent, named = (FM._exportThinned || []).filter(function (t) { return t && t.gif && t.name === '860g-done'; });
+        await sleep(1100);   // the overlay goes 900 ms after the finish line, and the toast with it
+        return { line: line, named: named, files: dl.files.length - files0,
+          lost: said.slice(said0).filter(function (s) { return /to fit memory/.test(s); }) };
+      };
+      var want = ' · smaller to fit memory: 860g-done ' + sq.width + '×' + sq.height;
+      var fmts = [['gif', 'GIF'], ['frames', 'PNG-sequence']];
+      FM._exportBytes = kit.bytes(sq);
+      for (var i = 0; i < fmts.length; i++) {
+        var r = await run(fmts[i][0]);
+        if (r.files !== 1) throw new Error('setup: the ' + fmts[i][1] + ' export saved ' + r.files + ' files, not one, so it did not finish');
+        if (r.named.length !== 1 || r.named[0].w !== sq.width || r.named[0].h !== sq.height) throw new Error('setup: the ' + fmts[i][1] + ' export did not keep the big GIF at its preview ' + sq.width + 'x' + sq.height + ' and name it: ' + JSON.stringify(FM._exportThinned));
+        if (r.line !== 'Done — saved to your Downloads' + want) throw new Error('the ' + fmts[i][1] + ' export kept 860g-done at ' + sq.width + '×' + sq.height + ', smaller than its own ' + kit.W + '×' + kit.H + ', and its finish line says only ' + JSON.stringify(r.line) + ', not the ready card words ' + JSON.stringify(want));
+        if (r.lost.length !== 1 || r.lost[0] !== 'Saved to your Downloads' + want) throw new Error('the ' + fmts[i][1] + ' export kept a GIF smaller and no toast said so once its overlay had gone: ' + JSON.stringify(r.lost));
+      }
+      /* CONTROL: the export's own total, the GIF at full size, nothing named and nothing said */
+      delete FM._exportBytes;
+      for (var j = 0; j < fmts.length; j++) {
+        var c = await run(fmts[j][0]);
+        if (c.files !== 1) throw new Error('setup: the ' + fmts[j][1] + ' export with room for the GIF saved ' + c.files + ' files, not one');
+        if ((FM._exportThinned || []).some(function (t) { return t && t.gif; })) throw new Error('setup: with the export total the GIF was still kept smaller: ' + JSON.stringify(FM._exportThinned));
+        if (c.line !== 'Done — saved to your Downloads.') throw new Error('CONTROL: a ' + fmts[j][1] + ' export that kept nothing smaller ended on ' + JSON.stringify(c.line) + ', not the plain Done line');
+        if (c.lost.length) throw new Error('CONTROL: a ' + fmts[j][1] + ' export that kept nothing smaller said ' + JSON.stringify(c.lost));
+      }
+    } finally {
+      if (toast0) Object.defineProperty(FM, 'toast', toast0); else delete FM.toast;
+      dl.stop();
+      if (had) FM._exportBytes = eb0; else delete FM._exportBytes;
+      P.duration = keep.d; P.width = keep.w; P.height = keep.h; P.fps = keep.fps;
+      fmtEl.value = keep.fmt; rangeEl.value = keep.range;
+      if (FM._setExportSoloId) { try { FM._setExportSoloId(keep.solo || null); } catch (e) {} }
+      try { if (prefs0 == null) localStorage.removeItem(PK); else localStorage.setItem(PK, prefs0); } catch (e) {}
+      overlay.classList.add('hidden');
+      kit.put();
+      try { if (FM.refreshAll) FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* #860 hunt #6, the GIF half (review F1): AN EXPORT STARTED WHILE THIS FRAME (PNG) STILL DECODES WAITS FOR IT, AND A STILL NEVER TAKES
+     AN EXPORT'S OWN GIF COPY OFF ITS RECORD. Since G5 the still can wait on a full-size GIF decode, so it outlasts its tap, and runExport
+     did not wait for it: the export put its own copy on the GIF record, the still's finally then deleted it, and the rest of the export
+     drew the preview's squeezed copy with nothing said. On a phone's total (kit.phone, a GIF decoded earlier filling it) a big GIF is
+     squeezed in the preview. The still's decode (the first FM.decodeGifFullSize) is held until the export draws its first frame, or 3 s:
+       A. a still mid-decode, then a GIF export through FM._runExport (160 x 120, 0.5 s at 10 fps, the export's own total): every frame
+          the export draws takes the big GIF from its own copy, and it decodes that copy only after the still has drawn;
+       B. a copy an export holds on the record (a stand-in, for an export running beside the still) when a still draws: still there after.
+     RED on 541b9835: A, the export decodes while the still waits and every frame after the still's finally draws the squeezed copy (the
+     order is red as well); B, the still's finally deletes the stand-in. CONTROLS (pass on both): the still and the export each decode
+     one copy at the full 517 x 509 with every frame, and the still draws its own; A saves one PNG and one GIF and B one PNG; every copy
+     closes exactly once; the preview's own copy (rec.anim) is untouched. */
+  test('860 an export started while This frame (PNG) still decodes its GIF copy waits for the still and draws its own copy to the end, and a still never takes an export copy off a GIF (CONTROL: each draws its own full-size copy)', { item: '860', budgetMs: 180000 }, async function () {
+    if (typeof FM._runExport !== 'function' || typeof FM.snapshotPNG !== 'function' || typeof FM._decodeGifAnimation !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.decodeGifFullSize !== 'function') throw new Error('FM._runExport, FM.snapshotPNG, FM._decodeGifAnimation, FM.makeLayer or FM.decodeGifFullSize is not exposed');
+    var fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range'), overlay = document.getElementById('export-overlay');
+    if (!fmtEl || !rangeEl || !overlay) throw new Error('setup: #exp-format, #exp-range or #export-overlay is missing from the document');
+    var kit = gif860Kit().phone().spy(), per = kit.per, n = kit.bigN, P = FM.scene.project, t0 = FM.time;
+    var keep = { d: P.duration, w: P.width, h: P.height, fps: P.fps, fmt: fmtEl.value, range: rangeEl.value, solo: (typeof FM._exportSoloId === 'function') ? FM._exportSoloId() : null };
+    var PK = 'fm.exportPrefs', prefs0 = null;
+    try { prefs0 = localStorage.getItem(PK); } catch (e) {}
+    var had = Object.prototype.hasOwnProperty.call(FM, '_exportBytes'), eb0 = FM._exportBytes;
+    var toast0 = Object.getOwnPropertyDescriptor(FM, 'toast'), rs0 = Object.getOwnPropertyDescriptor(FM, 'renderScene');
+    var dfs0 = Object.getOwnPropertyDescriptor(FM, 'decodeGifFullSize');
+    var afaKit = FM.animFrameAt, realRender = FM.renderScene, realDecode = FM.decodeGifFullSize;
+    var dl = hunt2dCatchDownloads(), order = [], copies = [], stillDrew = [], expDrew = [], calls = 0, phase = 'A';
+    var holding = false, open = null, timer = null, pend = [], B = null, stand = null;
+    var gate = new Promise(function (r) { open = function () { holding = false; r(); }; });
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var desc = function (a) { return a ? a.width + 'x' + a.height + ' with ' + (a.frames ? a.frames.length : 0) + ' frames' : 'nothing'; };
+    var closedOnce = function (what, a) {
+      var o = a.frames.filter(function (f) { return !f.closed; }).length, tw = a.frames.filter(function (f) { return f.closed > 1; }).length;
+      if (o) throw new Error(o + ' of the ' + a.frames.length + ' frames of ' + what + ' were never closed');
+      if (tw) throw new Error(tw + ' frames of ' + what + ' were closed more than once');
+    };
+    try {
+      FM.toast = function () {};
+      /* the still's render is the one drawn under FM._drawingStill (it has a copy to draw); the export's frames are drawn under FM._exporting */
+      FM.renderScene = function () {
+        if (FM._drawingStill) order.push('still-render');
+        return realRender.apply(this, arguments);
+      };
+      FM.animFrameAt = function (a) {
+        if (FM._drawingStill) stillDrew.push(a);
+        else if (FM._exporting) { expDrew.push(a); if (holding) open(); }
+        return afaKit.apply(this, arguments);
+      };
+      FM.decodeGifFullSize = function () {
+        var i = calls++, held = (i === 0 && holding);
+        order.push(i === 0 ? 'still-decode' : (phase === 'A' ? 'export-decode' : 'still-decode-B'));
+        var p = realDecode.apply(this, arguments).then(function (a) { copies[i] = a; return a; });
+        return held ? p.then(function (a) { return gate.then(function () { return a; }); }) : p;
+      };
+      kit.plant('860g-ov-fill', per);
+      var file = kit.fileOf(n, '860g-ov');
+      var sq = await FM._decodeGifAnimation(file);
+      if (!sq || sq.frames.length !== n || !(sq.width < kit.W)) throw new Error('setup: the big GIF came out ' + desc(sq) + ', not all ' + n + ' frames narrower than its own ' + kit.W);
+      var before = sq.frames.slice();
+      B = kit.show('860g-ov', sq, file);
+      P.width = 160; P.height = 120; P.fps = 10; P.duration = 0.5; FM.time = 0.1;
+      delete FM._exportBytes;
+      fmtEl.value = 'gif'; rangeEl.value = 'whole';
+      if (FM._setExportSoloId) FM._setExportSoloId(null);
+      /* A. the still, held mid-decode, then the export */
+      holding = true;
+      var still = FM.snapshotPNG();
+      if (!still || typeof still.then !== 'function') throw new Error('setup: This frame (PNG) with a GIF held smaller in the frame did not wait on a decode (it handed back ' + String(still) + ')');
+      pend.push(still);
+      for (var i = 0; i < 500 && !copies[0]; i++) await sleep(20);
+      if (!copies[0]) throw new Error('setup: the still never decoded its full-size copy of the big GIF (' + order.join(' > ') + ')');
+      var files0 = dl.files.length;
+      timer = setTimeout(function () { if (holding) open(); }, 3000);
+      var exp = FM._runExport();
+      pend.push(exp);
+      await exp;
+      var stillErr = null;
+      try { await still; } catch (e) { stillErr = e; }
+      clearTimeout(timer); timer = null;
+      await sleep(1000);   // the PNG's toBlob, and the overlay going 900 ms after the finish line
+      if (stillErr) throw new Error('the still threw: ' + stillErr.message);
+      var cS = copies[0], cE = copies[1];
+      if (!cS || cS.width !== kit.W || cS.height !== kit.H || cS.frames.length !== n) throw new Error('CONTROL: the still decoded ' + desc(cS) + ', not one copy at its full ' + kit.W + 'x' + kit.H + ' with all ' + n + ' frames');
+      if (!cE || cE.width !== kit.W || cE.height !== kit.H || cE.frames.length !== n) throw new Error('CONTROL: the export decoded ' + desc(cE) + ', not one copy at its full ' + kit.W + 'x' + kit.H + ' with all ' + n + ' frames (' + order.join(' > ') + ')');
+      if (calls !== 2) throw new Error('CONTROL: ' + calls + ' full-size copies were decoded, not one for the still and one for the export (' + order.join(' > ') + ')');
+      if (stillDrew.indexOf(cS) < 0 || stillDrew.indexOf(sq) >= 0) throw new Error('CONTROL: the still did not draw the big GIF from its own full-size copy (it drew ' + stillDrew.map(desc).join(', ') + ')');
+      if (!expDrew.length) throw new Error('setup: the export drew no GIF frame at all (' + order.join(' > ') + ')');
+      var wrong = expDrew.filter(function (a) { return a !== cE; });
+      if (wrong.length) throw new Error('the export started while the still decoded drew the big GIF ' + wrong.length + ' of ' + expDrew.length + ' times from ' + (wrong[0] === sq ? 'the squeezed preview copy, ' + sq.width + 'x' + sq.height : (wrong[0] === cS ? 'the copy the still decoded' : desc(wrong[0]))) + ', not its own full-size copy: the still took the export copy off the record (' + order.join(' > ') + ')');
+      var iR = order.indexOf('still-render'), iE = order.indexOf('export-decode');
+      if (iR < 0 || iE < 0) throw new Error('setup: the still or the export never reached its copy (' + order.join(' > ') + ')');
+      if (iE < iR) throw new Error('an export started while This frame (PNG) was still decoding did not wait for it: it decoded its own GIF copy before the still drew (' + order.join(' > ') + ')');
+      var names = dl.files.slice(files0).map(function (f) { return String(f.name); });
+      if (names.filter(function (x) { return /\.png$/.test(x); }).length !== 1 || names.filter(function (x) { return /\.gif$/.test(x); }).length !== 1) throw new Error('CONTROL: the still and the export saved ' + JSON.stringify(names) + ', not one PNG and one GIF');
+      closedOnce('the still copy', cS);
+      closedOnce('the export copy', cE);
+      if ('_exportAnim' in B.rec) throw new Error('after the still and the export the GIF record still holds a copy, so the next export could draw a closed bitmap');
+      if (FM._drawingStill) throw new Error('FM._drawingStill is still up after the still');
+      /* B. a copy an export holds on the record when a still draws: put back, never deleted */
+      phase = 'B';
+      stand = { frames: [], starts: [], total: 0, width: kit.W, height: kit.H };
+      B.rec._exportAnim = stand;
+      var callsB = calls, drewB = stillDrew.length, filesB = dl.files.length, errB = null;
+      var sB = FM.snapshotPNG();
+      pend.push(sB);
+      try { await sB; } catch (e) { errB = e; }
+      for (var w = 0; w < 100 && dl.files.length === filesB; w++) await sleep(20);
+      if (errB) throw new Error('the still beside the stand-in threw: ' + errB.message);
+      var cB = copies[callsB], drawnB = stillDrew.slice(drewB);
+      if (!cB || cB.width !== kit.W || cB.height !== kit.H) throw new Error('CONTROL: the still beside the stand-in decoded ' + desc(cB) + ', not one full-size copy');
+      if (drawnB.indexOf(cB) < 0 || drawnB.indexOf(stand) >= 0) throw new Error('CONTROL: the still beside the stand-in did not draw the big GIF from its own copy');
+      if (dl.files.length - filesB !== 1) throw new Error('CONTROL: the still beside the stand-in saved ' + (dl.files.length - filesB) + ' PNGs, not one');
+      if (B.rec._exportAnim !== stand) throw new Error('a still drawn while an export held its own copy on the GIF record ' + (('_exportAnim' in B.rec) ? 'left the still copy there' : 'took the export copy off') + ' when it finished, so the rest of that export would draw the squeezed preview copy');
+      delete B.rec._exportAnim; stand = null;
+      closedOnce('the still copy beside the stand-in', cB);
+      if (B.rec.anim !== sq || sq.frames.length !== before.length || sq.frames.some(function (f, z) { return f !== before[z] || f.closed; })) throw new Error('CONTROL: the still or the export changed or closed the GIF the preview holds (rec.anim)');
+    } finally {
+      if (timer) clearTimeout(timer);
+      open();
+      for (var q = 0; q < pend.length; q++) { try { await Promise.race([pend[q], sleep(20000)]); } catch (e) {} }
+      if (B && stand && B.rec._exportAnim === stand) delete B.rec._exportAnim;
+      FM.animFrameAt = afaKit;   // the kit's spy, which kit.put() then puts back
+      if (rs0) Object.defineProperty(FM, 'renderScene', rs0); else FM.renderScene = realRender;
+      if (dfs0) Object.defineProperty(FM, 'decodeGifFullSize', dfs0); else delete FM.decodeGifFullSize;
+      if (toast0) Object.defineProperty(FM, 'toast', toast0); else delete FM.toast;
+      await sleep(200);   // a PNG still on its way to toBlob lands in the catcher, not in a real download
+      dl.stop();
+      if (had) FM._exportBytes = eb0; else delete FM._exportBytes;
+      P.duration = keep.d; P.width = keep.w; P.height = keep.h; P.fps = keep.fps; FM.time = t0;
+      fmtEl.value = keep.fmt; rangeEl.value = keep.range;
+      if (FM._setExportSoloId) { try { FM._setExportSoloId(keep.solo || null); } catch (e) {} }
+      try { if (prefs0 == null) localStorage.removeItem(PK); else localStorage.setItem(PK, prefs0); } catch (e) {}
+      overlay.classList.add('hidden');
+      kit.put();
+      try { if (FM.refreshAll) FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* #860 hunt #6 G5, the fold's review (R1 R2 R3): the three ways a still that has to wait can still go wrong. A Cancel the export's wait
+     never read; a still waiting on the clips Home let go of, which held nothing, so an export ran beside it; and the check for another
+     project opened meanwhile, which compared FM.scene, an object opening a project changes in place, so it could never fire. */
+  test('860 This frame (PNG) that has to wait: Cancel ends an export waiting on it at once, a still waiting on the clips coming back holds an export off too, and a still whose project was closed while it waited saves nothing and says so (CONTROL: with its project unchanged the held still saves its one PNG)', { item: '860', budgetMs: 180000 }, async function () {
+    if (typeof FM._runExport !== 'function' || typeof FM.snapshotPNG !== 'function' || typeof FM._decodeGifAnimation !== 'function' || typeof FM.decodeGifFullSize !== 'function' || !FM.exporter || !FM.projects || typeof FM.projects.currentId !== 'function') throw new Error('FM._runExport, FM.snapshotPNG, FM._decodeGifAnimation, FM.decodeGifFullSize, FM.exporter or FM.projects.currentId is not exposed');
+    var fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range'), overlay = document.getElementById('export-overlay'), status = document.getElementById('export-status');
+    if (!fmtEl || !rangeEl || !overlay || !status) throw new Error('setup: #exp-format, #exp-range, #export-overlay or #export-status is missing from the document');
+    var kit = gif860Kit().phone().spy(), per = kit.per, n = kit.bigN, P = FM.scene.project, t0 = FM.time;
+    var keep = { d: P.duration, w: P.width, h: P.height, fps: P.fps, fmt: fmtEl.value, range: rangeEl.value, solo: (typeof FM._exportSoloId === 'function') ? FM._exportSoloId() : null };
+    var PK = 'fm.exportPrefs', prefs0 = null;
+    try { prefs0 = localStorage.getItem(PK); } catch (e) {}
+    var had = Object.prototype.hasOwnProperty.call(FM, '_exportBytes'), eb0 = FM._exportBytes;
+    var toast0 = Object.getOwnPropertyDescriptor(FM, 'toast'), rs0 = Object.getOwnPropertyDescriptor(FM, 'renderScene'), dfs0 = Object.getOwnPropertyDescriptor(FM, 'decodeGifFullSize');
+    var mb0 = Object.getOwnPropertyDescriptor(FM.exporter, 'mediaBack'), cid0 = Object.getOwnPropertyDescriptor(FM.projects, 'currentId');
+    var realRender = FM.renderScene, realDecode = FM.decodeGifFullSize;
+    var dl = hunt2dCatchDownloads(), order = [], copies = [], toasts = [], calls = 0, pend = [];
+    var holding = false, gate = null, open = function () {}, backOpen = function () {}, t2 = null;
+    var hold = function () { holding = true; return new Promise(function (r) { open = function () { holding = false; r(); }; }); };
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var saved = function (from, re) { return dl.files.slice(from).filter(function (f) { return re.test(String(f.name)); }).length; };
+    var closedAll = function (what, a) {
+      if (!a || !a.frames) throw new Error('setup: ' + what + ' was never decoded');
+      var o = a.frames.filter(function (f) { return !f.closed; }).length;
+      if (o) throw new Error(o + ' of the ' + a.frames.length + ' frames of ' + what + ' were never closed');
+    };
+    var putMediaBack = function () { if (mb0) Object.defineProperty(FM.exporter, 'mediaBack', mb0); };
+    var putCurrentId = function () { if (cid0) Object.defineProperty(FM.projects, 'currentId', cid0); };
+    try {
+      FM.toast = function (s) { toasts.push(String(s)); };
+      /* the still's render is the one drawn under FM._drawingStill; an export's frames are drawn under FM._exporting (marked once a run) */
+      FM.renderScene = function () {
+        if (FM._drawingStill) order.push('still-render');
+        else if (FM._exporting && order[order.length - 1] !== 'export-render') order.push('export-render');
+        return realRender.apply(this, arguments);
+      };
+      FM.decodeGifFullSize = function () {
+        var i = calls++, g = holding ? gate : null;
+        var p = realDecode.apply(this, arguments).then(function (a) { copies[i] = a; return a; });
+        return g ? p.then(function (a) { return g.then(function () { return a; }); }) : p;
+      };
+      kit.plant('860g-wt-fill', per);
+      var file = kit.fileOf(n, '860g-wt');
+      var sq = await FM._decodeGifAnimation(file);
+      if (!sq || sq.frames.length !== n || !(sq.width < kit.W)) throw new Error('setup: the big GIF came out ' + (sq ? sq.width + 'x' + sq.height + ' with ' + sq.frames.length + ' frames' : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + kit.W);
+      kit.show('860g-wt', sq, file);
+      P.width = 160; P.height = 120; P.fps = 10; P.duration = 0.5; FM.time = 0.1;
+      delete FM._exportBytes;
+      fmtEl.value = 'gif'; rangeEl.value = 'whole';
+      if (FM._setExportSoloId) FM._setExportSoloId(null);
+      /* 1. (R1) the still held mid-decode, an export started, then Cancel: the export ends while the still is still held */
+      gate = hold();
+      var f1 = dl.files.length, c1 = calls;
+      var s1 = FM.snapshotPNG();
+      if (!s1 || typeof s1.then !== 'function') throw new Error('setup: This frame (PNG) with a GIF held smaller in the frame did not wait on a decode (it handed back ' + String(s1) + ')');
+      pend.push(s1);
+      for (var i = 0; i < 500 && !copies[c1]; i++) await sleep(20);
+      if (!copies[c1]) throw new Error('setup: the still never decoded its full-size copy of the big GIF');
+      var e1 = FM._runExport();
+      pend.push(e1);
+      for (var j = 0; j < 100 && status.textContent.indexOf('Saving the frame first') < 0; j++) await sleep(20);
+      if (status.textContent.indexOf('Saving the frame first') < 0) throw new Error('setup: the export started beside the held still never said it was waiting for it (the status read ' + JSON.stringify(status.textContent) + ')');
+      FM._exportCancel = true;
+      var r1 = await Promise.race([e1.then(function () { return 'ended'; }, function () { return 'ended'; }), sleep(3000).then(function () { return 'waiting'; })]);
+      if (r1 !== 'ended') throw new Error('Cancel tapped while an export waited for This frame (PNG) did not end the export: 3 s later it was still waiting on the still');
+      if (!holding) throw new Error('setup: the still was let go before the Cancel was judged, so the Cancel proves nothing');
+      if (!overlay.classList.contains('hidden')) throw new Error('the export cancelled while it waited for the still left the export overlay up');
+      if (calls !== c1 + 1) throw new Error('the export cancelled while it waited still decoded ' + (calls - c1 - 1) + ' GIF copies of its own');
+      FM._exportCancel = false;
+      open();
+      try { await s1; } catch (e) { throw new Error('the held still threw: ' + e.message); }
+      for (var w = 0; w < 100 && saved(f1, /\.png$/) < 1; w++) await sleep(20);
+      if (saved(f1, /\.png$/) !== 1 || saved(f1, /\.gif$/) !== 0) throw new Error('CONTROL: the held still, its project unchanged, saved ' + saved(f1, /\.png$/) + ' PNGs and the cancelled export ' + saved(f1, /\.gif$/) + ' GIFs, not one PNG and no GIF');
+      closedAll('the first still copy', copies[c1]);
+      /* 2. (R2) a still waiting on the clips coming back, then an export: the export waits for the still to draw */
+      var backGate = new Promise(function (r) { backOpen = r; }), backAsked = 0;
+      FM.exporter.mediaBack = function () { backAsked++; return backAsked === 1 ? backGate : null; };
+      order.length = 0;
+      var f2 = dl.files.length, c2 = calls;
+      var s2 = FM.snapshotPNG();
+      if (!s2 || typeof s2.then !== 'function') throw new Error('setup: This frame (PNG) waiting on the clips coming back did not hand back a promise (it handed back ' + String(s2) + ')');
+      pend.push(s2);
+      t2 = setTimeout(function () { backOpen(); }, 600);
+      var e2 = FM._runExport();
+      pend.push(e2);
+      await e2;
+      try { await s2; } catch (e) { throw new Error('the still that waited on the clips threw: ' + e.message); }
+      clearTimeout(t2); t2 = null;
+      putMediaBack();
+      await sleep(1000);   // the PNG's toBlob, and the overlay going 900 ms after the finish line
+      var iS = order.indexOf('still-render'), iX = order.indexOf('export-render');
+      if (iS < 0 || iX < 0) throw new Error('setup: the still or the export never drew (' + order.join(' > ') + ')');
+      if (iX < iS) throw new Error('an export started while This frame (PNG) waited on the clips coming back did not wait for it: the export drew its frames before the still drew (' + order.join(' > ') + ')');
+      if (saved(f2, /\.png$/) !== 1 || saved(f2, /\.gif$/) !== 1) throw new Error('CONTROL: the still that waited on the clips and the export saved ' + saved(f2, /\.png$/) + ' PNGs and ' + saved(f2, /\.gif$/) + ' GIFs, not one of each');
+      for (var k = c2; k < calls; k++) closedAll('full-size copy ' + (k - c2 + 1) + ' of stage 2', copies[k]);
+      /* 3. (R3) the still held mid-decode, then another project open: nothing saved, the copy freed, and it says so */
+      gate = hold();
+      var f3 = dl.files.length, c3 = calls, tn = toasts.length;
+      var s3 = FM.snapshotPNG();
+      if (!s3 || typeof s3.then !== 'function') throw new Error('setup: the third still did not wait on a decode');
+      pend.push(s3);
+      for (var m = 0; m < 500 && !copies[c3]; m++) await sleep(20);
+      if (!copies[c3]) throw new Error('setup: the third still never decoded its full-size copy');
+      FM.projects.currentId = function () { return 'fm-test-860-another-project'; };
+      open();
+      try { await s3; } catch (e) { throw new Error('the still whose project was closed threw: ' + e.message); }
+      putCurrentId();
+      await sleep(600);
+      if (saved(f3, /\.png$/) !== 0) throw new Error('a still whose project was closed while it decoded its GIF copy still saved ' + saved(f3, /\.png$/) + ' PNG, drawn from the project open now');
+      closedAll('the copy of the still whose project was closed', copies[c3]);
+      var said = toasts.slice(tn).filter(function (s) { return /not saved/.test(s); });
+      if (!said.length) throw new Error('the still whose project was closed while it waited saved nothing and said nothing (toasts: ' + JSON.stringify(toasts.slice(tn)) + ')');
+    } finally {
+      if (t2) clearTimeout(t2);
+      backOpen(); open();
+      FM._exportCancel = false;
+      for (var q = 0; q < pend.length; q++) { try { await Promise.race([pend[q], sleep(20000)]); } catch (e) {} }
+      putMediaBack(); putCurrentId();
+      if (rs0) Object.defineProperty(FM, 'renderScene', rs0); else FM.renderScene = realRender;
+      if (dfs0) Object.defineProperty(FM, 'decodeGifFullSize', dfs0); else delete FM.decodeGifFullSize;
+      if (toast0) Object.defineProperty(FM, 'toast', toast0); else delete FM.toast;
+      await sleep(200);   // a PNG still on its way to toBlob lands in the catcher, not in a real download
+      dl.stop();
+      if (had) FM._exportBytes = eb0; else delete FM._exportBytes;
+      P.duration = keep.d; P.width = keep.w; P.height = keep.h; P.fps = keep.fps; FM.time = t0;
+      fmtEl.value = keep.fmt; rangeEl.value = keep.range;
+      if (FM._setExportSoloId) { try { FM._setExportSoloId(keep.solo || null); } catch (e) {} }
+      try { if (prefs0 == null) localStorage.removeItem(PK); else localStorage.setItem(PK, prefs0); } catch (e) {}
+      overlay.classList.add('hidden');
+      kit.put();
+      try { if (FM.refreshAll) FM.refreshAll(); } catch (e) {}
+    }
+  });
+
   /* The + on the Add-layer row "isn't centred inside the circle" (queue 296). It was the CHARACTER "+",
      and flex centres the line box, not the ink — where a glyph sits inside that box is the font's
      choice, which is why it can look level on one screen and high on another. Same finding as the × and
@@ -90723,6 +91216,9 @@
            it follows is swept, which is the saved-project case that slider exists for */
         ps.forEach(q => { if (q.follows === p.key) delete base[q.key]; });
         if (p.overriddenBy && p.liveWhen !== undefined) base[p.overriddenBy] = Array.isArray(p.liveWhen) ? p.liveWhen[0] : p.liveWhen;
+        /* #966 opts18: HSL Bands' Protect skin holds back only the skin tones its band reaches, and its starting band, Blue, reaches
+           none (its row's note says so), so it is swept on the Orange band, which every face is in. Only that slider. */
+        if (fx.type === 'hslbands' && p.key === 'skin') base.band = 1;
         if (p.overriddenBy && p.liveAbove !== undefined) {   // a slider live only ABOVE its controller's level (queue 904): turn the controller all the way up
           const ctl = ps.find(q => q.key === p.overriddenBy); base[p.overriddenBy] = ctl && typeof ctl.max === 'number' ? ctl.max : Number(p.liveAbove) + 1;
         }
@@ -141813,7 +142309,7 @@
     const ch = r.params.filter(p => p.key === 'channel')[0];
     if (!ch || ch.type !== 'segment' || ch.options.map(o => o[1]).join() !== 'RGB,Red,Green,Blue') bad.push('there is no Channel row of RGB / Red / Green / Blue');
     else ['', '_r', '_g', '_b'].forEach((s, i) => {
-      const shown = _cgRows(_cgInst('tonecurve', { channel: i })).join(), want = ['channel'].concat(_TC_KEYS.map(k => k + s), ['amount']).join();
+      const shown = _cgRows(_cgInst('tonecurve', { channel: i })).join(), want = ['channel'].concat(_TC_KEYS.map(k => k + s), ['amount', 'skin', 'keepcol']).join();   // skin, keepcol: #966 opts18 (Protect skin and Keep colour, under every Channel)
       if (shown !== want) bad.push('with Channel on ' + ch.options[i][1] + ' the panel shows ' + shown + ', not ' + want);
     });
     const p = _cgInst('tonecurve').params, pts = s => _TC_KEYS.map(k => p[k + s]).join();
@@ -180878,6 +181374,424 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts17 ──
+
+  /* ═══ #966: MORE CHOICE, ROUND EIGHTEEN — three more colour effects he already has, each still thin on choice (hunt/fx18). His words:
+   * "polish other effects just giving them more features … more choices always better … this is the complex version we want as much
+   * choice as possible". Tone Curve gets Protect skin and Keep colour, Duotone gets Protect skin and Affects, HSL Bands gets Protect
+   * skin and Mix. WRITTEN WITHOUT RUNNING (25 Oct, a slice run was taking timed readings on this machine): nothing but `node --check`.
+   * Every number below is reasoned from the code it names (worked in IEEE doubles beside the kernels, in their own order of operations,
+   * scratchpad bfx18-calc.ps1), the reasoning beside it; a bound only a run can set says MEASURE beside it. Round seventeen's four kinds
+   * for each effect: (a) its rows and what the load sanitiser keeps, clamps and drops, (b) what each new control does, on a fixture that
+   * holds what separates right from wrong, with a CONTROL, (c) at the defaults the kernel is today's picture byte for byte, (d) every new
+   * control off its default moves the very fixtures (c) holds still. The (b) tests do not stop at a missing row: on the base code the
+   * kernel ignores the new keys and the picture is judged and fails. All three run through round thirteen's tone13 (Duotone through
+   * duotonePixels, which both its layer path and the adjustment path call), so this block reuses round thirteen's _o13 helpers and round
+   * fourteen's _o14Want (the same file scope, defined above) and adds only the ones that read this round's own keys. Every comparison of
+   * two pictures is within ONE render path (#1183). ═══ */
+  const _o18Need = (type, keys) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts18 (hunt/fx18) is not built');
+    return r;
+  };
+  /* every new key, by effect */
+  const _O18_NEW = {
+    tonecurve: ['skin', 'keepcol'],
+    duotone: ['skin', 'range'],
+    hslbands: ['skin', 'mix'],
+  };
+  /* every new control off its default, each as [the settings it is laid on, the control]: HSL Bands' starting band is Blue, which no
+     skin window reaches (skinW12 is 0 from 60° to 340°, and the Blue band reaches 200° to 280°), so its Protect skin is laid on the
+     Orange band, which every skin tone is in */
+  const _O18_OFF = {
+    tonecurve: [[{}, { skin: 100 }], [{}, { keepcol: 100 }]],
+    duotone: [[{}, { skin: 100 }], [{}, { range: 1 }]],
+    hslbands: [[{ band: 1 }, { skin: 100 }], [{}, { mix: 50 }]],
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o18Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o13P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o13Pic;
+      const a = _o13Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o13Run(type, _o13Del(P, _O18_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O18_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on `base` (a new instance with those settings), on that fixture at that moment */
+  const _o18Moves = (type, base, over, W, H, pic, t) => E1.count(_o13Run(type, _o13P(type, base), W, H, pic(W, H), t), _o13Run(type, _o13P(type, Object.assign({}, base, over)), W, H, pic(W, H), t), 0);
+  /* the worst pixel of `got` against `want` and where, or null when every pixel matches to the level */
+  const _o18Cmp = (got, want, W) => {
+    let worst = 0, at = -1;
+    for (let i = 0; i < got.length; i += 4) for (let c = 0; c < 3; c++) { const e = Math.abs(got[i + c] - want[i + c]); if (e > worst) { worst = e; at = i / 4; } }
+    return worst ? { worst: worst, x: at % W, y: (at / W) | 0, got: Array.prototype.slice.call(got, at * 4, at * 4 + 3).join(', '), want: Array.prototype.slice.call(want, at * 4, at * 4 + 3).join(', ') } : null;
+  };
+  /* (b) in general: on `pic`, `over` laid on the instance `base` draws, pixel for pixel and to the last level, the kernel's own picture
+     without the new keys laid in by the share wf — the worst pixel and where, or null */
+  const _o18Worst = (type, base, over, W, H, pic, wf, t, ps) => {
+    const ker = _o13Run(type, _o13Del(Object.assign({}, base, over), _O18_NEW[type]), W, H, pic(W, H), t, ps);
+    return _o18Cmp(_o13Run(type, Object.assign({}, base, over), W, H, pic(W, H), t, ps), _o13Lay(pic(W, H), ker, wf), W);
+  };
+  /* how many pixels of a laid-in picture differ from the kernel's own: the fixture's CONTROL, so a (b) check that passes is not passing
+     because the share was 1 everywhere */
+  const _o18Held = (type, base, over, W, H, pic, wf, t) => {
+    const ker = _o13Run(type, _o13Del(Object.assign({}, base, over), _O18_NEW[type]), W, H, pic(W, H), t);
+    return E1.count(ker, _o13Lay(pic(W, H), ker, wf), 0);
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect, on that rect as a see-through card (80 % layer opacity, 60 % fill, turned 12° so its edges are part-covered) and
+     on an adjustment layer over the rect, all over a grey ground — both sides of each comparison through the same compositor path (a
+     Duotone on a layer draws through drawDuotone, on an adjustment layer through the adjustment path: both reach duotonePixels).
+     CONTROLS: each effect changes each picture against the same picture with no effect, and each new control off its default moves the
+     rect's picture through the same compositor, at 1:1. */
+  test('966 opts18 every new control at its default draws what the effect drew without it — Tone Curve, Duotone and HSL Bands through the compositor on a layer, on a see-through card and on an adjustment layer, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 90000 }, function () {
+    const TYPES = Object.keys(_O18_NEW);
+    TYPES.forEach(type => _o18Need(type, _O18_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const fxOf = (type, params) => ({ type: type, enabled: true, params: params });
+    const card = fx => { const L = _o13Rect(fx); L.transform.opacity = 0.8; L.fillOpacity = 0.6; L.transform.rotation = 12; return L; };
+    const adj = fx => { const A = FM.makeLayer('adjustment', { name: 'o18 adj', start: 0, duration: 4 }); A.effects = fx ? [fx] : []; return A; };
+    const WAYS = {
+      'on a layer': [fx => [_o13Rect(fx)], () => [_o13Rect(null)]],
+      'on a see-through card': [fx => [card(fx)], () => [card(null)]],
+      'on an adjustment layer': [fx => [adj(fx), _o13Rect(null)], () => [adj(null), _o13Rect(null)]],
+    };
+    TYPES.forEach(type => {
+      const P = _o13P(type);
+      Object.keys(WAYS).forEach(way => {
+        const make = WAYS[way][0], none = WAYS[way][1];
+        let moved = 0;
+        [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+          const a = _o13shot(make(fxOf(type, Object.assign({}, P))), t, W, H, rs, BG);
+          const b = _o13shot(make(fxOf(type, _o13Del(P, _O18_NEW[type]))), t, W, H, rs, BG);
+          const m = E1.maxDiff(a, b);
+          if (m !== 0) bad.push(type + ' ' + way + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O18_NEW[type].join(' / '));
+          if (rs == null) moved = Math.max(moved, E1.count(a, _o13shot(none(), t, W, H, null, BG), 2));
+        }));
+        if (moved < 50) bad.push('CONTROL: ' + type + ' ' + way + ' changes only ' + moved + ' pixels at either moment, so the comparison above proves little' /* MEASURE: reasoned, not run — the curve's S moves every tone off its three fixed points, the duotone recolours every pixel, and the Blue band turns the rect's blue end (#1040a0, hue 220°) 45° toward purple */);
+      });
+      _O18_OFF[type].forEach(([on, o]) => {
+        const base = _o13shot([_o13Rect(fxOf(type, Object.assign({}, P, on)))], 0.61, W, H, null, BG);
+        const n = E1.count(base, _o13shot([_o13Rect(fxOf(type, Object.assign({}, P, on, o)))], 0.61, W, H, null, BG), 2);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + (Object.keys(on).length ? ' on ' + JSON.stringify(on) : '') + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels; its warm end (#f0c060, hue 40°, saturation 0.6) is a full skin tone, so Protect skin 100 gives back about the warmest two fifths; Keep colour 100 takes the curve's added richness back off every coloured pixel (the warm end's blue by about 20 levels); Darks keeps (1 − L)² of each duotone move; Mix 50 halves the blue end's move */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Tone Curve: Protect skin and Keep colour ---- */
+  /* At its defaults (RGB a gentle S through 0, 20, 50, 80, 100 %, Red, Green and Blue straight, Amount 100) the table is the monotone
+     Hermite through those points with slopes 0.8, 0.96, 1.2, 0.96, 0.8, each level x / 255 to tcAt × 255: 40 → 30.50 → 31, 60 → 47.47 →
+     47, 80 → 68.33 → 68, 90 → 80.32 → 80, 100 → 92.88 → 93, 110 → 105.66 → 106, 120 → 118.31 → 118, 128 → 128.10 → 128, 130 → 130.52 →
+     131, 160 → 168.45 → 168, 170 → 180.77 → 181, 200 → 212.04 → 212, 220 → 228.39 → 228. So on round thirteen's six pixels: the light
+     skin tone (220, 170, 130) to (228, 181, 131), the deeper one (160, 110, 80) to (168, 106, 68), the rose (220, 100, 120) to (228, 93,
+     118), the blue (40, 90, 200) to (31, 80, 212), the green (60, 170, 80) to (47, 181, 68), the grey 128 to 128. Skin weights: 1, 1,
+     0.5, 0, 0, 0. Protect skin 100 keeps both skin tones the picture; the rose's green lands on a tie (96.5), so it is read in the busy
+     picture only. At 40 % a skin tone goes 0.6 of the way — the light one to 220 + 8 x 0.6 = 224.8, 176.6, 130.6, so (225, 177, 131),
+     the deeper one to (164.8, 107.6, 72.8) → (165, 108, 73) — and the rose 0.8 of it, (226.4, 94.4, 118.4) → (226, 94, 118). On the base
+     code Protect skin is ignored and both skin tones take the whole curve. */
+  test('966 opts18 Tone Curve has Protect skin (0–100 %, keyframable, 0 by default) and Keep colour (0–100 %, keyframable, 0 by default), neither greyed, both after Amount and shown under every Channel: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    const r = _o18Need('tonecurve', _O18_NEW.tonecurve);
+    const bad = _o13Rows('tonecurve', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'keepcol', label: 'Keep colour', min: 0, max: 100, unit: '%', def: 0 }], { skin: 40, keepcol: 70 });
+    bad.push.apply(bad, _o13Clamp('tonecurve', { skin: 150, keepcol: -5 }, { skin: 100, keepcol: 0 }));
+    bad.push.apply(bad, _o13Clamp('tonecurve', { skin: -5, keepcol: 150 }, { skin: 0, keepcol: 100 }));
+    const keys = (r.params || []).map(p => p.key), ix = k => keys.indexOf(k);
+    if (!(ix('amount') >= 0 && ix('amount') < ix('skin') && ix('skin') < ix('keepcol'))) bad.push('the rows run ' + keys.join(', ') + ' — Protect skin and Keep colour belong after Amount');
+    (r.params || []).filter(p => p.key === 'skin' || p.key === 'keepcol').forEach(p => { if (p.showWhen) bad.push(p.key + ' shows only when ' + JSON.stringify(p.showWhen) + ' — it acts on every curve at once, so it belongs under every Channel'); });
+    [0, 1, 2, 3].forEach(i => {
+      const fx = FM.fxRegistry.makeInstance('tonecurve'); fx.params.channel = i;
+      const shown = FM.fxRegistry.paramsOf('tonecurve').filter(p => FM.fxRegistry.rowShown(fx, p)).map(p => p.key);
+      ['skin', 'keepcol'].forEach(k => { if (shown.indexOf(k) < 0) bad.push('with Channel on ' + ['RGB', 'Red', 'Green', 'Blue'][i] + ' the panel leaves out ' + k); });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts18 Tone Curve Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the curve byte for byte, at 40 % a skin tone comes 0.4 of the way back and the rose 0.2, and with Red, Green and Blue curves, crossing points and part Amount every pixel of a busy picture is the curved picture laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone reads 228, 181, 131)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('tonecurve', _o13P('tonecurve', over), N, 1, row(), 0.5);
+    const kept = [[31, 80, 212], [47, 181, 68], [128, 128, 128]];
+    _o14Want(bad, run({}), _O13_SKIN, [[228, 181, 131], [168, 106, 68], [228, 93, 118]].concat(kept), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], null].concat(kept), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O13_SKIN, [[225, 177, 131], [165, 108, 73], [226, 94, 118]].concat(kept), 'Protect skin 40');
+    [{}, { shadows_r: 45, highs_b: 55 }, { shadows: 90, mids: 10 }, { amount: 60 }, { channel: 2, blacks: 12 }, { skin: 100 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, wf = (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b));
+      const w = _o18Worst('tonecurve', _o13P('tonecurve'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, wf, 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the curved picture laid in by 1 − its skin weight)');
+    });
+    const held = _o18Held('tonecurve', _o13P('tonecurve'), { skin: 70 }, 96, 72, _o13Pic, (r, g, b) => _o13W(100, 0, 0, 70, _o13Skin(r, g, b)), 0.5);
+    if (held < 300) bad.push('CONTROL: Protect skin 70 holds back only ' + held + ' of 6912 pixels of the busy picture, so the check above proves little' /* MEASURE: reasoned, not run — the busy picture's blue-40 cells with red over green are warm (hue 0° to 40°, saturation over 0.2), roughly a quarter of it, and the S moves each by a level or more */);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* KEEP COLOUR, worked in the kernel's order (the curve's bytes, then setLum255 of the picture's own pixel to the curved pixel's
+     brightness 0.299 R + 0.587 G + 0.114 B, then Keep colour of the way there): a sky (70, 130, 210) curves to (57, 131, 220), brightness
+     119.02, so the sky put at 119.02 is (67.84, 127.84, 207.84) — Keep colour 100 → (68, 128, 208), 50 → (62.42, 129.42, 213.92) → (62,
+     129, 214); the light skin tone curves to (228, 181, 131), brightness 189.353 → (228.963, 178.963, 138.963), so 100 → (229, 179, 139),
+     50 → (228, 180, 135); the green (60, 170, 80) curves to (47, 181, 68), brightness 128.052 → 100 (61, 171, 81), 50 (54.101, 176.101,
+     74.601) → (54, 176, 75); a red (200, 40, 40) curves to (212, 31, 31), brightness 85.119 → 100 (197.279, 37.279, 37.279) → (197, 37,
+     37), 50 (204.64, 34.14, 34.14) → (205, 34, 34); the grey 128 stays 128 (a grey has no colour to keep, and the curve holds it). At
+     100 % every one of them keeps the picture's own gaps between its channels (the sky 60 and 80, the red 160 and 0) — its hue and its
+     richness — at the curve's brightness. On the base code Keep colour is ignored and every pixel takes the curve's richer colour. */
+  const _O18_TCROW = [[70, 130, 210], [220, 170, 130], [60, 170, 80], [128, 128, 128], [200, 40, 40]];
+  /* setLum255 (js/compositor.js) to the letter: (r, g, b) put at brightness l, desaturated toward that grey instead of clipped */
+  const _o18SetLum = (r, g, b, l, out) => {
+    const d = l - (0.299 * r + 0.587 * g + 0.114 * b);
+    r += d; g += d; b += d;
+    const L = 0.299 * r + 0.587 * g + 0.114 * b, n = Math.min(r, g, b), x = Math.max(r, g, b);
+    if (n < 0 && L - n > 1e-9) { const k = L / (L - n); r = L + (r - L) * k; g = L + (g - L) * k; b = L + (b - L) * k; }
+    if (x > 255 && x - L > 1e-9) { const k = (255 - L) / (x - L); r = L + (r - L) * k; g = L + (g - L) * k; b = L + (b - L) * k; }
+    out[0] = r; out[1] = g; out[2] = b;
+  };
+  /* what tcKeep18 draws: each opaque pixel of the curve's own bytes `ker` moved Keep colour `kc` (0–100) of the way to the picture's
+     pixel put at the curved brightness, into a clamped array as the kernel's plate is */
+  const _o18Keep = (pic, ker, kc) => {
+    const k = kc > 0 ? (kc < 100 ? kc / 100 : 1) : 0, o = new Uint8ClampedArray(ker), out = [0, 0, 0];
+    if (!(k > 0)) return o;
+    for (let i = 0; i < pic.length; i += 4) {
+      if (pic[i + 3] === 0) continue;
+      const r3 = ker[i], g3 = ker[i + 1], b3 = ker[i + 2];
+      _o18SetLum(pic[i], pic[i + 1], pic[i + 2], 0.299 * r3 + 0.587 * g3 + 0.114 * b3, out);
+      o[i] = r3 + (out[0] - r3) * k; o[i + 1] = g3 + (out[1] - g3) * k; o[i + 2] = b3 + (out[2] - b3) * k;
+    }
+    return o;
+  };
+  test('966 opts18 Tone Curve Keep colour: at 100 % a sky reads 68, 128, 208 and a red 197, 37, 37 — the picture’s own colour at the curved brightness — at 50 % half way, a grey ramp is the curve itself byte for byte, and with Red, Green and Blue curves, part Amount and Protect skin every pixel of a busy picture is its own colour put at the curved brightness by Keep colour to the level (CONTROL: at 0 % the sky reads 57, 131, 220 and the red 212, 31, 31)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O18_TCROW.length, row = _o13Row(_O18_TCROW);
+    const run = over => _o13Run('tonecurve', _o13P('tonecurve', over), N, 1, row(), 0.5);
+    _o14Want(bad, run({}), _O18_TCROW, [[57, 131, 220], [228, 181, 131], [47, 181, 68], [128, 128, 128], [212, 31, 31]], 'CONTROL at 0 %');
+    _o14Want(bad, run({ keepcol: 100 }), _O18_TCROW, [[68, 128, 208], [229, 179, 139], [61, 171, 81], [128, 128, 128], [197, 37, 37]], 'Keep colour 100');
+    _o14Want(bad, run({ keepcol: 50 }), _O18_TCROW, [[62, 129, 214], [228, 180, 135], [54, 176, 75], [128, 128, 128], [205, 34, 34]], 'Keep colour 50');
+    const lv = o => _o13Run('tonecurve', _o13P('tonecurve', o), 256, 2, _o13Lv(), 0.5);
+    const g0 = E1.maxDiff(lv({ keepcol: 100 }), lv({}));
+    if (g0 !== 0) bad.push('on the grey ramp Keep colour 100 draws up to ' + g0 + ' levels away from the curve itself — a grey has no colour to keep, and its brightness is the curve’s');
+    const mk = E1.maxDiff(run({ keepcol: _o13KF(0, 100) }), run({ keepcol: 50 }));
+    if (mk > 1) bad.push('a Keep colour keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Keep colour 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    [[100, 0, {}], [35, 0, {}], [100, 0, { shadows_r: 45, mids: 60, highs_b: 55 }], [60, 0, { amount: 50, shadows: 35 }], [100, 60, {}], [70, 100, { channel: 1, whites: 90 }]].forEach(([kc, sk, extra]) => {
+      const ker = _o13Run('tonecurve', _o13Del(_o13P('tonecurve', extra), _O18_NEW.tonecurve), 96, 72, _o13Pic(96, 72), 0.5);
+      const kept = _o18Keep(_o13Pic(96, 72), ker, kc);
+      const want = sk ? _o13Lay(_o13Pic(96, 72), kept, (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b))) : kept;
+      const w = _o18Cmp(_o13Run('tonecurve', _o13P('tonecurve', Object.assign({}, extra, { keepcol: kc, skin: sk })), 96, 72, _o13Pic(96, 72), 0.5), want, 96);
+      if (w) bad.push('Keep colour ' + kc + (sk ? ' with Protect skin ' + sk : '') + ' and ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its own colour at the curved brightness' + (sk ? ', then laid in by 1 − its skin weight' : '') + ')');
+      if (kc === 100 && !sk && !Object.keys(extra).length) {
+        const n = E1.count(ker, kept, 0);
+        if (n < 1000) bad.push('CONTROL: Keep colour 100 takes only ' + n + ' of 6912 pixels of the busy picture off the curve, so the check above proves little' /* MEASURE: reasoned, not run — every coloured pixel of the busy picture takes the S's richer colour, and most of it is coloured */);
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts18 Tone Curve at Protect skin 0 % and Keep colour 0 % draws byte for byte what it drew without them — at its defaults, with Red, Green and Blue curves, crossing points, part Amount, on Channel Green, keyframed, and on a half-size plate (CONTROL: Protect skin and Keep colour each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o18Need('tonecurve', _O18_NEW.tonecurve);
+    const bad = _o18Ident('tonecurve', [{}, { over: { shadows_r: 45, mids: 60, highs_b: 55, blacks: 8 } }, { over: { shadows: 90, mids: 10 } }, { over: { amount: 40 } }, { over: { channel: 2 } }, { over: { shadows: _o13KF(25, 45) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }, { pic: _o13Row(_O18_TCROW), W: 5, H: 1 }]);
+    _O18_OFF.tonecurve.forEach(([on, o]) => { const n = _o18Moves('tonecurve', on, o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — Protect skin 100 gives back the warm cells (blue 40, red over green), roughly a quarter of the picture; Keep colour 100 takes the S's added richness off every coloured pixel */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Tone Curve ---- */
+
+  /* ---- Duotone: Protect skin and Affects ---- */
+  /* At its defaults (Amount 1, Shadows #241a52 = 36, 26, 82, Highlights #ff9e5e = 255, 158, 94, Balance 0, Contrast 100, Blend Replace)
+     the kernel takes each pixel to Shadows + (219, 132, 12) x L, L its Rec.601 brightness over 255. On round thirteen's six pixels: the
+     light skin tone (L 0.7074) to (190.92, 119.38, 90.49) → (191, 119, 90), the deeper one (L 0.4766) to (140.37, 88.91, 87.72) → (140,
+     89, 88), the rose (L 0.5418) to (154.66, 97.52, 88.50) → (155, 98, 89), the blue to (111, 71, 86), the green to (145, 92, 88), the
+     grey 128 to (146, 92, 88). Skin weights: 1, 1, 0.5, 0, 0, 0. Protect skin 100 keeps both skin tones the picture; the rose's red lands
+     on a tie (187.5), so it is read in the busy picture only. At 40 % a skin tone goes 0.6 of the way — the light one to 220 − 29 x 0.6
+     = 202.6, 170 − 51 x 0.6 = 139.4, 106, so (203, 139, 106), the deeper one to (148, 97.4, 84.8) → (148, 97, 85) — and the rose 0.8
+     of it, (168, 98.4, 95.2) → (168, 98, 95). On the base code Protect skin is ignored and both skin tones take the whole duotone. */
+  test('966 opts18 Duotone has Protect skin (0–100 %, keyframable, 0 by default) and Affects (All, Darks, Mids or Lights, storing 0–3, All by default), neither greyed and both after Blend: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and Mids, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    const r = _o18Need('duotone', _O18_NEW.duotone);
+    const bad = _o13Rows('duotone', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 }], { skin: 40, range: 2 });
+    bad.push.apply(bad, _o13Clamp('duotone', { skin: 150 }, { skin: 100 }));
+    bad.push.apply(bad, _o13Clamp('duotone', { skin: -5 }, { skin: 0 }));
+    bad.push.apply(bad, _o13Clamp('duotone', { range: 7 }, { range: undefined }));
+    const keys = (r.params || []).map(p => p.key), ix = k => keys.indexOf(k);
+    if (!(ix('blend') >= 0 && ix('blend') < ix('skin') && ix('skin') < ix('range'))) bad.push('the rows run ' + keys.join(', ') + ' — Protect skin and Affects belong after Blend');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts18 Duotone Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the duotone byte for byte, at 40 % a skin tone comes 0.4 of the way back and the rose 0.2, and with Balance and Contrast, each Blend, part Amount and Affects every pixel of a busy picture is the duotone laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone reads 191, 119, 90)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('duotone', _o13P('duotone', over), N, 1, row(), 0.5);
+    const kept = [[111, 71, 86], [145, 92, 88], [146, 92, 88]];
+    _o14Want(bad, run({}), _O13_SKIN, [[191, 119, 90], [140, 89, 88], [155, 98, 89]].concat(kept), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], null].concat(kept), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O13_SKIN, [[203, 139, 106], [148, 97, 85], [168, 98, 95]].concat(kept), 'Protect skin 40');
+    [{}, { balance: 40, contrast: 150 }, { blend: 1 }, { blend: 2 }, { blend: 3 }, { amount: 0.6 }, { skin: 100, range: 2 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, rg = extra.range || 0;
+      const w = _o18Worst('duotone', _o13P('duotone'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the duotone laid in by 1 − its skin weight' + (rg ? ' times its tonal weight' : '') + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* On the 0–255 grey ramp the defaults take grey 40 (L 0.1569) to (70.35, 46.71, 83.88) → (70, 47, 84) and grey 220 (L 0.8627) to
+     (224.94, 139.88, 92.35) → (225, 140, 92). Affects weighs each pixel's move by its own brightness, as tone13 does: grey 40 by Darks
+     (1 − L)² = 0.7109 → (61.33, 44.98, 71.28), so (61, 45, 71), Mids 0.5290 → (55.87, 43.70, 63.28), so (56, 44, 63), Lights 0.0246 →
+     (40.74, 40.17, 41.08), so (41, 40, 41); grey 220 by Darks 0.0188 → (220.09, 218.49, 217.59), so (220, 218, 218), Mids 0.4737 →
+     (222.37, 182.11, 159.37), so (222, 182, 159), Lights 0.7443 → (223.72, 160.45, 124.73), so (224, 160, 125). On the base code Affects
+     is ignored and every grey takes the whole duotone. */
+  test('966 opts18 Duotone Affects: Darks takes grey 40 to 61, 45, 71 and nearly leaves grey 220 at 220, 218, 218, Mids takes them to 56, 44, 63 and 222, 182, 159, Lights to 41, 40, 41 and 224, 160, 125 — and with another Amount, Balance and Contrast, a Colour blend and Protect skin every pixel of a busy picture is the duotone times the tonal weight of its own brightness to the level (CONTROL: All takes grey 40 to 70, 47, 84 and grey 220 to 225, 140, 92)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('duotone', _o13P('duotone', over), 256, 2, _o13Lv(), 0.5);
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    const all = run({});
+    if (px(all, 40) !== '70, 47, 84' || px(all, 220) !== '225, 140, 92') bad.push('CONTROL: under All grey 40 reads ' + px(all, 40) + ' and grey 220 reads ' + px(all, 220) + ' (70, 47, 84 and 225, 140, 92 expected)');
+    [[1, 'Darks', '61, 45, 71', '220, 218, 218'], [2, 'Mids', '56, 44, 63', '222, 182, 159'], [3, 'Lights', '41, 40, 41', '224, 160, 125']].forEach(([rg, name, w40, w220]) => {
+      const got = run({ range: rg });
+      if (px(got, 40) !== w40) bad.push(name + ' puts grey 40 at ' + px(got, 40) + ', not ' + w40);
+      if (px(got, 220) !== w220) bad.push(name + ' puts grey 220 at ' + px(got, 220) + ', not ' + w220);
+      [{}, { amount: 0.5 }, { balance: -50, contrast: 60 }, { blend: 3 }, { skin: 60 }].forEach(extra => {
+        const sk = extra.skin || 0;
+        const w = _o18Worst('duotone', _o13P('duotone'), Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), sk, _o13Skin(r, g, b)), 0.5);
+        if (w) bad.push(name + ' ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its duotone times its tonal weight' + (sk ? ' times 1 − its skin weight' : '') + ')');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts18 Duotone at Protect skin 0 % and All draws byte for byte what it drew without them — at its defaults, with Balance and Contrast, each Blend, part Amount, keyframed, and on a half-size plate (CONTROL: Protect skin and Darks each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o18Need('duotone', _O18_NEW.duotone);
+    const bad = _o18Ident('duotone', [{}, { over: { balance: 40 } }, { over: { contrast: 150 } }, { over: { blend: 1 } }, { over: { blend: 2, amount: 0.6 } }, { over: { blend: 3 } }, { over: { amount: _o13KF(0.2, 1) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O18_OFF.duotone.forEach(([on, o]) => { const n = _o18Moves('duotone', on, o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the default duotone recolours every pixel, so Darks holds back every pixel short of black by a level or more; Protect skin 100 gives back the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Duotone ---- */
+
+  /* ---- HSL Bands: Protect skin and Mix ---- */
+  /* On the Orange band (centre 30°, half-width 40°, Hue +45°, Saturation +40, the defaults), worked in the kernel's order (hue distance,
+     smoothstep, the saturation gate S x 3, then back from HSL): the light skin tone (220, 170, 130) at 26.7° takes weight 0.980 to (215.13,
+     237.65, 112.35) → (215, 238, 112), the deeper one (160, 110, 80) at 22.5° weight 0.908 to (168.44, 174.52, 65.48) → (168, 175, 65);
+     the rose (350°, 40° away: weight 0), the blue, the green and the grey are left alone. Skin weights: 1, 1, 0.5, 0, 0, 0. Protect skin
+     100 gives both skin tones back byte for byte; at 40 % a skin tone goes 0.6 of the way — the light one to 220 − 5 x 0.6 = 217, 170 +
+     68 x 0.6 = 210.8, 130 − 18 x 0.6 = 119.2, so (217, 211, 119), the deeper one to (164.8, 149, 71) → (165, 149, 71). On the base code
+     Protect skin is ignored and both skin tones turn yellow-green. */
+  test('966 opts18 HSL Bands has Protect skin (0–100 %, keyframable, 0 by default, with a note naming the bands it acts on) and Mix (0–100 %, keyframable, 100 by default), neither greyed, shown on every Band and both before Show selection: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    const r = _o18Need('hslbands', _O18_NEW.hslbands);
+    const bad = _o13Rows('hslbands', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp('hslbands', { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('hslbands', { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    const keys = (r.params || []).map(p => p.key), ix = k => keys.indexOf(k);
+    if (!(ix('lumhigh') >= 0 && ix('lumhigh') < ix('skin') && ix('skin') < ix('mix') && ix('mix') < ix('view'))) bad.push('the rows run ' + keys.join(', ') + ' — Protect skin and Mix belong after Lightness to and before Show selection');
+    const note = ((r.params || []).filter(p => p.key === 'skin')[0] || {}).note || '';
+    if (!/Orange/.test(note)) bad.push('Protect skin’s note (' + JSON.stringify(note) + ') does not say which bands reach a skin tone — on the starting band, Blue, it holds nothing back');
+    [0, 1, 5, 8].forEach(b => {
+      const fx = FM.fxRegistry.makeInstance('hslbands'); fx.params.band = b;
+      const shown = FM.fxRegistry.paramsOf('hslbands').filter(p => FM.fxRegistry.rowShown(fx, p)).map(p => p.key);
+      ['skin', 'mix'].forEach(k => { if (shown.indexOf(k) < 0) bad.push('with Band ' + b + ' the panel leaves out ' + k); });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* what Show selection paints with Protect skin and Mix: the kernel's own selection `sel` (white = all of the band's change) times each
+     opaque pixel's share Mix x (1 − Protect skin x its skin weight) of the picture `pic`, into a clamped array as hslBands18 writes it */
+  const _o18Sel = (pic, sel, mix, skin) => {
+    const o = new Uint8ClampedArray(sel), m = mix <= 0 ? 0 : (mix >= 100 ? 1 : mix / 100), s = skin <= 0 ? 0 : (skin >= 100 ? 1 : skin / 100);
+    for (let i = 0; i < pic.length; i += 4) {
+      if (pic[i + 3] === 0) continue;
+      let w = m;
+      if (s > 0) w *= 1 - s * _o13Skin(pic[i], pic[i + 1], pic[i + 2]);
+      if (w === 1) continue;
+      const v = sel[i] * w; o[i] = v; o[i + 1] = v; o[i + 2] = v;
+    }
+    return o;
+  };
+  test('966 opts18 HSL Bands Protect skin: on the Orange band at 100 % two skin tones come out as the picture byte for byte, at 40 % a skin tone comes 0.4 of the way back, with another Hue, Saturation and Brightness, a Custom band, the Yellow band wide, Ignore greys and Lightness from, and Mix every pixel of a busy picture is the retuned picture laid in by 1 − its skin weight to the level, and Show selection paints what it holds back darker (CONTROL: at 0 % the light skin tone reads 215, 238, 112)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN), OR = { band: 1 };
+    const run = over => _o13Run('hslbands', _o13P('hslbands', Object.assign({}, OR, over)), N, 1, row(), 0.5);
+    const kept = [[220, 100, 120], [40, 90, 200], [60, 170, 80], [128, 128, 128]];
+    _o14Want(bad, run({}), _O13_SKIN, [[215, 238, 112], [168, 175, 65]].concat(kept), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80]].concat(kept), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O13_SKIN, [[217, 211, 119], [165, 149, 71]].concat(kept), 'Protect skin 40');
+    [{}, { hue: -30 }, { sat: -50, lum: 30 }, { band: 8, centre: 20, width: 60 }, { band: 2, range: 2 }, { satgate: 10, lumlow: 20 }, { mix: 60 }, { skin: 100 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, mix = extra.mix == null ? 100 : extra.mix;
+      const w = _o18Worst('hslbands', _o13P('hslbands', OR), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(mix, 0, 0, sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the retuned picture laid in by 1 − its skin weight' + (mix < 100 ? ' times Mix' : '') + ')');
+    });
+    const held = _o18Held('hslbands', _o13P('hslbands', OR), { skin: 70 }, 96, 72, _o13Pic, (r, g, b) => _o13W(100, 0, 0, 70, _o13Skin(r, g, b)), 0.5);
+    if (held < 300) bad.push('CONTROL: on the Orange band Protect skin 70 holds back only ' + held + ' of 6912 pixels of the busy picture, so the check above proves little' /* MEASURE: reasoned, not run — the busy picture's blue-40 cells with red over green sit between 0° and 40°, the Orange band's own reach and the skin window both, roughly a quarter of it */);
+    [[100, 100], [60, 100], [100, 40]].forEach(([sk, mix]) => {
+      const P = _o13P('hslbands', Object.assign({}, OR, { view: 1 }));
+      const sel = _o13Run('hslbands', _o13Del(P, _O18_NEW.hslbands), 96, 72, _o13Pic(96, 72), 0.5);
+      const want = _o18Sel(_o13Pic(96, 72), sel, mix, sk);
+      const w = _o18Cmp(_o13Run('hslbands', Object.assign({}, P, { skin: sk, mix: mix }), 96, 72, _o13Pic(96, 72), 0.5), want, 96);
+      if (w) bad.push('Show selection at Protect skin ' + sk + ' and Mix ' + mix + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the selection times that pixel’s share)');
+      if (sk === 100 && mix === 100) { const n = E1.count(sel, want, 0); if (n < 300) bad.push('CONTROL: Protect skin 100 darkens only ' + n + ' pixels of the selection, so the check above proves little' /* MEASURE: reasoned, not run — the same warm cells */); }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* On the starting band, Blue (centre 240°, half-width 40°, Hue +45°, Saturation +40), worked as above: a sky (70, 130, 210) at 214.3°
+     takes weight 0.292 to (61.84, 94.65, 218.16) → (62, 95, 218), a blue (40, 90, 200) at 221.3° weight 0.547 to (41.54, 22.50195,
+     217.50) → (42, 23, 217), a light sky (90, 150, 230) to (82, 115, 238), a deep blue (30, 60, 220) at 230.5° weight 0.858 to (121.46,
+     0, 250) → (121, 0, 250); a skin tone (200, 120, 90) and the grey 128 are left alone. Mix 40 moves each 0.4 of the way from its own
+     value to the band's bytes: the sky to 70 − 8 x 0.4 = 66.8, 116, 213.2, so (67, 116, 213), the blue to (40.8, 63.2, 206.8) → (41, 63,
+     207), the light sky to (87, 136, 233), the deep blue to (66.4, 36, 232) → (66, 36, 232). On the base code Mix is ignored and every
+     pixel takes the whole change. */
+  const _O18_HBROW = [[70, 130, 210], [40, 90, 200], [90, 150, 230], [30, 60, 220], [200, 120, 90], [128, 128, 128]];
+  test('966 opts18 HSL Bands Mix: at 40 % a sky reads 67, 116, 213 and a deep blue 66, 36, 232, every pixel sits 0.4 of the way between itself and its retuned value to the level, at 0 % the picture is itself byte for byte, with another band, Hue and Protect skin a busy picture is laid in by Mix x (1 − its skin weight), Show selection at 50 % paints the selection at half, and a Mix keyed 0 to 100 draws its value half way (CONTROL: at 100 % the sky reads 62, 95, 218)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O18_HBROW.length, row = _o13Row(_O18_HBROW);
+    const run = over => _o13Run('hslbands', _o13P('hslbands', over), N, 1, row(), 0.5);
+    _o14Want(bad, run({}), _O18_HBROW, [[62, 95, 218], [42, 23, 217], [82, 115, 238], [121, 0, 250], [200, 120, 90], [128, 128, 128]], 'CONTROL at Mix 100');
+    _o14Want(bad, run({ mix: 40 }), _O18_HBROW, [[67, 116, 213], [41, 63, 207], [87, 136, 233], [66, 36, 232], [200, 120, 90], [128, 128, 128]], 'Mix 40');
+    const m0 = E1.maxDiff(run({ mix: 0 }), row());
+    if (m0 !== 0) bad.push('at Mix 0 the row moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(run({ mix: _o13KF(0, 100) }), run({ mix: 50 }));
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o18Worst('hslbands', _o13P('hslbands'), { mix: 35, band: 3, hue: -40, lum: 30 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 on the Green band with another Hue and Brightness: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    const w2 = _o18Worst('hslbands', _o13P('hslbands'), { mix: 60, skin: 100, band: 1 }, 96, 72, _o13Pic, (r, g, b) => _o13W(60, 0, 0, 100, _o13Skin(r, g, b)), 0.5);
+    if (w2) bad.push('Mix 60 with Protect skin 100 on the Orange band: pixel (' + w2.x + ', ' + w2.y + ') reads ' + w2.got + ', not ' + w2.want);
+    const P = _o13P('hslbands', { view: 1 }), sel = _o13Run('hslbands', _o13Del(P, _O18_NEW.hslbands), 96, 72, _o13Pic(96, 72), 0.5);
+    const lit = E1.count(sel, _o18Sel(_o13Pic(96, 72), sel, 0, 0), 0);
+    if (lit < 960) bad.push('CONTROL: the Blue band selects only ' + lit + ' pixels of the busy picture, so the two Show selection checks below prove little' /* MEASURED 25 Oct: 1925 of 6912 at 1280 and at 380; the floor is half that */);
+    const w3 =_o18Cmp(_o13Run('hslbands', Object.assign({}, P, { mix: 50 }), 96, 72, _o13Pic(96, 72), 0.5), _o18Sel(_o13Pic(96, 72), sel, 50, 0), 96);
+    if (w3) bad.push('Show selection at Mix 50: pixel (' + w3.x + ', ' + w3.y + ') reads ' + w3.got + ', not ' + w3.want + ' (the selection at half)');
+    const black = E1.maxDiff(_o13Run('hslbands', Object.assign({}, P, { mix: 0 }), 96, 72, _o13Pic(96, 72), 0.5), _o18Sel(_o13Pic(96, 72), sel, 0, 0));
+    if (black !== 0) bad.push('Show selection at Mix 0 is up to ' + black + ' levels off all black — nothing of the change shows, so nothing is selected');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts18 HSL Bands at Protect skin 0 % and Mix 100 % draws byte for byte what it drew without them — at its defaults, on the Red band, a Custom band, the Green band wide, with Ignore greys and a Lightness window, with Show selection on two bands, keyframed, and on a half-size plate (CONTROL: Protect skin and Mix each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o18Need('hslbands', _O18_NEW.hslbands);
+    const bad = _o18Ident('hslbands', [{}, { over: { band: 0, hue: -30 } }, { over: { band: 8, centre: 20, width: 60, sat: -50, lum: 30 } }, { over: { band: 3, range: 2.5, lum: -40 } }, { over: { satgate: 10, lumlow: 20, lumhigh: 60 } }, { over: { view: 1 } }, { over: { view: 1, band: 1 } }, { over: { hue: _o13KF(0, 90) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }, { pic: _o13Row(_O18_HBROW), W: 6, H: 1 }]);
+    _O18_OFF.hslbands.forEach(([on, o]) => { const n = _o18Moves('hslbands', on, o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + (Object.keys(on).length ? ' on ' + JSON.stringify(on) : '') + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — on the Orange band Protect skin 100 gives back the warm cells (blue 40, red over green), roughly a quarter of the picture; on the Blue band Mix 50 halves the move of the blue-230 cells, half of it */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end HSL Bands ---- */
+
+  /* the round's editors, new rows and all, fit the inspector (round thirteen's fit test) */
+  test('966 opts18 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = {
+      tonecurve: 'Keep colour',
+      duotone: 'Affects',
+      hslbands: 'Protect skin',
+    };
+    Object.keys(NEW).forEach(type => _o18Need(type, _O18_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o13Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts18 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition

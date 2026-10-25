@@ -424,7 +424,7 @@ window.FM = window.FM || {};
     /* faces kept, mixed: #966 opts13 */ temperature: 'Warms toward orange or cools toward blue — keeping faces their own colour if you like, mixed over the picture.',
     tint: 'Washes the whole clip toward one colour.',
     /* as rich or as muted, as light or as dark: #966 opts10 · faces kept, by tone: #966 opts16 */ colorize: 'Replaces the image colour with a single hue, keeping its light and shade — as rich or as muted, as light or as dark as you like, faces kept their own colour or only the darks, mids or lights tinted.',
-    duotone: 'Maps darks to one colour and lights to another.',
+    /* faces kept, by tone: #966 opts18 */ duotone: 'Maps darks to one colour and lights to another. Protect skin keeps faces their own colour; Affects lays the two colours on only the darks, mids or lights.',
     /* faces kept, by tone: #966 opts17 */ gradientmap: 'Remaps brightness onto a gradient — darks take one end, lights the other. Protect skin keeps faces their own colour; Affects maps only the darks, mids or lights.',
     glow: 'Blooms the bright areas into a soft halo.',
     softglow: 'A gentler bloom that lifts highlights without washing the picture out.',

@@ -4604,13 +4604,82 @@ window.FM = window.FM || {};
        at a time. Refused here with the export notice, before anything is rendered; every caller reaches it through this. */
     if (exportTurnedOff()) return sayExportTurnedOff();
     const back = (FM.exporter && FM.exporter.mediaBack) ? FM.exporter.mediaBack(FM.scene, s => { if (FM.toast) FM.toast(s, 2500); }) : null;
-    if (back) return back.then(() => snapshotNow(opts));
-    return snapshotNow(opts);
+    // (fold review R2) the wait for the clips is the still's too, so an export tapped during it waits its turn like any other
+    return snapshotNow(opts, back);
   };
-  function snapshotNow(opts) {
-    const P = FM.scene.project;
-    const t = FM.frameExportTime(FM.time);
+  /* #860 hunt #6 (review G5): A GIF THE PREVIEW HOLDS SMALLER GOES INTO THE STILL AT ITS FULL SIZE. The video exports decode their
+     own full-size copy of such a GIF (js/exporter.js prepareCaches); this still rendered the preview's squeezed copy and said
+     nothing. Now, when a GIF this one frame draws is held smaller than its own size, the still first asks the exporter for full-size
+     copies under the same rules as every export (FM.exporter.stillGifCopies: the one export total, the phone ceiling), draws them
+     for its one render, and closes them on every path, a throw included. Where a GIF still cannot fit, the toast after the save
+     says so in the ready card's words. With no such GIF on screen nothing changes: the still renders at once, synchronously, as before. */
+  /* (review F1, F2) ONE STILL AT A TIME, AND NEVER BESIDE AN EXPORT. A still that waits on that decode outlasts the tap that started
+     it, so `stillRun` holds the one in flight (a promise), or null. A still tapped meanwhile queues behind it: it saves its own PNG, as
+     before, but never decodes beside the first under a second export total and a second phone ceiling. runExport waits for it before
+     an export prepares, so the two never share the GIF records, the solo or the seek. Nothing in flight and nothing to decode: the
+     still is synchronous, exactly as before. */
+  /* (fold review R2) …and that includes the wait for the clips Home let go of (`wait`, mediaBack's promise): a still waiting on it is
+     in flight as much as one decoding, so it holds `stillRun` too. */
+  let stillRun = null;
+  function snapshotNow(opts, wait) {
     const o = opts || {};
+    // (review F4) the project and the instant tapped on, held for a still that has to wait
+    const pid = stillProject(), t = FM.frameExportTime(FM.time);
+    const before = (stillRun && wait) ? Promise.all([stillRun.then(null, () => {}), wait]) : (stillRun || wait);
+    if (before) return stillTrack(before.then(() => stillGo(o, pid, t), () => stillGo(o, pid, t)));
+    const r = stillGo(o, pid, t);
+    return (r && typeof r.then === 'function') ? stillTrack(r) : r;
+  }
+  /* (fold review R3) WHICH PROJECT IS OPEN, ASKED OF STORAGE. Opening another project changes FM.scene IN PLACE (storage.js load,
+     the import, a template's adopt all assign FM.scene.project and .layers), so comparing FM.scene itself never saw a change; and the
+     project object is replaced by an undo as well, which is not another project. The open project's id is the answer. It is read from
+     the shared key, so a second window opening a project in the same few seconds also stops this still: it then says so, rather than
+     saving nothing in silence. */
+  function stillProject() { return (FM.projects && typeof FM.projects.currentId === 'function') ? FM.projects.currentId() : null; }
+  function stillGone() { if (FM.toast) FM.toast('The frame was not saved: another project was opened while it waited', 3500); }
+  function stillTrack(p) {
+    stillRun = p;
+    const done = () => { if (stillRun === p) stillRun = null; };
+    p.then(done, done);
+    return p;
+  }
+  function stillGo(o, pid, t) {
+    if (stillProject() !== pid) return stillGone();   // (review F4) a queued still whose project was closed while it waited: nothing drawn, nothing saved
+    const gifIds = stillGifLayers(t, o.soloId);
+    if (!gifIds || !FM.exporter || typeof FM.exporter.stillGifCopies !== 'function') return drawStill(o, t, null);
+    return (async function () {
+      let prep = null;
+      try {
+        prep = await FM.exporter.stillGifCopies(FM.scene, l => gifIds.has(l.id), s => { if (FM.toast) FM.toast(s, 2500); });
+        if (stillProject() !== pid) return stillGone();   // (review F4) another project opened during the decode: nothing drawn or saved; the copies are freed below
+        drawStill(o, t, prep);
+      } finally {
+        if (prep) FM.exporter.closeGifCopies(prep.copies);
+      }
+    })();
+  }
+  /* The animated GIF layers the still at `t` draws (the export's own rules: visible, inside the solo the dialog asked for, not in a
+     hidden group, on screen at t), or null when none of them is held smaller than its own size, so there is nothing to decode. */
+  function stillGifLayers(t, soloId) {
+    const soloTarget = soloId ? FM.layerById(FM.scene, soloId) : null;
+    const soloRestore = soloTarget ? exportSoloPrep(soloTarget) : null;
+    try {
+      const soloOn = FM.scene.layers.some(l => l && l.solo);
+      const ids = new Set();
+      let small = false;
+      FM.scene.layers.forEach(l => {
+        if (!l || l.visible === false || (soloOn && !l.solo) || (FM.groupHidden && FM.groupHidden(l))) return;
+        if (!(l.start <= t && t < l.start + l.duration)) return;
+        const m = FM.media.get(l.id);
+        if (!m || m._released || !m.anim || !m.anim.frames || m.anim.frames.length < 2) return;
+        ids.add(l.id);
+        if ((m.width > 0 && m.anim.width < m.width) || (m.height > 0 && m.anim.height < m.height)) small = true;
+      });
+      return small ? ids : null;
+    } finally { exportSoloRestore(soloRestore); }
+  }
+  function drawStill(o, t, prep) {
+    const P = FM.scene.project;
     /* ⚠️ NOT CLAMPED TO 1. Every rung the dialog builds today is a DOWNSCALE, so a `Math.min(1, …)`
        would be invisible — and would silently ignore an upscale rung the moment one was added, which is
        the exact bug this change exists to fix. Clamped against an impossible ALLOCATION instead: 64
@@ -4639,8 +4708,21 @@ window.FM = window.FM || {};
        state, which the compositor drops only under FM._exporting: a still saved while the sheet previewed an effect held it. */
     const pvWas = FM._fxPreview, cmpWas = FM._fxCompare;
     FM._fxPreview = null; FM._fxCompare = null;
-    try { FM.renderScene(full.getContext('2d'), FM.scene, t); }
+    // (review G5) the still's full-size GIF copies sit on their records for this one render only, drawn under FM._drawingStill
+    const stillCopies = (prep && prep.copies) || [];
+    const animWas = [];   // (review F1) what each record held before the still's copy went on, put back after: an export's own copy is never taken off
+    try {
+      stillCopies.forEach(c => c.recs.forEach(r => {
+        if (!r || r._released || !r.anim) return;
+        animWas.push({ r: r, had: Object.prototype.hasOwnProperty.call(r, '_exportAnim'), a: r._exportAnim });
+        r._exportAnim = c.anim;
+      }));
+      if (stillCopies.length) FM._drawingStill = true;
+      FM.renderScene(full.getContext('2d'), FM.scene, t);
+    }
     finally {
+      FM._drawingStill = false;
+      for (let i = animWas.length - 1; i >= 0; i--) { const w = animWas[i]; if (w.had) w.r._exportAnim = w.a; else delete w.r._exportAnim; }
       FM.isolate = isoWas; cropHeld.forEach(l => { l._cropEditing = true; });
       FM._fxPreview = pvWas; FM._fxCompare = cmpWas;
       exportSoloRestore(soloRestore);
@@ -4659,6 +4741,9 @@ window.FM = window.FM || {};
       const a = document.createElement('a'); a.href = url; a.download = base + '-' + t.toFixed(2) + 's.png';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      // (review G5) a GIF the export total or the phone ceiling still could not hold at full size: said, in the ready card's words
+      const lost = memoryLossWords(prep && prep.thinned);
+      if (lost && FM.toast) FM.toast('Frame saved' + lost, 8000);
     }, 'image/png');
   }
 
@@ -6798,6 +6883,17 @@ window.FM = window.FM || {};
     // Taken here, still inside the tap on Export, and let go in the finally below (queue 690) — see expWakeTake.
     expWakeHold();
     if (FM.playing) FM.pause();
+    /* #860 hunt #6 (review F1): A STILL STILL DECODING ITS GIF COPIES (snapshotNow) FINISHES FIRST, before this export solos a layer or
+       prepares its own copies, so the two never draw over each other's. The overlay's Cancel, tapped while it waits, ends this export
+       there (the exporters clear the flag when they start, so it would otherwise be lost). Nothing in flight: no wait, exactly as before. */
+    /* (fold review R1) The wait is a 100 ms poll, like holdVideoElements', so Cancel ends it at once even while the still's decode
+       runs on (that decode has no clock of its own: bounded by its work, not by a total). */
+    if (stillRun) {
+      FM._exportCancel = false;
+      bar.style.width = '0%'; status.textContent = 'Saving the frame first…';
+      while (stillRun && !FM._exportCancel) await Promise.race([stillRun.then(null, () => {}), new Promise(r => setTimeout(r, 100))]);
+      if (FM._exportCancel) { overlay.classList.add('hidden'); expWakeDrop(); return; }
+    }
     // 'Hide other layers' — temporarily solo the selected clip (solo already isolates picture AND
     // audio at render/export/preview). Restored in finally even on error/cancel; no history commit.
     // Solo the layer the PICKER chose (queue 174). One source of truth — the old checkbox is gone, so
@@ -6839,10 +6935,11 @@ window.FM = window.FM || {};
       const onNote = (text) => { if (FM._exportInfo) FM._exportInfo(text); };
       /* outW/outH go to ALL THREE (queue 690). They used to reach the MP4 only, so a Custom size typed
          for a GIF or PNG frames — boxes on screen, no warning — came out at the project size. */
+      let made = null;   // (review G6) what the GIF and the PNG-sequence exports hand back: { thinned }, what memory kept back
       if (fmt === 'gif') {
-        await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, outW, outH, onProgress });
+        made = await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, outW, outH, onProgress });
       } else if (fmt === 'frames') {
-        await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', outW, outH, onProgress });
+        made = await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', outW, outH, onProgress });
       } else {
         await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, outW, outH, onProgress, onNote,
                                 onReady: showExportReady });
@@ -6852,8 +6949,15 @@ window.FM = window.FM || {};
        * wrong, answer (it may have gone to Photos, or been discarded). Every other format still
        * downloads straight away and still gets told so. (queue 141 part 4) */
       if (fmt !== 'mp4') {
-        status.textContent = 'Done — saved to your Downloads.';
-        setTimeout(() => overlay.classList.add('hidden'), 900);
+        /* #860 hunt #6 (review G6): …AND WHAT MEMORY KEPT BACK. These two have no ready card, so a GIF the export total or the phone
+           ceiling sent out smaller (or a clip given fewer frames) was never said. Said here in the card's own words, on this line and,
+           because the overlay goes in under a second, in a toast that stays once it has gone. Nothing kept back: the line is as before. */
+        const lost = memoryLossWords(made && made.thinned);
+        status.textContent = lost ? 'Done — saved to your Downloads' + lost : 'Done — saved to your Downloads.';
+        setTimeout(() => {
+          overlay.classList.add('hidden');
+          if (lost && FM.toast) FM.toast('Saved to your Downloads' + lost, 8000);
+        }, 900);
       } else {
         overlay.classList.add('hidden');
       }
@@ -6913,6 +7017,20 @@ window.FM = window.FM || {};
     else if (sel && cw && ch && [].some.call(sel.options, o => o.value === 'custom')) { sel.value = 'custom'; cw.value = t.fitW; ch.value = t.fitH; }
     else { alert(say + '\n\nPick a smaller size and export again.'); return; }
     return runExport();
+  }
+
+  /* #860 (1) and #860 hunt #6: WHAT AN EXPORT'S MEMORY KEPT BACK, IN ONE SET OF WORDS for every place that says it: the MP4's ready
+     card below, the GIF and PNG-sequence exports' finish line (review G6, they have no card) and the still's toast (review G5). A
+     reversed or frame-blend clip given fewer frames than its length needs plays choppier, said with each clip's real frame rate; a GIF
+     sent out smaller than its own size is named with the size it went out at. Two different losses, so two different phrases. '' when
+     nothing was kept back. */
+  function memoryLossWords(thinned) {
+    const list = (thinned || []).filter(Boolean);
+    const clips = list.filter(t => !t.gif), gifs = list.filter(t => t.gif);
+    let s = '';
+    if (clips.length) s += ' · fewer frames to fit memory: ' + clips.map(t => t.name + ' ' + t.effFps + ' fps').join(', ');
+    if (gifs.length) s += ' · smaller to fit memory: ' + gifs.map(t => t.name + ' ' + t.w + '×' + t.h).join(', ');
+    return s;
   }
 
   /* "Export ready" — our card in front of the OS save sheet (queue 141 part 4).
@@ -6992,11 +7110,7 @@ window.FM = window.FM || {};
          choppier in the file. Said once, here, with each clip's real frame rate. */
       /* #860 hunt #6 F3: …and a GIF the export total could not hold at its full size, drawn smaller (its preview copy), named with the
          size it went out at. The two are different losses, so they are said in different words. */
-      if (xrm && out.thinned && out.thinned.length) {
-        const clips = out.thinned.filter(t => t && !t.gif), gifs = out.thinned.filter(t => t && t.gif);
-        if (clips.length) xrm.textContent += ' · fewer frames to fit memory: ' + clips.map(t => t.name + ' ' + t.effFps + ' fps').join(', ');
-        if (gifs.length) xrm.textContent += ' · smaller to fit memory: ' + gifs.map(t => t.name + ' ' + t.w + '×' + t.h).join(', ');
-      }
+      if (xrm) xrm.textContent += memoryLossWords(out.thinned);
       if (xrm && out.resumedPct > 0) {
         xrm.textContent += ' · picked up from ' + out.resumedPct + '%';
       }

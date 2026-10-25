@@ -163,7 +163,12 @@ window.FM = window.FM || {};
      (Affects: 0 All, 1 Darks, 2 Mids, 3 Lights), Hue Ramp `skin` (Protect skin 0 to 100, default 0) and `range` (Affects: 0 All,
      1 Darks, 2 Mids, 3 Lights). Every default draws what the effect drew before, but a rev-35 sanitiser drops the new keys, so the
      two would normalise one project differently. */
-  C.SCHEMA_REV = 36;
+  /* Rev 37 (v18.05, #966 idle work round eighteen): new controls on three existing effects: Tone Curve `skin` (Protect skin 0 to
+     100, default 0) and `keepcol` (Keep colour 0 to 100, default 0), Duotone `skin` (Protect skin 0 to 100, default 0) and `range`
+     (Affects: 0 All, 1 Darks, 2 Mids, 3 Lights), HSL Bands `skin` (Protect skin 0 to 100, default 0) and `mix` (Mix 0 to 100,
+     default 100). Every default draws what the effect drew before, but a rev-36 sanitiser drops the new keys, so the two would
+     normalise one project differently. */
+  C.SCHEMA_REV = 37;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -402,7 +407,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =8119663260362946;   // SCHEMA_REV 36 (v18.04, #966 round seventeen): six new effect params on HSL Mixer, Gradient Map and Hue Ramp. Pinned 25 Oct with fp.js at rev 36; before: 4505451624971251 at rev 35.
+  C.SCHEMA_FP =7963662427846649;   // SCHEMA_REV 37 (v18.05, #966 round eighteen): six new effect params on Tone Curve, Duotone and HSL Bands. Pinned 25 Oct with fp.js at rev 37; before: 8119663260362946 at rev 36.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════

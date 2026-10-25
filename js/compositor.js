@@ -169,6 +169,13 @@ window.FM = window.FM || {};
          clip's own colours show through), and Colour takes their hue and saturation but keeps every pixel's own brightness,
          so the detail stays. Replace is the old duotone, byte for byte. (Tritone lives on Gradient Map, not here.) */
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Replace'], [1, 'Soft light'], [2, 'Overlay'], [3, 'Colour']] },
+      /* #966 opts18 (hunt/fx18, his "more choices always better"): the two colours always took every face in the shot with the rest,
+         and every tone of the picture at once. PROTECT SKIN holds skin-coloured pixels back with Teal & Orange's skin window (skinW12)
+         — the shot goes two-tone, the faces keep their own colour — and AFFECTS lays the two colours on only the darks, the mids or the
+         lights with Colour Balance's tonal weights on the pixel's own brightness. 0 % and All run the old loops untouched (tone13 only
+         off them), on a layer and on an adjustment layer alike: both draw through duotonePixels. */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks lays the two colours on the shadows and leaves the lights their own colour' },
     ] },
     // ---- batch 1: per-pixel colour / texture effects (routed through drawPixelEffect) ----
     { type: 'solarize', label: 'Solarize', params: [
@@ -2241,7 +2248,7 @@ window.FM = window.FM || {};
     // HSL Bands — push one colour band's hue, saturation and luminance. The saturation gate is the
     // whole trick: weighting by the pixel's own saturation is what leaves skin and neutrals alone
     // while a plain hue window would wreck them.
-    { type: 'hslbands', label: 'HSL Bands', desc: 'Retunes one colour band — its hue, saturation and brightness — and leaves the rest of the picture alone. Pick a band, or set your own centre and width.', params: [
+    { type: 'hslbands', label: 'HSL Bands', desc: 'Retunes one colour band — its hue, saturation and brightness — and leaves the rest of the picture alone. Pick a band, or set your own centre and width. Protect skin keeps faces as they are; Mix sets how much of the change shows.', params: [
       { key: 'band', label: 'Band', options: [[0, 'Red'], [1, 'Orange'], [2, 'Yellow'], [3, 'Green'], [4, 'Aqua'], [5, 'Blue'], [6, 'Purple'], [7, 'Magenta'], [8, 'Custom']], def: 5 },
       { key: 'hue', label: 'Hue', min: -180, max: 180, step: 1, def: 45, unit: '°' },
       { key: 'sat', label: 'Saturation', min: -100, max: 100, step: 1, def: 40, unit: '%' },
@@ -2257,6 +2264,14 @@ window.FM = window.FM || {};
       { key: 'satgate', label: 'Ignore greys below', min: 0, max: 100, step: 1, def: 33, unit: '%' },
       { key: 'lumlow', label: 'Lightness from', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'lumhigh', label: 'Lightness to', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* #966 opts18 (hunt/fx18, his "more choices always better"): the kernel's own note above names the classic way this control
+         ruins a shot — a band on orange also grabs every face — and the saturation gate only softens it; and the change always showed
+         at full strength. PROTECT SKIN holds skin-coloured pixels back from the band with Teal & Orange's skin window (skinW12) — a
+         richer orange car, the faces left as they are — and MIX lays the retuned picture over the plain one. Show selection paints
+         both (white = all of the change). The note: the starting band, Blue, reaches no skin tone, so there it holds nothing back. 0 %
+         and 100 % run the old loop untouched (hslBands18 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Holds faces back where the band reaches a skin tone: Red, Orange, Yellow and Magenta do, the starting Blue does not' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'view', label: 'Show selection', options: [[0, 'Off'], [1, 'On']], def: 0, note: 'It shows in the export too — turn it off when done' },
     ] },
     // ---- batch 34: the scan bar + a key that survives bad lighting ----
@@ -8600,6 +8615,10 @@ window.FM = window.FM || {};
      * classic way this control ruins a shot. One pass, no slice, no taps; most of the frame exits at
      * the hue test before any HSL round-trip. */
     hslbands: function (d, W, H, p, t) {
+      /* #966 opts18: PROTECT SKIN over 0 % or MIX under 100 % runs hslBands18 — this very kernel without the two (every other control
+         as it is), each pixel laid in by Mix x (1 − Protect skin x its skin weight); 0 % and 100 % run the lines below untouched */
+      const hbSk18 = p.skin == null ? 0 : FM.evalProp(p.skin, t), hbMx18 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (hbSk18 > 0 || hbMx18 < 100) { hslBands18(d, W, H, p, t, hbSk18, hbMx18); return; }
       const BAND_HUE = [0, 30, 60, 120, 180, 240, 280, 320];
       const band = Math.round(FM.evalProp(p.band, t) || 0);
       const custom = band >= 8;
@@ -14620,6 +14639,27 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._tone13 = tone13;   // suite seam (#966 opts13)
+  /* #966 opts18 — HSL BANDS' PROTECT SKIN AND MIX. The picture is tone13's: the kernel without the two, each pixel laid in by Mix x (1 −
+     Protect skin x skinW12 of its own colour). SHOW SELECTION paints the same share: the kernel's own selection (white = all of the
+     band's change, the band's weight x 255) times that pixel's share, so what Protect skin and Mix hold back shows darker, and Mix 0
+     paints it all black. A pixel with no alpha is never written. Pixel by pixel on the pixel alone (692). */
+  function hslBands18(d, W, H, p, t, skin, mix) {
+    const view = (p.view == null ? 0 : (Math.round(FM.evalProp(p.view, t)) | 0)) === 1;
+    if (!view) { tone13(d, W, H, p, t, PIXEL_FX.hslbands, ['skin', 'mix'], 0, mix, skin); return; }
+    const m = isFinite(mix) ? (mix <= 0 ? 0 : (mix >= 100 ? 1 : mix / 100)) : 1;
+    const s = isFinite(skin) ? (skin <= 0 ? 0 : (skin >= 100 ? 1 : skin / 100)) : 0;
+    const o = new Uint8ClampedArray(d), q = Object.assign({}, p);
+    delete q.skin; delete q.mix;
+    PIXEL_FX.hslbands(d, W, H, q, t);
+    for (let i = 0; i < d.length; i += 4) {
+      if (o[i + 3] === 0) continue;
+      let w = m;
+      if (s > 0) w *= 1 - s * skinW12(o[i], o[i + 1], o[i + 2]);
+      if (w === 1) continue;
+      const v = d[i] * w; d[i] = v; d[i + 1] = v; d[i + 2] = v;
+    }
+  }
+  FM._hslBands18 = hslBands18;   // suite seam (#966 opts18)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -21648,6 +21688,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      Amount fades each toward the untouched pixel, as before. Replace runs the old loop below, byte for byte. */
   const _duOut = [0, 0, 0];
   function duotonePixels(d, am, A, B, p, t) {
+    /* #966 opts18: PROTECT SKIN over 0 % or AFFECTS Darks (1), Mids (2) or Lights (3) runs tone13 — this very function without the two
+       (Amount, both colours, Balance, Contrast and Blend as they are), each pixel laid in by its tonal weight x (1 − Protect skin x its
+       skin weight). 0 % and All run the lines below untouched. A point operation, so the plate's size is never read. */
+    const duSk18 = p.skin == null ? 0 : FM.evalProp(p.skin, t), duRg18 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0);
+    if (duSk18 > 0 || duRg18 === 1 || duRg18 === 2 || duRg18 === 3) { tone13(d, d.length >> 2, 1, p, t, function (d18, W18, H18, q18, t18) { duotonePixels(d18, am, A, B, q18, t18); }, ['skin', 'range'], duRg18, 100, duSk18); return; }
     const bal = p.balance == null ? 0 : FM.evalProp(p.balance, t);
     const con = p.contrast == null ? 100 : FM.evalProp(p.contrast, t);
     const plain = (bal === 0 && con === 100);
@@ -24650,7 +24695,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
            renderScene) matches the preview. A still image has no `anim` and takes the old path untouched. */
         /* #860 hunt #6 F3: an export draws its own full-size copy of a GIF the preview holds smaller (js/exporter.js prepareCaches
            decodes it, and closes it when the export ends); the preview, and an export with no copy, draw rec.anim as before. */
-        const gifAnim = (FM._exporting && m._exportAnim) || m.anim;
+        /* (review G5) …and so does the still (FM.snapshotPNG), whose own copy is on the record only for its one render, under
+           FM._drawingStill (it renders without FM._exporting). */
+        const gifAnim = ((FM._exporting || FM._drawingStill) && m._exportAnim) || m.anim;
         if (gifAnim && gifAnim.frames && gifAnim.frames.length > 1 && FM.animFrameAt) {
           const local = FM.layerLocalTime(layer, t);
           src = FM.animFrameAt(gifAnim, local == null ? 0 : local);
@@ -25580,11 +25627,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ]) },
-    { type: 'tonecurve', label: 'Tone Curve', desc: 'Bends the tones through five points from black to white, each set to where that tone should end up: raise Shadows to open the darks, lower Highlights to calm the lights, or shape Red, Green and Blue on their own.', params: [
+    { type: 'tonecurve', label: 'Tone Curve', desc: 'Bends the tones through five points from black to white, each set to where that tone should end up: raise Shadows to open the darks, lower Highlights to calm the lights, or shape Red, Green and Blue on their own. Protect skin keeps faces as they are; Keep colour bends only the brightness.', params: [
       { key: 'channel', label: 'Channel', options: [[0, 'RGB'], [1, 'Red'], [2, 'Green'], [3, 'Blue']], def: 0, note: 'Each slider is where that tone ends up — straight, Shadows is 25 %, Midtones 50 %, Highlights 75 %' },
     ].concat(TC_SETS.reduce((out, s, i) => out.concat(TC_PTS.map(q => (
       { key: q[0] + s, label: q[1], min: 0, max: 100, step: 1, def: i ? q[2] : q[3], unit: '%', showWhen: { key: 'channel', is: i } }))), []), [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* #966 opts18 (hunt/fx18, his "more choices always better"): the curve always took every face in the shot with it, and an RGB
+         curve bent each channel on its own, so an S for contrast also made every colour richer and pushed its hue (a skin tone went
+         orange). PROTECT SKIN holds skin-coloured pixels back from the curve with Teal & Orange's skin window (skinW12), and KEEP
+         COLOUR (Resolve's luminance mix, a curve in Luminosity mode) puts each pixel's own colour back at the curved brightness, so
+         at 100 % the curve changes brightness only. Both show under every Channel. 0 % runs the old loop untouched (tone13 and
+         tcKeep18 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'keepcol', label: 'Keep colour', min: 0, max: 100, step: 1, def: 0, unit: '%', note: '100 % bends only the brightness: every colour keeps its own hue and richness' },
     ]) },
     { type: 'hslmixer', label: 'HSL Mixer', desc: 'Eight colours, each with its own hue, saturation and brightness: make a sky bluer, grass greener or a red softer and leave every other colour alone. Pick what to adjust, then move the colour. Protect skin keeps faces as they are; Mix sets how much of the change shows.', params: [
       { key: 'adjust', label: 'Adjust', options: [[0, 'Hue'], [1, 'Saturation'], [2, 'Brightness']], def: 1 },
@@ -25719,7 +25774,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
     _tcSig = sig; _tcLut = out; return out;
   }
+  /* #966 opts18 — TONE CURVE'S KEEP COLOUR: the kernel itself, untouched (run with the new keys taken away, by tone13), then each pixel
+     it curved moved toward the PICTURE's own colour put at the curved pixel's brightness (setLum255, Colour Balance's Keep brightness
+     turned round: the hue and the richness are the picture's, the brightness is the curve's) by Keep colour, 0–100 % (held there). 0 %
+     is the kernel byte for byte. Pixel by pixel on the pixel alone, so a cropped plate (692) draws what the whole one draws. */
+  function tcKeep18(d, W, H, p, t, keep) {
+    const k = keep > 0 ? (keep < 100 ? keep / 100 : 1) : 0, src = k > 0 ? d.slice() : null, out = [0, 0, 0];
+    PIXEL_FX.tonecurve(d, W, H, p, t);
+    if (!(k > 0)) return;
+    for (let i = 0; i < d.length; i += 4) {
+      if (src[i + 3] === 0) continue;
+      const r3 = d[i], g3 = d[i + 1], b3 = d[i + 2];
+      setLum255(src[i], src[i + 1], src[i + 2], 0.299 * r3 + 0.587 * g3 + 0.114 * b3, out);
+      d[i] = r3 + (out[0] - r3) * k; d[i + 1] = g3 + (out[1] - g3) * k; d[i + 2] = b3 + (out[2] - b3) * k;
+    }
+  }
+  FM._tcKeep18 = tcKeep18;   // suite seam (#966 opts18)
   PIXEL_FX.tonecurve = function (d, W, H, p, t) {
+    /* #966 opts18: PROTECT SKIN or KEEP COLOUR over 0 % runs tone13 — this very kernel without the two (every curve and Amount as they
+       are) with Keep colour laid on by tcKeep18, each pixel then laid in by 1 − Protect skin x its skin weight. 0 % runs the lines
+       below untouched. */
+    const tcSk18 = p.skin == null ? 0 : FM.evalProp(p.skin, t), tcKc18 = p.keepcol == null ? 0 : FM.evalProp(p.keepcol, t);
+    if (tcSk18 > 0 || tcKc18 > 0) { tone13(d, W, H, p, t, function (d18, W18, H18, q18, t18) { tcKeep18(d18, W18, H18, q18, t18, tcKc18); }, ['skin', 'keepcol'], 0, 100, tcSk18); return; }
     const amt = cgClamp(fparam(p, 'amount', 100, t), 0, 100, 0) / 100;
     if (!(amt > 0)) return;
     const sets = TC_SETS.map((s, i) => {
