@@ -1468,8 +1468,52 @@ window.FM = window.FM || {};
      down by each copy's real bytes), others (the clip records still to be sized after the GIFs, which share what is left), thinned
      (where a GIF kept smaller is written down, { gif: true }, for the words he reads), keep(copy) (what the caller does with each copy
      made: { anim, recs }), onStatus, and cancelled(). The rules themselves are prepareCaches' F3 note. */
+  /* (#860 hunt #6 GIF F3) `acct.at`: the still's one instant. A video export draws every frame of a GIF and keeps them all, but the still
+     draws ONE instant, and it used to be charged the whole animation (full.need, W x H x 4 x every frame) against the export total and
+     the phone ceiling to draw it: on a phone a GIF over the ceiling as an animation was drawn smaller and said so, when the one
+     full-size frame it shows (about 1 MB for 517 x 509) fits with room to spare, and every device decoded every frame for nothing.
+     With `at` the copy keeps only the frames shown at that instant (stillFrames: each layer of the GIF on screen then, at its own
+     time, since two halves of a split can show different frames), is costed at those frames' full size inside the same total and
+     the same ceiling, and is decoded with only those made (FM.decodeGifFullSize's keep). Without `at` nothing changes. */
+  function stillFrames(scene, recs, full, at) {
+    const keep = new Set();
+    for (const l of scene.layers) {
+      if (!l || recs.indexOf(FM.media.get(l.id)) < 0) continue;
+      const local = FM.layerLocalTime(l, at);
+      if (local == null) continue;   // not on screen at `at`, so the still does not draw it
+      keep.add(FM.animFrameIndexAt(full, local));
+    }
+    return keep.size ? Array.from(keep).sort((x, y) => x - y) : null;
+  }
+  /* (GIF F3, the refuter's N1) …BUT A STILL CAN STILL DRAW A GIF AT OTHER MOMENTS: Time Echo's copies (t − k x Echo time), Trail's Time
+     offset (t + k x offset), Match Grade's held and smoothed readings, and Motion Blur's slices across the shutter. A kept-frames copy holds
+     only the instant's frames, so every other moment fell back to the preview's squeezed copy: soft echoes beside a sharp layer, on a PC
+     too, where the whole animation always fitted before F3. So a GIF any of those touch (on its layer, inside an effect container, or on a
+     group above it) is decoded whole for the still, exactly as before F3, under the same total and the same ceiling. */
+  const momentOn = v => v != null && (v && typeof v === 'object' ? Array.isArray(v.kf) && v.kf.some(q => q && Number(q.v) !== 0) : Number(v) !== 0);
+  function drawsOtherMoments(scene, L) {
+    for (let x = L, hops = 0; x && hops < 64; hops++) {
+      if (FM.layerHasMotionBlur && FM.layerHasMotionBlur(x)) return true;
+      let any = false;
+      const walk = effs => (effs || []).forEach(e => {
+        if (any || !e || e.enabled === false) return;
+        if (Array.isArray(e.effects)) { walk(e.effects); return; }
+        const q = e.params || {};
+        if (e.type === 'timeecho' && (q.count == null || momentOn(q.count))) any = true;   // Echoes defaults to 4
+        else if (e.type === 'linearrepeat' && momentOn(q.delay)) any = true;   // Trail's Time offset, default 0
+        else if (e.type === 'matchgrade' && (momentOn(q.sample) || momentOn(q.smooth))) any = true;
+      });
+      walk(x.effects);
+      if (any) return true;
+      const up = x.parent;
+      x = up ? scene.layers.find(l => l && l.id === up && l.type === 'group') : null;
+    }
+    return false;
+  }
+  const copyFrames = c => (c.kept ? c.kept.length : c.frames.length);   // the frames a copy really holds (a still's keeps only its instant's)
   async function gifCopyStep(scene, drawn, acct) {
     const thinned = acct.thinned, onStatus = acct.onStatus, cancelled = acct.cancelled || (() => false);
+    const at = (typeof acct.at === 'number' && isFinite(acct.at) && FM.animFrameIndexAt && FM.layerLocalTime) ? acct.at : null;
     const gifGroups = [];
     for (const l of scene.layers) {
       if (!l || l.visible === false || !drawn(l)) continue;
@@ -1494,7 +1538,12 @@ window.FM = window.FM || {};
       }
       grp.full = full;
       grp.recs = grp.recs.filter(r => r.anim.width < full.width || r.anim.height < full.height);
-      if (grp.recs.length) gifTodo.push(grp);
+      if (!grp.recs.length) continue;
+      // (GIF F3) the still's frames, and what they need at full size; an export (no `at`) needs the whole animation, as before
+      const elsewhen = at != null && scene.layers.some(l => l && grp.recs.indexOf(FM.media.get(l.id)) >= 0 && drawsOtherMoments(scene, l));
+      grp.keep = (at != null && full.starts && !elsewhen) ? stillFrames(scene, grp.recs, full, at) : null;
+      grp.need = grp.keep ? full.width * full.height * 4 * grp.keep.length : full.need;
+      gifTodo.push(grp);
     }
     /* THE PHONE CEILING (the PM's call, 24 Oct, his to correct; review G1). There is no smaller export total for a phone: the 1.5 GB
        export total is every device's. So a GIF's full-size copy could take that whole 1.5 GB on his iPhone, where its preview copy holds
@@ -1509,7 +1558,7 @@ window.FM = window.FM || {};
     const gifLim = FM.frameCacheLimits ? FM.frameCacheLimits() : null;
     const gifOnPhone = !!(gifLim && gifLim.maxBytes > 0 && FM.previewFrameTotal && FM.previewFrameTotal(gifLim) <= gifLim.maxBytes);
     let gifCapLeft = gifOnPhone ? GIF_PHONE_CAP_K * (FM._gifBudget ? FM._gifBudget() : 64 * 1024 * 1024) : Infinity;
-    gifTodo.sort((x, y) => x.full.need - y.full.need);
+    gifTodo.sort((x, y) => x.need - y.need);
     let gifsLeft = gifTodo.length;
     for (const grp of gifTodo) {
       if (cancelled()) break;
@@ -1521,20 +1570,23 @@ window.FM = window.FM || {};
       /* (review G4) NOT ALL OR NOTHING: a GIF whose full size does not fit its share is decoded at the largest size that does, when that
          is still larger than the copy the preview holds; only otherwise is the preview copy drawn. Short of full size either way, the
          ready card names it. */
-      let k = grp.full.need <= share ? 1 : Math.sqrt(share / grp.full.need);
+      let k = grp.need <= share ? 1 : Math.sqrt(share / grp.need);
       // (review L1) the decoder rounds each side to whole pixels, which can put a copy a little past its share: k steps down until it fits
       const kSide = kk => [Math.max(1, Math.round(grp.full.width * kk)), Math.max(1, Math.round(grp.full.height * kk))];
-      while (k < 1 && k > 0.01 && kSide(k)[0] * kSide(k)[1] * 4 * grp.full.frames > share) k *= 0.995;
+      const nKeep = grp.keep ? grp.keep.length : grp.full.frames;
+      while (k < 1 && k > 0.01 && kSide(k)[0] * kSide(k)[1] * 4 * nKeep > share) k *= 0.995;
       let copy = null;
       // (review L2) decoded only when it really is larger than the copy the preview holds, side by side, not by a byte
       if (k >= 1 || (kSide(k)[0] > a.width && kSide(k)[1] > a.height)) {
         if (onStatus) onStatus('Decoding frames…');
-        try { copy = FM.decodeGifFullSize ? await FM.decodeGifFullSize(grp.file, k) : null; } catch (e) { copy = null; }
+        try { copy = FM.decodeGifFullSize ? await (grp.keep ? FM.decodeGifFullSize(grp.file, k, { keep: grp.keep }) : FM.decodeGifFullSize(grp.file, k)) : null; } catch (e) { copy = null; }
         grp.recs = grp.recs.filter(r => r && !r._released && r.anim);   // (G10) and after this one
       }
       if (copy && copy.frames && copy.frames.length && grp.recs.length) {
+        // (GIF F3) a moment the still's copy was not made for is drawn from the preview's own copy (FM.animFrameAt), never another frame
+        if (copy.kept) copy.rest = grp.recs[0].anim;
         acct.keep({ anim: copy, recs: grp.recs.slice() });
-        const cb = copy.width * copy.height * 4 * copy.frames.length;
+        const cb = copy.width * copy.height * 4 * copyFrames(copy);
         acct.remaining -= cb; gifCapLeft -= cb;
         if (copy.width < grp.full.width || copy.height < grp.full.height) thinned.push({ name: grp.name, gif: true, w: copy.width, h: copy.height, fullW: grp.full.width, fullH: grp.full.height });   // (L1) named only when it really is smaller
       } else {
@@ -1814,10 +1866,11 @@ window.FM = window.FM || {};
        are handed back and NOT put on the records: the still sets them for its one synchronous render and takes them off straight
        after, so nothing else (the preview, an export started meanwhile) can ever draw one, and it closes them (closeGifCopies) on
        every path, a throw included. `thinned` names any GIF that still could not fit, in the words the ready card uses. */
-    async stillGifCopies(scene, drawn, onStatus) {
+    /* (#860 hunt #6 GIF F3) `at`: the instant the still draws. Its copies keep only the frames shown then, costed at their full size. */
+    async stillGifCopies(scene, drawn, onStatus, at) {
       const copies = [], thinned = [];
       try {
-        await gifCopyStep(scene, drawn, { remaining: exportBytes(), others: 0, thinned: thinned, onStatus: onStatus, keep: c => { copies.push(c); } });
+        await gifCopyStep(scene, drawn, { remaining: exportBytes(), others: 0, thinned: thinned, onStatus: onStatus, at: at, keep: c => { copies.push(c); } });
       } catch (e) { closeGifCopies(copies); throw e; }
       return { copies: copies, thinned: thinned };
     },

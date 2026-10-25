@@ -841,18 +841,44 @@ window.FM = window.FM || {};
     gifAsks.add(ask);
     try { return await composeGifFrames(b, g, Math.min(1, Math.sqrt(budget / need))); } finally { gifAsks.delete(ask); }
   }
-  // decodeGifAnimation's frames, kept at scale k of the GIF's own size (1 is full size): every frame, never fewer.
-  async function composeGifFrames(b, g, k) {
+  /* When each frame starts and how long one loop lasts, from the header alone (no pixel is decoded). composeGifFrames times its
+     frames with this, and the export's GIF step (js/exporter.js gifCopyStep) reads it through FM.gifFullSize to know, before it
+     decodes anything, which frame a still's instant shows (#860 hunt #6 GIF F3), so the two can never disagree. */
+  function gifTiming(g) {
+    const starts = [];
+    let t = 0;
+    for (let i = 0; i < g.frames.length; i++) {
+      starts.push(t);
+      // centiseconds; 0 or 1 is shown at 100 ms by every browser, so a GIF plays here at the speed it plays there
+      const d = g.frames[i].delay;
+      t += (d <= 1 ? 10 : d) / 100;
+    }
+    return { starts: starts, total: t };
+  }
+  /* decodeGifAnimation's frames, kept at scale k of the GIF's own size (1 is full size): every frame, never fewer.
+     (#860 hunt #6 GIF F3) …unless `keep` (frame indices) is given: then only those frames are made into bitmaps. That is the still's
+     copy (This frame (PNG) draws one instant, so it needs the frame or two its layers show at it, not a whole animation of them).
+     Every frame up to the last one kept is still COMPOSED on the one full-size screen, because a GIF frame is drawn over what the
+     frames before it left (disposal), so a kept frame is exactly the frame the whole animation shows; the frames after it are not
+     read at all. The copy keeps the whole animation's starts and total, so FM.animFrameAt finds a kept frame at the very slot it
+     has in the whole animation; every other slot is empty, `kept` lists the full ones, and no frame stands in for an empty one. */
+  async function composeGifFrames(b, g, k, keep) {
     const W = g.width, H = g.height, n = g.frames.length;
+    let only = null;
+    if (Array.isArray(keep) && keep.length) {
+      only = new Set(keep.filter(i => i >= 0 && i < n && i === Math.floor(i)));
+      if (!only.size) only.add(0);
+    }
+    const last = only ? Math.max.apply(null, Array.from(only)) : n - 1;
     const ow = Math.max(1, Math.round(W * k)), oh = Math.max(1, Math.round(H * k));
     const screen = new Uint8ClampedArray(W * H * 4);
     const work = document.createElement('canvas'); work.width = W; work.height = H;
     const wctx = work.getContext('2d');
     const small = (ow !== W || oh !== H) ? document.createElement('canvas') : null;
     if (small) { small.width = ow; small.height = oh; }
-    const frames = [], starts = [];
-    let t = 0, saved = null, before = null;
-    for (let i = 0; i < n; i++) {
+    const frames = only ? new Array(n) : [], timing = gifTiming(g);
+    let saved = null, before = null;
+    for (let i = 0; i <= last; i++) {
       const f = g.frames[i];
       if (before) {                                             // the previous frame's disposal, applied now
         if (before.disposal === 2) {
@@ -883,19 +909,21 @@ window.FM = window.FM || {};
           }
         }
       }
-      wctx.putImageData(new ImageData(screen, W, H), 0, 0);
-      let src = work;
-      if (small) { const sc = small.getContext('2d'); sc.clearRect(0, 0, ow, oh); sc.drawImage(work, 0, 0, ow, oh); src = small; }
-      let bm = null;
-      if (window.createImageBitmap) { try { bm = await createImageBitmap(src); } catch (e) { bm = null; } }
-      if (!bm) { bm = document.createElement('canvas'); bm.width = ow; bm.height = oh; bm.getContext('2d').drawImage(src, 0, 0); }
-      frames.push(bm); starts.push(t);
-      // centiseconds; 0 or 1 is shown at 100 ms by every browser, so a GIF plays here at the speed it plays there
-      t += (f.delay <= 1 ? 10 : f.delay) / 100;
       before = f;
+      if (!only || only.has(i)) {
+        wctx.putImageData(new ImageData(screen, W, H), 0, 0);
+        let src = work;
+        if (small) { const sc = small.getContext('2d'); sc.clearRect(0, 0, ow, oh); sc.drawImage(work, 0, 0, ow, oh); src = small; }
+        let bm = null;
+        if (window.createImageBitmap) { try { bm = await createImageBitmap(src); } catch (e) { bm = null; } }
+        if (!bm) { bm = document.createElement('canvas'); bm.width = ow; bm.height = oh; bm.getContext('2d').drawImage(src, 0, 0); }
+        frames[i] = bm;
+      }
       if (i % 8 === 7) await new Promise(r => setTimeout(r, 0));   // a long GIF must not freeze the page while it decodes
     }
-    return { frames: frames, starts: starts, total: t, width: ow, height: oh };
+    const out = { frames: frames, starts: timing.starts, total: timing.total, width: ow, height: oh };
+    if (only) out.kept = Array.from(only).sort((x, y) => x - y);
+    return out;
   }
   FM._decodeGifAnimation = decodeGifAnimation;   // suite seam (queue 690)
   /* #860 hunt #6 F3 (the PM's decision, 24 Oct, his to correct): THE EXPORT DRAWS A GIF AT ITS OWN FULL SIZE. The preview can hold a
@@ -912,27 +940,45 @@ window.FM = window.FM || {};
     await gifDigest(file, b);   // (G7) cached per Blob: a file the preview decoded is not hashed twice
     return { b: b, g: g };
   }
+  // (#860 hunt #6 GIF F3) starts and total too, the frame timing (gifTiming), so the still can say which frames it needs before decoding
   FM.gifFullSize = async function (file) {
     const r = await gifFullBytes(file);
-    return r ? { width: r.g.width, height: r.g.height, frames: r.g.frames.length, need: r.g.width * r.g.height * 4 * r.g.frames.length } : null;
+    if (!r) return null;
+    const tm = gifTiming(r.g);
+    return { width: r.g.width, height: r.g.height, frames: r.g.frames.length, need: r.g.width * r.g.height * 4 * r.g.frames.length, starts: tm.starts, total: tm.total };
   };
   // `k` (review G4): the scale to decode at, when the export can afford less than full size but more than the preview holds (1 = full)
-  FM.decodeGifFullSize = async function (file, k) {
+  // `opts.keep` (#860 hunt #6 GIF F3): the still's frames, the only ones made (composeGifFrames); the video exports pass none and get every frame
+  FM.decodeGifFullSize = async function (file, k, opts) {
     const r = await gifFullBytes(file);
-    return r ? await composeGifFrames(r.b, r.g, (k > 0 && k < 1) ? k : 1) : null;
+    return r ? await composeGifFrames(r.b, r.g, (k > 0 && k < 1) ? k : 1, (opts && opts.keep) || null) : null;
   };
   FM.sameGifFile = sameGifFile;   // the export's copies are one per GIF FILE: a Split's two halves are two records of one file
-  /* The frame showing `local` seconds into the clip, looping — a sticker keeps moving for as long as its clip lasts. */
-  FM.animFrameAt = function (anim, local) {
-    if (!anim || !anim.frames || !anim.frames.length) return null;
+  /* Which frame (its index) shows `local` seconds into the clip, looping. One lookup for the compositor's draw (FM.animFrameAt) and for
+     the still's GIF step (js/exporter.js), which asks it of FM.gifFullSize's timing before anything is decoded (#860 hunt #6 GIF F3). */
+  function animFrameIndex(anim, local) {
+    const s = anim && anim.starts;
+    if (!s || !s.length) return 0;
     const total = anim.total > 0 ? anim.total : 0;
     let pos = total > 0 ? (+local || 0) % total : 0;
     if (pos < 0) pos += total;
-    const s = anim.starts;
     let lo = 0, hi = s.length - 1;
     while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (s[mid] <= pos + 1e-9) lo = mid; else hi = mid - 1; }
-    return anim.frames[lo] || anim.frames[0];
-  };
+    return lo;
+  }
+  FM.animFrameIndexAt = animFrameIndex;
+  /* The frame showing `local` seconds into the clip, looping — a sticker keeps moving for as long as its clip lasts. */
+  /* (#860 hunt #6 GIF F3) A still's copy keeps only the frames its instant shows (`kept`), and never stands one of them in for a frame
+     it did not keep: a moment it was not made for (a Motion Blur slice, an Echo) is drawn from `rest`, the GIF the preview holds, the
+     right frame at the preview's size. Every other animation answers exactly as before. */
+  function animFrameAt(anim, local) {
+    if (!anim || !anim.frames || !anim.frames.length) return null;
+    const f = anim.frames[animFrameIndex(anim, local)];
+    if (f) return f;
+    if (anim.kept) return (anim.rest && anim.rest !== anim) ? animFrameAt(anim.rest, local) : null;
+    return anim.frames[0];
+  }
+  FM.animFrameAt = animFrameAt;
   function closeAnim(rec) {
     if (!rec || !rec.anim) return;
     const a = rec.anim; rec.anim = null;

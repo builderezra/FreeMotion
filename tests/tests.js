@@ -44973,6 +44973,11 @@
          at its bottom end, by design, brightness:amount=min's twin. At the default Tone blend and Amount 1 the layer becomes black on this
          fixture's black ground; any Amount below 1, Screen or Overlay, or a lighter ground shows it ('966 opts10 Colourize Lightness …'). */
       'colorize:light=min': 1,
+      /* #966 opts19 (hunt/fx19): COLOUR POP's Show selection = On paints what keeps its colour as a matte (white kept, black drained),
+         replacecolor:view's twin, by design. The default Keep colour is red (hue 0°, a 24° window) and this fixture is orange (#e8a33d,
+         hue 35.8°), so all of it drains and the matte is black on a black ground; on a red layer it is white ('966 opts19 Colour Pop
+         Show selection …'). */
+      'spotcolor:view=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -69014,8 +69019,10 @@
       if (s1.copies.length !== 1 || s1.copies[0] !== c1[0]) throw new Error('the still decoded ' + s1.copies.length + ' copies, not one for the big GIF alone (the 4-frame GIF needs none)');
       if (s1.lost.length) throw new Error('CONTROL: a still whose GIFs all fit at full size said ' + JSON.stringify(s1.lost));
       freed('a still that fit', s1.copies);
-      /* 2. no room past the preview copy: drawn from it, and said in the ready card's words */
-      FM._exportBytes = kit.bytes(sq);
+      /* 2. no room past the preview copy: drawn from it, and said in the ready card's words. (GIF F3) The still keeps only the frame it
+         shows, so no room past the preview copy is now ONE frame at the preview copy's size: the whole preview copy's bytes would buy
+         the one frame at full size. */
+      FM._exportBytes = sq.width * sq.height * 4;
       var s2 = await snap();
       if (s2.err) throw new Error('the still threw: ' + (s2.err && s2.err.message));
       if (s2.files !== 1) throw new Error('CONTROL: the still saved ' + s2.files + ' PNGs, not one');
@@ -69396,6 +69403,259 @@
       overlay.classList.add('hidden');
       kit.put();
       try { if (FM.refreshAll) FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* #860 hunt #6, the GIF half, F3 follow-up: THIS FRAME (PNG) DECODES ONLY THE FRAME IT DRAWS. The still asked the GIF step for a
+     full-size copy of the WHOLE GIF, costed at every frame (W x H x 4 x all of them), to draw one instant. On a phone (kit.phone: all
+     the GIF copies of one render share at most 4 x gifBudget()) a GIF over that ceiling as an animation was drawn smaller and the toast
+     said smaller to fit memory, when the one full-size frame it shows (about 1 MB at 517 x 509) fits easily. The GIF here is 4.5
+     gifBudget()s as an animation, squeezed in the preview too; one still at 0.1 s (its frame 1), the PNG caught at toBlob and at the
+     download, FM.toast recorded, and the bitmaps the decoder makes counted (kit.fakes).
+     RED on 37952353: drawn from a copy graded to fit the ceiling (smaller than 517 x 509), named in the toast, every frame made.
+     GREEN: a full-size copy, nothing said, ONE bitmap made, and it is the frame the whole animation shows at 0.1 s, at its own slot.
+     CONTROLS (pass on both): one PNG; the still draws its own copy, never the preview's; the copy is off the record with its frames
+     closed once; the preview copy is untouched; and a GIF export of the same GIF (the video exports' prepare step) keeps EVERY frame. */
+  test('860 This frame (PNG) on a phone draws a GIF too big for the phone ceiling as a whole animation at its full size when the one frame it shows fits, makes only that frame and says nothing (CONTROL: a GIF export of the same GIF still keeps every frame)', { item: '860', budgetMs: 180000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.snapshotPNG !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.decodeGifFullSize !== 'function' || !FM.exporter || typeof FM.exporter.runGif !== 'function') throw new Error('FM._decodeGifAnimation, FM.snapshotPNG, FM.makeLayer, FM.decodeGifFullSize or FM.exporter.runGif is not exposed');
+    var kit = gif860Kit().phone().spy(), per = kit.per, F = kit.F, P = FM.scene.project, d0 = P.duration, t0 = FM.time;
+    var realAFA = kit.afa0 && kit.afa0.value;   // the app's own FM.animFrameAt, from before the kit's spy
+    var had = Object.prototype.hasOwnProperty.call(FM, '_exportBytes'), eb0 = FM._exportBytes;
+    var tb0 = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'toBlob');
+    var toast0 = Object.getOwnPropertyDescriptor(FM, 'toast'), dfs0 = Object.getOwnPropertyDescriptor(FM, 'decodeGifFullSize');
+    var afaKit = FM.animFrameAt, realDecode = FM.decodeGifFullSize;
+    var dl = hunt2dCatchDownloads(), said = [], copies = [], stillDrew = [];
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    var desc = function (a) { return a ? a.width + 'x' + a.height + ' with ' + (a.frames ? a.frames.length : 0) + ' frame slots' : 'nothing'; };
+    try {
+      if (typeof realAFA !== 'function') throw new Error('setup: the kit did not keep the app FM.animFrameAt');
+      HTMLCanvasElement.prototype.toBlob = function (cb, type) { setTimeout(function () { cb(new Blob([new Uint8Array(8)], { type: type || 'image/png' })); }, 0); };
+      FM.toast = function (msg) { said.push(String(msg)); };
+      /* what the still draws: a GIF frame asked for under FM._drawingStill (the still has a copy to draw), with the time it was asked at */
+      FM.animFrameAt = function (a, local) { if (FM._drawingStill) stillDrew.push({ a: a, local: local }); return afaKit.apply(this, arguments); };
+      FM.decodeGifFullSize = function () { return realDecode.apply(this, arguments).then(function (a) { if (a) copies.push(a); return a; }); };
+      var cap = 4 * (typeof FM._gifBudget === 'function' ? FM._gifBudget() : per);
+      var n = Math.min(990, Math.ceil(4.5 * per / F));
+      if (!(n * F > cap)) throw new Error('setup: a ' + n + '-frame GIF needs ' + kit.mb(n * F) + ', not more than the phone ceiling of ' + kit.mb(cap));
+      var file = kit.fileOf(n, '860g-f3-big');
+      var sq = await FM._decodeGifAnimation(file);
+      if (!sq || sq.frames.length !== n || !(sq.width < kit.W)) throw new Error('setup: the big GIF came out ' + desc(sq) + ', not all ' + n + ' frames narrower than its own ' + kit.W);
+      var before = sq.frames.slice();
+      var B = kit.show('860g-f3-big', sq, file);
+      P.duration = Math.max(d0 || 0, 5); FM.time = 0.1;
+      delete FM._exportBytes;
+      var fakes0 = kit.fakes, files0 = dl.files.length, err = null;
+      try { await FM.snapshotPNG(); } catch (e) { err = e; }
+      var made = kit.fakes - fakes0;
+      for (var i = 0; i < 100 && !err && dl.files.length === files0; i++) await sleep(20);
+      if (err) throw new Error('the still threw: ' + err.message);
+      if (dl.files.length - files0 !== 1) throw new Error('CONTROL: the still saved ' + (dl.files.length - files0) + ' PNGs, not one');
+      if (copies.length !== 1) throw new Error('setup: the still decoded ' + copies.length + ' copies of 860g-f3-big, not one');
+      var c = copies[0];
+      var lost = said.filter(function (s) { return /to fit memory/.test(s); });
+      if (c.width !== kit.W || c.height !== kit.H) throw new Error('This frame (PNG) on a phone drew 860g-f3-big from a copy of ' + c.width + 'x' + c.height + ', smaller than its own ' + kit.W + 'x' + kit.H + (lost.length ? ', and said ' + JSON.stringify(lost) : '') + ': the still was charged the whole animation (' + n + ' frames, ' + kit.mb(n * F) + ') against the phone ceiling of ' + kit.mb(cap) + ', where the one frame it shows needs ' + kit.mb(F));
+      if (lost.length) throw new Error('This frame (PNG) drew 860g-f3-big at its full size and still said ' + JSON.stringify(lost));
+      if (!stillDrew.some(function (x) { return x.a === c; }) || stillDrew.some(function (x) { return x.a === sq; })) throw new Error('CONTROL: the still did not draw 860g-f3-big from its own copy (it drew ' + stillDrew.map(function (x) { return desc(x.a); }).join(', ') + ')');
+      if (made !== 1) throw new Error('This frame (PNG) made ' + made + ' frame bitmaps of 860g-f3-big to draw the one frame it shows at 0.1 s: it decoded the whole animation for one instant');
+      /* the one frame kept is the frame the whole animation shows at that time, at the very slot it has there */
+      var local = FM.layerLocalTime(B.layer, 0.1);
+      var want = sq.frames.indexOf(realAFA(sq, local)), got = realAFA(c, local);
+      if (want < 0 || !got || c.frames.indexOf(got) !== want) throw new Error('the still copy answers ' + (got ? 'its frame ' + c.frames.indexOf(got) : 'nothing') + ' at 0.1 s, where the whole animation shows frame ' + want);
+      if ('_exportAnim' in B.rec) throw new Error('after the still the GIF record still holds the copy it decoded, so the next export could draw a closed bitmap');
+      var open = c.frames.filter(function (f) { return !f.closed; }).length, twice = c.frames.filter(function (f) { return f.closed > 1; }).length;
+      if (open) throw new Error(open + ' frames of the copy the still decoded were never closed');
+      if (twice) throw new Error(twice + ' frames of the copy the still decoded were closed more than once');
+      if (FM._drawingStill) throw new Error('after the still FM._drawingStill is still up');
+      if (B.rec.anim !== sq || sq.frames.length !== before.length || sq.frames.some(function (f, z) { return f !== before[z] || f.closed; })) throw new Error('CONTROL: the still changed or closed the GIF the preview holds (rec.anim)');
+      /* CONTROL: a GIF export of the same GIF (the video exports' prepare step, stopped after its first frame) still keeps every frame */
+      var cE0 = copies.length;
+      if (!(await kit.run('runGif'))) throw new Error('setup: the GIF export ran to its end instead of stopping after its first frame');
+      var ce = copies[cE0];
+      if (!ce) throw new Error('setup: the GIF export decoded no copy of its own of 860g-f3-big');
+      if (kit.drawn.indexOf(ce) < 0) throw new Error('setup: the GIF export did not draw 860g-f3-big from the copy it decoded');
+      var gaps = 0;
+      for (var z = 0; z < n; z++) if (!ce.frames[z]) gaps++;
+      if (ce.frames.length !== n || gaps || ce.kept) throw new Error('CONTROL: the GIF export of 860g-f3-big kept ' + (ce.frames.length - gaps) + ' of its ' + n + ' frames' + (ce.kept ? ', as a still copy' : '') + ': a video export draws every frame and must keep them all');
+    } finally {
+      FM.animFrameAt = afaKit;   // the kit's spy, which kit.put() then puts back
+      if (dfs0) Object.defineProperty(FM, 'decodeGifFullSize', dfs0); else delete FM.decodeGifFullSize;
+      if (toast0) Object.defineProperty(FM, 'toast', toast0); else delete FM.toast;
+      if (tb0) Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', tb0); else delete HTMLCanvasElement.prototype.toBlob;
+      dl.stop();
+      if (had) FM._exportBytes = eb0; else delete FM._exportBytes;
+      P.duration = d0; FM.time = t0;
+      kit.put();
+    }
+  });
+
+  /* #860 hunt #6, the GIF half, F3 follow-up: …AND TWO LAYERS OF ONE GIF AT DIFFERENT TIMES EACH DRAW THEIR OWN FRAME. The two halves of a
+     split are two records of one GIF file, so the still makes one copy for both (one per file), and each half can show a different
+     frame at the still's instant. The GIF here is built so every frame says which it is: frame i lights one more pixel of the top row
+     than frame i - 1 (disposal 1, nothing cleared), so a frame composed without the frames before it lights fewer; every bitmap the
+     decoder makes at full size is tagged with the pixels lit in it. Squeezed in the preview (kit.phone, a GIF decoded earlier filling
+     the total), layer A starts at 0 and layer B at 0.2 s, so the still at 0.35 s shows frame 3 in A and frame 1 in B.
+     RED on 37952353: the still makes the whole animation (every frame) for those two.
+     GREEN: two bitmaps made; a moment neither shows (0.05 s, frame 0) is answered from the preview copy, never by another frame of
+     the still copy. CONTROLS (pass on both): each layer is drawn from the still copy, and its frame is the one the WHOLE animation
+     (decoded here in full) shows at that layer's time, tag for tag; the two differ; one PNG; nothing said; the copy freed. */
+  test('860 This frame (PNG) with two layers of one GIF at different times makes only the frames they show and draws each its own (CONTROL: each is the frame the whole animation shows at that time)', { item: '860', budgetMs: 120000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.snapshotPNG !== 'function' || typeof FM.makeLayer !== 'function' || typeof FM.decodeGifFullSize !== 'function') throw new Error('FM._decodeGifAnimation, FM.snapshotPNG, FM.makeLayer or FM.decodeGifFullSize is not exposed');
+    var kit = gif860Kit().phone().spy(), per = kit.per, W = kit.W, H = kit.H, n = kit.bigN, P = FM.scene.project, d0 = P.duration, t0 = FM.time;
+    var realAFA = kit.afa0 && kit.afa0.value;   // the app's own FM.animFrameAt, from before the kit's spy
+    var had = Object.prototype.hasOwnProperty.call(FM, '_exportBytes'), eb0 = FM._exportBytes;
+    var tb0 = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'toBlob');
+    var toast0 = Object.getOwnPropertyDescriptor(FM, 'toast'), dfs0 = Object.getOwnPropertyDescriptor(FM, 'decodeGifFullSize');
+    var cib1 = Object.getOwnPropertyDescriptor(window, 'createImageBitmap'), cibKit = window.createImageBitmap;
+    var afaKit = FM.animFrameAt, realDecode = FM.decodeGifFullSize;
+    var dl = hunt2dCatchDownloads(), said = [], copies = [], stillDrew = [];
+    var rowsN = Math.min(H, Math.ceil(n / W));
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    try {
+      if (typeof realAFA !== 'function') throw new Error('setup: the kit did not keep the app FM.animFrameAt');
+      /* every full-size canvas the decoder makes a bitmap of is tagged with the pixels lit in the rows the fixture paints */
+      window.createImageBitmap = function (src) {
+        var lit = -1;
+        var cx = (src && src.tagName === 'CANVAS' && src.width === W && src.height === H) ? src.getContext('2d') : null;
+        if (cx) {
+          var px = cx.getImageData(0, 0, W, rowsN).data;
+          lit = 0;
+          for (var q = 3; q < px.length; q += 4) if (px[q]) lit++;
+        }
+        return cibKit.apply(window, arguments).then(function (bm) { if (bm && lit >= 0) { try { bm.lit = lit; } catch (e) {} } return bm; });
+      };
+      var fr = [];
+      for (var i = 0; i < n; i++) fr.push({ x: i % W, y: Math.floor(i / W), w: 1, h: 1, disposal: 1, transparent: -1, delay: 10, px: function () { return 1; } });
+      var bytes = h3aGifBytes(W, H, [[0, 0, 0], [230, 30, 30], [30, 60, 230], [30, 200, 40]], fr);
+      var file = { name: '860g-f3-two.gif', type: 'image/gif', size: bytes.length, arrayBuffer: function () { return Promise.resolve(bytes.buffer); } };
+      kit.plant('860g-f3-two-fill', per);
+      var sqA = await FM._decodeGifAnimation(file);
+      if (!sqA || sqA.frames.length !== n || !(sqA.width < W)) throw new Error('setup: the GIF came out ' + (sqA ? sqA.width + 'x' + sqA.height + ' with ' + sqA.frames.length + ' frames' : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + W);
+      var A = kit.show('860g-f3-two', sqA, file);
+      var sqB = await FM._decodeGifAnimation(file);   // the split's other half: a fresh record of the same file, at the first one's size
+      if (!sqB || sqB.frames.length !== n || !(sqB.width < W)) throw new Error('setup: the second half came out ' + (sqB ? sqB.width + 'x' + sqB.height + ' with ' + sqB.frames.length + ' frames' : 'as nothing'));
+      var Bh = kit.show('860g-f3-two-b', sqB, file);
+      Bh.layer.start = 0.2;
+      P.duration = Math.max(d0 || 0, 5); FM.time = 0.35;
+      delete FM._exportBytes;
+      var lA = FM.layerLocalTime(A.layer, 0.35), lB = FM.layerLocalTime(Bh.layer, 0.35);
+      /* CONTROL source: the whole animation, every frame at full size, each tagged */
+      var full = await realDecode(file);
+      if (!full || full.frames.length !== n || full.width !== W) throw new Error('setup: the whole animation decoded as ' + (full ? full.width + 'x' + full.height + ' with ' + full.frames.length + ' frames' : 'nothing'));
+      var iA = full.frames.indexOf(realAFA(full, lA)), iB = full.frames.indexOf(realAFA(full, lB));
+      if (iA !== 3 || iB !== 1) throw new Error('setup: at 0.35 s layer A shows frame ' + iA + ' and layer B frame ' + iB + ' of the whole animation, not 3 and 1');
+      if (full.frames[3].lit !== 4 || full.frames[1].lit !== 2) throw new Error('setup: the frames of the whole animation are not tagged by what they light (frame 3 lights ' + full.frames[3].lit + ', frame 1 lights ' + full.frames[1].lit + ')');
+      HTMLCanvasElement.prototype.toBlob = function (cb, type) { setTimeout(function () { cb(new Blob([new Uint8Array(8)], { type: type || 'image/png' })); }, 0); };
+      FM.toast = function (msg) { said.push(String(msg)); };
+      FM.animFrameAt = function (a, local) { if (FM._drawingStill) stillDrew.push({ a: a, local: local }); return afaKit.apply(this, arguments); };
+      FM.decodeGifFullSize = function () { return realDecode.apply(this, arguments).then(function (a) { if (a) copies.push(a); return a; }); };
+      var fakes0 = kit.fakes, files0 = dl.files.length, err = null;
+      try { await FM.snapshotPNG(); } catch (e) { err = e; }
+      var made = kit.fakes - fakes0;
+      for (var w = 0; w < 100 && !err && dl.files.length === files0; w++) await sleep(20);
+      if (err) throw new Error('the still threw: ' + err.message);
+      if (dl.files.length - files0 !== 1) throw new Error('CONTROL: the still saved ' + (dl.files.length - files0) + ' PNGs, not one');
+      if (copies.length !== 1) throw new Error('the still decoded ' + copies.length + ' copies of 860g-f3-two, not one for its two layers (one copy per GIF file)');
+      var c = copies[0];
+      if (c.width !== W || c.height !== H) throw new Error('setup: the still copy of 860g-f3-two came out ' + c.width + 'x' + c.height + ', not its full ' + W + 'x' + H);
+      if (made !== 2) throw new Error('This frame (PNG) made ' + made + ' frame bitmaps of 860g-f3-two to draw the 2 frames its two layers show at 0.35 s (frames 3 and 1): it decoded the whole animation for one instant');
+      if (stillDrew.some(function (x) { return x.a === sqA || x.a === sqB; })) throw new Error('CONTROL: the still drew 860g-f3-two from a preview copy');
+      var mine = stillDrew.filter(function (x) { return x.a === c; });
+      [['A', lA, iA], ['B', lB, iB]].forEach(function (s) {
+        if (!mine.some(function (x) { return Math.abs(x.local - s[1]) < 1e-6; })) throw new Error('CONTROL: the still never asked its copy for the frame of layer ' + s[0] + ' at ' + s[1].toFixed(2) + ' s into the GIF');
+        var f = realAFA(c, s[1]), wantF = full.frames[s[2]];
+        if (!f || c.frames.indexOf(f) < 0) throw new Error('layer ' + s[0] + ' at ' + s[1].toFixed(2) + ' s into the GIF gets ' + (f ? 'a frame that is not one of the still copy' : 'no frame') + ' from the still copy, where the whole animation shows its frame ' + s[2]);
+        if (f.lit !== wantF.lit) throw new Error('CONTROL: layer ' + s[0] + ' at ' + s[1].toFixed(2) + ' s into the GIF is drawn from a frame lighting ' + f.lit + ' pixels, where the whole animation shows frame ' + s[2] + ', lighting ' + wantF.lit + (f.lit < wantF.lit ? ': it was composed without the frames before it' : ''));
+      });
+      if (realAFA(c, lA) === realAFA(c, lB)) throw new Error('CONTROL: both layers get the same frame of the still copy, where they show frames 3 and 1');
+      /* a moment neither layer shows: answered from the preview copy, never by another frame of the still copy */
+      var f0 = realAFA(c, 0.05);
+      if (f0 && c.frames.indexOf(f0) >= 0) throw new Error('the still copy answers 0.05 s, a moment neither layer shows (frame 0), with its own frame ' + c.frames.indexOf(f0) + ': it holds more than the frames its instant shows');
+      if (f0 !== realAFA(sqA, 0.05) && f0 !== realAFA(sqB, 0.05)) throw new Error('the still copy answers 0.05 s with ' + (f0 ? 'a frame of neither preview copy' : 'nothing') + ', not the frame the preview copy shows then');
+      var lost = said.filter(function (s) { return /to fit memory/.test(s); });
+      if (lost.length) throw new Error('CONTROL: a still whose GIF fits at full size said ' + JSON.stringify(lost));
+      if ('_exportAnim' in A.rec || '_exportAnim' in Bh.rec) throw new Error('after the still a GIF record still holds the copy it decoded');
+      var open = c.frames.filter(function (f) { return !f.closed; }).length, twice = c.frames.filter(function (f) { return f.closed > 1; }).length;
+      if (open) throw new Error(open + ' frames of the copy the still decoded were never closed');
+      if (twice) throw new Error(twice + ' frames of the copy the still decoded were closed more than once');
+      if (FM._drawingStill) throw new Error('after the still FM._drawingStill is still up');
+    } finally {
+      FM.animFrameAt = afaKit;   // the kit's spy, which kit.put() then puts back
+      if (dfs0) Object.defineProperty(FM, 'decodeGifFullSize', dfs0); else delete FM.decodeGifFullSize;
+      if (toast0) Object.defineProperty(FM, 'toast', toast0); else delete FM.toast;
+      if (tb0) Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', tb0); else delete HTMLCanvasElement.prototype.toBlob;
+      if (cib1) Object.defineProperty(window, 'createImageBitmap', cib1); else delete window.createImageBitmap;   // the kit's stub, which kit.put() then puts back
+      dl.stop();
+      if (had) FM._exportBytes = eb0; else delete FM._exportBytes;
+      P.duration = d0; FM.time = t0;
+      kit.put();
+    }
+  });
+  /* #860 GIF F3, the refuter's N1: a still that keeps only its instant's frames drew Time Echo's copies (other moments) from the preview's
+     squeezed copy. A GIF under an effect that draws it at other moments is decoded whole for the still, as before F3. */
+  test('860 This frame (PNG) of a GIF under a Time Echo decodes the whole animation, so every echo is drawn from the still copy and none from the preview copy (CONTROL: with the echo switched off the still makes only the frame it shows)', { item: '860', budgetMs: 120000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.snapshotPNG !== 'function' || typeof FM.decodeGifFullSize !== 'function') throw new Error('FM._decodeGifAnimation, FM.snapshotPNG or FM.decodeGifFullSize is not exposed');
+    var kit = gif860Kit().phone().spy(), per = kit.per, W = kit.W, H = kit.H, n = kit.bigN, P = FM.scene.project, d0 = P.duration, t0 = FM.time;
+    var realAFA = kit.afa0 && kit.afa0.value;
+    var had = Object.prototype.hasOwnProperty.call(FM, '_exportBytes'), eb0 = FM._exportBytes;
+    var tb0 = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'toBlob');
+    var toast0 = Object.getOwnPropertyDescriptor(FM, 'toast'), dfs0 = Object.getOwnPropertyDescriptor(FM, 'decodeGifFullSize');
+    var afaKit = FM.animFrameAt, realDecode = FM.decodeGifFullSize;
+    var dl = hunt2dCatchDownloads(), copies = [], stillDrew = [];
+    var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    try {
+      if (typeof realAFA !== 'function') throw new Error('setup: the kit did not keep the app FM.animFrameAt');
+      var fr = [];
+      for (var i = 0; i < n; i++) fr.push({ x: i % W, y: Math.floor(i / W), w: 1, h: 1, disposal: 1, transparent: -1, delay: 10, px: function () { return 1; } });
+      var bytes = h3aGifBytes(W, H, [[0, 0, 0], [230, 30, 30], [30, 60, 230], [30, 200, 40]], fr);
+      var file = { name: '860g-f3-echo.gif', type: 'image/gif', size: bytes.length, arrayBuffer: function () { return Promise.resolve(bytes.buffer); } };
+      kit.plant('860g-f3-echo-fill', per);
+      var sq = await FM._decodeGifAnimation(file);
+      if (!sq || sq.frames.length !== n || !(sq.width < W)) throw new Error('setup: the GIF came out ' + (sq ? sq.width + 'x' + sq.height + ' with ' + sq.frames.length + ' frames' : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + W);
+      var A = kit.show('860g-f3-echo', sq, file);
+      var echo = { type: 'timeecho', enabled: true, params: { count: 2, spacing: 0.1 } };
+      A.layer.effects = [echo];
+      P.duration = Math.max(d0 || 0, 5); FM.time = 0.35;
+      delete FM._exportBytes;
+      HTMLCanvasElement.prototype.toBlob = function (cb, type) { setTimeout(function () { cb(new Blob([new Uint8Array(8)], { type: type || 'image/png' })); }, 0); };
+      FM.toast = function () {};
+      FM.animFrameAt = function (a, local) { if (FM._drawingStill) stillDrew.push({ a: a, local: local }); return afaKit.apply(this, arguments); };
+      FM.decodeGifFullSize = function () { return realDecode.apply(this, arguments).then(function (a) { if (a) copies.push(a); return a; }); };
+      var still = async function (what) {
+        var f0 = dl.files.length, m0 = kit.fakes, c0 = copies.length, s0 = stillDrew.length, err = null;
+        try { await FM.snapshotPNG(); } catch (e) { err = e; }
+        for (var w = 0; w < 100 && !err && dl.files.length === f0; w++) await sleep(20);
+        if (err) throw new Error('the still ' + what + ' threw: ' + err.message);
+        if (dl.files.length - f0 !== 1) throw new Error('CONTROL: the still ' + what + ' saved ' + (dl.files.length - f0) + ' PNGs, not one');
+        if (copies.length - c0 !== 1) throw new Error('the still ' + what + ' decoded ' + (copies.length - c0) + ' copies of 860g-f3-echo, not one');
+        return { made: kit.fakes - m0, c: copies[copies.length - 1], drew: stillDrew.slice(s0) };
+      };
+      /* with the echo: the whole animation, and every moment the echoes ask for is a frame of the still copy */
+      var on = await still('under the Time Echo');
+      var mine = on.drew.filter(function (x) { return x.a === on.c; });
+      var locals = [];
+      mine.forEach(function (x) { if (!locals.some(function (y) { return Math.abs(y - x.local) < 1e-6; })) locals.push(x.local); });
+      if (locals.length < 3) throw new Error('setup: the still asked its copy for ' + locals.length + ' moments of the GIF (' + locals.map(function (v) { return v.toFixed(2); }).join(', ') + '), not the instant and its 2 echoes, so the Time Echo did not draw');
+      if (on.made !== n) throw new Error('This frame (PNG) of a GIF under a Time Echo made ' + on.made + ' frame bitmaps of its ' + n + ': it kept only the instant, so the echoes come from the preview copy');
+      var soft = locals.filter(function (v) { var f = realAFA(on.c, v); return !f || on.c.frames.indexOf(f) < 0; });
+      if (soft.length) throw new Error('This frame (PNG) of a GIF under a Time Echo draws ' + soft.length + ' of its ' + locals.length + ' moments (' + soft.map(function (v) { return v.toFixed(2); }).join(', ') + ' s into the GIF) from the preview copy, ' + sq.width + 'x' + sq.height + ', not the still copy');
+      /* CONTROL: the echo switched off, the same still makes only the frame it shows */
+      echo.enabled = false;
+      var off = await still('with the echo switched off');
+      if (off.made !== 1) throw new Error('CONTROL: with the echo switched off the still made ' + off.made + ' frame bitmaps, not the 1 its instant shows, so the count above proves nothing');
+      [on.c, off.c].forEach(function (c, z) {
+        var open = c.frames.filter(function (f) { return f && !f.closed; }).length;
+        if (open) throw new Error(open + ' frames of still copy ' + (z + 1) + ' were never closed');
+      });
+      if ('_exportAnim' in A.rec) throw new Error('after the stills the GIF record still holds a copy');
+    } finally {
+      FM.animFrameAt = afaKit;
+      if (dfs0) Object.defineProperty(FM, 'decodeGifFullSize', dfs0); else delete FM.decodeGifFullSize;
+      if (toast0) Object.defineProperty(FM, 'toast', toast0); else delete FM.toast;
+      if (tb0) Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', tb0); else delete HTMLCanvasElement.prototype.toBlob;
+      dl.stop();
+      if (had) FM._exportBytes = eb0; else delete FM._exportBytes;
+      P.duration = d0; FM.time = t0;
+      kit.put();
     }
   });
 
@@ -104098,6 +104358,258 @@
         });
       }, 380);
     } finally { FM.media.remove(L.id); hb4Restore(saved); }
+  });
+
+  /* ═══ 690 REAL INPUT — A SECOND FINGER MUST NOT TAKE OVER A ONE-FINGER DRAG (25 Oct, lane 3) ═══════════════════════════
+   * The mask pen (js/mask-tool.js), Free crop (js/crop-tool.js) and the Move pad (js/inspector.js) each kept ONE drag and
+   * let every pointerdown replace it, without asking which finger it was. So a second finger that landed while the first
+   * was still down (a pinch to look closer, a thumb resting on the screen) started a drag of its own: the pen dropped a
+   * stray point where it touched, and the crop box and the layer leapt by the gap between his fingers. A synthetic event
+   * cannot show it (it cannot be captured, and two synthetic fingers are two dispatches the script orders), so each test
+   * lands a REAL second finger (tests/_cdp.py, `pts`) while the first is still down. Fixed by one gate in each: while the
+   * first finger's capture is live, every other finger is ignored. Each test's CONTROL is the same gesture with one finger
+   * (and the press records prove the second finger was a second trusted touch on the same control). */
+  function rf690Downs(sel) {
+    const downs = [];
+    const on = (e) => { const t = e.target; downs.push({ trusted: e.isTrusted, kind: e.pointerType, pid: e.pointerId, on: !!(t && t.closest && t.closest(sel)) }); };
+    window.addEventListener('pointerdown', on, true);
+    return { downs: downs, stop: () => window.removeEventListener('pointerdown', on, true) };
+  }
+  function rf690Two(D, what) {
+    const d = D.downs;
+    if (d.length < 2) throw new Error('CONTROL (' + what + '): only ' + d.length + ' press(es) reached the page — the second finger never landed (' + hb4J(d) + ')');
+    if (d.some(x => !x.trusted || x.kind !== 'touch' || !x.on)) throw new Error('CONTROL (' + what + '): not every press was a trusted touch on the control (' + hb4J(d) + ')');
+    if (d[0].pid === d[1].pid) throw new Error('CONTROL (' + what + '): the two presses carried one pointer id, so they were not two fingers (' + hb4J(d) + ')');
+  }
+
+  test('690 real input: a second finger that lands while the mask pen is down drops no point of its own, and the first finger keeps its point', { item: '690', budgetMs: 90000 }, async function () {
+    needsTouch924();
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = FM.makeLayer('shape', { name: 'RF690 mask', shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#3b82f6', start: 0, duration: 6 });
+          const m = FM.masks.make('add'); m.path = [];
+          L.masks = [m];
+          await hb4Scene([L]);
+          FM.selectLayer(L.id); await hb4Wait(200);
+          FM.maskTool.open(L.id, m.id); await hb4Wait(350);
+          if (!FM.maskTool.isActive() || !document.getElementById('mask-overlay')) throw new Error('setup: the mask editor did not open');
+          if (FM.maskTool._points().length) throw new Error('setup: the mask pen did not open empty (' + FM.maskTool._points().length + ' points)');
+          const cv = document.getElementById('preview');
+          const scr = (px, py) => { const o = FM.projectToOverlay(cv, px, py), r = document.getElementById('mask-overlay').getBoundingClientRect(); return { x: r.left + o.x, y: r.top + o.y }; };
+          const a = scr(300, 700), b = scr(760, 1150);
+          [a, b].forEach(p => { if (p.x < 30 || p.x > 340 || p.y < 20 || p.y > 740) throw new Error('setup: a finger would land at ' + hb4J(p) + ', out of reach of real input'); });
+          if (Math.hypot(b.x - a.x, b.y - a.y) < 40) throw new Error('setup: the two fingers are only ' + Math.round(Math.hypot(b.x - a.x, b.y - a.y)) + ' px apart');
+          /* THE CASE: the first finger drops a point at A and holds; the second lands at B; both spread 20 px; both lift. */
+          const D = rf690Downs('#mask-overlay');
+          try {
+            await realInput924([
+              { t: 'touchStart', x: a.x, y: a.y, ms: 120 },
+              { t: 'touchMove', x: a.x, y: a.y, pts: [{ x: a.x, y: a.y }, { x: b.x, y: b.y }], ms: 120 },
+              { t: 'touchMove', x: a.x - 10, y: a.y, pts: [{ x: a.x - 10, y: a.y }, { x: b.x + 10, y: b.y }], ms: 60 },
+              { t: 'touchMove', x: a.x - 20, y: a.y, pts: [{ x: a.x - 20, y: a.y }, { x: b.x + 20, y: b.y }], ms: 100 },
+              { t: 'touchEnd', x: a.x - 20, y: a.y, ms: 0 },
+            ], 'the mask pen held at A while a second finger lands at B');
+          } finally { D.stop(); }
+          await hb4Wait(400);
+          const two = FM.maskTool._points();
+          /* CONTROL: one finger pressed at B on its own drops a point there — so B is a place a press does drop one. */
+          const D1 = rf690Downs('#mask-overlay');
+          try {
+            await realInput924([
+              { t: 'touchStart', x: b.x, y: b.y, ms: 90 },
+              { t: 'touchMove', x: b.x + 1, y: b.y, ms: 60 },
+              { t: 'touchEnd', x: b.x + 1, y: b.y, ms: 0 },
+            ], 'one finger pressed at B on its own');
+          } finally { D1.stop(); }
+          await hb4Wait(300);
+          const after = FM.maskTool._points();
+          rf690Two(D, 'the mask pen');
+          if (!D1.downs.length || !D1.downs[0].trusted || D1.downs[0].kind !== 'touch' || !D1.downs[0].on) throw new Error('CONTROL: the lone press at B was not a trusted touch on the mask editor (' + hb4J(D1.downs) + ')');
+          if (after.length !== two.length + 1) throw new Error('CONTROL: one finger pressed at B on its own took the pen from ' + two.length + ' to ' + after.length + ' points, not one more — a press there is not dropping a point, so the case proves nothing');
+          if (!two.length) throw new Error('CONTROL: the first finger dropped no point at A at all');
+          const bad = [];
+          if (two.length !== 1) bad.push('a second finger that landed while the pen was down at A made ' + two.length + ' points, not 1 — the second finger dropped a stray point of its own where it touched (' + hb4J(two.map(p => [Math.round(p[0]), Math.round(p[1])])) + '), and lifting kept it');
+          const p0 = scr(two[0][0], two[0][1]);
+          if (Math.hypot(p0.x - (a.x - 20), p0.y - a.y) > 3) bad.push('the first finger ended 20 px left of A but the point it dropped is drawn at ' + hb4J({ x: Math.round(p0.x), y: Math.round(p0.y) }) + ', not under it at ' + hb4J({ x: Math.round(a.x - 20), y: Math.round(a.y) }) + ' — the second finger took its drag');
+          /* (the refuter's fold) MOVE: the first finger holds at A2 while a second lands at B2 and moves on its own as the LAST event
+             (every tool recomputes from the grab, so a second-finger move anywhere earlier is erased by the first finger's next one).
+             No LIFT gesture: a touchMove that drops the second finger delivers no pointerup to the tools in this driver (all three lift-clause
+             mutations SURVIVED it, 26 Oct), so it would only repeat the case above; the lift clause is reasoned, not proven here. */
+          const a2 = scr(250, 1450), b2 = scr(820, 1600);
+          [a2, b2].forEach(p => { if (p.x < 30 || p.x > 340 || p.y < 20 || p.y > 740) throw new Error('setup: a finger would land at ' + hb4J(p) + ', out of reach of real input'); });
+          const lastPt = () => { const q = FM.maskTool._points(); return q.length ? scr(q[q.length - 1][0], q[q.length - 1][1]) : null; };
+          const nM = FM.maskTool._points().length;
+          await realInput924([
+            { t: 'touchStart', x: a2.x, y: a2.y, ms: 120 },
+            { t: 'touchMove', x: a2.x, y: a2.y, pts: [{ x: a2.x, y: a2.y }, { x: b2.x, y: b2.y }], ms: 120 },
+            { t: 'touchMove', x: a2.x, y: a2.y, pts: [{ x: a2.x, y: a2.y }, { x: b2.x + 15, y: b2.y }], ms: 100 },
+            { t: 'touchEnd', x: a2.x, y: a2.y, ms: 0 },
+          ], 'the mask pen held at A2 while a second finger lands at B2 and moves on its own');
+          await hb4Wait(400);
+          const pM = lastPt();
+          if (FM.maskTool._points().length !== nM + 1) bad.push('MOVE: the pen held at A2 with a second finger moving at B2 took the mask from ' + nM + ' to ' + FM.maskTool._points().length + ' points, not one more');
+          else if (Math.hypot(pM.x - a2.x, pM.y - a2.y) > 3) bad.push('MOVE: the first finger never left A2, but its point is drawn at ' + hb4J({ x: Math.round(pM.x), y: Math.round(pM.y) }) + ' — the second finger moving on its own dragged it');
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { hb4Restore(saved); }
+  });
+
+  test('690 real input: a second finger that lands while one finger moves the Free crop box leaves the box moving by the first finger only', { item: '690', budgetMs: 90000 }, async function () {
+    needsTouch924();
+    const saved = FM.scene;
+    const tex = document.createElement('canvas'); tex.width = 1080; tex.height = 1920;
+    const tc = tex.getContext('2d'); tc.fillStyle = '#c03030'; tc.fillRect(0, 0, 540, 1920); tc.fillStyle = '#3050c0'; tc.fillRect(540, 0, 540, 1920);
+    const L = FM.makeLayer('image', { name: 'RF690 crop', x: 540, y: 960, start: 0, duration: 6 });
+    L.start = 0; L.duration = 6;
+    const BOX = { x: 100, y: 200, w: 600, h: 1200 };
+    const srcScreen = (sx, sy) => {
+      const q = FM.layerUVToCanvas(L, sx / 1080, sy / 1920, 1080, 1920), ov = document.getElementById('crop-overlay');
+      const o = FM.projectToOverlay(document.getElementById('preview'), q.x, q.y), r = ov.getBoundingClientRect();
+      return { x: r.left + o.x, y: r.top + o.y };
+    };
+    const cropNow = () => { const c = L.crop || {}; return { x: Math.round(FM.evalProp(c.x, 0)), y: Math.round(FM.evalProp(c.y, 0)), w: Math.round(FM.evalProp(c.w, 0)), h: Math.round(FM.evalProp(c.h, 0)) }; };
+    async function openCrop(where) {
+      L.crop = Object.assign({}, BOX);
+      FM.selectLayer(L.id); await hb4Wait(150);
+      FM.cropTool.start(L.id); await hb4Wait(250);
+      if (!FM.cropTool.isActive() || !document.getElementById('crop-overlay')) throw new Error('setup (' + where + '): Free crop did not open on the photo');
+    }
+    const done = () => { const b = document.querySelector('#crop-bar .cb-done'); if (!b) throw new Error('no Done on the crop bar'); b.click(); };
+    try {
+      FM.media.set(L.id, { kind: 'image', el: tex, width: 1080, height: 1920 });
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          await hb4Scene([L]);
+          await openCrop('one finger');
+          const per = 1 / FM.previewDispScale();
+          const a = srcScreen(400, 650), b = srcScreen(400, 1150);
+          [a, b].forEach(p => { if (p.x < 10 || p.x > 320 || p.y < 20 || p.y > 740) throw new Error('setup: a finger would land at ' + hb4J(p) + ', out of reach of real input'); });
+          const want = { x: Math.round(BOX.x + 40 * per), y: BOX.y, w: BOX.w, h: BOX.h };
+          /* y gets x's 2 screen px too: a finger's coordinates are rounded per event, and one 1280 run measured y 202 for 200 on the
+             one-finger CONTROL itself (26 Oct; 200 on the run before). A takeover moves the box by the gap between the fingers, far past it. */
+          const off = c => Math.abs(c.x - want.x) > 2 * per || Math.abs(c.y - want.y) > 2 * per || c.w !== want.w || c.h !== want.h;
+          /* CONTROL: one finger, 40 px right from inside the box — the box moves 40 px right and nothing else. */
+          const one = [{ t: 'touchStart', x: a.x, y: a.y, ms: 90 }];
+          [10, 20, 30, 40].forEach(d => one.push({ t: 'touchMove', x: a.x + d, y: a.y, ms: 45 }));
+          one.push({ t: 'touchEnd', x: a.x + 40, y: a.y, ms: 0 });
+          await realInput924(one, 'one finger moving the crop box 40 px');
+          await hb4Wait(150); done(); await hb4Wait(150);
+          const c1 = cropNow();
+          if (off(c1)) throw new Error('CONTROL: one finger dragging the crop box 40 px right made it ' + hb4J(c1) + ', not ' + hb4J(want) + ' — the tool is not taking the finger the way this test reads it');
+          /* THE CASE: the same 40 px, with a second finger landing inside the box half way and staying put. */
+          await openCrop('two fingers');
+          const D = rf690Downs('#crop-overlay');
+          try {
+            await realInput924([
+              { t: 'touchStart', x: a.x, y: a.y, ms: 90 },
+              { t: 'touchMove', x: a.x + 10, y: a.y, ms: 45 },
+              { t: 'touchMove', x: a.x + 20, y: a.y, ms: 60 },
+              { t: 'touchMove', x: a.x + 20, y: a.y, pts: [{ x: a.x + 20, y: a.y }, { x: b.x, y: b.y }], ms: 90 },
+              { t: 'touchMove', x: a.x + 30, y: a.y, pts: [{ x: a.x + 30, y: a.y }, { x: b.x, y: b.y }], ms: 45 },
+              { t: 'touchMove', x: a.x + 40, y: a.y, pts: [{ x: a.x + 40, y: a.y }, { x: b.x, y: b.y }], ms: 80 },
+              { t: 'touchEnd', x: a.x + 40, y: a.y, ms: 0 },
+            ], 'a 40 px drag of the crop box with a second finger landing half way');
+          } finally { D.stop(); }
+          await hb4Wait(150); done(); await hb4Wait(150);
+          const c2 = cropNow();
+          rf690Two(D, 'Free crop');
+          if (off(c2)) throw new Error('a 40 px drag of the crop box, with a second finger landing inside it half way, made the crop ' + hb4J(c2) + ' — one finger alone made it ' + hb4J(c1) + ': the second finger took the drag and the box leapt by the gap between his fingers');
+          /* (the refuter's fold) MOVE: the second finger moves on its own as the LAST event; the box still moves by the first
+             finger's 40 px only. No LIFT gesture: a touchMove that drops the second finger delivers no pointerup to the tools in this driver (all three lift-clause
+             mutations SURVIVED it, 26 Oct), so it would only repeat the case above; the lift clause is reasoned, not proven here. */
+          await openCrop('two fingers, the second moving last');
+          await realInput924([
+            { t: 'touchStart', x: a.x, y: a.y, ms: 90 },
+            { t: 'touchMove', x: a.x + 10, y: a.y, ms: 45 },
+            { t: 'touchMove', x: a.x + 20, y: a.y, ms: 60 },
+            { t: 'touchMove', x: a.x + 20, y: a.y, pts: [{ x: a.x + 20, y: a.y }, { x: b.x, y: b.y }], ms: 90 },
+            { t: 'touchMove', x: a.x + 30, y: a.y, pts: [{ x: a.x + 30, y: a.y }, { x: b.x, y: b.y }], ms: 45 },
+            { t: 'touchMove', x: a.x + 40, y: a.y, pts: [{ x: a.x + 40, y: a.y }, { x: b.x, y: b.y }], ms: 60 },
+            { t: 'touchMove', x: a.x + 40, y: a.y, pts: [{ x: a.x + 40, y: a.y }, { x: b.x + 15, y: b.y }], ms: 80 },
+            { t: 'touchEnd', x: a.x + 40, y: a.y, ms: 0 },
+          ], 'a 40 px drag of the crop box, the second finger moving on its own last');
+          await hb4Wait(150); done(); await hb4Wait(150);
+          const c3 = cropNow();
+          const bad = [];
+          if (off(c3)) bad.push('MOVE: the second finger moving on its own as the last event made the crop ' + hb4J(c3) + ', not ' + hb4J(want) + ' — its move drove the first finger’s drag');
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { FM.media.remove(L.id); hb4Restore(saved); }
+  });
+
+  test('690 real input: a second finger that touches the Move pad mid-swipe does not throw the layer across the frame, it moves by the first finger only', { item: '690', budgetMs: 90000 }, async function () {
+    needsTouch924();
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const S = FM.makeLayer('shape', { name: 'RF690 pad', shape: 'rect', x: 300, y: 700, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 6 });
+          await hb4Scene([S]);
+          FM.selectLayer(S.id); await hb4Wait(200);
+          FM._mtMode = 'move'; FM.inspector.openCategory('transform'); await hb4Wait(400);
+          const pad = document.querySelector('.mt-trackpad');
+          if (!pad) throw new Error('setup: the Move pad is not in Move & Transform');
+          const pr = pad.getBoundingClientRect();
+          const x0 = pr.left + 30, y0 = pr.top + pr.height / 2, x2 = Math.min(x0 + 150, pr.right - 12);
+          if (pr.width < 200 || x0 < 10 || pr.right > 372 || y0 > 740 || y0 < 20) throw new Error('setup: the Move pad is at ' + hb4J([pr.left, pr.top, pr.right, pr.bottom]) + ', out of reach of real input');
+          const sens = 1080 / 640;
+          const pos = () => ({ x: Math.round(FM.evalProp(S.transform.x, FM.time)), y: Math.round(FM.evalProp(S.transform.y, FM.time)) });
+          const want = { x: Math.round(300 + 40 * sens), y: 700 };
+          const off = p => Math.abs(p.x - want.x) > 4 || Math.abs(p.y - want.y) > 4;
+          /* CONTROL: one finger, 40 px right on the pad. */
+          const one = [{ t: 'touchStart', x: x0, y: y0, ms: 90 }];
+          [10, 20, 30, 40].forEach(d => one.push({ t: 'touchMove', x: x0 + d, y: y0, ms: 45 }));
+          one.push({ t: 'touchEnd', x: x0 + 40, y: y0, ms: 0 });
+          await realInput924(one, 'one finger swiping the Move pad 40 px');
+          await hb4Wait(250);
+          const p1 = pos();
+          if (off(p1)) throw new Error('CONTROL: one finger swiping the Move pad 40 px right put the layer at ' + hb4J(p1) + ', not ' + hb4J(want) + ' — the pad is not taking the finger the way this test reads it');
+          S.transform.x = 300; S.transform.y = 700; FM.requestRender(); await hb4Wait(150);
+          const pad2 = document.querySelector('.mt-trackpad'), pr2 = pad2 ? pad2.getBoundingClientRect() : null;
+          if (!pr2 || Math.abs(pr2.left - pr.left) > 2 || Math.abs(pr2.top - pr.top) > 2) throw new Error('setup: after the first swipe the Move pad is gone or moved (' + hb4J(pr2 ? [pr2.left, pr2.top] : null) + ')');
+          /* THE CASE: the same 40 px, with a second finger touching the pad 150 px to the right half way and staying put. */
+          const D = rf690Downs('.mt-trackpad');
+          try {
+            await realInput924([
+              { t: 'touchStart', x: x0, y: y0, ms: 90 },
+              { t: 'touchMove', x: x0 + 10, y: y0, ms: 45 },
+              { t: 'touchMove', x: x0 + 20, y: y0, ms: 60 },
+              { t: 'touchMove', x: x0 + 20, y: y0, pts: [{ x: x0 + 20, y: y0 }, { x: x2, y: y0 }], ms: 90 },
+              { t: 'touchMove', x: x0 + 30, y: y0, pts: [{ x: x0 + 30, y: y0 }, { x: x2, y: y0 }], ms: 45 },
+              { t: 'touchMove', x: x0 + 40, y: y0, pts: [{ x: x0 + 40, y: y0 }, { x: x2, y: y0 }], ms: 80 },
+              { t: 'touchEnd', x: x0 + 40, y: y0, ms: 0 },
+            ], 'a 40 px swipe on the Move pad with a second finger touching it half way');
+          } finally { D.stop(); }
+          await hb4Wait(250);
+          const p2 = pos();
+          rf690Two(D, 'the Move pad');
+          if (off(p2)) throw new Error('a 40 px swipe on the Move pad, with a second finger touching the pad half way, put the layer at ' + hb4J(p2) + ' — one finger alone put it at ' + hb4J(p1) + ': the second finger took the swipe and the layer leapt by the gap between his fingers');
+          /* (the refuter's fold) MOVE: the second finger moves on its own as the LAST event; the layer still moves by the first
+             finger's 40 px only. No LIFT gesture: a touchMove that drops the second finger delivers no pointerup to the tools in this driver (all three lift-clause
+             mutations SURVIVED it, 26 Oct), so it would only repeat the case above; the lift clause is reasoned, not proven here. */
+          const bad = [];
+          S.transform.x = 300; S.transform.y = 700; FM.requestRender(); await hb4Wait(150);
+          await realInput924([
+            { t: 'touchStart', x: x0, y: y0, ms: 90 },
+            { t: 'touchMove', x: x0 + 10, y: y0, ms: 45 },
+            { t: 'touchMove', x: x0 + 20, y: y0, ms: 60 },
+            { t: 'touchMove', x: x0 + 20, y: y0, pts: [{ x: x0 + 20, y: y0 }, { x: x2, y: y0 }], ms: 90 },
+            { t: 'touchMove', x: x0 + 30, y: y0, pts: [{ x: x0 + 30, y: y0 }, { x: x2, y: y0 }], ms: 45 },
+            { t: 'touchMove', x: x0 + 40, y: y0, pts: [{ x: x0 + 40, y: y0 }, { x: x2, y: y0 }], ms: 60 },
+            { t: 'touchMove', x: x0 + 40, y: y0, pts: [{ x: x0 + 40, y: y0 }, { x: x2 - 15, y: y0 }], ms: 80 },
+            { t: 'touchEnd', x: x0 + 40, y: y0, ms: 0 },
+          ], 'a 40 px swipe on the Move pad, the second finger moving on its own last');
+          await hb4Wait(250);
+          const p3 = pos();
+          if (off(p3)) bad.push('MOVE: the second finger moving on its own as the last event put the layer at ' + hb4J(p3) + ', not ' + hb4J(want) + ' — its move drove the first finger’s swipe');
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { hb4Restore(saved); }
   });
 
   /* 690 (HUNT-b 3) — ON A PHONE-SHAPED PROJECT THE ROTATE KNOB WAS UNDER THE TOP BAR. The knob sits 28 px above the selection
@@ -181792,6 +182304,436 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts18 ──
+
+  /* ═══ #966: MORE CHOICE, ROUND NINETEEN — three more effects he already has, each still thin on choice (hunt/fx19). His words: "polish
+   * other effects just giving them more features … more choices always better … this is the complex version we want as much choice as
+   * possible". Gamma and Exposure get Protect skin and Keep colour (Tone Curve's pair from round eighteen: the two brightness tools that
+   * still bent every colour and every face with the tones), Colour Pop gets Protect skin and Show selection. WRITTEN WITHOUT RUNNING (25
+   * Oct, a ship was taking timed readings on this machine): nothing but `node --check`. Every number below is reasoned from the code it
+   * names (worked in IEEE doubles beside the kernels, in their own order of operations, scratchpad bfx19-calc.ps1), the reasoning beside
+   * it; a bound only a run can set says MEASURE beside it. Round eighteen's four kinds for each effect: (a) its rows and what the load
+   * sanitiser keeps, clamps and drops, (b) what each new control does, on a fixture that holds what separates right from wrong, with a
+   * CONTROL, (c) at the defaults the kernel is today's picture byte for byte, (d) every new control off its default moves the very fixtures
+   * (c) holds still. The (b) tests do not stop at a missing row: on the base code the kernel ignores the new keys and the picture is
+   * judged and fails. All three are PIXEL_FX point ops (PIXEL_ADJ too); Protect skin runs through round thirteen's tone13 and Keep colour
+   * through round eighteen's tcKeep18, so this block reuses the _o13 helpers, round fourteen's _o14Want and round eighteen's _o18Cmp,
+   * _o18SetLum, _o18Keep and _O18_TCROW (the same file scope, defined above), and adds only the ones that read this round's own keys.
+   * Every comparison of two pictures is within ONE render path (#1183). ═══ */
+  const _o19Need = (type, keys) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts19 (hunt/fx19) is not built');
+    return r;
+  };
+  /* every new key, by effect */
+  const _O19_NEW = {
+    gamma: ['skin', 'keepcol'],
+    exposure: ['skin', 'keepcol'],
+    spotcolor: ['skin', 'view'],
+  };
+  /* every new control off its default, each as [the settings it is laid on, the control] */
+  const _O19_OFF = {
+    gamma: [[{}, { skin: 100 }], [{}, { keepcol: 100 }]],
+    exposure: [[{}, { skin: 100 }], [{}, { keepcol: 100 }]],
+    spotcolor: [[{}, { skin: 100 }], [{}, { view: 1 }]],
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o19Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o13P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o13Pic;
+      const a = _o13Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o13Run(type, _o13Del(P, _O19_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O19_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on `base` (a new instance with those settings), on that fixture at that moment */
+  const _o19Moves = (type, base, over, W, H, pic, t) => E1.count(_o13Run(type, _o13P(type, base), W, H, pic(W, H), t), _o13Run(type, _o13P(type, Object.assign({}, base, over)), W, H, pic(W, H), t), 0);
+  /* (b) in general: on `pic`, `over` laid on the instance `base` draws, pixel for pixel and to the last level, the kernel's own picture
+     without the new keys laid in by the share wf — the worst pixel and where, or null */
+  const _o19Worst = (type, base, over, W, H, pic, wf, t, ps) => {
+    const ker = _o13Run(type, _o13Del(Object.assign({}, base, over), _O19_NEW[type]), W, H, pic(W, H), t, ps);
+    return _o18Cmp(_o13Run(type, Object.assign({}, base, over), W, H, pic(W, H), t, ps), _o13Lay(pic(W, H), ker, wf), W);
+  };
+  /* how many pixels of a laid-in picture differ from the kernel's own: the fixture's CONTROL, so a (b) check that passes is not passing
+     because the share was 1 everywhere */
+  const _o19Held = (type, base, over, W, H, pic, wf, t) => {
+    const ker = _o13Run(type, _o13Del(Object.assign({}, base, over), _O19_NEW[type]), W, H, pic(W, H), t);
+    return E1.count(ker, _o13Lay(pic(W, H), ker, wf), 0);
+  };
+  /* (b) for Keep colour: on the busy picture, Keep colour kc (and Protect skin sk) laid on `extra` draws the kernel's own picture without
+     the new keys, put at its own brightness in the picture's colour by kc (_o18Keep, what tcKeep18 draws), then laid in by 1 − sk x the
+     skin weight — the worst pixel and where, or null; and how many pixels Keep colour alone takes off the kernel's picture */
+  const _o19KeepWorst = (type, kc, sk, extra) => {
+    const ker = _o13Run(type, _o13Del(_o13P(type, extra), _O19_NEW[type]), 96, 72, _o13Pic(96, 72), 0.5);
+    const kept = _o18Keep(_o13Pic(96, 72), ker, kc);
+    const want = sk ? _o13Lay(_o13Pic(96, 72), kept, (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b))) : kept;
+    return { w: _o18Cmp(_o13Run(type, _o13P(type, Object.assign({}, extra, { keepcol: kc, skin: sk })), 96, 72, _o13Pic(96, 72), 0.5), want, 96), off: E1.count(ker, kept, 0) };
+  };
+  /* the hue the kernels work out, 0–360° (Colour Pop's own spelling; −1 for a grey) */
+  const _o19Hue = (r, g, b) => {
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), df = mx - mn;
+    if (!(df > 0)) return -1;
+    let h;
+    if (mx === r) h = ((g - b) / df) % 6; else if (mx === g) h = (b - r) / df + 2; else h = (r - g) / df + 4;
+    h *= 60; if (h < 0) h += 360;
+    return h;
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect, on that rect as a see-through card (80 % layer opacity, 60 % fill, turned 12° so its edges are part-covered) and
+     on an adjustment layer over the rect, all over a grey ground — both sides of each comparison through the same compositor path.
+     CONTROLS: each effect changes each picture against the same picture with no effect, and each new control off its default moves the
+     rect's picture through the same compositor, at 1:1. */
+  test('966 opts19 every new control at its default draws what the effect drew without it — Gamma, Exposure and Colour Pop through the compositor on a layer, on a see-through card and on an adjustment layer, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 90000 }, function () {
+    const TYPES = Object.keys(_O19_NEW);
+    TYPES.forEach(type => _o19Need(type, _O19_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const fxOf = (type, params) => ({ type: type, enabled: true, params: params });
+    const card = fx => { const L = _o13Rect(fx); L.transform.opacity = 0.8; L.fillOpacity = 0.6; L.transform.rotation = 12; return L; };
+    const adj = fx => { const A = FM.makeLayer('adjustment', { name: 'o19 adj', start: 0, duration: 4 }); A.effects = fx ? [fx] : []; return A; };
+    const WAYS = {
+      'on a layer': [fx => [_o13Rect(fx)], () => [_o13Rect(null)]],
+      'on a see-through card': [fx => [card(fx)], () => [card(null)]],
+      'on an adjustment layer': [fx => [adj(fx), _o13Rect(null)], () => [adj(null), _o13Rect(null)]],
+    };
+    TYPES.forEach(type => {
+      const P = _o13P(type);
+      Object.keys(WAYS).forEach(way => {
+        const make = WAYS[way][0], none = WAYS[way][1];
+        let moved = 0;
+        [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+          const a = _o13shot(make(fxOf(type, Object.assign({}, P))), t, W, H, rs, BG);
+          const b = _o13shot(make(fxOf(type, _o13Del(P, _O19_NEW[type]))), t, W, H, rs, BG);
+          const m = E1.maxDiff(a, b);
+          if (m !== 0) bad.push(type + ' ' + way + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O19_NEW[type].join(' / '));
+          if (rs == null) moved = Math.max(moved, E1.count(a, _o13shot(none(), t, W, H, null, BG), 2));
+        }));
+        if (moved < 50) bad.push('CONTROL: ' + type + ' ' + way + ' changes only ' + moved + ' pixels at either moment, so the comparison above proves little' /* MEASURE: reasoned, not run — Gamma 1.8 lifts every tone off black and white, 0.8 EV multiplies every byte by 1.74, and Colour Pop drains the whole rect (its hues are 220° and 40°, nowhere near the red it keeps) */);
+      });
+      _O19_OFF[type].forEach(([on, o]) => {
+        const base = _o13shot([_o13Rect(fxOf(type, Object.assign({}, P, on)))], 0.61, W, H, null, BG);
+        const n = E1.count(base, _o13shot([_o13Rect(fxOf(type, Object.assign({}, P, on, o)))], 0.61, W, H, null, BG), 2);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels; its warm half (hue 40°, saturation 0.2 to 0.6) is skin to the skin window, so Protect skin 100 gives back most of that half; Keep colour 100 puts the gamma's or the exposure's lost richness back on every coloured pixel (the blue end by 8 levels or more); Show selection turns the drained grey rect into a black matte */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Gamma: Protect skin and Keep colour ---- */
+  /* At its default (Gamma 1.8, no trims, All, Mix 100) the kernel's table is round(255 x (v / 255)^(1 / 1.8)): 40 → 91, 60 → 114, 70 →
+     124, 80 → 134, 90 → 143, 100 → 152, 110 → 160, 120 → 168, 128 → 174, 130 → 175, 160 → 197, 170 → 204, 200 → 223, 210 → 229, 220 →
+     235 (round twelve's own figures for 40 and 64 agree). So on round thirteen's six pixels: the light skin tone (220, 170, 130) to (235,
+     204, 175), the deeper one (160, 110, 80) to (197, 160, 134), the rose (220, 100, 120) to (235, 152, 168), the blue (40, 90, 200) to
+     (91, 143, 223), the green (60, 170, 80) to (114, 204, 134), the grey 128 to 174. Skin weights: 1, 1, 0.5, 0, 0, 0. Protect skin 100
+     keeps both skin tones the picture; the rose's red lands on a tie (227.5), so it is read in the busy picture only. At 40 % a skin tone
+     goes 0.6 of the way — the light one to 220 + 15 x 0.6 = 229, 170 + 34 x 0.6 = 190.4, 130 + 45 x 0.6 = 157, so (229, 190, 157), the
+     deeper one to (182.2, 140, 112.4) → (182, 140, 112) — and the rose 0.8 of it, (232, 141.6, 158.4) → (232, 142, 158). On the base
+     code Protect skin is ignored and both skin tones take the whole curve. */
+  test('966 opts19 Gamma has Protect skin (0–100 %, keyframable, 0 by default) and Keep colour (0–100 %, keyframable, 0 by default, with a note saying what it keeps), neither greyed and both after Mix: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    const r = _o19Need('gamma', _O19_NEW.gamma);
+    const bad = _o13Rows('gamma', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'keepcol', label: 'Keep colour', min: 0, max: 100, unit: '%', def: 0 }], { skin: 40, keepcol: 70 });
+    bad.push.apply(bad, _o13Clamp('gamma', { skin: 150, keepcol: -5 }, { skin: 100, keepcol: 0 }));
+    bad.push.apply(bad, _o13Clamp('gamma', { skin: -5, keepcol: 150 }, { skin: 0, keepcol: 100 }));
+    const keys = (r.params || []).map(p => p.key), ix = k => keys.indexOf(k);
+    if (!(ix('mix') >= 0 && ix('mix') < ix('skin') && ix('skin') < ix('keepcol'))) bad.push('the rows run ' + keys.join(', ') + ' — Protect skin and Keep colour belong after Mix');
+    const note = ((r.params || []).filter(p => p.key === 'keepcol')[0] || {}).note || '';
+    if (!/brightness/.test(note) || !/hue/.test(note)) bad.push('Keep colour’s note (' + JSON.stringify(note) + ') does not say that only the brightness bends and every colour keeps its hue');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts19 Gamma Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the curve byte for byte, at 40 % a skin tone comes 0.4 of the way back and the rose 0.2, and with another Gamma, channel trims, Affects, Mix and Keep colour every pixel of a busy picture is the curved picture laid in by 1 − its skin weight to the level, and a keyed Protect skin draws its value (CONTROL: at 0 % the light skin tone reads 235, 204, 175)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('gamma', _o13P('gamma', over), N, 1, row(), 0.5);
+    const kept = [[91, 143, 223], [114, 204, 134], [174, 174, 174]];
+    _o14Want(bad, run({}), _O13_SKIN, [[235, 204, 175], [197, 160, 134], [235, 152, 168]].concat(kept), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], null].concat(kept), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O13_SKIN, [[229, 190, 157], [182, 140, 112], [232, 142, 158]].concat(kept), 'Protect skin 40');
+    [{}, { gamma: 0.6 }, { red: 1.4, blue: 0.7 }, { range: 1 }, { mix: 60 }, { skin: 100 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, wf = (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b));
+      const w = _o19Worst('gamma', _o13P('gamma'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, wf, 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the curved picture laid in by 1 − its skin weight)');
+    });
+    const kw = _o19KeepWorst('gamma', 60, 50, {});
+    if (kw.w) bad.push('Protect skin 50 with Keep colour 60: pixel (' + kw.w.x + ', ' + kw.w.y + ') reads ' + kw.w.got + ', not ' + kw.w.want + ' (its own colour at the curved brightness, then laid in by 1 − its skin weight)');
+    const mk = E1.maxDiff(run({ skin: _o13KF(0, 100) }), run({ skin: 50 }));
+    if (mk > 1) bad.push('a Protect skin keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Protect skin 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const held = _o19Held('gamma', _o13P('gamma'), { skin: 70 }, 96, 72, _o13Pic, (r, g, b) => _o13W(100, 0, 0, 70, _o13Skin(r, g, b)), 0.5);
+    if (held < 300) bad.push('CONTROL: Protect skin 70 holds back only ' + held + ' of 6912 pixels of the busy picture, so the check above proves little' /* MEASURE: reasoned, not run — the busy picture's blue-40 cells with red over green are warm (hue 0° to 40°, saturation over 0.2), roughly a quarter of it, and the curve lifts each by many levels */);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* KEEP COLOUR, worked in the kernels' order (the curve's bytes, then setLum255 of the picture's own pixel to the curved pixel's
+     brightness 0.299 R + 0.587 G + 0.114 B, then Keep colour of the way there): a sky (70, 130, 210) curves to (124, 175, 229) — hue
+     214.3° to 210.9°, its channels closer (gaps 51 and 54 where the picture has 60 and 80) — so Keep colour 100 puts the sky at the
+     curved brightness in its own colour, (115, 175, 255), gaps 60 and 80, hue 214.3° again, and 50 lands at (119, 175, 242); the light
+     skin tone curves to (235, 204, 175) → 100 (250, 200, 160), 50 (242, 202, 167); the green (60, 170, 80) curves to (114, 204, 134) →
+     100 (102, 212, 122), 50 (108, 208, 128); a red (200, 40, 40) curves to (223, 91, 91) → 100 (243, 83, 83), 50 (233, 87, 87); the
+     grey 128 stays 174 (a grey has no colour to keep, and its brightness is the curve's). None of these sits within 0.01 of a tie. On
+     the base code Keep colour is ignored and every pixel takes the curve's washed-out colour. */
+  test('966 opts19 Gamma Keep colour: at 100 % a sky reads 115, 175, 255 and a red 243, 83, 83 — the picture’s own colour at the curved brightness, its hue kept — at 50 % half way, a grey ramp is the curve itself byte for byte, and with another Gamma, channel trims, Affects, Mix and Protect skin every pixel of a busy picture is its own colour put at the curved brightness by Keep colour to the level (CONTROL: at 0 % the sky reads 124, 175, 229 and the red 223, 91, 91)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O18_TCROW.length, row = _o13Row(_O18_TCROW);
+    const run = over => _o13Run('gamma', _o13P('gamma', over), N, 1, row(), 0.5);
+    _o14Want(bad, run({}), _O18_TCROW, [[124, 175, 229], [235, 204, 175], [114, 204, 134], [174, 174, 174], [223, 91, 91]], 'CONTROL at 0 %');
+    const full = run({ keepcol: 100 });
+    _o14Want(bad, full, _O18_TCROW, [[115, 175, 255], [250, 200, 160], [102, 212, 122], [174, 174, 174], [243, 83, 83]], 'Keep colour 100');
+    _o14Want(bad, run({ keepcol: 50 }), _O18_TCROW, [[119, 175, 242], [242, 202, 167], [108, 208, 128], [174, 174, 174], [233, 87, 87]], 'Keep colour 50');
+    const sky = _o13At(full, N, 0, 0), dh = Math.abs(_o19Hue(sky[0], sky[1], sky[2]) - _o19Hue(70, 130, 210));
+    if (!(dh < 1)) bad.push('at Keep colour 100 the sky’s hue is ' + _o19Hue(sky[0], sky[1], sky[2]).toFixed(1) + '°, ' + dh.toFixed(1) + '° from its own 214.3°');
+    const lv = o => _o13Run('gamma', _o13P('gamma', o), 256, 2, _o13Lv(), 0.5);
+    const g0 = E1.maxDiff(lv({ keepcol: 100 }), lv({}));
+    if (g0 !== 0) bad.push('on the grey ramp Keep colour 100 draws up to ' + g0 + ' levels away from the curve itself — a grey has no colour to keep, and its brightness is the curve’s');
+    const mk = E1.maxDiff(run({ keepcol: _o13KF(0, 100) }), run({ keepcol: 50 }));
+    if (mk > 1) bad.push('a Keep colour keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Keep colour 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    [[100, 0, {}], [35, 0, {}], [100, 0, { gamma: 0.6 }], [60, 0, { red: 1.4, blue: 0.7 }], [100, 0, { range: 3 }], [70, 0, { mix: 50 }], [100, 60, {}]].forEach(([kc, sk, extra]) => {
+      const res = _o19KeepWorst('gamma', kc, sk, extra);
+      if (res.w) bad.push('Keep colour ' + kc + (sk ? ' with Protect skin ' + sk : '') + ' and ' + JSON.stringify(extra) + ': pixel (' + res.w.x + ', ' + res.w.y + ') reads ' + res.w.got + ', not ' + res.w.want + ' (its own colour at the curved brightness' + (sk ? ', then laid in by 1 − its skin weight' : '') + ')');
+      if (kc === 100 && !sk && !Object.keys(extra).length && res.off < 1000) bad.push('CONTROL: Keep colour 100 takes only ' + res.off + ' of 6912 pixels of the busy picture off the curve, so the check above proves little' /* MEASURE: reasoned, not run — the gamma closes up every coloured pixel's channels, and most of the busy picture is coloured */);
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts19 Gamma at Protect skin 0 % and Keep colour 0 % draws byte for byte what it drew without them — at its defaults, a strong and a weak curve, with channel trims, Darks, Mix, keyframed, and on a half-size plate (CONTROL: Protect skin and Keep colour each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o19Need('gamma', _O19_NEW.gamma);
+    const bad = _o19Ident('gamma', [{}, { over: { gamma: 0.5 } }, { over: { gamma: 3.2 } }, { over: { red: 1.4, blue: 0.7 } }, { over: { range: 1 } }, { over: { mix: 60 } }, { over: { gamma: _o13KF(0.6, 2.4) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }, { pic: _o13Row(_O18_TCROW), W: 5, H: 1 }]);
+    _O19_OFF.gamma.forEach(([on, o]) => { const n = _o19Moves('gamma', on, o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — Protect skin 100 gives back the warm cells (blue 40, red over green), roughly a quarter of the picture; Keep colour 100 puts the richness the curve takes off back on every coloured pixel */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Gamma ---- */
+
+  /* ---- Exposure: Protect skin and Keep colour ---- */
+  /* At its defaults (0.8 EV, Black point 0, no rolloff, Gamma 1, sRGB) the kernel multiplies each byte by 2^0.8 = 1.74110 into the clamped
+     array (round thirteen's grey 40 → 70). On round thirteen's six pixels: the light skin tone (220, 170, 130) to (383.0, 296.0, 226.3) →
+     (255, 255, 226), the deeper one (160, 110, 80) to (255, 192, 139), the rose (220, 100, 120) to (255, 174, 209), the blue (40, 90, 200)
+     to (70, 157, 255), the green (60, 170, 80) to (104, 255, 139), the grey 128 to 223. Skin weights: 1, 1, 0.5, 0, 0, 0. Protect skin 100
+     keeps both skin tones the picture; the rose lands on two ties (237.5 and 164.5), so it is read in the busy picture only. At 40 % a
+     skin tone goes 0.6 of the way — the light one to 220 + 35 x 0.6 = 241, 170 + 85 x 0.6 = 221, 130 + 96 x 0.6 = 187.6, so (241, 221,
+     188), the deeper one to (217, 159.2, 115.4) → (217, 159, 115) — and the rose 0.8 of it, (248, 159.2, 191.2) → (248, 159, 191). On
+     the base code Protect skin is ignored and both skin tones burn out to the exposure. */
+  test('966 opts19 Exposure has Protect skin (0–100 %, keyframable, 0 by default) and Keep colour (0–100 %, keyframable, 0 by default, with a note saying what it keeps), neither greyed and both after Mix: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    const r = _o19Need('exposure', _O19_NEW.exposure);
+    const bad = _o13Rows('exposure', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'keepcol', label: 'Keep colour', min: 0, max: 100, unit: '%', def: 0 }], { skin: 40, keepcol: 70 });
+    bad.push.apply(bad, _o13Clamp('exposure', { skin: 150, keepcol: -5 }, { skin: 100, keepcol: 0 }));
+    bad.push.apply(bad, _o13Clamp('exposure', { skin: -5, keepcol: 150 }, { skin: 0, keepcol: 100 }));
+    const keys = (r.params || []).map(p => p.key), ix = k => keys.indexOf(k);
+    if (!(ix('mix') >= 0 && ix('mix') < ix('skin') && ix('skin') < ix('keepcol'))) bad.push('the rows run ' + keys.join(', ') + ' — Protect skin and Keep colour belong after Mix');
+    const note = ((r.params || []).filter(p => p.key === 'keepcol')[0] || {}).note || '';
+    if (!/brightness/.test(note) || !/sky/.test(note)) bad.push('Keep colour’s note (' + JSON.stringify(note) + ') does not say that only the brightness moves and a sky stays blue');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts19 Exposure Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the exposure byte for byte, at 40 % a skin tone comes 0.4 of the way back and the rose 0.2, and stopped down, with a Black point and rolloff, in Linear light, with a Gamma, Affects, Mix and Keep colour every pixel of a busy picture is the exposed picture laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone reads 255, 255, 226)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('exposure', _o13P('exposure', over), N, 1, row(), 0.5);
+    const kept = [[70, 157, 255], [104, 255, 139], [223, 223, 223]];
+    _o14Want(bad, run({}), _O13_SKIN, [[255, 255, 226], [255, 192, 139], [255, 174, 209]].concat(kept), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], null].concat(kept), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O13_SKIN, [[241, 221, 188], [217, 159, 115], [248, 159, 191]].concat(kept), 'Protect skin 40');
+    [{}, { stops: -1 }, { offset: 20, rolloff: 40 }, { space: 1 }, { gamma: 1.4 }, { range: 1 }, { mix: 60 }, { skin: 100 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, wf = (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b));
+      const w = _o19Worst('exposure', _o13P('exposure'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, wf, 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the exposed picture laid in by 1 − its skin weight)');
+    });
+    const kw = _o19KeepWorst('exposure', 60, 50, {});
+    if (kw.w) bad.push('Protect skin 50 with Keep colour 60: pixel (' + kw.w.x + ', ' + kw.w.y + ') reads ' + kw.w.got + ', not ' + kw.w.want + ' (its own colour at the exposed brightness, then laid in by 1 − its skin weight)');
+    const mk = E1.maxDiff(run({ skin: _o13KF(0, 100) }), run({ skin: 50 }));
+    if (mk > 1) bad.push('a Protect skin keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Protect skin 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const held = _o19Held('exposure', _o13P('exposure'), { skin: 70 }, 96, 72, _o13Pic, (r, g, b) => _o13W(100, 0, 0, 70, _o13Skin(r, g, b)), 0.5);
+    if (held < 300) bad.push('CONTROL: Protect skin 70 holds back only ' + held + ' of 6912 pixels of the busy picture, so the check above proves little' /* MEASURE: reasoned, not run — the busy picture's blue-40 cells with red over green are warm, roughly a quarter of it, and 0.8 EV lifts each channel under 147 by 0.74 times itself */);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* KEEP COLOUR, worked as Gamma's above with the exposed bytes in place of the curve's: a sky (70, 130, 210) exposes to (121.9, 226.3,
+     365.6) → (122, 226, 255) — the blue channel clips, so the sky turns from 214.3° to 193.1°, toward cyan — and Keep colour 100 puts the
+     sky at that brightness in its own colour, desaturated toward its grey where it would pass white instead of clipped: (165, 204, 255),
+     hue 214.0°; 50 lands at (144, 215, 255); the light skin tone exposes to (255, 255, 226) — a face gone yellow-white, 60° — and 100
+     gives (255, 251, 247), still 26.7°, 50 (255, 253, 237); the green (60, 170, 80) exposes to (104, 255, 139) → 100 (130, 240, 150), 50
+     (117, 247, 144); a red (200, 40, 40) exposes to (255, 70, 70) → 100 (237, 77, 77), 50 (246, 74, 74); the grey 128 stays 223. None of
+     these sits within 0.01 of a tie. On the base code Keep colour is ignored and the sky turns cyan. */
+  test('966 opts19 Exposure Keep colour: at 100 % a sky reads 165, 204, 255 — still blue, where the plain exposure turns it toward cyan at 122, 226, 255 — and a red 237, 77, 77, at 50 % half way, a grey ramp is the exposure itself byte for byte, and stopped down, with a Black point and rolloff, in Linear light, Affects, Mix and Protect skin every pixel of a busy picture is its own colour put at the exposed brightness by Keep colour to the level (CONTROL: at 0 % the sky reads 122, 226, 255 and the red 255, 70, 70)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O18_TCROW.length, row = _o13Row(_O18_TCROW);
+    const run = over => _o13Run('exposure', _o13P('exposure', over), N, 1, row(), 0.5);
+    const plain = run({});
+    _o14Want(bad, plain, _O18_TCROW, [[122, 226, 255], [255, 255, 226], [104, 255, 139], [223, 223, 223], [255, 70, 70]], 'CONTROL at 0 %');
+    const full = run({ keepcol: 100 });
+    _o14Want(bad, full, _O18_TCROW, [[165, 204, 255], [255, 251, 247], [130, 240, 150], [223, 223, 223], [237, 77, 77]], 'Keep colour 100');
+    _o14Want(bad, run({ keepcol: 50 }), _O18_TCROW, [[144, 215, 255], [255, 253, 237], [117, 247, 144], [223, 223, 223], [246, 74, 74]], 'Keep colour 50');
+    const h0 = _o19Hue(70, 130, 210), sp = _o13At(plain, N, 0, 0), sk = _o13At(full, N, 0, 0);
+    const dPlain = Math.abs(_o19Hue(sp[0], sp[1], sp[2]) - h0), dKeep = Math.abs(_o19Hue(sk[0], sk[1], sk[2]) - h0);
+    if (!(dPlain > 15)) bad.push('CONTROL: the plain exposure turns the sky only ' + dPlain.toFixed(1) + '° off its own hue, so Keep colour has nothing to keep');
+    if (!(dKeep < 1)) bad.push('at Keep colour 100 the sky’s hue is ' + dKeep.toFixed(1) + '° from its own ' + h0.toFixed(1) + '° — it should stay blue');
+    const lv = o => _o13Run('exposure', _o13P('exposure', o), 256, 2, _o13Lv(), 0.5);
+    const g0 = E1.maxDiff(lv({ keepcol: 100 }), lv({}));
+    if (g0 !== 0) bad.push('on the grey ramp Keep colour 100 draws up to ' + g0 + ' levels away from the exposure itself — a grey has no colour to keep');
+    const mk = E1.maxDiff(run({ keepcol: _o13KF(0, 100) }), run({ keepcol: 50 }));
+    if (mk > 1) bad.push('a Keep colour keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Keep colour 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    [[100, 0, {}], [35, 0, {}], [100, 0, { stops: -1.5 }], [60, 0, { offset: 20, rolloff: 40 }], [100, 0, { space: 1, stops: 1.3 }], [100, 0, { range: 3 }], [70, 0, { mix: 50 }], [100, 60, {}]].forEach(([kc, sk2, extra]) => {
+      const res = _o19KeepWorst('exposure', kc, sk2, extra);
+      if (res.w) bad.push('Keep colour ' + kc + (sk2 ? ' with Protect skin ' + sk2 : '') + ' and ' + JSON.stringify(extra) + ': pixel (' + res.w.x + ', ' + res.w.y + ') reads ' + res.w.got + ', not ' + res.w.want + ' (its own colour at the exposed brightness' + (sk2 ? ', then laid in by 1 − its skin weight' : '') + ')');
+      if (kc === 100 && !sk2 && !Object.keys(extra).length && res.off < 1000) bad.push('CONTROL: Keep colour 100 takes only ' + res.off + ' of 6912 pixels of the busy picture off the exposure, so the check above proves little' /* MEASURE: reasoned, not run — a multiply grows every coloured pixel's channel gaps, Keep colour holds them, so every coloured pixel short of black moves */);
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts19 Exposure at Protect skin 0 % and Keep colour 0 % draws byte for byte what it drew without them — at its defaults, stopped down and pushed, with a Black point and Highlight rolloff, in Linear light with a Gamma, Darks, Mix, keyframed, and on a half-size plate (CONTROL: Protect skin and Keep colour each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o19Need('exposure', _O19_NEW.exposure);
+    const bad = _o19Ident('exposure', [{}, { over: { stops: -1.5 } }, { over: { stops: 2.4 } }, { over: { offset: 20, rolloff: 40 } }, { over: { space: 1, gamma: 1.4 } }, { over: { range: 1 } }, { over: { mix: 60 } }, { over: { stops: _o13KF(-1, 2) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }, { pic: _o13Row(_O18_TCROW), W: 5, H: 1 }]);
+    _O19_OFF.exposure.forEach(([on, o]) => { const n = _o19Moves('exposure', on, o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — Protect skin 100 gives back the warm cells (blue 40, red over green), roughly a quarter of the picture; Keep colour 100 holds every coloured pixel's channel gaps where the multiply grows them */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Exposure ---- */
+
+  /* ---- Colour Pop: Protect skin and Show selection ---- */
+  /* At its defaults (Keep #e03131, hue 0°; Hue range 0.2, a 24° window; Drain the rest 100 %, Boost 100 %, Acts on Everything else, no
+     Darken, a grey Rest colour) the kernel keeps a pixel by 1 − q² inside the window (q its hue distance over 24°) and drains the rest to
+     its brightness L. On round thirteen's six pixels and the kept red: the light skin tone (220, 170, 130) at 26.7°, outside the window,
+     drains whole to L 180.39 → (180, 180, 180); the deeper one (160, 110, 80) at 22.5° is kept 0.1211 and drains 0.8789 of the way to L
+     121.53 → (126.19, 120.13, 116.50) → (126, 120, 117) (116.5010, clear of the tie); the rose (220, 100, 120) at 350° is kept 0.8264 →
+     (206, 107, 123); the blue drains to 88, the green to 127, the grey stays 128, and the red (224, 49, 49) is kept whole. Skin weights:
+     1, 1, 0.5, 0, 0, 0 — and the red's is 1 too (hue 0°, saturation 0.78), which changes nothing, as it is kept. Protect skin 100 gives
+     both skin tones back byte for byte (the face keeps its colour while the rest drains); the rose lands on two ties (103.5 and 121.5),
+     so it is read in the busy picture only. At 40 % a skin tone goes 0.6 of the way — the light one to (196, 176, 160), the deeper one
+     to (139.6, 116, 102.2) → (140, 116, 102) — and the rose 0.8 of it, (208.8, 105.6, 122.4) → (209, 106, 122). On the base code
+     Protect skin is ignored and both skin tones drain. */
+  const _O19_POP = _O13_SKIN.concat([[224, 49, 49]]);
+  test('966 opts19 Colour Pop has Protect skin (0–100 %, keyframable, 0 by default, with a note on faces) and Show selection (Off or On, storing 0 or 1, Off by default, with a note that it shows in the export), neither greyed, both after Darken the rest and Show selection last: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and On, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    const r = _o19Need('spotcolor', _O19_NEW.spotcolor);
+    const bad = _o13Rows('spotcolor', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'view', label: 'Show selection', options: ['Off', 'On'], def: 0 }], { skin: 40, view: 1 });
+    bad.push.apply(bad, _o13Clamp('spotcolor', { skin: 150 }, { skin: 100 }));
+    bad.push.apply(bad, _o13Clamp('spotcolor', { skin: -5 }, { skin: 0 }));
+    bad.push.apply(bad, _o13Clamp('spotcolor', { view: 7 }, { view: undefined }));
+    /* the Keep and Rest colour rows come after the params (fx-registry paramsOf), so the order is read without them (review B1) */
+    const keys = (r.params || []).filter(p => p.type !== 'color').map(p => p.key), ix = k => keys.indexOf(k);
+    if (!(ix('darken') >= 0 && ix('darken') < ix('skin') && ix('skin') < ix('view') && ix('view') === keys.length - 1)) bad.push('the rows run ' + keys.join(', ') + ' — Protect skin belongs after Darken the rest, and Show selection last');
+    const nt = k => ((r.params || []).filter(p => p.key === k)[0] || {}).note || '';
+    if (!/[Ff]aces/.test(nt('skin'))) bad.push('Protect skin’s note (' + JSON.stringify(nt('skin')) + ') does not say faces keep their colour');
+    if (!/export/.test(nt('view'))) bad.push('Show selection’s note (' + JSON.stringify(nt('view')) + ') does not say it shows in the export too');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts19 Colour Pop Protect skin: at 100 % two skin tones keep their own colour byte for byte while a blue, a green and a grey drain and the red stays kept byte for byte, at 40 % a skin tone comes 0.4 of the way back and the rose 0.2, and with another Hue range and Drain, Acts on, Darken, a Rest colour and another Keep colour every pixel of a busy picture is the popped picture laid in by 1 − its skin weight to the level, with Boost off 100 laid in toward the kept colour instead so Protect skin never takes Boost off the kept red, and a keyed Protect skin draws its value (CONTROL: at 0 % the light skin tone drains to 180, 180, 180)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O19_POP.length, row = _o13Row(_O19_POP);
+    const run = over => _o13Run('spotcolor', _o13P('spotcolor', over), N, 1, row(), 0.5);
+    const kept = [[88, 88, 88], [127, 127, 127], [128, 128, 128], [224, 49, 49]];
+    _o14Want(bad, run({}), _O19_POP, [[180, 180, 180], [126, 120, 117], [206, 107, 123]].concat(kept), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O19_POP, [[220, 170, 130], [160, 110, 80], null].concat(kept), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O19_POP, [[196, 176, 160], [140, 116, 102], [209, 106, 122]].concat(kept), 'Protect skin 40');
+    [{}, { tolerance: 0.4, desat: 60 }, { invert: 1 }, { darken: 50 }, { color2: '#a0522d' }, { color: '#3aa0ff', tolerance: 0.3 }, { skin: 100 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, wf = (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b));
+      const w = _o19Worst('spotcolor', _o13P('spotcolor'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, wf, 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the popped picture laid in by 1 − its skin weight)');
+    });
+    /* (review F2) with Boost off 100 a protected pixel comes back as the KEPT colour would have it (the kernel with no drain, no darken
+       and a grey rest), not as the bare picture, so Protect skin never takes Boost off a kept red coat */
+    [{ boost: 180 }, { boost: 180, tolerance: 0.4, desat: 60 }, { boost: 60, darken: 50 }].forEach(extra => {
+      const all = Object.assign({}, _o13P('spotcolor'), { skin: 70 }, extra), q = _o13Del(Object.assign({}, all), _O19_NEW.spotcolor), pic = _o13Pic(96, 72);
+      const ker = _o13Run('spotcolor', q, 96, 72, _o13Pic(96, 72), 0.5), kp = _o13Run('spotcolor', Object.assign({}, q, { desat: 0, darken: 0, color2: '#808080' }), 96, 72, _o13Pic(96, 72), 0.5);
+      const want = new Uint8ClampedArray(ker);
+      for (let i = 0; i < pic.length; i += 4) { const wt = 1 - 0.7 * _o13Skin(pic[i], pic[i + 1], pic[i + 2]); if (wt === 1) continue; for (let c = 0; c < 3; c++) want[i + c] = kp[i + c] + (ker[i + c] - kp[i + c]) * wt; }
+      const w = _o18Cmp(_o13Run('spotcolor', all, 96, 72, _o13Pic(96, 72), 0.5), want, 96);
+      if (w) bad.push('Protect skin 70 with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the popped picture laid in toward the kept colour by 1 − its skin weight)');
+    });
+    const coat = a => Array.prototype.slice.call(a, (N - 1) * 4, (N - 1) * 4 + 3).join(', ');
+    if (coat(run({ boost: 200 })) === '224, 49, 49') bad.push('CONTROL: Boost 200 does not move the kept red coat, so the Boost check below proves nothing');
+    if (coat(run({ boost: 200, skin: 100 })) !== coat(run({ boost: 200 }))) bad.push('Protect skin 100 takes Boost 200 off the kept red coat: it reads ' + coat(run({ boost: 200, skin: 100 })) + ', not ' + coat(run({ boost: 200 })) + ' (a kept colour is not a face)');
+    const mk = E1.maxDiff(run({ skin: _o13KF(0, 100) }), run({ skin: 50 }));
+    if (mk > 1) bad.push('a Protect skin keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Protect skin 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const held = _o19Held('spotcolor', _o13P('spotcolor'), { skin: 70 }, 96, 72, _o13Pic, (r, g, b) => _o13W(100, 0, 0, 70, _o13Skin(r, g, b)), 0.5);
+    if (held < 300) bad.push('CONTROL: Protect skin 70 holds back only ' + held + ' of 6912 pixels of the busy picture, so the check above proves little' /* MEASURE: reasoned, not run — the busy picture's blue-40 cells with red over green are warm, roughly a quarter of it, and those outside the red window drain all the way */);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* SHOW SELECTION, worked on the same seven pixels: the matte is 255 x what keeps its colour — the kept share of the window (Acts on The
+     chosen hue turns it round), with what Protect skin holds back counted as kept: 1 − (1 − kept) x (1 − Protect skin x skin weight).
+     Off and 0 %: the light skin tone 0, the deeper one 0.1211 x 255 = 30.88 → 31, the rose 0.8264 x 255 = 210.73 → 211, the blue, the
+     green and the grey 0, the red 255. Acts on The chosen hue: 255, 224, 44, 255, 255, 255, 0. Protect skin 100: 255, 255, 1 − 0.1736 x
+     0.5 → 232.86 → 233, 0, 0, 0, 255; 40 %: 102, 1 − 0.8789 x 0.6 → 120.53 → 121, 1 − 0.1736 x 0.8 → 219.58 → 220, 0, 0, 0, 255. Every
+     channel the same; alpha untouched. On the base code Show selection is ignored and the picture is drawn. */
+  /* what colourPop19's matte holds, worked independently: each opaque pixel of `pic` painted 255 x what keeps its colour under Keep hue KH,
+     a window of win degrees, Acts on inv and Protect skin `skin`, into a clamped array as the kernel writes it; a clear pixel is left */
+  const _o19PopSel = (pic, KH, win, inv, skin) => {
+    const o = new Uint8ClampedArray(pic), s = skin <= 0 ? 0 : (skin >= 100 ? 1 : skin / 100);
+    for (let i = 0; i < pic.length; i += 4) {
+      if (pic[i + 3] === 0) continue;
+      const R = pic[i], G = pic[i + 1], B = pic[i + 2], df = Math.max(R, G, B) - Math.min(R, G, B);
+      let keep = 0;
+      if (df >= 8) { let dd = Math.abs(_o19Hue(R, G, B) - KH); if (dd > 180) dd = 360 - dd; if (dd <= win) { const q = dd / win; keep = 1 - q * q; } }
+      if (inv) keep = 1 - keep;
+      if (s > 0) keep = 1 - (1 - keep) * (1 - s * _o13Skin(R, G, B));
+      const v = keep * 255; o[i] = v; o[i + 1] = v; o[i + 2] = v;
+    }
+    return o;
+  };
+  test('966 opts19 Colour Pop Show selection: on seven pixels the matte reads 0, 31, 211, 0, 0, 0, 255 — the kept red white, the drained skin and greys black — Acts on the chosen hue turns it round, Protect skin 100 paints the faces white, every pixel of a busy picture is the matte to the level under another Hue range, Keep colour, Acts on and Protect skin, Drain, Boost, Darken and Rest colour do not move it, and a see-through pixel keeps its alpha (CONTROL: Off draws the drained picture, and the matte on the busy picture is neither all white nor all black)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O19_POP.length, row = _o13Row(_O19_POP);
+    const run = over => _o13Run('spotcolor', _o13P('spotcolor', over), N, 1, row(), 0.5);
+    const grey = list => list.map(v => [v, v, v]);
+    _o14Want(bad, run({}), _O19_POP, [[180, 180, 180], [126, 120, 117], [206, 107, 123], [88, 88, 88], [127, 127, 127], [128, 128, 128], [224, 49, 49]], 'CONTROL with Show selection Off');
+    _o14Want(bad, run({ view: 1 }), _O19_POP, grey([0, 31, 211, 0, 0, 0, 255]), 'Show selection');
+    _o14Want(bad, run({ view: 1, invert: 1 }), _O19_POP, grey([255, 224, 44, 255, 255, 255, 0]), 'Show selection with Acts on the chosen hue');
+    _o14Want(bad, run({ view: 1, skin: 100 }), _O19_POP, grey([255, 255, 233, 0, 0, 0, 255]), 'Show selection with Protect skin 100');
+    _o14Want(bad, run({ view: 1, skin: 40 }), _O19_POP, grey([102, 121, 220, 0, 0, 0, 255]), 'Show selection with Protect skin 40');
+    [['#e03131', 0.2, 0, 0], ['#e03131', 0.45, 1, 0], ['#3aa0ff', 0.3, 0, 0], ['#e03131', 0.2, 0, 100], ['#e03131', 0.3, 1, 60]].forEach(([col, tol, inv, sk]) => {
+      const K = [parseInt(col.slice(1, 3), 16), parseInt(col.slice(3, 5), 16), parseInt(col.slice(5, 7), 16)], KH = Math.max(0, _o19Hue(K[0], K[1], K[2]));
+      const want = _o19PopSel(_o13Pic(96, 72), KH, tol * 120, inv, sk);
+      const w = _o18Cmp(_o13Run('spotcolor', _o13P('spotcolor', { view: 1, color: col, tolerance: tol, invert: inv, skin: sk }), 96, 72, _o13Pic(96, 72), 0.5), want, 96);
+      if (w) bad.push('Show selection with Keep ' + col + ', Hue range ' + tol + (inv ? ', Acts on the chosen hue' : '') + (sk ? ', Protect skin ' + sk : '') + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (255 x what keeps its colour)');
+    });
+    const plainSel = _o13Run('spotcolor', _o13P('spotcolor', { view: 1 }), 96, 72, _o13Pic(96, 72), 0.5);
+    const busy = E1.maxDiff(_o13Run('spotcolor', _o13P('spotcolor', { view: 1, desat: 40, boost: 180, darken: 50, color2: '#a0522d' }), 96, 72, _o13Pic(96, 72), 0.5), plainSel);
+    if (busy !== 0) bad.push('Drain, Boost, Darken and a Rest colour move the matte by up to ' + busy + ' levels — it shows where the colour is kept, not how the rest is drained');
+    let lit = 0, dark = 0;
+    for (let i = 0; i < plainSel.length; i += 4) { if (plainSel[i] > 0) lit++; else dark++; }
+    if (lit < 300 || dark < 1000) bad.push('CONTROL: the matte of the busy picture lights ' + lit + ' pixels and leaves ' + dark + ' black, so the checks above prove little' /* MEASURE: reasoned, not run — the blue-40 cells with red well over green sit inside the red window (about 800 of 6912), the rest drains */);
+    const see = () => E1.frame(3, 1, x => [[224, 49, 49, 128], [60, 170, 80, 0], [220, 170, 130, 200]][x]);
+    const sv = _o13Run('spotcolor', _o13P('spotcolor', { view: 1 }), 3, 1, see(), 0.5), s0 = see();
+    for (let x = 0; x < 3; x++) if (sv[x * 4 + 3] !== s0[x * 4 + 3]) bad.push('Show selection turns pixel ' + x + '’s alpha ' + s0[x * 4 + 3] + ' into ' + sv[x * 4 + 3]);
+    if (sv[4] !== 60 || sv[5] !== 170 || sv[6] !== 80) bad.push('Show selection writes the clear pixel (' + [sv[4], sv[5], sv[6]].join(', ') + ') — a pixel with no alpha is never written');
+    if (sv[0] !== 255 || sv[8] !== 0) bad.push('CONTROL: on the see-through pixels the matte reads ' + sv[0] + ' for the red and ' + sv[8] + ' for the skin tone (255 and 0 expected)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts19 Colour Pop at Protect skin 0 % and Show selection Off draws byte for byte what it drew without them — at its defaults, on a hue sweep, with another Hue range and Drain, Acts on, Boost, Darken, a Rest colour and another Keep colour, keyframed, and on a half-size plate (CONTROL: Protect skin and Show selection each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o19Need('spotcolor', _O19_NEW.spotcolor);
+    const bad = _o19Ident('spotcolor', [{}, { pic: _o2Hues }, { over: { tolerance: 0.4, desat: 40 } }, { over: { invert: 1 } }, { over: { boost: 180 } }, { over: { darken: 50 } }, { over: { color2: '#a0522d' } }, { over: { color: '#3aa0ff', tolerance: 0.3 } }, { over: { tolerance: _o13KF(0.1, 0.5) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Row(_O19_POP), W: 7, H: 1 }]);
+    _O19_OFF.spotcolor.forEach(([on, o]) => { const n = _o19Moves('spotcolor', on, o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — Protect skin 100 gives back the warm cells (blue 40, red over green) outside the red window, roughly a fifth of the picture; Show selection turns every drained grey black and every kept pixel white */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Colour Pop ---- */
+
+  /* the round's editors, new rows and all, fit the inspector (round thirteen's fit test) */
+  test('966 opts19 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = {
+      gamma: 'Keep colour',
+      exposure: 'Keep colour',
+      spotcolor: 'Show selection',
+    };
+    Object.keys(NEW).forEach(type => _o19Need(type, _O19_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o13Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts19 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition

@@ -4650,7 +4650,8 @@ window.FM = window.FM || {};
     return (async function () {
       let prep = null;
       try {
-        prep = await FM.exporter.stillGifCopies(FM.scene, l => gifIds.has(l.id), s => { if (FM.toast) FM.toast(s, 2500); });
+        // (#860 hunt #6 GIF F3) `t`: the copies keep only the frames shown at the still's instant, costed at their full size
+        prep = await FM.exporter.stillGifCopies(FM.scene, l => gifIds.has(l.id), s => { if (FM.toast) FM.toast(s, 2500); }, t);
         if (stillProject() !== pid) return stillGone();   // (review F4) another project opened during the decode: nothing drawn or saved; the copies are freed below
         drawStill(o, t, prep);
       } finally {

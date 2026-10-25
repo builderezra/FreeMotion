@@ -201,6 +201,13 @@ window.FM = window.FM || {};
          100 % run the old lines untouched (gamma12 only off them). */
       { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks reshapes the shadows and leaves the lights alone' },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* #966 opts19 (hunt/fx19, his "more choices always better"): each channel always bent on its own, so a gamma lift washed every
+         colour out with the tones it opened (a rich colour's channels close up), and every face in the shot took the curve with the rest.
+         PROTECT SKIN holds skin-coloured pixels back with Teal & Orange's skin window (skinW12), and KEEP COLOUR is Tone Curve's (round
+         eighteen, tcKeep18): at 100 % only the brightness bends, every pixel keeping its own hue and richness. 0 % and 0 % run the old
+         lines untouched (skinKeep19 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'keepcol', label: 'Keep colour', min: 0, max: 100, step: 1, def: 0, unit: '%', note: '100 % bends only the brightness: every colour keeps its own hue and richness' },
     ] },
     { type: 'temperature', label: 'Colour Temperature', params: [
       { key: 'amount', label: 'Temperature', min: -100, max: 100, step: 1, def: 40 },
@@ -397,6 +404,13 @@ window.FM = window.FM || {};
          one. All and 100 % run the old lines untouched (tone13 only off them). */
       { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks lifts the shadows and leaves the lights alone' },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* #966 opts19 (hunt/fx19, his "more choices always better"): the stops always pushed each channel on its own, so where a colour
+         reached the top it turned (a blue sky went cyan, a face yellow), and every face in the shot was lit with the rest. PROTECT SKIN
+         holds skin-coloured pixels back with Teal & Orange's skin window (skinW12), and KEEP COLOUR is Tone Curve's (round eighteen,
+         tcKeep18): at 100 % only the brightness moves, every pixel keeping its own hue and richness on its way to white. 0 % and 0 %
+         run the old lines untouched (skinKeep19 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'keepcol', label: 'Keep colour', min: 0, max: 100, step: 1, def: 0, unit: '%', note: '100 % lights only the brightness: a sky stays blue and a face its own colour as they brighten' },
     ] },
     { type: 'fisheye', label: 'Fisheye', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -1865,6 +1879,12 @@ window.FM = window.FM || {};
       { key: 'boost', label: 'Boost the kept', min: 0, max: 300, step: 5, def: 100, unit: '%' },
       { key: 'invert', label: 'Acts on', def: 0, options: [[0, 'Everything else'], [1, 'The chosen hue']] },
       { key: 'darken', label: 'Darken the rest', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Sinks what is drained, so the kept colour pops' },
+      /* #966 opts19 (hunt/fx19, his "more choices always better"): every face in the shot drained with the rest (a red coat kept, the
+         people round it grey), and what the Hue range caught could only be guessed at. PROTECT SKIN holds skin-coloured pixels back with
+         Teal & Orange's skin window (skinW12), and SHOW SELECTION paints what keeps its colour as a matte, as Replace Colour's does —
+         white kept whole, black drained all the way. 0 % and Off run the old lines untouched (colourPop19 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Faces keep their own colour while the rest drains' },
+      { key: 'view', label: 'Show selection', def: 0, options: [[0, 'Off'], [1, 'On']], note: 'White keeps its colour, black is the most drained — it shows in the export too, turn it off when done' },
     ] },
     { type: 'fourcolor', label: 'Corner Colours', color: true, defColor: '#ff3d7f', colorLabel: 'Top Left', color2: true, defColor2: '#ffb86c', color2Label: 'Top Right', color3: true, defColor3: '#29d9bb', color3Label: 'Bottom Left', color4: true, defColor4: '#3d7bff', color4Label: 'Bottom Right', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
@@ -8782,6 +8802,11 @@ window.FM = window.FM || {};
       }
     },
     gamma: function (d, W, H, p, t) {
+      /* #966 opts19: PROTECT SKIN or KEEP COLOUR over 0 % runs skinKeep19 — this very kernel without the two (the curve, each trim, Affects
+         and Mix as they are), Keep colour laid on by tcKeep18, each pixel then laid in by 1 − Protect skin x its skin weight. 0 % runs the
+         lines below untouched. */
+      const gmSk19 = p.skin == null ? 0 : FM.evalProp(p.skin, t), gmKc19 = p.keepcol == null ? 0 : FM.evalProp(p.keepcol, t);
+      if (gmSk19 > 0 || gmKc19 > 0) { skinKeep19(d, W, H, p, t, PIXEL_FX.gamma, gmSk19, gmKc19); return; }
       const g = Math.max(0.05, FM.evalProp(p.gamma, t) || 1), inv = 1 / g, LUT = new Uint8ClampedArray(256);
       for (let v = 0; v < 256; v++) LUT[v] = Math.round(255 * Math.pow(v / 255, inv));
       // Per-channel trims MULTIPLY the master, so 1 leaves the master LUT bit-for-bit (g*1 === g) and
@@ -9541,6 +9566,11 @@ window.FM = window.FM || {};
       }
     },
     exposure: function (d, W, H, p, t) {
+      /* #966 opts19: PROTECT SKIN or KEEP COLOUR over 0 % runs skinKeep19 — this very kernel without the two (Stops, Black point, Highlight
+         rolloff, Gamma, Work in, Affects and Mix as they are), Keep colour laid on by tcKeep18, each pixel then laid in by 1 − Protect skin
+         x its skin weight. 0 % runs the lines below untouched. */
+      const exSk19 = p.skin == null ? 0 : FM.evalProp(p.skin, t), exKc19 = p.keepcol == null ? 0 : FM.evalProp(p.keepcol, t);
+      if (exSk19 > 0 || exKc19 > 0) { skinKeep19(d, W, H, p, t, PIXEL_FX.exposure, exSk19, exKc19); return; }
       /* #966 opts13: AFFECTS Darks (1), Mids (2) or Lights (3), or MIX under 100 %, runs tone13 — this very kernel without the two, its
          result laid in by the tonal weight of each pixel's own brightness and Mix; All and 100 % run the lines below untouched. */
       const exRg13 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0), exMx13 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
@@ -12444,6 +12474,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var scBoost=p.boost==null?100:FM.evalProp(p.boost,t); if(scBoost<0)scBoost=0; if(scBoost>300)scBoost=300; scBoost=scBoost===100?1:scBoost/100;
       var scInv=(p.invert==null?0:(Math.round(FM.evalProp(p.invert,t))|0))===1;
       var scTol = fparam(p, 'tolerance', 0.2, t); scTol=Math.max(0.02,Math.min(1,scTol)); var scK=hexToRGB(p.color)||[224,49,49]; var scKmx=Math.max(scK[0],scK[1],scK[2]), scKmn=Math.min(scK[0],scK[1],scK[2]), scKdf=scKmx-scKmn, scKH=0; if(scKdf>0){ if(scKmx===scK[0])scKH=((scK[1]-scK[2])/scKdf)%6; else if(scKmx===scK[1])scKH=(scK[2]-scK[0])/scKdf+2; else scKH=(scK[0]-scK[1])/scKdf+4; scKH*=60; if(scKH<0)scKH+=360; } var scWin=scTol*120;
+      /* #966 opts19 — PROTECT SKIN over 0 % or SHOW SELECTION On runs colourPop19: Protect skin through tone13 (this very kernel without the
+         two, every control above and below as it is, each pixel then laid in by 1 − Protect skin x its skin weight), Show selection as the
+         matte of what keeps its colour. 0 % and Off run the lines below untouched; nothing above this touches a pixel. */
+      var scSk19=p.skin==null?0:FM.evalProp(p.skin,t), scVw19=p.view==null?0:(Math.round(FM.evalProp(p.view,t))|0);
+      if(scSk19>0||scVw19===1){ colourPop19(d,W,H,p,t,scKH,scWin,scInv,scSk19,scVw19===1); return; }
       /* #966 opts2 — DARKEN THE REST and REST COLOUR (colourPop966, beside wCx, the loop below to the bit with the two added). A grey
          Rest colour drains to grey, which IS the loop below, so only a colour off grey or a Darken above 0 leaves it. */
       var scDk=p.darken==null?0:FM.evalProp(p.darken,t); if(!(scDk>0))scDk=0; if(scDk>100)scDk=100;
@@ -14660,6 +14695,62 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._hslBands18 = hslBands18;   // suite seam (#966 opts18)
+  /* ═══ #966 opts19 (hunt/fx19): the helpers behind the nineteenth round — Gamma's and Exposure's Protect skin and Keep colour, Colour
+   * Pop's Protect skin and Show selection. Each runs only off those controls' defaults, so a default kernel never calls one. ═══ */
+  /* PROTECT SKIN AND KEEP COLOUR FOR A POINT KERNEL `fn` (Gamma's, Exposure's): the kernel itself, untouched, run with the two keys taken
+     away (so every one of its own controls is what it is), Keep colour laid on by tcKeep18 (round eighteen's Tone Curve: the picture's
+     own colour put at the kernel's brightness), then each pixel laid in by 1 − Protect skin x its skin weight by tone13. At Protect skin
+     0 % it calls tcKeep18 straight on a copy of the params without the two, so it pays for no plate copy it does not need (round
+     eighteen's review N1). Pixel by pixel on the pixel alone, so a cropped plate (692) draws what the whole one draws. */
+  function skinKeep19(d, W, H, p, t, fn, skin, keep) {
+    const run = function (d19, W19, H19, q19, t19) { tcKeep18(d19, W19, H19, q19, t19, keep, fn); };
+    if (skin > 0) { tone13(d, W, H, p, t, run, ['skin', 'keepcol'], 0, 100, skin); return; }
+    const q = Object.assign({}, p); delete q.skin; delete q.keepcol;
+    run(d, W, H, q, t);
+  }
+  FM._skinKeep19 = skinKeep19;   // suite seam (#966 opts19)
+  /* COLOUR POP'S PROTECT SKIN AND SHOW SELECTION. With Show selection Off the picture is tone13's: the kernel without the two (Hue range,
+     Drain, Boost, Acts on, Darken and Rest colour as they are), each pixel laid in by 1 − Protect skin x skinW12 of its own colour — at
+     100 % a full skin tone keeps its own colour while the rest drains. SHOW SELECTION paints what keeps its colour: white a pixel kept
+     whole, black one drained all the way — the kernel's own keep (its hue window, 1 − q² inside it, from KH and win as the kernel
+     works them out; Acts on The chosen hue turns it round), with what Protect skin holds back counted as kept: 1 − (1 − keep) x (1 −
+     Protect skin x skinW12). A pixel with no alpha is never written; alpha never changes. Pixel by pixel on the pixel alone (692). */
+  /* (review F2) WITH BOOST OFF 100 A PROTECTED PIXEL COMES BACK AS THE KEPT COLOUR WOULD HAVE IT, not as the bare picture: tone13 lays the
+     whole kernel back toward the picture, Boost included, so Protect skin took Boost off the default red coat (skinW12 1). The kept plate is
+     this kernel with no drain, no darken and a grey rest; at Boost 100 it is the picture byte for byte, so that case stays tone13's. */
+  function colourPop19(d, W, H, p, t, KH, win, inv, skin, view) {
+    if (!view) {
+      const bo = p.boost == null ? 100 : FM.evalProp(p.boost, t);
+      if (bo === 100 || !(skin > 0)) { tone13(d, W, H, p, t, PIXEL_FX.spotcolor, ['skin', 'view'], 0, 100, skin); return; }
+      const o = new Uint8ClampedArray(d), k = d.slice(), q = Object.assign({}, p); delete q.skin; delete q.view;
+      PIXEL_FX.spotcolor(k, W, H, Object.assign({}, q, { desat: 0, darken: 0, color2: '#808080' }), t);
+      PIXEL_FX.spotcolor(d, W, H, q, t);
+      const s2 = skin >= 100 ? 1 : skin / 100;
+      for (let i = 0; i < d.length; i += 4) {
+        const w = 1 - s2 * skinW12(o[i], o[i + 1], o[i + 2]);
+        if (w === 1) continue;
+        d[i] = k[i] + (d[i] - k[i]) * w; d[i + 1] = k[i + 1] + (d[i + 1] - k[i + 1]) * w; d[i + 2] = k[i + 2] + (d[i + 2] - k[i + 2]) * w;
+      }
+      return;
+    }
+    const s = isFinite(skin) ? (skin <= 0 ? 0 : (skin >= 100 ? 1 : skin / 100)) : 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const R = d[i], G = d[i + 1], B = d[i + 2], mx = Math.max(R, G, B), mn = Math.min(R, G, B), df = mx - mn;
+      let keep = 0;
+      if (df >= 8) {
+        let h;
+        if (mx === R) h = ((G - B) / df) % 6; else if (mx === G) h = (B - R) / df + 2; else h = (R - G) / df + 4;
+        h *= 60; if (h < 0) h += 360;
+        let dd = Math.abs(h - KH); if (dd > 180) dd = 360 - dd;
+        if (dd <= win) { const q = dd / win; keep = 1 - q * q; }
+      }
+      if (inv) keep = 1 - keep;
+      if (s > 0) keep = 1 - (1 - keep) * (1 - s * skinW12(R, G, B));
+      const v = keep * 255; d[i] = v; d[i + 1] = v; d[i + 2] = v;
+    }
+  }
+  FM._colourPop19 = colourPop19;   // suite seam (#966 opts19)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -25777,10 +25868,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   /* #966 opts18 — TONE CURVE'S KEEP COLOUR: the kernel itself, untouched (run with the new keys taken away, by tone13), then each pixel
      it curved moved toward the PICTURE's own colour put at the curved pixel's brightness (setLum255, Colour Balance's Keep brightness
      turned round: the hue and the richness are the picture's, the brightness is the curve's) by Keep colour, 0–100 % (held there). 0 %
-     is the kernel byte for byte. Pixel by pixel on the pixel alone, so a cropped plate (692) draws what the whole one draws. */
-  function tcKeep18(d, W, H, p, t, keep) {
+     is the kernel byte for byte. Pixel by pixel on the pixel alone, so a cropped plate (692) draws what the whole one draws. #966 opts19:
+     `fn`, when given, is the point kernel run in the curve's place (Gamma's, Exposure's, through skinKeep19); without it, the curve. */
+  function tcKeep18(d, W, H, p, t, keep, fn) {
     const k = keep > 0 ? (keep < 100 ? keep / 100 : 1) : 0, src = k > 0 ? d.slice() : null, out = [0, 0, 0];
-    PIXEL_FX.tonecurve(d, W, H, p, t);
+    (fn || PIXEL_FX.tonecurve)(d, W, H, p, t);
     if (!(k > 0)) return;
     for (let i = 0; i < d.length; i += 4) {
       if (src[i + 3] === 0) continue;

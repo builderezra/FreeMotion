@@ -102,12 +102,20 @@ window.FM = window.FM || {};
      edge by how far the finger has travelled from where it went down, never to where the finger is. A mouse does
      not tremble, so it keeps every pixel. */
   const GRAB_SLOP = 6;
+  /* ⚠️ ONE FINGER DRIVES THE BOX (queue 690, real input). A second finger that landed while the first was moving the box
+     started a grab of its own: the box then moved by the first finger's distance from the SECOND finger's press, so it
+     leapt by the gap between his fingers, and lifting the second finger ended the drag under the first. While the first
+     finger's capture is live (a real touch only: a synthetic pointer cannot be captured), every other finger is ignored. */
+  function otherFinger(e) {
+    return !!(drag && drag.kind === 'touch' && e.pointerType === 'touch' && e.pointerId !== drag.pid && overlay && overlay.hasPointerCapture && overlay.hasPointerCapture(drag.pid));
+  }
   function onDown(e) {
     if (!active) return;
     e.preventDefault(); e.stopPropagation();
+    if (otherFinger(e)) return;
     const id = hitHandle(e), sp = evtSrc(e);
     const grab = { sx: e.clientX, sy: e.clientY, slop: e.pointerType === 'mouse' ? 0 : GRAB_SLOP, moved: false,
-                   startSp: sp, startRect: Object.assign({}, rect) };
+                   startSp: sp, startRect: Object.assign({}, rect), pid: e.pointerId, kind: e.pointerType };
     // On a handle → resize. Inside an existing (partial) crop → move it. Otherwise (uncropped frame,
     // or a press outside the box) → DRAW a fresh box from here, iPhone-style.
     if (id) drag = Object.assign(grab, { mode: id });
@@ -118,6 +126,7 @@ window.FM = window.FM || {};
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   function onMove(e) {
     if (!active || !drag) return;
+    if (otherFinger(e)) return;
     e.preventDefault();
     // queue 690: nothing until the finger really travels — see GRAB_SLOP above
     if (!drag.moved && drag.slop && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < drag.slop) return;
@@ -143,7 +152,7 @@ window.FM = window.FM || {};
     }
     redraw();
   }
-  function onUp(e) { if (drag) { drag = null; try { overlay.releasePointerCapture(e.pointerId); } catch (_) {} } }
+  function onUp(e) { if (drag && !otherFinger(e)) { drag = null; try { overlay.releasePointerCapture(e.pointerId); } catch (_) {} } }
 
   function commit() {
     const l = layer(); if (!l) return;

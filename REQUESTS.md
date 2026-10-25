@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 25 Oct at v18.05
+> ## 📌 WHAT I NEED FROM YOU — updated 26 Oct at v18.06
 >
-> **State:** v18.05 — **three more effects have new controls** (#966): Tone Curve (Protect skin, Keep colour), Duotone (Protect skin, Affects), HSL Bands (Protect skin, Mix); and **This frame (PNG) draws a GIF at its full size** (#860). A live session needs both devices on v18.05. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+> **State:** v18.06 — **three more effects have new controls** (#966): Gamma and Exposure (Protect skin, Keep colour), Colour Pop (Protect skin, Show selection); **a GIF in This frame (PNG) costs one frame** (#860); and **a second finger no longer hijacks the mask pen, Free crop or the Move pad** (#690). A live session needs both devices on v18.06. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+>
+> v18.05 — **three more effects have new controls** (#966): Tone Curve (Protect skin, Keep colour), Duotone (Protect skin, Affects), HSL Bands (Protect skin, Mix); and **This frame (PNG) draws a GIF at its full size** (#860). A live session needs both devices on v18.05. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
 > v18.04 — **three more effects have new controls** (#966): HSL Mixer (Protect skin, Mix), Gradient Map and Hue Ramp (Protect skin, Affects). A live session needs both devices on v18.04. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
@@ -27550,6 +27552,7 @@ re-opened #480, which I had marked done and had not fixed.
       #593, #603 and #645, which had been open since 26 Aug and cost three sessions of testing.
       ↻ **25 Sep, his words in full: *"Keep going"*** — sent right after I stopped the loop at v16.93 with the actionable list dry and everything else waiting on his picks. Read as this brief, restated: the loop is re-armed, and the work is a bug hunt — with REAL touch and mouse input this time (tests/_cdp.py's channel from #924), because his phone complaints kept surviving synthetic tests.
       UNBLOCKED 30 Sep (#993 housekeeping): a standing brief, not a question — nothing in it waits for an answer (the 25 Sep line just above is about OTHER items), so it should not read as 🟠 NEEDS YOU. The JUMPED line keeps it from holding the queue.
+      📍 **v18.06 (26 Oct): a real-input hunt shipped** (lane three, his 31 Aug brief) — a second finger that lands while one finger works the mask pen, Free crop or the Move pad no longer starts a drag of its own: the pen dropped a stray point where it touched, and the crop box and the layer leapt by the gap between his fingers. One gate in each: while the first finger's capture is live, every other finger's press, moves and lift are ignored (mouse and pen never gated). Three real-finger tests, each with a one-finger CONTROL and a second-finger-moves-last case. The lift clause is reasoned, not proven: a touchMove that drops one finger of two delivers no pointerup in this driver. Logged for later, not built: the same takeover in point-edit, motion-path, touch-up, fill-drag, the nudge pad and the other inspector pads; whether two fingers on the mask pen should take back the first finger's point, as the draw tool's #165.3b does.
 
 - [x] **691b — SAME BUG, OTHER HALF, found 1 Sep by re-running #691's own audit.** Fixed v14.81.
       JUMPED: this IS #691, which is closed — the same bug in the dispatcher its audit never asked about.
@@ -30982,6 +30985,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v18.02 (24 Oct): #6's GIF half shipped** — one total for decoded GIF frames (4 x gifBudget on a fine-pointer 384 MB desktop, one gifBudget on a phone), a newcomer decodes smaller from its share, a GIF already decoded is never touched, a copy of a held GIF (Split half, Duplicate, paste) decodes at its original's size, Replace media does not count the GIF it replaces. **Decided by the PM, his to correct:** (1) the EXPORT re-decodes every GIF it draws at full size inside the export's own total, and a GIF that does not fit is named on the ready card; (2) on a phone all GIF export copies together take at most 4 x gifBudget (about 320 MB): no smaller phone export total exists, mobile Safari kills the tab past that, and crash-resume would re-run the prepare step; a GIF that does not fit goes out at the largest size that does. A build, a review (blocker: copies squeezed against their originals), folds by hand, F3 built, its review (blocker: no phone export figure existed), the PM's ceiling, a review of the folds. Left: thinned caches never regrow; a lazy build near the playhead for many reversed clips; the single-frame PNG export still draws the preview copy and says nothing (review G5); a GIF or PNG-sequence export has no ready card to name a GIF kept smaller (G6); records kept for undo are not counted in the GIF total (F4); two different GIFs that share a name, a size and a type would be taken for one file, so the export could draw one's frames for the other (G7, rare, for the next hunt).
       📍 **v18.03 (25 Oct): G7 shipped** — a GIF's identity is a SHA-256 of all its bytes (a full-length FNV-1a where the browser has no crypto.subtle), taken once per file where the decode holds the bytes, so two different GIFs that share a name, a size and a type are never one file and never share an export copy; one GIF used twice (a Split) still shares one. The PM put it first (wrong frames in his file beats new effects) and asked for the whole file, not its ends. Test '860 two different GIFs that share a name …', two mutations CAUGHT. Left of #6: G5 (the single-frame PNG export says nothing), G6 (GIF and PNG-sequence exports have no card), F4 (undo records outside the GIF total), thinned caches never regrow, a lazy build near the playhead.
       📍 **v18.05 (25 Oct): #6's G5 and G6 shipped** — This frame (PNG) draws a GIF the preview holds smaller from a full-size copy, under the export's own total and the phone ceiling, freed on every path; the GIF and PNG-sequence exports say what memory kept smaller, in the ready card's words. Two reviews, both folded: one still at a time and never beside an export (the export waits, and Cancel ends that wait), a still waiting on the clips coming back holds an export off too, a still puts back an export's copy instead of deleting it, and another project opened mid-still is read from FM.projects.currentId (the first fold compared FM.scene, which opening a project changes in place, so it never fired; the slices caught a second slip, FM.storage for FM.projects) and said. NEXT (the review's F3, not built): the still decodes the WHOLE GIF to draw one frame, so on a phone a GIF over the ceiling is drawn smaller when its one frame (about 1 MB) would fit; keep only the frame animFrameAt picks in composeGifFrames, about 10 lines. Also left: the still's smaller-to-fit toast can sit behind an export overlay (R4).
+      📍 **v18.06 (26 Oct): #6's F3 shipped** — This frame (PNG) decodes only the frames its layers show at that instant (each layer of a split at its own time), costed at those frames' full size inside the same total and phone ceiling, so on a phone a GIF over the ceiling as an animation is drawn full size when its one frame fits. A refuter found the still then drew Time Echo's copies from the preview's squeezed copy (on a PC too); folded: a GIF under Time Echo, Trail's Time offset, Match Grade or Motion Blur (on its layer, in an effect container or on a group above it) is decoded whole for the still, as before. Still open from #6: R4, the still's smaller-to-fit toast can sit behind an export overlay; F4 (narrow), the kept copy's fallback is captured at decode time.
 
 - [x] **861 — "Give me the list to answer."** (10 Sep, his words in full — logged LATE, on 11 Sep, and that is the point of the entry:)
       > *"Give me the list to answer."*
@@ -34164,6 +34168,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v18.02 (24 Oct): round sixteen shipped** — Colourize Protect skin and Affects (All, Darks, Mids, Lights); Colour Wheels Protect skin and Mix; Black & White Mixer Protect skin and Mix. Every default byte-identical; SCHEMA_REV 35 with the fingerprint re-pinned by fp.js; 15 '966 opts16' tests. A review (no blocker) and its fold: the B&W Mixer's does-nothing reason no longer claims an orange layer is already black and white at Mix 0 or under Protect skin.
       📍 **v18.04 (25 Oct): round seventeen shipped** — HSL Mixer Protect skin and Mix; Gradient Map Protect skin and Affects; Hue Ramp Protect skin and Affects. Every default byte-identical; SCHEMA_REV 36 with the fingerprint re-pinned by fp.js; 15 '966 opts17' tests. A review (no blocker) and its one fold (the HSL Mixer's Protect skin row names the sliders it guards). Next pick the builder named: Tone Curve still has no Protect skin.
       📍 **v18.05 (25 Oct): round eighteen shipped** — Tone Curve Protect skin and Keep colour; Duotone Protect skin and Affects; HSL Bands Protect skin and Mix. Every default byte-identical; SCHEMA_REV 37 with the fingerprint re-pinned by fp.js; 14 '966 opts18' tests. A review (no blocker) and its two folds (HSL Bands' Protect skin note names Magenta and says the starting Blue reaches no skin; the Mix test's Show selection checks got a measured CONTROL, 1925 of 6912 pixels). Next pick the builder named: Protect skin on Split Toning, Tint and Colour Pop, then Exposure, Gamma and Faded Film.
+      📍 **v18.06 (26 Oct): round nineteen shipped** — Gamma Protect skin and Keep colour; Exposure Protect skin and Keep colour; Colour Pop Protect skin and Show selection. Every default byte-identical; SCHEMA_REV 38 with the fingerprint re-pinned by fp.js; 14 '966 opts19' tests. A review and a refuter; folds: the row-order test read past the colour rows (B1), Colour Pop's Protect skin no longer takes Boost off a kept red (F2), the matte note says black is the most drained (F3). FOR ROUND TWENTY (the refuter's call, not folded): Exposure's Keep colour keeps channel gaps, not ratios, so a pushed colour comes out paler (0.50 to 0.33 saturation at +0.8 EV); the review's ratio version is unbounded (a near-black turns to red specks), so it needs a bounded design. Next picks the builder named: Protect skin on Split Toning (its noopWhy must allow it), Tint and Faded Film.
 
 - [ ] **967 — Live collaboration feels extremely underbaked on his phone: pull it all up, make sure it's all there and working, and make it simple enough for someone who's never used it** (26 Sep, builder chat — his words)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -38055,3 +38060,328 @@ re-opened #480, which I had marked done and had not fixed.
       What the read found: js/exporter.js is the only encoder user in the app, and none of its waits had a limit: the video encoder's flush, the video back-pressure loop (which never read Cancel or the encoder's own error), the soundtrack encoder's flush, and both flushes of the AAC warm-up probe that runs before every soundtrack. On this laptop's Chrome a 2160 x 3840 H.264 flush never settled, twice, in the suite. In his own export that is the dialog saying Exporting… for ever, Cancel dead, and only a reload out.
       📍 **Built (24 Oct, hunt/encstall 4f1cf576, not run yet):** one rule, progress and not a clock: a wait is called stalled only when nothing comes out of the encoder for the stall window while it still has work, so a slow encoder that is still working never trips it; Cancel and the encoder's own error end the wait at once. A stalled video encode ends as "The export stopped" and offers the next size down (the existing Too big offer, on his yes, never a quiet downsize); a stalled soundtrack is the existing "exporting WITHOUT SOUND"; a stalled probe only skips the warm-up trim. Three red-first tests on the app's real export. Next: measure the stall window on the real 4K path at 1x and under a 4x CPU throttle and set it from that, then a review and its refuter, slices, mutations, ship.
       📍 **v18.01 (24 Oct): FIXED** — every encoder wait ends (js/exporter.js encWait): Cancel read on every turn, the codec's own error ends it, and no output for 90 s before the first chunk or 20 s after it is ENCODER_STALLED, which offers the next size down (offerSmallerMp4, The export stopped). The windows are 5x the measured silences of a working 4K H.264 encoder here (six runs: 2.2-14.3 s to the first chunk, at most 1.8 s between chunks, 24 ms at the flush), pinned by '1185 the encoder stall windows are at least …'; '?fmmeasure=1' re-measures. A review and its refuter found a frozen page read as a stall (folded, with a test that blocks the page 1.5 s) and a prove.sh blocker (folded). Not ticked: the queue gate holds hunt items behind the lower ones (#1181-#1184). Optional hand check on his PC: export a 4K clip and press Cancel part-way — it stops at once.
+- [ ] **1186 — Collab media: a transfer interrupted by a link change is never asked for again, and only a reload frees it (both directions) (hunt HIGH #1186)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 1 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      The hunt's shared notes (they apply to all nine, #1186 to #1194):
+      > The pattern hunted was #1185's: an await on a browser API that can never settle, or a save that silently fails.
+      > - 6 read-only finders (export, media, storage, audio, app, collab), then 2 refuters per finding: "is there an existing guard" and "can it really happen to him".
+      > - 12 found: 10 CONFIRMED, 2 PLAUSIBLE, none refuted. Merged into the 9 items below.
+      > - These are PM findings, so each REQUESTS entry needs a `(hunt HIGH/MEDIUM/LOW #n)` tag.
+      > - Full run: PM tasks/wqth4twr4.output; journal at subagents/workflows/wf_fbf9c315-20d.
+      > Summary: I merged the 11 findings into 9 build items, ranked by what Ezra would suffer. I checked every cited line against the v18.05 tree, read-only, and they all match.
+      >
+      > Shared fixes:
+      > - The three collab-media findings are one fix in `collab-media.js`: end transfers when the link changes, and add a measured no-progress window as a backstop.
+      > - The two Replace-media findings are one fix: keep the original, or ask, before overwriting it.
+      > - Item 2's new `unlandedFiles()` check also closes the project-switch half of item 7, so build item 2 first.
+      >
+      > Only one gap is a missing error listener: `idbDel` has no `onabort`. It is a one-line fix and needs no timeout, because every IndexedDB transaction ends in either complete or abort. The other items are silent data loss, or collab waits that nothing ever re-asks.
+      >
+      > Two items are PLAUSIBLE, each refuted by one checker:
+      > - Item 8, the voice take: the same bytes were just played in review, so the add almost never fails.
+      > - Item 9, the join over a link that already closed: the only path left is a sub-second coincidence, and the result is a stale "Live" label.
+      >
+      > Notes for the builder:
+      > - These are hunt findings, so each REQUESTS.md entry needs a `(hunt HIGH/MEDIUM/LOW #n)` tag in its header, or `ship.sh` will refuse the release.
+      > - Every prototype stub must put back the original property descriptor in a `finally`.
+      > - Every red test races its own named deadline, so it fails by name instead of hanging the suite.
+      > - The 921 tests must also run at `--width 380`.
+      > - Item 1 changes collab, so the memory rule applies: check it with two real Chromes, pausing one with SIGSTOP.
+      > - Two existing tests (`tests.js` 35147 and 35290) clear `ctl.inb` by hand, standing in for code the app does not have. Once item 1 lands, remove those hand-clears.
+      > ITEM 1 [HIGH] Collab media: a transfer interrupted by a link change is never asked for again, and only a reload frees it (both directions)
+      >   findings: collab:collab-media-inflight-never-reasked, collab:collab-media-forget-leaves-inbound, collab:collab-media-serve-zombie-refuses-want
+      >   files: js/collab-media.js (startWant 824-855, serve 869-918, abort 1046, M.forget 1364-1369, plus a new M.relink); js/collab-session.js (the 'welcome' case 945-951 calls M.relink; dropPeer 1807-1811 already calls forget); tests/tests.js (921 S4)
+      >   he sees today: 1. His iPhone is a guest and a clip is downloading. He locks the phone or switches apps, and the link drops and reconnects.
+      > 2. After 'Back in sync', the card stays frozen at 'Receiving media · N of M · 41%' for the rest of the session. The clip stays blank with its missing marker, and every export says the clip is 'still downloading in the background', which is false.
+      > 3. The same happens on his PC as owner when a guest that was uploading leaves, is removed, or drops. With two such stuck entries (IN_FLIGHT is 2), no media from any guest reaches the PC again.
+      > 4. After a guest reload, one clip can sit at 0% for ever, because the owner's dead send loops still count against the cap and serve() returns at line 893 without a word.
+      > 5. Only a reload, or ending the session, gets out.
+      >   fix: Model it on #1185's waitEncoder: every turn reads the link state, a measured no-progress window is the backstop, and the existing card is the only path (no new message, nothing removed). Recovery resumes from the parts already stored, because startWant already counts them.
+      > (a) Owner side: M.forget(S, mid) also ends everything in flight with that member. It sets stop on every ctl.out job with job.to === mid. It calls abort(ctl, fid, 'gone') on every ctl.inb entry whose e.from === mid, WITHOUT tried() or bad, so planWants asks again from whoever holds the file next. forget is already reached from bye (collab-session.js 776), dropPeer on link close (collab-ui.js 2631, 2985) and member-back (collab-ui.js 2616).
+      > (b) Guest side: add M.relink(S), which does the same for the owner ('h'): abort every inb entry and stop every out job. Call it from the 'welcome' case (collab-session.js 945-951), which is the moment the owner has re-admitted the hello. Do NOT call it from setLink: a want sent before the owner re-admits the member can be dropped. On the first welcome of a fresh join nothing is in flight, so it does nothing.
+      > (c) startWant (853): read S.sendMsg's answer. If false, abort at once (no tried) so the slot is not held. The next sweep asks again.
+      > (d) serve's loop (901-916): on every turn, break when job.stop, when S.endpoint(toMid) !== ep, or when ep.open === false. A braked job never reaches sendBulk, so today it can never notice the link is gone.
+      > (e) serve at the cap (893): a new ask for a DIFFERENT file from the same peer replaces that peer's job with the least recent progress, instead of returning with no reply. An honest receiver never holds more than IN_FLIGHT asks, so a third ask proves it has given one up. The cap stays at IN_FLIGHT, so the S8 fuzz rule at 875-884 holds.
+      > (f) Backstop no-progress window, on inb (last T_START or T_DATA for it) and on out (last 'ok' that advanced upto, or last send). When it expires, abort and re-ask (receiver) or stop (sender).
+      > - Size it from measurement: take the longest gap between progress events on a WORKING transfer in the '921 S8 … 4× CPU throttle' run and on a real two-Chrome run. Set the window well above that, and write both numbers into the test.
+      > - The clock does not run while this side's own part write is pending (inb.chain). Otherwise a slow phone's IndexedDB times out its own work.
+      > - The clock restarts when the tick gap shows THIS device was paused (the #967 liveTick rule, collab-session.js 1717-1723), so a phone in the background never times out its own pause.
+      >   red-first test: Each test races its own named deadline, so on today's code it fails by name instead of hanging. Run with ?only=921%20S4, at --width 380 as well.
+      > T1 (the high case), today's failure is 'hung':
+      > - Copy the cut-mid-file fixture of '921 S4 a link that dies mid-file resumes…' (tests.js 35147): withCollabGuest921 + q921bigPng, c.peer.cutAt = 55%.
+      > - Remove its hand-clear of c.ctl.inb and wanted.
+      > - After the cut, do exactly what collab-ui connect() does: c.S.setLink(<fresh fake link to the same peer>), c.S.setOnline(true), deliver {t:'welcome'}, then set c.peer.cut = false.
+      > - Assert c.peer.wants.length === 2 and that the record lands, raced against a 30 s deadline.
+      > - Today: wants stays 1 and M.pending(c.S).n stays 1.
+      > T2, owner and bye:
+      > - Guest m1 announces X via 'mf'. Let reconcile send want X to m1 (assert ctl.inb[X] exists).
+      > - Deliver {t:'bye'} from m1. Then have m2 announce X.
+      > - Assert ctl.inb[X] is gone within one tick, and that a want reaches m2.
+      > - Today: pending stays 1 and m2 gets nothing.
+      > T3, the sender zombie:
+      > - Owner session. A stub endpoint for m1 never acks, and its bufferedAmount('bulk') stays above LIM.BUFFER_HIGH.
+      > - Deliver want A and want B from m1. Then dropPeer('m1') and addPeer(newEp, {mid:'m1'}). Deliver want C.
+      > - Assert newEp sees a T_START for C within 2 s, and that Object.keys(ctl.out).length falls to 0.
+      > - Today: no T_START, and ctl.out keeps 2 jobs for ever.
+      >   control: These pass today and must still pass after the fix:
+      > - T1 with the hand-clear left in goes green. That proves the fixture delivers once a want is sent again.
+      > - T2: m1 sending an 'mf' with miss:1 clears the entry (line 500). That proves the assertion can go green.
+      > - T3: a want for A again after the swap gets a T_START through the same-file supersede at line 890.
+      > A new negative control: a healthy but slow transfer must not be aborted by (f), and must finish with exactly one want. Use a stub that delays each 'ok' by the measured worst gap. This catches a window set too tight.
+      > After the fix, remove the hand-clears in tests.js 35147 and 35290, so those tests check the app instead of a stand-in.
+      >   refuter notes: No refuter disagreed on any of the three. The 'real' checks sharpened them:
+      > - A reconnect starts after only 6 s of silence (liveTick 1741). It does not need LINK_GRACE to run out, so locking the phone is the normal trigger.
+      > - The app's own card tells phone users to keep the screen on during a transfer.
+      > - T_DATA has no sequence or offset check (969-982). So even a send loop that survives onto a new link can never complete a file that lost frames on the old one. Abort-and-re-ask from the stored parts is the right shape, not trying to carry on.
+      > - The 'another member announces the same fid' case in finding 2 is rare, because fid is a content fingerprint. The main stall does not depend on it.
+      > - For the zombie, the clip the user sees stall depends on the reloaded guest asking for a different file first (orderKey follows the playhead and selection). The endless 25 ms loop per dead job happens every time.
+      > - No bytes are lost. It is a stall with a status that lies. 'Export anyway' still works.
+
+- [ ] **1187 — Opening another project, or a new build reloading the app, frees a clip whose file never reached storage (a voice take is lost for good) (hunt MEDIUM #1187)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 2 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all nine, are in #1186.)
+      > ITEM 2 [MEDIUM] Opening another project, or a new build reloading the app, frees a clip whose file never reached storage (a voice take is lost for good)
+      >   findings: storage:switch-frees-unlanded-clip
+      >   files: js/storage.js (new unlandedFiles() beside planBlobWrites 566; projects.open 2937, create 2978, confirmLeave 2799-2802, askLeave 2783); js/home.js (card-tap gate 2706); index.html (fmSwTry 1369)
+      >   he sees today: 1. On a nearly full iPhone he records a voice-over or adds a big clip. He sees one toast, 'Not enough storage to save that media', and the clip keeps playing, even after going Home and back.
+      > 2. He then opens another project, or a new release auto-reloads the app.
+      > 3. Back in the project, the clip is empty, and the only message is '“X” never finished saving, so that clip is empty — add it again'.
+      > 4. For an in-app voice take, or a Remove vocals / Reduce noise render, there is nothing to add again. If openDB itself rejected, nothing was said beforehand at all: the catch at storage.js 849 is silent.
+      >   fix: Ask before letting go of a file the disk does not have, in the app's existing dialog. Use no new timeout: every wait here is the existing settled()/save(), which always settles because idbPut handles abort and openDB rejects on error.
+      > - Add FM.storage.unlandedFiles(): planBlobWrites() filtered to jobs where _stored.get(id) !== job.rev. It is a map lookup per clip with no IndexedDB read, the same cost class as lastWriteRefused().
+      > - In projects.open, create and confirmLeave, after flushSync, when unlandedFiles() is not empty:
+      >   - If pendingSaves(), await settled() first. A file still writing is late, not lost (see the _writing comment at 606).
+      >   - Then run one awaited save() and check again.
+      >   - If clips are still unlanded, call askLeave({ why: '“<clip name>” has not saved — opening another project now throws it away.' }). Stay leaves everything as it was. 'Leave anyway' is kept, so nothing he uses is removed.
+      > - In home.js 2706, add the same flag read to the card-tap gate, so the question comes BEFORE the push, as that comment requires.
+      > - In index.html fmSwTry 1369, apply the same check: return false, which holds the reload exactly as it already does for a refused doc. Keep the existing 'once per set of clips' save rule, so a store that refuses is not handed the file every 2 s.
+      > - Optional: in save()'s openDB catch (849), raise the existing warnStore 'Could not save that media.' once, so the openDB-reject case is no longer silent.
+      > - This also closes the project-switch half of item 7. After an Undo of Replace media the record is at the wrong revision, so open() now writes it before releasing.
+      >   red-first test: 1. Seed a second project. Add an image clip to the open one.
+      > 2. Stub IDBObjectStore.prototype.put to throw DOMException('QuotaExceededError') only for that layer id's key. Restore the descriptor in finally.
+      > 3. await FM.storage.save(), then await FM.storage.settled().
+      > 4. Assert FM.storage.readMedia(id) is null and FM.storage.lastWriteRefused() is false. This proves the doc saved and the file did not.
+      > 5. Stub FM.ask to record its calls and answer Stay (false). Then await FM.projects.open(otherId).
+      > 6. RED today: open returns true, FM.ask is never called, and FM.media.get(id) is gone.
+      > 7. After the fix: FM.ask is called once with the clip's name, open returns false, and FM.media.get(id) still holds the file.
+      > Second red, the update reload: with the same stub, call FM._swReloadWhenIdle(stubReload) and run the check. Assert stubReload is never called while the clip is unlanded. Today it is called.
+      >   control: - Without the put stub, open() switches with no question and the record is on disk.
+      > - A clip whose write is slow but succeeds (a put stub that resolves after a delay) gets no question either: open waits for settled() and then goes ahead.
+      > - Mutation for the proof: make unlandedFiles() return [], and the red must come back.
+      >   refuter notes: Both checkers found no guard, both with high confidence. The 'real' check adds two points:
+      > - WebKit's localStorage.setItem succeeds against its own 5 MB origin quota even on a nearly full phone, so the small doc 'saves' exactly where the blob does not. The doc-only check is weakest on his iPhone.
+      > - Every release he ships puts the app through the update-reload path.
+      📍 **26 Oct ~01:10: building now** in hunt/dl52 (one lane, the PM's pace), items 5 and 2 together, then a review and a refuter.
+
+- [ ] **1188 — Replace media: Undo cannot bring the original back, and nothing says so (hunt MEDIUM #1188)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 3 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all nine, are in #1186.)
+      > ITEM 3 [MEDIUM] Replace media: Undo cannot bring the original back, and nothing says so
+      >   findings: app:replace-no-keep-original, storage:second-window-sweep-eats-prev
+      >   files: js/app.js (swapInMedia 5298-5341, restoreReplacedOnce 5153-5159); js/storage.js (stashPrevMedia 711-723, takePrevMedia 726-746, hasPrevMedia 748, _prevFiles 692)
+      >   he sees today: 1. He replaces a clip and taps Undo.
+      > 2. The layer's size and settings snap back, but it keeps showing the new file. Redo and Undo cannot fix it, and no message appears.
+      > 3. This happens in three ways:
+      >    (a) He replaced the clip while it had no copy in memory: just back from Home before its reload reached that layer, or a clip whose reload failed and sits blank.
+      >    (b) The phone was nearly full, so keeping the original was refused. The only hint is 'Not enough storage to save that media', which reads as being about the new file.
+      >    (c) On the PC, a second FreeMotion window started or reloaded, and its boot sweep deleted the kept original (prev:<id>:<rev> has no exemption at storage.js 3447).
+      > 4. The replace also removed the original's library tile (app.js 5339), so the original is gone from the app for good.
+      >   fix: Keep the original, or ask, before the new file is saved over it. Use the existing FM.ask dialog; this is not a silent downgrade.
+      > (a) swapInMedia (5301-5307): when FM.media.get(id) has no file, read the layer's stored record with FM.storage.readMedia(id). If its rev matches layer.mediaRev, stash that. Nothing is lost when there is truly no record.
+      > (b) Read stashPrevMedia's boolean, which the empty catch currently throws away. If it is false:
+      >    - Call FM.ask({ title: 'Not enough storage to keep the original', message: 'If you replace it now, Undo cannot bring “<layer name>” back.', ok: 'Replace anyway', cancel: 'Keep it', danger: true }).
+      >    - On 'Keep it', release nrec (FM._releaseMediaRecord) and return false with the layer untouched. Do not reuse the stale() toast text.
+      >    - Check that the other callers handle a false return: template-fill.js 270, and Simple's pickReplace/planReplace in spine-edit.js (~2282-2338, ~2490), which call with noSave.
+      > (c) takePrevMedia: when the slot read is empty but _prevFiles still holds that revision's File (another window's sweep took the record), answer from memory and write the slot again (best effort).
+      >    - Store kind alongside the File in _prevFiles. File.type cannot tell an audio clip from an image here, because restoreReplacedOnce tests /^video/.
+      >    - Update the identity check at line 715 to compare .file.
+      > (d) Optional, smaller: restoreReplacedOnce 5159 throws away the redo-side stash result the same way. Read it there too.
+      >   red-first test: R1 (no record in memory, case a):
+      > - Store an image layer's file and save it. FM.media.remove(id), as Home's release does.
+      > - await FM.swapInMedia(id, nrecB). Then FM.history.undo() and await FM.restoreReplacedMedia().
+      > - Assert FM.media.get(id).file is the ORIGINAL, by size and name. Today it is B.
+      > R2 (refused keep, case b):
+      > - Keep the record in memory. Stub FM.storage.stashPrevMedia to resolve false. Stub FM.ask to record its calls and answer 'Keep it'.
+      > - Assert FM.ask was called, swapInMedia resolved false, layer.mediaRev is unchanged, and readMedia(id) is still the original.
+      > - Today: no question, it returns true, and the record is overwritten.
+      > R3 (second window, case c):
+      > - Replace A with B through the app's path, then await settled().
+      > - await FM.projects.pruneOrphans() as the stand-in for the other window's boot. Assert FM.storage.listMediaKeys('prev:') is empty: that proves the sweep really ran. FM._mediaBusy must be 0, or the sweep returns early and the test passes for the wrong reason.
+      > - Undo, then await restoreReplacedMedia(). Assert the file is A. Today it is B.
+      >   control: - Record in memory, the real stash and no sweep: Undo brings A back. This is green today.
+      > - Mutation: delete the stash line at 5306, and this control must go red. That proves the control can tell the difference.
+      >   refuter notes: Both findings had no refutation. The 'real' checks add:
+      > - Case (b) is the most reachable: the large original is refused and the smaller new file fits.
+      > - For (c), manifest.json has no launch_handler, so relaunching the installed app on Windows Chrome opens a new window. The iPhone cannot hit (c).
+      > - In the common case the source file is still in his Photos or Files. Media that exists only in the app (in-app recordings, a friend's collab clip, Take Video) is lost for good.
+      > - A clip reused from a lib: shared copy keeps that copy.
+
+- [ ] **1189 — Restore from a backup or importing a .fmotion.json throws away footage this device cannot open, then tells him it was never in the file (hunt MEDIUM #1189)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 4 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all nine, are in #1186.)
+      > ITEM 4 [MEDIUM] Restore from a backup or importing a .fmotion.json throws away footage this device cannot open, then tells him it was never in the file
+      >   findings: storage:applyscene-drops-undecodable-bytes
+      >   files: js/storage.js (applyScene 2011-2057, against hydratePack 2512-2517); js/settings.js (restore summary ~798-800)
+      >   he sees today: 1. He restores a backup (Settings → Restore from a backup) or imports a project file that holds a clip this browser will not open. Examples: an .mkv or WebM on the iPhone, an unconverted HEIC in Chrome on the PC, or a clip whose 20 s metadata timer fired while iOS suspended the restore.
+      > 2. The restore says 'Restored N projects.'
+      > 3. The project opens with a blank clip, then and on every later launch, with no message.
+      > 4. On a single-file import he is told '1 layer has no footage in this file … restore from a full backup', which is false: the footage was in the file.
+      > 5. This device's copy of the bytes is gone, and so is every later backup made from it.
+      >   fix: Store the bytes first, then decode, exactly as hydratePack already does (2512-2517).
+      > - In applyScene, after dataURLToFile, hold FM._mediaBusy and idbPut(db, nid, { file, kind: md.kind, rev: layer.mediaRev || 0 }). On success, record the rev in _stored. Then decode.
+      > - If the decode fails, the layer is blank this session, but its file is on disk. The next launch's hydrate tries again, and the next save does not drop it.
+      > - Make the warning true. Layers whose embed was ABSENT keep today's 'no footage in this file' sentence. Layers whose bytes were stored but would not open get a separate sentence on the same importWarnings/toast path, e.g. '1 clip in this file could not be opened on this device — its footage is kept with the project.'
+      > - Optional: let the quiet restore's final summary (settings.js ~800) carry the count, since its mid-restore toasts are replaced by the next one.
+      > - Also check that Save project file and backup read the STORED record for a layer with no file in memory. hydratePack's comment says save-backs must, or the next backup leaves this clip out.
+      >   red-first test: 1. Build a one-project backup object: {app:'freemotion', backup:1, projects:[{app:'freemotion', v:1, project:{name:'R', width:320, height:240, fps:30, duration:2}, layers:[one image layer 'L1'], media:{L1:{kind:'image', name:'a.png', dataURL:<tiny PNG data URL>}}}]}.
+      > 2. Stub FM.loadImageFile to reject, standing in for a codec this device lacks. Stub FM.projects.confirmLeave to answer true. Restore both in finally.
+      > 3. await FM.storage.restoreBackup(obj), then await FM.storage.settled().
+      > 4. Find the restored doc's layer id and call FM.storage.readMedia(thatId).
+      > 5. RED today: null. Expect a record whose file.size equals the PNG's.
+      > 6. Second assertion: on the single-file import path, the warning does NOT say 'no footage in this file' for that layer.
+      >   control: - With loadImageFile not stubbed, the record exists and the layer is in FM.media. This is green today.
+      > - A backup whose embed for L1 is absent still gives the 'no footage in this file' sentence. That keeps the existing warning honest.
+      >   refuter notes: Both checkers confirmed; the 'real' one at medium confidence. Its view:
+      > - The HEVC-in-Chrome-on-PC example is weak. Chrome on Windows decodes HEVC with a GPU, and a clip with an audio track usually loads as audio only, which still keeps its bytes.
+      > - The real routes are a Safari-unplayable container from the PC, an unconverted HEIC sent to the PC, and the 20 s metadata timer firing after an iOS suspension mid-restore. In that last case the clip would have played on the next launch.
+      > - The original backup file is never damaged. What is lost is this device's copy.
+
+- [ ] **1190 — Export: the overlay can stick for good with a dead Cancel when an IndexedDB delete aborts while committing (hunt LOW #1190)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 5 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all nine, are in #1186.)
+      > ITEM 5 [LOW] Export: the overlay can stick for good with a dead Cancel when an IndexedDB delete aborts while committing
+      >   findings: export:xr-clear-idbdel-no-onabort
+      >   files: js/storage.js (idbDel 336-341)
+      >   he sees today: Rarely: WebKit's IndexedDB connection is lost mid-commit (memory pressure during a heavy 4K export), the disk fails, or site data is cleared during an export. Then:
+      > - After Cancel, the export overlay stays at its last percentage for good, and Cancel does nothing.
+      > - In the fresh-start sweep (exporter.js 2125), the bar sits at 0% before frame 1.
+      > - A reload is the only way out, and it does not even ask, because FM._exporting was already cleared (exporter.js 2362).
+      > - After a successful Save he sees nothing, but runExport's finally never runs: a 'Hide other layers' solo is never put back in the editor, and the videos are never re-seeked.
+      >   fix: One line: add tx.onabort = () => res() to idbDel, the same as idbPut beside it at line 297 (it is the only transaction helper in storage.js without one).
+      > - No deadline is needed or wanted. By the IndexedDB spec every transaction ends in exactly one complete or abort event, so with both handled the promise always settles, and nothing is guessed.
+      > - Do NOT put a fixed timeout on XR.clear. A slow phone deleting ~170 parts would trip it, and a clear that gives up early lets the old job's late deletes race the next export's parts.
+      > - The same line also covers every other idbDel awaiter: removeMedia, deleteLayer, export-resume clear() (290, 293) and the boot sweep (3454).
+      >   red-first test: 1. Wrap IDBObjectStore.prototype.delete. For keys starting 'xr:', return the real request and add req.addEventListener('success', () => req.transaction.abort()). That fires abort on the transaction with no error event, which is the commit-time shape. Restore the descriptor in finally.
+      > 2. Seed 'xr:job' with FM.storage.writeMedia.
+      > 3. Run await Promise.race([FM.exportResume.clear().then(() => 'settled'), sleep(5000).then(() => 'hung')]). The 5 s is the test's own failure deadline, not app timing.
+      > 4. Today: 'hung'. After the fix: 'settled'.
+      > 5. End to end: export a 1 s 64x64 MP4 via FM._runExport with the stub on, and set FM._exportCancel at frame 5. Within 10 s the run must settle and #export-overlay must be hidden.
+      >   control: Put the same abort-in-success stub on put instead. FM.storage.writeMedia('xr:probe', {}) must resolve false within 5 s. That proves the stub produces the abort-only case, and that idbPut already handles it.
+      >   refuter notes: Both checkers confirmed it, but the window is narrow: each delete is exposed only for its commit round trip, and a delete can never hit a quota error.
+      > - The 'real' check adds a route it could not verify in the source: WebKit aborting open IndexedDB transactions when the app is suspended. That fits him tapping Save or Cancel and then leaving the app while a long job's parts are still being deleted.
+      > - It is rated low and is a one-line fix, so it can ride along with any release.
+      📍 **26 Oct ~01:10: building now** in hunt/dl52 (one lane, the PM's pace), items 5 and 2 together, then a review and a refuter.
+
+- [ ] **1191 — Media library: tapping a tile while storage cannot be read deletes the tile, and sometimes the file (hunt LOW #1191)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 6 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all nine, are in #1186.)
+      > ITEM 6 [LOW] Media library: tapping a tile while storage cannot be read deletes the tile, and sometimes the file
+      >   findings: media:medialib-failed-read-drops-tile
+      >   files: js/storage.js (readMedia 867, idbGet 175, idbGetMedia 215-221; add a checked variant); js/medialib.js (use() 211, 221, 223, gone() 186-197)
+      >   he sees today: 1. WebKit's IndexedDB connection is lost, which is a known home-screen-app failure on iOS after coming back from the background (WebKit bugs 273827, 277615 and 197050). Add → Media still shows its tiles, because they live in localStorage.
+      > 2. Each tile he taps says 'That file is no longer stored — import it again' and disappears for good.
+      > 3. Tapping a second tile because the first failed makes it worse.
+      > 4. If the project that first imported the file was deleted, the next healthy launch's sweep erases the app's copy of the file too (storage.js 3447-3454).
+      >   fix: Tell 'the read failed' apart from 'nothing is stored' at the bottom of the stack, and send a failure down use()'s existing error path.
+      > - Add a checked read, e.g. FM.storage.readMediaChecked(key) or readMedia(key, { strict: true }), built on an idbGet variant that does not turn errors into null.
+      >   - It REJECTS when openDB rejects, db.transaction throws, or the request errors.
+      >   - It resolves null only when the store really has nothing. A pointer whose shared copy is gone still reads as absent, as today.
+      > - use() lines 211 and 221 call it. A failed read lands in use()'s existing catch, which says 'Could not open that file' and keeps the tile.
+      > - Every other readMedia caller is unchanged.
+      >   red-first test: 1. Write a File under a layer-style key with FM.storage.writeMedia. Add a library entry with FM.mediaLib.add({file, kind:'image', width:2, height:2}, key), with no project referencing the key.
+      > 2. Stub IDBFactory.prototype.open so its request fires onerror for ONE call. Restore the descriptor in finally.
+      > 3. await FM.mediaLib.use(mid).
+      > 4. Assert FM.mediaLib.list() still contains mid, and that the toast is 'Could not open that file'. Today the tile is removed and the toast is 'no longer stored'.
+      > 5. Then run await FM.projects.pruneOrphans() and assert the record is still in IndexedDB.
+      >   control: - Control 1: with the stub removed, the same tap adds a clip and keeps the tile.
+      > - Control 2: a key that was never written still drops the tile with 'no longer stored'. This stops a fix that simply never drops a tile from passing.
+      >   refuter notes: Both checkers confirmed it.
+      > - It needs a real IndexedDB fault at the moment of the tap, but that fault is a long-running WebKit bug on exactly his setup.
+      > - A tile whose key is a lib: shared copy never loses its file. The file is erased only when no project still names the key. Otherwise only the tile is lost.
+
+- [ ] **1192 — Undo of a Replace media, then a quick switch to another app: the undone file comes back on relaunch (hunt LOW #1192)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 7 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all nine, are in #1186.)
+      > ITEM 7 [LOW] Undo of a Replace media, then a quick switch to another app: the undone file comes back on relaunch
+      >   findings: storage:hidden-flush-cancels-blob-save
+      >   files: js/app.js (restoreReplacedOnce 5166-5168); js/storage.js (flushSync 857, autosave 912)
+      >   he sees today: 1. He undoes a Replace media, and within about 600 ms of the swap landing he switches apps.
+      > 2. iOS closes FreeMotion in the background, or he swipes it away later, or he comes back and closes it without another edit.
+      > 3. On relaunch the clip shows the file he had undone, at the original's size and fit, and no message appears.
+      > 4. That launch's boot sweep deletes the kept original (prev:), so it cannot come back.
+      >   fix: One line. In restoreReplacedOnce, when back > 0, call FM.storage.markDirty() and FM.storage.save() directly instead of autosave().
+      > - Every other path that changes a clip's file already does this: app.js 3391, 4897, 5110, 5334 and 5730. The comment at 5727-5729 explains why: pagehide/visibilitychange flushSync cancels the 600 ms save and writes only the doc.
+      > - Item 2's unlandedFiles() check in open() covers the project-switch half of the same problem.
+      >   red-first test: 1. Add clip A, replace it with B, and await settled().
+      > 2. FM.history.undo(), then await FM.restoreReplacedMedia().
+      > 3. Straight away, stub document.visibilityState to 'hidden' (restore the descriptor in finally) and dispatch 'visibilitychange'.
+      > 4. Wait past the code's own 600 ms debounce, then await FM.storage.settled() and FM.storage.readMedia(id).
+      > 5. RED today: the record is still B at rev 1, and fm.mediaPending has no note for it. Expect A at rev 0.
+      >   control: Without the hidden event, after the same wait and settled(), the record is A at rev 0. This is green today.
+      >   refuter notes: Both checkers confirmed it, at low severity.
+      > - The window is the ~600 ms after a swap that lands at a moment he does not control: after an IndexedDB read, a decode and an IndexedDB write.
+      > - A new-build reload is safe, because fmSwTry runs a real save() first. Going Home does not flush.
+      > - The original is probably still in his Photos or Files, so he can re-replace it by hand.
+
+- [ ] **1193 — Voice-over: if adding the take fails, the recording is thrown away — PLAUSIBLE (hunt LOW #1193)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 8 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all nine, are in #1186.)
+      > ITEM 8 [LOW] Voice-over: if adding the take fails, the recording is thrown away (PLAUSIBLE)
+      >   findings: audio:voice-take-destroyed-before-import
+      >   files: js/voice-rec.js (commit 725-741, close 576-590, addFile 747-761)
+      >   he sees today: Only if FM.voiceRec.addFile rejects: loadVideoFile's 20 s metadata timer fires, the element raises 'error', or addMediaLayer throws. Then:
+      > - The panel has already closed.
+      > - A toast says 'Could not add the recording — the details are in Settings → Last error → Copy'.
+      > - The take is gone, with no layer, no retry and no library copy. He has to record it again.
+      >   fix: Keep the take until it is in.
+      > - commit() holds b and file until addFile settles.
+      > - On rejection, put the panel back in review with the same take: re-arm the listeners that close() removed, re-enable ui.add, and show the existing toast. Call close() on success only, or close at once but re-open into review on failure.
+      > - fmSwBusy (index.html 1336) already holds a new build while the state is 'review', so a re-opened take is also protected from the update reload.
+      >   red-first test: 1. Open the recorder with the suite's permission-free _openMic, and record past MIN_SECONDS.
+      > 2. Stub FM.loadVideoFile to reject ONCE. Restore it in finally.
+      > 3. Tap Add.
+      > 4. Today: FM.voiceRec._state() is 'closed' and the take cannot be recovered.
+      > 5. Expect 'review', with the same blob size, and ui.add enabled.
+      > 6. Tap Add again, unstubbed. Exactly one layer is added.
+      >   control: With the real loadVideoFile, the same flow adds exactly one layer and closes the panel. This is green today.
+      >   refuter notes: PLAUSIBLE: one checker refuted it.
+      > - The doubt: the same bytes were just loaded and played in the review <audio> (698-699), and loadVideoFile always settles. Its duration steps are bounded (1500 ms seek, a decode in try/catch, a 600 s maximum take).
+      > - So the only route is an iOS suspension straddling the 20 s timer just after tapping Add, or an addMediaLayer throw, which would be a general import bug.
+      > - No hang either way. It is cheap insurance: build it when the queue reaches it, not ahead of the CONFIRMED items.
+
+- [ ] **1194 — Collab: a join whose link closes during the copy setup shows 'Live' over a dead copy — PLAUSIBLE (hunt LOW #1194)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 9 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all nine, are in #1186.)
+      > ITEM 9 [LOW] Collab: a join whose link closes during the copy setup shows 'Live' over a dead copy (PLAUSIBLE)
+      >   findings: collab:collab-session-setlink-closed-link
+      >   files: js/collab-session.js (C.join tail 2186-2244, setLink call 2233; C.reopen 2350; setLink 1677-1692; liveTick 1734)
+      >   he sees today: 1. The link dies inside C.join's async tail: sameDeviceCopy, createLinked and the awaited FM.projects.open. setLink then binds onclose to a link that has already closed.
+      > 2. S.online stays true, and liveTick skips a closed link, so nothing marks it offline.
+      > 3. The banner reads 'Live · Ezra' over a copy that never changes again.
+      > 4. An Editor's first edit heals it. A Viewer or Commenter stays on the dead 'Live' until they reload.
+      >   fix: Add one check at the two call sites, after C.attach and after the early-message replay: if (ep.open === false) S.setOnline(false).
+      > - C.join: around 2234-2244. C.reopen: after 2351.
+      > - That link delivered the snap, or was dialled open, so false can only mean it closed since. It can never mean 'still connecting'.
+      > - It goes down the existing markOffline → A.onOffline path, which shows the Offline banner and starts the reconnect.
+      > - Do NOT put the check inside setLink: collab-ui connect() can hand over a link before onopen fires.
+      >   red-first test: 1. Run C.join with a fake link. Stub FM.projects.open so it closes the link (ep.close()) before resolving true.
+      > 2. Deliver welcome and snap. Run S.tick() twice.
+      > 3. Assert C.session.online === false, or that A.onOffline was called.
+      > 4. Red today: online stays true.
+      >   control: Closing the same link AFTER join resolves calls markOffline through the onclose that setLink bound. This is green today, and proves the assertion can pass.
+      >   refuter notes: PLAUSIBLE: one checker refuted it.
+      > - The doubt: the named triggers (phone lock, Wi-Fi drop) do not close the link. A 'failed' link is held open for LINK_GRACE (collab-link.js 591-598), so ep.open is still true at setLink, and liveTick's 6 s silence rule then marks it offline normally.
+      > - What is left needs an explicit close inside a sub-second window: the owner closing his tab or switching project right after Let in, or the guest dismissing the join sheet.
+      > - The result is a stale label, not a hang. 'bye ended' and 'deny removed' are already replayed from `early`.
+      > - C.reopen's version already recovers, because its reconnect stays armed.
+      > - Low priority, and a two-line fix.
+

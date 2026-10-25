@@ -222,9 +222,22 @@ window.FM = window.FM || {};
     return { pi: pi, sx: e.clientX, sy: e.clientY, px: pp.x, py: pp.y, ox: p ? p[0] : pp.x, oy: p ? p[1] : pp.y,
              slop: e.pointerType === 'mouse' ? 0 : GRAB_SLOP, moved: false };
   }
+  /* ⚠️ ONE FINGER AT A TIME (queue 690, real input). A second finger that landed while the first was still down went
+     through the whole press path: in PEN mode it dropped a NEW point where it touched and took the drag over, so both
+     fingers then pulled that stray point back and forth and each lift committed it — a pinch to look closer left a
+     point on his mask every time (the draw tool had exactly this, #165.3b). While the first finger's capture is live
+     (a real touch only: a synthetic pointer cannot be captured, so no synthetic path changes), every other finger's
+     press, moves and lift are ignored. That stops the stray point and the takeover; it does not undo the first finger's
+     own press, so a pinch still leaves the point the first finger dropped (whether two fingers should take that back,
+     as the draw tool's #165.3b does, is a separate call). */
+  function otherFinger(e) {
+    return !!(drag && drag.kind === 'touch' && e.pointerType === 'touch' && e.pointerId !== drag.pid && overlay && overlay.hasPointerCapture && overlay.hasPointerCapture(drag.pid));
+  }
+  function own(e) { if (drag) { drag.pid = e.pointerId; drag.kind = e.pointerType; } }
   function onDown(e) {
     if (!active) return;
     e.preventDefault(); e.stopPropagation();
+    if (otherFinger(e)) return;
     { const m0 = mask(); if (m0 && m0 === seedOf) followPlayhead(m0); }   // a press straight after a scrub, before the next frame
     const pp = evtToProj(e);
     const P = proj(), cp = { x: clamp(pp.x, 0, P.width), y: clamp(pp.y, 0, P.height) };
@@ -236,6 +249,7 @@ window.FM = window.FM || {};
       else { pts.push([cp.x, cp.y]); sel = pts.length - 1; drag = { pi: sel, follow: true }; dirty = true; flush(); FM.requestRender(); updateBar(); }
       draw();
       try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
+      own(e);
       return;
     }
     // EDIT
@@ -246,6 +260,7 @@ window.FM = window.FM || {};
       lastTap = { t: now, pi: hp };
       sel = hp; drag = grab(e, hp, pp); updateBar(); draw();
       try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
+      own(e);
       return;
     }
     const hm = nearestMid(pp);
@@ -256,12 +271,14 @@ window.FM = window.FM || {};
       pts.splice(hm + 1, 0, np); sel = hm + 1; drag = grab(e, sel, pp);   // it sits on the curve, not under the finger
       dirty = true; flush(); FM.requestRender(); updateBar(); draw();
       try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
+      own(e);
       return;
     }
     sel = -1; updateBar(); draw();
   }
   function onMove(e) {
     if (!active || !drag) return;
+    if (otherFinger(e)) return;
     e.preventDefault();
     const P = proj(), pp = evtToProj(e), p = pts[drag.pi];
     if (!p) return;
@@ -275,7 +292,7 @@ window.FM = window.FM || {};
     dirty = true; flush(); FM.requestRender();
   }
   function onUp(e) {
-    if (drag) { drag = null; if (FM.history) FM.history.commit(); try { overlay.releasePointerCapture(e.pointerId); } catch (_) {} }
+    if (drag && !otherFinger(e)) { drag = null; if (FM.history) FM.history.commit(); try { overlay.releasePointerCapture(e.pointerId); } catch (_) {} }
   }
   function onResize() { if (active) draw(); }
 

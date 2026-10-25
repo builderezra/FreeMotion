@@ -5736,15 +5736,22 @@ window.FM = window.FM || {};
         return out;
       };
       let pd = null;
+      /* ⚠️ ONE FINGER MOVES THE LAYER (queue 690, real input). A second finger that touched the pad while the first was
+         swiping started a swipe of its own from where the layer then was, so the first finger moved it by its distance
+         from the SECOND finger: the layer leapt across the frame by the gap between his fingers (x 1.69 on a 1080 frame),
+         and lifting the second finger ended the swipe under the first. While the first finger's capture is live (a real
+         touch only: a synthetic pointer cannot be captured), every other finger is ignored. */
+      const otherPadFinger = e => !!(pd && pd.kind === 'touch' && e.pointerType === 'touch' && e.pointerId !== pd.pid && pad.hasPointerCapture && pad.hasPointerCapture(pd.pid));
       pad.addEventListener('pointerdown', e => {
+        if (otherPadFinger(e)) { e.preventDefault(); return; }
         const fr = padFrame();
         pd = { x: e.clientX, y: e.clientY, ix: mtEval(layer, 'x'), iy: mtEval(layer, 'y'),
                fr: fr || { ax: 0, ay: 0, sx: 1, sy: 1 },
-               tx: fr ? padTargets(fr, 'x') : [], ty: fr ? padTargets(fr, 'y') : [] };
+               tx: fr ? padTargets(fr, 'x') : [], ty: fr ? padTargets(fr, 'y') : [], pid: e.pointerId, kind: e.pointerType };
         try { pad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault();
       });
       pad.addEventListener('pointermove', e => {
-        if (!pd) return;
+        if (!pd || otherPadFinger(e)) return;
         if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; commitH(); return; }
         // ~9 finger px of stickiness, expressed in FRAME units — per axis, since a stretched parent scales them apart (bughunt4 #1b)
         const fr = pd.fr, thrX = 9 * sens * Math.abs(fr.sx), thrY = 9 * sens * Math.abs(fr.sy);
@@ -5756,7 +5763,7 @@ window.FM = window.FM || {};
         if (FM.showAlignGuide) FM.showAlignGuide(hx, hy);   // the line on the CANVAS — what did I line up with?
         refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update();
       });
-      const padEnd = e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} showPadSnap(null, null); commitH(); };
+      const padEnd = e => { if (!pd || otherPadFinger(e)) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} showPadSnap(null, null); commitH(); };
       pad.addEventListener('pointerup', padEnd);
       pad.addEventListener('pointercancel', padEnd);
       control.appendChild(pad);
