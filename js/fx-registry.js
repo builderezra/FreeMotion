@@ -425,7 +425,7 @@ window.FM = window.FM || {};
     tint: 'Washes the whole clip toward one colour.',
     /* as rich or as muted, as light or as dark: #966 opts10 · faces kept, by tone: #966 opts16 */ colorize: 'Replaces the image colour with a single hue, keeping its light and shade — as rich or as muted, as light or as dark as you like, faces kept their own colour or only the darks, mids or lights tinted.',
     duotone: 'Maps darks to one colour and lights to another.',
-    gradientmap: 'Remaps brightness onto a gradient — darks take one end, lights the other.',
+    /* faces kept, by tone: #966 opts17 */ gradientmap: 'Remaps brightness onto a gradient — darks take one end, lights the other. Protect skin keeps faces their own colour; Affects maps only the darks, mids or lights.',
     glow: 'Blooms the bright areas into a soft halo.',
     softglow: 'A gentler bloom that lifts highlights without washing the picture out.',
     vignette: 'Darkens the edges to pull the eye to the middle.',
@@ -495,7 +495,7 @@ window.FM = window.FM || {};
     /* part way, and Show selection: #966 opts9 */ replacecolor: 'Finds one colour and swaps it for another — all the way or part way — leaving everything else alone. Show selection shows what it has caught.',
     spotcolor: 'Keeps ONE colour and drains the rest to grey — the red-coat-in-a-black-and-white-film shot.',
     fourcolor: 'Blends four colours from the four corners, for a soft full-frame wash.',
-    /* either way round (Reverse): #966 opts7 */ spectralmap: 'Maps brightness across a stretch of the colour wheel — darks at one hue, lights at the other, either way round.',
+    /* either way round (Reverse): #966 opts7 · faces kept, by tone: #966 opts17 */ spectralmap: 'Maps brightness across a stretch of the colour wheel — darks at one hue, lights at the other, either way round. Protect skin keeps faces their own colour; Affects colours only the darks, mids or lights.',
     palettemap: 'Snaps every colour to the nearest one in a small palette, like a poster print — or lays your colours over the tones, darkest on the shadows.',   // #966 opts6: Match by Brightness
 
     // Distortion & warp

@@ -141943,14 +141943,14 @@
     const adj = r.params.filter(p => p.key === 'adjust')[0];
     if (!adj || adj.type !== 'segment' || adj.options.map(o => o[1]).join() !== 'Hue,Saturation,Brightness') bad.push('there is no Adjust row of Hue / Saturation / Brightness');
     else ['hue', 'sat', 'lum'].forEach((s, i) => {
-      const shown = _cgRows(_cgInst('hslmixer', { adjust: i })).join(), want = ['adjust'].concat(_HM_BANDS.map(b => s + '_' + b));
+      const shown = _cgRows(_cgInst('hslmixer', { adjust: i })).join(), want = ['adjust'].concat(_HM_BANDS.map(b => s + '_' + b), ['skin', 'mix']);   // skin, mix: #966 opts17 (Protect skin and Mix, under every Adjust)
       if (shown !== want.join()) bad.push('with Adjust on ' + adj.options[i][1] + ' the panel shows ' + shown + ', not ' + want.join());
-      const labels = r.params.filter(p => want.indexOf(p.key) > 0).map(p => p.label).join();
+      const labels = r.params.filter(p => want.indexOf(p.key) > 0 && p.key !== 'skin' && p.key !== 'mix').map(p => p.label).join();
       if (labels !== NAMES) bad.push('the ' + adj.options[i][1] + ' rows are labelled ' + labels + ', not ' + NAMES);
     });
     const p = _cgInst('hslmixer').params;
     if (p.adjust !== 1) bad.push('it opens on Adjust ' + p.adjust + ', not on Saturation, where its starting look is');
-    const set = Object.keys(p).filter(k => k !== 'adjust' && p[k] !== 0).sort();
+    const set = Object.keys(p).filter(k => k !== 'adjust' && k !== 'skin' && k !== 'mix' && p[k] !== 0).sort();   // skin, mix: #966 opts17, pinned at 0 and 100 by its own rows test
     if (set.join() !== 'sat_aqua,sat_blue,sat_green' || p.sat_blue !== 40 || p.sat_aqua !== 30 || p.sat_green !== 20) bad.push('it starts with ' + set.map(k => k + ' ' + p[k]).join(', ') + ' — the look is Saturation Blue 40, Aqua 30, Green 20 and nothing else');
     if (bad.length) throw new Error(bad.join(' | '));
   });
@@ -180494,6 +180494,390 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts16 ──
+
+  /* ═══ #966: MORE CHOICE, ROUND SEVENTEEN — three more colour effects he already has, each still thin on choice (hunt/fx17). His words:
+   * "polish other effects just giving them more features … more choices always better … this is the complex version we want as much
+   * choice as possible". HSL Mixer gets Protect skin and Mix, Gradient Map and Hue Ramp each get Protect skin and Affects.
+   * WRITTEN WITHOUT RUNNING (25 Oct, a slice run was taking timed readings on this machine): nothing but `node --check`. Every number
+   * below is reasoned from the code it names (worked in IEEE doubles beside the kernels, in their own order of operations), the
+   * reasoning beside it; a bound only a run can set says MEASURE beside it. Round sixteen's four kinds for each effect: (a) its rows and
+   * what the load sanitiser keeps, clamps and drops, (b) what each new control does, on a fixture that holds what separates right from
+   * wrong, with a CONTROL, (c) at the defaults the kernel is today's picture byte for byte, (d) every new control off its default moves
+   * the very fixtures (c) holds still. The (b) tests do not stop at a missing row: on the base code the kernel ignores the new keys and
+   * the picture is judged and fails. All three are PIXEL_FX kernels run through round thirteen's tone13, so this block reuses round
+   * thirteen's _o13 helpers and round fourteen's _o14Want (the same file scope, defined above) and adds only the ones that read this
+   * round's own keys. Every comparison of two pictures is within ONE render path (#1183). ═══ */
+  const _o17Need = (type, keys) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts17 (hunt/fx17) is not built');
+    return r;
+  };
+  /* every new key, by effect */
+  const _O17_NEW = {
+    hslmixer: ['skin', 'mix'],
+    gradientmap: ['skin', 'range'],
+    spectralmap: ['skin', 'range'],
+  };
+  /* every new control off its default, each as [the settings it is laid on, the control]: the HSL Mixer's own look moves only blues,
+     aquas and greens, which no skin window reaches (skinW12 is 0 from 60° to 340°, and Saturation Green starts at Yellow's 60°), so
+     its Protect skin is laid on an Orange Hue and a Red Saturation that do move skin tones */
+  const _O17_OFF = {
+    hslmixer: [[{ hue_orange: 60, sat_red: 40 }, { skin: 100 }], [{}, { mix: 50 }]],
+    gradientmap: [[{}, { skin: 100 }], [{}, { range: 1 }]],
+    spectralmap: [[{}, { skin: 100 }], [{}, { range: 3 }]],
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o17Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o13P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o13Pic;
+      const a = _o13Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o13Run(type, _o13Del(P, _O17_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O17_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on `base` (a new instance with those settings), on that fixture at that moment */
+  const _o17Moves = (type, base, over, W, H, pic, t) => E1.count(_o13Run(type, _o13P(type, base), W, H, pic(W, H), t), _o13Run(type, _o13P(type, Object.assign({}, base, over)), W, H, pic(W, H), t), 0);
+  /* (b) in general: on `pic` at plate scale ps, `over` laid on the instance `base` draws, pixel for pixel and to the last level, the
+     kernel's own picture without the new keys (same plate) laid in by the share wf — the worst pixel and where, or null when every
+     pixel matches */
+  const _o17Worst = (type, base, over, W, H, pic, wf, t, ps) => {
+    const ker = _o13Run(type, _o13Del(Object.assign({}, base, over), _O17_NEW[type]), W, H, pic(W, H), t, ps);
+    const want = _o13Lay(pic(W, H), ker, wf), got = _o13Run(type, Object.assign({}, base, over), W, H, pic(W, H), t, ps);
+    let worst = 0, at = -1;
+    for (let i = 0; i < got.length; i += 4) for (let c = 0; c < 3; c++) { const e = Math.abs(got[i + c] - want[i + c]); if (e > worst) { worst = e; at = i / 4; } }
+    return worst ? { worst: worst, x: at % W, y: (at / W) | 0, got: got.slice(at * 4, at * 4 + 3).join(', '), want: want.slice(at * 4, at * 4 + 3).join(', ') } : null;
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect, on that rect as a see-through card (80 % layer opacity, 60 % fill, turned 12° so its edges are part-covered) and
+     on an adjustment layer over the rect, all over a grey ground — both sides of each comparison through the same compositor path.
+     CONTROLS: each effect changes each picture against the same picture with no effect, and each new control off its default moves the
+     rect's picture through the same compositor, at 1:1. */
+  test('966 opts17 every new control at its default draws what the effect drew without it — HSL Mixer, Gradient Map and Hue Ramp through the compositor on a layer, on a see-through card and on an adjustment layer, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 90000 }, function () {
+    const TYPES = Object.keys(_O17_NEW);
+    TYPES.forEach(type => _o17Need(type, _O17_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const fxOf = (type, params) => ({ type: type, enabled: true, params: params });
+    const card = fx => { const L = _o13Rect(fx); L.transform.opacity = 0.8; L.fillOpacity = 0.6; L.transform.rotation = 12; return L; };
+    const adj = fx => { const A = FM.makeLayer('adjustment', { name: 'o17 adj', start: 0, duration: 4 }); A.effects = fx ? [fx] : []; return A; };
+    const WAYS = {
+      'on a layer': [fx => [_o13Rect(fx)], () => [_o13Rect(null)]],
+      'on a see-through card': [fx => [card(fx)], () => [card(null)]],
+      'on an adjustment layer': [fx => [adj(fx), _o13Rect(null)], () => [adj(null), _o13Rect(null)]],
+    };
+    TYPES.forEach(type => {
+      const P = _o13P(type);
+      Object.keys(WAYS).forEach(way => {
+        const make = WAYS[way][0], none = WAYS[way][1];
+        let moved = 0;
+        [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+          const a = _o13shot(make(fxOf(type, Object.assign({}, P))), t, W, H, rs, BG);
+          const b = _o13shot(make(fxOf(type, _o13Del(P, _O17_NEW[type]))), t, W, H, rs, BG);
+          const m = E1.maxDiff(a, b);
+          if (m !== 0) bad.push(type + ' ' + way + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O17_NEW[type].join(' / '));
+          if (rs == null) moved = Math.max(moved, E1.count(a, _o13shot(none(), t, W, H, null, BG), 2));
+        }));
+        if (moved < 50) bad.push('CONTROL: ' + type + ' ' + way + ' changes only ' + moved + ' pixels at either moment, so the comparison above proves little' /* MEASURE: reasoned, not run — the HSL Mixer's own look saturates the blue end of the rect (#1040a0, hue 220°, its HSL saturation 0.82 taken to 1), the map and the ramp recolour every pixel of it */);
+      });
+      _O17_OFF[type].forEach(([on, o]) => {
+        const base = _o13shot([_o13Rect(fxOf(type, Object.assign({}, P, on)))], 0.61, W, H, null, BG);
+        const n = E1.count(base, _o13shot([_o13Rect(fxOf(type, Object.assign({}, P, on, o)))], 0.61, W, H, null, BG), 2);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + (Object.keys(on).length ? ' on ' + JSON.stringify(on) : '') + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels; its warm end (#f0c060, hue 40°, saturation 0.6) is a full skin tone, so Protect skin 100 gives back about the warmest two fifths (the HSL Mixer's Orange Hue 60 turns it 6° there); Mix 50 halves the blue end's move; Darks keeps (1 − L)² of each map move and Lights L² of each ramp move */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- HSL Mixer: Protect skin and Mix ---- */
+  /* On round thirteen's six pixels its own look (Saturation Blue 40, Aqua 30, Green 20) leaves both skin tones and the rose byte for byte
+     (their hues, 26.7°, 22.5° and 350°, are reached by no slider) and the grey (no hue). With Orange Hue 60 (the hue table 9° at
+     Orange's 30°, Orange turns 15° at ±100) and Red Saturation 40 laid on, worked in the kernel's order (hue, saturation and lightness
+     from its HSL, each change weighted by min(1, 3 x the HSL saturation), back to RGB): the light skin tone (220, 170, 130) to (222.00,
+     182.31, 128.00) → (222, 182, 128), the deeper one (160, 110, 80) to (164, 118.90, 76) → (164, 119, 76), the rose (220, 100, 120) to
+     (238, 82, 108); the green (60, 170, 80) at 130.9° takes Green and Aqua's saturation to (48, 182, 72.36) → (48, 182, 72) and the
+     grey stays 128. The blue (40, 90, 200) lands its red on 10.5 and its blue on 229.5 to within float noise, so it is read in the busy
+     picture only. Skin weights (skinW12): 1, 1, 0.5, 0, 0, 0. Protect skin 100 keeps both skin tones the picture and puts the rose half
+     way, (229, 91, 114) — whole numbers, no tie; at 40 % a skin tone goes 0.6 of the way — the light one to 220 + 2 x 0.6 = 221.2,
+     170 + 12 x 0.6 = 177.2, 128.8, so (221, 177, 129), the deeper one to (162, 115, 78) — and the rose 0.8 of it, (234, 86, 110). On the
+     base code Protect skin is ignored and both skin tones take the whole change. */
+  const _O17_HMO = { hue_orange: 60, sat_red: 40 };
+  test('966 opts17 HSL Mixer has Protect skin (0–100 %, keyframable, 0 by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed and shown under every Adjust: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    const r = _o17Need('hslmixer', _O17_NEW.hslmixer);
+    const bad = _o13Rows('hslmixer', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp('hslmixer', { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('hslmixer', { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    (r.params || []).filter(p => p.key === 'skin' || p.key === 'mix').forEach(p => { if (p.showWhen) bad.push(p.key + ' shows only when ' + JSON.stringify(p.showWhen) + ' — it acts on every colour at once, so it belongs under every Adjust'); });
+    [0, 1, 2].forEach(i => {
+      const fx = FM.fxRegistry.makeInstance('hslmixer'); fx.params.adjust = i;
+      const shown = FM.fxRegistry.paramsOf('hslmixer').filter(p => FM.fxRegistry.rowShown(fx, p)).map(p => p.key);
+      ['skin', 'mix'].forEach(k => { if (shown.indexOf(k) < 0) bad.push('with Adjust on ' + ['Hue', 'Saturation', 'Brightness'][i] + ' the panel leaves out ' + k); });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts17 HSL Mixer Protect skin: with an Orange Hue and a Red Saturation, at 100 % two skin tones come out as the picture byte for byte and the rose half way at 229, 91, 114, while a green and a grey keep the mix byte for byte, at 40 % a skin tone comes 0.4 of the way back and the rose 0.2, and with other sliders of every Adjust and Mix every pixel of a busy picture is the mixed picture laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone reads 222, 182, 128)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('hslmixer', _o13P('hslmixer', Object.assign({}, _O17_HMO, over)), N, 1, row(), 0.5);
+    const kept = [null, [48, 182, 72], [128, 128, 128]];
+    _o14Want(bad, run({}), _O13_SKIN, [[222, 182, 128], [164, 119, 76], [238, 82, 108]].concat(kept), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], [229, 91, 114]].concat(kept), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O13_SKIN, [[221, 177, 129], [162, 115, 78], [234, 86, 110]].concat(kept), 'Protect skin 40');
+    [{}, { lum_blue: -50, hue_aqua: 70 }, { adjust: 0, sat_magenta: -60, lum_orange: 40 }, { skin: 100, mix: 60 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, mix = extra.mix == null ? 100 : extra.mix;
+      const w = _o17Worst('hslmixer', _o13P('hslmixer', _O17_HMO), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(mix, 0, 0, sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the mixed picture laid in by 1 − its skin weight' + (mix < 100 ? ' times Mix' : '') + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* At its own look the mixer moves only blues, aquas and greens: on six pixels the green (60, 170, 80) to (48, 182, 72.36) → (48, 182,
+     72), a sky (70, 130, 210) at 214.3° to (45, 126.43, 235) → (45, 126, 235), a sea (60, 180, 190) at 184.6° to (40, 196.92, 210) → (40,
+     197, 210), a light sky (90, 150, 230) to (65, 146.43, 255) → (65, 146, 255), while a skin tone (200, 120, 90) and the grey 128 stay
+     put. Mix 40 moves every pixel 0.4 of the way from its own value to the mixer's bytes: the green to 60 − 12 x 0.4 = 55.2, 174.8, 76.8,
+     so (55, 175, 77), the sky to (60, 128.4, 220) → (60, 128, 220), the sea to (52, 186.8, 198) → (52, 187, 198), the light sky to (80,
+     148.4, 240) → (80, 148, 240). On the base code Mix is ignored and every pixel takes the whole change. */
+  const _O17_HMROW = [[60, 170, 80], [70, 130, 210], [60, 180, 190], [90, 150, 230], [200, 120, 90], [128, 128, 128]];
+  test('966 opts17 HSL Mixer Mix: at 40 % a green reads 55, 175, 77 and a sky 60, 128, 220, every pixel sits 0.4 of the way between itself and its mixed value to the level, at 0 % the picture is itself byte for byte, with an Orange Hue and Protect skin as well a busy picture is laid in by Mix x (1 − its skin weight), and a Mix keyed 0 to 100 draws its value half way (CONTROL: at 100 % the green reads 48, 182, 72)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O17_HMROW.length, row = _o13Row(_O17_HMROW);
+    const run = over => _o13Run('hslmixer', _o13P('hslmixer', over), N, 1, row(), 0.5);
+    _o14Want(bad, run({}), _O17_HMROW, [[48, 182, 72], [45, 126, 235], [40, 197, 210], [65, 146, 255], [200, 120, 90], [128, 128, 128]], 'CONTROL at Mix 100');
+    _o14Want(bad, run({ mix: 40 }), _O17_HMROW, [[55, 175, 77], [60, 128, 220], [52, 187, 198], [80, 148, 240], [200, 120, 90], [128, 128, 128]], 'Mix 40');
+    const m0 = E1.maxDiff(run({ mix: 0 }), row());
+    if (m0 !== 0) bad.push('at Mix 0 the row moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(run({ mix: _o13KF(0, 100) }), run({ mix: 50 }));
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o17Worst('hslmixer', _o13P('hslmixer'), { mix: 35, hue_orange: 60, sat_red: 40, lum_blue: -30 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with Orange Hue, Red Saturation and Blue Brightness: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    const w2 = _o17Worst('hslmixer', _o13P('hslmixer'), { mix: 60, skin: 100, hue_orange: 60 }, 96, 72, _o13Pic, (r, g, b) => _o13W(60, 0, 0, 100, _o13Skin(r, g, b)), 0.5);
+    if (w2) bad.push('Mix 60 with Protect skin 100 and an Orange Hue: pixel (' + w2.x + ', ' + w2.y + ') reads ' + w2.got + ', not ' + w2.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts17 HSL Mixer at Protect skin 0 % and Mix 100 % draws byte for byte what it drew without them — at its own look, with an Orange Hue and a Red Saturation, Blue Brightness, Aqua Hue and Magenta Saturation, on Adjust Hue, keyframed, and on a half-size plate (CONTROL: Protect skin and Mix each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o17Need('hslmixer', _O17_NEW.hslmixer);
+    const bad = _o17Ident('hslmixer', [{}, { over: _O17_HMO }, { over: { lum_blue: -50, hue_aqua: 70, sat_magenta: -60 } }, { over: { adjust: 0 } }, { over: { sat_blue: _o13KF(0, 100) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }, { pic: _o13Row(_O17_HMROW), W: 6, H: 1 }]);
+    _O17_OFF.hslmixer.forEach(([on, o]) => { const n = _o17Moves('hslmixer', on, o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + (Object.keys(on).length ? ' on ' + JSON.stringify(on) : '') + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the busy picture's blue-40 cells with red over green are warm (hue 0° to 40°, saturation over 0.2), roughly a quarter of it, and the Orange Hue turns them; its blue-230 cells are blues and aquas, half of it, and Mix 50 halves their move */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* the review's F1 of round sixteen, on the HSL Mixer (#966 opts17): AT MIX 0, OR WITH PROTECT SKIN KEEPING A SKIN-COLOURED LAYER AS IT
+     IS, the mixer really does change nothing, and the panel then said none of the colours here is one that is set — false when he has
+     just turned Orange on an orange. The same wrong-reason fault rounds 13 and 16 folded for Channel Remap and the B&W Mixer; the same
+     test. The does-it-change-anything answer is planted (true), so the line is read for every case. CONTROL: at its own look on the
+     orange (#e8a33d, hue 35.8°, between Orange and Yellow, which its look leaves at 0) the reason is the mixer's own and true, so the
+     reason line really is read. RED on b3ea2629: every other case gives the mixer's reason. */
+  test('966 opts17 HSL Mixer does not say no colour here is set when Mix or Protect skin is what holds it back', { item: '966', budgetMs: 60000 }, async function () {
+    const SAME = /none of the colours here is one that is set/, GEN = /changes nothing on this layer/;
+    const CASES = [
+      { say: 'its own look', over: {}, control: true },
+      { say: 'Orange Hue 60 at Mix 0 %', over: { hue_orange: 60, mix: 0 } },
+      { say: 'Orange Hue 60 at Mix 40 %', over: { hue_orange: 60, mix: 40 } },
+      { say: 'Orange Hue 60 with Protect skin 100 %', over: { hue_orange: 60, skin: 100 } },
+      { say: 'Orange Hue 60 with Protect skin keyed 0 to 100', over: { hue_orange: 60, skin: _o13KF(0, 100) } },
+    ];
+    const real = FM.fxThumbs && FM.fxThumbs.effectDoesNothing;
+    if (typeof real !== 'function') throw new Error('FM.fxThumbs.effectDoesNothing is not reachable, so the settle timer cannot be asked');
+    const keep = FM.scene.layers.slice(), bad = [];
+    const hint = () => { const h = document.querySelector('.fx-row.fx-open .fx-noop-hint'); return h ? (h.textContent || '').trim() : ''; };
+    const make = (over) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#e8a33d', start: 0, duration: 5 });
+      const fx = FM.fxRegistry.makeInstance('hslmixer');
+      Object.assign(fx.params, JSON.parse(JSON.stringify(over)));
+      fx._expanded = true; fx._noop = true; fx._noopKey = 'planted';
+      L.effects = [fx];
+      FM.scene.layers = keep.concat([L]);
+      return L;
+    };
+    try {
+      FM.fxThumbs.effectDoesNothing = function () { return true; };
+      for (const c of CASES) {
+        const body = await _o13Open(make(c.over));
+        if (!body) { bad.push(c.say + ': the editor did not open, so its line was not read'); continue; }
+        const h = hint(), said = h ? '“' + h + '”' : 'no line at all';
+        if (c.control) { if (!SAME.test(h)) bad.push('CONTROL: at ' + c.say + ' the row gave ' + said + ', not the mixer reason, so nothing below is proven'); continue; }
+        if (!GEN.test(h)) bad.push('at ' + c.say + ' the row gave ' + said + ', not the general changes-nothing line');
+        else if (SAME.test(h)) bad.push('at ' + c.say + ' the row says no colour on an orange layer is one that is set, when it is ' + c.say + ' that holds the mixer back');
+      }
+    } finally {
+      FM.fxThumbs.effectDoesNothing = real;
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  /* ---- end HSL Mixer ---- */
+
+  /* ---- Gradient Map: Protect skin and Affects ---- */
+  /* At its defaults (Amount 1, Two colours, Shadows #241a52 = 36, 26, 82, Highlights #ffb86c = 255, 184, 108, Midpoint 50, Reverse Off,
+     Blend Normal, Dither 0) the kernel takes each pixel to Shadows + (219, 158, 26) x L, L its Rec.601 brightness over 255. On round
+     thirteen's six pixels: the light skin tone (220, 170, 130) (L 0.7074) to (190.92, 137.77, 100.39) → (191, 138, 100), the deeper one
+     (L 0.4766) to (140.37, 101.30, 94.39) → (140, 101, 94), the rose (L 0.5418) to (154.66, 111.61, 96.09) → (155, 112, 96), the blue to
+     (111, 80, 91), the green to (144.94, 104.60, 94.93) → (145, 105, 95), the grey 128 to (145.93, 105.31, 95.05) → (146, 105, 95). Skin
+     weights: 1, 1, 0.5, 0, 0, 0. Protect skin 100 keeps both skin tones the picture; the rose lands its red on a tie (187.5) only an exact
+     0.5 weight decides, so it is read in the busy picture only. At 40 % a skin tone goes 0.6 of the way — the light one to 220 − 29 x 0.6
+     = 202.6, 170 − 32 x 0.6 = 150.8, 112, so (203, 151, 112), the deeper one to (148, 104.6, 88.4) → (148, 105, 88) — and the rose 0.8 of
+     it, (168, 109.6, 100.8) → (168, 110, 101). On the base code Protect skin is ignored and both skin tones take the whole map. */
+  test('966 opts17 Gradient Map has Protect skin (0–100 %, keyframable, 0 by default) and Affects (All, Darks, Mids or Lights, storing 0–3, All by default), neither greyed and both after Dither: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and Mids, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    const r = _o17Need('gradientmap', _O17_NEW.gradientmap);
+    const bad = _o13Rows('gradientmap', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 }], { skin: 40, range: 2 });
+    bad.push.apply(bad, _o13Clamp('gradientmap', { skin: 150 }, { skin: 100 }));
+    bad.push.apply(bad, _o13Clamp('gradientmap', { skin: -5 }, { skin: 0 }));
+    bad.push.apply(bad, _o13Clamp('gradientmap', { range: 7 }, { range: undefined }));
+    const keys = (r.params || []).map(p => p.key), ix = k => keys.indexOf(k);
+    if (!(ix('dither') >= 0 && ix('dither') < ix('skin') && ix('skin') < ix('range'))) bad.push('the rows run ' + keys.join(', ') + ' — Protect skin and Affects belong after Dither');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts17 Gradient Map Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the map byte for byte, at 40 % a skin tone comes 0.4 of the way back and the rose 0.2, and with Three colours, Reverse and a Midpoint, a Colour blend, Dither (on a 2x plate too) and Affects every pixel of a busy picture is the mapped picture laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone reads 191, 138, 100)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('gradientmap', _o13P('gradientmap', over), N, 1, row(), 0.5);
+    const kept = [[111, 80, 91], [145, 105, 95], [146, 105, 95]];
+    _o14Want(bad, run({}), _O13_SKIN, [[191, 138, 100], [140, 101, 94], [155, 112, 96]].concat(kept), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], null].concat(kept), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O13_SKIN, [[203, 151, 112], [148, 105, 88], [168, 110, 101]].concat(kept), 'Protect skin 40');
+    [{}, { stops: 3 }, { reverse: 1, midpoint: 30 }, { blend: 8 }, { dither: 60 }, { dither: 60, ps: 2 }, { skin: 100, range: 2 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, rg = extra.range || 0, ps = extra.ps, ex = Object.assign({}, extra); delete ex.ps;
+      const w = _o17Worst('gradientmap', _o13P('gradientmap'), Object.assign({ skin: sk }, ex), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), sk, _o13Skin(r, g, b)), 0.5, ps);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the mapped picture laid in by 1 − its skin weight' + (rg ? ' times its tonal weight' : '') + (ps ? ', the map drawn at plate scale ' + ps + ' on both sides' : '') + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* On the 0–255 grey ramp the defaults take grey 40 (L 0.1569) to (70.35, 50.78, 86.08) → (70, 51, 86) and grey 220 (L 0.8627) to
+     (224.94, 162.31, 104.43) → (225, 162, 104). Affects weighs each pixel's move by its own brightness, as tone13 does: grey 40 by Darks
+     (1 − L)² = 0.7109 → (61.33, 47.82, 72.70), so (61, 48, 73), Mids 0.5290 → (55.87, 45.82, 64.34), so (56, 46, 64), Lights 0.0246 →
+     (40.74, 40.27, 41.13), so (41, 40, 41); grey 220 by Darks 0.0188 → (220.09, 218.91, 217.81), so (220, 219, 218), Mids 0.4737 →
+     (222.37, 192.53, 165.06), so (222, 193, 165), Lights 0.7443 → (223.72, 176.83, 133.66), so (224, 177, 134). On the base code Affects
+     is ignored and every grey takes the whole map. */
+  test('966 opts17 Gradient Map Affects: Darks maps grey 40 to 61, 48, 73 and nearly leaves grey 220 at 220, 219, 218, Mids takes them to 56, 46, 64 and 222, 193, 165, Lights to 41, 40, 41 and 224, 177, 134 — and with another Amount, Three colours, a Blend, Reverse and Protect skin every pixel of a busy picture is the map times the tonal weight of its own brightness to the level (CONTROL: All maps grey 40 to 70, 51, 86 and grey 220 to 225, 162, 104)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('gradientmap', _o13P('gradientmap', over), 256, 2, _o13Lv(), 0.5);
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    const all = run({});
+    if (px(all, 40) !== '70, 51, 86' || px(all, 220) !== '225, 162, 104') bad.push('CONTROL: under All grey 40 reads ' + px(all, 40) + ' and grey 220 reads ' + px(all, 220) + ' (70, 51, 86 and 225, 162, 104 expected)');
+    [[1, 'Darks', '61, 48, 73', '220, 219, 218'], [2, 'Mids', '56, 46, 64', '222, 193, 165'], [3, 'Lights', '41, 40, 41', '224, 177, 134']].forEach(([rg, name, w40, w220]) => {
+      const got = run({ range: rg });
+      if (px(got, 40) !== w40) bad.push(name + ' puts grey 40 at ' + px(got, 40) + ', not ' + w40);
+      if (px(got, 220) !== w220) bad.push(name + ' puts grey 220 at ' + px(got, 220) + ', not ' + w220);
+      [{}, { amount: 0.5 }, { stops: 3, blend: 3 }, { reverse: 1, midpoint: 70 }, { skin: 60 }].forEach(extra => {
+        const sk = extra.skin || 0;
+        const w = _o17Worst('gradientmap', _o13P('gradientmap'), Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), sk, _o13Skin(r, g, b)), 0.5);
+        if (w) bad.push(name + ' ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its map times its tonal weight' + (sk ? ' times 1 − its skin weight' : '') + ')');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts17 Gradient Map at Protect skin 0 % and All draws byte for byte what it drew without them — at its defaults, with Three colours, Reverse and a Midpoint, a Colour blend, Overlay at part Amount, Dither (on a 2x plate too), keyframed, and on a half-size plate (CONTROL: Protect skin and Darks each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o17Need('gradientmap', _O17_NEW.gradientmap);
+    const bad = _o17Ident('gradientmap', [{}, { over: { stops: 3 } }, { over: { reverse: 1, midpoint: 30 } }, { over: { blend: 8 } }, { over: { blend: 3, amount: 0.6 } }, { over: { dither: 60 } }, { over: { dither: 60 }, ps: 2 }, { over: { amount: _o13KF(0.2, 1) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O17_OFF.gradientmap.forEach(([on, o]) => { const n = _o17Moves('gradientmap', on, o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the default map takes every pixel to the purple-to-peach ramp, so Darks holds back every pixel short of black by a level or more; Protect skin 100 gives back the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Gradient Map ---- */
+
+  /* ---- Hue Ramp: Protect skin and Affects ---- */
+  /* At its defaults (Amount 1, Spectrum span 260°, Hue offset 0, Saturation 100, Reverse Off) each pixel takes the hue (1 − L) x 260° at
+     full saturation and value 0.25 + 0.75 L, L its Rec.601 brightness over 255. On round thirteen's six pixels: the light skin tone (L
+     0.7074, hue 76.1°, value 0.7806) to (145.72, 199.04, 0) → (146, 199, 0), the deeper one (hue 136.1°) to (0, 154.90, 41.53) → (0, 155,
+     42), the rose (hue 119.1°) to (2.42, 167.37, 0) → (2, 167, 0), the blue (hue 170.7°) to (0, 129.44, 109.36) → (0, 129, 109), the green
+     to (0, 158.89, 28.24) → (0, 159, 28), the grey 128 to (0, 159.75, 25.27) → (0, 160, 25). Skin weights: 1, 1, 0.5, 0, 0, 0. Protect
+     skin 100 keeps both skin tones the picture; the rose lands its green on a tie (133.5), so it is read in the busy picture only. At 40 %
+     a skin tone goes 0.6 of the way — the light one to 220 − 74 x 0.6 = 175.6, 170 + 29 x 0.6 = 187.4, 130 − 130 x 0.6 = 52, so (176,
+     187, 52), the deeper one to (64, 137, 57.2) → (64, 137, 57) — and the rose 0.8 of it, (45.6, 153.6, 24) → (46, 154, 24). On the base
+     code Protect skin is ignored and both skin tones go green. */
+  test('966 opts17 Hue Ramp has Protect skin (0–100 %, keyframable, 0 by default) and Affects (All, Darks, Mids or Lights, storing 0–3, All by default), neither greyed and both after Reverse: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and Mids, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    const r = _o17Need('spectralmap', _O17_NEW.spectralmap);
+    const bad = _o13Rows('spectralmap', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 }], { skin: 40, range: 2 });
+    bad.push.apply(bad, _o13Clamp('spectralmap', { skin: 150 }, { skin: 100 }));
+    bad.push.apply(bad, _o13Clamp('spectralmap', { skin: -5 }, { skin: 0 }));
+    bad.push.apply(bad, _o13Clamp('spectralmap', { range: 7 }, { range: undefined }));
+    const keys = (r.params || []).map(p => p.key), ix = k => keys.indexOf(k);
+    if (!(ix('reverse') >= 0 && ix('reverse') < ix('skin') && ix('skin') < ix('range'))) bad.push('the rows run ' + keys.join(', ') + ' — Protect skin and Affects belong after Reverse');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts17 Hue Ramp Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the ramp byte for byte, at 40 % a skin tone comes 0.4 of the way back and the rose 0.2, and with another span and offset, Saturation and Amount, Reverse and Affects every pixel of a busy picture is the ramped picture laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone reads 146, 199, 0)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('spectralmap', _o13P('spectralmap', over), N, 1, row(), 0.5);
+    const kept = [[0, 129, 109], [0, 159, 28], [0, 160, 25]];
+    _o14Want(bad, run({}), _O13_SKIN, [[146, 199, 0], [0, 155, 42], [2, 167, 0]].concat(kept), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], null].concat(kept), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O13_SKIN, [[176, 187, 52], [64, 137, 57], [46, 154, 24]].concat(kept), 'Protect skin 40');
+    [{}, { span: 360, offset: 90 }, { saturation: 40, amount: 0.6 }, { reverse: 1 }, { skin: 100, range: 3 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, rg = extra.range || 0;
+      const w = _o17Worst('spectralmap', _o13P('spectralmap'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the ramped picture laid in by 1 − its skin weight' + (rg ? ' times its tonal weight' : '') + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* On the 0–255 grey ramp the defaults take grey 40 (L 0.1569: hue 219.2°, value 0.3676) to (0, 32.48, 93.75) → (0, 32, 94) and grey 220
+     (L 0.8627: hue 35.7°, value 0.8971) to (228.75, 136.05, 0) → (229, 136, 0). Affects weighs each pixel's move by its own brightness:
+     grey 40 by Darks 0.7109 → (11.56, 34.31, 78.39), so (12, 34, 78), Mids 0.5290 → (18.84, 35.77, 68.57), so (19, 36, 69), Lights 0.0246
+     → (39.02, 39.80, 41.33), so (39, 40, 41); grey 220 by Darks 0.0188 → (220.17, 218.42, 215.86), so (220, 218, 216), Mids 0.4737 →
+     (224.26, 180.21, 115.79), so (224, 180, 116), Lights 0.7443 → (226.70, 157.48, 56.25), so (227, 157, 56). On the base code Affects is
+     ignored and every grey takes the whole ramp. */
+  test('966 opts17 Hue Ramp Affects: Lights takes grey 220 to 227, 157, 56 and nearly leaves grey 40 at 39, 40, 41, Mids takes them to 224, 180, 116 and 19, 36, 69, Darks to 220, 218, 216 and 12, 34, 78 — and with another Amount, span and offset, Saturation, Reverse and Protect skin every pixel of a busy picture is the ramp times the tonal weight of its own brightness to the level (CONTROL: All takes grey 40 to 0, 32, 94 and grey 220 to 229, 136, 0)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('spectralmap', _o13P('spectralmap', over), 256, 2, _o13Lv(), 0.5);
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    const all = run({});
+    if (px(all, 40) !== '0, 32, 94' || px(all, 220) !== '229, 136, 0') bad.push('CONTROL: under All grey 40 reads ' + px(all, 40) + ' and grey 220 reads ' + px(all, 220) + ' (0, 32, 94 and 229, 136, 0 expected)');
+    [[1, 'Darks', '12, 34, 78', '220, 218, 216'], [2, 'Mids', '19, 36, 69', '224, 180, 116'], [3, 'Lights', '39, 40, 41', '227, 157, 56']].forEach(([rg, name, w40, w220]) => {
+      const got = run({ range: rg });
+      if (px(got, 40) !== w40) bad.push(name + ' puts grey 40 at ' + px(got, 40) + ', not ' + w40);
+      if (px(got, 220) !== w220) bad.push(name + ' puts grey 220 at ' + px(got, 220) + ', not ' + w220);
+      [{}, { amount: 0.5 }, { span: 120, offset: 200 }, { reverse: 1, saturation: 60 }, { skin: 60 }].forEach(extra => {
+        const sk = extra.skin || 0;
+        const w = _o17Worst('spectralmap', _o13P('spectralmap'), Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), sk, _o13Skin(r, g, b)), 0.5);
+        if (w) bad.push(name + ' ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its ramp times its tonal weight' + (sk ? ' times 1 − its skin weight' : '') + ')');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts17 Hue Ramp at Protect skin 0 % and All draws byte for byte what it drew without them — at its defaults, with another span, offset, Saturation and Amount, Reverse, keyframed, and on a half-size plate (CONTROL: Protect skin and Lights each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o17Need('spectralmap', _O17_NEW.spectralmap);
+    const bad = _o17Ident('spectralmap', [{}, { over: { span: 360, offset: 90, saturation: 40, amount: 0.6 } }, { over: { reverse: 1 } }, { over: { offset: _o13KF(0, 180) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O17_OFF.spectralmap.forEach(([on, o]) => { const n = _o17Moves('spectralmap', on, o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the default ramp recolours every pixel, so Lights holds back every pixel short of white by a level or more; Protect skin 100 gives back the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Hue Ramp ---- */
+
+  /* the round's editors, new rows and all, fit the inspector (round thirteen's fit test) */
+  test('966 opts17 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = {
+      hslmixer: 'Protect skin',
+      gradientmap: 'Affects',
+      spectralmap: 'Affects',
+    };
+    Object.keys(NEW).forEach(type => _o17Need(type, _O17_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o13Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts17 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition

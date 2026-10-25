@@ -515,6 +515,12 @@ window.FM = window.FM || {};
       { key: 'reverse', label: 'Reverse', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay'], [4, 'Soft light'], [8, 'Colour'], [9, 'Luminosity']] },
       { key: 'dither', label: 'Dither', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      /* #966 opts17 (hunt/fx17, his "more choices always better"): the map always took every face in the shot with it, and every
+         tone alike. PROTECT SKIN holds skin-coloured pixels back from it with Teal & Orange's skin window (skinW12) — a two-colour
+         night, faces left their own colour — and AFFECTS confines it to the darks, the mids or the lights with Colour Balance's tonal
+         weights on the pixel's own brightness. 0 % and All run the old loops untouched (tone13 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks maps the shadows and leaves the lights their own colour' },
     ] },
     { type: 'colorize', label: 'Colourize', color: true, defColor: '#3aa0ff', colorLabel: 'Colour', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -1874,6 +1880,12 @@ window.FM = window.FM || {};
          REVERSE turns it round — the darks take the lights' hue and the lights the darks' (Gradient Map's Reverse); no Hue offset can
          do it, because an offset turns the wheel and this mirrors it. Off is the old ramp, to the byte. */
       { key: 'reverse', label: 'Reverse', def: 0, options: [[0, 'Off'], [1, 'On']], note: 'The darks take the lights’ end of the spectrum, and the lights the darks’' },
+      /* #966 opts17 (hunt/fx17, his "more choices always better"): the rainbow always took every face in the shot with it, and every
+         tone alike. PROTECT SKIN holds skin-coloured pixels back from it with Teal & Orange's skin window (skinW12) — the world in
+         false colour, the faces their own — and AFFECTS confines it to the darks, the mids or the lights with Colour Balance's tonal
+         weights on the pixel's own brightness. 0 % and All run the old loop untouched (tone13 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Lights colours the highlights and leaves the darks alone' },
     ] },
     { type: 'radialshadow', label: 'Lamp Shadow', params: [
       { key: 'reach', label: 'Reach', min: 0, max: 100, step: 1, def: 40 },
@@ -9828,7 +9840,7 @@ window.FM = window.FM || {};
          the map's colour; Luminosity keeps the picture's colour and takes the map's brightness), then Amount mixes as before.
        · A KEYFRAMED colour (Midtones included) needs nothing here: resolveFxColors (queue 555) turns every animated
          color* into its value at t before any pixel kernel runs, on every path that draws one. */
-    gradientmap: function(d,W,H,p,t,S){ var gmCs=(S>1&&isFinite(S))?S:1;
+    gradientmap: function(d,W,H,p,t,S){ /* #966 opts17: PROTECT SKIN over 0 % or AFFECTS Darks (1), Mids (2) or Lights (3) runs tone13 — this very kernel without the two (Amount, Colours, Midpoint, Reverse, Blend and Dither as they are, at this plate's S), each pixel laid in by its tonal weight x (1 − Protect skin x its skin weight); 0 % and All run the lines below untouched */ const gmSk17 = p.skin == null ? 0 : FM.evalProp(p.skin, t), gmRg17 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0); if (gmSk17 > 0 || gmRg17 === 1 || gmRg17 === 2 || gmRg17 === 3) { tone13(d, W, H, p, t, function (d17, W17, H17, q17, t17) { PIXEL_FX.gradientmap(d17, W17, H17, q17, t17, S); }, ['skin', 'range'], gmRg17, 100, gmSk17); return; } var gmCs=(S>1&&isFinite(S))?S:1;
       function gmBay(x,y){ if(gmCs===1) return BAYER8[(y&7)*8+(x&7)]; var u=(x+0.5)/gmCs-0.5, v=(y+0.5)/gmCs-0.5, x0=Math.floor(u), y0=Math.floor(v), fu=u-x0, fv=v-y0, r0=(y0&7)*8, r1=((y0+1)&7)*8, c0=x0&7, c1=(x0+1)&7; return (BAYER8[r0+c0]*(1-fu)+BAYER8[r0+c1]*fu)*(1-fv)+(BAYER8[r1+c0]*(1-fu)+BAYER8[r1+c1]*fu)*fv; }   // the dither cell, one PROJECT pixel at any plate scale (#482 5.1 review); at 1 the old index exactly
       var gmAmt = fparam(p, 'amount', 1, t); if(gmAmt<0)gmAmt=0; if(gmAmt>1)gmAmt=1;
       var gmSh=hexToRGB(p.color)||[36,26,82], gmHi=hexToRGB(p.color2)||[255,184,108];
@@ -12459,7 +12471,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         d[fci]=d[fci]+(fcr-d[fci])*fcA; d[fci+1]=d[fci+1]+(fcg-d[fci+1])*fcA; d[fci+2]=d[fci+2]+(fcb-d[fci+2])*fcA; } } },
     // Spectral Map: luminance → spectrum sweep (violet 260° for shadows through to red 0° for
     // highlights), full saturation, value lifted so shadows stay readable. False-colour look.
-    spectralmap: function(d,W,H,p,t){ var smA = fparam(p, 'amount', 1, t); smA=smA<0?0:(smA>1?1:smA); if(smA<=0)return; var smSpan=p.span==null?260:FM.evalProp(p.span,t); var smOff=p.offset==null?0:FM.evalProp(p.offset,t); var smSatP=p.saturation==null?100:FM.evalProp(p.saturation,t); var smSat=smSatP===100?1:smSatP/100; /* #966 opts7: REVERSE (1) runs the spectrum the other way, the darks at the lights' end; Off (0) is the old (1 − L) x span */ var smRev=p.reverse==null?0:(Math.round(FM.evalProp(p.reverse,t))|0); for(var smi=0;smi<d.length;smi+=4){ if(d[smi+3]===0)continue; var smL=(0.299*d[smi]+0.587*d[smi+1]+0.114*d[smi+2])/255; var smH=smRev===1?smL*smSpan:(1-smL)*smSpan; if(smOff!==0){smH=(smH+smOff)%360; if(smH<0)smH+=360;} var smV=0.25+0.75*smL, smC=smSat===1?smV:smV*smSat, smX=smC*(1-Math.abs((smH/60)%2-1)), smR, smG, smB; if(smH<60){smR=smC;smG=smX;smB=0;} else if(smH<120){smR=smX;smG=smC;smB=0;} else if(smH<180){smR=0;smG=smC;smB=smX;} else if(smH<240){smR=0;smG=smX;smB=smC;} else if(smH<300){smR=smX;smG=0;smB=smC;} else {smR=smC;smG=0;smB=smX;} if(smSat!==1){var smM=smV-smC; smR+=smM; smG+=smM; smB+=smM;} smR*=255; smG*=255; smB*=255; d[smi]=d[smi]+(smR-d[smi])*smA; d[smi+1]=d[smi+1]+(smG-d[smi+1])*smA; d[smi+2]=d[smi+2]+(smB-d[smi+2])*smA; } },
+    spectralmap: function(d,W,H,p,t){ /* #966 opts17: PROTECT SKIN over 0 % or AFFECTS Darks (1), Mids (2) or Lights (3) runs tone13 — this very kernel without the two (Amount, Spectrum span, Hue offset, Saturation and Reverse as they are), each pixel laid in by its tonal weight x (1 − Protect skin x its skin weight); 0 % and All run the line below untouched */ const smSk17 = p.skin == null ? 0 : FM.evalProp(p.skin, t), smRg17 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0); if (smSk17 > 0 || smRg17 === 1 || smRg17 === 2 || smRg17 === 3) { tone13(d, W, H, p, t, PIXEL_FX.spectralmap, ['skin', 'range'], smRg17, 100, smSk17); return; } var smA = fparam(p, 'amount', 1, t); smA=smA<0?0:(smA>1?1:smA); if(smA<=0)return; var smSpan=p.span==null?260:FM.evalProp(p.span,t); var smOff=p.offset==null?0:FM.evalProp(p.offset,t); var smSatP=p.saturation==null?100:FM.evalProp(p.saturation,t); var smSat=smSatP===100?1:smSatP/100; /* #966 opts7: REVERSE (1) runs the spectrum the other way, the darks at the lights' end; Off (0) is the old (1 − L) x span */ var smRev=p.reverse==null?0:(Math.round(FM.evalProp(p.reverse,t))|0); for(var smi=0;smi<d.length;smi+=4){ if(d[smi+3]===0)continue; var smL=(0.299*d[smi]+0.587*d[smi+1]+0.114*d[smi+2])/255; var smH=smRev===1?smL*smSpan:(1-smL)*smSpan; if(smOff!==0){smH=(smH+smOff)%360; if(smH<0)smH+=360;} var smV=0.25+0.75*smL, smC=smSat===1?smV:smV*smSat, smX=smC*(1-Math.abs((smH/60)%2-1)), smR, smG, smB; if(smH<60){smR=smC;smG=smX;smB=0;} else if(smH<120){smR=smX;smG=smC;smB=0;} else if(smH<180){smR=0;smG=smC;smB=smX;} else if(smH<240){smR=0;smG=smX;smB=smC;} else if(smH<300){smR=smX;smG=0;smB=smC;} else {smR=smC;smG=0;smB=smX;} if(smSat!==1){var smM=smV-smC; smR+=smM; smG+=smM; smB+=smM;} smR*=255; smG*=255; smB*=255; d[smi]=d[smi]+(smR-d[smi])*smA; d[smi+1]=d[smi+1]+(smG-d[smi+1])*smA; d[smi+2]=d[smi+2]+(smB-d[smi+2])*smA; } },
     // Radial Shadow: point-light shadow — each transparent pixel marches a few taps back toward the
     // light; if opaque content sits between it and the light, it's in shadow. Strength fades with tap
     // distance so the shadow softens as it throws further. Paints only transparent px (like longshadow).
@@ -25574,10 +25586,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: q[0] + s, label: q[1], min: 0, max: 100, step: 1, def: i ? q[2] : q[3], unit: '%', showWhen: { key: 'channel', is: i } }))), []), [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ]) },
-    { type: 'hslmixer', label: 'HSL Mixer', desc: 'Eight colours, each with its own hue, saturation and brightness: make a sky bluer, grass greener or a red softer and leave every other colour alone. Pick what to adjust, then move the colour.', params: [
+    { type: 'hslmixer', label: 'HSL Mixer', desc: 'Eight colours, each with its own hue, saturation and brightness: make a sky bluer, grass greener or a red softer and leave every other colour alone. Pick what to adjust, then move the colour. Protect skin keeps faces as they are; Mix sets how much of the change shows.', params: [
       { key: 'adjust', label: 'Adjust', options: [[0, 'Hue'], [1, 'Saturation'], [2, 'Brightness']], def: 1 },
     ].concat(HM_SETS.reduce((out, s, i) => out.concat(HM_BANDS.map(b => (
-      { key: s + '_' + b[0], label: b[1], min: -100, max: 100, step: 1, def: HM_DEF[s + '_' + b[0]] || 0, showWhen: { key: 'adjust', is: i } }))), [])) },
+      { key: s + '_' + b[0], label: b[1], min: -100, max: 100, step: 1, def: HM_DEF[s + '_' + b[0]] || 0, showWhen: { key: 'adjust', is: i } }))), []), [
+      /* #966 opts17 (hunt/fx17, his "more choices always better"): the mixer always moved a face with its colour — a warmer orange
+         took every skin tone in the shot with it — and always at full strength. PROTECT SKIN holds skin-coloured pixels back from every
+         slider with Teal & Orange's skin window (skinW12) — a richer orange car, the faces left as they are — and MIX lays the mixed
+         picture over the plain one. Both show under every Adjust. 0 % and 100 % run the old loop untouched (tone13 only off them).
+         The note (the review's fold): at the mixer's own starting look it holds nothing back, because that look only moves colours a
+         face is not, so the row says which sliders it guards. */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Holds faces back from the Red, Orange, Yellow and Magenta sliders, the colours a skin tone is made of' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ]) },
   ];
   // routed like every pixel effect, and — being point operations — admitted to the adjustment path and the cropped readback
   CG_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; PIXEL_ADJ[r.type] = 1; CROP_FX[r.type] = 1; });
@@ -25738,6 +25759,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     _hmSig = sig; _hmT = T; return T;
   }
   PIXEL_FX.hslmixer = function (d, W, H, p, t) {
+    /* #966 opts17: PROTECT SKIN over 0 % or MIX under 100 % runs tone13 — this very kernel without the two (every slider of every
+       Adjust as it is), each pixel laid in by Mix x (1 − Protect skin x its skin weight). 0 % and 100 % run the lines below untouched. */
+    const hmSk17 = p.skin == null ? 0 : FM.evalProp(p.skin, t), hmMx17 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+    if (hmSk17 > 0 || hmMx17 < 100) { tone13(d, W, H, p, t, PIXEL_FX.hslmixer, ['skin', 'mix'], 0, hmMx17, hmSk17); return; }
     const vals = [];
     let any = false;
     for (let s = 0; s < 3; s++) for (let k = 0; k < 8; k++) {
