@@ -153,7 +153,12 @@ window.FM = window.FM || {};
      (Affects: 0 All, 1 Darks, 2 Mids, 3 Lights), Teal & Orange `range` (Affects: 0 All, 1 Darks, 2 Mids, 3 Lights) and `mix`
      (Mix 0 to 100, default 100). Every default draws what the effect drew before, but a rev-33 sanitiser drops the new keys,
      so the two would normalise one project differently. */
-  C.SCHEMA_REV = 34;
+  /* Rev 35 (v18.02, #966 idle work round sixteen): new controls on three existing effects: Colourize `skin` (Protect skin 0 to
+     100, default 0) and `range` (Affects: 0 All, 1 Darks, 2 Mids, 3 Lights), Colour Wheels `skin` (Protect skin 0 to 100,
+     default 0) and `mix` (Mix 0 to 100, default 100), Black & White Mixer `skin` (Protect skin 0 to 100, default 0) and `mix`
+     (Mix 0 to 100, default 100). Every default draws what the effect drew before, but a rev-34 sanitiser drops the new keys,
+     so the two would normalise one project differently. */
+  C.SCHEMA_REV = 35;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -392,7 +397,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =5614001361829661;   // SCHEMA_REV 34 (v18.00, #966 round fifteen): six new effect params on Levels, Unsharp Mask and Teal & Orange. Pinned 24 Oct with fp.js at rev 34; before: 3676690552475312 at rev 33.
+  C.SCHEMA_FP =4505451624971251;   // SCHEMA_REV 35 (v18.02, #966 round sixteen): six new effect params on Colourize, Colour Wheels and Black & White Mixer. Pinned 24 Oct with fp.js at rev 35; before: 5614001361829661 at rev 34.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════

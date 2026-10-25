@@ -68303,6 +68303,548 @@
     }
   });
 
+  /* #860 hunt #6, THE GIF HALF: fixtures (FM.gifFrameShare / FM.gifFrameTotal, js/media.js). A GIF here is built by hand
+     (h3aGifBytes, the 690 GIF tests' builder) with a big screen and one-pixel frames, so what it NEEDS (W x H x 4 bytes a frame,
+     every frame kept at the screen's size) is as large as a test wants while the file stays a few kilobytes and the decode cheap.
+     createImageBitmap is stubbed for the decoder's own canvases only (the fixture's odd 517 x 509 shape, or that shape scaled
+     down) and hands back a fake bitmap of the canvas's size, so no real 160 MB is ever held; every other caller gets the real one.
+     The file is a stand-in whose arrayBuffer() resolves at once, so two decodes started together interleave in a fixed order.
+     What a GIF was decoded INTO is read from the result, width x height x 4 x frames: that is what its budget bought (the decoder
+     scales by k = sqrt(budget / need) and never drops a frame), on bc8e78f3 and on the account alike.
+     per is gifBudget() as bc8e78f3 has it and TOT the total, both read from the DEVICE (the same formula, and the same test
+     FM.previewFrameTotal makes: four of per on a fine pointer with the full 384 MB, per elsewhere and at the 380 px pass), never
+     from the account under test, so a build with no total is held to it too. slots = TOT / per (4 on his PC, 1 on a phone).
+     A decode is registered the way the app does it: its record in FM.media under a HIDDEN image layer of the open scene, so
+     nothing draws the fake bitmaps. plant() stands in for a GIF decoded earlier, holding whole MB of 512 x 512 fake frames.
+     ISOLATED as fc860dKit is: the scene's layers are swapped for the kit's own list (the account counts only GIFs the open scene
+     holds, so nothing else is seen), and put() restores the stub, removes the records (FM.media's release closes their fakes),
+     puts the list back, then isoKeep. */
+  function gif860Kit() {
+    var MB = 1048576;
+    var kit = { lim: FM.frameCacheLimits(), W: 517, H: 509, ids: [], fakes: 0, MB: MB };
+    kit.F = kit.W * kit.H * 4;
+    kit.per = Math.max(32 * MB, Math.min(160 * MB, kit.lim.maxBytes / 2));
+    kit.pc = !!(window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches) && kit.lim.maxBytes >= 384 * MB;
+    kit.TOT = kit.pc ? 4 * kit.per : kit.per;
+    kit.slots = Math.round(kit.TOT / kit.per);
+    kit.bigN = Math.ceil(1.5 * kit.per / kit.F);
+    kit.k = isoKeep();
+    kit.scene0 = FM.scene; kit.layers0 = FM.scene.layers;
+    FM.scene.layers = [];
+    kit.cib0 = Object.getOwnPropertyDescriptor(window, 'createImageBitmap');
+    var real = window.createImageBitmap;
+    window.createImageBitmap = function (src) {
+      var mine = !!(src && src.tagName === 'CANVAS' && src.width > 0 && src.height > 0 && src.width <= kit.W && src.height <= kit.H &&
+                 Math.abs(src.width / src.height - kit.W / kit.H) < 0.03);
+      if (!mine) return real.apply(window, arguments);
+      kit.fakes++;
+      return Promise.resolve({ width: src.width, height: src.height, closed: 0, close: function () { this.closed++; } });
+    };
+    kit.fileOf = function (n, tag) {
+      var fr = [];
+      for (var i = 0; i < n; i++) fr.push({ x: i % 2, y: 0, w: 1, h: 1, disposal: 1, transparent: -1, delay: 10, px: function () { return 1; } });
+      var bytes = h3aGifBytes(kit.W, kit.H, [[0, 0, 0], [230, 30, 30], [30, 60, 230], [30, 200, 40]], fr);
+      return { name: tag + '.gif', type: 'image/gif', size: bytes.length, arrayBuffer: function () { return Promise.resolve(bytes.buffer); } };
+    };
+    kit.decode = function (n, tag, opts) { return FM._decodeGifAnimation(kit.fileOf(n, tag), opts); };
+    kit.hold = function (id, anim, o) {
+      var el = document.createElement('canvas'); el.width = 2; el.height = 2;
+      var rec = { kind: 'image', el: el, width: kit.W, height: kit.H, anim: anim };
+      if (o && o.file) rec.file = o.file;
+      FM.media.set(id, rec);
+      FM.scene.layers.push({ id: id, name: id, type: 'image', start: 0, duration: 5, trimStart: 0, visible: false, effects: [], behaviors: [] });
+      kit.ids.push(id);
+      return rec;
+    };
+    /* (F3) A GIF layer an EXPORT draws: a real layer (FM.makeLayer), VISIBLE, its record holding `anim` and the file it came from.
+       Only ever used after kit.spy(), which keeps every draw off the fake bitmaps. */
+    kit.show = function (tag, anim, file) {
+      var L = FM.makeLayer('image', { name: tag, x: 20, y: 20, start: 0, duration: 5 });
+      var el = document.createElement('canvas'); el.width = 2; el.height = 2;
+      var rec = { kind: 'image', el: el, width: kit.W, height: kit.H, anim: anim, file: file };
+      FM.media.set(L.id, rec);
+      FM.scene.layers.push(L);
+      kit.ids.push(L.id);
+      return { rec: rec, layer: L };
+    };
+    /* (F3) WHICH GIF FRAMES THE EXPORT DREW FROM. The compositor picks a GIF's frame through FM.animFrameAt(anim, t) at call time; the
+       spy writes down the anim it was handed while FM._exporting and answers null, so the layer's 2 x 2 element is drawn instead and
+       no fake bitmap ever reaches drawImage (in the export or in a preview frame drawn meanwhile). put() restores it. */
+    kit.drawn = [];
+    kit.spy = function () {
+      kit.afa0 = Object.getOwnPropertyDescriptor(FM, 'animFrameAt');
+      kit.spied = true;
+      FM.animFrameAt = function (a) { if (FM._exporting) kit.drawn.push(a); return null; };
+      return kit;
+    };
+    /* (F3) ONE REAL EXPORT, STOPPED AFTER ITS FIRST FRAME: runFrames or runGif over 0-0.2 s at a tenth of the size. The frame loop
+       reports each frame through onProgress (the prepare phase's calls say so with a third argument), and a throw there leaves the
+       loop through the path's own finally, as a failure would, before any file is handed over. true = stopped there. */
+    kit.run = async function (how) {
+      var stop = new Error('860g: stopped after the first frame');
+      /* (review G3) the swapped-in scene's GIF layers run 0 to 5 s, but the project keeps the length it had, which an empty boot
+         project has at 0 s: the export range would then be empty and the export would draw no layer at all. Set for the run, put back. */
+      var P = FM.scene.project, d0 = P.duration;
+      P.duration = Math.max(d0 || 0, 5);
+      try {
+        await FM.exporter[how]({ from: 0, to: 0.2, fps: 10, scale: 0.1, name: 'x860g', onProgress: function (p, s, prep) { if (!prep) throw stop; } });
+      } catch (e) { if (e === stop) return true; throw e; }
+      finally { P.duration = d0; }
+      return false;
+    };
+    /* A PHONE'S GIF TOTAL, on any machine (F3 brief 5, as fc860dKit.phone). The suite's 380 px pass is a narrow window on a desktop (a
+       fine pointer with the full 384 MB), so the GIF total there is the PC's as well and a phone's (one gifBudget(), slots = 1) was
+       never in force at either width. FM.gifFrameTotal reads FM.previewFrameTotal, and a phone's answer is the one cache's ceiling. */
+    kit.phone = function () {
+      kit.tot0 = Object.getOwnPropertyDescriptor(FM, 'previewFrameTotal');
+      kit.phoned = true;
+      FM.previewFrameTotal = function (l) { return (l && l.maxBytes) || 0; };
+      kit.pc = false; kit.TOT = kit.per; kit.slots = 1;
+      return kit;
+    };
+    kit.plant = function (id, bytes) {
+      var m = Math.max(1, Math.floor(bytes / MB)), fr = [], st = [];
+      for (var i = 0; i < m; i++) { fr.push({ width: 512, height: 512, closed: 0, close: function () { this.closed++; } }); st.push(i / 10); }
+      var a = { frames: fr, starts: st, total: m / 10, width: 512, height: 512 };
+      kit.hold(id, a);
+      return a;
+    };
+    kit.bytes = function (a) { return a ? a.width * a.height * 4 * a.frames.length : 0; };
+    kit.mb = function (b) { return (b / MB).toFixed(1) + ' MB'; };
+    kit.put = function () {
+      try { if (FM.exporter && FM.exporter.releaseGifCopies) FM.exporter.releaseGifCopies(); } catch (e) {}   // (F3) a test that called prepareCaches alone
+      try { if (kit.cib0) Object.defineProperty(window, 'createImageBitmap', kit.cib0); else delete window.createImageBitmap; } catch (e) {}
+      kit.ids.forEach(function (id) { try { FM.media.remove(id); } catch (e) {} });
+      if (FM.scene === kit.scene0) FM.scene.layers = kit.layers0;   // the same array, untouched: isoKeep below then finds nothing to put back
+      if (kit.spied) { if (kit.afa0) Object.defineProperty(FM, 'animFrameAt', kit.afa0); else delete FM.animFrameAt; }
+      if (kit.phoned) { if (kit.tot0) Object.defineProperty(FM, 'previewFrameTotal', kit.tot0); else delete FM.previewFrameTotal; }
+      kit.k.put();
+    };
+    return kit;
+  }
+
+  /* #860 hunt #6, the GIF half: SEVERAL BIG GIFS DECODED ONE AFTER ANOTHER FIT ONE TOTAL. decodeGifAnimation scaled every GIF to
+     the whole gifBudget() (per, 160 MB on his PC), so ten big stickers held about 1.6 GB of bitmaps. Now one total (TOT) holds them
+     all and a new GIF may take only the room left in it, never more than per. The plan: slots - 1 big GIFs (each needs 1.5 per),
+     then a small one (0.15 per, which fits whole), then one more big one.
+     GREEN, his PC (TOT 4 per): the first three big ones each get per (the room is there), the small one its own 23 frames whole,
+     and the last big one the room left, TOT - 3 per - small, about 0.86 per: the six-way sum is TOT to the rounding of k. The 380
+     px pass (TOT = per): the small one whole, then the big one TOT - small. RED on bc8e78f3: the last big one gets per as well,
+     so the sum is TOT + small (4.14 per against 4, or 1.14 per against 1), past TOT x 1.008, the rounding allowance (k rounds to
+     whole pixels, under 0.3 % a GIF here).
+     CONTROLS (pass on both): every GIF decoded every frame; the small one kept its full size; no GIF went over per; and the last
+     big one got at least the room left (it is lent the room, not held to a fair share the others cannot give back). */
+  test('860 several big GIFs decoded one after another in one scene fit one GIF frame total instead of each taking a whole budget', { item: '860', budgetMs: 90000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM._decodeGifAnimation or FM.frameCacheLimits is not exposed');
+    if (!FM.media || typeof FM.media.set !== 'function' || !FM.scene || !Array.isArray(FM.scene.layers)) throw new Error('FM.media.set or FM.scene.layers is not reachable');
+    var kit = gif860Kit(), per = kit.per, TOT = kit.TOT, F = kit.F;
+    try {
+      var smallN = Math.max(2, Math.floor(0.15 * per / F));
+      var plan = [];
+      for (var i = 0; i < kit.slots - 1; i++) plan.push(kit.bigN);
+      plan.push(smallN, kit.bigN);
+      var got = [];
+      for (var j = 0; j < plan.length; j++) {
+        var a = await kit.decode(plan[j], '860g-t1-' + j);
+        if (!a || a.frames.length !== plan[j]) throw new Error('setup: GIF ' + (j + 1) + ' of ' + plan.length + ' decoded ' + (a ? a.frames.length : 'no') + ' frames, not its ' + plan[j]);
+        kit.hold('860g-t1-' + j, a);
+        got.push(kit.bytes(a));
+      }
+      if (kit.fakes < 1) throw new Error('setup: the decoder never reached the bitmap stub, so nothing here was measured');
+      var small = got[plan.length - 2], last = got[plan.length - 1];
+      if (small !== smallN * F) throw new Error('CONTROL: the small GIF, which fits, was decoded into ' + kit.mb(small) + ', not its full ' + kit.mb(smallN * F));
+      if (got.some(function (b) { return b > per * 1.005; })) throw new Error('a GIF was decoded into more than one GIF may take: ' + got.map(kit.mb).join(', ') + ' against ' + kit.mb(per));
+      var sum = got.reduce(function (s, b) { return s + b; }, 0);
+      if (sum > TOT * 1.008) throw new Error(plan.length + ' GIFs decoded one after another in one scene hold ' + kit.mb(sum) + ' of frames (' + got.map(kit.mb).join(', ') + ') against one ' + kit.mb(TOT) + ' GIF frame total: each was handed a whole budget');
+      var left = TOT - (kit.slots - 1) * per - small;
+      if (!(last >= 0.95 * left)) throw new Error('CONTROL: the last big GIF was decoded into only ' + kit.mb(last) + ' where ' + kit.mb(left) + ' of the total was left for it');
+    } finally {
+      kit.put();
+    }
+  });
+
+  /* #860 hunt #6, the GIF half, CONTROL: ONE GIF ALONE DECODES EXACTLY AS IT DID. With nothing else in the scene the account hands a
+     new GIF the whole gifBudget() (per), so a GIF needing 1.5 per comes out at the very size bc8e78f3 gives it: k =
+     sqrt(per / need), each side rounded to whole pixels, every frame kept. Passes on both, to the pixel. */
+  test('860 one GIF alone still decodes under the whole one-GIF budget, to the very pixel it did before the GIF frame total (CONTROL)', { item: '860' }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM._decodeGifAnimation or FM.frameCacheLimits is not exposed');
+    var kit = gif860Kit(), per = kit.per;
+    try {
+      if (typeof FM._gifBudget === 'function' && FM._gifBudget() !== per) throw new Error('setup: the app reads the one-GIF budget as ' + kit.mb(FM._gifBudget()) + ' where the device gives ' + kit.mb(per));
+      var n = kit.bigN, a = await kit.decode(n, '860g-solo');
+      var k = Math.min(1, Math.sqrt(per / (kit.W * kit.H * 4 * n)));
+      var ow = Math.max(1, Math.round(kit.W * k)), oh = Math.max(1, Math.round(kit.H * k));
+      if (!a || a.frames.length !== n) throw new Error('one GIF alone decoded ' + (a ? a.frames.length : 'no') + ' frames, not its ' + n);
+      if (kit.fakes < 1) throw new Error('setup: the decoder never reached the bitmap stub, so nothing here was measured');
+      if (a.width !== ow || a.height !== oh) throw new Error('one GIF alone, needing ' + kit.mb(n * kit.F) + ', was decoded at ' + a.width + 'x' + a.height + ', not the ' + ow + 'x' + oh + ' the whole ' + kit.mb(per) + ' one-GIF budget gives it');
+    } finally {
+      kit.put();
+    }
+  });
+
+  /* #860 hunt #6, the GIF half: A GIF THAT FINDS THE TOTAL FULL STILL DECODES, A QUARTER OF A FAIR SHARE, EVERY FRAME. slots GIFs
+     decoded earlier (planted) hold per each, the whole total; then a big one is decoded. The account never thins or gives back a
+     GIF already decoded (nothing would decode it again, so it would freeze on its first frame), so the newcomer gets the floor:
+     a quarter of fair, fair = min(per, TOT / (slots + 1)) (0.2 per on his PC, per / 8 at 380 px), and the total runs over by just
+     that. RED on bc8e78f3: the newcomer gets the whole per, so the held sum is TOT + per, past (TOT + fair / 4) x 1.008.
+     CONTROLS (pass on both): every frame decoded, at least a pixel on each side; at least 0.97 of a quarter of fair (k rounds to
+     whole pixels), so it is usable; the planted GIFs keep every frame, none closed. */
+  test('860 a GIF decoded once the GIF frame total is full still gets a usable quarter share and every frame, and the GIFs already decoded are not touched', { item: '860', budgetMs: 90000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM._decodeGifAnimation or FM.frameCacheLimits is not exposed');
+    if (!FM.media || typeof FM.media.set !== 'function' || !FM.scene || !Array.isArray(FM.scene.layers)) throw new Error('FM.media.set or FM.scene.layers is not reachable');
+    for (var pass = 0; pass < 2; pass++) {   // (F3 brief 5) this machine's GIF total, then a phone's (kit.phone: slots 1), on every machine
+    var kit = gif860Kit();
+    if (pass) kit.phone();
+    var per = kit.per, TOT = kit.TOT;
+    try {
+      var held = [];
+      for (var i = 0; i < kit.slots; i++) held.push(kit.plant('860g-full-' + i, per));
+      var heldBytes = held.reduce(function (s, x) { return s + kit.bytes(x); }, 0);
+      var before = held.map(function (x) { return x.frames.slice(); });
+      var fair = Math.min(per, Math.floor(TOT / (kit.slots + 1)));
+      var n = kit.bigN, a = await kit.decode(n, '860g-late');
+      if (!a || a.frames.length !== n || !(a.width >= 1 && a.height >= 1)) throw new Error('the GIF decoded once the total was full came back with ' + (a ? a.frames.length + ' frames at ' + a.width + 'x' + a.height : 'nothing') + ', not all ' + n + ' frames');
+      if (kit.fakes < 1) throw new Error('setup: the decoder never reached the bitmap stub, so nothing here was measured');
+      var late = kit.bytes(a);
+      if (!(late >= 0.25 * fair * 0.97)) throw new Error('CONTROL: the GIF decoded once the total was full got only ' + kit.mb(late) + ' (' + a.width + 'x' + a.height + '), under a quarter of its fair ' + kit.mb(fair));
+      if (heldBytes + late > (TOT + 0.25 * fair) * 1.008) throw new Error('with ' + kit.slots + ' GIFs already holding the whole ' + kit.mb(TOT) + ' GIF frame total, a new GIF was decoded into ' + kit.mb(late) + ', where a quarter of a fair share (' + kit.mb(0.25 * fair) + ') is the most the full total allows');
+      held.forEach(function (x, q) {
+        if (x.frames.length !== before[q].length || x.frames.some(function (f, z) { return f !== before[q][z] || f.closed; })) throw new Error('CONTROL: GIF ' + q + ', decoded earlier, was thinned, re-decoded or had a frame closed when a new GIF was decoded');
+      });
+    } catch (e) {
+      if (pass && e && e.message) e.message = 'on a phone GIF total: ' + e.message;
+      throw e;
+    } finally {
+      kit.put();
+    }
+    }
+  });
+
+  /* #860 hunt #6, the GIF half: TWO GIFS DECODED AT THE SAME MOMENT COUNT EACH OTHER. A decode holds its ask in the account until it
+     ends, so a second one starting meanwhile sees it (a project load and an import, two imports at once). slots - 1 planted GIFs
+     hold per each, leaving per of room; then two big GIFs are decoded together. GREEN: the first to ask takes the per of room
+     and the second the floor, a quarter of min(per, TOT / (slots + 1)): the held sum is at most (TOT + fair / 4) x 1.008. RED on
+     bc8e78f3, and with the asks left out of the count: each takes the whole per, TOT + per. CONTROL (passes on both): both decode
+     every frame, each into at least 0.97 of a quarter of fair. */
+  test('860 two GIFs decoded at the same moment count each other against the GIF frame total', { item: '860' }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM._decodeGifAnimation or FM.frameCacheLimits is not exposed');
+    if (!FM.media || typeof FM.media.set !== 'function' || !FM.scene || !Array.isArray(FM.scene.layers)) throw new Error('FM.media.set or FM.scene.layers is not reachable');
+    var kit = gif860Kit(), per = kit.per, TOT = kit.TOT;
+    try {
+      var held = [];
+      for (var i = 0; i < kit.slots - 1; i++) held.push(kit.plant('860g-two-' + i, per));
+      var heldBytes = held.reduce(function (s, x) { return s + kit.bytes(x); }, 0);
+      var fair = Math.min(per, Math.floor(TOT / (kit.slots + 1)));
+      var n = kit.bigN;
+      var both = await Promise.all([kit.decode(n, '860g-two-a'), kit.decode(n, '860g-two-b')]);
+      both.forEach(function (a, q) { if (!a || a.frames.length !== n) throw new Error('CONTROL: GIF ' + (q + 1) + ' of the two decoded together came back with ' + (a ? a.frames.length : 'no') + ' frames, not all ' + n); });
+      if (kit.fakes < 1) throw new Error('setup: the decoder never reached the bitmap stub, so nothing here was measured');
+      var b0 = kit.bytes(both[0]), b1 = kit.bytes(both[1]);
+      if (!(Math.min(b0, b1) >= 0.25 * fair * 0.97)) throw new Error('CONTROL: of two GIFs decoded together one got only ' + kit.mb(Math.min(b0, b1)) + ', under a quarter of its fair ' + kit.mb(fair));
+      if (heldBytes + b0 + b1 > (TOT + 0.25 * fair) * 1.008) throw new Error('two GIFs decoded at the same moment were decoded into ' + kit.mb(b0) + ' and ' + kit.mb(b1) + ' beside ' + kit.mb(heldBytes) + ' already held, against one ' + kit.mb(TOT) + ' GIF frame total: neither counted the other');
+    } finally {
+      kit.put();
+    }
+  });
+
+  /* #860 hunt #6, the GIF half (review F1): A COPY OF A GIF THE SCENE ALREADY HOLDS DECODES AT THE SIZE OF ITS ORIGINAL. A Split
+     half, a Duplicate and a paste each decode a FRESH record of the file a layer already holds, and the account counted the original
+     against its own copy: on his iPhone a split 480 x 480 sticker's tail came out 222 x 222 beside a 480 x 480 head. Here the
+     original is decoded alone (the whole per), held with its file; GIFs decoded earlier then fill the rest of the total, and the same
+     file is decoded again, as a Split does. GREEN: the copy is decoded at the original's very width (gifTwin). RED on 71fd8d32 (the
+     account without the twin rule): the copy finds the total full and gets the quarter-share floor, far narrower. (Passes on
+     bc8e78f3, which had no total, so it is proven by mutation.) CONTROL: the original really was decoded at full budget size. */
+  test('860 a copy of a GIF the scene already holds (a Split half, a Duplicate, a paste) decodes at the size of the one it was made from', { item: '860', budgetMs: 90000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM._decodeGifAnimation or FM.frameCacheLimits is not exposed');
+    for (var pass = 0; pass < 2; pass++) {   // (F3 brief 5) this machine's GIF total, then a phone's (kit.phone), on every machine
+    var kit = gif860Kit(), per = kit.per;
+    if (pass) kit.phone();
+    try {
+      var n = kit.bigN, file = kit.fileOf(n, '860g-twin');
+      var orig = await FM._decodeGifAnimation(file);
+      if (!orig || orig.frames.length !== n) throw new Error('setup: the original decoded ' + (orig ? orig.frames.length : 'no') + ' frames, not its ' + n);
+      var k = Math.min(1, Math.sqrt(per / (kit.W * kit.H * 4 * n))), ow = Math.max(1, Math.round(kit.W * k));
+      if (orig.width !== ow) throw new Error('CONTROL: the original, decoded alone, came out ' + orig.width + ' wide, not the ' + ow + ' a whole budget gives it');
+      kit.hold('860g-twin-head', orig);
+      FM.media.get('860g-twin-head').file = file;
+      for (var i = 0; i < kit.slots; i++) kit.plant('860g-twin-fill-' + i, per);
+      var copy = await FM._decodeGifAnimation(kit.fileOf(n, '860g-twin'));
+      if (!copy || copy.frames.length !== n) throw new Error('the copy decoded ' + (copy ? copy.frames.length : 'no') + ' frames, not all ' + n);
+      if (copy.width !== orig.width) throw new Error('a copy of a GIF the scene already holds (a Split half) was decoded ' + copy.width + ' x ' + copy.height + ' beside its original at ' + orig.width + ' x ' + orig.height + ': the two halves of a split sticker no longer match');
+    } catch (e) {
+      if (pass && e && e.message) e.message = 'on a phone GIF total: ' + e.message;
+      throw e;
+    } finally {
+      kit.put();
+    }
+    }
+  });
+
+  /* #860 hunt #6, the GIF half (review F2): REPLACE MEDIA DOES NOT COUNT THE GIF IT IS PUTTING AWAY. Replace (and its undo and redo)
+     decodes the new file while the old record is still the layer's, and the account counted the old one against its replacement, so
+     a GIF replaced by another came out squeezed by the one it replaced. Here the old GIF and others decoded earlier fill the total;
+     then a different GIF is decoded the way Replace asks (gifSkip: the old record). GREEN: the old one is left out, so the new one has
+     a whole per of room and decodes as it would alone. RED on 71fd8d32: the old one is counted, the total is full, and the new one gets
+     the quarter-share floor. (Passes on bc8e78f3, no total; proven by mutation.) CONTROL: without gifSkip the same decode is squeezed,
+     so the room really was full. */
+  test('860 a GIF put in by Replace media is not squeezed by the GIF it replaces', { item: '860', budgetMs: 90000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM._decodeGifAnimation or FM.frameCacheLimits is not exposed');
+    for (var pass = 0; pass < 2; pass++) {   // (F3 brief 5) this machine's GIF total, then a phone's (kit.phone), on every machine
+    var kit = gif860Kit(), per = kit.per;
+    if (pass) kit.phone();
+    try {
+      kit.plant('860g-rep-old', per);
+      for (var i = 0; i < kit.slots - 1; i++) kit.plant('860g-rep-fill-' + i, per);
+      var old = FM.media.get('860g-rep-old'), n = kit.bigN;
+      var k = Math.min(1, Math.sqrt(per / (kit.W * kit.H * 4 * n))), ow = Math.max(1, Math.round(kit.W * k));
+      var squeezed = await kit.decode(n, '860g-rep-ctl');
+      if (!squeezed || !(squeezed.width < ow)) throw new Error('CONTROL: with the total full and nothing left out, a new GIF still came out ' + (squeezed ? squeezed.width : 'no') + ' wide, so the room was never full');
+      var put = await kit.decode(n, '860g-rep-new', { gifSkip: old });
+      if (!put || put.frames.length !== n) throw new Error('the replacing GIF decoded ' + (put ? put.frames.length : 'no') + ' frames, not all ' + n);
+      if (put.width !== ow) throw new Error('a GIF put in by Replace media came out ' + put.width + ' wide, not the ' + ow + ' it gets alone: the GIF it replaces was counted against it');
+    } catch (e) {
+      if (pass && e && e.message) e.message = 'on a phone GIF total: ' + e.message;
+      throw e;
+    } finally {
+      kit.put();
+    }
+    }
+  });
+
+  /* #860 hunt #6, the GIF half F3 (the PM's decision, 24 Oct, his to correct): A GIF THE PREVIEW HOLDS SMALLER IS EXPORTED AT ITS FULL
+     SIZE. The GIF frame total can decode a GIF smaller for the preview (here on a phone's total, kit.phone: a GIF decoded earlier fills
+     it, so the big one gets the quarter-share floor), and the export drew those very frames, so the squeeze reached his file. Now the
+     export decodes its own copy at full size inside its own total, and the compositor draws that while FM._exporting. Driven through a
+     real export (runFrames, stopped after its first frame: kit.run); kit.spy writes down which anim each GIF frame was drawn from.
+     RED on 396c93e1: the export draws the big GIF from the preview's own squeezed copy. GREEN: from one copy at 517 x 509, every frame.
+     CONTROLS: the preview copy really is narrower than the GIF alone would get (the total squeezed it, not only the one-GIF cap); a
+     4-frame GIF already at full size in the preview is drawn from its own preview copy and never decoded again. */
+  test('860 a GIF the preview holds smaller (the GIF frame total was full) is drawn into the export at its full size, from a copy the export decodes for itself (CONTROL: a GIF already at full size is not decoded again)', { item: '860', budgetMs: 90000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM._decodeGifAnimation or FM.frameCacheLimits is not exposed');
+    if (!FM.exporter || typeof FM.exporter.runFrames !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('FM.exporter.runFrames or FM.makeLayer is not exposed');
+    var kit = gif860Kit().phone().spy(), per = kit.per, n = kit.bigN;
+    try {
+      var sfile = kit.fileOf(4, '860g-x-small');
+      var sm = await FM._decodeGifAnimation(sfile);
+      if (!sm || sm.frames.length !== 4 || sm.width !== kit.W || sm.height !== kit.H) throw new Error('setup: a 4-frame GIF decoded alone came out ' + (sm ? sm.frames.length + ' frames at ' + sm.width + 'x' + sm.height : 'as nothing') + ', not 4 frames at its full ' + kit.W + 'x' + kit.H);
+      kit.show('860g-x-small', sm, sfile);
+      kit.plant('860g-x-fill', per);
+      var file = kit.fileOf(n, '860g-x-big');
+      var sq = await FM._decodeGifAnimation(file);
+      var k = Math.min(1, Math.sqrt(per / (kit.W * kit.H * 4 * n))), ow = Math.max(1, Math.round(kit.W * k));
+      if (!sq || sq.frames.length !== n || !(sq.width < ow)) throw new Error('CONTROL: with the GIF frame total full the big GIF still came out ' + (sq ? sq.width + 'x' + sq.height : 'as nothing') + ', not narrower than the ' + ow + ' it gets alone, so the preview never squeezed it');
+      kit.show('860g-x-big', sq, file);
+      if (!(await kit.run('runFrames'))) throw new Error('setup: the export ran to its end instead of stopping after its first frame');
+      if (!kit.drawn.length) throw new Error('setup: the export drew no GIF frame at all');
+      if (kit.drawn.indexOf(sq) >= 0) throw new Error('the export drew the big GIF from the copy the preview holds, ' + sq.width + 'x' + sq.height + ', where its own size is ' + kit.W + 'x' + kit.H + ': the preview squeeze reached the exported file');
+      if (kit.drawn.indexOf(sm) < 0) throw new Error('CONTROL: the 4-frame GIF already at full size in the preview was not drawn from its own preview copy: it was decoded again for nothing');
+      var copies = kit.drawn.filter(function (a) { return a !== sm; });
+      var bad = copies.filter(function (a) { return !a || a.width !== kit.W || a.height !== kit.H || !a.frames || a.frames.length !== n; });
+      if (!copies.length || bad.length) throw new Error('the export drew the big GIF from ' + (copies.length ? copies.map(function (a) { return a ? a.width + 'x' + a.height + ' with ' + (a.frames ? a.frames.length : 0) + ' frames' : 'nothing'; }).join(', ') : 'no copy at all') + ', not one copy at its full ' + kit.W + 'x' + kit.H + ' with all ' + n + ' frames');
+    } finally {
+      kit.put();
+    }
+  });
+
+  /* #860 hunt #6, the GIF half F3: WHEN THE EXPORT'S TOTAL CANNOT HOLD A GIF AT FULL SIZE, IT GOES OUT AT ITS PREVIEW SIZE AND THE READY
+     CARD SAYS SO. The export's byte total (shrunk through FM._exportBytes, the suite seam, so no gigabyte is ever needed) is set one
+     byte short of the big GIF's full size: it keeps its preview copy, and is written into the list the ready card reads ({ gif: true },
+     with the size it went out at), and the card names it in its own words, not as a clip with fewer frames.
+     RED on 396c93e1: nothing names it (the export had no GIF step at all). CONTROL: with exactly its full size in the total, the same
+     GIF IS decoded at full size and is no longer named, so the total, and only the total, kept it back. */
+  /* (review G4) …AT THE LARGEST SIZE THAT FITS, NOT ALL OR NOTHING. Three totals now: half its full size (decoded at k = sqrt(1/2),
+     about 366 x 360, larger than the preview copy, and named at that size); no more than the preview copy holds (that copy is drawn,
+     and named at its size, on the card in its own words); and its full size (the CONTROL). */
+  test('860 a GIF whose full size does not fit what is left of the export total goes out at the largest size that fits, or as its preview copy when that is all there is, and is named on the export ready card (CONTROL: with room for it, it is exported at full size)', { item: '860', budgetMs: 90000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM._decodeGifAnimation or FM.frameCacheLimits is not exposed');
+    if (!FM.exporter || typeof FM.exporter.prepareCaches !== 'function' || typeof FM._showExportReady !== 'function') throw new Error('FM.exporter.prepareCaches or FM._showExportReady is not exposed');
+    var overlay = document.getElementById('export-ready');
+    if (!overlay) throw new Error('#export-ready is missing from the document');
+    var wasHidden = overlay.classList.contains('hidden');
+    var had = Object.prototype.hasOwnProperty.call(FM, '_exportBytes'), eb0 = FM._exportBytes;
+    var rAF = function () { return new Promise(function (r) { requestAnimationFrame(function () { r(); }); }); };
+    var kit = gif860Kit().phone(), per = kit.per, n = kit.bigN;
+    try {
+      kit.plant('860g-over-fill', per);
+      var file = kit.fileOf(n, '860g-over');
+      var sq = await FM._decodeGifAnimation(file);
+      if (!sq || sq.frames.length !== n || !(sq.width < kit.W)) throw new Error('setup: the big GIF came out ' + (sq ? sq.frames.length + ' frames at ' + sq.width + 'x' + sq.height : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + kit.W);
+      var rec = kit.hold('860g-over', sq, { file: file });
+      var need = kit.W * kit.H * 4 * n;
+      var scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' }, selectedId: null, selectedIds: [],
+        layers: [{ id: '860g-over', name: '860g-over', type: 'image', start: 0, duration: 5, trimStart: 0, visible: true, effects: [], behaviors: [] }] };
+      var held = kit.bytes(sq);
+      /* 1. half its full size: the largest size that fits, larger than the preview copy, and named at that size */
+      FM._exportBytes = Math.floor(need / 2);
+      await FM.exporter.prepareCaches(scene, 30);
+      /* the size the export's rule gives: k = sqrt(share / need), stepped down until the whole-pixel sides fit the share (review L1) */
+      var share2 = Math.floor(need / 2), k2 = Math.sqrt(share2 / need), side = function (kk) { return [Math.max(1, Math.round(kit.W * kk)), Math.max(1, Math.round(kit.H * kk))]; };
+      while (side(k2)[0] * side(k2)[1] * 4 * n > share2) k2 *= 0.995;
+      var mid = rec._exportAnim, w2 = side(k2)[0], h2 = side(k2)[1];
+      if (mid && kit.bytes(mid) > share2) throw new Error('the GIF went out into ' + kit.mb(kit.bytes(mid)) + ', past the ' + kit.mb(share2) + ' the export total gave it');
+      if (!mid || mid.width !== w2 || mid.height !== h2 || !mid.frames || mid.frames.length !== n) throw new Error('with half its full size in the export total the GIF went out ' + (mid ? mid.width + 'x' + mid.height : 'as its preview copy, ' + sq.width + 'x' + sq.height) + ', not at the ' + w2 + 'x' + h2 + ' that fits: all or nothing');
+      var hit1 = (FM._exportThinned || []).filter(function (t) { return t && t.gif && t.name === '860g-over'; })[0];
+      if (!hit1 || hit1.w !== w2 || hit1.h !== h2) throw new Error('a GIF sent out at ' + w2 + 'x' + h2 + ', short of its full ' + kit.W + 'x' + kit.H + ', is not named at that size in the list the ready card reads: ' + JSON.stringify(FM._exportThinned));
+      /* 2. no more than the preview copy holds: that copy is drawn, and named at its size */
+      FM._exportBytes = held;
+      await FM.exporter.prepareCaches(scene, 30);
+      if (rec._exportAnim) throw new Error('with only ' + kit.mb(held) + ' in the export total, what the preview copy already holds, a copy of ' + rec._exportAnim.width + 'x' + rec._exportAnim.height + ' was decoded anyway');
+      var list = (FM._exportThinned || []).slice();
+      var hit = list.filter(function (t) { return t && t.gif && t.name === '860g-over'; })[0];
+      if (!hit) throw new Error('a GIF the export total could not hold at full size, sent out at its preview ' + sq.width + 'x' + sq.height + ', is not named in the list the ready card reads: ' + JSON.stringify(list));
+      if (hit.w !== sq.width || hit.h !== sq.height) throw new Error('the list gives the GIF kept smaller as ' + hit.w + 'x' + hit.h + ', not the ' + sq.width + 'x' + sq.height + ' it went out at');
+      var p = FM._showExportReady({ blob: { size: 5 * 1048576 }, name: 'x860g.mp4', poster: null, width: 320, height: 240, fps: 30, seconds: 5,
+        hasAudio: true, thinned: list, save: function () { return Promise.resolve(); } });
+      await rAF(); await rAF();
+      var meta = document.getElementById('xr-meta').textContent;
+      document.getElementById('xr-discard').click();
+      await p;
+      if (meta.indexOf(' · smaller to fit memory: 860g-over ' + sq.width + '×' + sq.height) < 0) throw new Error('the ready card does not name the GIF that went out smaller, with its size: "' + meta + '"');
+      if (/fewer frames|undefined/.test(meta)) throw new Error('the ready card words the GIF as a clip with fewer frames: "' + meta + '"');
+      FM._exportBytes = need;
+      await FM.exporter.prepareCaches(scene, 30);
+      var ea = rec._exportAnim;
+      if (!ea || ea.width !== kit.W || ea.height !== kit.H || !ea.frames || ea.frames.length !== n) throw new Error('CONTROL: with exactly ' + kit.mb(need) + ' in the export total the GIF was not decoded at its full size: ' + (ea ? ea.width + 'x' + ea.height : 'no copy'));
+      if ((FM._exportThinned || []).some(function (t) { return t && t.gif; })) throw new Error('CONTROL: a GIF exported at full size is still named as kept smaller: ' + JSON.stringify(FM._exportThinned));
+    } finally {
+      if (had) FM._exportBytes = eb0; else delete FM._exportBytes;
+      if (wasHidden) overlay.classList.add('hidden');
+      kit.put();
+    }
+  });
+
+  /* #860 hunt #6, the GIF half (review G1, the PM's call, 24 Oct, his to correct): ON A PHONE THE EXPORT'S GIF COPIES STAY UNDER A
+     CEILING, TOGETHER. There is no smaller export total for a phone (1.5 GB is every device's), so a big GIF's full-size copy could take
+     most of it on his iPhone: mobile Safari's kill zone, and the crash-resume store would run the same prepare step again on every
+     attempt. So on a phone all GIF copies together take at most 4 x gifBudget().
+       1. One GIF needing 1.5 times that ceiling at full size: on a phone (kit.phone) it goes out AT the ceiling's size (the largest
+          size under it, to the rounding of whole pixels: between 97 % and 100 % of the ceiling), still larger than its preview copy,
+          and is named at that size (review H1: a ceiling of half this would have passed a test of under-the-ceiling only).
+       2. TOGETHER (review H1): two GIFs each needing 0.75 of the ceiling: on a phone the two copies sum to no more than it.
+     CONTROL: on a PC (a PC's total set, so a runner reporting little memory still counts as a PC: review L4) the big GIF goes out at its
+     full size and is not named. RED on fcba8a8a (no ceiling): on the phone it is decoded at full size, past the ceiling, and the two
+     together reach 1.5 times it. */
+  test('860 on a phone the GIF copies an export decodes stay under the phone ceiling together, a GIF going out at the ceiling size and named on the card (CONTROL: on a PC it goes out at full size)', { item: '860', budgetMs: 240000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM._gifBudget !== 'function') throw new Error('FM._decodeGifAnimation or FM._gifBudget is not exposed');
+    if (!FM.exporter || typeof FM.exporter.prepareCaches !== 'function') throw new Error('FM.exporter.prepareCaches is not exposed');
+    var had = Object.prototype.hasOwnProperty.call(FM, '_exportBytes'), eb0 = FM._exportBytes;
+    /* gifs: [[frames as a fraction of the ceiling at full size, tag], ...]; returns what the export made of each */
+    var run = async function (phone, gifs) {
+      var kit = gif860Kit(), pct0 = null;
+      if (phone) kit.phone();
+      else { pct0 = Object.getOwnPropertyDescriptor(FM, 'previewFrameTotal'); FM.previewFrameTotal = function (l) { return 4 * ((l && l.maxBytes) || 0); }; }
+      try {
+        var cap = 4 * FM._gifBudget(), out = [], layers = [];
+        for (var i = 0; i < gifs.length; i++) {
+          var n = Math.ceil(gifs[i][0] * cap / kit.F);
+          if (n > 1000) throw new Error('setup: a GIF needing ' + gifs[i][0] + ' x the ceiling here would take ' + n + ' frames, past the decoder 1000');
+          var file = kit.fileOf(n, gifs[i][1]);
+          var pv = await FM._decodeGifAnimation(file);
+          if (!pv || pv.frames.length !== n || !(pv.width < kit.W)) throw new Error('setup: GIF ' + gifs[i][1] + ' came out ' + (pv ? pv.frames.length + ' frames at ' + pv.width + 'x' + pv.height : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + kit.W);
+          out.push({ tag: gifs[i][1], n: n, pv: kit.bytes(pv), rec: kit.hold(gifs[i][1], pv, { file: file }) });
+          layers.push({ id: gifs[i][1], name: gifs[i][1], type: 'image', start: 0, duration: 5, trimStart: 0, visible: true, effects: [], behaviors: [] });
+        }
+        var scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' }, selectedId: null, selectedIds: [], layers: layers };
+        if (had) delete FM._exportBytes;   // the export's own 1.5 GB total, as on every device
+        await FM.exporter.prepareCaches(scene, 30);
+        var named = (FM._exportThinned || []).filter(function (t) { return t && t.gif; });
+        out.forEach(function (o) {
+          var ea = o.rec._exportAnim;
+          o.ea = ea ? { w: ea.width, h: ea.height, bytes: kit.bytes(ea), frames: ea.frames.length } : null;
+          o.named = named.filter(function (t) { return t.name === o.tag; })[0] || null;
+        });
+        return { cap: cap, out: out, W: kit.W, H: kit.H, mb: kit.mb };
+      } finally {
+        try { if (FM.exporter.releaseGifCopies) FM.exporter.releaseGifCopies(); } catch (e) {}
+        if (!phone) { if (pct0) Object.defineProperty(FM, 'previewFrameTotal', pct0); else delete FM.previewFrameTotal; }
+        kit.put();
+      }
+    };
+    try {
+      /* 1. one big GIF on a phone */
+      var ph = await run(true, [[1.5, '860g-cap']]), g = ph.out[0];
+      if (!g.ea) throw new Error('on a phone the big GIF got no export copy at all: it went out at its preview size, ' + ph.mb(g.pv) + ', when ' + ph.mb(ph.cap) + ' was allowed');
+      if (g.ea.bytes > ph.cap) throw new Error('on a phone the export decoded the big GIF into ' + ph.mb(g.ea.bytes) + ' (' + g.ea.w + 'x' + g.ea.h + '), past the ' + ph.mb(ph.cap) + ' phone ceiling: one GIF can take most of the 1.5 GB export total on an iPhone');
+      if (g.ea.bytes < 0.97 * ph.cap) throw new Error('on a phone the big GIF went out into only ' + ph.mb(g.ea.bytes) + ' (' + g.ea.w + 'x' + g.ea.h + '), well under the ' + ph.mb(ph.cap) + ' ceiling it is allowed: the ceiling is lower than the PM decided');
+      if (!(g.ea.bytes > g.pv) || g.ea.frames !== g.n) throw new Error('on a phone the export copy (' + ph.mb(g.ea.bytes) + ', ' + g.ea.frames + ' frames) is not larger than the preview copy (' + ph.mb(g.pv) + ') with every frame');
+      if (!g.named || g.named.w !== g.ea.w || g.named.h !== g.ea.h) throw new Error('on a phone the GIF sent out at ' + g.ea.w + 'x' + g.ea.h + ', short of its full ' + ph.W + 'x' + ph.H + ', is not named at that size: ' + JSON.stringify(g.named));
+      /* 2. two GIFs on a phone, together */
+      var two = await run(true, [[0.75, '860g-cap-a'], [0.75, '860g-cap-b']]);
+      var sum = two.out.reduce(function (s, o) { return s + (o.ea ? o.ea.bytes : o.pv); }, 0);
+      if (sum > two.cap) throw new Error('on a phone two GIFs went out into ' + two.out.map(function (o) { return o.ea ? two.mb(o.ea.bytes) : 'its preview copy'; }).join(' and ') + ', ' + two.mb(sum) + ' together, past the ' + two.mb(two.cap) + ' ceiling: the ceiling holds each copy, not all of them');
+      if (two.out.some(function (o) { return !o.ea || !o.named; })) throw new Error('CONTROL: of two GIFs on a phone, each needing 0.75 of the ceiling, one got no copy or was not named: ' + JSON.stringify(two.out.map(function (o) { return { ea: o.ea, named: !!o.named }; })));
+      /* CONTROL: a PC */
+      var pc = await run(false, [[1.5, '860g-cap']]), p = pc.out[0];
+      if (!p.ea || p.ea.w !== pc.W || p.ea.h !== pc.H) throw new Error('CONTROL: on a PC the big GIF went out at ' + (p.ea ? p.ea.w + 'x' + p.ea.h : 'its preview size') + ', not its full ' + pc.W + 'x' + pc.H + ': the ceiling reached a PC');
+      if (p.named) throw new Error('CONTROL: on a PC a GIF exported at full size is still named as smaller');
+    } finally {
+      if (had) FM._exportBytes = eb0; else delete FM._exportBytes;
+    }
+  });
+
+  /* #860 hunt #6, the GIF half (review H2, the fold of G2): THE EXPORT'S GIF COPIES ARE FREED AS SOON AS THE LAST FRAME IS DRAWN, NOT
+     WHEN THE READY CARD CLOSES. An MP4 export waits on its ready card (onReady) for as long as he leaves it open, and its full-size
+     GIF copies used to wait with it, a whole GIF of bitmaps for nothing. Driven through the app's own FM.exporter.run on the VP9 + Opus
+     path (ax2WithOpusPath), with a squeezed GIF on screen; inside onReady the record no longer holds its export copy and every frame
+     of that copy is already closed. RED on 8baaea64: the export makes no copy at all (the CONTROL fails); with the early free
+     taken out (mutate.sh), the copy is still held inside onReady. CONTROL: the export did draw from its own copy. */
+  test('860 an MP4 export frees its full-size GIF copies when the last frame is drawn, before its ready card waits for him', { item: '860', budgetMs: 120000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.run !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('FM.exporter.run or FM.makeLayer is not exposed');
+    var kit = gif860Kit().phone().spy(), per = kit.per, n = kit.bigN, P = FM.scene.project, d0 = P.duration, inReady = null;
+    try {
+      kit.plant('860g-mp4-fill', per);
+      var file = kit.fileOf(n, '860g-mp4');
+      var sq = await FM._decodeGifAnimation(file);
+      if (!sq || sq.frames.length !== n || !(sq.width < kit.W)) throw new Error('setup: the big GIF came out ' + (sq ? sq.frames.length + ' frames at ' + sq.width + 'x' + sq.height : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + kit.W);
+      var B = kit.show('860g-mp4', sq, file);
+      P.duration = Math.max(d0 || 0, 5);
+      await ax2WithOpusPath(false, function () {
+        return FM.exporter.run({ from: 0, to: 0.2, fps: 10, scale: 0.1, name: 'x860g-mp4', onReady: async function () {
+          var copy = kit.drawn.filter(function (a) { return a && a !== sq; })[0];
+          inReady = { copy: !!copy, held: '_exportAnim' in B.rec, open: copy ? copy.frames.filter(function (f) { return !f.closed; }).length : -1, total: copy ? copy.frames.length : 0 };
+        } });
+      });
+      if (!inReady) throw new Error('setup: the MP4 export never reached its ready card');
+      if (!inReady.copy) throw new Error('CONTROL: the MP4 export drew the big GIF from the copy the preview holds, so it made no copy of its own to free');
+      if (inReady.held) throw new Error('while the ready card waited, the GIF record still held its full-size export copy: a whole GIF of bitmaps kept for as long as the card stays open');
+      if (inReady.open) throw new Error('while the ready card waited, ' + inReady.open + ' of the ' + inReady.total + ' frames of the export copy were still open');
+    } finally {
+      P.duration = d0;
+      kit.put();
+      try { if (FM.exportResume && FM.exportResume.clear) await FM.exportResume.clear(); } catch (e) {}
+    }
+  });
+
+  /* #860 hunt #6, the GIF half F3: THE EXPORT'S FULL-SIZE GIF COPY IS CLOSED WHEN THE EXPORT ENDS, AND THE PREVIEW'S COPY IS LEFT
+     ALONE. A copy is a whole GIF of bitmaps at full size, held for one export only: kept after it, it would sit in memory beside the
+     preview's own for the rest of the session. Driven through a real GIF export (runGif) stopped after its first frame by a throw, the
+     way a failure leaves it, so the path's finally is what frees it. RED on 396c93e1: the export draws the preview's copy itself and
+     makes none. GREEN: the copy it drew (kit.spy) has every frame closed exactly once and the record no longer holds it.
+     CONTROL: rec.anim is the very object it was, every frame the same and none closed. */
+  test('860 the full-size GIF copy an export decodes is closed when the export ends, and the GIF the preview holds is left exactly as it was', { item: '860', budgetMs: 90000 }, async function () {
+    if (typeof FM._decodeGifAnimation !== 'function' || typeof FM.frameCacheLimits !== 'function') throw new Error('FM._decodeGifAnimation or FM.frameCacheLimits is not exposed');
+    if (!FM.exporter || typeof FM.exporter.runGif !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('FM.exporter.runGif or FM.makeLayer is not exposed');
+    var kit = gif860Kit().phone().spy(), per = kit.per, n = kit.bigN;
+    try {
+      kit.plant('860g-free-fill', per);
+      var file = kit.fileOf(n, '860g-free');
+      var sq = await FM._decodeGifAnimation(file);
+      if (!sq || sq.frames.length !== n || !(sq.width < kit.W)) throw new Error('setup: the big GIF came out ' + (sq ? sq.frames.length + ' frames at ' + sq.width + 'x' + sq.height : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + kit.W);
+      var before = sq.frames.slice();
+      var B = kit.show('860g-free', sq, file);
+      if (!(await kit.run('runGif'))) throw new Error('setup: the GIF export ran to its end instead of stopping after its first frame');
+      var copy = kit.drawn.filter(function (a) { return a && a !== sq; })[0];
+      if (!copy) throw new Error('the GIF export drew ' + (kit.drawn.length ? 'the copy the preview holds, ' + sq.width + 'x' + sq.height : 'no GIF frame at all') + ': it made no full-size copy of its own, so there was nothing for it to free');
+      if ('_exportAnim' in B.rec) throw new Error('after the export ended the GIF record still holds its export copy (' + copy.width + 'x' + copy.height + ', ' + copy.frames.length + ' frames): a whole full-size GIF kept in memory for nothing');
+      var open = copy.frames.filter(function (f) { return !f.closed; }).length, twice = copy.frames.filter(function (f) { return f.closed > 1; }).length;
+      if (open) throw new Error('after the export ended ' + open + ' of the ' + copy.frames.length + ' frames of its full-size GIF copy were never closed');
+      if (twice) throw new Error(twice + ' frames of the export copy were closed more than once');
+      if (B.rec.anim !== sq || sq.frames.length !== before.length || sq.frames.some(function (f, z) { return f !== before[z] || f.closed; })) throw new Error('CONTROL: the export changed or closed the GIF the preview holds (rec.anim)');
+    } finally {
+      kit.put();
+    }
+  });
+
   /* The + on the Add-layer row "isn't centred inside the circle" (queue 296). It was the CHARACTER "+",
      and flex centres the line box, not the ink — where a glyph sits inside that box is the font's
      choice, which is why it can look level on one screen and high on another. Same finding as the × and
@@ -141077,7 +141619,7 @@
     const wheel = r.params.filter(p => p.key === 'wheel')[0];
     if (!wheel || wheel.type !== 'segment' || wheel.options.map(o => o[1]).join() !== 'Shadows,Midtones,Highlights') bad.push('there is no Wheel row of Shadows / Midtones / Highlights');
     else ['sh', 'mid', 'hi'].forEach((w, i) => {
-      const shown = _cgRows(_cgInst('colorwheels', { wheel: i })).join(), want = ['wheel', w + '_hue', w + '_amt', w + '_lum', 'balance', 'blend', 'keep'].join();
+      const shown = _cgRows(_cgInst('colorwheels', { wheel: i })).join(), want = ['wheel', w + '_hue', w + '_amt', w + '_lum', 'balance', 'blend', 'keep', 'skin', 'mix'].join();   // skin, mix: #966 opts16 (Protect skin and Mix, under every wheel)
       if (shown !== want) bad.push('with Wheel on ' + wheel.options[i][1] + ' the panel shows ' + shown + ', not ' + want);
       // a wheel's Hue does nothing at Amount 0, so its row is gated by that Amount (greyed, with the reason) rather than looking live
       const hue = r.params.filter(p => p.key === w + '_hue')[0];
@@ -144025,7 +144567,7 @@
     const bad = [];
     const r = _cgListed('bwmixer', ['black and white', 'b&w', 'mono', 'monochrome', 'grayscale', 'greyscale', 'infrared', 'channel mixer'], bad);
     const keys = r.params.map(p => p.key).join();
-    if (keys !== 'preset,reds,yellows,greens,cyans,blues,magentas,contrast,tint,color') bad.push('its controls are ' + keys + ', not preset, reds, yellows, greens, cyans, blues, magentas, contrast, tint, color');
+    if (keys !== 'preset,reds,yellows,greens,cyans,blues,magentas,skin,mix,contrast,tint,color') bad.push('its controls are ' + keys + ', not preset, reds, yellows, greens, cyans, blues, magentas, skin, mix, contrast, tint, color');   // skin, mix: #966 opts16 (Protect skin and Mix, above Contrast)
     const DEF = { preset: 0, reds: 40, yellows: 60, greens: 40, cyans: 60, blues: 20, magentas: 80, contrast: 0, tint: 0, color: '#c09060' };
     const inst = FM.fxRegistry.makeInstance('bwmixer').params;
     Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
@@ -179521,6 +180063,376 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts15 ──
+
+  /* ═══ #966: MORE CHOICE, ROUND SIXTEEN — three more colour effects he already has, each still thin on choice (hunt/fx16). His words:
+   * "polish other effects just giving them more features … more choices always better … this is the complex version we want as much
+   * choice as possible". Colourize gets Protect skin and Affects, Colour Wheels and Black & White Mixer each get Protect skin and Mix.
+   * WRITTEN WITHOUT RUNNING (24 Oct, other lanes and a slice run were working on this machine): nothing but `node --check`. Every
+   * number below is reasoned from the code it names, the reasoning beside it; a bound only a run can set says MEASURE beside it. Round
+   * fifteen's four kinds for each effect: (a) its rows and what the load sanitiser keeps, clamps and drops, (b) what each new control
+   * does, on a fixture that holds what separates right from wrong, with a CONTROL, (c) at the defaults the kernel is today's picture
+   * byte for byte, (d) every new control off its default moves the very fixtures (c) holds still. The (b) tests do not stop at a
+   * missing row: on the base code the kernel ignores the new keys and the picture is judged and fails. All three are PIXEL_FX kernels
+   * run through round thirteen's tone13, so this block reuses round thirteen's _o13 helpers and round fourteen's _o14Want (the same file
+   * scope, defined above) and adds only the ones that read this round's own keys. Every comparison of two pictures is within ONE render
+   * path (#1183). ═══ */
+  const _o16Need = (type, keys) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts16 (hunt/fx16) is not built');
+    return r;
+  };
+  /* every new key, by effect, and every new control off its default on the effect's own default settings */
+  const _O16_NEW = {
+    colorize: ['skin', 'range'],
+    colorwheels: ['skin', 'mix'],
+    bwmixer: ['skin', 'mix'],
+  };
+  const _O16_OFF = {
+    colorize: [{ skin: 100 }, { range: 1 }],
+    colorwheels: [{ skin: 100 }, { mix: 50 }],
+    bwmixer: [{ skin: 100 }, { mix: 50 }],
+  };
+  /* (c): through the dispatcher's own pixel step at plate scale ps, every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate */
+  const _o16Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o13P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o13Pic;
+      const a = _o13Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o13Run(type, _o13Del(P, _O16_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O16_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* (d): how many pixels `over` moves when laid on a new instance, on that fixture at that moment, through the dispatcher's pixel step */
+  const _o16Moves = (type, over, W, H, pic, t) => E1.count(_o13Run(type, _o13P(type), W, H, pic(W, H), t), _o13Run(type, _o13P(type, over), W, H, pic(W, H), t), 0);
+  /* (b) in general: on `pic`, `over` laid on the instance `base` draws, pixel for pixel and to the last level, the kernel's own picture
+     without the new keys laid in by the share wf — the worst pixel and where, or null when every pixel matches */
+  const _o16Worst = (type, base, over, W, H, pic, wf, t) => {
+    const ker = _o13Run(type, _o13Del(Object.assign({}, base, over), _O16_NEW[type]), W, H, pic(W, H), t);
+    const want = _o13Lay(pic(W, H), ker, wf), got = _o13Run(type, Object.assign({}, base, over), W, H, pic(W, H), t);
+    let worst = 0, at = -1;
+    for (let i = 0; i < got.length; i += 4) for (let c = 0; c < 3; c++) { const e = Math.abs(got[i + c] - want[i + c]); if (e > worst) { worst = e; at = i / 4; } }
+    return worst ? { worst: worst, x: at % W, y: (at / W) | 0, got: got.slice(at * 4, at * 4 + 3).join(', '), want: want.slice(at * 4, at * 4 + 3).join(', ') } : null;
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each effect
+     on a gradient rect, on that rect as a see-through card (80 % layer opacity, 60 % fill, turned 12° so its edges are part-covered) and
+     on an adjustment layer over the rect, all over a grey ground — both sides of each comparison through the same compositor path.
+     CONTROLS: each effect changes each picture against the same picture with no effect, and each new control off its default moves the
+     rect's picture through the same compositor, at 1:1. */
+  test('966 opts16 every new control at its default draws what the effect drew without it — Colourize, Colour Wheels and Black & White Mixer through the compositor on a layer, on a see-through card and on an adjustment layer, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture, and each new control off its default moves it)', { item: '966', budgetMs: 90000 }, function () {
+    const TYPES = Object.keys(_O16_NEW);
+    TYPES.forEach(type => _o16Need(type, _O16_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    const fxOf = (type, params) => ({ type: type, enabled: true, params: params });
+    const card = fx => { const L = _o13Rect(fx); L.transform.opacity = 0.8; L.fillOpacity = 0.6; L.transform.rotation = 12; return L; };
+    const adj = fx => { const A = FM.makeLayer('adjustment', { name: 'o16 adj', start: 0, duration: 4 }); A.effects = fx ? [fx] : []; return A; };
+    const WAYS = {
+      'on a layer': [fx => [_o13Rect(fx)], () => [_o13Rect(null)]],
+      'on a see-through card': [fx => [card(fx)], () => [card(null)]],
+      'on an adjustment layer': [fx => [adj(fx), _o13Rect(null)], () => [adj(null), _o13Rect(null)]],
+    };
+    TYPES.forEach(type => {
+      const P = _o13P(type);
+      Object.keys(WAYS).forEach(way => {
+        const make = WAYS[way][0], none = WAYS[way][1];
+        let moved = 0;
+        [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+          const a = _o13shot(make(fxOf(type, Object.assign({}, P))), t, W, H, rs, BG);
+          const b = _o13shot(make(fxOf(type, _o13Del(P, _O16_NEW[type]))), t, W, H, rs, BG);
+          const m = E1.maxDiff(a, b);
+          if (m !== 0) bad.push(type + ' ' + way + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O16_NEW[type].join(' / '));
+          if (rs == null) moved = Math.max(moved, E1.count(a, _o13shot(none(), t, W, H, null, BG), 2));
+        }));
+        if (moved < 50) bad.push('CONTROL: ' + type + ' ' + way + ' changes only ' + moved + ' pixels at either moment, so the comparison above proves little' /* MEASURE: reasoned, not run — Colourize turns the whole rect blue, Colour Wheels lifts and tints the dark blue end by 4 to 14 levels, the mixer takes every coloured pixel to grey */);
+      });
+      const base = _o13shot([_o13Rect(fxOf(type, Object.assign({}, P)))], 0.61, W, H, null, BG);
+      _O16_OFF[type].forEach(o => {
+        const n = E1.count(base, _o13shot([_o13Rect(fxOf(type, Object.assign({}, P, o)))], 0.61, W, H, null, BG), 2);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels; its warm end (#f0c060, hue 40°, saturation 0.6) is a full skin tone, so Protect skin 100 gives back about the warmest two fifths, where Colour Wheels moves red by 3 to 7 levels; Mix 50 halves every move; Darks keeps (1 − L)² of each */);
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Colourize: Protect skin and Affects ---- */
+  /* At its defaults (Amount 1, Colour #3aa0ff = 58, 160, 255, Shadow lift 25, Blend Tone, Saturation 100, Lightness 0) the kernel takes
+     each pixel to the colour times F = 0.25 + 0.75 x L, L its Rec.601 brightness over 255, into the clamped array. On round thirteen's
+     six pixels: the light skin tone (220, 170, 130) (L 0.7074, F 0.7806) to (45.27, 124.89, 199.04) → (45, 125, 199), the deeper one
+     (160, 110, 80) to (35, 97, 155), the rose (220, 100, 120) to (38, 105, 167), the blue (40, 90, 200) to (29, 81, 129), the green (60,
+     170, 80) to (36, 100, 159), the grey 128 to (36.34, 100.24, 159.75) → (36, 100, 160). Skin weights (skinW12): 1, 1, 0.5, 0, 0, 0.
+     Protect skin 100 moves each pixel 1 − its skin weight of the way: both skin tones stay the picture, the blue, the green and the grey
+     keep the tint byte for byte; the rose lands on a tie (132.5) only an exact 0.5 weight decides, so it is read in the busy-picture
+     check and not by value. At 40 % a skin tone goes 0.6 of the way — the light one to 220 − 175 x 0.6 = 115, 170 − 45 x 0.6 = 143,
+     130 + 69 x 0.6 = 171.4, so (115, 143, 171), the deeper one to (85, 102, 125) — and the rose 0.8 of it, (74, 104, 158). On the base
+     code Protect skin is ignored and both skin tones take the whole tint. */
+  test('966 opts16 Colourize has Protect skin (0–100 %, keyframable, 0 by default) and Affects (All, Darks, Mids or Lights, storing 0–3, All by default), neither greyed: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and Mids, holds 150 at 100 and −5 at 0 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o16Need('colorize', _O16_NEW.colorize);
+    const bad = _o13Rows('colorize', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'range', label: 'Affects', options: ['All', 'Darks', 'Mids', 'Lights'], def: 0 }], { skin: 40, range: 2 });
+    bad.push.apply(bad, _o13Clamp('colorize', { skin: 150 }, { skin: 100 }));
+    bad.push.apply(bad, _o13Clamp('colorize', { skin: -5 }, { skin: 0 }));
+    bad.push.apply(bad, _o13Clamp('colorize', { range: 7 }, { range: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts16 Colourize Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the tint byte for byte, at 40 % a skin tone comes 0.4 of the way back and the rose 0.2, and with another Amount and Shadow lift, each Blend, Saturation and Lightness and Affects every pixel of a busy picture is the tinted picture laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone reads 45, 125, 199)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('colorize', _o13P('colorize', over), N, 1, row(), 0.5);
+    const kept = [[29, 81, 129], [36, 100, 159], [36, 100, 160]];
+    _o14Want(bad, run({}), _O13_SKIN, [[45, 125, 199], [35, 97, 155], [38, 105, 167]].concat(kept), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], null].concat(kept), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O13_SKIN, [[115, 143, 171], [85, 102, 125], [74, 104, 158]].concat(kept), 'Protect skin 40');
+    [{ amount: 0.6, lift: 40 }, { blend: 1 }, { blend: 3 }, { sat: 150, light: 30 }, { skin: 100, range: 2 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, rg = extra.range || 0;
+      const w = _o16Worst('colorize', _o13P('colorize'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the tinted picture laid in by 1 − its skin weight' + (rg ? ' times its tonal weight' : '') + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* On the 0–255 grey ramp the defaults take grey 40 (L 0.1569, F 0.3676) to (21.32, 58.82, 93.75) → (21, 59, 94) and grey 220 (L 0.8627,
+     F 0.8971) to (52.03, 143.53, 228.75) → (52, 144, 229). Affects weighs each pixel's move by its own brightness, as tone13 does: grey 40
+     by Darks (1 − L)² = 0.7109 → (26.49, 53.51, 78.39), so (26, 54, 78), Mids 0.5290 → (29.95, 50.05, 68.57), so (30, 50, 69), Lights
+     0.0246 → (39.53, 40.47, 41.33), so (40, 40, 41); grey 220 by Darks 0.0188 → (216.84, 218.57, 220.17), so (217, 219, 220), Mids
+     0.4737 → (140.42, 184.00, 224.26), so (140, 184, 224), Lights 0.7443 → (94.95, 163.43, 226.70), so (95, 163, 227). On the base
+     code Affects is ignored and every grey takes the whole tint. */
+  test('966 opts16 Colourize Affects: Darks tints grey 40 to 26, 54, 78 and nearly leaves grey 220 at 217, 219, 220, Mids takes them to 30, 50, 69 and 140, 184, 224, Lights to 40, 40, 41 and 95, 163, 227 — and with another Amount, each Blend, Saturation, Lightness and Protect skin every pixel of a busy picture is the tint times the tonal weight of its own brightness to the level (CONTROL: All tints grey 40 to 21, 59, 94 and grey 220 to 52, 144, 229)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('colorize', _o13P('colorize', over), 256, 2, _o13Lv(), 0.5);
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    const all = run({});
+    if (px(all, 40) !== '21, 59, 94' || px(all, 220) !== '52, 144, 229') bad.push('CONTROL: under All grey 40 reads ' + px(all, 40) + ' and grey 220 reads ' + px(all, 220) + ' (21, 59, 94 and 52, 144, 229 expected)');
+    [[1, 'Darks', '26, 54, 78', '217, 219, 220'], [2, 'Mids', '30, 50, 69', '140, 184, 224'], [3, 'Lights', '40, 40, 41', '95, 163, 227']].forEach(([rg, name, w40, w220]) => {
+      const got = run({ range: rg });
+      if (px(got, 40) !== w40) bad.push(name + ' puts grey 40 at ' + px(got, 40) + ', not ' + w40);
+      if (px(got, 220) !== w220) bad.push(name + ' puts grey 220 at ' + px(got, 220) + ', not ' + w220);
+      [{}, { amount: 0.5, lift: 10 }, { blend: 2 }, { blend: 3, sat: 60 }, { light: -40 }, { skin: 60 }].forEach(extra => {
+        const sk = extra.skin || 0;
+        const w = _o16Worst('colorize', _o13P('colorize'), Object.assign({ range: rg }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(100, rg, _o13L(r, g, b), sk, _o13Skin(r, g, b)), 0.5);
+        if (w) bad.push(name + ' ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (its tint times its tonal weight' + (sk ? ' times 1 − its skin weight' : '') + ')');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts16 Colourize at Protect skin 0 % and All draws byte for byte what it drew without them — at its defaults, with another Amount and Shadow lift, each Blend, Saturation and Lightness, keyframed, and on a half-size plate (CONTROL: Protect skin and Darks each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o16Need('colorize', _O16_NEW.colorize);
+    const bad = _o16Ident('colorize', [{}, { over: { amount: 0.6, lift: 40 } }, { over: { blend: 1 } }, { over: { blend: 3 } }, { over: { sat: 150, light: 30 } }, { over: { amount: _o13KF(0.2, 1) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O16_OFF.colorize.forEach(o => { const n = _o16Moves('colorize', o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the default tint takes every pixel to the blue tone, so Darks holds back every pixel short of black by a level or more; Protect skin 100 gives back the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Colourize ---- */
+
+  /* ---- Colour Wheels: Protect skin and Mix ---- */
+  /* At its defaults (Shadows hue 190° Amount 30, Midtones Amount 0, Highlights hue 35° Amount 25, every Brightness 0, Balance 0, Blending
+     50, Keep brightness 100) the reaches are a = b = 1 and Midtones does nothing, so each channel's table is y = x + L·(1 − x), then
+     y + K·y, each held to 0..1, with L = 0.09 x the Shadows push and K = 0.075 x the Highlights push (cgPush: (2/3)·cos of the hue less
+     0°, 120°, 240°, its Rec.601 brightness taken out): L −0.0579, 0.0217, 0.0398 and K 0.0313, −0.0053, −0.0550 for red, green and blue.
+     On round thirteen's six pixels: the light skin tone (220, 170, 130) to (224.80, 170.94, 127.56) → (225, 171, 128), the deeper one
+     (160, 110, 80) to (159.34, 112.56, 82.18) → (159, 113, 82), the rose (220, 100, 120) to (225, 103, 118), the blue (40, 90, 200) to
+     (28.42, 93.09, 191.08) → (28, 93, 191), the green (60, 170, 80) to (50, 171, 82), the grey 128 to (124.43, 130.07, 125.74) → (124,
+     130, 126). Protect skin 100 keeps both skin tones the picture (the rose, at 0.5, lands on a tie, 222.5, so it is read in the busy
+     picture only); at 40 % a skin tone goes 0.6 of the way — the light one to 220 + 5 x 0.6 = 223, 170.6, 128.8, so (223, 171, 129), the
+     deeper one to (159, 112, 81) — and the rose 0.8 of it, (224, 102, 118). On the base code Protect skin is ignored. */
+  test('966 opts16 Colour Wheels has Protect skin (0–100 %, keyframable, 0 by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed and shown under every wheel: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    const r = _o16Need('colorwheels', _O16_NEW.colorwheels);
+    const bad = _o13Rows('colorwheels', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp('colorwheels', { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('colorwheels', { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    (r.params || []).filter(p => p.key === 'skin' || p.key === 'mix').forEach(p => { if (p.showWhen) bad.push(p.key + ' shows only when ' + JSON.stringify(p.showWhen) + ' — it acts on all three wheels at once, so it belongs under every one'); });
+    [0, 1, 2].forEach(i => {
+      const fx = FM.fxRegistry.makeInstance('colorwheels'); fx.params.wheel = i;
+      const shown = FM.fxRegistry.paramsOf('colorwheels').filter(p => FM.fxRegistry.rowShown(fx, p)).map(p => p.key);
+      ['skin', 'mix'].forEach(k => { if (shown.indexOf(k) < 0) bad.push('with Wheel on ' + ['Shadows', 'Midtones', 'Highlights'][i] + ' the panel leaves out ' + k); });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts16 Colour Wheels Protect skin: at 100 % two skin tones come out as the picture byte for byte while a blue, a green and a grey keep the grade byte for byte, at 40 % a skin tone comes 0.4 of the way back and the rose 0.2, and with stronger wheels, a Midtones wheel, Balance, Blending, Keep brightness and Mix every pixel of a busy picture is the graded picture laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone reads 225, 171, 128)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('colorwheels', _o13P('colorwheels', over), N, 1, row(), 0.5);
+    const kept = [[28, 93, 191], [50, 171, 82], [124, 130, 126]];
+    _o14Want(bad, run({}), _O13_SKIN, [[225, 171, 128], [159, 113, 82], [225, 103, 118]].concat(kept), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], null].concat(kept), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O13_SKIN, [[223, 171, 129], [159, 112, 81], [224, 102, 118]].concat(kept), 'Protect skin 40');
+    [{ sh_amt: 80, hi_hue: 60 }, { mid_amt: 50, mid_lum: 30 }, { balance: 60, blend: 20, keep: 0 }, { skin: 100, mix: 60 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, mix = extra.mix == null ? 100 : extra.mix;
+      const w = _o16Worst('colorwheels', _o13P('colorwheels'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(mix, 0, 0, sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the graded picture laid in by 1 − its skin weight' + (mix < 100 ? ' times Mix' : '') + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* On the 0–255 grey ramp the defaults take grey 40 to (28.42, 44.44, 45.89) → (28, 44, 46) and grey 220 to (224.80, 219.60, 209.23) →
+     (225, 220, 209). Mix 40 moves every pixel 0.4 of the way: grey 40 to 40 − 12 x 0.4 = 35.2, 41.6, 42.4, so (35, 42, 42), grey 220 to
+     222, 220, 215.6, so (222, 220, 216). On the base code Mix is ignored and every grey takes the whole grade. */
+  test('966 opts16 Colour Wheels Mix: at 40 % grey 40 of a 0–255 ramp reads 35, 42, 42 and grey 220 reads 222, 220, 216, every grey sits 0.4 of the way between itself and its graded value to the level in each channel, at 0 % the ramp is itself byte for byte, and a Mix keyed 0 to 100 draws its value half way (CONTROL: the whole grade takes grey 40 to 28, 44, 46 and grey 220 to 225, 220, 209)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const run = over => _o13Run('colorwheels', _o13P('colorwheels', over), 256, 2, _o13Lv(), 0.5);
+    const full = run({}), part = run({ mix: 40 }), none = run({ mix: 0 }), keyed = run({ mix: _o13KF(0, 100) }), half = run({ mix: 50 });
+    const px = (d, v) => _o13At(d, 256, v, 0).slice(0, 3).join(', ');
+    if (px(full, 40) !== '28, 44, 46' || px(full, 220) !== '225, 220, 209') bad.push('CONTROL: at Mix 100 grey 40 reads ' + px(full, 40) + ' and grey 220 ' + px(full, 220) + ' (28, 44, 46 and 225, 220, 209 expected)');
+    if (px(part, 40) !== '35, 42, 42') bad.push('at Mix 40 grey 40 reads ' + px(part, 40) + ', not 35, 42, 42');
+    if (px(part, 220) !== '222, 220, 216') bad.push('at Mix 40 grey 220 reads ' + px(part, 220) + ', not 222, 220, 216');
+    let worst = 0, at = -1;
+    for (let v = 0; v < 256; v++) {
+      const f = _o13At(full, 256, v, 0), want = _o13U8(v + (f[0] - v) * 0.4, v + (f[1] - v) * 0.4, v + (f[2] - v) * 0.4), got = _o13At(part, 256, v, 0);
+      for (let c = 0; c < 3; c++) { const e = Math.abs(got[c] - want[c]); if (e > worst) { worst = e; at = v; } }
+    }
+    if (worst > 0) bad.push('at Mix 40 grey ' + at + ' reads ' + px(part, at) + ', ' + worst + ' levels from 0.4 of the way to its graded value');
+    const m0 = E1.maxDiff(none, _o13Lv());
+    if (m0 !== 0) bad.push('at Mix 0 the ramp moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(keyed, half);
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o16Worst('colorwheels', _o13P('colorwheels'), { mix: 35, sh_amt: 70, mid_amt: 40, keep: 40 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with stronger wheels and Keep brightness 40: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts16 Colour Wheels at Protect skin 0 % and Mix 100 % draws byte for byte what it drew without them — at its defaults, with stronger wheels, a Midtones wheel, Balance, Blending and Keep brightness, keyframed, and on a half-size plate (CONTROL: Protect skin and Mix each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o16Need('colorwheels', _O16_NEW.colorwheels);
+    const bad = _o16Ident('colorwheels', [{}, { over: { sh_amt: 80, hi_hue: 60 } }, { over: { mid_amt: 50, mid_lum: 30 } }, { over: { balance: 60, blend: 20, keep: 0 } }, { over: { sh_amt: _o13KF(0, 100) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O16_OFF.colorwheels.forEach(o => { const n = _o16Moves('colorwheels', o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the default grade lifts every blue under 104 and pulls every one over it (blue 40 goes to 46), so Mix 50 moves nearly every pixel; Protect skin 100 gives back the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Colour Wheels ---- */
+
+  /* ---- Black & White Mixer: Protect skin and Mix ---- */
+  /* At its defaults (Reds 40, Yellows 60, Greens 40, Cyans 60, Blues 20, Magentas 80, Contrast 0, Tint 0) each pixel becomes the grey
+     min + (mid − min) x the secondary's weight + (max − mid) x the primary's: the light skin tone (220, 170, 130) to 130 + 40 x 0.6 + 50 x
+     0.4 = 174, the deeper one (160, 110, 80) to 80 + 18 + 20 = 118, the rose (220, 100, 120) to 100 + 20 x 0.8 + 100 x 0.4 = 156, the
+     blue (40, 90, 200) to 40 + 50 x 0.6 + 110 x 0.2 = 92, the green (60, 170, 80) to 60 + 20 x 0.6 + 90 x 0.4 = 108, the grey 128 to
+     itself. Protect skin 100 keeps both skin tones the picture and puts the rose (weight 0.5) half way, (188, 128, 138) — whole numbers,
+     no tie; at 40 % a skin tone goes 0.6 of the way — the light one to 220 − 46 x 0.6 = 192.4, 172.4, 156.4, so (192, 172, 156), the
+     deeper one to (135, 115, 103) — and the rose 0.8 of it, (169, 145, 149). Mix 40 moves every pixel 0.4 of the way: the light skin tone
+     to (201.6, 171.6, 147.6), so (202, 172, 148), the deeper one (143, 113, 95), the rose (194, 122, 134), the blue (60.8, 90.8, 156.8),
+     so (61, 91, 157), the green (79, 145, 91). On the base code both are ignored and every pixel goes all the way to its grey. */
+  test('966 opts16 Black & White Mixer has Protect skin (0–100 %, keyframable, 0 by default) and Mix (0–100 %, keyframable, 100 by default), neither greyed and both above Contrast so Tint keeps its colour row beside it: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and 70 and holds 150 at 100 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    const r = _o16Need('bwmixer', _O16_NEW.bwmixer);
+    const bad = _o13Rows('bwmixer', [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp('bwmixer', { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp('bwmixer', { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    const keys = (r.params || []).map(p => p.key), ix = k => keys.indexOf(k);
+    if (!(ix('magentas') < ix('skin') && ix('skin') < ix('mix') && ix('mix') < ix('contrast') && ix('tint') < ix('color'))) bad.push('the rows run ' + keys.join(', ') + ' — Protect skin and Mix belong after Magentas and before Contrast, so Tint and its colour stay together');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts16 Black & White Mixer Protect skin: at 100 % two skin tones come out as the picture byte for byte, the rose half way to its grey at 188, 128, 138, while a blue, a green and a grey keep their greys byte for byte, at 40 % a skin tone comes 0.4 of the way back and the rose 0.2, and with other colour sliders, Contrast, Tint and Mix every pixel of a busy picture is the black and white laid in by 1 − its skin weight to the level (CONTROL: at 0 % the light skin tone reads 174, 174, 174)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('bwmixer', _o13P('bwmixer', over), N, 1, row(), 0.5);
+    const kept = [[92, 92, 92], [108, 108, 108], [128, 128, 128]];
+    _o14Want(bad, run({}), _O13_SKIN, [[174, 174, 174], [118, 118, 118], [156, 156, 156]].concat(kept), 'CONTROL at 0 %');
+    _o14Want(bad, run({ skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], [188, 128, 138]].concat(kept), 'Protect skin 100');
+    _o14Want(bad, run({ skin: 40 }), _O13_SKIN, [[192, 172, 156], [135, 115, 103], [169, 145, 149]].concat(kept), 'Protect skin 40');
+    [{ reds: 120, blues: -50 }, { contrast: 60 }, { tint: 70 }, { skin: 100, mix: 60 }].forEach(extra => {
+      const sk = extra.skin == null ? 70 : extra.skin, mix = extra.mix == null ? 100 : extra.mix;
+      const w = _o16Worst('bwmixer', _o13P('bwmixer'), Object.assign({ skin: sk }, extra), 96, 72, _o13Pic, (r, g, b) => _o13W(mix, 0, 0, sk, _o13Skin(r, g, b)), 0.5);
+      if (w) bad.push('Protect skin ' + sk + ' with ' + JSON.stringify(extra) + ': pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want + ' (the black and white laid in by 1 − its skin weight' + (mix < 100 ? ' times Mix' : '') + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts16 Black & White Mixer Mix: at 40 % the light skin tone reads 202, 172, 148 and the blue 61, 91, 157, every pixel sits 0.4 of the way to its grey, at 0 % the picture is itself byte for byte, with Protect skin 100 as well a skin tone stays put while the blue goes 0.4 of the way, and a Mix keyed 0 to 100 draws its value half way (CONTROL: at 100 % the light skin tone reads 174, 174, 174)', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], N = _O13_SKIN.length, row = _o13Row(_O13_SKIN);
+    const run = over => _o13Run('bwmixer', _o13P('bwmixer', over), N, 1, row(), 0.5);
+    const at = (d, x) => _o13At(d, N, x, 0).slice(0, 3).join(', ');
+    if (at(run({}), 0) !== '174, 174, 174') bad.push('CONTROL: at Mix 100 the light skin tone reads ' + at(run({}), 0) + ', not 174, 174, 174');
+    _o14Want(bad, run({ mix: 40 }), _O13_SKIN, [[202, 172, 148], [143, 113, 95], [194, 122, 134], [61, 91, 157], [79, 145, 91], [128, 128, 128]], 'Mix 40');
+    _o14Want(bad, run({ mix: 40, skin: 100 }), _O13_SKIN, [[220, 170, 130], [160, 110, 80], null, [61, 91, 157]], 'Mix 40 with Protect skin 100');
+    const m0 = E1.maxDiff(run({ mix: 0 }), row());
+    if (m0 !== 0) bad.push('at Mix 0 the row moves up to ' + m0 + ' levels — it should be the picture itself');
+    const mk = E1.maxDiff(run({ mix: _o13KF(0, 100) }), run({ mix: 50 }));
+    if (mk > 1) bad.push('a Mix keyed 0 to 100 over a second draws up to ' + mk + ' levels away from Mix 50 half a second in' /* a level of slack: the eased value may land a hair off 50 and tip a tie */);
+    const w = _o16Worst('bwmixer', _o13P('bwmixer'), { mix: 35, reds: 150, contrast: -40, tint: 50 }, 96, 72, _o13Pic, () => 0.35, 0.5);
+    if (w) bad.push('Mix 35 with Reds 150, Contrast −40 and a Tint: pixel (' + w.x + ', ' + w.y + ') reads ' + w.got + ', not ' + w.want);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  test('966 opts16 Black & White Mixer at Protect skin 0 % and Mix 100 % draws byte for byte what it drew without them — at its defaults, with other colour sliders, Contrast and Tint, keyframed, and on a half-size plate (CONTROL: Protect skin and Mix each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
+    _o16Need('bwmixer', _O16_NEW.bwmixer);
+    const bad = _o16Ident('bwmixer', [{}, { over: { reds: 120, blues: -50 } }, { over: { contrast: 60 } }, { over: { tint: 70 } }, { over: { tint: _o13KF(0, 100) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }]);
+    _O16_OFF.bwmixer.forEach(o => { const n = _o16Moves('bwmixer', o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — the busy picture is colour everywhere but its few near-grey pixels, so Mix 50 moves nearly every pixel; Protect skin 100 gives back the warm cells (blue 40, red over green), roughly a quarter of the picture */); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ---- end Black & White Mixer ---- */
+
+  /* the round's editors, new rows and all, fit the inspector (round thirteen's fit test) */
+  test('966 opts16 the round’s editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = {
+      colorize: 'Affects',
+      colorwheels: 'Protect skin',
+      bwmixer: 'Protect skin',
+    };
+    Object.keys(NEW).forEach(type => _o16Need(type, _O16_NEW[type]));
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o13Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  /* #966 opts16 (the review's F1): THE B&W MIXER DOES NOT CLAIM THE LAYER IS ALREADY BLACK AND WHITE WHEN MIX OR PROTECT SKIN IS WHAT
+     HOLDS IT BACK. At Mix 0, or with Protect skin keeping a skin-coloured layer as it is, the mixer really does change nothing, and the
+     panel then said "this layer has no colour in it, it is already black and white", which is false on an orange. The same wrong-reason
+     fault round 13 folded for Channel Remap; the same test, on the mixer. The does-it-change-anything answer is planted (true), so the
+     line is read for every case. CONTROL: at its defaults the reason is the mixer's own, so the reason line really is read. RED on
+     62fb8f86: Mix 0 and Protect skin give the black-and-white reason. */
+  test('966 opts16 Black & White Mixer does not claim the layer is already black and white when Mix or Protect skin is what holds it back', { item: '966', budgetMs: 60000 }, async function () {
+    const SAME = /already black and white/, GEN = /changes nothing on this layer/;
+    const CASES = [
+      { say: 'its defaults', over: {}, control: true },
+      { say: 'Mix 0 %', over: { mix: 0 } },
+      { say: 'Mix 40 %', over: { mix: 40 } },
+      { say: 'Protect skin 100 %', over: { skin: 100 } },
+      { say: 'Protect skin keyed 0 to 100', over: { skin: _o13KF(0, 100) } },
+    ];
+    const real = FM.fxThumbs && FM.fxThumbs.effectDoesNothing;
+    if (typeof real !== 'function') throw new Error('FM.fxThumbs.effectDoesNothing is not reachable, so the settle timer cannot be asked');
+    const keep = FM.scene.layers.slice(), bad = [];
+    const hint = () => { const h = document.querySelector('.fx-row.fx-open .fx-noop-hint'); return h ? (h.textContent || '').trim() : ''; };
+    const make = (over) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#e8a33d', start: 0, duration: 5 });
+      const fx = FM.fxRegistry.makeInstance('bwmixer');
+      Object.assign(fx.params, JSON.parse(JSON.stringify(over)));
+      fx._expanded = true; fx._noop = true; fx._noopKey = 'planted';
+      L.effects = [fx];
+      FM.scene.layers = keep.concat([L]);
+      return L;
+    };
+    try {
+      FM.fxThumbs.effectDoesNothing = function () { return true; };
+      for (const c of CASES) {
+        const body = await _o13Open(make(c.over));
+        if (!body) { bad.push(c.say + ': the editor did not open, so its line was not read'); continue; }
+        const h = hint(), said = h ? '“' + h + '”' : 'no line at all';
+        if (c.control) { if (!SAME.test(h)) bad.push('CONTROL: at ' + c.say + ' the row gave ' + said + ', not the mixer reason, so nothing below is proven'); continue; }
+        if (!GEN.test(h)) bad.push('at ' + c.say + ' the row gave ' + said + ', not the general changes-nothing line');
+        else if (SAME.test(h)) bad.push('at ' + c.say + ' the row says an orange layer is already black and white, when it is ' + c.say + ' that holds the mixer back');
+      }
+    } finally {
+      FM.fxThumbs.effectDoesNothing = real;
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts16 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition

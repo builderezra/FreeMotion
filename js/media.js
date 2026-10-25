@@ -644,6 +644,78 @@ window.FM = window.FM || {};
     const lim = (FM.frameCacheLimits && FM.frameCacheLimits().maxBytes) || 128 * MB;
     return Math.max(32 * MB, Math.min(160 * MB, lim / 2));
   }
+  FM._gifBudget = gifBudget;   // suite seam (#860 hunt #6): the one-GIF figure
+
+  /* #860 hunt #6, THE GIF HALF: ONE TOTAL FOR EVERY ANIMATED GIF'S DECODED FRAMES. gifBudget() was handed to EACH GIF, so ten big
+   * GIF stickers held ten times it (about 1.6 GB of bitmaps on his PC at 160 MB each), and nothing gave any of it back until the
+   * project was left. There is now one TOTAL for all of them (FM.gifFrameTotal: four of gifBudget() on the machines where the
+   * preview frame caches get four of theirs, a fine pointer with the full 384 MB, which js/frames.js FM.previewFrameTotal decides
+   * for both; gifBudget() itself everywhere else, a phone above all, where running out of memory is a crash), and no one GIF takes
+   * more than gifBudget(), as before. decodeGifAnimation asks FM.gifFrameShare how many bytes a new GIF may decode into, and a
+   * GIF that needs less than that takes less, as it always did.
+   *
+   * THE RULE.
+   *   1. Counted: every GIF record the open scene holds (a layer whose record has decoded frames; split halves share one record and
+   *      count once), every decode still running (its ask, held in gifAsks until that decode ends, so two at once cannot both take
+   *      the whole room), and the asker. fair = total / that count, never more than gifBudget().
+   *   2. A new GIF may take all the room that is left (the total less what 1 holds), up to gifBudget(). The frames of a GIF already
+   *      decoded are never given back or thinned (4), so holding a newcomer to fair while that room sits unused would only make it
+   *      softer for nothing (the video half lends its room the same way, review F2). So one GIF alone decodes exactly as before,
+   *      and on his PC four big ones do too.
+   *   3. When the room left is under a quarter of fair, the new GIF still gets a quarter of fair: it always decodes, every frame,
+   *      only smaller (k from its share, the way gifBudget() always made a big GIF softer, never shorter). The total then runs
+   *      over by that quarter, once for each GIF that found it full: ten big GIFs on his PC hold 640 MB plus about 135 MB, against
+   *      1.6 GB before. That is the price of 4, and it is bounded.
+   *   4. A GIF ALREADY DECODED IS NEVER RE-DECODED, THINNED OR GIVEN BACK. Nothing decodes a GIF again after its load, so frames
+   *      given back would leave it frozen on its first frame for the rest of the session (the queue 690 bug this decoder fixed),
+   *      and dropping frames would change how it moves on screen. A GIF the scene no longer holds (a deleted layer whose record
+   *      lingers for undo) is neither counted nor touched: an undo brings it back moving, and the release path (FM.media.remove,
+   *      the media sweep, leaving the project: closeAnim below) frees its frames when the record itself goes.
+   * WHY IT CANNOT THRASH OR CLOSE A BITMAP IN USE. The account answers one question, once per decode, and frees nothing: it
+   * closes no bitmap, so the compositor can never draw a closed one, and it never causes a decode, so nothing can loop.
+   * WHY IT IS NOT THE VIDEO ACCOUNT'S TOTAL. One pool for both was weighed and left out: a preview frame cache can be thinned and
+   * rebuilt (FM.requestPlay builds whatever is missing), a GIF's frames cannot (4), so in one pool the GIFs would be the part
+   * that never gives back, and a reversed clip would be thinned to pay for a sticker it can never reclaim from, with the load
+   * order (GIFs decode while the project loads, reverse caches warm after) deciding which. The two halves were also measured and
+   * reviewed on their own numbers (r860d F1 to F3); one pool would change all of them, and on a phone one GIF would halve what
+   * the first reversed clip gets. So they are separate totals with the same shape, from the same device test. */
+  const gifAsks = new Set();
+  function animBytes(a) { return (a && a.frames && a.width > 0 && a.height > 0) ? a.width * a.height * 4 * a.frames.length : 0; }
+  FM.gifFrameTotal = function () {
+    const per = gifBudget();
+    const lim = FM.frameCacheLimits ? FM.frameCacheLimits() : null;
+    if (!lim || !(lim.maxBytes > 0) || typeof FM.previewFrameTotal !== 'function') return per;
+    return per * Math.max(1, Math.round(FM.previewFrameTotal(lim) / lim.maxBytes));
+  };
+  /* (review F1, F2) THE SAME GIF IS NOT ITS OWN RIVAL. A Split half, a Duplicate and a paste each decode a FRESH record of the file a
+     layer already holds, so the account counted the original against its own copy, and a split sticker's tail came out at half the
+     size of its head. A copy of a GIF the scene already holds decodes at that one's size (gifTwin), taking no share of its own, so
+     the two always match. And Replace media, or its undo, does not count the record it is about to put away (`skip`). */
+  function sameGifFile(a, b) { return a === b || !!(a && b && a.size === b.size && (a.type || '') === (b.type || '') && (a.name || '') === (b.name || '')); }
+  function gifTwin(file, skip) {
+    const layers = (FM.scene && FM.scene.layers) || [];
+    for (const l of layers) {
+      const m = (l && FM.media) ? FM.media.get(l.id) : null;
+      if (m && m !== skip && !m._released && m.anim && m.anim.width > 0 && sameGifFile(m.file, file)) return m;
+    }
+    return null;
+  }
+  FM._gifTwin = gifTwin;   // suite seam
+  FM.gifFrameShare = function (skip) {
+    const per = gifBudget(), total = FM.gifFrameTotal();
+    const live = new Set(), layers = (FM.scene && FM.scene.layers) || [];
+    let held = 0;
+    for (const l of layers) {
+      const m = (l && FM.media) ? FM.media.get(l.id) : null;
+      if (!m || m === skip || m._released || !m.anim || live.has(m)) continue;
+      live.add(m);
+      held += animBytes(m.anim);
+    }
+    gifAsks.forEach(a => { held += a.bytes; });
+    const fair = Math.min(per, Math.floor(total / (live.size + gifAsks.size + 1)));
+    const room = total - held;
+    return Math.max(1, Math.floor(fair / 4), Math.min(per, room));
+  };
   // By its type or its name — and, when a phone hands over neither (an empty type is common from Files), by its first bytes.
   async function looksLikeGif(file) {
     if (!file) return false;
@@ -721,14 +793,28 @@ window.FM = window.FM || {};
     return out;
   }
   // Every frame, composed the way a browser shows it (disposal 2 clears to transparent, 3 restores), as bitmaps.
-  async function decodeGifAnimation(file) {
+  async function decodeGifAnimation(file, opts) {
     const b = new Uint8Array(await file.arrayBuffer());
     const g = parseGif(b);
     if (!g || g.frames.length < 2 || !(g.width > 0 && g.height > 0)) return null;
     const W = g.width, H = g.height, n = g.frames.length;
     // a header claiming a picture this big is damaged (or hostile) — the arrays below would be gigabytes
     if (W * H > 64e6 || g.frames.some(f => f.w * f.h > 64e6)) throw new Error('a GIF of ' + W + 'x' + H + ' is too big to animate');
-    const k = Math.min(1, Math.sqrt(gifBudget() / (W * H * 4 * n)));
+    /* #860 hunt #6: the bytes this GIF may decode into are its SHARE of one total for every GIF (FM.gifFrameShare, above, holds the
+       rule): gifBudget() for a GIF alone, as before, never more, never 0. Held in gifAsks until the decode ends, so a decode that
+       starts meanwhile counts this one. */
+    const skip = (opts && opts.gifSkip) || null;
+    const twin = gifTwin(file, skip);
+    if (twin) return await composeGifFrames(b, g, Math.min(1, twin.anim.width / W));   // (review F1) the copy matches the one it was made from
+    const need = W * H * 4 * n;
+    const budget = Math.max(1, Math.floor(FM.gifFrameShare ? FM.gifFrameShare(skip) : gifBudget()));
+    const ask = { bytes: Math.min(need, budget) };
+    gifAsks.add(ask);
+    try { return await composeGifFrames(b, g, Math.min(1, Math.sqrt(budget / need))); } finally { gifAsks.delete(ask); }
+  }
+  // decodeGifAnimation's frames, kept at scale k of the GIF's own size (1 is full size): every frame, never fewer.
+  async function composeGifFrames(b, g, k) {
+    const W = g.width, H = g.height, n = g.frames.length;
     const ow = Math.max(1, Math.round(W * k)), oh = Math.max(1, Math.round(H * k));
     const screen = new Uint8ClampedArray(W * H * 4);
     const work = document.createElement('canvas'); work.width = W; work.height = H;
@@ -783,6 +869,29 @@ window.FM = window.FM || {};
     return { frames: frames, starts: starts, total: t, width: ow, height: oh };
   }
   FM._decodeGifAnimation = decodeGifAnimation;   // suite seam (queue 690)
+  /* #860 hunt #6 F3 (the PM's decision, 24 Oct, his to correct): THE EXPORT DRAWS A GIF AT ITS OWN FULL SIZE. The preview can hold a
+     GIF smaller (its share of the GIF total above, or gifBudget() for a big one), and the export drew those very frames, so the
+     squeeze reached his file. js/exporter.js prepareCaches now decodes its own copy at full size (k = 1) for the length of one export,
+     inside the export's byte total, and closes it when the export ends; rec.anim is never touched. These are its tools: what a full
+     copy costs, read from the header before anything is decoded, and the full-size decode itself, which takes no share of the GIF
+     total (the copy is not the preview's). A GIF the decoder refuses (damaged, too big to animate) answers null to both. */
+  async function gifFullBytes(file) {
+    const b = new Uint8Array(await file.arrayBuffer());
+    const g = parseGif(b);
+    if (!g || g.frames.length < 2 || !(g.width > 0 && g.height > 0)) return null;
+    if (g.width * g.height > 64e6 || g.frames.some(f => f.w * f.h > 64e6)) return null;
+    return { b: b, g: g };
+  }
+  FM.gifFullSize = async function (file) {
+    const r = await gifFullBytes(file);
+    return r ? { width: r.g.width, height: r.g.height, frames: r.g.frames.length, need: r.g.width * r.g.height * 4 * r.g.frames.length } : null;
+  };
+  // `k` (review G4): the scale to decode at, when the export can afford less than full size but more than the preview holds (1 = full)
+  FM.decodeGifFullSize = async function (file, k) {
+    const r = await gifFullBytes(file);
+    return r ? await composeGifFrames(r.b, r.g, (k > 0 && k < 1) ? k : 1) : null;
+  };
+  FM.sameGifFile = sameGifFile;   // the export's copies are one per GIF FILE: a Split's two halves are two records of one file
   /* The frame showing `local` seconds into the clip, looping — a sticker keeps moving for as long as its clip lasts. */
   FM.animFrameAt = function (anim, local) {
     if (!anim || !anim.frames || !anim.frames.length) return null;
@@ -814,7 +923,7 @@ window.FM = window.FM || {};
     return still.then(async rec => {
       if (!(await looksLikeGif(file))) return rec;
       try {
-        const anim = await decodeGifAnimation(file);
+        const anim = await decodeGifAnimation(file, opts);   // opts.gifSkip: the record a Replace is putting away (#860 #6, review F2)
         if (anim) rec.anim = anim;
       } catch (e) {
         console.warn('[media] the frames of ' + (file.name || 'a GIF') + ' could not be read — it will show as a still', e);

@@ -5068,7 +5068,7 @@ window.FM = window.FM || {};
       const prev = await FM.storage.takePrevMedia(id, want);
       if (!prev || !prev.file || (prev.rev || 0) !== want) continue;
       let rec = null;
-      try { rec = /^video/.test(prev.kind || '') ? await FM.loadVideoFile(prev.file) : await FM.loadImageFile(prev.file); } catch (e) { rec = null; }
+      try { rec = /^video/.test(prev.kind || '') ? await FM.loadVideoFile(prev.file) : await FM.loadImageFile(prev.file, { gifSkip: live }); } catch (e) { rec = null; }
       if (!rec) continue;
       // keep the file going away, under its own revision, BEFORE it leaves — the redo (or the next undo) asks for it
       if (unchanged() && live.file && FM.storage.stashPrevMedia) { try { await FM.storage.stashPrevMedia(id, live, live.rev || 0); } catch (e) {} }
@@ -5185,7 +5185,7 @@ window.FM = window.FM || {};
           if (!wav) { if (FM.toast) FM.toast('No sound could be read from “' + (file.name || 'that clip') + '” — the song is unchanged', 4200); return null; }
           nrec = await FM.loadVideoFile(wav);
         } else if (kind === 'video' || kind === 'audio') nrec = await FM.loadVideoFile(file);
-        else nrec = await FM.loadImageFile(file);   // an image, or a name nothing recognises (the old fall-through)
+        else nrec = await FM.loadImageFile(file, { gifSkip: cur });   // an image, or a name nothing recognises (the old fall-through); a GIF does not count the one it replaces (#860 #6)
       } catch (e) { nrec = null; } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
       if (!nrec) { if (FM.toast) FM.toast('Could not load that file'); return null; }
       // Decoding a phone video or photo can outlive the project it was picked in (5e8337da): never apply it to another.
@@ -6990,8 +6990,12 @@ window.FM = window.FM || {};
          even though the mechanism is done. It is one clause on a line he already reads. */
       /* #860 (1): a reversed or frame-blend clip the export's memory budget gave fewer frames than its length needs plays
          choppier in the file. Said once, here, with each clip's real frame rate. */
+      /* #860 hunt #6 F3: …and a GIF the export total could not hold at its full size, drawn smaller (its preview copy), named with the
+         size it went out at. The two are different losses, so they are said in different words. */
       if (xrm && out.thinned && out.thinned.length) {
-        xrm.textContent += ' · fewer frames to fit memory: ' + out.thinned.map(t => t.name + ' ' + t.effFps + ' fps').join(', ');
+        const clips = out.thinned.filter(t => t && !t.gif), gifs = out.thinned.filter(t => t && t.gif);
+        if (clips.length) xrm.textContent += ' · fewer frames to fit memory: ' + clips.map(t => t.name + ' ' + t.effFps + ' fps').join(', ');
+        if (gifs.length) xrm.textContent += ' · smaller to fit memory: ' + gifs.map(t => t.name + ' ' + t.w + '×' + t.h).join(', ');
       }
       if (xrm && out.resumedPct > 0) {
         xrm.textContent += ' · picked up from ' + out.resumedPct + '%';

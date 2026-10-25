@@ -1437,6 +1437,24 @@ window.FM = window.FM || {};
     })();
   }
 
+  /* #860 hunt #6 F3: the full-size GIF copies this export decoded (prepareCaches), each with the records that draw it. Closed when the
+     export ends, on success, Cancel or failure (freeExportCaches, in every path's finally): the record lets go of its copy FIRST, so
+     nothing can draw a closed bitmap, and the preview's own rec.anim is left exactly as it was. */
+  let gifCopies = [];
+  function releaseGifCopies() {
+    const list = gifCopies;
+    gifCopies = [];
+    list.forEach(c => {
+      c.recs.forEach(r => { if (r && r._exportAnim === c.anim) delete r._exportAnim; });
+      (c.anim.frames || []).forEach(f => { if (f && f.close) { try { f.close(); } catch (e) {} } });
+    });
+  }
+  // What prepareCaches built, freed: the clips' full-res frame caches (#3) and the GIF copies (#860 hunt #6 F3).
+  function freeExportCaches(list) {
+    (list || []).forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
+    releaseGifCopies();
+  }
+
   async function prepareCaches(scene, fps, onStatus, span) {
     FM._exportThinned = [];   // #860 (1): never the last export's list, even when this one throws before its build loop
     const back = mediaBack(scene, onStatus, () => FM._exportCancel);   // bughunt3 #2 — see mediaBack
@@ -1447,7 +1465,7 @@ window.FM = window.FM || {};
        clip in full, so three 1080p clips held about 4.8 GB at once. It is shared now across the DISTINCT media records still
        to build (the two halves of a split share one record and one cache), each cache's real size is taken off what is left,
        and a clip that gets fewer frames than its length needs is written down so the ready card can say so. */
-    const EXPORT_BYTES = 1610612736;
+    const EXPORT_BYTES = (FM._exportBytes > 0) ? FM._exportBytes : 1610612736;   // FM._exportBytes: a suite seam (#860 hunt #6 F3), never set by the app
     const fcBytes = fc => (fc && fc.w > 0 && fc.h > 0 && fc.count > 0) ? fc.w * fc.h * 4 * fc.count : 0;
     /* #860 (1): only a clip THIS export draws takes a share. One outside the range (a clip, the loop, the marks) or left out by
        a solo (the Export card's Hide other layers sets one) is skipped by the compositor, so it is not decoded either. A Match
@@ -1467,6 +1485,92 @@ window.FM = window.FM || {};
     let remaining = EXPORT_BYTES;
     const thinned = [];
     FM._exportThinned = thinned;   // read by the export's ready card (and the suite)
+    /* #860 hunt #6 F3 (the PM's decision, 24 Oct, his to correct): EVERY GIF THIS EXPORT DRAWS IS DRAWN AT ITS FULL SIZE when this
+       account has room. The preview can hold a GIF smaller (its share of the GIF total, or gifBudget() for a big one: js/media.js),
+       and the export used to draw those same frames, so the squeeze reached the file. Now a GIF held smaller than its own size gets
+       an export copy decoded at full size (FM.decodeGifFullSize), drawn instead of rec.anim while FM._exporting (js/compositor.js)
+       and closed when the export ends (freeExportCaches, every path's finally); rec.anim is never touched. The copies are paid for
+       out of THIS account, before the clips' caches below:
+         - one copy per GIF FILE, so the two halves of a split (two records of one file) are decoded and counted once;
+         - smallest first, each taking its full size only when that fits its share of what is left over the records still to size
+           (the GIFs after it and every reversed / frame-blend clip, as the clips share it), so a sticker that needs little leaves
+           the rest to the others and one huge GIF cannot starve the clips;
+         - a GIF whose full size does not fit keeps its preview copy and is written down ({ gif: true }) for the ready card, the way
+           a thinned clip is. A GIF already at full size in the preview needs no copy. Drawn by this export = the clips' rule. */
+    releaseGifCopies();   // belt: every export's finally frees its own
+    const gifGroups = [];
+    for (const l of scene.layers) {
+      if (!l || l.visible === false || !inExport(l)) continue;
+      const g = FM.media.get(l.id);
+      if (!g || g._released || !g.anim || !g.anim.frames || g.anim.frames.length < 2) continue;
+      let grp = gifGroups.find(x => x.recs.indexOf(g) >= 0 || (g.file && FM.sameGifFile && FM.sameGifFile(x.file, g.file)));
+      if (!grp) { grp = { file: g.file || null, recs: [], name: l.name || (g.file && g.file.name) || 'GIF', full: null }; gifGroups.push(grp); }
+      if (grp.recs.indexOf(g) < 0) grp.recs.push(g);
+    }
+    const gifTodo = [];
+    for (const grp of gifGroups) {
+      if (FM._exportCancel) break;
+      let full = null;
+      try { full = (grp.file && FM.gifFullSize) ? await FM.gifFullSize(grp.file) : null; } catch (e) { full = null; }
+      grp.recs = grp.recs.filter(r => r && !r._released && r.anim);   // (review G10) a record freed while this waited is neither drawn nor read
+      if (!grp.recs.length) continue;
+      const a0 = grp.recs[0].anim;
+      if (!full) {
+        // no file to decode again, or one the decoder refuses: drawn as the preview holds it, and said when that is smaller
+        if (grp.recs.some(r => r.width > 0 && r.anim.width < r.width)) thinned.push({ name: grp.name, gif: true, w: a0.width, h: a0.height });
+        continue;
+      }
+      grp.full = full;
+      grp.recs = grp.recs.filter(r => r.anim.width < full.width || r.anim.height < full.height);
+      if (grp.recs.length) gifTodo.push(grp);
+    }
+    /* THE PHONE CEILING (the PM's call, 24 Oct, his to correct; review G1). There is no smaller export total for a phone: the 1.5 GB
+       above is every device's. So a GIF's full-size copy could take that whole 1.5 GB on his iPhone, where its preview copy holds
+       64 to 80 MB, and that is mobile Safari's kill zone: the tab is killed with nothing said (the notes at js/media.js gifBudget and
+       at FM.frameCacheLimits). Worse, the crash-resume store (js/export-resume.js) picks an interrupted export up again, and every
+       attempt runs this prepare step again, so such an export could die the same way each time and never finish. So on a device whose
+       preview total is the one-cache figure (FM.previewFrameTotal: a phone, and also a PC whose browser reports under 8 GB, which is as
+       short of memory as a phone for this; his own machines report 8 and are unchanged), all the GIF copies of one export TOGETHER take
+       at most GIF_PHONE_CAP_K x gifBudget() inside this account: 256 MB on his iPhone, where gifBudget() is 64 MB. Everywhere else
+       this account alone decides, as before. */
+    const GIF_PHONE_CAP_K = 4;
+    const gifLim = FM.frameCacheLimits ? FM.frameCacheLimits() : null;
+    const gifOnPhone = !!(gifLim && gifLim.maxBytes > 0 && FM.previewFrameTotal && FM.previewFrameTotal(gifLim) <= gifLim.maxBytes);
+    let gifCapLeft = gifOnPhone ? GIF_PHONE_CAP_K * (FM._gifBudget ? FM._gifBudget() : 64 * 1024 * 1024) : Infinity;
+    gifTodo.sort((x, y) => x.full.need - y.full.need);
+    let gifsLeft = gifTodo.length;
+    for (const grp of gifTodo) {
+      if (FM._exportCancel) break;
+      const share = Math.min(Math.floor(Math.max(0, remaining) / Math.max(1, gifsLeft + pending.size)), Math.floor(Math.max(0, gifCapLeft) / Math.max(1, gifsLeft)));
+      gifsLeft--;
+      grp.recs = grp.recs.filter(r => r && !r._released && r.anim);   // (G10) again: the decodes before this one waited
+      if (!grp.recs.length) continue;
+      const a = grp.recs[0].anim, held = a.width * a.height * 4 * a.frames.length;
+      /* (review G4) NOT ALL OR NOTHING: a GIF whose full size does not fit its share is decoded at the largest size that does, when that
+         is still larger than the copy the preview holds; only otherwise is the preview copy drawn. Short of full size either way, the
+         ready card names it. */
+      let k = grp.full.need <= share ? 1 : Math.sqrt(share / grp.full.need);
+      // (review L1) the decoder rounds each side to whole pixels, which can put a copy a little past its share: k steps down until it fits
+      const kSide = kk => [Math.max(1, Math.round(grp.full.width * kk)), Math.max(1, Math.round(grp.full.height * kk))];
+      while (k < 1 && k > 0.01 && kSide(k)[0] * kSide(k)[1] * 4 * grp.full.frames > share) k *= 0.995;
+      let copy = null;
+      // (review L2) decoded only when it really is larger than the copy the preview holds, side by side, not by a byte
+      if (k >= 1 || (kSide(k)[0] > a.width && kSide(k)[1] > a.height)) {
+        if (onStatus) onStatus('Decoding frames…');
+        try { copy = FM.decodeGifFullSize ? await FM.decodeGifFullSize(grp.file, k) : null; } catch (e) { copy = null; }
+        grp.recs = grp.recs.filter(r => r && !r._released && r.anim);   // (G10) and after this one
+      }
+      if (copy && copy.frames && copy.frames.length && grp.recs.length) {
+        gifCopies.push({ anim: copy, recs: grp.recs.slice() });
+        grp.recs.forEach(r => { r._exportAnim = copy; });
+        const cb = copy.width * copy.height * 4 * copy.frames.length;
+        remaining -= cb; gifCapLeft -= cb;
+        if (copy.width < grp.full.width || copy.height < grp.full.height) thinned.push({ name: grp.name, gif: true, w: copy.width, h: copy.height, fullW: grp.full.width, fullH: grp.full.height });   // (L1) named only when it really is smaller
+      } else {
+        if (copy && copy.frames) copy.frames.forEach(f => { try { if (f && f.close) f.close(); } catch (e) {} });   // decoded for records that went meanwhile
+        if (grp.recs.length) thinned.push({ name: grp.name, gif: true, w: a.width, h: a.height, fullW: grp.full.width, fullH: grp.full.height });
+      }
+    }
     for (const layer of scene.layers) {
       if (FM._exportCancel) break;   // Cancel during the (potentially minutes-long) decode phase — was only checked in the encode loop, so Cancel did nothing here
       if (layer.type !== 'video') continue;
@@ -1683,6 +1787,7 @@ window.FM = window.FM || {};
 
   FM.exporter = {
     prepareCaches,
+    releaseGifCopies,   // #860 hunt #6 F3: a caller of prepareCaches alone (the suite) frees the GIF copies it made
     /* suite seam (Simple 2.7): the frame path's own seek, so a test can run it without encoding */
     seekAllVideos,
     buildAudioMix,
@@ -2075,6 +2180,7 @@ window.FM = window.FM || {};
         if (opts.onProgress) opts.onProgress((f + 1) / totalFrames, mix ? 'audio + video' : 'video');
       }
 
+      releaseGifCopies();   // (#860 hunt #6, review G2) every frame is drawn: the full-size GIF copies go now, not after the ready card has sat open
       await encWait(encoder, vw, { p: encoder.flush(), what: 'video' });   // a flush that never settles is a stall, not an endless Exporting…
       /* Rethrown here rather than inside the callback: a throw from the encoder's own error handler
          does not reach this async function, it becomes an unhandled rejection and the export keeps
@@ -2216,8 +2322,8 @@ window.FM = window.FM || {};
       } finally {
         // Free the full-res export frame caches (built by prepareCaches) on success, cancel, OR error so
         // a heavy reversed/slow clip doesn't keep multiple GB resident and OOM mobile Safari. Preview
-        // re-decodes a lightweight downscaled cache on the next scrub/play. (#3)
-        exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
+        // re-decodes a lightweight downscaled cache on the next scrub/play. (#3) …and the full-size GIF copies (#860 hunt #6 F3).
+        freeExportCaches(exportCaches);
         if (releaseVideos) releaseVideos();   // queue 690 — any strip that waited on the export is drawn now
         FM._exporting = false;
         if (FM.releaseTiltPools) FM.releaseTiltPools();   // bughunt8 #9: the export-sized tilt plates go back (compositor.js)
@@ -2319,7 +2425,7 @@ window.FM = window.FM || {};
       } finally {
         if (releaseVideos) releaseVideos();   // queue 690
         FM._exportTransparent = false;
-        exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
+        freeExportCaches(exportCaches);   // the clips' caches and the GIF copies (#860 hunt #6 F3), as the video export's finally
         FM._exporting = false;
         if (FM.releaseTiltPools) FM.releaseTiltPools();   // bughunt8 #9: as the video export's finally
       }
@@ -2394,7 +2500,7 @@ window.FM = window.FM || {};
       } finally {
         if (releaseVideos) releaseVideos();   // queue 690
         FM._exportTransparent = false;
-        exportCaches.forEach(m => { try { FM.clearFrameCache(m); } catch (e) {} });
+        freeExportCaches(exportCaches);   // the clips' caches and the GIF copies (#860 hunt #6 F3), as the video export's finally
         FM._exporting = false;
         if (FM.releaseTiltPools) FM.releaseTiltPools();   // bughunt8 #9: as the video export's finally
       }

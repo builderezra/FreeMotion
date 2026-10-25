@@ -3207,6 +3207,8 @@ window.FM = window.FM || {};
   function noopWhy(fx) {
     const q = (fx && fx.params) || {};
     if (fx.type === 'channelremap' && ((q.range != null && q.range !== 0) || (q.skin != null && q.skin !== 0))) return null;
+    // #966 opts16 (review F1): the B&W Mixer at Mix 0, or with Protect skin holding a skin-coloured layer back, does nothing for that reason, not because the layer is already grey
+    if (fx.type === 'bwmixer' && ((q.skin != null && q.skin !== 0) || (q.mix != null && q.mix !== 100))) return null;
     return NOOP_WHY[fx.type];
   }
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see

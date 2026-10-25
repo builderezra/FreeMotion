@@ -527,6 +527,12 @@ window.FM = window.FM || {};
          run the old loop untouched (colorize10 only off them). */
       { key: 'sat', label: 'Saturation', min: 0, max: 200, step: 1, def: 100, unit: '%', note: '0 a grey tone · above 100 % richer than the swatch' },
       { key: 'light', label: 'Lightness', min: -100, max: 100, step: 1, def: 0, note: '−100 black · 100 white' },
+      /* #966 opts16 (hunt/fx16, his "more choices always better"): the tint always took every face in the shot with it, and every
+         tone alike. PROTECT SKIN holds skin-coloured pixels back from it with Teal & Orange's skin window (skinW12) — a blue night,
+         faces left their own colour — and AFFECTS confines it to the darks, the mids or the lights with Colour Balance's tonal weights
+         on the pixel's own brightness. 0 % and All run the old loops untouched (tone13 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks tints the shadows and leaves the lights their own colour' },
     ] },
     { type: 'checker', label: 'Checker', color: true, defColor: '#000000', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Cell size', min: 2, max: 120, step: 1, def: 24, unit: 'px' },
@@ -9848,7 +9854,7 @@ window.FM = window.FM || {};
         if(gmBl){ var gnO=fxBlendRGB(gmBl, gn0, gn1, gn2, gnR, gnG, gnB); gn0=gnO[0]; gn1=gnO[1]; gn2=gnO[2]; }
         d[gnI]=gnR+(gn0-gnR)*gmAmt; d[gnI+1]=gnG+(gn1-gnG)*gmAmt; d[gnI+2]=gnB+(gn2-gnB)*gmAmt;
       } },
-    colorize: function(d,W,H,p,t){ var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; var czLiftP=p.lift==null?25:FM.evalProp(p.lift,t); var czLift=czLiftP===25?0.25:czLiftP/100, czRange=czLift===0.25?0.75:(1-czLift); var czMode=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); /* #966 opts10: SATURATION and LIGHTNESS — off 100 % and 0, colorize10 is the loop below with the two laid on the tint; at them it runs untouched */ var czS10=p.sat==null?100:FM.evalProp(p.sat,t), czL10=p.light==null?0:FM.evalProp(p.light,t); if(czS10!==100||czL10!==0){ colorize10(d,czAmt,czR,czG,czB,czLift,czRange,czMode,czS10,czL10); return; } for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=czLift+czRange*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czMode===1){czTR=d[czI]*czTR/255;czTG=d[czI+1]*czTG/255;czTB=d[czI+2]*czTB/255;} else if(czMode===2){czTR=255-(255-d[czI])*(255-czTR)/255;czTG=255-(255-d[czI+1])*(255-czTG)/255;czTB=255-(255-d[czI+2])*(255-czTB)/255;} else if(czMode===3){czTR=d[czI]<128?(2*d[czI]*czTR/255):(255-2*(255-d[czI])*(255-czTR)/255);czTG=d[czI+1]<128?(2*d[czI+1]*czTG/255):(255-2*(255-d[czI+1])*(255-czTG)/255);czTB=d[czI+2]<128?(2*d[czI+2]*czTB/255):(255-2*(255-d[czI+2])*(255-czTB)/255);} if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
+    colorize: function(d,W,H,p,t){ /* #966 opts16: PROTECT SKIN over 0 % or AFFECTS Darks (1), Mids (2) or Lights (3) runs tone13 — this very kernel without the two (Amount, Shadow lift, Blend, Saturation and Lightness as they are), each pixel laid in by its tonal weight x (1 − Protect skin x its skin weight); 0 % and All run the lines below untouched */ const czSk16 = p.skin == null ? 0 : FM.evalProp(p.skin, t), czRg16 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0); if (czSk16 > 0 || czRg16 === 1 || czRg16 === 2 || czRg16 === 3) { tone13(d, W, H, p, t, PIXEL_FX.colorize, ['skin', 'range'], czRg16, 100, czSk16); return; } var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; var czLiftP=p.lift==null?25:FM.evalProp(p.lift,t); var czLift=czLiftP===25?0.25:czLiftP/100, czRange=czLift===0.25?0.75:(1-czLift); var czMode=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); /* #966 opts10: SATURATION and LIGHTNESS — off 100 % and 0, colorize10 is the loop below with the two laid on the tint; at them it runs untouched */ var czS10=p.sat==null?100:FM.evalProp(p.sat,t), czL10=p.light==null?0:FM.evalProp(p.light,t); if(czS10!==100||czL10!==0){ colorize10(d,czAmt,czR,czG,czB,czLift,czRange,czMode,czS10,czL10); return; } for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=czLift+czRange*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czMode===1){czTR=d[czI]*czTR/255;czTG=d[czI+1]*czTG/255;czTB=d[czI+2]*czTB/255;} else if(czMode===2){czTR=255-(255-d[czI])*(255-czTR)/255;czTG=255-(255-d[czI+1])*(255-czTG)/255;czTB=255-(255-d[czI+2])*(255-czTB)/255;} else if(czMode===3){czTR=d[czI]<128?(2*d[czI]*czTR/255):(255-2*(255-d[czI])*(255-czTR)/255);czTG=d[czI+1]<128?(2*d[czI+1]*czTG/255):(255-2*(255-d[czI+1])*(255-czTG)/255);czTB=d[czI+2]<128?(2*d[czI+2]*czTB/255):(255-2*(255-d[czI+2])*(255-czTB)/255);} if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
     checker: function(d,W,H,p,t,ps){ var chkSz=FM.evalProp(p.size,t); chkSz=(chkSz==null?24:chkSz); chkSz=Math.max(2,Math.min(120,Math.round(chkSz))); chkSz=Math.max(1,Math.round(chkSz*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var chkCol=hexToRGB(p.color)||[0,0,0]; var chkR=chkCol[0],chkG=chkCol[1],chkB=chkCol[2];
       // MIX was welded at a 50/50 blend, so neither a solid checker nor a barely-there one existed.
       // RATIO frees the cell from being square, ANGLE from being axis-aligned. Half a step is exact in
@@ -24630,9 +24636,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
            only ever paints frame 0, so the frames are decoded on load (js/media.js, `anim`) and chosen here — looping,
            through layerLocalTime so a trim, a speed change and Reverse move it like a clip, and the export (same
            renderScene) matches the preview. A still image has no `anim` and takes the old path untouched. */
-        if (m.anim && m.anim.frames && m.anim.frames.length > 1 && FM.animFrameAt) {
+        /* #860 hunt #6 F3: an export draws its own full-size copy of a GIF the preview holds smaller (js/exporter.js prepareCaches
+           decodes it, and closes it when the export ends); the preview, and an export with no copy, draw rec.anim as before. */
+        const gifAnim = (FM._exporting && m._exportAnim) || m.anim;
+        if (gifAnim && gifAnim.frames && gifAnim.frames.length > 1 && FM.animFrameAt) {
           const local = FM.layerLocalTime(layer, t);
-          src = FM.animFrameAt(m.anim, local == null ? 0 : local);
+          src = FM.animFrameAt(gifAnim, local == null ? 0 : local);
         }
         // Render from the pre-decoded frame cache: reversed clips always; forward clips when
         // frame-blend slow-mo is on. With frame-blend + speed<1 we cross-dissolve the two
@@ -25541,7 +25550,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   const HM_SETS = ['hue', 'sat', 'lum'];   // the key prefix of each set of eight: Hue, Saturation, Brightness
   const HM_DEF = { sat_blue: 40, sat_aqua: 30, sat_green: 20 };   // the default look — a richer sky, sea and leaves; every other slider starts at 0
   const CG_ROWS = [
-    { type: 'colorwheels', label: 'Colour Wheels', desc: 'Lift, gamma and gain: give the shadows, the midtones and the highlights each their own colour and brightness. Pick a wheel, then its Hue, how much of it (Amount) and its Brightness.', params: [
+    { type: 'colorwheels', label: 'Colour Wheels', desc: 'Lift, gamma and gain: give the shadows, the midtones and the highlights each their own colour and brightness. Pick a wheel, then its Hue, how much of it (Amount) and its Brightness — faces kept their own colour, or mixed over the picture, if you like.', params: [
       { key: 'wheel', label: 'Wheel', options: [[0, 'Shadows'], [1, 'Midtones'], [2, 'Highlights']], def: 0 },
     ].concat(CG_WHEELS.reduce((out, w, i) => out.concat([
       // the wheel's colour does nothing while its Amount is 0, so the row greys out and says so ('effects: no effect slider is completely inert')
@@ -25552,6 +25561,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0 },
       { key: 'blend', label: 'Blending', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* #966 opts16 (hunt/fx16, his "more choices always better"): the wheels always graded every face in the shot with the rest, and
+         always at full strength. PROTECT SKIN holds skin-coloured pixels back from the grade with Teal & Orange's skin window (skinW12)
+         — teal shadows and warm lights, faces left their own colour — and MIX lays the graded picture over the plain one. Both show
+         under every wheel. 0 % and 100 % run the old loop untouched (tone13 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ]) },
     { type: 'tonecurve', label: 'Tone Curve', desc: 'Bends the tones through five points from black to white, each set to where that tone should end up: raise Shadows to open the darks, lower Highlights to calm the lights, or shape Red, Green and Blue on their own.', params: [
       { key: 'channel', label: 'Channel', options: [[0, 'RGB'], [1, 'Red'], [2, 'Green'], [3, 'Blue']], def: 0, note: 'Each slider is where that tone ends up — straight, Shadows is 25 %, Midtones 50 %, Highlights 75 %' },
@@ -25611,6 +25626,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     _cgSig = sig; _cgLut = out; return out;
   }
   PIXEL_FX.colorwheels = function (d, W, H, p, t) {
+    /* #966 opts16: PROTECT SKIN over 0 % or MIX under 100 % runs tone13 — this very kernel without the two (every wheel, Balance,
+       Blending and Keep brightness as they are), each pixel laid in by Mix x (1 − Protect skin x its skin weight). 0 % and 100 %
+       run the lines below untouched. */
+    const cwSk16 = p.skin == null ? 0 : FM.evalProp(p.skin, t), cwMx16 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+    if (cwSk16 > 0 || cwMx16 < 100) { tone13(d, W, H, p, t, PIXEL_FX.colorwheels, ['skin', 'mix'], 0, cwMx16, cwSk16); return; }
     const sA = cgClamp(fparam(p, 'sh_amt', 30, t), 0, 100, 0) / 100, mA = cgClamp(fparam(p, 'mid_amt', 0, t), 0, 100, 0) / 100, hA = cgClamp(fparam(p, 'hi_amt', 25, t), 0, 100, 0) / 100;
     const sB = cgClamp(fparam(p, 'sh_lum', 0, t), -100, 100, 0) / 100, mB = cgClamp(fparam(p, 'mid_lum', 0, t), -100, 100, 0) / 100, hB = cgClamp(fparam(p, 'hi_lum', 0, t), -100, 100, 0) / 100;
     if (!sA && !mA && !hA && !sB && !mB && !hB) return;   // every wheel neutral: the picture, byte for byte
@@ -26843,7 +26863,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // the Tint colour a new one starts with: a warm sepia (it does nothing until Tint is above 0)
   const BW_TINT = '#c09060';
   const BW_ROWS = [
-    { type: 'bwmixer', label: 'Black & White Mixer', desc: 'Black and white the way a photographer makes it: choose how bright each colour turns — darken a blue sky, lighten skin, make leaves glow — with a coloured lens filter or six sliders, then add contrast and a tint.', params: [
+    { type: 'bwmixer', label: 'Black & White Mixer', desc: 'Black and white the way a photographer makes it: choose how bright each colour turns — darken a blue sky, lighten skin, make leaves glow — with a coloured lens filter or six sliders, then add contrast and a tint — faces left in colour, or mixed over the picture, if you like.', params: [
       { key: 'preset', label: 'Colour filter', options: BW_FILTERS.map((f, i) => [i, f[0]]), def: 0,
         sets: BW_FILTERS.reduce((o, f, i) => { o[i] = {}; BW_BANDS.forEach((b, k) => { o[i][b[0]] = f[1][k]; }); return o; }, {}),
         note: 'A tap sets the six sliders below to that filter — then move any of them' },
@@ -26853,6 +26873,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          unchanged; fine-scrub and a typed number land on the same 2 % grid. Range and defaults untouched (all even). The Orange
          filter's 25 and 85 are written as they are by the row above and kept; the next drag of that slider lands on the grid. */
     ].concat(BW_BANDS.map(b => ({ key: b[0], label: b[1], min: -200, max: 300, step: 2, def: b[2], unit: '%' })), [
+      /* #966 opts16 (hunt/fx16, his "more choices always better"): the mix always took the whole picture to grey, faces and all, and
+         always all the way. PROTECT SKIN holds skin-coloured pixels back from it with Teal & Orange's skin window (skinW12) — the shot in
+         black and white, the faces left in their own colour — and MIX lays the black and white over the colour picture (50 % a half
+         faded colour). Both sit above Contrast so Tint keeps its colour row beside it. 0 % and 100 % run the old loop untouched
+         (tone13 only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Faces keep their own colour while the rest goes black and white' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'contrast', label: 'Contrast', min: -100, max: 100, step: 1, def: 0 },
       { key: 'tint', label: 'Tint', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ]), color: true, defColor: BW_TINT, colorLabel: 'Tint colour', colorGate: { by: 'tint', deadAt: 0, deadAtText: '0%' } },
@@ -26862,6 +26889,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`, the control's default
   function bwNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
   PIXEL_FX.bwmixer = function (d, W, H, p, t) {
+    /* #966 opts16: PROTECT SKIN over 0 % or MIX under 100 % runs tone13 — this very kernel without the two (the Colour filter's six
+       sliders, Contrast and Tint as they are), each pixel laid in by Mix x (1 − Protect skin x its skin weight). 0 % and 100 % run
+       the lines below untouched. */
+    const bwSk16 = p.skin == null ? 0 : FM.evalProp(p.skin, t), bwMx16 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+    if (bwSk16 > 0 || bwMx16 < 100) { tone13(d, W, H, p, t, PIXEL_FX.bwmixer, ['skin', 'mix'], 0, bwMx16, bwSk16); return; }
     const wR = bwNum(fparam(p, 'reds', 40, t), -200, 300, 40) / 100;
     const wY = bwNum(fparam(p, 'yellows', 60, t), -200, 300, 60) / 100;
     const wG = bwNum(fparam(p, 'greens', 40, t), -200, 300, 40) / 100;

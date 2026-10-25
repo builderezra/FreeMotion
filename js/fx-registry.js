@@ -423,7 +423,7 @@ window.FM = window.FM || {};
     /* the darks, mids or lights alone, mixed: #966 opts13 */ exposure: 'Brightness in stops, the way a camera meters it — over the whole picture or just its darks, mids or lights, mixed over it.',
     /* faces kept, mixed: #966 opts13 */ temperature: 'Warms toward orange or cools toward blue — keeping faces their own colour if you like, mixed over the picture.',
     tint: 'Washes the whole clip toward one colour.',
-    /* as rich or as muted, as light or as dark: #966 opts10 */ colorize: 'Replaces the image colour with a single hue, keeping its light and shade — as rich or as muted, as light or as dark as you like.',
+    /* as rich or as muted, as light or as dark: #966 opts10 · faces kept, by tone: #966 opts16 */ colorize: 'Replaces the image colour with a single hue, keeping its light and shade — as rich or as muted, as light or as dark as you like, faces kept their own colour or only the darks, mids or lights tinted.',
     duotone: 'Maps darks to one colour and lights to another.',
     gradientmap: 'Remaps brightness onto a gradient — darks take one end, lights the other.',
     glow: 'Blooms the bright areas into a soft halo.',
