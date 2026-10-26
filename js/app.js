@@ -5300,13 +5300,38 @@ window.FM = window.FM || {};
          over the same key, so without this the original is gone from the registry, from IndexedDB and
          from the media library at once — and undo cannot reach it, because history only swaps layer JSON. */
       const outgoing = FM.media.get(id);
-      if (outgoing && outgoing.file && FM.storage && FM.storage.stashPrevMedia) {
+      /* 1188: UNDO CAN ONLY BRING BACK WHAT WAS KEPT, SO A REPLACE THAT CANNOT KEEP THE ORIGINAL ASKS FIRST.
+         (a) A clip with no copy in memory (back from Home before its reload reached it, or a reload that failed and left it
+             blank) kept nothing, and the save below writes the new file over the one on disk: that stored record, when it is
+             the revision the layer names, is what is kept. No record at all means nothing is lost.
+         (b) The keep can be refused (a nearly full phone: the big original does not fit and the smaller new file does), and
+             its answer was thrown away — Undo then put the settings back over the new file, for good, with nothing said. So
+             he is asked, and Keep it leaves the clip exactly as it was. Not inside Simple's runner (o.simple): its plan
+             goes on after this step whatever it answers, and it would hold the runner open on a question. */
+      let keep = (outgoing && outgoing.file) ? outgoing : null, kept = true;
+      /* 1188: where he is asked below, the question says what a refused keep means, so the keep is quiet: warnStore's 'Not
+         enough storage to save that media' sat dimmed behind the question and was still up after Keep it, untrue. Simple is
+         not asked, so there the storage toast stays — it is the only word he gets. */
+      const asksFirst = !o.simple && !!FM.ask;
+      if (FM.storage && FM.storage.stashPrevMedia) {
         /* 1176 leftover: the new file is decoded but not in the clip until this write is done, so a new build waits for it
            (FM._importing, as the decode above it). */
         FM._importing = (FM._importing || 0) + 1;
-        try { await FM.storage.stashPrevMedia(id, outgoing, layer.mediaRev || 0); } catch (e) {} finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
+        try {
+          if (!keep && FM.storage.readMedia) {
+            const stored = await FM.storage.readMedia(id);
+            if (stored && stored.file && (stored.rev || 0) === (layer.mediaRev || 0)) keep = stored;
+          }
+          if (keep) kept = (await FM.storage.stashPrevMedia(id, keep, layer.mediaRev || 0, { quiet: asksFirst })) !== false;
+        } catch (e) { kept = false; } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
       }
       if (!stillCurrent()) return stale();
+      if (!kept && asksFirst) {
+        const what = layer.name ? '“' + layer.name + '”' : 'the original';
+        const go = await FM.ask({ title: 'Not enough storage to keep the original', message: 'If you replace it now, Undo cannot bring ' + what + ' back.', ok: 'Replace anyway', cancel: 'Keep it', danger: true });
+        if (!go) { if (FM._releaseMediaRecord) FM._releaseMediaRecord(nrec); return false; }
+        if (!stillCurrent()) return stale();
+      }
       if (!FM.replaceMediaWith(id, nrec)) return stale();
       fitReplacedMedia(FM.layerById(FM.scene, id), outgoing, nrec);   // queue 690 (HUNT-a): same place, same size — before the commit, so undo puts the old scale back
       /* The outgoing blob is NOT deleted any more, and the layer gets a serialisable marker.

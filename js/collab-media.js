@@ -60,7 +60,21 @@ window.FM = window.FM || {};
        that decide which fonts are "used", so per session at most this many, and this many bytes, are taken;
        and a font this session installed that no project uses when it ends is taken out again (`M.detach`). */
     FONTS_SESSION: 12,
-    FONT_SESSION_BYTES: 24 * 1024 * 1024
+    FONT_SESSION_BYTES: 24 * 1024 * 1024,
+    /* #1186 — THE BACKSTOP, NOT THE RULE. A transfer ends when its link changes (M.forget on the owner, M.relink on a
+       guest at the owner's welcome), and that is what recovers the normal case — a locked phone, a dropped link, a guest
+       who left. This is only for a transfer that stops moving with no event to say so: a receiver with no T_START or
+       T_DATA for this long (its own part write pending, or its own part count before the ask, does not count) asks again
+       from the parts it has kept, and a sender with no send and no `ok` that moved its window for this long AND for the
+       link grace (`sendStallMs`, #1186 F1) stops. Progress, not a clock: every byte
+       restarts it, and a tick gap that shows THIS device was paused (#967's liveTick rule) restarts it too.
+       MEASURE: pending. The size has not been measured. Measure it as the longest gap between two progress events on
+       a WORKING transfer in '921 S8 a 500-layer project under a 4× CPU throttle…' (tests/_cdp.py, nothing beside it)
+       and on a real two-Chrome run with one Chrome SIGSTOPped and resumed (the #967 method); set this well above the
+       larger, and write both numbers here and into the '1186 … slow one that keeps moving' test. Until then it is
+       60 s, deliberately loose: too tight aborts a healthy slow transfer and re-sends up to a part of it, too loose
+       only makes a stall with no event behind it last longer. */
+    STALL: 60000
   });
   M.LIMITS = LIM;
 
@@ -813,17 +827,44 @@ window.FM = window.FM || {};
   /* ═══ THE PUMP ════════════════════════════════════════════════════════════════════════════════ */
   function pump(ctl) {
     if (ctl.skip) return;
-    while (ctl.queue.length && Object.keys(ctl.inb).length < LIM.IN_FLIGHT) {
-      const fid = ctl.queue.shift();
+    let i = 0;
+    while (i < ctl.queue.length && Object.keys(ctl.inb).length < LIM.IN_FLIGHT) {
+      const fid = ctl.queue[i];
       const e = ctl.peer[fid];
-      if (!e || ctl.have[fid]) { delete ctl.wanted[fid]; continue; }
+      if (!e || ctl.have[fid]) { ctl.queue.splice(i, 1); delete ctl.wanted[fid]; continue; }
+      /* #1186: a file whose source has no open link here (a guest that left, a guest's own link down) stays QUEUED —
+         still wanted, still counted, still painted as missing — until there is a link to ask on. Asking into nothing
+         is how a slot was held for good: the want was never sent and the T_START it waited for never came. */
+      if (!reachable(ctl, e)) { i++; continue; }
+      ctl.queue.splice(i, 1);
       startWant(ctl, e);
     }
+  }
+  function reachable(ctl, e) {
+    const S = ctl.S;
+    const to = S.isOwner ? e.from : 'h';
+    if (to == null || !S.endpoint) return false;
+    const ep = S.endpoint(to);
+    if (!ep || ep.open === false) return false;
+    /* #1186 F2: A GUEST ASKS ON A LINK ONLY ONCE THE OWNER HAS WELCOMED IT. Between setLink and the welcome a sweep used
+       to ask on the new link, and the welcome's M.relink then asked again: the answer to the first ask was a stray
+       T_START, which reaching the re-ask while it counted its parts (from 0) abandoned it as a bad offset, deleted the
+       kept parts and counted a try (TRIES is 2), and at the same offset was adopted and doubled the parts. Before a
+       knock is let in, a want on it is dropped unread anyway. M.relink sets `_relinkEp` before it asks, so the re-ask
+       still goes at once; a fresh join (`_relinkEp` not yet set) and the #967 quiet link (the same link) are untouched. */
+    if (!S.isOwner && ctl._relinkEp != null && ep !== ctl._relinkEp) return false;
+    return true;
   }
 
   async function startWant(ctl, e) {
     const S = ctl.S;
     const to = S.isOwner ? e.from : 'h';
+    /* #1186: THE SLOT IS TAKEN BEFORE THE FIRST AWAIT. `pump` counts `ctl.inb` to stay under IN_FLIGHT and this set
+       it only after the part reads below, so one pump started EVERY queued file at once — and the sender, capped at
+       IN_FLIGHT per peer, never answered the third. `to` is who was asked, so `M.forget` ends exactly the transfers
+       that member was serving. `at` is the no-progress clock (LIM.STALL). */
+    const inb = { fid: e.fid, e: e, from: 0, got: 0, buf: [], bufLen: 0, part: 0, xid: null, upto: 0, to: to, at: Date.now(), asked: false };
+    ctl.inb[e.fid] = inb;
     /* §15.7 — RESUME. Whatever parts of this file already landed, in this room, are counted before a
        byte is asked for: `want{fid, from}`. The parts survive a reload, a rejoin and a new epoch,
        because they are keyed by the fingerprint and not by the connection. */
@@ -846,11 +887,18 @@ window.FM = window.FM || {};
       }
       if (from > e.size) { from = 0; haveParts = 0; }   // a stale or over-long set is not a resume point
     } catch (x) { from = 0; haveParts = 0; }
+    /* #1186: ended while the parts were being counted (a link change, a member gone): that end is the answer. */
+    if (ctl.inb[e.fid] !== inb) return;
     if (from > 0) ctl.stats.resumed++;
-    const inb = { fid: e.fid, e: e, from: from, got: from, buf: [], bufLen: 0, part: haveParts, xid: null, upto: from };
-    ctl.inb[e.fid] = inb;
+    inb.from = from; inb.got = from; inb.part = haveParts; inb.upto = from;
     ctl.stats.wants++;
-    S.sendMsg(to, { t: 'want', fid: e.fid, from: from });
+    inb.at = Date.now();
+    /* #1186 N3: the no-progress clock starts at the ask — counting the kept parts is this side's own work. */
+    inb.asked = true;
+    /* #1186 (c): a want the link would not take is not in flight. The slot is given back and the file goes back to the
+       head of the queue, and the next sweep asks again — not the next tick, so a link that keeps refusing is not a
+       loop of part reads. */
+    if (!S.sendMsg(to, { t: 'want', fid: e.fid, from: from })) { requeue(ctl, e.fid, 'unsent', true); return; }
     M.ui.sync(ctl);
   }
 
@@ -890,15 +938,37 @@ window.FM = window.FM || {};
       if (j.fid === fid) { j.stop = true; continue; }        // one job per (peer, file): the newest ask wins
       live++;
     }
-    if (live >= LIM.IN_FLIGHT) return;                      // an honest peer never asks for more at once
+    /* #1186 (e): AT THE CAP, A NEW FILE REPLACES THE JOB THAT HAS MOVED LEAST RECENTLY — it used to be refused with no
+       reply, and the receiver waited for a T_START for good. An honest receiver holds at most IN_FLIGHT asks
+       (`startWant` takes its slot before it asks), so a third ask for a different file proves it has given one of
+       them up. The cap is unchanged: at most IN_FLIGHT live jobs per peer, whatever a peer sends. */
+    while (live >= LIM.IN_FLIGHT) {
+      let old = null;
+      for (let i = 0; i < xids.length; i++) {
+        const j = ctl.out[xids[i]];
+        if (!j || j.to !== toMid || j.stop) continue;
+        if (!old || (j.at || 0) < (old.at || 0)) old = j;
+      }
+      if (!old) break;
+      old.stop = true;
+      live--;
+    }
     const xid = ctl.nextXid++;
-    const job = { xid: xid, to: toMid, fid: fid, from: start, off: start, size: file.size, upto: start, stop: false };
+    const job = { xid: xid, to: toMid, fid: fid, from: start, off: start, size: file.size, upto: start, stop: false, at: Date.now() };
     ctl.out[xid] = job;
     const ep = S.endpoint(toMid);
     const head = enc ? enc.encode(JSON.stringify({ fid: fid, from: start, size: file.size, kind: e.kind === 'font' ? 'font' : 'media' })) : null;
     if (!S.sendBulk(toMid, frame(T_START, xid, 0, head))) { delete ctl.out[xid]; return; }
-    let seq = 1;
+    let seq = 1, turn = Date.now();
     while (job.off < file.size && !job.stop) {
+      /* #1186 (d): EVERY TURN READS THE LINK. A braked job never reaches sendBulk below, so it could never notice that
+         the link it was sending on had gone — it slept 25 ms at a time for the rest of the session, holding one of
+         the peer's IN_FLIGHT places. A replaced endpoint (the member came back on a new link) is gone too. */
+      if (S.endpoint(toMid) !== ep || (ep && ep.open === false)) break;
+      const t = Date.now();
+      if (t - turn > pausedGap()) job.at = t;
+      turn = t;
+      if (t - job.at > sendStallMs()) break;
       /* §15.5's two brakes, and they are different brakes. `bufferedAmount` is the BROWSER's queue —
          ignoring it buffers the whole file in the tab's heap, which on a phone is the tab. `upto` is
          the RECEIVER's — it is acknowledged only once a part is persisted, so IndexedDB's speed, not
@@ -912,6 +982,7 @@ window.FM = window.FM || {};
       if (job.stop) break;
       if (!S.sendBulk(toMid, frame(T_DATA, xid, seq++, bytes))) break;   // the link went; the receiver resumes
       job.off = end;
+      job.at = Date.now();
       ctl.stats.sentBytes += bytes.length;
     }
     delete ctl.out[xid];
@@ -928,6 +999,7 @@ window.FM = window.FM || {};
       if (!h || typeof h.fid !== 'string') return;
       const inb = ctl.inb[h.fid];
       if (!inb) return;                                  // nothing here asked for it
+      if (inb.asked === false) return;                   // (fold check K2) a placeholder still counting its parts has asked nothing yet
       /* ⚠️ AND IT HAS TO BE THE PEER WE ASKED. `xid` is the SENDER's counter and every controller starts
          its own at 1 (`nextXid`), so two guests uploading at once both open with xid 1. Keyed by the
          number alone, the second T_START silently took over the first one's transfer: every frame of
@@ -963,6 +1035,7 @@ window.FM = window.FM || {};
       inb.got = inb.from;
       inb.upto = inb.from;
       inb.buf = []; inb.bufLen = 0;
+      inb.at = Date.now();
       ctl.byXid[key] = h.fid;
       return;
     }
@@ -975,6 +1048,7 @@ window.FM = window.FM || {};
        then fails the length check anyway — at the cost of up to 4 MiB written to his disk first. */
     if (inb.got + f.body.length > inb.e.size) { abort(ctl, fid, 'oversize'); tried(ctl, fid); ctl.dirty = true; return; }
     inb.buf.push(f.body.slice());                        // the frame's buffer is the link's; keep our own
+    inb.at = Date.now();
     inb.bufLen += f.body.length;
     inb.got += f.body.length;
     ctl.bytesGot += f.body.length;
@@ -1000,6 +1074,9 @@ window.FM = window.FM || {};
     const blob = new Blob(inb.buf, inb.e.mime ? { type: inb.e.mime } : undefined);
     inb.buf = []; inb.bufLen = 0;
     const upto = inb.got;
+    /* #1186: while this side's own part write is pending the no-progress clock does not run (`stallCheck`) — a slow
+       phone's IndexedDB must not time out its own work. */
+    inb.writing = (inb.writing || 0) + 1;
     const job = (inb.chain || Promise.resolve()).then(async function () {
       if (inb.dead) return;
       /* §15.6 — the part is held under `FM._mediaBusy`, which is what stops `pruneOrphans` and
@@ -1017,7 +1094,7 @@ window.FM = window.FM || {};
       ctl.S.sendMsg(ctl.S.isOwner ? inb.e.from : 'h', { t: 'ok', xid: inb.xid, upto: inb.upto });
       if (last) await complete(ctl, inb);
     });
-    inb.chain = job.catch(function (e) { C.lastError = e; });
+    inb.chain = job.catch(function (e) { C.lastError = e; }).then(function () { inb.writing = Math.max(0, (inb.writing || 1) - 1); inb.at = Date.now(); });
     return inb.chain;
   }
 
@@ -1052,6 +1129,51 @@ window.FM = window.FM || {};
       if (ctl.byXid && inb.xkey) delete ctl.byXid[inb.xkey];
     }
     ctl.lastAbort = why || 'abort';
+  }
+
+  /* #1186: A TRANSFER WHOSE LINK CHANGED IS ENDED AND ASKED FOR AGAIN — never `tried`, never `bad`: nothing was wrong
+     with the file. It stays `wanted` and goes back to the head of the queue, so it is still counted on the card (no
+     second "of M" for a file that was never new) and `pump` asks again on the next reconcile, from the parts already
+     kept (`startWant` counts them) and of whoever holds it by then. A part write already queued does not land
+     (`dead`), exactly as for `abort`. `quiet` leaves it to the next sweep instead of the next tick. */
+  function requeue(ctl, fid, why, quiet) {
+    const inb = ctl.inb[fid];
+    if (!inb) return false;
+    inb.dead = true;
+    delete ctl.inb[fid];
+    if (ctl.byXid && inb.xkey) delete ctl.byXid[inb.xkey];
+    /* #1186 N2: the bytes received and not yet kept in a part are thrown away here and come again on the re-ask, so they
+       come out of the count too — or the card and the export gate run ahead of the clip, to 100 % with it still missing. */
+    ctl.bytesGot = Math.max(0, ctl.bytesGot - Math.max(0, (inb.got || 0) - (inb.upto || 0)));
+    ctl.lastAbort = why || 'requeue';
+    if (ctl.wanted[fid] && ctl.queue.indexOf(fid) < 0) ctl.queue.unshift(fid);
+    if (!quiet) ctl.dirty = true;
+    return true;
+  }
+  /* Suite seam `M._stallOverride`: the backstop's RULE at a size a test can wait out; the SIZE is LIM.STALL's. */
+  function stallMs() { return (M._stallOverride != null) ? M._stallOverride : LIM.STALL; }
+  /* #1186 F1: THE SENDER GIVES UP NO SOONER THAN THE LINK ITSELF IS GIVEN UP (collab-link.js LINK_GRACE, 120 s). At the
+     receiver's 60 s a phone locked for 60-120 s on a link that survived came back to a send that had already ended, and
+     waited a whole window more for its clip (on e690af6f the braked send simply carried on). Every slot this could free
+     sooner is freed already — M.forget, the endpoint check above, the replacement at the cap, the same-file supersede —
+     so this stays only as the bound on a send to a peer that keeps its link open and never reads. */
+  function sendStallMs() {
+    const g = (C.link && typeof C.link.grace === 'function') ? C.link.grace() : ((C.LIMITS && C.LIMITS.LINK_GRACE) || 120000);
+    return Math.max(stallMs(), +g || 0);
+  }
+  /* #967's rule (collab-session.js liveTick): a gap between two turns well over a PING means this device was paused. */
+  function pausedGap() { return 2 * ((C.LIMITS && C.LIMITS.PING) || 2000); }
+  /* #1186 (f): the receiver's half of the backstop, on every tick. */
+  function stallCheck(ctl, t) {
+    const gap = ctl._stallAt ? t - ctl._stallAt : 0;
+    ctl._stallAt = t;
+    const paused = gap > pausedGap();
+    const win = stallMs();
+    Object.keys(ctl.inb).forEach(function (fid) {
+      const inb = ctl.inb[fid];
+      if (paused || inb.writing > 0 || !inb.asked || !inb.at) { inb.at = t; return; }
+      if (t - inb.at > win) { ctl.stats.stalls = (ctl.stats.stalls || 0) + 1; requeue(ctl, fid, 'stall'); }
+    });
   }
 
   /* ⚠️ AND A FILE THAT ARRIVES BROKEN MUST NOT LOOP (queue 921 S4). A completed transfer whose bytes do
@@ -1349,7 +1471,12 @@ window.FM = window.FM || {};
         const job = ctl.out[+msg.xid];
         const src = fromMid || (S.isOwner ? null : 'h');
         const n = +msg.upto;
-        if (job && job.to === src && n >= 0) job.upto = Math.max(job.upto, Math.min(n, job.off));
+        if (job && job.to === src && n >= 0) {
+          const was = job.upto;
+          job.upto = Math.max(job.upto, Math.min(n, job.off));
+          /* #1186: an `ok` that moved the window is progress for the sender's no-progress clock. */
+          if (job.upto > was) job.at = Date.now();
+        }
         return true;
       }
       case 'have':
@@ -1365,7 +1492,35 @@ window.FM = window.FM || {};
     const ctl = ctlOf(S);
     if (!ctl || mid == null) return false;
     delete ctl.told[mid];
+    /* #1186 (a): …AND SO DOES EVERY TRANSFER WITH IT. A send loop to a member who left slept on its brakes for the
+       rest of the session, holding that member's places when it came back; a file it was sending us stayed in
+       `ctl.inb` for good — never asked for again, the card frozen at "Receiving media", and at IN_FLIGHT 2 two of
+       those stopped all media from guests. Its sends stop here, and what it was sending is asked for again of
+       whoever holds it next (`requeue`: not `tried`, not `bad`). Reached from bye, Remove, a dropped link and a
+       member coming back (dropPeer). */
+    Object.keys(ctl.out).forEach(function (x) { const j = ctl.out[x]; if (j && j.to === mid) j.stop = true; });
+    let n = 0;
+    Object.keys(ctl.inb).forEach(function (fid) { const inb = ctl.inb[fid]; if (inb && inb.to === mid && requeue(ctl, fid, 'gone')) n++; });
+    if (n) kick(ctl);
     return true;
+  };
+  /* #1186 (b): the guest's half — the owner has just admitted this device's hello ('welcome'), so whatever was in flight
+     on the link before is gone with that link: both directions end, and what was arriving is asked for again on this
+     one. Not at setLink: a want sent before the owner re-admits the member can be dropped. A welcome on the SAME link
+     (the #967 quiet link coming back) lost nothing, so it changes nothing; the first welcome of a join has nothing in
+     flight. */
+  M.relink = function (S) {
+    const ctl = ctlOf(S);
+    if (!ctl || S.isOwner) return 0;
+    const ep = S.endpoint ? S.endpoint('h') : null;
+    if (ep === ctl._relinkEp) return 0;
+    ctl._relinkEp = ep;
+    Object.keys(ctl.out).forEach(function (x) { ctl.out[x].stop = true; });
+    let n = 0;
+    Object.keys(ctl.inb).forEach(function (fid) { if (requeue(ctl, fid, 'relink')) n++; });
+    /* …and a file that waited in the queue for this welcome (F2: `reachable` holds a guest's asks until it) goes now too. */
+    if (n || ctl.queue.length) kick(ctl);
+    return n;
   };
 
   M.onBulk = function (S, fromMid, buf) {
@@ -1395,6 +1550,10 @@ window.FM = window.FM || {};
        two property reads — so that half is not throttled. */
     if (ctl.held.length) applyHeld(ctl);
     const t = Date.now();
+    /* #1186: a guest's first link was admitted by its join's own handshake, whose welcome this session never saw — so the
+       first link it ticks on while online counts as welcomed (M.relink), and a welcome back on that same link changes nothing. */
+    if (!S.isOwner && ctl._relinkEp === undefined && S.online && S.endpoint) ctl._relinkEp = S.endpoint('h') || undefined;
+    stallCheck(ctl, t);
     if (!ctl.dirty && (t - (ctl.lastSweep || 0)) < LIM.SWEEP) return 0;
     ctl.lastSweep = t;
     reconcile(ctl);

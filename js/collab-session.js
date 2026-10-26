@@ -949,6 +949,8 @@ window.FM = window.FM || {};
           if (typeof msg.hostName === 'string' && msg.hostName) S.hostName = msg.hostName.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').slice(0, LIM.NAME);
           /* S6 review: the owner has ADMITTED this hello — the one moment "back in sync" is true. */
           if (A.onWelcome) try { A.onWelcome(msg); } catch (e) {}
+          /* #1186: …and the moment a transfer cut by the link change can be asked for again (collab-media.js M.relink). */
+          if (C.media && C.media.relink) { try { C.media.relink(S); } catch (e) { C.lastError = e; } }
           return;
         case 'snap': return onSnap(msg);
         case 'tail': {

@@ -34814,9 +34814,14 @@
     peer.announce = function (t) {
       const files = [], fonts = [];
       peer.fids.forEach(function (f) { const e = peer.files[f].entry; (e.kind === 'font' ? fonts : files).push(JSON.parse(JSON.stringify(e))); });
-      ep.send('ctl', { t: t || 'mf', files: files, fonts: fonts });
+      peer.ep.send('ctl', { t: t || 'mf', files: files, fonts: fonts });
     };
+    /* #1186: a pause between payload frames (a slow but healthy sender), 0 for none. */
+    peer.gapMs = 0;
     async function serve(w) {
+      /* #1186: the link this transfer started on — a peer moved to a new link (`rehome`) serves new asks there, and an
+         old transfer still sees its own link close. */
+      const ep = peer.ep;
       const f = peer.files[w.fid];
       if (!f) return;
       peer.serves++;
@@ -34831,6 +34836,7 @@
       while (off < f.file.size) {
         while (peer.paused) { await new Promise(function (r) { setTimeout(r, 20); }); if (!ep.open) return; }
         if (peer.cutAt && peer.servedBytes >= peer.cutAt && !peer.cut) { peer.cut = true; return; }
+        if (peer.gapMs && seq > 1) { await new Promise(function (r) { setTimeout(r, peer.gapMs); }); if (!ep.open) return; }
         const end = Math.min(off + 64 * 1024, f.file.size);
         const bytes = new Uint8Array(await f.file.slice(off, end).arrayBuffer());
         if (!ep.open) return;
@@ -34839,10 +34845,16 @@
         off = end;
       }
     }
-    ep.onmessage = function (ch, msg) {
+    function onMsg921(ch, msg) {
       if (ch === 'ctl') {
         if (!msg || typeof msg !== 'object') return;
-        if (msg.t === 'want') { peer.wants.push({ fid: msg.fid, from: msg.from }); serve(msg); return; }
+        if (msg.t === 'want') {
+          peer.wants.push({ fid: msg.fid, from: msg.from });
+          /* #1186 F2: a want can be HELD and answered later (`releaseHeld`), which is how a late answer is made. */
+          if (peer.holdWants) { peer.held.push(msg); return; }
+          serve(msg);
+          return;
+        }
         if (msg.t === 'ok') { peer.oks.push(msg); return; }
         if (msg.t === 'have') { peer.haves.push(msg.fid); return; }
         if (msg.t === 'mf') { peer.mfs.push(msg); return; }
@@ -34863,8 +34875,14 @@
       g.bytes.push(f.body.slice());
       g.n += f.body.length;
       peer.gotBytes += f.body.length;
-      if (g.n >= g.size) ep.send('ctl', { t: 'have', fid: g.fid });
-    };
+      if (g.n >= g.size) peer.ep.send('ctl', { t: 'have', fid: g.fid });
+    }
+    ep.onmessage = onMsg921;
+    /* #1186: the same peer on a NEW link — what a reconnect is from the far end. */
+    peer.rehome = function (ep2) { peer.ep = ep2; ep2.onmessage = onMsg921; };
+    peer.holdWants = false;
+    peer.held = [];
+    peer.releaseHeld = function () { const h = peer.held.splice(0, peer.held.length); h.forEach(function (w) { serve(w); }); return h.length; };
     /* Everything the peer received for one fid, as one Blob — so a test can compare BYTES rather than
        a length. */
     peer.blobFor = function (fid) {
@@ -34951,6 +34969,42 @@
       FM.selectLayer(null);
       await q915aCleanup(made921, orig921, wasHome921, [], [], []);
     }
+  }
+
+  /* #1186: a guest's reconnect, as collab-ui makes one (setLink to a fresh link, setOnline), then the owner's welcome —
+     the moment the owner has re-admitted the hello. The far end's test peer moves to the new link with it, and the old
+     link is closed at both ends, the way a dropped one is gone. */
+  async function relink1186(c) {
+    const C = c.C, old = c.loop;
+    const loop2 = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'async' });
+    c.G.setLink(loop2.b);
+    try { old.b.onmessage = null; old.b.onclose = null; old.b.close(); } catch (e) {}
+    try { old.a.close(); } catch (e) {}
+    c.loop = loop2;
+    c.peer.rehome(loop2.a);
+    c.G.setOnline(true);
+    loop2.a.send('ctl', { t: 'welcome', mid: c.G.mid, epoch: c.G.epoch, role: c.G.role });
+    await settle921(60);
+    return loop2;
+  }
+  /* #1186: an owner-side endpoint that records what it is sent and reports a fixed bulk buffer — above BUFFER_HIGH it
+     brakes every send loop to it for as long as the test likes, which is what a link that went quiet does. */
+  function stubEp1186(buffered) {
+    const ep = { kind: 'stub', open: true, onmessage: null, onclose: null, onopen: null, sent: [], buffered: buffered || 0 };
+    ep.send = function (ch, msg) { if (!ep.open) return false; ep.sent.push({ ch: ch, msg: msg }); return true; };
+    ep.bufferedAmount = function (ch) { return ch === 'bulk' ? ep.buffered : 0; };
+    ep.close = function () { if (!ep.open) return; ep.open = false; if (typeof ep.onclose === 'function') ep.onclose(); };
+    ep.starts = function () {
+      const out = [];
+      ep.sent.forEach(function (s) {
+        if (s.ch !== 'bulk') return;
+        const f = FM.collab.media._unframe(s.msg);
+        if (!f || f.type !== 1) return;
+        try { out.push(JSON.parse(new TextDecoder().decode(f.body)).fid); } catch (e) {}
+      });
+      return out;
+    };
+    return ep;
   }
 
   test('921 S4 the manifest groups one file for every layer that uses it, so a split and a duplicate transfer zero extra bytes', { item: '921', budgetMs: 180000 }, async function () {
@@ -35142,11 +35196,11 @@
       for (let i = 0; i < parts.length; i++) { const rec = await FM.storage.collabGet(parts[i]); stored += (rec && rec.blob) ? rec.blob.size : 0; }
       if (!stored) throw new Error('CONTROL: the ' + parts.length + ' part record(s) on disk hold no bytes, so the resume offset below would be compared against nothing');
 
-      /* Now the peer comes back and the session asks again. `from` must be the bytes already kept. */
+      /* Now the peer comes back and the session asks again. `from` must be the bytes already kept.
+         #1186: the way back is the app's own — a new link and the owner's welcome, as collab-ui's reconnect makes
+         them — where this used to clear `ctl.inb` and `wanted` by hand, standing in for code the app did not have. */
       c.peer.cut = false; c.peer.cutAt = 0;
-      c.ctl.inb = Object.create(null);
-      delete c.ctl.wanted[fid];
-      c.ctl.dirty = true;
+      await relink1186(c);
       await until921('the file to arrive after the resume', async function () {
         const r = await FM.storage.readMedia(c.ids[0]);
         return (r && r.file) ? r : null;
@@ -35286,10 +35340,10 @@
       /* CONTROL: with nothing outstanding the gate does not ask at all, so an ordinary export in a
          live session is not one extra tap. `_answer` is left set to false: if the gate asked, this
          would come back false. */
+      /* #1186: a reconnect, as the app makes one, brings the stalled clip in — this used to clear `ctl.inb` and
+         `wanted` by hand. */
       c.peer.cut = false; c.peer.cutAt = 0;
-      c.ctl.inb = Object.create(null);
-      c.ctl.wanted = Object.create(null);
-      c.ctl.dirty = true;
+      await relink1186(c);
       await until921('the file to finish arriving', async function () {
         const r = await FM.storage.readMedia(c.ids[0]);
         return (r && r.file && r.file.size === splash.size) ? true : null;
@@ -36079,6 +36133,344 @@
       const gate = await C.media.exportGate();
       if (gate !== true) throw new Error('the export gate still stops to ask about a clip that can never arrive');
     });
+  });
+
+  /* ═══ #1186 — A TRANSFER INTERRUPTED BY A LINK CHANGE IS ASKED FOR AGAIN (hunt HIGH) ═══════════════════════════════
+   * His iPhone is a guest and a clip is downloading; he locks it, the link drops and comes back, 'Back in sync' — and
+   * the card stayed at 'Receiving media · 41%' for the rest of the session, the clip blank, every export saying it was
+   * still downloading. The owner side had the same hole for a guest that was uploading and left. Each test races its
+   * own named deadline ('1186 deadline: …'), so on e690af6f it fails by name instead of hanging the suite. */
+  test('1186 a guest whose link drops mid-file asks again once the owner welcomes it back, and the clip lands', { item: '1186', budgetMs: 240000 }, async function () {
+    const C = need921S4('#1186 the relink');
+    await withCollabGuest921([mediaLayer921('Ctl', 'image', { duration: 2 }), mediaLayer921('Clip', 'image', { duration: 2 })], async function (c) {
+      const a = await q921noisePng(560, 1186, 'ctl1186.png');
+      const b = await q921noisePng(600, 1187, 'relink1186.png');
+      if (b.size < 8 * 64 * 1024) throw new Error('CONTROL: the fixture is ' + b.size + ' bytes, a handful of frames, so a cut at 40 percent would not land mid-file');
+      const wantsOf = function (fid) { return c.peer.wants.filter(function (w) { return w.fid === fid; }); };
+      const landed = async function (id, size) { const r = await FM.storage.readMedia(id); return (r && r.file && r.file.size === size) ? r : null; };
+
+      /* CONTROL (green on e690af6f too): the fixture delivers once a want is sent again. The same cut, then the
+         hand-clear the older tests used to stand in for a reconnect, and the clip lands. */
+      c.peer.cutAt = Math.floor(a.size * 0.4);
+      const fa = c.peer.add(a, 'image', [[c.ids[0], 0]]);
+      c.peer.announce('mf');
+      await until921('CONTROL: the first transfer to be cut mid-file', async function () { return c.peer.cut ? c.peer.servedBytes : null; }, 60000);
+      c.peer.cutAt = 0;
+      delete c.ctl.inb[fa];
+      delete c.ctl.wanted[fa];
+      c.ctl.dirty = true;
+      await until921('CONTROL: the hand-cleared file to land', function () { return landed(c.ids[0], a.size); }, 60000);
+      if (wantsOf(fa).length !== 2) throw new Error('CONTROL: the hand-cleared file took ' + wantsOf(fa).length + ' wants, not 2, so the count below would not mean what it says');
+
+      /* THE CASE: the same cut, then a link change exactly as collab-ui's reconnect makes one, then the owner's
+         welcome. Nothing is cleared by hand. On e690af6f nothing asks again: the want count stays 1, pending stays 1. */
+      c.peer.cut = false;
+      c.peer.cutAt = c.peer.servedBytes + Math.floor(b.size * 0.4);
+      const fb = c.peer.add(b, 'image', [[c.ids[1], 0]]);
+      c.peer.announce('mf');
+      await until921('the second transfer to be cut mid-file', async function () { return c.peer.cut ? c.peer.servedBytes : null; }, 60000);
+      if (await FM.storage.readMedia(c.ids[1])) throw new Error('CONTROL: the clip already has a record while its transfer is cut, so the re-ask below would prove nothing');
+      if (wantsOf(fb).length !== 1) throw new Error('CONTROL: ' + wantsOf(fb).length + ' wants for the clip before the link changed, not 1');
+      const filesBefore = c.ctl.files;
+      /* N2: what the cut transfer received and had not yet kept in a part, read once every frame sent before the cut is in. */
+      await settle921(200);
+      const ib = c.ctl.inb[fb];
+      if (!ib) throw new Error('CONTROL: the cut clip is not in flight before the link changes, so the relink below has nothing to end');
+      const unflushed = ib.got - ib.upto, gotBefore = c.ctl.bytesGot;
+      if (!(unflushed > 0)) throw new Error('CONTROL: the cut transfer holds ' + unflushed + ' unkept bytes, so the byte count check below would prove nothing');
+      c.peer.cutAt = 0;
+      await relink1186(c);
+      await until921('1186 deadline: a second want for the clip after the welcome', async function () { return wantsOf(fb).length >= 2 ? true : null; }, 30000);
+      await until921('1186 deadline: the clip to land after the relink', function () { return landed(c.ids[1], b.size); }, 30000);
+      if (wantsOf(fb).length !== 2) throw new Error('the clip was asked for ' + wantsOf(fb).length + ' times across one link change, not twice');
+      const p = C.media.pending(c.G);
+      if (p.n) throw new Error(p.n + ' file(s) still pending after the clip landed — the card would still say Receiving media');
+      if (c.ctl.files !== filesBefore) throw new Error('the link change counted the clip again: the card went from ' + filesBefore + ' files to ' + c.ctl.files + ' for the same clips');
+      /* N2: the bytes the relink threw away come out of the count, so it ends where one clean download would have left it. */
+      const reFrom = Math.max(0, +wantsOf(fb)[1].from || 0);
+      const off = c.ctl.bytesGot - (gotBefore - unflushed + (b.size - reFrom));
+      if (off !== 0) throw new Error('after the relink the received-bytes count is ' + off + ' bytes off one clean download: the ' + unflushed + ' bytes the cut transfer held and threw away stayed counted, so the card and the export gate read the clip as further along than it is, up to 100 percent while it is still arriving');
+    });
+  });
+
+  test('1186 the owner asks the next holder when the guest that was sending a file says bye', { item: '1186', budgetMs: 180000 }, async function () {
+    const C = need921S4('#1186 forget');
+    await withCollab921([mediaLayer921('X', 'image'), mediaLayer921('Y', 'image')], async function (c) {
+      const ctl = C.media._ctl(c.S);
+      if (!ctl) throw new Error('CONTROL: the host session has no media controller');
+      const x = await q921noisePng(300, 1190, 'x1186.png');
+      const y = await q921noisePng(260, 1191, 'y1186.png');
+      const fx = C.media._fid(C.media._fp(x)), fy = C.media._fid(C.media._fp(y));
+      const loopA = C.link.LoopLink({ aTag: 'h', bTag: 'pa', mode: 'async' });
+      const loopB = C.link.LoopLink({ aTag: 'h', bTag: 'pb', mode: 'async' });
+      const midA = c.S.addPeer(loopA.a, { role: 'editor', name: 'Ann', color: '#44aaff' });
+      const midB = c.S.addPeer(loopB.a, { role: 'editor', name: 'Bo', color: '#ffaa44' });
+      if (!midA || !midB) throw new Error('CONTROL: both guests were not admitted');
+      const pA = mediaPeer921(loopA.b), pB = mediaPeer921(loopB.b);
+      try {
+        pA.add(x, 'image', [[c.ids[0], 0]]);
+        pA.add(y, 'image', [[c.ids[1], 0]]);
+        /* Ann starts both and holds them: the T_START goes, the bytes do not. */
+        pA.paused = true;
+        pA.announce('ann');
+        await until921('CONTROL: both files to be in flight from Ann', async function () { return (ctl.inb[fx] && ctl.inb[fy] && pA.wants.length >= 2) ? true : null; }, 60000);
+
+        /* CONTROL (green on e690af6f too): Ann's own miss for Y ends Y's transfer, so the gone-from-ctl.inb check below
+           can go green at all. */
+        pA.ep.send('ctl', { t: 'ann', files: [{ fid: fy, fp: C.media._fp(y), size: y.size, mime: 'image/png', kind: 'image', name: 'y1186.png', lm: 0, layers: [], miss: 1 }], fonts: [] });
+        await until921('CONTROL: the miss to end the transfer of Y', async function () { return ctl.inb[fy] ? null : true; }, 30000);
+
+        /* THE CASE: Ann leaves while X is in flight from her. */
+        pA.ep.send('ctl', { t: 'bye', why: 'left' });
+        await until921('CONTROL: the bye to be taken', async function () { return c.S.peerIds().indexOf(midA) < 0 ? true : null; }, 30000);
+        loopA.b.close();
+        c.S.tick('full');
+        await settle921(80);
+        if (ctl.inb[fx]) throw new Error('the guest that was sending X said bye and X is still in flight from her one tick later — never asked for again, the card frozen at Receiving media, and at IN_FLIGHT 2 two of these stop media from every guest');
+        /* …and Bo holds the same file: he is asked for it. */
+        pB.add(x, 'image', [[c.ids[0], 0]]);
+        pB.announce('ann');
+        await until921('1186 deadline: a want for X to reach the next holder', async function () { return pB.wants.some(function (w) { return w.fid === fx; }) ? true : null; }, 20000);
+        await until921('1186 deadline: X to land from the next holder', async function () { const r = await FM.storage.readMedia(c.ids[0]); return (r && r.file && r.file.size === x.size) ? true : null; }, 30000);
+      } finally {
+        pA.paused = false;
+        try { loopA.b.close(); } catch (e) {}
+        try { loopB.a.close(); } catch (e) {}
+        try { const ks = await FM.storage.collabKeys('collab:part:'); for (const k of ks) if (k.indexOf(ctl.sid) >= 0) await FM.storage.collabDel(k); } catch (e) {}
+      }
+    });
+  });
+
+  test('1186 the owner ends its sends to a guest whose link changed, and a third ask from the same guest is answered', { item: '1186', budgetMs: 180000 }, async function () {
+    const C = need921S4('#1186 serve');
+    await withCollab921([mediaLayer921('A', 'image'), mediaLayer921('B', 'image'), mediaLayer921('Cc', 'image'), mediaLayer921('D', 'image')], async function (c) {
+      const ctl = C.media._ctl(c.S);
+      if (!ctl) throw new Error('CONTROL: the host session has no media controller');
+      const files = [];
+      for (let i = 0; i < 4; i++) { const f = await q921noisePng(120 + i * 10, 1192 + i, 'z' + i + '1186.png'); await q921give(c.ids[i], f, 'image', 0); files.push(f); }
+      FM.history.commit();
+      const fids = files.map(function (f) { return C.media._fid(C.media._fp(f)); });
+      /* A link that went quiet: its bulk buffer stays over BUFFER_HIGH, so every send loop to it is braked for good. */
+      const ep1 = stubEp1186(C.media.LIMITS.BUFFER_HIGH + 1);
+      const mid = c.S.addPeer(ep1, { role: 'editor', name: 'Sam', color: '#44aaff' });
+      if (!mid) throw new Error('CONTROL: the guest was not admitted');
+      await until921('CONTROL: the owner to hold all four files', async function () { return fids.every(function (f) { return ctl.mine[f]; }) ? true : null; }, 30000);
+      const want = function (ep, fid) { ep.onmessage('ctl', { t: 'want', fid: fid, from: 0 }); };
+      const liveTo = function () { return Object.keys(ctl.out).filter(function (k) { const j = ctl.out[k]; return j && j.to === mid && !j.stop; }); };
+      const fails = [];
+      try {
+        want(ep1, fids[0]); want(ep1, fids[1]);
+        await until921('CONTROL: two braked sends to the guest', async function () { return (ep1.starts().length === 2 && liveTo().length === 2) ? true : null; }, 5000);
+        /* (e) Same link: an honest receiver holds at most IN_FLIGHT asks, so a third proves it gave one up. */
+        want(ep1, fids[2]);
+        try {
+          await until921('1186 deadline: a T_START for a third file on the same link', async function () { return ep1.starts().indexOf(fids[2]) >= 0 ? true : null; }, 2000);
+          /* F3: …by REPLACING the send that moved least recently, never by lifting the cap. */
+          const live = liveTo().length, cap = C.media.LIMITS.IN_FLIGHT;
+          if (live !== cap) fails.push('after the third ask ' + live + ' sends to the guest are live, not ' + cap + ': the cap was lifted instead of the stalest send being replaced, so a peer opens one more send loop for every ask it sends');
+        }
+        catch (e) { fails.push('a third ask from the same guest got no reply at all, so it waits for a T_START for the rest of the session (' + e.message + ')'); }
+        /* (a) + (d) The guest comes back on a new link with its old mid (member-back). */
+        const ep2 = stubEp1186(0);
+        c.S.dropPeer(mid);
+        const again = c.S.addPeer(ep2, { role: 'editor', mid: mid, name: 'Sam', color: '#44aaff' });
+        if (again !== mid) throw new Error('CONTROL: the guest came back as ' + again + ', not ' + mid + ', so this is not the member-back case');
+        want(ep2, fids[3]);
+        try { await until921('1186 deadline: a T_START for a fourth file on the new link', async function () { return ep2.starts().indexOf(fids[3]) >= 0 ? true : null; }, 2000); }
+        catch (e) { fails.push('after the guest came back, a want on its new link got no reply: the dead send loops on the old link still held its places (' + e.message + ')'); }
+        try { await until921('1186 deadline: every send on the old link to end', async function () { return Object.keys(ctl.out).length === 0 ? true : null; }, 2000); }
+        catch (e) { fails.push(Object.keys(ctl.out).length + ' send loop(s) still running for a link that is gone, 25 ms at a time for the rest of the session (' + e.message + ')'); }
+        /* CONTROL (green on e690af6f too): a want for the FIRST file again on the new link is answered through the
+           same-file supersede, so a T_START on the new link can be seen at all. */
+        want(ep2, fids[0]);
+        await until921('CONTROL: a T_START for the first file again on the new link', async function () { return ep2.starts().indexOf(fids[0]) >= 0 ? true : null; }, 2000);
+      } finally {
+        Object.keys(ctl.out).forEach(function (k) { if (ctl.out[k]) ctl.out[k].stop = true; });
+      }
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
+
+  test('1186 a transfer that stops moving on a link that stays up is asked for again, and a slow one that keeps moving is left alone', { item: '1186', budgetMs: 240000 }, async function () {
+    const C = need921S4('#1186 the no-progress backstop');
+    const M = C.media;
+    /* The RULE at a size a test can wait out: 2.5 s with no frame. The SIZE is LIMITS.STALL (MEASURE: pending — see
+       collab-media.js); when it is measured, write the worst working gap here as GAP and keep WIN above it. F7: a 2 s
+       margin between GAP and WIN, so one main-thread stall on a hot laptop mid-suite does not read as the backstop
+       cutting a live transfer (it was 800 ms). */
+    const WIN = 2500, GAP = 500;
+    const had = Object.getOwnPropertyDescriptor(M, '_stallOverride');
+    M._stallOverride = WIN;
+    try {
+      await withCollabGuest921([mediaLayer921('Slow', 'image', { duration: 2 }), mediaLayer921('Stuck', 'image', { duration: 2 })], async function (c) {
+        const slow = await q921noisePng(640, 1196, 'slow1186.png');   // (fold check K1) big enough to outlast several windows at GAP
+        const stuck = await q921noisePng(420, 1197, 'stuck1186.png');
+        const wantsOf = function (fid) { return c.peer.wants.filter(function (w) { return w.fid === fid; }); };
+        const landed = async function (id, size) { const r = await FM.storage.readMedia(id); return (r && r.file && r.file.size === size) ? r : null; };
+
+        /* NEGATIVE CONTROL (green on e690af6f, and must stay green): a healthy transfer whose every frame comes GAP ms
+           after the last — under the window — finishes with exactly one want. A window set too tight fails here. */
+        c.peer.gapMs = GAP;
+        const fs = c.peer.add(slow, 'image', [[c.ids[0], 0]]);
+        const tSlow = Date.now();
+        c.peer.announce('mf');
+        await until921('CONTROL: the slow file to land', function () { return landed(c.ids[0], slow.size); }, 90000);
+        c.peer.gapMs = 0;
+        const tookSlow = Date.now() - tSlow;
+        /* (fold check K1) the slow transfer must outlast two windows, or it never needed its frames to keep the clock alive and the
+           check below proves nothing (at 300 px it was about 5 frames, 2 s, inside one 2.5 s window) */
+        if (tookSlow < 2 * WIN) throw new Error('CONTROL: the slow transfer took only ' + tookSlow + ' ms, under two windows (' + (2 * WIN) + ' ms), so the negative control cannot fail' /* MEASURE: pending */);
+        if (wantsOf(fs).length !== 1) throw new Error('a healthy transfer whose frames came every ' + GAP + ' ms, under the ' + WIN + ' ms window, was asked for ' + wantsOf(fs).length + ' times: the backstop is cutting transfers that are still moving');
+
+        /* THE CASE: the sender stops mid-file and says nothing, and the link stays up. */
+        c.peer.cut = false;
+        c.peer.cutAt = c.peer.servedBytes + Math.floor(stuck.size * 0.4);
+        const ft = c.peer.add(stuck, 'image', [[c.ids[1], 0]]);
+        c.peer.announce('mf');
+        await until921('the transfer to stop mid-file', async function () { return c.peer.cut ? true : null; }, 60000);
+        c.peer.cutAt = 0;
+        await until921('1186 deadline: a second want once ' + WIN + ' ms pass with no frame', async function () { return wantsOf(ft).length >= 2 ? true : null; }, 12000);
+        await until921('1186 deadline: the stopped file to land after it was asked for again', function () { return landed(c.ids[1], stuck.size); }, 30000);
+      });
+    } finally {
+      if (had) Object.defineProperty(M, '_stallOverride', had); else delete M._stallOverride;
+    }
+  });
+
+  test('1186 a guest asks on a new link only once the owner welcomes it, so a late answer to an early ask cannot delete the kept parts or count a try', { item: '1186', budgetMs: 180000 }, async function () {
+    const C = need921S4('#1186 the welcome gate');
+    const M = C.media;
+    await withCollabGuest921([mediaLayer921('Late', 'image', { duration: 2 })], async function (c) {
+      const file = await q921noisePng(420, 1198, 'late1186.png');
+      const fp = M._fp(file);
+      const fid = c.peer.add(file, 'image', [[c.ids[0], 0]]);
+      const pre = M._partPrefix(c.G, fp);
+      const F = Math.floor(file.size * 0.4);
+      const wantsOf = function () { return c.peer.wants.filter(function (w) { return w.fid === fid; }); };
+      const landed = async function () { const r = await FM.storage.readMedia(c.ids[0]); return (r && r.file && r.file.size === file.size) ? r : null; };
+      const st = FM.storage, realKeys = st.collabKeys;
+      const hadKeys = Object.getOwnPropertyDescriptor(st, 'collabKeys');
+      const hadStall = Object.getOwnPropertyDescriptor(M, '_stallOverride');
+      const putStall = function () { if (hadStall) Object.defineProperty(M, '_stallOverride', hadStall); else delete M._stallOverride; };
+      let armed = false, heldAt = 0, release = null;
+      const gate = new Promise(function (r) { release = r; });
+      const fails = [];
+      try {
+        if (!pre) throw new Error('CONTROL: this room has no part prefix');
+        /* The parts a cut transfer kept: the first 40 percent of the clip, as part 0. */
+        await st.collabPut(pre + '0', { v: 1, sid: c.sid, fp: fp, n: 0, at: Date.now(), blob: file.slice(0, F) });
+        await until921('CONTROL: the first link to count as welcomed', async function () { return c.ctl._relinkEp === c.loop.b ? true : null; }, 5000);
+        /* The link drops, and the clip is announced while it is down, so it waits in the queue. */
+        const old = c.loop;
+        try { old.b.onmessage = null; old.b.onclose = null; old.b.close(); } catch (e) {}
+        try { old.a.close(); } catch (e) {}
+        M.onCtl(c.G, 'h', { t: 'mf', files: [JSON.parse(JSON.stringify(c.peer.files[fid].entry))], fonts: [] });
+        await until921('CONTROL: the clip to wait in the queue while the link is down', async function () { return (c.ctl.queue.indexOf(fid) >= 0 && !c.ctl.inb[fid]) ? true : null; }, 10000);
+        /* The new link, as collab-ui's reconnect makes one, with every want on it held unanswered for now. */
+        const loop2 = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'async' });
+        c.G.setLink(loop2.b);
+        c.loop = loop2;
+        c.peer.rehome(loop2.a);
+        c.peer.holdWants = true;
+        c.G.setOnline(true);
+        /* Two sweeps on the new link before the owner has welcomed it. On the branch head the clip is asked for here. */
+        const t0 = Date.now(), sweeps = 2 * M.LIMITS.SWEEP + 500;
+        await until921('a want on the new link before the welcome', async function () { return (wantsOf().length || Date.now() - t0 > sweeps) ? true : null; }, sweeps + 3000);
+        const early = wantsOf().length;
+        if (early) fails.push('the guest asked for the clip ' + early + ' time(s) on its new link before the owner had welcomed it, so the welcome asks again and the answer to this ask arrives as a stray');
+        /* The welcome, with the re-ask held while it counts the kept parts. */
+        st.collabKeys = function (p) {
+          const a = arguments;
+          if (armed && String(p).indexOf(pre) === 0) { armed = false; heldAt = Date.now(); return gate.then(function () { return realKeys.apply(st, a); }); }
+          return realKeys.apply(st, a);
+        };
+        armed = true;
+        loop2.a.send('ctl', { t: 'welcome', mid: c.G.mid, epoch: c.G.epoch, role: c.G.role });
+        await until921('1186 deadline: the ask after the welcome to start counting the kept parts', async function () { return heldAt ? true : null; }, 10000);
+        const ph = c.ctl.inb[fid];
+        if (!ph) throw new Error('CONTROL: the ask after the welcome has no transfer in place while it counts its parts');
+        /* THE LATE ANSWER: whatever was asked before the welcome is answered now, while the re-ask counts its parts. */
+        c.peer.holdWants = false;
+        const strays = c.peer.releaseHeld();
+        await settle921(400);
+        const tries = c.ctl.tries[fid] || 0;
+        if (tries) fails.push('a T_START answering the ask sent before the welcome (' + strays + ' late answer(s)) reached the re-ask while it counted its parts: the transfer was abandoned as a bad offset and a try counted (' + tries + ' of ' + M.LIMITS.TRIES + ', one more and the clip is never asked for again this session)');
+        const ks = await realKeys.call(st, pre);
+        if (!ks || ks.indexOf(pre + '0') < 0) fails.push('the parts kept from the cut transfer were deleted by a late answer, so the clip is downloaded again from the start');
+        /* N3: the re-ask's own part count, held here for four windows, is not a stall. */
+        M._stallOverride = 250;
+        const t1 = Date.now();
+        await until921('the held part count to outlast the window', async function () { return Date.now() - t1 > 1000 ? true : null; }, 5000);
+        if (c.ctl.inb[fid] !== ph) fails.push('the re-ask was ended as stalled while it was still counting its kept parts, before any want was sent: on a slow phone every restart counts again and the want never goes');
+        putStall();
+        release();
+        try { await until921('1186 deadline: the clip to land after the welcome', landed, 30000); }
+        catch (e) { fails.push('the clip did not land after the welcome (' + e.message + ')'); }
+        const w = wantsOf();
+        if (w.length !== 1) fails.push('the clip was asked for ' + w.length + ' times across one link change, not once');
+        else if (+w[0].from !== F) fails.push('the clip was asked for from byte ' + w[0].from + ', not from the ' + F + ' bytes kept on this device');
+      } finally {
+        if (release) release();
+        if (hadKeys) Object.defineProperty(st, 'collabKeys', hadKeys); else delete st.collabKeys;
+        putStall();
+        c.peer.holdWants = false;
+      }
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
+
+  test('1186 the owner keeps a braked send to a guest whose link is still up until the link grace runs out, so a phone unlocked on the same link gets its clip at once', { item: '1186', budgetMs: 180000 }, async function () {
+    const C = need921S4('#1186 the sender rule');
+    const M = C.media;
+    /* The receiver's window and the link grace, both at a test size; the sender's window is the larger of the two. */
+    const WIN = 300, GRACE = 4000, PAUSE = 1500;
+    if (!C.link || typeof C.link._grace !== 'function' || typeof C.link.grace !== 'function') throw new Error('CONTROL: collab-link.js has no grace seam, so the sender rule cannot be put at a test size');
+    const hadStall = Object.getOwnPropertyDescriptor(M, '_stallOverride');
+    M._stallOverride = WIN;
+    C.link._grace(GRACE);
+    try {
+      await withCollab921([mediaLayer921('A', 'image'), mediaLayer921('B', 'image')], async function (c) {
+        const ctl = M._ctl(c.S);
+        if (!ctl) throw new Error('CONTROL: the host session has no media controller');
+        const files = [];
+        for (let i = 0; i < 2; i++) { const f = await q921noisePng(140 + i * 10, 1200 + i, 's' + i + '1186.png'); await q921give(c.ids[i], f, 'image', 0); files.push(f); }
+        FM.history.commit();
+        const fids = files.map(function (f) { return M._fid(M._fp(f)); });
+        const ep = stubEp1186(M.LIMITS.BUFFER_HIGH + 1);
+        const mid = c.S.addPeer(ep, { role: 'editor', name: 'Pia', color: '#44aaff' });
+        if (!mid) throw new Error('CONTROL: the guest was not admitted');
+        await until921('CONTROL: the owner to hold both files', async function () { return fids.every(function (f) { return ctl.mine[f]; }) ? true : null; }, 30000);
+        const jobFor = function (fid) { const k = Object.keys(ctl.out).find(function (x) { const j = ctl.out[x]; return j && j.to === mid && j.fid === fid && !j.stop; }); return k ? ctl.out[k] : null; };
+        const dataN = function () { return ep.sent.filter(function (s) { if (s.ch !== 'bulk') return false; const f = M._unframe(s.msg); return !!f && f.type === 2; }).length; };
+        const fails = [];
+        try {
+          ep.onmessage('ctl', { t: 'want', fid: fids[0], from: 0 });
+          await until921('CONTROL: a braked send of the first file', async function () { return (ep.starts().indexOf(fids[0]) >= 0 && jobFor(fids[0])) ? true : null; }, 5000);
+          if (dataN()) throw new Error('CONTROL: ' + dataN() + ' payload frames went past a full bulk buffer, so this is not a braked send');
+          /* THE CASE: his phone is locked, and nothing is read for five receiver windows, all well inside the link grace. */
+          await settle921(PAUSE);
+          if (!jobFor(fids[0])) fails.push('the owner gave up its send ' + PAUSE + ' ms into a pause on a link that is still up (receiver window ' + WIN + ' ms, link grace ' + GRACE + ' ms): a phone unlocked on the same link then waits a whole receiver window more for its clip, plus a re-send');
+          /* …and he unlocks it: the buffer drains, and the bytes go at once. */
+          ep.buffered = 0;
+          try { await until921('1186 deadline: payload to flow once the paused guest reads again', async function () { return dataN() > 0 ? true : null; }, 2000); }
+          catch (e) { fails.push('the paused guest read again on the same link and no payload came (' + e.message + ')'); }
+          /* The rule itself still holds: a send that a guest on an open link never reads ends once the link grace has
+             passed, so a send loop is never held for good (on e690af6f it was). */
+          ep.buffered = M.LIMITS.BUFFER_HIGH + 1;
+          ep.onmessage('ctl', { t: 'want', fid: fids[1], from: 0 });
+          await until921('CONTROL: a braked send of the second file', async function () { return (ep.starts().indexOf(fids[1]) >= 0 && jobFor(fids[1])) ? true : null; }, 5000);
+          try { await until921('1186 deadline: the unread send to end after the link grace', async function () { return jobFor(fids[1]) ? null : true; }, GRACE + 4000); }
+          catch (e) { fails.push('a send nobody read for longer than the ' + GRACE + ' ms link grace, on a link that stayed up, is still running (' + e.message + ')'); }
+          if (c.S.peerIds().indexOf(mid) < 0) throw new Error('CONTROL: the guest is no longer a member, so its sends ended by M.forget and not by the sender rule');
+        } finally {
+          Object.keys(ctl.out).forEach(function (k) { if (ctl.out[k]) ctl.out[k].stop = true; });
+        }
+        if (fails.length) throw new Error(fails.join(' · '));
+      });
+    } finally {
+      C.link._grace(null);
+      if (hadStall) Object.defineProperty(M, '_stallOverride', hadStall); else delete M._stallOverride;
+    }
   });
 
   /* ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -99232,6 +99624,305 @@
     } finally {
       if (id) { hfDropTiles(id); for (let r = 0; r < 3; r++) { try { await q915aDel('prev:' + id + ':' + r); } catch (e) {} } }
       await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* ═══ 1188 (hunt MEDIUM): REPLACE MEDIA — UNDO COULD NOT BRING THE ORIGINAL BACK, AND NOTHING SAID SO ════════════════════════
+     History only swaps layer JSON, so an Undo of a Replace brings the picture back only from the copy the Replace kept
+     (storage.js stashPrevMedia). Three ways that copy was never made, or was made and then lost, while Undo put the layer's
+     settings back over the new file: (a) the clip had no copy in memory to keep (back from Home before its reload reached it),
+     (b) the keep was refused on a full store and its answer thrown away, (c) a second window's boot sweep deleted the kept slot.
+     Every await that could hang races its own named deadline, so a red run fails by name instead of holding the suite. */
+  function r1188Within(p, ms, what) {
+    let t = null;
+    const dl = new Promise(function (res, rej) { t = setTimeout(function () { rej(new Error('1188 deadline: ' + what + ' did not settle within ' + Math.round(ms / 1000) + ' s')); }, ms); });
+    return Promise.race([Promise.resolve(p), dl]).finally(function () { clearTimeout(t); });
+  }
+  function r1188Put(obj, key, d) { if (d) Object.defineProperty(obj, key, d); else delete obj[key]; }
+  function r1188Shows(id) { const m = FM.media.get(id); return (m && m.file) ? m.file : null; }
+  function r1188Name(f) { return f ? f.name + ' (' + f.size + ' bytes)' : 'nothing'; }
+  // A project with one photo, saved: the original is on disk at revision 0 and in memory.
+  async function r1188Project(made, name, tagA, tagB) {
+    const pid = await FM.projects.create({ name: name, width: 320, height: 240 });
+    made.push(pid);
+    const fA = await q915aPng(tagA, '#d62828'), fB = await q915aPng(tagB, '#2a9d8f');
+    FM.addMediaLayer(await FM.loadImageFile(fA));
+    const id = FM.scene.selectedId;
+    await sleep(700); await r1188Within(FM.storage.settled(), 15000, 'the first save of the original');
+    const d0 = await FM.storage.readMedia(id);
+    if (!d0 || !d0.file || d0.file.name !== fA.name) throw new Error('setup: the original photo never reached storage, so there is nothing for an Undo to bring back');
+    return { id: id, fA: fA, fB: fB };
+  }
+  async function r1188Cleanup(made, id, orig, wasOpen) {
+    /* A regression that asks in a test that does not stub FM.ask leaves the REAL question up, and its scrim and its window
+       keydown handler would eat the next tests' taps and keys: answer it (Keep it) first, as the 690 storage test does. */
+    try { const q = document.getElementById('fm-ask'); if (q && !q.classList.contains('hidden')) { const c = q.querySelector('.fm-ask-cancel'); if (c) c.click(); await sleep(150); } } catch (e) {}
+    for (const one of [].concat(id || [])) { hfDropTiles(one); for (let r = 0; r < 10; r++) { try { await q915aDel('prev:' + one + ':' + r); } catch (e) {} } }
+    await hfCleanup(made, orig, wasOpen);
+  }
+  // The storage toasts warnStore puts up (storage.js), out of everything the FM.toast stub saw.
+  function r1188StoreToasts(seen) { return seen.filter(function (m) { return /not enough storage|could not save/i.test(String(m)); }); }
+  /* warnStore's quota toast lands only after navigator.storage.estimate answers, so a check for NO toast waits past that.
+     The 400 ms after it is MEASURE: pending — the positive control in the test that uses this proves the wait is long enough. */
+  async function r1188ToastsSettle() {
+    if (navigator.storage && navigator.storage.estimate) await r1188Within(navigator.storage.estimate().catch(function () {}), 3000, 'the storage estimate a quota toast waits on');
+    await sleep(400);
+  }
+
+  test('1188 replacing a clip that has no copy in memory keeps its saved original, so Undo brings it back', { item: '1188', budgetMs: 75000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    let id = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const P = await r1188Project(made, '1188 no copy in memory', 'r1188aORIG', 'r1188aNEW');
+      id = P.id;
+      const nrecB = await FM.loadImageFile(P.fB);
+      /* Home lets a project's media go (storage.js releaseSceneMedia does exactly this per clip) and he is back before the
+         reload reached this layer: the clip is on disk and nothing of it is in memory. */
+      FM.media.remove(id);
+      if (FM.media.get(id)) throw new Error('setup: the clip is still in memory, so this is not the case where nothing could be kept');
+      const ok = await r1188Within(FM.swapInMedia(id, nrecB), 15000, 'the replace');
+      if (ok !== true) throw new Error('setup: the replace answered ' + ok + ' instead of landing');
+      await r1188Within(FM.storage.settled(), 15000, 'the save after the replace');
+      const shown = r1188Shows(id);
+      if (!shown || shown.name !== P.fB.name) throw new Error('setup: after the replace the clip shows ' + r1188Name(shown) + ', not the new photo');
+      FM.history.undo();
+      await r1188Within(FM.restoreReplacedMedia(), 15000, 'the Undo putting the original back');
+      const now = r1188Shows(id);
+      if (!now || now.name !== P.fA.name || now.size !== P.fA.size) {
+        throw new Error('he replaced a photo that had no copy in memory (just back from Home) and pressed Undo: the clip shows ' + r1188Name(now) +
+          ' instead of his original ' + r1188Name(P.fA) + ' — nothing kept the file on disk before the new one was saved over it');
+      }
+    } finally {
+      await r1188Cleanup(made, id, orig, wasOpen);
+    }
+  });
+
+  test('1188 when the original cannot be kept, Replace media asks first, and Keep it leaves the clip and its saved file as they were', { item: '1188', budgetMs: 150000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], asks = [], stashCalls = [], ids = [];
+    const dStash = Object.getOwnPropertyDescriptor(FM.storage, 'stashPrevMedia');
+    const dAsk = Object.getOwnPropertyDescriptor(FM, 'ask');
+    let id = null, answer = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const P = await r1188Project(made, '1188 keep refused', 'r1188bORIG', 'r1188bNEW');
+      id = P.id; ids.push(id);
+      const L = FM.layerById(FM.scene, id), rev0 = L.mediaRev || 0;
+      /* the store refuses the copy of the original (a nearly full phone: the big original does not fit), and the question is
+         answered here instead of on screen. Every keep is written down, for steps 3 and 4. */
+      Object.defineProperty(FM.storage, 'stashPrevMedia', { configurable: true, enumerable: true, writable: true, value: function (sid, rec, rev) { stashCalls.push({ id: sid, rev: rev, name: rec && rec.file ? rec.file.name : null }); return Promise.resolve(false); } });
+      const askStub = function (o) { asks.push(o || {}); return Promise.resolve(answer); };
+      askStub.isOpen = function () { return false; };
+      Object.defineProperty(FM, 'ask', { configurable: true, enumerable: true, writable: true, value: askStub });
+
+      /* 1. Keep it */
+      answer = null;
+      const nrecB = await FM.loadImageFile(P.fB);
+      const res = await r1188Within(FM.swapInMedia(id, nrecB), 15000, 'the replace with the keep refused');
+      await r1188Within(FM.storage.settled(), 15000, 'the save after the replace');
+      if (!asks.length) {
+        const d = await FM.storage.readMedia(id);
+        throw new Error('the original could not be kept and Replace media went ahead without a word: it answered ' + res + ', the clip shows ' + r1188Name(r1188Shows(id)) +
+          ' and the saved copy is ' + r1188Name(d && d.file) + ' — Undo can no longer bring his original back, and nothing told him');
+      }
+      if (asks.length !== 1) throw new Error('one Replace asked ' + asks.length + ' questions');
+      const q = asks[0];
+      if (!/keep the original/i.test(q.title || '')) throw new Error('the question is titled ' + String(q.title).replace(/"/g, "'") + ', which does not say the original cannot be kept');
+      if (L.name && String(q.message || '').indexOf(L.name) < 0) throw new Error('the question does not name the clip ' + L.name + ': ' + String(q.message).replace(/"/g, "'"));
+      if (q.ok !== 'Replace anyway' || q.cancel !== 'Keep it') throw new Error('the question offers ' + q.ok + ' / ' + q.cancel + ', not Replace anyway / Keep it');
+      if (res !== false) throw new Error('he answered Keep it and the replace answered ' + res + ' instead of false — its callers cannot tell nothing was replaced');
+      if ((FM.layerById(FM.scene, id).mediaRev || 0) !== rev0) throw new Error('after Keep it the layer moved from revision ' + rev0 + ' to ' + FM.layerById(FM.scene, id).mediaRev);
+      const shown = r1188Shows(id);
+      if (!shown || shown.name !== P.fA.name) throw new Error('after Keep it the clip shows ' + r1188Name(shown) + ' instead of his original');
+      const d1 = await FM.storage.readMedia(id);
+      if (!d1 || !d1.file || d1.file.name !== P.fA.name) throw new Error('after Keep it the saved copy is ' + r1188Name(d1 && d1.file) + ' — his original was written over anyway');
+      if (!nrecB._released) throw new Error('after Keep it the photo he picked was not let go (FM._releaseMediaRecord), so it stays decoded in memory for nothing');
+
+      /* 2. CONTROL: Replace anyway still replaces */
+      answer = true;
+      const nrecC = await FM.loadImageFile(P.fB);
+      const res2 = await r1188Within(FM.swapInMedia(id, nrecC), 15000, 'the replace answered Replace anyway');
+      await r1188Within(FM.storage.settled(), 15000, 'the save after Replace anyway');
+      if (asks.length !== 2) throw new Error('CONTROL: the second replace with the keep refused asked ' + (asks.length - 1) + ' questions instead of one');
+      if (res2 !== true) throw new Error('CONTROL: he answered Replace anyway and the replace answered ' + res2);
+      if ((FM.layerById(FM.scene, id).mediaRev || 0) !== rev0 + 1) throw new Error('CONTROL: after Replace anyway the layer is at revision ' + FM.layerById(FM.scene, id).mediaRev + ', not ' + (rev0 + 1));
+      const s2 = r1188Shows(id);
+      if (!s2 || s2.name !== P.fB.name) throw new Error('CONTROL: after Replace anyway the clip shows ' + r1188Name(s2) + ', not the photo he picked');
+
+      /* 3. NOTHING TO KEEP, SO NOTHING TO ASK. A layer with no file in memory and no record on disk (a template's empty slot, a
+         lost pointer) loses nothing to a replace. A wrong fix that asks whenever nothing was kept would ask on every one. */
+      answer = null;
+      const E = FM.makeLayer('image', { name: '1188 empty slot', x: 160, y: 120, start: 0, duration: 3 });
+      FM.scene.layers.push(E);
+      ids.push(E.id);
+      if (FM.media.get(E.id)) throw new Error('setup: the empty layer has media in memory, so this is not the case with nothing to keep');
+      const dE = await r1188Within(FM.storage.readMedia(E.id), 3000, 'reading the empty layer record');
+      if (dE) throw new Error('setup: the empty layer has a record on disk, so this is not the case with nothing to keep');
+      const nrecE = await FM.loadImageFile(P.fB);
+      const asks3 = asks.length, calls3 = stashCalls.length;
+      const res3 = await r1188Within(FM.swapInMedia(E.id, nrecE), 15000, 'the replace of a layer with nothing to keep');
+      await r1188Within(FM.storage.settled(), 15000, 'the save after replacing the empty layer');
+      if (asks.length !== asks3) throw new Error('a replace of a layer with no file in memory and no record on disk asked ' + (asks.length - asks3) + ' question(s): nothing could be lost, so he must not be asked');
+      if (stashCalls.length !== calls3) throw new Error('a replace of a layer with nothing stored tried to keep ' + stashCalls.slice(calls3).map(function (c) { return c.name; }).join(', ') + ' as its original');
+      if (res3 !== true) throw new Error('a replace of a layer with nothing to keep answered ' + res3 + ' instead of landing');
+      const s3 = r1188Shows(E.id);
+      if (!s3 || s3.name !== P.fB.name) throw new Error('a replace of a layer with nothing to keep left it showing ' + r1188Name(s3) + ', not the photo he picked');
+
+      /* 4. THE REV GUARD. The record on disk is at another revision than the one the layer names (an Undo put the layer back
+         and the save that files its own clip has not landed), with nothing in memory. That record is not the file this
+         revision showed, so it must not be kept under it: Undo would then bring back a clip this revision never had. */
+      const nrecD = await FM.loadImageFile(P.fA);
+      const d4 = await r1188Within(FM.storage.readMedia(id), 3000, 'reading the clip record before the revision step');
+      if (!d4 || !d4.file) throw new Error('setup: the clip has no record on disk, so there is no other revision to guard against');
+      const L4 = FM.layerById(FM.scene, id);
+      L4.mediaRev = (d4.rev || 0) + 2;
+      FM.media.remove(id);
+      if (FM.media.get(id)) throw new Error('setup: the clip is still in memory, so the record on disk is never read');
+      const asks4 = asks.length, calls4 = stashCalls.length;
+      const res4 = await r1188Within(FM.swapInMedia(id, nrecD), 15000, 'the replace with the record at another revision');
+      await r1188Within(FM.storage.settled(), 15000, 'the save after the revision step');
+      const wrong = stashCalls.slice(calls4).filter(function (c) { return c.id === id; });
+      if (wrong.length) throw new Error('the record on disk is at revision ' + (d4.rev || 0) + ' and the layer names ' + ((d4.rev || 0) + 2) + ', and it was kept under revision ' + wrong[0].rev + ' anyway (' + wrong[0].name + '): Undo would bring back a clip that revision never showed');
+      if (asks.length !== asks4) throw new Error('a record at another revision was taken for the original and its refused keep asked ' + (asks.length - asks4) + ' question(s)');
+      if (res4 !== true) throw new Error('the replace with the record at another revision answered ' + res4 + ' instead of landing');
+    } finally {
+      r1188Put(FM.storage, 'stashPrevMedia', dStash);
+      r1188Put(FM, 'ask', dAsk);
+      await r1188Cleanup(made, ids, orig, wasOpen);
+    }
+  });
+
+  test('1188 Undo still brings the original back after a second window boot sweep deleted the copy Replace media kept', { item: '1188', budgetMs: 120000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    let id = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const P = await r1188Project(made, '1188 second window', 'r1188cORIG', 'r1188cNEW');
+      id = P.id;
+      const ok = await r1188Within(FM.swapInMedia(id, await FM.loadImageFile(P.fB)), 15000, 'the replace');
+      if (ok !== true) throw new Error('setup: the replace answered ' + ok + ' instead of landing');
+      await r1188Within(FM.storage.settled(), 15000, 'the save after the replace');
+      const slot = 'prev:' + id + ':0';
+      const kept0 = await FM.storage.listMediaKeys('prev:' + id + ':');
+      if (kept0.indexOf(slot) < 0) throw new Error('setup: the replace kept no copy of the original (' + (kept0.join(', ') || 'no slots') + '), so there is nothing for a sweep to take');
+      /* A second FreeMotion window starts (a relaunch of the installed app on the PC opens one): its boot sweep is
+         FM.projects.pruneOrphans, the one every launch runs. It stands down while a media write is in flight, so none may be. */
+      const t0 = Date.now();
+      while (FM._mediaBusy && Date.now() - t0 < 10000) await sleep(50);
+      if (FM._mediaBusy) throw new Error('setup: a media write stayed in flight for 10 s (FM._mediaBusy ' + FM._mediaBusy + '), so the sweep would stand down and this would pass for the wrong reason');
+      await r1188Within(FM.projects.pruneOrphans(), 30000, 'the boot sweep');
+      const kept1 = await FM.storage.listMediaKeys('prev:' + id + ':');
+      if (kept1.length) throw new Error('setup: the boot sweep left ' + kept1.join(', ') + ' in place, so it did not run and this measures nothing');
+      FM.history.undo();
+      await r1188Within(FM.restoreReplacedMedia(), 15000, 'the Undo putting the original back');
+      const now = r1188Shows(id);
+      if (!now || now.name !== P.fA.name || now.size !== P.fA.size) {
+        throw new Error('a second window started and its boot sweep deleted the copy Replace media kept; Undo then left the clip on ' + r1188Name(now) +
+          ' instead of his original ' + r1188Name(P.fA) + ', although this window still held that file');
+      }
+      const kept2 = await FM.storage.listMediaKeys('prev:' + id + ':');
+      if (kept2.indexOf(slot) < 0) throw new Error('the original came back from memory but its slot was not written again (' + (kept2.join(', ') || 'no slots') + '), so after this session it is gone for good');
+    } finally {
+      await r1188Cleanup(made, id, orig, wasOpen);
+    }
+  });
+
+  test('1188 CONTROL with the original in memory and its kept copy left alone, Undo of a replace brings it back', { item: '1188', budgetMs: 75000 }, async function () {
+    /* Green before the fix: the queue 829 case. It proves the three above can tell a kept original from a lost one — with the
+       keep in swapInMedia removed, this goes red. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    let id = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const P = await r1188Project(made, '1188 control', 'r1188dORIG', 'r1188dNEW');
+      id = P.id;
+      const ok = await r1188Within(FM.swapInMedia(id, await FM.loadImageFile(P.fB)), 15000, 'the replace');
+      if (ok !== true) throw new Error('CONTROL: the replace answered ' + ok + ' instead of landing');
+      await r1188Within(FM.storage.settled(), 15000, 'the save after the replace');
+      const shown = r1188Shows(id);
+      if (!shown || shown.name !== P.fB.name) throw new Error('CONTROL: after the replace the clip shows ' + r1188Name(shown) + ', not the new photo');
+      FM.history.undo();
+      await r1188Within(FM.restoreReplacedMedia(), 15000, 'the Undo putting the original back');
+      const now = r1188Shows(id);
+      if (!now || now.name !== P.fA.name || now.size !== P.fA.size) throw new Error('CONTROL: an ordinary Undo of a replace left the clip on ' + r1188Name(now) + ' instead of his original ' + r1188Name(P.fA));
+    } finally {
+      await r1188Cleanup(made, id, orig, wasOpen);
+    }
+  });
+
+  test('1188 a keep refused on a full store is said once by the question, with no storage toast behind it, and a refused write-back on Undo is quiet', { item: '1188', budgetMs: 75000 }, async function () {
+    /* The REAL keep (storage.js stashPrevMedia) is refused here, by IndexedDB itself, for this clip's kept slots only. The
+       question already says what that means; warnStore's 'Not enough storage to save that media' sat dimmed behind it and
+       was still up after Keep it, where nothing is being saved. Undo's write-back of a kept copy (1188 c) is the same. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], asks = [], toasts = [];
+    const dAsk = Object.getOwnPropertyDescriptor(FM, 'ask');
+    const dToast = Object.getOwnPropertyDescriptor(FM, 'toast');
+    const dPut = Object.getOwnPropertyDescriptor(IDBObjectStore.prototype, 'put');
+    let id = null;
+    const refuse = function (lid) {
+      const real = dPut.value;
+      Object.defineProperty(IDBObjectStore.prototype, 'put', Object.assign({}, dPut, { value: function (val, key) {
+        if (typeof key === 'string' && key.indexOf('prev:' + lid + ':') === 0) throw new DOMException('refused by the 1188 test', 'QuotaExceededError');
+        return real.apply(this, arguments);
+      } }));
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const P = await r1188Project(made, '1188 refused quietly', 'r1188eORIG', 'r1188eNEW');
+      id = P.id;
+      const askStub = function (o) { asks.push(o || {}); return Promise.resolve(null); };
+      askStub.isOpen = function () { return false; };
+      Object.defineProperty(FM, 'ask', { configurable: true, enumerable: true, writable: true, value: askStub });
+      Object.defineProperty(FM, 'toast', { configurable: true, enumerable: true, writable: true, value: function (m) { toasts.push(String(m)); } });
+      refuse(id);
+
+      /* 1. POSITIVE CONTROL: a keep nobody reports (no quiet) on the same refusal DOES put the storage toast up within the wait
+         below, so the two checks for no toast can see one */
+      const c1 = await r1188Within(FM.storage.stashPrevMedia(id, { file: P.fA, kind: 'image' }, 9), 5000, 'the control keep');
+      await r1188ToastsSettle();
+      if (c1 !== false) throw new Error('CONTROL: the refused keep answered ' + c1 + ', so the store did not refuse it and nothing below is measured');
+      if (!r1188StoreToasts(toasts).length) throw new Error('CONTROL: a refused keep nobody reports put up no storage toast within the wait (' + (toasts.join(' | ') || 'no toasts') + '), so the checks for no toast below prove nothing');
+
+      /* 2. Replace media: the keep is refused, he is asked, he answers Keep it, and no storage toast is up */
+      toasts.length = 0;
+      const nrecB = await FM.loadImageFile(P.fB);
+      const res = await r1188Within(FM.swapInMedia(id, nrecB), 10000, 'the replace with the keep refused by the store');
+      await r1188ToastsSettle();
+      if (asks.length !== 1) throw new Error('the store refused the copy of his original and Replace media asked ' + asks.length + ' question(s) instead of one — the refusal never reached the question');
+      if (res !== false) throw new Error('he answered Keep it and the replace answered ' + res + ' instead of false');
+      const t2 = r1188StoreToasts(toasts);
+      if (t2.length) throw new Error('the question already says the original cannot be kept, and the storage toast went up as well: ' + t2.join(' | ') + ' — dimmed behind the question, and still up after Keep it, where nothing is being saved');
+
+      /* 3. Undo's write-back (1188 c): a copy kept in this session whose slot a second window swept away is answered from
+         memory, and writing the slot back is refused — the Undo worked, so no storage toast */
+      r1188Put(IDBObjectStore.prototype, 'put', dPut);
+      const k3 = await r1188Within(FM.storage.stashPrevMedia(id, { file: P.fA, kind: 'image' }, 5), 5000, 'keeping a copy at revision 5');
+      if (k3 !== true) throw new Error('setup: with room, the keep at revision 5 answered ' + k3);
+      await r1188Within(q915aDel('prev:' + id + ':5'), 5000, 'the sweep of the slot at revision 5');
+      const left = await r1188Within(FM.storage.listMediaKeys('prev:' + id + ':'), 5000, 'listing the kept slots');
+      if (left.indexOf('prev:' + id + ':5') >= 0) throw new Error('setup: the slot at revision 5 is still there, so the copy is not answered from memory');
+      refuse(id);
+      toasts.length = 0;
+      const back = await r1188Within(FM.storage.takePrevMedia(id, 5), 5000, 'reading the kept copy at revision 5');
+      await r1188ToastsSettle();
+      if (!back || !back.file || back.file.name !== P.fA.name) throw new Error('setup: the copy this session kept at revision 5 was answered as ' + r1188Name(back && back.file) + ', so the write-back never ran');
+      const t3 = r1188StoreToasts(toasts);
+      if (t3.length) throw new Error('an Undo got his original back from memory and the refused write-back of its slot put up ' + t3.join(' | ') + ' — about an Undo that worked');
+    } finally {
+      r1188Put(IDBObjectStore.prototype, 'put', dPut);
+      r1188Put(FM, 'toast', dToast);
+      r1188Put(FM, 'ask', dAsk);
+      await r1188Cleanup(made, id, orig, wasOpen);
     }
   });
 

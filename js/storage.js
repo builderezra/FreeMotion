@@ -291,10 +291,14 @@ window.FM = window.FM || {};
   // origin quota was rejected by the browser, reported as saved, and silently missing after a reload.
   // On mobile, where the quota is far smaller and Safari rejects rather than prompting, that is most of
   // what "I cannot add long videos, it won't work" looks like from the outside.
-  function idbPut(db, key, val) {
+  /* 1188: `quiet` is for a write whose CALLER says what a refusal means (Replace media's question, Undo's write-back of a kept
+     copy): warnStore's 'Not enough storage to save that media' would sit dimmed behind that question, and still be up after he
+     answered Keep it, where nothing is being saved and it reads as untrue. A quiet write that lands still counts as one. */
+  function idbPut(db, key, val, quiet) {
     if (isLibKey(key) || isRef(val)) return Promise.resolve(false);   // queue 915: the generic writer never writes a shared copy or a pointer — only idbPutSharedOnce / idbPutPointer do (see above)
     _verified.delete(key);   // #860 hunt #8: written, so not yet read back: the next save checks it once (see _verified)
-    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => { if (!quietKey(key)) storeWrote(); res(true); }; tx.onerror = () => { warnStore(tx.error, key); res(false); }; tx.onabort = () => { warnStore(tx.error, key); res(false); }; } catch (e) { warnStore(e, key); res(false); } }); }
+    const warn = e => { if (!quiet) warnStore(e, key); };
+    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => { if (!quietKey(key)) storeWrote(); res(true); }; tx.onerror = () => { warn(tx.error); res(false); }; tx.onabort = () => { warn(tx.error); res(false); }; } catch (e) { warn(e); res(false); } }); }
 
   // Say WHY, with the real numbers, instead of failing mutely. Separate latch from warnQuota so a
   // localStorage warning earlier in the session cannot suppress this one.
@@ -688,7 +692,10 @@ window.FM = window.FM || {};
   const _saving = new Set();
   /* queue 690: which revisions of which layer have a kept file (see stashPrevMedia), and WHICH File object each
      one holds. Session-only on purpose: a kept file is only reachable through undo, and undo does not outlive
-     the session — so after a reload nothing is looked up, even while the boot sweep has not yet run. */
+     the session — so after a reload nothing is looked up, even while the boot sweep has not yet run.
+     1188 (c): each revision maps to { file, kind }, so takePrevMedia can answer from here when another window's boot
+     sweep has deleted the slot — the kind with it, because File.type cannot tell a song from a photo and
+     restoreReplacedMedia opens a kept file by its kind. */
   const _prevFiles = new Map();
   function prevKey(id, rev) { return 'prev:' + id + ':' + (rev || 0); }
   FM.storage = {
@@ -708,16 +715,17 @@ window.FM = window.FM || {};
        both directions. The growth is one copy per revision a replace or an undo/redo actually puts away —
        a file already kept at its revision is not written again — and the boot sweep clears every one of
        them, as it cleared the single slot (undo history does not outlive the session, so neither need they). */
-    async stashPrevMedia(id, rec, rev) {
+    /* `o.quiet` (1188): the caller reports a refusal itself (Replace media asks him), so warnStore stays out of it. */
+    async stashPrevMedia(id, rec, rev, o) {
       if (!id || !rec || !rec.file) return false;
       rev = rev || 0;
       const kept = _prevFiles.get(id);
-      if (kept && kept.get(rev) === rec.file) return true;   // this exact file is already kept at this revision
+      if (kept && kept.get(rev) && kept.get(rev).file === rec.file) return true;   // this exact file is already kept at this revision
       try {
         const db = await openDB();
-        const ok = await idbPut(db, prevKey(id, rev), { file: rec.file, kind: rec.kind, rev: rev, at: Date.now() });
+        const ok = await idbPut(db, prevKey(id, rev), { file: rec.file, kind: rec.kind, rev: rev, at: Date.now() }, !!(o && o.quiet));
         db.close();
-        if (ok) { if (!kept) _prevFiles.set(id, new Map()); _prevFiles.get(id).set(rev, rec.file); }
+        if (ok) { if (!kept) _prevFiles.set(id, new Map()); _prevFiles.get(id).set(rev, { file: rec.file, kind: rec.kind }); }
         return ok;
       } catch (e) { return false; }
     },
@@ -728,8 +736,20 @@ window.FM = window.FM || {};
       try {
         const db = await openDB();
         let got = null;
-        if (rev != null) got = await idbGet(db, prevKey(id, rev));
-        else {
+        if (rev != null) {
+          got = await idbGet(db, prevKey(id, rev));
+          /* 1188 (c): THE SLOT CAN BE GONE WHILE THIS SESSION STILL HOLDS THE FILE. A second FreeMotion window that starts or
+             reloads runs the boot sweep, and a `prev:` slot belongs to no project doc, so it is deleted — and the next Undo of
+             the replace found nothing and left his new pick on screen, with nothing said. This session kept the File object it
+             wrote there, so it answers from that and writes the slot back (best effort: a full store just refuses it, and
+             QUIETLY — the Undo it serves worked, so a 'Not enough storage to save that media' in the middle of it says
+             something untrue). */
+          const mem = (got && got.file) ? null : (_prevFiles.get(id) || new Map()).get(rev || 0);
+          if (mem && mem.file) {
+            got = { file: mem.file, kind: mem.kind, rev: rev || 0, at: Date.now() };
+            await idbPut(db, prevKey(id, rev), got, true);
+          }
+        } else {
           const pre = 'prev:' + id + ':';
           for (const k of await idbKeys(db)) {
             if (typeof k !== 'string' || k.indexOf(pre) !== 0) continue;
@@ -740,7 +760,7 @@ window.FM = window.FM || {};
         db.close();
         /* the file read back IS what that slot holds, so a later stash of this same object at this revision
            (the clip it restores, put away again by the next undo or redo) is a no-op rather than a second copy */
-        if (got && got.file) { if (!_prevFiles.has(id)) _prevFiles.set(id, new Map()); _prevFiles.get(id).set(got.rev || 0, got.file); }
+        if (got && got.file) { if (!_prevFiles.has(id)) _prevFiles.set(id, new Map()); _prevFiles.get(id).set(got.rev || 0, { file: got.file, kind: got.kind }); }
         return got || null;
       } catch (e) { return null; }
     },
