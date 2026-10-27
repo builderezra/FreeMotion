@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Oct at v18.08
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Oct at v18.09
 >
-> **State:** v18.08 — **footage your phone cannot open is kept when you restore or import** (#1189), **a Media library tile is no longer deleted when storage cannot be read** (#1191), **Undo of Replace media then a quick app switch keeps the original** (#1192), **a voice take whose add fails comes back to try again** (#1193), and **a collab join whose link drops says Offline instead of Live** (#1194). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+> **State:** v18.09 — **switching projects no longer loses a clip that never saved, and never hangs asking about it** (#1187), **a project that cannot be opened is kept, and its Delete says so with Save a copy first** (#1004, #1005), **a second tab no longer writes an old file over a newer replaced one** (#1000), and **a very big project file asks before it is read** (#1007). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+>
+> v18.08 — **footage your phone cannot open is kept when you restore or import** (#1189), **a Media library tile is no longer deleted when storage cannot be read** (#1191), **Undo of Replace media then a quick app switch keeps the original** (#1192), **a voice take whose add fails comes back to try again** (#1193), and **a collab join whose link drops says Offline instead of Live** (#1194). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
 > v18.07 — **a collab clip cut off when the link drops is fetched again** (#1186), and **Undo of Replace media keeps the original** (#1188). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
@@ -34340,6 +34342,7 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ (answered 11 Oct, ~10:05 AWST, #1130) BUILT OUT UNTIL HE picks A or B for the band.
       📋 **30 Sep — the logging chat's #993 note:** branch `fix-970` (bebd4560) is based on v17.11 — rebase it on v17.13 before merging.
       ✅ **UNBLOCKED 11 Oct, ~10:05 AWST — decided by the PM under his standing rule (#1130: "Go through each one and see where it's an obvious yes"); he can overrule:** option A (built).
+      📍 **27 Oct: ported** onto v18.07 as hunt/fix970b (a build, a review, a refuter, a fold), for a later Full release. Decision input (option A stands under rule 16; he can overrule): the band is on from 1227 to about 1391 px whatever is selected, so on a 1366×768 laptop or a 1920 screen at 150 % the video is about 40 px (about 12 %) shorter; the no-height alternative is folding Group and Masking group into ⋯ above 1226 px.
 
 - [x] **971 — Collab: an edit made while a friend's phone is paused can take up to ~a minute to reach them after they come back (hunt LOW #971)** (27 Sep — found by #967's two-Chrome re-check; NOT his words)
       Measured (2 of 9 runs, two Chromes, the guest's Chrome SIGSTOPped 25 s while the owner added a layer 3 s in): the guest came back online, then went Offline again and stayed so until ~60 s, while both sides read 'connected' and the owner's send buffer grew (ctl 205→1584, pres 168→9772) — then everything flushed at once and caught up, no data lost. Looks like the SCTP data channel's retransmit backoff after a long outage, not app logic. With no edit during the pause it never happened (3/3).
@@ -35260,6 +35263,7 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.1
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct (via INBOX — the PM's check of the helper's batch 3; NOT his words):** **#1000 (HIGH, stale tab overwrites newer media) / #1001 / #996 / #1003 (ChatGPT's lane):** when reviewing or building: after writeScene, skip the blob loop when `_writeFail === 'stale'` and move notePending to just after writeScene, skipping it on stale (js/storage.js:743-747, :768-800); `_stale` is only set inside writeScene, so "compute _stale first" does not work. #1001: delete a non-plain-object `fillGradient` in sanitizeUnsafeValues (:1537-1543; strict mode throws on a string); a failed import reopens the previous project with `{confirmed:true}`, or null when none was open (as restoreBackup does at :1958). #996: remove the test layer BY ID — after redo `indexOf(L)` is -1 and `splice(-1,1)` deletes a real layer. #1003: tell a read error from an absence in duplicateFrom.
+      📍 **v18.09 (28 Oct): built and shipped** (codex/h1000: Codex, then a Claude review, a refuter, a fold and a check). A stale save writes no document and no file over a record; saveUnseenMedia still stores a clip whose key holds nothing and that this session never stored (an import made only in that tab), as a pointer when its shared copy is there. Not built: N1 (the pending note now lands after the document).
 
 - [ ] **1001 — An import that throws leaves an empty "Imported project" behind (hunt LOW #1001)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35284,24 +35288,28 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.5
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct (via INBOX — the PM's check of the helper's batch 3; NOT his words):** **#1004 / #1005 (HIGH, corrupt doc overwritten with a blank; boot sweep deletes clips of an unreadable project) / #1006 / #1007:** refuse in open() BEFORE any teardown (right after the vanished-card check, storage.js:2494-2497); after :2524-2535 a `false` no longer means "nothing was torn down", which is what home.js:2311/2457 and storage.js:3228/3468 assume. Keep the unbind in load() for the boot path (app.js:6847-6861). Keep the corrupt copy under `fm.unreadable.<id>` and delete it in projects.remove: `fm.proj.<id>.unreadable` (VERIFIED.md §1.5) is read as a project by five scanners (storage.js:2937, :2876; medialib.js:393; collab-media.js:145, :245) and would stall the boot sweep forever. #1005: fail closed (no deletions in a boot where any fm.proj.* doc is non-empty and has no .project). #1007: also ask before reading in Settings → Restore from a backup (js/settings.js:734), one shared helper.
+      📍 **v18.09 (28 Oct): built and shipped** (codex/h1004: Codex, then a Claude review, a refuter, two folds, two checks). An unreadable project is refused at open and at the boot load, its stored copy kept (fm.unreadable.<id> when it differs), the toast says what was kept; a refused landing closes to Home; template and element drafts take the same path (switchAwayTo).
 
 - [ ] **1005 — The boot cleanup deletes media that belongs to an unreadable project (hunt LOW #1005)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.6
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct:** see the note on #1004, which covers this entry too.
+      📍 **v18.09 (28 Oct): built and shipped** (codex/h1004). The boot sweep keeps every unreadable doc's media and gives an unindexed one a card; its Delete asks "This project can’t be opened. Deleting it removes it for good." with Save a copy (the raw stored text, as <name> (unreadable copy).txt) and Delete. Not tested: the copy write's quiet failure (module state the suite cannot reset). Checked at 380 by its slice only.
 
 - [ ] **1006 — Opening a pre-v2.25 install with a full disk deletes the only scene (hunt LOW #1006)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.7
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct:** see the note on #1004, which covers this entry too.
+      ⏸ **HELD (28 Oct, v18.09 ships no fix):** Codex's fix was reviewed and refuted: it still loses the legacy clips at the same boot (the sweep keeps only what fm.proj.* docs name, the retry never runs again once any project exists, and on the per-origin cap the copy can never fit beside the original). VERIFIED §1.7: no real device has fm.scene (nothing has written it since v2.25). A sound fix is a move with rollback, a separate design.
 
 - [ ] **1007 — Opening a huge project file has no size warning (hunt LOW #1007)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.8
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct:** see the note on #1004, which covers this entry too.
+      📍 **v18.09 (28 Oct): built and shipped** (codex/h1006: Codex, then a Claude review, a refuter, a fold and a check). readImportFile asks, with the size, before reading a file over LARGE_READ_BYTES (96 MiB, labelled MB like every size in the app), a phone warning level and never a cap; Cancel returns FM.storage.IMPORT_CANCELLED and reads nothing; a file whose JSON is just null still reaches the import and is refused there.
 
 - [ ] **1008 — Group rendering rescans the whole scene once per group, every frame (hunt LOW #1008)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -36334,8 +36342,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **REMAINS OPEN (builder, 16 Oct):** only the ❓ above — the Mac's tests/_holdprobe.py answer, which decides the kept phone-cancels-tap patch. The shipping half is done (v17.25), and every laptop ship since runs the finger tests one browser each.
       ✅ **ANSWERED (22 Oct, the PM, under his 11 Oct and 21 Oct rules — a test-harness call, not his):** the Mac probe is moot (the Mac has not shipped since 7 Oct; the laptop runs the finger tests on every ship), and the kept phone-cancels-tap patch is ADOPTED: no click after a hold of 500 ms or more or a move past 10 px, as a real iPhone or Android. PROVEN 22 Oct 12:51: every finger test, one browser each, 99 of 99 at 1280 and 98 of 98 at 380. 📍 **v17.95: SHIPPED** as its own INSTRUMENT CHANGE release (the pre-ship review: the gate refuses it beside app changes). Ticked.
 
-- [ ] **1098 — Test like the phone, but also see the PC's real speed, and find Windows issues (his answer, 7 Oct, while the laptop shipped v17.24)** (7 Oct, ~09:55 AWST — his words, in the laptop builder's chat)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1098 — Test like the phone, but also see the PC's real speed, and find Windows issues (his answer, 7 Oct, while the laptop shipped v17.24)** (7 Oct, ~09:55 AWST — his words, in the laptop builder's chat)
 
       **Context:** the 921 S8 speed test (500 layers at a 4× CPU throttle) went red on the laptop only because its CPU is
       slower than the Mac's — 4× of the laptop is a slower "phone" than 4× of the Mac. Asked how to handle it (options:
@@ -36359,11 +36366,12 @@ re-opened #480, which I had marked done and had not fixed.
          `PC speed · <test> · <metric>: phone x ms · PC y ms (×ratio)`. Only 921 S8 runs under the throttle today; measured
          17 Oct: commit median phone 13.5 ms · PC 5.9 ms (×2.3) at 1280, 12.9 · 5.9 (×2.2) at 380; hot tick 2.6 · 1.1 ms.
          Reported, never a pass/fail rule; tools/test-perf-report.sh proves the reader cannot silently print nothing.
-      3. [ ] *"and also find issues with windows"* — run the app (and where possible the suite) in Windows Chrome/Edge on
+      3. [x] ✅ v17.98 — *"and also find issues with windows"* — run the app (and where possible the suite) in Windows Chrome/Edge on
          this laptop, not only in Linux Chrome under WSL. He has enabled Claude in Chrome here, which can drive his real
          Windows Chrome. Related: #1081 (PC export Save may open the Windows Share window).
       📍 **v17.96 (23 Oct): clause 3's tool landed (tools only)** — tests/_win_suite.py runs the suite or a slice in Windows Chrome on the laptop, after the same tests in this machine's Linux Chrome (--linux-control), and files each red as WINDOWS ONLY, red on both, or not run; 20 new tools/test-port.sh checks prove it against a stub. The first real run (23 Oct, `--only '482 6.7'` at 1280) posted a verdict on both sides: Linux 2 of 2, Windows 1 of 2 with one WINDOWS ONLY red, filed as #1181. Still owed before the tick: the whole suite through it (two full passes, never beside a ship) and its WINDOWS ONLY list filed as hunt items, or written down as none found.
       📍 **v17.98 (23 Oct): clause 3's whole run happened** — the whole suite ran through tests/_win_suite.py --linux-control on the v17.98 tree (23 Oct, 18:50 to 20:36). Windows Chrome 156 at 1280 px passed 3453; 29 were red only there, filed by cause as #1182 (the scrollbars take width on Windows, 2 tests), #1183 (pictures drawn differently, 24 tests, including a sign that canvas filters may do nothing in that Chrome) and #1184 (tests that cannot see their fault there, 3); 1 was red on both (the version label, because v17.98's log line was not written yet when it ran); 5 need the test driver; 171 cannot run there. So clause 3 is done: the tool exists, it ran the whole suite, and its WINDOWS ONLY list is filed. The tick waits behind the queue order.
+      ✅ **v18.09 (28 Oct): ticked** — clause 1 v17.24, clause 2 v17.60, clause 3 v17.96 (the tool) and v17.98 (the whole run, its WINDOWS ONLY list filed as #1182, #1183, #1184).
 
 - [ ] **1099 — Opening a file can freeze the app: caps on layers, effects, keyframes, path points and fonts, and shape checks in the sanitiser (hunt MEDIUM #1099)** (7 Oct ~04:05 AWST — via INBOX, the PM's note on the cloud helper's hunt/import-robustness; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -37026,6 +37034,7 @@ re-opened #480, which I had marked done and had not fixed.
       - The App settings end glyph is a `span` inside the one `<button id=cv-app-bar>` (no nested button).
       - To check while building: the Editor block open at 1280×720 sits 4 px above the screen (is today the same?), and the PC closed-bar titles look slightly dimmer than "App settings" (same computed colour; cause unknown).
       📍 **Moved here from #1141 (20 Oct hand-off audit):** hunt/cog-1132 a0a0985c, ported as wip/c41-cog e3703003 + 48d4e115, never landed.
+      📍 **27 Oct: ported and folded** onto v18.07 as hunt/cog1132b (a build, a review, a refuter, two folds, two checks; READY TO MEASURE, nothing run in a browser yet). Route: the prototype lock run, then release L (the lock only, LOOSENS THE LOCK with his words), then release C. 📝 For his next sheet (not blocking; built as is meanwhile, rule 16): on a short phone the open Canvas card's header scrolls away with its content (only Cancel/Apply stays) — keep it, or pin it?
 
 - [ ] **1133 — "the builder looks like its slacking again" (hunt HIGH #21: tick.sh hides the queue during a ship, so the loop idles)** (11 Oct, ~11:35 AWST, via INBOX — HIS WORDS, filed by the logger)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -37043,6 +37052,7 @@ re-opened #480, which I had marked done and had not fixed.
       3. [ ] A self-test for tick.sh (stub lock + temp worktree with an old mtime → the IDLE line; a fresh mtime → no IDLE line), run by ship.sh when tick.sh changes.
       4. [ ] The PM relayed this to the builder at 11:36, along with the build list: the tray fix into p24, Simple after 2.6, then his visible asks (#920, the glow burst, #1082) in next.sh order.
       🔨 **v17.40 (13 Oct):** clauses 1–2 shipped (611e6b47): tick.sh names the top item and the worktrees during a ship, and ends on IDLE after 15 min with no worktree edit.
+      📍 **v18.09 (28 Oct): clause 3 shipped (tools only)** (codex/idle1133, checked and folded): tools/_shipidle.sh reads every worktree git knows for this repo, .claude/worktrees and each child of FM_WORKTREE_ROOTS (default ~/fm-helper-wt and ~/fm-codex-wt), statting only the files work happens in plus each worktree's reflog (1.2 s for ~300 worktrees); on 27 Oct the old reader said 5922 min idle while the builder was committing. tools/test-shipidle.sh (8 checks, one a CONTROL against v18.07's reader), run by ship.sh when tick.sh, _shipidle.sh or its test changes. The tick waits behind #1122 and #1132.
 
 - [ ] **1134 — Export has no audio (#215/#604/#677): the cloud helper's AX1 findings + a guard queued (hunt MEDIUM #22)** (11 Oct, ~12:02 AWST, via INBOX — HIS WORDS, filed by the logger)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
@@ -38181,6 +38191,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **26 Oct ~01:10: building now** in hunt/dl52 (one lane, the PM's pace), items 5 and 2 together, then a review and a refuter.
       📍 **26 Oct: built, folded, all 4 mutations CAUGHT — and PARKED, not shipped.** Its slices hung in suite order: 921 S2/S3 project-switch tests each sat at their 180 s budget (one alone passes on both trees), most likely an earlier test leaving a clip whose file can never be stored, so the new question waits on an answer no test gives. Parked as v107-assembled.patch (#1190 rides with it). Before shipping: bisect the leak with ?after/upto slices, and check the real-user side the PM raised: a file that can NEVER be stored (storage permanently full) must not make every project switch ask the clip question forever.
       📍 **27 Oct, carried from #1192's review (MEDIUM):** a switch while the Undo's restore is still fetching, or while its save is still writing, and on relaunch hydrate, reportPending and pruneOrphans' missing prev: exemption can delete his original. Check it against this entry's unlandedFiles() wait when it lands.
+      📍 **v18.09 (28 Oct): built and shipped** (hunt/dl52d: a build, a review, a refuter, two folds, two checks; titles renamed from hunt dl2). unlandedFiles() names the clips a save would write whose revision has not landed; open, create, confirmLeave and fmSwTry ask through landOrAsk, which waits only while saves move: each whole-file put (idbPut, idbPutSharedOnce) carries its own deadline from its own start (LAND_STALL_MS 10 s floor + bytes at LAND_FLOOR_BPMS, MEASURE: pending), spent once; a return from the background moves live deadlines by the hidden time. 35 of 36 mutations CAUGHT; SURVIVED: `let due = Math.max(_savesMovedAt, since) + LAND_STALL_MS;` → `since + …` (the movement stamp matters only for a save moving with no whole-file put in flight, a case no leg builds). Follow-ups, not built: a leg for that case; K5 (a gap rule and a ceiling on the hidden-look stamp; a page that reports hidden for ever never asks), M2 (a put handed to a stalled store still buys silence: count only the oldest put), M3 (template and element packs keep files under media; putBegin reads only val.file), M4, M5, M7, no leg proves idbPutSharedOnce's count, the hydrate after a switch is unbounded (F1), F4, F6, medialib.js ~220 and index.html ~1337 unbounded waits.
 
 - [ ] **1188 — Replace media: Undo cannot bring the original back, and nothing says so (hunt MEDIUM #1188)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 3 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -38285,6 +38296,7 @@ re-opened #480, which I had marked done and had not fixed.
       > - The 'real' check adds a route it could not verify in the source: WebKit aborting open IndexedDB transactions when the app is suspended. That fits him tapping Save or Cancel and then leaving the app while a long job's parts are still being deleted.
       > - It is rated low and is a one-line fix, so it can ride along with any release.
       📍 **26 Oct ~01:10: building now** in hunt/dl52 (one lane, the PM's pace), items 5 and 2 together, then a review and a refuter.
+      📍 **v18.09 (28 Oct): built and shipped** (in hunt/dl52d, titles renamed from hunt dl5): idbDel settles on tx.onabort, so clearing an export's resume parts ends instead of hanging, and Cancel works.
 
 - [ ] **1191 — Media library: tapping a tile while storage cannot be read deletes the tile, and sometimes the file (hunt LOW #1191)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 6 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**

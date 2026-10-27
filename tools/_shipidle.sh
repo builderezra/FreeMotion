@@ -12,7 +12,7 @@ set -uo pipefail
 R="${1:-$(cd "$(dirname "$0")/.." && pwd)}"; LIM="${2:-15}"
 cd "$R" || exit 1
 python3 - "$LIM" <<'PY'
-import os, sys, time
+import glob, os, subprocess, sys, time
 lim = int(sys.argv[1])
 nx = 'nothing workable'
 try:
@@ -23,12 +23,51 @@ try:
 except Exception as e:
     nx = '? (the classifier could not say: %s)' % str(e)[:60]
 best, where = 0.0, ''
-for root, dirs, files in os.walk('.claude/worktrees'):
-    dirs[:] = [d for d in dirs if d not in ('.git', 'node_modules')]
-    for f in files:
-        if f == '.git':
-            continue
-        p = os.path.join(root, f)
+trees, seen = [], set()
+main = os.path.realpath('.')
+def add_tree(p):
+    key = os.path.realpath(p)
+    if key != main and key not in seen and os.path.isdir(p):
+        seen.add(key)
+        trees.append(p)
+try:
+    listing = subprocess.check_output(['git', 'worktree', 'list', '--porcelain', '-z'], stderr=subprocess.DEVNULL)
+    registered = [os.fsdecode(field[9:]) for field in listing.split(b'\0') if field.startswith(b'worktree ')]
+    if registered:
+        main = os.path.realpath(registered[0])
+    for p in registered:
+        add_tree(p)
+except (OSError, subprocess.CalledProcessError):
+    pass
+for p in sorted(glob.glob('.claude/worktrees/*')):
+    add_tree(p)
+roots = os.environ.get('FM_WORKTREE_ROOTS')
+if roots is None:
+    roots = os.pathsep.join(os.path.expanduser('~/' + name) for name in ('fm-helper-wt', 'fm-codex-wt'))
+for root in roots.split(os.pathsep):
+    if not root:
+        continue
+    try:
+        with os.scandir(root) as entries:
+            for entry in entries:
+                if entry.is_dir():
+                    add_tree(entry.path)
+    except OSError:
+        continue
+for tree in trees:
+    # Hundreds of stale worktrees share these roots: never walk whole trees (assets, caches and dependencies).
+    paths = [os.path.join(tree, 'index.html')]
+    for pattern in ('*.css', 'js/*.js', 'tests/*.js', 'tests/*.py', 'tools/*.sh', 'tools/*.py'):
+        paths.extend(glob.glob(os.path.join(tree, pattern)))
+    try:
+        with open(os.path.join(tree, '.git'), encoding='utf-8') as f:
+            pointer = f.readline().strip()
+        if pointer.startswith('gitdir: '):
+            gitdir = os.path.join(tree, pointer[8:])
+            paths.append(os.path.normpath(os.path.join(gitdir, 'logs', 'HEAD')))
+    except OSError:
+        pass
+    for p in paths:
         try:
             m = os.stat(p).st_mtime
         except OSError:

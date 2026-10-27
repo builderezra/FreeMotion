@@ -17,6 +17,70 @@ window.FM = window.FM || {};
   function newId(prefix) { return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function readJSON(key, def) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : def; } catch (e) { return def; } }
   function writeJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { warnQuota(e); return false; } }
+  /* #1004: a stored project doc that is THERE but cannot be used — not JSON, or no `project` (every writer stores one, so a
+     doc without it is damage, not a format). Pure: each reader below decides what to do about it. */
+  function unreadableRaw(raw) {
+    if (!raw) return false;
+    let doc = null; try { doc = JSON.parse(raw); } catch (e) {}
+    return !(doc && doc.project);
+  }
+  function unreadableDoc(id) { try { return unreadableRaw(localStorage.getItem('fm.proj.' + id)); } catch (e) { return true; } }
+  /* …and what to tell him when one is refused (#1004 review N2 + finding 6). Name WHAT could not be read: an element or a
+     template being edited is not "that project", and Home's refusal branch for those is silent, so this is the only word he
+     gets. Say his open project is untouched only when there is one and it is: at boot nothing is open yet, and on a landing
+     (a delete, a workspace being put away) the project he was in is the one going. */
+  function unreadableSaid(id, openKept) {
+    const idx = readJSON(PROJ_INDEX, []);
+    const e = (Array.isArray(idx) && idx.find(p => p && p.id === id)) || {};
+    const what = e.templateDraft ? 'Your unfinished edit of this template' : e.elementDraft ? 'Your unfinished edit of this element'
+      : e.name ? '“' + String(e.name).slice(0, 80) + '”' : 'That project';
+    return what + ' could not be read, so it was not opened. Its stored copy has been kept' + (openKept ? ', and your open project has not been changed.' : '.');
+  }
+  // #1004: keep the original outside fm.proj.* — every project scanner reads that namespace.
+  function unreadableProject(id, raw, openKept) {
+    if (!unreadableRaw(raw)) return false;
+    /* Written only when it differs (review finding 6: a copy of a doc up to several MB was rewritten at every boot and every
+       tap). A full store is NOT reported through warnQuota: the original is still at fm.proj.<id>, so its "autosave paused"
+       would be untrue, and it would spend the one real quota warning (_quotaWarned) before autosave ever needed it. */
+    try { if (localStorage.getItem('fm.unreadable.' + id) !== raw) localStorage.setItem('fm.unreadable.' + id, raw); } catch (e) {}
+    if (FM.toast) FM.toast(unreadableSaid(id, openKept), 6000);
+    return true;
+  }
+  /* ═══ AN UNREADABLE DOC THAT NO CARD LISTS GETS ONE (#1005 review finding 2 — the builder's call, logged for the PM) ═══
+     The boot sweep fails closed: while any fm.proj.* doc cannot be read it deletes no media, because that doc's references
+     are unknown. That is only safe while the doc can be got rid of, and one with no index entry (a lost saveIndex, the case
+     migrate() names) has no Home card: nothing could delete it, so the sweep stood down on every boot for ever, in silence.
+     So the boot gives it a card, named from the doc when its first field is still readable, else "Unreadable project".
+     Home's own Delete then removes the doc and its kept copy (remove()), and the next boot sweeps normally.
+     It never writes over an index it cannot read: replacing a damaged fm.projects is not this function's call. */
+  function unreadableName(raw) {
+    const m = /"project"\s*:\s*\{\s*"name"\s*:\s*("(?:[^"\\]|\\.){0,400}")/.exec(raw);
+    let name = ''; if (m) { try { name = String(JSON.parse(m[1])).replace(/\s+/g, ' ').trim().slice(0, 80); } catch (e) {} }
+    return name ? name + ' (unreadable)' : 'Unreadable project';
+  }
+  function indexUnreadable() {
+    let idx = null;
+    try { const t = localStorage.getItem(PROJ_INDEX); idx = t ? JSON.parse(t) : []; } catch (e) { return 0; }
+    if (!Array.isArray(idx)) return 0;
+    const have = new Set(idx.map(p => p && p.id));
+    let added = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const lk = localStorage.key(i);
+      if (!lk || lk.indexOf('fm.proj.') !== 0 || have.has(lk.slice(8))) continue;
+      let raw = null; try { raw = localStorage.getItem(lk); } catch (e) { continue; }
+      if (!unreadableRaw(raw)) continue;
+      const id = lk.slice(8), now = Date.now();
+      idx.unshift({ id: id, name: unreadableName(raw), created: now, modified: now, width: 1080, height: 1920, duration: 0, layers: 0, thumb: null, unreadable: true });
+      have.add(id); added++;
+    }
+    /* Written quietly, as the copy above is (#1005 review finding 3). Through writeJSON a full store raised warnQuota's
+       "autosave paused", which is untrue here (nothing about autosave changed), and spent the one real quota warning
+       (_quotaWarned) before autosave ever needed it. A card that could not be written is tried again at the next boot. */
+    let wrote = false;
+    if (added) { try { localStorage.setItem(PROJ_INDEX, JSON.stringify(idx)); wrote = true; } catch (e) {} }
+    if (wrote && FM.home && FM.home.isOpen && FM.home.isOpen() && FM.home.refresh) { try { FM.home.refresh(); } catch (e) {} }
+    return added;
+  }
   function curId() {
     let id = null;
     try { id = localStorage.getItem(CUR_KEY); } catch (e) {}
@@ -265,10 +329,30 @@ window.FM = window.FM || {};
   function sameFile(a, b) {
     return !!a && !!b && a.size === b.size && (a.type || '') === (b.type || '') && (a.name || '') === (b.name || '') && (a.lastModified || 0) === (b.lastModified || 0);
   }
+  /* 1187 bounded wait (review K1, K2): EVERY WHOLE-FILE PUT STILL OUT, WITH ITS OWN DEADLINE. A switch waiting on a
+     save gives the store a window (settleOrStall, landDue, by LAND_STALL_MS below), and one put of a whole file is the
+     longest stretch IndexedDB has nothing to show. So each put of a record holding a file, through idbPut or
+     idbPutSharedOnce, is in _puts from the moment it is handed over until it answers: a clip's own write in save(), and
+     also Replace media's kept copy (stashPrevMedia), a library tile's shared copy (shareMedia), a friend's received clip
+     (collab writeMedia). IndexedDB runs readwrite transactions on the store one at a time, so his clip's read or write
+     queues behind any of them, and the switch must wait while they move (K2). Each one's allowance counts from its own
+     start (K1): at + LAND_STALL_MS + bytes at LAND_FLOOR_BPMS, spent once. A put that never answers stays here, but its
+     deadline passes once and no later movement renews it. Thumbnails hold no file and are not counted. Another
+     FreeMotion window's writes are not seen at all. Every answer is movement (savesMoved). */
+  const _puts = new Set();
+  function putBegin(val) {
+    const f = val && val.file, n = (f && typeof f.size === 'number' && isFinite(f.size) && f.size > 0) ? f.size : 0;
+    if (!n) return null;
+    const q = { bytes: n, at: nowMs() };
+    _puts.add(q);
+    return q;
+  }
+  function putEnd(q) { if (q) _puts.delete(q); savesMoved(); }
   /* The shared copy, written ONCE. Resolves 'written', 'exists' (something is already there — it is never
      rewritten, because a clip may be playing from it), or false (the write failed: no room). */
   function idbPutSharedOnce(db, lk, val) {
     if (!isLibKey(lk) || !val || !val.file) return Promise.resolve(false);
+    const qs = putBegin(val);   // review K2: a tile's first reuse writes its whole file here (see _puts)
     return new Promise((res) => {
       let out = false;
       try {
@@ -284,7 +368,7 @@ window.FM = window.FM || {};
         tx.onerror = () => { warnStore(tx.error, lk); res(false); };
         tx.onabort = () => { warnStore(tx.error, lk); res(false); };
       } catch (e) { warnStore(e, lk); res(false); }
-    });
+    }).then(out => { putEnd(qs); return out; });
   }
   /* A pointer, written only if the shared copy it names is really there — the check and the write are one
      transaction, so nothing can slip between them. False means "not written": the caller writes the file. */
@@ -320,7 +404,8 @@ window.FM = window.FM || {};
     if (isLibKey(key) || isRef(val)) return Promise.resolve(false);   // queue 915: the generic writer never writes a shared copy or a pointer — only idbPutSharedOnce / idbPutPointer do (see above)
     _verified.delete(key);   // #860 hunt #8: written, so not yet read back: the next save checks it once (see _verified)
     const warn = e => { if (!quiet) warnStore(e, key); };
-    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => { if (!quietKey(key)) storeWrote(); res(true); }; tx.onerror = () => { warn(tx.error); res(false); }; tx.onabort = () => { warn(tx.error); res(false); }; } catch (e) { warn(e); res(false); } }); }
+    const q = putBegin(val);   // 1187 bounded wait (review K1, K2): a whole file is in _puts until its put answers
+    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(val, key); tx.oncomplete = () => { if (!quietKey(key)) storeWrote(); res(true); }; tx.onerror = () => { warn(tx.error); res(false); }; tx.onabort = () => { warn(tx.error); res(false); }; } catch (e) { warn(e); res(false); } }).then(ok => { putEnd(q); return ok; }); }
 
   // Say WHY, with the real numbers, instead of failing mutely. Separate latch from warnQuota so a
   // localStorage warning earlier in the session cannot suppress this one.
@@ -364,7 +449,11 @@ window.FM = window.FM || {};
     if (heldByAnother(key)) return Promise.resolve();   // queue 915 phase B: another copy in memory still plays from this record's file — it goes at a later sweep, when nothing holds it
     _stored.delete(key);   // queue 690 (hunt 5): no longer known to be on disk — a clip brought back by undo is noted again on its next save
     _verified.delete(key);   // #860 hunt #8: …and the next save reads it again rather than skip it
-    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
+    /* 1190: onabort too, the same as idbPut. A transaction that aborts while committing (WebKit losing its
+       connection mid-export, a disk fault, site data cleared) fires abort with no error event, so without it
+       this promise never settled and every awaiter hung: XR.clear left the export overlay stuck with a dead
+       Cancel. No timeout: by the IndexedDB spec every transaction ends in exactly one complete or abort. */
+    return new Promise((res) => { try { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).delete(key); tx.oncomplete = () => res(); tx.onerror = () => res(); tx.onabort = () => res(); } catch (e) { res(); } }); }
   function idbKeys(db) { return new Promise((res) => { try { const rq = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => res([]); } catch (e) { res([]); } }); }
 
   /* ═══ THE LAYER IDS A COLLAB CHECKPOINT CAN STILL BRING BACK (queue 921 S0, spec §12.4) ════════════
@@ -636,7 +725,7 @@ window.FM = window.FM || {};
   function writingBegin(jobs) { jobs.forEach(j => _writing.set(j.id, (_writing.get(j.id) || 0) + 1)); }
   function writingEnd(jobs) { jobs.forEach(j => { const c = (_writing.get(j.id) || 1) - 1; if (c > 0) _writing.set(j.id, c); else _writing.delete(j.id); }); }
   function readPending() { const p = readJSON(PENDING_KEY, null); return (p && typeof p === 'object' && !Array.isArray(p)) ? p : {}; }
-  // Before the document that lists these clips is written. A clip already known to be on disk costs nothing.
+  // After the document write, unless this tab is stale. A clip already known to be on disk costs nothing.
   function notePending(jobs) {
     const todo = jobs.filter(j => _stored.get(j.id) !== j.rev);
     if (!todo.length) return;
@@ -667,6 +756,48 @@ window.FM = window.FM || {};
     let changed = false;
     landed.forEach(x => { _stored.set(x.id, x.rev); if (pend[x.id] && pend[x.id].r === x.rev) { delete pend[x.id]; changed = true; } });
     if (changed) writePending(pend);
+  }
+  /* ═══ 1187: WHICH CLIPS' FILES THE DISK DOES NOT HAVE, ASKED FOR FREE ══════════════════════════════════════
+   * open(), create(), confirmLeave() and a new build's reload (index.html fmSwTry) let go of every clip in memory. A clip
+   * whose file never reached storage — a nearly full phone refused it ("Not enough storage to save that media"), or
+   * IndexedDB would not open — has its ONLY copy there, so a voice take or a Remove vocals render was gone for good, and the
+   * project came back saying it "never finished saving … add it again" about something there is nothing to add again from.
+   * This is the question they ask first: the clips a save would write (planBlobWrites) whose revision this session has not
+   * seen land (_stored). A map lookup per clip and no IndexedDB read, the cost class of lastWriteRefused(), so an ordinary
+   * switch pays nothing. A record that IS on disk but was written some other way reads as not landed here; the one save the
+   * callers run before they ask reads it and strikes it (landOrAsk, below). */
+  function unlandedFiles() {
+    let jobs = []; try { jobs = planBlobWrites(); } catch (e) { return []; }
+    return jobs.filter(j => _stored.get(j.id) !== j.rev).map(j => {
+      const L = FM.layerById ? FM.layerById(FM.scene, j.id) : null;
+      return { id: j.id, rev: j.rev, name: String((L && L.name) || 'A clip').slice(0, 80) };
+    });
+  }
+  /* ═══ A STALE TAB STILL KEEPS WHAT ONLY IT HAS (#1000, review fold) ═══════════════════════════════════════════════
+   * A stale save writes no document, and no file over a record: another window has newer work on disk, and this tab's
+   * file for a layer may be older than that window's (Replace media keeps the layer id). But an IMPORT reaches IndexedDB
+   * only through save() (handleFiles saves, then gives the file its Add → Media tile keyed at the new layer id), so a
+   * stale save that wrote nothing at all left a clip imported in this tab with a tile pointing at no record: a tap on it
+   * said "no longer stored" and dropped the tile for every window, and after a reload the import existed nowhere.
+   * So a clip's file is still written when, and only when, this session holds no revision of it on disk (_stored: no
+   * hydrate read it, no save of ours wrote it) AND nothing is stored under its key. A key that holds nothing cannot hold
+   * the other window's newer file. A key that holds anything, or a read that failed, is left alone. No pending note and
+   * no card: those belong to a document that landed. */
+  async function saveUnseenMedia(jobs) {
+    const todo = jobs.filter(j => !_stored.has(j.id));
+    if (!todo.length) return;
+    try {
+      const db = await openDB();
+      try {
+        for (const job of todo) {
+          const existing = await idbGet(db, job.id);
+          if (existing !== undefined) continue;   // a record is there (perhaps the other window's newer file), or the read failed
+          const asPtr = job.ref ? await idbPutPointer(db, job.id, { ref: job.ref, kind: job.kind, rev: job.rev }) : false;
+          const wrote = asPtr || await idbPut(db, job.id, { file: job.file, kind: job.kind, rev: job.rev });
+          if (wrote) _stored.set(job.id, job.rev);   // ours, on disk now: the next stale save does not read it again
+        }
+      } finally { db.close(); }
+    } catch (e) { /* storage unavailable — ignore, as save() does */ }
   }
   /* The load's half. `found` = ids whose file IS stored, `lacking` = layers read with nothing stored. Says which
      noted clips came back empty, and tidies notes this project no longer needs: the file turned up after all
@@ -712,6 +843,86 @@ window.FM = window.FM || {};
    * Every save is counted while it runs; pendingSaves() says whether one is, and settled() resolves once
    * every save running NOW has finished, so mediaLib.use can let the disk catch up before it decides. */
   const _saving = new Set();
+  /* ═══ 1187 (bounded wait): A SWITCH WAITS ON A SAVE ONLY WHILE THE SAVE IS MOVING ═══════════════════════════════
+   * landOrAsk (below) waits for the running saves, then for one more, before it asks about a clip whose file has not landed.
+   * Those waits were plain awaits, and a save can never settle: WebKit's IndexedDB stall on a home-screen iPhone app, an
+   * open that stays blocked, a transaction queued behind one that never ends. The switch then froze for good, and so did
+   * every later one, since each waited on the same stuck save (the suite showed it: the 915.5Br tests hold a save queued,
+   * and every project switch after them hung). So a wait now lasts only while a save is visibly MOVING: every answer
+   * IndexedDB gives a save (its open, each clip's read and write) and every save's end stamp _savesMovedAt. Once nothing
+   * has moved for the window the wait stops and he is asked the clip question, which names the clip and says it has not
+   * saved. So the wait BEFORE that question can no longer hang. That is all it bounds (review F1): what a switch does after
+   * it is not bounded here. open()'s load still awaits the store with no bound (hydrateSceneMedia: openDB, then each clip's
+   * read), so on a store that has stopped answering, Leave anyway, a switch with no unlanded clip, and create() all still
+   * hang inside load(), after the teardown. That is its own item (bound the hydrate), not this one.
+   * Saves that keep moving are waited for however long they take.
+   * The window covers the longest stretch one save spends with nothing to show: ONE put of one clip's whole file (a long
+   * video on a phone), which IndexedDB answers only at the end. Too short and a file still being written is asked about
+   * (Stay is safe, and the question says to try again once it has saved); too long and a stalled store leaves the switch
+   * silent for that long first. So it grows with the file (review F3): movement grants LAND_STALL_MS, and every whole-file
+   * put handed to IndexedDB and not answered yet (_puts, above idbPutSharedOnce: save()'s own and every other writer's, K2)
+   * is waited for until its own deadline, its start plus LAND_STALL_MS plus its bytes at LAND_FLOOR_BPMS, the slowest rate
+   * a put is taken to write at. That allowance is spent once (K1): a put that never answers buys its silence once, not
+   * again after every return to the app or every other save's answer. One long phone video still being written is waited
+   * for; a small clip's stall is asked about after about LAND_STALL_MS, unless a big put whose own deadline has not passed
+   * is still out ahead of it (landDue). MEASURE: pending, both numbers. How: time every clip put in save() (bytes, and ms
+   * from the put being handed over to its answer) on his iPhone's home-screen app and on the laptop, with real clips from
+   * 1 MB to a minute or more of 4K;
+   * LAND_FLOOR_BPMS is half the slowest bytes/ms seen, and LAND_STALL_MS the longest small-file put (under 1 MB) times 3,
+   * never under 10 s. Until then 10 s, about 7× the slowest write this suite holds open on purpose (1.5 s) and past the
+   * point where a silent switch reads as frozen, and 5 MB/s, so a 100 MB clip gets 10 s + 20 s. */
+  let LAND_STALL_MS = 10000;
+  let LAND_FLOOR_BPMS = 5 * 1048576 / 1000;   // bytes per ms: 5 MB/s, MEASURE: pending (above)
+  const LAND_POLL_MS = 250;   // how often a waiting switch looks again; a fraction of the window, so the ask comes on time
+  const nowMs = () => ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now());   // monotonic: a test that moves Date.now must not end a wait
+  let _savesMovedAt = 0;
+  function savesMoved() { _savesMovedAt = nowMs(); }
+  /* (review F5) TIME THE PAGE WAS NOT RUNNING IS NOT QUIET TIME. performance.now keeps counting while iOS has a backgrounded
+     PWA suspended, so a wait that spans a trip to another app read the whole trip as a store that had stopped answering, and
+     asked the moment he came back, while the write was carrying on. So a hidden page counts as movement on every look, and
+     coming back (visibilitychange to visible, pageshow) is movement too: the window starts again from his return.
+     (review K1) A return grants LAND_STALL_MS and no more. Each put still out has its deadline moved on by the hidden time
+     it lived through, so its allowance is neither used up while the page was away nor granted again. The hidden time is
+     measured from the going-away event, or from the first look that saw the page hidden when no event said so. */
+  const pageHidden = () => { try { return typeof document !== 'undefined' && document.visibilityState === 'hidden'; } catch (e) { return false; } };
+  let _hiddenAt = 0;   // when the page went hidden; 0 while it is visible
+  function wentHidden() { if (!_hiddenAt) _hiddenAt = nowMs(); }
+  function cameBack() {
+    if (_hiddenAt) {
+      const t = nowMs(), h = _hiddenAt;
+      _hiddenAt = 0;
+      _puts.forEach(q => { q.at += t - Math.max(q.at, h); });
+    }
+    savesMoved();
+  }
+  try {
+    document.addEventListener('visibilitychange', () => { if (pageHidden()) wentHidden(); else cameBack(); });
+    window.addEventListener('pageshow', () => { cameBack(); });
+  } catch (e) {}
+  /* When a waiting switch may ask: LAND_STALL_MS after the last movement or `since` (when the waited-for work began),
+     whichever is later, and not before the deadline of any whole-file put still out (_puts, review K1). */
+  function landDue(since) {
+    let due = Math.max(_savesMovedAt, since) + LAND_STALL_MS;
+    _puts.forEach(q => { due = Math.max(due, q.at + LAND_STALL_MS + q.bytes / LAND_FLOOR_BPMS); });
+    return due;
+  }
+  /* Resolves true once `p` settles, false once landDue has passed with nothing having moved. Never rejects. A save STARTING
+     is not movement: an edit made while the switch waits starts one, and that says nothing about the store answering. */
+  function settleOrStall(p, since) {
+    return new Promise(resolve => {
+      let done = false, timer = null;
+      const finish = v => { if (done) return; done = true; clearTimeout(timer); resolve(v); };
+      Promise.resolve(p).then(() => finish(true), () => finish(true));
+      const look = () => {
+        if (done) return;
+        if (pageHidden()) wentHidden(); else if (_hiddenAt) cameBack();
+        if (pageHidden()) savesMoved();
+        if (nowMs() >= landDue(since)) { finish(false); return; }
+        timer = setTimeout(look, LAND_POLL_MS);
+      };
+      timer = setTimeout(look, 0);   // a promise that has already settled answers first
+    });
+  }
   /* queue 690: which revisions of which layer have a kept file (see stashPrevMedia), and WHICH File object each
      one holds. Session-only on purpose: a kept file is only reachable through undo, and undo does not outlive
      the session — so after a reload nothing is looked up, even while the boot sweep has not yet run.
@@ -790,18 +1001,26 @@ window.FM = window.FM || {};
     hasPrevMedia(id, rev) { const kept = _prevFiles.get(id); return !!kept && kept.has(rev || 0); },
     pendingSaves() { return _saving.size; },
     settled() { return Promise.all(Array.from(_saving)).then(() => true, () => true); },
+    /* 1187 (bounded wait) suite seam: sets LAND_STALL_MS for a test that must not spend the real window, and answers the
+       one it replaced, which the test puts back in its finally. Anything not a positive number leaves it as it is. */
+    _landStallMs(ms) { const was = LAND_STALL_MS; if (typeof ms === 'number' && isFinite(ms) && ms > 0) LAND_STALL_MS = ms; return was; },
+    // …and LAND_FLOOR_BPMS (review F3) the same way, so a test can give a small file a long put's share of the window.
+    _landFloorRate(bpms) { const was = LAND_FLOOR_BPMS; if (typeof bpms === 'number' && isFinite(bpms) && bpms > 0) LAND_FLOOR_BPMS = bpms; return was; },
     async save() {
       let saved = null;
       const running = new Promise(r => { saved = r; });
+      running.at = nowMs();   // 1187 (bounded wait): when it began, so a wait on it is counted from no earlier than this
       _saving.add(running);   // queue 915 phase B, review round 3: see _saving above
-      /* queue 830: which files this save is for, taken before the first await (see below). queue 690 (hunt 5): and
-         NOTED before the document that lists them is written — the two land in the same tick, so a close at any
-         moment after leaves a note for every file that had not landed yet (see notePending). */
+      /* queue 830: which files this save is for, taken before the first await (see below). The pending note and
+         document write land in the same tick, but #1000 must first let writeScene detect a stale tab. */
       let jobs = []; try { jobs = planBlobWrites(); } catch (e) {}
       try {
-      try { notePending(jobs); } catch (e) {}
       writingBegin(jobs);
       let sceneOk = writeScene();   // rev-guarded; a quota failure shouldn't block the IDB media save below
+      /* #1000: this tab's old files must not overwrite newer media either, and a stale tab notes nothing and stamps no card.
+         Only a clip nothing has stored yet (one imported in this tab) is still written: see saveUnseenMedia. */
+      if (_writeFail === 'stale') { await saveUnseenMedia(jobs); return; }
+      try { notePending(jobs); } catch (e) {}
       const warnedBefore = _quotaWarned;
       /* queue 748 (hunt MEDIUM #31): `warnedBefore` can only see a flag raised THIS tick, and the index write's result was
          thrown away — so with the index failing every tick, the flag was raised on tick 1, reset on tick 2 (raised before, not
@@ -819,7 +1038,7 @@ window.FM = window.FM || {};
        * by the next save before it is trusted: a put that reported success is not a record anyone has seen (the
        * 915.5Br early-tap test drops one on purpose, as a save that has not landed), and that read is what notices.
        * Skipped, EXCEPT:
-       *  · when THIS save's document write FAILED (_writeFail, set by writeScene just above: refused or stale). Then
+       *  · when THIS save's document write was REFUSED (_writeFail, set by writeScene just above; a stale save never gets here). Then
        *    the doc on disk does not list a new clip, so another tab's boot sweep (pruneOrphans reads its keep-set
        *    from the stored docs, never from the pending notes) can delete the file while _stored still says it is
        *    there. The per-save read is what puts it back, so on a full store every save still reads.
@@ -847,7 +1066,11 @@ window.FM = window.FM || {};
            permanently blank clips — and no toast, because idbPut was never reached, so nothing failed.
            A snapshot taken before any await belongs to the scene this save is FOR. (Taken at the top now, before
            the document is written — queue 690, hunt 5 — which is still before any await.) */
-        const db = await openDB();
+        /* 1187: a store that will not even OPEN was the one refusal nothing said: idbPut never ran, so no warnStore, and
+           every new file stayed only in memory. Said once (warnStore forgets it the moment any write lands), and only when this
+           save had a file the disk does not have. */
+        const db = await openDB().catch(e => { if (jobs.some(j => _stored.get(j.id) !== j.rev)) warnStore(e, 'idb:open'); throw e; });
+        savesMoved();   // 1187 (bounded wait): the store answered (see settleOrStall)
         const landed = [];   // queue 690 (hunt 5): each file now on disk at the revision it was saved for
         for (const job of jobs) {
           if (!fullCheck && _stored.get(job.id) === job.rev && _verified.get(job.id) === job.rev) { landed.push({ id: job.id, rev: job.rev }); continue; }   // #860 hunt #8: read on disk at this revision, nothing written since
@@ -872,15 +1095,27 @@ window.FM = window.FM || {};
              * re-write on first launch. `kind` rides along, which also fixes a video→image replace
              * saving the layer as one type against a stored record marked the other. */
             const existing = await idbGet(db, job.id);
+            savesMoved();
             if (!existing || (existing.rev || 0) !== job.rev) {
               /* queue 915 phase B: a clip reused from Add → Media — or a split, duplicate or paste of one — is
                  written as a POINTER at its one shared copy, and only if that copy is really there (checked in
                  the same transaction). If it is not, the whole file is written exactly as before: a pointer at
                  nothing would be a blank clip, and the file is in memory to write. */
               const asPtr = job.ref ? await idbPutPointer(db, job.id, { ref: job.ref, kind: job.kind, rev: job.rev }) : false;
-              const wrote = asPtr || await idbPut(db, job.id, { file: job.file, kind: job.kind, rev: job.rev });
-              if (wrote) landed.push({ id: job.id, rev: job.rev });
-            } else { _verified.set(job.id, job.rev); landed.push({ id: job.id, rev: job.rev }); }   // already there at this revision (read just now, so #860 hunt #8's skip may trust it)
+              let wrote = asPtr;
+              /* 1187 bounded wait (review F3, K1): while this put is out its bytes earn it a deadline of its own (_puts, in
+                 idbPut), so one long video still being written is waited for, not asked about */
+              if (!wrote) wrote = await idbPut(db, job.id, { file: job.file, kind: job.kind, rev: job.rev });
+              savesMoved();   // one clip's write answered: the step the window is sized for
+              /* (review F2) on disk from this moment, not from the end of the loop: a switch whose bound fires while a LATER clip
+                 of this save is still being written must not name, or count, this one. strikePending below still clears its note. */
+              if (wrote) { landed.push({ id: job.id, rev: job.rev }); _stored.set(job.id, job.rev); }
+            } else {
+              /* already there at this revision (read just now, so #860 hunt #8's skip may trust it). On disk from this moment
+                 too (review K4): a clip another writer stored (a friend's clip through collab's writeMedia, a record written
+                 outside save()) is read here, and a bound that fires on a LATER clip of this save must not name, or count, it. */
+              _verified.set(job.id, job.rev); _stored.set(job.id, job.rev); landed.push({ id: job.id, rev: job.rev });
+            }
           }
         }
         strikePending(landed);
@@ -889,7 +1124,7 @@ window.FM = window.FM || {};
         // handle explicit deletions; FM.projects.pruneOrphans() sweeps true orphans once at boot.
         db.close();
       } catch (e) { /* storage unavailable — ignore */ }
-      } finally { writingEnd(jobs); _saving.delete(running); saved(); }
+      } finally { writingEnd(jobs); _saving.delete(running); savesMoved(); saved(); }
     },
 
     /* Synchronous best-effort scene write for page unload (the 600ms debounce can't run there).
@@ -901,6 +1136,8 @@ window.FM = window.FM || {};
        A flag read and no write, so Home can ask it on every card tap for free. */
     lastWriteRefused() { return _writeFail === 'refused'; },
     unsavedOnScreen: unsavedOnScreen,   // queue 690: see the function
+    /* 1187: see the function — [{ id, rev, name }] of the clips whose file the disk does not have */
+    unlandedFiles: unlandedFiles,
 
     async removeMedia(id) { try { const db = await openDB(); await idbDel(db, id); db.close(); } catch (e) {} },
 
@@ -963,6 +1200,7 @@ window.FM = window.FM || {};
       if (FM.fonts) FM.fonts.rehydrateAll();     // register imported custom fonts (idempotent; re-renders when ready)
       if (!boundId) return false;                // queue 936: no project open — a fresh start, or the last one deleted
       const raw = diskRaw();      // the text as well as the doc: writeScene compares against it (queue 690, hunt 5)
+      if (unreadableProject(boundId, raw, false)) { boundId = null; return false; }   // nothing is open yet: the toast does not claim one is kept
       let scene = null; try { scene = raw ? JSON.parse(raw) : null; } catch (e) { scene = null; }
       if (!scene || !scene.project) return false;   // accept a 0-layer project so canvas settings (name/size/fps/bg) survive a reload
       adoptRev(scene.rev, raw);   // this tab is now level with what is on disk (#306)
@@ -2218,13 +2456,32 @@ window.FM = window.FM || {};
     } finally { try { if (db) db.close(); } catch (e) {} }
     return true;
   };
-  function saveProjectFile(obj) {
-    const name = (((obj.project && obj.project.name) || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
-    const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
+  /* How Save project file hands a file over: a link to the blob, clicked. Shared with Save a copy below (#1004 + #1005). */
+  function downloadBlob(blob, fileName) {
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = name + '.fmotion.json';
+    const a = document.createElement('a'); a.href = url; a.download = fileName;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  /* ═══ SAVE A COPY OF A PROJECT THAT CAN'T BE OPENED (#1004 + #1005, the PM's ask) ═══════════════════════════════════
+     Offered by Home's Delete… on such a card before anything is deleted (home.js deleteUnreadable). It is the stored text
+     exactly as it is, never parsed or repaired: the original kept at fm.unreadable.<id> when there is one (unreadableProject
+     keeps it at the first refusal), else the doc itself. So a damaged project can still be recovered later, by hand or by a
+     later version. Named after its card. True when a file was handed over, false when there is nothing stored to save. */
+  FM.storage.saveUnreadableCopy = function (id) {
+    let raw = null;
+    try { raw = localStorage.getItem('fm.unreadable.' + id); if (raw == null) raw = localStorage.getItem('fm.proj.' + id); } catch (e) { raw = null; }
+    if (raw == null || raw === '') return false;
+    const card = ((FM.projects && FM.projects.list()) || []).find(p => p && p.id === id);
+    const base = String((card && card.name) || '').replace(/\s*\(unreadable\)\s*$/i, '');
+    const name = base.replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'project';
+    downloadBlob(new Blob([raw], { type: 'text/plain' }), name + ' (unreadable copy).txt');
+    if (FM.toast) FM.toast('Copy saved', 2400);
+    return true;
+  };
+  function saveProjectFile(obj) {
+    const name = (((obj.project && obj.project.name) || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
+    downloadBlob(new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' }), name + '.fmotion.json');
     /* SAY WHAT IS NOT IN IT (queue 888). This used to toast "Project file saved" whatever happened,
        including when the only thing in the project was a video too big to embed and the file was 4KB
        of nothing. Naming the clips is the whole fix: a file that says what it is missing can be
@@ -2477,6 +2734,29 @@ window.FM = window.FM || {};
     } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   };
 
+  /* #1007: THE SIZE AT WHICH OPENING A FILE ASKS FIRST. A warning level for a phone, never a cap. Reading a project file or
+     a backup holds its text, the parsed object and, on import, reIdLayers' full clone all at once: about 3x the file
+     (VERIFIED §1.8). At this level that peak is about 290 MiB, which a desktop tab carries and a phone tab may not
+     (unmeasured), so above it he is asked and may go on, and below it nothing changes. Real files embed their clips with no
+     count cap, so this must never refuse a file. It is its own number on purpose: FM.storage._backupEmbedLimit is a
+     per-clip ceiling on what a backup embeds, not a file size, and only happens to be 96 MiB as well.
+     The unit is MiB: 96 x 1024 x 1024 bytes. The question prints the size in that same binary unit and calls it MB, as
+     every other size this app shows does (the omitted-clip and skipped-media notes divide by 1048576 too). */
+  const LARGE_READ_BYTES = 96 * 1024 * 1024;
+  /* #1007: WHAT CANCEL RETURNS. Its own object, compared by identity, and never null: JSON.parse('null') is null too, so a
+     file holding only that was taken for a Cancel and dropped in silence, where before it was told it is not a project or
+     not a backup. Frozen, so nothing that is handed it by mistake can write into it. */
+  FM.storage.IMPORT_CANCELLED = Object.freeze({ cancelled: true });
+  FM.storage.readImportFile = async function (file) {
+    if (file.size > LARGE_READ_BYTES) {
+      const ok = await FM.ask({ title: 'Open a large file?',
+        message: 'This file is ' + (file.size / 1048576).toFixed(1) + ' MB. Reading it may take a while or fail on a phone. Continue?',
+        ok: 'Continue', cancel: 'Cancel' });
+      if (!ok) return FM.storage.IMPORT_CANCELLED;
+    }
+    return JSON.parse(await file.text());
+  };
+
   FM.storage.importFile = function (onDone) {   // onDone runs ONLY on a successful import (not on picker-cancel)
     const input = document.createElement('input'); input.type = 'file'; input.accept = '.json,application/json'; input.style.display = 'none';
     input.addEventListener('change', async () => {
@@ -2490,7 +2770,7 @@ window.FM = window.FM || {};
       FM._importing = (FM._importing || 0) + 1;
       try {
         let obj = null;
-        try { obj = JSON.parse(await file.text()); }
+        try { obj = await FM.storage.readImportFile(file); if (obj === FM.storage.IMPORT_CANCELLED) return; }
         catch (e) { if (FM.toast) FM.toast('That file is not readable as a project — it may be truncated.', 5000); return; }
         // Import into a NEW project — never overwrite whatever happens to be open. (#r1) …but only
         // once the file has been checked, which is queue 673's whole point.
@@ -2877,11 +3157,58 @@ window.FM = window.FM || {};
     const name = (FM.scene && FM.scene.project && FM.scene.project.name) || 'This project';
     if (!FM.ask) return Promise.resolve(false);   // no way to ask — never throw it away unasked
     const why = (how && how.why) || 'Opening another project now throws it away.';
+    /* (1187 review F7) a clip whose FILE did not save is not "storage full" (IndexedDB may simply not have opened) and not
+       "what you changed since it last saved": the project itself saved. It gets its own true words; Stay is the same. */
+    if (how && how.clipTitle) return FM.ask({
+      title: how.clipTitle,
+      message: 'The project saved, but the file did not, so it is only on this screen. ' + why + ' To keep it, stay and try again once it has saved, or free some space.',
+      ok: how.ok || 'Leave anyway', cancel: 'Stay', danger: true,
+    }).then(v => !!v);
     return FM.ask({
       title: 'Storage full — “' + name + '” is not saved',
       message: 'What you changed since it last saved is only on this screen. ' + why + ' To keep it, stay and use ⚙ → Save project file inside it.',
       ok: (how && how.ok) || 'Leave anyway', cancel: 'Stay', danger: true,
     }).then(v => !!v);
+  }
+  /* ═══ 1187: …AND A CLIP WHOSE FILE THE DISK DOES NOT HAVE IS NOT LET GO UNASKED EITHER ═══════════════════════
+   * The question above guards the DOCUMENT. A clip's FILE is written by save() after it, and a refused file left the
+   * document saving fine — so every door out (open, create, confirmLeave) went ahead and freed its only copy. Asked only
+   * when unlandedFiles() is not empty, so the ordinary switch reaches its teardown in the same task as before. A file still
+   * WRITING is late, not lost (see _writing), so a running save is waited for first; then ONE save, awaited, which writes
+   * every file it can and strikes a record that was on disk all along; then the answer again. Only a file the disk still
+   * does not have is asked about, in askLeave's own dialog with the clip named, and Stay (also Cancel, Escape, a tap
+   * outside) leaves everything as it was. Both waits last only while a save is moving (settleOrStall, landDue above):
+   * idbPut answers abort and error alike and openDB rejects on error, but a store that never answers at all (WebKit's stall,
+   * a blocked open) left the switch waiting for good. Once nothing has moved for the window it asks instead; and when the
+   * running saves are the ones that stopped, the extra save is not started, because it would only queue behind them and
+   * cost him a second window. An edit made while it waited is flushed, and asked about if refused. What this bounds is the
+   * question: once he answers Leave anyway, or when no clip is unlanded, the switch goes on to open()'s load, which still
+   * waits on the same store with no bound (see the note above LAND_STALL_MS). */
+  function unlandedWhy(un, how) {
+    const nm = '“' + un[0].name + '”';
+    const what = un.length === 1 ? nm + ' has not saved' : un.length + ' clips have not saved (' + nm + ' and ' + (un.length - 1) + ' more)';
+    const tail = (how && how.why) || 'Opening another project now throws it away.';
+    return { why: what + ' — ' + tail.charAt(0).toLowerCase() + tail.slice(1), ok: how && how.ok,
+             clipTitle: un.length === 1 ? nm + ' is not saved on this device' : un.length + ' clips are not saved on this device' };
+  }
+  async function landOrAsk(how) {
+    const S = FM.storage;
+    if (!unlandedFiles().length) return true;
+    /* (review F1) `noWait`: the version label, the escape hatch for a broken build, never waits on a write. A stalled IndexedDB
+       (the home-screen WebKit stall) would leave it on '…' for good; it asks at once, and he can Stay and tap again once the
+       write lands. */
+    if (!(how && how.noWait)) {
+      let moving = true;
+      if (S.pendingSaves()) {
+        const since = Array.from(_saving).reduce((t, p) => Math.max(t, p.at || 0), 0);
+        moving = await settleOrStall(S.settled(), since);
+      }
+      if (moving && unlandedFiles().length) await settleOrStall(S.save(), nowMs());
+    }
+    const un = unlandedFiles();
+    if (un.length) return askLeave(unlandedWhy(un, how));
+    if (!S.flushSync() && S.unsavedOnScreen()) return askLeave(how);
+    return true;
   }
 
   FM.projects = {
@@ -2890,8 +3217,8 @@ window.FM = window.FM || {};
        True = go ahead. For callers that must ask BEFORE they start moving things — Home's card tap asks here,
        ahead of the push, rather than half-way through it — and then pass { confirmed: true } to open(). */
     async confirmLeave(how) {
-      if (FM.storage.flushSync() || !FM.storage.unsavedOnScreen()) return true;
-      return askLeave(how);
+      if (!FM.storage.flushSync() && FM.storage.unsavedOnScreen()) return askLeave(how);
+      return landOrAsk(how);   // 1187: the document is safe — and so is every clip's file, or he is asked
     },
     // Thumbnail for a card — IDB first, then the legacy inline thumb (pre-migration entries). Async.
     async getThumb(id) {
@@ -2924,6 +3251,9 @@ window.FM = window.FM || {};
     },
     saveIndex(arr) { return writeJSON(PROJ_INDEX, arr); },   // queue 748: the autosave tick needs to know
     currentId() { return curId(); },
+    /* #1004 + #1005: a stored project that is there but cannot be read. Home's Delete… asks about one in its own words and
+       offers Save a copy first (home.js deleteUnreadable). A project with no doc at all is not unreadable, it is gone. */
+    isUnreadable(id) { return !!id && unreadableDoc(id); },
     // One-time: fold the legacy single fm.scene autosave into the project index.
     migrate() {
       let id = curId();
@@ -3004,7 +3334,7 @@ window.FM = window.FM || {};
       return true;
     },
     // Switch the editor to another project (stash current first).
-    // Resolves FALSE when the project could not be saved and he chose to stay (queue 690) — nothing changed.
+    // Resolves FALSE on a refused switch (including an unreadable target) — the outgoing scene stays intact.
     // `opts.confirmed`: the caller has already asked (confirmLeave), or what is being left is being thrown away.
     async open(id, opts) {
       /* THIS tab's project, not the shared pointer (queue 936 review): a tab with nothing open that is asked for the project
@@ -3017,6 +3347,12 @@ window.FM = window.FM || {};
         let doc = null; try { doc = localStorage.getItem('fm.proj.' + id); } catch (e) {}
         if (!doc) { if (FM.toast) FM.toast('That project is no longer on this device', 3200); if (FM.home && FM.home.refresh) FM.home.refresh(); return false; }
       }
+      /* `opts.landing`: the caller is leaving a project that is going (a delete, a workspace being put away), so a refusal
+         here must not tell him his open project was kept (#1004 review N2). */
+      if (id) {
+        try { if (unreadableProject(id, localStorage.getItem('fm.proj.' + id), !!tabId() && !(opts && opts.landing))) return false; }
+        catch (e) { if (FM.toast) FM.toast('That project could not be read', 3200); return false; }
+      }
       if (FM.tracker && FM.tracker.isPicking && FM.tracker.isPicking()) FM.tracker.cancel();   // drop any tracking overlay from the outgoing project
       if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) FM.pointEdit.stop();
       if (FM.cropTool && FM.cropTool.isActive && FM.cropTool.isActive()) FM.cropTool.stop();
@@ -3027,7 +3363,17 @@ window.FM = window.FM || {};
       /* queue 690: the flush's answer is READ now. Refused, with work only on screen → ask, BEFORE anything below
          is torn down; Stay returns with the project exactly as it was. (A stale tab also fails the flush, and
          there dropping the local copy is the point, so unsavedOnScreen says no and the switch goes ahead.) */
-      if (!FM.storage.flushSync() && !(opts && opts.confirmed) && FM.storage.unsavedOnScreen() && !(await askLeave())) return false;
+      /* 1187: …and a clip whose FILE never reached storage is asked about too (landOrAsk), before releaseProjectMedia below
+         frees its only copy. One question at most: Leave anyway on the document question has already answered for the clips. */
+      const flushed = FM.storage.flushSync();
+      if (!(opts && opts.confirmed)) {
+        const from = tabId();
+        if (!flushed && FM.storage.unsavedOnScreen()) { if (!(await askLeave())) return false; }
+        else if (!(await landOrAsk())) return false;
+        /* (review F3) that wait can be seconds long and silent, so another door (a draft committed on the way Home, a collab
+           join) may have opened a project meanwhile: this switch is then stale, and must not tear that one down. */
+        if (tabId() !== from) return false;
+      }
       this.touchCurrent(true);   // queue 915: a no-op picture while its media are released (makeThumb)
       /* ⚠️ THE SESSION STANDS DOWN HERE, NOT AT history.reset() BELOW (queue 921, spec §12.1 `paused`).
          Everything from the next line to `load()` finishing is a document that belongs to NEITHER
@@ -3068,7 +3414,14 @@ window.FM = window.FM || {};
        asked BEFORE anything is written, so Stay leaves no half-made project behind. */
     async create(opts) {
       opts = opts || {};
-      if (!FM.storage.flushSync() && !opts.confirmed && FM.storage.unsavedOnScreen() && !(await askLeave())) return false;
+      /* 1187: the clip-file question as in open(), asked here because the open() below is confirmed */
+      const flushed = FM.storage.flushSync();
+      if (!opts.confirmed) {
+        const from = tabId();
+        if (!flushed && FM.storage.unsavedOnScreen()) { if (!(await askLeave())) return false; }
+        else if (!(await landOrAsk())) return false;
+        if (tabId() !== from) return false;   // (review F3) as in open(): another door opened a project during the wait
+      }
       this.touchCurrent(true);
       const id = newId('p');
       const fresh = FM.newScene();
@@ -3360,6 +3713,7 @@ window.FM = window.FM || {};
         db.close();
       } catch (e) {}
       try { localStorage.removeItem('fm.proj.' + id); } catch (e) {}
+      try { localStorage.removeItem('fm.unreadable.' + id); } catch (e) {}
       this.saveIndex(this.list().filter(p => p.id !== id));
       return true;
     },
@@ -3392,9 +3746,13 @@ window.FM = window.FM || {};
       if (id !== tabId()) return { ok: await this.discardDraft(id), why: '' };   // bughunt8 #2b: open in THIS tab, not named by the shared pointer
       if (FM.storage && FM.storage.flushSync) FM.storage.flushSync();
       const others = this.list().filter(p => p.id !== id);
-      const target = (others.filter(p => !p.elementDraft && !p.templateDraft)[0] || others[0] || {}).id;
-      /* queue 936: the last one can go too — "nothing open" is a real state now, so there is somewhere to land. */
-      await this.open(target || null, { confirmed: true });   // queue 690: the draft being left is the one being discarded
+      let target = (others.filter(p => !p.elementDraft && !p.templateDraft)[0] || others[0] || {}).id || null;
+      /* queue 936: the last one can go too — "nothing open" is a real state now, so there is somewhere to land.
+         confirmed (queue 690): the draft being left is the one being discarded.
+         #1004 review F3: a landing that cannot be read is refused with nothing torn down, so the draft stayed open and
+         discardDraft refused it, every time, for as long as that project stayed unreadable. Close to nothing instead. */
+      if (target && (await this.open(target, { confirmed: true, landing: true })) === false) target = null;
+      if (!target) await this.open(null, { confirmed: true });
       const ok = await this.discardDraft(id);
       if (!target) landOnHome();
       return { ok: ok, why: ok ? '' : 'refused' };
@@ -3445,6 +3803,7 @@ window.FM = window.FM || {};
       } catch (e) {}
       try { localStorage.removeItem('fm.collab.host.' + id); } catch (e) {}   // …and the room it was shared from
       try { localStorage.removeItem('fm.proj.' + id); } catch (e) {}
+      try { localStorage.removeItem('fm.unreadable.' + id); } catch (e) {}
       this.saveIndex(this.list().filter(p => p.id !== id));
       /* bughunt8 #2b: the project THIS tab has open (tabId), not the shared fm.currentProject. Asked of the pointer, deleting the
          project open here while another tab was elsewhere left this tab on it (its next save wrote the doc back with no card), and
@@ -3459,7 +3818,11 @@ window.FM = window.FM || {};
            answer, and that branch already exists below. */
         const rest = this.list().filter(p => !p.elementDraft && !p.templateDraft);
         // confirmed (queue 690): the project being left is the one he just deleted — nothing to ask about
-        if (rest.length) await this.open(rest[0].id, { confirmed: true });
+        if (rest.length) {
+          if ((await this.open(rest[0].id, { confirmed: true, landing: true })) === false) {
+            await this.open(null, { confirmed: true }); landOnHome();   // #1004: a refused landing must not leave the deleted project writable
+          }
+        }
         else { await this.open(null, { confirmed: true }); landOnHome(); }   // queue 936: the last one gone → the empty Projects tab, not a new "Untitled"
         // open()/create() flushSync'd BEFORE switching CUR_KEY, resurrecting the deleted doc as an
         // unindexed localStorage orphan that leaks quota forever — remove it (again) now. (#r2)
@@ -3476,7 +3839,10 @@ window.FM = window.FM || {};
         /* An interrupted export's saved chunks live in this store too, and belong to no layer, no
          * project and no media-library entry — so the keep-set below reads them as orphans and deletes
          * them at the first boot after a crash, which is the exact boot on which they are the point.
-         * They are exempted from the scan (see the prefix list) and reaped by their own rules instead. */
+         * They are exempted from the scan (see the prefix list) and reaped by their own rules instead.
+         * #1004 review F1: this stays ABOVE the unreadable-doc gate below. It reads only `xr:` records, never a project
+         * doc, so an unreadable doc says nothing about whether it is safe, and behind the gate up to 512 MB of stale
+         * export scratch stayed on the device for as long as that doc did. */
         if (FM.exportResume && FM.exportResume.sweep) { try { await FM.exportResume.sweep(); } catch (e) {} }
         const projIds = new Set();   // EVERY stored project doc — scanned from localStorage, not just the index (an unindexed doc's media must never be mass-deleted)
         const collectKeep = () => {
@@ -3485,7 +3851,10 @@ window.FM = window.FM || {};
             const lk = localStorage.key(i);
             if (lk && lk.indexOf('fm.proj.') === 0) {
               projIds.add(lk.slice(8));
-              const d = readJSON(lk, null); if (d && d.layers) d.layers.forEach(l => keep.add(l.id));
+              const raw = localStorage.getItem(lk);
+              let d = null; try { d = raw ? JSON.parse(raw) : null; } catch (e) {}
+              if (raw && (!d || !d.project)) return null;   // #1005: unknown references — delete nothing this boot
+              if (d && Array.isArray(d.layers)) d.layers.forEach(l => { if (l) keep.add(l.id); });
             }
           }
           FM.scene.layers.forEach(l => keep.add(l.id));
@@ -3496,6 +3865,7 @@ window.FM = window.FM || {};
           return keep;
         };
         const keep = collectKeep();
+        if (!keep) { indexUnreadable(); return; }   // #1005: delete nothing — and an unreadable doc no card lists gets one (finding 2)
         /* ⚠️ queue 921 S0: A SAVE POINT IS A REFERENCE (spec §12.4, §24). `collab:ckpt:*` holds the
            document as it was before a share started, so every layer id inside one is still reachable
            through "Earlier versions…" — and collectKeep above only reads `fm.proj.*`, which a checkpoint
@@ -3542,6 +3912,7 @@ window.FM = window.FM || {};
         if (candidates.length) {
           if (FM._mediaBusy) { db.close(); return; }   // something started writing mid-scan
           const keep2 = collectKeep();                  // fresh snapshot at delete time
+          if (!keep2) { db.close(); indexUnreadable(); return; }
           for (const k of candidates) {
             if (keep2.has(k) || ckptKeep.has(k) || FM.media.get(k)) continue;   // referenced since the scan / by a collab save point (queue 921 S0) / live in memory
             await idbDel(db, k);
@@ -3662,6 +4033,19 @@ window.FM = window.FM || {};
      check above and minted its OWN element (or template): two cards for one thing, the #505 failure. A second call for
      the same workspace while one is running answers null, "nothing happened", which is what Home already reads it as. */
   const _libCommitting = new Set();
+  /* #1004 review F3: PUT A WORKSPACE AWAY — the switch the three commit paths share (commitLibDraftOnce below, and the
+     template and element commitDraft). `back` is the project to go back to, or none. A `back` that cannot be read is
+     refused by open() with nothing torn down, so the workspace stayed open, discardDraft refused it, and the commit still
+     answered "done" (for a new one, beside the element it had just saved). Close to nothing instead. A refusal for any
+     other reason (he chose to stay, queue 690) is left exactly as it was. Resolves true when the caller lands on Home. */
+  async function switchAwayTo(back) {
+    if (back && (await FM.projects.open(back, { landing: true })) === false) {
+      if (!unreadableDoc(back)) return false;
+      back = null;
+    }
+    if (!back) await FM.projects.open(null, { confirmed: true });   // queue 936: nowhere to land closes to nothing
+    return !back;
+  }
   async function commitLibDraft(kind) {
     const pid = tabId();
     if (!pid || _libCommitting.has(pid)) return null;
@@ -3686,9 +4070,9 @@ window.FM = window.FM || {};
     if (tabId() !== pid) { await FM.projects.discardDraft(pid); return has ? 'saved' : 'empty'; }   // he opened something else meanwhile: put the workspace away, leave the new one alone
     const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);
     const back = (P.returnTo && list.some(p => p.id === P.returnTo)) ? P.returnTo : (list[0] && list[0].id);
-    await FM.projects.open(back || null, { confirmed: !back });   // queue 936: nowhere to land closes to nothing
+    const home = await switchAwayTo(back);   // queue 936: nowhere to land closes to nothing
     await FM.projects.discardDraft(pid);
-    if (!back) landOnHome();
+    if (home) landOnHome();
     return has ? 'saved' : 'empty';
   }
   /* ═══ #948 fix 4 — TEMPLATES AND ELEMENTS GET THEIR OWN FILES ════════════════════════════════════════════════════════
@@ -3949,7 +4333,7 @@ window.FM = window.FM || {};
       const rev = meta.rev || 0;
       const existing = FM.projects.list().find(p => p.templateDraft && p.ofTemplate === tid);
       if (existing) {
-        if ((await FM.projects.open(existing.id)) === false) return false;   // queue 690: he chose to stay — never adopt a pack into HIS project
+        if ((await FM.projects.open(existing.id)) === false) return false;   // refused switch (#1004 included): never adopt a pack into HIS project
         /* THE TEMPLATE MOVED ON WHILE THIS WORKSPACE SAT (review, 2 Sep): "Update template from project" on some
            other project bumps `rev`; a workspace built from the older pack would, on Home, write the OLD contents
            back over the NEW ones. Re-adopt the current pack instead — the workspace was stale by definition. */
@@ -4009,9 +4393,9 @@ window.FM = window.FM || {};
       /* queue 936: nothing to go back to is no longer a reason to KEEP the draft open. It used to be, because "no project
          open" could not exist — so a draft committed on a fresh start stayed the open project, and the next launch
          reopened the workspace. Now it closes to nothing, like deleting the last project. */
-      await FM.projects.open(back || null, { confirmed: !back });
+      const home = await switchAwayTo(back);   // #1004 review F3: …and so does a `back` that cannot be read
       await FM.projects.discardDraft(pid);
-      if (!back) landOnHome();
+      if (home) landOnHome();
       return true;
     },
     /* WRITE A PROJECT BACK OVER THE TEMPLATE IT CAME FROM (queue 408 clause 2). Same shape as the preset
@@ -4231,7 +4615,7 @@ window.FM = window.FM || {};
       if (!meta) return null;
       const existing = FM.projects.list().find(p => p.elementDraft && p.ofElement === eid);
       if (existing) {
-        if ((await FM.projects.open(existing.id)) === false) return false;   // queue 690: false = he chose to stay
+        if ((await FM.projects.open(existing.id)) === false) return false;   // refused switch (#1004 included): leave the outgoing project intact
         /* ⚠️ AN EMPTY WORKSPACE IS A STUB, NOT HIS EDIT (queue 690, HUNT-e) — the rule commitDraft already
            applies on the way out, applied on the way back in. `create()` stamps `ofElement` on a doc with no
            layers, so a crash before the insert landed — or, until the history reset below, one Undo straight
@@ -4317,9 +4701,9 @@ window.FM = window.FM || {};
       if (tabId() !== pid) { await FM.projects.discardDraft(pid); return true; }   // queue 936 review: see the template twin
       const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);   // a template workspace is not somewhere to land either
       const back = (P.returnTo && list.some(p => p.id === P.returnTo)) ? P.returnTo : (list[0] && list[0].id);
-      await FM.projects.open(back || null, { confirmed: !back });   // queue 936: nowhere to land closes to nothing — see the template twin
+      const home = await switchAwayTo(back);   // queue 936: nowhere to land closes to nothing — see the template twin (and #1004 F3)
       await FM.projects.discardDraft(pid);
-      if (!back) landOnHome();
+      if (home) landOnHome();
       return true;
     },
     async updateFrom(eid, projectId, name) {

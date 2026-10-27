@@ -2821,7 +2821,12 @@
       libs.push('lib:' + T2.mid);
       if (!hold) throw new Error('setup: the held write never started');
       if (T2.key !== a.orig) throw new Error('setup: the new tile is keyed at ' + T2.key + ', not at the clip it replaced');
-      await FM.projects.open(bId);   // A released: nothing on screen holds the new file
+      /* { confirmed: true } (1187 bounded wait): since 1187 a switch with a clip file not yet landed waits for the save
+         and then ASKS, and this save is held on purpose until after the switch, so an unconfirmed open waited on it while
+         the test waited on the open: a deadlock that hung every later switch in the suite. He has already answered Leave
+         anyway here, as Home's card tap does (confirmLeave, then open confirmed); what this test is about is the tap AFTER
+         he left, with the save still queued, and that is unchanged. */
+      await FM.projects.open(bId, { confirmed: true });   // A released: nothing on screen holds the new file
       const mA = FM.media.get(a.orig);
       if (mA && mA.file) throw new Error('setup: the replaced clip is still in memory after opening another project, so nothing here is the disk alone');
       let asked = false;
@@ -2847,6 +2852,7 @@
     } finally {
       if (hold) { try { await hold.release(); } catch (e) {} }
       FM.toast = realToast; FM.storage.stashPrevMedia = realStash; FM.storage.readMedia = realRead;
+      try { await Promise.race([FM.storage.settled(), sleep(15000)]); } catch (e) {}   // 1187 bounded wait: the save it held is let finish before anything else switches
       await q915bFinish(made, orig, wasOpen, libs, idx0);
     }
   });
@@ -51418,6 +51424,188 @@
       FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = selIds0;
       if (FM.refreshAll) FM.refreshAll();
     }
+  });
+
+  function r1000Deadline(name, promise, ms = 10000) {
+    let timer;
+    return Promise.race([promise, new Promise((resolve, reject) => {
+      timer = setTimeout(() => reject(new Error('1000 deadline: ' + name)), ms);
+    })]).finally(() => clearTimeout(timer));
+  }
+
+  async function r1000StaleMedia(checkNotes) {
+    const key = 'fm.proj.' + FM.projects.currentId(), pk = 'fm.mediaPending';
+    const layers0 = FM.scene.layers, project0 = FM.scene.project;
+    const sel0 = FM.scene.selectedId, sels0 = FM.scene.selectedIds;
+    const setDesc = Object.getOwnPropertyDescriptor(Storage.prototype, 'setItem');
+    const realSet = Storage.prototype.setItem;
+    await r1000Deadline('settle existing saves', FM.storage.settled());
+    const raw0 = localStorage.getItem(key), pending0 = localStorage.getItem(pk);
+    if (!raw0) throw new Error('1000 setup: no stored project');
+    const L = FM.makeLayer('image', { name: '1000 old clip', x: 10, y: 10 });
+    L.start = 0; L.duration = 2; L.mediaRev = 0;
+    const oldFile = new Blob(['1000 OLD'], { type: 'application/octet-stream' });
+    const newFile = new Blob(['1000 NEWER replacement'], { type: 'application/octet-stream' });
+    let quota = false, bodyOk = false, cleanupErr = null;
+    const notes = [];
+    /* The record is DELETED before the newer one is written, as the other window's Replace media leaves this session
+       knowing nothing of it (review fold, #1000). writeMedia clears only _verified, so without the delete the previous
+       save's _stored(L) = 0 equals job.rev: the refused save's note was filtered out (its CONTROL failed on both trees)
+       and the stale save wrote no note on 75cacf0e either, so the pending-note test could not fail there. */
+    const seed = async name => {
+      await r1000Deadline(name + ' forget the stored record', FM.storage.removeMedia(L.id));
+      const ok = await r1000Deadline(name + ' seed newer record', FM.storage.writeMedia(L.id, { file: newFile, kind: 'image', rev: 1 }));
+      if (!ok) throw new Error('1000 setup: newer record write failed');
+      const rec = await r1000Deadline(name + ' read seed', FM.storage.readMedia(L.id));
+      if (!rec || rec.rev !== 1 || await r1000Deadline(name + ' seed bytes', rec.file.text()) !== '1000 NEWER replacement') {
+        throw new Error('1000 setup: newer replacement was not stored');
+      }
+      notes.length = 0;
+    };
+    const expectOld = async name => {
+      const rec = await r1000Deadline(name + ' read result', FM.storage.readMedia(L.id));
+      if (!rec || rec.rev !== 0 || await r1000Deadline(name + ' result bytes', rec.file.text()) !== '1000 OLD') {
+        throw new Error('1000 CONTROL: ' + name + ' did not write this tab\'s old file');
+      }
+      if (!notes.some(p => p[L.id] && p[L.id].r === 0)) throw new Error('1000 CONTROL: ' + name + ' never recorded its pending clip');
+    };
+    try {
+      FM.scene.layers = [L]; FM.scene.selectedId = L.id; FM.scene.selectedIds = [L.id];
+      FM.media.set(L.id, { kind: 'image', file: oldFile, el: document.createElement('canvas'), width: 1, height: 1, duration: 0 });
+      if (!FM.storage.flushSync()) throw new Error('1000 setup: baseline document refused');
+      Object.defineProperty(Storage.prototype, 'setItem', Object.assign({}, setDesc, { value: function (k, v) {
+        if (k === pk) notes.push(JSON.parse(v));
+        if (quota && k === key) throw new DOMException('1000 full store', 'QuotaExceededError');
+        return realSet.call(this, k, v);
+      } }));
+      await r1000Deadline('ordinary setup', seed('ordinary'), 40000);
+      await r1000Deadline('ordinary autosave', FM.storage.save());
+      await r1000Deadline('ordinary control', expectOld('ordinary save'), 40000);
+
+      await r1000Deadline('quota setup', seed('quota'), 40000);
+      const beforeQuota = localStorage.getItem(key);
+      L.name = '1000 edit while full'; quota = true;
+      await r1000Deadline('quota autosave', FM.storage.save());
+      if (!FM.storage.lastWriteRefused() || localStorage.getItem(key) !== beforeQuota) throw new Error('1000 CONTROL: quota did not refuse the document');
+      await r1000Deadline('quota control', expectOld('refused save'), 40000);
+      quota = false;
+      if (!FM.storage.flushSync()) throw new Error('1000 setup: document did not recover after quota');
+
+      await r1000Deadline('stale setup', seed('stale'), 40000);
+      const other = JSON.parse(localStorage.getItem(key));
+      other.rev++; other.layers[0].mediaRev = 1; other.layers[0].name = '1000 replaced in window B';
+      localStorage.setItem(key, JSON.stringify(other));
+      const otherRaw = localStorage.getItem(key);
+      L.name = '1000 transform edit in window A';
+      if (FM._sceneRevState().stale) throw new Error('1000 setup: stale was already set before autosave');
+      await r1000Deadline('stale autosave', FM.storage.save());
+      if (!FM._sceneRevState().stale || localStorage.getItem(key) !== otherRaw) throw new Error('1000 CONTROL: autosave did not detect and refuse the newer document');
+      if (checkNotes) {
+        const pending = JSON.parse(localStorage.getItem(pk) || '{}');
+        if (notes.some(p => p[L.id]) || pending[L.id]) throw new Error('1000 stale autosave recorded a pending note for its old clip');
+      } else {
+        const rec = await r1000Deadline('stale read result', FM.storage.readMedia(L.id));
+        if (!rec || rec.rev !== 1 || await r1000Deadline('stale result bytes', rec.file.text()) !== '1000 NEWER replacement') {
+          throw new Error('1000 stale autosave overwrote window B\'s newer replacement with window A\'s old file');
+        }
+      }
+      bodyOk = true;
+    } finally {
+      Object.defineProperty(Storage.prototype, 'setItem', setDesc);
+      await r1000Cleanup(key, raw0, [L.id], e => { cleanupErr = cleanupErr || e; });
+      FM.scene.layers = layers0; FM.scene.project = project0;
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = sels0;
+      try { if (pending0 == null) localStorage.removeItem(pk); else localStorage.setItem(pk, pending0); } catch (e) { cleanupErr = cleanupErr || e; }
+      if (FM.refreshAll) FM.refreshAll();
+      if (bodyOk && cleanupErr) throw cleanupErr;   // a failed cleanup fails the test, but never hides the body's own failure
+    }
+  }
+
+  /* The document and the stale flag FIRST, each step in its own try (review fold, #1000): a removeMedia that hit its
+     deadline used to skip the restore and the load() behind it, and the tab stayed stale for the rest of the suite.
+     load() replaces FM.scene.layers from disk, so the caller puts its scene back after this (as #306 does). */
+  async function r1000Cleanup(key, raw0, ids, fail) {
+    try { localStorage.setItem(key, raw0); } catch (e) { fail(e); }
+    try { await r1000Deadline('cleanup reload original revision', FM.storage.load()); } catch (e) { fail(e); }
+    for (const id of ids) {
+      try { await r1000Deadline('cleanup remove synthetic media', FM.storage.removeMedia(id)); } catch (e) { fail(e); }
+      try { FM.media.remove(id); } catch (e) { fail(e); }
+    }
+  }
+
+  test('1000 stale autosave preserves the newer replacement (ordinary and quota saves still write media)', { item: '1000', budgetMs: 120000 }, async function () {
+    await r1000Deadline('media regression', r1000StaleMedia(false), 90000);
+  });
+
+  test('1000 stale autosave never records its old clip as pending (ordinary and quota saves still note it)', { item: '1000', budgetMs: 120000 }, async function () {
+    await r1000Deadline('pending regression', r1000StaleMedia(true), 90000);
+  });
+
+  /* #1000 review fold: A CLIP IMPORTED IN THE STALE TAB STILL GETS ITS FILE STORED. An import's file reaches IndexedDB only
+   * through save(), and its Add → Media tile is keyed at the new layer id, so a stale save that wrote no media at all
+   * (5c80a97b) left that tile pointing at nothing: a tap said "no longer stored" and dropped it for every window, and after
+   * a reload the import existed nowhere. CONTROL, in the same save: a clip that already has a newer record (window B
+   * replaced it, and this session holds no record of it on disk, the case the _stored half alone would let through) is
+   * still not written over. 75cacf0e fails the CONTROL; 5c80a97b fails the import. */
+  async function r1000StaleImport() {
+    const key = 'fm.proj.' + FM.projects.currentId(), pk = 'fm.mediaPending';
+    const layers0 = FM.scene.layers, project0 = FM.scene.project;
+    const sel0 = FM.scene.selectedId, sels0 = FM.scene.selectedIds;
+    await r1000Deadline('settle existing saves', FM.storage.settled());
+    const raw0 = localStorage.getItem(key), pending0 = localStorage.getItem(pk);
+    if (!raw0) throw new Error('1000 setup: no stored project');
+    const A = FM.makeLayer('image', { name: '1000 clip window B replaced', x: 10, y: 10 });
+    A.start = 0; A.duration = 2; A.mediaRev = 0;
+    const N = FM.makeLayer('image', { name: '1000 clip imported in the stale tab', x: 20, y: 20 });
+    N.start = 0; N.duration = 2; N.mediaRev = 0;
+    const oldFile = new Blob(['1000 OLD'], { type: 'application/octet-stream' });
+    const newFile = new Blob(['1000 NEWER replacement'], { type: 'application/octet-stream' });
+    const importFile = new Blob(['1000 IMPORTED while stale'], { type: 'application/octet-stream' });
+    const bytes = async (name, rec) => (rec && rec.file) ? await r1000Deadline(name + ' bytes', rec.file.text()) : null;
+    let bodyOk = false, cleanupErr = null;
+    try {
+      FM.scene.layers = [A]; FM.scene.selectedId = A.id; FM.scene.selectedIds = [A.id];
+      FM.media.set(A.id, { kind: 'image', file: oldFile, el: document.createElement('canvas'), width: 1, height: 1, duration: 0 });
+      if (!FM.storage.flushSync()) throw new Error('1000 setup: baseline document refused');
+      await r1000Deadline('forget A', FM.storage.removeMedia(A.id));
+      await r1000Deadline('forget N', FM.storage.removeMedia(N.id));
+      const ok = await r1000Deadline('seed newer record', FM.storage.writeMedia(A.id, { file: newFile, kind: 'image', rev: 1 }));
+      if (!ok) throw new Error('1000 setup: newer record write failed');
+      const seeded = await r1000Deadline('read seed', FM.storage.readMedia(A.id));
+      if (!seeded || seeded.rev !== 1 || await bytes('seed', seeded) !== '1000 NEWER replacement') throw new Error('1000 setup: newer replacement was not stored');
+      if (await r1000Deadline('read import before', FM.storage.readMedia(N.id))) throw new Error('1000 setup: the imported clip already has a record');
+      // window B replaced A and saved: newer work on disk
+      const other = JSON.parse(localStorage.getItem(key));
+      other.rev++; other.layers[0].mediaRev = 1; other.layers[0].name = '1000 replaced in window B';
+      localStorage.setItem(key, JSON.stringify(other));
+      const otherRaw = localStorage.getItem(key);
+      // …and this tab, now behind, imports a clip and saves
+      FM.scene.layers = [A, N]; FM.scene.selectedId = N.id; FM.scene.selectedIds = [N.id];
+      FM.media.set(N.id, { kind: 'image', file: importFile, el: document.createElement('canvas'), width: 1, height: 1, duration: 0 });
+      if (FM._sceneRevState().stale) throw new Error('1000 setup: stale was already set before the save');
+      await r1000Deadline('stale save', FM.storage.save());
+      if (!FM._sceneRevState().stale || localStorage.getItem(key) !== otherRaw) throw new Error('1000 CONTROL: the save did not detect and refuse the newer document');
+      const got = await r1000Deadline('read import after', FM.storage.readMedia(N.id));
+      if (!got || (got.rev || 0) !== 0 || await bytes('import', got) !== '1000 IMPORTED while stale') {
+        throw new Error('1000 the stale save never stored the clip imported in this tab: its Add → Media tile points at nothing, and after a reload the import exists nowhere');
+      }
+      const kept = await r1000Deadline('read A after', FM.storage.readMedia(A.id));
+      if (!kept || kept.rev !== 1 || await bytes('kept', kept) !== '1000 NEWER replacement') {
+        throw new Error('1000 CONTROL: the stale save wrote this tab\'s old file over window B\'s newer replacement');
+      }
+      bodyOk = true;
+    } finally {
+      await r1000Cleanup(key, raw0, [A.id, N.id], e => { cleanupErr = cleanupErr || e; });
+      FM.scene.layers = layers0; FM.scene.project = project0;
+      FM.scene.selectedId = sel0; FM.scene.selectedIds = sels0;
+      try { if (pending0 == null) localStorage.removeItem(pk); else localStorage.setItem(pk, pending0); } catch (e) { cleanupErr = cleanupErr || e; }
+      if (FM.refreshAll) FM.refreshAll();
+      if (bodyOk && cleanupErr) throw cleanupErr;   // a failed cleanup fails the test, but never hides the body's own failure
+    }
+  }
+
+  test('1000 stale save still stores a clip imported in that tab, and never writes over a newer record (CONTROL: window B\'s replaced clip keeps its newer file)', { item: '1000', budgetMs: 120000 }, async function () {
+    await r1000Deadline('stale import', r1000StaleImport(), 90000);
   });
 
   /* ---------------- EFFECTS-PLAN round 19: the atmosphere effects ---------------- */
@@ -185886,5 +186074,1246 @@
       try { await race1189(FM.storage.settled(), 15000, 'FM.storage.settled in cleanup'); } catch (e) {}
       await q915aCleanup(made, orig, wasHome, [], [], []);
     }
+  });
+
+  /* ═══ 1190 (the PM's read-only hang / data-loss hunt, item 5): AN INDEXEDDB DELETE THAT ABORTS WHILE IT COMMITS ═══
+     idbDel (js/storage.js) settled on complete and on error only. A transaction that aborts at commit — WebKit losing its
+     IndexedDB connection under the memory pressure of a heavy export, a disk fault, site data cleared — fires abort with NO
+     error event, so the promise never settled and everything awaiting it hung: the export's resume clear
+     (FM.exportResume.clear, waited on by Cancel, after Save, and by the fresh-start sweep before frame 1) left the export
+     overlay up at its last percentage with a Cancel that did nothing. The stub is exactly that shape: the real request runs,
+     and its own success handler aborts the transaction, which rolls the write back and fires abort alone. Each wait races
+     the TEST'S own deadline, never app timing. The prototype descriptors are put back in a finally, and so are any xr:
+     records that were there before (dl5KeepXr). */
+  function dl5AbortAfterSuccess(proto, name, keyAt) {
+    const d = Object.getOwnPropertyDescriptor(proto, name), real = d.value;
+    Object.defineProperty(proto, name, { configurable: true, enumerable: d.enumerable, writable: true, value: function () {
+      const req = real.apply(this, arguments);
+      const key = arguments[keyAt];
+      if (typeof key === 'string' && key.indexOf('xr:') === 0) req.addEventListener('success', function () { try { req.transaction.abort(); } catch (e) {} });
+      return req;
+    } });
+    return function () { Object.defineProperty(proto, name, d); };
+  }
+  async function dl5KeepXr() {
+    const recs = [];
+    try {
+      const keys = await FM.storage.listMediaKeys('xr:');
+      for (const k of keys) { const v = await FM.storage.readMedia(k); if (v != null) recs.push([k, v]); }
+    } catch (e) {}
+    return async function () {
+      try { await Promise.race([FM.exportResume.clear(), sleep(10000)]); } catch (e) {}
+      try { await Promise.race([FM.storage.removeMedia('xr:probe'), sleep(5000)]); } catch (e) {}
+      for (const kv of recs) { try { await FM.storage.writeMedia(kv[0], kv[1]); } catch (e) {} }
+    };
+  }
+
+  /* FAILS ON 37952353: the clear is still pending 5 s after its delete transaction aborted ('hung').
+     CONTROL first, green before and after: the same abort-in-success on a PUT makes FM.storage.writeMedia answer false within
+     5 s and nothing lands (idbPut already answers abort), so the stub really produces the abort-only case. And after the
+     fix the job record the aborted delete was for is still on disk: the clear settled because the abort was answered, not
+     because the delete went through. */
+  test('1190 an IndexedDB delete that aborts while committing still settles: clearing an export’s resume parts ends instead of hanging, which is what kept the export overlay up with a dead Cancel (CONTROL: the same abort on a put already makes writeMedia answer false)', { item: '1190', budgetMs: 60000 }, async function () {
+    if (!FM.exportResume || typeof FM.exportResume.clear !== 'function') throw new Error('setup: FM.exportResume.clear (js/export-resume.js) is not reachable');
+    if (!FM.storage || typeof FM.storage.writeMedia !== 'function' || typeof FM.storage.readMedia !== 'function' || typeof FM.storage.listMediaKeys !== 'function') throw new Error('setup: FM.storage.writeMedia / readMedia / listMediaKeys are not reachable');
+    const race = function (p, ms) {
+      return Promise.race([Promise.resolve(p).then(function (v) { return { end: 'settled', v: v }; }, function (e) { return { end: 'settled', v: e }; }), sleep(ms).then(function () { return { end: 'hung' }; })]);
+    };
+    const putBack = await dl5KeepXr();
+    let undo = null;
+    try {
+      window.__fmStep = '1190: CONTROL, an aborted put';
+      undo = dl5AbortAfterSuccess(IDBObjectStore.prototype, 'put', 1);
+      const c = await race(FM.storage.writeMedia('xr:probe', { probe: '1190' }), 5000);
+      undo(); undo = null;
+      if (c.end !== 'settled') throw new Error('CONTROL: a put whose transaction aborted while committing left writeMedia pending 5 s later, so idbPut no longer answers abort and this stub measures something else');
+      if (c.v !== false) throw new Error('CONTROL: with its transaction aborted in the put’s own success handler, writeMedia answered ' + String(c.v) + ', not false: the stub did not produce the abort-only case');
+      if (await FM.storage.readMedia('xr:probe')) throw new Error('CONTROL: the aborted put landed anyway, so the transaction was never aborted');
+      /* the job record, which the clear deletes first */
+      if ((await FM.storage.writeMedia('xr:job', { hunt: 'dl5', parts: 0 })) !== true) throw new Error('setup: the export job record could not be written, so there is nothing for the clear to delete');
+      window.__fmStep = '1190: the clear with its delete aborted';
+      undo = dl5AbortAfterSuccess(IDBObjectStore.prototype, 'delete', 0);
+      const r = await race(FM.exportResume.clear(), 5000);
+      undo(); undo = null;
+      if (r.end !== 'settled') {
+        throw new Error('clearing the export’s resume parts (FM.exportResume.clear, which Cancel, Save and the fresh-start sweep all wait on) was still pending 5 s after its delete transaction aborted while committing: idbDel answers complete and error only, so on an abort it never settles, the export overlay stays up at its last percentage and Cancel does nothing');
+      }
+      if (!(await FM.storage.readMedia('xr:job'))) throw new Error('setup: the job record is gone, so its delete was never aborted and the clear settled for the ordinary reason, which proves nothing');
+    } finally {
+      if (undo) { try { undo(); } catch (e) {} }
+      await putBack();
+    }
+  });
+
+  /* The same fault end to end, through the Export button's own entry (FM._runExport): an MP4 of a 1 s shape project, with the
+     delete stub on, and Cancel at frame 5 (set where the exporter draws its frames). On 37952353 the fresh-start sweep's clear
+     hangs before frame 1, so the cancel comes as a tap 2.5 s in and is never read: the run is still pending at the 10 s
+     deadline and the overlay is up. 320x240 rather than the list's 64x64, a size every encoder in the suite takes.
+     CONTROL first: the same export, cancelled at frame 5 with no fault, settles and hides the overlay (green before and after),
+     so the fixture reaches the frame loop and the red is the fault's. On a red run the hung export's flags are put down by
+     hand, because its own finally never runs. */
+  test('1190 an export whose resume parts cannot be deleted still ends when he taps Cancel: the run settles and the export overlay goes within 10 s (CONTROL: the same export cancelled at frame 5 with no fault ends the same way)', { item: '1190', budgetMs: 120000 }, async function () {
+    if (typeof VideoEncoder === 'undefined' || typeof window.Mp4Muxer === 'undefined') throw new Error('setup: no WebCodecs or muxer in this browser, so there is no MP4 export to cancel');
+    if (typeof FM._runExport !== 'function' || typeof FM._setExportSoloId !== 'function' || !FM.exportResume) throw new Error('setup: FM._runExport / FM._setExportSoloId / FM.exportResume are not reachable');
+    const $ = function (id) { return document.getElementById(id); };
+    const overlay = $('export-overlay'), ready = $('export-ready'), discard = $('xr-discard');
+    const fmtEl = $('exp-format'), rangeEl = $('exp-range'), resEl = $('exp-res'), fpsEl = $('exp-fps');
+    if (!overlay || !fmtEl || !rangeEl || !resEl || !fpsEl) throw new Error('setup: the export dialog or its overlay is missing from this build');
+    const keep = { fmt: fmtEl.value, range: rangeEl.value, res: resEl.value, fps: fpsEl.value, solo: FM._exportSoloId ? FM._exportSoloId() : null, prefs: null, rep: null };
+    try { keep.prefs = localStorage.getItem('fm.exportPrefs'); keep.rep = localStorage.getItem('fm.lastExportReport'); } catch (e) {}
+    const dRender = Object.getOwnPropertyDescriptor(FM, 'renderScene'), realRender = FM.renderScene;
+    const dAlert = Object.getOwnPropertyDescriptor(window, 'alert');
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [], alerts = [];
+    let frames = 0, armed = false, cancelledAt = '', poll = 0, undo = null, hung = false, putBack = null;
+    /* `fallback`: the 2.5 s tap stands in for frame 5 only in the FAULTED run (review F6a) — armed in the CONTROL too, a slow
+       laptop reaching frame 5 after 2.5 s failed the control on both trees */
+    const exportOnce = async function (fallback) {
+      frames = 0; cancelledAt = ''; FM._exportCancel = false; armed = true;
+      const t0 = Date.now();
+      poll = setInterval(function () {
+        if (ready && discard && !ready.classList.contains('hidden')) discard.click();
+        if (fallback && !cancelledAt && FM._exporting && Date.now() - t0 > 2500) { cancelledAt = 'by a tap 2.5 s in, at frame ' + frames; FM._exportCancel = true; }
+      }, 50);
+      const running = FM._runExport();
+      const end = await Promise.race([Promise.resolve(running).then(function () { return 'settled'; }, function () { return 'settled'; }), sleep(10000).then(function () { return 'hung'; })]);
+      clearInterval(poll); poll = 0; armed = false;
+      if (end === 'hung') hung = true;
+      return { end: end, hidden: overlay.classList.contains('hidden'), at: cancelledAt, frames: frames };
+    };
+    try {
+      putBack = await dl5KeepXr();
+      Object.defineProperty(window, 'alert', { configurable: true, writable: true, value: function (m) { alerts.push(String(m)); } });
+      Object.defineProperty(FM, 'renderScene', { configurable: true, writable: true, value: function () {
+        if (armed && FM._exporting) { frames++; if (frames === 5 && !cancelledAt) { cancelledAt = 'at frame 5'; FM._exportCancel = true; } }
+        return realRender.apply(this, arguments);
+      } });
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      /* a named deadline (review F6b): a clip an earlier test left unstored would raise a REAL question here, not a hang to the budget */
+      const pid = await Promise.race([FM.projects.create({ name: '1190 export', width: 320, height: 240, fps: 30 }), sleep(15000).then(function () { return 'hung'; })]);
+      if (pid === 'hung') throw new Error('setup: making the export project had not finished 15 s later (a leave question nobody can answer?)');
+      if (!pid) throw new Error('setup: no project could be made to export from');
+      made.push(pid);
+      const L = FM.makeLayer('shape', { name: '1190 box', shape: 'rect', x: 160, y: 120, shapeW: 80, shapeH: 60, fill: '#e76f51' });
+      L.start = 0; L.duration = 1; FM.scene.layers.push(L);
+      FM.scene.project.duration = 1; FM.scene.project.fps = 30;
+      FM.selectLayer(null); FM.refreshAll();
+      /* The size list is built per project when the dialog opens (showExportDialog). Run alone, nothing had opened it, so
+         Same as project did not exist yet (v18.09's prove, 27 Oct, red on both trees). Open it once on this project, then put it away. */
+      await Promise.race([FM.showExportDialog(), sleep(5000)]); await sleep(60);
+      const dlg = $('export-dialog'); if (dlg) dlg.classList.add('hidden');
+      fmtEl.value = 'mp4'; rangeEl.value = 'whole'; resEl.value = '1'; fpsEl.value = 'project'; FM._setExportSoloId(null);
+      if (resEl.value !== '1' || fpsEl.value !== 'project') throw new Error('setup: the export dialog has no Same as project size or frame rate');
+      window.__fmStep = '1190: CONTROL export, cancelled at frame 5';
+      const c = await exportOnce(false);
+      if (c.end !== 'settled' || !c.hidden) throw new Error('CONTROL: with nothing failing, an export cancelled ' + (c.at || 'never') + ' ' + (c.end === 'hung' ? 'was still running 10 s later' : 'left the overlay up') + (alerts.length ? ' (it said: ' + alerts.join(' / ').slice(0, 160) + ')' : ''));
+      if (c.at !== 'at frame 5') throw new Error('CONTROL: the export never reached frame 5 (cancelled ' + (c.at || 'never') + ', ' + c.frames + ' frames drawn' + (alerts.length ? ', it said: ' + alerts.join(' / ').slice(0, 160) : '') + '), so this fixture does not reach the frame loop');
+      window.__fmStep = '1190: export with every resume delete aborted';
+      undo = dl5AbortAfterSuccess(IDBObjectStore.prototype, 'delete', 0);
+      const r = await exportOnce(true);
+      undo(); undo = null;
+      if (r.end !== 'settled' || !r.hidden) {
+        throw new Error('an MP4 export whose resume parts could not be deleted (the IndexedDB transaction aborted while committing) did not end when he cancelled it ' + (r.at || 'at all') + ': ' +
+          (r.end === 'hung' ? 'the run was still pending 10 s later, with ' + r.frames + ' frame(s) drawn' : 'the run settled but the export overlay is still up') +
+          ', so the overlay sits at its last percentage with a Cancel that does nothing until the app is reloaded');
+      }
+    } finally {
+      if (poll) clearInterval(poll);
+      armed = false;
+      if (undo) { try { undo(); } catch (e) {} }
+      if (hung) { FM._exporting = false; overlay.classList.add('hidden'); }
+      FM._exportCancel = false;
+      if (dRender) Object.defineProperty(FM, 'renderScene', dRender); else FM.renderScene = realRender;
+      if (dAlert) Object.defineProperty(window, 'alert', dAlert); else delete window.alert;
+      fmtEl.value = keep.fmt; rangeEl.value = keep.range; resEl.value = keep.res; fpsEl.value = keep.fps;
+      try { FM._setExportSoloId(keep.solo); } catch (e) {}
+      try {
+        if (keep.prefs == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', keep.prefs);
+        if (keep.rep == null) localStorage.removeItem('fm.lastExportReport'); else localStorage.setItem('fm.lastExportReport', keep.rep);
+      } catch (e) {}
+      if (putBack) await putBack();
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* ═══ 1187 (the PM's hunt, item 2): A CLIP WHOSE FILE NEVER REACHED STORAGE IS NOT LET GO UNASKED ════════════════
+     save() writes the project document first and the clip's file after it, and on a nearly full phone the file can be
+     refused while the small document saves (WebKit's localStorage has its own 5 MB): one toast, Not enough storage to save
+     that media, and the clip plays on from memory. Opening another project, + New project, Home's card tap and a new
+     build's auto-reload then let go of that memory, and the file was gone for good: a voice take or a Remove vocals render
+     has nothing to add again from. The fix asks first (FM.storage.unlandedFiles, then the app's own askLeave), after waiting
+     for a write still running and one more save. The put of ONE layer's record is refused with a QuotaExceededError, as a
+     full store refuses it; FM.ask is stubbed to record each question and answer it, so a question nobody taps can never hang
+     the suite. Every stub puts its descriptor back in a finally. */
+  async function dl2Clip(name, rgb) {
+    const plate = document.createElement('canvas'); plate.width = 32; plate.height = 24;
+    const file = await q915aPng('dl2-' + name.replace(/[^a-z0-9]+/gi, '-'), rgb);
+    const L = FM.makeLayer('image', { name: name, x: 160, y: 120 });
+    L.start = 0; L.duration = 2;
+    FM.scene.layers.push(L);
+    FM.media.set(L.id, { kind: 'image', el: plate, width: 32, height: 24, duration: 0, file: file });
+    FM.refreshAll();
+    return L;
+  }
+  function dl2RefusePut(isRefused) {
+    const d = Object.getOwnPropertyDescriptor(IDBObjectStore.prototype, 'put'), real = d.value;
+    Object.defineProperty(IDBObjectStore.prototype, 'put', { configurable: true, enumerable: d.enumerable, writable: true, value: function (val, key) {
+      if (isRefused(key)) throw new DOMException('refused by the 1187 test', 'QuotaExceededError');
+      return real.apply(this, arguments);
+    } });
+    return function () { Object.defineProperty(IDBObjectStore.prototype, 'put', d); };
+  }
+  function dl2Ask(answerOf) {
+    const d = Object.getOwnPropertyDescriptor(FM, 'ask'), asked = [];
+    const stub = function (o) {
+      const app = document.getElementById('app');
+      asked.push({ o: o || {}, pushing: document.body.classList.contains('fm-pushing') || !!(app && app.classList.contains('fm-push-wait')) });
+      return Promise.resolve(answerOf(o));
+    };
+    stub.isOpen = function () { return false; };
+    Object.defineProperty(FM, 'ask', { configurable: true, writable: true, value: stub });
+    return { asked: asked, put: function () { if (d) Object.defineProperty(FM, 'ask', d); else delete FM.ask; } };
+  }
+  function dl2Within(p, ms, what) {
+    return Promise.race([p, sleep(ms).then(function () { throw new Error(what + ' had not finished ' + Math.round(ms / 1000) + ' s later'); })]);
+  }
+
+  /* FAILS ON 37952353: open() answers true with no question asked, and the clip whose file was refused is no longer in memory.
+     CONTROLS, green before and after: with every clip's file stored, the same open switches with no question; and a clip whose
+     write is slow but succeeds (the save's IndexedDB open held 1.5 s, so the write is still running when open() is called) is
+     waited for, not asked about, and lands. The Home leg forces the push on (FM.home._pushAllowed, the phone's answer) so
+     before the push means something at every width. */
+  test('1187 opening another project while a clip’s file never reached storage asks first, naming the clip: Stay keeps it on screen and in memory, from a Home card the question comes before the push, and Leave anyway still goes (CONTROLS: with the file stored the same open switches with no question; a write still running is waited for, not asked about)', { item: '1187', budgetMs: 120000 }, async function () {
+    if (!FM.projects || typeof FM.projects.open !== 'function' || !FM.home || typeof FM.home._openProject !== 'function') throw new Error('setup: FM.projects.open / FM.home._openProject are not reachable');
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    let answer = false, refused = null, slowOn = false;
+    const A = dl2Ask(function () { return answer; }), asked = A.asked;
+    const unPut = dl2RefusePut(function (k) { return refused !== null && k === refused; });
+    const dOpen = Object.getOwnPropertyDescriptor(IDBFactory.prototype, 'open'), realOpen = dOpen.value;
+    Object.defineProperty(IDBFactory.prototype, 'open', { configurable: true, enumerable: dOpen.enumerable, writable: true, value: function () {
+      const r = realOpen.apply(this, arguments);
+      if (slowOn) {
+        let fn = null;
+        Object.defineProperty(r, 'onsuccess', { configurable: true, get: function () { return fn; }, set: function (f) { fn = f; } });
+        r.addEventListener('success', function (ev) { setTimeout(function () { if (fn) fn.call(r, ev); }, 1500); });
+      }
+      return r;
+    } });
+    const push0 = FM.home._pushAllowed;
+    const inMemory = function (L, f) { const m = FM.media.get(L.id); return !!(m && m.file && (!f || m.file === f)); };
+    const said = function (q) { return [q.title, q.message, q.ok, q.cancel].filter(Boolean).join(' | ').replace(/"/g, '\''); };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const other = await FM.projects.create({ name: '1187 other', width: 320, height: 240 }); made.push(other);
+      const mine = await FM.projects.create({ name: '1187 mine', width: 320, height: 240 }); made.push(mine);
+      if (!other || !mine || FM.projects.currentId() !== mine) throw new Error('setup: 1187 mine is not the open project');
+      if (asked.length) throw new Error('setup: creating two projects asked ' + asked.length + ' question(s): ' + said(asked[0].o));
+      /* CONTROL 1: the file stored, no question */
+      window.__fmStep = '1187: CONTROL, every file stored';
+      const S1 = await dl2Clip('1187 stored', '#2a9d8f');
+      FM.storage.markDirty(); await FM.storage.save(); await FM.storage.settled();
+      const r1 = await FM.storage.readMedia(S1.id);
+      if (!r1 || !r1.file) throw new Error('setup: with room to save, the clip 1187 stored did not reach storage');
+      const o1 = await dl2Within(FM.projects.open(other), 15000, 'CONTROL: opening the other project with every clip stored');
+      if (o1 !== true || FM.projects.currentId() !== other) throw new Error('CONTROL: with every clip’s file stored, opening another project answered ' + o1 + ' and did not switch');
+      if (asked.length) throw new Error('CONTROL: with every clip’s file stored, opening another project asked a question (' + said(asked[0].o) + '): a question on every switch is one he learns to tap through');
+      if ((await dl2Within(FM.projects.open(mine), 15000, 'setup: going back to 1187 mine')) !== true) throw new Error('setup: could not go back to 1187 mine');
+      /* CONTROL 2: a slow write that succeeds is waited for, not asked about */
+      window.__fmStep = '1187: CONTROL, a write still running';
+      const S2 = await dl2Clip('1187 slow', '#264653');
+      FM.storage.markDirty();
+      slowOn = true;
+      const saving = FM.storage.save();
+      slowOn = false;
+      if (FM.storage.pendingSaves() < 1) throw new Error('setup: the save had already finished, so nothing was still being written');
+      if (await FM.storage.readMedia(S2.id)) throw new Error('setup: the slow write had already landed, so nothing was in flight at the switch');
+      if (FM.storage.pendingSaves() < 1) throw new Error('setup: the slow save finished before the switch, so nothing was in flight');
+      const o2 = await dl2Within(FM.projects.open(other), 15000, 'CONTROL: opening the other project while a clip’s file was still being written');
+      await dl2Within(saving, 15000, 'setup: the slow save');
+      if (o2 !== true || FM.projects.currentId() !== other) throw new Error('CONTROL: a clip whose write was slow but succeeded stopped the switch (open answered ' + o2 + ')');
+      if (asked.length) throw new Error('CONTROL: a clip whose file was still being written, and landed, was asked about (' + said(asked[0].o) + '): a file on its way is late, not lost');
+      const r2 = await FM.storage.readMedia(S2.id);
+      if (!r2 || !r2.file) throw new Error('CONTROL: the slow write never landed');
+      if ((await dl2Within(FM.projects.open(mine), 15000, 'setup: going back to 1187 mine again')) !== true) throw new Error('setup: could not go back to 1187 mine again');
+      /* THE BUG: a clip whose file the full phone refuses */
+      window.__fmStep = '1187: a clip whose file was refused, then open';
+      const B = await dl2Clip('1187 Voice 1', '#e76f51');
+      refused = B.id;
+      FM.storage.markDirty(); await FM.storage.save(); await FM.storage.settled();
+      if (await FM.storage.readMedia(B.id)) throw new Error('setup: the refused write landed anyway, so the phone was not full');
+      if (FM.storage.lastWriteRefused()) throw new Error('setup: the project document was refused too, so this is the full-store question, not the clip one');
+      const mB = FM.media.get(B.id), fileB = mB && mB.file;
+      if (!fileB) throw new Error('setup: 1187 Voice 1 is not in memory to begin with');
+      answer = false;
+      const o3 = await dl2Within(FM.projects.open(other), 15000, 'opening another project with a clip whose file never reached storage');
+      if (o3 !== false || asked.length !== 1 || FM.projects.currentId() !== mine || !inMemory(B, fileB)) {
+        throw new Error('the phone refused to store the file of a clip (1187 Voice 1: a voice take or a Remove vocals render has no other copy) and he opened another project: open() answered ' + o3 + ' after ' + asked.length + ' question(s), the open project is ' +
+          (FM.projects.currentId() === mine ? 'still his' : 'the other one') + ', and the clip ' + (inMemory(B, fileB) ? 'is still in memory' : 'was let go, its only copy gone for good') + '. Back in his project it says the clip never finished saving, add it again');
+      }
+      if (said(asked[0].o).indexOf('1187 Voice 1') < 0) throw new Error('the question does not name the clip whose file is not stored: ' + said(asked[0].o));
+      if (!/Leave anyway/.test(asked[0].o.ok || '') || !/Stay/.test(asked[0].o.cancel || '')) throw new Error('the question’s answers are not Stay and Leave anyway: ' + said(asked[0].o));
+      if (!FM.layerById(FM.scene, B.id)) throw new Error('after Stay the clip 1187 Voice 1 is no longer on the timeline');
+      /* Home, a card tap: the question BEFORE the push, and Stay leaves him on Home with the clip */
+      window.__fmStep = '1187: Home card tap with the clip not stored';
+      FM.home._pushAllowed = function () { return true; };
+      FM.home.open(); await sleep(400);
+      const r4 = await dl2Within(FM.home._openProject(other), 15000, 'a tap on the other project’s card on Home');
+      if (asked.length !== 2) throw new Error('a tap on another project’s card on Home, with 1187 Voice 1 still not stored, asked ' + (asked.length - 1) + ' question(s), not one (open answered ' + r4 + ', the open project is ' + (FM.projects.currentId() === mine ? 'his' : 'the other one') + ')');
+      if (asked[1].pushing) throw new Error('the question came up half-way through the push into the editor: Home was already sliding away under it');
+      if (r4 !== null) throw new Error('after Stay on a Home card tap, openProject answered ' + r4 + ' (null means he chose to stay; false would make its ⋯ actions say busy)');
+      await sleep(250);
+      if (!FM.home.isOpen()) throw new Error('after Stay on a Home card tap, Home closed anyway');
+      if (FM.projects.currentId() !== mine || !inMemory(B, fileB)) throw new Error('after Stay on a Home card tap his project or the clip 1187 Voice 1 was let go');
+      FM.home._pushAllowed = push0;
+      FM.home.close(); await sleep(300);
+      /* Leave anyway: the door is asked, not locked */
+      window.__fmStep = '1187: Leave anyway';
+      answer = true;
+      const o5 = await dl2Within(FM.projects.open(other), 15000, 'opening another project answered Leave anyway');
+      if (o5 !== true || FM.projects.currentId() !== other) throw new Error('Leave anyway did not open the other project (open answered ' + o5 + ')');
+      if (asked.length !== 3) throw new Error('expected exactly three questions (open, Home card, open again), got ' + asked.length);
+    } finally {
+      slowOn = false;
+      try { FM.home._pushAllowed = push0; } catch (e) {}
+      Object.defineProperty(IDBFactory.prototype, 'open', dOpen);
+      unPut(); A.put();
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* The update reload (index.html fmSwTry, through FM._swReloadWhenIdle with a counter for location.reload, which is not
+     writable). FAILS ON 37952353: with the clip's file refused, the check saves once, finds the document saved, and reloads.
+     CONTROL first, green before and after: with every clip's file stored the same check reloads at once. After the red, the
+     file is let through and an ordinary save lands it, and the held reload then goes by itself, exactly once: the hold
+     lifts, it is not a lock. The hold is cancelled in the finally. */
+  test('1187 a new build waiting to reload holds while a clip’s file never reached storage, and goes by itself once it is stored (CONTROL: with every file stored the same reload goes at once)', { item: '1187', budgetMs: 90000 }, async function () {
+    const W = FM._swReloadWhenIdle;
+    if (typeof W !== 'function' || typeof W.busy !== 'function' || typeof W.held !== 'function' || typeof W.cancel !== 'function') throw new Error('setup: FM._swReloadWhenIdle (index.html, bughunt6 #14) with busy / held / cancel is not reachable');
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    let refused = null, reloads = 0;
+    const count = function () { reloads++; };
+    const unPut = dl2RefusePut(function (k) { return refused !== null && k === refused; });
+    const until = async function (ok, ms) { const t0 = Date.now(); while (!ok() && Date.now() - t0 < ms) await sleep(100); return ok(); };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const pid = await FM.projects.create({ name: '1187 reload', width: 320, height: 240 });
+      if (!pid) throw new Error('setup: no project could be made');
+      made.push(pid);
+      const S = await dl2Clip('1187 stored before the update', '#2a9d8f');
+      FM.storage.markDirty(); await FM.storage.save(); await FM.storage.settled();
+      if (!(await FM.storage.readMedia(S.id))) throw new Error('setup: with room to save, the first clip did not reach storage');
+      if (!(await until(function () { return W.busy() === ''; }, 8000))) throw new Error('setup: the app was not idle to start with (' + W.busy() + ')');
+      window.__fmStep = '1187: CONTROL, the update with every file stored';
+      reloads = 0;
+      const now0 = await dl2Within(W(count), 15000, 'CONTROL: the update check with every file stored');
+      if (!now0 || reloads !== 1) throw new Error('CONTROL: with every clip’s file stored the update did not reload at once (' + reloads + ' reload, ' + (W.busy() || 'idle') + ')');
+      if (W.held()) throw new Error('CONTROL: a reload is still held after it ran');
+      window.__fmStep = '1187: the update with a clip not stored';
+      const B = await dl2Clip('1187 Remove vocals render', '#6d597a');
+      refused = B.id;
+      FM.storage.markDirty(); await FM.storage.save(); await FM.storage.settled();
+      if (await FM.storage.readMedia(B.id)) throw new Error('setup: the refused write landed anyway, so the phone was not full');
+      if (FM.storage.lastWriteRefused()) throw new Error('setup: the project document was refused too, so this is the full-store hold, not the clip one');
+      if (!(await until(function () { return W.busy() === ''; }, 8000))) throw new Error('setup: the app was not idle before the update (' + W.busy() + ')');
+      reloads = 0;
+      const now1 = await dl2Within(W(count), 15000, 'the update check with a clip not stored');
+      await sleep(2600);
+      if (now1 || reloads) throw new Error('a new build reloaded the app while the file of 1187 Remove vocals render was only in memory (the phone refused to store it; ' + reloads + ' reload): the reload lets go of its only copy, and the project comes back saying it never finished saving');
+      if (!W.held()) throw new Error('with a clip not stored the reload was dropped rather than held, so he would stay on the old build until the next launch');
+      /* room again: an ordinary save lands the file, and the held reload goes by itself */
+      window.__fmStep = '1187: the file stored, the held reload goes';
+      refused = null;
+      FM.storage.markDirty(); await FM.storage.save(); await FM.storage.settled();
+      if (!(await FM.storage.readMedia(B.id))) throw new Error('setup: with room again, the clip was still not stored');
+      if (!(await until(function () { return reloads > 0; }, 9000))) throw new Error('once the clip’s file was stored, the held reload never happened by itself, so he would stay on the old build until the next launch');
+      await sleep(2600);
+      if (reloads !== 1) throw new Error('once the clip was stored the app reloaded ' + reloads + ' times, not once');
+    } finally {
+      try { W.cancel(); } catch (e) {}
+      unPut();
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* ═══ 1187 bounded wait: A SWITCH NEVER WAITS FOR GOOD ON A SAVE THAT STOPPED ANSWERING ════════════════════════════
+     landOrAsk waited for the running saves (settled()) and then for one more save() with plain awaits, so a save that never
+     settles (WebKit's IndexedDB stall on a home-screen iPhone app, a blocked open) froze the switch for good, and every later
+     switch waited on the same save. A put is held here the way such a store holds it: its transaction kept alive and the
+     write never made, so IndexedDB never answers; a delayed put is the same hold let go after a set time, and then really
+     written. dl2HoldPut puts the descriptor back; every hold is let go in the finally first, so the stuck save lands and
+     nothing is left pending for later tests. */
+  function dl2HoldPut(rule) {
+    const d = Object.getOwnPropertyDescriptor(IDBObjectStore.prototype, 'put'), real = d.value, held = [], calls = {};
+    Object.defineProperty(IDBObjectStore.prototype, 'put', { configurable: true, enumerable: d.enumerable, writable: true, value: function (val, key) {
+      const how = rule(key);
+      if (how == null) return real.apply(this, arguments);
+      const st = this, args = arguments, h = { on: true };
+      const until = typeof how === 'number' ? performance.now() + how : Infinity;
+      calls[key] = (calls[key] || 0) + 1;
+      held.push(h);
+      const spin = function () {
+        if (h.on && performance.now() < until) { st.get('hunt-dl2-hold').onsuccess = spin; return; }
+        real.apply(st, args);
+      };
+      spin();
+      return undefined;
+    } });
+    return {
+      calls: function (k) { return calls[k] || 0; },
+      release: function () { held.forEach(function (h) { h.on = false; }); },
+      put: function () { Object.defineProperty(IDBObjectStore.prototype, 'put', d); },
+    };
+  }
+
+  /* FAILS ON 80553c78 (hunt/dl52d): the switch whose own save never answers does not return at all; it is raced against a
+     deadline (the window plus 8 s), so the red is this test failing by name, not a hang. The window is set to 2.5 s through
+     FM.storage._landStallMs, so the suite does not spend the real one (the seam is absent on 80553c78, where nothing bounds
+     the wait). CONTROL, green before and after: five clips whose writes each take 0.8 s, 4 s in all, longer than the window
+     but never quiet for that long, are waited for and land, and nothing is asked. */
+  test('1187 a project switch while a clip’s save never answers asks within the window instead of hanging, whether the stuck save is the one the switch starts or one already running: Stay keeps the clip, and a stalled store is not handed a second save (CONTROL: a slow save that keeps landing files is waited for past the window, not asked about)', { item: '1187', budgetMs: 90000 }, async function () {
+    if (!FM.projects || typeof FM.projects.open !== 'function' || !FM.storage || typeof FM.storage.pendingSaves !== 'function') throw new Error('setup: FM.projects.open / FM.storage.pendingSaves are not reachable');
+    const WIN = 2500, MARGIN = 2000, DEADLINE = WIN + 8000, SLOW = 800;
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [], opens = [], marks = [];
+    const hold = {}, slow = {};
+    const W0 = typeof FM.storage._landStallMs === 'function' ? FM.storage._landStallMs(WIN) : null;
+    const P = dl2HoldPut(function (k) { return hold[k] ? 'hold' : (slow[k] || null); });
+    const A = dl2Ask(function () { marks.push({ at: performance.now(), saving: FM.storage.pendingSaves() }); return false; }), asked = A.asked;
+    const said = function (q) { return [q.title, q.message, q.ok, q.cancel].filter(Boolean).join(' | ').replace(/"/g, '\''); };
+    const inMemory = function (L) { const m = FM.media.get(L.id); return !!(m && m.file); };
+    const timedOpen = async function (id, what) {
+      const t0 = performance.now(), p = FM.projects.open(id);
+      opens.push(p);
+      const r = await Promise.race([p.then(function (v) { return { v: v }; }), sleep(DEADLINE).then(function () { return null; })]);
+      if (!r) throw new Error(what + ': the switch had not returned ' + (DEADLINE / 1000) + ' s later. It waits for a save that never answers, so the app sits on this project for good, and every later switch waits on the same save');
+      return { v: r.v, t0: t0, ms: performance.now() - t0 };
+    };
+    const untilCalls = async function (k, n) { for (let i = 0; i < 150 && P.calls(k) < n; i++) await sleep(20); return P.calls(k) >= n; };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const other = await dl2Within(FM.projects.create({ name: '1187 bound other', width: 320, height: 240 }), 15000, 'setup: making the other project'); made.push(other);
+      const mine = await dl2Within(FM.projects.create({ name: '1187 bound mine', width: 320, height: 240 }), 15000, 'setup: making his project'); made.push(mine);
+      if (!other || !mine || FM.projects.currentId() !== mine) throw new Error('setup: 1187 bound mine is not the open project');
+      if (asked.length) throw new Error('setup: creating two projects asked ' + asked.length + ' question(s): ' + said(asked[0].o));
+
+      /* CONTROL: a save that keeps moving is waited for however long it takes */
+      window.__fmStep = '1187 bounded wait: CONTROL, a slow save that keeps landing files';
+      const Ss = [];
+      for (let i = 0; i < 5; i++) { const S = await dl2Clip('1187 slow ' + (i + 1), '#264653'); Ss.push(S); slow[S.id] = SLOW; }
+      FM.storage.markDirty();
+      const saving = FM.storage.save();
+      if (FM.storage.pendingSaves() < 1) throw new Error('setup: the slow save had already finished, so nothing was still being written');
+      const c = await timedOpen(other, 'CONTROL: opening the other project while a slow save kept landing files');
+      await dl2Within(saving, 15000, 'setup: the slow save');
+      if (Ss.some(function (S) { return P.calls(S.id) < 1; })) throw new Error('setup: the slow writes were not held, so nothing here was slow');
+      if (c.v !== true || FM.projects.currentId() !== other) throw new Error('CONTROL: a save that kept landing files stopped the switch (open answered ' + c.v + ' after ' + Math.round(c.ms) + ' ms)');
+      if (asked.length) throw new Error('CONTROL: a save that kept landing files was asked about after ' + Math.round(c.ms) + ' ms (' + said(asked[0].o) + '): a file on its way is late, not lost, and the wait is bounded by progress, not by the clock');
+      if (c.ms <= WIN) throw new Error('setup: the slow save was over in ' + Math.round(c.ms) + ' ms, inside the ' + WIN + ' ms window, so this control shows nothing about a wait that outlasts it');
+      for (const S of Ss) { const r = await FM.storage.readMedia(S.id); if (!r || !r.file) throw new Error('CONTROL: the slow write of ' + S.name + ' never landed'); }
+      Ss.forEach(function (S) { delete slow[S.id]; });
+      if ((await dl2Within(FM.projects.open(mine), 15000, 'setup: going back to 1187 bound mine')) !== true) throw new Error('setup: could not go back to 1187 bound mine');
+      if (asked.length) throw new Error('setup: going back to his project asked a question: ' + said(asked[0].o));
+
+      /* 1: the save the switch starts itself never answers */
+      window.__fmStep = '1187 bounded wait: the switch’s own save never answers';
+      const H1 = await dl2Clip('1187 stuck own save', '#e76f51');
+      await dl2Within(FM.storage.settled(), 15000, 'setup: the saves before the stuck one');
+      if (FM.storage.pendingSaves()) throw new Error('setup: a save was still running, so this is not the switch’s own save');
+      hold[H1.id] = true;
+      const r1 = await timedOpen(other, 'opening another project while the save it starts never answers');
+      if (P.calls(H1.id) !== 1) throw new Error('setup: the write of the stuck clip was attempted ' + P.calls(H1.id) + ' times, not once');
+      if (asked.length !== 1 || r1.v !== false) throw new Error('with the save never answering, the switch answered ' + r1.v + ' after ' + asked.length + ' question(s) and ' + Math.round(r1.ms) + ' ms: it must ask, and Stay must keep him here');
+      const w1 = marks[0].at - r1.t0;
+      if (w1 > WIN + MARGIN) throw new Error('the question came ' + Math.round(w1) + ' ms after the switch, past the ' + WIN + ' ms window plus ' + MARGIN + ' ms: a stalled store keeps him waiting longer than it says');
+      if (w1 < WIN - 400) throw new Error('the question came ' + Math.round(w1) + ' ms after the switch, before the ' + WIN + ' ms window: the save it started was not waited for, so a file about to land would be asked about');
+      if (said(asked[0].o).indexOf('1187 stuck own save') < 0) throw new Error('the question does not name the clip whose save never answered: ' + said(asked[0].o));
+      if (FM.projects.currentId() !== mine || !inMemory(H1) || !FM.layerById(FM.scene, H1.id)) throw new Error('after Stay his project or the clip 1187 stuck own save was let go');
+      hold[H1.id] = false; P.release();
+      await dl2Within(FM.storage.settled(), 15000, 'setup: the stuck save, let go');
+      const k1 = await FM.storage.readMedia(H1.id);
+      if (!k1 || !k1.file) throw new Error('setup: the stuck save, let go, did not land the clip');
+
+      /* 2: a save already running never answers */
+      window.__fmStep = '1187 bounded wait: a running save never answers';
+      const H2 = await dl2Clip('1187 stuck running save', '#6d597a');
+      hold[H2.id] = true;
+      FM.storage.markDirty();
+      const stuck = FM.storage.save();
+      opens.push(stuck);
+      if (!(await untilCalls(H2.id, 1))) throw new Error('setup: the running save never reached the write of the stuck clip');
+      const r2 = await timedOpen(other, 'opening another project while a save already running never answers');
+      if (asked.length !== 2 || r2.v !== false) throw new Error('with a running save never answering, the switch answered ' + r2.v + ' after ' + (asked.length - 1) + ' question(s) and ' + Math.round(r2.ms) + ' ms: it must ask, and Stay must keep him here');
+      const w2 = marks[1].at - r2.t0;
+      if (w2 > WIN + MARGIN) throw new Error('the question came ' + Math.round(w2) + ' ms after the switch, past the ' + WIN + ' ms window plus ' + MARGIN + ' ms');
+      if (marks[1].saving !== 1) throw new Error(marks[1].saving + ' saves were running when it asked, not the one stuck save: the switch handed a stalled store another save, which only queues behind it and costs him a second window');
+      if (said(asked[1].o).indexOf('1187 stuck running save') < 0) throw new Error('the question does not name the clip whose save never answered: ' + said(asked[1].o));
+      if (FM.projects.currentId() !== mine || !inMemory(H2) || !FM.layerById(FM.scene, H2.id)) throw new Error('after Stay his project or the clip 1187 stuck running save was let go');
+    } finally {
+      for (const k in hold) hold[k] = false;
+      for (const k in slow) delete slow[k];
+      P.release();
+      P.put();
+      try { await Promise.race([FM.storage.settled(), sleep(15000)]); } catch (e) {}
+      try { await Promise.race([Promise.all(opens.map(function (p) { return Promise.resolve(p).catch(function () {}); })), sleep(15000)]); } catch (e) {}
+      A.put();
+      if (W0 != null) FM.storage._landStallMs(W0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+
+  /* 1187 bounded wait, the review's folds. FAILS ON f3a936b8, and each leg says how:
+     F2  one save of two clips, the first written and the second held for good. The bound fires part way through that save,
+         and on f3a936b8 a written clip counted as not saved until the save's whole loop ended, so the question named the
+         first clip, which was on disk, and said 2 clips. Now only the held clip is named. The held clip being asked about
+         at all is the leg's own control: the bound did fire.
+     F5  the page coming back part way through the window (a visibilitychange while visible, then a pageshow) is movement,
+         so he is asked a window after his return, not at once; on f3a936b8 neither was, and it asked at the window. And a
+         page hidden through the whole window is not asked about while hidden (visibilityState stubbed, no event sent, so
+         only the wait's own look can tell).
+     F3  CONTROL, green on 80553c78 where nothing bounds the wait: one put longer than the floor window, still being
+         written, earns a longer window by its bytes, lands, and is not asked about. On f3a936b8 the window was fixed and
+         it asked while the file was being written. The floor rate is set low through FM.storage._landFloorRate, so a
+         400 kB file earns 4 s without the suite writing 100 MB.
+     The second review's folds, FAILING ON a1ccc6dc where marked:
+     K4  a clip whose record another writer stored (FM.storage.writeMedia, the way collab stores a friend's clip), then a
+         held clip in the same save. On a1ccc6dc the read that found the first on disk did not count it as stored until the
+         loop ended, so the question named it and said 2 clips. FAILS ON a1ccc6dc.
+     K2  Replace media's kept copy (stashPrevMedia, 400 kB, written for 4.5 s) is being written ahead of a tiny clip whose
+         save the switch starts, and IndexedDB queues the clip's read behind it. On a1ccc6dc only save()'s own puts
+         counted, so it asked at the window while the kept copy was still being written. FAILS ON a1ccc6dc.
+     K1  a 400 kB put that never answers, and a visibilitychange 4 s in. Its allowance (2.5 s + 4 s) counts from its own
+         start and is spent once; on a1ccc6dc every movement granted it again, so it asked 6.5 s after the return, not
+         6.5 s after the put began. FAILS ON a1ccc6dc.
+     K1b CONTROL: the same put with the page hidden from before the switch until 4 s in (no event). The time hidden does
+         not spend the put's allowance: he is asked about the put's whole allowance after he is back, not at once.
+     K3  a 400 kB file that lands, then a tiny clip held, in one save. The landed put's deadline must go with it, or the
+         tiny clip's stall is asked about 6.5 s in, not 2.5 s: this is the leg that catches a put never taken off _puts.
+     The window is 2.5 s through FM.storage._landStallMs. Both seams, the put and the visibilityState stub are put back in
+     the finally, every hold is let go first, every dangling switch and save is waited for, and the kept copy is removed. */
+  test('1187 bounded wait folds: a question that comes part way through a save names only the clips the disk does not have yet (also one another writer stored), a page that comes back or is hidden is not quiet time, a put’s byte allowance counts from its own start and is spent once, another whole-file write queued ahead of his clip is waited for, and one long put still being written is waited for (CONTROL: one put longer than the floor window lands and is not asked about)', { item: '1187', budgetMs: 180000 }, async function () {
+    if (!FM.projects || typeof FM.projects.open !== 'function' || !FM.storage || typeof FM.storage.pendingSaves !== 'function') throw new Error('setup: FM.projects.open / FM.storage.pendingSaves are not reachable');
+    const WIN = 2500, MARGIN = 2000, DEADLINE = WIN + 12000, BACK = 1200;
+    const RATE = 100, PAD = 400000, LONG = 4500, BACK_K1 = 4000;
+    let keptKey = null;
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [], opens = [], marks = [];
+    const hold = {}, slow = {};
+    const W0 = typeof FM.storage._landStallMs === 'function' ? FM.storage._landStallMs(WIN) : null;
+    const R0 = typeof FM.storage._landFloorRate === 'function' ? FM.storage._landFloorRate(RATE) : null;
+    const P = dl2HoldPut(function (k) { return hold[k] ? 'hold' : (slow[k] || null); });
+    const A = dl2Ask(function () { marks.push({ at: performance.now() }); return false; }), asked = A.asked;
+    const dVis = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    let visStubbed = false;
+    const unVis = function () {
+      if (!visStubbed) return;
+      visStubbed = false;
+      if (dVis) Object.defineProperty(document, 'visibilityState', dVis); else delete document.visibilityState;
+    };
+    const said = function (q) { return [q.title, q.message, q.ok, q.cancel].filter(Boolean).join(' | ').replace(/"/g, '\''); };
+    const inMemory = function (L) { const m = FM.media.get(L.id); return !!(m && m.file); };
+    const heldSwitch = async function (id, what, during) {
+      const t0 = performance.now(), p = FM.projects.open(id);
+      opens.push(p);
+      const side = Promise.resolve().then(function () { return during ? during(t0) : null; });
+      const both = await Promise.all([Promise.race([p.then(function (v) { return { v: v }; }), sleep(DEADLINE).then(function () { return null; })]), side]);
+      const r = both[0];
+      if (!r) throw new Error(what + ': the switch had not returned ' + (DEADLINE / 1000) + ' s later');
+      return { v: r.v, t0: t0, ms: performance.now() - t0 };
+    };
+    const fresh = async function (name, rgb) {
+      const L = await dl2Clip(name, rgb);
+      await dl2Within(FM.storage.settled(), 15000, 'setup: the saves before ' + name);
+      if (FM.storage.pendingSaves()) throw new Error('setup: a save was still running before ' + name + ', so the switch would not be the one starting it');
+      return L;
+    };
+    const letGo = async function (what) {
+      for (const k in hold) hold[k] = false;
+      P.release();
+      await dl2Within(FM.storage.settled(), 15000, 'setup: ' + what + ', let go');
+    };
+    /* the clip's file padded to PAD bytes, in the same task dl2Clip returns in, so no save has written the small one first */
+    const padTo = function (L, tag) {
+      const m = FM.media.get(L.id);
+      m.file = new File([m.file, new Uint8Array(PAD)], 'hunt-dl2-fold-' + tag + '-' + Date.now() + '.png', { type: 'image/png', lastModified: Date.now() });
+      if (m.file.size < PAD) throw new Error('setup: the ' + tag + ' clip file is ' + m.file.size + ' bytes, not the ' + PAD + ' it needs');
+      return m.file;
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      if (document.visibilityState === 'hidden') throw new Error('setup: the test document reports hidden, so a visibilitychange here would be a going away, not a coming back');
+      const other = await dl2Within(FM.projects.create({ name: '1187 fold other', width: 320, height: 240 }), 15000, 'setup: making the other project'); made.push(other);
+      const mine = await dl2Within(FM.projects.create({ name: '1187 fold mine', width: 320, height: 240 }), 15000, 'setup: making his project'); made.push(mine);
+      if (!other || !mine || FM.projects.currentId() !== mine) throw new Error('setup: 1187 fold mine is not the open project');
+      if (asked.length) throw new Error('setup: creating two projects asked ' + asked.length + ' question(s): ' + said(asked[0].o));
+
+      /* F2: one save of two clips, the first written, the second held */
+      window.__fmStep = '1187 folds F2: one save of two clips, the second held';
+      const first = await dl2Clip('1187 fold written first', '#2a9d8f');
+      const second = await fresh('1187 fold held second', '#e76f51');
+      hold[second.id] = true;
+      const r2 = await heldSwitch(other, 'opening another project while the second clip of its save never answers');
+      if (P.calls(second.id) !== 1) throw new Error('setup: the write of the held clip was attempted ' + P.calls(second.id) + ' times, not once');
+      if (asked.length !== 1 || r2.v !== false) throw new Error('with the second clip of the save never answering, the switch answered ' + r2.v + ' after ' + asked.length + ' question(s) and ' + Math.round(r2.ms) + ' ms: it must ask, and Stay must keep him here');
+      const q2 = said(asked[0].o);
+      if (q2.indexOf('1187 fold written first') >= 0 || /\b2 clips\b/.test(q2)) throw new Error('the question came part way through a save and named or counted the clip that save had already written to disk (' + q2 + '): import two videos, leave while the second is still writing, and he is told the first did not save and leaving throws it away, when it is safe on disk');
+      if (q2.indexOf('1187 fold held second') < 0) throw new Error('the question does not name the clip whose write never answered: ' + q2);
+      if (FM.projects.currentId() !== mine || !inMemory(second) || !FM.layerById(FM.scene, second.id)) throw new Error('after Stay his project or the clip 1187 fold held second was let go');
+      await letGo('the held second clip');
+      const k1 = await FM.storage.readMedia(first.id), k2 = await FM.storage.readMedia(second.id);
+      if (!k1 || !k1.file) throw new Error('setup: the clip written first is not on disk after all, so naming it was right');
+      if (!k2 || !k2.file) throw new Error('setup: the held clip, let go, did not land');
+
+      /* F5: coming back part way through the window */
+      window.__fmStep = '1187 folds F5: the page comes back (visibilitychange) part way through the window';
+      const v1 = await fresh('1187 fold back from another app', '#6d597a');
+      hold[v1.id] = true;
+      let backAt = 0;
+      const r5a = await heldSwitch(other, 'opening another project, then coming back to the app part way through the wait', async function () {
+        await sleep(BACK);
+        backAt = performance.now();
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      if (asked.length !== 2 || r5a.v !== false) throw new Error('with the save never answering and the page coming back part way, the switch answered ' + r5a.v + ' after ' + (asked.length - 1) + ' question(s)');
+      const w5a = marks[1].at - backAt;
+      if (w5a < WIN - 400) throw new Error('he came back to the app ' + Math.round(backAt - r5a.t0) + ' ms into the wait and was asked ' + Math.round(w5a) + ' ms after that, inside the ' + WIN + ' ms window: the time he was away read as a store that had stopped answering, so he is asked the moment he returns while the write may be carrying on');
+      if (w5a > WIN + MARGIN) throw new Error('after he came back the question took ' + Math.round(w5a) + ' ms, past the ' + WIN + ' ms window plus ' + MARGIN + ' ms');
+      if (said(asked[1].o).indexOf('1187 fold back from another app') < 0) throw new Error('the question does not name the held clip: ' + said(asked[1].o));
+      await letGo('the clip held across the return');
+
+      window.__fmStep = '1187 folds F5: the page comes back (pageshow) part way through the window';
+      const v2 = await fresh('1187 fold back from the cache', '#8ab17d');
+      hold[v2.id] = true;
+      backAt = 0;
+      const r5b = await heldSwitch(other, 'opening another project, then a pageshow part way through the wait', async function () {
+        await sleep(BACK);
+        backAt = performance.now();
+        window.dispatchEvent(new Event('pageshow'));
+      });
+      if (asked.length !== 3 || r5b.v !== false) throw new Error('with the save never answering and a pageshow part way, the switch answered ' + r5b.v + ' after ' + (asked.length - 2) + ' question(s)');
+      const w5b = marks[2].at - backAt;
+      if (w5b < WIN - 400) throw new Error('the page was shown again ' + Math.round(backAt - r5b.t0) + ' ms into the wait and he was asked ' + Math.round(w5b) + ' ms after that, inside the ' + WIN + ' ms window: a pageshow is not counted as coming back');
+      if (w5b > WIN + MARGIN) throw new Error('after the pageshow the question took ' + Math.round(w5b) + ' ms, past the ' + WIN + ' ms window plus ' + MARGIN + ' ms');
+      await letGo('the clip held across the pageshow');
+
+      window.__fmStep = '1187 folds F5: the page hidden through the whole window';
+      const v3 = await fresh('1187 fold while away', '#bc4749');
+      hold[v3.id] = true;
+      Object.defineProperty(document, 'visibilityState', { configurable: true, enumerable: true, get: function () { return 'hidden'; } });
+      visStubbed = true;
+      backAt = 0;
+      let askedWhileHidden = -1;
+      const r5c = await heldSwitch(other, 'opening another project with the page hidden through the window', async function (t0) {
+        await sleep(WIN + 1500);
+        askedWhileHidden = asked.length - 3;
+        unVis();
+        backAt = performance.now();
+      });
+      unVis();
+      if (askedWhileHidden !== 0) throw new Error('with the page hidden, the switch asked ' + askedWhileHidden + ' question(s) within ' + (WIN + 1500) + ' ms: time the page is hidden (a phone with the app in the background) read as a store that had stopped answering');
+      if (asked.length !== 4 || r5c.v !== false) throw new Error('once the page was visible again the switch answered ' + r5c.v + ' after ' + (asked.length - 3) + ' question(s): it must still ask, and Stay must keep him here');
+      const w5c = marks[3].at - backAt;
+      if (w5c < WIN - 900) throw new Error('the page was visible again and he was asked ' + Math.round(w5c) + ' ms later, inside the ' + WIN + ' ms window: the hidden time counted as quiet after all');
+      if (w5c > WIN + MARGIN) throw new Error('after the page was visible again the question took ' + Math.round(w5c) + ' ms, past the ' + WIN + ' ms window plus ' + MARGIN + ' ms');
+      await letGo('the clip held while hidden');
+
+      /* K4: a clip another writer stored, then a held clip, in one save */
+      window.__fmStep = '1187 folds K4: a clip stored by another writer, then a held clip in the same save';
+      const a4 = asked.length;
+      const ext = await dl2Clip('1187 fold stored by another writer', '#2a9d8f');
+      const extJob = FM.storage._writeJobs().filter(function (j) { return j.id === ext.id; })[0];
+      if (!extJob) throw new Error('setup: the clip stored by another writer has no file to write');
+      if ((await dl2Within(FM.storage.writeMedia(ext.id, { file: extJob.file, kind: extJob.kind, rev: extJob.rev }), 15000, 'setup: storing the clip through writeMedia')) !== true) throw new Error('setup: writeMedia did not store the clip stored by another writer');
+      const after4 = await fresh('1187 fold held after the stored one', '#e76f51');
+      const un4 = FM.storage.unlandedFiles().map(function (u) { return u.id; });
+      if (un4.indexOf(ext.id) < 0 || un4.indexOf(after4.id) < 0) throw new Error('setup: before the switch the clip stored by another writer and the held clip were not both still unlanded to this session (' + un4.length + ' unlanded), so this leg would show nothing');
+      hold[after4.id] = true;
+      const r4 = await heldSwitch(other, 'opening another project while its save reads a clip another writer stored, then never answers on the next');
+      if (P.calls(after4.id) !== 1) throw new Error('setup: the write of the held clip was attempted ' + P.calls(after4.id) + ' times, not once');
+      if (asked.length !== a4 + 1 || r4.v !== false) throw new Error('with the clip after the stored one never answering, the switch answered ' + r4.v + ' after ' + (asked.length - a4) + ' question(s): it must ask, and Stay must keep him here');
+      const q4 = said(asked[a4].o);
+      if (q4.indexOf('1187 fold stored by another writer') >= 0 || /\b2 clips\b/.test(q4)) throw new Error('the question came part way through a save and named or counted a clip that save had just read on disk at its revision (' + q4 + '): a friend’s clip received in a live session is stored that way, and he is told it did not save and leaving throws it away, when it is safe on disk');
+      if (q4.indexOf('1187 fold held after the stored one') < 0) throw new Error('the question does not name the clip whose write never answered: ' + q4);
+      if (FM.projects.currentId() !== mine || !inMemory(after4)) throw new Error('after Stay his project or the clip 1187 fold held after the stored one was let go');
+      await letGo('the clip held after the stored one');
+
+      /* K2: Replace media's kept copy being written ahead of a tiny clip's save */
+      window.__fmStep = '1187 folds K2: a kept copy is being written ahead of a tiny clip';
+      const a5 = asked.length;
+      const behind = await fresh('1187 fold behind a kept copy', '#6d597a');
+      const keptId = 'hunt-dl2-fold-kept-' + Date.now();
+      keptKey = 'prev:' + keptId + ':1';
+      const keptFile = new File([FM.media.get(behind.id).file, new Uint8Array(PAD)], keptId + '.png', { type: 'image/png', lastModified: Date.now() });
+      hold[behind.id] = true;
+      slow[keptKey] = LONG;
+      let keptEnd = 0;
+      const kept = FM.storage.stashPrevMedia(keptId, { file: keptFile, kind: 'image' }, 1).then(function (ok) { keptEnd = performance.now(); return ok; });
+      opens.push(kept);
+      for (let i = 0; i < 150 && P.calls(keptKey) < 1; i++) await sleep(20);
+      if (P.calls(keptKey) < 1) throw new Error('setup: the kept copy was never handed to IndexedDB, so nothing was being written ahead of the clip');
+      const r5 = await heldSwitch(other, 'opening another project while a kept copy was being written ahead of the clip');
+      if ((await dl2Within(kept, 15000, 'setup: the kept copy')) !== true) throw new Error('setup: the kept copy never landed');
+      if (asked.length !== a5 + 1 || r5.v !== false) throw new Error('with a tiny clip held behind a kept copy, the switch answered ' + r5.v + ' after ' + (asked.length - a5) + ' question(s): once the kept copy landed it must still ask about the held clip, and Stay must keep him here');
+      const m5 = marks[a5].at;
+      if (!keptEnd || m5 < keptEnd) throw new Error('he was asked ' + Math.round(m5 - r5.t0) + ' ms into the switch while a ' + Math.round(keptFile.size / 1000) + ' kB kept copy (Replace media keeps his original) was still being written ahead of his clip, for ' + LONG + ' ms: IndexedDB queues the clip behind it, so he was told the clip had not saved while the store was busy writing and the save would have landed it');
+      if (m5 - keptEnd > WIN + MARGIN) throw new Error('after the kept copy landed the question took ' + Math.round(m5 - keptEnd) + ' ms, past the ' + WIN + ' ms window plus ' + MARGIN + ' ms');
+      if (said(asked[a5].o).indexOf('1187 fold behind a kept copy') < 0) throw new Error('the question does not name the held clip: ' + said(asked[a5].o));
+      delete slow[keptKey];
+      await letGo('the clip held behind the kept copy');
+
+      /* K1: a put that never answers earns its byte allowance once, from its own start */
+      window.__fmStep = '1187 folds K1: a long put that never answers, and a return part way';
+      const a6 = asked.length, earned = WIN + PAD / RATE;
+      const stuckBig = await dl2Clip('1187 fold long put never answers', '#264653');
+      padTo(stuckBig, 'stuck');
+      await dl2Within(FM.storage.settled(), 15000, 'setup: the saves before the stuck long put');
+      if (FM.storage.pendingSaves()) throw new Error('setup: a save was still running before the stuck long put');
+      hold[stuckBig.id] = true;
+      backAt = 0;
+      const r6 = await heldSwitch(other, 'opening another project while a long put never answers, with a return part way', async function () {
+        await sleep(BACK_K1);
+        backAt = performance.now();
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      if (P.calls(stuckBig.id) !== 1) throw new Error('setup: the stuck long put was attempted ' + P.calls(stuckBig.id) + ' times, not once');
+      if (asked.length !== a6 + 1 || r6.v !== false) throw new Error('with a long put never answering, the switch answered ' + r6.v + ' after ' + (asked.length - a6) + ' question(s): it must ask, and Stay must keep him here');
+      const w6 = marks[a6].at - r6.t0;
+      if (!backAt || marks[a6].at < backAt) throw new Error('setup: he was asked ' + Math.round(w6) + ' ms in, before the return at ' + BACK_K1 + ' ms, so nothing here came back during the wait');
+      if (w6 > earned + MARGIN) throw new Error('a ' + Math.round(PAD / 1000) + ' kB put that never answers earns ' + earned + ' ms from its own start, and he was asked ' + Math.round(w6) + ' ms in, after coming back to the app ' + Math.round(backAt - r6.t0) + ' ms in: the return granted the stuck put its whole allowance again, so after every trip to another app a stalled store sits silent for the length of a long video before it asks');
+      if (said(asked[a6].o).indexOf('1187 fold long put never answers') < 0) throw new Error('the question does not name the stuck long put: ' + said(asked[a6].o));
+      await letGo('the stuck long put');
+
+      /* K1b CONTROL: the time the page was hidden does not spend a put's allowance */
+      window.__fmStep = '1187 folds K1b: a long put that never answers, with the page hidden until part way';
+      const a7 = asked.length;
+      const awayBig = await dl2Clip('1187 fold long put while away', '#8ab17d');
+      padTo(awayBig, 'away');
+      await dl2Within(FM.storage.settled(), 15000, 'setup: the saves before the long put while away');
+      if (FM.storage.pendingSaves()) throw new Error('setup: a save was still running before the long put while away');
+      hold[awayBig.id] = true;
+      Object.defineProperty(document, 'visibilityState', { configurable: true, enumerable: true, get: function () { return 'hidden'; } });
+      visStubbed = true;
+      backAt = 0;
+      let askedAway = -1;
+      const r7 = await heldSwitch(other, 'opening another project while a long put never answers, with the page hidden until part way', async function () {
+        await sleep(BACK_K1);
+        askedAway = asked.length - a7;
+        unVis();
+        backAt = performance.now();
+      });
+      unVis();
+      if (P.calls(awayBig.id) !== 1) throw new Error('setup: the long put while away was attempted ' + P.calls(awayBig.id) + ' times, not once');
+      if (askedAway !== 0) throw new Error('with the page hidden, the switch asked ' + askedAway + ' question(s) within ' + BACK_K1 + ' ms');
+      if (asked.length !== a7 + 1 || r7.v !== false) throw new Error('once the page was visible again the switch answered ' + r7.v + ' after ' + (asked.length - a7) + ' question(s): it must still ask, and Stay must keep him here');
+      const w7 = marks[a7].at - backAt;
+      if (w7 < earned - 900) throw new Error('the page was hidden from before the switch until ' + BACK_K1 + ' ms in, and once it was visible he was asked about a ' + Math.round(PAD / 1000) + ' kB put still out ' + Math.round(w7) + ' ms later, inside the ' + earned + ' ms its bytes earn: the time the page was away used up the put’s allowance, so a long video that went on writing while he was in another app is asked about almost as soon as he is back');
+      if (w7 > earned + MARGIN) throw new Error('after the page was visible again the question took ' + Math.round(w7) + ' ms, past the ' + earned + ' ms the put earns plus ' + MARGIN + ' ms');
+      await letGo('the long put held while away');
+
+      /* K3: a long file that lands, then a tiny clip held, in one save */
+      window.__fmStep = '1187 folds K3: a long file lands, then a tiny clip is held, in one save';
+      const a8 = asked.length;
+      const doneBig = await dl2Clip('1187 fold long file landed', '#264653');
+      padTo(doneBig, 'landed');
+      slow[doneBig.id] = 1;
+      const tiny = await fresh('1187 fold tiny held after a long file', '#bc4749');
+      hold[tiny.id] = true;
+      const r8 = await heldSwitch(other, 'opening another project while a tiny clip after a long file that landed never answers');
+      if (P.calls(doneBig.id) < 1) throw new Error('setup: the long file was never written, so no long put had landed ahead of the held clip');
+      if (asked.length !== a8 + 1 || r8.v !== false) throw new Error('with the tiny clip after a long file never answering, the switch answered ' + r8.v + ' after ' + (asked.length - a8) + ' question(s): it must ask, and Stay must keep him here');
+      const w8 = marks[a8].at - r8.t0;
+      if (w8 > WIN + MARGIN) throw new Error('a ' + Math.round(PAD / 1000) + ' kB file had landed and the tiny clip after it never answered, and he was asked ' + Math.round(w8) + ' ms in, past the ' + WIN + ' ms window plus ' + MARGIN + ' ms: a put that had answered still held its byte allowance, so a stall after a big import keeps him waiting as if the big file were still being written');
+      if (w8 < WIN - 400) throw new Error('the question came ' + Math.round(w8) + ' ms in, before the ' + WIN + ' ms window');
+      const q8 = said(asked[a8].o);
+      if (q8.indexOf('1187 fold tiny held after a long file') < 0) throw new Error('the question does not name the held tiny clip: ' + q8);
+      if (q8.indexOf('1187 fold long file landed') >= 0) throw new Error('the question named the long file that had landed: ' + q8);
+      delete slow[doneBig.id];
+      await letGo('the tiny clip held after a long file');
+
+      /* F3 CONTROL: one long put still being written is waited for */
+      window.__fmStep = '1187 folds F3: one put longer than the floor window';
+      const a3 = asked.length;
+      const big = await dl2Clip('1187 fold long video', '#264653');
+      const mb = FM.media.get(big.id);
+      padTo(big, 'long');
+      await dl2Within(FM.storage.settled(), 15000, 'setup: the saves before the long put');
+      if (FM.storage.pendingSaves()) throw new Error('setup: a save was still running before the long put');
+      slow[big.id] = LONG;
+      const r3 = await heldSwitch(other, 'opening another project while one long put was still being written');
+      if (P.calls(big.id) !== 1) throw new Error('setup: the long put was held ' + P.calls(big.id) + ' times, not once, so nothing here was one long write');
+      if (asked.length !== a3) throw new Error('CONTROL: one put of a ' + Math.round(mb.file.size / 1000) + ' kB file still being written (held ' + LONG + ' ms, past the ' + WIN + ' ms floor) was asked about after ' + Math.round(marks[a3] ? marks[a3].at - r3.t0 : r3.ms) + ' ms (' + said(asked[a3].o) + '): one long phone video still being written is late, not lost, and the window must grow with the bytes still being written');
+      if (r3.v !== true || FM.projects.currentId() !== other) throw new Error('CONTROL: the switch with one long put still being written answered ' + r3.v + ' after ' + Math.round(r3.ms) + ' ms and did not switch');
+      if (r3.ms < LONG - 300) throw new Error('setup: the switch was over in ' + Math.round(r3.ms) + ' ms, before the ' + LONG + ' ms put ended, so it did not wait for it');
+      const kb = await FM.storage.readMedia(big.id);
+      if (!kb || !kb.file) throw new Error('CONTROL: the long put never landed');
+    } finally {
+      unVis();
+      for (const k in hold) hold[k] = false;
+      for (const k in slow) delete slow[k];
+      P.release();
+      P.put();
+      try { await Promise.race([FM.storage.settled(), sleep(15000)]); } catch (e) {}
+      try { await Promise.race([Promise.all(opens.map(function (p) { return Promise.resolve(p).catch(function () {}); })), sleep(15000)]); } catch (e) {}
+      if (keptKey) { try { await Promise.race([FM.storage.removeMedia(keptKey), sleep(5000)]); } catch (e) {} }
+      A.put();
+      if (W0 != null) FM.storage._landStallMs(W0);
+      if (R0 != null) FM.storage._landFloorRate(R0);
+      await hcCleanup(made, orig, wasOpen);
+    }
+  });
+  // #1004/#1005: real storage/open paths, with an isolated media store so the sweep cannot touch suite media.
+  async function safety1004(run) {
+    const held = [], keys = new Map(), originalId = FM.storage.openProjectId();
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); keys.set(k, localStorage.getItem(k)); }
+    function stub(o, k, value) {
+      held.push([o, k, Object.getOwnPropertyDescriptor(o, k)]);
+      Object.defineProperty(o, k, { configurable: true, writable: true, value: value });
+    }
+    const records = new Map(), deleted = [], messages = [], calls = { close: 0, reset: 0, release: 0, onKeys: null, dbOpen: 0, dbClose: 0 };
+    function request(value) { const r = {}; queueMicrotask(function () { r.result = value; if (r.onsuccess) r.onsuccess(); }); return r; }
+    const db = { close: function () { calls.dbClose++; }, transaction: function () {
+      const tx = { objectStore: function () { return {
+        get: function (k) { return request(records.get(k)); },
+        getAllKeys: function () { if (calls.onKeys) calls.onKeys(); return request(Array.from(records.keys())); },
+        delete: function (k) { deleted.push(k); records.delete(k); queueMicrotask(function () { if (tx.oncomplete) tx.oncomplete(); }); }
+      }; } };
+      return tx;
+    } };
+    function within(p, name) { return hcWithin(p, 5000, name); }
+    try {
+      stub(indexedDB, 'open', function () { calls.dbOpen++; return request(db); });
+      stub(FM, 'scene', scene([]));
+      stub(FM, 'time', 0); stub(FM, 'playing', false); stub(FM, '_mediaBusy', 0);
+      stub(FM, 'collab', null); stub(FM, 'groupContext', null); stub(FM, 'clipboard', []);
+      stub(FM, 'media', { get: function () { return null; }, all: function () { return {}; } });
+      stub(FM, 'fonts', { rehydrateAll: function () {}, list: function () { return []; } });
+      stub(FM, 'mediaLib', { keys: function () { return []; } });
+      stub(FM, 'exportResume', null);
+      stub(FM, 'editor', null);
+      ['tracker', 'pointEdit', 'cropTool', 'fillDrag', 'maskTool', 'drawTool', 'loadingDot', 'viewport'].forEach(k => stub(FM, k, null));
+      ['refreshAll', 'resizeCanvas', 'seekVideosToTime', 'selectLayer', 'warnOversizeProject', 'libEditSync', 'pause', 'resetMotionFlowCache', 'releaseTiltPools', '_resetPlayQuality'].forEach(k => stub(FM, k, function () {}));
+      stub(FM, 'releaseProjectMedia', function () { calls.release++; });
+      stub(FM, 'history', { reset: function () { calls.reset++; } });
+      stub(FM, 'toast', function (m) { messages.push(String(m)); });
+      stub(FM.projects, 'migrate', function () {});
+      stub(FM.projects, 'touchCurrent', function () { return true; });
+      stub(FM.home, 'close', function () { calls.close++; });
+      stub(FM.home, 'pushWillRun', function () { return false; });
+      stub(FM.home, 'refresh', function () {});
+      stub(FM.home, 'isOpen', function () { return true; });
+      for (const k of keys.keys()) if (k.indexOf('fm.proj.') === 0) localStorage.removeItem(k);
+      localStorage.setItem('fm.projects', '[]');
+      localStorage.removeItem('fm.currentProject');
+      await within(FM.storage.load(), '1004 fixture unbind');
+      await within(run({ records, deleted, messages, calls, stub, within }), '1004/1005 test body');
+    } finally {
+      try {
+        // Restore the private tab binding/revision against the original bytes, in the isolated scene/media registry.
+        if (originalId) {
+          localStorage.setItem('fm.currentProject', originalId);
+          const originalRaw = keys.get('fm.proj.' + originalId);
+          if (originalRaw === undefined) localStorage.removeItem('fm.proj.' + originalId);
+          else localStorage.setItem('fm.proj.' + originalId, originalRaw);
+        } else localStorage.removeItem('fm.currentProject');
+        await within(FM.storage.load(), '1004 restore original tab binding');
+      } finally {
+        for (const k of Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i))) if (!keys.has(k)) localStorage.removeItem(k);
+        keys.forEach((v, k) => localStorage.setItem(k, v));
+        for (let i = held.length - 1; i >= 0; i--) {
+          const h = held[i]; if (h[2]) Object.defineProperty(h[0], h[1], h[2]); else delete h[0][h[1]];
+        }
+      }
+    }
+  }
+
+  test('1004 Home refuses unreadable projects before teardown and keeps the open work', { item: '1004', budgetMs: 30000 }, async function () {
+    await hcWithin(safety1004(async function (s) {
+      const good = 'test1004good', bad = 'test1004bad';
+      localStorage.setItem('fm.projects', JSON.stringify([{ id: good }, { id: bad }]));
+      localStorage.setItem('fm.proj.' + good, JSON.stringify(scene([], { project: Object.assign({}, scene([]).project, { name: 'Readable control' }) })));
+      if (await s.within(FM.home._openProject(good, true), '1004 Home readable control') !== true) throw new Error('control: readable card did not open');
+      if (FM.storage.openProjectId() !== good || FM.scene.project.name !== 'Readable control') throw new Error('control: readable project was not loaded');
+      const live = FM.scene.project, layers = FM.scene.layers;
+      live.name = 'Work only on screen';
+      const releases = s.calls.release, resets = s.calls.reset, closes = s.calls.close;
+      for (const raw of ['garbage{', '{"layers":[]}']) {
+        localStorage.setItem('fm.proj.' + bad, raw);
+        if (await s.within(FM.home._openProject(bad, false), '1004 Home unreadable refusal ' + raw) !== null) throw new Error('Home misread the refused open as success');
+        FM.storage.flushSync();
+        if (localStorage.getItem('fm.proj.' + bad) !== raw || localStorage.getItem('fm.unreadable.' + bad) !== raw) throw new Error('unreadable bytes were overwritten or not preserved');
+        if (FM.storage.openProjectId() !== good || FM.projects.currentId() !== good || FM.scene.project !== live || FM.scene.layers !== layers || live.name !== 'Work only on screen') throw new Error('refusal replaced the open work');
+        if (s.calls.release !== releases || s.calls.reset !== resets || s.calls.close !== closes) throw new Error('refusal tore down the editor or closed Home');
+      }
+      if (!s.messages.some(m => /could not be read/i.test(m))) throw new Error('no unreadable-project message');
+      // #1004 review N2: over an open project the refusal says that project was kept…
+      const overOpen = s.messages.filter(m => /could not be read/i.test(m)).pop() || '';
+      if (!/your open project has not been changed/i.test(overOpen)) throw new Error('the refusal over an open project did not say it was kept: ' + overOpen);
+      await s.within(FM.projects.remove(bad), '1004 remove unreadable project');
+      if (localStorage.getItem('fm.unreadable.' + bad) !== null) throw new Error('remove left the unreadable copy behind');
+      localStorage.setItem('fm.proj.' + bad, 'garbage{');
+      localStorage.setItem('fm.projects', JSON.stringify([{ id: good }, { id: bad }]));
+      s.messages.length = 0;
+      await s.within(FM.projects.remove(good), '1004 delete current with unreadable landing');
+      FM.storage.flushSync();
+      if (FM.storage.openProjectId() !== null || localStorage.getItem('fm.proj.' + good) !== null || localStorage.getItem('fm.proj.' + bad) !== 'garbage{') throw new Error('remove misread refused landing and left a deleted project writable');
+      // …and on the landing after a delete it does not: the project he was in is the one just deleted.
+      const onLanding = s.messages.filter(m => /could not be read/i.test(m)).pop() || '';
+      if (!onLanding) throw new Error('control: the refused landing said nothing');
+      if (/open project/i.test(onLanding)) throw new Error('the refused landing after a delete claimed the deleted project was kept: ' + onLanding);
+    }), 20000, '1004 Home regression and cleanup');
+  });
+
+  test('1004 boot load unbinds an unreadable doc before a lifecycle flush', { item: '1004', budgetMs: 30000 }, async function () {
+    await hcWithin(safety1004(async function (s) {
+      const id = 'test1004boot';
+      localStorage.setItem('fm.projects', JSON.stringify([{ id }]));
+      localStorage.setItem('fm.currentProject', id);
+      localStorage.setItem('fm.proj.' + id, JSON.stringify(scene([])));
+      if (!await s.within(FM.storage.load(), '1004 boot readable control') || FM.storage.openProjectId() !== id) throw new Error('control: readable boot did not bind');
+      for (const raw of ['garbage{', '{"rev":1}']) {
+        localStorage.setItem('fm.proj.' + id, raw);
+        s.messages.length = 0;
+        if (await s.within(FM.storage.load(), '1004 boot unreadable ' + raw) !== false) throw new Error('unreadable boot claimed success');
+        FM.storage.flushSync();
+        if (FM.storage.openProjectId() !== null || localStorage.getItem('fm.proj.' + id) !== raw || localStorage.getItem('fm.unreadable.' + id) !== raw) throw new Error('boot stayed writable over unreadable bytes');
+        // #1004 review finding 6: at boot nothing is open, so the message must not claim an open project was kept.
+        const said = s.messages.filter(m => /could not be read/i.test(m)).pop() || '';
+        if (!said) throw new Error('control: the unreadable boot said nothing');
+        if (/open project/i.test(said)) throw new Error('the boot message claimed an open project was kept: ' + said);
+      }
+    }), 20000, '1004 boot regression and cleanup');
+  });
+
+  test('1004 template and element edit callers stop when an unreadable workspace refuses open', { item: '1004', budgetMs: 30000 }, async function () {
+    await hcWithin(safety1004(async function (s) {
+      const good = 'test1004editor', draft = 'test1004draft';
+      localStorage.setItem('fm.proj.' + good, JSON.stringify(scene([])));
+      await s.within(FM.projects.open(good), '1004 edit caller readable control');
+      if (FM.storage.openProjectId() !== good) throw new Error('control: readable editor was not opened');
+      let live = FM.scene.project;
+      for (const kind of ['template', 'element']) {
+        const lib = kind === 'template' ? FM.templates : FM.elements;
+        const rec = { id: draft }; rec[kind + 'Draft'] = true; rec[kind === 'template' ? 'ofTemplate' : 'ofElement'] = 'test1004lib';
+        localStorage.setItem('fm.projects', JSON.stringify([{ id: good }, rec]));
+        localStorage.setItem('fm.proj.' + draft, 'garbage{');
+        let packs = 0;
+        s.messages.length = 0;   // #1004 review finding 7: the template pass's message must not stand in for the element's
+        s.stub(lib, 'list', function () { return [{ id: 'test1004lib', rev: 2 }]; });
+        s.stub(lib, 'getPack', async function () { packs++; return { project: scene([]).project, layers: [], media: {} }; });
+        if (await s.within(lib.openForEdit('test1004lib'), '1004 ' + kind + ' caller refusal') !== false) throw new Error(kind + ' caller continued after refusal');
+        if (FM.scene.project !== live || FM.storage.openProjectId() !== good) throw new Error(kind + ' caller replaced the open project');
+        if (!s.messages.some(m => /could not be read/i.test(m))) throw new Error('control: unreadable target was not exercised');
+        // #1004 review N2: Home is silent on this refusal, so the message is all he gets: it names the edit, not "that project".
+        if (!s.messages.some(m => new RegExp('edit of this ' + kind + ' could not be read', 'i').test(m))) throw new Error('the ' + kind + ' refusal did not say it was the ' + kind + ': ' + s.messages.join(' | '));
+        if (kind === 'template' && packs !== 1) throw new Error('control: template pack lookup was not exercised');
+        const readable = scene([]);
+        readable.project.ofTemplateRev = 2;
+        localStorage.setItem('fm.proj.' + draft, JSON.stringify(readable));
+        if (await s.within(lib.openForEdit('test1004lib'), '1004 ' + kind + ' readable workspace control') !== draft || FM.storage.openProjectId() !== draft) throw new Error('control: ' + kind + ' caller did not open its readable workspace');
+        await s.within(FM.projects.open(good), '1004 return from readable ' + kind + ' workspace');
+        // load() replaces project objects, so the next refusal must preserve the newly loaded one.
+        live = FM.scene.project;
+      }
+    }), 20000, '1004 edit callers regression and cleanup');
+  });
+
+  test('1005 boot sweep deletes no media with an unreadable project and still collects readable orphans', { item: '1005', budgetMs: 30000 }, async function () {
+    await hcWithin(safety1004(async function (s) {
+      const key = 'test1005orphan', doc = 'fm.proj.test1005broken';
+      let sweeps = 0;
+      s.stub(FM, 'exportResume', { sweep: async function () { sweeps++; } });
+      for (const raw of ['garbage{', '{"layers":[]}']) {
+        s.records.set(key, { file: new Blob(['clip']) });
+        localStorage.setItem(doc, raw);
+        const swept = sweeps;
+        await s.within(FM.projects.pruneOrphans(), '1005 unreadable sweep ' + raw);
+        if (!s.records.has(key) || s.deleted.length) throw new Error('unreadable project allowed media deletion');
+        // #1004 review F1: the export-resume clean-up reads no project doc, so an unreadable one must not stop it.
+        if (sweeps !== swept + 1) throw new Error('an unreadable project stopped the export-resume clean-up (' + (sweeps - swept) + ' runs)');
+      }
+      localStorage.setItem(doc, JSON.stringify(scene([])));
+      await s.within(FM.projects.pruneOrphans(), '1005 readable orphan control');
+      if (s.records.has(key) || !s.deleted.includes(key)) throw new Error('control: readable sweep did not delete the same orphan');
+      const deletedBefore = s.deleted.length;
+      s.records.set(key, { file: new Blob(['clip']) });
+      s.calls.onKeys = function () { localStorage.setItem(doc, 'garbage{'); };
+      const opened = s.calls.dbOpen, closed = s.calls.dbClose;
+      await s.within(FM.projects.pruneOrphans(), '1005 project becomes unreadable during scan');
+      if (!s.records.has(key) || s.deleted.length !== deletedBefore) throw new Error('fresh keep-set ignored a project that became unreadable during the scan');
+      /* #1004 review N1: without its own guard a null delete-time keep-set still deletes nothing (keep2.has throws and the
+         catch swallows it), so the media store left OPEN is what tells the guard is there. */
+      if (s.calls.dbOpen - opened !== 1 || s.calls.dbClose - closed !== 1) throw new Error('the delete-time stand-down left the media store open (opened ' + (s.calls.dbOpen - opened) + ', closed ' + (s.calls.dbClose - closed) + ')');
+    }), 20000, '1005 sweep regression and cleanup');
+  });
+
+  /* #1005 review finding 2 (the builder's call, logged for the PM): an unreadable doc with no Home card stood the sweep down
+     on every boot, silently, because nothing could delete it. The boot now gives it a card, and Home's Delete clears it. */
+  test('1005 an unreadable doc that no card lists gets one at the boot sweep, and deleting that card lets the next sweep run', { item: '1005', budgetMs: 30000 }, async function () {
+    await hcWithin(safety1004(async function (s) {
+      const key = 'test1005lost', named = 'test1005nocard', bare = 'test1005nocard2', fine = 'test1005fine';
+      const cards = id => FM.projects.list().filter(p => p && p.id === id);
+      let refreshed = 0;
+      s.stub(FM.home, 'refresh', function () { refreshed++; });
+      // CONTROL: an unindexed doc that CAN be read gets no card, and the sweep collects the orphan as before.
+      localStorage.setItem('fm.proj.' + named, JSON.stringify(scene([])));
+      s.records.set(key, { file: new Blob(['clip']) });
+      await s.within(FM.projects.pruneOrphans(), '1005 card control sweep');
+      if (FM.projects.list().length !== 0) throw new Error('control: a sweep with nothing unreadable added a card: ' + JSON.stringify(FM.projects.list()));
+      if (s.records.has(key) || !s.deleted.includes(key)) throw new Error('control: the readable sweep did not collect the orphan');
+      s.records.set(key, { file: new Blob(['clip']) });
+      s.deleted.length = 0;
+      localStorage.setItem('fm.proj.' + named, '{"project":{"name":"Beach day","width":1080,"layers"');
+      localStorage.setItem('fm.proj.' + bare, 'garbage{');
+      /* #1005 review finding 1: a READABLE doc with no card stays beside them through both passes. Only a doc that cannot
+         be read gets a card; this one must not be given an untrue "(unreadable)" card. */
+      localStorage.setItem('fm.proj.' + fine, JSON.stringify(scene([], { project: Object.assign({}, scene([]).project, { name: 'Readable no card' }) })));
+      for (const pass of [1, 2]) {
+        await s.within(FM.projects.pruneOrphans(), '1005 unindexed unreadable sweep ' + pass);
+        if (!s.records.has(key) || s.deleted.includes(key)) throw new Error('pass ' + pass + ': the sweep deleted media while a doc could not be read');
+        if (cards(fine).length) throw new Error('pass ' + pass + ': a readable doc with no card was given an unreadable card: ' + JSON.stringify(cards(fine)));
+        const a = cards(named), b = cards(bare);
+        if (a.length !== 1 || b.length !== 1) throw new Error('pass ' + pass + ': expected exactly one card for each unreadable doc, found ' + a.length + ' and ' + b.length);
+        if (a[0].name !== 'Beach day (unreadable)') throw new Error('the card does not carry the name the doc still shows: ' + a[0].name);
+        if (b[0].name !== 'Unreadable project') throw new Error('a doc with no readable name was not called Unreadable project: ' + b[0].name);
+      }
+      if (!refreshed) throw new Error('Home was not re-rendered to show the new cards');
+      // His tap on the card is refused cleanly and names it; Home's Delete removes the doc and its kept copy.
+      s.messages.length = 0;
+      if (await s.within(FM.projects.open(named), '1005 open the unreadable card') !== false) throw new Error('the unreadable card opened');
+      if (!s.messages.some(m => /Beach day \(unreadable\). could not be read/.test(m))) throw new Error('the refusal did not name the card: ' + s.messages.join(' | '));
+      if (localStorage.getItem('fm.unreadable.' + named) === null) throw new Error('control: the refused open kept no copy');
+      for (const id of [named, bare]) await s.within(FM.projects.remove(id), '1005 delete the card ' + id);
+      for (const id of [named, bare]) {
+        if (localStorage.getItem('fm.proj.' + id) !== null || localStorage.getItem('fm.unreadable.' + id) !== null || cards(id).length) throw new Error('deleting the card left the doc, its copy or the card behind: ' + id);
+      }
+      await s.within(FM.projects.pruneOrphans(), '1005 sweep after the delete');
+      if (s.records.has(key) || !s.deleted.includes(key)) throw new Error('the sweep still stood down after the unreadable cards were deleted');
+      if (cards(fine).length || localStorage.getItem('fm.proj.' + fine) === null) throw new Error('the readable doc with no card was given a card or lost at the last sweep');
+    }), 20000, '1005 unindexed unreadable doc regression and cleanup');
+  });
+
+  test('1004 putting a workspace away lands on Home when the project to land on cannot be read', { item: '1004', budgetMs: 30000 }, async function () {
+    await hcWithin(safety1004(async function (s) {
+      const land = 'test1004land', draft = 'test1004put';
+      const readable = JSON.stringify(scene([], { project: Object.assign({}, scene([]).project, { name: 'Landing control' }) }));
+      for (const way of ['discardDraftAnyway', 'elements.commitNew']) {
+        for (const raw of [readable, 'garbage{']) {
+          const what = way + (raw === readable ? ' (readable control)' : ' (unreadable landing)');
+          localStorage.setItem('fm.projects', JSON.stringify([{ id: land, name: 'Landing' }, { id: draft, name: 'Draft', elementDraft: true, libNew: 'element' }]));
+          localStorage.setItem('fm.proj.' + land, raw);
+          localStorage.setItem('fm.proj.' + draft, JSON.stringify(scene([])));
+          if (await s.within(FM.projects.open(draft), '1004 open the workspace for ' + what) !== true || FM.storage.openProjectId() !== draft) throw new Error('control: the workspace did not open for ' + what);
+          s.messages.length = 0;
+          const got = way === 'discardDraftAnyway'
+            ? (await s.within(FM.projects.discardDraftAnyway(draft), '1004 ' + what)).ok
+            : await s.within(FM.elements.commitNew(), '1004 ' + what);
+          const want = raw === readable ? land : null;
+          if (FM.storage.openProjectId() !== want) throw new Error(what + ': open project is ' + FM.storage.openProjectId() + ', expected ' + want + ' (the workspace stayed open)');
+          if (localStorage.getItem('fm.proj.' + draft) !== null || FM.projects.list().some(p => p.id === draft)) throw new Error(what + ': the workspace was not put away');
+          if (way === 'discardDraftAnyway' ? got !== true : got !== 'empty') throw new Error(what + ': answered ' + got);
+          if (raw !== readable) {
+            if (localStorage.getItem('fm.proj.' + land) !== raw) throw new Error(what + ': the unreadable project was written over');
+            const said = s.messages.filter(m => /could not be read/i.test(m)).pop() || '';
+            if (!said || /open project/i.test(said)) throw new Error(what + ': the refused landing said the wrong thing: ' + said);
+          }
+          if (want) await s.within(FM.projects.open(null, { confirmed: true }), '1004 close after ' + what);
+        }
+      }
+    }), 20000, '1004 workspace landing regression and cleanup');
+  });
+
+  /* #1004 + #1005, the PM's ask: Delete… on a card whose project can't be opened asked the ordinary 'Delete "X"? This
+     cannot be undone.' It says so in plain words now, and its left answer is Save a copy: the stored text, exactly as it
+     is, handed over as a file (caught the way hunt2dCatchDownloads catches one, through the fixture's own stub so each
+     descriptor goes back), so a damaged project can still be recovered later. Driven through the real card's ⋯ menu and
+     the real FM.ask. CONTROL: an ordinary card's Delete… keeps its words and its Cancel, and still deletes. */
+  test('1005 Delete on a card that cannot be opened says so plainly, offers Save a copy first, and an ordinary card keeps its Delete', { item: '1005', budgetMs: 30000 }, async function () {
+    await hcWithin(safety1004(async function (s) {
+      const good = 'test1005plain', bad = 'test1005damaged', bare = 'test1005damaged2';
+      const raw = '{"project":{"name":"Beach day","width":1080,"layers"', kept = '{"project":{"name":"Beach day","width":1080,"height":1920},"layers":[{"id":"L1"';
+      const said = 'This project can’t be opened. Deleting it removes it for good.';
+      const files = [];
+      const realMake = URL.createObjectURL, realClick = HTMLElement.prototype.click;
+      s.stub(URL, 'createObjectURL', function (b) { const u = realMake.call(URL, b); if (b instanceof Blob) files.push({ url: u, blob: b, name: null }); return u; });
+      s.stub(HTMLAnchorElement.prototype, 'click', function () {
+        if (this.download) { const f = files.find(x => x.url === this.href); if (f) f.name = this.download; else files.push({ url: this.href, blob: null, name: this.download }); return; }
+        return realClick.call(this);
+      });
+      const listed = id => FM.projects.list().some(p => p && p.id === id);
+      const asked = () => ask967b3();
+      const handed = () => files.filter(f => f.name);   // downloads only: Home's own pictures may make blob URLs too
+      // Opens the card's ⋯, taps Delete…, and returns the question it asks.
+      async function deleteOn(id) {
+        FM.home._render('projects');
+        const c = hcCard(id), more = c && c.querySelector('.hm-card-more');
+        if (!more) throw new Error('setup: Home drew no card with a ⋯ for ' + id);
+        more.click();
+        const row = await hcUntil('the Delete row of ' + id, function () {
+          const m = document.getElementById('ctx-menu');
+          if (!m || m.classList.contains('hidden')) return null;
+          return Array.prototype.filter.call(m.querySelectorAll('.ctx-item'), x => x.textContent.trim() === 'Delete…')[0] || null;
+        }, 3000);
+        row.click();
+        return hcUntil('the delete question for ' + id, asked, 3000);
+      }
+      /* `bad` is a card the boot sweep made (#1005, flagged); `bare` is an ordinary card whose doc went bad, with no flag:
+         the Delete reads the stored doc, not the flag. */
+      localStorage.setItem('fm.projects', JSON.stringify([
+        { id: good, name: 'Plain card', modified: 3 },
+        { id: bad, name: 'Beach day (unreadable)', modified: 2, unreadable: true },
+        { id: bare, name: 'Went bad', modified: 1 }
+      ]));
+      localStorage.setItem('fm.proj.' + good, JSON.stringify(scene([])));
+      localStorage.setItem('fm.proj.' + bad, raw);
+      localStorage.setItem('fm.proj.' + bare, 'garbage{');
+      const plainSaid = 'Delete "Plain card"? This cannot be undone.';
+      const escape = a => a.ok.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      const again = () => { const a = asked(); return a && a.cancel.textContent === 'Cancel' ? a : null; };
+      try {
+        // CONTROL: the ordinary card's Delete… is unchanged, and its Cancel deletes nothing.
+        let q = await deleteOn(good);
+        if (q.title !== 'Delete project' || q.msg !== plainSaid || q.cancel.textContent !== 'Cancel' || q.ok.textContent !== 'Delete') throw new Error('CONTROL: the ordinary Delete changed: ' + q.title + ' / ' + q.msg + ' / ' + q.cancel.textContent + ' / ' + q.ok.textContent);
+        q.cancel.click();
+        await hcUntil('the ordinary question to go', () => !asked(), 2000);
+        if (!listed(good) || localStorage.getItem('fm.proj.' + good) === null || handed().length) throw new Error('CONTROL: Cancel on the ordinary Delete deleted or downloaded something');
+        // The unreadable card asks in plain words, with Save a copy as its left answer.
+        q = await deleteOn(bad);
+        if (q.title !== 'Delete project' || q.msg !== said) throw new Error('the unreadable card did not say it cannot be opened: ' + q.title + ' / ' + q.msg);
+        if (q.cancel.textContent !== 'Save a copy' || q.ok.textContent !== 'Delete') throw new Error('the unreadable card did not offer Save a copy before Delete: ' + q.cancel.textContent + ' / ' + q.ok.textContent);
+        // Putting it away (Escape, as a tap on the dim area does) deletes nothing and saves nothing.
+        escape(q);
+        await hcUntil('the question to go on Escape', () => !asked(), 2000);
+        await sleep(60);
+        if (!listed(bad) || localStorage.getItem('fm.proj.' + bad) !== raw || handed().length) throw new Error('putting the question away deleted or downloaded something');
+        // Save a copy: the doc's own text (no kept copy yet), as a file named after the card, then the question again.
+        q = await deleteOn(bad);
+        q.cancel.click();
+        await hcUntil('the copy to be handed over', () => handed().length, 3000);
+        const one = handed();
+        if (one.length !== 1 || !one[0].blob) throw new Error('Save a copy handed over ' + one.length + ' files, or one with no contents');
+        if (one[0].name !== 'Beach day (unreadable copy).txt') throw new Error('the copy is not named after the card: ' + one[0].name);
+        const oneText = await one[0].blob.text();
+        if (oneText !== raw) throw new Error('the copy is not the stored text exactly as it is: ' + oneText.slice(0, 80));
+        q = await hcUntil('the question after the copy', again, 3000);
+        if (q.msg !== said || q.ok.textContent !== 'Delete') throw new Error('after the copy the question changed: ' + q.msg + ' / ' + q.ok.textContent);
+        // Cancel there deletes nothing.
+        q.cancel.click();
+        await hcUntil('the second question to go', () => !asked(), 2000);
+        await sleep(60);
+        if (!listed(bad) || localStorage.getItem('fm.proj.' + bad) !== raw) throw new Error('Cancel after the copy deleted the project');
+        // With a kept original (fm.unreadable.<id>, written at the first refusal) that is what is saved; then Delete removes it all.
+        localStorage.setItem('fm.unreadable.' + bad, kept);
+        q = await deleteOn(bad);
+        q.cancel.click();
+        await hcUntil('the second copy', () => handed().length === 2, 3000);
+        const two = handed()[1], twoText = two.blob ? await two.blob.text() : null;
+        if (twoText !== kept) throw new Error('the copy was not the kept original: ' + String(twoText).slice(0, 80));
+        q = await hcUntil('the question after the second copy', again, 3000);
+        q.ok.click();
+        await hcUntil('the unreadable project to go', () => !listed(bad) && localStorage.getItem('fm.proj.' + bad) === null && localStorage.getItem('fm.unreadable.' + bad) === null, 5000);
+        // An ordinary card whose doc went bad (no flag) asks the same; Delete straight away needs no copy, and saves none.
+        q = await deleteOn(bare);
+        if (q.msg !== said || q.cancel.textContent !== 'Save a copy') throw new Error('a card whose doc went bad (no flag) asked something else: ' + q.msg + ' / ' + q.cancel.textContent);
+        q.ok.click();
+        await hcUntil('the second unreadable project to go', () => !listed(bare) && localStorage.getItem('fm.proj.' + bare) === null, 5000);
+        if (handed().length !== 2) throw new Error('Delete without Save a copy handed a file over');
+        // CONTROL, to the end: the ordinary card's Delete still deletes, with no copy offered or made.
+        q = await deleteOn(good);
+        if (q.msg !== plainSaid) throw new Error('CONTROL: the ordinary Delete changed after the unreadable ones: ' + q.msg);
+        q.ok.click();
+        await hcUntil('the ordinary project to go', () => !listed(good) && localStorage.getItem('fm.proj.' + good) === null, 5000);
+        if (handed().length !== 2) throw new Error('CONTROL: the ordinary Delete handed a file over');
+      } finally {
+        // The menu and any question go away BEFORE the fixture restores. Escape is no answer: nothing is deleted or saved.
+        try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+        try { const a = asked(); if (a) escape(a); } catch (e) {}
+      }
+    }), 25000, '1005 unreadable Delete regression and cleanup').finally(function () {
+      // Home was drawn from the fixture's cards: draw his own again if it is on screen (a hidden grid is redrawn on open).
+      try { if (FM.home && FM.home.refresh) FM.home.refresh(); } catch (e) {}
+    });
+  });
+
+  /* #1007 (VERIFIED §1.8): OPENING A HUGE FILE ASKS FIRST, ON BOTH DOORS. Import project file and Settings, Restore from a backup
+     each read the whole file into memory before anything checked its size, and on a phone a several-hundred-MB file can kill the
+     tab. Both doors now go through FM.storage.readImportFile, which asks before it reads anything over 96 MiB and reads nothing on
+     Cancel. Driven through the real doors (importFile, and the Restore button in the real Settings panel) with the file picker
+     faked and the consumer stubbed, so no large payload is ever allocated: the fake file only reports a size. Each pick has its
+     own named 2 s deadline. A file whose JSON is just null must still reach the consumer, which is what tells him it is not a
+     project or a backup: Cancel has its own value, so null is not taken for it (review F5). */
+  async function fileDoor1007(restore) {
+    const stubs = [];
+    function stub(obj, key, value) {
+      stubs.push([obj, key, Object.getOwnPropertyDescriptor(obj, key)]);
+      Object.defineProperty(obj, key, { configurable: true, writable: true, value: value });
+    }
+    function deadline(p, name) {
+      let timer;
+      return Promise.race([p, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(name + ' deadline: 2000 ms')), 2000); })]).finally(() => clearTimeout(timer));
+    }
+    const create = document.createElement;
+    const consumer = restore ? 'restoreBackup' : 'importParsed';
+    let picked, asks = [], reads = 0, consumed = 0, allow = false;
+    const got = [];
+    const wasOpen = FM.settings.isOpen();
+    let restoreButton;
+    try {
+      if (restore) {
+        FM.settings.open();
+        const row = Array.from(document.querySelectorAll('.set-row')).find(r => r.textContent.indexOf('Restore from a backup') >= 0);
+        if (!row) throw new Error('setup: the Restore from a backup row is missing from Settings');
+        restoreButton = row.querySelector('button');
+        if (!restoreButton) throw new Error('setup: the Restore from a backup row has no button');
+      }
+      stub(FM, 'ask', async function (opts) { asks.push({ opts: opts, reads: reads }); return allow; });
+      stub(FM, 'toast', function () {});
+      stub(FM.storage, consumer, async function (obj) { consumed++; got.push(obj); return { ok: false }; });
+      stub(document, 'createElement', function (tag) {
+        const el = create.call(document, tag);
+        if (tag === 'input') {
+          let change;
+          stub(el, 'addEventListener', function (type, fn) { if (type === 'change') change = fn; });
+          stub(el, 'click', function () {});
+          picked = { el: el, run: function (file) { stub(el, 'files', [file]); return change(); } };
+        }
+        return el;
+      });
+      function pick() {
+        picked = null;
+        if (restore) {
+          restoreButton.click();
+        } else FM.storage.importFile();
+        if (!picked) throw new Error('CONTROL: the door did not open a file picker');
+        return picked;
+      }
+      function file(size, text) { return { size: size, text: async function () { reads++; return text === undefined ? '{}' : text; } }; }
+      await deadline(pick().run(file(96 * 1048576 + 1)), '1007 large Cancel');
+      if (asks.length !== 1 || asks[0].reads !== 0 || !/96\.0 MB/.test(asks[0].opts.message)) throw new Error('a file over 96 MiB did not ask, with its size, before it was read');
+      if (reads || consumed) throw new Error('Cancel read or opened the file anyway');
+      await deadline(pick().run(file(1048576)), '1007 small control');
+      if (asks.length !== 1 || reads !== 1 || consumed !== 1) throw new Error('CONTROL: a 1 MiB file must be read and reach ' + consumer + ' without asking');
+      allow = true;
+      await deadline(pick().run(file(400 * 1048576)), '1007 Continue control');
+      if (asks.length !== 2 || asks[1].reads !== 1 || reads !== 2 || consumed !== 2) throw new Error('CONTROL: Continue must read the large file and hand it to ' + consumer);
+      await deadline(pick().run(file(1024, 'null')), '1007 null file');
+      if (asks.length !== 2 || reads !== 3) throw new Error('setup: the null file was not read exactly once, without asking');
+      if (consumed !== 3 || got[2] !== null) {
+        throw new Error('a file whose JSON is just null was taken for a Cancel and dropped in silence: it never reached ' + consumer + ', which is what tells him it is not a ' + (restore ? 'backup' : 'project'));
+      }
+    } finally {
+      if (picked) picked.el.remove();
+      stubs.reverse().forEach(s => { if (s[2]) Object.defineProperty(s[0], s[1], s[2]); else delete s[0][s[1]]; });
+      if (restore) {
+        if (wasOpen) FM.settings.open(); else FM.settings.close({ handBack: false });
+      }
+    }
+  }
+
+  test('1007 Import project asks before reading a large file, Cancel reads nothing, a null file is not a Cancel', { item: '1007', budgetMs: 12000 }, async function () {
+    await fileDoor1007(false);   // four named 2 s deadlines inside fileDoor1007
+  });
+  test('1007 Settings Restore asks before reading a large backup, Cancel reads nothing, a null file is not a Cancel', { item: '1007', budgetMs: 12000 }, async function () {
+    await fileDoor1007(true);   // four named 2 s deadlines inside fileDoor1007
   });
 })();

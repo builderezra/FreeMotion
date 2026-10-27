@@ -27,7 +27,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.08">
+<meta name="fm-build" content="v18.09">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -301,7 +301,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.08</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.09</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1182,7 +1182,7 @@
   <script src="js/perf-probe.js?v=12"></script>
   <script src="js/drawn-x.js?v=1"></script>
   <script src="js/variant.js?v=3"></script>   <!-- queue 974: every animation with options plays one AT RANDOM (FM.variant); before timeline/home/app -->
-  <script src="js/settings.js?v=58"></script>
+  <script src="js/settings.js?v=59"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
   <script src="js/collab-core.js?v=61"></script>
@@ -1234,13 +1234,13 @@
   <script src="js/audio-fx-live.js?v=17"></script>
   <script src="js/audio-fx-browser.js?v=17"></script>
   <script src="js/history.js?v=43"></script>
-  <script src="js/storage.js?v=82"></script>
+  <script src="js/storage.js?v=83"></script>
   <script src="js/export-resume.js?v=10"></script>
   <script src="js/medialib.js?v=10"></script>
   <script src="js/template-fill.js?v=4"></script>
   <script src="js/home-arrow.js?v=5"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
   <script src="js/tutorials.js?v=1"></script>   <!-- #1082: the lessons in Home's Tutorials tab -->
-  <script src="js/home.js?v=206"></script>
+  <script src="js/home.js?v=207"></script>
   <script src="js/graph-editor.js?v=19"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
@@ -1366,6 +1366,12 @@
         if (fmSwHeld !== held) return false;   // cancelled, or replaced, while it saved
         if (saving) held.savedKey = key;
         if ((F.collab && F.collab.active) || fmSwBusy() || fmSwMediaKey() !== key) return false;   // the next check tries again
+        /* 1187: …and a clip whose FILE the disk does not have (a full phone refused it, or IndexedDB would not open) holds it
+           the same way: the reload lets go of its only copy. The save above was this set of clips' one try (savedKey), so a store
+           that refuses is not handed the file again every 2 s; an edit's autosave that lands it lets the next check go. Asked
+           BEFORE the flush below (review F4): flushSync cancels the 600 ms autosave, the very save that would land the file. */
+        try { if (S.unlandedFiles && S.unlandedFiles().length) return false; }
+        catch (e) { return false; }
         try { if (S.flushSync && !S.flushSync() && S.unsavedOnScreen && S.unsavedOnScreen()) return false; }
         catch (e) { return false; }
         fmSwStop();
@@ -1460,7 +1466,7 @@
                unasked — while opening another card, New project and Restore all stop and ask (queue 690, hunt f). Same
                question, same default: Stay (also Cancel, Escape, a tap outside) leaves everything exactly as it was. */
             var asking = (window.FM && FM.projects && FM.projects.confirmLeave)
-              ? Promise.resolve().then(function () { return FM.projects.confirmLeave({ why: 'Updating reloads the app, and that throws it away.', ok: 'Update anyway' }); })
+              ? Promise.resolve().then(function () { return FM.projects.confirmLeave({ why: 'Updating reloads the app, and that throws it away.', ok: 'Update anyway', noWait: true }); })
                   /* ⚠️ …and a question that cannot be ASKED does not stop the update (hunt-7 review, 26 Sep). This chip is the
                      escape hatch for a broken build; when the app's own scripts throw, going ahead is the whole point. */
                   .catch(function () { return true; })

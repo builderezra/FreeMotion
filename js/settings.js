@@ -789,7 +789,7 @@ window.FM = window.FM || {};
             FM._importing = (FM._importing || 0) + 1;
             try {
             let obj = null;
-            try { obj = JSON.parse(await file.text()); }
+            try { obj = await FM.storage.readImportFile(file); if (obj === FM.storage.IMPORT_CANCELLED) return; }
             catch (e) { if (FM.toast) FM.toast('That file is not readable — it may be truncated.', 5000); return; }
             if (FM.toast) FM.toast('Restoring…', 3000);
             const r = await FM.storage.restoreBackup(obj, null);

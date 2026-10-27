@@ -1328,6 +1328,29 @@ window.FM = window.FM || {};
     const U = FM.collab && FM.collab.ui;
     if (U && U.endForDelete) { try { U.endForDelete(id); } catch (e) {} }
   }
+  /* ═══ DELETE… ON A PROJECT THAT CAN'T BE OPENED (#1004 + #1005, the PM's ask) ═══════════════════════════════════════
+     A stored project that is there but cannot be read keeps a card so it can be got rid of (#1005), and its Delete… asked
+     the ordinary 'Delete "Beach day (unreadable)"? This cannot be undone.', which says neither what is wrong nor that
+     anything could be kept. It says it plainly now, and the left answer is Save a copy. A tap on the dim area, or Escape,
+     puts the question away and deletes nothing (js/ask.js cancelValue); after a copy the same question comes back with a
+     plain Cancel. Every other card's Delete… is the one in projectCard, unchanged. */
+  async function deleteUnreadable(p, shared) {
+    const said = 'This project can’t be opened. Deleting it removes it for good.';
+    let answer = await FM.ask({ title: 'Delete project', message: said, cancel: 'Save a copy', cancelValue: 'copy', ok: 'Delete', danger: true });
+    if (answer === 'copy') {
+      /* THE COPY IS OFFERED HERE, BEFORE ANYTHING IS DELETED: the stored text, exactly as it is, as a file
+         (FM.storage.saveUnreadableCopy), because once the card goes that text is all that is left of the project and a
+         damaged one can still be recovered later. */
+      if (!FM.storage.saveUnreadableCopy(p.id)) {
+        if (FM.toast) FM.toast('There was nothing left to save — that project is no longer on this device', 3200);
+        render(); return;
+      }
+      answer = await FM.ask({ title: 'Delete project', message: said, ok: 'Delete', danger: true });
+    }
+    if (answer !== true) return;
+    if (shared) endSharedFor(p.id);
+    await FM.projects.remove(p.id); render();
+  }
   /* #967 B3 (J4-11): the projects with save points, read when Home draws — "Earlier versions…" shows on those only. */
   let ckptPids = null;
   function readVersionPids() {
@@ -1519,6 +1542,8 @@ window.FM = window.FM || {};
         { sep: true },
         { label: 'Delete…', danger: true, action: async () => {
           const sh = sharedOf([p.id]), who = sh.who, shared = sh.ids.length > 0;
+          // #1004 + #1005: a project that can't be opened is asked about in its own words, with Save a copy first
+          if (FM.projects.isUnreadable && FM.projects.isUnreadable(p.id)) { await deleteUnreadable(p, shared); return; }
           const message = who.length ? namesOf(who) + (who.length === 1 ? ' is' : ' are') + ' working in this now — deleting ends it for everyone. This cannot be undone.'
             : shared ? 'Delete "' + (p.name || 'Untitled') + '"? It is shared — deleting it stops sharing, and the link and short code stop working. This cannot be undone.'
             : 'Delete "' + (p.name || 'Untitled') + '"? This cannot be undone.';
@@ -2702,10 +2727,20 @@ window.FM = window.FM || {};
        Stay leaves him on Home with his project still open. A flag read, so an ordinary tap costs nothing and
        reaches the push in the same task as before. Resolves null (not false) so the ⋯ actions do not report
        "busy" for a choice he just made. */
+    /* 1187: …and the same for a clip whose FILE never reached storage (FM.storage.unlandedFiles, a map lookup like the
+       flag above): confirmLeave waits for a write still running, saves once more, and asks only if the disk still lacks it —
+       here, before the push, rather than from inside open(). Asked (or waited on), then the busy check again, as for leaveOk:
+       another open may have started meanwhile. */
     let confirmed = false;
-    if (id !== FM.storage.openProjectId() && FM.storage && FM.storage.lastWriteRefused && FM.storage.lastWriteRefused()) {
+    const st = FM.storage;
+    if (id !== st.openProjectId() && ((st.lastWriteRefused && st.lastWriteRefused()) || (st.unlandedFiles && st.unlandedFiles().length))) {
+      const from = st.openProjectId();
       if (!(await FM.projects.confirmLeave())) return null;
+      /* (review F2) the wait can be a big clip's whole write, with nothing held: if he went back to the editor meanwhile, or
+         another project opened, this tap is stale — it must not switch him later, unasked, with `confirmed` set. */
+      if (!FM.home.isOpen() || st.openProjectId() !== from) { cancelPress(lead || null); return null; }
       confirmed = true;
+      if (_opening && !openAbandoned()) return false;
     }
     _opening = true; _openingAt = Date.now();
     holdPress();   // this open now owns the press — no release timer, and no other card, may take it

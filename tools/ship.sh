@@ -669,6 +669,14 @@ if [ -n "$(git status --porcelain -- tools/inbox.sh tools/next.sh tools/tick.sh 
     exit 1
   fi
 fi
+# …and the ship's idle reader (#1133): activity in the builder's external worktrees must reach the tick.
+if [ -n "$(git status --porcelain -- tools/_shipidle.sh tools/test-shipidle.sh tools/tick.sh 2>/dev/null)" ]; then
+  echo "→ the ship idle reader changed — proving it before shipping"
+  if ! ./tools/test-shipidle.sh; then
+    echo "❌ THE SHIP IDLE READER IS BROKEN — not committing, not pushing."
+    exit 1
+  fi
+fi
 # …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
 # EVERY script tools/test-port.sh exercises is listed, and test-port.sh checks that itself (6 Oct, the port audit): a release
 # that edited only tools/_shipgates.py — the feature gate, and the sh() that makes a failed git a refusal — ran no self-test.
