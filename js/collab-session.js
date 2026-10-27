@@ -2242,6 +2242,14 @@ window.FM = window.FM || {};
               try { S.onMessage(m.ch, m.msg, null); } catch (e) { C.lastError = e; }
             }
             early.length = 0;
+            /* 1194 (hunt LOW #9): A LINK THAT CLOSED DURING THE COPY SETUP IS SAID HERE. It closed inside the async tail above
+               (sameDeviceCopy, createLinked, the awaited projects.open), before setLink bound its onclose, so nothing heard it:
+               S.online stayed true, liveTick skips a closed link, and the banner read 'Live' over a copy that never changed
+               again (a Viewer or Commenter until a reload). This link delivered the snap, so false here can only mean it closed
+               since, never 'still connecting'. The check is here and not in setLink, because setLink is also handed links that
+               open LATER (it binds their onopen: a LoopLink's heal, and the suite's own rigs), where false means 'not yet', not
+               'gone'. Down the same markOffline -> A.onOffline path a close after the join takes (the banner, the reconnect). */
+            if (ep.open === false && S.active) S.setOnline(false);
             resolve({ gpid: gpid, session: S });
           });
         }).catch(function (e) { reject(e && e.why ? e : { why: 'failed', err: String(e) }); });
@@ -2352,6 +2360,9 @@ window.FM = window.FM || {};
       S.setLink(ep);
       C.attach(S, o);
       ep.send('ctl', S._helloMsg({ name: o.name }));
+      /* 1194: the same check as C.join's tail. The dialled link can close while the base is read; its onclose was bound
+         only now, so say it, rather than sit on 'Live' over a closed link. */
+      if (S.active && ep.open === false) S.setOnline(false);
       return { session: S, owed: owed, gpid: gpid };
     });
   };

@@ -5164,9 +5164,14 @@ window.FM = window.FM || {};
       back++;
       } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
     }
-    /* autosave, not just markDirty: the undo's own save may already have run while this was fetching, and after
-       it nothing else would write the restored file to disk until his next edit */
-    if (back) { FM.refreshAll(); FM.requestRender(); if (FM.storage) { if (FM.storage.autosave) FM.storage.autosave(); else FM.storage.markDirty(); } }
+    /* a save, not just markDirty: the undo's own save may already have run while this was fetching, and after
+       it nothing else would write the restored file to disk until his next edit.
+       1192 (hunt LOW): and a save NOW, not the 600 ms autosave. A switch to another app inside those 600 ms runs
+       flushSync (pagehide / a hidden visibilitychange), which cancels the pending save and writes the document only,
+       so the record kept the file he had undone and the next launch showed it, with its boot sweep deleting the kept
+       original. Every other path that changes a clip's file already saves at once (import, duplicate, paste, replace,
+       split — see the note at split's save). */
+    if (back) { FM.refreshAll(); FM.requestRender(); if (FM.storage) { FM.storage.markDirty(); if (FM.storage.save) FM.storage.save(); } }
     return back;
   }
 

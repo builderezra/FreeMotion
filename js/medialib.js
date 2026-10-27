@@ -208,7 +208,15 @@ window.FM = window.FM || {};
         if (FM.toast) FM.toast(PREPARING, 0);
       };
       try {
-        let rec = await st.readMedia(e.key);
+        /* 1191 review, finding 3: a row with no key (an old one; add() above still mends those) can never be read, and the
+           strict read below REJECTS a missing key (DataError), so the tile said 'Could not open that file' on every tap for
+           good. It is dropped as no longer stored, which is what the quiet read always answered for it. */
+        if (typeof e.key !== 'string' || !e.key) return gone();
+        /* 1191 (hunt LOW): a STRICT read. The ordinary one answers null when the read FAILED (WebKit lost the IndexedDB
+           connection, as a home-screen app back from the background does), and gone() below then dropped the tile for a
+           file that is on disk; once no project named it, the next boot sweep erased the file too. A failed read now
+           rejects into the catch at the bottom: 'Could not open that file', and the tile stays. */
+        let rec = await st.readMedia(e.key, { strict: true });
         /* THE DISK MAY ONLY BE BEHIND (review, round 3). The tile's key is a clip's own record, it does not hold the
            tile's file (or holds nothing), and a save is still running: Replace media and every import give the file
            its tile before their save has written it, and a project switch then takes the clip off screen, so
@@ -218,7 +226,7 @@ window.FM = window.FM || {};
         if (!isLib(e.key) && !(rec && rec.file && (!e.fp || fingerprint(rec.file) === e.fp)) && st.pendingSaves && st.pendingSaves() && st.settled) {
           prepare();
           await st.settled();
-          rec = await st.readMedia(e.key);
+          rec = await st.readMedia(e.key, { strict: true });   // 1191: strict here too, a failed read is never a missing file
         }
         if (!rec || !rec.file) return gone();   // the blob went away (project deleted before this shipped, storage cleared)
         /* IS THE FILE UNDER THE TILE'S KEY STILL THE TILE'S FILE? (review, round 2.) A shared copy is written once

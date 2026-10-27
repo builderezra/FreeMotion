@@ -24868,6 +24868,172 @@
     });
   });
 
+  /* 1193 (hunt LOW #8): a voice take whose add fails. commit() closes the panel (close() drops the blob) before
+     FM.voiceRec.addFile settles, so a rejected add (loadVideoFile's 20 s metadata timer across an iOS suspension, the
+     element's error, an addMediaLayer throw) left a toast and nothing else. Each stub puts its property's own descriptor
+     back; every wait is a vrWait, which fails by the name it is given. */
+  function stub1193(obj, key, value) {
+    var had = Object.prototype.hasOwnProperty.call(obj, key);
+    var d = Object.getOwnPropertyDescriptor(obj, key);
+    Object.defineProperty(obj, key, { configurable: true, enumerable: d ? !!d.enumerable : true, writable: true, value: value });
+    return function () { if (had) Object.defineProperty(obj, key, d); else delete obj[key]; };
+  }
+  async function take1193(why) {
+    FM.voiceRec.open();
+    await vrWait(function () { return vrStates().join() === 'live'; }, 8000, why + ': the mic');
+    vrEl('.vr-rec').click();
+    await vrWait(function () { return FM.voiceRec._state() === 'recording'; }, 3000, why + ': recording to start');
+    await new Promise(function (r) { setTimeout(r, 700); });
+    vrEl('.vr-rec').click();
+    await vrWait(function () { return FM.voiceRec._state() !== 'recording'; }, 9000, why + ': the take to settle');
+    if (FM.voiceRec._state() !== 'review') throw new Error(why + ': setup: a 700 ms take came out empty (state ' + FM.voiceRec._state() + '), so nothing below is exercised');
+  }
+  async function with1193(failOnce, body) {
+    var savedScene = FM.scene, savedTime = FM.time, savedLib = null;
+    try { savedLib = localStorage.getItem('fm.medialib'); } catch (e) {}
+    var realLoad = FM.loadVideoFile, put = [], imp1193 = FM._importing || 0;
+    /* ctx.hold (a promise the body sets before its Add) holds the failing add until the body releases it; ctx.release is
+       called again in the finally, so a red run never leaves an add held (and FM._importing up) for the rest of the suite.
+       ctx.stub adds a stub of the body's own, put back with the rest. */
+    var ctx = { sizes: [], toasts: [], reported: 0, failNext: !!failOnce, hold: null, release: null,
+      stub: function (obj, key, value) { put.push(stub1193(obj, key, value)); } };
+    await withFakeMic(async function () {
+      try {
+        FM.scene = scene([FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120 })]);
+        put.push(stub1193(FM, 'history', { commit: function () {}, undo: function () {}, redo: function () {} }));
+        put.push(stub1193(FM.storage, 'save', function () { return Promise.resolve(); }));
+        /* what the catch left, read in the same synchronous step (reportError runs right after reviewAgain), so no timer
+           of the app's can change it before a test looks */
+        put.push(stub1193(FM, 'reportError', function () {
+          ctx.reported++;
+          ctx.atReport = { playing: !!FM.playing, pauses: ctx.pauses || 0, time: FM.time, state: FM.voiceRec._state() };
+        }));
+        put.push(stub1193(FM, 'toast', function (m) { ctx.toasts.push(String(m)); }));
+        put.push(stub1193(FM, 'loadVideoFile', function (f) {
+          ctx.sizes.push(f && f.size);
+          if (ctx.failNext) {
+            ctx.failNext = false;
+            var fails = new Error('1193 stub: this add fails once');
+            return ctx.hold ? ctx.hold.then(function () { throw fails; }) : Promise.reject(fails);
+          }
+          return realLoad.apply(this, arguments);
+        }));
+        await body(ctx);
+      } finally {
+        /* An add still in flight when a red run gets here (a held one, or a second Add whose wait timed out on a slow load)
+           would settle AFTER the close below: its rejection re-opens the recorder into review, and every later voice test's
+           open() then does nothing. So let a held add go and wait for it, bounded just past loadVideoFile's 20 s metadata
+           timer (1193 review N2). */
+        if (ctx.release) { try { ctx.release(); } catch (e) {} }
+        var until1193 = Date.now() + 21000;
+        while ((FM._importing || 0) > imp1193 && Date.now() < until1193) { await new Promise(function (r) { setTimeout(r, 50); }); }
+        try { FM.voiceRec.close(); } catch (e) {}
+        try { (FM.scene.layers || []).forEach(function (l) { if (FM.media.get(l.id)) FM.media.remove(l.id); }); } catch (e) {}
+        while (put.length) { try { put.pop()(); } catch (e) {} }
+        FM.scene = savedScene; FM.time = savedTime;
+        try { if (savedLib == null) localStorage.removeItem('fm.medialib'); else localStorage.setItem('fm.medialib', savedLib); } catch (e) {}
+        if (FM.refreshAll) { try { FM.refreshAll(); } catch (e) {} }
+      }
+    });
+  }
+
+  test('1193 a voice take whose add fails is kept: the panel comes back in review with the same take and Add enabled, and Add again puts in exactly one layer', { item: '1193', budgetMs: 60000 }, async function () {
+    await with1193(true, async function (ctx) {
+      await take1193('1193');
+      vrEl('.vr-btn--add').click();
+      await vrWait(function () { return ctx.reported > 0; }, 8000, '1193: the failed add to be reported');
+      if (ctx.sizes.length !== 1 || !(ctx.sizes[0] > 0)) throw new Error('setup: the Add never reached FM.loadVideoFile with the take (sizes ' + JSON.stringify(ctx.sizes) + ')');
+      if (FM.scene.layers.length !== 1) throw new Error('setup: ' + (FM.scene.layers.length - 1) + ' layer(s) were added although the add failed');
+      if (!ctx.toasts.some(function (t) { return t.indexOf('Could not add the recording') === 0; })) throw new Error('the failed add was not said: toasts ' + JSON.stringify(ctx.toasts));
+      if (FM.voiceRec._state() !== 'review') throw new Error('the add failed and the take was thrown away: the recorder is ' + FM.voiceRec._state() + ', with no layer, no retry and no library copy, so he has to record it again');
+      if (vrEl('#vr-overlay').classList.contains('hidden')) throw new Error('the recorder says review but its panel is hidden, so the kept take cannot be reached');
+      var add = vrEl('.vr-btn--add');
+      if (add.disabled) throw new Error('the take came back with Add to timeline disabled, so it cannot be tried again');
+      add.click();
+      await vrWait(function () { return FM.scene.layers.length >= 2; }, 15000, '1193: the second Add to become a layer');
+      await new Promise(function (r) { setTimeout(r, 300); });
+      if (FM.scene.layers.length !== 2) throw new Error('the second Add put in ' + (FM.scene.layers.length - 1) + ' layers, not exactly one');
+      if (ctx.sizes.length !== 2 || ctx.sizes[1] !== ctx.sizes[0]) throw new Error('the second Add did not carry the same take (sizes ' + JSON.stringify(ctx.sizes) + ')');
+      var m = FM.media.get(FM.scene.layers[0].id);
+      if (!m || !m.file || m.file.size !== ctx.sizes[0] || !/^Voice /.test(m.file.name)) throw new Error('the layer the second Add made is not the kept take (' + (m && m.file ? m.file.name + ', ' + m.file.size + ' bytes' : 'no file') + ', the take was ' + ctx.sizes[0] + ' bytes)');
+      if (FM.voiceRec._state() !== 'closed') throw new Error('after the take went in the recorder is still ' + FM.voiceRec._state());
+    });
+  });
+
+  test('1193 CONTROL with the real FM.loadVideoFile the same flow adds exactly one layer and closes the panel, with no error said', { item: '1193', budgetMs: 60000 }, async function () {
+    await with1193(false, async function (ctx) {
+      await take1193('1193 CONTROL');
+      vrEl('.vr-btn--add').click();
+      if (FM.voiceRec._state() !== 'closed') throw new Error('CONTROL: tapping Add did not close the panel at once (state ' + FM.voiceRec._state() + ')');
+      await vrWait(function () { return FM.scene.layers.length >= 2; }, 15000, '1193 CONTROL: the take to become a layer');
+      await new Promise(function (r) { setTimeout(r, 300); });
+      if (FM.scene.layers.length !== 2) throw new Error('CONTROL: one Add put in ' + (FM.scene.layers.length - 1) + ' layers, not exactly one');
+      if (ctx.sizes.length !== 1 || !(ctx.sizes[0] > 0)) throw new Error('CONTROL: FM.loadVideoFile saw ' + JSON.stringify(ctx.sizes) + ', not the one take');
+      if (ctx.reported) throw new Error('CONTROL: a good add reported ' + ctx.reported + ' error(s)');
+      if (FM.voiceRec._state() !== 'closed' || !vrEl('#vr-overlay').classList.contains('hidden')) throw new Error('CONTROL: after a good add the recorder is ' + FM.voiceRec._state() + ' and its panel is ' + (vrEl('#vr-overlay').classList.contains('hidden') ? 'hidden' : 'showing'));
+    });
+  });
+
+  /* 1193 review #1: he can press play while the add is in flight (the panel is closed by then). The take must come back
+     over a paused project, its sentence naming the playhead the next Add will use. Playback is put on by hand (the
+     pattern other transport tests use), with the playhead moved, as a press of play leaves them; the real FM.pause runs. */
+  test('1193 a take that comes back while the project plays is paused first, so Lands at names where Add again will put it', { item: '1193', budgetMs: 60000 }, async function () {
+    await with1193(true, async function (ctx) {
+      var realPause = FM.pause;
+      try {
+        FM.time = 0.5;
+        await take1193('1193 paused');
+        var first = vrEl('.vr-lands').textContent;
+        if (first.indexOf('Lands at 0:00.5') < 0) throw new Error('setup: the first review does not name the 0.5 s playhead (' + first + '), so a stale sentence could not be told from a fresh one');
+        ctx.hold = new Promise(function (r) { ctx.release = r; });
+        vrEl('.vr-btn--add').click();
+        await vrWait(function () { return ctx.sizes.length === 1; }, 8000, '1193 paused: the Add to reach FM.loadVideoFile');
+        if (FM.voiceRec._state() !== 'closed') throw new Error('setup: tapping Add did not close the panel (state ' + FM.voiceRec._state() + '), so play could not have been pressed behind it');
+        ctx.pauses = 0;
+        ctx.stub(FM, 'pause', function () { ctx.pauses++; return realPause.apply(this, arguments); });
+        /* (fold check, LOW) a REVIEW play, so pause() really moves the playhead (back to where the review started, 1.2 s):
+           with the pause after paintLands the sentence would name 3 s, so the order the fold depends on is seen */
+        FM.time = 3; FM.playing = true; FM._reviewing = true; FM._reviewFrom = 1.2;
+        ctx.release();
+        await vrWait(function () { return ctx.reported > 0; }, 8000, '1193 paused: the failed add to be reported');
+        var rep = ctx.atReport;
+        if (rep.state !== 'review' || FM.voiceRec._state() !== 'review') throw new Error('the add failed and the take was thrown away: the recorder is ' + rep.state + ' (now ' + FM.voiceRec._state() + ')');
+        if (rep.playing || rep.pauses < 1) throw new Error('the take came back in review over a playing project (playing ' + rep.playing + ', pause x' + rep.pauses + '): the sentence names a playhead that keeps running, the take lands wherever it has run to at the next Add, and its own Play doubles the project audio');
+        var at = rep.time;
+        if (!(Math.abs(at - 1.2) < 0.05)) throw new Error('setup: the pause left the playhead at ' + at + ', not back at 1.2 s where the review play started');
+        var r = at % 60, want = 'Lands at ' + Math.floor(at / 60) + ':' + (r < 10 ? '0' : '') + r.toFixed(1);
+        var lands = vrEl('.vr-lands').textContent;
+        if (lands.indexOf(want) < 0) throw new Error('the take came back saying ' + JSON.stringify(lands) + ' with the playhead paused at ' + at + ' s; it must say ' + want + ', where the next Add puts it');
+      } finally {
+        if (FM.playing) { try { realPause.call(FM); } catch (e) {} }
+        FM._reviewing = false; FM._reviewFrom = null;
+      }
+    });
+  });
+
+  /* 1193 review #2: most of what addMediaLayer can throw runs after FM.insertLayer. A take whose layer went in must NOT come
+     back: the panel would say it did not go in over a layer that did, and Add again would put in a second copy. The real
+     loader and the real addMediaLayer run; the stub throws only after the real one has returned. */
+  test('1193 an add that throws after its layer went in does not bring the take back: one layer, the recorder stays closed, no second copy', { item: '1193', budgetMs: 60000 }, async function () {
+    await with1193(false, async function (ctx) {
+      await take1193('1193 landed');
+      var realAdd = FM.addMediaLayer;
+      ctx.threw = 0;
+      ctx.stub(FM, 'addMediaLayer', function () {
+        realAdd.apply(this, arguments);
+        ctx.threw++;
+        throw new Error('1193 stub: a throw after the insert');
+      });
+      vrEl('.vr-btn--add').click();
+      await vrWait(function () { return ctx.reported > 0; }, 15000, '1193 landed: the throw to be reported');
+      await new Promise(function (r) { setTimeout(r, 300); });
+      if (ctx.threw !== 1 || ctx.sizes.length !== 1) throw new Error('setup: addMediaLayer threw ' + ctx.threw + ' time(s) over ' + ctx.sizes.length + ' load(s), not once over the one take');
+      var takes = FM.scene.layers.filter(function (l) { var m = FM.media.get(l.id); return !!(m && m.file && m.file.size === ctx.sizes[0] && /^Voice /.test(m.file.name)); });
+      if (takes.length !== 1 || FM.scene.layers.length !== 2) throw new Error('setup: the layer did not go in before the throw (' + takes.length + ' take layer(s), ' + FM.scene.layers.length + ' in all), so this is not the case under test');
+      if (FM.voiceRec._state() !== 'closed' || !vrEl('#vr-overlay').classList.contains('hidden')) throw new Error('the take went in and the recorder came back anyway (state ' + FM.voiceRec._state() + ', panel ' + (vrEl('#vr-overlay').classList.contains('hidden') ? 'hidden' : 'showing') + '): it says it did not go in over a layer that did, and Add again would put in a second copy');
+    });
+  });
+
   test('voice: a long take stops itself at the cap, and keeps what it got', { item: 'voice-rec' }, async function () {
     /* The cap is not a nicety. Decoded PCM costs rate × channels × 4 bytes/sec and is set by DURATION
        alone (js/media.js decodeAudio) — the same cost that made long video imports fail before v5.59 —
@@ -32379,6 +32545,131 @@
       C._undoHandover(false);
       try { HS.stop('ended'); } catch (e) {}
     }
+  });
+
+  /* 1194 (hunt LOW #9): a link that closes inside C.join's async tail (sameDeviceCopy, createLinked, the awaited
+     projects.open) closes before setLink binds its onclose, so nothing hears it: S.online stays true, liveTick skips a
+     closed link, and the banner reads Live over a copy that never changes again. The same for C.reopen's base read.
+     Stubs put their own descriptors back; every wait races its own named deadline. */
+  function stub1194(obj, key, value) {
+    const had = Object.prototype.hasOwnProperty.call(obj, key);
+    const d = Object.getOwnPropertyDescriptor(obj, key);
+    Object.defineProperty(obj, key, { configurable: true, enumerable: d ? !!d.enumerable : true, writable: true, value: value });
+    return function () { if (had) Object.defineProperty(obj, key, d); else delete obj[key]; };
+  }
+  async function by1194(p, ms, what) {
+    const r = await Promise.race([Promise.resolve(p).then(function (v) { return { v: v }; }, function (e) { return { e: e }; }), sleep(ms).then(function () { return null; })]);
+    if (!r) throw new Error('DEADLINE 1194: ' + what + ' did not settle within ' + ms + ' ms');
+    if (r.e) throw new Error(what + ' failed: ' + JSON.stringify(r.e && r.e.why ? r.e : String(r.e)));
+    return r.v;
+  }
+  async function join1194(closeDuring, body) {
+    const C = need921('the join flow');
+    const ts = Date.now().toString(36);
+    const hostDoc = {
+      project: { width: 320, height: 240, fps: 30, duration: 5, name: 'FX1194 join' },
+      layers: [{ id: 'l_1194j' + ts, type: 'shape', shape: 'rect', name: 'before', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } }]
+    };
+    const inv = C.bridge.invariants();
+    const host = C.Host({ base: jclone921(hostDoc), invariants: inv, epoch: 'e1194j' });
+    const HS = C.Session({ adapter: plainAdapter921(hostDoc, inv), role: 'owner', mid: 'o', host: host });
+    const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+    HS.addPeer(loop.a, { role: 'editor', name: 'Sam' });
+    const gdoc = { project: {}, layers: [] };
+    const gA = plainAdapter921(gdoc, inv);
+    const put = [];
+    const ctx = { C: C, loop: loop, gA: gA, opened: 0, openAtOpen: null };
+    try {
+      put.push(stub1194(FM.projects, 'createLinked', function (meta, D) { gdoc.project = jclone921(D.project); gdoc.layers = jclone921(D.layers); return 'p_1194j' + ts; }));
+      /* the copy's open, where the link goes: the owner closing his tab, or the guest dismissing the sheet, right after Let in */
+      put.push(stub1194(FM.projects, 'open', function () {
+        ctx.opened++;
+        if (closeDuring) loop.b.close();
+        ctx.openAtOpen = loop.b.open;
+        return Promise.resolve(true);
+      }));
+      /* timeoutMs: the join's own deadline no longer than by1194's, so a red run cannot leave JOIN_WAIT's 140 s timer behind (1193 review #6) */
+      const p = C.join({ link: loop.b, adapter: gA, role: 'editor', autoTick: false, timeoutMs: 8000 });
+      loop.pump(4);                                   // hello, then welcome and the snapshot, then the join handler
+      const joined = await by1194(p, 8000, 'the join');
+      ctx.S = joined && joined.session;
+      if (!ctx.S) throw new Error('setup: the join resolved with no session');
+      if (ctx.opened !== 1) throw new Error('setup: the join reached projects.open ' + ctx.opened + ' times, not once, so the window under test was not entered');
+      if (C.session !== ctx.S) throw new Error('setup: the joined session is not the attached one');
+      await body(ctx);
+    } finally {
+      while (put.length) { try { put.pop()(); } catch (e) {} }
+      try { C.end(); } catch (e) {} try { C.detach(); } catch (e) {}
+      C._undoHandover(false);
+      try { HS.stop('ended'); } catch (e) {}
+    }
+  }
+
+  test('1194 a join whose link closes while the copy is being opened is marked offline, not left on Live over a dead copy', { item: '1194', budgetMs: 30000 }, async function () {
+    await join1194(true, async function (ctx) {
+      if (ctx.openAtOpen !== false || ctx.loop.b.open !== false) throw new Error('setup: the link was not closed inside projects.open (open ' + ctx.loop.b.open + '), so this is not the window under test');
+      ctx.S.tick(); ctx.S.tick();
+      if (ctx.S.online !== false || ctx.gA.offlineN !== 1) throw new Error('the link closed while the copy was being opened and the session still says Live (online ' + ctx.S.online + ', onOffline x' + ctx.gA.offlineN + '): setLink bound onclose to a link that had already closed, liveTick skips a closed link, and a Viewer sits on Live over a copy that never changes again until a reload');
+    });
+  });
+
+  test('1194 CONTROL a join over a link that stays open is Live, and closing that link after the join marks it offline through the onclose setLink bound', { item: '1194', budgetMs: 30000 }, async function () {
+    await join1194(false, async function (ctx) {
+      if (ctx.openAtOpen !== true) throw new Error('CONTROL setup: the link was not open inside projects.open');
+      ctx.S.tick(); ctx.S.tick();
+      if (ctx.S.online !== true || ctx.gA.offlineN !== 0) throw new Error('CONTROL: a join over a link that stayed open is not Live (online ' + ctx.S.online + ', onOffline x' + ctx.gA.offlineN + '), so an offline reading in the test above would mean nothing');
+      ctx.loop.b.close();
+      if (ctx.S.online !== false || ctx.gA.offlineN !== 1) throw new Error('CONTROL: closing the link after the join did not mark the session offline (online ' + ctx.S.online + ', onOffline x' + ctx.gA.offlineN + ')');
+    });
+  });
+
+  async function reopen1194(closeDuring, body) {
+    const C = need921('the reconnect flow');
+    if (typeof C.reopen !== 'function') throw new Error('FM.collab.reopen is missing');
+    const inv = C.bridge.invariants();
+    const doc = {
+      project: { width: 320, height: 240, fps: 30, duration: 5, name: 'FX1194 reopen' },
+      layers: [{ id: 'l_1194r' + Date.now().toString(36), type: 'shape', shape: 'rect', name: 'kept', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } }]
+    };
+    const gdoc = jclone921(doc);
+    const gA = plainAdapter921(gdoc, inv);
+    const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+    const ctx = { C: C, loop: loop, gA: gA, openAtRead: null };
+    /* the stored base is read async; the dialled link goes while it is */
+    gA.readBase = function () {
+      if (closeDuring) loop.b.close();
+      ctx.openAtRead = loop.b.open;
+      return Promise.resolve({ D: jclone921(doc), epoch: 'e1194r', seq: 0, cid: 0 });
+    };
+    const gpid = (FM.storage && FM.storage.openProjectId) ? FM.storage.openProjectId() : null;
+    try {
+      const r = await by1194(C.reopen({ link: loop.b, gpid: gpid, adapter: gA, role: 'editor', mid: 'g', autoTick: false }), 8000, 'the reconnect');
+      ctx.S = r && r.session;
+      if (!ctx.S) throw new Error('setup: the reconnect attached no session (gpid ' + gpid + ')');
+      if (C.session !== ctx.S) throw new Error('setup: the reconnected session is not the attached one');
+      await body(ctx);
+    } finally {
+      try { if (ctx.S) { ctx.S.stop('left'); if (C.session === ctx.S) C.detach(); } } catch (e) {}
+      try { C._undoHandover(false); } catch (e) {}
+    }
+  }
+
+  test('1194 a reconnect whose link closes while its stored base is read is marked offline, not left on Live', { item: '1194', budgetMs: 30000 }, async function () {
+    await reopen1194(true, async function (ctx) {
+      if (ctx.openAtRead !== false) throw new Error('setup: the link was not closed inside readBase, so this is not the window under test');
+      ctx.S.tick(); ctx.S.tick();
+      if (ctx.S.online !== false || ctx.gA.offlineN !== 1) throw new Error('the link closed while the base was read and the reconnected session still says Live (online ' + ctx.S.online + ', onOffline x' + ctx.gA.offlineN + ')');
+    });
+  });
+
+  test('1194 CONTROL a reconnect over a link that stays open is Live, and a close after it marks it offline', { item: '1194', budgetMs: 30000 }, async function () {
+    await reopen1194(false, async function (ctx) {
+      if (ctx.openAtRead !== true) throw new Error('CONTROL setup: the link was not open inside readBase');
+      ctx.S.tick(); ctx.S.tick();
+      if (ctx.S.online !== true || ctx.gA.offlineN !== 0) throw new Error('CONTROL: a reconnect over an open link is not Live (online ' + ctx.S.online + ', onOffline x' + ctx.gA.offlineN + ')');
+      ctx.loop.b.close();
+      if (ctx.S.online !== false || ctx.gA.offlineN !== 1) throw new Error('CONTROL: closing the link after the reconnect did not mark the session offline (online ' + ctx.S.online + ', onOffline x' + ctx.gA.offlineN + ')');
+    });
   });
 
   test('921 S2 being told the wire is cut really marks the outbox, so work done away comes back as a CAS and not an overwrite', { item: '921', budgetMs: 60000 }, async function () {
@@ -99926,6 +100217,424 @@
     }
   });
 
+  /* ═══ 1191 (hunt LOW, PM hunt item 6): A MEDIA TILE TAPPED WHILE STORAGE CANNOT BE READ ═══════════════════════════════
+     WebKit loses a home-screen app's IndexedDB connection after it comes back from the background (bugs 273827, 277615,
+     197050). Add → Media still shows its tiles, because they live in localStorage, and every tile he tapped then said the
+     file is no longer stored and was removed for good: readMedia answered null for a read that FAILED exactly as for a file
+     that is not there. Once no project named the file's key, the next healthy launch's boot sweep erased the file too.
+     use() now reads strictly (storage.js readChecked): a failed read lands in its own catch, says Could not open that file,
+     and keeps the tile. Every await races its own named deadline, so a red run fails by name instead of hanging. */
+  function q1191Within(p, ms, what) {
+    let t = null;
+    const dl = new Promise(function (res, rej) { t = setTimeout(function () { rej(new Error('1191 deadline: ' + what + ' did not settle within ' + Math.round(ms / 1000) + ' s')); }, ms); });
+    return Promise.race([Promise.resolve(p), dl]).finally(function () { clearTimeout(t); });
+  }
+  // How a read ENDED, under its own deadline: { ok: true, v } or { ok: false, e }. A deadline still fails the test by name.
+  function q1191Outcome(p, ms, what) {
+    return q1191Within(Promise.resolve(p).then(function (v) { return { ok: true, v: v }; }, function (e) { return { ok: false, e: e }; }), ms, what);
+  }
+  /* Swap a method for a stand-in on the object that really holds it (the instance, or a prototype up its chain). Hands back
+     the function that puts the ORIGINAL property descriptor back; calling it twice is harmless. */
+  function q1191Stub(obj, name, make) {
+    let host = obj;
+    while (host && !Object.prototype.hasOwnProperty.call(host, name)) host = Object.getPrototypeOf(host);
+    const d = host ? Object.getOwnPropertyDescriptor(host, name) : null;
+    if (!d || typeof d.value !== 'function') throw new Error('setup: ' + name + ' is not a method here, so there is nothing to stub');
+    Object.defineProperty(host, name, Object.assign({}, d, { value: make(d.value) }));
+    let put = false;
+    return function () { if (put) return; put = true; Object.defineProperty(host, name, d); };
+  }
+  // The next n opens of storage fail the way a lost connection does: the open request fires error, which openDB listens for.
+  function q1191FailOpens(n) {
+    const s = { failed: 0 };
+    let left = n;
+    s.put = q1191Stub(indexedDB, 'open', function (real) {
+      return function () {
+        if (left <= 0) return real.apply(this, arguments);
+        left--; s.failed++;
+        const rq = { result: undefined, readyState: 'done', error: new DOMException('1191 stub: the connection to storage is lost', 'UnknownError'), onsuccess: null, onerror: null, onupgradeneeded: null, onblocked: null };
+        setTimeout(function () { if (typeof rq.onerror === 'function') rq.onerror({ type: 'error', target: rq }); }, 0);
+        return rq;
+      };
+    });
+    return s;
+  }
+  /* A photo stored under a layer-style key that no project names (the project that imported it was deleted), with its tile
+     in Add → Media. With store false the key is never written: a tile whose file really is gone. */
+  async function q1191Tile(tag, rgb, store) {
+    const file = await q915aPng('1191' + tag, rgb);
+    const key = 'l_q1191' + tag + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    if (store) {
+      const ok = await q1191Within(FM.storage.writeMedia(key, { file: file, kind: 'image', rev: 0 }), 10000, 'storing the photo under its key');
+      if (ok !== true) throw new Error('setup: the photo could not be stored (' + ok + '), so there is no file behind the tile');
+    }
+    const mid = FM.mediaLib.add({ file: file, kind: 'image', width: 32, height: 24 }, key);
+    if (!mid) throw new Error('setup: Add - Media made no tile for the photo');
+    return { file: file, key: key, mid: mid };
+  }
+  function q1191HasTile(mid) { return FM.mediaLib.list().some(function (e) { return e.mid === mid; }); }
+  // Every toast written down as well as shown; hands back the function that puts FM.toast's descriptor back.
+  function q1191Toasts(said) {
+    const d = Object.getOwnPropertyDescriptor(FM, 'toast'), real = FM.toast;
+    Object.defineProperty(FM, 'toast', { configurable: true, enumerable: true, writable: true, value: function (m) { said.push(String(m)); return real.apply(this, arguments); } });
+    let put = false;
+    return function () { if (put) return; put = true; r1188Put(FM, 'toast', d); };
+  }
+  async function q1191Finish(made, orig, wasOpen, keys, libs, idx0) {
+    for (const k of keys) { try { await q915aDel(k); } catch (e) {} }
+    await q915bFinish(made, orig, wasOpen, libs, idx0);
+  }
+
+  test('1191 a tile tapped while storage cannot be opened keeps its tile and its file, and says it could not open it', { item: '1191', budgetMs: 60000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], keys = [], libs = [], said = [];
+    let fail = null, unToast = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      made.push(await FM.projects.create({ name: '1191 storage lost', width: 320, height: 240 }));
+      const T = await q1191Tile('lost', '#e76f51', true);
+      keys.push(T.key); libs.push('lib:' + T.mid);
+      /* the sweep's own control: a record nothing names at all, which the boot sweep below MUST take, or it never ran */
+      const stray = 'l_q1191stray' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      keys.push(stray);
+      const okS = await q1191Within(FM.storage.writeMedia(stray, { file: await q915aPng('1191stray', '#264653'), kind: 'image', rev: 0 }), 10000, 'storing the stray record');
+      if (okS !== true) throw new Error('setup: the stray record could not be stored (' + okS + ')');
+      await q1191Within(FM.storage.settled(), 15000, 'the saves before the tap');
+      unToast = q1191Toasts(said);
+      fail = q1191FailOpens(1);
+      const p = FM.mediaLib.use(T.mid);   // his tap: its read is the first open of storage after the stub, made before use() first awaits
+      const ok = await q1191Within(p, 15000, 'the tap on the tile while storage could not be opened');
+      fail.put(); unToast();
+      if (fail.failed !== 1) throw new Error('CONTROL: ' + fail.failed + ' opens of storage failed instead of the one his tap made, so the tap never met a failed read');
+      const kept = q1191HasTile(T.mid), gone = said.filter(function (m) { return /no longer stored/i.test(m); });
+      if (!kept || gone.length) {
+        throw new Error('storage could not be opened when he tapped a tile in Add - Media, and the tap ' + (kept ? 'kept the tile but ' : 'removed the tile for good and ') + 'said ' + (said.join(' | ') || 'nothing') +
+          ' - a read that FAILED was taken for a file that is not stored, though it is on disk');
+      }
+      if (!said.some(function (m) { return /could not open that file/i.test(m); })) throw new Error('the failed read was not said as Could not open that file (toasts: ' + (said.join(' | ') || 'none') + ')');
+      if (ok !== false) throw new Error('the tap answered ' + ok + ' although nothing could be read');
+      if (q915bImages().length) throw new Error('a tap whose read failed added ' + q915bImages().length + ' clip(s)');
+      /* the next healthy launch's boot sweep, with the tile the only thing that names the file's key */
+      const t0 = Date.now();
+      while (FM._mediaBusy && Date.now() - t0 < 10000) await sleep(50);
+      if (FM._mediaBusy) throw new Error('setup: a media write stayed in flight for 10 s (FM._mediaBusy ' + FM._mediaBusy + '), so the sweep would stand down and the file would survive for the wrong reason');
+      await q1191Within(FM.projects.pruneOrphans(), 30000, 'the boot sweep');
+      const raw = await q1191Within(q915aRaw(), 10000, 'reading the store after the sweep');
+      if (raw[stray]) throw new Error('CONTROL: the boot sweep left ' + stray + ', a record nothing names, so it did not run and the check below proves nothing');
+      const r = raw[T.key];
+      if (!(r && r.file && r.file.size === T.file.size)) throw new Error('after the failed tap the boot sweep erased the file itself (' + T.key + ' holds ' + q915bShape(r) + ')');
+    } finally {
+      if (fail) fail.put();
+      if (unToast) unToast();
+      await q1191Finish(made, orig, wasOpen, keys, libs, idx0);
+    }
+  });
+
+  test('1191 CONTROL with storage readable, the same tap adds the clip and keeps its tile', { item: '1191', budgetMs: 60000 }, async function () {
+    /* Green before the fix: the tile, the key and the tap in the test above make a working tap, so its red is the failed read alone. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], keys = [], libs = [], said = [];
+    let unToast = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      made.push(await FM.projects.create({ name: '1191 storage fine', width: 320, height: 240 }));
+      const T = await q1191Tile('fine', '#2a9d8f', true);
+      keys.push(T.key); libs.push('lib:' + T.mid);
+      await q1191Within(FM.storage.settled(), 15000, 'the saves before the tap');
+      unToast = q1191Toasts(said);
+      const ok = await q1191Within(FM.mediaLib.use(T.mid), 15000, 'the tap on the tile');
+      unToast();
+      if (ok !== true) throw new Error('CONTROL: with storage readable the tap answered ' + ok + ' (toasts: ' + (said.join(' | ') || 'none') + ')');
+      const added = q915bImages();
+      if (added.length !== 1) throw new Error('CONTROL: the tap added ' + added.length + ' clips instead of one');
+      const m = FM.media.get(added[0].id);
+      if (!(m && m.file && m.file.size === T.file.size)) throw new Error('CONTROL: the clip the tap added holds ' + (m && m.file ? m.file.size + ' bytes' : 'nothing') + ', not the photo of ' + T.file.size + ' bytes');
+      if (!q1191HasTile(T.mid)) throw new Error('CONTROL: a tap that added the clip removed its tile');
+      await sleep(100);
+      await q1191Within(FM.storage.settled(), 15000, 'the save after the tap');
+    } finally {
+      if (unToast) unToast();
+      await q1191Finish(made, orig, wasOpen, keys, libs, idx0);
+    }
+  });
+
+  test('1191 CONTROL a tile whose file was never stored is still dropped, and said to be no longer stored', { item: '1191', budgetMs: 45000 }, async function () {
+    /* Green before the fix, and it must stay green: a fix that simply never drops a tile passes the first test above and fails this one. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], keys = [], libs = [], said = [];
+    let unToast = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      made.push(await FM.projects.create({ name: '1191 never stored', width: 320, height: 240 }));
+      const T = await q1191Tile('never', '#8338ec', false);
+      keys.push(T.key); libs.push('lib:' + T.mid);
+      const raw0 = await q1191Within(q915aRaw(), 10000, 'reading the store before the tap');
+      if (raw0[T.key] !== undefined) throw new Error('setup: something is stored under the key that was never written (' + q915bShape(raw0[T.key]) + ')');
+      unToast = q1191Toasts(said);
+      const ok = await q1191Within(FM.mediaLib.use(T.mid), 15000, 'the tap on the tile with nothing stored');
+      unToast();
+      if (ok !== false) throw new Error('CONTROL: the tap on a tile with nothing stored answered ' + ok);
+      if (q1191HasTile(T.mid)) throw new Error('CONTROL: a tile whose file is stored nowhere stayed in Add - Media after his tap (toasts: ' + (said.join(' | ') || 'none') + ')');
+      if (!said.some(function (m) { return /no longer stored/i.test(m); })) throw new Error('CONTROL: the tap on a tile whose file is stored nowhere said ' + (said.join(' | ') || 'nothing') + ' instead of that it is no longer stored');
+      if (said.some(function (m) { return /could not open/i.test(m); })) throw new Error('CONTROL: a file that is stored nowhere was said as a read that failed (' + said.join(' | ') + ')');
+      if (q915bImages().length) throw new Error('CONTROL: a tap on a tile with nothing stored added ' + q915bImages().length + ' clip(s)');
+    } finally {
+      if (unToast) unToast();
+      await q1191Finish(made, orig, wasOpen, keys, libs, idx0);
+    }
+  });
+
+  test('1191 a strict read rejects when storage cannot be opened, a transaction cannot be made or the request fails, and answers null only when nothing is stored', { item: '1191', budgetMs: 45000 }, async function () {
+    const keys = [], puts = [];
+    try {
+      const file = await q915aPng('1191strict', '#ffbe0b');
+      const K = 'l_q1191strict' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      keys.push(K);
+      const okW = await q1191Within(FM.storage.writeMedia(K, { file: file, kind: 'image', rev: 0 }), 10000, 'storing the photo');
+      if (okW !== true) throw new Error('setup: the photo could not be stored (' + okW + ')');
+      const strict = function (k, what) { return q1191Outcome(FM.storage.readMedia(k, { strict: true }), 10000, what); };
+      const told = function (o) { return o.ok ? 'resolved ' + q915bShape(o.v) : 'rejected (' + (o.e && o.e.name) + ')'; };
+      /* CONTROL: a healthy strict read gives the record */
+      const c = await strict(K, 'the healthy strict read');
+      if (!(c.ok && c.v && c.v.file && c.v.file.size === file.size)) throw new Error('CONTROL: a strict read of a stored photo ' + told(c));
+
+      /* 1. the store cannot be opened */
+      let fail = q1191FailOpens(1); puts.push(fail.put);
+      const o1 = await strict(K, 'the strict read with storage unopenable');
+      fail.put();
+      if (fail.failed !== 1) throw new Error('CONTROL: the stub failed ' + fail.failed + ' opens instead of the one the strict read made');
+      if (o1.ok) throw new Error('storage could not be opened and the strict read ' + told(o1) + ' instead of rejecting - its caller cannot tell a failed read from a file that is not stored');
+      fail = q1191FailOpens(1); puts.push(fail.put);
+      const l1 = await q1191Within(FM.storage.readMedia(K), 10000, 'the ordinary read with storage unopenable');
+      fail.put();
+      if (l1 !== null) throw new Error('the ordinary read with storage unopenable answered ' + q915bShape(l1) + ' - every other caller of readMedia keeps its quiet null');
+
+      /* 2. a transaction cannot be made (a connection WebKit is closing throws InvalidStateError there) */
+      let threw = 0;
+      let put = q1191Stub(IDBDatabase.prototype, 'transaction', function (real) {
+        return function (names, mode) {
+          if (mode !== 'readwrite') { threw++; throw new DOMException('1191 stub: the database connection is closing', 'InvalidStateError'); }
+          return real.apply(this, arguments);
+        };
+      });
+      puts.push(put);
+      const o2 = await strict(K, 'the strict read with no transaction');
+      put();
+      if (!threw) throw new Error('CONTROL: the strict read made no readonly transaction, so the stub never fired');
+      if (o2.ok) throw new Error('a transaction could not be made and the strict read ' + told(o2) + ' instead of rejecting');
+
+      /* 3. the request fails: its transaction aborts under it, as a connection lost mid-read does */
+      let aborted = 0;
+      put = q1191Stub(IDBObjectStore.prototype, 'get', function (real) {
+        return function () { const rq = real.apply(this, arguments); aborted++; this.transaction.abort(); return rq; };
+      });
+      puts.push(put);
+      const o3 = await strict(K, 'the strict read whose request fails');
+      put();
+      if (!aborted) throw new Error('CONTROL: the strict read made no request, so the stub never fired');
+      if (o3.ok) throw new Error('the read request failed and the strict read ' + told(o3) + ' instead of rejecting');
+
+      /* 4. nothing stored: null, never a rejection - that is how use() still tells a tile whose file really went */
+      const o4 = await strict('l_q1191absent' + Date.now().toString(36), 'the strict read of a key never written');
+      if (!(o4.ok && o4.v === null)) throw new Error('a strict read of a key never written ' + told(o4) + ' instead of resolving null');
+
+      /* 5. a pointer whose shared copy is gone reads as nothing, as the ordinary read answers it */
+      const Kp = 'l_q1191ptr' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      keys.push(Kp);
+      await q1191Within(q915aPut(Kp, { ref: 'lib:m_q1191gone' + Date.now().toString(36), kind: 'image', rev: 0 }), 10000, 'writing the pointer by hand');
+      const o5 = await strict(Kp, 'the strict read of a pointer at nothing');
+      if (!(o5.ok && o5.v === null)) throw new Error('a strict read of a pointer whose shared copy is gone ' + told(o5) + ' instead of resolving null');
+    } finally {
+      puts.forEach(function (p) { try { p(); } catch (e) {} });
+      for (const k of keys) { try { await q915aDel(k); } catch (e) {} }
+    }
+  });
+
+  /* 1191 review, finding 2: use()'s SECOND read. When the first read finds nothing under a clip's own key while a save is
+     still running (Replace media and every import give a file its tile before their save lands), use() waits for the
+     running saves and reads again. That read must be strict too: a failed read there answered null, gone() dropped the
+     tile, and it is the same loss as above on the branch where a save was running. Here pendingSaves is made to answer 1
+     and settled() is passed through to the real one; with arm set, settled() first makes the next open of storage fail.
+     Nothing is saving (the test waits for that), so the real settled() resolves through microtasks only and the read after
+     it is the next open of storage. Hands back the tap's answer and the counts; every stub's descriptor is put back. */
+  async function q1191Reread(T, arm) {
+    const s = { ok: undefined, pend: 0, settles: 0, fail: null };
+    const puts = [];
+    /* (fold check, LOW) a REAL save still running could take the armed failed open and blame the fix: a false red, never a false
+       green, but said here by name rather than read as a regression */
+    const realPend = FM.storage.pendingSaves();
+    if (realPend) throw new Error('setup: a real save is still running (' + realPend + ') before the tap, so it could take the failed open meant for the read');
+    try {
+      puts.push(q1191Stub(FM.storage, 'pendingSaves', function () { return function () { s.pend++; return 1; }; }));
+      puts.push(q1191Stub(FM.storage, 'settled', function (real) {
+        return function () {
+          s.settles++;
+          if (arm && !s.fail) { s.fail = q1191FailOpens(1); puts.push(s.fail.put); }
+          return real.apply(this, arguments);
+        };
+      }));
+      s.ok = await q1191Within(FM.mediaLib.use(T.mid), 15000, 'the tap whose read after the running saves ' + (arm ? 'met storage it could not open' : 'found nothing'));
+    } finally {
+      puts.forEach(function (p) { try { p(); } catch (e) {} });
+    }
+    return s;
+  }
+
+  test('1191 the read again after the running saves, when storage cannot be opened, keeps the tile and says it could not open it', { item: '1191', budgetMs: 60000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], keys = [], libs = [], said = [];
+    let unToast = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      made.push(await q1191Within(FM.projects.create({ name: '1191 read again', width: 320, height: 240 }), 15000, 'making the project'));
+      /* two tiles keyed at a clip's own record with nothing written there yet, so each tap's first read finds nothing */
+      const C = await q1191Tile('againctl', '#3a86ff', false);
+      const T = await q1191Tile('againlost', '#fb5607', false);
+      keys.push(C.key, T.key); libs.push('lib:' + C.mid, 'lib:' + T.mid);
+      await sleep(700);
+      await q1191Within(FM.storage.settled(), 15000, 'the saves before the taps');
+      unToast = q1191Toasts(said);
+      /* CONTROL, storage readable: the read again finds nothing too, and the tile is dropped as no longer stored. It proves the
+         tap reached the read after the saves, and that a use() which never drops a tile is not what passes below. */
+      const c = await q1191Reread(C, false);
+      if (c.settles !== 1 || c.pend < 1) throw new Error('CONTROL: the tap waited for the running saves ' + c.settles + ' time(s) (pendingSaves asked ' + c.pend + ' times), so it never made the read after them');
+      if (c.ok !== false || q1191HasTile(C.mid) || !said.some(function (m) { return /no longer stored/i.test(m); })) {
+        throw new Error('CONTROL: with storage readable and nothing stored, the tap answered ' + c.ok + ', ' + (q1191HasTile(C.mid) ? 'kept' : 'dropped') + ' the tile and said ' + (said.join(' | ') || 'nothing'));
+      }
+      await sleep(200);
+      said.length = 0;
+      const s = await q1191Reread(T, true);
+      unToast();
+      if (s.settles !== 1) throw new Error('CONTROL: the tap waited for the running saves ' + s.settles + ' time(s), so it never made the read after them');
+      if (!s.fail || s.fail.failed !== 1) throw new Error('CONTROL: ' + (s.fail ? s.fail.failed : 0) + ' opens of storage failed instead of the one the read after the saves made');
+      const kept = q1191HasTile(T.mid), gone = said.filter(function (m) { return /no longer stored/i.test(m); });
+      if (!kept || gone.length) {
+        throw new Error('storage could not be opened for the read after the running saves, and the tap ' + (kept ? 'kept the tile but ' : 'removed the tile for good and ') + 'said ' + (said.join(' | ') || 'nothing') +
+          ' - a read that FAILED was taken for a file that is not stored');
+      }
+      if (!said.some(function (m) { return /could not open that file/i.test(m); })) throw new Error('the failed read after the saves was not said as Could not open that file (toasts: ' + (said.join(' | ') || 'none') + ')');
+      if (s.ok !== false) throw new Error('the tap answered ' + s.ok + ' although its read after the saves failed');
+      if (q915bImages().length) throw new Error('a tap whose read failed added ' + q915bImages().length + ' clip(s)');
+    } finally {
+      if (unToast) unToast();
+      await q1191Finish(made, orig, wasOpen, keys, libs, idx0);
+    }
+  });
+
+  test('1191 a tile row with no key is dropped as no longer stored, not kept as a read that failed', { item: '1191', budgetMs: 45000 }, async function () {
+    /* Review, finding 3: an old row can lack its key, and a strict read of no key rejects (DataError), a read that can never
+       succeed: kept as Could not open that file, the tile said so on every tap for good. use() now drops a keyless row before
+       it reads, as the quiet read always did. Green on v18.07 (the quiet read), red on the strict read without the guard. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), idx0 = localStorage.getItem('fm.medialib');
+    const made = [], said = [];
+    let unToast = null;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      made.push(await q1191Within(FM.projects.create({ name: '1191 no key', width: 320, height: 240 }), 15000, 'making the project'));
+      const mid = 'm_q1191nokey' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const row = { mid: mid, fp: '', name: 'Photo', kind: 'image', type: 'image/png', audio: false, w: 32, h: 24, dur: 0, size: 100, added: Date.now() };
+      localStorage.setItem('fm.medialib', JSON.stringify([row].concat(FM.mediaLib.list())));
+      if (!q1191HasTile(mid)) throw new Error('setup: the row with no key is not in Add - Media');
+      unToast = q1191Toasts(said);
+      const ok = await q1191Within(FM.mediaLib.use(mid), 15000, 'the tap on the tile with no key');
+      unToast();
+      if (ok !== false) throw new Error('the tap on a tile with no key answered ' + ok);
+      if (q1191HasTile(mid)) throw new Error('a tile row with no key stayed in Add - Media after his tap and said ' + (said.join(' | ') || 'nothing') + ' - a read that can never succeed is kept for good');
+      if (!said.some(function (m) { return /no longer stored/i.test(m); })) throw new Error('the tap on a tile with no key said ' + (said.join(' | ') || 'nothing') + ' instead of that it is no longer stored');
+      if (said.some(function (m) { return /could not open/i.test(m); })) throw new Error('a tile with no key was said as a read that failed (' + said.join(' | ') + ')');
+      if (q915bImages().length) throw new Error('a tap on a tile with no key added ' + q915bImages().length + ' clip(s)');
+    } finally {
+      if (unToast) unToast();
+      await q1191Finish(made, orig, wasOpen, [], [], idx0);
+    }
+  });
+
+  /* ═══ 1192 (hunt LOW, PM hunt item 7): UNDO OF A REPLACE MEDIA, THEN A QUICK SWITCH TO ANOTHER APP ═════════════════════
+     restoreReplacedOnce put the original back on screen and left its write to the 600 ms autosave. A switch to another app
+     inside that window runs storage.js flushSync, which cancels the pending save and writes the document only: the record
+     kept the file he had undone, the next launch showed it at the original's size and fit, and that launch's boot sweep
+     deleted the kept original. It now saves at once, as every other path that changes a clip's file does. (Opening another
+     project inside the window is #1187's half and is not built here.) Every await races its own named deadline (r1188Within). */
+  function q1192Away() {
+    const dv = Object.getOwnPropertyDescriptor(document, 'visibilityState'), dh = Object.getOwnPropertyDescriptor(document, 'hidden');
+    const df = Object.getOwnPropertyDescriptor(FM.storage, 'flushSync'), realFlush = FM.storage.flushSync;
+    const a = { flushes: 0, done: false };
+    a.back = function () {
+      if (a.done) return;
+      a.done = true;
+      r1188Put(document, 'visibilityState', dv); r1188Put(document, 'hidden', dh); r1188Put(FM.storage, 'flushSync', df);
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    Object.defineProperty(FM.storage, 'flushSync', { configurable: true, enumerable: true, writable: true, value: function () { a.flushes++; return realFlush.apply(this, arguments); } });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: function () { return 'hidden'; } });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: function () { return true; } });
+    if (document.visibilityState !== 'hidden') { a.back(); throw new Error('setup: the page could not be made to read as hidden'); }
+    document.dispatchEvent(new Event('visibilitychange'));
+    return a;
+  }
+  // Replace, save, Undo; then (goAway) he switches to another app at once. Resolves with the record on disk once the saves settle.
+  async function q1192UndoThen(made, name, tagA, tagB, goAway, h) {
+    const P = await r1188Project(made, name, tagA, tagB);
+    h.id = P.id;
+    const ok = await r1188Within(FM.swapInMedia(P.id, await FM.loadImageFile(P.fB)), 15000, 'the replace');
+    if (ok !== true) throw new Error('setup: the replace answered ' + ok + ' instead of landing');
+    await r1188Within(FM.storage.settled(), 15000, 'the save after the replace');
+    const d1 = await r1188Within(FM.storage.readMedia(P.id), 5000, 'reading the record after the replace');
+    if (!(d1 && d1.file && d1.file.name === P.fB.name && (d1.rev || 0) === 1)) throw new Error('setup: after the replace the saved record is ' + r1188Name(d1 && d1.file) + ' at revision ' + (d1 && d1.rev) + ', not the new photo at revision 1');
+    FM.history.undo();
+    await r1188Within(FM.restoreReplacedMedia(), 15000, 'the Undo putting the original back');
+    const shown = r1188Shows(P.id);
+    if (!shown || shown.name !== P.fA.name) throw new Error('setup: the Undo left the clip on ' + r1188Name(shown) + ' instead of the original');
+    if (goAway) {
+      h.away = q1192Away();
+      if (h.away.flushes < 1) throw new Error('CONTROL: the switch to another app never reached storage flushSync, so no pending save was cancelled and this measures nothing');
+    }
+    await sleep(900);   // past the 600 ms autosave, which the switch cancelled
+    await r1188Within(FM.storage.settled(), 15000, 'the saves after the Undo');
+    const d = await r1188Within(FM.storage.readMedia(P.id), 5000, 'reading the record after the Undo');
+    if (h.away) h.away.back();
+    return { P: P, d: d };
+  }
+
+  test('1192 Undo of a Replace media, then a switch to another app at once, still saves the original and not the file he undid', { item: '1192', budgetMs: 75000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], h = { id: null, away: null };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const r = await q1192UndoThen(made, '1192 undo then away', 'r1192aORIG', 'r1192aNEW', true, h);
+      const d = r.d;
+      if (!(d && d.file && d.file.name === r.P.fA.name && (d.rev || 0) === 0)) {
+        throw new Error('he undid a Replace media and switched to another app at once: the saved record is ' + r1188Name(d && d.file) + ' at revision ' + (d && d.rev) +
+          ', not his original ' + r1188Name(r.P.fA) + ' at revision 0 - the switch cancelled the only save that would have written it, so the next launch shows the file he undid and its boot sweep deletes the kept original');
+      }
+    } finally {
+      if (h.away) h.away.back();
+      await r1188Cleanup(made, h.id, orig, wasOpen);
+    }
+  });
+
+  test('1192 CONTROL with no switch to another app, the save after an Undo of a Replace media writes the original', { item: '1192', budgetMs: 75000 }, async function () {
+    /* Green before the fix: the 600 ms autosave writes the original when nothing cancels it, so the test above is red for the switch alone. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], h = { id: null, away: null };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const r = await q1192UndoThen(made, '1192 undo stays', 'r1192bORIG', 'r1192bNEW', false, h);
+      const d = r.d;
+      if (!(d && d.file && d.file.name === r.P.fA.name && (d.rev || 0) === 0)) throw new Error('CONTROL: with no switch to another app the saved record after the Undo is ' + r1188Name(d && d.file) + ' at revision ' + (d && d.rev) + ', not the original ' + r1188Name(r.P.fA) + ' at revision 0');
+    } finally {
+      if (h.away) h.away.back();
+      await r1188Cleanup(made, h.id, orig, wasOpen);
+    }
+  });
+
   test('690 an autosave that lands while undo is still fetching his original never files the wrong clip under it', { item: '690', budgetMs: 60000 }, async function () {
     /* Undo puts the layer back at once and fetches the kept file after — IndexedDB and a decode, seconds for a video
        on a phone. The undo's own autosave fires 600 ms later, and it wrote the clip still on screen (the replacement)
@@ -131784,7 +132493,11 @@
     await smCog(async function (c) {
       FM.closeCanvasDialog(); await c.sleep(100);
       const docOf = () => JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers });
-      const ALLOWED = { 'fm.editor.last': 1, 'fm.editor.hint': 1, 'fm.projects': 1 };   // the card's own `editor` is checked below
+      /* fm.variantLog is not the switch's: it is the empty-project clapper's pick log (js/variant.js), written on every lap of
+         its CSS animation (js/app.js clapLines, animationiteration; every 3.6 s on timing C, 6 s on A). smCog keeps the scene
+         it finds, so on an empty one a lap can land inside these ten switches by chance: v18.08's first ship went red on
+         exactly that, while the same test alone passed 6 of 6 (27 Oct). No switch shows or hides #drop-hint. */
+      const ALLOWED = { 'fm.editor.last': 1, 'fm.editor.hint': 1, 'fm.projects': 1, 'fm.variantLog': 1 };   // the card's own `editor` is checked below
       const snap = () => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (!ALLOWED[k]) o[k] = localStorage.getItem(k); } return o; };
       const cards = () => { try { return JSON.parse(localStorage.getItem('fm.projects') || '[]').map(p => { const q = Object.assign({}, p); delete q.editor; return q; }); } catch (e) { return null; } };
       const doc0 = docOf(), hist0 = JSON.stringify(FM.history._steps()), ls0 = snap(), cards0 = JSON.stringify(cards()), pair0 = localStorage.getItem('fm.cvPair');
@@ -184874,6 +185587,304 @@
         try { FM.media.remove(id); } catch (e) {}
         try { await FM.storage.removeMedia(id); } catch (e) {}
       }
+    }
+  });
+
+  /* ═══ #1189 (hunt MEDIUM): A RESTORE OR AN IMPORT KEEPS FOOTAGE THIS DEVICE CANNOT OPEN, AND SAYS SO TRUTHFULLY ═══════════════════
+     What was wrong. applyScene decoded each embedded clip and kept it in FM.media only; the bytes reached IndexedDB through the
+     save after the import, and that save writes only what decoded (planBlobWrites). A clip this device would not open (a container
+     Safari will not play, an unconverted HEIC, the 20 s metadata timer firing while iOS suspended a restore) was stored nowhere:
+     blank then and on every later launch, missing from every later backup, and a single-file import said the layer had no footage
+     in this file, which was false. Now the bytes are stored first and decoded second, as hydratePack does, and the warning tells an
+     absent embed from one that came and would not open. FM.loadImageFile refusing ONE named file stands in for the missing codec.
+     FAILS BEFORE THE FIX: the restored layer has no record (readMedia null); the import's no-footage sentence names the clip that
+     came, and its record is missing too.
+     CONTROLS, green before and after: a clip that opens is stored (restore) and in FM.media (import) as before, and an absent embed
+     keeps today's no-footage sentence, naming only itself. */
+  function race1189(p, ms, what) {
+    let t = null;
+    const dl = new Promise(function (res, rej) { t = setTimeout(function () { rej(new Error('1189 deadline: ' + what + ' did not finish within ' + Math.round(ms / 1000) + ' s')); }, ms); });
+    return Promise.race([Promise.resolve(p), dl]).finally(function () { clearTimeout(t); });
+  }
+  async function png1189(rgb) {
+    const c = document.createElement('canvas'); c.width = 6; c.height = 4;
+    const g = c.getContext('2d'); g.fillStyle = rgb; g.fillRect(0, 0, 6, 4);
+    const url = c.toDataURL('image/png');
+    const size = (await (await fetch(url)).blob()).size;
+    return { url: url, size: size };
+  }
+  /* FM.loadImageFile refuses the named files only, as a device without the codec would; the returned function puts the
+     original property descriptor back, and every caller runs it in a finally. Its `refused` counts the refusals (review
+     fold 4), so a test can prove its stand-in fired: a clip that decodes is stored by the save, and green on any code. */
+  function stub1189(names) {
+    const d = Object.getOwnPropertyDescriptor(FM, 'loadImageFile'), real = FM.loadImageFile;
+    const undo = function () { if (d) Object.defineProperty(FM, 'loadImageFile', d); else delete FM.loadImageFile; };
+    undo.refused = 0;
+    FM.loadImageFile = function (f) {
+      if (f && names.indexOf(f.name) >= 0) { undo.refused++; return Promise.reject(new Error('1189 stub: this device cannot open ' + f.name)); }
+      return real.apply(this, arguments);
+    };
+    return undo;
+  }
+  /* the last 'Project imported' toast, cut into its sentences (no layer name here holds a full stop) */
+  function sentences1189(msg) { return String(msg || '').split(/(?<=\.)\s+/); }
+  function layer1189(name) {
+    const L = FM.makeLayer('image', { name: name, start: 0, duration: 2 });
+    L.name = name; L.start = 0; L.duration = 2;
+    return jclone921(L);
+  }
+
+  test('1189 Restore from a backup keeps the bytes of a clip this device cannot open, and the next open of its project shows it (CONTROL: a clip that opens is stored as before)', { item: '1189', budgetMs: 120000 }, async function () {
+    if (typeof FM.storage.restoreBackup !== 'function' || typeof FM.storage.readMedia !== 'function' || typeof FM.loadImageFile !== 'function' || typeof FM.projects.confirmLeave !== 'function') throw new Error('setup: FM.storage.restoreBackup / readMedia, FM.loadImageFile or FM.projects.confirmLeave is not reachable');
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const had = new Set(FM.projects.list().map(function (p) { return p.id; }));
+    const made = [];
+    const fresh = function () { return FM.projects.list().filter(function (p) { return !had.has(p.id) && made.indexOf(p.id) < 0; }).map(function (p) { return p.id; }); };
+    const dLeave = Object.getOwnPropertyDescriptor(FM.projects, 'confirmLeave');
+    const dToast = Object.getOwnPropertyDescriptor(FM, 'toast'), realToast = FM.toast;
+    let unstub = null;
+    try {
+      if (wasHome) FM.home.close();
+      const good = await png1189('#d94f2a'), bad = await png1189('#2a6fdb');
+      const entry = function (projName, layerName, fileName, png) {
+        const L = layer1189(layerName);
+        const o = { app: 'freemotion', v: 1, project: { name: projName, width: 320, height: 240, fps: 30, duration: 2 }, layers: [L], media: {} };
+        o.media[L.id] = { kind: 'image', name: fileName, dataURL: png.url };
+        return o;
+      };
+      const obj = { app: 'freemotion', backup: 1, v: 1, count: 2, projects: [
+        entry('FX1189 restore opens', 'FX1189 L opens', 'fx1189-opens.png', good),
+        entry('FX1189 restore cannot open', 'FX1189 L1', 'fx1189-cannot-open.png', bad)] };
+      unstub = stub1189(['fx1189-cannot-open.png']);
+      FM.projects.confirmLeave = async function () { return true; };
+      FM.toast = function () {};
+      window.__fmStep = '1189 restore: restoreBackup';
+      const r = await race1189(FM.storage.restoreBackup(obj, null), 30000, 'FM.storage.restoreBackup');
+      const refusedN = unstub.refused;
+      fresh().forEach(function (id) { made.push(id); });
+      await race1189(FM.storage.settled(), 15000, 'FM.storage.settled after the restore');
+      if (!r || !r.ok || r.restored !== 2) throw new Error('setup: the restore answered ' + JSON.stringify(r) + ', not both entries restored');
+      /* CONTROL (review fold 4): the stand-in really refused the clip, or the save stored a clip that decoded and this is green on any code */
+      if (!refusedN) throw new Error('CONTROL: the stand-in never refused fx1189-cannot-open.png, so nothing here measured a clip this device cannot open');
+      const find = function (projName, layerName) {
+        const card = FM.projects.list().filter(function (p) { return made.indexOf(p.id) >= 0 && p.name === projName; })[0];
+        if (!card) throw new Error('setup: the restore made no project named ' + projName);
+        let doc = null; try { doc = JSON.parse(localStorage.getItem('fm.proj.' + card.id) || 'null'); } catch (e) { doc = null; }
+        const L = ((doc && doc.layers) || []).filter(function (l) { return l && l.name === layerName; })[0];
+        if (!L) throw new Error('setup: the stored document of ' + projName + ' has no layer named ' + layerName);
+        return { pid: card.id, lid: L.id };
+      };
+      const ok = find('FX1189 restore opens', 'FX1189 L opens');
+      const sh = find('FX1189 restore cannot open', 'FX1189 L1');
+      window.__fmStep = '1189 restore: reading the records';
+      /* CONTROL: a clip that opens is stored with its project, as before */
+      const okRec = await race1189(FM.storage.readMedia(ok.lid), 10000, 'reading the restored clip that opens');
+      if (!(okRec && okRec.file && okRec.file.size === good.size)) throw new Error('CONTROL: the restored clip that opens has ' + (okRec && okRec.file ? okRec.file.size + ' bytes' : 'no record') + ' in IndexedDB, not its ' + good.size + ' bytes, so the check below measures nothing');
+      /* the clip this device could not open: its bytes are stored too */
+      const rec = await race1189(FM.storage.readMedia(sh.lid), 10000, 'reading the restored clip that would not open');
+      if (!(rec && rec.file)) throw new Error('the restored clip this device could not open has NO record in IndexedDB: the restore threw away footage that was in the backup, so the clip is blank on every launch and every later backup leaves it out');
+      if (rec.file.size !== bad.size) throw new Error('the stored record of the clip that would not open holds ' + rec.file.size + ' bytes, not the ' + bad.size + ' the backup carried');
+      if (rec.kind !== 'image') throw new Error('the stored record of the restored photo says kind ' + JSON.stringify(rec.kind) + ', so the next open would decode it as the wrong kind');
+      /* …and on a device (or a launch) that can open it, the project shows it from that record */
+      unstub(); unstub = null;
+      window.__fmStep = '1189 restore: opening the restored project';
+      const opened = await race1189(FM.projects.open(sh.pid, { confirmed: true }), 30000, 'opening the restored project');
+      if (opened === false) throw new Error('setup: the restored project would not open');
+      const m = FM.media.get(sh.lid);
+      if (!(m && m.file)) throw new Error('opened again with the photo decoding normally, the restored clip is still blank: its stored record did not bring it back');
+    } finally {
+      if (unstub) unstub();
+      if (dLeave) Object.defineProperty(FM.projects, 'confirmLeave', dLeave); else delete FM.projects.confirmLeave;
+      if (dToast) Object.defineProperty(FM, 'toast', dToast); else FM.toast = realToast;
+      fresh().forEach(function (id) { made.push(id); });
+      try { await race1189(FM.storage.settled(), 15000, 'FM.storage.settled in cleanup'); } catch (e) {}
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+  });
+
+  test('1189 Import project file says a clip that would not open is kept, not that the file has no footage for it (CONTROLS: an absent embed still says no footage in this file, a clip that opens is not named)', { item: '1189', budgetMs: 90000 }, async function () {
+    if (typeof FM.storage.importObject !== 'function' || typeof FM.storage.readMedia !== 'function' || typeof FM.loadImageFile !== 'function') throw new Error('setup: FM.storage.importObject / readMedia or FM.loadImageFile is not reachable');
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const had = new Set(FM.projects.list().map(function (p) { return p.id; }));
+    const made = [], said = [];
+    const fresh = function () { return FM.projects.list().filter(function (p) { return !had.has(p.id) && made.indexOf(p.id) < 0; }).map(function (p) { return p.id; }); };
+    const dToast = Object.getOwnPropertyDescriptor(FM, 'toast'), realToast = FM.toast;
+    let unstub = null;
+    try {
+      if (wasHome) FM.home.close();
+      const png = await png1189('#3c9d5a');
+      const shutL = layer1189('FX1189 cannot open'), goneL = layer1189('FX1189 not in file'), fineL = layer1189('FX1189 opens');
+      const file = { app: 'freemotion', v: 1, project: { name: 'FX1189 import', width: 320, height: 240, fps: 30, duration: 2 }, layers: [shutL, goneL, fineL], media: {} };
+      file.media[shutL.id] = { kind: 'image', name: 'fx1189-imp-cannot.png', dataURL: png.url };
+      file.media[fineL.id] = { kind: 'image', name: 'fx1189-imp-opens.png', dataURL: png.url };
+      unstub = stub1189(['fx1189-imp-cannot.png']);
+      FM.toast = function (m) { said.push(String(m)); };
+      window.__fmStep = '1189 import: importObject';
+      const ok = await race1189(FM.storage.importObject(file, null, { confirmed: true }), 30000, 'FM.storage.importObject');
+      fresh().forEach(function (id) { made.push(id); });
+      await race1189(FM.storage.settled(), 15000, 'FM.storage.settled after the import');
+      if (ok !== true) throw new Error('setup: the import answered ' + JSON.stringify(ok) + ', not true');
+      const byName = function (n) { return (FM.scene.layers || []).filter(function (l) { return l && l.name === n; })[0]; };
+      const S = byName('FX1189 cannot open'), F = byName('FX1189 opens');
+      if (!S || !F || !byName('FX1189 not in file')) throw new Error('setup: the imported project does not hold the three named layers');
+      const msg = said.filter(function (m) { return m.indexOf('Project imported') === 0; }).pop() || '';
+      /* CONTROL: the clip that opens is shown and not named */
+      const fm = FM.media.get(F.id);
+      if (!(fm && fm.file)) throw new Error('CONTROL: the imported clip that opens is not in FM.media, so this import proves nothing');
+      if (msg.indexOf('FX1189 opens') >= 0) throw new Error('CONTROL: the import warning names the clip that opened: ' + JSON.stringify(msg));
+      /* CONTROL: an embed that is absent keeps today's sentence */
+      const i = msg.indexOf('no footage in this file'), j = i >= 0 ? msg.indexOf('restore from a full backup', i) : -1;
+      const noFootage = (i >= 0 && j > i) ? msg.slice(i, j) : '';
+      if (!noFootage || noFootage.indexOf('FX1189 not in file') < 0) throw new Error('CONTROL: the layer whose footage is not in the file is not named as having no footage in this file: ' + JSON.stringify(msg));
+      /* the clip whose footage WAS in the file */
+      if (noFootage.indexOf('FX1189 cannot open') >= 0) throw new Error('the import says FX1189 cannot open has no footage in this file, and its footage WAS in the file: he would believe the file is incomplete and the clip gone: ' + JSON.stringify(msg));
+      const k = msg.indexOf('could not be opened on this device');
+      const shutSentence = k >= 0 ? msg.slice(k, msg.indexOf('.', k) + 1) : '';
+      if (!shutSentence || shutSentence.indexOf('FX1189 cannot open') < 0 || shutSentence.indexOf('kept with the project') < 0) throw new Error('the import does not say that FX1189 cannot open could not be opened on this device and that its footage is kept with the project: ' + JSON.stringify(msg));
+      if (shutSentence.indexOf('FX1189 not in file') >= 0) throw new Error('the could-not-be-opened sentence names the layer whose footage is not in the file: ' + JSON.stringify(msg));
+      const rec = await race1189(FM.storage.readMedia(S.id), 10000, 'reading the imported clip that would not open');
+      if (!(rec && rec.file && rec.file.size === png.size)) throw new Error('the import says the clip is kept, but its record in IndexedDB is ' + (rec && rec.file ? rec.file.size + ' bytes, not ' + png.size : 'missing'));
+    } finally {
+      if (unstub) unstub();
+      if (dToast) Object.defineProperty(FM, 'toast', dToast); else FM.toast = realToast;
+      fresh().forEach(function (id) { made.push(id); });
+      try { await race1189(FM.storage.settled(), 15000, 'FM.storage.settled in cleanup'); } catch (e) {}
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+  });
+
+  /* #1189 review folds 1 and 2: THE DEVICE REFUSES THE WRITES. IDBObjectStore.prototype.put refuses the records of two of the
+     file's three clips (picked by the file a record carries, then by its key, so the save's retry is refused too); the third
+     has room. The refusal is not a quota error, so warnStore says it at once ('Could not save that media.') and the order of
+     the toasts is exact: a quota refusal says the same through navigator.storage.estimate(), milliseconds later, a race this
+     test does not take.
+     FAILS ON THE BRANCH HEAD BEFORE THE FOLDS (e14338c1): applyScene's write was not quiet, so the clip that opens spent its one
+     storage warning on a toast that 'Project imported' replaced at once, and the save's retry said nothing (fold 1); and with
+     one unopened clip kept and one not, the sentence dropped the kept clause for both and never said the refused one's footage
+     was not kept (fold 2). On 75cacf0e it fails on the clip with room: nothing stored it.
+     CONTROLS: both stand-ins fired, the refused records are really absent, the clip that opens is in FM.media and not named. */
+  test('1189 Import project file on a device that refuses the writes warns after Project imported, and names the unopened clips it kept apart from those it could not keep (CONTROLS: both stand-ins fired, the clip that opens is not named)', { item: '1189', budgetMs: 90000 }, async function () {
+    if (typeof FM.storage.importObject !== 'function' || typeof FM.storage.readMedia !== 'function' || typeof FM.loadImageFile !== 'function' || typeof IDBObjectStore === 'undefined') throw new Error('setup: FM.storage.importObject / readMedia, FM.loadImageFile or IDBObjectStore is not reachable');
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const had = new Set(FM.projects.list().map(function (p) { return p.id; }));
+    const made = [], said = [];
+    const fresh = function () { return FM.projects.list().filter(function (p) { return !had.has(p.id) && made.indexOf(p.id) < 0; }).map(function (p) { return p.id; }); };
+    const dToast = Object.getOwnPropertyDescriptor(FM, 'toast'), realToast = FM.toast;
+    const dPut = Object.getOwnPropertyDescriptor(IDBObjectStore.prototype, 'put'), realPut = IDBObjectStore.prototype.put;
+    const fullNames = ['fx1189-full-opens.png', 'fx1189-full-cannot.png'], fullKeys = new Set(), refusedFiles = new Set();
+    const storeSaid = function (m) { return /^(Not enough storage to save that media|Could not save that media)/.test(m); };
+    let unstub = null, putRefused = 0;
+    try {
+      if (wasHome) FM.home.close();
+      const png = await png1189('#b8860b');
+      const keptL = layer1189('FX1189 full kept'), opensL = layer1189('FX1189 full opens'), cannotL = layer1189('FX1189 full cannot');
+      const file = { app: 'freemotion', v: 1, project: { name: 'FX1189 full', width: 320, height: 240, fps: 30, duration: 2 }, layers: [keptL, opensL, cannotL], media: {} };
+      /* the order matters on the branch head: the clip with room is written FIRST, because a write that lands clears warnStore's
+         latch, so the latch the refused clip that opens sets is still set when the save retries it */
+      file.media[keptL.id] = { kind: 'image', name: 'fx1189-full-kept.png', dataURL: png.url };
+      file.media[opensL.id] = { kind: 'image', name: 'fx1189-full-opens.png', dataURL: png.url };
+      file.media[cannotL.id] = { kind: 'image', name: 'fx1189-full-cannot.png', dataURL: png.url };
+      unstub = stub1189(['fx1189-full-kept.png', 'fx1189-full-cannot.png']);
+      IDBObjectStore.prototype.put = function (val, key) {
+        if (typeof key === 'string' && val && val.file && fullNames.indexOf(val.file.name) >= 0) { fullKeys.add(key); refusedFiles.add(val.file.name); }
+        if (typeof key === 'string' && fullKeys.has(key)) { putRefused++; throw new DOMException('refused by the 1189 test: this device would not store it', 'UnknownError'); }
+        return realPut.apply(this, arguments);
+      };
+      FM.toast = function (m) { said.push(String(m)); };
+      window.__fmStep = '1189 full: importObject';
+      const ok = await race1189(FM.storage.importObject(file, null, { confirmed: true }), 30000, 'FM.storage.importObject on a device that refuses the writes');
+      fresh().forEach(function (id) { made.push(id); });
+      await race1189(FM.storage.settled(), 15000, 'FM.storage.settled after the refused import');
+      if (ok !== true) throw new Error('setup: the import answered ' + JSON.stringify(ok) + ', not true');
+      const byName = function (n) { return (FM.scene.layers || []).filter(function (l) { return l && l.name === n; })[0]; };
+      const K = byName('FX1189 full kept'), O = byName('FX1189 full opens'), C = byName('FX1189 full cannot');
+      if (!K || !O || !C) throw new Error('setup: the imported project does not hold the three named layers');
+      /* CONTROLS: both stand-ins fired */
+      if (unstub.refused < 2) throw new Error('CONTROL: the decode stand-in refused ' + unstub.refused + ' of the 2 clips it was given, so nothing here measured a clip this device cannot open');
+      if (!putRefused || !refusedFiles.has('fx1189-full-opens.png')) throw new Error('CONTROL: the storage stand-in never refused the record of the clip that opens (' + putRefused + ' refusals), so nothing here measured a device that would not store it');
+      window.__fmStep = '1189 full: reading the records';
+      const kRec = await race1189(FM.storage.readMedia(K.id), 10000, 'reading the unopened clip that had room');
+      if (!(kRec && kRec.file && kRec.file.size === png.size)) throw new Error('FX1189 full kept could not be opened here and had room, and its record in IndexedDB is ' + (kRec && kRec.file ? kRec.file.size + ' bytes, not ' + png.size : 'missing') + ': the import threw its footage away');
+      const oRec = await race1189(FM.storage.readMedia(O.id), 10000, 'reading the refused clip that opens');
+      const cRec = await race1189(FM.storage.readMedia(C.id), 10000, 'reading the refused clip that would not open');
+      if (oRec || cRec) throw new Error('setup: a refused write went through anyway, so the device was not refusing');
+      const fm = FM.media.get(O.id);
+      if (!(fm && fm.file)) throw new Error('CONTROL: the clip that opens is not in FM.media, so this import proves nothing about its warning');
+      const msg = said.filter(function (m) { return m.indexOf('Project imported') === 0; }).pop() || '';
+      if (!msg) throw new Error('setup: the import put up no Project imported toast: ' + JSON.stringify(said));
+      if (msg.indexOf('FX1189 full opens') >= 0) throw new Error('CONTROL: the import warning names the clip that opened: ' + JSON.stringify(msg));
+      /* fold 2: the kept and the not-kept are named apart */
+      const parts = sentences1189(msg);
+      const lost = parts.filter(function (s) { return s.indexOf('could not be kept here') >= 0; })[0] || '';
+      const kept = parts.filter(function (s) { return s.indexOf('kept with the project') >= 0; })[0] || '';
+      if (!lost || lost.indexOf('FX1189 full cannot') < 0) throw new Error('the footage of FX1189 full cannot was NOT stored on this device, and the import does not say so: he would delete the file believing the clip is kept: ' + JSON.stringify(msg));
+      if (lost.indexOf('FX1189 full kept') >= 0) throw new Error('the not-kept sentence names FX1189 full kept, whose footage WAS stored: ' + JSON.stringify(msg));
+      if (!kept || kept.indexOf('FX1189 full kept') < 0) throw new Error('the import does not say the footage of FX1189 full kept is kept with the project, and it is: ' + JSON.stringify(msg));
+      if (kept.indexOf('FX1189 full cannot') >= 0) throw new Error('the import says the footage of FX1189 full cannot is kept with the project, and nothing stored it: ' + JSON.stringify(msg));
+      /* fold 1: the clip that opens and could not be stored is warned about AFTER Project imported, where he can read it.
+         MEASURE: pending. The save's refusal is said synchronously inside the save settled() waited for; the 5 s below is a
+         deadline for a slow phone pass, not a timing floor. */
+      const imp = said.lastIndexOf(msg);
+      const after = function () { return said.slice(imp + 1).some(storeSaid); };
+      const t0 = Date.now();
+      while (!after() && Date.now() - t0 < 5000) await new Promise(function (r) { setTimeout(r, 100); });
+      if (!after()) throw new Error('FX1189 full opens plays from memory and could not be stored, and nothing on screen says so: its one storage warning went up during the import, under Project imported, which replaced it at once, and the save that retried it stayed silent. Toasts in order: ' + JSON.stringify(said));
+    } finally {
+      if (dPut) Object.defineProperty(IDBObjectStore.prototype, 'put', dPut); else IDBObjectStore.prototype.put = realPut;
+      if (unstub) unstub();
+      if (dToast) Object.defineProperty(FM, 'toast', dToast); else FM.toast = realToast;
+      fresh().forEach(function (id) { made.push(id); });
+      try { await race1189(FM.storage.settled(), 15000, 'FM.storage.settled in cleanup'); } catch (e) {}
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+  });
+
+  /* #1189 review fold 3: A data: EMBED THIS DEVICE COULD NOT READ. window.fetch refuses this one data: URL, as a phone short of
+     memory refuses the read of a big embed in a whole backup. Its footage WAS in the file.
+     FAILS BEFORE THE FOLD (and on 75cacf0e): the layer is named in the no-footage sentence, which tells him to restore from a
+     full backup, about the full backup itself.
+     CONTROLS: the stand-in refused the read, an absent embed keeps today's no-footage sentence, nothing claims footage was kept. */
+  test('1189 Import project file says a clip whose embed could not be read was in the file, not that the file has no footage for it (CONTROLS: the read was refused, an absent embed still says no footage in this file)', { item: '1189', budgetMs: 90000 }, async function () {
+    if (typeof FM.storage.importObject !== 'function' || typeof window.fetch !== 'function') throw new Error('setup: FM.storage.importObject or window.fetch is not reachable');
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+    const had = new Set(FM.projects.list().map(function (p) { return p.id; }));
+    const made = [], said = [];
+    const fresh = function () { return FM.projects.list().filter(function (p) { return !had.has(p.id) && made.indexOf(p.id) < 0; }).map(function (p) { return p.id; }); };
+    const dToast = Object.getOwnPropertyDescriptor(FM, 'toast'), realToast = FM.toast;
+    const dFetch = Object.getOwnPropertyDescriptor(window, 'fetch'), realFetch = window.fetch;
+    let fetchRefused = 0;
+    try {
+      if (wasHome) FM.home.close();
+      const png = await png1189('#7b3fa0');
+      const unreadL = layer1189('FX1189 unread'), goneL = layer1189('FX1189 absent');
+      const file = { app: 'freemotion', v: 1, project: { name: 'FX1189 unread', width: 320, height: 240, fps: 30, duration: 2 }, layers: [unreadL, goneL], media: {} };
+      file.media[unreadL.id] = { kind: 'image', name: 'fx1189-unread.png', dataURL: png.url };
+      window.fetch = function (u) {
+        if (u === png.url) { fetchRefused++; return Promise.reject(new TypeError('1189 stand-in: this device could not read the embed')); }
+        return realFetch.apply(window, arguments);
+      };
+      FM.toast = function (m) { said.push(String(m)); };
+      window.__fmStep = '1189 unread: importObject';
+      const ok = await race1189(FM.storage.importObject(file, null, { confirmed: true }), 30000, 'FM.storage.importObject with an embed that cannot be read');
+      fresh().forEach(function (id) { made.push(id); });
+      await race1189(FM.storage.settled(), 15000, 'FM.storage.settled after the import');
+      if (ok !== true) throw new Error('setup: the import answered ' + JSON.stringify(ok) + ', not true');
+      if (!fetchRefused) throw new Error('CONTROL: the stand-in never refused the read of the embed, so nothing here measured an embed this device could not read');
+      const msg = said.filter(function (m) { return m.indexOf('Project imported') === 0; }).pop() || '';
+      /* CONTROL: an embed that is absent keeps today's sentence */
+      const i = msg.indexOf('no footage in this file'), j = i >= 0 ? msg.indexOf('restore from a full backup', i) : -1;
+      const noFootage = (i >= 0 && j > i) ? msg.slice(i, j) : '';
+      if (!noFootage || noFootage.indexOf('FX1189 absent') < 0) throw new Error('CONTROL: the layer whose footage is not in the file is not named as having no footage in this file: ' + JSON.stringify(msg));
+      if (noFootage.indexOf('FX1189 unread') >= 0) throw new Error('the import says FX1189 unread has no footage in this file, and its footage WAS in the file: he would be told to restore from a full backup about the full backup itself: ' + JSON.stringify(msg));
+      const lost = sentences1189(msg).filter(function (s) { return s.indexOf('could not be kept here') >= 0; })[0] || '';
+      if (!lost || lost.indexOf('FX1189 unread') < 0) throw new Error('the import does not say FX1189 unread came in the file and its footage could not be kept here: ' + JSON.stringify(msg));
+      if (msg.indexOf('kept with the project') >= 0) throw new Error('the import says footage is kept with the project, and nothing of FX1189 unread was read or stored: ' + JSON.stringify(msg));
+    } finally {
+      if (dFetch) Object.defineProperty(window, 'fetch', dFetch); else window.fetch = realFetch;
+      if (dToast) Object.defineProperty(FM, 'toast', dToast); else FM.toast = realToast;
+      fresh().forEach(function (id) { made.push(id); });
+      try { await race1189(FM.storage.settled(), 15000, 'FM.storage.settled in cleanup'); } catch (e) {}
+      await q915aCleanup(made, orig, wasHome, [], [], []);
     }
   });
 })();

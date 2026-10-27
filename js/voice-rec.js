@@ -471,6 +471,14 @@ window.FM = window.FM || {};
       say('Playback paused so the take is clean.');
     }
 
+    listen();
+    paint();
+    arm();
+  }
+
+  /* The panel's three window listeners, put on by open() and taken off by close(). Its own function since 1193 (hunt LOW
+     #8), because a take whose add failed re-opens the panel into review (reviewAgain) and needs exactly these back. */
+  function listen() {
     /* Hidden → stop the take and let go of the mic. VISIBLE AGAIN → put the mic back, but only if
        the panel is sitting idle without one. That second half is not symmetry for its own sake: the
        too-short branch below re-arms, and if the app was backgrounded at that moment it would open
@@ -496,9 +504,6 @@ window.FM = window.FM || {};
       }
     };
     document.addEventListener('keydown', onKey, true);
-
-    paint();
-    arm();
   }
 
   /* Acquire the mic and start the meter. Separate from open() because Retake — and the too-short
@@ -698,15 +703,44 @@ window.FM = window.FM || {};
     blobUrl = URL.createObjectURL(blob);
     ui.audio.src = blobUrl;
     paintPlayback();
+    paintLands();
+    state = 'review';
+    say(ui._note || '');
+    ui._note = '';
+    paint();
+  }
+  function paintLands() {
     landsFirst = !!(FM.scene && FM.scene.layers && FM.scene.layers.length === 0);
     landsAt = FM.time || 0;
     ui.lands.textContent = landsFirst
       ? 'Will start the composition at 0:00.'
       : 'Lands at ' + clockFine(landsAt) + ' — where the playhead is, same as an import.';
+  }
+
+  /* 1193 (hunt LOW #8): A TAKE WHOSE ADD FAILED COMES BACK, IT IS NOT THROWN AWAY. commit() closes the panel before the add
+     settles (and close() drops the blob), so an add that rejected (FM.loadVideoFile's 20 s metadata timer across an iOS
+     suspension, the element's 'error', an addMediaLayer throw) left a toast and nothing else: no layer, no retry, no library
+     copy, and the take existed nowhere. The panel goes back into review with the same bytes, Add enabled, so one more tap
+     tries again (and while it is in review the update hold in index.html fmSwBusy keeps a new build from reloading it).
+     Only into a panel still closed: one opened again for a new take meanwhile is his, and is left alone. */
+  function reviewAgain(b, secs) {
+    if (state !== 'closed' || !root || !b || !b.size) return false;
+    blob = b; seconds = secs || 0; chunks = [];
+    root.classList.remove('hidden');
+    listen();
+    blobUrl = URL.createObjectURL(b);
+    ui.audio.src = blobUrl;
+    paintPlayback();
+    /* Paused FIRST (1193 review #1). He may have pressed play while the add was in flight: open() pauses for exactly this
+       reason, and addMediaLayer places the take at FM.time at the next Add, so a sentence painted over a running playhead
+       names a place the take will not go, and the take's own Play doubles the project's audio. Before paintLands, because
+       pause() can move FM.time (it snaps to a frame). */
+    if (FM.pause && FM.playing) { try { FM.pause(); } catch (e) {} }
+    paintLands();
     state = 'review';
-    say(ui._note || '');
-    ui._note = '';
+    say('It did not go in, so the take is still here — tap Add to timeline to try again.', 'bad');
     paint();
+    return true;
   }
 
   function retake() {
@@ -734,7 +768,18 @@ window.FM = window.FM || {};
       file = b; try { file.name = name; } catch (e2) {}
     }
     close();          // the panel is done; the mic is already down, and close() proves it
+    /* b and secs are held by this closure until the add settles (1193): on a failure the take goes back into review. */
     FM.voiceRec.addFile(file, secs).catch(function (err) {
+      /* NOT when the take went in after all (1193 review #2). Most of what addMediaLayer can throw runs AFTER FM.insertLayer
+         (refreshAll, seekVideosToTime, history.commit, the save), so the layer is in the scene: bringing the take back would
+         say it did not go in over a layer that did, and Add would put in a second copy. Found by this very File on a layer's
+         media record (FM.loadVideoFile puts the File it was handed on its record, and FM.media.set stores that record); a
+         throw before the insert finds none, so the take comes back. */
+      var landed = false;
+      try {
+        landed = ((FM.scene && FM.scene.layers) || []).some(function (l) { var m = FM.media && FM.media.get(l.id); return !!(m && m.file === file); });
+      } catch (e) {}
+      if (!landed) { try { reviewAgain(b, secs); } catch (e) {} }
       if (FM.reportError) FM.reportError('adding a voice recording', err);   // queue 674
       if (FM.toast) FM.toast('Could not add the recording \u2014 the details are in Settings \u2192 Last error \u2192 Copy', 6000);
     });

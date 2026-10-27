@@ -212,12 +212,34 @@ window.FM = window.FM || {};
      existing "nothing stored" path handles it, and none of them can copy the dead pointer onward.
      A pointer answers `ref` too (phase B): the clip it becomes is still a pointer, so its next save, and
      every split, duplicate or paste of it, writes a few bytes instead of the whole file again. */
-  async function idbGetMedia(db, key) {
-    const v = await idbGet(db, key);
+  async function idbGetMedia(db, key, get) {
+    get = get || idbGet;   // 1191: readChecked passes idbGetChecked, so both reads follow the one pointer rule below
+    const v = await get(db, key);
     if (!isRef(v)) return v;
-    const t = await idbGet(db, v.ref);
+    const t = await get(db, v.ref);
     if (!t || !t.file) return null;
     return { file: t.file, kind: v.kind || t.kind, rev: v.rev || 0, ref: v.ref };
+  }
+  /* ═══ 1191 (hunt LOW): A READ THAT CAN SAY IT FAILED ═══════════════════════════════════════════════════════════════
+   * idbGet answers null for "nothing is stored" AND for "the read failed", and so does readMedia. Add → Media's use()
+   * drops a tile on null, so a tap while WebKit had lost the IndexedDB connection (a home-screen app back from the
+   * background: WebKit bugs 273827, 277615, 197050) removed the tile for good, and once no project named its key the
+   * next healthy boot sweep deleted the file as well. readMedia(key, { strict: true }) is the same read, through the
+   * same pointer rule, except that it REJECTS when the store cannot be opened, the transaction cannot be made or the
+   * request fails, and resolves null only when nothing is stored (a pointer whose shared copy is gone still reads as
+   * nothing, as above). Only use() asks for it; every other reader keeps the quiet null it was written against. */
+  function idbGetChecked(db, key) {
+    return new Promise((res, rej) => {
+      const tx = db.transaction(STORE, 'readonly');   // a connection that is closing throws here, and the throw rejects
+      const rq = tx.objectStore(STORE).get(key);
+      rq.onsuccess = () => res(rq.result === undefined ? null : rq.result);
+      rq.onerror = () => rej(rq.error || new Error('the media read failed'));
+      tx.onabort = () => rej(tx.error || new Error('the media read was aborted'));
+    });
+  }
+  async function readChecked(key) {
+    const db = await openDB();
+    try { return await idbGetMedia(db, key, idbGetChecked); } finally { try { db.close(); } catch (e) {} }
   }
   /* queue 915 phase B: WHICH STORED KEY A LIVE RECORD'S BYTES WERE READ OUT OF. A Blob read from IndexedDB
      is backed by that record, and whether it stays readable once the record is deleted is not something
@@ -884,7 +906,8 @@ window.FM = window.FM || {};
 
     // Generic single-key access to the media store, for features that need to read or write a blob
     // outside the scene document (the Media library reads imported files and caches its thumbnails).
-    async readMedia(key) { try { const db = await openDB(); const v = await idbGetMedia(db, key); db.close(); return v; } catch (e) { return null; } },   // queue 915 phase A: a pointer reads as its file
+    // 1191: { strict: true } rejects on a failed read instead of answering null (readChecked, above), for Add → Media's use()
+    async readMedia(key, opts) { if (opts && opts.strict) return readChecked(key); try { const db = await openDB(); const v = await idbGetMedia(db, key); db.close(); return v; } catch (e) { return null; } },   // queue 915 phase A: a pointer reads as its file
     // Reports what actually happened. It used to return a hardcoded true, so callers could not tell a
     // stored clip from one the browser refused on quota.
     async writeMedia(key, val) { try { const db = await openDB(); const ok = await idbPut(db, key, val); db.close(); return ok; } catch (e) { return false; } },
@@ -2029,16 +2052,48 @@ window.FM = window.FM || {};
       }
     }
     const hydratedMediaIds = new Set();
+    const unopened = new Map();   // #1189: old layer id → true when the bytes it came with are stored, though this device would not open them
     if (obj.media) {
+      /* ⚠️ #1189: THE BYTES FIRST, THE DECODE SECOND, as hydratePack has done since v15.04. The file used to reach IndexedDB only
+         through the save after the import, and that save writes what DECODED (planBlobWrites reads FM.media): a clip this device
+         cannot open (a container Safari will not play, an unconverted HEIC, the 20 s metadata timer firing while iOS suspended a
+         restore) was in neither, so Restore from a backup and Import project file threw its footage away, and the warning below
+         said it was never in the file. Stored first, under the layer's new id at the revision the save would write, the layer is
+         blank in this session only: the next open's hydrate tries the decode again, and Save project file and Back up read the
+         stored record (exportFile, packFromProject). FM._mediaBusy holds the boot sweep and Home's release off meanwhile, as for a
+         pack: until the save after this writes the document, no stored doc lists these ids. */
+      const layerOf = new Map(re.layers.map(l => [l.id, l]));
+      FM._mediaBusy = (FM._mediaBusy || 0) + 1;
+      let db = null;
+      try {
+      try { db = await openDB(); } catch (e) { db = null; }
       for (const id of Object.keys(obj.media)) {
         const md = obj.media[id], nid = re.map[id];
         if (!nid || !md || (md.kind !== 'video' && md.kind !== 'image')) continue;
         try {
           const file = await dataURLToFile(md.dataURL, md.name);
           if (!file) continue;   // non-data: URL was rejected → layer loads media-less (relink via Replace media…)
-          const rec = md.kind === 'video' ? await FM.loadVideoFile(file) : await FM.loadImageFile(file);
+          const L = layerOf.get(nid), rev = (L && L.mediaRev) || 0;
+          let kept = false;
+          /* #1189 review fold 1: QUIET. A refusal here is said by the sentence below for a clip that will not open, and by the
+             save's own retry for one that does. A toast from here would spend that clip's one storage warning (_storeWarned) on
+             a message that 'Project imported' replaces a moment later, and the save's retry would then say nothing. */
+          try { kept = !!db && await idbPut(db, nid, { file: file, kind: md.kind, rev: rev }, true); } catch (e) { kept = false; }
+          if (kept) _stored.set(nid, rev);   // on disk at this revision, so the save after this does not note it as on its way
+          let rec = null;
+          try { rec = md.kind === 'video' ? await FM.loadVideoFile(file) : await FM.loadImageFile(file); } catch (e) { rec = null; }
           if (rec) { FM.media.set(nid, rec); hydratedMediaIds.add(id); if (rec.kind === 'video' && rec.el) rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec); }
-        } catch (e) { /* a missing/corrupt embed → that layer loads media-less (relink via Replace media…) */ }
+          else unopened.set(id, kept);
+        } catch (e) {
+          /* a missing/corrupt embed → that layer loads media-less (relink via Replace media…). #1189 review fold 3: but a data:
+             embed whose bytes could not even be read here (the fetch of a big one refused on a phone) WAS in the file, so it is
+             told as a clip that could not be opened, its footage not kept here, never as no footage in this file. */
+          if (!hydratedMediaIds.has(id) && !unopened.has(id) && typeof md.dataURL === 'string' && /^data:/i.test(md.dataURL)) unopened.set(id, false);
+        }
+      }
+      } finally {
+        try { if (db) db.close(); } catch (e) {}
+        FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1);
       }
     }
     /* ⚠️ AND SAY WHICH LAYERS CAME BACK EMPTY (queue 888). An absent or corrupt embed
@@ -2051,7 +2106,7 @@ window.FM = window.FM || {};
     let missingMediaWarning = '';
     try {
       const want = (obj.layers || []).filter(l => l && (l.type === 'video' || l.type === 'image'));
-      const blank = want.filter(l => !hydratedMediaIds.has(l.id)).map(l => l.name || l.type);
+      const blank = want.filter(l => !hydratedMediaIds.has(l.id) && !unopened.has(l.id)).map(l => l.name || l.type);   // #1189: bytes that came and would not open are said below
       if (blank.length) {
         const om = obj.omitted || [];
         const absent = om.filter(o => o.missing);
@@ -2065,6 +2120,24 @@ window.FM = window.FM || {};
           (details.length ? ' (' + details.join('; ') + ')' : '') +
           ' — ' + blank.slice(0, 3).join(', ') + (blank.length > 3 ? ' and more' : '') +
           '. Use Replace media… on ' + (blank.length === 1 ? 'it' : 'each') + ', or restore from a full backup.';
+      }
+      /* #1189: …AND A CLIP WHOSE FOOTAGE WAS IN THE FILE IS NEVER TOLD IT WAS NOT. Its bytes came with it and would not open
+         here; when they were stored (above) they are kept with the project, which is what he needs to hear before he deletes
+         the file. Same importWarnings / toast path, its own sentence. */
+      const shut = want.filter(l => unopened.has(l.id));
+      if (shut.length) {
+        /* #1189 review fold 2: the clips whose bytes were stored and the ones whose bytes were NOT are named apart. The write
+           above is quiet and the save never retries a clip that is not in FM.media, so this sentence is the only thing that
+           can say the footage was not kept. NEUTRAL wording: it is not always a full device, IndexedDB may not have opened,
+           or the embed may not have been read. */
+        const names = ls => ls.slice(0, 3).map(l => l.name || l.type).join(', ') + (ls.length > 3 ? ' and more' : '');
+        const clips = n => n + (n === 1 ? ' clip in this file' : ' clips in this file') + ' could not be opened on this device';
+        const keptL = shut.filter(l => unopened.get(l.id) === true);
+        const lostL = shut.filter(l => unopened.get(l.id) !== true);
+        const notes = [];
+        if (keptL.length) notes.push(clips(keptL.length) + ' — ' + (keptL.length === 1 ? 'its' : 'their') + ' footage is kept with the project: ' + names(keptL) + '.');
+        if (lostL.length) notes.push(clips(lostL.length) + ', and ' + (lostL.length === 1 ? 'its' : 'their') + ' footage could not be kept here — keep the file: ' + names(lostL) + '.');
+        missingMediaWarning += (missingMediaWarning ? ' ' : '') + notes.join(' ');
       }
     } catch (e) {}                                    // a warning must never break an import
     const missingFonts = Array.isArray(obj.omittedFonts) ? obj.omittedFonts.slice(0, 100).filter(f => f && typeof f === 'object') : [];

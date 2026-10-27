@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 26 Oct at v18.07
+> ## 📌 WHAT I NEED FROM YOU — updated 27 Oct at v18.08
 >
-> **State:** v18.07 — **a collab clip cut off when the link drops is fetched again** (#1186), and **Undo of Replace media keeps the original** (#1188). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+> **State:** v18.08 — **footage your phone cannot open is kept when you restore or import** (#1189), **a Media library tile is no longer deleted when storage cannot be read** (#1191), **Undo of Replace media then a quick app switch keeps the original** (#1192), **a voice take whose add fails comes back to try again** (#1193), and **a collab join whose link drops says Offline instead of Live** (#1194). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+>
+> v18.07 — **a collab clip cut off when the link drops is fetched again** (#1186), and **Undo of Replace media keeps the original** (#1188). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
 > v18.06 — **three more effects have new controls** (#966): Gamma and Exposure (Protect skin, Keep colour), Colour Pop (Protect skin, Show selection); **a GIF in This frame (PNG) costs one frame** (#860); and **a second finger no longer hijacks the mask pen, Free crop or the Move pad** (#690). A live session needs both devices on v18.06. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
@@ -38178,6 +38180,7 @@ re-opened #480, which I had marked done and had not fixed.
       > - Every release he ships puts the app through the update-reload path.
       📍 **26 Oct ~01:10: building now** in hunt/dl52 (one lane, the PM's pace), items 5 and 2 together, then a review and a refuter.
       📍 **26 Oct: built, folded, all 4 mutations CAUGHT — and PARKED, not shipped.** Its slices hung in suite order: 921 S2/S3 project-switch tests each sat at their 180 s budget (one alone passes on both trees), most likely an earlier test leaving a clip whose file can never be stored, so the new question waits on an answer no test gives. Parked as v107-assembled.patch (#1190 rides with it). Before shipping: bisect the leak with ?after/upto slices, and check the real-user side the PM raised: a file that can NEVER be stored (storage permanently full) must not make every project switch ask the clip question forever.
+      📍 **27 Oct, carried from #1192's review (MEDIUM):** a switch while the Undo's restore is still fetching, or while its save is still writing, and on relaunch hydrate, reportPending and pruneOrphans' missing prev: exemption can delete his original. Check it against this entry's unlandedFiles() wait when it lands.
 
 - [ ] **1188 — Replace media: Undo cannot bring the original back, and nothing says so (hunt MEDIUM #1188)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 3 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -38254,6 +38257,7 @@ re-opened #480, which I had marked done and had not fixed.
       > - The HEVC-in-Chrome-on-PC example is weak. Chrome on Windows decodes HEVC with a GPU, and a clip with an audio track usually loads as audio only, which still keeps its bytes.
       > - The real routes are a Safari-unplayable container from the PC, an unconverted HEIC sent to the PC, and the 20 s metadata timer firing after an iOS suspension mid-restore. In that last case the clip would have played on the next launch.
       > - The original backup file is never damaged. What is lost is this device's copy.
+      📍 **v18.08 (27 Oct): built and shipped** (hunt/rs1189: a build, a review, a refuter, a fold, a fold check). applyScene stores a clip's bytes (quietly, under FM._mediaBusy) before decoding it, and records the rev in _stored, so a clip this device cannot open keeps its file and the next hydrate tries it again. The import's sentence splits the unopened clips into "kept with the project" and "could not be kept here — keep the file", and a data: embed whose fetch throws is no longer called absent. KNOWN GAP (the check's finding 1, MEDIUM, not a regression on v18.07): when a clip that decodes was refused in the same import, the save's retry toast replaces the not-kept sentence a moment after it goes up; the fix is to await the import's save before the Project imported toast and add a clause from the PENDING_KEY note. Not built: 5 (another window's boot sweep during the decode loop) and 6 (the quiet restore's final summary carries no count).
 
 - [ ] **1190 — Export: the overlay can stick for good with a dead Cancel when an IndexedDB delete aborts while committing (hunt LOW #1190)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 5 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -38309,6 +38313,7 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both checkers confirmed it.
       > - It needs a real IndexedDB fault at the moment of the tap, but that fault is a long-running WebKit bug on exactly his setup.
       > - A tile whose key is a lib: shared copy never loses its file. The file is erased only when no project still names the key. Otherwise only the tile is lost.
+      📍 **v18.08 (27 Oct): built and shipped** (hunt/ml1191: a build, a review, a refuter, a fold, a fold check). readMedia(key, { strict: true }) rejects when storage cannot be opened, a transaction cannot be made or the request fails, and answers null only when nothing is stored; the Media library's use() reads strictly (both reads, and the re-read after the running saves), so a failed read says Could not open that file and keeps the tile, and a row with no key is dropped at once. Every other readMedia caller is unchanged. Follow-up: the strict-read test can go red falsely if a real autosave takes the failed open under load (it can never be falsely green).
 
 - [ ] **1192 — Undo of a Replace media, then a quick switch to another app: the undone file comes back on relaunch (hunt LOW #1192)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 7 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -38334,6 +38339,7 @@ re-opened #480, which I had marked done and had not fixed.
       > - The window is the ~600 ms after a swap that lands at a moment he does not control: after an IndexedDB read, a decode and an IndexedDB write.
       > - A new-build reload is safe, because fmSwTry runs a real save() first. Going Home does not flush.
       > - The original is probably still in his Photos or Files, so he can re-replace it by hand.
+      📍 **v18.08 (27 Oct): built and shipped** (hunt/ml1191). restoreReplacedOnce marks the project dirty and saves at once, like every other path that changes a clip's file, so a hidden-page flushSync can no longer cancel the save that writes the original back. Only the app-switch half: the project-switch half is #1187's. Follow-up (the review's finding 1, MEDIUM, carried to #1187): a switch while the restore is still fetching, or while its save is still writing, and on relaunch hydrate, reportPending and pruneOrphans' missing prev: exemption can still delete his original.
 
 - [ ] **1193 — Voice-over: if adding the take fails, the recording is thrown away — PLAUSIBLE (hunt LOW #1193)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 8 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -38361,6 +38367,7 @@ re-opened #480, which I had marked done and had not fixed.
       > - The doubt: the same bytes were just loaded and played in the review <audio> (698-699), and loadVideoFile always settles. Its duration steps are bounded (1500 ms seek, a decode in try/catch, a 600 s maximum take).
       > - So the only route is an iOS suspension straddling the 20 s timer just after tapping Add, or an addMediaLayer throw, which would be a general import bug.
       > - No hang either way. It is cheap insurance: build it when the queue reaches it, not ahead of the CONFIRMED items.
+      📍 **v18.08 (27 Oct): built and shipped** (hunt/cj1193: a build, a review, a refuter, a fold, a fold check). The panel still closes at once, and if the add fails, reviewAgain puts the same take back in review (its listeners re-armed, Add enabled, a line saying it did not go in) and pauses the project if it was playing, so Lands at names the frame it will land on; an add that threw after its layer went in does not come back for a second copy. Follow-up: when the take did land, the toast still says Could not add the recording.
 
 - [ ] **1194 — Collab: a join whose link closes during the copy setup shows 'Live' over a dead copy — PLAUSIBLE (hunt LOW #1194)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 9 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -38389,4 +38396,4 @@ re-opened #480, which I had marked done and had not fixed.
       > - The result is a stale label, not a hang. 'bye ended' and 'deny removed' are already replayed from `early`.
       > - C.reopen's version already recovers, because its reconnect stays armed.
       > - Low priority, and a two-line fix.
-
+      📍 **v18.08 (27 Oct): built and shipped** (hunt/cj1193). C.join and C.reopen mark the session offline when the link closed during the copy setup (ep.open === false on an active session), down the existing markOffline → onOffline path, which shows Offline and starts the reconnect; nothing changes in setLink. Follow-up (its refuter): a join the guest CANCELS in the tail still opens the copy with a You're in toast; built as codex/rjoin, for v18.10.
