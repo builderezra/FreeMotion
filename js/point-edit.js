@@ -263,14 +263,25 @@ window.FM = window.FM || {};
     return { si: si, pi: pi, sx: e.clientX, sy: e.clientY, lu: loc.u, lv: loc.v,
              u0: p ? p[0] : loc.u, v0: p ? p[1] : loc.v, slop: e.pointerType === 'mouse' ? 0 : GRAB_SLOP };
   }
+  /* ⚠️ ONE FINGER AT A TIME (queue 690, real input, round two). A second finger that landed while the first was dragging a
+     point went through the whole press path: on another point it took the drag over, so the first finger then moved THAT
+     point by its distance from the second press, and on empty space its moves still reached onMove and dragged the held
+     point after it. While the first finger's capture is live (a real touch only: a synthetic pointer cannot be captured,
+     so no synthetic path changes), every other finger's press, moves and lift are ignored — the mask pen's gate. */
+  function otherFinger(e) {
+    return !!(e && drag && drag.ptype === 'touch' && e.pointerType === 'touch' && e.pointerId !== drag.pid && overlay && overlay.hasPointerCapture && overlay.hasPointerCapture(drag.pid));
+  }
+  function own(e) { if (drag) { drag.pid = e.pointerId; drag.ptype = e.pointerType; } }
   function onDown(e) {
     const l = layer(); if (!l) return;
+    if (otherFinger(e)) { e.preventDefault(); e.stopPropagation(); return; }
     // a tangent handle of the selected point takes priority over selecting another point
     const hnd = nearestHandle(e);
     if (hnd) {
       e.preventDefault(); e.stopPropagation();
       drag = { si: sel.si, pi: sel.pi, handle: hnd };
       try { overlay.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
+      own(e);
       return;
     }
     const hit = nearest(e);
@@ -314,6 +325,7 @@ window.FM = window.FM || {};
     }
     draw();
     try { overlay.setPointerCapture(e.pointerId); } catch (_) {}   // a released/synthetic pointerId throws NotFoundError; every other call site in this app already guards
+    own(e);
   }
   // ---- snapping a dragged point to the OTHER points (v5.44) --------------------------------------
   // Ezra: "the shape editor point editor thing doesn't have grid snapping to the other points."
@@ -335,7 +347,7 @@ window.FM = window.FM || {};
     return best;
   }
   function onMove(e) {
-    if (!drag) return;
+    if (!drag || otherFinger(e)) return;
     const l = layer(); if (!l) return;
     e.preventDefault();
     // queue 690: nothing until the finger really travels, then by how far it has travelled — see grab()
@@ -375,8 +387,8 @@ window.FM = window.FM || {};
     drag.moved = true;
     FM.requestRender(); notify('move'); draw();
   }
-  function onUp() {
-    if (!drag) return;
+  function onUp(e) {
+    if (!drag || otherFinger(e)) return;
     // A drag CLEARS the double-tap latch. Without this, dragging a point and then grabbing it again
     // within 350ms counts as a double tap and deletes it — two ordinary adjustments in a row, and the
     // point is gone. A double tap should mean two taps, not two drags.

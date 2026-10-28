@@ -160,15 +160,24 @@ window.FM = window.FM || {};
      GRAB_SLOP px (the keyframe diamonds' KF_DRAG_SLOP, v16.94), and then moves by how far the finger has travelled.
      A mouse does not tremble, so it keeps every pixel. */
   const GRAB_SLOP = 6;
+  /* ⚠️ ONE FINGER AT A TIME (queue 690, real input, round two). A second finger that landed while the first held a dot
+     took the drag over when it hit another dot (that dot then moved by the first finger's distance from the second
+     press), and wherever it landed its moves still reached onMove — a window listener — and dragged the held dot after
+     it. While the first finger's capture is live (a real touch only: a synthetic pointer cannot be captured, so no
+     synthetic path changes), every other finger's press, moves and lift are ignored — the mask pen's gate. */
+  function otherFinger(e) {
+    return !!(e && drag && drag.ptype === 'touch' && e.pointerType === 'touch' && e.pointerId !== drag.pid && overlay && overlay.hasPointerCapture && overlay.hasPointerCapture(drag.pid));
+  }
   function onDown(e) {
     if (!activeId) return;
     e.preventDefault(); e.stopPropagation();
+    if (otherFinger(e)) return;
     const l = layer(); if (!l) return;
     const pp = evtToProj(e);
     const hit = pick(pp);
     if (!hit) { if (selT != null) { selT = null; draw(); } return; }
     if (hit.kind === 'dot') selT = hit.t;
-    drag = { kind: hit.kind, t: hit.t, did: false };
+    drag = { kind: hit.kind, t: hit.t, did: false, pid: e.pointerId, ptype: e.pointerType };
     if (hit.kind === 'dot') {
       const o = posAt(l, hit.t);
       Object.assign(drag, { sx: e.clientX, sy: e.clientY, px: pp.x, py: pp.y, ox: o.x, oy: o.y, slop: e.pointerType === 'mouse' ? 0 : GRAB_SLOP });
@@ -178,6 +187,7 @@ window.FM = window.FM || {};
   }
   function onMove(e) {
     if (!activeId || !drag) return;
+    if (otherFinger(e)) return;
     e.preventDefault();
     const l = layer(); if (!l) return;
     const pp = evtToProj(e), px = clampN(pp.x), py = clampN(pp.y);
@@ -202,7 +212,7 @@ window.FM = window.FM || {};
     FM.requestRender();
   }
   function onUp(e) {
-    if (!drag) return;
+    if (!drag || otherFinger(e)) return;
     const did = drag.did; drag = null;
     if (did && FM.history) FM.history.commit();
     try { if (overlay) overlay.releasePointerCapture(e.pointerId); } catch (_) {}

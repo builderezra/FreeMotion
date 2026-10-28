@@ -126,19 +126,27 @@ window.FM = window.FM || {};
   function loop() { if (!active) return; draw(); if (active) raf = requestAnimationFrame(loop); }
 
   // ---- gesture ----------------------------------------------------------------------------------
+  /* ⚠️ ONE FINGER MOVES THE FILL (queue 690, real input, round two). A second finger that landed on the canvas while the
+     first was dragging the fill started a drag of its own from where the fill then was, so the first finger moved it by
+     its distance from the SECOND finger's press and it leapt by the gap between his fingers; and the moves are window
+     listeners, so a second finger anywhere dragged it too. While the first finger's capture is live (a real touch only:
+     a synthetic pointer cannot be captured, so no synthetic path changes), every other finger is ignored. */
+  function otherFinger(e) {
+    return !!(e && drag && drag.ptype === 'touch' && e.pointerType === 'touch' && e.pointerId !== drag.pid && overlay && overlay.hasPointerCapture && overlay.hasPointerCapture(drag.pid));
+  }
   function onDown(e) {
     const l = layer(); if (!l) { FM.fillDrag.stop(); return; }
     // The canvas is ours while this is open, locked layer or not: swallow the event either way, or a
     // miss falls through to canvas-edit and reads as "deselect", closing the panel under the finger
     // (the same bug point-edit had to fix).
     e.preventDefault(); e.stopPropagation();
-    if (l.locked) return;
+    if (l.locked || otherFinger(e)) return;
     const p = FM.eventToProject(e), loc = toLocal(l, p.x, p.y), o = offGet(l);
-    drag = { u: loc.u, v: loc.v, ox: o.x, oy: o.y, moved: false };
+    drag = { u: loc.u, v: loc.v, ox: o.x, oy: o.y, moved: false, pid: e.pointerId, ptype: e.pointerType };
     try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
   }
   function onMove(e) {
-    if (!drag) return;
+    if (!drag || otherFinger(e)) return;
     const l = layer(); if (!l) { drag = null; return; }
     e.preventDefault();
     const p = FM.eventToProject(e), loc = toLocal(l, p.x, p.y);
@@ -151,7 +159,7 @@ window.FM = window.FM || {};
     FM.requestRender();
   }
   function onUp(e) {
-    if (!drag) return;
+    if (!drag || otherFinger(e)) return;
     const moved = drag.moved; drag = null;
     if (overlay) { try { overlay.releasePointerCapture(e.pointerId); } catch (_) {} }
     if (moved) { if (FM.inspector) FM.inspector.refresh(); if (FM.history) FM.history.commit(); }

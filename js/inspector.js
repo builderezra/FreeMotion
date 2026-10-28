@@ -830,14 +830,19 @@ window.FM = window.FM || {};
     window: GLIDE_WINDOW, rest: GLIDE_REST, stopAt: GLIDE_STOP };
   function attachGlide(node, applyDx, onSettle) {
     let drag = null, raf = 0;
+    /* ⚠️ ONE FINGER DRIVES THE GLIDE (queue 690, real input). A second finger, a pinch or a resting thumb,
+       replaced the velocity trail and the scrub jumped on release. While the first finger's capture is live
+       (a real touch only: a synthetic pointer cannot be captured), every other finger is ignored. */
+    const otherGlideFinger = e => !!(drag && drag.kind === 'touch' && e.pointerType === 'touch' && e.pointerId !== drag.pid && node.hasPointerCapture && node.hasPointerCapture(drag.pid));
     const stop = () => { if (raf) { cancelAnimationFrame(raf); raf = 0; } };
     const settle = () => { if (onSettle) onSettle(); };
     node.addEventListener('pointerdown', e => {
+      if (otherGlideFinger(e)) { e.preventDefault(); return; }
       stop();                                        // a fresh grab kills any in-flight glide
-      drag = { mouse: e.pointerType === 'mouse', trail: [{ x: e.clientX, t: e.timeStamp }] };
+      drag = { pid: e.pointerId, kind: e.pointerType, mouse: e.pointerType === 'mouse', trail: [{ x: e.clientX, t: e.timeStamp }] };
     });
     node.addEventListener('pointermove', e => {
-      if (!drag) return;
+      if (!drag || otherGlideFinger(e)) return;
       const tr = drag.trail; tr.push({ x: e.clientX, t: e.timeStamp });
       while (tr.length > 2 && tr[1].t <= e.timeStamp - GLIDE_WINDOW) tr.shift();   // keep one sample at or before the window's edge
     });
@@ -853,7 +858,7 @@ window.FM = window.FM || {};
       return dt >= 8 ? (last.x - tr[i].x) / dt : 0;
     };
     const release = (e) => {
-      if (!drag) return;
+      if (!drag || otherGlideFinger(e)) return;
       const min = drag.mouse ? GLIDE_MIN_FLICK_MOUSE : GLIDE_MIN_FLICK;
       const v0 = releaseV(e);
       let v = Math.max(-GLIDE_MAX_V, Math.min(GLIDE_MAX_V, isFinite(v0) ? v0 : 0));
@@ -874,7 +879,7 @@ window.FM = window.FM || {};
       raf = requestAnimationFrame(step);
     };
     node.addEventListener('pointerup', release);
-    node.addEventListener('pointercancel', () => { if (!drag) return; drag = null; settle(); });   // OS-cancelled → settle where it is, never glide
+    node.addEventListener('pointercancel', e => { if (!drag || otherGlideFinger(e)) return; drag = null; settle(); });   // OS-cancelled → settle where it is, never glide
     /* cancelDrag is called by the strip when a touch turns out to be a scroll (nothing in flight yet)
        AND — from its own pointerup, which runs AFTER this one — when the drag ended in fine mode. In
        that second case the glide is ALREADY running: clearing `drag` did nothing to it, so "no momentum
@@ -949,6 +954,7 @@ window.FM = window.FM || {};
        away. `q` lets the row keep it. */
     const q = (o.q > 0) ? o.q : tickQuantum(o.min, o.max, o.step, o.unit);
     strip.dataset.q = String(q);   // the notch this row actually uses — read by the suite (queue 455)
+    strip.dataset.tick = String(TICK);   // px of drag per notch — read by the suite (queue 690), so no test hardcodes 7
     const ruler = el('div', 'fx-scrub-ticks');
     /* ⚠️ THE RULER IS A WINDOW ONCE IT GETS LONG (queue 609). Ezra: *"The speed slider looks weird and
      * broken"*, with a screenshot showing a white wall at the far left and a scatter of blurred grey
@@ -1061,24 +1067,37 @@ window.FM = window.FM || {};
      * A mouse keeps the old immediate behaviour: you cannot scroll a panel by dragging with a mouse,
      * so there is no ambiguity to resolve and adding a 6px dead zone would only make it feel loose. */
     const LOCK = 6;
+    /* ⚠️ ONE FINGER DRIVES THE EFFECT RULER (queue 690, real input). A second finger, a pinch or a resting thumb,
+       re-read the value and replaced the grab, so even a still second finger made the value jump. While the first
+       finger's capture is live (a real touch only: a synthetic pointer cannot be captured), every other finger is ignored.
+       ⚠️ THE OWNER IS WHOEVER HOLDS THE DRAG OR, IN THE FIRST 6 PX BEFORE THE LOCK, THE PENDING PRESS (round three's fold).
+       Gating on `drag` alone left the slop open: a second finger that landed there replaced `pend`, and the first finger's
+       next move locked the scrub on the second finger's x, a jump by the gap between them. Worse, a resting thumb kept the
+       GLIDE (which gates from the press) while the second finger drove the value, so the flick got no momentum and nothing
+       was committed until the thumb lifted. The strip holds the first finger's implicit capture from its press (the ruler,
+       marks and centre line are all pointer-events:none), so the same capture test covers both halves. */
+    const fxOwner = () => drag ? { id: drag.pid, kind: drag.kind } : pend;
+    const otherFxFinger = e => { const own = fxOwner(); return !!(own && own.kind === 'touch' && e.pointerType === 'touch' && e.pointerId !== own.id && strip.hasPointerCapture && strip.hasPointerCapture(own.id)); };
     strip.addEventListener('pointerdown', (e) => {
+      if (otherFxFinger(e)) { e.preventDefault(); return; }
       cur = o.read(); lastApplied = null;          // re-read: the value may have been typed or keyframed since
       if (e.pointerType === 'mouse') {
-        drag = { x: e.clientX };
+        drag = { x: e.clientX, pid: e.pointerId, kind: e.pointerType };
         try { strip.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault();
         return;
       }
-      pend = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      pend = { x: e.clientX, y: e.clientY, id: e.pointerId, kind: e.pointerType };
     });
-    const end = () => { pend = null; if (drag) { drag = null; glide.cancelDrag(); o.release(); } };
+    const end = e => { if (e && otherFxFinger(e)) return; pend = null; if (drag) { drag = null; glide.cancelDrag(); o.release(); } };
     // buttons===0 guard: if the pointerup was swallowed (capture lost, DOM rebuilt mid-drag), a plain
     // hover would otherwise KEEP scrubbing.
     strip.addEventListener('pointermove', (e) => {
+      if (otherFxFinger(e)) return;
       if (pend) {
         const px = e.clientX - pend.x, py = e.clientY - pend.y;
         if (Math.abs(px) < LOCK && Math.abs(py) < LOCK) return;      // still too small to call
         if (Math.abs(py) > Math.abs(px)) { pend = null; glide.cancelDrag(); return; }   // theirs: a scroll
-        drag = { x: pend.x };                                        // ours: measure from where the finger LANDED
+        drag = { x: pend.x, pid: pend.id, kind: pend.kind };          // ours: measure from where the finger LANDED
         try { strip.setPointerCapture(pend.id); } catch (err) {}
         pend = null;
       }
@@ -1110,7 +1129,8 @@ window.FM = window.FM || {};
        for covering distance and fine mode is for landing exactly; they are opposite intents, so the
        glide stands down whenever the drag ended out in the fine zone. Found by measuring a fine drag
        and seeing it move almost as far as a coarse one. */
-    strip.addEventListener('pointerup', () => {
+    strip.addEventListener('pointerup', e => {
+      if (otherFxFinger(e)) return;
       if (drag && drag.fine) glide.cancelDrag();
       pend = null; drag = null;
     });   // attachGlide's own pointerup starts the glide and settles
@@ -1118,8 +1138,11 @@ window.FM = window.FM || {};
     /* ONLY THE STRIP'S OWN CAPTURE ENDING ends the drag (queue 690). lostpointercapture BUBBLES, so a child
        that had held the touch — the centre line did, by being where the finger landed — handing it to the
        strip at the 6px lock reached this listener as if the strip had lost it, and the drag died after its
-       first notch. The CSS now keeps touches off the line; this keeps any other child from doing the same. */
-    strip.addEventListener('lostpointercapture', (e) => { if (e.target === strip) end(); });
+       first notch. The CSS now keeps touches off the line; this keeps any other child from doing the same.
+       AND ONLY THE OWNER'S (round three's fold). A second finger lands on the strip itself and is implicitly captured
+       there, so its LIFT fires this listener with target === strip; `end()` with no event skipped the gate and ended the
+       first finger's scrub mid-gesture (cancelled its glide, committed early). `end(e)` gates it like every other event. */
+    strip.addEventListener('lostpointercapture', (e) => { if (e.target === strip) end(e); });
     strip._sync = sync;
     return strip;
   }
@@ -3211,8 +3234,11 @@ window.FM = window.FM || {};
     if (fx.type === 'bwmixer' && ((q.skin != null && q.skin !== 0) || (q.mix != null && q.mix !== 100))) return null;
     // #966 opts17: the HSL Mixer at Mix 0, or with Protect skin holding a skin-coloured layer back, does nothing for that reason, not because no colour here is one that is set
     if (fx.type === 'hslmixer' && ((q.skin != null && q.skin !== 0) || (q.mix != null && q.mix !== 100))) return null;
+    // #966 opts20: skin protection can hold the tones back even when the colour has room for them
+    if (fx.type === 'splittone' && q.skin != null && q.skin !== 0) return null;
     return NOOP_WHY[fx.type];
   }
+  FM._noopWhy20 = noopWhy;   // suite seam (#966 opts20)
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is
      measured until the settings have been still for NOOP_SETTLE, and the row is only redrawn when the
@@ -4543,6 +4569,16 @@ window.FM = window.FM || {};
             else doReset();
           }, 480);
         });
+        /* #1122, IN FULL TOO. S4d (below) stopped the hold when a finger that starts a swipe on a card moves past a tap's slop,
+           and built it for Simple only (DESIGN §0.4): in Full a slow swipe still raised "Reset <group>" 480 ms in. Asked whether
+           Full's same swipe should be fixed, his answer: "if an issue then fix". Same card, same timer, same swipe, so the same
+           check. It asks no editor question: where S4d's own check also runs, a second clear() of a cleared timer changes nothing. */
+        let swipeAt = null;
+        card.addEventListener('pointerdown', ev => { swipeAt = { x: ev.clientX, y: ev.clientY }; });
+        card.addEventListener('pointermove', ev => {
+          if (!swipeAt) return;
+          if (Math.hypot(ev.clientX - swipeAt.x, ev.clientY - swipeAt.y) > 10) clear();
+        });
         ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => card.addEventListener(ev, clear));
         /* S4d: IN SIMPLE a finger that starts a swipe on a card and moves past a tap's slop is no longer holding it: the 480 ms timer was only
            cleared on up, cancel and leave, so a slow swipe raised "Reset <group>". Full's identical code is left as it is (DESIGN §0.4). */
@@ -5081,9 +5117,13 @@ window.FM = window.FM || {};
        nothing adds no undo step, and one that interrupted a glide still banks where the glide stopped.
        A drag that moved, or a glide that runs on after the finger has gone, settles exactly as before. */
     const glide = attachGlide(val, applyDx, () => { gest.end(); commitH(); if (drag && !drag.moved) return; FM.inspector.refresh(); });
-    val.addEventListener('pointerdown', e => { if (val.isContentEditable) { glide.cancelDrag(); return; } drag = { x: e.clientX, moved: false }; gest.begin(); try { val.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+    /* ⚠️ ONE FINGER SCRUBS THE NUMBER (queue 690, real input). A second finger, a pinch or a resting thumb,
+       replaced the grab and the value jumped by the gap between the fingers. While the first finger's capture is live
+       (a real touch only: a synthetic pointer cannot be captured), every other finger is ignored. */
+    const otherBoxFinger = e => !!(drag && drag.kind === 'touch' && e.pointerType === 'touch' && e.pointerId !== drag.pid && val.hasPointerCapture && val.hasPointerCapture(drag.pid));
+    val.addEventListener('pointerdown', e => { if (otherBoxFinger(e)) { e.preventDefault(); return; } if (val.isContentEditable) { glide.cancelDrag(); return; } drag = { x: e.clientX, moved: false, pid: e.pointerId, kind: e.pointerType }; gest.begin(); try { val.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
     val.addEventListener('pointermove', e => {
-      if (!drag) return;
+      if (!drag || otherBoxFinger(e)) return;
       if (e.pointerType === 'mouse' && e.buttons === 0) { const moved = drag.moved; drag = null; glide.cancelDrag(); if (moved) { commitH(); FM.inspector.refresh(); } return; }
       const dx = e.clientX - drag.x; drag.x = e.clientX;
       if (!drag.moved && Math.abs(dx) > 2) drag.moved = true;
@@ -5098,7 +5138,7 @@ window.FM = window.FM || {};
     // instead of a 12px label, and typing into a box you were not already editing costs one extra tap.
     // Scrubbing by dragging the number is untouched either way.
     val.addEventListener('pointerup', e => {
-      if (!drag) return;
+      if (!drag || otherBoxFinger(e)) return;
       const moved = drag.moved;
       /* Cancelled while `drag` still says "tap": a wobble of a pixel or two can start a glide, and
          cancelDrag() settles it — which, with `drag` already cleared, would rebuild the card under the
@@ -5120,7 +5160,7 @@ window.FM = window.FM || {};
       if (opts.axis) FM._mtAxis = opts.axis;
       startEdit();
     });
-    val.addEventListener('pointercancel', e => { if (!drag) return; const moved = drag.moved; drag = null; glide.cancelDrag(); try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (moved) { commitH(); FM.inspector.refresh(); } });   // OS-cancelled scrub commits its value to history (never opens the editor)
+    val.addEventListener('pointercancel', e => { if (!drag || otherBoxFinger(e)) return; const moved = drag.moved; drag = null; glide.cancelDrag(); try { val.releasePointerCapture(e.pointerId); } catch (_) {} if (moved) { commitH(); FM.inspector.refresh(); } });   // OS-cancelled scrub commits its value to history (never opens the editor)
     function startEdit() {
       val.contentEditable = 'true'; val.classList.add('editing'); val.textContent = String(round(getVal(), dp)); val.focus();
       const r = document.createRange(); r.selectNodeContents(val); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
@@ -5178,19 +5218,24 @@ window.FM = window.FM || {};
     };
     // Same momentum as every other scrubber — one implementation, so they cannot drift apart in feel.
     const glide = attachGlide(strip, applyDx, () => { gest.end(); commitH(); if (onChange) onChange(); });
+    /* ⚠️ ONE FINGER SCRUBS THE STRIP (queue 690, real input). A second finger, a pinch or a resting thumb,
+       replaced the grab and the value jumped by the gap between the fingers. While the first finger's capture is live
+       (a real touch only: a synthetic pointer cannot be captured), every other finger is ignored. */
+    const otherScrubFinger = e => !!(drag && drag.kind === 'touch' && e.pointerType === 'touch' && e.pointerId !== drag.pid && strip.hasPointerCapture && strip.hasPointerCapture(drag.pid));
     strip.addEventListener('pointerdown', e => {
-      drag = { x: e.clientX }; gest.begin();
+      if (otherScrubFinger(e)) { e.preventDefault(); return; }
+      drag = { x: e.clientX, pid: e.pointerId, kind: e.pointerType }; gest.begin();
       try { strip.setPointerCapture(e.pointerId); } catch (_) {}
       e.preventDefault();
     });
     strip.addEventListener('pointermove', e => {
-      if (!drag) return;
+      if (!drag || otherScrubFinger(e)) return;
       if (e.pointerType === 'mouse' && e.buttons === 0) { drag = null; glide.cancelDrag(); commitH(); if (onChange) onChange(); return; }
       const dx = e.clientX - drag.x; drag.x = e.clientX;
       if (dx) applyDx(dx);
     });
-    strip.addEventListener('pointerup', e => { drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} });
-    strip.addEventListener('pointercancel', e => { if (!drag) return; drag = null; glide.cancelDrag(); try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });
+    strip.addEventListener('pointerup', e => { if (!drag || otherScrubFinger(e)) return; drag = null; try { strip.releasePointerCapture(e.pointerId); } catch (_) {} });
+    strip.addEventListener('pointercancel', e => { if (!drag || otherScrubFinger(e)) return; drag = null; glide.cancelDrag(); try { strip.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); if (onChange) onChange(); });
     return strip;
   }
 
@@ -5448,15 +5493,20 @@ window.FM = window.FM || {};
     const pad = el('div', 'mt-trackpad'); pad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe here to move point'));
     const sens = ((FM.scene.project.width || 1080) / 300);
     let pd = null;
-    pad.addEventListener('pointerdown', e => { pd = { x: e.clientX, y: e.clientY }; try { pad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+    /* ⚠️ ONE FINGER MOVES THE POINT (queue 690, real input, round two). This pad steps from the LAST event, so a second
+       finger that touched it mid-swipe restarted it from itself, and the first finger's next move then read the whole gap
+       between his fingers as travel: the point leapt by that gap x 3.6. While the first finger's capture is live (a real
+       touch only: a synthetic pointer cannot be captured), every other finger is ignored — the Move pad's gate. */
+    const otherPtFinger = e => !!(pd && pd.ptype === 'touch' && e.pointerType === 'touch' && e.pointerId !== pd.pid && pad.hasPointerCapture && pad.hasPointerCapture(pd.pid));
+    pad.addEventListener('pointerdown', e => { if (otherPtFinger(e)) { e.preventDefault(); return; } pd = { x: e.clientX, y: e.clientY, pid: e.pointerId, ptype: e.pointerType }; try { pad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
     pad.addEventListener('pointermove', e => {
-      if (!pd) return;
+      if (!pd || otherPtFinger(e)) return;
       if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; pe.commit(); return; }
       pe.moveSel((e.clientX - pd.x) * sens, (e.clientY - pd.y) * sens);
-      pd = { x: e.clientX, y: e.clientY };
+      pd.x = e.clientX; pd.y = e.clientY;
     });
-    pad.addEventListener('pointerup', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} pe.commit(); });
-    pad.addEventListener('pointercancel', e => { if (!pd) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} pe.commit(); });
+    pad.addEventListener('pointerup', e => { if (!pd || otherPtFinger(e)) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} pe.commit(); });
+    pad.addEventListener('pointercancel', e => { if (!pd || otherPtFinger(e)) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} pe.commit(); });
     center.appendChild(pad);
     center.appendChild(el('div', 'insp-hint', 'Tap a point to select it · on a curve point, drag its handles to shape the curve · tap a hollow ring to add a point · double-tap to delete'));
 
@@ -5625,18 +5675,21 @@ window.FM = window.FM || {};
         zpad.appendChild(el('i', 'mt-zpad-arrow down'));
         const zsens = ((FM.scene.project.width || 1080) / 640) * 2;   // depth ranges wider than x/y
         let zd = null;
+        // queue 690 round two: one finger drives Z — a second finger restarted the swipe from itself (the Move pad's gate)
+        const otherZFinger = e => !!(zd && zd.ptype === 'touch' && e.pointerType === 'touch' && e.pointerId !== zd.pid && zpad.hasPointerCapture && zpad.hasPointerCapture(zd.pid));
         zpad.addEventListener('pointerdown', e => {
-          zd = { y: e.clientY, iz: mtEval(layer, 'z') };
+          if (otherZFinger(e)) { e.preventDefault(); return; }
+          zd = { y: e.clientY, iz: mtEval(layer, 'z'), pid: e.pointerId, ptype: e.pointerType };
           try { zpad.setPointerCapture(e.pointerId); } catch (_) {}
           e.preventDefault();
         });
         zpad.addEventListener('pointermove', e => {
-          if (!zd) return;
+          if (!zd || otherZFinger(e)) return;
           if (e.pointerType === 'mouse' && e.buttons === 0) { zd = null; commitH(); return; }
           mtSet(layer, 'z', Math.round(zd.iz + (e.clientY - zd.y) * zsens));
           refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update();
         });
-        const zEnd = e => { if (!zd) return; zd = null; try { zpad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); };
+        const zEnd = e => { if (!zd || otherZFinger(e)) return; zd = null; try { zpad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); };
         zpad.addEventListener('pointerup', zEnd);
         zpad.addEventListener('pointercancel', zEnd);
         control.appendChild(zpad);
@@ -5787,7 +5840,10 @@ window.FM = window.FM || {};
       place(); syncFns.push(place);
       const ang = e => { const r = ring.getBoundingClientRect(); return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI; };
       let rd = null;
-      ring.addEventListener('pointerdown', e => { rd = { a: ang(e), v: mtEval(layer, 'rotation'), acc: 0 }; try { ring.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+      /* queue 690 round two: ONE FINGER TURNS THE DIAL. A second finger on the ring restarted the turn from its own angle, so
+         the first finger's next move read the angle between his fingers as a turn and the layer spun by it (the Move pad's gate). */
+      const otherRingFinger = e => !!(rd && rd.ptype === 'touch' && e.pointerType === 'touch' && e.pointerId !== rd.pid && ring.hasPointerCapture && ring.hasPointerCapture(rd.pid));
+      ring.addEventListener('pointerdown', e => { if (otherRingFinger(e)) { e.preventDefault(); return; } rd = { a: ang(e), v: mtEval(layer, 'rotation'), acc: 0, pid: e.pointerId, ptype: e.pointerType }; try { ring.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
       // Accumulate the angle incrementally, normalising each step into (-180,180], so dragging the
       // knob past the ±180° seam (9 o'clock) advances smoothly instead of snapping a full turn. (#3)
       /* 45° DETENTS (queue 99). Ezra: "the spin tool should have snapping every 45 degrees."
@@ -5805,7 +5861,7 @@ window.FM = window.FM || {};
       const SNAP_DEG = 45, snapTol = () => (magnetOn() ? 7 : 0);   // magnet off → tolerance 0, so nothing holds (queue 620) — read LIVE (queue 736): the timeline's magnet toggle never refreshes this panel, so a build-time read held the old answer for the rest of the session
       let lastNotch = null;
       ring.addEventListener('pointermove', e => {
-        if (!rd) return;
+        if (!rd || otherRingFinger(e)) return;
         if (e.pointerType === 'mouse' && e.buttons === 0) { rd = null; commitH(); return; }
         const a = ang(e); let d = a - rd.a; d -= 360 * Math.round(d / 360); rd.acc += d; rd.a = a;
         const raw = rd.v + rd.acc;
@@ -5819,8 +5875,8 @@ window.FM = window.FM || {};
         mtSet(layer, 'rotation', held ? notch : Math.round(raw));
         place(); brot._refresh(); if (FM.canvasEdit) FM.canvasEdit.update();
       });
-      ring.addEventListener('pointerup', e => { if (!rd) return; rd = null; lastNotch = null; ring.classList.remove('snapped'); try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
-      ring.addEventListener('pointercancel', e => { if (!rd) return; rd = null; lastNotch = null; ring.classList.remove('snapped'); try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      ring.addEventListener('pointerup', e => { if (!rd || otherRingFinger(e)) return; rd = null; lastNotch = null; ring.classList.remove('snapped'); try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      ring.addEventListener('pointercancel', e => { if (!rd || otherRingFinger(e)) return; rd = null; lastNotch = null; ring.classList.remove('snapped'); try { ring.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
       control.appendChild(dial);
     } else if (mode === 'scale') {
       const sz = FM.layerSize(layer);
@@ -5953,15 +6009,17 @@ window.FM = window.FM || {};
       const SNAP = [0, 0.25, 0.5, 0.75, 1];
       const snapA = v => { if (!magnetOn()) return v; for (let i = 0; i < SNAP.length; i++) if (Math.abs(v - SNAP[i]) < 0.045) return SNAP[i]; return v; };
       let ad = null;
-      apad.addEventListener('pointerdown', e => { ad = { x: e.clientX, y: e.clientY, ax: getA('anchorX'), ay: getA('anchorY') }; try { apad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+      // queue 690 round two: one finger places the anchor — a second finger restarted the swipe from itself (the Move pad's gate)
+      const otherAnchorFinger = e => !!(ad && ad.ptype === 'touch' && e.pointerType === 'touch' && e.pointerId !== ad.pid && apad.hasPointerCapture && apad.hasPointerCapture(ad.pid));
+      apad.addEventListener('pointerdown', e => { if (otherAnchorFinger(e)) { e.preventDefault(); return; } ad = { x: e.clientX, y: e.clientY, ax: getA('anchorX'), ay: getA('anchorY'), pid: e.pointerId, ptype: e.pointerType }; try { apad.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
       apad.addEventListener('pointermove', e => {
-        if (!ad) return;
+        if (!ad || otherAnchorFinger(e)) return;
         if (e.pointerType === 'mouse' && e.buttons === 0) { ad = null; commitH(); return; }
         setAnchor(snapA(ad.ax + (e.clientX - ad.x) / 260), snapA(ad.ay + (e.clientY - ad.y) / 260));
         refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update();
       });
-      apad.addEventListener('pointerup', e => { if (!ad) return; ad = null; try { apad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
-      apad.addEventListener('pointercancel', e => { if (!ad) return; ad = null; try { apad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      apad.addEventListener('pointerup', e => { if (!ad || otherAnchorFinger(e)) return; ad = null; try { apad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
+      apad.addEventListener('pointercancel', e => { if (!ad || otherAnchorFinger(e)) return; ad = null; try { apad.releasePointerCapture(e.pointerId); } catch (_) {} commitH(); });
       control.appendChild(apad);
       const reset = el('button', 'btn', 'Centre the anchor');
       reset.style.cssText = 'width:100%;justify-content:center;min-height:38px;';

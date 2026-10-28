@@ -5213,6 +5213,39 @@ window.FM = window.FM || {};
     });
     else if (typeof p === 'number' && isFinite(p)) obj[key] = p * f;
   }
+  /* 1188 N1 (the PM, 27 Oct): THE STORED ORIGINAL'S SIZE, READ BOUNDED AND LIGHT. A replace must never wait for ever on a
+     bad stored file, so this is not the full loader: a video reads its metadata only (loadedmetadata), an image its header
+     (onload), each raced against a deadline that has no progress to wait on, since a header that has not answered in that
+     time is not coming. Any error or timeout answers null, which fits nothing, as before 1188 N1. The element and the URL
+     are let go either way. */
+  const STORED_SIZE_MS = 8000;   // MEASURE: pending (a local blob's header answers in well under a second on his phone)
+  function storedSize(file, kind) {
+    return new Promise(res => {
+      let url = null, el = null, done = false, timer = 0;
+      const end = wh => {
+        if (done) return;
+        done = true; clearTimeout(timer);
+        if (el) { el.onload = el.onerror = el.onloadedmetadata = null; if (kind === 'video') { try { el.removeAttribute('src'); el.load(); } catch (e) {} } }
+        if (url) { try { URL.revokeObjectURL(url); } catch (e) {} }
+        res(wh);
+      };
+      timer = setTimeout(() => end(null), FM._storedSizeMs || STORED_SIZE_MS);
+      try {
+        if (kind !== 'video' && kind !== 'image') { end(null); return; }   // a sound has no size to fit
+        url = URL.createObjectURL(file);
+        if (kind === 'video') {
+          el = document.createElement('video'); el.preload = 'metadata'; el.muted = true;
+          el.onloadedmetadata = () => end(el.videoWidth > 0 && el.videoHeight > 0 ? { width: el.videoWidth, height: el.videoHeight } : null);
+        } else {
+          el = new Image();
+          el.onload = () => end(el.naturalWidth > 0 && el.naturalHeight > 0 ? { width: el.naturalWidth, height: el.naturalHeight } : null);
+        }
+        el.onerror = () => end(null);
+        el.src = url;
+      } catch (e) { end(null); }
+    });
+  }
+  FM._storedSize = storedSize;   // suite seam (1188 N1)
   function fitReplacedMedia(layer, old, nrec) {
     const ow = old && old.width, oh = old && old.height, nw = nrec && nrec.width, nh = nrec && nrec.height;
     if (!layer || !layer.transform || !(ow > 0 && oh > 0 && nw > 0 && nh > 0)) return;
@@ -5337,8 +5370,24 @@ window.FM = window.FM || {};
         if (!go) { if (FM._releaseMediaRecord) FM._releaseMediaRecord(nrec); return false; }
         if (!stillCurrent()) return stale();
       }
+      /* 1188 N1: HOME CAN HAVE RELEASED THE OLD RECORD, so the size the new file is fitted to comes from, in order: the record
+         that was in memory when he picked; else the one a return-from-Home reload put back during the awaits above
+         (stillCurrent has passed, so it is the clip on screen); else the stored original's size, read here. `keep` was
+         read from disk above and checked against the layer's revision, so its file IS the clip on screen, and storedSize
+         reads the same width and height the full loader would have given the record in memory. That read is the whole
+         cost: only on this path (nothing of the clip in memory, and a new file with a picture to fit), counted in
+         FM._importing like the read above, and bounded (storedSize above: a video's metadata, an image's header, never the
+         full loader, and never a GIF's frames). A read that fails or times out fits nothing, as before. Chosen before the swap. */
+      let fitSource = outgoing || FM.media.get(id);
+      if (!fitSource && keep && keep.file && nrec && nrec.width > 0 && nrec.height > 0) {
+        let wh = null;
+        FM._importing = (FM._importing || 0) + 1;
+        try { wh = await (FM._storedSize || storedSize)(keep.file, keep.kind === 'video' ? 'video' : (keep.kind === 'audio' ? 'audio' : 'image')); } catch (e) { wh = null; } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
+        if (wh) fitSource = wh;
+        if (!stillCurrent()) return stale();
+      }
       if (!FM.replaceMediaWith(id, nrec)) return stale();
-      fitReplacedMedia(FM.layerById(FM.scene, id), outgoing, nrec);   // queue 690 (HUNT-a): same place, same size — before the commit, so undo puts the old scale back
+      fitReplacedMedia(FM.layerById(FM.scene, id), fitSource, nrec);   // queue 690 (HUNT-a): same place, same size — before the commit, so undo puts the old scale back
       /* The outgoing blob is NOT deleted any more, and the layer gets a serialisable marker.
        *
        * A replace only changes out-of-history state — the media registry and the IDB blob. On an

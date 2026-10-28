@@ -844,15 +844,24 @@ window.FM = window.FM || {};
   FM.nudgePad = function (el, opts) {
     if (!el || !opts) return;
     var pd = null;
+    /* ⚠️ ONE FINGER NUDGES (queue 690, real input, round two). A second finger that touched the pad mid-swipe restarted
+       the swipe from itself, so the first finger then moved the point by its distance from the SECOND finger: the point
+       leapt by the gap between his fingers times the pad's gain, and lifting the second finger ended the swipe under the
+       first. While the first finger's capture is live (a real touch only: a synthetic pointer cannot be captured, so no
+       synthetic path changes), every other finger is ignored — the Move pad's gate. */
+    function otherNudgeFinger(e) {
+      return !!(pd && pd.ptype === 'touch' && e.pointerType === 'touch' && e.pointerId !== pd.pid && el.hasPointerCapture && el.hasPointerCapture(pd.pid));
+    }
     el.addEventListener('pointerdown', function (e) {
+      if (otherNudgeFinger(e)) { e.preventDefault(); e.stopPropagation(); return; }
       if (opts.enabled && !opts.enabled()) return;
       var at = opts.get(); if (!at) return;
-      pd = { x: e.clientX, y: e.clientY, cx: at[0], cy: at[1] };
+      pd = { x: e.clientX, y: e.clientY, cx: at[0], cy: at[1], pid: e.pointerId, ptype: e.pointerType };
       try { el.setPointerCapture(e.pointerId); } catch (_) {}
       e.preventDefault(); e.stopPropagation();
     });
     el.addEventListener('pointermove', function (e) {
-      if (!pd) return;
+      if (!pd || otherNudgeFinger(e)) return;
       // A mouse that was released outside the pad never sends pointerup here; buttons===0 is the only
       // honest signal that the drag is over, and without it the cursor follows the mouse forever.
       if (e.pointerType === 'mouse' && e.buttons === 0) { pd = null; return; }
@@ -860,7 +869,7 @@ window.FM = window.FM || {};
       opts.set(pd.cx + (e.clientX - pd.x) * sens, pd.cy + (e.clientY - pd.y) * sens);
       e.preventDefault();
     });
-    function end(e) { if (!pd) return; pd = null; try { el.releasePointerCapture(e.pointerId); } catch (_) {} if (opts.end) opts.end(); }   // queue 741: a release hook, so a pad that writes history can commit once per swipe
+    function end(e) { if (!pd || otherNudgeFinger(e)) return; pd = null; try { el.releasePointerCapture(e.pointerId); } catch (_) {} if (opts.end) opts.end(); }   // queue 741: a release hook, so a pad that writes history can commit once per swipe
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
   };

@@ -108,18 +108,29 @@ window.FM = window.FM || {};
   }
   function insideBox(p) { return p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h; }
 
+  /* ⚠️ ONE FINGER DRIVES THE BOX (queue 690, real input, round two). A second finger that landed while the first was
+     moving the box started a drag of its own: inside the box the box then moved by the first finger's distance from the
+     SECOND finger's press, so it leapt by the gap between his fingers; outside it a fresh box was drawn between the two.
+     While the first finger's capture is live (a real touch only: a synthetic pointer cannot be captured, so no synthetic
+     path changes), every other finger's press, moves and lift are ignored — Free crop's gate. */
+  function otherFinger(e) {
+    return !!(e && drag && drag.ptype === 'touch' && e.pointerType === 'touch' && e.pointerId !== drag.pid && overlay && overlay.hasPointerCapture && overlay.hasPointerCapture(drag.pid));
+  }
   function onDown(e) {
     if (!active) return;
     e.preventDefault(); e.stopPropagation();
+    if (otherFinger(e)) return;
     const id = hitHandle(e), p = evtPct(e);
     // On a handle → resize. Inside the box → move it. Otherwise → draw a fresh box from here.
     if (id) drag = { mode: id };
     else if (insideBox(p)) drag = { mode: 'move', startPt: p, startBox: Object.assign({}, box) };
     else drag = { mode: 'new', startPt: p };
+    drag.pid = e.pointerId; drag.ptype = e.pointerType;
     try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
   }
   function onMove(e) {
     if (!active || !drag) return;
+    if (otherFinger(e)) return;
     e.preventDefault();
     const p = evtPct(e);
     if (drag.mode === 'move') {
@@ -139,7 +150,9 @@ window.FM = window.FM || {};
     }
     writeBox();   // live preview — requestRender coalesces via rAF
   }
-  function onUp(e) { if (drag) { drag = null; try { overlay.releasePointerCapture(e.pointerId); } catch (_) {} } }
+  /* pointercancel ends a drag too (queue 690, round two): it was the one sibling without it, so a drag the OS cancelled
+     (a system gesture, an incoming call) left `drag` set, and a hovering mouse or pen on a touch PC then moved the box. */
+  function onUp(e) { if (drag && !otherFinger(e)) { drag = null; try { overlay.releasePointerCapture(e.pointerId); } catch (_) {} } }
 
   function done() {
     teardown();
@@ -158,6 +171,7 @@ window.FM = window.FM || {};
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
     window.removeEventListener('pointermove', onMove, true);
     window.removeEventListener('pointerup', onUp, true);
+    window.removeEventListener('pointercancel', onUp, true);
     if (overlay && overlay.parentElement) overlay.parentElement.removeChild(overlay); overlay = null;
     if (bar && bar.parentElement) bar.parentElement.removeChild(bar); bar = null;
   }
@@ -185,6 +199,7 @@ window.FM = window.FM || {};
       overlay.addEventListener('pointerdown', onDown);
       window.addEventListener('pointermove', onMove, true);
       window.addEventListener('pointerup', onUp, true);
+      window.addEventListener('pointercancel', onUp, true);
       bar = document.createElement('div'); bar.id = 'touchup-bar';
       bar.innerHTML = '<span class="cb-hint">Drag the box over what you want removed</span><button class="cb-cancel" type="button">Cancel</button><button class="cb-done" type="button">Done</button>';
       document.body.appendChild(bar);

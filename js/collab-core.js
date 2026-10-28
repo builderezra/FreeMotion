@@ -173,7 +173,13 @@ window.FM = window.FM || {};
      colour 0 to 100, default 0), Colour Pop `skin` (Protect skin 0 to 100, default 0) and `view` (Show selection: 0 Off, 1 On). Every
      default draws what the effect drew before, but a rev-37 sanitiser drops the new keys, so the two would normalise one project
      differently. */
-  C.SCHEMA_REV = 38;
+  /* Rev 39 (v18.10, #966 idle work round twenty): new controls on three existing effects: Split Toning `skin` (Protect skin 0 to
+     100, default 0), Tint `skin` (Protect skin 0 to 100, default 0), Faded Film `skin` (Protect skin 0 to 100, default 0); and
+     Exposure's `keepcol` (Keep colour, rev 38) now keeps each colour's own hue at a saturation no higher than the picture's or
+     the plain exposure's, not its channel gaps, so a rev-38 build draws an Exposure with Keep colour above 0 differently. Every
+     default draws what the effect drew before, but a rev-38 sanitiser drops the new keys, so the two would normalise one project
+     differently. */
+  C.SCHEMA_REV = 39;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -412,7 +418,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =1719698363167737;   // SCHEMA_REV 38 (v18.06, #966 round nineteen): six new effect params on Gamma, Exposure and Colour Pop. Pinned 26 Oct with fp.js at rev 38; before: 7963662427846649 at rev 37.
+  C.SCHEMA_FP =424103012518769;   // SCHEMA_REV 39 (v18.10, #966 round twenty): three new effect params on Split Toning, Tint and Faded Film, and Exposure's Keep colour re-drawn. Pinned 28 Oct with fp.js at rev 39; before: 1719698363167737 at rev 38.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════

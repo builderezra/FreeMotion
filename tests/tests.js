@@ -39170,6 +39170,135 @@
     });
   });
 
+  /* rjoin folds: the cancel lands where a real one does — WHILE projects.open() is loading the copy (only that first open is
+     held, then let into the real open(); every other open passes straight through) — and the test reads the END STATE: back on
+     the project THIS tab had open with its layers, the copy gone, no session, no You’re in, and why === 'cancelled'. A decoy
+     project sits at the head of the index and the shared pointer is moved onto it, as another tab would move it: a copy
+     removed while open lands on rest[0] (the decoy), and a restore that reads the shared pointer opens the decoy, so only a
+     restore to this tab's own project passes. gpid is captured once, from a linked copy's card, and the cleanup never lists
+     orig — the hold can neither swallow the restore's own open nor delete the runner's project. */
+  test('921 S6 a join the guest cancels while its copy is loading puts him back on his own project, removes the copy and says no You’re in; an uncancelled online join does, an offline one does not', { item: '921', budgetMs: 180000 }, async function () {
+    const C = need921S6('the cancelled join tail');
+    const S = C.signal;
+    async function deadline(what, p, ms) {
+      let timer;
+      try {
+        return await Promise.race([p, new Promise(function (_, reject) {
+          timer = setTimeout(function () { reject(new Error('timed out waiting for ' + what)); }, ms || 10000);
+        })]);
+      } finally { clearTimeout(timer); }
+    }
+    await withFakeNet921(async function (net) {
+      await withLabs921(async function (ui) {
+        for (const mode of ['cancel', 'online', 'offline']) {
+          const wasHome = FM.home.isOpen(), orig = FM.storage.openProjectId();
+          const inv = S.newRoom();
+          const room = { kind: 'link', keys: await deadline(mode + ': invite keys', S.linkKeys(inv)) };
+          const D = { project: { name: 'Join tail', width: 320, height: 240, fps: 30, duration: 3, background: '#000000' }, layers: [layer921('Tail ' + mode)] };
+          const host = scriptedHost921(C, room, { doc: D, sid: inv.sid });
+          const openDesc = Object.getOwnPropertyDescriptor(FM.projects, 'open');
+          const joinDesc = Object.getOwnPropertyDescriptor(C, 'join');
+          const toastDesc = Object.getOwnPropertyDescriptor(FM, 'toast');
+          const realOpen = FM.projects.open, realJoin = C.join, realToast = FM.toast;
+          let hold = null, gpid = null, decoy = null, origIds = '', finished = false, outcome = null, opened = 0, loading = null;
+          const loadDesc = Object.getOwnPropertyDescriptor(FM.storage, 'load');
+          const toasts = [];
+          const ids = function () { return FM.scene.layers.map(function (l) { return l.id; }).join(','); };
+          try {
+            if (mode === 'cancel') {
+              decoy = await FM.projects.create({ name: 'FX921 tail decoy', width: 320, height: 240 });
+              if (!decoy || !(await FM.projects.open(orig, { confirmed: true })) || FM.storage.openProjectId() !== orig || FM.projects.list()[0].id !== decoy) throw new Error('CONTROL: the decoy project could not be put at the head of the index beside his own');
+              origIds = ids();
+            }
+            FM.toast = function (msg) { toasts.push(String(msg)); return realToast.apply(this, arguments); };
+            FM.projects.open = function (pid, opts) {
+              const card = !gpid && pid && pid !== orig && pid !== decoy ? FM.projects.list().find(function (p) { return p.id === pid; }) : null;
+              if (!card || !card.collab) return realOpen.apply(FM.projects, arguments);
+              gpid = pid;
+              return new Promise(function (resolve, reject) {
+                hold = function (how) {
+                  hold = null;
+                  if (how === 'drop') { resolve(false); return; }
+                  Promise.resolve(realOpen.call(FM.projects, pid, opts)).then(function (ok) {
+                    if (ok !== false) opened++;
+                    resolve(ok);
+                  }, reject);
+                };
+              });
+            };
+            C.join = function (opts) {
+              return realJoin.call(C, opts).then(function (r) {
+                if (mode === 'offline') r.session.setOnline(false);
+                outcome = r;
+                finished = true;
+                return r;
+              }, function (e) { outcome = e; finished = true; throw e; });
+            };
+            host.start();
+            await host.rv.ready(5000).catch(function () { throw new Error(mode + ': owner relay ready deadline'); });
+            if (!FM.home.isOpen()) FM.home.open();
+            await deadline(mode + ': Join sheet', ui.join());
+            /* another tab opened the decoy: the shared pointer moves, this tab's project does not */
+            if (mode === 'cancel') localStorage.setItem('fm.currentProject', decoy);
+            document.querySelector('.cj-code').value = S.inviteLink(inv);
+            document.querySelector('.cj-go').click();
+            await until921S6(mode + ': admitted join held before opening copy', function () { return hold; }, 30000);
+            const cancelBtn = document.querySelector('#collab-join .fm-ask-cancel');
+            if (host.admitted !== 1 || !net.offers(room.keys).length || !gpid || FM.storage.openProjectId() !== orig || !cancelBtn) throw new Error('CONTROL: ' + mode + ' did not reach the real relay join’s copy-opening tail');
+            /* Since #1187 (v18.09) open() first awaits landOrAsk, so the switch is not done the instant hold() returns. The cancel lands
+               when open() reaches FM.storage.load(): his project is torn down, this tab is the copy's, and the copy is loading. */
+            if (mode === 'cancel') {
+              const realLoad = FM.storage.load;
+              loading = new Promise(function (res) {
+                FM.storage.load = function () { Object.defineProperty(FM.storage, 'load', loadDesc); res(true); return realLoad.apply(this, arguments); };
+              });
+            }
+            hold();
+            if (mode === 'cancel') {
+              await deadline('cancel: open() reaching the copy’s load', loading, 10000);
+              if (FM.storage.openProjectId() !== gpid) throw new Error('CONTROL: the copy was not loading when the cancel landed (this tab is on ' + FM.storage.openProjectId() + ')');
+              cancelBtn.click();
+            }
+            await until921S6(mode + ': join tail and UI completion', function () {
+              return finished && (mode === 'cancel' || !document.getElementById('collab-join'));
+            }, 15000);
+            const saidIn = toasts.some(function (msg) { return /You’re in.*stays in sync/.test(msg); });
+            if (mode === 'cancel') {
+              const now = FM.storage.openProjectId();
+              if (opened !== 1) throw new Error('CONTROL: the copy never really opened under the cancel (opened=' + opened + ')');
+              if (now !== orig) throw new Error('a join cancelled while its copy loaded left him on ' + (now === gpid ? 'the copy' : now === decoy ? 'another project (the decoy at the head of the list, or the one the shared pointer named)' : String(now)) + ', not on his own project');
+              if (ids() !== origIds || FM.scene.layers.some(function (l) { return l.id === D.layers[0].id; })) throw new Error('his own project came back with other layers: ' + ids() + ' (was ' + origIds + ')');
+              if (C.session || saidIn) throw new Error('a cancelled join attached a session or said You’re in');
+              if (FM.projects.list().some(function (p) { return p.id === gpid; }) || localStorage.getItem('fm.proj.' + gpid)) throw new Error('the cancelled join left its half-made copy behind');
+              if (!outcome || outcome.why !== 'cancelled') throw new Error('the cancelled tail did not reject as cancelled (why: ' + String(outcome && outcome.why) + ')');
+            } else {
+              if (opened !== 1 || FM.storage.openProjectId() !== gpid || !C.session) throw new Error('CONTROL: the uncancelled ' + mode + ' join did not open its copy');
+              if (mode === 'online' && (!C.session.online || !saidIn)) throw new Error('CONTROL: the online join did not say You’re in');
+              if (mode === 'offline' && (C.session.online || saidIn)) throw new Error('the offline join said You’re in, or the offline injection did not run');
+            }
+          } finally {
+            if (loadDesc && FM.storage.load !== loadDesc.value) Object.defineProperty(FM.storage, 'load', loadDesc);
+            Object.defineProperty(FM.projects, 'open', openDesc);
+            Object.defineProperty(C, 'join', joinDesc);
+            if (toastDesc) Object.defineProperty(FM, 'toast', toastDesc); else delete FM.toast;
+            ui.close();
+            /* a hold never let go answers as Stay would: the join takes its own copy back before the cleanup runs */
+            if (hold) {
+              hold('drop');
+              try { await until921S6(mode + ': dropped hold settles', function () { return finished; }, 5000); } catch (e) {}
+            }
+            host.stop();
+            host.HS.stop('left');
+            try { if (C.session) { C.session.stop('left'); C.detach(); } } catch (e) {}
+            C._undoHandover(false);
+            const made = [gpid, decoy].filter(function (id) { return id && id !== orig; });
+            await deadline(mode + ': project cleanup', q915aCleanup(made, orig, wasHome, [], [], []), 15000);
+          }
+        }
+      });
+    });
+  });
+
   test('921 S6 the version gate speaks on both screens: a newer joiner is told the owner needs an update and the owner is offered one, an older joiner is told to update, the same version gets in', { item: '921', budgetMs: 180000 }, async function () {
     const C = need921S6('the version gate');
     const S = C.signal;
@@ -100179,6 +100308,144 @@
     }
   });
 
+  test('1188 a released clip replaced at another resolution keeps the in-memory control’s on-screen size, fitted from its stored original when nothing of it is in memory', { item: '1188', budgetMs: 260000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [], ids = [];
+    /* Every full decode and every size read of the original's file while a swap runs is written down (the loaders and
+       FM._storedSize are wrapped, never replaced: each call goes through to the real one), so the test can say that the
+       stored file was never fully decoded and how often its size was read. Put back in the finally, descriptor and all. */
+    const dImg = Object.getOwnPropertyDescriptor(FM, 'loadImageFile'), dVid = Object.getOwnPropertyDescriptor(FM, 'loadVideoFile');
+    const dSize = Object.getOwnPropertyDescriptor(FM, '_storedSize');
+    const decodes = [], sizeReads = [];
+    let counting = false, small = null;
+    const wrap = function (key, d) {
+      Object.defineProperty(FM, key, { configurable: true, enumerable: true, writable: true, value: function (file) {
+        const p = d.value.apply(this, arguments);
+        if (counting && small && file && file.name === small.name) {
+          const one = { via: key, rec: null };
+          decodes.push(one);
+          Promise.resolve(p).then(function (r) { one.rec = r; }, function () {});
+        }
+        return p;
+      } });
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      if (!dImg || !dVid || typeof dImg.value !== 'function' || typeof dVid.value !== 'function') throw new Error('setup: FM.loadImageFile or FM.loadVideoFile is not a plain function, so its decodes cannot be counted');
+      if (!dSize || typeof dSize.value !== 'function') throw new Error('setup: FM._storedSize (the bounded size read) is not exposed');
+      wrap('loadImageFile', dImg); wrap('loadVideoFile', dVid);
+      Object.defineProperty(FM, '_storedSize', { configurable: true, enumerable: true, writable: true, value: function (file) {
+        const p = dSize.value.apply(this, arguments);
+        if (counting && small && file && file.name === small.name) sizeReads.push(p);
+        return p;
+      } });
+      made.push(await r1188Within(FM.projects.create({ name: '1188 released replace fit', width: 320, height: 240, sizePicked: true }), 15000, 'creating the fit project'));
+      small = await r1188Within(q915aPng('r1188fit', '#d62828'), 5000, 'encoding the 32 by 24 original');
+      const c = document.createElement('canvas'); c.width = 64; c.height = 48;
+      c.getContext('2d').fillRect(0, 0, 64, 48);
+      const blob = await r1188Within(new Promise(function (resolve) { c.toBlob(resolve, 'image/png'); }), 5000, 'encoding the 64 by 48 replacement');
+      if (!blob) throw new Error('setup: replacement PNG encoding failed');
+      const big = new File([blob], 'r1188fit-big.png', { type: 'image/png' });
+      const boxOf = function (L) { const s = FM.layerSize(L); return { w: s.w * L.transform.scale, h: s.h * L.transform.scale }; };
+      let control = null;
+      /* Each mode is its own clip: the 32 by 24 photo at scale 0.75 (a 24 by 18 box), saved, then replaced by a 64 by 48 one
+         with nothing of it in memory (FM.media.remove, the per-clip release Home uses) except in the CONTROL. No storage or
+         decode stubs: the loaders are only counted.
+           memory      CONTROL: in memory, so the fit uses the record itself: scale 0.375, the same box, and no size read.
+           saved       released, the layer as the import left it: the stored original's size is read once (never a full
+                       decode), and its 32 by 24 is the source. The same box.
+           unknown     released, and the layer carries no size of its own (a clip imported before v17.33): its stored file
+                       is the only place its size is, and the box is still kept, from one size read.
+           rehydrated  as 'unknown', but a return-from-Home reload puts the original back while the replace waits on its keep
+                       (N2): that record is the clip on screen, so it is the source, the box is kept, and nothing is decoded. */
+      for (const mode of ['memory', 'saved', 'unknown', 'rehydrated']) {
+        window.__fmStep = '1188 replace fit: ' + mode;
+        const old = await r1188Within(FM.loadImageFile(small), 5000, 'decoding the original for ' + mode);
+        FM.addMediaLayer(old);
+        const id = FM.scene.selectedId, L = FM.layerById(FM.scene, id); ids.push(id);
+        L.transform.scale = 0.75; L.transform.x = 137; L.transform.y = 91;
+        if (old.width !== 32 || old.height !== 24 || L.srcW !== 32 || L.srcH !== 24 || (L.srcRev || 0) !== 0) throw new Error('setup: the imported natural size was not 32 by 24 at revision 0');
+        const before = boxOf(L);
+        await r1188Within(sleep(700), 2000, 'the import save debounce for ' + mode);
+        await r1188Within(FM.storage.settled(), 15000, 'the import save for ' + mode);
+        const disk = await r1188Within(FM.storage.readMedia(id), 5000, 'checking the original record for ' + mode);
+        if (!disk || !disk.file || disk.file.name !== small.name) throw new Error('setup: the original record did not reach storage for ' + mode);
+        if (mode === 'unknown' || mode === 'rehydrated') { delete L.srcW; delete L.srcH; delete L.srcRev; }
+        const replacement = await r1188Within(FM.loadImageFile(big), 5000, 'decoding the replacement for ' + mode);
+        if (replacement.width !== 64 || replacement.height !== 48) throw new Error('setup: the replacement for ' + mode + ' decoded at ' + replacement.width + ' by ' + replacement.height);
+        // decoded BEFORE the swap starts, so it can be put back at once: after the swap has taken outgoing, before it fits
+        const back = mode === 'rehydrated' ? await r1188Within(FM.loadImageFile(small), 5000, 'decoding the original again, as the reload does') : null;
+        if (mode !== 'memory') FM.media.remove(id);
+        if (!!FM.media.get(id) !== (mode === 'memory')) throw new Error('setup: wrong residency for ' + mode);
+        const pre = FM.layerById(FM.scene, id), had = 'srcW ' + pre.srcW + ' by ' + pre.srcH + ' at srcRev ' + pre.srcRev + ', mediaRev ' + pre.mediaRev + ', scale ' + pre.transform.scale;
+        decodes.length = 0; sizeReads.length = 0; counting = true;
+        let ok = null;
+        try {
+          const swap = FM.swapInMedia(id, replacement, { noSave: true, noLib: true });
+          if (back) FM.media.set(id, back);
+          ok = await r1188Within(swap, 15000, 'replacing the clip for ' + mode);
+        } finally { counting = false; }
+        if (ok !== true || FM.media.get(id) !== replacement) throw new Error('setup: the replacement did not land for ' + mode);
+        const now = FM.layerById(FM.scene, id);
+        const drawn = boxOf(now);
+        // Integer source sizes times 0.75 or 0.375 are exact binary products; no raster sampling or tolerance is needed.
+        if (mode === 'memory') {
+          if (drawn.w !== before.w || drawn.h !== before.h || now.transform.scale === 0.75) throw new Error('CONTROL: the in-memory replace did not preserve the original box by changing scale');
+          control = drawn;
+        } else if (drawn.w !== control.w || drawn.h !== control.h) {
+          throw new Error('a released clip (' + mode + ') replaced at another resolution draws ' + JSON.stringify(drawn) + ' at scale ' + now.transform.scale + ' instead of the in-memory control ' + JSON.stringify(control) + ' (it had ' + had + ')');
+        }
+        if (now.transform.x !== 137 || now.transform.y !== 91) throw new Error('the replace moved the clip for ' + mode);
+        const fromDisk = mode === 'saved' || mode === 'unknown';
+        /* (the PM, 27 Oct) the stored original's SIZE is read, bounded (FM._storedSize), never through the full loaders */
+        if (decodes.length) throw new Error('replacing the clip (' + mode + ') ran the full ' + decodes[0].via + ' on the original ' + decodes.length + ' time(s): only its size may be read, bounded');
+        if (sizeReads.length !== (fromDisk ? 1 : 0)) {
+          throw new Error('replacing the clip (' + mode + ') read the original size ' + sizeReads.length + ' times, not ' + (fromDisk ? 'once (nothing of it was in memory, so its stored file is the only source of its size)' : 'at all (a record of it was in memory)'));
+        }
+      }
+    } finally {
+      counting = false;
+      r1188Put(FM, 'loadImageFile', dImg); r1188Put(FM, 'loadVideoFile', dVid); r1188Put(FM, '_storedSize', dSize);
+      await r1188Within(r1188Cleanup(made, ids, orig, wasOpen), 30000, 'cleaning up the replace-fit project');
+    }
+  });
+
+  /* 1188 N1 (the PM, 27 Oct): the stored original's size is read BOUNDED. A header that never answers gives up at the deadline,
+     a broken file answers null at once, and either way the replace fits nothing, as before. CONTROL: a real PNG gives its size. */
+  test('1188 the size read of a stored original is bounded: a header that never answers gives up at its deadline, a broken file answers null, a real photo gives its size', { item: '1188', budgetMs: 30000 }, async function () {
+    if (typeof FM._storedSize !== 'function') throw new Error('setup: FM._storedSize is not exposed');
+    const had = Object.prototype.hasOwnProperty.call(FM, '_storedSizeMs'), was = FM._storedSizeMs;
+    const dSrc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    try {
+      const png = await r1188Within(q915aPng('r1188size', '#2a9d8f'), 5000, 'encoding the control photo');
+      const wh = await r1188Within(FM._storedSize(png, 'image'), 5000, 'the control size read');
+      if (!wh || wh.width !== 32 || wh.height !== 24) throw new Error('CONTROL: a real 32 by 24 photo read as ' + JSON.stringify(wh));
+      const junk = new File([new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])], 'r1188junk.png', { type: 'image/png' });
+      const t0 = Date.now(), bad = await r1188Within(FM._storedSize(junk, 'image'), 5000, 'the broken-file size read');
+      if (bad !== null) throw new Error('a broken stored file read as a size: ' + JSON.stringify(bad));
+      if (Date.now() - t0 > 3000) throw new Error('a broken stored file took ' + (Date.now() - t0) + ' ms to say so: it should fail at once, not at the deadline');
+      /* CONTROL for the video branch: the size read of a real video is the size the full loader gives it */
+      const vid = await r1188Within(q915brVideo('r1188size'), 10000, 'fetching the control video');
+      const vwh = await r1188Within(FM._storedSize(vid, 'video'), 10000, 'the control video size read');
+      const vrec = await r1188Within(FM.loadVideoFile(vid), 20000, 'the full load of the control video');
+      try { vrec.el.removeAttribute('src'); vrec.el.load(); } catch (e) {}
+      try { URL.revokeObjectURL(vrec.url); } catch (e) {}
+      if (!vrec.width || !vrec.height) throw new Error('setup: the full loader gave the control video no size');
+      if (!vwh || vwh.width !== vrec.width || vwh.height !== vrec.height) throw new Error('CONTROL: a real video read as ' + JSON.stringify(vwh) + ', the full loader says ' + vrec.width + ' by ' + vrec.height);
+      /* a header that never answers: the image's src setter swallows the URL, so neither load nor error ever fires. The read
+         sets its src at once, so the setter goes back on the next line: Home's card thumbnails must not lose theirs meanwhile. */
+      FM._storedSizeMs = 400;
+      Object.defineProperty(HTMLImageElement.prototype, 'src', { configurable: true, enumerable: dSrc.enumerable, get: dSrc.get, set: function () {} });
+      const t1 = Date.now(), pHung = FM._storedSize(png, 'image');
+      Object.defineProperty(HTMLImageElement.prototype, 'src', dSrc);
+      const hung = await r1188Within(pHung, 5000, 'a size read whose header never answers');
+      if (hung !== null) throw new Error('a size read whose header never answered came back as ' + JSON.stringify(hung));
+      if (Date.now() - t1 > 2400) throw new Error('a size read whose header never answered took ' + (Date.now() - t1) + ' ms, past its 400 ms deadline plus a margin');
+    } finally {
+      Object.defineProperty(HTMLImageElement.prototype, 'src', dSrc);
+      if (had) FM._storedSizeMs = was; else delete FM._storedSizeMs;
+    }
+  });
+
   test('1188 when the original cannot be kept, Replace media asks first, and Keep it leaves the clip and its saved file as they were', { item: '1188', budgetMs: 150000 }, async function () {
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
     const made = [], asks = [], stashCalls = [], ids = [];
@@ -105957,11 +106224,22 @@
    * lands a REAL second finger (tests/_cdp.py, `pts`) while the first is still down. Fixed by one gate in each: while the
    * first finger's capture is live, every other finger is ignored. Each test's CONTROL is the same gesture with one finger
    * (and the press records prove the second finger was a second trusted touch on the same control). */
+  /* Presses AND moves, in one order (`n`), by pointer id (round three's fold): a gesture whose second finger is meant to
+     move can then prove that a trusted move from THAT finger arrived after its press. Without it a dropped move would turn
+     the MOVE gesture into a copy of the resting one, and every move-clause mutation would survive for that reason alone. */
   function rf690Downs(sel) {
-    const downs = [];
-    const on = (e) => { const t = e.target; downs.push({ trusted: e.isTrusted, kind: e.pointerType, pid: e.pointerId, on: !!(t && t.closest && t.closest(sel)) }); };
+    const downs = [], moves = [];
+    let n = 0;
+    const on = (e) => { const t = e.target; downs.push({ trusted: e.isTrusted, kind: e.pointerType, pid: e.pointerId, on: !!(t && t.closest && t.closest(sel)), n: n++ }); };
+    const mv = (e) => { if (e.isTrusted && e.pointerType === 'touch') moves.push({ pid: e.pointerId, x: Math.round(e.clientX), n: n++ }); };
     window.addEventListener('pointerdown', on, true);
-    return { downs: downs, stop: () => window.removeEventListener('pointerdown', on, true) };
+    window.addEventListener('pointermove', mv, true);
+    return { downs: downs, moves: moves, stop: () => { window.removeEventListener('pointerdown', on, true); window.removeEventListener('pointermove', mv, true); } };
+  }
+  function rf690Moved(D, what) {
+    const p2 = D.downs[1];
+    const mine = p2 ? D.moves.filter(m => m.pid === p2.pid && m.n > p2.n) : [];
+    if (!mine.length) throw new Error('CONTROL (' + what + '): no trusted move from the second finger arrived after its press, so this gesture never moved it (' + hb4J({ downs: D.downs, moves: D.moves.slice(-12) }) + ')');
   }
   function rf690Two(D, what) {
     const d = D.downs;
@@ -105969,6 +106247,159 @@
     if (d.some(x => !x.trusted || x.kind !== 'touch' || !x.on)) throw new Error('CONTROL (' + what + '): not every press was a trusted touch on the control (' + hb4J(d) + ')');
     if (d[0].pid === d[1].pid) throw new Error('CONTROL (' + what + '): the two presses carried one pointer id, so they were not two fingers (' + hb4J(d) + ')');
   }
+
+  /* Round three: the same CONTROL / resting second finger / second finger moving LAST as the pad tests.
+     Read the first finger's actual trusted coordinates, so rounding in the driver is measured rather than
+     hidden in a guessed tolerance. No single-finger LIFT: the real-input driver cannot deliver that.
+     Round three's folds:
+     · EARLY (the effect ruler only): the first finger rests at +3 px, inside the 6 px lock, so it is only PENDING; the
+       second lands at the far end and drives 20 px. The resting thumb owns the ruler, so nothing may move. Its own test.
+     · The attachGlide MOVE is a FLICK by the second finger (three 30 px moves, 12 ms apart): a slow lone move could
+       never show the glide adopting the second finger, because the glide would not fling it anyway.
+     · Every gesture whose second finger moves proves a trusted move from THAT finger arrived after its press.
+     · The one-finger flick steps 40 px, so a slow driver still clears the 0.6 px/ms bar (about 66 ms a step).
+     · The ruler's notch, tick width and step are read from the strip and the registry, never written in. */
+  async function rf690Scrubber(kind, gestures) {
+    needsTouch924();
+    const saved = FM.scene;
+    const mode = Object.getOwnPropertyDescriptor(FM, '_mtMode'), link = Object.getOwnPropertyDescriptor(FM, '_mtLink');
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = FM.makeLayer('shape', { name: 'RF690 ' + kind, shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#e0245e', start: 0, duration: 6 });
+          await hb4Scene([L]);
+          FM.selectLayer(L.id); await hb4Wait(200);
+          const fx = kind === 'fx-scrub';
+          if (fx) { L.effects = [FM.fxRegistry.makeInstance('blur')]; L.effects[0]._expanded = true; }
+          FM._mtMode = 'scale'; FM._mtLink = true;
+          const sel = fx ? '.fx-scrub' : kind === 'mtVBox' ? '.mt-vbox-val[aria-label="Width"]' : '.mt-scrub';
+          const read = () => fx ? FM.evalProp(L.effects[0].params.radius, FM.time) : FM.evalProp(L.transform.scale, FM.time);
+          const base = fx ? 25 : 1;
+          let gain = 0, fxQ = 0, fxStep = 0;
+          async function open() {
+            if (fx) L.effects[0].params.radius = base; else L.transform.scale = base;
+            FM.inspector.openCategory(fx ? 'effects' : 'transform'); await hb4Wait(300);
+            const node = document.querySelector('#inspector-panel ' + sel);
+            if (!node) throw new Error('setup: no ' + kind + ' control');
+            const r = node.getBoundingClientRect();
+            if (r.width < 70 || r.left < 0 || r.right > 380 || r.top < 20 || r.bottom > 740) throw new Error('setup: ' + kind + ' is out of reach: ' + hb4J([r.left, r.top, r.right, r.bottom]));
+            if (fx) {
+              /* -q / TICK per screen px, both read off the strip (dataset.q, dataset.tick); the step from the registry. */
+              const row = FM.fxRegistry.paramsOf('blur').filter(p => p && p.key === 'radius')[0];
+              const tick = Number(node.dataset.tick);
+              fxQ = Number(node.dataset.q);
+              fxStep = row ? Number(row.step) : NaN;
+              if (!(tick > 0) || !(fxQ > 0) || !(fxStep > 0)) throw new Error('setup: the effect ruler did not give its notch, tick width and step: ' + hb4J([node.dataset.q, node.dataset.tick, row ? row.step : null]));
+              gain = -fxQ / tick;
+            } else gain = kind === 'mtVBox' ? 0.35 / 300 : 0.004;
+            return { node: node, x: Math.round(r.left + 10), b: Math.round(r.right - 12), y: Math.round(r.top + r.height / 2) };
+          }
+          async function swipe(which, fast) {
+            const c = await open(), D = rf690Downs(sel);
+            let pid = null, start = null, last = null, released = null;
+            const down = e => { if (pid == null) { pid = e.pointerId; start = last = e.clientX; } };
+            const move = e => { if (e.pointerId === pid) last = e.clientX; };
+            const up = e => { if (e.pointerId === pid) released = read(); };
+            const early = which === 'EARLY', glideMove = which === 'MOVE' && kind === 'attachGlide';
+            const total = early ? 3 : fast ? 160 : 20, step = fast ? 40 : 5;
+            const room = glideMove ? total + 90 : early ? 30 : total;
+            if (c.x + room >= c.b) throw new Error('setup: ' + kind + ' is too narrow for a ' + room + ' px gesture: ' + hb4J(c));
+            c.node.addEventListener('pointerdown', down);
+            c.node.addEventListener('pointermove', move);
+            c.node.addEventListener('pointerup', up);
+            const both = (x1, x2) => [{ x: x1, y: c.y }, { x: x2, y: c.y }];
+            const steps = [{ t: 'touchStart', x: c.x, y: c.y, ms: 100 }];
+            if (early) {
+              /* The first finger rests at +3 px (PENDING: under the 6 px lock), the second lands and drives 20 px back. */
+              steps.push({ t: 'touchMove', x: c.x + 3, y: c.y, ms: 60 });
+              steps.push({ t: 'touchMove', x: c.x + 3, y: c.y, pts: both(c.x + 3, c.b), ms: 60 });
+              for (let i = 1; i <= 4; i++) steps.push({ t: 'touchMove', x: c.x + 3, y: c.y, pts: both(c.x + 3, c.b - 5 * i), ms: 60 });
+              steps.push({ t: 'touchMove', x: c.x + 3, y: c.y, pts: both(c.x + 3, c.b - 20), ms: 200 });
+            } else {
+              for (let i = 1; i <= 4; i++) {
+                const x = c.x + step * i;
+                steps.push({ t: 'touchMove', x: x, y: c.y, pts: which && i > 2 ? both(x, c.b) : undefined, ms: fast ? 12 : kind === 'attachGlide' ? 20 : 60 });
+                if (which && i === 2) steps.push({ t: 'touchMove', x: x, y: c.y, pts: both(x, c.b), ms: kind === 'attachGlide' ? 20 : 60 });
+              }
+              /* The scrub tests park before release; the glide test releases the slow first finger immediately. */
+              if (kind !== 'attachGlide') steps.push({ t: 'touchMove', x: c.x + total, y: c.y, pts: which ? both(c.x + total, c.b) : undefined, ms: 200 });
+              /* MOVE: the second finger moves LAST, alone. On the glide it FLICKS (about 1 px/ms over the window), then both lift. */
+              if (glideMove) for (let k = 1; k <= 3; k++) steps.push({ t: 'touchMove', x: c.x + total, y: c.y, pts: both(c.x + total, c.b - 30 * k), ms: 12 });
+              else if (which === 'MOVE') steps.push({ t: 'touchMove', x: c.x + total, y: c.y, pts: both(c.x + total, c.b - 15), ms: 200 });
+            }
+            steps.push({ t: 'touchEnd', x: c.x + total, y: c.y, ms: 0 });
+            try {
+              await realInput924(steps, kind + ' ' + (which || 'CONTROL') + (fast ? ' flick' : ' scrub'));
+            } finally {
+              D.stop();
+              c.node.removeEventListener('pointerdown', down);
+              c.node.removeEventListener('pointermove', move);
+              c.node.removeEventListener('pointerup', up);
+            }
+            if (which) {
+              rf690Two(D, kind + ' ' + which);
+              if (which !== 'CASE') rf690Moved(D, kind + ' ' + which);
+              /* EARLY drives 20 px, and a takeover moves the value by the second finger's whole travel; with only two of its
+                 moves through the bug reads 25.5, inside the tolerance (the check's K2), so its LAST move must have arrived. */
+              if (early) {
+                const p2 = D.downs[1], m2 = D.moves.filter(m => m.pid === p2.pid && m.n > p2.n);
+                if (!m2.length || Math.abs(m2[m2.length - 1].x - (c.b - 20)) > 1) throw new Error('CONTROL (' + kind + ' EARLY): the last move of the second finger did not reach ' + (c.b - 20) + ' px, so the 20 px it drives never all arrived (' + hb4J(m2.slice(-6)) + ')');
+              }
+            } else if (D.downs.length !== 1 || !D.downs[0].trusted || D.downs[0].kind !== 'touch' || !D.downs[0].on) throw new Error('CONTROL: no lone trusted touch on ' + kind + ': ' + hb4J(D.downs));
+            if (early) {
+              if (released == null || Math.abs(last - start) >= 6) throw new Error('CONTROL: the resting first finger on ' + kind + ' did not stay inside the 6 px lock and release: ' + hb4J({ start: start, last: last, released: released }));
+            } else if (released == null || last - start !== total) throw new Error('CONTROL: ' + kind + ' did not receive the first finger travelling ' + total + ' px and releasing');
+            /* A finger resting inside the lock never moves the ruler, so EARLY expects the value it started at. */
+            const expected = early ? base : base + (last - start) * gain;
+            const epsilon = Number.EPSILON * Math.max(1, Math.abs(expected)) * 32;
+            /* The effect ruler quantises to its displayed notch (q), then the real parameter's step. */
+            const tolerance = fx ? fxQ / 2 + fxStep / 2 + epsilon : epsilon;
+            await hb4Wait(500);
+            const after = read();
+            if (fast) await hb4Wait(2000);
+            return { release: released, after: after, expected: expected, tolerance: tolerance };
+          }
+          const one = await swipe('', false);
+          if (Math.abs(one.release - one.expected) > one.tolerance || Math.abs(one.release - base) <= one.tolerance) throw new Error('CONTROL: ' + kind + ' one-finger scrub did not move by its measured travel: ' + hb4J(one));
+          const drift = Math.abs(one.after - one.release);
+          if (drift > one.tolerance) throw new Error('CONTROL: the slow first finger glided: ' + hb4J(one));
+          if (kind === 'attachGlide') {
+            const flick = await swipe('', true);
+            if (Math.abs(flick.release - flick.expected) > flick.tolerance || flick.after - flick.release <= Math.abs(flick.release - base)) throw new Error('CONTROL: a lone fast flick did not produce a glide beyond the finger travel: ' + hb4J(flick));
+          }
+          const bad = [];
+          for (const which of (gestures || ['CASE', 'MOVE'])) {
+            const two = await swipe(which, false);
+            if (Math.abs(two.release - two.expected) > two.tolerance) bad.push(which + ': the second finger took over ' + kind + ' before release: ' + hb4J(two));
+            if (Math.abs(two.after - two.release) > drift + two.tolerance) bad.push(which + ': the second finger flung ' + kind + ' after the slow first finger released: ' + hb4J(two));
+          }
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally {
+      hb4Restore(saved);
+      if (mode) Object.defineProperty(FM, '_mtMode', mode); else delete FM._mtMode;
+      if (link) Object.defineProperty(FM, '_mtLink', link); else delete FM._mtLink;
+    }
+  }
+
+  test('690 real input: a second finger on mtScrub leaves the Scale strip moving by the first finger only', { item: '690', budgetMs: 90000 }, async function () {
+    await rf690Scrubber('mtScrub');
+  });
+  test('690 real input: a second finger on fx-scrub leaves the effect value moving by the first finger only', { item: '690', budgetMs: 90000 }, async function () {
+    await rf690Scrubber('fx-scrub');
+  });
+  /* The effect ruler's first 6 px (round three's fold, the review's F2 and NEW-1): a finger inside the lock is only PENDING,
+     and a second finger that landed then replaced it and drove the value, while the glide stayed with the resting thumb. */
+  test('690 real input: a second finger inside the fx-scrub lock cannot take the effect value from a resting first finger', { item: '690', budgetMs: 90000 }, async function () {
+    await rf690Scrubber('fx-scrub', ['EARLY']);
+  });
+  test('690 real input: a second finger on mtVBox leaves the Width value moving by the first finger only', { item: '690', budgetMs: 90000 }, async function () {
+    await rf690Scrubber('mtVBox');
+  });
+  test('690 real input: a second finger tracked by attachGlide cannot fling a scrub parked by the first finger', { item: '690', budgetMs: 90000 }, async function () {
+    await rf690Scrubber('attachGlide');
+  });
 
   test('690 real input: a second finger that lands while the mask pen is down drops no point of its own, and the first finger keeps its point', { item: '690', budgetMs: 90000 }, async function () {
     needsTouch924();
@@ -106194,6 +106625,386 @@
           await hb4Wait(250);
           const p3 = pos();
           if (off(p3)) bad.push('MOVE: the second finger moving on its own as the last event put the layer at ' + hb4J(p3) + ', not ' + hb4J(want) + ' — its move drove the first finger’s swipe');
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { hb4Restore(saved); }
+  });
+
+  /* ═══ 690 REAL INPUT, ROUND TWO — THE SAME TAKEOVER IN THE OTHER ONE-FINGER TOOLS (27 Oct, rf690b) ═══════════════════════
+   * Round one's refuter listed the same fault still open elsewhere: Customise Points (js/point-edit.js) and its point pad
+   * (js/inspector.js), the motion path (js/motion-path.js), the Touch-up box (js/touchup-tool.js), the fill drag
+   * (js/fill-drag.js), the Swipe to nudge pad (js/draw-tool.js FM.nudgePad) and the Move and Transform Z pad, rotation ring and
+   * anchor pad (js/inspector.js). Each kept one drag and let every press replace it, and the canvas tools' moves are window
+   * listeners, so a second finger anywhere drove the held one. Fixed by round one's gate in each. Every tool runs the same
+   * three gestures (rf690bThree): CONTROL, one finger 40 px; the CASE, a second finger lands after 20 px and stays; MOVE, the
+   * same and the second finger then moves 15 px on its own as the LAST event (every tool recomputes from the grab, so an
+   * earlier second-finger move is erased by the first finger's next one). No LIFT gesture: a touchMove that drops one finger
+   * of two delivers no pointerup in this driver (round one's lift mutations SURVIVED it), so the lift clause is reasoned only.
+   * (the second refuter's folds) Every finger must land ON the control (N1: the gradient test's second finger sat on a corner
+   * handle's touch pad, so the test could never go green), and MOVE must show that its lone move really arrived (F3). */
+  function rf690bReach(p, what) {
+    const W = window.innerWidth, H = window.innerHeight;
+    if (!p || !(p.x >= 6 && p.x <= W - 6 && p.y >= 6 && p.y <= H - 12)) throw new Error('setup (' + what + '): a finger would land at ' + hb4J(p ? { x: Math.round(p.x), y: Math.round(p.y) } : null) + ', out of reach of real input (' + W + ' x ' + H + ')');
+  }
+  function rf690bWho(el) {
+    if (!el) return 'nothing';
+    if (el.id) return '#' + el.id;
+    const c = el.getAttribute && el.getAttribute('class');
+    return (c ? '.' + c.trim().split(/\s+/).join('.') : String(el.tagName || '?').toLowerCase()).slice(0, 48);
+  }
+  function rf690bOnControl(p, sel, who, what) {
+    const el = document.elementFromPoint(p.x, p.y);
+    if (!(el && el.closest && el.closest(sel))) throw new Error('setup (' + what + '): ' + who + ' at ' + hb4J({ x: Math.round(p.x), y: Math.round(p.y) }) + ' would land on ' + rf690bWho(el) + ', not on ' + sel + ' — a handle or the edge of the control is in the way, so the gesture would not test the control');
+  }
+  async function rf690bThree(o) {
+    const out = {}, u = o.u, m = o.m;
+    for (const k of ['one', 'case', 'move']) {
+      await o.reset(k);
+      const w = o.where(k), a = { x: w.a.x, y: w.a.y }, b = { x: w.b.x, y: w.b.y };
+      const at = d => ({ x: a.x + u.x * d, y: a.y + u.y * d });
+      const b2 = { x: b.x + m.x, y: b.y + m.y };
+      [a, at(40), b, b2].forEach(p => rf690bReach(p, o.what));
+      if (Math.hypot(b.x - a.x, b.y - a.y) < 40) throw new Error('setup (' + o.what + '): the two fingers are only ' + Math.round(Math.hypot(b.x - a.x, b.y - a.y)) + ' px apart');
+      /* N1: a, b and b2 must each hit the control itself, before any input is sent */
+      rf690bOnControl(a, o.sel, 'the first finger', o.what);
+      rf690bOnControl(b, o.sel, 'the second finger', o.what);
+      rf690bOnControl(b2, o.sel, 'the second finger after its own move', o.what);
+      const s = [{ t: 'touchStart', x: a.x, y: a.y, ms: 90 },
+                 { t: 'touchMove', x: at(10).x, y: at(10).y, ms: 45 },
+                 { t: 'touchMove', x: at(20).x, y: at(20).y, ms: 60 }];
+      if (k === 'one') {
+        s.push({ t: 'touchMove', x: at(30).x, y: at(30).y, ms: 45 }, { t: 'touchMove', x: at(40).x, y: at(40).y, ms: 80 });
+      } else {
+        s.push({ t: 'touchMove', x: at(20).x, y: at(20).y, pts: [at(20), b], ms: 90 },
+               { t: 'touchMove', x: at(30).x, y: at(30).y, pts: [at(30), b], ms: 45 },
+               { t: 'touchMove', x: at(40).x, y: at(40).y, pts: [at(40), b], ms: k === 'move' ? 60 : 80 });
+        if (k === 'move') s.push({ t: 'touchMove', x: at(40).x, y: at(40).y, pts: [at(40), b2], ms: 80 });
+      }
+      s.push({ t: 'touchEnd', x: at(40).x, y: at(40).y, ms: 0 });
+      const how = k === 'one' ? 'one finger, 40 px' : k === 'case' ? 'a second finger lands half way and stays' : 'a second finger lands half way and moves on its own last';
+      const D = rf690Downs(o.sel);
+      /* F3: in MOVE, every trusted touch press and move in order, by pointer id */
+      const seq = [];
+      const log = e => { if (e.isTrusted && e.pointerType === 'touch') seq.push({ ev: e.type === 'pointerdown' ? 'down' : 'move', pid: e.pointerId }); };
+      if (k === 'move') { window.addEventListener('pointerdown', log, true); window.addEventListener('pointermove', log, true); }
+      try { await realInput924(s, o.what + ': ' + how); } finally {
+        D.stop();
+        window.removeEventListener('pointerdown', log, true); window.removeEventListener('pointermove', log, true);
+      }
+      await hb4Wait(o.settle || 300);
+      out[k] = await o.read(k);
+      out[k + 'Downs'] = D.downs;
+      out[k + 'Seq'] = seq;
+    }
+    const d1 = out.oneDowns;
+    if (!d1.length || !d1[0].trusted || d1[0].kind !== 'touch' || !d1[0].on) throw new Error('CONTROL (' + o.what + '): the one-finger press was not a trusted touch on the control (' + hb4J(d1) + ')');
+    rf690Two({ downs: out.caseDowns }, o.what);
+    rf690Two({ downs: out.moveDowns }, o.what + ', the second finger moving');
+    /* F3: MOVE proves its own gesture arrived. CDP sends one event per CHANGED touch point, so a second finger that stays put
+       sends no move, and the only move from its pointer id after its press is the lone last one. Without it, a dropped or
+       coalesced move would turn MOVE into a copy of the CASE and the move clause would be unproven. */
+    const ms = out.moveSeq, pid2 = out.moveDowns[1].pid;
+    const i2 = ms.findIndex(x => x.ev === 'down' && x.pid === pid2);
+    const n2 = i2 < 0 ? 0 : ms.slice(i2 + 1).filter(x => x.ev === 'move' && x.pid === pid2).length;
+    if (!n2) throw new Error('CONTROL (' + o.what + ', the second finger moving): no trusted touch move from the second finger (pointer ' + pid2 + ') reached the page after its press, so the MOVE gesture never ran (' + hb4J(ms.map(x => x.ev + ' ' + x.pid)) + ')');
+    return out;
+  }
+  const RF690B_HOW = { case: 'a second finger that landed half way and stayed', move: 'a second finger that landed half way and then moved on its own as the last event' };
+
+  test('690 real input: a second finger that lands while one finger drags a point in Customise Points does not take the drag, on the canvas or on its point pad', { item: '690', budgetMs: 90000 }, async function () {
+    needsTouch924();
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = FM.makeLayer('shape', { name: 'RF690b points', shape: 'triangle', x: 540, y: 900, shapeW: 800, shapeH: 800, fill: '#22c55e', start: 0, duration: 6 });
+          await hb4Scene([L]);
+          FM.selectLayer(L.id); await hb4Wait(250);
+          FM.inspector.openCategory('element'); await hb4Wait(400);
+          if (!FM.pointEdit.isActive() || !Array.isArray(L.subs) || !L.subs[0] || L.subs[0].length < 3) throw new Error('setup: Customise Points did not open the point editor on the triangle');
+          const subs0 = JSON.parse(JSON.stringify(L.subs));
+          const cv = document.getElementById('preview');
+          const ptScreen = i => {
+            const p = L.subs[0][i], q = FM.pointEdit._toCanvas(L, p[0], p[1]);
+            const o = FM.projectToOverlay(cv, q.x, q.y), r = document.getElementById('pe-overlay').getBoundingClientRect();
+            return { x: r.left + o.x, y: r.top + o.y };
+          };
+          const reset = async () => { L.subs = JSON.parse(JSON.stringify(subs0)); FM.requestRender(); await hb4Wait(400); };
+          const bad = [];
+          /* 1. ON THE CANVAS: the first finger drags corner 1 40 px left; the second lands on corner 0 (the apex). */
+          let s0, f0;
+          const C = await rf690bThree({
+            what: 'Customise Points', sel: '#pe-overlay', u: { x: -1, y: 0 }, m: { x: 15, y: 0 }, reset: reset,
+            where: () => { s0 = ptScreen(1); f0 = ptScreen(0); return { a: s0, b: f0 }; },
+            read: () => { const s = ptScreen(1), f = ptScreen(0); return { dx: s.x - s0.x, dy: s.y - s0.y, ox: f.x - f0.x, oy: f.y - f0.y }; },
+          });
+          const r2 = v => Math.round(v * 10) / 10;
+          if (Math.abs(C.one.dx + 40) > 3 || Math.abs(C.one.dy) > 3 || Math.hypot(C.one.ox, C.one.oy) > 2) throw new Error('CONTROL: one finger dragging corner 1 of the triangle 40 px left moved it ' + hb4J({ x: r2(C.one.dx), y: r2(C.one.dy) }) + ' (and corner 0 by ' + hb4J({ x: r2(C.one.ox), y: r2(C.one.oy) }) + ') — the editor is not taking the finger the way this test reads it');
+          ['case', 'move'].forEach(k => {
+            const r = C[k];
+            if (Math.abs(r.dx + 40) > 3 || Math.abs(r.dy) > 3 || Math.hypot(r.ox, r.oy) > 2) bad.push('Customise Points, ' + RF690B_HOW[k] + ' on corner 0: the corner the first finger dragged 40 px left moved ' + hb4J({ x: r2(r.dx), y: r2(r.dy) }) + ' and the corner under the second finger moved ' + hb4J({ x: r2(r.ox), y: r2(r.oy) }) + ' — the second finger took the drag');
+          });
+          /* 2. ON ITS POINT PAD (Swipe here to move point, gain project width / 300): it steps from the LAST event, so a takeover reads the gap as travel. */
+          const padNow = () => { const p = document.querySelector('.mt-trackpad'); return p && /move point/i.test(p.textContent || '') ? p : null; };
+          if (!padNow()) throw new Error('setup: the Customise Points panel has no Swipe here to move point pad');
+          const sens = (FM.scene.project.width || 1080) / 300;
+          let g0;
+          /* (F2) the second finger's own move has a y part: x alone is blind at one pad width (where its mutated travel equals
+             the 40 px), and 12 px of y is 43 project px on this pad, far past the tolerance */
+          const P = await rf690bThree({
+            what: 'the Customise Points pad', sel: '.mt-trackpad', u: { x: 1, y: 0 }, m: { x: -15, y: 12 }, reset: reset,
+            where: () => {
+              const pad = padNow(); if (!pad) throw new Error('setup: the point pad is gone');
+              g0 = FM.pointEdit.getSel(); if (!g0) throw new Error('setup: no point is selected for the pad to move');
+              const pr = pad.getBoundingClientRect(), y = pr.top + pr.height / 2;
+              return { a: { x: pr.left + 30, y: y }, b: { x: Math.min(pr.left + 180, pr.right - 12), y: y } };
+            },
+            read: () => { const g = FM.pointEdit.getSel(); return g ? { dx: g.x - g0.x, dy: g.y - g0.y } : { dx: NaN, dy: NaN }; },
+          });
+          const want = 40 * sens, tol = 2 * sens + 1;
+          if (!(Math.abs(P.one.dx - want) <= tol && Math.abs(P.one.dy) <= tol)) throw new Error('CONTROL: one finger swiping the point pad 40 px right moved the point ' + hb4J({ x: r2(P.one.dx), y: r2(P.one.dy) }) + ' project px, not ' + r2(want) + ' — the pad is not taking the finger the way this test reads it');
+          ['case', 'move'].forEach(k => {
+            const r = P[k];
+            if (!(Math.abs(r.dx - want) <= tol && Math.abs(r.dy) <= tol)) bad.push('the point pad, ' + RF690B_HOW[k] + ': the point moved ' + hb4J({ x: r2(r.dx), y: r2(r.dy) }) + ' project px, not ' + r2(want) + ' by the first finger — the second finger restarted the swipe from itself');
+          });
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { hb4Restore(saved); }
+  });
+
+  test('690 real input: a second finger that lands while one finger drags a motion path dot does not take the drag or move the dot', { item: '690', budgetMs: 90000 }, async function () {
+    needsTouch924();
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = FM.makeLayer('shape', { name: 'RF690b path', shape: 'rect', x: 300, y: 600, shapeW: 160, shapeH: 160, fill: '#f59e0b', start: 0, duration: 6 });
+          const kx = () => ({ kf: [{ t: 0, v: 300, e: 'linear' }, { t: 2, v: 800, e: 'linear' }] });
+          const ky = () => ({ kf: [{ t: 0, v: 600, e: 'linear' }, { t: 2, v: 1400, e: 'linear' }] });
+          L.transform.x = kx(); L.transform.y = ky();
+          await hb4Scene([L]);
+          FM.setTime(1); FM.refreshAll(); FM.selectLayer(L.id); await hb4Wait(250);
+          FM.motionPath.open(L.id); await hb4Wait(350);
+          if (!FM.motionPath.isActive() || !document.getElementById('mpath-overlay')) throw new Error('setup: the motion path editor did not open');
+          const cv = document.getElementById('preview');
+          const kAt = t => ({ x: FM.evalProp(L.transform.x, t), y: FM.evalProp(L.transform.y, t) });
+          const dot = t => { const q = kAt(t), o = FM.projectToOverlay(cv, q.x, q.y), r = document.getElementById('mpath-overlay').getBoundingClientRect(); return { x: r.left + o.x, y: r.top + o.y }; };
+          let p0, p1;
+          /* the first finger drags the dot at 0 s 40 px right; the second lands on the dot at 2 s */
+          const R = await rf690bThree({
+            what: 'a motion path dot', sel: '#mpath-overlay', u: { x: 1, y: 0 }, m: { x: 15, y: 0 },
+            reset: async () => { L.transform.x = kx(); L.transform.y = ky(); FM.requestRender(); await hb4Wait(300); },
+            where: () => { p0 = kAt(0); p1 = kAt(2); return { a: dot(0), b: dot(2) }; },
+            read: () => { const q0 = kAt(0), q1 = kAt(2); return { dx: q0.x - p0.x, dy: q0.y - p0.y, ox: q1.x - p1.x, oy: q1.y - p1.y }; },
+          });
+          const k = FM.previewDispScale(), want = 40 / k, tol = 2 / k + 1;
+          const off = r => Math.abs(r.dx - want) > tol || Math.abs(r.dy) > tol || Math.hypot(r.ox, r.oy) > 1;
+          const fmt = r => hb4J({ x: Math.round(r.dx), y: Math.round(r.dy) });
+          if (off(R.one)) throw new Error('CONTROL: one finger dragging the dot at 0 s 40 px right moved its keyframe ' + fmt(R.one) + ' project px (want ' + Math.round(want) + ', 0), the dot at 2 s by ' + hb4J({ x: R.one.ox, y: R.one.oy }) + ' — the editor is not taking the finger the way this test reads it');
+          const bad = [];
+          ['case', 'move'].forEach(kk => {
+            const r = R[kk];
+            if (off(r)) bad.push('the motion path, ' + RF690B_HOW[kk] + ' on the dot at 2 s: the keyframe the first finger dragged moved ' + fmt(r) + ' project px, not ' + Math.round(want) + ' right, and the one under the second finger moved ' + hb4J({ x: Math.round(r.ox), y: Math.round(r.oy) }) + ' — the second finger took the drag');
+          });
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { hb4Restore(saved); }
+  });
+
+  test('690 real input: a second finger that lands while one finger moves the Touch-up box leaves the box moving by the first finger only', { item: '690', budgetMs: 90000 }, async function () {
+    needsTouch924();
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = FM.makeLayer('shape', { name: 'RF690b touch-up', shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#3b82f6', start: 0, duration: 6 });
+          L.effects = [{ type: 'touchup', enabled: false, params: { x: 30, y: 25, w: 40, h: 30 } }];
+          await hb4Scene([L]);
+          FM.selectLayer(L.id); await hb4Wait(200);
+          const fx = L.effects[0];
+          const pr = () => document.getElementById('preview').getBoundingClientRect();
+          const pct = (px, py) => { const r = pr(); return { x: r.left + px / 100 * r.width, y: r.top + py / 100 * r.height }; };
+          const open = async () => {
+            if (FM.touchupTool.isOpen()) FM.touchupTool.close();
+            fx.params.x = 30; fx.params.y = 25; fx.params.w = 40; fx.params.h = 30;
+            FM.touchupTool.open(L.id, fx); await hb4Wait(300);
+            if (!FM.touchupTool.isOpen() || !document.getElementById('touchup-overlay')) throw new Error('setup: the Touch-up box did not open');
+          };
+          try {
+            /* the first finger moves the box from inside it 40 px right; the second lands inside it too */
+            const R = await rf690bThree({
+              what: 'the Touch-up box', sel: '#touchup-overlay', u: { x: 1, y: 0 }, m: { x: 15, y: 0 }, reset: open,
+              where: () => ({ a: pct(40, 35), b: pct(60, 48) }),
+              read: () => ({ x: +fx.params.x, y: +fx.params.y, w: +fx.params.w, h: +fx.params.h }),
+            });
+            const r = pr(), want = { x: 30 + 40 / r.width * 100, y: 25, w: 40, h: 30 };
+            const off = c => Math.abs(c.x - want.x) > 2.5 / r.width * 100 + 0.1 || Math.abs(c.y - want.y) > 2.5 / r.height * 100 + 0.1 || Math.abs(c.w - 40) > 0.15 || Math.abs(c.h - 30) > 0.15;
+            const fmt = c => hb4J({ x: Math.round(c.x * 10) / 10, y: Math.round(c.y * 10) / 10, w: c.w, h: c.h });
+            if (off(R.one)) throw new Error('CONTROL: one finger moving the Touch-up box 40 px right made it ' + fmt(R.one) + ' percent, not ' + fmt(want) + ' — the tool is not taking the finger the way this test reads it');
+            const bad = [];
+            ['case', 'move'].forEach(k => { if (off(R[k])) bad.push('the Touch-up box, ' + RF690B_HOW[k] + ' inside it: the box is ' + fmt(R[k]) + ' percent, not ' + fmt(want) + ' — the second finger took the drag and the box leapt by the gap between his fingers'); });
+            if (bad.length) throw new Error(bad.join('; AND '));
+          } finally { try { if (FM.touchupTool.isOpen()) FM.touchupTool.close(); } catch (e) {} }
+        });
+      }, 380);
+    } finally { hb4Restore(saved); }
+  });
+
+  test('690 real input: a second finger that lands while one finger drags the gradient on the canvas leaves it moving by the first finger only', { item: '690', budgetMs: 90000 }, async function () {
+    needsTouch924();
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = FM.makeLayer('shape', { name: 'RF690b fill', shape: 'rect', x: 540, y: 960, shapeW: 800, shapeH: 800, fill: '#ffffff', start: 0, duration: 6 });
+          L.fillMode = 'gradient';
+          L.fillGradient = { enabled: true, type: 'radial', angle: 0, c0: '#ffffff', c1: '#000000' };
+          await hb4Scene([L]);
+          FM.selectLayer(L.id); await hb4Wait(200);
+          FM.inspector.openCategory('color'); await hb4Wait(400);
+          if (!FM.fillDrag.isActive() || FM.fillDrag.layerId() !== L.id || FM.fillDrag.mode() !== 'gradient') throw new Error('setup: Colouring on a gradient shape did not start dragging the gradient on the canvas');
+          const offNow = () => { const g = L.fillGradient || {}; return { x: +FM.evalProp(g.ox, 0) || 0, y: +FM.evalProp(g.oy, 0) || 0 }; };
+          /* the first finger drags from the centre 40 px right; the second lands inside the shape STRAIGHT BELOW the centre.
+             (the second refuter's N1) Not down and to the left: at 380 the 800 px shape is about 120 px across, and (-40, +50)
+             was inside the bottom-left scale handle's 44 px touch pad, which sits above #fd-overlay, so that press never reached
+             the fill and the test could not go green. (0, +45) is about 38 px clear of both bottom corner pads, and its move to
+             (+15, +45) about 23 px; rf690bThree now refuses any finger whose point is not on #fd-overlay. */
+          const R = await rf690bThree({
+            what: 'the gradient on the canvas', sel: '#fd-overlay', u: { x: 1, y: 0 }, m: { x: 15, y: 0 },
+            reset: async () => { L.fillGradient.ox = 0; L.fillGradient.oy = 0; FM.requestRender(); await hb4Wait(250); },
+            where: () => { const s = hb4Screen(540, 960); return { a: s, b: { x: s.x, y: s.y + 45 } }; },
+            read: () => offNow(),
+          });
+          if (!(R.one.x > 0.01) || Math.abs(R.one.y) > R.one.x / 40 * 2.5) throw new Error('CONTROL: one finger dragging the gradient 40 px right moved its centre ' + hb4J(R.one) + ' box widths — the tool is not taking the finger the way this test reads it');
+          const tol = Math.max(0.003, R.one.x / 40 * 2.5);
+          const bad = [];
+          ['case', 'move'].forEach(k => {
+            const c = R[k];
+            if (Math.abs(c.x - R.one.x) > tol || Math.abs(c.y - R.one.y) > tol) bad.push('the gradient, ' + RF690B_HOW[k] + ': its centre moved ' + hb4J({ x: Math.round(c.x * 1000) / 1000, y: Math.round(c.y * 1000) / 1000 }) + ' box widths, one finger alone moved it ' + hb4J({ x: Math.round(R.one.x * 1000) / 1000, y: Math.round(R.one.y * 1000) / 1000 }) + ' — the second finger took the drag');
+          });
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { hb4Restore(saved); }
+  });
+
+  test('690 real input: a second finger that touches the mask Swipe to nudge pad mid-swipe does not throw the point, it moves by the first finger only', { item: '690', budgetMs: 90000 }, async function () {
+    needsTouch924();
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const L = FM.makeLayer('shape', { name: 'RF690b nudge', shape: 'rect', x: 540, y: 960, shapeW: 1080, shapeH: 1920, fill: '#3b82f6', start: 0, duration: 6 });
+          const mk = FM.masks.make('add'); mk.path = [[200, 500], [400, 500], [400, 900], [200, 900]]; mk.closed = true;
+          L.masks = [mk];
+          await hb4Scene([L]);
+          FM.selectLayer(L.id); await hb4Wait(200);
+          FM.maskTool.open(L.id, mk.id); await hb4Wait(350);
+          if (!FM.maskTool.isActive()) throw new Error('setup: the mask editor did not open');
+          FM.maskTool._select(1); await hb4Wait(250);
+          const padNow = () => document.querySelector('#mask-bar .mk-pad');
+          if (!padNow()) throw new Error('setup: selecting a mask point did not offer the Swipe to nudge pad');
+          const pt = () => { const q = FM.maskTool._points()[1]; return q ? { x: q[0], y: q[1] } : { x: NaN, y: NaN }; };
+          let q0;
+          /* the first finger swipes 40 px right from the pad's left end; the second touches its right end.
+             (F2) Its own move has a y part: with x alone, a pad 73 to 77 px wide makes the move-clause mutant land on the
+             67.5 this test wants. 10 px of y is 16.9 project px, past the tolerance, and stays inside the 40 px tall pad. */
+          const R = await rf690bThree({
+            what: 'the Swipe to nudge pad', sel: '.mk-pad', u: { x: 1, y: 0 }, m: { x: -15, y: 10 },
+            reset: async () => { await hb4Wait(150); },
+            where: () => {
+              const pad = padNow(); if (!pad) throw new Error('setup: the Swipe to nudge pad is gone');
+              q0 = pt();
+              const r = pad.getBoundingClientRect(), y = r.top + r.height / 2;
+              return { a: { x: r.left + 10, y: y }, b: { x: r.right - 10, y: y } };
+            },
+            read: () => { const q = pt(); return { dx: q.x - q0.x, dy: q.y - q0.y }; },
+          });
+          const sens = (FM.scene.project.width || 1080) / 640, want = 40 * sens, tol = 2 * sens + 0.5;
+          const r1 = v => Math.round(v * 10) / 10;
+          if (!(Math.abs(R.one.dx - want) <= tol && Math.abs(R.one.dy) <= tol)) throw new Error('CONTROL: one finger swiping the nudge pad 40 px right moved the point ' + hb4J({ x: r1(R.one.dx), y: r1(R.one.dy) }) + ' project px, not ' + r1(want) + ' — the pad is not taking the finger the way this test reads it');
+          const bad = [];
+          ['case', 'move'].forEach(k => {
+            const r = R[k];
+            if (!(Math.abs(r.dx - want) <= tol && Math.abs(r.dy) <= tol)) bad.push('the nudge pad, ' + RF690B_HOW[k] + ': the point moved ' + hb4J({ x: r1(r.dx), y: r1(r.dy) }) + ' project px, not ' + r1(want) + ' by the first finger — the second finger restarted the swipe from itself');
+          });
+          if (bad.length) throw new Error(bad.join('; AND '));
+        });
+      }, 380);
+    } finally { hb4Restore(saved); }
+  });
+
+  test('690 real input: a second finger on the Z pad, the rotation ring or the anchor pad mid-swipe does not take the gesture, each moves by the first finger only', { item: '690', budgetMs: 150000 }, async function () {
+    needsTouch924();
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const S = FM.makeLayer('shape', { name: 'RF690b pads', shape: 'rect', x: 300, y: 700, shapeW: 200, shapeH: 200, fill: '#e0245e', start: 0, duration: 6 });
+          await hb4Scene([S]);
+          FM.selectLayer(S.id); await hb4Wait(200);
+          const ev = (k, d) => { const v = S.transform[k]; return v == null ? d : (+FM.evalProp(v, FM.time)); };
+          const r1 = v => Math.round(v * 1000) / 1000;
+          const bad = [];
+          /* 1. THE Z PAD (tap Z): vertical, gain project width / 640 x 2; the second finger lands 60 px lower and to the right */
+          FM._mtMode = 'move'; FM.inspector.openCategory('transform'); await hb4Wait(350);
+          FM._mtAxis = 'z'; FM.inspector.refresh(); await hb4Wait(350);
+          const zpad = () => document.querySelector('.mt-zpad');
+          if (!zpad()) throw new Error('setup: tapping Z did not turn the Move pad into the Z pad');
+          const zs = ((FM.scene.project.width || 1080) / 640) * 2;
+          const Z = await rf690bThree({
+            what: 'the Z pad', sel: '.mt-zpad', u: { x: 0, y: 1 }, m: { x: 0, y: 15 },
+            reset: async () => { S.transform.z = 0; FM.requestRender(); await hb4Wait(200); },
+            where: () => {
+              const p = zpad(); if (!p) throw new Error('setup: the Z pad is gone');
+              const r = p.getBoundingClientRect();
+              return { a: { x: r.left + 40, y: r.top + 20 }, b: { x: r.right - 40, y: Math.min(r.top + 80, r.bottom - 25) } };
+            },
+            read: () => ({ z: ev('z', 0) }),
+          });
+          const zWant = 40 * zs, zTol = 2 * zs + 1;
+          if (Math.abs(Z.one.z - zWant) > zTol) throw new Error('CONTROL: one finger swiping the Z pad 40 px down put Z at ' + r1(Z.one.z) + ', not ' + r1(zWant) + ' — the pad is not taking the finger the way this test reads it');
+          ['case', 'move'].forEach(k => { if (Math.abs(Z[k].z - zWant) > zTol) bad.push('the Z pad, ' + RF690B_HOW[k] + ': Z is ' + r1(Z[k].z) + ', not ' + r1(zWant) + ' — the second finger restarted the swipe from itself'); });
+          /* 2. THE ROTATION RING: the first finger starts 55 px right of its centre and goes 40 px down; the second lands 55 px left */
+          FM._mtMode = 'rotate'; FM.inspector.openCategory('transform'); await hb4Wait(400);
+          const ring = () => document.querySelector('.mt-dial-ring');
+          if (!ring()) throw new Error('setup: Rotate in Move and Transform has no dial ring');
+          const T = await rf690bThree({
+            what: 'the rotation ring', sel: '.mt-dial-ring', u: { x: 0, y: 1 }, m: { x: 0, y: 15 },
+            reset: async () => { S.transform.rotation = 0; FM.requestRender(); await hb4Wait(200); },
+            where: () => {
+              const p = ring(); if (!p) throw new Error('setup: the dial ring is gone');
+              const r = p.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+              if (r.width < 120) throw new Error('setup: the dial ring is only ' + Math.round(r.width) + ' px wide');
+              return { a: { x: cx + 55, y: cy }, b: { x: cx - 55, y: cy } };
+            },
+            read: () => ({ rot: ev('rotation', 0) }),
+          });
+          const rWant = Math.round(Math.atan2(40, 55) * 180 / Math.PI);
+          if (Math.abs(T.one.rot - rWant) > 2) throw new Error('CONTROL: one finger turning the ring from 3 o’clock 40 px down set the rotation to ' + r1(T.one.rot) + ', not about ' + rWant + ' — the ring is not taking the finger the way this test reads it');
+          ['case', 'move'].forEach(k => { if (Math.abs(T[k].rot - rWant) > 2) bad.push('the rotation ring, ' + RF690B_HOW[k] + ' at 9 o’clock: the rotation is ' + r1(T[k].rot) + ', not about ' + rWant + ' — the second finger restarted the turn from its own angle'); });
+          /* 3. THE ANCHOR PAD: 260 px of swipe crosses the layer; the second finger lands 150 px to the right */
+          FM._mtMode = 'anchor'; FM.inspector.openCategory('transform'); await hb4Wait(400);
+          const apad = () => { const p = document.querySelector('.mt-trackpad'); return p && /anchor/i.test(p.textContent || '') ? p : null; };
+          if (!apad()) throw new Error('setup: Move and Transform has no anchor pad in its anchor mode');
+          /* (F2) the second finger's own move has a y part, as on the other pads. 16 px, not 12: the pad snaps within 0.045 of a
+             quarter point (11.7 px of swipe), so 12 px would sit 0.3 px from being snapped back to 0.5; 16 px is 0.062 */
+          const A = await rf690bThree({
+            what: 'the anchor pad', sel: '.mt-trackpad', u: { x: 1, y: 0 }, m: { x: -15, y: 16 },
+            reset: async () => { S.transform.anchorX = 0.5; S.transform.anchorY = 0.5; S.transform.x = 300; S.transform.y = 700; FM.requestRender(); await hb4Wait(200); },
+            where: () => {
+              const p = apad(); if (!p) throw new Error('setup: the anchor pad is gone');
+              const r = p.getBoundingClientRect(), y = r.top + r.height / 2;
+              return { a: { x: r.left + 30, y: y }, b: { x: Math.min(r.left + 180, r.right - 12), y: y } };
+            },
+            read: () => ({ ax: ev('anchorX', 0.5), ay: ev('anchorY', 0.5) }),
+          });
+          const aWant = 0.5 + 40 / 260, aTol = 0.012;
+          if (Math.abs(A.one.ax - aWant) > aTol || Math.abs(A.one.ay - 0.5) > aTol) throw new Error('CONTROL: one finger swiping the anchor pad 40 px right put the anchor at ' + hb4J({ x: r1(A.one.ax), y: r1(A.one.ay) }) + ', not ' + hb4J({ x: r1(aWant), y: 0.5 }) + ' — the pad is not taking the finger the way this test reads it');
+          ['case', 'move'].forEach(k => { const c = A[k]; if (Math.abs(c.ax - aWant) > aTol || Math.abs(c.ay - 0.5) > aTol) bad.push('the anchor pad, ' + RF690B_HOW[k] + ': the anchor is at ' + hb4J({ x: r1(c.ax), y: r1(c.ay) }) + ', not ' + hb4J({ x: r1(aWant), y: 0.5 }) + ' — the second finger restarted the swipe from itself'); });
           if (bad.length) throw new Error(bad.join('; AND '));
         });
       }, 380);
@@ -149683,8 +150494,9 @@
     const bad = [];
     const r = _cgListed('splittone', ['split toning', 'split tone', 'tint', 'teal and orange', 'grade', 'cinematic'], bad);
     const keys = r.params.map(p => p.key).join();
-    /* + blending: #966 opts10 (18 Oct) gave Split Toning a Blending row (100 % = today's look); '966 opts10' pins it */
-    if (keys !== 'shadows,highlights,balance,keep,mix,blending,color,color2') bad.push('its controls are ' + keys + ', not shadows, highlights, balance, keep, mix, blending, color, color2');
+    /* + blending: #966 opts10 (18 Oct) gave Split Toning a Blending row (100 % = today's look); '966 opts10' pins it · + skin: #966
+       opts20 (27 Oct) Protect skin (0 % = today's look); '966 opts20' pins it */
+    if (keys !== 'shadows,highlights,balance,keep,mix,blending,skin,color,color2') bad.push('its controls are ' + keys + ', not shadows, highlights, balance, keep, mix, blending, skin, color, color2');
     const DEF = { shadows: 50, highlights: 50, balance: 0, keep: 100, mix: 100, color: '#1e90a0', color2: '#ffa04a' };
     const inst = FM.fxRegistry.makeInstance('splittone').params;
     Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
@@ -183908,7 +184720,9 @@
    * CONTROL, (c) at the defaults the kernel is today's picture byte for byte, (d) every new control off its default moves the very fixtures
    * (c) holds still. The (b) tests do not stop at a missing row: on the base code the kernel ignores the new keys and the picture is
    * judged and fails. All three are PIXEL_FX point ops (PIXEL_ADJ too); Protect skin runs through round thirteen's tone13 and Keep colour
-   * through round eighteen's tcKeep18, so this block reuses the _o13 helpers, round fourteen's _o14Want and round eighteen's _o18Cmp,
+   * through round eighteen's tcKeep18 — Gamma's still; since round twenty (#966 opts20) Exposure's runs through exposureKeep20, which
+   * moves only the colours a channel clips, read here through its letter-for-letter twin _o20Keep (defined with the opts20 block
+   * below, the same file scope) — so this block reuses the _o13 helpers, round fourteen's _o14Want and round eighteen's _o18Cmp,
    * _o18SetLum, _o18Keep and _O18_TCROW (the same file scope, defined above), and adds only the ones that read this round's own keys.
    * Every comparison of two pictures is within ONE render path (#1183). ═══ */
   const _o19Need = (type, keys) => {
@@ -183957,11 +184771,13 @@
     return E1.count(ker, _o13Lay(pic(W, H), ker, wf), 0);
   };
   /* (b) for Keep colour: on the busy picture, Keep colour kc (and Protect skin sk) laid on `extra` draws the kernel's own picture without
-     the new keys, put at its own brightness in the picture's colour by kc (_o18Keep, what tcKeep18 draws), then laid in by 1 − sk x the
-     skin weight — the worst pixel and where, or null; and how many pixels Keep colour alone takes off the kernel's picture */
+     the new keys, put at its own brightness in the picture's colour by kc (_o18Keep for Gamma, what tcKeep18 draws; since round twenty
+     _o20Keep for Exposure, exposureKeep20 to the letter, the picture's hue at a bounded saturation), then laid in by 1 − sk x the skin
+     weight — the worst pixel and where, or null; and how many pixels Keep colour alone takes off the kernel's picture. Both keepers
+     are their kernels' own arithmetic in the same order, so the comparison is exact */
   const _o19KeepWorst = (type, kc, sk, extra) => {
     const ker = _o13Run(type, _o13Del(_o13P(type, extra), _O19_NEW[type]), 96, 72, _o13Pic(96, 72), 0.5);
-    const kept = _o18Keep(_o13Pic(96, 72), ker, kc);
+    const kept = type === 'exposure' ? _o20Keep(_o13Pic(96, 72), ker, kc) : _o18Keep(_o13Pic(96, 72), ker, kc);
     const want = sk ? _o13Lay(_o13Pic(96, 72), kept, (r, g, b) => _o13W(100, 0, 0, sk, _o13Skin(r, g, b))) : kept;
     return { w: _o18Cmp(_o13Run(type, _o13P(type, Object.assign({}, extra, { keepcol: kc, skin: sk })), 96, 72, _o13Pic(96, 72), 0.5), want, 96), off: E1.count(ker, kept, 0) };
   };
@@ -184010,7 +184826,7 @@
       _O19_OFF[type].forEach(([on, o]) => {
         const base = _o13shot([_o13Rect(fxOf(type, Object.assign({}, P, on)))], 0.61, W, H, null, BG);
         const n = E1.count(base, _o13shot([_o13Rect(fxOf(type, Object.assign({}, P, on, o)))], 0.61, W, H, null, BG), 2);
-        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels; its warm half (hue 40°, saturation 0.2 to 0.6) is skin to the skin window, so Protect skin 100 gives back most of that half; Keep colour 100 puts the gamma's or the exposure's lost richness back on every coloured pixel (the blue end by 8 levels or more); Show selection turns the drained grey rect into a black matte */);
+        if (n < 130) bad.push('CONTROL: ' + type + ' ' + JSON.stringify(o) + ' moves only ' + n + ' pixels of the frame through the compositor' /* MEASURE: reasoned, not run — the rect is 100 x 70 = 7000 pixels; its warm half (hue 40°, saturation 0.2 to 0.6) is skin to the skin window, so Protect skin 100 gives back most of that half; Keep colour 100 puts the gamma's lost richness back on every coloured pixel (the blue end by 8 levels or more), and since round twenty the exposure's hue back on every colour a channel clips — both ends of the gradient clip at 0.8 EV (28, 111, 255 → 34, 108, 255 and 255, 255, 167 → 255, 244, 223), roughly 60 % of the rect; Show selection turns the drained grey rect into a black matte */);
       });
     });
     if (bad.length) throw new Error(bad.join(' · '));
@@ -184139,20 +184955,31 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
   /* KEEP COLOUR, worked as Gamma's above with the exposed bytes in place of the curve's: a sky (70, 130, 210) exposes to (121.9, 226.3,
-     365.6) → (122, 226, 255) — the blue channel clips, so the sky turns from 214.3° to 193.1°, toward cyan — and Keep colour 100 puts the
-     sky at that brightness in its own colour, desaturated toward its grey where it would pass white instead of clipped: (165, 204, 255),
-     hue 214.0°; 50 lands at (144, 215, 255); the light skin tone exposes to (255, 255, 226) — a face gone yellow-white, 60° — and 100
-     gives (255, 251, 247), still 26.7°, 50 (255, 253, 237); the green (60, 170, 80) exposes to (104, 255, 139) → 100 (130, 240, 150), 50
-     (117, 247, 144); a red (200, 40, 40) exposes to (255, 70, 70) → 100 (237, 77, 77), 50 (246, 74, 74); the grey 128 stays 223. None of
-     these sits within 0.01 of a tie. On the base code Keep colour is ignored and the sky turns cyan. */
-  test('966 opts19 Exposure Keep colour: at 100 % a sky reads 165, 204, 255 — still blue, where the plain exposure turns it toward cyan at 122, 226, 255 — and a red 237, 77, 77, at 50 % half way, a grey ramp is the exposure itself byte for byte, and stopped down, with a Black point and rolloff, in Linear light, Affects, Mix and Protect skin every pixel of a busy picture is its own colour put at the exposed brightness by Keep colour to the level (CONTROL: at 0 % the sky reads 122, 226, 255 and the red 255, 70, 70)', { item: '966', budgetMs: 60000 }, function () {
+     365.6) → (122, 226, 255) — the blue channel clips, so the sky turns from 214.3° to 193.1°, toward cyan. Since round twenty (#966
+     opts20) Keep colour is exposureKeep20's: the picture's own hue at a saturation no higher than the picture's or the plain
+     exposure's, put at the exposed brightness and cut toward its grey where it would pass white — no longer the picture's channel
+     gaps. Keep colour 100 puts the sky at (165.486, 203.849, 255) → (165, 204, 255), hue 214.0° (round nineteen's gaps ended on the
+     same gamut point along the sky's own hue), 50 at (144, 215, 255); the light skin tone exposes to (255, 255, 226) — a face gone
+     yellow-white, 60° — and 100 gives (255, 250.827, 247.488) → (255, 251, 247), still 26.7°, 50 (255, 253, 237), as before; the green
+     (60, 170, 80) exposes to (104, 255, 139), saturation 0.592, and 100 gives (106.193, 255, 133.249) → (106, 255, 133), its own hue
+     at saturation 0.584, as rich as the exposure leaves it (round nineteen's gaps gave 130, 240, 150, saturation 0.458), 50 (105, 255,
+     136); a red (200, 40, 40) exposes to (255, 70, 70), whose hue does not turn, so 100 and 50 are exactly (255, 70, 70) (round
+     nineteen's gaps gave 237, 77, 77 and 246, 74, 74); the grey 128 stays 223. The nearest of these to a tie is the face's blue at
+     100, 247.488, over 0.01 away (worked in IEEE doubles in the kernel's own order, scratchpad rfx20-calc.ps1). _o20Keep is
+     exposureKeep20 to the letter, so every comparison with it is exact. On the base code (round nineteen) the green reads 130, 240,
+     150 and the red 237, 77, 77. */
+  test('966 opts19 Exposure Keep colour: at 100 % a sky reads 165, 204, 255 — still blue, where the plain exposure turns it toward cyan at 122, 226, 255 — and a green 106, 255, 133, its own hue as rich as the exposure leaves it, at 50 % half way, a grey ramp is the exposure itself byte for byte, and stopped down, with a Black point and rolloff, in Linear light, Affects, Mix and Protect skin every pixel of a busy picture is its own hue put at the exposed brightness, no richer than the picture or the exposure, by Keep colour to the level (CONTROL: at 0 % the sky reads 122, 226, 255 and the green 104, 255, 139)', { item: '966', budgetMs: 60000 }, function () {
     const bad = [], N = _O18_TCROW.length, row = _o13Row(_O18_TCROW);
     const run = over => _o13Run('exposure', _o13P('exposure', over), N, 1, row(), 0.5);
     const plain = run({});
     _o14Want(bad, plain, _O18_TCROW, [[122, 226, 255], [255, 255, 226], [104, 255, 139], [223, 223, 223], [255, 70, 70]], 'CONTROL at 0 %');
     const full = run({ keepcol: 100 });
-    _o14Want(bad, full, _O18_TCROW, [[165, 204, 255], [255, 251, 247], [130, 240, 150], [223, 223, 223], [237, 77, 77]], 'Keep colour 100');
-    _o14Want(bad, run({ keepcol: 50 }), _O18_TCROW, [[144, 215, 255], [255, 253, 237], [117, 247, 144], [223, 223, 223], [246, 74, 74]], 'Keep colour 50');
+    _o14Want(bad, full, _O18_TCROW, [[165, 204, 255], [255, 251, 247], [106, 255, 133], [223, 223, 223], [255, 70, 70]], 'Keep colour 100');
+    _o14Want(bad, run({ keepcol: 50 }), _O18_TCROW, [[144, 215, 255], [255, 253, 237], [105, 255, 136], [223, 223, 223], [255, 70, 70]], 'Keep colour 50');
+    [50, 100].forEach(k => {
+      const e = E1.maxDiff(run({ keepcol: k }), _o20Keep(row(), plain, k));
+      if (e !== 0) bad.push('Keep colour ' + k + ' draws up to ' + e + ' levels away from exposureKeep20 worked to the letter (_o20Keep)');
+    });
     const h0 = _o19Hue(70, 130, 210), sp = _o13At(plain, N, 0, 0), sk = _o13At(full, N, 0, 0);
     const dPlain = Math.abs(_o19Hue(sp[0], sp[1], sp[2]) - h0), dKeep = Math.abs(_o19Hue(sk[0], sk[1], sk[2]) - h0);
     if (!(dPlain > 15)) bad.push('CONTROL: the plain exposure turns the sky only ' + dPlain.toFixed(1) + '° off its own hue, so Keep colour has nothing to keep');
@@ -184165,14 +184992,14 @@
     [[100, 0, {}], [35, 0, {}], [100, 0, { stops: -1.5 }], [60, 0, { offset: 20, rolloff: 40 }], [100, 0, { space: 1, stops: 1.3 }], [100, 0, { range: 3 }], [70, 0, { mix: 50 }], [100, 60, {}]].forEach(([kc, sk2, extra]) => {
       const res = _o19KeepWorst('exposure', kc, sk2, extra);
       if (res.w) bad.push('Keep colour ' + kc + (sk2 ? ' with Protect skin ' + sk2 : '') + ' and ' + JSON.stringify(extra) + ': pixel (' + res.w.x + ', ' + res.w.y + ') reads ' + res.w.got + ', not ' + res.w.want + ' (its own colour at the exposed brightness' + (sk2 ? ', then laid in by 1 − its skin weight' : '') + ')');
-      if (kc === 100 && !sk2 && !Object.keys(extra).length && res.off < 1000) bad.push('CONTROL: Keep colour 100 takes only ' + res.off + ' of 6912 pixels of the busy picture off the exposure, so the check above proves little' /* MEASURE: reasoned, not run — a multiply grows every coloured pixel's channel gaps, Keep colour holds them, so every coloured pixel short of black moves */);
+      if (kc === 100 && !sk2 && !Object.keys(extra).length && res.off < 1000) bad.push('CONTROL: Keep colour 100 takes only ' + res.off + ' of 6912 pixels of the busy picture off the exposure, so the check above proves little' /* MEASURE: reasoned, not run — since round twenty Keep colour moves every colour a channel clips (below white a multiply already keeps the colour, so it hands back the plain exposure): of the blue-230 cells all but the near-white ones (red and green both 147 or more, which expose to pure white) and the r = g diagonal, about 2,800, and the blue-40 cells with red or green 147 or more, roughly 5,000 of 6912 in all (rfx20 F4, xfx20 F4) */);
     });
     if (bad.length) throw new Error(bad.join(' · '));
   });
   test('966 opts19 Exposure at Protect skin 0 % and Keep colour 0 % draws byte for byte what it drew without them — at its defaults, stopped down and pushed, with a Black point and Highlight rolloff, in Linear light with a Gamma, Darks, Mix, keyframed, and on a half-size plate (CONTROL: Protect skin and Keep colour each move the same fixtures)', { item: '966', budgetMs: 60000 }, function () {
     _o19Need('exposure', _O19_NEW.exposure);
     const bad = _o19Ident('exposure', [{}, { over: { stops: -1.5 } }, { over: { stops: 2.4 } }, { over: { offset: 20, rolloff: 40 } }, { over: { space: 1, gamma: 1.4 } }, { over: { range: 1 } }, { over: { mix: 60 } }, { over: { stops: _o13KF(-1, 2) }, t: 0.37 }, { ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: 6, H: 1 }, { pic: _o13Row(_O18_TCROW), W: 5, H: 1 }]);
-    _O19_OFF.exposure.forEach(([on, o]) => { const n = _o19Moves('exposure', on, o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — Protect skin 100 gives back the warm cells (blue 40, red over green), roughly a quarter of the picture; Keep colour 100 holds every coloured pixel's channel gaps where the multiply grows them */); });
+    _O19_OFF.exposure.forEach(([on, o]) => { const n = _o19Moves('exposure', on, o, 96, 72, _o13Pic, 0.5); if (n < 500) bad.push('CONTROL: ' + JSON.stringify(o) + ' moves only ' + n + ' of 6912 pixels' /* MEASURE: reasoned, not run — Protect skin 100 gives back the warm cells (blue 40, red over green), roughly a quarter of the picture; Keep colour 100 (since round twenty) turns every colour a channel clips back to its own hue, roughly 5,000 of the 6912 pixels (rfx20 F4, xfx20 F4) */); });
     if (bad.length) throw new Error(bad.join(' · '));
   });
   /* ---- end Exposure ---- */
@@ -184326,6 +185153,207 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts19 ──
+
+  /* ═══ #966: MORE CHOICE, ROUND TWENTY (codex/fx20, written by OpenAI Codex; folded 27 Oct with review rfx20 and its refutation
+   * xfx20). Exposure's Keep colour is bounded (exposureKeep20: the picture's own hue at a saturation no higher than the picture's or
+   * the plain exposure's, so it moves only the colours a channel clips and never grows colour in lifted noise), and Split Toning,
+   * Tint and Faded Film get Protect skin (Teal & Orange's skin window through tone13). WRITTEN WITHOUT RUNNING: nothing but
+   * `node --check`; every number is reasoned from the code it names, and a bound only a run can set says MEASURE beside it. ═══ */
+  /* the HSV saturation and the Rec.601 brightness of an [r, g, b] */
+  const _o20Sat = a => { const hi = Math.max(a[0], a[1], a[2]); return hi ? (hi - Math.min(a[0], a[1], a[2])) / hi : 0; };
+  const _o20Y = a => 0.299 * a[0] + 0.587 * a[1] + 0.114 * a[2];
+  /* exposureKeep20 (js/compositor.js) to the letter, as _o18SetLum / _o18Keep are tcKeep18's: each opaque pixel of the exposure's own
+     bytes `plain` moved Keep colour `keep` (0–100) of the way to the picture's `src` hue at a saturation no higher than the picture's
+     or the plain pixel's, at the plain brightness, cut toward that grey where it would pass white, into a clamped array as the
+     kernel's plate is. The same operations on the same values in the same order, so a comparison with it is exact (this round's
+     review, rfx20 F1: Codex's HSV re-spelling of the same algebra rounded differently and needed a level of slack that hid every
+     one-level fault). The design itself is checked apart from this twin by _o20Bounds below, from the bytes alone. */
+  const _o20Keep = (src, plain, keep) => {
+    const k = keep > 0 ? Math.min(1, keep / 100) : 0, d = new Uint8ClampedArray(plain);
+    if (!(k > 0)) return d;
+    for (let i = 0; i < d.length; i += 4) {
+      if (src[i + 3] === 0) continue;
+      const r = src[i], g = src[i + 1], b = src[i + 2], hi = Math.max(r, g, b), lo = Math.min(r, g, b), gap = hi - lo;
+      const R = d[i], G = d[i + 1], B = d[i + 2], mx = Math.max(R, G, B), mn = Math.min(R, G, B);
+      const Y = 0.299 * R + 0.587 * G + 0.114 * B;
+      const sat = hi > 0 && mx > 0 ? Math.min(gap / hi, (mx - mn) / mx) : 0;
+      const hR = gap > 0 ? (r - lo) / gap : 0, hG = gap > 0 ? (g - lo) / gap : 0, hB = gap > 0 ? (b - lo) / gap : 0;
+      const hY = 0.299 * hR + 0.587 * hG + 0.114 * hB;
+      let c = sat * Y / (1 - sat * (1 - hY));
+      if (hY > 0) c = Math.min(c, Y / hY);
+      if (hY < 1) c = Math.min(c, (255 - Y) / (1 - hY));
+      d[i] = R + (Y + c * (hR - hY) - R) * k;
+      d[i + 1] = G + (Y + c * (hG - hY) - G) * k;
+      d[i + 2] = B + (Y + c * (hB - hY) - B) * k;
+    }
+    return d;
+  };
+  const _o20Exposure = (pixels, over) => _o13Run('exposure', _o13P('exposure', over), pixels.length, 1, _o13Row(pixels)(), 0.5);
+  const _o20Bounds = (src, plain, kept) => {
+    const Y = _o20Y(plain), cap = Math.min(_o20Sat(src), _o20Sat(plain));
+    /* Half a byte per rounded channel bounds luma error by 0.5; saturation's numerator can grow one byte and its denominator
+       shrink half a byte. This is a quantisation bound, not a fitted visual tolerance. */
+    const hi = Math.max.apply(null, kept.slice(0, 3)), slack = hi > 0.5 ? (1 + cap * 0.5) / (hi - 0.5) : 0;
+    if (Math.abs(_o20Y(kept) - Y) > 0.500000001) throw new Error('brightness moved: ' + plain + ' → ' + kept);
+    if (_o20Sat(kept) > cap + slack) throw new Error('saturation exceeds its byte rounding bound');
+    if (kept.some(v => v < 0 || v > 255)) throw new Error('outside byte gamut');
+  };
+  test('966 opts20 Exposure saturation keeps a pushed colour near its original half saturation (CONTROL: plain exposure pushes the pixel)', { item: '966' }, async function () {
+    const src = [60, 90, 120], plain = Array.from(_o20Exposure([src], {})), kept = Array.from(_o20Exposure([src], { keepcol: 100 }));
+    if (plain[0] !== 104 || plain[1] !== 157 || plain[2] !== 209) throw new Error('CONTROL: the expected +0.8 EV was not drawn');
+    _o20Bounds(src, plain, kept);
+    const hi = Math.max.apply(null, kept.slice(0, 3));
+    if (Math.abs(_o20Sat(kept) - 0.5) > 1.25 / (hi - 0.5)) throw new Error('the pushed colour lost saturation: ' + kept);
+    const sky = [[70, 130, 210]];
+    if (!E1.count(_o20Exposure(sky, {}), _o20Exposure(sky, { keepcol: 100 }), 0)) throw new Error('CONTROL: the clipped sky did not exercise Keep colour');
+  });
+  /* NEAR-BLACK, the reason the design is bounded: at Black point 20 a one-byte red speck (1, 0, 0) lifts to (22, 20, 20), brightness
+     20.598, saturation 2 / 22; Keep colour 100 hands back exactly (22, 20, 20) — c = 20.598 / 10.299 = 2 — never redder than the
+     plain lift (reasoned in the kernel's order, rfx20 N1). The speck check separates this bounded design from a RATIO keeper (the
+     refuted keepRatio19 drew 69, 0, 0); it does not separate it from the base code, whose gap keeper draws (21, 20, 20) and passes
+     it. On the base the test is red through its last line: the lifted companions are not exposureKeep20's. */
+  test('966 opts20 Exposure near-black with Black point 20 cannot grow red noise (CONTROL: the black point lifts black)', { item: '966' }, async function () {
+    const pixels = [[1, 0, 0], [0, 0, 0], [2, 1, 1], [70, 130, 210], [60, 90, 120]], over = { offset: 20 };
+    const plain = _o20Exposure(pixels, over), kept = _o20Exposure(pixels, Object.assign({}, over, { keepcol: 100 }));
+    if (!(plain[4] > 0 && plain[0] > pixels[0][0])) throw new Error('CONTROL: Black point did not lift the noise');
+    pixels.forEach((p, x) => _o20Bounds(p, Array.from(plain.slice(x * 4, x * 4 + 3)), Array.from(kept.slice(x * 4, x * 4 + 3))));
+    if (Math.max(kept[0], kept[1], kept[2]) - Math.min(kept[0], kept[1], kept[2]) > 2) throw new Error('a one-byte speck grew chroma: it reads ' + Array.from(kept.slice(0, 3)).join(', ') /* reasoned, not run: exactly (22, 20, 20), the plain lift's own 2 levels of chroma, so 2 is the bound and not a slack */);
+    if (!E1.count(plain, kept, 0)) throw new Error('CONTROL: the coloured companion did not exercise Keep colour');
+    const m = E1.maxDiff(kept, _o20Keep(_o13Row(pixels)(), plain, 100));
+    if (m !== 0) throw new Error('the lifted pixels draw up to ' + m + ' levels away from exposureKeep20 worked to the letter (_o20Keep)');
+  });
+  test('966 opts20 Exposure Gamma 1.4 shadows stay within both saturation caps (CONTROL: Gamma lifts the shadows)', { item: '966' }, async function () {
+    const pixels = [[12, 24, 48], [30, 45, 60], [60, 90, 120]], over = { stops: 0, gamma: 1.4 };
+    const plain = _o20Exposure(pixels, over), kept = _o20Exposure(pixels, Object.assign({}, over, { keepcol: 100 }));
+    if (!(plain[0] > 12 && _o20Sat(Array.from(plain.slice(0, 3))) < _o20Sat(pixels[0]))) throw new Error('CONTROL: Gamma did not lift and soften the shadow');
+    pixels.forEach((p, x) => {
+      const a = Array.from(plain.slice(x * 4, x * 4 + 3)), b = Array.from(kept.slice(x * 4, x * 4 + 3));
+      _o20Bounds(p, a, b);
+      const hi = Math.max.apply(null, b);
+      if (Math.abs(_o20Sat(b) - _o20Sat(a)) > 1.5 / (hi - 0.5)) throw new Error('Gamma shadows lost the plain saturation');
+    });
+    if (!E1.count(plain, kept, 0)) throw new Error('CONTROL: the hue correction never ran');
+  });
+  test('966 opts20 Exposure grey ramp stays grey at the plain brightness (CONTROL: coloured pixels exercise Keep colour)', { item: '966', budgetMs: 60000 }, async function () {
+    [{}, { offset: 20 }, { gamma: 1.4 }, { space: 1, stops: 2 }].forEach(over => {
+      const run = k => _o13Run('exposure', _o13P('exposure', Object.assign({}, over, { keepcol: k })), 256, 2, _o13Lv(), 0.5);
+      if (E1.maxDiff(run(0), run(100))) throw new Error('grey ramp changed');
+    });
+    if (!E1.count(_o20Exposure([[70, 130, 210]], {}), _o20Exposure([[70, 130, 210]], { keepcol: 100 }), 0)) throw new Error('CONTROL: coloured companion did not change');
+    const colour = [[60, 90, 120]], plain = _o20Exposure(colour, {}), kept = _o20Exposure(colour, { keepcol: 100 });
+    const m = E1.maxDiff(kept, _o20Keep(_o13Row(colour)(), plain, 100));
+    if (m !== 0) throw new Error('the coloured pixel (60, 90, 120) at Keep colour 100 draws up to ' + m + ' levels away from exposureKeep20 worked to the letter — it should be the plain 104, 157, 209 (the base code’s gap keeper draws 123, 153, 183)');
+  });
+  /* THE DESIGN ON EVERY PIXEL, apart from its twin (rfx20 F1): Keep colour 100 on each of the busy picture's 6912 pixels, against
+     _o20Bounds' three rules worked from the bytes alone — the plain brightness to half a level, a saturation no higher than the
+     picture's or the plain exposure's to its byte rounding, inside 0..255. All three hold by construction (the target's HSV
+     saturation is exactly the cap before the gamut bound and lower after it; its brightness is the plain one before rounding). On the
+     base code the gap keeper fails the cap stopped down: (128, 128, 230) at −1.5 EV exposes to (45, 45, 81), saturation 0.444, and
+     keeping its 102-level gap at brightness 49.104 draws (37.476, 37.476, 139.476) → (37, 37, 139), saturation 0.734, far past the
+     cap's 0.443 (the picture's 102 / 230) plus its rounding slack of 0.009 (reasoned, not run). CONTROL: at its defaults Keep colour moves at least 1000 of the
+     pixels. */
+  test('966 opts20 Exposure Keep colour 100 on every pixel of a busy picture keeps the plain brightness to half a level and is no richer than the picture or the plain exposure — at its defaults, stopped down, with a Black point and rolloff, in Linear light, with a Gamma and with a negative Black point (CONTROL: Keep colour moves the busy picture)', { item: '966', budgetMs: 60000 }, async function () {
+    const bad = [];
+    [{}, { stops: -1.5 }, { offset: 20, rolloff: 40 }, { space: 1, stops: 1.3 }, { stops: 0, gamma: 1.4 }, { offset: -30 }].forEach(over => {
+      const pic = _o13Pic(96, 72);
+      const plain = _o13Run('exposure', _o13P('exposure', over), 96, 72, _o13Pic(96, 72), 0.5);
+      const kept = _o13Run('exposure', _o13P('exposure', Object.assign({}, over, { keepcol: 100 })), 96, 72, _o13Pic(96, 72), 0.5);
+      let n = 0, first = '';
+      for (let i = 0; i < pic.length; i += 4) {
+        const s = [pic[i], pic[i + 1], pic[i + 2]], a = [plain[i], plain[i + 1], plain[i + 2]], b = [kept[i], kept[i + 1], kept[i + 2]];
+        try { _o20Bounds(s, a, b); } catch (e) { if (!n) first = 'pixel ' + s.join('/') + ' exposes to ' + a.join(', ') + ' and is kept at ' + b.join(', ') + ': ' + e.message; n++; }
+      }
+      if (n) bad.push(JSON.stringify(over) + ': ' + n + ' of 6912 pixels break a rule, first ' + first);
+      const moved = E1.count(plain, kept, 0);
+      if (!Object.keys(over).length && moved < 1000) bad.push('CONTROL: at its defaults Keep colour 100 moves only ' + moved + ' of 6912 pixels, so the check above proves little' /* MEASURE: reasoned, not run — roughly 5,000 move, every colour a channel clips at 0.8 EV (rfx20 F4, xfx20 F4) */);
+    });
+    if (bad.length) throw new Error(bad.slice(0, 6).join(' · '));
+  });
+
+  const _O20_NEW = { exposure: ['keepcol'], splittone: ['skin'], tint: ['skin'], faded: ['skin'] };
+  /* (c) through the dispatcher's own pixel step (xfx20 R1): _o13Run hands the params to FM._applyPixelFx as they are — no render-time
+     fill — so here the new key is really absent, as in a project saved before it, and the kernel's own `== null` branch is what is
+     read. The compositor pass cannot reach that branch: effectiveFx fills the key back to its default before any kernel sees it.
+     Each case on the busy picture unless it names its own: the effect's other controls off their defaults, a keyframe at 0.37 s, a
+     half-size plate, the grey ramp, the skin row and the sky row */
+  const _O20_IDENT = {
+    exposure: [{}, { over: { stops: -1.5 } }, { over: { offset: 20, rolloff: 40 } }, { over: { space: 1, gamma: 1.4 } }, { over: { range: 1 } }, { over: { mix: 60 } }, { over: { skin: 100 } }, { over: { stops: _o13KF(-1, 2) }, t: 0.37 }],
+    splittone: [{}, { over: { balance: 40, blending: 20 } }, { over: { keep: 0 } }, { over: { mix: 60 } }, { over: { shadows: 0, highlights: 80 } }, { over: { color: '#3060d0', color2: '#ffe0a0' } }, { over: { mix: _o13KF(0, 100) }, t: 0.37 }],
+    tint: [{}, { over: { mode: 1 } }, { over: { range: 1 } }, { over: { range: 2, soft: 40 } }, { over: { preserve: 1 } }, { over: { amount: 0.5, color: '#3060d0' } }, { over: { amount: _o13KF(0, 1) }, t: 0.37 }],
+    faded: [{}, { over: { range: 1 } }, { over: { mix: 60 } }, { over: { tone: -100, fadecol: '#604020' } }, { over: { crush: 150, rolloff: 40, lift: 60 } }, { over: { amount: _o13KF(0, 1) }, t: 0.37 }],
+  };
+  /* (c) THE ONE THAT PROTECTS HIS PROJECTS, for one effect: through the compositor on a layer, a see-through card and an adjustment
+     layer, at 1:1 and on a half-size plate, at two moments, a new instance against the same one without the new key; then the same
+     through the dispatcher with the key really absent (_O20_IDENT). CONTROLS: the effect and its new control at 100 each change
+     every compositor picture; for Exposure, Keep colour 100 on (60, 90, 120) is exposureKeep20's, the plain 104, 157, 209 (the base
+     code's gap keeper draws 123, 153, 183, so on the base this line is the one that is red) */
+  const _o20IdentPin = type => {
+    _o19Need(type, _O20_NEW[type]);
+    if (type === 'exposure') {
+      const pixels = [[60, 90, 120]], plain = _o20Exposure(pixels, {}), kept = _o20Exposure(pixels, { keepcol: 100 });
+      const m = E1.maxDiff(kept, _o20Keep(_o13Row(pixels)(), plain, 100));
+      if (m !== 0) throw new Error('CONTROL: Keep colour 100 on (60, 90, 120) draws up to ' + m + ' levels away from exposureKeep20 worked to the letter — the old gap keeper is still drawn');
+    }
+    const P = _o13P(type), fx = p => ({ type: type, enabled: true, params: p });
+    const card = f => { const L = _o13Rect(f); L.transform.opacity = 0.8; L.fillOpacity = 0.6; L.transform.rotation = 12; return L; };
+    const adj = f => { const L = FM.makeLayer('adjustment', { start: 0, duration: 4 }); L.effects = f ? [f] : []; return L; };
+    const ways = [f => [_o13Rect(f)], f => [card(f)], f => [adj(f), _o13Rect(null)]];
+    ways.forEach(make => {
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const shot = p => _o13shot(make(p ? fx(p) : null), t, 160, 120, rs, '#808080');
+        const a = shot(P), b = shot(_o13Del(P, _O20_NEW[type]));
+        if (E1.maxDiff(a, b)) throw new Error(type + ' default changed the frame');
+        if (!E1.count(a, shot(null), 0)) throw new Error('CONTROL: effect did not change this surface');
+        const on = Object.assign({}, P); on[_O20_NEW[type][0]] = 100;
+        if (!E1.count(a, shot(on), 0)) throw new Error('CONTROL: control did not change this surface');
+      }));
+    });
+    const bad = [];
+    _O20_IDENT[type].concat([{ ps: 0.5 }, { pic: _o13Lv, W: 256, H: 2 }, { pic: _o13Row(_O13_SKIN), W: _O13_SKIN.length, H: 1 }, { pic: _o13Row(_O18_TCROW), W: _O18_TCROW.length, H: 1 }]).forEach((c, n) => {
+      const Q = _o13P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o13Pic;
+      const m = E1.maxDiff(_o13Run(type, Q, W, H, pic(W, H), c.t, c.ps), _o13Run(type, _o13Del(Q, _O20_NEW[type]), W, H, pic(W, H), c.t, c.ps));
+      if (m !== 0) bad.push('through the dispatcher, case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one with ' + _O20_NEW[type].join(' / ') + ' absent');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  };
+  test('966 opts20 Exposure default byte-identity on layer, see-through card, adjustment and half-size plate, and through the dispatcher with Keep colour absent (CONTROL: the effect and its control change the fixture)', { item: '966', budgetMs: 90000 }, async function () { _o20IdentPin('exposure'); });
+  test('966 opts20 Split Toning default byte-identity on layer, see-through card, adjustment and half-size plate, and through the dispatcher with Protect skin absent (CONTROL: the effect and its control change the fixture)', { item: '966', budgetMs: 90000 }, async function () { _o20IdentPin('splittone'); });
+  test('966 opts20 Tint default byte-identity on layer, see-through card, adjustment and half-size plate, and through the dispatcher with Protect skin absent (CONTROL: the effect and its control change the fixture)', { item: '966', budgetMs: 90000 }, async function () { _o20IdentPin('tint'); });
+  test('966 opts20 Faded Film default byte-identity on layer, see-through card, adjustment and half-size plate, and through the dispatcher with Protect skin absent (CONTROL: the effect and its control change the fixture)', { item: '966', budgetMs: 90000 }, async function () { _o20IdentPin('faded'); });
+  /* (a) and (b) for one effect's Protect skin: its row and what the load sanitiser keeps and clamps, then on round thirteen's skin
+     row, plain and with its other controls off their defaults, Protect skin 40 and 100 draw the plain effect laid in by 1 − Protect
+     skin x each pixel's skin weight, to the level. CONTROLS: the plain effect moves both skin tones, and Protect skin moves the
+     picture off the plain effect. On the base code the row is missing and _o19Need stops it (xfx20: these do not reach the judging) */
+  const _o20SkinPin = type => {
+    _o19Need(type, ['skin']);
+    const bad = _o13Rows(type, [{ key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 }], { skin: 40 });
+    bad.push.apply(bad, _o13Clamp(type, { skin: 150 }, { skin: 100 }));
+    bad.push.apply(bad, _o13Clamp(type, { skin: -5 }, { skin: 0 }));
+    const pic = _o13Row(_O13_SKIN)(), N = _O13_SKIN.length;
+    [{}, { amount: 0.7, mix: 60, range: 1, mode: 1, keep: 40, blending: 20, color: '#3060d0' }].forEach(extra => {
+      const run = sk => _o13Run(type, _o13P(type, Object.assign({}, extra, { skin: sk })), N, 1, pic.slice(), 0.5);
+      const plain = run(0);
+      if (!E1.count(plain.slice(0, 8), pic.slice(0, 8), 0)) throw new Error('CONTROL: plain effect did not move either skin tone');
+      [40, 100].forEach(sk => {
+        const want = _o13Lay(pic, plain, (r, g, b) => 1 - sk / 100 * _o13Skin(r, g, b));
+        if (E1.maxDiff(run(sk), want)) throw new Error(type + ' skin protection differs from the weighted grade');
+        if (!E1.count(run(sk), plain, 0)) throw new Error('CONTROL: skin protection had no work');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  };
+  test('966 opts20 Split Toning Protect skin holds faces back and leaves other colours graded (CONTROL: the plain effect changes skin)', { item: '966', budgetMs: 60000 }, async function () { _o20SkinPin('splittone'); });
+  test('966 opts20 Tint Protect skin holds faces back and leaves other colours graded (CONTROL: the plain effect changes skin)', { item: '966', budgetMs: 60000 }, async function () { _o20SkinPin('tint'); });
+  test('966 opts20 Faded Film Protect skin holds faces back and leaves other colours graded (CONTROL: the plain effect changes skin)', { item: '966', budgetMs: 60000 }, async function () { _o20SkinPin('faded'); });
+  test('966 opts20 Split Toning gives no false gamut reason when Protect skin holds it back (CONTROL: unprotected Split Toning retains its reason)', { item: '966' }, async function () {
+    _o19Need('splittone', ['skin']);
+    if (typeof FM._noopWhy20 !== 'function') throw new Error('no reason seam');
+    if (!/brightness/.test(FM._noopWhy20({ type: 'splittone', params: { skin: 0 } }))) throw new Error('CONTROL: original reason missing');
+    [100, _o13KF(0, 100)].forEach(skin => {
+      if (FM._noopWhy20({ type: 'splittone', params: { skin: skin } }) !== null) throw new Error('skin protection was blamed on gamut');
+    });
+  });
+  // ── end 966 opts20 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition
@@ -187315,5 +188343,43 @@
   });
   test('1007 Settings Restore asks before reading a large backup, Cancel reads nothing, a null file is not a Cancel', { item: '1007', budgetMs: 12000 }, async function () {
     await fileDoor1007(true);   // four named 2 s deadlines inside fileDoor1007
+  });
+
+  /* #1122, his answer 3 ("if an issue then fix"): S4d's slow-swipe fix was Simple-only and Full kept the identical bug — a finger that starts a slow
+     swipe on a category card and takes over half a second to get going raised "Reset <group>". Same card, same timer, same swipe, now in Full too
+     (its own check beside the hold, js/inspector.js, so S4d's Simple lines stay exactly as Simple shipped them). */
+  test('1122 Full too: a slow swipe that starts on a category card does not raise its Reset menu, a still hold does', { item: '1122', budgetMs: 60000 }, async function () {
+    const menuOpen = function () { const m = document.getElementById('ctx-menu'); return !!(m && !m.classList.contains('hidden') && (m.textContent || '').indexOf('Reset') >= 0); };
+    const press = function (el, type, x, y, buttons) { el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, button: 0, buttons: buttons })); };
+    for (const width of ['phone', 'wide']) {
+      await (width === 'phone' ? atPhoneWidth : atWideWidth)(async function () {
+        await smView(async function (v) {
+          if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) throw new Error('setup: the editor is in Simple — this is the Full test');
+          /* back() first: from the category grid it leaves the clip (nothing selected, the inspector empty — measured 28 Oct at both
+             widths), so it may only clear a sub-view left open by an earlier test, and the clip is selected after it */
+          if (FM.inspector && FM.inspector.back) { try { FM.inspector.back(); } catch (e) {} }
+          await v.sleep(80);
+          FM.selectLayer(v.c2.id); FM.refreshAll(); await v.sleep(160);
+          const card = s4Card('Speed');
+          if (!card) {
+            const ins = document.getElementById('inspector'), sel = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
+            throw new Error('setup: no Speed card in Full at ' + width + ': cards [' + [].map.call(document.querySelectorAll('#inspector .cat-card'), function (b) { return b.textContent.trim(); }).join(' | ') +
+              '], selected ' + (sel ? sel.type + ' ' + sel.id : 'nothing') + ' (c2 ' + v.c2.id + '), selectMode ' + !!FM.selectMode + ', ids ' + (FM.selectionIds ? FM.selectionIds().length : '?') +
+              ', band ' + !!(FM.simpleTools && FM.simpleTools.bandIdle && FM.simpleTools.bandIdle(sel)) + ', inspector: ' + (ins ? (ins.innerHTML || '').replace(/\s+/g, ' ').slice(0, 400) : 'none'));
+          }
+          card.scrollIntoView({ block: 'center' }); await v.sleep(60);
+          const r = card.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+          // CONTROL: a still hold of 700 ms does raise it, so the check can see the menu at all
+          press(card, 'pointerdown', x, y, 1); await v.sleep(700);
+          if (!menuOpen()) throw new Error('CONTROL at ' + width + ': a 700 ms still hold did not raise the Reset menu in Full');
+          press(card, 'pointerup', x, y, 0); try { FM.contextMenu.hide(); } catch (e) {} card._heldReset = false; await v.sleep(80);
+          // the slow swipe: down, 120 ms, a 28 px move, then the finger keeps going for 700 ms
+          press(card, 'pointerdown', x, y, 1); await v.sleep(120); press(card, 'pointermove', x, y - 28, 1); await v.sleep(700);
+          const raised = menuOpen();
+          press(card, 'pointercancel', x, y - 60, 0); try { FM.contextMenu.hide(); } catch (e) {} card._heldReset = false;
+          if (raised) throw new Error('at ' + width + ' in Full a slow swipe that started on the Speed card raised "Reset Speed" 480 ms after the touch');
+        });
+      });
+    }
   });
 })();

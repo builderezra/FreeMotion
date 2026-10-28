@@ -3982,6 +3982,7 @@ window.FM = window.FM || {};
       if (J.rv) { try { J.rv.stop(); } catch (e) {} }         // the relay's work is done: nothing more goes through it
       const me = U.getProfile() || profile;
       const joinOpts = {
+        cancelled: function () { return J.stopped; },
         link: res.link, role: 'editor', name: me.name, color: me.color, mk: me.mk || undefined,
         dev: isPhoneNow() ? 'phone' : 'pc', app: C.signal.appVersion(), onConflict: 'refuse',
         sid: target.sid || (typeof h.sid === 'string' ? h.sid : null), sk: target.sk || null,
@@ -3989,6 +3990,7 @@ window.FM = window.FM || {};
         hostName: hostLabel, hostColor: cleanColor(res.host && res.host.cl) || cleanColor(h.cl) || null
       };
       function done(r) {
+        if (J.stopped) return r;
         if (joinLink === res.link) joinLink = null;          // the session owns it now
         stop();
         clearPendingJoin();
@@ -4000,12 +4002,20 @@ window.FM = window.FM || {};
         if (card) card._joined = true;
         closeCard();
         showEditor();
-        toastTillTap('You’re in — this copy stays in sync with ' + hostLabel);   // #967 batch 2: until the first tap (J2-8)
+        if (s && s.online && !s.ended) toastTillTap('You’re in — this copy stays in sync with ' + hostLabel);
         return r;
       }
-      function lateFail(e) { try { res.link.close(); } catch (x) {} fail(Object.assign({ after: true }, e || {})); }
+      /* A join that was cancelled (the sheet closed, Swap codes only turned on, a new join) still closes its link here, so
+         the owner does not keep him admitted — only the sheet's own close did that — and says nothing into a sheet that is
+         gone or now belongs to another join. Also the rejection of a second round from sameDeviceChoice. */
+      function lateFail(e) {
+        try { res.link.close(); } catch (x) {}
+        if (joinLink === res.link) joinLink = null;
+        if (J.stopped) return;
+        fail(Object.assign({ after: true }, e || {}));
+      }
       C.join(joinOpts).then(done, function (e) {
-        if (e && e.why === 'same-device') { stop(); return sameDeviceChoice(e, status, joinOpts, done, lateFail); }
+        if (!J.stopped && e && e.why === 'same-device') { return sameDeviceChoice(e, status, joinOpts, done, lateFail); }
         lateFail(e);
       });
     }

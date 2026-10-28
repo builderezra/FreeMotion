@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Oct at v18.09
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Oct at v18.10
 >
-> **State:** v18.09 — **switching projects no longer loses a clip that never saved, and never hangs asking about it** (#1187), **a project that cannot be opened is kept, and its Delete says so with Save a copy first** (#1004, #1005), **a second tab no longer writes an old file over a newer replaced one** (#1000), and **a very big project file asks before it is read** (#1007). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+> **State:** v18.10 — **three more effects have Protect skin** (#966): Split Toning, Tint and Faded Film; **a second finger no longer hijacks a scrub, a slider or any other one-finger tool** (#690); **in the full editor a slow swipe on a card no longer pops its Reset menu** (#1122, your "if an issue then fix"); and an Exposure with Keep colour above 0 looks a little less rich than in v18.06. A live session needs both devices on v18.10. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+>
+> v18.09 — **switching projects no longer loses a clip that never saved, and never hangs asking about it** (#1187), **a project that cannot be opened is kept, and its Delete says so with Save a copy first** (#1004, #1005), **a second tab no longer writes an old file over a newer replaced one** (#1000), and **a very big project file asks before it is read** (#1007). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
 > v18.08 — **footage your phone cannot open is kept when you restore or import** (#1189), **a Media library tile is no longer deleted when storage cannot be read** (#1191), **Undo of Replace media then a quick app switch keeps the original** (#1192), **a voice take whose add fails comes back to try again** (#1193), and **a collab join whose link drops says Offline instead of Live** (#1194). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
@@ -27559,6 +27561,7 @@ re-opened #480, which I had marked done and had not fixed.
       ↻ **25 Sep, his words in full: *"Keep going"*** — sent right after I stopped the loop at v16.93 with the actionable list dry and everything else waiting on his picks. Read as this brief, restated: the loop is re-armed, and the work is a bug hunt — with REAL touch and mouse input this time (tests/_cdp.py's channel from #924), because his phone complaints kept surviving synthetic tests.
       UNBLOCKED 30 Sep (#993 housekeeping): a standing brief, not a question — nothing in it waits for an answer (the 25 Sep line just above is about OTHER items), so it should not read as 🟠 NEEDS YOU. The JUMPED line keeps it from holding the queue.
       📍 **v18.06 (26 Oct): a real-input hunt shipped** (lane three, his 31 Aug brief) — a second finger that lands while one finger works the mask pen, Free crop or the Move pad no longer starts a drag of its own: the pen dropped a stray point where it touched, and the crop box and the layer leapt by the gap between his fingers. One gate in each: while the first finger's capture is live, every other finger's press, moves and lift are ignored (mouse and pen never gated). Three real-finger tests, each with a one-finger CONTROL and a second-finger-moves-last case. The lift clause is reasoned, not proven: a touchMove that drops one finger of two delivers no pointerup in this driver. Logged for later, not built: the same takeover in point-edit, motion-path, touch-up, fill-drag, the nudge pad and the other inspector pads; whether two fingers on the mask pen should take back the first finger's point, as the draw tool's #165.3b does.
+      📍 **v18.10 (28 Oct): real-input rounds two and three shipped** (hunt/rf690b and codex/scrub690, each reviewed, refuted, folded and checked): the one-finger gate on Customise Points, the motion path, Touch-up, the fill drag, the nudge pad, the inspector's Z pad, ring and anchor pad, mtScrub, fx-scrub (with the 6 px lock's pending finger), mtVBox and attachGlide. The lift clause is reasoned, not proven (this driver cannot lift one finger of two).
 
 - [x] **691b — SAME BUG, OTHER HALF, found 1 Sep by re-running #691's own audit.** Fixed v14.81.
       JUMPED: this IS #691, which is closed — the same bug in the dispatcher its audit never asked about.
@@ -34175,6 +34178,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v18.04 (25 Oct): round seventeen shipped** — HSL Mixer Protect skin and Mix; Gradient Map Protect skin and Affects; Hue Ramp Protect skin and Affects. Every default byte-identical; SCHEMA_REV 36 with the fingerprint re-pinned by fp.js; 15 '966 opts17' tests. A review (no blocker) and its one fold (the HSL Mixer's Protect skin row names the sliders it guards). Next pick the builder named: Tone Curve still has no Protect skin.
       📍 **v18.05 (25 Oct): round eighteen shipped** — Tone Curve Protect skin and Keep colour; Duotone Protect skin and Affects; HSL Bands Protect skin and Mix. Every default byte-identical; SCHEMA_REV 37 with the fingerprint re-pinned by fp.js; 14 '966 opts18' tests. A review (no blocker) and its two folds (HSL Bands' Protect skin note names Magenta and says the starting Blue reaches no skin; the Mix test's Show selection checks got a measured CONTROL, 1925 of 6912 pixels). Next pick the builder named: Protect skin on Split Toning, Tint and Colour Pop, then Exposure, Gamma and Faded Film.
       📍 **v18.06 (26 Oct): round nineteen shipped** — Gamma Protect skin and Keep colour; Exposure Protect skin and Keep colour; Colour Pop Protect skin and Show selection. Every default byte-identical; SCHEMA_REV 38 with the fingerprint re-pinned by fp.js; 14 '966 opts19' tests. A review and a refuter; folds: the row-order test read past the colour rows (B1), Colour Pop's Protect skin no longer takes Boost off a kept red (F2), the matte note says black is the most drained (F3). FOR ROUND TWENTY (the refuter's call, not folded): Exposure's Keep colour keeps channel gaps, not ratios, so a pushed colour comes out paler (0.50 to 0.33 saturation at +0.8 EV); the review's ratio version is unbounded (a near-black turns to red specks), so it needs a bounded design. Next picks the builder named: Protect skin on Split Toning (its noopWhy must allow it), Tint and Faded Film.
+      📍 **v18.10 (28 Oct): round twenty shipped** (codex/fx20: Codex, then a Claude review, a refuter, a fold and a check): Split Toning, Tint and Faded Film `skin` (Protect skin); Exposure Keep colour re-drawn with a gamut bound (a look change, said in the POLISH line); SCHEMA_REV 39. Next: round twenty-one.
 
 - [ ] **967 — Live collaboration feels extremely underbaked on his phone: pull it all up, make sure it's all there and working, and make it simple enough for someone who's never used it** (26 Sep, builder chat — his words)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -36771,15 +36775,14 @@ re-opened #480, which I had marked done and had not fixed.
         - Reds come back in under an hour instead of after a 2-hour ship. Today's refusal (978, which fails alone) would have been caught that way, and so would the r3-era reds the helper had already seen.
         - The PM has queued this as the helper's top item (PRE1), ready for the moment a candidate branch is pushed.
 
-- [ ] **1122 — Ezra picks E (the A1 PC tray) and A (transitions), the two Simple picks the PM marked as blocking Phase 2** (10 Oct, ~17:40 AWST, via INBOX — HIS WORDS, filed by the logger)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1122 — Ezra picks E (the A1 PC tray) and A (transitions), the two Simple picks the PM marked as blocking Phase 2** (10 Oct, ~17:40 AWST, via INBOX — HIS WORDS, filed by the logger)
       Moved from INBOX.md whole:
       ### 10 Oct 2026, ~17:40 AWST — Ezra picks E (the A1 PC tray) and A (transitions), the two Simple picks the PM marked as blocking Phase 2
       **His words (verbatim):** "e a"
       **Context:** a reply to the PM's 16:15 line, "Reply 'E and A' to take my picks, or 'you decide'". It answers the two open design picks for Simple.
       **His clauses:**
-      1. [ ] **A1, the Simple-mode PC tray: option E.** 13 tools become 10, in two rows. It is built on the helper's `hunt/simple-a1-e`. The sheet he saw is a1/sheet.jpg, with E marked recommended.
-      2. [ ] **Transitions in Simple: option A.** A ◇ above each cut, plus a tray row (crossfade, dip to black or white; preview = export). It is built by the helper's S11 and linearised in `hunt/simple-stack-landing(-2)`. The sheet he saw is tr/sheet.jpg, with A marked recommended. B (a popover) and C (a Transition clip tool) are NOT chosen.
+      1. [x] ✅ v17.42 — **A1, the Simple-mode PC tray: option E.** 13 tools become 10, in two rows. It is built on the helper's `hunt/simple-a1-e`. The sheet he saw is a1/sheet.jpg, with E marked recommended.
+      2. [x] ✅ v17.92 — **Transitions in Simple: option A.** A ◇ above each cut, plus a tray row (crossfade, dip to black or white; preview = export). It is built by the helper's S11 and linearised in `hunt/simple-stack-landing(-2)`. The sheet he saw is tr/sheet.jpg, with A marked recommended. B (a popover) and C (a Transition clip tool) are NOT chosen.
       **Logger's plan (not his words):**
       - Both are already built. Land them in their Simple releases (A1 with 2.3; transitions where DESIGN places them), and drop the unchosen variants (`980-p22-trayb`/`trayb2` if they are the B tray).
       - ⚠️ `hunt/simple-*` branches carry `tests/_cdp_h52.py` in their history (#14). Do not land those `tests/` as they are.
@@ -36788,6 +36791,7 @@ re-opened #480, which I had marked done and had not fixed.
       🔨 **11 Oct, ~15:00 — his answer built (code + test, no browser yet):** `hunt/answers-1130` 327974c9 drops S4d's Simple-only condition, so a slow swipe that starts on a category card raises no Reset menu in Full either; test `1122 Full too: a slow swipe…` at phone and wide (control: a still hold still raises it). Ships in a Full release; clauses 1–2 ride the Simple releases.
       📍 **Moved here from #1136 (20 Oct hand-off audit):** the Full slow-swipe fix (327974c9, answer 3) never landed.
       📍 **v17.92 (21 Oct): Simple 2.7, his pick A, ships** (`hunt/sm6p`): the solid blue ◇ above each cut between two main clips, and the Transition row None · Crossfade · Dip to black · Dip to white at 0.5 s; the video never gets shorter and the sound still cuts at the cut. A project holding a transition is stamped FM.SM_V 2, so an older build opens it read-only in Simple. ON, decided under his 21 Oct 'fine with ur choices' rule (Settings → Simple editor → More transition controls; the review page keeps the question): Length −/+, On every cut, the ◇ on a hand-made crossfade and Turn into a transition. Two pre-ship reviews with refuters (21 Oct): the exporter's seek rode in v17.91 (the laptop's lock cannot measure exporter.js), Full's settings whitelist line stays Full's, Rev 30 sits in its own comment, and fp_3 to fp_10 pin every clause of the trIn rule. Collab schema rev 30. The Full-unchanged lock passed on this exact tree before it shipped.
+      ✅ **v18.10 (28 Oct): ticked** — clause 1 (his pick E) shipped v17.42, clause 2 (his pick A) v17.92, his answer 3 ("if an issue then fix", the slow swipe in the full editor) v18.10: hunt/sw1122 ports 327974c9 as its own listener beside S4d, so the Simple editor's lines stay as they shipped.
 
 - [ ] **1123 — Ezra: the list of every question for him, and the old Simple artifact** (10 Oct, ~17:55 AWST, via INBOX — HIS WORDS, filed by the logger)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
@@ -38237,6 +38241,7 @@ re-opened #480, which I had marked done and had not fixed.
       > - In the common case the source file is still in his Photos or Files. Media that exists only in the app (in-app recordings, a friend's collab clip, Take Video) is lost for good.
       > - A clip reused from a lib: shared copy keeps that copy.
       📍 **v18.07 (26 Oct): built and shipped** (hunt/rp1188: a build, a review, a refuter, a fold, a fold check). swapInMedia keeps the original from storage when it is not in memory (only at the layer's own revision), asks before replacing when the keep is refused ('Keep it' leaves the clip and its saved file as they were), keeps quiet where the question speaks for it, and takePrevMedia answers from memory and writes the slot back (quietly) when another window's boot sweep took it. HELD, Simple's own call: in the Simple editor a refused keep still replaces without asking (spine-edit passes simple: true). Not built: #3 (goes with #1191's checked read), #4, #7; N1 (fitReplacedMedia with no outgoing record) for the PM.
+      📍 **v18.10 (28 Oct): N1 shipped** (codex/n1188: Codex, then a Claude review, a refuter, my edits, a check, a fold): with nothing of the clip in memory, Replace media fits from the stored original's size, read from its header (storedSize: a video's metadata, an image's load, 8 s deadline, MEASURE: pending), never through the full loaders, and only when the new file has a picture. F3 still HELD for a Simple release.
 
 - [ ] **1189 — Restore from a backup or importing a .fmotion.json throws away footage this device cannot open, then tells him it was never in the file (hunt MEDIUM #1189)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 4 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -38409,3 +38414,396 @@ re-opened #480, which I had marked done and had not fixed.
       > - C.reopen's version already recovers, because its reconnect stays armed.
       > - Low priority, and a two-line fix.
       📍 **v18.08 (27 Oct): built and shipped** (hunt/cj1193). C.join and C.reopen mark the session offline when the link closed during the copy setup (ep.open === false on an active session), down the existing markOffline → onOffline path, which shows Offline and starts the reconnect; nothing changes in setLink. Follow-up (its refuter): a join the guest CANCELS in the tail still opens the copy with a You're in toast; built as codex/rjoin, for v18.10.
+      📍 **v18.10 (28 Oct): the refuter's follow-up shipped** (codex/rjoin, folded and checked): a join the guest cancels in its tail does not open the copy (or closes it the way a failed join does), and the You're in toast shows only while the session is online.
+
+- [ ] **1195 — Duplicating, importing or pasting a layer wipes Neon Outline / Tiles / Timecode's 'source' choice (hunt HIGH #1195)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 1 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      The hunt's shared notes (they apply to all twenty, #1195 to #1214):
+      > ### 28 Oct 2026, ~03:20 AWST — PM wrong-result hunt (Ezra's "go way way harder", 28 Oct ~01:25): 20 build items
+      > This hunt looked for SILENT WRONG RESULTS: the preview differing from the export, Undo that doesn't fully restore, edits that drop or shift keyframes, numeric faults, and sanitisers that drop fields.
+      > - 6 read-only finders (history, timeline, export, keyframes, text, effects), then 2 refuters per finding: "intended or already corrected" and "can he reach it, and does he see it".
+      > - 24 found and 24 kept: none refuted. That is suspicious, so each fix's own review + refuter must re-verify it before it is built.
+      > - Merged into 20 items. These are PM findings, so each REQUESTS entry needs a `(hunt HIGH/MEDIUM/LOW #n)` tag.
+      > - Full run: PM tasks/wan7hfarw.output; journal at subagents/workflows/wf_6c8e06a8-074.
+      > Summary: I checked every cited line in this tree before writing the list, and all 21 findings hold. Merged items: the two phone GPU-blur faults are one edit to the same loop in compositor.js. KF-1, KF-2 and KF-5 are one rule: the remaining private 1e-3 keyframe matches change to the half-frame tolerance that queue 683 adopted. The two saved-filter faults go through the same landing functions, so they are one item. That leaves 18 build items, ranked by what Ezra would suffer. Wrong exports and silently lost or changed edits come first, then undo/redo, then cosmetic text and cases needing a niche combination. None of the findings is a security fault. Notes for the builder: (1) Item 2 changes pixels only on the no-ctx.filter path. Any pinned picture test that forces _forceNoCtxFilter with a blur on transparency will move and needs a RE-PINS line. (2) Item 18 has to relax the '966 opts4' byte-for-byte pin at tests/tests.js:163866 for mode 2. That pin currently requires the wrong 'éCole De éTé'. (3) The usual lock rules apply: no browser readings or suite runs beside a live ship. Tolerances below are set between the measured jitter (about 1e-9 for evalProp arithmetic, 0 for the same render path twice) and the fault size. Where a GPU or pixel comparison is involved, the test should write both measured numbers into itself.
+      >
+      > ITEM 1 [HIGH] Duplicating, importing or pasting a layer wipes Neon Outline / Tiles / Timecode's 'source' choice
+      >   findings: effects:FX-SRC-CLOBBER
+      >   files: js/scene.js (new helper beside FM.eachRefFx ~580), js/storage.js:2852-2854, js/app.js:5062-5066, js/inspector.js:515-517
+      >   he sees today: Neon Outline was glowing on every edge inside the picture. After Home > Duplicate, an import, a template or element insert, a layer copy/paste or Paste effect, it traces only the clip's rectangle. Tiles on an off-frame clip repeats a sliver, and a timer set to Timeline time restarts at every cut. The panel highlights 'Layer' / 'On screen' / 'Clip time', options he never picked. Preview and export are both wrong, and the change is saved for good (safeFxParam keeps '' as option 0).
+      >   fix: A layer-id remap is only correct for effects whose registry row 'source' is a layer picker. edgeglow (compositor.js:831), timecode (:1498) and tiles (:1778) use a segment row with the same name, holding 0/1/2. Add one predicate beside FM.eachRefFx in scene.js:
+      >   FM.fxHasLayerRef = function (fx) { const e = fx && FM.fxRegistry && FM.fxRegistry.get && FM.fxRegistry.get(fx.type); return !!(e && (e.params || []).some(p => p && p.key === 'source' && p.type === 'layer')); };
+      > Gate all three clear/remap sites on it:
+      > - storage.js:2853: if (fx && fx.params && fx.params.source && FM.fxHasLayerRef(fx)) fx.params.source = map[fx.params.source] || '';
+      > - app.js:5063: if (!fx || !fx.params || !fx.params.source || !FM.fxHasLayerRef(fx)) return;
+      > - inspector.js:516: add the same && FM.fxHasLayerRef(fx).
+      > The duplicate paths at app.js:4818/4876 only rewrite on an idMap hit, so they need nothing. Copies already damaged (source '') are not repaired, under the old-projects rule; he re-picks the option. Nothing he uses changes; the setting simply survives.
+      >   red-first test: L = FM.makeLayer('shape', {...}); L.effects = [{type:'edgeglow',enabled:true,params:{source:2,amount:1.5,radius:8}}, {type:'tiles',enabled:true,params:{mode:0,source:1}}, {type:'timecode',enabled:true,params:{source:1}}, {type:'lumamatte',enabled:true,params:{source:'layer_not_in_this_pack'}}]. Run out = FM.storage._reIdLayers([L]).layers[0] and assert out.effects[0].params.source === 2, [1] === 1 and [2] === 1. Today all three come back ''. Repeat through the layer paste path (copy L, paste) and through FM.fxClipboard copy + read on the same project. Values are integers, so use exact equality.
+      >   control: In the same test, the dangling lumamatte ref still comes back '' (the remap still clears refs that point outside the pack). Second control: a lumamatte whose source is another layer inside the pack is remapped to that layer's NEW id. Both pass today and must still pass after the fix.
+      >   refuter notes: Both refuters confirmed with high confidence. One correction: Timecode defaults to 0, so it is only hit after he picked Timeline time. On a flat shape or text, Both and Layer look about the same, so the visible damage is on photos and videos. Neon Outline and Tiles are hit at their DEFAULTS.
+      >
+      📍 **Where it is (28 Oct):** codex/h2a 13c8d822 (with item 3), built, NOT reviewed or run yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 1' until it lands, then #1195.
+- [ ] **1196 — Phone (no ctx.filter): a blur at 0 switches the whole grade off, and every blur draws a dark halo on transparency (hunt HIGH #1196)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 2 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 2 [HIGH] Phone (no ctx.filter): a blur at 0 switches the whole grade off, and every blur draws a dark halo on transparency
+      >   findings: effects:GPU-BLUR0-KILLS-STACK, effects:GPU-BLUR-STRAIGHT-ALPHA
+      >   files: js/compositor.js:15224-15230 (runCssOpsOnGPU blur loop)
+      >   he sees today: On his iPhone, in the preview and the exported MP4, a clip with Grayscale/Saturation/Sepia/etc. plus a Gaussian Blur at 0 draws in full colour. That covers a blur typed to 0, a blur-in before its first key, and the 'Focus Pull' preset after it lands on 0. The same project stays graded on the PC. Separately, every blurred title, sticker or shape on the phone has a grey or dark ring the PC never draws: over black the 50% edge is 64 instead of 128.
+      >   fix: One edit to the blur loop. Skip a pass that cannot draw, the way queue 836 already skips a glow with no halo, and blur the premultiplied picture the way ctx.filter does, using the option #986 C24 added:
+      >   for (let bi = 0; bi < ops.blurs.length; bi++) {
+      >     const rpx = ops.blurs[bi] * ps;
+      >     if (!(rpx > 0.05)) continue;   // blur(0px) draws nothing on the PC either: skip the pass, keep the grade (queue 836's rule, for Blur)
+      >     const o = FM.glColor.blur(cur, W, H, rpx, { premul: true });
+      >     if (!o) return null;
+      >     ...unchanged...
+      >   }
+      > If the skipped blur was the last pass, cur already holds the graded copy, so nothing else needs to change. If a zero blur is the whole stack, cur stays wA and drawCssFxOnGPU returns false, which gives a plain draw. That is correct, because blur 0 is a no-op. Leave the glow halo call at 15237 alone: it only uses alpha, through source-in. What he will see: on the phone, a grade with a 0 blur stays on, and blurred text and shapes lose the dark fringe. Nothing changes on the PC.
+      >   red-first test: (a) Copy the 836 harness: dead filter descriptor on CanvasRenderingContext2D.prototype plus FM._forceNoCtxFilter = true. Make a red rect with effects [FM.fxRegistry.makeInstance('grayscale'), {type:'blur',enabled:true,params:{radius:0}}], render with FM.renderScene and read the centre pixel. Assert |r-g| < 14. The measured grey jitter is 0-2 and the fault is 255, because the rect draws red. Today it is red. (b) A white 44px rect on a black project with Blur radius 8. The reference render has ctx.filter alive; the candidate uses the dead-filter harness. Over the reference's edge ramp (pixels with reference R between 20 and 235), the mean |R_cand - R_ref| must stay under a bound. Measure the fixed build (expected a few levels, the same order as the #661 alpha comparison) and today's build (expected about 30 or more). Put the bound between them and write both numbers into the test.
+      >   control: (a) The same scene with radius 4 renders grey on the phone path, both today and after the fix. The radius-0 scene with ctx.filter alive renders grey (the PC path). (b) The same reference-versus-candidate comparison on a full-frame opaque image layer passes today and after, because there are no transparent neighbours. This shows the bound is not loose. The existing #661 alpha-only test stays green, since premul does not change the alpha channel.
+      >   refuter notes: All four votes confirmed. One refuter could not find the Focus Pull preset by grep; the other found it at fx-presets.js:34-35 (radius 28 down to 0, then holding 0). The bug does not depend on the preset: a typed 0 is enough. The gl-color.js:326-330 comment justifies the straight-alpha default as 'invisible on the opaque layers', but drawCssFxOnGPU draws onto a cleared transparent plate, so that premise is false here.
+      >
+      📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 2' until it lands, then #1196.
+- [ ] **1197 — Keyframe 'is there a key here' still uses 1 ms in seven places: a button deletes a key it offers to add, edits land on a twin key, and an ease goes on the wrong move (hunt HIGH #1197)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 3 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 3 [HIGH] Keyframe 'is there a key here' still uses 1 ms in seven places: a button deletes a key it offers to add, edits land on a twin key, and an ease goes on the wrong move
+      >   findings: keyframes:KF-1, keyframes:KF-2, keyframes:KF-5
+      >   files: js/inspector.js:4758 (fill colour diamond), js/point-edit.js:90 and :107, js/inspector.js:5410 (toggleShapeSubsKf), js/inspector.js:3530 (toggleMaskPathKf), js/mask-tool.js:115 (flush), js/graph-editor.js:156,163,164 (pickKfs)
+      >   he sees today: These keys are off the frame grid after any Speed change or fps change, because scaleLayerKeyframes never snaps.
+      > (1) On such a key, the Solid fill diamond reads '◇ … tap to add one here'. Tapping it DELETES the colour key, and the animation loses that colour in the preview and the export. The button still says 'add', so nothing tells him.
+      > (2) Dragging an Edit Points point or a roto-mask point on such a key adds a twin key 2.6 ms away. The paused frame looks edited, but in playback and the MP4 the edit flicks on for one frame and the old outline comes back.
+      > (3) The Edit Points and mask diamonds say 'Remove the point keyframe at the playhead', but they ADD a duplicate instead.
+      > (4) Picking Ease In on a lit diamond eases the NEXT move instead of the one into the diamond.
+      >   fix: Use one rule, the HALF_FRAME tolerance that scene.js:338 exposes as FM._halfFrame and FM.hasKeyframeAt (queue 683):
+      > - inspector.js:4758: const at = anim && FM.hasKeyframeAt(p, FM.time);
+      > - point-edit.js:90 and :107, inspector.js:5410 and :3530, mask-tool.js:115: replace `< 1e-3` with `< FM._halfFrame()`.
+      > - graph-editor.js:151: add const eps = FM._halfFrame ? FM._halfFrame() : 1e-3; and use eps in place of 1e-3 at 156, 163 and 164.
+      > What he will see: the fill diamond shows ◆ 'remove one here' on the key it is about to delete. Editing points or a mask on that key edits the key itself. An ease picked on a lit diamond goes on the move into it. On-grid keys behave exactly as today.
+      >   red-first test: fps 30, FM.time = 23/30 in every case. Key values are exact, so key-count checks use exact equality and point positions use 0.5 px (the edit is 50 px; jitter is about 1e-9).
+      > (a) KF-1: a shape with layer.fill = {kf:[{t:0,v:'#ff0000',e:'linear'},{t:0.76923,v:'#0000ff',e:'linear'},{t:2,v:'#00ff00',e:'linear'}]}. Open Colouring (solid) and read .fill-kf. Assert that the label and the action agree: if it shows '◇', a click must not drop kf.length from 3 to 2. Today it shows ◇ and the click deletes the key.
+      > (b) KF-2: subs = {kf:[{t:0,v:A},{t:0.76923,v:B},{t:2,v:C}]} with the same topology. Run FM.pointEdit.start(id,{embedded:true}) and FM.pointEdit.moveSel(50,0). Assert subs.kf.length === 3, and that FM.evalShapeSubs(l, 24/30)[0][0][0] is within 0.5 px of B's lerp toward C plus the 50 px edit. Today the length is 4 and frame 24 shows the unedited point.
+      > (c) Two keys at 0 and 0.76923: the Edit Points ◆ click (toggleShapeSubsKf) must leave kf.length at 1, not 3. Do the same for toggleMaskPathKf and for mask-tool flush() with a dragged point (length stays 2 and the edited value is on the 0.76923 key).
+      > (d) KF-5: p = {kf:[{t:0,v:0,e:'linear'},{t:0.7643,v:50,e:'linear'},{t:2,v:100,e:'linear'}]}. FM._pickEaseKfs(()=>p,['x']).kfs[0] must be p.kf[1]. Today it is p.kf[2].
+      >   control: With the key exactly at 23/30: (a) shows ◆ and the click removes it, (b) the length stays 3 and the edit persists at frame 24, (c) the ◆ removes it, (d) the picker returns p.kf[1]. All of these pass today and after. With the playhead at 1.2 s, which is genuinely between keys: (a) the click adds (3 to 4), (b) a new key is created (length 4), (d) the picker returns p.kf[2].
+      >   refuter notes: KF-1 and KF-2 were confirmed with high confidence by all four votes. KF-5 was confirmed at medium confidence. Its 'intended' refuter notes that the graph draws the segment the playhead is inside, so the graph and playback agree with each other. What breaks is only which move a lit diamond edits. It stays low on its own and rides along because the fix is the same token. Refuters also note that the 1e-3 values were copied from before queue 683, which only unified hasKeyframeAt and toggleKeyframe.
+      >
+      📍 **Where it is (28 Oct):** codex/h2a 13c8d822 (with item 1), built, NOT reviewed or run yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 3' until it lands, then #1197.
+- [ ] **1198 — Captions > Detect speech > 'The whole project' puts his typed captions on the wrong speech, or drops them (hunt HIGH #1198)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 4 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 4 [HIGH] Captions > Detect speech > 'The whole project' puts his typed captions on the wrong speech, or drops them
+      >   findings: text:TXT-1
+      >   files: js/captions.js:337-345 (detect, overlap carry-over)
+      >   he sees today: Take a caption clip that starts after 0:00 and holds captions he has typed. Re-running Detect with 'The whole project' moves the clip back. Each typed caption then lands one speech stretch earlier, over speech he did not caption, and some captions vanish. The toast reports success, and the preview and export show the wrong captions. Undo works only if he notices.
+      >   fix: fitCues('project') re-bases the NEW cues by `shift` but returns only out.start. The old cues are still in the old local time. Shift them by the same amount before comparing:
+      >   const moved = (capLayer.start || 0) - fit.start;   // 0 in 'clip' mode, so that mode is untouched
+      >   ...
+      >   const ov = Math.min(b, o.end + moved) - Math.max(a, o.start + moved);
+      > The plain-text pseudo-cue (start 0, end dur) shifts the same way, which is correct. Text that overlaps no new cue at all is still dropped. That is existing behaviour in both modes and out of scope. Nothing else he sees changes.
+      >   red-first test: Stub FM.decodeAudio and FM.detectSpeech the way test 916.7 does. Source video at start 0, length 10, no trim. Caption text layer at start 4, length 6, captions [{start:0.5,end:2,text:'Hello'}], segments [[1,2],[4.5,6]]. Run await FM.captions.detect(cap, src, null, 'project'). Assert cap.start === 1 and that the cue holding 'Hello' runs 3.5-5 local (project 4.5-6), within 1e-3 (the cues are rounded with toFixed(3)). Today 'Hello' sits on 0-1. Second assert: an old cue {4.5,6,'Bye'} with segments [[1,2],[8.5,10]] must survive on the 7.5-9 cue. Today it is gone.
+      >   control: The same setup in 'clip' mode keeps 'Hello' on the cue at 0.5-2 (moved = 0), both today and after. A caption clip at start 0 in 'project' mode (shift 0) carries the text identically today and after.
+      >   refuter notes: Both refuters confirmed with high confidence. The scope choice is remembered for the session (FM._capScope), so once picked it becomes the default. The only project-mode detect test uses start 0 and empty captions.
+      >
+      📍 **Where it is (28 Oct):** codex/h2b 3cd8818b (with item 5), built, NOT reviewed or run yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 4' until it lands, then #1198.
+- [ ] **1199 — Undo then tapping another clip (or a no-move slider tap) silently destroys Redo; a ghost step makes Undo look dead (hunt MEDIUM #1199)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 5 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 5 [MEDIUM] Undo then tapping another clip (or a no-move slider tap) silently destroys Redo; a ghost step makes Undo look dead
+      >   findings: history:H1
+      >   files: js/history.js:346-347 (commit no-op check), js/history.js:141-150 (restore re-stamp)
+      >   he sees today: He undoes an edit to compare. He then taps another layer, and touches a slider ruler without dragging or presses the text tick without typing. Redo goes grey and the undone edit can never come back. Without an undo, the ghost step means his next Undo press appears to do nothing. A second route: open Border & Shadow (it writes a default shadow while rendering), turn Outline on, Undo, then tap any ruler. Redo is gone.
+      >   fix: Make two changes.
+      > (1) In commit(), a difference in selection only counts as a no-op, with stack[index] re-stamped, which restore already does. snap()'s key order puts selection last, and an unescaped `,"selectedId":` can only be that top-level key:
+      >   const body = x => x.slice(0, x.lastIndexOf(',"selectedId":'));
+      >   if (index >= 0 && (stack[index] === s || body(stack[index]) === body(s))) { stack[index] = s; if (cb) FM.collab.afterCommit(meta); return; }
+      > (2) At the end of restore(), re-stamp from the LIVE scene after the muted refresh, not from the parsed string. That way the defaults panels write while rendering (inspector.js:7297 layer.shadow) and the sanitiser's normalisation become part of the step he is standing on:
+      >   const now = snap(); return now === str ? null : now;
+      > Replace lines 147-150 with that. Before landing, check whether Simple's runner (FM.spine) reads commitSeq to learn that a selection-only command committed. If it does, apply (1) only when no meta is passed. Nothing he sees changes, except that Redo survives.
+      >   red-first test: (a) Two shapes A and B. FM.selectLayer(A.id); A.transform.x += 10; FM.history.commit(); FM.history.undo(); then FM.selectLayer(B.id); FM.history.commit(). Assert FM.history.canRedo() is still true. Today it is false. (b) delete L.shadow. Select L, render the Border & Shadow category, click the Outline tile, FM.history.undo(), FM.history.commit(). Assert canRedo() is still true. Today it is false. (c) Without an undo: edit A (commit), select B, commit(). Assert the stack length did not grow (read it through the canUndo depth or a suite seam).
+      >   control: Straight after the undo in (a), canRedo() is true. That passes today, so the setup is right. Positive control that commits still record: after the undo, make a REAL edit to B (x += 5) and commit(). canRedo() must now be false, today and after. (b) with the Color category open instead of Border & Shadow stays green today.
+      >   refuter notes: Both refuters confirmed with high confidence. The 690 test (tests.js:99010-99013) already treats a selection-only step as a bug, but only checks an unchanged selection. The impact is the lost redo tail; project content is never damaged.
+      >
+      📍 **Where it is (28 Oct):** codex/h2b 3cd8818b (with item 4), built, NOT reviewed or run yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 5' until it lands, then #1199.
+- [ ] **1200 — Hold-to-reset Speed (and Paste look with Speed ticked) leaves the clip length, so half of it freezes on one frame (hunt MEDIUM #1200)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 6 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 6 [MEDIUM] Hold-to-reset Speed (and Paste look with Speed ticked) leaves the clip length, so half of it freezes on one frame
+      >   findings: keyframes:KF-4
+      >   files: js/inspector.js:3796-3801 (applyStyle speed branch), js/app.js:5923-5947 (Reset speed (1×) body, to be shared)
+      >   he sees today: Take a 4 s video slowed to 50% (now 8 s long). Long-press the Speed card and choose Reset Speed. It says done and reads 100%, but the clip stays 8 s and its second half is a still frame in playback and the MP4, with its keyframes still stretched. Paste look pre-ticks Speed, so a plain Paste look from a 1x clip onto a slowed clip does the same. Pasting from a 2x clip onto a 4 s 1x clip freezes from 2 s on.
+      >   fix: Lift the ⋯ menu's 'Reset speed (1×)' body (app.js:5933-5944: span via layerSourceAdvance/speedAt, speed 1, source clamp, scaleLayerKeyframes, refitGroupsFor, project grow) into FM.resetClipSpeed(layer). The menu item then calls it, followed by its own seek/rebuild/refresh/commit. In applyStyle's speed branch, re-time for a flat source speed instead of assigning:
+      >   if ('speed' in src) {
+      >     if (!FM.isAnimated(src.speed) && FM.resetClipSpeed && FM.setClipSpeed) {
+      >       FM.resetClipSpeed(target);
+      >       const sp = +src.speed;
+      >       if (sp > 0 && Math.abs(sp - 1) > 1e-9) FM.setClipSpeed(target, sp);
+      >     } else target.speed = clone(src.speed);   // a ramp: as before
+      >   }
+      > What he will see: Reset Speed and a pasted Speed change the clip's length exactly as the slider and the ⋯ menu do. The 50% clip goes back to 4 s with its keys pulled in.
+      >   red-first test: Use a video layer whose media record has duration 4 and trimStart 0. Call FM.setClipSpeed(layer, 0.5), which gives duration 8, plus an opacity key at 7.5 s. Hold the Speed card for 520 ms with real timers, then tap 'Reset Speed'. Assert speed === 1, |duration - 4| < 1e-6 and |the opacity key's t - 3.75| < 1e-6. The arithmetic is exact to about 1e-12, and the fault is 4 s. Today the duration stays 8 and the key stays at 7.5. Second red: Paste Style with only Speed ticked, from a 2x clip onto a 1x 4 s clip with 4 s of media, must leave duration * speed <= 4 + 1e-6. Today it is 8.
+      >   control: The same 50% clip through the ⋯ 'Reset speed (1×)' item gives duration 4 and the key at 3.75. That is the existing #690 assertion, and it proves the expected numbers.
+      >   refuter notes: Both refuters confirmed with high confidence. openPasteStyle pre-ticks every tile that is not blocked, so Speed is ticked by default. A reversed clip reset this way freezes its first half instead. A sped-up clip loses the end of its footage.
+      >
+      📍 **Where it is (28 Oct):** queued for Codex as h2c (with items 9 and 10). The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 6' until it lands, then #1200.
+- [ ] **1201 — Export 'Only one layer' on a member of a styled group exports the whole group, with the other members' pictures but not their sound (hunt MEDIUM #1201)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 7 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 7 [MEDIUM] Export 'Only one layer' on a member of a styled group exports the whole group, with the other members' pictures but not their sound
+      >   findings: export:EXP-1
+      >   files: js/compositor.js:30411-30419 (beside _isoUnit), :30434 (fillBehindPass unit pick), :30464 (main loop unit pick)
+      >   he sees today: The export card says 'Only the Title layer'. The file holds the title AND the photo or video beside it in the group, fading or shadowed as the group is. The other video's picture plays with no sound. In a plain group the same pick exports the title alone, so the result depends on a group look he cannot connect to it.
+      >   fix: Give solo the rule that isolate already has (bughunt4 #9). A member draws through a unit only when that unit's group is itself soloed:
+      >   const _soloUnit = function (id) { let u = memberToUnit && memberToUnit[id], n = 0; while (u && !u.group.solo && n++ < 64) u = u.childOwner && u.childOwner[id]; return (u && u.group.solo) ? u : null; };
+      > At 30434 and 30464, pick the unit with: (_iso && _iso.mode === 1) ? _isoUnit(L.id) : soloActive ? _soloUnit(L.id) : memberToUnit[L.id].
+      > exportSoloPrep solos a group's descendants, so exporting a styled GROUP still draws it as its unit. What he will see: picking one member exports that member alone, without its group's fade or shadow, matching its sound. Any preview solo behaves the same way.
+      >   red-first test: Group G with transform.opacity 0.8. Member A is a red 40x40 rect at x=60 and member B a blue one at x=180, both with parent=G. Run restore = FM._exportSoloPrep(B), set FM._exporting = true, then FM.renderScene into a 240x120 canvas at t=0.5. A's centre pixel must equal the background within ±3 per channel. The same path drawn twice has no jitter; the fault is red*0.8, about 204. Today it reads red*0.8. Finish with exportSoloRestore(restore) and FM._exporting = false in a finally.
+      >   control: The same layout with G at opacity 1 and no look (a plain group, no unit): A's pixel is background today and after. In both runs, B's centre pixel is blue (B*0.8 in the styled case is NOT expected after the fix: B is drawn alone at opacity 1). Exporting G itself (FM._exportSoloPrep(G)) draws both A and B at 0.8 today and after.
+      >   refuter notes: Both refuters confirmed with high confidence. The preview's own solo shows the same picture as the export, so this is not a preview-versus-export split. The file does not match the card's 'Only the … layer' or its audio mix.
+      >
+      📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 7' until it lands, then #1201.
+- [ ] **1202 — This-frame PNG draws a reversed (or frame-blend slow-mo) clip from the small preview cache (hunt MEDIUM #1202)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 8 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 8 [MEDIUM] This-frame PNG draws a reversed (or frame-blend slow-mo) clip from the small preview cache
+      >   findings: export:EXP-2
+      >   files: js/frames.js (export a one-frame capture helper using seekLock/seekAndPaint/frameSeekTarget), js/exporter.js (stillClipFrames beside stillGifCopies ~1870), js/app.js:4646-4730 (stillGo / drawStill), js/compositor.js:24800-24816
+      >   he sees today: In a 'Same as project · full detail' PNG, the reversed clip is soft and blocky. It is drawn from 360x640 bitmaps stretched 3x on his iPhone, or 540x960 stretched 2x on the PC, and it can be the nearest cached frame, not the exact one. Every other layer is sharp, and the MP4 of the same moment is crisp. Nothing says so.
+      >   fix: Give the still its own full-size frames, the way it already gets full-size GIF copies (review G5).
+      > (1) In frames.js, export FM.captureFrameAt(rec, time). Under the same seekLock buildFrameCache uses, it runs seekAndPaint(rec.el, time), then createImageBitmap(rec.el) at full size, and puts el.currentTime back.
+      > (2) In exporter.js, stillClipFrames(scene, pick, t) handles every video layer the still draws (the same pick as stillGifLayers: visible, inside the solo, not group-hidden, on screen at t) that is reversed or frame-blend at speed < 1, and whose frameCache is scaled or has fps !== P.fps. For each: fps = P.fps, dur = rec.duration, count = min(900, round(dur*fps)), local = FM.layerLocalTime(layer, t). Capture the index the compositor would read: Math.round(local*count/dur), or floor and floor+1 for frame blend, each at FM.frameSeekTarget(i*dur/count, dur). Set rec._stillCache = { fps, effFps: count/dur, count, frames: <sparse array with only those indices>, duration: dur, scaled: false }.
+      > (3) Compositor 24800: const fcS = (FM._drawingStill && m._stillCache) || m.frameCache; and use fcS in place of m.frameCache in that block. The math stays identical to the export's.
+      > (4) stillGo takes its async path when GIF copies OR clip frames are needed. drawStill sets FM._drawingStill when either exists. Its finally closes the bitmaps and deletes _stillCache.
+      > What he will see: the PNG takes a moment longer when a reversed clip is on screen, and that clip is sharp.
+      >   red-first test: A reversed video layer whose record has m.el = a 1080x1920 canvas filled green, with readyState = 4 and currentTime = 0 defined on it. Stub m.frameCache = {scaled:true, fps:24, effFps:24, count:N, duration, w:2, h:2, frames:[2x2 red bitmaps]}. Stub HTMLCanvasElement.prototype.toBlob to read the still's pixels, then call FM.snapshotPNG({scale:1}). The clip's centre must be green within ±3. Today it is red, because the preview cache is drawn. Restore the stubs in finally.
+      >   control: The same layer with reversed = false draws green today and after, which proves the element path draws the stub. A plain still with no reversed clip renders byte-identical to today (hash the pixels), which proves the new path is not touched.
+      >   refuter notes: Both refuters confirmed with high confidence. The toolbar's #btn-snapshot sits in a hidden div, but the Export dialog's 'This frame (PNG)' reaches the same path. frames.js:133-139 already calls this exact softness a bug for the other export paths.
+      >
+      📍 **Where it is (28 Oct):** queued for Codex as h2e. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 8' until it lands, then #1202.
+- [ ] **1203 — Cancelling a keyframe drag after it crossed a neighbour leaves the list unsorted, freezing the animation (hunt MEDIUM #1203)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 9 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 9 [MEDIUM] Cancelling a keyframe drag after it crossed a neighbour leaves the list unsorted, freezing the animation
+      >   findings: timeline:TL-1
+      >   files: js/timeline.js:626 (restoreGestures)
+      >   he sees today: On the phone, while dragging a diamond past its neighbour, a second finger or a palm touches the timeline, or the OS takes the touch. The diamonds look untouched, but the layer stops moving at the restored key for the rest of the clip, in the preview and the export. It survives autosave and reload. Only a later undo/redo, a new key on that property, or another drag puts it right.
+      >   fix: Put the order back along with the times:
+      >   if (kfDrag.orig) { kfDrag.kfs.forEach((k, i) => { k.t = kfDrag.orig[i]; }); if (FM.sortKeyframes && kfDrag.layer) FM.sortKeyframes(kfDrag.layer); }
+      > Nothing he sees changes, except that the animation stays right.
+      >   red-first test: A shape with transform.x = {kf:[{t:0,v:0},{t:1,v:100},{t:2,v:200}]}, all linear. Arm a real kf drag on the 1 s diamond with the harness the existing queue-690 'RELATIVE, and only past the slop' kf-drag test uses (grep tests.js for KF_DRAG_SLOP). Move the pointer past 2 s, then call FM.timeline._abortGestures(). Assert the kf times are ascending and |FM.evalProp(p, 2) - 200| < 1e-6. evalProp is exact; the fault is 100. Today it reads 100.
+      >   control: The same drag stopped at 0.5 s (no crossing) and then aborted gives FM.evalProp(p, 2) === 200, today and after. Releasing the crossing drag normally sorts it via dedupDraggedKfs, today and after.
+      >   refuter notes: Both refuters confirmed with high confidence. Correction to the finding: history.restore runs sanitizeKeyframes, which sorts, so an undo or redo heals it, but the abort itself triggers neither. The trigger is rare on the PC, needing a stale-gesture recovery or a window blur. Medium severity or a little lower.
+      >
+      📍 **Where it is (28 Oct):** queued for Codex as h2c (with items 6 and 10). The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 9' until it lands, then #1203.
+- [ ] **1204 — After splitting a parent, a child that outlives it snaps back to the pose at the cut (hunt MEDIUM #1204)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 10 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 10 [MEDIUM] After splitting a parent, a child that outlives it snaps back to the pose at the cut
+      >   findings: timeline:TL-2
+      >   files: js/scene.js:902-913 (FM.clipAt fallback)
+      >   he sees today: Take a child parented to a moving clip that he split, where the child runs past the parent's end, or the tail half was trimmed shorter. The moment the last half ends, the child jumps back to where it was at the cut and stays there, in the preview and the export.
+      >   fix: Keep clipAt's covering pass exactly as it is, including the inclusive end that is right for a parent at the seam. Replace only the final `return p;` with refLayerAt's own rule: the latest half to have ended by t, else the earliest.
+      >   const s = l => l.start || 0, e = l => (l.start || 0) + (l.duration || 0);
+      >   let ended = e(p) <= t + 1e-9 ? p : null, first = p;
+      >   for (const l of ls) { if (!l || l === p || l.splitOf !== p.splitOf) continue; if (e(l) <= t + 1e-9 && (!ended || e(l) > e(ended))) ended = l; if (s(l) < s(first)) first = l; }
+      >   return ended || first;
+      > A project that has never split a parent still returns at the first `!p.splitOf` test. Nothing else he sees changes.
+      >   red-first test: P covers 0-10 s with x keyed {0:0, 10:200}. C covers 0-12 s with parent = P. Record r = FM.evalProp(FM.clipAt(FM.scene, P.id, 11).transform.x, 11), which is 200. Set FM.time = 5, await FM.splitLayer(P.id), and read the same value at t = 11. Assert |v - 200| < 1e-6. Today it is 100.
+      >   control: Inside the parent's window, at t = 9 and t = 6, the reading is identical before and after the split, today and after (the existing split-parent / 914.8 cases). At exactly t = 10, the tail is still returned (200) today and after.
+      >   refuter notes: Both refuters confirmed with high confidence. At exactly t = 10 the inclusive end still returns the tail, so the snap starts just after 10 s. It only shows if the parent is still moving after the cut.
+      >
+      📍 **Where it is (28 Oct):** queued for Codex as h2c (with items 6 and 9). The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 10' until it lands, then #1204.
+- [ ] **1205 — Split mid-morph freezes a roto mask before the cut, then jumps back and races after it (hunt MEDIUM #1205)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 11 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 11 [MEDIUM] Split mid-morph freezes a roto mask before the cut, then jumps back and races after it
+      >   findings: timeline:TL-3
+      >   files: js/app.js:5686-5695 (splitAnimated seam value)
+      >   he sees today: Split a clip whose roto mask is morphing between two keys. The mask stops following its subject for the stretch before the cut, jumps back at the cut, then morphs twice as fast to catch up. The preview and the export agree with each other, but both differ from the clip before the split.
+      >   fix: An animated mask path has its own evaluator, as point sets do (queue 914.7), so its seam takes the shape AT the cut:
+      >   const mk = (arrKf && Array.isArray(lyr.masks)) ? lyr.masks.find(m => m && m.path === p) : null;
+      >   const v = (p === lyr.subs && FM.evalShapeSubs) ? JSON.parse(JSON.stringify(FM.evalShapeSubs(lyr, t)))
+      >           : (mk && FM.evalMaskPath) ? JSON.parse(JSON.stringify(FM.evalMaskPath(mk, t)))
+      >           : arrKf ? JSON.parse(JSON.stringify((before || p.kf[0]).v)) : FM.evalProp(p, t);
+      > This is evaluated before p.kf is filtered, as the other branches are, and B's own mask path for the tail half. evalMaskPath already snaps across a vertex-count change, so a topology change stays as today. Simple mode's S.seamKey (spine-edit.js:504-507) makes the same key-before choice but has no layer to tell a mask path from another array track. Leave it as a follow-up with its own test. Nothing else he sees changes.
+      >   red-first test: A shape layer with masks[0].path = {kf:[{t:0,v:SQ_A},{t:2,v:SQ_B}]}. Both are 4-point squares, linear: A spans x 100-300, B spans x 500-700. The clip covers 0-4 s. Record FM.evalMaskPath(m, 0.5 / 1.0 / 1.5) before the split, then split at 1 s. The head's mask at 0.5 and the tail's at 1.0 and 1.5 must match within 0.5 px per vertex (the lerp is exact; the fault is 100 px). Today they are off by 100 px.
+      >   control: A split at exactly t = 2 (on a key), and a split of a static path, give matching halves today and after. A mask whose two keys have different vertex counts snaps to the key before, today and after.
+      >   refuter notes: Both refuters confirmed with high confidence. The 'snap to the key before' comment only guards against evalProp turning arrays into strings. It never claims the snap is correct, and 914.7 calls this same snap-back a bug for point sets.
+      >
+      📍 **Where it is (28 Oct):** queued for Codex as h2d (with items 12 and 13). The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 11' until it lands, then #1205.
+- [ ] **1206 — Word Highlight (Spoken timing) races or lags after a split caption track is trimmed (hunt MEDIUM #1206)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 12 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 12 [MEDIUM] Word Highlight (Spoken timing) races or lags after a split caption track is trimmed
+      >   findings: text:TXT-2
+      >   files: js/timeline.js:4426-4428 (shiftCues), js/compositor.js:4970-4977 (hlCueSpan)
+      >   he sees today: He cuts a karaoke caption track and trims either half by any amount. On the head clip the highlight runs ahead of the voice, about twice as fast. On the tail clip it lags and re-lights words already said. It is burned into the export. The untrimmed split looks right, so it reads as random sync drift.
+      >   fix: Make two changes.
+      > (1) The marks are layer-local times, so a head trim, extendClipTo and the grip's headRebase must move them as they move start and end:
+      >   function shiftCues(caps, delta) { return Array.isArray(caps) ? caps.map(c => { const o = { ...c, start: c.start - delta, end: c.end - delta }; if (Number.isFinite(c.animFrom)) o.animFrom = c.animFrom - delta; if (Number.isFinite(c.animTo)) o.animTo = c.animTo - delta; return o; }) : null; }
+      > (2) In hlCueSpan only, a mark counts while the cue still reaches the clip's edge, even past it, as a trim leaves it. That honours the comment's 'without its clamp to the clip':
+      >   if (Number.isFinite(cue.animFrom) && s <= 1e-3) s = cue.animFrom;
+      >   if (Number.isFinite(cue.animTo) && dur > 0 && e >= dur - 1e-3) e = cue.animTo;
+      > Leave FM.captions.animSpan's gates alone. Its comment says a head-trimmed track enters at its new head, which is the Animate preset's intended behaviour. What he will see: the highlight stays on the spoken word after trimming either half.
+      >   red-first test: Text layer covering 0-4 s with captions [{start:0,end:4,text:'one two six ten'}] and a Word Highlight with follow:1. Set FM.time = 2 and run FM.splitLayer. On the head half, set head.duration = 1.8, which is what the tail grip writes. The lit-unit pattern at 1.5 s must be '0100'; today it is '0001'. On the tail half, FM.trimLayerHead(tail, 0.5), then at project 2.6 the pattern must be '0010' (six); today it is '0100'. These are discrete word indices, so compare exactly through FM.captionWordTimes or the hlUnits seam the 966 B9 tests read.
+      >   control: Before any trim, straight after the split: '0100' on the head at 1.5 s and '0010' on the tail at 2.6 s, today and after (the existing 966 B9 fresh-split case). An unsplit cue trimmed the same way gives the same word times today and after.
+      >   refuter notes: Both refuters confirmed with high confidence. Correction: with stored `words`, the tail half after a head trim is fully wrong, not partly. Remaining doubt with this fix: a cue whose edge he dragged away from the cut, and which a later trim pushes back past the clip edge, would honour its old mark again. That is rare.
+      >
+      📍 **Where it is (28 Oct):** queued for Codex as h2d (with items 11 and 13). The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 12' until it lands, then #1206.
+- [ ] **1207 — Text Reverse and Type-On cut emoji and flags in half (boxes on screen and in the export) (hunt MEDIUM #1207)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 13 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 13 [MEDIUM] Text Reverse and Type-On cut emoji and flags in half (boxes on screen and in the export)
+      >   findings: text:TXT-3
+      >   files: js/compositor.js:3697, :3715, :3798 (TEXT_FX textprogress / textreverse)
+      >   he sees today: A text with "G'day 🇦🇺" or 'Hi 😀' under Text Reverse (Characters, the default) shows replacement boxes on every frame. Under Type-On by Letter (the default) it flickers boxes and a lone 'A' during every reveal, and an emoji takes several letters of time. The same frames are in the MP4.
+      >   fix: Cut by grapheme, the unit layout already uses (queue 690 / bughunt2 #2). Read the helper at call time, so load order cannot matter:
+      > - 3798: else st.text = st.text.split('\n').map(function (ln) { return (FM._graphemes || Array.from)(ln).reverse().join(''); }).join('\n');
+      > - 3697: if (dir === 0 && unit === 0 && cur === 0) { var gs = (FM._graphemes || Array.from)(st.text); st.text = gs.slice(0, Math.round(gs.length * pr)).join(''); return; }
+      > - 3715: else toks = (FM._graphemes || Array.from)(src);
+      > ASCII text gives identical output, one grapheme per character, so pinned pictures without emoji do not move. What he will see: emoji and flags stay whole, and Type-On counts one emoji as one letter. Scramble's loop (3762) also walks code units. It is the same class but was not traced to a picture; fix it in the same pass only with its own test.
+      >   red-first test: FM._FX_TABLES.TEXT_FX.textreverse(st = {text:'Hi 😀'}, {unit:0}, 0): expect '😀 iH' exactly. Today the result matches /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/. Second: textprogress on {text:"G'day 🇦🇺"} with {progress:k/20} for k = 0..20 must never yield a lone surrogate, and never a single regional-indicator letter (/[\u{1F1E6}-\u{1F1FF}]/u matched exactly once).
+      >   control: 'ab cd' still reverses to 'dc ba', and textprogress on 'hello world' at every k/20 returns exactly what s.slice(0, round(len*pr)) returns. Both hold today and after.
+      >   refuter notes: Both refuters confirmed with high confidence. Caveat: Text Reverse's boxes show in the preview at once, so that half is a visible wrong render rather than a silent one. The Type-On flicker is brief while editing but ends up in the MP4. A static Progress of 0.5 does not hit it for these strings.
+      >
+      📍 **Where it is (28 Oct):** queued for Codex as h2d (with items 11 and 12). The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 13' until it lands, then #1207.
+- [ ] **1208 — Dragging the easing curve's handles leaves a Bounce/Elastic on the other channel (hunt MEDIUM #1208)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 14 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 14 [MEDIUM] Dragging the easing curve's handles leaves a Bounce/Elastic on the other channel
+      >   findings: keyframes:KF-3
+      >   files: js/graph-editor.js:361 (applyBez)
+      >   he sees today: In Move mode, X and Y are keyed at different times. One of them had Bounce picked. He drags the curve's handles: the graph shows his cubic curve as 'Cubic Bezier Easing', but the vertical motion still bounces in the preview and the export. The canvas only draws kfs[0], so nothing shows it.
+      >   fix: Clear the other mode's field, as applyPreset, applyEzPreset and graphClip.applyTo already do. The comments at 339 and 516 already claim applyBez does this:
+      >   function applyBez(bez) { cur.kfs.forEach(kf => { kf.bez = bez.slice(); kf.e = 'custom'; delete kf.ez; }); FM.requestRender(); redraw(); }
+      > The mirror case, setEzParams (216) skipping keys without ez, has an explicit guard and may be deliberate. Leave it and say so in the entry. Nothing else he sees changes.
+      >   red-first test: layer.transform.x = {kf:[{t:0,v:0,e:'linear'},{t:1,v:100,e:'linear'},{t:3,v:200,e:'linear'}]}, y = {kf:[{t:0,v:0,e:'linear'},{t:3,v:300,e:'easeInOut',ez:{fam:'bounce',preset:'bounce',p:{n:3,d:0.5}}}]}. FM.time = 2, FM.buildEasingEditor(layer,'move') into the document. Dispatch pointerdown on .es-canvas near a handle, then a window pointermove and a pointerup. Assert 'ez' is not in y.kf[1], and |FM.evalProp(y,1.5) - 300*FM.bezierAt(...y.kf[1].bez, 0.5)| < 1e-6. bezierAt is exact; the bounce differs by tens of px.
+      >   control: x.kf[2].bez was written by the same drag, which proves the drag ran, today and after. Clicking the Ease In-Out preset instead clears y's ez today and after.
+      >   refuter notes: Both refuters confirmed with high confidence. The 'real' refuter showed the trigger needs no hand-made data: a channel-only diamond (queue 419) or a typed X value at a new time makes the mixed state. The mirror case is weaker: it may be deliberate.
+      >
+      📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 14' until it lands, then #1208.
+- [ ] **1209 — 'Sharpen for upscaling' forgets it was added after any undo or reload, so a second press stacks a second Unsharp Mask (hunt MEDIUM #1209)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 15 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 15 [MEDIUM] 'Sharpen for upscaling' forgets it was added after any undo or reload, so a second press stacks a second Unsharp Mask
+      >   findings: history:H2
+      >   files: js/app.js:5829, :5848, :5893; js/storage.js:1920 (sanitizeEffects whitelist)
+      >   he sees today: After any undo, redo, duplicate or reload, the ⋯ menu offers 'Sharpen for upscaling…' again instead of 'Remove sharpening'. Pressing it shows the first-time toast and adds a second Unsharp Mask, and the halo shows in the preview and the export.
+      >   fix: The marker is a runtime '_' key, which snap(), save and clone all strip, as scene.js:882-884 warns. Make it a saved key and teach the whitelist, mirroring `sm`:
+      > - app.js:5829 and :5893: e._iq becomes e.iq
+      > - app.js:5848: inst.iq = 1;
+      > - storage.js beside line 1920: if (f.iq === 1 && f.type === 'unsharpmask') out.iq = 1;
+      > Grep collab-diff.js for where an effect's `sm` is listed. If effects are whitelisted there, add `iq` beside it, or a session drops it. What he will see: the menu keeps offering 'Remove sharpening' after undo and reload. Clips sharpened before the fix carry no mark, so the menu offers Sharpen again for those (old-projects rule).
+      >   red-first test: L = iqLayer(270,480) pushed into the scene. FM.improveQuality(L) commits. Then L.transform.x += 1; FM.history.commit(); FM.history.undo(); L2 = FM.layerById(FM.scene, L.id). Assert FM.layerMenuItems(L2) contains 'Remove sharpening'. Call FM.improveQuality(L2) and assert L2 has 0 unsharpmask effects. Today the label is 'Sharpen for upscaling…' and there are 2. Repeat through FM.storage._sanitizeLayers on a JSON round trip, which stands in for a reload.
+      >   control: With no undo in between, the second press leaves 0 effects. That is the existing 44991 test, today and after. A plain user-added Unsharp Mask (no iq) is never removed by the menu's toggle, today and after.
+      >   refuter notes: Both refuters confirmed with high confidence. Correction: it is not a preview-versus-export mismatch, since both draw both masks. An Undo straight after the second press removes it. What is lost for good after a reload is the toggle.
+      >
+      📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 15' until it lands, then #1209.
+- [ ] **1210 — A saved filter lands with switched-off ingredients back on, and its keyframes on the wrong clock (hunt MEDIUM #1210)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 16 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 16 [MEDIUM] A saved filter lands with switched-off ingredients back on, and its keyframes on the wrong clock
+      >   findings: effects:SAVED-FILTER-REENABLES-CHILD, effects:SAVED-FILTER-KF-NOT-REANCHORED
+      >   files: js/filters.js:730-748 (saneChild), :856-876 (makeInstance); js/fx-presets.js:207-255 (capture), :283-314 (makeInstance); js/inspector.js:1561, :2270, :2318 (callers)
+      >   he sees today: His own saved look comes back from the Filters tab, from Your filters or a star, and from 'Reset to original look' with an ingredient he had turned off switched on again, such as an extra vignette or grain. A saved look with a Strength fade-in lands already at full strength on any clip not starting at 0. An animated ingredient fires at the original clip's time instead of the new clip's.
+      >   fix: (a) saneChild: after the params loop, add `if (def.enabled === false) inst.enabled = false;`. Library recipes never set enabled, so they are unchanged.
+      > (b) Keyframe clock, in four steps:
+      > 1. capture: also take minT/maxT over the children, FM.fxListAnimatedProps(kids). Rebase the children's keys by minT with r4, as the container's are. Stamp the preset rel: 1, and teach sanePreset to keep `rel` only as exactly 1. Without this, presets saved before the fix would have their already-absolute children shifted twice.
+      > 2. FM.effectPresets.makeInstance: after copying the children, if (preset.rel === 1) FM.shiftFxKeyframes(inst.effects, t0).
+      > 3. FM.filters.makeInstance(id, atTime): for a saved def (def.custom), shift the container's params by atTime, and the children by atTime only when the saved preset is rel === 1. FM.filters.get must pass `rel` through. Library recipes have no keys, so they are unchanged.
+      > 4. Callers pass the target clip's start, the anchor Paste effect already uses (inspector.js:1603 fxClipboard.read(layer.start || 0)): applyFilter FM.filters.makeInstance(id, L.start || 0), filterPreviewStack (2270) layer.start, Reset to original look (1561) layer.start.
+      > What he will see: a saved look comes back as he saved it, and its animation starts with the clip it lands on.
+      >   red-first test: (a) box = FM.filters.makeInstance('noir'); box.effects[1].enabled = false; cap = FM.effectPresets.capture(box, 't'); FM.effectPresets.save(cap). Assert FM.filters.makeInstance(cap.id).effects[1].enabled === false. Today it is true. (b) A layer at start 10. Its container has params.strength = {kf:[{t:10,v:0},{t:11,v:1}]} and a child blur with radius = {kf:[{t:10,v:20},{t:11,v:0}]}. capture + save, then b = FM.filters.makeInstance(cap.id, 30). Assert |b.params.strength.kf[0].t - 30| < 1e-4 and |b.effects[0].params.radius.kf[0].t - 30| < 1e-4. r4 rounds to 1e-4, and the fault is 10-20 s. Today they are 0 and 10. Clean up with FM.effectPresets.remove(cap.id).
+      >   control: (a) FM.effectPresets.makeInstance(cap, 0).effects[1].enabled === false already passes today. A library filter's children are all enabled today and after. (b) On the original box, both first keys sit at 10. A static saved filter lands identically today and after. A preset stored without `rel` keeps its children's times exactly as today.
+      >   refuter notes: All four votes confirmed with high confidence. On the same clip, only the container's Strength is wrong, because the children keep their original times. The rel flag is my addition: without it, existing saved presets with animated children would get worse.
+      >
+      📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 16' until it lands, then #1210.
+- [ ] **1211 — Pressing Undo while 'Preparing frames…' runs after the menu's Reverse undoes an earlier, unrelated edit (hunt LOW #1211)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 17 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 17 [LOW] Pressing Undo while 'Preparing frames…' runs after the menu's Reverse undoes an earlier, unrelated edit
+      >   findings: history:H3
+      >   files: js/app.js:5915-5921 (Reverse menu item)
+      >   he sees today: He chooses ⋯ > Reverse on a long clip and presses Undo while the sticky 'Preparing frames… N%' toast is up. The clip is not reversed, but his previous change to another layer has also been silently undone, and the next edit cuts the redo that could bring it back. If he edits something else during the build instead, undoing that edit also un-reverses the clip.
+      >   fix: Commit first, as the Speed panel's checkbox (inspector.js:173) and swapInMedia (app.js:5373) do. Then do the long build, and only redraw afterwards:
+      >   action: async () => {
+      >     layer.reversed = !layer.reversed;
+      >     if (FM.history) FM.history.commit();   // the Reverse is its own step BEFORE the long frame build
+      >     if (layer.reversed) { if (FM.ensureReverseCache) await FM.ensureReverseCache(layer); } else if (FM.maybeClearCache) FM.maybeClearCache(layer);
+      >     if (FM.layerById(FM.scene, layer.id) !== layer) return;   // an undo replaced it meanwhile: restore already redrew
+      >     FM.timeline.rebuild(); FM.requestRender(); FM.seekVideosToTime();
+      >     if (FM.reconcileAudio) FM.reconcileAudio();
+      >   }
+      > What he will see: Undo during the build takes back the Reverse and nothing else.
+      >   red-first test: Stub FM.ensureReverseCache with a promise resolved by hand. Move shape X (+50 x) and commit. Call FM.layerMenuItems(V).find(i => i.label === 'Reverse').action() without awaiting it, then FM.history.undo() before resolving the stub, then resolve it and await a tick. Assert X's x is still +50 (exact) and the live V.reversed === false. Today X is back at its old x.
+      >   control: Resolve the stub BEFORE the undo. The undo then removes only the Reverse and X stays moved, today and after. Without any undo, the Reverse is one undo step, today and after.
+      >   refuter notes: Both refuters confirmed with high confidence. There is no test of the menu's Reverse followed by Undo. Impact is low but real: an earlier, unrelated edit is silently lost.
+      >
+      📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 17' until it lands, then #1211.
+- [ ] **1212 — Splitting a Wave text jolts every letter at the cut (hunt LOW #1212)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 18 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 18 [LOW] Splitting a Wave text jolts every letter at the cut
+      >   findings: timeline:TL-4
+      >   files: js/compositor.js:4395 (textClocks whole clock), :4732 and :4736 (wave / jitter phase)
+      >   he sees today: A text with Animate set to Wave, split mid-clip: the whole word jumps up to about 30 px in one frame at the cut, in the preview and the export.
+      >   fix: Carry the phase as the effect clock does (split and head trim already maintain B.fxTimeOffset, queue 823). Add the phase to the whole clock only:
+      >   const ph = parseFloat(layer.fxTimeOffset); const whole = { t0: layer.start, t1: layer.start + layer.duration, n: 0, ph: isFinite(ph) ? ph : 0 };
+      > Use it for the ongoing presets' phase, not for the entrance p:
+      >   wave: dy = Math.sin((tIn + (ck.ph || 0)) * 3.4 + gi * 0.55) * fs * 0.13;
+      >   jitter: const step = Math.floor((tIn + (ck.ph || 0)) * 24);
+      > Caption clocks carry no ph, so they are unchanged. What he will see: a split Wave keeps waving through the cut. A head-trimmed Wave also no longer restarts its wave, matching Drift, Spin and the other effects.
+      >   red-first test: Text covering 0-4 s with textAnim {preset:'wave', durIn:0, stagger:0}. Render frames at t = 1.0 and t = 1.5 before and after FM.splitLayer at 0.5, and take the ink centroid y of the glyph band. Assert |dy_after - dy_before| < 1 px. The same render path gives 0 difference, and the fault is about 20 px. Today it is off by about 20 px.
+      >   control: Preset 'fade' with durIn 0 renders identical centroids after the split, today and after. An unsplit Wave renders byte-identical today and after (ph = 0).
+      >   refuter notes: Both refuters confirmed with high confidence. Caveat: the Jitter restart is invisible, because it re-rolls every 1/24 s anyway. The visible bug is Wave only. The jitter line is changed only so the tail is literally identical to the unsplit clip.
+      >
+      📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 18' until it lands, then #1212.
+- [ ] **1213 — Rounded corners on a clip with a keyframed crop export square wherever the crop is smaller than at the parked playhead (hunt LOW #1213)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 19 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 19 [LOW] Rounded corners on a clip with a keyframed crop export square wherever the crop is smaller than at the parked playhead
+      >   findings: export:EXP-3
+      >   files: js/compositor.js:20357 (roundcorners kernel)
+      >   he sees today: In the preview the cropped clip's corners are rounded throughout. In the exported file they are square for the stretch where the crop is smaller than at the playhead, and with 'Continuous curve' on (the default) the squircle is missing entirely there.
+      >   fix: Use the render-time size helper that already exists for exactly this. layerSizeAt is declared in the same file at 22319, and t is in scope as the line above uses it:
+      >   const _sz = (layer && FM.layerSize) ? layerSizeAt(layer, t) : null;
+      > It gives the same answer as layerSize whenever the crop is not keyframed or t is the playhead, so nothing else moves. Squish's reach box (15679) and groupRestBoundsLocal (31028) read the playhead the same way but were not traced to a visible difference. Leave them.
+      >   red-first test: Modelled on '986 C8'. An image 240x320 at (120,160) with crop {w: kf 240->80, h: kf 320->120 over 0..4 s} and effects [{type:'roundcorners', params:{radius:40, style:0}}], with FM._exporting = true. Render t = 2 once with FM.time = 2 and once with FM.time = 0, and read the plate pixel just inside the crop's top-left corner (41,51). The two alphas must match within 8 (corner AA). Today it is transparent with FM.time = 2 and opaque with FM.time = 0, a fault of 255.
+      >   control: With no effect, both renders are opaque, today and after. With a static 160x220 crop, both renders are byte-identical, today and after.
+      >   refuter notes: Both refuters confirmed with high confidence. The reverse case (a crop at t that is larger than at the playhead) falls back to the old bounding-box path and gives only small differences.
+      >
+      📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 19' until it lands, then #1213.
+- [ ] **1214 — Change Case > Capitalize Words writes "Don'T", "I'M", 'éCole' and leaves Cyrillic lowercase (hunt LOW #1214)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 20 of 20, via INBOX; started by his "go way way harder")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Moved from INBOX.md whole (the PM's write-up, not his words):
+      (The hunt's shared notes, for all twenty, are in #1195.)
+      > ITEM 20 [LOW] Change Case > Capitalize Words writes "Don'T", "I'M", 'éCole' and leaves Cyrillic lowercase
+      >   findings: text:TXT-4
+      >   files: js/compositor.js:3868 (texttransform mode 2); tests/tests.js:163866 (the '966 opts4' byte-for-byte pin)
+      >   he sees today: Title-cased captions read 'Don'T', 'It'S' and 'I'M' on almost every English sentence with a contraction, with either the straight or the iPhone's curly apostrophe. Accented words get the capital on the wrong letter, and Russian is never capitalised. It shows in the preview and the export.
+      >   fix: Use a letter-aware rule (Unicode flags, as modes 4/5 beside it already walk by code point): a letter starts a word unless a letter, digit or mark precedes it, or a letter plus an apostrophe does:
+      >   else if (m === 2) st.text = s.toLowerCase().replace(/(?<![\p{L}\p{N}\p{M}])(?<![\p{L}\p{N}]['’])\p{L}/gu, function (c) { return c.toUpperCase(); });
+      > Lookbehind needs Safari 16.4+; his iOS 26.5 and Chrome both have it. The '966 opts4' pin at tests.js:163866 copies the old regex and requires the old output for its accented sample. Update its mode-2 expectation to the new rule, or drop mode 2 from that pin, and say so in the POLISH-LOG line. Visible change: Title Case reads correctly, and snake_case words now capitalise after the underscore.
+      >   red-first test: texttransform {mode:2}, exact string compare. "i'm here, don't go" gives "I'm Here, Don't Go" (today "I'M Here, Don'T Go"). "it’s fine" gives "It’s Fine". 'école de été' gives 'École De Été'. 'привет мир' gives 'Привет Мир'.
+      >   control: 'hello brave new world' gives 'Hello Brave New World', 'Mixed CASE 2026 & co!' gives 'Mixed Case 2026 & Co!', and 'tab\there' gives 'Tab\tHere', identical today and after. Modes 0, 1, 3, 4 and 5 stay byte-identical across the pin's TEXTS.
+      >   refuter notes: Both refuters confirmed with high confidence. The preview shows the error at once, so on one title he would notice. Across a long Detect-speech caption track he is unlikely to check every cue.
+      📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 20' until it lands, then #1214.

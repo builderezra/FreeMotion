@@ -2200,6 +2200,7 @@ window.FM = window.FM || {};
           });
           return Promise.reject({ why: 'same-device', pid: clash.pid, linked: clash.linked, name: clash.name });
         }).then(function () {
+          if (o.cancelled && o.cancelled()) return Promise.reject({ why: 'cancelled' });
           /* S6: what this device needs to find the room again on its own — the invite's sid/sk or the
              room code it joined with, and the member token the owner granted (`welcome.tok`, filed under
              `welcome.rid`). A connection-code join has neither rendezvous, so it keeps neither. */
@@ -2213,12 +2214,22 @@ window.FM = window.FM || {};
             epoch: snap.epoch, seq: snap.seq, name: o.name
           }, snap.D);
           if (!gpid) return Promise.reject({ why: 'no-room' });
+          /* bughunt8 #2b: the project THIS tab has open, not the shared fm.currentProject another tab may have moved. */
+          const tabPid = function () { return FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null; };
+          const previous = tabPid();
           return FM.projects.open(gpid).then(function (opened) {
             /* queue 690: false = storage is full, his open project is not saved, and he chose to stay in it. The
                session must not attach: it would apply the room's edits into HIS project. Take back the copy just
                made (nothing of his is in it) and say what is true — there is no room. */
-            if (opened === false) {
-              return Promise.resolve(FM.projects.remove(gpid)).catch(function () {}).then(function () { return Promise.reject({ why: 'no-room' }); });
+            const cancelled = o.cancelled && o.cancelled();
+            /* A cancel that landed while open() was loading the copy: put him back on the project he was in, then take
+               the copy away. `confirmed`, because what is being left is the copy being thrown away — a full store must
+               not ask him about it (Stay would leave him in the copy, and the remove below would land him anywhere).
+               What comes back is his project as it was last saved (open() saved it first); its undo history, playhead
+               and selection went with the switch to the copy. */
+            if (opened === false || cancelled) {
+              const back = cancelled && tabPid() === gpid ? FM.projects.open(previous, { confirmed: true }) : null;
+              return Promise.resolve(back).catch(function () {}).then(function () { return FM.projects.remove(gpid); }).catch(function () {}).then(function () { return Promise.reject({ why: cancelled ? 'cancelled' : 'no-room' }); });
             }
             const S = Session({
               adapter: A, role: (welcome && welcome.role) || o.role || 'editor',

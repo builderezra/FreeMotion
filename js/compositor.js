@@ -147,6 +147,10 @@ window.FM = window.FM || {};
          weight, as on Colour Balance (100 = the old weights; nothing to widen under All). Defaults run the old loops. */
       { key: 'mode', label: 'Method', def: 0, options: [[0, 'Colourise'], [1, 'Tint over']] },
       { key: 'soft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] },
+      /* #966 opts20 (round twenty, his "more choices always better"): the tint always washed every face in the shot with the rest.
+         PROTECT SKIN holds skin-coloured pixels back with Teal & Orange's skin window (skinW12, through tone13), after Method, Range,
+         Range width and Keep brightness. 0 % runs the old loops untouched (tintPixels' first statement). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
     { type: 'threshold', label: 'Threshold', color: true, defColor: '#000000', colorLabel: 'Below', color2: true, defColor2: '#ffffff', color2Label: 'Above', params: [
       { key: 'level', label: 'Level', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -406,8 +410,8 @@ window.FM = window.FM || {};
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
       /* #966 opts19 (hunt/fx19, his "more choices always better"): the stops always pushed each channel on its own, so where a colour
          reached the top it turned (a blue sky went cyan, a face yellow), and every face in the shot was lit with the rest. PROTECT SKIN
-         holds skin-coloured pixels back with Teal & Orange's skin window (skinW12), and KEEP COLOUR is Tone Curve's (round eighteen,
-         tcKeep18): at 100 % only the brightness moves, every pixel keeping its own hue and richness on its way to white. 0 % and 0 %
+         holds skin-coloured pixels back with Teal & Orange's skin window (skinW12), and KEEP COLOUR now uses exposureKeep20's bounded
+         saturation: at 100 % only the brightness moves, keeping the hue without amplifying colour in lifted noise. 0 % and 0 %
          run the old lines untouched (skinKeep19 only off them). */
       { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'keepcol', label: 'Keep colour', min: 0, max: 100, step: 1, def: 0, unit: '%', note: '100 % lights only the brightness: a sky stays blue and a face its own colour as they brighten' },
@@ -1621,6 +1625,10 @@ window.FM = window.FM || {};
          colour so the colour row stays last. */
       { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']], note: 'Darks fades the shadows and leaves the lights crisp' },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* #966 opts20 (round twenty, his "more choices always better"): the fade always washed out every face with the rest. PROTECT
+         SKIN holds skin-coloured pixels back from the whole fade with Teal & Orange's skin window (skinW12, through tone13), every
+         older control left on the kernel. 0 % runs the old loop untouched. Placed before Fade colour so the colour row stays last. */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'fadecol', label: 'Fade colour', swatch: true, def: '#808080' },   // a colour row inside `params` (fx-registry paramsOf `swatch`), last like every effect colour
     ] },
     /* #966 opts4: VIEWER — night vision as seen through the device: everything outside one round Scope, or a pair of Binocular
@@ -9566,8 +9574,8 @@ window.FM = window.FM || {};
       }
     },
     exposure: function (d, W, H, p, t) {
-      /* #966 opts19: PROTECT SKIN or KEEP COLOUR over 0 % runs skinKeep19 — this very kernel without the two (Stops, Black point, Highlight
-         rolloff, Gamma, Work in, Affects and Mix as they are), Keep colour laid on by tcKeep18, each pixel then laid in by 1 − Protect skin
+      /* #966 opts19 / opts20: PROTECT SKIN or KEEP COLOUR over 0 % runs skinKeep19 — this very kernel without the two (Stops, Black point,
+         Highlight rolloff, Gamma, Work in, Affects and Mix as they are), Keep colour bounded by exposureKeep20, then laid in by 1 − Protect skin
          x its skin weight. 0 % runs the lines below untouched. */
       const exSk19 = p.skin == null ? 0 : FM.evalProp(p.skin, t), exKc19 = p.keepcol == null ? 0 : FM.evalProp(p.keepcol, t);
       if (exSk19 > 0 || exKc19 > 0) { skinKeep19(d, W, H, p, t, PIXEL_FX.exposure, exSk19, exKc19); return; }
@@ -12892,6 +12900,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     },
     // ---- batch 21 ----
     faded: function(d,W,H,p,t){
+      /* #966 opts20: hold skin back from the whole fade, with every older control left on the kernel. 0 % runs it untouched. */
+      const fdSk20 = p.skin == null ? 0 : FM.evalProp(p.skin, t);
+      if (fdSk20 > 0) { tone13(d, W, H, p, t, PIXEL_FX.faded, ['skin'], 0, 100, fdSk20); return; }
       /* #966 opts14: AFFECTS Darks (1), Mids (2) or Lights (3), or MIX under 100 %, runs tone13 — this very kernel without the two, its
          result laid in by the tonal weight of each pixel's own brightness and Mix; All and 100 % run the lines below untouched. */
       const fdRg14 = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0), fdMx14 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
@@ -14698,17 +14709,44 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   /* ═══ #966 opts19 (hunt/fx19): the helpers behind the nineteenth round — Gamma's and Exposure's Protect skin and Keep colour, Colour
    * Pop's Protect skin and Show selection. Each runs only off those controls' defaults, so a default kernel never calls one. ═══ */
   /* PROTECT SKIN AND KEEP COLOUR FOR A POINT KERNEL `fn` (Gamma's, Exposure's): the kernel itself, untouched, run with the two keys taken
-     away (so every one of its own controls is what it is), Keep colour laid on by tcKeep18 (round eighteen's Tone Curve: the picture's
-     own colour put at the kernel's brightness), then each pixel laid in by 1 − Protect skin x its skin weight by tone13. At Protect skin
-     0 % it calls tcKeep18 straight on a copy of the params without the two, so it pays for no plate copy it does not need (round
+     away (so every one of its own controls is what it is), Keep colour laid on by tcKeep18 for Gamma or exposureKeep20 for Exposure,
+     then each pixel laid in by 1 − Protect skin x its skin weight by tone13. At Protect skin
+     0 % it calls the colour helper straight on a copy of the params without the two, so it pays for no plate copy it does not need (round
      eighteen's review N1). Pixel by pixel on the pixel alone, so a cropped plate (692) draws what the whole one draws. */
   function skinKeep19(d, W, H, p, t, fn, skin, keep) {
-    const run = function (d19, W19, H19, q19, t19) { tcKeep18(d19, W19, H19, q19, t19, keep, fn); };
+    const run = function (d19, W19, H19, q19, t19) { (fn === PIXEL_FX.exposure ? exposureKeep20 : tcKeep18)(d19, W19, H19, q19, t19, keep, fn); };
     if (skin > 0) { tone13(d, W, H, p, t, run, ['skin', 'keepcol'], 0, 100, skin); return; }
     const q = Object.assign({}, p); delete q.skin; delete q.keepcol;
     run(d, W, H, q, t);
   }
   FM._skinKeep19 = skinKeep19;   // suite seam (#966 opts19)
+  /* #966 opts20 — EXPOSURE'S BOUNDED KEEP COLOUR. Channel gaps lose saturation as brightness rises; dividing by the source brightness
+     instead can amplify a one-byte red in black noise without bound. Use the source hue, but cap HSV saturation at BOTH the source's
+     and the plain exposure's. On that hue's ray, RGB = Y + c x (hue − its brightness): solving c for that saturation keeps the plain
+     Rec.601 brightness exactly. The gamut bound can only reduce c, never clip a channel and turn the hue. Thus a multiply keeps its
+     original saturation, a gamma lift cannot grow richer than the plain lift, and lifted near-black noise keeps only the tiny
+     saturation the plain lift has. No division by source brightness, no noise threshold and no unbounded gain. Greys stay grey.
+     Keep colour 0 calls the old kernel without a copy; channel rounding is the only brightness error (at most half a level). */
+  function exposureKeep20(d, W, H, p, t, keep, fn) {
+    const k = keep > 0 ? Math.min(1, keep / 100) : 0, src = k > 0 ? d.slice() : null;
+    fn(d, W, H, p, t);
+    if (!(k > 0)) return;
+    for (let i = 0; i < d.length; i += 4) {
+      if (src[i + 3] === 0) continue;
+      const r = src[i], g = src[i + 1], b = src[i + 2], hi = Math.max(r, g, b), lo = Math.min(r, g, b), gap = hi - lo;
+      const R = d[i], G = d[i + 1], B = d[i + 2], mx = Math.max(R, G, B), mn = Math.min(R, G, B);
+      const Y = 0.299 * R + 0.587 * G + 0.114 * B;
+      const sat = hi > 0 && mx > 0 ? Math.min(gap / hi, (mx - mn) / mx) : 0;
+      const hR = gap > 0 ? (r - lo) / gap : 0, hG = gap > 0 ? (g - lo) / gap : 0, hB = gap > 0 ? (b - lo) / gap : 0;
+      const hY = 0.299 * hR + 0.587 * hG + 0.114 * hB;
+      let c = sat * Y / (1 - sat * (1 - hY));
+      if (hY > 0) c = Math.min(c, Y / hY);
+      if (hY < 1) c = Math.min(c, (255 - Y) / (1 - hY));
+      d[i] = R + (Y + c * (hR - hY) - R) * k;
+      d[i + 1] = G + (Y + c * (hG - hY) - G) * k;
+      d[i + 2] = B + (Y + c * (hB - hY) - B) * k;
+    }
+  }
   /* COLOUR POP'S PROTECT SKIN AND SHOW SELECTION. With Show selection Off the picture is tone13's: the kernel without the two (Hue range,
      Drain, Boost, Acts on, Darken and Rest colour as they are), each pixel laid in by 1 − Protect skin x skinW12 of its own colour — at
      100 % a full skin tone keeps its own colour while the rest drains. SHOW SELECTION paints what keeps its colour: white a pixel kept
@@ -21687,6 +21725,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      and Keep brightness work on it exactly as on Colourise. RANGE WIDTH is an exponent on the Range weight, 100/width, as on
      Colour Balance — 100 is the old weights and All has no range to widen. Colourise + 100 run the old loops below. */
   function tintPixels(d, am, C, p, t) {
+    /* #966 opts20: protect skin after Method, Range and Keep brightness, on every Tint route. 0 % runs the old loops untouched. */
+    const tiSk20 = p.skin == null ? 0 : FM.evalProp(p.skin, t);
+    if (tiSk20 > 0) { tone13(d, d.length / 4, 1, p, t, function (a20, W20, H20, q20, t20) { tintPixels(a20, am, C, q20, t20); }, ['skin'], 0, 100, tiSk20); return; }
     const rng = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0);
     const pres = p.preserve == null ? 0 : (Math.round(FM.evalProp(p.preserve, t)) | 0);
     const wf = TINT_W[rng > 0 && rng < TINT_W.length ? rng : 0];
@@ -28037,7 +28078,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * saved project, filter or look can move. */
   const ST_SH = '#1e90a0', ST_HI = '#ffa04a';   // the colours a new one starts with: a teal (30,144,160) and an orange (255,160,74)
   const ST_ROWS = [
-    { type: 'splittone', label: 'Split Toning', desc: 'Tints the shadows one colour and the highlights another — teal and orange, cool and warm, sepia darks — while the picture keeps its own colours and brightness. Balance moves where the shadows end and the highlights begin; Blending how softly they meet.', params: [
+    { type: 'splittone', label: 'Split Toning', desc: 'Tints the shadows one colour and the highlights another — teal and orange, cool and warm, sepia darks — while the picture keeps its own colours and brightness. Balance moves where the shadows end and the highlights begin; Blending how softly they meet; Protect skin keeps faces their own colour.', params: [
       { key: 'shadows', label: 'Shadows', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'highlights', label: 'Highlights', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0, note: '−100 more of the shadow colour · +100 more of the highlight colour' },
@@ -28049,6 +28090,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          darks take only the shadow colour and the lights only the highlight colour; 0 a hard split. 100 % reads the old table
          untouched (stSplit10 only below it). */
       { key: 'blending', label: 'Blending', min: 0, max: 100, step: 1, def: 100, unit: '%', note: '100 a wide, soft crossover · 0 a hard split at the Balance point' },
+      /* #966 opts20 (round twenty, his "more choices always better"): both tones always landed on every face in the shot. PROTECT
+         SKIN holds skin-coloured pixels back from both with Teal & Orange's skin window (skinW12, through tone13). 0 % reads the old
+         kernel untouched (its first statement). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ], color: true, defColor: ST_SH, colorLabel: 'Shadows colour', colorGate: { by: 'shadows', deadAt: 0, deadAtText: '0%' },
     color2: true, defColor2: ST_HI, color2Label: 'Highlights colour', color2Gate: { by: 'highlights', deadAt: 0, deadAtText: '0%' } },
   ];
@@ -28088,6 +28133,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   FM._stSplit10 = stSplit10;   // suite seam (#966 opts10)
   PIXEL_FX.splittone = function (d, W, H, p, t) {
+    /* #966 opts20: hold skin back from both tones through the same skin window; 0 % runs the old kernel untouched. */
+    const stSk20 = p.skin == null ? 0 : FM.evalProp(p.skin, t);
+    if (stSk20 > 0) { tone13(d, W, H, p, t, PIXEL_FX.splittone, ['skin'], 0, 100, stSk20); return; }
     const sa = stNum(fparam(p, 'shadows', 50, t), 0, 100, 50) / 100;
     const ha = stNum(fparam(p, 'highlights', 50, t), 0, 100, 50) / 100;
     const mix = stNum(fparam(p, 'mix', 100, t), 0, 100, 100) / 100;
