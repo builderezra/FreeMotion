@@ -335,6 +335,17 @@ window.FM = window.FM || {};
 
     /* ── the pipeline ────────────────────────────────────────────────────────────────────────── */
 
+    function rateDrop(m, cid) {
+      const t = now();
+      let ack = null;
+      if (m.rateNoticeAt == null || t - m.rateNoticeAt >= 250) {
+        m.rateNoticeAt = t;
+        const tokens = Math.min(LIM.TX_BURST, m.tokens + (t - m.tokenAt) / 1000 * LIM.TX_PER_SEC);
+        ack = { t: 'rl', cid: cid, at: Math.max(0, Math.ceil((1 - tokens) * 1000 / LIM.TX_PER_SEC)) };
+      }
+      return { ack: ack, b: null, dropped: 'rate' };
+    }
+
     function takeToken(m) {
       const t = now();
       const refill = (t - m.tokenAt) / 1000 * LIM.TX_PER_SEC;
@@ -1007,11 +1018,20 @@ window.FM = window.FM || {};
         note({ t: now(), mid: mid, what: 'bad-tx', why: bad });
         return { ack: { t: 'ack', cid: (tx && tx.cid) || 0, seq: null, at: H.seq, ops: [], fix: [], rej: [['*', 'bad']], lost: [] }, b: null };
       }
+      /* #1218: own the first rate hole: no later cid may pass it. Only a guest whose hello said it understands `rl` ever has one. */
+      if (m.rateHole != null && tx.cid > m.rateHole) return rateDrop(m, m.rateHole);
       if (!takeToken(m)) {                                    // 2
         m.flagged = true;
         note({ t: now(), mid: mid, what: 'rate' });
-        return { ack: null, b: null, dropped: 'rate' };
+        /* An older build on the same PROTO and SCHEMA_REV is admitted and never answers `rl`, so it keeps today's rule: the tx is
+           lost and nothing is held. Holding a hole for it would drop every later edit until it reconnected. */
+        if (!m.rl) return { ack: null, b: null, dropped: 'rate' };
+        /* A duplicate (a cid already taken) never becomes the hole: its ack is on its way and nobody would fill it. A NEW hole is
+           told at once, whenever the last notice went. */
+        if (m.rateHole == null && tx.cid > m.lastCid) { m.rateHole = tx.cid; m.rateNoticeAt = null; }
+        return rateDrop(m, m.rateHole != null ? m.rateHole : tx.cid);
       }
+      if (tx.cid === m.rateHole) m.rateHole = null;
       if (tx.cid <= m.lastCid) {                              // 3
         for (let i = m.acks.length - 1; i >= 0; i--) if (m.acks[i].cid === tx.cid) return { ack: refreshDup(m, tx, m.acks[i]), b: null, dup: true };   // refreshed: see refreshDup
         return { ack: null, b: null, dup: true };

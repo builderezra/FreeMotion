@@ -218,6 +218,9 @@ window.FM = window.FM || {};
     RING_BATCHES: 2000, RING_BYTES: 8 * 1024 * 1024,
     HASH_IDLE: 2000, HASH_MIN: 10000, HASH_ESCALATE: 3, HASH_WINDOW: 600000,
     OUTBOX_OPS: 5000, OUTBOX_BYTES: 4 * 1024 * 1024,
+    /* #1020: guest document holds cover the host ring's byte budget. At 10 edits/s (100 ms ticks),
+       1000 messages cover about 100 s of export/jobs before catch-up replaces the held document copy. */
+    HELD_MESSAGES: 1000, HELD_BYTES: 8 * 1024 * 1024,
     UNDO_STEPS: 120,
     CKPT_EVERY: 600000, CKPT_KEEP: 10,
     KNOCK_TIMEOUT: 120000, PENDING_JOIN: 24 * 3600 * 1000,
@@ -491,6 +494,7 @@ window.FM = window.FM || {};
 
   C.detach = function (opts) {
     const s = C.session;
+    if (s && s._clearTxFlush) s._clearTxFlush();
     C.session = null;
     C.active = false;
     C.role = 'owner';

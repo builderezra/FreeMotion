@@ -178,6 +178,22 @@ window.FM = window.FM || {};
     const forceIds = Object.create(null);         // S7: layer ids whose next `lr` is a confirmed delete-anyway
     let refusedAt = 0;                            // S7: the §16.3 toast, said once rather than every tick
     let outboxOps = 0, outboxBytes = 0;
+    function enqueue(entry) {
+      outstanding.push(entry);
+      counted(entry);
+    }
+    /* What an entry costs the outbox, and the cap it may trip. Split from enqueue so a caller that pushes for itself (runStep's
+       undo and redo) counts the same way. */
+    function counted(entry) {
+      entry.bytes = canon(entry.ops).length;
+      outboxOps += entry.ops.length;
+      outboxBytes += entry.bytes;
+      if (!S.outboxFull && (outboxOps > LIM.OUTBOX_OPS || outboxBytes > LIM.OUTBOX_BYTES)) {
+        S.outboxFull = true;
+        keepMyVersion();
+        if (A.onOutboxFull) { try { A.onOutboxFull(true); } catch (e) {} }
+      }
+    }
 
     /* ── the local interaction (§8.2) ────────────────────────────────────────────────────────── */
     let held = Object.create(null);               // pathKey -> {b: the value before the interaction}
@@ -194,7 +210,40 @@ window.FM = window.FM || {};
     let keepIds = null;                           // memoised reachable() answer
 
     /* ── frozen / busy (§8.9) ────────────────────────────────────────────────────────────────── */
-    const msgQueue = [];                          // guests: whole messages. owner: live applications.
+    const msgQueue = [];                          // guests: whole messages; owner replays the host ring.
+    let msgQueueBytes = 0, msgQueueGap = false, queueGapSeq = null, firstHeldSeq = null;
+    function documentMessage(entry) {
+      return ['b', 'tail', 'snap', 'hash'].indexOf(entry.msg.t) !== -1;
+    }
+    function holdMessage(entry) {
+      if (isOwner) {
+        if (firstHeldSeq === null) firstHeldSeq = entry.seq;
+        S.stats.queued++;
+        return;
+      }
+      if (msgQueueGap && documentMessage(entry)) return;
+      if (entry.msg.t === 'role' || entry.msg.t === 'settings') {
+        for (let i = msgQueue.length - 1; i >= 0; i--) {
+          if (msgQueue[i].msg.t === entry.msg.t) {
+            msgQueueBytes -= canon(msgQueue[i]).length;
+            msgQueue.splice(i, 1);
+          }
+        }
+      }
+      const bytes = canon(entry).length;
+      if (!msgQueueGap && (msgQueue.length + 1 > LIM.HELD_MESSAGES || msgQueueBytes + bytes > LIM.HELD_BYTES)) {
+        for (let i = msgQueue.length - 1; i >= 0; i--) {
+          if (documentMessage(msgQueue[i])) msgQueue.splice(i, 1);
+        }
+        msgQueueBytes = msgQueue.reduce(function (n, e) { return n + canon(e).length; }, 0);
+        msgQueueGap = true;
+        if (queueGapSeq === null) queueGapSeq = S.bs;   // the first gap's seq: a second overflow must not skip it
+        if (documentMessage(entry)) return;
+      }
+      msgQueue.push(entry);
+      msgQueueBytes += bytes;
+      S.stats.queued++;
+    }
 
     /* ── links ───────────────────────────────────────────────────────────────────────────────── */
     const peers = Object.create(null);            // owner: mid -> endpoint
@@ -304,7 +353,7 @@ window.FM = window.FM || {};
      * refused or queued, because there is nobody left to send it to and the copy is his (§16's roles end with it). */
     function pushLocal(scope) {
       const over = !S.active;
-      if (frozen() || busy()) return 0;              // §8.9: ticks and sweeps stand down
+      if (frozen() || busy()) return 0; // §8.9: ticks and sweeps stand down
       /* ⚠️ NEVER DIFF ONE PROJECT AGAINST ANOTHER (queue 921). `FM.projects.open()` empties the live
          scene and THEN awaits `storage.load()` — IndexedDB plus a media hydrate, hundreds of ms — and
          the 100 ms ticker fires right through it. Nothing on that path is `jobWrapped` and nothing
@@ -406,16 +455,7 @@ window.FM = window.FM || {};
            content op underneath it, in base as well as live, with nothing to bring them back. */
         if (op.o === 's' || op.o === 'd') pending[P.key(op.p)] = S.cid;
       }
-      outstanding.push(entry);
-      outboxOps += ops.length;
-      outboxBytes += canon(ops).length;
-      /* §13.1 (S8 review): past the cap this device turns read-only and says so — the flag was set and nothing
-         read it, so the outbox went on growing past the size it exists to bound. */
-      if (!S.outboxFull && (outboxOps > LIM.OUTBOX_OPS || outboxBytes > LIM.OUTBOX_BYTES)) {
-        S.outboxFull = true;
-        keepMyVersion();
-        if (A.onOutboxFull) { try { A.onOutboxFull(true); } catch (e) {} }
-      }
+      enqueue(entry);
       if (S.online) flushOutstanding();
       S.stats.tx++;
       return res.ops.length;
@@ -455,10 +495,33 @@ window.FM = window.FM || {};
       return out;
     }
 
+    let flushTimer = null, flushAt = 0;
+    let txTokens = LIM.TX_BURST / 2, txTokenAt = now();
+    function clearFlush() {
+      if (flushTimer != null) clearTimeout(flushTimer);
+      flushTimer = null;
+      flushAt = 0;
+    }
+    S._clearTxFlush = clearFlush;
+    S._txRefill = function (n) { txTokens = n == null ? LIM.TX_BURST / 2 : n; txTokenAt = now(); };   // tests: refill (or empty) this pace
+    function scheduleFlush(ms) {
+      clearFlush();
+      flushAt = now() + ms;
+      flushTimer = setTimeout(function () {
+        clearFlush();
+        if (S.active && S.online) flushOutstanding();
+      }, ms);
+    }
     function flushOutstanding() {
+      if (!S.active || !S.online || (flushTimer != null && now() < flushAt)) return;
       for (let i = 0; i < outstanding.length; i++) {
         const e = outstanding[i];
         if (e.sent) continue;
+        const t = now();
+        txTokens = Math.min(LIM.TX_BURST / 2, txTokens + (t - txTokenAt) / 1000 * (LIM.TX_PER_SEC / 2));
+        txTokenAt = t;
+        if (txTokens < 1) { scheduleFlush(Math.ceil((1 - txTokens) * 1000 / (LIM.TX_PER_SEC / 2))); return; }
+        txTokens -= 1;
         /* q:1 marks a tx the host must CAS, i.e. one written against a base the host may have moved
            past. Anything that waited out an offline stretch qualifies, and so does a re-send. */
         const q = (e.queued || e.replay) ? 1 : 0;
@@ -749,7 +812,7 @@ window.FM = window.FM || {};
             broadcast(r.b, mid);
             lastBatchAt = now();
             const all = r.b.ops.concat(r.b.fix || []);
-            if (frozen() || busy()) { msgQueue.push({ kind: 'live', ops: all, by: mid, ord: r.b.ord }); S.stats.queued++; }
+            if (frozen() || busy() || firstHeldSeq !== null) { holdMessage({ seq: r.b.seq }); }
             else { applyIncoming(all, { by: mid }); adoptOrder(r.b.ord, true); }
           }
           return;
@@ -855,6 +918,9 @@ window.FM = window.FM || {};
          the owner's UI decided, and a hello from anywhere else is a stranger's and is not answered. */
       const m = host.members[mid];
       if (!m) { strangerNote(mid, 'hello'); return; }
+      /* #1218: this guest resends from a rate hole when told (`rl`), so the host may hold it to that hole. A build that says nothing
+         keeps the old rule (collab-host.js). */
+      m.rl = msg.rl === 1;
       const have = (msg.have && typeof msg.have === 'object') ? msg.have : {};
       /* S5: a member who says hello (joined, or came back) is owed the roster and everybody's state now. */
       if (C.presence) { try { C.presence.onJoin(S, mid); } catch (e) {} }
@@ -946,9 +1012,20 @@ window.FM = window.FM || {};
         }
         return;
       }
+      if (msg.t === 'rl') {
+        if (!outstanding.some(function (e) { return e.cid === msg.cid; })) return;
+        for (let i = 0; i < outstanding.length; i++) {
+          if (outstanding[i].cid >= msg.cid) { outstanding[i].sent = false; outstanding[i].replay = true; }
+        }
+        const at = typeof msg.at === 'number' && isFinite(msg.at) ? msg.at : 50;
+        /* The host is dry, so the resend starts from an EMPTY bucket and goes at half its refill: a burst would open new holes. */
+        txTokens = 0; txTokenAt = now();
+        scheduleFlush(Math.max(50, Math.min(2000, at)));
+        return;
+      }
       /* §8.9: a guest queues WHOLE incoming messages while frozen or busy, so an export or a half-built
          paste never sees a document somebody else is changing underneath it. */
-      if ((frozen() || busy()) && msg.t !== 'welcome') { msgQueue.push({ kind: 'msg', msg: msg }); S.stats.queued++; return; }
+      if ((frozen() || busy() || msgQueueGap) && msg.t !== 'welcome') { holdMessage({ kind: 'msg', msg: msg }); return; }
       switch (msg.t) {
         case 'welcome':
           S.mid = msg.mid || S.mid;
@@ -963,6 +1040,7 @@ window.FM = window.FM || {};
         case 'snap': return onSnap(msg);
         case 'tail': {
           for (let i = 0; i < msg.batches.length; i++) onBatch(msg.batches[i]);
+          queueGapSeq = null;
           catchupCopySeen = true;
           replayOutstanding();
           return;
@@ -1049,7 +1127,7 @@ window.FM = window.FM || {};
       if (entry) rememberCatchup(entry.ops, entry.cid);
       if (entry) {
         outboxOps -= entry.ops.length;
-        outboxBytes -= canon(entry.ops).length;
+        outboxBytes -= entry.bytes;
         outstanding.splice(i, 1);
         if (S.outboxFull && outboxOps <= LIM.OUTBOX_OPS && outboxBytes <= LIM.OUTBOX_BYTES) {
           S.outboxFull = false;
@@ -1157,6 +1235,7 @@ window.FM = window.FM || {};
     }
 
     function onSnap(snap) {
+      queueGapSeq = null;
       const mine = Object.create(null);
       Object.keys(pending).forEach(function (k) { mine[k] = 1; });
       Object.keys(held).forEach(function (k) { mine[k] = 1; });
@@ -1358,6 +1437,11 @@ window.FM = window.FM || {};
       }
       if (A.flushPendingCommit) { try { A.flushPendingCommit(); } catch (e) {} }
       pushLocal('hot');
+      if (!isOwner && S.active && S.outboxFull) {
+        if (st.pre) preIdx++;
+        else (intoRedo ? undoStack : redoStack).push(st);
+        return false;
+      }
       const keepOps = [], keepRecs = [];
       let soft = 0, hardFail = null, undoCids = null;
       for (let i = 0; i < st.ops.length; i++) {
@@ -1464,6 +1548,7 @@ window.FM = window.FM || {};
           S.cid += 1;
           for (let i = 0; i < ops.length; i++) if (ops[i].o === 's' || ops[i].o === 'd') pending[P.key(ops[i].p)] = S.cid;
           outstanding.push({ cid: S.cid, ops: ops, sent: false, queued: !S.online || catchingUp, ed: st.ed === 's' ? 's' : undefined });
+          counted(outstanding[outstanding.length - 1]);   // #1019: an undo or redo counts toward the outbox cap, as an edit does
           rememberCatchup(ops, S.cid);
           undoCids = [S.cid];
           if (S.online) flushOutstanding();
@@ -1525,6 +1610,8 @@ window.FM = window.FM || {};
     /* The scheduled work of §9, in one call so the app has one timer and the suite has one entry. */
     S.tick = function (scope) {
       if (!S.active) return 0;
+      /* #1218: a paced flush that is already due runs here as well, so neither a fake clock nor a throttled timer can strand it. */
+      if (flushTimer != null && now() >= flushAt) { clearFlush(); flushOutstanding(); }
       if (isOwner) serveOwed();
       drainQueue();
       if (!interacting() && (Object.keys(held).length || deferredOrd)) release();   // settle
@@ -1538,16 +1625,43 @@ window.FM = window.FM || {};
     };
 
     function drainQueue() {
-      if (!msgQueue.length) return;
       if (frozen() || busy()) return;
+      if (firstHeldSeq !== null) {
+        const tail = host.tail(firstHeldSeq - 1);
+        firstHeldSeq = null;
+        if (tail === null) {
+          // The host ring evicted the held range; only a snapshot can recover it now.
+          S.stats.resyncs++;
+          onSnap(host.snapshot());
+        } else {
+          for (let i = 0; i < tail.batches.length; i++) {
+            const b = tail.batches[i];
+            if (b.by === S.mid) continue;
+            applyIncoming(b.ops.concat(b.fix || []), { by: b.by });
+            adoptOrder(b.ord, true);
+          }
+        }
+        pushLocal('full');
+      }
+      if (msgQueueGap) {
+        msgQueueGap = false;
+        S.stats.resyncs++;
+        catchingUp = true;
+        catchupCopySeen = false;
+        outstanding.forEach(function (e) { e.queued = true; rememberCatchup(e.ops, e.cid); });
+        sendToHost({ t: 'resync', seq: S.bs, h: S.baseHash() });
+        pushLocal('full');
+      }
+      if (!msgQueue.length) return;
       const q = msgQueue.splice(0, msgQueue.length);
+      msgQueueBytes = 0;
       for (let i = 0; i < q.length; i++) {
-        if (q[i].kind === 'live') { applyIncoming(q[i].ops, { by: q[i].by }); adoptOrder(q[i].ord, true); }
-        else guestMessage(q[i].msg);
+        guestMessage(q[i].msg);
       }
       pushLocal('full');                       // §8.9: drain, then a full diff
     }
-    S._queued = function () { return msgQueue.length; };
+    S._queued = function () { return msgQueue.length + (firstHeldSeq === null ? 0 : 1); };
+    S._outboxSize = function () { return { ops: outboxOps, bytes: outboxBytes }; };
 
     /* §12.4: the guest's base, so a reload can compute an outbox instead of losing the offline work. */
     let persistTimer = null, persistFails = 0;
@@ -1590,7 +1704,7 @@ window.FM = window.FM || {};
          failure only shows up much later as the guest's offline edits being quietly overwritten by a
          snapshot. The `catch` below could never see it either: an async rejection is not a throw. */
       let r;
-      try { r = A.persistBase({ epoch: S.epoch, seq: S.bs, cid: S.cid, D: clone({ project: S.base.project, layers: S.base.layers }) }); }
+      try { r = A.persistBase({ epoch: S.epoch, seq: queueGapSeq !== null ? queueGapSeq : S.bs, cid: S.cid, D: clone({ project: S.base.project, layers: S.base.layers }) }); }
       catch (e) { return persistFailed(); }
       if (r && typeof r.then === 'function') {
         return r.then(function (ok) { if (!ok) return persistFailed(); persistFails = 0; return true; },
@@ -1616,13 +1730,14 @@ window.FM = window.FM || {};
       for (let i = 0; i < res.ops.length; i++) D.apply(S.base, res.ops[i]);
       S.cid += 1;
       for (let i = 0; i < ops.length; i++) if (ops[i].o === 's' || ops[i].o === 'd') pending[P.key(ops[i].p)] = S.cid;
-      outstanding.push({ cid: S.cid, ops: ops, sent: false, queued: true });
+      enqueue({ cid: S.cid, ops: ops, sent: false, queued: true });
       keepMyVersion();                          // §13.2 step 5: a reload's recovered work is offline work too
       return ops.length;
     };
 
     /* §13.1: offline is a state the link reports, never one we infer from silence and hope about. */
     function markOffline() {
+      clearFlush();
       if (!S.online) return;
       S.online = false;
       catchingUp = true;
@@ -1708,7 +1823,8 @@ window.FM = window.FM || {};
        so the owner's knock card, the version gate and the member table all read the same fields. */
     function helloMsg(extra) {
       const me = S.me || {};
-      const m = { t: 'hello', role: S.role, have: { epoch: S.epoch, seq: S.bs }, proto: C.PROTO, schema: C.SCHEMA_REV };
+      // A kept ack may be newer than discarded batches; reconnect must still request the missing range.
+      const m = { t: 'hello', role: S.role, have: { epoch: S.epoch, seq: queueGapSeq === null ? S.bs : queueGapSeq }, proto: C.PROTO, schema: C.SCHEMA_REV, rl: 1 };   // rl: #1218
       if (typeof me.name === 'string') m.name = me.name;
       if (typeof me.color === 'string') m.color = me.color;
       if (typeof me.mk === 'string') m.mk = me.mk;
@@ -1835,6 +1951,7 @@ window.FM = window.FM || {};
     S.endpoint = function (mid) { return isOwner ? peers[mid] : link; };
 
     S.stop = function (why) {
+      clearFlush();
       S.active = false;
       /* S6 review: WHY it stopped, for whoever tidies up after it — a knock still on the owner's screen is
          answered "paused" when he merely opened another project, and "ended" when he stopped sharing. */
@@ -1973,7 +2090,7 @@ window.FM = window.FM || {};
   function cleanStr(s, n) { return typeof s === 'string' ? s.replace(CTRL_, '').trim().slice(0, n) : ''; }
   function meOf(o) { return { name: o.name, color: o.color, mk: o.mk, dev: o.dev, app: o.app }; }
   function joinHello(o) {
-    const m = { t: 'hello', role: o.role || 'editor', name: o.name, color: o.color, have: { epoch: null, seq: 0 }, proto: C.PROTO, schema: C.SCHEMA_REV };
+    const m = { t: 'hello', role: o.role || 'editor', name: o.name, color: o.color, have: { epoch: null, seq: 0 }, proto: C.PROTO, schema: C.SCHEMA_REV, rl: 1 };
     if (typeof o.mk === 'string') m.mk = o.mk;
     if (o.dev === 'phone' || o.dev === 'pc') m.dev = o.dev;
     if (typeof o.app === 'string') m.app = o.app;

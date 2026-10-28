@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Oct at v18.13
+> ## 📌 WHAT I NEED FROM YOU — updated 29 Oct at v18.14
 >
-> **State:** v18.13 — **the dialogs, toasts and export progress work with a screen reader** (#1021–#1024); **a voice take survives the microphone going away** (#1035); **Pixelate's Block aspect and Edges work on an adjustment layer** (#1055) and **a sharp hold speed drop keeps the footage in step** (#1061). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+> **State:** v18.14 — **a friend's fast edits are no longer lost when the host is busy** (#1218). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+>
+> v18.13 — **the dialogs, toasts and export progress work with a screen reader** (#1021–#1024); **a voice take survives the microphone going away** (#1035); **Pixelate's Block aspect and Edges work on an adjustment layer** (#1055) and **a sharp hold speed drop keeps the footage in step** (#1061). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
 > v18.12 — **in the full editor Tab moves through the buttons** (#1017) and **GIF and PNG-frame exports offer the share sheet** (#1031); **downloads keep their names in any language** (#1044) and **a full phone no longer says a preset saved** (#1045); **a two-finger twist past half a turn no longer jumps the layer** (#1215); **an export no longer starts before its fill pictures have loaded** (#1217). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
@@ -35490,12 +35492,14 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 7
       Where: js/collab-session.js:1219 (no accounting), :296-304 (accounting only in pushLocal), :913-914 (onAck subtracts every entry), limits js/collab-core.js:77 · He sees: Long outage plus repeated Undo of big steps: memory grows past the cap (reproduced at 25,200 ops against the 5000 cap). The cost is a slow resend, not data loss. ChatGPT's "medium" is too high · Fix: One enqueue(entry) helper for pushLocal, runStep and recoverOutbox. runStep honours outboxFull · Test: 1200-layer guest offline: big edit, then alternate undo/redo until past the cap. outboxFull becomes true and onOutboxFull fires. After the acks, an edit just over the cap still trips it
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.14 (29 Oct): shipped** (codex/h1019b, check folds F1 F2 N-a N-c; landed as land/h1019b): runStep counts its entry through counted() on the line after the push a Simple release wrote; the 1019 drain waits for the paced tail.
 
 - [ ] **1020 — The held-message queue is uncapped while frozen or busy. On the owner it fills at the peers' rate (hunt LOW #1020)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 8
       Where: js/collab-session.js:117, :625 (owner), :817 (guest), :1282-1291 (drain) · He sees: Honest use: negligible. A buggy or hostile Editor during a long export could grow the owner's memory without limit · Fix: Cap by count and bytes. Past the cap, drop and resync from host.base · Test: Owner with FM._exporting=true, feed Editor txs past the cap: S._queued() stays at or below the cap. After unfreeze the live doc hashes equal to base
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.14 (29 Oct): shipped** (in h1019b): the owner holds one sequence while frozen; a guest that overflows keeps acks and control and asks again from the first gap's seq (hello and a reload both use it); the owner test refills the guest pace through S._txRefill.
 
 - [ ] **1021 — The New project, Export, Canvas and export-progress dialogs have no role=dialog, aria-modal or name, and export progress and completion are silent (hunt LOW #1021)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -38893,6 +38897,8 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found by the refuter on codex/h1019 (#1019 #1020). When the host's rate limit drops a guest's edit, nothing resends it; the guest's next edit carries a later id, so the dropped one can never land — the two devices quietly disagree.
       📍 **Where it is (28 Oct):** codex/h1218 e8d2d162 (Codex, on 6f8db2e3, from the design in the builder's codex-h1218.txt: the host records the hole and answers 'rl'; the guest paces itself at half the host's bucket and resends from the hole). Needs a Claude review and a refuter before it lands.
+      📍 **v18.14 (29 Oct): shipped** (codex/h1218, review rh1218: folds B1 B2 M1 M2 m2 m3 by the builder, three new tests and one for S.tick's due flush; landed as land/h1218 under land/h1019b): the host owns the first rate hole only for a guest whose hello says rl; a new hole is told at once; a duplicate never becomes the hole; the guest resends from an empty bucket at half the host refill; a due paced flush also goes out on the next tick. Left: #1226.
+
 - [ ] **1219 — A project with many styled groups walks the whole scene once per group every frame (hunt LOW #1219)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       From the review of codex/h1008 (#1008): collectGroupUnits is one pass now, but buildGroupUnit still rescans the scene for each unit.
@@ -39010,3 +39016,7 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       #1017 shipped in v18.12 for the full editor only: Simple runs the same keydown handler, and the Full-unchanged lock keeps a Full release out of Simple's behaviour (the fix named #sm-timeline, a Simple hook). Simple's Tab is exactly as on v18.11.
       📍 **Where it is (28 Oct):** nothing built. A Simple release (it ships alone, after a full-unchanged PASS) can take the same early return for #sm-timeline.
+- [ ] **1226 — Live collaboration: after a replayed edit is answered, the guest sends its document once more (hunt LOW #1226)** (29 Oct ~03:20 AWST — the builder's own, measured while landing #1218; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Measured in "1218 a host rate hole…": cids 2 and 3 are resent with q:1 after an rl; between ack 2 and ack 3 the guest sends cid 4, which sets the name cid 3 already carried. Harmless (it converges, and the set is idempotent) but one wasted tx per replay. The test allows one trailing cid for now.
+      📍 **Where it is (29 Oct):** nothing built. Look at what onAck does for a replayed entry while a later one is still outstanding.

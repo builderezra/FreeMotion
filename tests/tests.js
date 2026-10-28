@@ -32885,6 +32885,206 @@
     return Object.assign(FM.makeLayer('shape', { name: name, start: 0, duration: 3 }), over || {});
   }
 
+  async function memoryDeadline1019(work) {
+    let timer;
+    const deadline = new Promise(function (_, reject) {
+      timer = setTimeout(function () { reject(new Error('1019/1020 collaboration fixture deadline')); }, 90000);
+    });
+    try { return await Promise.race([work, deadline]); }
+    finally { clearTimeout(timer); }
+  }
+
+  ['ops', 'bytes'].forEach(function (kind) {
+    test('1019 offline undo and redo count ' + kind + ' and acknowledgements leave no debt', { item: '1019', budgetMs: 120000 }, async function () {
+      const C = need921('bounded undo outbox'), lim = C.LIMITS;
+      /* Keep this cap test's replay near the guest's own burst (TX_BURST / 2 since #1218 paces a resend at half the host's refill);
+         the bytes variant goes a little past it, so the drain below waits for the paced tail instead of assuming it is instant. */
+      const n = kind === 'ops' ? Math.ceil(lim.OUTBOX_OPS / Math.floor(lim.TX_BURST / 2)) : 1;
+      const layers = Array.from({ length: n }, function (_, i) { return layer921('cap' + i); });
+      await memoryDeadline1019(withFakeNet921(async function () {
+        await withCollab921(layers, async function (c) {
+          const g = c.addGuest(), full = [];
+          const descriptor = Object.getOwnPropertyDescriptor(g.A, 'onOutboxFull');
+          try {
+            g.A.onOutboxFull = function (on) { full.push(on); };
+            g.G.setOnline(false);
+            g.doc.layers.forEach(function (l) { l.name = kind === 'bytes' ? 'x'.repeat(Math.min(lim.STRING_LEAF - 1, Math.ceil(lim.OUTBOX_BYTES / 32))) : 'edited'; });
+            g.G.beforeSnap(); g.G.afterCommit();
+            const first = g.G._outstanding();
+            if (first.length !== 1 || first[0].n !== n) throw new Error('CONTROL: the big edit did not enqueue one op per layer');
+            if (g.G.outboxFull || full.length) throw new Error('CONTROL: a below-cap edit tripped the cap');
+            let undo = true;
+            for (let i = 0; i < 220 && !g.G.outboxFull; i++) {
+              if (!(undo ? g.G.undo() : g.G.redo())) throw new Error('CONTROL: the alternating step did not run');
+              undo = !undo;
+            }
+            if (!g.G.outboxFull || full[0] !== true) throw new Error('undo/redo bypassed the ' + kind + ' cap');
+            const held = g.G._outstanding().length, hash = g.G.hash(), depth = JSON.stringify(g.G._undoDepth());
+            if ((undo ? g.G.undo() : g.G.redo()) || g.G._outstanding().length !== held || g.G.hash() !== hash) throw new Error('a full outbox still accepted an undo/redo');
+            if (JSON.stringify(g.G._undoDepth()) !== depth) throw new Error('the refused step was consumed');
+            g.G.setOnline(true);
+            await until921S6('1019 the outbox drains after the reconnect', function () { g.loop.settle(); return !g.G._outstanding().length; }, 15000);
+            for (let i = 0; i < 30; i++) g.loop.settle();
+            if (g.G._outstanding().length || g.G.outboxFull || full[full.length - 1] !== false) throw new Error('acknowledgements did not drain the outbox');
+            const size = g.G._outboxSize();
+            if (size.ops !== 0 || size.bytes !== 0) throw new Error('acknowledgements left incorrect counters: ' + JSON.stringify(size));
+            if (!(undo ? g.G.undo() : g.G.redo())) throw new Error('the refused step did not run after the drain');
+            g.loop.settle();
+            g.G.setOnline(false);
+            g.doc.layers[0].name = 'z'.repeat(lim.OUTBOX_BYTES + 1);
+            g.G.tick('full');
+            if (!g.G.outboxFull) throw new Error('a new edit just over the byte cap escaped after acknowledgements');
+          } finally {
+            if (descriptor) Object.defineProperty(g.A, 'onOutboxFull', descriptor);
+            else delete g.A.onOutboxFull;
+            g.G.stop('left');
+          }
+        });
+      }));
+    });
+  });
+
+  ['count', 'bytes'].forEach(function (kind) {
+    test('1020 owner held messages retain one sequence for ' + kind + ' and preserve local work', { item: '1020', budgetMs: 120000 }, async function () {
+      await memoryDeadline1019(withFakeNet921(async function () {
+        await withCollab921([layer921('A'), layer921('B')], async function (c) {
+          const g = c.addGuest(), lim = c.C.LIMITS;
+          const exporting = Object.getOwnPropertyDescriptor(FM, '_exporting');
+          const applied = Object.getOwnPropertyDescriptor(c.S.adapter, 'afterApply');
+          const afterApply = c.S.adapter.afterApply, seen = [];
+          try {
+            c.S.adapter.afterApply = function (sum) {
+              seen.push(FM.scene.layers[0].name);
+              return afterApply.call(this, sum);
+            };
+            FM._exporting = true;
+            for (let i = 0; i < 3; i++) {
+              g.doc.layers[0].name = 'control' + i;
+              const m = c.S.host.members[g.mid]; m.tokens = lim.TX_BURST; m.tokenAt = Date.now(); g.G._txRefill();
+              g.G.tick('full'); g.loop.settle();
+            }
+            if (!c.S._queued() || FM.scene.layers[0].name !== 'A') throw new Error('CONTROL: edits were not held during export');
+            FM._exporting = false; c.S.tick('full');
+            if (seen.join(',') !== 'control0,control1,control2') throw new Error('CONTROL: held edits were not each applied in order: ' + seen.join(','));
+            if (FM.scene.layers[0].name !== 'control2' || c.S.hash() !== c.S.host.hash()) throw new Error('CONTROL: below-cap edits did not drain in order');
+            FM._exporting = true;
+            const cap = lim.HELD_MESSAGES || 1000, bytes = lim.HELD_BYTES || lim.RING_BYTES;
+            const count = kind === 'count' ? cap + 2 : 20;
+            const padding = kind === 'bytes' ? 'x'.repeat(Math.min(lim.STRING_LEAF - 10, Math.ceil(bytes / 32))) : '';
+            FM.scene.layers[1].name = 'local-during-export';
+            FM.history.commit();
+            const half = layer921('half', { id: 'half_1020', name: 'Pasted' });
+            const job = FM.jobBegin('test-paste');
+            try {
+              FM.scene.layers.push(half);
+              c.S.tick('hot'); c.S.tick('full');
+            } finally { FM.jobEnd(job); }
+            FM.history.commit();
+            if (c.S.base.layers.length !== 2 || c.S.base.layers[1].name !== 'B') throw new Error('CONTROL: frozen local work was sent early');
+            for (let i = 0; i < count; i++) {
+              g.doc.layers[0].name = padding + i;
+              const m = c.S.host.members[g.mid]; m.tokens = lim.TX_BURST; m.tokenAt = Date.now(); g.G._txRefill();
+              g.G.tick('full'); g.loop.settle();
+              if (c.S._queued() !== 1) throw new Error('the owner retained operations instead of one ring sequence');
+            }
+            if (c.S.base.layers[0].name !== padding + (count - 1)) throw new Error('CONTROL: the host did not sequence the editor edits');
+            if (!c.S.host.tail(c.S.host.seq - count)) throw new Error('CONTROL: the held range was evicted from the host ring');
+            FM._exporting = false; c.S.tick('full'); g.loop.settle();
+            if (c.S.hash() !== c.S.host.hash()) throw new Error('overflow did not resync live from host.base');
+            if (FM.scene.layers[0].name !== padding + (count - 1) || g.doc.layers[0].name !== padding + (count - 1)) throw new Error('ring replay lost the last remote edit');
+            if (c.S._queued()) throw new Error('held messages survived resync');
+            if (FM.scene.layers[1].name !== 'local-during-export' || g.doc.layers[1].name !== 'local-during-export') throw new Error('the frozen owner edit did not survive and reach the guest');
+            if (!FM.scene.layers.some(function (l) { return l.id === half.id; }) || !g.doc.layers.some(function (l) { return l.id === half.id; })) throw new Error('the frozen paste did not survive and reach the guest');
+          } finally {
+            if (applied) Object.defineProperty(c.S.adapter, 'afterApply', applied);
+            else delete c.S.adapter.afterApply;
+            if (exporting) Object.defineProperty(FM, '_exporting', exporting);
+            else delete FM._exporting;
+            g.G.stop('left');
+          }
+        });
+      }));
+    });
+  });
+
+  test('1020 guest overflow keeps a role change and reconnects through a tail without going mute', { item: '1020', budgetMs: 120000 }, async function () {
+    await memoryDeadline1019(withFakeNet921(async function () {
+      await withCollab921(Array.from({ length: 30 }, function (_, i) { return layer921(i ? 'B' + i : 'A'); }), async function (c) {
+        const g = c.addGuest(), lim = c.C.LIMITS, cap = lim.HELD_MESSAGES || 1000;
+        const frozen = Object.getOwnPropertyDescriptor(g.A, 'frozen');
+        const send = Object.getOwnPropertyDescriptor(g.loop.a, 'send');
+        const sent = c.sentTo(g.loop);
+        let freeze = true;
+        try {
+          g.A.frozen = function () { return freeze; };
+          FM.scene.layers[0].name = 'control'; FM.history.commit(); g.loop.settle();
+          if (g.G._queued() !== 1 || g.doc.layers[0].name !== 'A') throw new Error('CONTROL: the guest did not hold the first batch');
+          freeze = false;
+          g.doc.layers[1].name = 'in-flight'; g.G.tick('full');
+          freeze = true;
+          if (g.G._outstanding().length !== 1) throw new Error('CONTROL: no guest tx was in flight before the gap');
+          for (let i = 0; i < cap + 1; i++) {
+            FM.scene.layers[0].name = 'overflow' + i; FM.history.commit();
+          }
+          g.loop.settle();
+          if (c.S.base.layers[1].name !== 'in-flight' || !g.G._outstanding().length) throw new Error('CONTROL: the host did not accept a tx whose ack is held beyond the gap');
+          if (g.G._queued() > 1) throw new Error('guest document messages were not discarded at the count cap');
+          for (let i = 0; i < 5; i++) {
+            c.S.setPeerRole(g.mid, i % 2 ? 'viewer' : 'commenter'); g.loop.settle();
+          }
+          if (g.G._queued() > 3) throw new Error('the gap retained superseded roles or settings');
+          if (g.G.role !== 'editor') throw new Error('CONTROL: the frozen role was applied early');
+          if (!g.G._queued()) throw new Error('the gap discarded the role and settings');
+          g.G.setOnline(false);
+          g.loop.partition('h');
+          if (g.loop.b.open) throw new Error('CONTROL: the resync link was not closed');
+          freeze = false; g.G.tick('full');
+          if (g.G.role !== 'commenter') throw new Error('the role change did not survive the gap');
+          if (g.G._outstanding().length) throw new Error('the gap discarded the acknowledgement');
+          sent.length = 0;
+          g.loop.heal('h');
+          g.G.setOnline(true); g.loop.settle();
+          if (sent.some(function (m) { return m.t === 'snap'; })) throw new Error('CONTROL: a snapshot masked the tail-only reconnect');
+          if (!sent.some(function (m) { return m.t === 'tail' && m.msg.batches.length; })) throw new Error('reconnect did not answer with the missing tail');
+          if (g.doc.layers[0].name !== FM.scene.layers[0].name) throw new Error('the reconnect tail did not heal the gap');
+          c.S.setPeerRole(g.mid, 'editor'); g.loop.settle();
+          if (g.G.role !== 'editor') throw new Error('CONTROL: edit access was not restored');
+          g.doc.layers[1].name = 'after-tail'; g.G.tick('full'); g.loop.settle();
+          if (c.S.base.layers[1].name !== 'after-tail') throw new Error('the guest stayed mute after a tail healed the overflow');
+          for (let i = 0; i < 2; i++) {
+            for (let j = i * 15; j < (i + 1) * 15; j++) FM.scene.layers[j].name = 'x'.repeat(170000);
+            FM.history.commit(); g.loop.settle();
+          }
+          const snap = c.S.host.snapshot(), bytes = c.P.canon({ kind: 'msg', msg: snap }).length;
+          if (bytes <= lim.TX_BYTES || bytes >= lim.RING_BYTES) throw new Error('CONTROL: snapshot size did not fall between transaction and ring budgets: ' + bytes);
+          const resyncs = g.G.stats.resyncs, snaps = g.G.stats.snaps || 0;
+          freeze = true;
+          g.doc.layers[0].name = 'stale';
+          g.G.onMessage('ctl', snap);
+          if (g.G._queued() !== 1) throw new Error('a legal ring-sized snapshot overflowed the guest hold');
+          freeze = false;
+          g.G.tick('full');
+          if (g.G._queued() || g.G.stats.resyncs !== resyncs || g.G.hash() !== c.S.hash()) throw new Error('the held snapshot did not drain without another resync');
+          if (g.G.stats.snaps !== snaps + 1 || g.doc.layers[0].name !== snap.D.layers[0].name) throw new Error('CONTROL: the queued snapshot did not repair live');
+          freeze = true;
+          g.G.onMessage('ctl', snap);
+          if (g.G._queued() !== 1) throw new Error('CONTROL: the byte-overflow setup did not hold its first snapshot');
+          if (2 * bytes <= (lim.HELD_BYTES || lim.RING_BYTES)) throw new Error('CONTROL: two snapshots do not exceed the held byte budget');
+          g.G.onMessage('ctl', snap);
+          if (g.G._queued()) throw new Error('the guest retained snapshots past its byte budget');
+          freeze = false; g.G.tick('full'); g.loop.settle();
+          if (g.G.stats.resyncs !== resyncs + 1 || g.G.hash() !== c.S.hash()) throw new Error('the byte gap did not recover through a snapshot');
+        } finally {
+          if (frozen) Object.defineProperty(g.A, 'frozen', frozen);
+          else delete g.A.frozen;
+          if (send) Object.defineProperty(g.loop.a, 'send', send);
+          else delete g.loop.a.send;
+          g.G.stop('left');
+        }
+      });
+    }));
+  });
+
   test('921 S2 LoopLink.heal reopens only the side it heals, so a still-cut endpoint never reports itself connected', { item: '921' }, function () {
     const C = need921('the loopback transport');
     const loop = C.link.LoopLink({ aTag: 'a', bTag: 'b', mode: 'manual' });
@@ -192220,5 +192420,242 @@
       FM.scene = saved; FM.refreshAll(); if (wasHome) FM.home.open();
       if (open) FM.shortcuts.show(); else FM.shortcuts.hide({ now: true });
     }
+  });
+  /* #1218: manual links exercise the real sessions without opening a socket. */
+  async function deadline1218(name, job, ms) {
+    let timer;
+    try {
+      return await Promise.race([job, new Promise(function (resolve, reject) {
+        timer = setTimeout(function () { reject(new Error('1218 deadline: ' + name)); }, ms);
+      })]);
+    } finally { clearTimeout(timer); }
+  }
+
+  test('1218 offline 90 entries reconnect in cid order and converge, with a 20 entry control', { item: '1218', budgetMs: 60000 }, async function () {
+    await deadline1218('offline reconnect fixture', withCollab921([layer921('A')], async function (c) {
+      for (const count of [20, 90]) {
+        const g = c.addGuest(), H = c.S.host;
+        const descriptor = Object.getOwnPropertyDescriptor(H, 'receive'), receive = H.receive;
+        const bDesc = Object.getOwnPropertyDescriptor(g.loop.b, 'send'), bSend = g.loop.b.send;
+        const accepted = [];
+        let forced = false;
+        try {
+          H.receive = function (mid, tx) {
+            /* The fixture host uses real Date.now. Force exactly one empty bucket at cid 61,
+               then refill before cid 62: wall time cannot decide whether the old code loses 61. */
+            if (mid === g.mid && count === 90 && tx.cid === 61 && !forced) {
+              H.members[mid].tokens = 0; H.members[mid].tokenAt = Date.now(); forced = true;
+            } else if (mid === g.mid && forced) {
+              H.members[mid].tokens = c.C.LIMITS.TX_BURST; H.members[mid].tokenAt = Date.now();
+            }
+            const r = receive.call(H, mid, tx);
+            if (mid === g.mid && r.ack && r.ack.t === 'ack' && !r.dup) accepted.push(tx.cid);
+            return r;
+          };
+          g.G.setOnline(false);
+          for (let i = 1; i <= count; i++) { g.doc.layers[0].name = 'offline1218-' + count + '-' + i; g.G.tick('full'); }
+          if (g.G._outstanding().length !== count) throw new Error('CONTROL: not one outbox entry per edit');
+          let txSends = 0;
+          g.loop.b.send = function (ch, msg) { if (msg && msg.t === 'tx') txSends++; return bSend.call(g.loop.b, ch, msg); };
+          const began = Date.now();
+          g.G.setOnline(true);
+          g.loop.settle();
+          /* Only tx count: the reconnect hello, a resync or a media ask may ride the same link. Elapsed refill is measured rather
+             than assuming the machine is fast. */
+          const allowance = Math.floor(c.C.LIMITS.TX_BURST / 2 + (Date.now() - began) / 1000 * (c.C.LIMITS.TX_PER_SEC / 2));
+          if (txSends > allowance) throw new Error('reconnect exceeded the measured local token allowance (' + txSends + ' tx, allowance ' + allowance + ')');
+          await until921S6('1218 all ' + count + ' offline cids acknowledged', function () {
+            g.loop.settle(); return !g.G._outstanding().length;
+          }, 12000);
+          if (accepted.length !== count || accepted.some(function (cid, i) { return cid !== i + 1; })) throw new Error('offline cids were lost or accepted out of order: ' + accepted);
+          if (!c.P.eq(H.base, g.G.base)) throw new Error('host and guest bases differ after reconnect');
+          if (count === 90 && !forced) throw new Error('CONTROL: the forced rate miss was never reached');
+          if (!H.members[g.mid] || H.members[g.mid].rl !== true) throw new Error('the reconnect hello did not mark the guest as one that resends on rl');
+        } finally {
+          Object.defineProperty(H, 'receive', descriptor);
+          if (bDesc) Object.defineProperty(g.loop.b, 'send', bDesc); else delete g.loop.b.send;
+          g.G.stop('left');
+          g.loop.settle();
+        }
+      }
+    }), 45000);
+  });
+
+  test('1218 a host rate hole blocks the next cid and both replay in order', { item: '1218', budgetMs: 45000 }, async function () {
+    await deadline1218('host rate hole fixture', withCollab921([layer921('A')], async function (c) {
+      const g = c.addGuest(), H = c.S.host, m = H.members[g.mid];
+      const sendDescriptor = Object.getOwnPropertyDescriptor(g.loop.a, 'send');
+      const sent = c.sentTo(g.loop);
+      try {
+        /* Only a guest that says it understands rl is held to a hole; 1218 offline… proves the hello says so. Marked here directly,
+           so this wire carries the guest's three edits and nothing a hello brings back. */
+        m.rl = true;
+        g.doc.layers[0].name = 'control1218'; g.G.tick('full'); g.loop.settle();
+        if (m.lastCid !== 1 || g.G._outstanding().length || H.base.layers[0].name !== 'control1218') throw new Error('CONTROL: ordinary tx and ack did not drain');
+        /* Reset real-clock tokens immediately before each decisive receive. The next cid has a
+           full bucket, so only ownership of the hole can stop it, regardless of wall time. */
+        g.doc.layers[0].name = 'hole1218'; g.G.tick('full');
+        m.tokens = 0; m.tokenAt = Date.now();
+        g.loop.pump(1);
+        m.tokens = c.C.LIMITS.TX_BURST; m.tokenAt = Date.now();
+        g.doc.layers[0].name = 'after1218'; g.G.tick('full');
+        g.loop.pump(1);
+        if (m.tokens !== c.C.LIMITS.TX_BURST) throw new Error('a later cid took a token while the rate hole was owned');
+        if (m.lastCid !== 1 || H.base.layers[0].name !== 'control1218') throw new Error('a cid after the rate hole was accepted');
+        const rl = sent.filter(function (e) { return e.t === 'rl'; });
+        if (rl.length !== 1 || rl[0].msg.cid !== 2 || !isFinite(rl[0].msg.at) || rl[0].msg.at < 0) throw new Error('host did not report the first hole once');
+        await until921S6('1218 hole and next cid to replay', function () { g.loop.settle(); return !g.G._outstanding().length; }, 5000);
+        const acks = sent.filter(function (e) { return e.t === 'ack'; }).map(function (e) { return e.msg.cid; });
+        /* Measured (29 Oct): the guest sends its document once more after the replayed cid 2 is answered and before 3 is (cid 4 sets
+           the name 3 already carried), so the acks are 1,2,3 and at most one later cid. The claim is the order and the convergence. */
+        if (acks.slice(0, 3).join(',') !== '1,2,3' || acks.length > 4 || m.lastCid !== acks[acks.length - 1] || H.base.layers[0].name !== 'after1218' || !c.P.eq(H.base, g.G.base)) throw new Error('hole replay did not accept both cids in order: acks ' + acks.join(',') + ', lastCid ' + m.lastCid + ', host name ' + H.base.layers[0].name + ', bases equal ' + c.P.eq(H.base, g.G.base));
+      } finally {
+        Object.defineProperty(g.loop.a, 'send', sendDescriptor);
+        g.G.stop('left'); g.loop.settle();
+      }
+    }), 30000);
+  });
+
+  test('1218 below limit wire counts stay unchanged and rl alone resends outstanding work', { item: '1218', budgetMs: 45000 }, async function () {
+    await deadline1218('below limit fixture', withCollab921([layer921('A')], async function (c) {
+      const g = c.addGuest(), sendDescriptor = Object.getOwnPropertyDescriptor(g.loop.a, 'send');
+      const sent = c.sentTo(g.loop);
+      try {
+        const a = g.loop.a.sent, b = g.loop.b.sent;
+        for (let i = 1; i <= 6; i++) {
+          g.doc.layers[0].name = 'control1218-' + i; g.G.tick('full'); g.loop.settle();
+          if (g.G._outstanding().length) throw new Error('CONTROL: below limit outbox did not drain immediately');
+        }
+        /* 6f8db2e3 sends exactly one tx and one ack per edit on this already admitted manual link. */
+        if (g.loop.a.sent - a !== 6 || g.loop.b.sent - b !== 6 || sent.some(function (e) { return e.t === 'rl'; })) throw new Error('CONTROL: below limit wire count changed or rl was sent');
+        g.doc.layers[0].name = 'retry1218'; g.G.tick('full');
+        const cid = g.G.cid;
+        /* Hold the tx on the fake wire, then deliver only rl. No reconnect or edit may trigger retry. */
+        const tx = g.loop.wire.q.filter(function (e) { return e.data && e.data.t === 'tx'; })[0];
+        if (!tx || tx.data.cid !== cid || !g.G._outstanding()[0].sent) throw new Error('CONTROL: no sent outstanding tx to retry');
+        g.loop.wire.q.length = 0;
+        g.loop.a.send('ctl', { t: 'rl', cid: cid, at: 50 }); g.loop.pump(1);
+        await until921S6('1218 rl timer to send q:1 without another edit', function () {
+          return g.loop.wire.q.some(function (e) { return e.data && e.data.t === 'tx' && e.data.cid === cid && e.data.q === 1; });
+        }, 3000);
+        g.loop.settle();
+        if (g.G._outstanding().length || !c.P.eq(c.S.host.base, g.G.base)) throw new Error('rl retry did not drain and converge');
+      } finally {
+        Object.defineProperty(g.loop.a, 'send', sendDescriptor);
+        g.G.stop('left'); g.loop.settle();
+      }
+    }), 30000);
+  });
+
+  /* #1218 review B2 and M1, at the host: three real txs held off the wire and handed to H.receive by hand, so each receive meets exactly
+     the bucket set before it, whatever the wall clock does. */
+  function txs1218(g) {
+    const txs = [];
+    for (let i = 1; i <= 3; i++) {
+      g.doc.layers[0].name = 'held1218-' + i; g.G.tick('full');
+      g.loop.wire.q.forEach(function (e) { if (e.data && e.data.t === 'tx') txs.push(e.data); });
+      g.loop.wire.q.length = 0;
+    }
+    if (txs.map(function (t) { return t.cid; }).join(',') !== '1,2,3') throw new Error('CONTROL: the guest did not send cids 1, 2 and 3: ' + txs.map(function (t) { return t.cid; }));
+    return txs;
+  }
+
+  test('1218 a second rate hole right after the first is told at once, not after the notice throttle', { item: '1218', budgetMs: 45000 }, async function () {
+    await deadline1218('second hole fixture', withCollab921([layer921('A')], async function (c) {
+      const g = c.addGuest(), H = c.S.host, m = H.members[g.mid];
+      try {
+        g.G.hello({ name: 'Sam' }); g.loop.settle();
+        if (m.rl !== true) throw new Error('the guest hello did not say it understands rl');
+        const txs = txs1218(g);
+        const full = function () { m.tokens = c.C.LIMITS.TX_BURST; m.tokenAt = Date.now(); };
+        const dry = function () { m.tokens = 0; m.tokenAt = Date.now(); };
+        full(); const r1 = H.receive(g.mid, txs[0]);
+        if (!r1.ack || r1.ack.t !== 'ack' || m.lastCid !== 1) throw new Error('CONTROL: cid 1 was not accepted with a full bucket');
+        dry(); const r2 = H.receive(g.mid, txs[1]);
+        if (r2.dropped !== 'rate' || !r2.ack || r2.ack.t !== 'rl' || r2.ack.cid !== 2) throw new Error('the first hole (cid 2) was not dropped and told: ' + JSON.stringify(r2));
+        full(); const r3 = H.receive(g.mid, txs[2]);
+        if (r3.dropped !== 'rate' || r3.ack) throw new Error('CONTROL: cid 3 behind the hole was not dropped quietly inside the notice throttle: ' + JSON.stringify(r3));
+        full(); const r2b = H.receive(g.mid, txs[1]);
+        if (!r2b.ack || r2b.ack.t !== 'ack' || m.lastCid !== 2 || m.rateHole != null) throw new Error('CONTROL: the resent hole (cid 2) was not accepted');
+        /* The second miss lands microseconds after the first notice: the old throttle said nothing, and a guest that had sent
+           everything waited for an edit that might never come. */
+        dry(); const r3b = H.receive(g.mid, txs[2]);
+        if (r3b.dropped !== 'rate') throw new Error('CONTROL: the second forced miss was not reached');
+        if (!r3b.ack || r3b.ack.t !== 'rl' || r3b.ack.cid !== 3) throw new Error('a new rate hole (cid 3) right after the first was not told: ' + JSON.stringify(r3b.ack));
+      } finally { g.G.stop('left'); g.loop.settle(); }
+    }), 30000);
+  });
+
+  test('1218 a rate-dropped duplicate never becomes the hole, so the next cid is accepted', { item: '1218', budgetMs: 45000 }, async function () {
+    await deadline1218('duplicate hole fixture', withCollab921([layer921('A')], async function (c) {
+      const g = c.addGuest(), H = c.S.host, m = H.members[g.mid];
+      try {
+        g.G.hello({ name: 'Sam' }); g.loop.settle();
+        if (m.rl !== true) throw new Error('the guest hello did not say it understands rl');
+        const txs = txs1218(g);
+        const full = function () { m.tokens = c.C.LIMITS.TX_BURST; m.tokenAt = Date.now(); };
+        full(); H.receive(g.mid, txs[0]); full(); H.receive(g.mid, txs[1]);
+        if (m.lastCid !== 2) throw new Error('CONTROL: cids 1 and 2 were not accepted with a full bucket');
+        m.tokens = 0; m.tokenAt = Date.now();
+        const d = H.receive(g.mid, txs[1]);   // cid 2 again (a stale rl's resend), on a dry bucket
+        if (d.dropped !== 'rate') throw new Error('CONTROL: the duplicate was not dropped for rate: ' + JSON.stringify(d));
+        if (m.rateHole != null) throw new Error('a rate-dropped duplicate (cid ' + m.rateHole + ') became the rate hole');
+        full(); const r3 = H.receive(g.mid, txs[2]);
+        if (!r3.ack || r3.ack.t !== 'ack' || r3.dup || m.lastCid !== 3) throw new Error('cid 3 after a rate-dropped duplicate was not accepted: ' + JSON.stringify(r3));
+      } finally { g.G.stop('left'); g.loop.settle(); }
+    }), 30000);
+  });
+
+  test('1218 a paced resend that is due goes out on the next tick, so a timer that never fires cannot strand it', { item: '1218', budgetMs: 30000 }, async function () {
+    await deadline1218('due flush fixture', withCollab921([layer921('A')], async function (c) {
+      const g = c.addGuest();
+      const stDesc = Object.getOwnPropertyDescriptor(window, 'setTimeout');
+      let swallowed = 0;
+      try {
+        /* An empty bucket, so the edit waits for the paced flush. Its timer is swallowed here, as a throttled background tab or a
+           fake clock would leave it; only S.tick can send the edit once its time has come. */
+        g.G._txRefill(0);
+        Object.defineProperty(window, 'setTimeout', { configurable: true, writable: true, value: function () { swallowed++; return 0; } });
+        g.doc.layers[0].name = 'due1218-late'; g.G.tick('full');
+        Object.defineProperty(window, 'setTimeout', stDesc);
+        const late = g.G._outstanding();
+        if (late.length !== 1 || late[0].sent || !swallowed) throw new Error('CONTROL: the edit past the burst was not left waiting on a paced flush (' + late.length + ' outstanding, sent ' + (late[0] && late[0].sent) + ', timers ' + swallowed + ')');
+        await sleep(1000 / (c.C.LIMITS.TX_PER_SEC / 2) + 60);
+        g.G.tick('hot');
+        if (!g.G._outstanding()[0] || !g.G._outstanding()[0].sent) throw new Error('a paced flush that was due did not go out on the next tick: its timer never fired and nothing else sent it');
+        await until921S6('1218 the late edit drains', function () { g.loop.settle(); return !g.G._outstanding().length; }, 5000);
+        if (c.S.host.base.layers[0].name !== 'due1218-late') throw new Error('the late edit did not reach the host');
+      } finally {
+        if (window.setTimeout !== stDesc.value) Object.defineProperty(window, 'setTimeout', stDesc);
+        g.G.stop('left'); g.loop.settle();
+      }
+    }), 30000);
+  });
+
+  test('1218 after a rate notice the guest resends from an empty bucket at half the host refill, never in a burst', { item: '1218', budgetMs: 45000 }, async function () {
+    await deadline1218('paced resend fixture', withCollab921([layer921('A')], async function (c) {
+      const g = c.addGuest();
+      const bDesc = Object.getOwnPropertyDescriptor(g.loop.b, 'send'), bSend = g.loop.b.send;
+      const times = [];
+      try {
+        for (let i = 1; i <= 5; i++) { g.doc.layers[0].name = 'pace1218-' + i; g.G.tick('full'); }
+        const out = g.G._outstanding();
+        if (out.length !== 5 || out.some(function (e) { return !e.sent; })) throw new Error('CONTROL: five sent, unanswered txs were not outstanding');
+        g.loop.wire.q.length = 0;   // the five never reach the host, which is dry and says so
+        g.loop.b.send = function (ch, msg) { if (msg && msg.t === 'tx') times.push(Date.now()); return bSend.call(g.loop.b, ch, msg); };
+        const rlAt = Date.now();
+        g.loop.a.send('ctl', { t: 'rl', cid: out[0].cid, at: 50 }); g.loop.pump(1);
+        await until921S6('1218 all five resent', function () { return times.length >= 5; }, 5000);
+        /* From an empty bucket refilling at TX_PER_SEC / 2 the k-th resend cannot leave before k * 1000 / 15 ms (timers only delay):
+           the fifth at 333 ms or later. The guest's own bucket (about 25 tokens here) sent all five together at about 50 ms. */
+        const pace = 1000 / (c.C.LIMITS.TX_PER_SEC / 2), fifth = times[4] - rlAt;
+        if (fifth < 5 * pace - 2) throw new Error('the five resends went out in a burst: the fifth ' + fifth + ' ms after the notice, where an empty bucket needs ' + Math.round(5 * pace) + ' ms');
+        await until921S6('1218 paced resend drains', function () { g.loop.settle(); return !g.G._outstanding().length; }, 5000);
+        if (!c.P.eq(c.S.host.base, g.G.base)) throw new Error('the paced resend did not converge');
+      } finally {
+        if (bDesc) Object.defineProperty(g.loop.b, 'send', bDesc); else delete g.loop.b.send;
+        g.G.stop('left'); g.loop.settle();
+      }
+    }), 30000);
   });
 })();

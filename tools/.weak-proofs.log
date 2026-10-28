@@ -233,3 +233,5 @@
 2026-10-28 15:17	WEAK	1008 indexed units equal the old oracle for adversarial scenes	collector seam is missing
 2026-10-28 15:17	WEAK	1008 nested render pixels equal the old collector with one scene scan	collector seam is missing
 2026-10-28 15:17	WEAK	1003 a Duplicate refused at its own document write says space when there was no room, failed otherwise, and leaves no card	FM.projects.lastDuplicateWhy is not a function
+2026-10-29 04:00	WEAK	1020 owner held messages retain one sequence for 	count and preserve local work — g.G._txRefill is not a function
+2026-10-29 04:00	WEAK	1218 a paced resend that is due goes out on the next tick, so a timer that never fires cannot strand it	g.G._txRefill is not a function
