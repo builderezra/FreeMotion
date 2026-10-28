@@ -6060,8 +6060,7 @@ window.FM = window.FM || {};
     if (!layer) { if (FM.toast) FM.toast('Select a layer first'); return; }
     const name = prompt('Preset name:', layer.name + ' look');
     if (!name || !name.trim()) return;
-    FM.layerPresets.save(name.trim(), layer);
-    if (FM.toast) FM.toast('Preset saved — apply it from any layer’s Presets section');
+    if (FM.layerPresets.save(name.trim(), layer) && FM.toast) FM.toast('Preset saved — apply it from any layer’s Presets section');
   };
   // Save the current selection as a reusable ELEMENT (insertable from Add → Object/Element).
   FM.saveElementPrompt = async function () {
@@ -7066,32 +7065,16 @@ window.FM = window.FM || {};
       const onNote = (text) => { if (FM._exportInfo) FM._exportInfo(text); };
       /* outW/outH go to ALL THREE (queue 690). They used to reach the MP4 only, so a Custom size typed
          for a GIF or PNG frames — boxes on screen, no warning — came out at the project size. */
-      let made = null;   // (review G6) what the GIF and the PNG-sequence exports hand back: { thinned }, what memory kept back
       if (fmt === 'gif') {
-        made = await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, outW, outH, onProgress });
+        await FM.exporter.runGif({ scale, fps, from, to, name: expName, transparent, dither: true, outW, outH, onProgress, onReady: showExportReady });
       } else if (fmt === 'frames') {
-        made = await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', outW, outH, onProgress });
+        await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', outW, outH, onProgress, onReady: showExportReady });
       } else {
         await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, outW, outH, onProgress, onNote,
                                 onReady: showExportReady });
       }
-      /* The MP4 path now ends on its own card, which has already said what happened and hidden the
-       * progress overlay — repeating "saved to your Downloads" behind it would be a second, and often
-       * wrong, answer (it may have gone to Photos, or been discarded). Every other format still
-       * downloads straight away and still gets told so. (queue 141 part 4) */
-      if (fmt !== 'mp4') {
-        /* #860 hunt #6 (review G6): …AND WHAT MEMORY KEPT BACK. These two have no ready card, so a GIF the export total or the phone
-           ceiling sent out smaller (or a clip given fewer frames) was never said. Said here in the card's own words, on this line and,
-           because the overlay goes in under a second, in a toast that stays once it has gone. Nothing kept back: the line is as before. */
-        const lost = memoryLossWords(made && made.thinned);
-        status.textContent = lost ? 'Done — saved to your Downloads' + lost : 'Done — saved to your Downloads.';
-        setTimeout(() => {
-          overlay.classList.add('hidden');
-          if (lost && FM.toast) FM.toast('Saved to your Downloads' + lost, 8000);
-        }, 900);
-      } else {
-        overlay.classList.add('hidden');
-      }
+      // Every format ends on its ready card, which says what was made and where memory kept anything back.
+      overlay.classList.add('hidden');
     } catch (e) {
       overlay.classList.add('hidden');
       if (e.message === 'NO_WEBCODECS') alert('Export needs the WebCodecs video encoder. Please open FreeMotion in Google Chrome.');
@@ -7151,7 +7134,7 @@ window.FM = window.FM || {};
   }
 
   /* #860 (1) and #860 hunt #6: WHAT AN EXPORT'S MEMORY KEPT BACK, IN ONE SET OF WORDS for every place that says it: the MP4's ready
-     card below, the GIF and PNG-sequence exports' finish line (review G6, they have no card) and the still's toast (review G5). A
+     card below, the GIF and PNG-sequence ready cards (review G6) and the still's toast (review G5). A
      reversed or frame-blend clip given fewer frames than its length needs plays choppier, said with each clip's real frame rate; a GIF
      sent out smaller than its own size is named with the size it went out at. Two different losses, so two different phrases. '' when
      nothing was kept back. */
@@ -10148,6 +10131,11 @@ window.FM = window.FM || {};
       else if (e.code === 'Backslash') { e.preventDefault(); clearRegion(); }
       else if (e.code === 'KeyM') { e.preventDefault(); if (e.repeat) return; if (FM.toggleMarkerAtPlayhead) FM.toggleMarkerAtPlayhead(); }   // toggle (dedups within 0.12s) + ignore OS autorepeat → no stacked duplicates / undo spam
       else if (e.code === 'Tab') {
+        const active = document.activeElement;
+        /* #1017: only while the layer timeline (#timeline) is showing. The editor that hides it runs this same handler, and
+           its Tab stays exactly as it was (the Full-unchanged lock); it can take the fix in a release of its own. */
+        const rowsTl = document.getElementById('timeline');
+        if (rowsTl && getComputedStyle(rowsTl).visibility !== 'hidden' && active && active !== document.body && !rowsTl.contains(active)) return;
         e.preventDefault();
         /* bughunt6 #6: TAB WALKS THE ROWS THE TIMELINE SHOWS. It walked every layer in the project, so inside Edit Group,
            or past the members of a collapsed group, it selected a layer with no row on screen, and a Delete after it

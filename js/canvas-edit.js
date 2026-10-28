@@ -319,6 +319,7 @@ window.FM = window.FM || {};
       // vpPtrs is a Map and iterates in insertion order, so q[0]/q[1] mean the same finger here and
       // in every move — swap them and the angle would flip by 180° mid-gesture.
       ang0: Math.atan2(q[1].y - q[0].y, q[1].x - q[0].x),
+      angLast: Math.atan2(q[1].y - q[0].y, q[1].x - q[0].x), turn: 0,   // the running twist, step by step (see the move)
       twisting: false,
     };
     // WITH A LAYER SELECTED the pinch resizes THAT LAYER instead of zooming the view (Ezra: "dragging
@@ -383,7 +384,7 @@ window.FM = window.FM || {};
     const a = document.activeElement;
     if (!a || a === document.body || typeof a.blur !== 'function') return;
     const typing = a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable;
-    if (!typing) return;
+    if (!typing && !a.matches('button, [tabindex], a[href]')) return;
     if (a.closest && a.closest('.te-panel, .te-pop')) return;   // the text editor's field keeps the keyboard (#857)
     a.blur();
   }
@@ -602,8 +603,14 @@ window.FM = window.FM || {};
           // every resize would also skew the layer a few degrees. Past 7° the twist LATCHES and the
           // threshold is subtracted from then on, so the angle starts moving from zero rather than
           // jumping by 7 the moment it engages.
+          /* ⚠️ THE TURN IS ADDED UP MOVE BY MOVE, not read from the start angle (its h1048 refuter, 28 Oct): the angle since the
+             pinch began was wrapped into ±180°, so a twist carried past half a turn flipped to −180 and the layer jumped by 360 under
+             his fingers — the rotate handle's #1063 in the pinch. Each move's own step is small, so wrapping THAT is safe, and the
+             running total can go past a full turn. A step that is not a number (a degenerate touch) is ignored, not summed. */
           const ang = Math.atan2(q[1].y - q[0].y, q[1].x - q[0].x);
-          let dDeg = ((((ang - vpPinch.ang0) * 180 / Math.PI) + 180) % 360 + 360) % 360 - 180;
+          const step = ((((ang - vpPinch.angLast) * 180 / Math.PI) + 180) % 360 + 360) % 360 - 180;
+          if (isFinite(step)) { vpPinch.turn += step; vpPinch.angLast = ang; }
+          let dDeg = vpPinch.turn;
           const DEAD = 7;
           if (!vpPinch.twisting && Math.abs(dDeg) > DEAD) vpPinch.twisting = true;
           if (vpPinch.twisting) {

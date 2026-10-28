@@ -76,8 +76,13 @@ window.FM = window.FM || {};
     const s = Math.max(0, Math.floor(+t || 0));
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
+  function hostNow() {
+    const s = C.session;
+    const offset = s && !s.isOwner && typeof s.hostOffset === 'number' ? s.hostOffset : 0;
+    return Date.now() + offset;
+  }
   function ago(at) {
-    const m = Math.round((Date.now() - (+at || 0)) / 60000);
+    const m = Math.round((hostNow() - (+at || 0)) / 60000);
     if (!(m >= 1)) return 'just now';
     if (m < 60) return m + ' min ago';
     const h = Math.round(m / 60);
@@ -205,7 +210,7 @@ window.FM = window.FM || {};
        the toast sits at 60, so Post simply appeared to do nothing. And "resolve" was the wrong advice — the
        ceiling counts resolved comments too (the host's does), so only deleting makes room. */
     if (l.length >= MAX_COMMENTS) { say('This project has ' + MAX_COMMENTS + ' comments — delete some first to add another'); return null; }
-    const c = { id: rid('c_'), by: me(), at: Date.now(), text: tx, replies: [] };
+    const c = { id: rid('c_'), by: me(), at: hostNow(), text: tx, replies: [] };
     if (o.pin !== false) {
       c.t = Math.round((+FM.time || 0) * 1000) / 1000;
       const sel = FM.scene.selectedId;
@@ -223,7 +228,7 @@ window.FM = window.FM || {};
     if (!c || !tx || !CM.canWrite()) return null;
     if (!Array.isArray(c.replies)) c.replies = [];
     if (c.replies.length >= MAX_REPLIES) return null;
-    const r = { id: rid('r_'), by: me(), at: Date.now(), text: tx };
+    const r = { id: rid('r_'), by: me(), at: hostNow(), text: tx };
     c.replies.push(r);
     see(c, r);
     commit(); changed();

@@ -4121,6 +4121,31 @@ window.FM = window.FM || {};
     return { x: a * wnoise(t * f), y: a * wnoise(t * f + 100) };
   };
 
+  /* #1219: ONE id → layer index per FRAME, for the lookups a frame makes once per layer or per group: a child's parent
+     (applyParentChain) and a masking group's mask (buildGroupUnit). Both were FM.layerById, a find from the top of the scene, so a
+     frame read the scene about children × layers / 2 times: measured, 2380 of the 3100 entries a 40-group, 120-layer frame read,
+     after the units already carried their members. renderScene opens the index for the scene it draws and closes it when the
+     frame ends; it is built on the first lookup, in one pass, and answers only for that scene's own layers array. A hit is checked
+     before it is used (the layer still sits where the pass saw it, with that id), so an index left open by a frame that threw can
+     only miss, never answer wrong. A miss, a split layer (FM.clipAt / FM.refLayerAt pick the half on screen) and every lookup
+     outside a frame take the old route. */
+  let _frameIdx = null;   // { layers, idx } while renderScene draws; idx is built on the first lookup
+  function frameIndex(layers) {   // first match wins, as FM.layerById's find does
+    const byId = new Map(), at = new Map();
+    for (let i = 0; i < layers.length; i++) { const L = layers[i]; if (L && !byId.has(L.id)) { byId.set(L.id, L); at.set(L, i); } }
+    return { byId: byId, at: at };
+  }
+  FM._frameIndex = frameIndex;   // suite seam (#1219): a test that answers null puts every lookup back on the old route
+  function frameLayer(scene, id) {
+    const x = _frameIdx;
+    if (!x || !scene || x.layers !== scene.layers) return undefined;
+    if (x.idx === undefined) x.idx = FM._frameIndex(x.layers) || null;
+    if (!x.idx) return undefined;
+    const L = x.idx.byId.get(id);
+    if (!L || L.id !== id || scene.layers[x.idx.at.get(L)] !== L) return undefined;
+    return L;
+  }
+
   // Apply the layer's parent-chain transform (translate/rotate/scale, root-most first) so a
   // child inherits its parent's motion (AM layer parenting). Cycle- and missing-parent-safe.
   // Composes the parent chain onto ctx (position/rotation/scale, root-first) and RETURNS the total
@@ -4132,7 +4157,8 @@ window.FM = window.FM || {};
     let pid = layer.parent;
     while (pid && !seen.has(pid)) {
       seen.add(pid);
-      const pl = FM.clipAt(scene, pid, t);   // the half that actually covers t, if this parent was split
+      const hit = frameLayer(scene, pid);   // #1219: the frame's id index, not a find from the top of the scene per child
+      const pl = (hit && !hit.splitOf) ? hit : FM.clipAt(scene, pid, t);   // the half that actually covers t, if this parent was split
       if (!pl) break;
       chain.push(pl);
       pid = pl.parent;
@@ -18373,8 +18399,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      so the margin is still the boxes' own (reachMargin). */
   function unitReach(u, t, scene) {
     let b = null, q = null, keep = false;
-    scene.layers.forEach(L => {
-      if (keep || !u.memberIds.has(L.id) || L.type === 'group' || L.type === 'camera' || L.type === 'adjustment' || L.type === 'null') return;
+    unitMembers(u, scene).forEach(L => {   // #1219: the unit's own list, not the scene (a union, so the order does not matter)
+      if (keep || L.type === 'group' || L.type === 'camera' || L.type === 'adjustment' || L.type === 'null') return;
       if (!FM.isLayerVisibleAt(L, t)) return;
       if (FM.hasCopyBg && FM.hasCopyBg(L)) { keep = true; return; }
       const r = tiltLayerReach(L, t, scene);
@@ -22348,6 +22374,30 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     rec.at = performance.now();
     return rec.ready ? rec.img : null;
   }
+  /* ⚠️ AN EXPORT WAITS FOR ITS FILLS (leak1009's review, F2). getFillImage decodes on first sight and nothing that draws waits,
+     so a fill first asked for BY THE EXPORT — a closed group's member (it has no timeline row to warm it), or a project opened
+     from Home straight into Export, now that a switch prunes every fill — baked the still-decoding placeholder (the layer's own fill colour) into the file until the
+     decode landed. The exporter's pre-flight (prepareCaches) awaits this: every media fill in the scene is asked for and
+     decoded, each bounded by one shared deadline, so a picture that never decodes costs the export `ms` at most and then draws
+     the placeholder exactly as before. Resolves the number decoded, or -1 when the deadline ran out first. */
+  FM.prewarmFillImages = function (scene, ms) {
+    const waits = [];
+    ((scene && scene.layers) || []).forEach(function (l) {
+      if (!l || !l.fillImage || FM.fillModeOf(l) !== 'media') return;
+      getFillImage(l);
+      const r = _fillImg[l.id];
+      if (!r || r.ready || r.failed) return;
+      waits.push(new Promise(function (res) {
+        const done = function () { if (r.img.complete && r.img.naturalWidth > 0) r.ready = true; res(); };
+        if (r.img.decode) r.img.decode().then(done, done); else { r.img.addEventListener('load', done); r.img.addEventListener('error', done); }
+      }));
+    });
+    if (!waits.length) return Promise.resolve(0);
+    let timer = null;
+    return Promise.race([Promise.all(waits).then(function () { return waits.length; }),
+      new Promise(function (res) { timer = setTimeout(function () { res(-1); }, ms || 8000); })])
+      .then(function (n) { clearTimeout(timer); return n; });
+  };
   // Paint the CURRENT path with the layer's fill (solid / gradient / media), honouring fillOpacity
   // and colour keyframes. Shared by the shape branch and the media fill-override so a rect, a video
   // and a group silhouette all colour identically. Assumes the caller traced the path.
@@ -29938,7 +29988,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (!lin || drawable.some(l => l.splitOf !== lin)) { maskId = mask.id; maskLin = lin; }
         }
       }
-      units.push({ group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, maskLin: maskLin, maskSet: maskSet, drawn: false, depth: 0, pass: pass });
+      /* #1219: `order` — the unit's members bottom → top, the very list buildGroupUnit, its pass-through copy and unitReach used
+         to find by walking the WHOLE scene once per unit build (#1008's review: about 180k iterations a frame on its large scene).
+         The members are the scene's own objects and `index` already holds each one's place, so this reads the scene no further
+         (#1008's read budget holds) and draws the same layers in the same order: a scene's ids are unique. */
+      const order = members.slice().sort((a, b) => index.get(b) - index.get(a));
+      units.push({ group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, maskLin: maskLin, maskSet: maskSet, drawn: false, depth: 0, pass: pass, order: order });
     }
     if (!units.length) return null;
     /* NESTING. A group inside another group is a unit in its own right, and both of them own the same
@@ -29980,6 +30035,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return map;
   }
   FM._collectGroupUnits = collectGroupUnits;   // suite seam (#1008)
+  // a unit's members bottom → top: its own list (#1219), or the scene walk it replaced, for a unit built anywhere else
+  function unitMembers(u, scene) {
+    if (u.order) return u.order;
+    const out = [];
+    for (let i = scene.layers.length - 1; i >= 0; i--) { const L = scene.layers[i]; if (u.memberIds.has(L.id)) out.push(L); }
+    return out;
+  }
   const _mgPool = [];   // one { A, B } per NESTING DEPTH — see collectGroupUnits for why depth is the right index
   /* Flatten a group unit into the `_flat` proxy that carries the group's own effects/opacity/blend.
    * Split out of drawGroupUnit so the backdrop pass can reach a fill that lives on the GROUP: that
@@ -30042,9 +30104,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * does, and a flag living on the unit would make the main loop's rebuild skip every nested unit
      * the earlier pass had already drawn — the group would come out empty. */
     const drawnHere = new Set();
-    for (let i = scene.layers.length - 1; i >= 0; i--) {   // members bottom→top, minus the mask itself
-      const L = scene.layers[i];
-      if (!u.memberIds.has(L.id) || isUnitMask(u, L)) continue;   // bughunt2 #8: every half of a split mask
+    const mem = unitMembers(u, scene);
+    for (let i = 0; i < mem.length; i++) {   // members bottom→top, minus the mask itself (#1219: the unit's own list)
+      const L = mem[i];
+      if (isUnitMask(u, L)) continue;   // bughunt2 #8: every half of a split mask
       /* A nested group that carries visual state of its own is composited as its own flattened unit
        * and then skipped wholesale — its leaves are in OUR memberIds too, and drawing them here as
        * well is the double-composite half of this bug. It goes down at the z-slot of its bottom-most
@@ -30062,7 +30125,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       drawLayer(a, L, t, scene);
     }
     // bughunt2 #8: the half of a split mask on screen at t (a mask never split: the old find by id, through FM.layerById)
-    const maskLayer = (u.maskId && !u.maskSet) ? (FM.refLayerAt ? FM.refLayerAt(scene, u.maskId, t) : scene.layers.find(l => l.id === u.maskId)) : null;
+    const _mh = (u.maskId && !u.maskSet) ? frameLayer(scene, u.maskId) : undefined;   // #1219: the frame's index, not a find per masking group
+    const maskLayer = (u.maskId && !u.maskSet) ? ((_mh && !_mh.splitOf) ? _mh : (FM.refLayerAt ? FM.refLayerAt(scene, u.maskId, t) : scene.layers.find(l => l.id === u.maskId))) : null;
     // bughunt4 #7: a top member that is a group is the mask whole, and it is on screen while any piece of it is
     const maskOn = u.maskSet ? groupMaskOn(u, t, scene) : !!(maskLayer && FM.isLayerVisibleAt(maskLayer, t));
     if (maskOn) {   // hidden mask → members show unclipped
@@ -30147,16 +30211,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * A (the content) and B (the plate being drawn into) are never touched by it. groupMaskOn is the single mask's "hidden mask →
    * members show unclipped" rule for the whole group: the mask is on while any piece of it is on screen at t. */
   function groupMaskOn(u, t, scene) {
-    for (let i = 0; i < scene.layers.length; i++) {
-      const L = scene.layers[i];
+    const mem = unitMembers(u, scene);   // #1219: the unit's own list (maskSet is part of it), not the scene; any piece will do
+    for (let i = 0; i < mem.length; i++) {
+      const L = mem[i];
       if (u.maskSet.has(L.id) && L.type !== 'group' && L.type !== 'camera' && L.type !== 'adjustment' && L.type !== 'null' && FM.isLayerVisibleAt(L, t)) return true;
     }
     return false;
   }
   function drawGroupMask(b, u, t, scene) {
     const drawnHere = new Set();
-    for (let i = scene.layers.length - 1; i >= 0; i--) {   // the mask's pieces bottom to top, as buildGroupUnit walks members
-      const L = scene.layers[i];
+    const mem = unitMembers(u, scene);
+    for (let i = 0; i < mem.length; i++) {   // the mask's pieces bottom to top, as buildGroupUnit walks members (#1219: the unit's own list)
+      const L = mem[i];
       if (!u.maskSet.has(L.id)) continue;
       const own = u.childOwner && u.childOwner[L.id];
       if (own && own !== u) {
@@ -30245,9 +30311,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (rw && rw.canvas === src) _bgRelay = Object.assign({}, rw, { canvas: C });
     try {
       const drawnHere = new Set();
-      for (let i = scene.layers.length - 1; i >= 0; i--) {   // members bottom→top, as buildGroupUnit walks them
-        const L = scene.layers[i];
-        if (!u.memberIds.has(L.id)) continue;
+      const mem = unitMembers(u, scene);
+      for (let i = 0; i < mem.length; i++) {   // members bottom→top, as buildGroupUnit walks them (#1219: the unit's own list)
+        const L = mem[i];
         const own = u.childOwner && u.childOwner[L.id];
         if (own && own !== u) {               // a nested unit goes down whole, at its bottom member's slot, onto THIS copy
           if (!drawnHere.has(own.group.id)) { drawnHere.add(own.group.id); drawGroupUnit(c, own, t, scene); }
@@ -30464,6 +30530,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (reordered.length === scene.layers.length) scene = Object.assign({}, scene, { layers: reordered });
     }
     const P = scene.project;
+    const _frameIdxWas = _frameIdx;   // #1219: this frame's id index (frameLayer), opened for the scene drawn; a comp drawn inside keeps its own
+    _frameIdx = { layers: scene.layers, idx: undefined };
     // Supersample factor for THIS target: how many canvas pixels exist per project pixel. Export and
     // thumbnails hand us a canvas sized exactly to the project, so this is 1 and nothing changes.
     // A caller that is cropping (the zoomed preview) stamps the canvas itself and sets __fmCrop —
@@ -30712,6 +30780,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     _camParallax = null;   // parallax is scoped to the layer loop above only
     _camLens = null;
     _bgRelay = _bgRelayWas;
+    _frameIdx = _frameIdxWas;
     if (cam) {
       const cx = P.width / 2, cy = P.height / 2;
       /* Behavior-resolved (same as the parallax stash above — the two MUST agree or depth layers shear

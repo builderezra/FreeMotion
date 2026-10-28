@@ -65,7 +65,7 @@ window.FM = window.FM || {};
   // TWICE — once on the JS heap, once in blob storage. A blob in, a blob out: no copy. (#47)
   async function deliver(blob, name) {
     let file = null;
-    try { file = new File([blob], name, { type: 'video/mp4' }); } catch (e) {}
+    try { file = new File([blob], name, { type: blob.type || 'video/mp4' }); } catch (e) {}
     if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file], title: name }); return 'shared'; }
       catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; }
@@ -1755,6 +1755,11 @@ window.FM = window.FM || {};
     if (FM.audioSpectrum && FM.audioSpectrum.prewarm) {
       try { await FM.audioSpectrum.prewarm(scene); } catch (e) { /* best-effort, like the envelopes: a clip that will not decode is silent */ }
     }
+    // (d) decode every media fill (leak1009's review, F2) — a fill first asked for by the export baked the placeholder into the
+    //     file's first frames; bounded, so a picture that never decodes draws the placeholder as before (compositor.js)
+    if (FM.prewarmFillImages) {
+      try { await FM.prewarmFillImages(scene); } catch (e) { /* best-effort: an undecodable fill draws the placeholder, as before */ }
+    }
     return built;
   }
 
@@ -2301,8 +2306,7 @@ window.FM = window.FM || {};
        * nothing on the web can write to a camera roll without the sheet. `save` is the same deliver()
        * this line always called, handed over as a closure so the caller does not need the blob's
        * plumbing and cannot deliver something else by mistake.
-       * Absent, the behaviour is exactly what it was, which is what keeps the GIF and PNG paths and
-       * every existing test on the old road. */
+       * Absent, deliver opens the sheet directly or downloads. */
       const outBlob = sink.finish();
       const outName = (opts.name || 'freemotion-export') + '.mp4';
       /* #215: THE FILE IS READ BACK, NOT TRUSTED (fileAacCheck, beside the repair it checks). A track no player can decode
@@ -2496,6 +2500,7 @@ window.FM = window.FM || {};
          * rounded on the same clock, so the error never builds up: at 30 fps that is 3, 4, 3, 3, 4, 3 …
          * and 60 frames last exactly 2.00 s. At 25 or 50 fps it is 4 or 2 every frame, as before. */
         const csAt = k => Math.round(k * 100 / fps);
+        let poster = null;
         for (let f = 0; f < totalFrames; f++) {
           if (FM._exportCancel) throw new Error('CANCELLED');
           const t = start + f / fps;
@@ -2503,14 +2508,30 @@ window.FM = window.FM || {};
           FM.renderScene(projCtx, scene, t);
           outCtx.clearRect(0, 0, outW, outH);
           blit(outCtx);
+          if (!poster && opts.onReady) {
+            try {
+              poster = document.createElement('canvas');
+              const pk = Math.min(1, 320 / Math.max(outW, outH));
+              poster.width = Math.max(1, Math.round(outW * pk));
+              poster.height = Math.max(1, Math.round(outH * pk));
+              poster.getContext('2d').drawImage(outCanvas, 0, 0, poster.width, poster.height);
+            } catch (e) { poster = null; }
+          }
           const data = outCtx.getImageData(0, 0, outW, outH).data;
           gif.addFrame(data, (csAt(f + 1) - csAt(f)) * 10);   // streaming: encoder appends this frame now, retains no pixels
           if (opts.onProgress) opts.onProgress((f + 1) / totalFrames, 'gif');
           await nextTick();   // yield so the Cancel tap can land between frames (throttle-proof — see nextTick)
         }
         const blob = gif.finish();
-        download(blob, (opts.name || 'freemotion-export') + '.gif');
-        return { thinned: memLoss };   // (review G6) a GIF has no ready card: what memory cost is said by its caller (js/app.js runExport)
+        const name = (opts.name || 'freemotion-export') + '.gif';
+        if (typeof opts.onReady === 'function') {
+          releaseGifCopies();
+          if (releaseVideos) { releaseVideos(); releaseVideos = null; }
+          FM._exportTransparent = false;
+          await opts.onReady({ blob, name, poster, width: outW, height: outH, fps, seconds: Math.max(0, end - start),
+            hasAudio: false, thinned: memLoss, save: () => deliver(blob, name) });
+        } else await deliver(blob, name);
+        return { thinned: memLoss };
       } finally {
         if (releaseVideos) releaseVideos();   // queue 690
         FM._exportTransparent = false;
@@ -2572,6 +2593,7 @@ window.FM = window.FM || {};
         if (transparent) FM._exportTransparent = true;   // so exported PNGs carry alpha, without touching saved state
         const zip = FM.zipWrite.create();
         const base = opts.name || 'freemotion-export';
+        let poster = null;
         for (let f = 0; f < totalFrames; f++) {
           if (FM._exportCancel) throw new Error('CANCELLED');
           const t = start + f / fps;
@@ -2579,6 +2601,15 @@ window.FM = window.FM || {};
           FM.renderScene(projCtx, scene, t);
           outCtx.clearRect(0, 0, outW, outH);
           blit(outCtx);
+          if (!poster && opts.onReady) {
+            try {
+              poster = document.createElement('canvas');
+              const pk = Math.min(1, 320 / Math.max(outW, outH));
+              poster.width = Math.max(1, Math.round(outW * pk));
+              poster.height = Math.max(1, Math.round(outH * pk));
+              poster.getContext('2d').drawImage(outCanvas, 0, 0, poster.width, poster.height);
+            } catch (e) { poster = null; }
+          }
           const blob = await new Promise(res => outCanvas.toBlob(res, 'image/png'));
           const buf = new Uint8Array(await blob.arrayBuffer());
           const idx = String(f).padStart(4, '0');
@@ -2586,8 +2617,15 @@ window.FM = window.FM || {};
           if (opts.onProgress) opts.onProgress((f + 1) / totalFrames, 'frames');
         }
         const zipBlob = zip.finish();
-        download(zipBlob, base + '_frames.zip');
-        return { thinned: memLoss };   // (review G6) as runGif: no ready card, so its caller says it
+        const name = base + '_frames.zip';
+        if (typeof opts.onReady === 'function') {
+          releaseGifCopies();
+          if (releaseVideos) { releaseVideos(); releaseVideos = null; }
+          FM._exportTransparent = false;
+          await opts.onReady({ blob: zipBlob, name, poster, width: outW, height: outH, fps, seconds: Math.max(0, end - start),
+            hasAudio: false, thinned: memLoss, save: () => deliver(zipBlob, name) });
+        } else await deliver(zipBlob, name);
+        return { thinned: memLoss };
       } finally {
         if (releaseVideos) releaseVideos();   // queue 690
         FM._exportTransparent = false;

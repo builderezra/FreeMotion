@@ -142,7 +142,7 @@ inbox_key() { printf '%s' "$1" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space
 # prefix came out shorter (a looser match) than the Mac's character-counting BSD cut. bash counts characters on both.
 # Off main, REQUESTS.md here is that branch's copy and misses whatever main logged since, so ssh/main's is asked too.
 already_logged() {
-  [ ${#1} -gt 24 ] && { grep -Fq "${1:0:40}" REQUESTS.md 2>/dev/null ||
+  [ ${#1} -gt 24 ] && { grep -Fq -e "${1:0:40}" REQUESTS.md 2>/dev/null ||
     { [ "$ON_MAIN" = 0 ] && git grep -Fq -e "${1:0:40}" ssh/main -- REQUESTS.md 2>/dev/null; }; }
 }
 # the tree-only lines that are NOT already logged — what the ⛔ banner at the end counts (a stale line a work branch still

@@ -130,6 +130,7 @@ window.FM = window.FM || {};
       mid: o.mid || (isOwner ? 'o' : 'g'),
       isOwner: isOwner,
       host: host,
+      hostOffset: null,
       adapter: A,
       /* base: the host-confirmed document plus our own outstanding ops. On the owner it IS the host's
          authoritative tree — one object, never a copy, so they can never drift. */
@@ -937,7 +938,14 @@ window.FM = window.FM || {};
          Queued behind an export, a `lease-no` would leave the text editor open on a layer somebody else
          holds for as long as the export runs. */
       if (C.presence && C.presence.onCtl(S, 'h', msg)) return;
-      if (msg.t === 'pong') return;                 // S6: consumed by the silence clock above, never queued
+      if (msg.t === 'pong') {
+        const t = now();
+        if (lastPing && msg.n === pingN && typeof msg.hc === 'number' && isFinite(msg.hc) && t >= lastPing) {
+          const offset = msg.hc - (lastPing + (t - lastPing) / 2);
+          S.hostOffset = S.hostOffset == null ? offset : S.hostOffset + (offset - S.hostOffset) / 4;
+        }
+        return;
+      }
       /* §8.9: a guest queues WHOLE incoming messages while frozen or busy, so an export or a half-built
          paste never sees a document somebody else is changing underneath it. */
       if ((frozen() || busy()) && msg.t !== 'welcome') { msgQueue.push({ kind: 'msg', msg: msg }); S.stats.queued++; return; }

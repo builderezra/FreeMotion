@@ -53,6 +53,17 @@ printf '%s' "$out" | grep -qF "$NOTE_LOCAL" && ! printf '%s' "$out" | grep -q 'i
 rm -f .inbox-seen
 git checkout -q -- INBOX.md
 
+echo "── on main: a logged line that starts with a dash reads ALREADY LOGGED (28 Oct: grep took '- has a…' for an option) ──"
+DASHED="- has a true black ground, the colour the launch images already use"
+DASHED_NEW="- a bullet he wrote that nobody has logged yet, with enough words"
+printf '      %s\n' "$DASHED" >> REQUESTS.md
+printf '%s\n%s\n' "$DASHED" "$DASHED_NEW" >> INBOX.md
+out="$(tools/inbox.sh 2>&1)"
+printf '%s' "$out" | grep -qF "ALREADY LOGGED — do not add again: $DASHED" && ok "main: a logged '- ' line reads ALREADY LOGGED" || bad "main: a logged '- ' line read as unlogged: $out"
+printf '%s\n' "$out" | grep -qxF -e "$DASHED_NEW" && ok "main: CONTROL — an unlogged '- ' line is still listed as his words" || bad "main: the unlogged '- ' line is not listed plainly: $out"
+rm -f .inbox-seen
+git checkout -q -- INBOX.md REQUESTS.md
+
 echo "── off main: the WORKING TREE's INBOX.md is read as well as ssh/main's ──"
 git checkout -q -b work
 printf '%s\n' "$NOTE_LOCAL" >> INBOX.md          # the logging chat appends here, uncommitted

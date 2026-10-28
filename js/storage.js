@@ -436,7 +436,8 @@ window.FM = window.FM || {};
     if (_storeWarned.has(what) || !FM.toast) return;
     _storeWarned.add(what);
     const mb = n => (n / 1048576).toFixed(0) + ' MB';
-    const say = extra => FM.toast((quota ? 'Not enough storage to save that media.' : 'Could not save that media.') + (extra || ''), 6000);
+    const say = extra => FM.toast((quota ? 'Not enough storage to save that media.' : 'Could not save that media.') + (extra || '') +
+      (quota && FM.storagePersisted === false ? ' This browser has not protected FreeMotion’s storage.' : ''), 6000);
     if (quota && navigator.storage && navigator.storage.estimate) {
       navigator.storage.estimate().then(q => say(q && q.quota ? ' Used ' + mb(q.usage || 0) + ' of ' + mb(q.quota) + '.' : '')).catch(() => say(''));
     } else say('');
@@ -445,9 +446,10 @@ window.FM = window.FM || {};
   // Ask once for persistent storage. Without it the browser may evict this origin's media under
   // pressure — i.e. projects can lose their clips with no user action at all. Cheap, and silent when
   // it is refused or unsupported.
+  FM.storagePersisted = null;
   try {
     if (navigator.storage && navigator.storage.persist && navigator.storage.persisted) {
-      navigator.storage.persisted().then(p => { if (!p) return navigator.storage.persist(); }).catch(() => {});
+      navigator.storage.persisted().then(p => p ? true : navigator.storage.persist()).then(p => { FM.storagePersisted = !!p; }).catch(() => {});
     }
   } catch (e) {}
   function idbDel(db, key) {
@@ -2467,6 +2469,11 @@ window.FM = window.FM || {};
     } finally { try { if (db) db.close(); } catch (e) {} }
     return true;
   };
+  function safeFileName(name, fallback) {
+    const clean = String(name || '').replace(/[\\/:*?"<>|\x00-\x1f\x7f]+/g, ' ').replace(/\s+/g, ' ').replace(/^[\s.]+|[\s.]+$/g, '');
+    return Array.from(clean).slice(0, 80).join('').replace(/[\s.]+$/g, '') || fallback;
+  }
+  FM.storage._safeFileName = safeFileName;
   /* How Save project file hands a file over: a link to the blob, clicked. Shared with Save a copy below (#1004 + #1005). */
   function downloadBlob(blob, fileName) {
     const url = URL.createObjectURL(blob);
@@ -2485,13 +2492,13 @@ window.FM = window.FM || {};
     if (raw == null || raw === '') return false;
     const card = ((FM.projects && FM.projects.list()) || []).find(p => p && p.id === id);
     const base = String((card && card.name) || '').replace(/\s*\(unreadable\)\s*$/i, '');
-    const name = base.replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'project';
+    const name = safeFileName(base, 'project');
     downloadBlob(new Blob([raw], { type: 'text/plain' }), name + ' (unreadable copy).txt');
     if (FM.toast) FM.toast('Copy saved', 2400);
     return true;
   };
   function saveProjectFile(obj) {
-    const name = (((obj.project && obj.project.name) || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
+    const name = safeFileName(obj.project && obj.project.name, 'project');
     downloadBlob(new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' }), name + '.fmotion.json');
     /* SAY WHAT IS NOT IN IT (queue 888). This used to toast "Project file saved" whatever happened,
        including when the only thing in the project was a video too big to embed and the file was 4KB
@@ -4112,7 +4119,7 @@ window.FM = window.FM || {};
   const LIB_THUMB_RE = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
   function libThumbOk(t) { return typeof t === 'string' && t.length <= 600000 && LIB_THUMB_RE.test(t); }
   function saveLibFile(obj, name, kind) {
-    const safe = String(name || '').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || kind;
+    const safe = safeFileName(name, kind);
     const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = safe + '.fm' + kind + '.json';

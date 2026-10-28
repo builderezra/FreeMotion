@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Oct at v18.11
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Oct at v18.12
 >
-> **State:** v18.11 — **twelve more effects have Protect skin and Mix** (#966); **three undo steps that took two presses now take one** (#1043 #1046 #1047); **FreeMotion no longer deletes your other apps' offline copies** on the same site (#1060); **nine wrong results fixed** from the PM's hunt (#1196 to #1214: a phone blur, Export only this layer, the easing handles, Sharpen, saved filters, Undo during Reverse, a split Wave, rounded corners, Capitalize Words). A live session needs both devices on v18.11. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+> **State:** v18.12 — **in the full editor Tab moves through the buttons** (#1017) and **GIF and PNG-frame exports offer the share sheet** (#1031); **downloads keep their names in any language** (#1044) and **a full phone no longer says a preset saved** (#1045); **a two-finger twist past half a turn no longer jumps the layer** (#1215); **an export no longer starts before its fill pictures have loaded** (#1217). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+>
+> v18.11 — **twelve more effects have Protect skin and Mix** (#966); **three undo steps that took two presses now take one** (#1043 #1046 #1047); **FreeMotion no longer deletes your other apps' offline copies** on the same site (#1060); **nine wrong results fixed** from the PM's hunt (#1196 to #1214: a phone blur, Export only this layer, the easing handles, Sharpen, saved filters, Undo during Reverse, a split Wave, rounded corners, Capitalize Words). A live session needs both devices on v18.11. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
 > v18.10 — **three more effects have Protect skin** (#966): Split Toning, Tint and Faded Film; **a second finger no longer hijacks a scrub, a slider or any other one-finger tool** (#690); **in the full editor a slow swipe on a card no longer pops its Reset menu** (#1122, your "if an issue then fix"); and an Exposure with Keep colour above 0 looks a little less rich than in v18.06. A live session needs both devices on v18.10. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
@@ -35472,12 +35474,14 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 5
       Where: js/app.js:8956 (preventDefault unless inEdit at :8796 or an overlay owns the screen at :8771-8785). Layer head is a plain div at js/timeline.js:1345, eye/lock spans at :1349/:1369 · He sees: A keyboard user cannot Tab around the editor. Layer rows are not exposed to a screen reader. A/S/D, the arrows and ,/. do still move and trim clips (ChatGPT and the orchestrator both missed this) · Fix: Cycle layers only when activeElement is body or the timeline. Roving tabindex plus role/aria-label/aria-selected on .tl-head · Test: Focus #btn-export and press Tab: defaultPrevented is false and the selection is unchanged. Control: with focus on body, Tab still cycles
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.12 (28 Oct): shipped** (codex/h1017b, review, refuter, rework, check; landed as land/h1017b): Tab moves through the controls when a button has focus, and a canvas click gives Tab back to the layers — in the full editor only (the early return waits for #timeline to be visible, which Simple hides), so Simple's Tab is unchanged: #1225.
 
 - [ ] **1018 — The persistent-storage result is thrown away, so nobody can tell whether his install is protected from eviction (hunt LOW #1018)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 6
       Where: js/storage.js:326-333 (only call site). The quota toast warnStore is at :313-324 · He sees: Nothing visible. A diagnosis gap if projects ever vanish · Fix: Store FM.storagePersisted, then show it in the quota toast and the Labs report. Otherwise stay silent · Test: Stub persisted/persist to resolve false and assert FM.storagePersisted === false. Force a quota error: the toast mentions protection
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.12 (28 Oct): shipped** (in h1017b):FM.storagePersisted records the browser's answer; the quota warning adds that storage was not protected when it was not.
 
 - [ ] **1019 — Offline Undo/Redo steps skip the outbox op/byte cap, and acks then make the counters undercount (hunt LOW #1019)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35550,12 +35554,14 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 19
       Where: js/collab-host.js:532-533; js/collab-comments.js:79-85; the pong's hc (js/collab-session.js:617) is never read · He sees: Only with a device clock that is manually wrong. Cosmetic · Fix: Estimate hostOffset from pongs and use it in ago() · Test: Guest clock 3 h behind: a fresh comment reads "just now"
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.12 (28 Oct): shipped** (in h1017b): comment times use the host's clock offset measured from a pong.
 
 - [ ] **1031 — GIF and PNG-frame exports never offer the share sheet (hunt LOW #1031)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 20
       Where: js/exporter.js:1730, :1800 (plain download()) · He sees: On iPhone a GIF lands in Files, not Photos · Fix: Route GIF through the ready card and deliver() · Test: Stub canShare/share: runGif offers share
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.12 (28 Oct): shipped** (in h1017b): GIF and PNG-frame exports end on the ready card with Save and Share.
 
 - [ ] **1032 — One smooth scroll ignores reduced motion (hunt LOW #1032)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35566,10 +35572,12 @@ re-opened #480, which I had marked done and had not fixed.
 - [ ] **1033 — Test gap: one unreadable file in a multi-file pick is named and the rest still import (hunt LOW #1033)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 2
+      📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
 
 - [ ] **1034 — Test gap: a GIF over the memory budget is shrunk but drawn full size, and freed on removal (hunt LOW #1034)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 3
+      📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
 
 - [ ] **1035 — Test gap (needs app code): the mic going away mid-take — voice-rec listens for no track ended / mute (hunt LOW #1035)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35578,14 +35586,17 @@ re-opened #480, which I had marked done and had not fixed.
 - [ ] **1036 — Test gap: rotating 390 → 844 crosses into Studio and keeps the selection, panel and playhead (hunt LOW #1036)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 5
+      📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
 
 - [ ] **1037 — Test gap: a JPEG with an EXIF rotation tag shows upright everywhere, including export (hunt LOW #1037)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 6
+      📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
 
 - [ ] **1038 — Test gap: a custom font travels inside a template or project file (hunt LOW #1038)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 7
+      📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
 
 - [x] **1039 — ChatGPT batch 3 verified — 18 new issues: logged as #1040–#1057** (1 Oct, via INBOX — the logging chat's verification of ChatGPT's read-only reports; NOT his words) ✅ **LOGGED**
       Moved from INBOX.md whole, as the logging chat wrote it:
@@ -35646,11 +35657,13 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 5
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.12 (28 Oct): shipped** (codex/h1044b, landed as land/h1044b): safeFileName keeps every letter and strips only what a file name cannot hold; main's newer Save a copy (#1005) names through it too, with its own test.
 
 - [ ] **1045 — Saving a preset on a full phone says "saved" when nothing was saved (hunt LOW #1045)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 6
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.12 (28 Oct): shipped** (in h1044b): a preset save on full storage says it was not saved.
 
 - [ ] **1046 — An AI Director build, re-roll or refine that deletes a layer takes 2+ undo presses (hunt LOW #1046)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35679,6 +35692,7 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 11
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.12 (28 Oct): shipped** (in h1044b): recent colours merge what is stored with what this window picked.
 
 - [ ] **1051 — A project that is a plain value ("project":"x") passes the import gate and throws (hunt LOW #1051)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35699,6 +35713,7 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 15
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.12 (28 Oct): shipped** (in h1044b): the ? sheet: the 1-5 row says Nothing selected, the 1-9 card keys are listed, Ctrl+Y and Delete / Backspace are right.
 
 - [ ] **1055 — Pixelate's Block aspect and Edges do nothing on an adjustment layer (hunt LOW #1055)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -38844,14 +38859,20 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found by the refuter on codex/h1048 (#1063, the rotate handle): the pinch has the same fault. js/canvas-edit.js (~606) turns the layer by the raw angle between the fingers, wrapped to ±180°, so a twist carried past 180° flips by a whole turn mid-gesture.
       📍 **Where it is (28 Oct):** hunt/twist 62095d19 (~/fm-claude-wt/twist, on 6f8db2e3): the twist adds up its steps, as #1063 did for the handle. Test '1215 a two-finger twist carried past half a turn'. Needs its premise run (red on the base, green on the branch) and a review; waits for v18.12.
+      📍 **v18.12 (28 Oct): shipped** (hunt/twist): the twist is summed move by move, each step wrapped, so it can pass a full turn.
+
 - [ ] **1216 — Two tests clean up through FM.canvasEdit._finishDrag, which no longer exists, so their cleanup does nothing (hunt LOW #1216)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Test hygiene, found beside #1215: two calls in tests/tests.js (around 55721 and 55773 on v18.10) reach for a function the app removed. Nothing he sees; a drag a failing test leaves open is not closed for the next test.
       📍 **Where it is (28 Oct):** hunt/twist 62095d19, with #1215.
+      📍 **v18.12 (28 Oct): shipped** (hunt/twist): the two tests clean up through FM._resetVpPointers.
+
 - [ ] **1217 — An export can start before the fill pictures are decoded, so its first frames draw without them (hunt MEDIUM #1217)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       F2 of the review of hunt/leak1009 (#1009): a switch now lets go of the old project's fill pictures, and the exporter never waited for a fill to decode again.
       📍 **Where it is (28 Oct):** hunt/fill2 52a0f9c5 (on hunt/leak1009, so it lands with v18.11 or after it): FM.prewarmFillImages, awaited in the exporter's prepareCaches step (d). Needs its premise run and a review.
+      📍 **v18.12 (28 Oct): shipped** (hunt/fill2, its premise re-run and the test rebuilt — a cold fill draws the layer's own fill colour, so the old fixture could not tell — then a refuter): the exporter's pre-flight awaits FM.prewarmFillImages, bounded at 8 s.
+
 - [ ] **1218 — Live collaboration: an edit the host drops for coming too fast is never sent again, and a later edit makes it look like a duplicate (hunt HIGH #1218)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Found by the refuter on codex/h1019 (#1019 #1020). When the host's rate limit drops a guest's edit, nothing resends it; the guest's next edit carries a later id, so the dropped one can never land — the two devices quietly disagree.
@@ -38860,6 +38881,8 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       From the review of codex/h1008 (#1008): collectGroupUnits is one pass now, but buildGroupUnit still rescans the scene for each unit.
       📍 **Where it is (28 Oct):** hunt/gu1219 b8450140 (on codex/h1008): unit.order and unitMembers are computed once. Test '1219 a frame with many styled groups'; its bound is MEASURE: pending. Needs its premise run and a review.
+      📍 **v18.12 (28 Oct): shipped** (hunt/gu1219, the 3100 leftover reads accounted for — 2380 were per-child parent finds — then a refuter and its folds): a per-frame id index serves parent, mask and group-mask lookups; group units carry their members in draw order.
+
 - [ ] **1220 — The tick's idle check (#1133) may not count a ship's finger phases as a ship (hunt LOW #1220 — TO CONFIRM)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       A note from a tick on 28 Oct with no detail behind it. _shipidle.sh shows nothing wrong, so this is logged to be confirmed, not built.
@@ -38872,3 +38895,102 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found by Codex while reworking codex/h1055 (#1055 #1061): js/app.js (~5706-5707).
       📍 **Where it is (28 Oct):** Nothing built.
+- [ ] **1223 — The intro (the launch splash) looks AI-made: make it feel human — build H2 "Scrub", recommended** (28 Oct ~14:15 AWST, his words; the PM's plan ~15:00; moved from INBOX.md verbatim)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      **His words, verbatim:** "THe intro u have on the app rn looks very Ai made, try making it feel more human, research what makes ai stuff feel ai when it comes to claude design and stuff."
+      **His clauses:**
+      1. [x] research what makes AI stuff feel AI (the PM: 3 researchers, ~45 sources, the seven tells below)
+      2. [ ] make the intro feel more human: H2 built into index.html's splash, the six steps below
+      3. [ ] he sees it before it is called done: a 380 px and a desktop check, and a three-frame strip (0.2 s, 1.0 s, end)
+      Builds on #1180 (the Keyframes splash, his pick on 23 Oct). Options drawn: the board "Human intro · four takes" (H1–H4); his standing rule since 21 Oct is to ship the recommended pick ON and let him correct it.
+      **The INBOX blocks, verbatim:**
+      ### 28 Oct 2026, ~14:15 AWST — the intro looks AI-made; make it feel human (#1180's Keyframes splash)
+      **His words, verbatim:** "THe intro u have on the app rn looks very Ai made, try making it feel more human, research what makes ai stuff feel ai when it comes to claude design and stuff."
+      He was looking at the logo canvas (artboards Main, Greys, Teal, Grades, Across, D2-Animations) when he said it.
+
+      **What "the intro" is:** the launch splash in index.html (#splash / #splash-mark, inline SVG + SMIL, 5.5 s timeline). It is
+      card 7 of tools/design/logo-1180/canvas/D2-Round2.dc.html, his pick on 23 Oct ("i love the first one").
+
+      **PM's first reading of the AI tells in it (research and drawn options follow in a block titled "#intro feels AI — PM plan"):**
+      1. The tagline **"EDITING, EVOLVED"**: the stock "X, reimagined / X, evolved" formula, in small, wide-spaced grey capitals.
+      2. **Every element fades up and settles** (the name rises 8 px, the tagline 6 px), the most common AI entrance.
+      3. The same expo-out spline (0.16 1 0.3 1) and the same springy overshoot (1.3 → 0.92 → 1) on all three diamonds,
+         with an even 0.018-cycle stagger. It is mechanically regular.
+      4. **Glow blooms and pulse rings** (white radial flashes, an expanding outline ring, a teal halo on the playhead), plus
+         gradient-filled bars, a neon teal accent on near-black, and a dead-centre symmetric layout.
+
+      **Not to build until the PM's plan lands** (options drawn on the canvas for him to pick, one recommended).
+
+      ### 28 Oct 2026, ~15:00 AWST — #intro feels AI — PM plan (READY TO BUILD: H2 "Scrub", recommended; he may pick another)
+      Follows the block "the intro looks AI-made; make it feel human". His words, verbatim: "THe intro u have on the app rn looks very
+      Ai made, try making it feel more human, research what makes ai stuff feel ai when it comes to claude design and stuff."
+
+      **Research (3 web researchers, ~45 sources: Anthropic's frontend-design skill and blog, Adrian Krebs' 500-page "design slop"
+      count, Pixelslop's catalogue, impeccable.style, Emil Kowalski, Apple HIG, School of Motion, Saul Bass and Spider-Verse writing).
+      The current splash hits nearly every named tell:**
+      1. Tinted near-black #0b0b0d with ONE bright accent. Anthropic's own skill lists exactly this as a Claude default
+         (#0B0B0B / #111, single bright accent), and Pixelslop gives it its top severity score.
+      2. Glow halos: the white radial flashes, the expanding outline-ring pulses and the playhead's teal halo. "Dark-mode glow" and
+         "pulsing indicators" are named tells. A white rotated square popping with a glow also reads as the AI sparkle (✨).
+      3. "EDITING, EVOLVED": the tracked grey all-caps label tell plus the "X, reimagined" slogan formula. Apple: no text on a launch screen.
+      4. Fade-and-rise entrances (the name rises 8 px, the tagline 6 px). Anthropic's skill: "the generic default and read as AI-generated".
+      5. One curve (expo-out 0.16 1 0.3 1) on everything, an even stagger, a scale-from-0 spring with 30% overshoot
+         (Kowalski: never from 0, start at ~0.9; bounce 0.1–0.3 at most).
+      6. Too many effects (pops, glows, rings, spins, slides, drop, two fades) over 5.5 s on every launch. The research says one idea, short.
+      7. A dead-centre symmetric layout and a system font with no decision behind it.
+      Human moves the research backs: one idea native to the subject (a scrub, a cut, keys), uneven hand timing, a different ease per
+      role (falling = ease-in with a hard stop), motivated motion (the playhead CAUSES the reveal), stepped "on twos" texture,
+      holds, a hard cut instead of a dissolve, a ground that matches the first real frame. Full notes are in the PM scratchpad
+      research-intro.md.
+      **The 23 Oct "Keyframes, by hand" round changed only the motion.** It kept the glow, the tagline, the gradient bars on
+      #0b0b0d and Sora, so it fixed tells 5–6 and left 1–4.
+
+      **Drawn on his logo canvas, new board "Human intro · four takes"** (https://claude.ai/artifact/4ot9bNBsNL6HCv6Nei8QN7,
+      project/Human-Intro.dc.html). Every take keeps his logo exactly (the F of clips, the light-from-above grey, the teal playhead) and:
+      - has a **true black #000 ground**, the colour the iPhone launch images already use (index.html:73), so launch → splash is one
+        colour, and the playhead's knock-out backing becomes #000;
+      - has **no glow, no rings, no tagline, no fade-ups, no scale-from-0**;
+      - uses a **left-aligned lockup**: the name starts on the F's spine (logo at translate(21 30), the text at x=35, text-anchor start,
+        letter-spacing -0.3), instead of mirrored centring;
+      - sets the name in the font the app really ships (SF / Segoe; the canvas used to show Sora, which the app never loads);
+      - moves in under 1.6 s instead of 5.5 s.
+      The takes:
+      - **H1 · Keyframes, played.** The keys are tapped onto the F's spine at uneven times (0.12 / 0.27 / 0.55 s), and each clip
+        plays out from its key with ease-out (0.23 1 0.32 1), ending at 1.20 / 1.24 / 1.32 s. The playhead falls with an ease-in
+        (0.55 0 1 0.45), lands hard at 1.54 s with a 1 px settle, and the name cuts in on the landing frame. Closest to his pick.
+      - **H2 · Scrub — RECOMMENDED.** The playhead cuts in at the clips' start (0.15 s), holds a beat, then sweeps right
+        (0.40→0.98 s, ease-in-out 0.77 0 0.175 1). The clips are revealed exactly at its edge (a clipPath width on the same spline),
+        so it overshoots to x=112. Then it rocks back like a hand scrubbing tape: 112→70→90→79→82, at 1.16 / 1.30 / 1.41 / 1.50 s,
+        each swing shorter. It stops on its frame and the name cuts in on that frame. ONE idea, the gesture an editor's hand
+        really makes, and the playhead causes everything.
+      - **H3 · On twos.** The clips step in at 12 fps (calcMode discrete, out of sync, with holds) under a sub-pixel gate weave,
+        the playhead falls smooth on ones, and the name appears two letters per step. The most "hand-made" texture, and the most stylised.
+      - **H4 · Quiet.** Everything cuts in on frame one, and the playhead plays at an even speed from the clips' start to its place
+        (0.40→0.95 s) and stops dead. This is Apple's "launch is not a branding moment" reading, and the least show.
+      Exact SMIL values (keyTimes on a 4 s loop: divide by 4 for seconds) are in the board's file. In the app, play ONE pass with
+      fill="freeze" and no repeatCount, re-timed onto its own short dur (H2's motion ends at 1.50 s).
+
+      **Build H2 into the splash (his standing rule since 21 Oct: ship the recommended pick ON, he corrects later). What changes in index.html:**
+      1. #splash-mark: replace the Keyframes SMIL with H2's, one-shot. The END FRAME (the still for reduced motion / no SMIL /
+         paused clock) is H2's last frame.
+      2. The splash ground #0b0b0d → #000 in splash-css (#splash.splash-kf background-color AND the image layer;
+         html.splash-on.splash-kf-on). Keep queue 920's split for the light Home: only the COLOUR ramps to #fafdff.
+      3. Delete the tagline <text>, the radial gradients nC_w / nC_t, every glow circle and every outline-ring polygon.
+      4. Hand-over: dissolve .9s → the existing quick .28s path (an editor cuts, it doesn't dissolve). Hold the end frame ~0.6 s
+         (the research says a beat to read the name; it was 0.4 s).
+      5. Re-derive the cap and the 15 s ceiling from the new timeline (motion 1.5 s + 0.6 s hold), and re-point every #1180
+         test that names old timings (3.36 s settle, 5.5 s dur, "EDITING, EVOLVED", nC_ ids). Release 1's rules stay:
+         splashed per build, the clock-based cap, the still if the clock hasn't started or animationsPaused().
+      6. A phone check at 380 px plus a desktop check, and send him a recording or a three-frame strip (0.2 s, 1.0 s, end), per the
+         design rule: he sees it before it is called done.
+      **Not decided by the PM:** a timecode readout (the research suggested a frame counter that freezes on the stop; left out
+      as an extra element), sound (none in the app's splash today), and whether the logo's own grey gradient should go flat (it is
+      his chosen grade, so it is kept).
+- [ ] **1224 — A test earlier in the suite leaves a tiny landscape project open, so later tests that draw at fixed sizes run off the frame (hunt LOW #1224)** (28 Oct ~18:05 AWST — the builder's own finding from the v18.11 refusal; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Found when v18.11's first ship was refused on '1063 rotate handle crosses the left pivot…': in suite order the preview was 382x287 (landscape) where alone it is 162x289 (1080x1920), and the fixed 160 px square put the handle outside the window (elementFromPoint null, "covered by nothing"). Nothing he sees; the test now sizes its square from the open project (v18.11).
+      📍 **Where it is (28 Oct):** not found. The harness resets FM.scene.project between tests, so whatever leaks is something the reset does not cover (a cached size, a stale aspect on the preview, or the Home thumbnail path). Bisect with ?after=/&upto= slices ending at 1063 and log the leaking test here.
+- [ ] **1225 — In Simple mode Tab still cycles layers even when a button has focus (#1017's fix, held back from Simple) (hunt LOW #1225)** (28 Oct ~19:30 AWST — the builder's own, from the v18.12 assembly; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      #1017 shipped in v18.12 for the full editor only: Simple runs the same keydown handler, and the Full-unchanged lock keeps a Full release out of Simple's behaviour (the fix named #sm-timeline, a Simple hook). Simple's Tab is exactly as on v18.11.
+      📍 **Where it is (28 Oct):** nothing built. A Simple release (it ships alone, after a full-unchanged PASS) can take the same early return for #sm-timeline.

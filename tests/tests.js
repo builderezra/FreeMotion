@@ -15815,6 +15815,47 @@
     }
   });
 
+  /* #1215 — THE TWIST CARRIED PAST HALF A TURN. The pinch read the angle since it began and wrapped it into ±180°, so at 180°
+     the rotation flipped to −180 and the layer jumped by 360 under his fingers (found by the h1048 refuter, 28 Oct, beside #1063).
+     Model: the twist test above (same fixture, same finger events); stubs put back by descriptor. Today the reading after 200° of
+     twist is about −167; with the running total it is about 193 (200 less the 7° dead zone), and no step between two moves of
+     10° is more than a few degrees. */
+  test('1215 a two-finger twist carried past half a turn keeps turning the layer, it does not jump by 360', { item: '1215' }, function () {
+    const pv = document.getElementById('preview');
+    if (!pv) throw new Error('#preview missing');
+    const savedScene = FM.scene;
+    const keep = ['commit', 'autosave', 'save', 'markDirty'].map(k => [k === 'commit' ? FM.history : FM.storage, k]);
+    const descs = keep.map(([o, k]) => Object.getOwnPropertyDescriptor(o, k));
+    keep.forEach(([o, k]) => { o[k] = function () {}; });
+    try {
+      FM.scene = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000' }, layers: [], selectedId: null, selectedIds: [] };
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'T', x: 160, y: 120, shapeW: 80, shapeH: 80, fill: '#f00' });
+      FM.scene.layers.push(L); FM.scene.selectedId = L.id; FM.scene.selectedIds = [L.id];
+      const r = pv.getBoundingClientRect();
+      if (!r.width) throw new Error('#preview has no size to aim at');
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const ev = (type, id, x, y) => pv.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch', isPrimary: id === 1, clientX: x, clientY: y, button: 0 }));
+      const at = (deg, rad) => [cx + Math.cos(deg * Math.PI / 180) * rad, cy + Math.sin(deg * Math.PI / 180) * rad];
+      const rot = () => FM.evalProp(L.transform.rotation, FM.time) || 0;
+      let a = at(180, 80), b = at(0, 80);
+      ev('pointerdown', 1, a[0], a[1]); ev('pointerdown', 2, b[0], b[1]);
+      const seen = [];
+      try {
+        for (let d = 10; d <= 200; d += 10) { a = at(180 + d, 80); b = at(d, 80); ev('pointermove', 1, a[0], a[1]); ev('pointermove', 2, b[0], b[1]); seen.push(rot()); }
+      } finally { ev('pointerup', 1, a[0], a[1]); ev('pointerup', 2, b[0], b[1]); }
+      // CONTROL: half way, before the wrap, the twist is turning the layer at all (90° less the 7° dead zone)
+      const at90 = seen[8];
+      if (!(at90 > 75 && at90 < 90)) throw new Error('CONTROL: after 90° of twist the layer is at ' + at90 + '°, not about 83 — the twist is not reaching it, so this test sees nothing (' + seen.join(', ') + ')');
+      let jump = 0; for (let i = 1; i < seen.length; i++) jump = Math.max(jump, Math.abs(seen[i] - seen[i - 1]));
+      const last = seen[seen.length - 1];
+      if (jump > 20) throw new Error('twisting on past half a turn jumped the layer by ' + jump.toFixed(1) + '° between two 10° moves (' + seen.join(', ') + ')');
+      if (!(last > 185 && last < 200)) throw new Error('after 200° of twist the layer is at ' + last + '°, not about 193 (' + seen.join(', ') + ')');
+    } finally {
+      FM.scene = savedScene;
+      keep.forEach(([o, k], i) => { if (descs[i]) Object.defineProperty(o, k, descs[i]); else delete o[k]; });
+    }
+  });
+
   test('adding a camera does not move layers that have depth', { item: 'cam-parallax' }, function () {
     // v5.20. Depth parallax was driven by the camera's ABSOLUTE position instead of its displacement
     // from the frame centre, so every z != 0 layer picked up a constant offset of centre*(1-pscale) —
@@ -20496,6 +20537,108 @@
     }
   });
 
+
+  /* #1219 fixture: `groups` styled groups in three kinds, each beside one loose layer, every group moved by (3, 2) so each child
+     needs its parent found to land in the right place. Kind 0: an opacity group around one leaf. Kind 1: a masking group, its top
+     leaf masking the leaf under it (the mask found by id, u.maskId). Kind 2: a masking group whose top member is a plain group
+     holding the mask's piece (u.maskSet, groupMaskOn and drawGroupMask). */
+  function fixture1219(groups) {
+    const layers = [];
+    for (let i = 0; i < groups; i++) {
+      const kind = i % 3, x = 6 + (i % 12) * 9, y = 6 + (Math.floor(i / 12) % 7) * 12;
+      const g = FM.makeLayer('group', { name: '1219 ' + i, x: 0, y: 0 }); g.transform.x = 3; g.transform.y = 2;
+      const loose = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 86, shapeW: 4, shapeH: 4, fill: '#ff0000' });
+      if (kind === 0) {
+        g.transform.opacity = 0.5;
+        const leaf = FM.makeLayer('shape', { shape: 'rect', x: x, y: y, shapeW: 6, shapeH: 6, fill: '#ffffff' }); leaf.parent = g.id;
+        // a second member over half of it, in another colour, so the pixels see the members' order (its refuter, 28 Oct)
+        const over = FM.makeLayer('shape', { shape: 'rect', x: x + 3, y: y + 3, shapeW: 6, shapeH: 6, fill: '#ff8000' }); over.parent = g.id;
+        layers.push(g, over, leaf, loose);
+      } else if (kind === 1) {
+        g.maskGroup = true;
+        const mask = FM.makeLayer('shape', { shape: 'rect', x: x + 2, y: y, shapeW: 4, shapeH: 6, fill: '#ffffff' }); mask.parent = g.id;
+        const body = FM.makeLayer('shape', { shape: 'rect', x: x, y: y, shapeW: 8, shapeH: 8, fill: '#00ff00' }); body.parent = g.id;
+        layers.push(g, mask, body, loose);
+      } else {
+        g.maskGroup = true;
+        const holder = FM.makeLayer('group', { name: '1219 mask ' + i, x: 0, y: 0 }); holder.parent = g.id;
+        const piece = FM.makeLayer('shape', { shape: 'rect', x: x, y: y + 2, shapeW: 8, shapeH: 3, fill: '#ffffff' }); piece.parent = holder.id;
+        const body = FM.makeLayer('shape', { shape: 'rect', x: x, y: y, shapeW: 8, shapeH: 8, fill: '#0000ff' }); body.parent = g.id;
+        layers.push(g, holder, piece, body, loose);
+      }
+    }
+    return scene(layers, { project: { width: 120, height: 90, fps: 30, duration: 5, background: '#000000' } });
+  }
+
+  /* One frame of `sc` with its scene reads counted (count1008). `old` draws it the way it was drawn before #1219: the units carry
+     no member list (unitMembers walks the scene once per call, as buildGroupUnit, drawPassUnit, unitReach, groupMaskOn and
+     drawGroupMask all did) and the frame has no id index (every parent and every mask is a find from the top of the scene, as
+     applyParentChain and buildGroupUnit did). On a tree without either seam, `old` changes nothing: that tree IS the old way. */
+  function frame1219(sc, old) {
+    const dc = Object.getOwnPropertyDescriptor(FM, '_collectGroupUnits'), di = Object.getOwnPropertyDescriptor(FM, '_frameIndex');
+    const collector = FM._collectGroupUnits;
+    const strip = m => {
+      const seen = new Set();
+      const v = u => { if (!u || seen.has(u)) return; seen.add(u); delete u.order; Object.keys(u.childOwner || {}).forEach(id => v(u.childOwner[id])); };
+      Object.keys(m || {}).forEach(id => v(m[id]));
+      return m;
+    };
+    const draw = () => { const c = offscreen(120, 90), g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, sc, 0); return g.getImageData(0, 0, 120, 90).data; };
+    try {
+      if (old) {
+        FM._collectGroupUnits = function (s, t) { return strip(collector(s, t)); };
+        if (di) FM._frameIndex = function () { return null; };
+      }
+      return count1008(sc, draw);
+    } finally {
+      Object.defineProperty(FM, '_collectGroupUnits', dc);
+      if (di) Object.defineProperty(FM, '_frameIndex', di);
+    }
+  }
+
+  /* #1219 — THE SAME RESCAN, ONE LEVEL DOWN (#1008's review), AND ONE MORE BELOW THAT. The collector indexes the scene once, but
+     buildGroupUnit still walked the whole scene once per unit build to find that unit's members, and every child still found its
+     parent with FM.layerById, a find from the top of the scene (applyParentChain → FM.clipAt), as a masking group found its mask.
+     Measured on the 40-group, 120-layer frame this test first used: 7900 reads before, 3100 with the member lists alone, and
+     2380 of those 3100 were the parent finds; the other 720 are six single passes (the camera, the collector's two, solo, fill
+     behind, the layer loop). A walk per group or per child grows with groups × layers, so the frame is drawn at 40 and at 80
+     groups and the reads must grow like the layers (about 2x), not like their square (about 4x). Model: the 1008 tests above
+     (scene, count1008, the collector seam).
+     MEASURED on this fixture (28 Oct, 1280 wide, with the opacity groups' second member). Fixed: 1317 reads for 173 layers at 40
+     groups, 2635 for 346 at 80 (7.61 and 7.62 a layer: seven single passes, the six above plus the index's own, and one check per
+     parent or mask found). The old walk: 21506 and 84452 (124.3 and 244.1 a layer, 3.93x the reads for 2x the layers). The base
+     itself (56bb6b21): 20414 and 79967, 1.96x per layer. */
+  test('1219 a frame reads the scene a fixed number of times however many styled groups it holds, not once per group or per child (CONTROL: the old walk draws the same pixels and grows about four-fold when the groups double)', { item: '1219', budgetMs: 120000 }, function () {
+    if (typeof FM._collectGroupUnits !== 'function') throw new Error('setup: the collector seam is missing');
+    const runs = [40, 80].map(groups => {
+      const sc = fixture1219(groups), n = sc.layers.length;
+      const was = frame1219(sc, true), now = frame1219(sc, false);
+      for (let i = 0; i < now.value.length; i++) {
+        if (now.value[i] !== was.value[i]) throw new Error(groups + ' groups: pixel byte ' + i + ' differs from the old walk: ' + now.value[i] + ' versus ' + was.value[i]);
+      }
+      return { groups: groups, sc: sc, n: n, was: was.reads, now: now.reads, pixels: now.value };
+    });
+    const a = runs[0], b = runs[1];
+    const said = 'reads ' + a.now + ' for ' + a.n + ' layers and ' + b.now + ' for ' + b.n + ' (the old walk: ' + a.was + ' and ' + b.was + ')';
+    // CONTROL: the old walk is quadratic on this very fixture (measured 3.93x the reads, 1.96x per layer), so the check below can tell them apart
+    if (!(b.was / a.was > 3.2)) throw new Error('CONTROL: the old walk did not grow quadratically, ' + said);
+    // CONTROL: every child's place comes from its parent, and every masked group's look from its mask, so a lookup that lost or
+    // mistook either would show in the pixel comparison above
+    const moved = fixture1219(40);
+    moved.layers.forEach(l => { if (l.type === 'group' && !l.parent) { l.transform.x = 0; l.transform.y = 0; } });
+    const unmasked = fixture1219(40);
+    unmasked.layers.forEach(l => { if (l.maskGroup) l.maskGroup = false; });
+    [[moved, 'moving every group back to the origin'], [unmasked, 'turning every mask off']].forEach(pair => {
+      const px = frame1219(pair[0], false).value;
+      let diff = 0;
+      for (let i = 0; i < px.length; i += 4) if (px[i] !== a.pixels[i] || px[i + 1] !== a.pixels[i + 1] || px[i + 2] !== a.pixels[i + 2]) diff++;
+      if (!diff) throw new Error('CONTROL: ' + pair[1] + ' did not change the frame');
+    });
+    // per-layer growth: fixed 1.00 (7.61 → 7.62 a layer), the old walk 1.96; at 80 groups fixed 7.62 a layer, the old walk 244.1, so the
+    // bound of 40 a layer sits between them with room for a legitimate pass or two more (its refuter: 10 was brittle)
+    const growth = (b.now / b.n) / (a.now / a.n);
+    if (!(growth < 1.25) || !(b.now < 40 * b.n)) throw new Error('doubling the styled groups multiplied the reads per layer by ' + growth.toFixed(2) + ': a frame ' + said + ' — something still walks the scene once per group or per child');
+  });
 
   test('groups: a group nested inside another group keeps its own opacity', { item: 'nested-groups' }, function () {
     /* collectGroupUnits builds one flattened unit per group that has visual state of its own, then
@@ -56748,7 +56891,7 @@
       if (Math.abs(x1 - x0) > 0.5 || Math.abs(s1 - s0) > 0.005)
         throw new Error('a right-click on a handle moved the layer (x ' + x0 + '→' + x1 + ', scale ' + s0 + '→' + s1 + ') — and the release for that button never comes, so it keeps following the cursor');
     } finally {
-      try { FM.canvasEdit._finishDrag && FM.canvasEdit._finishDrag(); } catch (e) {}
+      try { if (FM._resetVpPointers) FM._resetVpPointers(); } catch (e) {}   // FM.canvasEdit._finishDrag never existed: this cleanup did nothing (#1216)
       window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 61, pointerType: 'mouse', button: 2, buttons: 0, clientX: 0, clientY: 0 }));
       FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
       FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(60);
@@ -56800,7 +56943,7 @@
       if (L.transform.scale.kf.map(k => k.v).join(',') === was)
         throw new Error('control: at a frame where the layer is visible the corner drag no longer scales it either — the guard is refusing everywhere');
     } finally {
-      try { FM.canvasEdit._finishDrag && FM.canvasEdit._finishDrag(); } catch (e) {}
+      try { if (FM._resetVpPointers) FM._resetVpPointers(); } catch (e) {}   // FM.canvasEdit._finishDrag never existed: this cleanup did nothing (#1216)
       [63, 64].forEach(id => window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: id, pointerType: 'mouse', button: 0, buttons: 0, clientX: 0, clientY: 0 })));
       FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
       if (FM.seek) FM.seek(t0); else FM.time = t0;
@@ -70777,15 +70920,9 @@
     }
   });
 
-  /* #860 hunt #6, the GIF half (review G6): A GIF OR PNG-SEQUENCE EXPORT THAT KEPT A GIF SMALLER SAYS SO WHEN IT FINISHES. Those two
-     have no ready card, so the MP4 card's ' · smaller to fit memory: <name> <w>×<h>' was never said for them: the export ended on
-     Done — saved to your Downloads. and nothing else. Driven through the entry the Export button calls (FM._runExport) for both
-     formats, on a 160 x 120 project 0.2 s long at 10 fps, with a big GIF squeezed in the preview (kit.phone, a GIF decoded earlier
-     filling the total) and the export total shrunk (FM._exportBytes, the suite seam) to what that preview copy holds, so the export
-     keeps it smaller and names it ({ gif: true }). The finish line, and the toast that stays once the overlay has gone (FM.toast
-     recorded), must carry the card's words. RED on 221694de: the line is Done — saved to your Downloads. and no toast says anything.
-     CONTROL: with the export's own total the GIF goes out at full size, the list names nothing, and the line is exactly as before with
-     no toast; each export saved one file. */
+  /* #860 review G6 / #1031: both ready cards name a GIF kept smaller to fit memory. The real Export entry draws a squeezed
+     preview on the phone budget, with its export total reduced to that copy's bytes. Read the card before Save, then count
+     one file. CONTROL: with the export's own total, the full-size GIF is not named and the card claims no memory loss. */
   test('860 a GIF or PNG-sequence export that kept a GIF smaller to fit memory says so when it finishes, in the ready card words (CONTROL: an export that kept nothing smaller says only that it is done)', { item: '860', budgetMs: 180000 }, async function () {
     if (typeof FM._runExport !== 'function' || typeof FM._decodeGifAnimation !== 'function' || typeof FM.makeLayer !== 'function') throw new Error('FM._runExport, FM._decodeGifAnimation or FM.makeLayer is not exposed');
     var fmtEl = document.getElementById('exp-format'), rangeEl = document.getElementById('exp-range');
@@ -70797,24 +70934,36 @@
     try { prefs0 = localStorage.getItem(PK); } catch (e) {}
     var had = Object.prototype.hasOwnProperty.call(FM, '_exportBytes'), eb0 = FM._exportBytes;
     var toast0 = Object.getOwnPropertyDescriptor(FM, 'toast'), said = [];
+    var ebd = Object.getOwnPropertyDescriptor(FM, '_exportBytes');
     var dl = hunt2dCatchDownloads();
     var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
     try {
       FM.toast = function (msg) { said.push(String(msg)); };
       kit.plant('860g-done-fill', per);
       var file = kit.fileOf(n, '860g-done');
-      var sq = await FM._decodeGifAnimation(file);
+      var sq = await hunt1017Within(FM._decodeGifAnimation(file), '860 memory preview decode', 60000);
       if (!sq || sq.frames.length !== n || !(sq.width < kit.W)) throw new Error('setup: the big GIF came out ' + (sq ? sq.frames.length + ' frames at ' + sq.width + 'x' + sq.height : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + kit.W);
-      kit.show('860g-done', sq, file);
+      var B = kit.show('860g-done', sq, file);
       P.width = 160; P.height = 120; P.fps = 10; P.duration = 0.2;
       var run = async function (fmt) {
         fmtEl.value = fmt; rangeEl.value = 'whole';
         if (FM._setExportSoloId) FM._setExportSoloId(null);
-        var said0 = said.length, files0 = dl.files.length;
-        await FM._runExport();
-        var line = status.textContent, named = (FM._exportThinned || []).filter(function (t) { return t && t.gif && t.name === '860g-done'; });
+        var said0 = said.length, files0 = dl.files.length, drawn0 = kit.drawn.length;
+        var line = null, copyHeldAtCard = false;
+        var closer = setInterval(function () {
+          if (!document.getElementById('export-ready').classList.contains('hidden')) {
+            line = document.getElementById('xr-meta').textContent;
+            copyHeldAtCard = !!B.rec._exportAnim;
+            document.getElementById('xr-save').click();
+          }
+        }, 60);
+        try { await hunt1017Within(FM._runExport(), '860 memory ready card Save', 60000); }
+        finally { clearInterval(closer); document.getElementById('xr-discard').click(); }
+        if (line === null) throw new Error('the export bypassed its ready card');
+        if (copyHeldAtCard) throw new Error(fmt + ' kept its full-size GIF copy while the card waited');
+        var named = (FM._exportThinned || []).filter(function (t) { return t && t.gif && t.name === '860g-done'; });
         await sleep(1100);   // the overlay goes 900 ms after the finish line, and the toast with it
-        return { line: line, named: named, files: dl.files.length - files0,
+        return { line: line, named: named, drawn: kit.drawn.slice(drawn0), files: dl.files.length - files0,
           lost: said.slice(said0).filter(function (s) { return /to fit memory/.test(s); }) };
       };
       var want = ' · smaller to fit memory: 860g-done ' + sq.width + '×' + sq.height;
@@ -70824,8 +70973,7 @@
         var r = await run(fmts[i][0]);
         if (r.files !== 1) throw new Error('setup: the ' + fmts[i][1] + ' export saved ' + r.files + ' files, not one, so it did not finish');
         if (r.named.length !== 1 || r.named[0].w !== sq.width || r.named[0].h !== sq.height) throw new Error('setup: the ' + fmts[i][1] + ' export did not keep the big GIF at its preview ' + sq.width + 'x' + sq.height + ' and name it: ' + JSON.stringify(FM._exportThinned));
-        if (r.line !== 'Done — saved to your Downloads' + want) throw new Error('the ' + fmts[i][1] + ' export kept 860g-done at ' + sq.width + '×' + sq.height + ', smaller than its own ' + kit.W + '×' + kit.H + ', and its finish line says only ' + JSON.stringify(r.line) + ', not the ready card words ' + JSON.stringify(want));
-        if (r.lost.length !== 1 || r.lost[0] !== 'Saved to your Downloads' + want) throw new Error('the ' + fmts[i][1] + ' export kept a GIF smaller and no toast said so once its overlay had gone: ' + JSON.stringify(r.lost));
+        if (r.line.indexOf(want) < 0) throw new Error('the ' + fmts[i][1] + ' ready card omitted ' + want + ': ' + r.line);
       }
       /* CONTROL: the export's own total, the GIF at full size, nothing named and nothing said */
       delete FM._exportBytes;
@@ -70833,13 +70981,13 @@
         var c = await run(fmts[j][0]);
         if (c.files !== 1) throw new Error('setup: the ' + fmts[j][1] + ' export with room for the GIF saved ' + c.files + ' files, not one');
         if ((FM._exportThinned || []).some(function (t) { return t && t.gif; })) throw new Error('setup: with the export total the GIF was still kept smaller: ' + JSON.stringify(FM._exportThinned));
-        if (c.line !== 'Done — saved to your Downloads.') throw new Error('CONTROL: a ' + fmts[j][1] + ' export that kept nothing smaller ended on ' + JSON.stringify(c.line) + ', not the plain Done line');
-        if (c.lost.length) throw new Error('CONTROL: a ' + fmts[j][1] + ' export that kept nothing smaller said ' + JSON.stringify(c.lost));
+        if (!c.drawn.some(function (a) { return a !== sq && a.width === kit.W && a.height === kit.H; })) throw new Error('CONTROL: the export never drew its own full-size GIF copy');
+        if (/to fit memory/.test(c.line)) throw new Error('CONTROL: an export that kept nothing smaller claimed a memory loss: ' + c.line);
       }
     } finally {
       if (toast0) Object.defineProperty(FM, 'toast', toast0); else delete FM.toast;
       dl.stop();
-      if (had) FM._exportBytes = eb0; else delete FM._exportBytes;
+      if (ebd) Object.defineProperty(FM, '_exportBytes', ebd); else delete FM._exportBytes;
       P.duration = keep.d; P.width = keep.w; P.height = keep.h; P.fps = keep.fps;
       fmtEl.value = keep.fmt; rangeEl.value = keep.range;
       if (FM._setExportSoloId) { try { FM._setExportSoloId(keep.solo || null); } catch (e) {} }
@@ -70874,8 +71022,17 @@
     var toast0 = Object.getOwnPropertyDescriptor(FM, 'toast'), rs0 = Object.getOwnPropertyDescriptor(FM, 'renderScene');
     var dfs0 = Object.getOwnPropertyDescriptor(FM, 'decodeGifFullSize');
     var afaKit = FM.animFrameAt, realRender = FM.renderScene, realDecode = FM.decodeGifFullSize;
+    var afa0 = Object.getOwnPropertyDescriptor(FM, 'animFrameAt');
+    var ebd = Object.getOwnPropertyDescriptor(FM, '_exportBytes');
     var dl = hunt2dCatchDownloads(), order = [], copies = [], stillDrew = [], expDrew = [], calls = 0, phase = 'A';
     var holding = false, open = null, timer = null, pend = [], B = null, stand = null;
+    var cardSeen = false, copyHeldAtCard = false, closer = setInterval(function () {
+      if (!document.getElementById('export-ready').classList.contains('hidden')) {
+        cardSeen = true;
+        copyHeldAtCard = !!(B && B.rec._exportAnim) || !!(copies[1] && copies[1].frames.some(function (f) { return !f.closed; }));
+        document.getElementById('xr-save').click();
+      }
+    }, 60);
     var gate = new Promise(function (r) { open = function () { holding = false; r(); }; });
     var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
     var desc = function (a) { return a ? a.width + 'x' + a.height + ' with ' + (a.frames ? a.frames.length : 0) + ' frames' : 'nothing'; };
@@ -70904,7 +71061,7 @@
       };
       kit.plant('860g-ov-fill', per);
       var file = kit.fileOf(n, '860g-ov');
-      var sq = await FM._decodeGifAnimation(file);
+      var sq = await hunt1017Within(FM._decodeGifAnimation(file), '860 overlap preview decode', 60000);
       if (!sq || sq.frames.length !== n || !(sq.width < kit.W)) throw new Error('setup: the big GIF came out ' + desc(sq) + ', not all ' + n + ' frames narrower than its own ' + kit.W);
       var before = sq.frames.slice();
       B = kit.show('860g-ov', sq, file);
@@ -70923,9 +71080,11 @@
       timer = setTimeout(function () { if (holding) open(); }, 3000);
       var exp = FM._runExport();
       pend.push(exp);
-      await exp;
+      await hunt1017Within(exp, '860 overlapping still export Save', 60000);
+      if (!cardSeen) throw new Error('the overlapping still export bypassed its ready card');
+      if (copyHeldAtCard) throw new Error('the GIF export kept its full-size copy while the ready card waited');
       var stillErr = null;
-      try { await still; } catch (e) { stillErr = e; }
+      try { await hunt1017Within(still, '860 overlapping still finish', 20000); } catch (e) { stillErr = e; }
       clearTimeout(timer); timer = null;
       await sleep(1000);   // the PNG's toBlob, and the overlay going 900 ms after the finish line
       if (stillErr) throw new Error('the still threw: ' + stillErr.message);
@@ -70953,7 +71112,7 @@
       var callsB = calls, drewB = stillDrew.length, filesB = dl.files.length, errB = null;
       var sB = FM.snapshotPNG();
       pend.push(sB);
-      try { await sB; } catch (e) { errB = e; }
+      try { await hunt1017Within(sB, '860 stand-in still finish', 20000); } catch (e) { errB = e; }
       for (var w = 0; w < 100 && dl.files.length === filesB; w++) await sleep(20);
       if (errB) throw new Error('the still beside the stand-in threw: ' + errB.message);
       var cB = copies[callsB], drawnB = stillDrew.slice(drewB);
@@ -70965,17 +71124,19 @@
       closedOnce('the still copy beside the stand-in', cB);
       if (B.rec.anim !== sq || sq.frames.length !== before.length || sq.frames.some(function (f, z) { return f !== before[z] || f.closed; })) throw new Error('CONTROL: the still or the export changed or closed the GIF the preview holds (rec.anim)');
     } finally {
+      clearInterval(closer);
+      document.getElementById('xr-discard').click();
       if (timer) clearTimeout(timer);
       open();
-      for (var q = 0; q < pend.length; q++) { try { await Promise.race([pend[q], sleep(20000)]); } catch (e) {} }
+      for (var q = 0; q < pend.length; q++) { try { await hunt1017Within(pend[q], '860 overlap cleanup ' + q, 20000); } catch (e) {} }
       if (B && stand && B.rec._exportAnim === stand) delete B.rec._exportAnim;
-      FM.animFrameAt = afaKit;   // the kit's spy, which kit.put() then puts back
-      if (rs0) Object.defineProperty(FM, 'renderScene', rs0); else FM.renderScene = realRender;
+      if (afa0) Object.defineProperty(FM, 'animFrameAt', afa0); else delete FM.animFrameAt;
+      if (rs0) Object.defineProperty(FM, 'renderScene', rs0); else delete FM.renderScene;
       if (dfs0) Object.defineProperty(FM, 'decodeGifFullSize', dfs0); else delete FM.decodeGifFullSize;
       if (toast0) Object.defineProperty(FM, 'toast', toast0); else delete FM.toast;
       await sleep(200);   // a PNG still on its way to toBlob lands in the catcher, not in a real download
       dl.stop();
-      if (had) FM._exportBytes = eb0; else delete FM._exportBytes;
+      if (ebd) Object.defineProperty(FM, '_exportBytes', ebd); else delete FM._exportBytes;
       P.duration = keep.d; P.width = keep.w; P.height = keep.h; P.fps = keep.fps; FM.time = t0;
       fmtEl.value = keep.fmt; rangeEl.value = keep.range;
       if (FM._setExportSoloId) { try { FM._setExportSoloId(keep.solo || null); } catch (e) {} }
@@ -71000,9 +71161,13 @@
     var had = Object.prototype.hasOwnProperty.call(FM, '_exportBytes'), eb0 = FM._exportBytes;
     var toast0 = Object.getOwnPropertyDescriptor(FM, 'toast'), rs0 = Object.getOwnPropertyDescriptor(FM, 'renderScene'), dfs0 = Object.getOwnPropertyDescriptor(FM, 'decodeGifFullSize');
     var mb0 = Object.getOwnPropertyDescriptor(FM.exporter, 'mediaBack'), cid0 = Object.getOwnPropertyDescriptor(FM.projects, 'currentId');
+    var ebd = Object.getOwnPropertyDescriptor(FM, '_exportBytes');
     var realRender = FM.renderScene, realDecode = FM.decodeGifFullSize;
     var dl = hunt2dCatchDownloads(), order = [], copies = [], toasts = [], calls = 0, pend = [];
     var holding = false, gate = null, open = function () {}, backOpen = function () {}, t2 = null;
+    var cardSeen = false, closer = setInterval(function () {
+      if (!document.getElementById('export-ready').classList.contains('hidden')) { cardSeen = true; document.getElementById('xr-save').click(); }
+    }, 60);
     var hold = function () { holding = true; return new Promise(function (r) { open = function () { holding = false; r(); }; }); };
     var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
     var saved = function (from, re) { return dl.files.slice(from).filter(function (f) { return re.test(String(f.name)); }).length; };
@@ -71011,8 +71176,8 @@
       var o = a.frames.filter(function (f) { return !f.closed; }).length;
       if (o) throw new Error(o + ' of the ' + a.frames.length + ' frames of ' + what + ' were never closed');
     };
-    var putMediaBack = function () { if (mb0) Object.defineProperty(FM.exporter, 'mediaBack', mb0); };
-    var putCurrentId = function () { if (cid0) Object.defineProperty(FM.projects, 'currentId', cid0); };
+    var putMediaBack = function () { if (mb0) Object.defineProperty(FM.exporter, 'mediaBack', mb0); else delete FM.exporter.mediaBack; };
+    var putCurrentId = function () { if (cid0) Object.defineProperty(FM.projects, 'currentId', cid0); else delete FM.projects.currentId; };
     try {
       FM.toast = function (s) { toasts.push(String(s)); };
       /* the still's render is the one drawn under FM._drawingStill; an export's frames are drawn under FM._exporting (marked once a run) */
@@ -71028,7 +71193,7 @@
       };
       kit.plant('860g-wt-fill', per);
       var file = kit.fileOf(n, '860g-wt');
-      var sq = await FM._decodeGifAnimation(file);
+      var sq = await hunt1017Within(FM._decodeGifAnimation(file), '860 waiting preview decode', 60000);
       if (!sq || sq.frames.length !== n || !(sq.width < kit.W)) throw new Error('setup: the big GIF came out ' + (sq ? sq.width + 'x' + sq.height + ' with ' + sq.frames.length + ' frames' : 'as nothing') + ', not all ' + n + ' frames narrower than its own ' + kit.W);
       kit.show('860g-wt', sq, file);
       P.width = 160; P.height = 120; P.fps = 10; P.duration = 0.5; FM.time = 0.1;
@@ -71055,7 +71220,7 @@
       if (calls !== c1 + 1) throw new Error('the export cancelled while it waited still decoded ' + (calls - c1 - 1) + ' GIF copies of its own');
       FM._exportCancel = false;
       open();
-      try { await s1; } catch (e) { throw new Error('the held still threw: ' + e.message); }
+      try { await hunt1017Within(s1, '860 first held still finish', 20000); } catch (e) { throw new Error('the held still threw: ' + e.message); }
       for (var w = 0; w < 100 && saved(f1, /\.png$/) < 1; w++) await sleep(20);
       if (saved(f1, /\.png$/) !== 1 || saved(f1, /\.gif$/) !== 0) throw new Error('CONTROL: the held still, its project unchanged, saved ' + saved(f1, /\.png$/) + ' PNGs and the cancelled export ' + saved(f1, /\.gif$/) + ' GIFs, not one PNG and no GIF');
       closedAll('the first still copy', copies[c1]);
@@ -71070,8 +71235,9 @@
       t2 = setTimeout(function () { backOpen(); }, 600);
       var e2 = FM._runExport();
       pend.push(e2);
-      await e2;
-      try { await s2; } catch (e) { throw new Error('the still that waited on the clips threw: ' + e.message); }
+      await hunt1017Within(e2, '860 waiting still export Save', 60000);
+      if (!cardSeen) throw new Error('the waiting still export bypassed its ready card');
+      try { await hunt1017Within(s2, '860 clips held still finish', 20000); } catch (e) { throw new Error('the still that waited on the clips threw: ' + e.message); }
       clearTimeout(t2); t2 = null;
       putMediaBack();
       await sleep(1000);   // the PNG's toBlob, and the overlay going 900 ms after the finish line
@@ -71090,7 +71256,7 @@
       if (!copies[c3]) throw new Error('setup: the third still never decoded its full-size copy');
       FM.projects.currentId = function () { return 'fm-test-860-another-project'; };
       open();
-      try { await s3; } catch (e) { throw new Error('the still whose project was closed threw: ' + e.message); }
+      try { await hunt1017Within(s3, '860 closed project still finish', 20000); } catch (e) { throw new Error('the still whose project was closed threw: ' + e.message); }
       putCurrentId();
       await sleep(600);
       if (saved(f3, /\.png$/) !== 0) throw new Error('a still whose project was closed while it decoded its GIF copy still saved ' + saved(f3, /\.png$/) + ' PNG, drawn from the project open now');
@@ -71098,17 +71264,19 @@
       var said = toasts.slice(tn).filter(function (s) { return /not saved/.test(s); });
       if (!said.length) throw new Error('the still whose project was closed while it waited saved nothing and said nothing (toasts: ' + JSON.stringify(toasts.slice(tn)) + ')');
     } finally {
+      clearInterval(closer);
+      document.getElementById('xr-discard').click();
       if (t2) clearTimeout(t2);
       backOpen(); open();
       FM._exportCancel = false;
-      for (var q = 0; q < pend.length; q++) { try { await Promise.race([pend[q], sleep(20000)]); } catch (e) {} }
+      for (var q = 0; q < pend.length; q++) { try { await hunt1017Within(pend[q], '860 waiting cleanup ' + q, 20000); } catch (e) {} }
       putMediaBack(); putCurrentId();
-      if (rs0) Object.defineProperty(FM, 'renderScene', rs0); else FM.renderScene = realRender;
+      if (rs0) Object.defineProperty(FM, 'renderScene', rs0); else delete FM.renderScene;
       if (dfs0) Object.defineProperty(FM, 'decodeGifFullSize', dfs0); else delete FM.decodeGifFullSize;
       if (toast0) Object.defineProperty(FM, 'toast', toast0); else delete FM.toast;
       await sleep(200);   // a PNG still on its way to toBlob lands in the catcher, not in a real download
       dl.stop();
-      if (had) FM._exportBytes = eb0; else delete FM._exportBytes;
+      if (ebd) Object.defineProperty(FM, '_exportBytes', ebd); else delete FM._exportBytes;
       P.duration = keep.d; P.width = keep.w; P.height = keep.h; P.fps = keep.fps; FM.time = t0;
       fmtEl.value = keep.fmt; rangeEl.value = keep.range;
       if (FM._setExportSoloId) { try { FM._setExportSoloId(keep.solo || null); } catch (e) {} }
@@ -103295,11 +103463,15 @@
     if (!FM.showExportDialog || !FM.exporter || !FM.exporter.runGif || !FM.exporter.runFrames) throw new Error('setup: the export dialog or the GIF / frames exporters are not reachable');
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
     const saved = FM.scene, dl = hunt2dCatchDownloads();
+    let cardSeen = false;
+    const closer = setInterval(() => {
+      if (!document.getElementById('export-ready').classList.contains('hidden')) { cardSeen = true; document.getElementById('xr-save').click(); }
+    }, 60);
     let prefs0 = null; try { prefs0 = localStorage.getItem('fm.exportPrefs'); } catch (e) {}
     const $ = id => document.getElementById(id);
     // [width, height, the picture itself] — the first GIF frame, or the first PNG cut out of the store-only zip
     const sizeOf = async (fmt, blob) => {
-      const b = new Uint8Array(await blob.arrayBuffer());
+      const b = new Uint8Array(await hunt1017Within(blob.arrayBuffer(), '690 custom file bytes'));
       if (fmt === 'gif') return [b[6] | (b[7] << 8), b[8] | (b[9] << 8), blob];
       for (let i = 0; i + 12 < b.length; i++) if (b[i] === 0x49 && b[i + 1] === 0x48 && b[i + 2] === 0x44 && b[i + 3] === 0x52) {
         const dv = new DataView(b.buffer);
@@ -103310,13 +103482,15 @@
     };
     // what colour the file has at (x, y): 'box' (the blue square), 'bg' (black) or something else
     const colourAt = async (pic, x, y) => {
-      const bmp = await createImageBitmap(pic), c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext('2d');
+      const bmp = await hunt1017Within(createImageBitmap(pic), '690 custom picture decode'), c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext('2d');
       g.drawImage(bmp, 0, 0); const d = g.getImageData(x, y, 1, 1).data;
+      bmp.close();
       return (d[2] > 150 && d[0] < 120) ? 'box' : (d[0] < 40 && d[1] < 40 && d[2] < 40) ? 'bg' : 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')';
     };
     const through = async fmt => {
       dl.files.length = 0;
-      await FM.showExportDialog();
+      cardSeen = false;
+      await hunt1017Within(FM.showExportDialog(), '690 custom size dialog');
       if ($('export-dialog').classList.contains('hidden')) throw new Error('setup: the export dialog did not open');
       $('exp-format').value = fmt; $('exp-format').dispatchEvent(new Event('change'));
       $('exp-range').value = 'whole';
@@ -103329,6 +103503,7 @@
       while (!dl.files.length && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 40));
       const f = dl.files[0];
       if (!f || !f.blob) throw new Error('setup: the ' + fmt + ' export handed nothing to the download link');
+      if (!cardSeen) throw new Error('the custom size ' + fmt + ' export bypassed its ready card');
       await new Promise(r => setTimeout(r, 1100));   // the progress card lingers 900 ms on Done
       return sizeOf(fmt, f.blob);
     };
@@ -103336,8 +103511,8 @@
       const box = FM.makeLayer('shape', { name: 'hunt2d box', shape: 'rect', x: 160, y: 90, shapeW: 60, shapeH: 60, fill: '#3a7bd5', start: 0, duration: 0.3 });
       FM.scene = scene([box], { project: { width: 320, height: 180, fps: 10, duration: 0.3, background: '#000000' } });
       FM.selectLayer(null); FM.refreshAll();
-      const gif = await through('gif');
-      const png = await through('frames');
+      const gif = await hunt1017Within(through('gif'), '690 custom GIF Save', 45000);
+      const png = await hunt1017Within(through('frames'), '690 custom frames Save', 45000);
       const wrong = [['the GIF', gif], ['the PNG frames', png]].filter(x => x[1][0] !== 200 || x[1][1] !== 200);
       if (wrong.length) throw new Error('Custom size 200 x 200 was set and on screen in the export dialog, and ' + wrong.map(x => x[0] + ' came out ' + x[1][0] + ' x ' + x[1][1]).join(' and ') + ' — the project size. The box is offered for these formats and silently ignored, so a square GIF cannot be made');
       // contained, not stretched: centre is the box, 25 px above it is background (stretched, the box reaches it)
@@ -103346,6 +103521,8 @@
         if (mid !== 'box' || above !== 'bg') throw new Error(x[0] + ' at 200 x 200 is not the project contained in the frame: the centre reads ' + mid + ' (want box) and 25 px above it reads ' + above + ' (want bg) — the picture was stretched or misplaced to fill the custom size');
       }
     } finally {
+      clearInterval(closer);
+      document.getElementById('xr-discard').click();
       dl.stop();
       try { if (prefs0 == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', prefs0); } catch (e) {}
       try { $('exp-format').value = 'mp4'; $('exp-res').value = '1'; $('exp-res').dispatchEvent(new Event('change')); $('exp-cw').value = ''; $('exp-ch').value = ''; if (FM._syncExportFormat) FM._syncExportFormat(); } catch (e) {}
@@ -189665,6 +189842,34 @@
     });
   });
 
+  /* #1044 at landing (v18.12): Save a copy (#1005) reached main after codex/h1044 was cut, still on the old cleaner that turns
+     every letter outside plain English into a space. It names its file through safeFileName now, as Save project file does,
+     so a card named in another language keeps its name. Caught the way the 1005 test catches a download, through the
+     fixture's own stub so each descriptor goes back. CONTROL: a plain English name comes out exactly as before. */
+  test('1044 Save a copy keeps the letters of a card named in another language, as Save project file does', { item: '1044', budgetMs: 20000 }, async function () {
+    await hcWithin(safety1004(async function (s) {
+      const files = [];
+      const realMake = URL.createObjectURL, realClick = HTMLElement.prototype.click;
+      s.stub(URL, 'createObjectURL', function (b) { const u = realMake.call(URL, b); if (b instanceof Blob) files.push({ url: u, blob: b, name: null }); return u; });
+      s.stub(HTMLAnchorElement.prototype, 'click', function () {
+        if (this.download) { const f = files.find(x => x.url === this.href); if (f) f.name = this.download; else files.push({ url: this.href, blob: null, name: this.download }); return; }
+        return realClick.call(this);
+      });
+      const handed = () => files.filter(f => f.name).map(f => f.name);
+      localStorage.setItem('fm.projects', JSON.stringify([
+        { id: 'test1044copyA', name: 'Beach day (unreadable)', modified: 2, unreadable: true },
+        { id: 'test1044copyB', name: 'Été à Kraków — день (unreadable)', modified: 1, unreadable: true }
+      ]));
+      localStorage.setItem('fm.proj.test1044copyA', 'garbage{');
+      localStorage.setItem('fm.proj.test1044copyB', 'garbage{');
+      if (FM.storage.saveUnreadableCopy('test1044copyA') !== true) throw new Error('CONTROL: Save a copy handed nothing over for a plain card');
+      if (handed()[0] !== 'Beach day (unreadable copy).txt') throw new Error('CONTROL: a plain English name changed: ' + handed()[0]);
+      if (FM.storage.saveUnreadableCopy('test1044copyB') !== true) throw new Error('setup: Save a copy handed nothing over for the second card');
+      const want = 'Été à Kraków — день (unreadable copy).txt';
+      if (handed()[1] !== want) throw new Error('Save a copy dropped the letters of the card name: ' + JSON.stringify(handed()[1]) + ', not ' + JSON.stringify(want));
+    }), 20000, '1044 Save a copy name');
+  });
+
   /* #1007 (VERIFIED §1.8): OPENING A HUGE FILE ASKS FIRST, ON BOTH DOORS. Import project file and Settings, Restore from a backup
      each read the whole file into memory before anything checked its size, and on a phone a several-hundred-MB file can kill the
      tab. Both doors now go through FM.storage.readImportFile, which asks before it reads anything over 96 MiB and reads nothing on
@@ -189808,6 +190013,47 @@
     g.fillStyle = '#fff'; g.fillRect(n % 50, (n * 7) % 50, 9, 9);
     return c.toDataURL('image/png');
   }
+
+  /* #1217 — AN EXPORT NEVER WAITED FOR A FILL PICTURE (leak1009's review, F2). getFillImage decodes on first sight and the frame
+     loop never waits, so a fill the export asks for first (a closed group's member, or a project opened from Home straight into
+     Export, now that a switch prunes every fill) baked the placeholder into the file's first frames. The pre-flight
+     (FM.exporter.prepareCaches, the seam bughunt2 #10 drives) now decodes every media fill first. Model: bughunt2 #10 and the
+     1009 tests below (q1009Within for the deadline).
+     THE PLACEHOLDER IS THE LAYER'S OWN FILL COLOUR, not always blue: js/compositor.js paintFillInPath's still-decoding branch
+     paints FM.evalProp(layer.fill, t) || '#3a7bd5', so the blue is only for a layer with no fill colour. The first version of
+     this test gave its shape fill '#fff', a cold fill read 255,255,255, and its control refused on both trees (28 Oct premise).
+     So the three colours are apart here: the ground black, the layer's fill (what a cold fill draws) green #00c000, the
+     picture red #ff0000. Measured 28 Oct at 1280: on the branch, cold 0,192,0, the cold fill once landed 255,0,0, the export's
+     first frame 255,0,0; on ba7beb2e (no wait) the export's first frame 0,192,0. The bounds sit between: a channel above 200 or
+     140 where the colour is, below 60 where it is not. */
+  test('1217 an export decodes every media fill before its first frame, so a fill nothing has drawn yet is in the file, not its placeholder colour (CONTROLS: the same kind of cold fill drawn straight away is the placeholder, and the picture once it lands)', { item: '1217' }, async function () {
+    if (!FM.exporter || typeof FM.exporter.prepareCaches !== 'function' || typeof FM.renderScene !== 'function') throw new Error('setup: FM.exporter.prepareCaches or FM.renderScene is not reachable');
+    const red = function (mark) { const c = offscreen(64, 64), g = c.getContext('2d'); g.fillStyle = '#ff0000'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#fe0000'; g.fillRect(mark, 0, 1, 1); return c.toDataURL('image/png'); };
+    const sceneOf = function (url) {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 80, fill: '#00c000' });
+      L.start = 0; L.duration = 3; L.fillMode = 'media'; L.fillImage = url;
+      return { project: { width: 160, height: 120, fps: 30, duration: 3, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] };
+    };
+    // the export's first frame: t = start + 0 / fps (js/exporter.js frame loop), drawn by FM.renderScene, read at the shape's centre
+    const frame0 = function (sc) { const c = offscreen(160, 120), g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, sc, 0); return Array.from(g.getImageData(80, 60, 1, 1).data.slice(0, 3)); };
+    const isPicture = p => p[0] > 200 && p[1] < 60 && p[2] < 60;
+    const isFillColour = p => p[0] < 60 && p[1] > 140 && p[2] < 60;
+    // CONTROL 1: a fill nothing has asked for, drawn at once, is the layer's placeholder colour, not the picture and not the ground
+    const coldScene = sceneOf(red(17));
+    const cold = frame0(coldScene);
+    if (!isFillColour(cold)) throw new Error('CONTROL: a cold fill drawn at once reads ' + cold + ', not the layer’s own fill colour (measured 0,192,0) that paintFillInPath draws while the picture decodes — this fixture cannot tell a waited-for fill from one that was not');
+    // CONTROL 2: the same cold fill, once its own decode lands, reads the picture, so the picture and the reading point are right
+    let landed = null;
+    try {
+      await q1009Until('1217 CONTROL: the cold fill’s own decode landing', function () { landed = frame0(coldScene); return isPicture(landed); }, 5000);
+    } catch (e) { throw new Error('CONTROL: the cold fill still reads ' + landed + ' after its own decode had 5 s, not the red picture (measured 255,0,0) — the picture or the reading point is wrong, so a red reading below would prove nothing'); }
+    // the export's way: the pre-flight first, then the first frame the moment it returns, as the frame loop draws it
+    const sc = sceneOf(red(41));
+    await q1009Within(FM.exporter.prepareCaches(sc, 30), 15000, '1217 deadline: the export pre-flight');
+    const first = frame0(sc);
+    if (isFillColour(first)) throw new Error('the export pre-flight returned with the fill picture still decoding: the first frame reads ' + first + ', the layer’s placeholder colour, where the picture is red (measured 255,0,0 once waited for) — the file starts without its fill');
+    if (!isPicture(first)) throw new Error('after the export pre-flight the first frame reads ' + first + ', neither the red picture nor the layer’s placeholder colour');
+  });
 
   /* #1009 — FILL PICTURES FROM A PROJECT HE HAS LEFT STAYED DECODED ALL SESSION (js/compositor.js getFillImage). The cache
      evicted ONE entry per miss, only past 40, so a project with many image fills left every picture (and its data-URL
@@ -190508,6 +190754,639 @@
         FM.selectLayer(selected || null); FM.timeline.rebuild(); FM.refreshAll();
         if (home) FM.home.open();
       }
+    }
+  });
+  function hunt1017Within(p, name, ms) {
+    let timer;
+    const deadline = new Promise(function (_, reject) { timer = setTimeout(function () { reject(new Error('deadline: ' + name)); }, ms || 15000); });
+    return Promise.race([p, deadline]).finally(function () { clearTimeout(timer); });
+  }
+
+  test('1017 Tab leaves focused buttons alone and body Tab still cycles layers', { item: '1017', budgetMs: 60000 }, async function () {
+    const keep = isoKeep(), focus = document.activeElement;
+    const button = document.createElement('button');
+    button.textContent = '1017 focus'; document.body.appendChild(button);
+    try {
+      await hunt1017Within(_bh6KeysToEditor(), '1017 editor overlays close');
+      await hunt1017Within(_bh2With(async function () {
+        const a = FM.makeLayer('shape', { name: '1017 A' }), b = FM.makeLayer('shape', { name: '1017 B' });
+        FM.scene.layers.push(a, b); FM.refreshAll(); FM.selectLayer(a.id);
+        const press = function () {
+          const e = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true, cancelable: true });
+          document.dispatchEvent(e); return e;
+        };
+        const buttons = [button];
+        if (window.innerWidth >= 701) buttons.push(document.getElementById('btn-undo'));
+        for (const target of buttons) {
+          target.focus();
+          if (document.activeElement !== target) throw new Error('setup: button did not take focus');
+          const e = press();
+          if (e.defaultPrevented || FM.scene.selectedId !== a.id) throw new Error('Tab on a button stole focus navigation or changed the selected layer');
+          target.blur();
+        }
+        if (document.activeElement !== document.body) throw new Error('setup: body does not own focus');
+        const control = press();
+        if (!control.defaultPrevented || FM.scene.selectedId !== b.id) throw new Error('CONTROL: body Tab did not select the next layer');
+      }), '1017 keyboard fixture');
+    } finally {
+      button.remove();
+      keep.put();
+      if (focus && document.contains(focus) && focus.focus) focus.focus({ preventScroll: true });
+    }
+  });
+
+  test('1017 clicking a layer after the play pill gives Tab back to layer selection', { item: '1017', budgetMs: 90000 }, async function () {
+    const a = FM.makeLayer('shape', { name: '1017 canvas A', shape: 'rect', x: 300, y: 420, shapeW: 300, shapeH: 300, start: 0, duration: 4 });
+    const b = FM.makeLayer('shape', { name: '1017 canvas B', shape: 'rect', x: 800, y: 1300, shapeW: 100, shapeH: 100, start: 0, duration: 4 });
+    await hunt1017Within(pcScene690c([a, b], async function () {
+      for (const clicked of [false, true]) {
+        FM.selectLayer(a.id); FM.refreshAll();
+        if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+        if (clicked) {
+          /* the pill is given focus directly: in the wide PC layout it sits beyond the part of the frame real input can
+             reach (467,509 on v18.11), so a real click never landed (v18.12 assembly). The canvas click below stays real. */
+          const pill = document.getElementById('time-readout');
+          pill.focus({ preventScroll: true });
+          if (document.activeElement !== pill) throw new Error('CONTROL: the play pill did not take focus');
+          await new Promise(function (resolve) { setTimeout(resolve, 300); });
+          FM.pause(); FM.setTime(1);
+        }
+        const r = document.getElementById('select-box').getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        reach690c(x, y, 'the layer on the canvas');
+        await hunt1017Within(realInput924(click690c(x, y), '1017 clicking the canvas layer'), '1017 canvas click');
+        if (FM.scene.selectedId !== a.id) throw new Error('CONTROL: the canvas click did not select A');
+        if (clicked && document.activeElement === document.getElementById('time-readout')) throw new Error('the canvas click left the play pill focused');
+        await hunt1017Within(frameKeys690c('1017 Tab'), '1017 frame keyboard');
+        await hunt1017Within(realInput924([KEY690c.tab], '1017 Tab after canvas click'), '1017 real Tab');
+        if (FM.scene.selectedId !== b.id) throw new Error((clicked ? '' : 'CONTROL: ') + 'Tab after the canvas click did not select B');
+      }
+    }), '1017 PC canvas fixture', 75000);
+  });
+
+  test('1018 refused persistence is recorded and quota warns only when protection was refused', { item: '1018', budgetMs: 60000 }, async function () {
+    const ds = Object.getOwnPropertyDescriptor(navigator, 'storage'), dt = Object.getOwnPropertyDescriptor(FM, 'toast');
+    const dp = Object.getOwnPropertyDescriptor(FM, 'storagePersisted');
+    try {
+      const script = Array.prototype.find.call(document.scripts, function (s) { return /\/js\/storage\.js(?:\?|$)/.test(s.src); });
+      if (!script) throw new Error('setup: the loaded storage script was not found');
+      const response = await hunt1017Within(fetch(script.src), '1018 storage source');
+      if (!response.ok) throw new Error('setup: storage source returned ' + response.status);
+      const source = await hunt1017Within(response.text(), '1018 storage source text');
+      const start = source.indexOf('  const _storeWarned = new Set();'), end = source.indexOf('  function idbDel(', start);
+      if (start < 0 || end < start) throw new Error('setup: storage warning and startup block not found');
+      // Run the real warning/startup block without re-installing storage listeners or opening another database.
+      /* the block reads _quotaHits (since v18.11, #1003), which storage.js declares above it: declared here when the
+         slice does not, or the block threw a ReferenceError before it could be judged (v18.12 assembly) */
+      const block = source.slice(start, end);
+      const boot = new Function('FM', 'navigator', (/\blet _quotaHits\b/.test(block) ? '' : 'let _quotaHits = 0;\n') + block + '\nreturn warnStore;');
+      for (const protectedStorage of [false, true]) {
+        let persistedCalls = 0, persistCalls = 0, say;
+        Object.defineProperty(navigator, 'storage', { configurable: true, value: {
+          persisted: function () { persistedCalls++; return Promise.resolve(false); },
+          persist: function () { persistCalls++; return Promise.resolve(protectedStorage); },
+          estimate: function () { return Promise.resolve({ usage: 1, quota: 2 }); }
+        } });
+        Object.defineProperty(FM, 'toast', { configurable: true, writable: true, value: function (m) { if (say) say(String(m)); } });
+        const warn = boot(FM, navigator);
+        if (FM.storagePersisted !== null) throw new Error('persistence is not unknown while the request is pending');
+        await hunt1017Within(new Promise(function (resolve) { setTimeout(resolve, 0); }), '1018 persistence microtasks');
+        if (persistedCalls !== 1 || persistCalls !== 1) throw new Error('CONTROL: the browser persistence request was not exercised');
+        if (FM.storagePersisted !== protectedStorage) throw new Error('persistence result was discarded: ' + FM.storagePersisted);
+        const toast = new Promise(function (resolve) { say = resolve; });
+        warn(new DOMException('1018 forced quota', 'QuotaExceededError'), '1018-quota');
+        const message = await hunt1017Within(toast, '1018 quota toast');
+        if (!/^Not enough storage/.test(message)) throw new Error('CONTROL: forced quota did not reach the quota warning');
+        if (/has not protected FreeMotion/.test(message) !== !protectedStorage) throw new Error('quota protection clause disagrees with persistence: ' + message);
+      }
+    } finally {
+      if (ds) Object.defineProperty(navigator, 'storage', ds); else delete navigator.storage;
+      if (dt) Object.defineProperty(FM, 'toast', dt); else delete FM.toast;
+      if (dp) Object.defineProperty(FM, 'storagePersisted', dp); else delete FM.storagePersisted;
+    }
+  });
+
+  test('1030 a guest three hours ahead or behind reads and posts comments in host time after a pong', { item: '1030', budgetMs: 180000 }, async function () {
+    for (const skew of [-3 * 60 * 60000, 3 * 60 * 60000]) {
+    await hunt1017Within(withLabs921(async function () {
+      await hunt1017Within(withGuestApp921('editor', [layer921('1030 A')], async function (g) {
+        const dn = Object.getOwnPropertyDescriptor(Date, 'now'), da = Object.getOwnPropertyDescriptor(g.loop.a, 'onmessage');
+        let local = Date.now() - skew;
+        const halfTrip = 100;
+        try {
+          Object.defineProperty(Date, 'now', { configurable: true, writable: true, value: function () { return local; } });
+          let pings = 0, clockShift = 0;
+          Object.defineProperty(g.loop.a, 'onmessage', { configurable: true, writable: true, value: function (ch, msg) {
+            if (ch === 'ctl' && msg.t === 'ping') {
+              pings++; local += halfTrip;
+              g.loop.a.send('ctl', { t: 'pong', n: msg.n, hc: local + skew + clockShift });
+              local += halfTrip;
+            }
+          } });
+          g.G.setLiveness(true); g.G.tick('hot'); g.loop.settle();
+          if (pings !== 1) throw new Error('CONTROL: fake wire did not answer a guest ping');
+          const by = { mid: 'o', name: 'Host', color: '#ff9f43' };
+          FM.scene.project.comments = [
+            { id: 'c_1030_fresh', text: 'fresh', by: by, at: local + skew, replies: [] },
+            { id: 'c_1030_old', text: 'old', by: by, at: local + skew - 12 * 60000, replies: [] }
+          ];
+          g.C.comments.open(); g.C.comments.onChange();
+          const age = function (id) { const el = document.querySelector('#collab-comments [data-cid=' + id + '] .cc-time'); return el && el.textContent; };
+          if (age('c_1030_fresh') !== '· just now') throw new Error('a host-stamped fresh comment is not just now: ' + age('c_1030_fresh'));
+          if (age('c_1030_old') !== '· 12 min ago') throw new Error('an old host comment lost its age: ' + age('c_1030_old'));
+          if (g.G.hostOffset !== skew) throw new Error('pong did not estimate host minus local clock with half the measured round trip: ' + g.G.hostOffset);
+          const id = g.C.comments.add('1030 pending', { pin: false });
+          const own = FM.scene.project.comments.find(function (c) { return c.id === id; });
+          if (!own) throw new Error('CONTROL: the guest did not add a pending comment');
+          if (own.at !== local + skew || age(id) !== '· just now') throw new Error('a pending guest comment did not use host time');
+          const rid = g.C.comments.reply(id, '1030 pending reply');
+          const reply = own.replies.find(function (r) { return r.id === rid; });
+          if (!reply) throw new Error('CONTROL: the guest did not add a pending reply');
+          if (reply.at !== local + skew) throw new Error('a pending guest reply did not use host time');
+          local += 2000; clockShift = 400;
+          g.G.tick('hot'); g.loop.settle();
+          if (pings !== 2 || g.G.hostOffset !== skew + 100) throw new Error('the next pong did not smooth one quarter of the measured 400 ms clock change');
+        } finally {
+          g.C.comments.close();
+          if (dn) Object.defineProperty(Date, 'now', dn); else delete Date.now;
+          if (da) Object.defineProperty(g.loop.a, 'onmessage', da); else delete g.loop.a.onmessage;
+        }
+      }), '1030 guest fake network', 60000);
+    }), '1030 Labs fixture', 75000);
+    }
+  });
+
+  test('1031 GIF and PNG frames ready cards share their files and download without file sharing', { item: '1031', budgetMs: 90000 }, async function () {
+    const dc = Object.getOwnPropertyDescriptor(navigator, 'canShare'), ds = Object.getOwnPropertyDescriptor(navigator, 'share');
+    const da = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click'), dscene = Object.getOwnPropertyDescriptor(FM, 'scene');
+    const keep = isoKeep(), focus = document.activeElement;
+    const flags = ['_exporting', '_exportCancel', '_exportTransparent', '_exportThinned'].map(function (key) { return [key, Object.getOwnPropertyDescriptor(FM, key)]; });
+    const card = document.getElementById('export-ready');
+    const hidden = card.classList.contains('hidden');
+    const shares = [], downloads = [];
+    let running = null;
+    try {
+      await hunt1017Within(_bh6KeysToEditor(), '1031 close overlays');
+      FM.scene = scene([], { project: { width: 8, height: 8, fps: 10, duration: 0.1, background: '#000000' } });
+      Object.defineProperty(navigator, 'share', { configurable: true, value: function (data) { shares.push(data); return Promise.resolve(); } });
+      Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, value: function () { downloads.push(this.download); } });
+      for (const format of ['gif', 'frames']) {
+        shares.length = 0; downloads.length = 0;
+        const name = format === 'gif' ? '1031-probe.gif' : '1031-probe_frames.zip';
+        const mime = format === 'gif' ? 'image/gif' : 'application/zip';
+        for (const canShare of [true, false]) {
+          const offeredTypes = [];
+          Object.defineProperty(navigator, 'canShare', { configurable: true, value: canShare ? function (data) {
+            offeredTypes.push(data.files[0].type);
+            return canShare;
+          } : undefined });
+          let ready = false;
+          let renderedTransparent = false;
+          running = FM.exporter[format === 'gif' ? 'runGif' : 'runFrames']({ name: '1031-probe', transparent: true, fps: 10, from: 0, to: 0.1,
+            onProgress: function (_, stage) { if (stage === format && FM._exportTransparent) renderedTransparent = true; }, onReady: function (out) {
+            ready = true;
+            if (!renderedTransparent) throw new Error('CONTROL: the transparent frame loop was not exercised');
+            if (FM._exportTransparent) throw new Error(format + ' kept export transparency while its card waited');
+            const p = FM._showExportReady(out);
+            if (card.classList.contains('hidden')) throw new Error('ready card did not open');
+            if (document.getElementById('xr-poster').classList.contains('hidden')) throw new Error(format + ' ready card has no poster');
+            if (shares.length !== (canShare ? 0 : 1) || downloads.length) throw new Error('file was delivered before Save');
+            document.getElementById('xr-save').click();
+            return p;
+          } });
+          await hunt1017Within(running, '1031 ' + format + ' render and ready card Save', 15000);
+          running = null;
+          if (!ready) throw new Error(format + ' bypassed the export ready card');
+          if (canShare && (!offeredTypes.length || offeredTypes.some(function (type) { return type !== mime; }))) throw new Error('the share sheet was offered an incorrect MIME type for ' + format);
+          if (canShare) {
+            const f = shares[0] && shares[0].files[0];
+            if (shares.length !== 1 || !f || f.name !== name || f.type !== mime || !f.size) throw new Error('Save did not share the finished ' + format);
+            if (downloads.length) throw new Error('sharing also downloaded');
+          } else if (shares.length !== 1 || downloads.join() !== name) throw new Error('CONTROL: unavailable sharing did not download ' + format + ' exactly once');
+        }
+      }
+    } finally {
+      document.getElementById('xr-discard').click();
+      if (running) { FM._exportCancel = true; try { await hunt1017Within(running, '1031 cancel unfinished export', 10000); } catch (e) {} }
+      if (dc) Object.defineProperty(navigator, 'canShare', dc); else delete navigator.canShare;
+      if (ds) Object.defineProperty(navigator, 'share', ds); else delete navigator.share;
+      if (da) Object.defineProperty(HTMLAnchorElement.prototype, 'click', da); else delete HTMLAnchorElement.prototype.click;
+      if (dscene) Object.defineProperty(FM, 'scene', dscene); else delete FM.scene;
+      flags.forEach(function (entry) { if (entry[1]) Object.defineProperty(FM, entry[0], entry[1]); else delete FM[entry[0]]; });
+      if (hidden) card.classList.add('hidden');
+      keep.put(); FM.refreshAll();
+      if (focus && document.contains(focus) && focus.focus) focus.focus({ preventScroll: true });
+    }
+  });
+  // Batch 2 guards: all asynchronous boundaries name the operation that failed to finish.
+  function deadline1033(p, what, ms) {
+    let timer;
+    const deadline = new Promise(function (_, reject) {
+      timer = setTimeout(function () { reject(new Error('batch 2 deadline: ' + what)); }, ms || 15000);
+    });
+    return Promise.race([p, deadline]).finally(function () { clearTimeout(timer); });
+  }
+  function restore1033(obj, key, descriptor) {
+    if (descriptor) Object.defineProperty(obj, key, descriptor);
+    else delete obj[key];
+  }
+
+  test('1033 an unreadable file is named and the files on either side still import', { item: '1033' }, async function () {
+    const keys = ['loadImageFile', 'addMediaLayer', 'reportError', '_wantAudioOnly', '_importing'];
+    const descriptors = keys.map(function (key) { return Object.getOwnPropertyDescriptor(FM, key); });
+    const files = ['first.png', 'unreadable.png', 'last.png'].map(function (name) { return new File(['fixture'], name, { type: 'image/png' }); });
+    const tried = [], added = [], reports = [], failure = new Error('1033 refused image');
+    try {
+      FM._wantAudioOnly = false;
+      FM.loadImageFile = function (file) {
+        tried.push(file);
+        return file === files[1] ? Promise.reject(failure) : Promise.resolve({ kind: 'image', file: file });
+      };
+      FM.addMediaLayer = function (rec) { added.push(rec.file); };
+      FM.reportError = function (where, error, message) { reports.push({ where: where, error: error, message: message }); };
+      await deadline1033(FM._handleFiles(files), 'three-file import');
+      if (tried.length !== 3 || tried.some(function (f, i) { return f !== files[i]; })) throw new Error('the importer did not try all three picked files in order');
+      if (reports.length !== 1 || reports[0].error !== failure) throw new Error('CONTROL: the deliberate decode rejection was not the one error reported');
+      if (added.length !== 2 || added[0] !== files[0] || added[1] !== files[2]) throw new Error('the valid files before and after the unreadable file did not both import');
+      if (reports[0].where.indexOf(files[1].name) < 0 || reports[0].message.indexOf(files[1].name) < 0) throw new Error('the import error did not name the unreadable file in its context and user message');
+    } finally {
+      keys.forEach(function (key, i) { restore1033(FM, key, descriptors[i]); });
+    }
+  });
+
+  test('1034 a GIF over budget keeps every frame, draws at its original size and closes every frame on removal', { item: '1034', budgetMs: 90000 }, async function () {
+    const kit = gif860Kit();
+    let anim = null, frames = [], frameIndex = -1, fake = null;
+    try {
+      anim = await deadline1033(kit.decode(kit.bigN, '1034 over budget'), 'oversized GIF decode', 60000);
+      if (!anim || anim.frames.length !== kit.bigN || kit.fakes !== kit.bigN) throw new Error('CONTROL: the oversized GIF did not decode every frame through the bitmap seam');
+      frames = anim.frames.slice();
+      const scale = Math.min(1, Math.sqrt(kit.per / (kit.bigN * kit.F)));
+      if (anim.width !== Math.round(kit.W * scale) || anim.height !== Math.round(kit.H * scale) || anim.width >= kit.W) throw new Error('the oversized GIF was not shrunk to its measured one-GIF budget');
+      const L = FM.makeLayer('image', { x: kit.W / 2 + 10, y: kit.H / 2 + 10, start: 0, duration: 5 });
+      const rec = kit.hold(L.id, anim);
+      FM.scene.layers = [L];
+      frameIndex = FM.animFrameIndexAt(anim, 0.1);
+      fake = anim.frames[frameIndex];
+      const drawable = offscreen(anim.width, anim.height), dg = drawable.getContext('2d');
+      dg.fillStyle = '#e61e1e'; dg.fillRect(0, 0, drawable.width, drawable.height);
+      anim.frames[frameIndex] = drawable;
+      const P = { width: kit.W + 20, height: kit.H + 20, fps: 30, duration: 5, background: null };
+      const shot = function () {
+        const c = offscreen(P.width, P.height);
+        FM.renderScene(c.getContext('2d'), { project: P, layers: [L], selectedId: null, selectedIds: [] }, 0.1);
+        return c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      };
+      const small = shot();
+      const full = offscreen(kit.W, kit.H), g = full.getContext('2d');
+      g.fillStyle = '#e61e1e'; g.fillRect(0, 0, full.width, full.height);
+      rec.anim = null; rec.el = full;
+      const control = shot();
+      rec.anim = anim;
+      anim.frames[frameIndex] = fake;
+      let lit = 0, difference = 0;
+      for (let i = 3; i < control.length; i += 4) { if (control[i]) lit++; if (control[i] !== small[i]) difference++; }
+      if (lit !== kit.W * kit.H) throw new Error('CONTROL: the full-size still did not cover exactly the original GIF rectangle: ' + lit + ' pixels');
+      if (difference) throw new Error('the shrunk GIF covers a different rectangle from the full-size still: ' + difference + ' alpha pixels');
+      if (frames.some(function (f) { return f.closed !== 0; })) throw new Error('CONTROL: a frame was closed before removal');
+      FM.media.remove(L.id);
+      if (FM.media.get(L.id) || rec.anim !== null || frames.some(function (f) { return f.closed !== 1; })) throw new Error('removing the GIF did not detach its animation and close every decoded frame exactly once');
+    } finally {
+      if (anim && fake) anim.frames[frameIndex] = fake;
+      kit.put();
+      frames.forEach(function (f) { if (!f.closed) f.close(); });
+    }
+  });
+
+  test('1036 rotating 390 to 844 enters Studio and keeps selection, panel and playhead', { item: '1036', budgetMs: 60000 }, async function () {
+    const keep = isoKeep(), t0 = FM.time, view0 = FM.inspector.currentView();
+    const duration0 = FM.scene.project.duration;
+    const mode0 = FM.editor.mode(), panel0 = document.getElementById('inspector-panel').classList.contains('open');
+    try {
+      if (FM.home.isOpen()) FM.home.close();
+      if (mode0 !== 'full') FM.editor.set('full', { quiet: true });
+      FM.pause();
+      const L = FM.makeLayer('shape', { name: '1036 selected', shape: 'rect', x: 80, y: 60, shapeW: 40, shapeH: 40, start: 0, duration: 5 });
+      FM.scene.layers = [L]; FM.scene.project.duration = 5;
+      FM.selectLayer(L.id); FM.inspector.openCategory('effects'); FM.setTime(1.25);
+      const at = FM.time;
+      if (!(at > 0 && at < 5) || FM.playing) throw new Error('CONTROL: the test did not establish a nonzero paused playhead');
+      const playhead = function () {
+        const clip = document.querySelector('#timeline .clip[data-id="' + L.id + '"]');
+        const line = document.getElementById('tl-centerline');
+        if (!clip || !line || !(FM._tlPxPerSec() > 0)) throw new Error('CONTROL: the selected clip and timeline playhead are not measurable');
+        const mid = line.getBoundingClientRect().left + (parseFloat(getComputedStyle(line).borderLeftWidth) || 0) / 2;
+        const pps = FM._tlPxPerSec();
+        return { time: (mid - clip.getBoundingClientRect().left) / pps, pixel: 1 / pps };
+      };
+      const check = function () {
+        if (FM.scene.selectedId !== L.id || (FM.scene.selectedIds || []).join(',') !== L.id) throw new Error('rotation changed the selected layer');
+        if (FM.inspector.currentView() !== 'effects') throw new Error('rotation left the Effects panel');
+        if (FM.time !== at) throw new Error('rotation moved the paused playhead from ' + at + ' to ' + FM.time);
+      };
+      await atSize921(390, 760, async function () {
+        FM.mobile.open();
+        if (getComputedStyle(document.getElementById('inspector-panel')).position !== 'fixed') throw new Error('CONTROL: 390 did not reach the phone inspector layout');
+        if (!document.getElementById('inspector-panel').classList.contains('open')) throw new Error('CONTROL: the selected layer inspector did not open on the phone');
+        check();
+        const before = playhead(), error = Math.abs(before.time - at);
+        if (error > 3 * before.pixel) throw new Error('CONTROL: the portrait playhead is not over its paused time: ' + before.time + ' versus ' + at);
+        await atSize921(844, 390, async function () {
+          const app = getComputedStyle(document.getElementById('app'));
+          if (app.gridTemplateColumns.trim().split(/\s+/).length !== 3 || getComputedStyle(document.getElementById('inspector-panel')).position === 'fixed') throw new Error('844 did not cross into the three-column Studio layout');
+          check();
+          const after = playhead();
+          if (Math.abs(after.time - at) > 3 * after.pixel) throw new Error('the landscape timeline playhead moved from ' + before.time + ' to ' + after.time + ' while the clock stayed at ' + at);
+        });
+        check();
+      });
+    } finally {
+      keep.put(); FM.scene.project.duration = duration0; FM.setTime(t0);
+      if (FM.selectedLayer(FM.scene)) FM.inspector.openCategory(view0);
+      if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true });
+      if (panel0) FM.mobile.open(); else FM.mobile.close();
+    }
+  });
+
+  test('1037 an EXIF rotated JPEG is upright in the loader, preview, thumbnail and exported PNG frame', { item: '1037', budgetMs: 90000 }, async function () {
+    const keep = isoKeep(), t0 = FM.time, descriptors = [
+      [URL, 'createObjectURL'], [HTMLAnchorElement.prototype, 'click'], [FM.zipWrite, 'create']
+    ].map(function (p) { return [p[0], p[1], Object.getOwnPropertyDescriptor(p[0], p[1])]; });
+    let plain = null, turned = null, unstub = null;
+    const id = 'guard1037jpeg';
+    try {
+      const c = offscreen(80, 48), g = c.getContext('2d');
+      ['#ff0000', '#0000ff', '#00ff00', '#ffff00'].forEach(function (col, i) { g.fillStyle = col; g.fillRect((i % 2) * 40, Math.floor(i / 2) * 24, 40, 24); });
+      const jpeg = await deadline1033(new Promise(function (resolve) { c.toBlob(resolve, 'image/jpeg', 1); }), 'JPEG fixture encoding');
+      const bytes = new Uint8Array(await deadline1033(jpeg.arrayBuffer(), 'JPEG fixture bytes'));
+      // APP1: Exif, little-endian TIFF, one SHORT orientation entry (6 = 90 degrees clockwise).
+      const exif = new Uint8Array([255,225,0,34,69,120,105,102,0,0,73,73,42,0,8,0,0,0,1,0,18,1,3,0,1,0,0,0,6,0,0,0,0,0,0,0]);
+      plain = await deadline1033(FM.loadImageFile(new File([bytes], '1037 plain.jpg', { type: 'image/jpeg' })), 'untagged JPEG load');
+      turned = await deadline1033(FM.loadImageFile(new File([bytes.slice(0, 2), exif, bytes.slice(2)], '1037 upright.jpg', { type: 'image/jpeg' })), 'EXIF JPEG load');
+      if (plain.width !== 80 || plain.height !== 48) throw new Error('CONTROL: untagged fixture is not the encoded 80 by 48 JPEG');
+      if (turned.width !== 48 || turned.height !== 80) throw new Error('EXIF orientation did not swap the intrinsic dimensions to 48 by 80');
+      const colours = function (ctx, w, h) {
+        return [[0.25,0.25], [0.75,0.25], [0.25,0.75], [0.75,0.75]].map(function (p) {
+          const q = ctx.getImageData(Math.floor(w * p[0]), Math.floor(h * p[1]), 1, 1).data;
+          const palette = [[255,0,0], [0,0,255], [0,255,0], [255,255,0]], names = ['red', 'blue', 'green', 'yellow'];
+          const distances = palette.map(function (rgb) { return rgb.reduce(function (sum, v, i) { return sum + (q[i] - v) * (q[i] - v); }, 0); });
+          return names[distances.indexOf(Math.min.apply(null, distances))];
+        }).join(',');
+      };
+      const raw = offscreen(80, 48); raw.getContext('2d').drawImage(plain.el, 0, 0);
+      if (colours(raw.getContext('2d'), 80, 48) !== 'red,blue,green,yellow') throw new Error('CONTROL: the untagged asymmetric fixture has the wrong quadrant order');
+      const expected = 'green,red,yellow,blue';
+      const upright = offscreen(48, 80); upright.getContext('2d').drawImage(turned.el, 0, 0);
+      if (colours(upright.getContext('2d'), 48, 80) !== expected) throw new Error('the loaded JPEG pixels are sideways');
+      const L = FM.makeLayer('image', { x: 24, y: 40, start: 0, duration: 2 }); L.id = id;
+      FM.media.set(id, turned);
+      FM.scene = scene([L], { project: { width: 48, height: 80, fps: 10, duration: 2, background: '#000000' } });
+      const preview = offscreen(48, 80);
+      FM.renderScene(preview.getContext('2d'), FM.scene, 0);
+      if (colours(preview.getContext('2d'), 48, 80) !== expected) throw new Error('the preview JPEG is sideways');
+      const thumb = offscreen(48, 80); FM.renderThumb(L, thumb);
+      if (colours(thumb.getContext('2d'), 48, 80) !== expected) throw new Error('the timeline thumbnail JPEG is sideways');
+      unstub = stub690();
+      const exported = await deadline1033(exportFrame690('1037 upright'), 'PNG frame export and decode', 60000);
+      if (exported.canvas.width !== 48 || exported.canvas.height !== 80 || colours(exported, 48, 80) !== expected) throw new Error('the exported PNG frame JPEG is sideways or has the wrong dimensions');
+    } finally {
+      if (unstub) unstub();
+      descriptors.forEach(function (p) { restore1033(p[0], p[1], p[2]); });
+      FM.media.remove(id);
+      if (plain) FM._releaseMediaRecord(plain);
+      if (turned && !turned._released) FM._releaseMediaRecord(turned);
+      keep.put(); FM.setTime(t0);
+    }
+  });
+
+  test('1038 a project file carries the used custom font bytes and family to its importer', { item: '1038', budgetMs: 60000 }, async function () {
+    const keep = isoKeep(), t0 = FM.time;
+    const templates0 = localStorage.getItem('fm.templates');
+    const keys = ['list', 'getFile', 'applyEmbedded'];
+    const descriptors = keys.map(function (key) { return Object.getOwnPropertyDescriptor(FM.fonts, key); });
+    const bytes = new Uint8Array(3000);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 31 + 7) & 255;
+    const face = { id: 'guard1038font', name: '1038 custom face', family: 'FMFguard1038font', css: 'FMFguard1038font, sans-serif' };
+    const file = new File([bytes], '1038.ttf', { type: 'font/ttf' });
+    let reads = 0, received = null, templateId = null;
+    try {
+      FM.fonts.list = function () { return [face]; };
+      FM.fonts.getFile = function (id) { if (id !== face.id) throw new Error('unexpected font requested'); reads++; return Promise.resolve(file); };
+      // Like the 921 font transport test, pin delivery to the font loader; font parsing belongs to that loader.
+      FM.fonts.applyEmbedded = function (fonts) { received = fonts; return Promise.resolve(0); };
+      const L = FM.makeLayer('text', { text: 'Portable custom face' }); L.fontFamily = face.css;
+      const source = scene([L], { project: { width: 320, height: 240, fps: 30, duration: 2 } });
+      const packed = await deadline1033(FM.storage.serializeScene(source), 'project font serialization');
+      if (reads !== 1) throw new Error('CONTROL: serializing the used custom face did not request its file exactly once');
+      const fd = packed.fonts && packed.fonts[face.id];
+      if (!fd || fd.family !== face.family || fd.css !== face.css || !/^data:/.test(fd.dataURL)) throw new Error('the project file lost the embedded font or its family token');
+      const restored = new Uint8Array(await deadline1033((await deadline1033(fetch(fd.dataURL), 'embedded font fetch')).arrayBuffer(), 'embedded font bytes'));
+      if (restored.length !== bytes.length || restored.some(function (b, i) { return b !== bytes[i]; })) throw new Error('the embedded font bytes changed in the project file');
+      FM.scene = scene([], { project: Object.assign({}, source.project) });
+      if (await deadline1033(FM.storage.applyScene(JSON.parse(JSON.stringify(packed))), 'project font import') !== true) throw new Error('the portable project was refused');
+      if (!received || JSON.stringify(received) !== JSON.stringify(packed.fonts) || FM.scene.layers[0].fontFamily !== face.css) throw new Error('import did not hand the embedded font to the font loader with the text family intact');
+      received = null;
+      const r = await deadline1033(FM.templates.importObject(Object.assign(JSON.parse(JSON.stringify(packed)), { kind: 'template', name: '1038 tpl' })), 'template font import');
+      templateId = r && r.id;
+      if (!templateId) throw new Error('CONTROL: the portable template was refused');
+      if (!received || JSON.stringify(received) !== JSON.stringify(packed.fonts)) throw new Error('template import did not hand the embedded font to the font loader');
+      const unused = await deadline1033(FM.storage.serializeScene(scene([], { project: source.project })), 'unused font control');
+      if (reads !== 1 || Object.keys(unused.fonts).length) throw new Error('CONTROL: a project without text still read or embedded the custom font');
+    } finally {
+      try {
+        if (templateId) await deadline1033(FM.templates.remove(templateId), 'template font cleanup');
+      } finally {
+        if (templates0 !== null) localStorage.setItem('fm.templates', templates0); else localStorage.removeItem('fm.templates');
+        keys.forEach(function (key, i) { restore1033(FM.fonts, key, descriptors[i]); });
+        keep.put(); FM.setTime(t0);
+      }
+    }
+  });
+  function deadline1044(promise, label) {
+    let timer;
+    const deadline = new Promise(function (_, reject) { timer = setTimeout(function () { reject(new Error(label + ' deadline')); }, 5000); });
+    return Promise.race([promise, deadline]).finally(function () { clearTimeout(timer); });
+  }
+
+  test('1044 project and template downloads keep Unicode filenames', { item: '1044', budgetMs: 30000 }, async function () {
+    const saved = FM.scene;
+    const dURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const dClick = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click');
+    const dPack = Object.getOwnPropertyDescriptor(FM.templates, 'getPack');
+    const dList = Object.getOwnPropertyDescriptor(FM.templates, 'list');
+    const dToast = Object.getOwnPropertyDescriptor(FM, 'toast');
+    const dl = hunt2dCatchDownloads();
+    let name = 'Plain Reel-1';
+    try {
+      FM.scene = scene([], { project: { name: name, width: 64, height: 64, duration: 1, fps: 30 } });
+      FM.toast = function () {};
+      FM.templates.getPack = async function () { return { project: FM.scene.project, layers: [], media: {} }; };
+      FM.templates.list = function () { return [{ id: 'filename1044', name: name }]; };
+      for (const title of ['Plain Reel-1', 'Café ü Привет 東京 مشروع 🎬']) {
+        name = title; FM.scene.project.name = title;
+        const start = dl.files.length;
+        await deadline1044(FM.storage.exportFile(), '1044 project export');
+        await deadline1044(FM.templates.exportFile('filename1044'), '1044 template export');
+        if (dl.files.length !== start + 2) throw new Error('setup: both real exporters must download');
+        if (dl.files[start].name !== title + '.fmotion.json' || dl.files[start + 1].name !== title + '.fmtemplate.json') throw new Error((title === 'Plain Reel-1' ? 'CONTROL: ASCII changed' : 'Unicode filename lost') + ': ' + JSON.stringify(dl.files.slice(start).map(f => f.name)));
+      }
+      const safe = FM.storage._safeFileName;
+      if (safe('a/b:c*?', 'project') !== 'a b c' || safe('...', 'template') !== 'template') throw new Error('illegal characters or fallback are wrong');
+      if (safe('\u3000. .Reel. \u00a0', 'project') !== 'Reel' || safe('My  Reel', 'project') !== 'My Reel') throw new Error('filename edges or whitespace runs are wrong');
+      const capped = safe('🎬'.repeat(300), 'project');
+      if (Array.from(capped).length !== 80 || capped !== '🎬'.repeat(80)) throw new Error('code point cap split or lost emoji');
+    } finally {
+      dl.stop();
+      /* each one back as it was, or gone when it had none: HTMLAnchorElement.prototype has no click of its own (it is
+         HTMLElement's), so putting back an undefined descriptor threw here and hid the test's own verdict (v18.12 assembly) */
+      const put = (o, k, d) => { if (d) Object.defineProperty(o, k, d); else delete o[k]; };
+      put(URL, 'createObjectURL', dURL);
+      put(HTMLAnchorElement.prototype, 'click', dClick);
+      put(FM.templates, 'getPack', dPack);
+      put(FM.templates, 'list', dList);
+      put(FM, 'toast', dToast);
+      FM.scene = saved;
+    }
+  });
+
+  test('1045 full storage refuses presets without claiming success', { item: '1045', budgetMs: 30000 }, async function () {
+    const saved = FM.scene, wasHome = FM.home.isOpen();
+    const dSet = Object.getOwnPropertyDescriptor(Storage.prototype, 'setItem');
+    const dToast = Object.getOwnPropertyDescriptor(FM, 'toast');
+    const dPrompt = Object.getOwnPropertyDescriptor(window, 'prompt');
+    const keys = ['fm.fxpresets', 'fm.layerpresets'], before = keys.map(k => localStorage.getItem(k));
+    const tagKey = FM.presetTags._key, tagsBefore = localStorage.getItem(tagKey);
+    const said = [], layer = FM.makeLayer('shape', { name: '1045' });
+    let full = false;
+    try {
+      if (wasHome) FM.home.close();
+      layer.effects = [FM.fxRegistry.makeInstance('blur')].filter(Boolean);
+      FM.scene = scene([layer]); FM.selectLayer(layer.id); FM.refreshAll();
+      FM.toast = function (m) { said.push(m); };
+      window.prompt = function () { return 'quota1045'; };
+      Object.defineProperty(Storage.prototype, 'setItem', Object.assign({}, dSet, { value: function (key, value) {
+        if (full && keys.indexOf(key) >= 0) throw new DOMException('Phone full', 'QuotaExceededError');
+        return dSet.value.call(this, key, value);
+      } }));
+      keys.forEach(k => localStorage.setItem(k, '[]'));
+      localStorage.setItem(tagKey, '{}');
+      if (FM.fxPresets.save('room1045', []) !== true) throw new Error('fx save did not return true with room');
+      FM.savePresetPrompt(layer);
+      if (FM.fxPresets.saved().length !== 1 || FM.layerPresets.list().length !== 1 || !said.some(m => m.indexOf('Preset saved') === 0)) throw new Error('CONTROL: lists did not grow and report success with room');
+      const intact = keys.map(k => localStorage.getItem(k));
+      full = true; said.length = 0;
+      const result = FM.fxPresets.save('full1045', []);
+      FM.savePresetPrompt(layer);
+      if (result !== false || said.length !== 2 || said.some(m => m !== 'Storage full — preset not saved')) throw new Error('failed saves must report storage full only: ' + JSON.stringify(said));
+      if (keys.some((k, i) => localStorage.getItem(k) !== intact[i])) throw new Error('failed save changed a preset list');
+      for (const category of ['effects', 'presets']) {
+        for (const refuse of [false, true]) {
+          full = refuse;
+          FM.inspector.openCategory(category);
+          await deadline1044(sleep(220), '1045 ' + category + ' card');
+          const acts = [].slice.call(document.querySelectorAll('#inspector .fx-act'));
+          const fxOnly = acts.filter(b => /^save effects only/i.test((b.textContent || '').trim()))[0];
+          if (!fxOnly || fxOnly.disabled) throw new Error('setup: enabled effects-only button missing in ' + category);
+          const name = category + (refuse ? 'full1045' : 'room1045');
+          window.prompt = function () { return name; };
+          const count = FM.fxPresets.saved().length, list = localStorage.getItem(keys[0]);
+          said.length = 0;
+          fxOnly.click();
+          if (!refuse) {
+            if (FM.fxPresets.saved().length !== count + 1 || said.indexOf('Saved preset “' + name + '”') < 0) throw new Error('CONTROL: ' + category + ' button did not save and announce success with room');
+          } else {
+            if (localStorage.getItem(keys[0]) !== list || said.some(m => m.indexOf('Saved preset') === 0) || said.indexOf('Storage full — preset not saved') < 0) throw new Error(category + ' button claims success on a full phone');
+          }
+        }
+      }
+      full = false;
+      for (const entry of [[FM.fxPresets, 'fp:', 'effectsroom1045'], [FM.layerPresets, 'lp:', 'quota1045']]) {
+        const store = entry[0], prefix = entry[1], name = entry[2], renamed = name + ' renamed';
+        FM.presetTags.set(prefix + name, ['warm1045']);
+        FM.inspector.openCategory('presets');
+        const chip = [].slice.call(document.querySelectorAll('#inspector .preset-chip')).filter(c => c.textContent === 'warm1045')[0];
+        if (!chip) throw new Error('CONTROL: rename tag chip missing');
+        chip.click();
+        const names = function () { return [].slice.call(document.querySelectorAll('#inspector .insp-preset-name')).map(n => n.textContent); };
+        if (names().indexOf(name) < 0) throw new Error('CONTROL: tagged preset was not visible before rename');
+        if (!store.rename(name, renamed) || names().indexOf(renamed) < 0 || names().indexOf(name) >= 0) throw new Error('GUARD: tagged ' + prefix + ' rename disappeared before another refresh');
+        [].slice.call(document.querySelectorAll('#inspector .preset-chip')).filter(c => c.textContent === 'All')[0].click();
+      }
+    } finally {
+      const all = [].slice.call(document.querySelectorAll('#inspector .preset-chip')).filter(c => c.textContent === 'All')[0];
+      if (all) all.click();
+      Object.defineProperty(Storage.prototype, 'setItem', dSet);
+      Object.defineProperty(FM, 'toast', dToast);
+      Object.defineProperty(window, 'prompt', dPrompt);
+      keys.forEach((k, i) => { if (before[i] === null) localStorage.removeItem(k); else localStorage.setItem(k, before[i]); });
+      if (tagsBefore === null) localStorage.removeItem(tagKey); else localStorage.setItem(tagKey, tagsBefore);
+      FM.scene = saved; FM.inspector.openCategory('home'); FM.refreshAll(); if (wasHome) FM.home.open();
+    }
+  });
+
+  test('1050 recent colours merge another window at pick time', { item: '1050' }, async function () {
+    const saved = FM.scene, recent = FM.recentColors, stored = localStorage.getItem('fm.recentColors');
+    const dSet = Object.getOwnPropertyDescriptor(Storage.prototype, 'setItem');
+    const wasHome = FM.home.isOpen();
+    try {
+      if (wasHome) FM.home.close();
+      const layer = FM.makeLayer('shape', { fill: '#000000' });
+      FM.scene = scene([layer]); FM.selectLayer(layer.id); FM.refreshAll();
+      FM.inspector.openCategory('color'); FM.inspector.refresh();
+      let input = document.querySelector('#inspector-panel .color-field input[type="color"]');
+      if (!input) throw new Error('setup: real colour picker missing');
+      const pick = function (c) { input = document.querySelector('#inspector-panel .color-field input[type="color"]'); if (!input) throw new Error('setup: colour picker missing after refresh'); input.value = c; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); };
+      FM.recentColors = []; localStorage.setItem('fm.recentColors', '[]');
+      pick('#abcdef');
+      if (JSON.stringify(FM.recentColors) !== '["#abcdef"]' || FM._fillGet(layer) !== '#abcdef') throw new Error('CONTROL: single-window picker did not commit its colour');
+      localStorage.setItem('fm.recentColors', JSON.stringify(['#112233', '#abcdef', '#112233']));
+      pick('#445566');
+      const expected = '["#445566","#112233","#abcdef"]';
+      if (localStorage.getItem('fm.recentColors') !== expected || JSON.stringify(FM.recentColors) !== expected) throw new Error('another window’s picks were lost or duplicated');
+      let refused = 0;
+      Object.defineProperty(Storage.prototype, 'setItem', Object.assign({}, dSet, { value: function (key, value) {
+        if (key === 'fm.recentColors') { refused++; throw new DOMException('Phone full', 'QuotaExceededError'); }
+        return dSet.value.call(this, key, value);
+      } }));
+      pick('#778899'); pick('#aabbcc');
+      if (refused !== 2 || FM._fillGet(layer) !== '#aabbcc' || localStorage.getItem('fm.recentColors') !== expected) throw new Error('CONTROL: two full-phone picks did not commit while storage refused both writes');
+      if (JSON.stringify(FM.recentColors) !== '["#aabbcc","#445566","#112233","#abcdef","#778899"]') throw new Error('full phone lost an earlier unsaved pick');
+    } finally {
+      Object.defineProperty(Storage.prototype, 'setItem', dSet);
+      FM.recentColors = recent;
+      if (stored === null) localStorage.removeItem('fm.recentColors'); else localStorage.setItem('fm.recentColors', stored);
+      FM.scene = saved; FM.refreshAll(); if (wasHome) FM.home.open();
+    }
+  });
+
+  test('1054 shortcut sheet names selection conditions and alternate keys', { item: '1054' }, async function () {
+    const open = FM.shortcuts.isOpen();
+    const saved = FM.scene, wasHome = FM.home.isOpen();
+    const dCard = Object.getOwnPropertyDescriptor(FM.inspector, 'openCategoryByIndex');
+    const dTab = Object.getOwnPropertyDescriptor(FM.addMenu, 'openTab');
+    try {
+      FM.shortcuts.show();
+      const rows = Array.from(document.querySelectorAll('#shortcuts-overlay .shortcut-row')).map(r => [r.querySelector('.shortcut-key').textContent, r.querySelector('.shortcut-desc').textContent]);
+      if (!FM.shortcuts.isOpen() || !rows.some(r => r[0] === 'Space' && r[1] === 'Play / pause')) throw new Error('CONTROL: open sheet lost its correct Space row');
+      if (!rows.some(r => r[0] === '1 – 5' && r[1].indexOf('Nothing selected: Add menu →') === 0)) throw new Error('Add tabs need the nothing selected condition');
+      if (!rows.some(r => r[0] === '1 – 9' && r[1] === 'Layer selected: open that panel card')) throw new Error('selected-layer card keys missing');
+      if (!rows.some(r => r[0] === 'Delete / Backspace' && r[1] === 'Delete selected layer')) throw new Error('Backspace missing');
+      if (!['⌘/Ctrl + ⇧ + Z', '⌘/Ctrl + Y'].every(key => rows.some(r => r[0] === key && r[1] === 'Redo'))) throw new Error('separate redo keys missing');
+      FM.shortcuts.hide({ now: true });
+      if (wasHome) FM.home.close();
+      const layer = FM.makeLayer('shape');
+      FM.scene = scene([layer]); FM.selectLayer(layer.id); FM.refreshAll();
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      let card = 0, tabs = 0;
+      FM.inspector.openCategoryByIndex = function (n) { card = n; return true; };
+      FM.addMenu.openTab = function () { tabs++; };
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', code: 'Digit1', bubbles: true, cancelable: true }));
+      if (card !== 1 || tabs !== 0) throw new Error('GUARD: Digit1 with a selected layer must open card 1, not Add');
+    } finally {
+      Object.defineProperty(FM.inspector, 'openCategoryByIndex', dCard);
+      Object.defineProperty(FM.addMenu, 'openTab', dTab);
+      FM.scene = saved; FM.refreshAll(); if (wasHome) FM.home.open();
+      if (open) FM.shortcuts.show(); else FM.shortcuts.hide({ now: true });
     }
   });
 })();

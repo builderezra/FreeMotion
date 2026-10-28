@@ -3820,6 +3820,7 @@ window.FM = window.FM || {};
   }
   function connReport(r) {
     const lines = ['FreeMotion connection test · ' + r.at];
+    lines.push('storage persisted: ' + (FM.storagePersisted == null ? 'unknown' : FM.storagePersisted));
     if (r.relayGate) lines.push('relays: not tried (' + r.relayGate + ')');
     else lines.push('relays: ' + r.relays.map(function (x) { return x.label + ' ' + (x.up ? 'up ' + x.ms + ' ms' : 'down (' + x.why + ')'); }).join(', '));
     const st = r.stun || {};
