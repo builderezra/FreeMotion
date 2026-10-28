@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Oct at v18.10
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Oct at v18.11
 >
-> **State:** v18.10 — **three more effects have Protect skin** (#966): Split Toning, Tint and Faded Film; **a second finger no longer hijacks a scrub, a slider or any other one-finger tool** (#690); **in the full editor a slow swipe on a card no longer pops its Reset menu** (#1122, your "if an issue then fix"); and an Exposure with Keep colour above 0 looks a little less rich than in v18.06. A live session needs both devices on v18.10. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+> **State:** v18.11 — **twelve more effects have Protect skin and Mix** (#966); **three undo steps that took two presses now take one** (#1043 #1046 #1047); **FreeMotion no longer deletes your other apps' offline copies** on the same site (#1060); **nine wrong results fixed** from the PM's hunt (#1196 to #1214: a phone blur, Export only this layer, the easing handles, Sharpen, saved filters, Undo during Reverse, a split Wave, rounded corners, Capitalize Words). A live session needs both devices on v18.11. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+>
+> v18.10 — **three more effects have Protect skin** (#966): Split Toning, Tint and Faded Film; **a second finger no longer hijacks a scrub, a slider or any other one-finger tool** (#690); **in the full editor a slow swipe on a card no longer pops its Reset menu** (#1122, your "if an issue then fix"); and an Exposure with Keep colour above 0 looks a little less rich than in v18.06. A live session needs both devices on v18.10. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
 > v18.09 — **switching projects no longer loses a clip that never saved, and never hangs asking about it** (#1187), **a project that cannot be opened is kept, and its Delete says so with Save a copy first** (#1004, #1005), **a second tab no longer writes an old file over a newer replaced one** (#1000), and **a very big project file asks before it is read** (#1007). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
@@ -30123,7 +30125,7 @@ re-opened #480, which I had marked done and had not fixed.
       📋 **30 Sep — the logging chat's #993 note:** under LOOP.md rule 16 the builder can ship B for clause 20 (rename the sketching bar's Cancel to Close) and tell him "say A to change it" — which leaves only the pinch reading (clause 18) for him.
       ✅ **v17.15** (queue 834 partial): clause 20 built as B — the Sketching bar's button reads Close (its strokes are already kept); Custom shape keeps Cancel. Say “A” to make Cancel really discard. Clause 18 (the pinch) still waits on his reading.
       ✅ **UNBLOCKED 11 Oct, ~10:05 AWST — decided by the PM under his standing rule (#1130: "Go through each one and see where it's an obvious yes"); he can overrule:** the sketching bar stays Close and keeps strokes.
-
+      📍 **28 Oct (builder):** clause 18 need not wait on him: the pinch that starts on a corner square can be measured with the real-input driver. Owed in a machine gap; nothing else changes until it is.
 
 - [x] **835 — Get rid of the CLIP OPTIONS / Done row on the phone.** (7 Sep, his words in full:) ✅ DONE v16.06.
       > *"Get rid of the row that says clip options and done. Make sure that menu still opens up fully and covers the
@@ -34179,6 +34181,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v18.05 (25 Oct): round eighteen shipped** — Tone Curve Protect skin and Keep colour; Duotone Protect skin and Affects; HSL Bands Protect skin and Mix. Every default byte-identical; SCHEMA_REV 37 with the fingerprint re-pinned by fp.js; 14 '966 opts18' tests. A review (no blocker) and its two folds (HSL Bands' Protect skin note names Magenta and says the starting Blue reaches no skin; the Mix test's Show selection checks got a measured CONTROL, 1925 of 6912 pixels). Next pick the builder named: Protect skin on Split Toning, Tint and Colour Pop, then Exposure, Gamma and Faded Film.
       📍 **v18.06 (26 Oct): round nineteen shipped** — Gamma Protect skin and Keep colour; Exposure Protect skin and Keep colour; Colour Pop Protect skin and Show selection. Every default byte-identical; SCHEMA_REV 38 with the fingerprint re-pinned by fp.js; 14 '966 opts19' tests. A review and a refuter; folds: the row-order test read past the colour rows (B1), Colour Pop's Protect skin no longer takes Boost off a kept red (F2), the matte note says black is the most drained (F3). FOR ROUND TWENTY (the refuter's call, not folded): Exposure's Keep colour keeps channel gaps, not ratios, so a pushed colour comes out paler (0.50 to 0.33 saturation at +0.8 EV); the review's ratio version is unbounded (a near-black turns to red specks), so it needs a bounded design. Next picks the builder named: Protect skin on Split Toning (its noopWhy must allow it), Tint and Faded Film.
       📍 **v18.10 (28 Oct): round twenty shipped** (codex/fx20: Codex, then a Claude review, a refuter, a fold and a check): Split Toning, Tint and Faded Film `skin` (Protect skin); Exposure Keep colour re-drawn with a gamut bound (a look change, said in the POLISH line); SCHEMA_REV 39. Next: round twenty-one.
+      📍 **v18.11 (28 Oct): rounds twenty-one to twenty-four shipped** (codex/fx21..fx24, reviewed, refuted, folded and checked): Protect skin and Mix on twelve effects; SCHEMA_REV 40. Next: the CSS-chain effects (Brightness, Contrast, Saturation, Hue Shift, Grayscale, Sepia, Invert, Glow) need their own design round.
 
 - [ ] **967 — Live collaboration feels extremely underbaked on his phone: pull it all up, make sure it's all there and working, and make it simple enough for someone who's never used it** (26 Sep, builder chat — his words)
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -35280,12 +35283,14 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.3
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.11 (28 Oct): shipped** (codex/h1002, folded and checked): a malformed gradient or a throwing invariant refuses the whole collab tx and puts the base back.
 
 - [ ] **1003 — Duplicate says "done" even when it could not read a clip (hunt LOW #1003)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.4
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct:** see the note on #1000, which covers this entry too.
+      📍 **v18.11 (28 Oct): shipped** (codex/h1002): a Duplicate that runs out of room rolls back every file it wrote and says it was space. On assembly the doc write's line (the Simple editor's, v17.45) went back byte for byte and its cause stands pending across it, so the Full-unchanged lock did not fire; test '1003 a Duplicate refused at its own document write…' covers it.
 
 - [ ] **1004 — A project file that will not open gets overwritten with a blank one (hunt LOW #1004)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35319,6 +35324,7 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.9
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.11 (28 Oct): shipped** (codex/h1008, review, refuter, fold, check): collectGroupUnits in one pass. Follow-up: buildGroupUnit still walked the scene per unit — #1219, built on hunt/gu1219.
 
 - [ ] **1009 — Image fills from a previous project stay in memory all session (hunt LOW #1009)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35326,6 +35332,7 @@ re-opened #480, which I had marked done and had not fixed.
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 8 Oct — the helper's H27 (hunt/p9-leak-patches; NOT yet PM-verified) has a format-patch with a test for this (fill cache by last use):
       red on main, green patched, at both widths.
+      📍 **v18.11 (28 Oct): shipped** (hunt/leak1009): a switch prunes every fill of the outgoing project; fills of the open one stay decoded. Its review's F2 (an export never waited for a fill) is #1217, built on hunt/fill2.
 
 - [ ] **1010 — The no-GPU blur fallback allocates two big buffers per call (hunt LOW #1010)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35333,6 +35340,7 @@ re-opened #480, which I had marked done and had not fixed.
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 8 Oct — the helper's H27 (hunt/p9-leak-patches; NOT yet PM-verified) has a format-patch with a test for this (CPU blur buffers):
       red on main, green patched, at both widths.
+      📍 **v18.11 (28 Oct): shipped** (hunt/leak1009): the CPU blur reuses one buffer; plates below about r 37 on a full-frame layer still allocate ~34-36 MB per call.
 
 - [ ] **1011 — Reopen #671's leftover: an export that fails closes its VideoFrame only on success (js/exporter.js ~1494–1498) (hunt LOW #1011)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35632,6 +35640,7 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 4
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.11 (28 Oct): shipped** (hunt/undo1043, folded and checked): several files picked together are one undo step, with an Opening N files… toast.
 
 - [ ] **1044 — Project and template download filenames drop every non-ASCII character (hunt LOW #1044)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35647,16 +35656,19 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 7
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.11 (28 Oct): shipped** (hunt/undo1043): an AI Director build or Refine that removes a layer is one undo step; one stopped before it changed anything is none.
 
 - [ ] **1047 — Effects sheet: picking Mask first, then another effect, makes 2 undo steps (hunt LOW #1047)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 8
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.11 (28 Oct): shipped** (hunt/undo1043): Mask then another effect from the Effects sheet is one step each.
 
 - [ ] **1048 — A long unbroken text run wraps in quadratic time and freezes the page (hunt LOW #1048)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 9
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.11 (28 Oct): shipped** (codex/h1048, folded and checked): under 512 visible characters a run wraps by today's loop; past it a binary search, handing the tail back to the old walk.
 
 - [ ] **1049 — The boot sweep and project delete still fail open on unreadable template, element or font indexes and on failed checkpoint reads (hunt LOW #1049)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35730,6 +35742,7 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 2
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.11 (28 Oct): shipped** (codex/h1048): sw.js activate and the version chip touch only freemotion- caches and FreeMotion's own registration.
 
 - [ ] **1061 — A hold speed key that drops sharply leaves a lasting footage offset, and a split changes it (hunt LOW #1061)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35740,11 +35753,13 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 4
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **28 Oct (builder):** not built in codex/h1055 (its review kept it out). Building the preview's smear at export's 720 px costs speed, so it needs a timing at 380 px first.
 
 - [ ] **1063 — Dragging the rotate handle across the left of the pivot makes the rotation box jump by 360 (hunt LOW #1063)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 5
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.11 (28 Oct): shipped** (codex/h1048): the rotate drag adds up its steps, so crossing the left of the pivot no longer jumps by 360. The pinch twist had the same fault: #1215, built on hunt/twist.
 
 - [ ] **1064 — ship.sh's cache-buster gate misses every ?v= file that isn't js/*.js or the two stylesheets (hunt LOW #1064)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -38466,6 +38481,8 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: All four votes confirmed. One refuter could not find the Focus Pull preset by grep; the other found it at fx-presets.js:34-35 (radius 28 down to 0, then holding 0). The bug does not depend on the preset: a typed 0 is enough. The gl-color.js:326-330 comment justifies the straight-alpha default as 'invisible on the opaque layers', but drawCssFxOnGPU draws onto a cleared transparent plate, so that premise is false here.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 2' until it lands, then #1196.
+      📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
+
 - [ ] **1197 — Keyframe 'is there a key here' still uses 1 ms in seven places: a button deletes a key it offers to add, edits land on a twin key, and an ease goes on the wrong move (hunt HIGH #1197)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 3 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38569,6 +38586,8 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. The preview's own solo shows the same picture as the export, so this is not a preview-versus-export split. The file does not match the card's 'Only the … layer' or its audio mix.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 7' until it lands, then #1201.
+      📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
+
 - [ ] **1202 — This-frame PNG draws a reversed (or frame-blend slow-mo) clip from the small preview cache (hunt MEDIUM #1202)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 8 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38696,6 +38715,8 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. The 'real' refuter showed the trigger needs no hand-made data: a channel-only diamond (queue 419) or a typed X value at a new time makes the mixed state. The mirror case is weaker: it may be deliberate.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 14' until it lands, then #1208.
+      📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
+
 - [ ] **1209 — 'Sharpen for upscaling' forgets it was added after any undo or reload, so a second press stacks a second Unsharp Mask (hunt MEDIUM #1209)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 15 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38714,6 +38735,8 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. Correction: it is not a preview-versus-export mismatch, since both draw both masks. An Undo straight after the second press removes it. What is lost for good after a reload is the toggle.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 15' until it lands, then #1209.
+      📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
+
 - [ ] **1210 — A saved filter lands with switched-off ingredients back on, and its keyframes on the wrong clock (hunt MEDIUM #1210)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 16 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38734,6 +38757,8 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: All four votes confirmed with high confidence. On the same clip, only the container's Strength is wrong, because the children keep their original times. The rel flag is my addition: without it, existing saved presets with animated children would get worse.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 16' until it lands, then #1210.
+      📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
+
 - [ ] **1211 — Pressing Undo while 'Preparing frames…' runs after the menu's Reverse undoes an earlier, unrelated edit (hunt LOW #1211)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 17 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38757,6 +38782,8 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. There is no test of the menu's Reverse followed by Undo. Impact is low but real: an earlier, unrelated edit is silently lost.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 17' until it lands, then #1211.
+      📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
+
 - [ ] **1212 — Splitting a Wave text jolts every letter at the cut (hunt LOW #1212)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 18 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38776,6 +38803,8 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. Caveat: the Jitter restart is invisible, because it re-rolls every 1/24 s anyway. The visible bug is Wave only. The jitter line is changed only so the tail is literally identical to the unsplit clip.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 18' until it lands, then #1212.
+      📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
+
 - [ ] **1213 — Rounded corners on a clip with a keyframed crop export square wherever the crop is smaller than at the parked playhead (hunt LOW #1213)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 19 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38792,6 +38821,8 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. The reverse case (a crop at t that is larger than at the playhead) falls back to the old bounding-box path and gives only small differences.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 19' until it lands, then #1213.
+      📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
+
 - [ ] **1214 — Change Case > Capitalize Words writes "Don'T", "I'M", 'éCole' and leaves Cyrillic lowercase (hunt LOW #1214)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 20 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38807,3 +38838,37 @@ re-opened #480, which I had marked done and had not fixed.
       >   control: 'hello brave new world' gives 'Hello Brave New World', 'Mixed CASE 2026 & co!' gives 'Mixed Case 2026 & Co!', and 'tab\there' gives 'Tab\tHere', identical today and after. Modes 0, 1, 3, 4 and 5 stay byte-identical across the pin's TEXTS.
       >   refuter notes: Both refuters confirmed with high confidence. The preview shows the error at once, so on one title he would notice. Across a long Detect-speech caption track he is unlikely to check every cue.
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 20' until it lands, then #1214.
+      📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
+
+- [ ] **1215 — A two-finger twist carried past half a turn jumps the layer by 360° (hunt MEDIUM #1215)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Found by the refuter on codex/h1048 (#1063, the rotate handle): the pinch has the same fault. js/canvas-edit.js (~606) turns the layer by the raw angle between the fingers, wrapped to ±180°, so a twist carried past 180° flips by a whole turn mid-gesture.
+      📍 **Where it is (28 Oct):** hunt/twist 62095d19 (~/fm-claude-wt/twist, on 6f8db2e3): the twist adds up its steps, as #1063 did for the handle. Test '1215 a two-finger twist carried past half a turn'. Needs its premise run (red on the base, green on the branch) and a review; waits for v18.12.
+- [ ] **1216 — Two tests clean up through FM.canvasEdit._finishDrag, which no longer exists, so their cleanup does nothing (hunt LOW #1216)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Test hygiene, found beside #1215: two calls in tests/tests.js (around 55721 and 55773 on v18.10) reach for a function the app removed. Nothing he sees; a drag a failing test leaves open is not closed for the next test.
+      📍 **Where it is (28 Oct):** hunt/twist 62095d19, with #1215.
+- [ ] **1217 — An export can start before the fill pictures are decoded, so its first frames draw without them (hunt MEDIUM #1217)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      F2 of the review of hunt/leak1009 (#1009): a switch now lets go of the old project's fill pictures, and the exporter never waited for a fill to decode again.
+      📍 **Where it is (28 Oct):** hunt/fill2 52a0f9c5 (on hunt/leak1009, so it lands with v18.11 or after it): FM.prewarmFillImages, awaited in the exporter's prepareCaches step (d). Needs its premise run and a review.
+- [ ] **1218 — Live collaboration: an edit the host drops for coming too fast is never sent again, and a later edit makes it look like a duplicate (hunt HIGH #1218)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Found by the refuter on codex/h1019 (#1019 #1020). When the host's rate limit drops a guest's edit, nothing resends it; the guest's next edit carries a later id, so the dropped one can never land — the two devices quietly disagree.
+      📍 **Where it is (28 Oct):** codex/h1218 e8d2d162 (Codex, on 6f8db2e3, from the design in the builder's codex-h1218.txt: the host records the hole and answers 'rl'; the guest paces itself at half the host's bucket and resends from the hole). Needs a Claude review and a refuter before it lands.
+- [ ] **1219 — A project with many styled groups walks the whole scene once per group every frame (hunt LOW #1219)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      From the review of codex/h1008 (#1008): collectGroupUnits is one pass now, but buildGroupUnit still rescans the scene for each unit.
+      📍 **Where it is (28 Oct):** hunt/gu1219 b8450140 (on codex/h1008): unit.order and unitMembers are computed once. Test '1219 a frame with many styled groups'; its bound is MEASURE: pending. Needs its premise run and a review.
+- [ ] **1220 — The tick's idle check (#1133) may not count a ship's finger phases as a ship (hunt LOW #1220 — TO CONFIRM)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      A note from a tick on 28 Oct with no detail behind it. _shipidle.sh shows nothing wrong, so this is logged to be confirmed, not built.
+      📍 **Where it is (28 Oct):** Nothing built.
+- [ ] **1221 — The other export filenames — video, audio, PNG and the export card — still drop letters that are not plain English (hunt LOW #1221)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Found by the refuter on codex/h1044: #1044 fixed the download filenames it named; the same strip runs in the other export paths.
+      📍 **Where it is (28 Oct):** Nothing built.
+- [ ] **1222 — A split less than a millisecond before a hold speed key can drop the cut's tail and lose the footage's advance (hunt LOW #1222)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Found by Codex while reworking codex/h1055 (#1055 #1061): js/app.js (~5706-5707).
+      📍 **Where it is (28 Oct):** Nothing built.

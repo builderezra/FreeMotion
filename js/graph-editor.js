@@ -358,7 +358,10 @@ window.FM = window.FM || {};
     if (pasteBtn) pasteBtn.classList.toggle('is-armed', FM.graphClip.has());
   }
 
-  function applyBez(bez) { cur.kfs.forEach(kf => { kf.bez = bez.slice(); kf.e = 'custom'; }); FM.requestRender(); redraw(); }
+  /* `ez` goes, as applyPreset, applyEzPreset and graphClip.applyTo already clear the other mode (#1208): in Move mode X and
+     Y keyed at different times share the graph, the canvas draws only kfs[0], and a Bounce left on the other channel's key kept
+     bouncing — evalProp reads `ez` first — while the graph showed his Cubic Bezier. */
+  function applyBez(bez) { cur.kfs.forEach(kf => { kf.bez = bez.slice(); kf.e = 'custom'; delete kf.ez; }); FM.requestRender(); redraw(); }
   function applyPreset(key) {
     // Store only the named easing (delete any custom bez). evalProp + bezOf both resolve a named
     // ease from kf.e, and every "is a preset active?" read site checks for the ABSENCE of kf.bez —

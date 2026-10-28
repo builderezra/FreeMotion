@@ -1577,11 +1577,12 @@ window.FM = window.FM || {};
   function filterLayerMeta(id, layer) {
     if (!id || !layer || layer.type === 'shape' || layer.type === 'text') return null;
     if (!FM.filters || !FM.filters.makeInstance || !FM.fxRegistry.fitToLayer) return null;
-    const probe = FM.filters.makeInstance(id);
+    const probe = FM.filters.makeInstance(id, layer.start || 0);
     if (!probe || !FM.fxRegistry.fitToLayer(probe, layer)) return null;
     if (!canPreview(layer, null)) return null;
+    // on the clip's own clock, as the Filters tab's preview and Add land it (#1210)
     return { layerId: layer.id, rev: sceneRev(), filter: id, still: true, fx: null,
-      apply: function (doc) { const b = FM.filters.makeInstance(id), f = b && FM.fxRegistry.fitToLayer(b, doc); if (!f) throw new Error('the filter no longer fits'); doc.effects = (doc.effects || []).concat([f]); } };
+      apply: function (doc) { const b = FM.filters.makeInstance(id, doc.start || 0), f = b && FM.fxRegistry.fitToLayer(b, doc); if (!f) throw new Error('the filter no longer fits'); doc.effects = (doc.effects || []).concat([f]); } };
   }
 
   /* One SLICE of a layer strip. Cheap presets finish in a single rAF (a 10-frame shake strip on a

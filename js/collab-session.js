@@ -1909,7 +1909,10 @@ window.FM = window.FM || {};
       const bad = [];
       for (let i = 0; i < rej.length; i++) { const op = ops[rej[i][0]]; if (op) bad.push(op); }
       revertToBase(bad);
-      leaseToast(rej, ops, 'this');
+      /* queue 1002 review F4: only a LEASE refusal names somebody. A change the host could not apply (a rolled-back tx,
+         a limit) had no holder, and holderSaid's fallback blamed "Someone else" who did not exist. */
+      if (rej.some(function (x) { return x[1] === 'lease'; })) leaseToast(rej, ops, 'this');
+      else toast('That change could not be made, so it was put back');
     }
     /* §17.2's words, and for a refused DELETE its one action: "Sam is editing 'Logo' — it wasn't deleted
        [Delete anyway]". The whole toast is the button (FM.toast's onTap), so it can be pressed on a phone

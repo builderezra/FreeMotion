@@ -564,7 +564,7 @@ window.FM = window.FM || {};
         drag = { mode: 'scale', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, pw: pw, startScale: s0, startDist: Math.hypot(arm.x, arm.y) || 1 };
       } else {
         const arm = handleArm(pw, p, cx, cy);
-        drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, pw: pw, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(arm.y, arm.x) };
+        drag = { mode: 'rotate', pointerId: e.pointerId, layer: layer, cx: cx, cy: cy, pivot: pivot, pw: pw, startRot: FM.evalProp(layer.transform.rotation, FM.time), startAngle: Math.atan2(arm.y, arm.x), angleDelta: 0 };
       }
     };
   }
@@ -718,7 +718,14 @@ window.FM = window.FM || {};
       FM.shiftTransform(L, 'scale', s, FM.time);
     } else if (drag.mode === 'rotate') {
       const arm = handleArm(drag.pw, p, drag.cx, drag.cy);   // bughunt4 #1b: the angle in the parent's space — mirrored under a flip
-      const deg = drag.startRot + (Math.atan2(arm.y, arm.x) - drag.startAngle) * 180 / Math.PI;
+      const angle = Math.atan2(arm.y, arm.x);
+      let step = (angle - drag.startAngle) * 180 / Math.PI;
+      while (step > 180) step -= 360;
+      while (step <= -180) step += 360;
+      /* #1063 fold: a NaN angle (a zero-width canvas mid-drag) must not poison the running total for the rest of the
+         drag or be saved on release; skip that one move and carry on from the last good angle. */
+      if (isFinite(step)) { drag.angleDelta += step; drag.startAngle = angle; }
+      const deg = drag.startRot + drag.angleDelta;
       if (drag.pivot && !drag.pivot.sandwich) {
         // rotate about the bounds centre C: G' = C + R(Δ)·(G0 − C), so the visible box turns in place
         // (queue 831: only when the RENDERER is not pivoting — see the note where `pivot` is built)

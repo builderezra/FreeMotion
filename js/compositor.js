@@ -293,6 +293,8 @@ window.FM = window.FM || {};
          old loop untouched (thermalLoop10 only off them). */
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay'], [4, 'Soft light'], [8, 'Colour'], [9, 'Luminosity']] },
       { key: 'cycle', label: 'Cycle speed', min: -2, max: 2, step: 0.05, def: 0, unit: '/s', note: 'The colours flow through the picture, this many palette lengths a second · below 0 the other way' },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'dither', label: 'Dither', params: [
       { key: 'levels', label: 'Levels', min: 2, max: 32, step: 1, def: 4 },
@@ -647,6 +649,8 @@ window.FM = window.FM || {};
       { key: 'outside', label: 'Glow past the edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Add'], [2, 'Soft light']] },
       { key: 'from', label: 'Colour from', def: 0, options: [[0, 'Chosen colour'], [1, 'Source colour']] },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Holds the glow back on skin-coloured pixels where it lands' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     /* REACH AND EDGES (#1068 B5, ChatGPT 7a2ef677 with the land list's fixes). Length reached only 80 px; it reaches 400 now, and a
        saved Length (never above 80) draws as before. Edges: an angle other than 45 used to march back pixel by pixel, which
@@ -716,6 +720,8 @@ window.FM = window.FM || {};
       { key: 'passes', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1 },
       { key: 'outside', label: 'Glow past the edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Multiply'], [1, 'Subtract'], [2, 'Soft light']] },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Holds the dark glow back where it spreads onto skin beside dark areas · at the starting Threshold a flat skin tone is never dark enough to glow, so there it does nothing' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'stroke', label: 'Stroke Colour', color: true, defColor: '#ffffff', colorLabel: 'Stroke', params: [
       { key: 'width', label: 'Width', min: 1, max: 60, step: 1, def: 4, unit: 'px' },
@@ -825,6 +831,8 @@ window.FM = window.FM || {};
          surface faces the light (a Blinn highlight, tinted the light's colour) — wet paint, a plastic logo. White and 0 % run the old
          loop untouched (bumpLit966). */
       { key: 'shine', label: 'Shine', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'A glossy highlight where the surface faces the light' },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ], color: true, defColor: '#ffffff', colorLabel: 'Light colour' },
     /* Edge Glow. GLOW ON is the design, not a mode flag bolted on: "the layer" versus "the media
      * inside the layer" IS "alpha edges versus luminance edges", which is why the control is honest.
@@ -900,6 +908,8 @@ window.FM = window.FM || {};
       { key: 'blur', label: 'Blur', min: 0, max: 60, step: 1, def: 0, unit: 'px' },
       { key: 'motion', label: 'Motion', min: 0, max: 100, step: 1, def: 25, legacy: 0, unit: '%' },
       { key: 'speed', label: 'Drift', min: -4, max: 4, step: 0.1, def: 0 },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'fractalwarp', label: 'Noise Warp', params: [
       { key: 'amount', label: 'Strength', min: 0, max: 60, step: 1, def: 24, unit: 'px' },
@@ -1247,6 +1257,8 @@ window.FM = window.FM || {};
            there. 50 / 50 is the old middle, to the bit. */
         { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'shape', liveWhen: [1, 2] },
         { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'shape', liveWhen: [1, 2] },
+        { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+        { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
       ], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
     /* #482 polish 6.5 (#966 "as much choice as possible"; answers the backlog's C38). The core was welded at W x 0.18 and the
        rays at six, flat, and the description promised "the streaks and ghosts a real one throws" while it drew neither. Core
@@ -1570,6 +1582,8 @@ window.FM = window.FM || {};
       { key: 'wander', label: 'Wander', min: 0, max: 300, step: 5, def: 100, unit: '%', overriddenBy: 'speed', liveAbove: 0 },   // a still leak does not roam (review of polish 1.2)
       { key: 'flicker', label: 'Flicker', min: 0, max: 1, step: 0.02, def: 0 },
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Add'], [2, 'Soft light']] },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Holds the light leak back on skin-coloured pixels where it lands' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     /* Letterbox. BARS ARE MEASURED AGAINST — the one param that had to change meaning when these two
      * effects were confined to the layer they are attached to (see PIXEL_FX.letterbox / fxBounds).
@@ -1864,6 +1878,8 @@ window.FM = window.FM || {};
       { key: 'outside', label: 'Glow past the edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Add'], [2, 'Soft light']] },
       { key: 'from', label: 'Colour from', def: 0, options: [[0, 'Chosen colour'], [1, 'Source colour']] },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Holds the bloom back on skin-coloured pixels where it lands · higher Thresholds may leave a flat skin tone untouched' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'replacecolor', label: 'Replace Colour', color: true, defColor: '#e03131', colorLabel: 'From', color2: true, defColor2: '#3aa0ff', color2Label: 'To', params: [
       { key: 'tolerance', label: 'Tolerance', min: 0.02, max: 1, step: 0.02, def: 0.25 },
@@ -1905,6 +1921,8 @@ window.FM = window.FM || {};
       { key: 'spin', label: 'Spin speed', min: -360, max: 360, step: 5, def: 0, unit: '°/s', note: 'The colours travel round the corners, this many degrees a second' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'spectralmap', label: 'Hue Ramp', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -2013,6 +2031,8 @@ window.FM = window.FM || {};
       { key: 'count', label: 'Colours', min: 2, max: 8, step: 1, def: 4, note: 'Your colours uses the first 2–4 below; Levels makes this many steps per red, green and blue' },
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'match', label: 'Match by', def: 0, options: [[0, 'Nearest colour'], [1, 'Brightness']], overriddenBy: 'mode', liveWhen: 1, note: 'Brightness lays your colours over the tones, darkest on the shadows' },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     /* MORE TO TURN (queue 403 clause 2). Ezra: "Lighting bolt effect could use some other variables and
        work". Every default below reproduces the previous look EXACTLY — thickness 1, jitter 1, three
@@ -2858,11 +2878,26 @@ window.FM = window.FM || {};
     for (let i = 0; i < n; i++) out.push(Math.max(0, ((i < m ? wl : wl + 2) - 1) / 2));
     return out;
   }
+  /* queue 1010: the scratch pair is kept between calls, up to CPU_BLUR_CAP floats each (8 MB). It was two new Float32Arrays
+     on EVERY call: per frame for a blurred or feathered Censor, and up to 67 MB a call on a device whose WebGL blur is lost.
+     What fits: Censor's default region on a 1080x1920 frame (about 1.04M floats with its pad), and a no-filter plate past
+     about r 37 (drawBlurredNoFilter works at 1/k size from r 17, but a full-frame plate stays over the cap until about
+     r 37: at r 17 it is 8.5M floats). What does NOT fit: a no-filter plate below about r 37 on a full-frame layer
+     (1080x1920 pads to about 1144x1984, 9.1M floats at r 16) still allocates two new arrays, about 34 to 36 MB each, per
+     call, as it always did. A plate past the cap allocates per call and keeps nothing, so each kept array stays at 8 MB at most.
+     Safe to share: the function is synchronous and never re-entered, `a` is fully written by the premultiply loop and `b` by
+     every pass before either is read, so a kept pair cannot carry an earlier picture into this one. */
+  let _cpuBlurA = null, _cpuBlurB = null;
+  const CPU_BLUR_CAP = 2097152;
   function cpuBlurCanvas(cv, W, H, sigma) {        // premultiplied, transparent past the edge — what 'blur()' draws
     const g = cv.getContext('2d');
     let img; try { img = g.getImageData(0, 0, W, H); } catch (e) { return false; }
     const d = img.data, N = W * H;
-    let a = new Float32Array(N * 4), b = new Float32Array(N * 4);
+    let a, b;
+    if (N * 4 <= CPU_BLUR_CAP) {
+      if (!_cpuBlurA || _cpuBlurA.length < N * 4) { _cpuBlurA = new Float32Array(N * 4); _cpuBlurB = new Float32Array(N * 4); }
+      a = _cpuBlurA; b = _cpuBlurB;
+    } else { a = new Float32Array(N * 4); b = new Float32Array(N * 4); }
     for (let i = 0; i < N; i++) { const j = i * 4, al = d[j + 3] / 255; a[j] = d[j] * al; a[j + 1] = d[j + 1] * al; a[j + 2] = d[j + 2] * al; a[j + 3] = d[j + 3]; }
     const pass = (src, dst, r, horiz) => {
       const len = horiz ? W : H, lines = horiz ? H : W, step = horiz ? 4 : W * 4, inv = 1 / (2 * r + 1);
@@ -3150,7 +3185,8 @@ window.FM = window.FM || {};
     const pd = def && ((def.params || []).find(q => q && q.key === key) || (def.param === key ? { key: key, def: def.def, legacy: def.legacy } : null));
     if (pd && pd.legacy !== undefined) v = pd.legacy;
     else {
-      const fn = _kernelOf(type); const src = fn ? String(fn) : '';
+      // a kernel behind a shared wrapper (#966 opts21–24) is named by its __fmKernel: its literals are read off its own source (rfx2124 M1)
+      const fn = _kernelOf(type); const src = fn ? String(fn) + (fn.__fmKernel ? String(fn.__fmKernel) : '') : '';
       const k = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const m = src.match(new RegExp("fparam\\(\\s*\\w+,\\s*'" + k + "',\\s*(-?[0-9.]+)"))
              || src.match(new RegExp("\\." + k + "\\s*==\\s*null\\s*\\?\\s*(-?[0-9.]+)"))
@@ -3873,7 +3909,23 @@ window.FM = window.FM || {};
       var m = (p.mode | 0), s = st.text;
       if (m === 0) st.text = s.toUpperCase();
       else if (m === 1) st.text = s.toLowerCase();
-      else if (m === 2) st.text = s.toLowerCase().replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+      /* Capitalize Words by LETTER, not by \w (#1214): \b\w is ASCII-only and treats an apostrophe as a word break, so it
+         wrote “Don'T”, “I'M”, “éCole” and left Russian lowercase. A letter starts a word unless a letter or digit is right before
+         it, or a letter or digit and then an apostrophe (straight or the iPhone's curly one) are. A MARK is part of the character
+         before it — a combining accent, or the selector that makes ❤ an emoji — so it never moves the two characters looked back
+         at (its review: “❤️love” read “❤️love”, where \b\w gave “❤️Love”). Walked by code point, not with a lookbehind: a
+         lookbehind in a literal is a parse error on iOS before 16.4 and would take this whole file with it. */
+      else if (m === 2) {
+        var LN = /[\p{L}\p{N}]/u, L1 = /\p{L}/u, M1 = /\p{M}/u, o2 = '', p1 = '', p2 = '';
+        for (var c2 of s.toLowerCase()) {
+          if (L1.test(c2) && !LN.test(p1) && !((p1 === "'" || p1 === '’') && LN.test(p2))) {
+            var u2 = Array.from(c2.toUpperCase());   // ß → Ss, a ligature → its title case, never a split surrogate
+            o2 += u2[0] + u2.slice(1).join('').toLowerCase();
+          } else o2 += c2;
+          if (!M1.test(c2)) { p2 = p1; p1 = c2; }
+        }
+        st.text = o2;
+      }
       else if (m === 3) { s = s.toLowerCase(); st.text = s.charAt(0).toUpperCase() + s.slice(1); }
       /* #966 opts4: aLtErNaTiNg (4) — lower, upper, lower… counting letters only, so a space, a digit or a line break does not break
          the beat — and sWAP cASE (5), each letter flipped. A character with no case (a digit, a symbol, an emoji) is left as it is;
@@ -4400,7 +4452,11 @@ window.FM = window.FM || {};
    * (FM.textLines records which) — a caption that stacks on top of one already showing animates in on its own
    * while the first one holds still, and its letters are staggered from its own first letter. */
   function textClocks(layer, t, lines) {
-    const whole = { t0: layer.start, t1: layer.start + layer.duration, n: 0 };
+    /* `ph`: where the ongoing presets (Wave, Jitter) are in their cycle at the clip's start — fxTimeOffset, which a split
+       and a head trim keep for every other time-driven effect (queue 823). Without it the tail half of a split Wave restarted
+       its wave at the cut and the whole word jumped (#1212). The ENTRANCE still reads t0. Caption clocks carry none. */
+    const ph = parseFloat(layer.fxTimeOffset);
+    const whole = { t0: layer.start, t1: layer.start + layer.duration, n: 0, ph: isFinite(ph) ? ph : 0 };
     const caps = layer.captions;
     if (!Array.isArray(caps) || !caps.length) return lines.map(() => whole);
     const lt = t - (layer.start || 0), live = [];
@@ -4737,11 +4793,11 @@ window.FM = window.FM || {};
       else if (preset === 'spin') { alpha = Math.min(1, p * 2); sc = Math.max(0, easeOutBack(p)); rot = (1 - pe) * -Math.PI; }
       else if (preset === 'zoom-out') { alpha = Math.min(1, p * 1.6); sc = 1 + (1 - pe) * 1.8; }
       else if (preset === 'stretch') { alpha = Math.min(1, p * 2); scx = 0.25 + 0.75 * easeOutBack(p); scy = 1.9 - 0.9 * easeOutBack(p); }
-      else if (preset === 'wave') { alpha = p; dy = Math.sin(tIn * 3.4 + gi * 0.55) * fs * 0.13; }
+      else if (preset === 'wave') { alpha = p; dy = Math.sin((tIn + (ck.ph || 0)) * 3.4 + gi * 0.55) * fs * 0.13; }
       else if (preset === 'jitter') {
         alpha = p;
         // 24 steps a second: fast enough to read as a shake, slow enough not to look like noise.
-        const step = Math.floor(tIn * 24);
+        const step = Math.floor((tIn + (ck.ph || 0)) * 24);
         dx = (hash2(gi, step) - 0.5) * fs * 0.09;
         dy = (hash2(gi + 977, step) - 0.5) * fs * 0.09;
       }
@@ -14666,8 +14722,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      kernel's: Mix (0–100 %, 100 the kernel itself, 0 the picture; NaN reads 100) times the tonal weight of Affects on the pixel's OWN
      brightness L (0–1; Darks (1 − L)², Mids 1 − (2L − 1)², Lights L², anything else 1) times 1 − Protect skin x skinW12 of the pixel's
      own colour (0–100 %; NaN reads 0). A share of exactly 1 keeps the kernel's bytes; alpha is the kernel's. Pixel by pixel on the
-     pixel alone, so a cropped plate (692) draws what the whole one draws. */
-  function tone13(d, W, H, p, t, fn, keys, range, mix, skin) {
+     pixel alone, so a cropped plate (692) draws what the whole one draws.
+     ALPHA21 (#966 opts21–23, rfx2124 H1; only the shared wrapper below passes it): where the kernel CHANGED a pixel's alpha (Glow past
+     the edges lays a halo into clear and part-clear pixels) colour and alpha are laid in together, premultiplied — alpha
+     aO + (aK − aO)·w, colour (cO·aO + (cK·aK − cO·aO)·w) / that alpha — so Mix 40 is the halo at 40 % coverage, not a darkened halo at
+     full coverage. A pixel left with no alpha is written clear (never 0 / 0). A pixel whose alpha the kernel kept takes the plain line,
+     byte for byte as before. */
+  function tone13(d, W, H, p, t, fn, keys, range, mix, skin, alpha21) {
     const m = isFinite(mix) ? (mix <= 0 ? 0 : (mix >= 100 ? 1 : mix / 100)) : 1;
     const s = isFinite(skin) ? (skin <= 0 ? 0 : (skin >= 100 ? 1 : skin / 100)) : 0;
     if (!(m > 0)) return;
@@ -14681,10 +14742,40 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (tw) { const L = (r * 0.299 + g * 0.587 + b * 0.114) / 255; w *= range === 1 ? (1 - L) * (1 - L) : (range === 2 ? 1 - (2 * L - 1) * (2 * L - 1) : L * L); }
       if (s > 0) w *= 1 - s * skinW12(r, g, b);
       if (w === 1) continue;
+      if (alpha21 && d[i + 3] !== o[i + 3]) {
+        const aO = o[i + 3], aK = d[i + 3], aN = aO + (aK - aO) * w;
+        if (!(aN > 0)) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0; continue; }
+        d[i] = (r * aO + (d[i] * aK - r * aO) * w) / aN; d[i + 1] = (g * aO + (d[i + 1] * aK - g * aO) * w) / aN; d[i + 2] = (b * aO + (d[i + 2] * aK - b * aO) * w) / aN;
+        d[i + 3] = aN;
+        continue;
+      }
       d[i] = r + (d[i] - r) * w; d[i + 1] = g + (d[i + 1] - g) * w; d[i + 2] = b + (d[i + 2] - b) * w;
     }
   }
   FM._tone13 = tone13;   // suite seam (#966 opts13)
+  /* #966 opts21 / opts22 / opts23 / opts24: Heat Map, Highlight Bloom, Shadow Bloom, Bump Map, Oil Slick, Colour Wash, Light Leak,
+     Dreamy Bloom, Corner Colours and Palette Map, laid in by Mix x (1 − Protect skin x skinW12). At Protect skin 0 and Mix 100 the
+     kernel itself runs, with every argument it was handed.
+     THE WRAPPER KEEPS THE KERNEL'S OWN ARITY (rfx2124 B1): pxToPlate reads it. A 5-argument kernel has its px params scaled to the
+     plate for it (Highlight and Shadow Bloom's Radius); a 6-argument one scales its own (Oil Slick's Blur). One fixed arity of 6 made
+     both blooms blur a reduced preview plate at the full Radius — twice the export on a half plate, the #691 bug again.
+     IT FORWARDS EVERY ARGUMENT (B2), on both paths: Heat Map reads the clip at arguments[7], so Cycle speed runs on the clip's own
+     clock, and dropping arguments 6–9 put every saved one on project time.
+     __fmKernel names the kernel for fxFillValue, which reads fallback literals off a kernel's own source, not off this wrapper (M1).
+     The final 1 asks tone13 to lay a halo the kernel drew past the layer's edges in premultiplied (ALPHA21, H1). */
+  ['thermal', 'lightglow', 'darkglow', 'bumpmap', 'iridescence', 'gradientoverlay', 'lightleak', 'softglow', 'fourcolor', 'palettemap'].forEach(type => {
+    const kernel = PIXEL_FX[type];
+    const run21 = function (self, a) {
+      const p = a[3], t = a[4];
+      const sk21 = p.skin == null ? 0 : FM.evalProp(p.skin, t), mx21 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      if (sk21 > 0 || mx21 < 100) {
+        tone13(a[0], a[1], a[2], p, t, function (d22, W22, H22, q22, t22) { const b22 = Array.prototype.slice.call(a); b22[0] = d22; b22[3] = q22; b22[4] = t22; kernel.apply(self, b22); }, ['skin', 'mix'], 0, mx21, sk21, 1); return;
+      }
+      return kernel.apply(self, a);
+    };
+    PIXEL_FX[type] = kernel.length >= 6 ? function (d, W, H, p, t, ps) { return run21(this, arguments); } : function (d, W, H, p, t) { return run21(this, arguments); };
+    PIXEL_FX[type].__fmKernel = kernel;
+  });
   /* #966 opts18 — HSL BANDS' PROTECT SKIN AND MIX. The picture is tone13's: the kernel without the two, each pixel laid in by Mix x (1 −
      Protect skin x skinW12 of its own colour). SHOW SELECTION paints the same share: the kernel's own selection (white = all of the
      band's change, the band's weight x 255) times that pixel's share, so what Protect skin and Mix hold back shows darker, and Mix 0
@@ -15261,7 +15352,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
     for (let bi = 0; bi < ops.blurs.length; bi++) {
       // the radius is in PROJECT px and the plate is at `ps` — the same conversion effectFilter does
-      const o = FM.glColor.blur(cur, W, H, ops.blurs[bi] * ps);
+      const rpx = ops.blurs[bi] * ps;
+      /* ⚠️ A BLUR THAT CANNOT DRAW IS NOT A REASON TO ABANDON THE WHOLE STACK (#1196) — queue 836's rule for a
+       * glow, for Blur. `FM.glColor.blur` refuses a radius that is not > 0.05, and the `return null` below then threw
+       * away every Grayscale, Saturation and Sepia on the layer with it: on a phone a blur typed to 0, a blur-in before
+       * its first key or Focus Pull landing on 0 drew the clip in full colour, while blur(0px) on the PC draws nothing
+       * and keeps the grade. Skip the pass. If it was the last one, `cur` already holds the graded copy.
+       * PREMULTIPLIED (#986 C24's option), because that is what ctx.filter's blur does: straight colour let every
+       * transparent neighbour pull an edge toward black, a dark ring round each blurred title, sticker or shape. */
+      if (!(rpx > 0.05)) continue;
+      const o = FM.glColor.blur(cur, W, H, rpx, { premul: true });
       if (!o) return null;
       const last = bi === ops.blurs.length - 1 && !ops.glows.length;
       if (!last) { const b2 = needB(); b2.cx.drawImage(o, 0, 0); cur = b2.cv; } else cur = o;
@@ -20392,7 +20492,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * destroyed layer. The projected box must contain the alpha box or this path is abandoned and
        * the old one runs, unchanged. */
       const _M = (layer && FM._layerCTM && scene) ? FM._layerCTM(layer, t, scene) : null;
-      const _sz = (layer && FM.layerSize) ? FM.layerSize(layer) : null;
+      // the crop at THIS frame, not the playhead's (#1213): an exported frame of a keyframed crop was masked with the box
+      // of wherever the playhead sat, so its corners came out square wherever the crop was smaller there (layerSizeAt, #986)
+      const _sz = (layer && FM.layerSize) ? layerSizeAt(layer, t) : null;
       if (_M && _sz && _sz.w > 4 && _sz.h > 4) {
         const s = ps || 1, oX = (A.__fmOX || 0), oY = (A.__fmOY || 0);
         const lw = _sz.w, lh = _sz.h;
@@ -22195,27 +22297,55 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // Media-fill pictures (a shape filled with an image), decoded lazily from the self-contained data
   // URL stashed on layer.fillImage — needs no extra IndexedDB plumbing and survives reload.
   const _fillImg = {};
+  /* queue 1009: WHICH PICTURES GO. The cache kept every fill picture for the whole session: it evicted one entry per miss,
+     only past 40, and only one whose layer was not in FM.scene, so a project with many image fills left them all decoded
+     (with their data-URL strings) after he moved to another project. Three rules now:
+       · a fill that a layer of the OPEN scene still uses is never dropped by a miss. A record is keyed by layer id, and it
+         is live while a layer of FM.scene.layers (a flat list: a group's members are in it, by parent) has that id and
+         that record's picture as its fillImage. This is the case the rule exists for: the preview draws only when asked,
+         so after a 30 s pause every fill ON SCREEN is unused for 30 s, and a new photo shape (its timeline row's thumbnail
+         misses first) would drop every other fill. The canvas, the rows and an export, which never waits for a decode,
+         would then draw the placeholder in their place (the v3.24 thrash, back by another road);
+       · every OTHER record (a deleted layer, a changed fill, a template or element thumbnail's mini scene, whose layers
+         are not in FM.scene) is dropped on a miss once more than 8 records exist and it is unused for 30 s, judged by LAST
+         USE (rec.at, stamped on every call), so a thumbnail drawn again within that time does not decode again;
+       · a project switch (FM.projects.open, next to resetMotionFlowCache) passes force: everything goes, the outgoing
+         scene's live fills included (the prune runs before that scene is cleared).
+     A dropped Image is blanked as well as forgotten, so its decode can be released at once. */
+  function liveFillIds() {
+    const live = new Set();
+    ((FM.scene && FM.scene.layers) || []).forEach(function (l) {
+      const r = l && l.fillImage ? _fillImg[l.id] : null;
+      if (r && r.src === l.fillImage) live.add(l.id);
+    });
+    return live;
+  }
+  function pruneFillImages(force) {
+    const keys = Object.keys(_fillImg);
+    if (!force && keys.length <= 8) return;
+    const now = performance.now();
+    const live = force ? null : liveFillIds();
+    keys.forEach(function (k) {
+      const r = _fillImg[k];
+      if (!force && (live.has(k) || now - (r.at || 0) < 30000)) return;
+      r.img.onload = null; r.img.onerror = null;
+      r.img.src = '';
+      delete _fillImg[k];
+    });
+  }
+  FM._pruneFillImages = pruneFillImages;
   function getFillImage(layer) {
     const src = layer.fillImage;
     if (!src) return null;
     let rec = _fillImg[layer.id];
     if (!rec || rec.src !== src) {
-      // bounded: entries were never evicted, so deleted layers / swapped fills / old projects kept
-      // their decoded Images (plus multi-MB data-URL strings) reachable for the whole session.
-      // Evict only a DEAD entry (its layer left the scene) — never keys[0], which is the next live
-      // layer about to be drawn: FIFO eviction chased the draw pointer and thrashed every fill to the
-      // blue placeholder + re-decoded every image every frame once a project had >40 media fills.
-      const keys = Object.keys(_fillImg);
-      if (keys.length > 40) {
-        const live = new Set((FM.scene && FM.scene.layers || []).map(l => l.id));   // flat array incl. group children
-        const dead = keys.find(k => !live.has(k) && k !== layer.id);
-        if (dead) delete _fillImg[dead];
-      }
-      rec = _fillImg[layer.id] = { src: src, img: new Image(), ready: false };
+      pruneFillImages(false);
+      rec = _fillImg[layer.id] = { src: src, img: new Image(), ready: false, at: 0 };
       rec.img.onload = () => { rec.ready = true; FM.requestRender(); };
       rec.img.onerror = () => { rec.failed = true; };   // corrupt data URL → placeholder, no endless retry
       rec.img.src = src;
     }
+    rec.at = performance.now();
     return rec.ready ? rec.img : null;
   }
   // Paint the CURRENT path with the layer's fill (solid / gradient / media), honouring fillOpacity
@@ -25017,6 +25147,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'boost', label: 'Colour boost', min: 0, max: 1, step: 0.02, def: 0.2 },
       { key: 'spread', label: 'Rainbow across', min: 0, max: 720, step: 5, def: 0, unit: '°', note: 'The colours turn this far from one side of the frame to the other' },
       { key: 'sangle', label: 'Rainbow angle', min: 0, max: 360, step: 1, def: 0, unit: '°', overriddenBy: 'spread', liveAbove: 0, note: '0° runs left to right, 90° top to bottom' },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'softskin', label: 'Soften Skin', desc: 'Smooths small blemishes and noise and keeps the edges sharp. It cannot find faces: on Everything it softens the whole picture, on Skin tones it follows skin-coloured pixels (and will also soften a wooden table). Brighten lifts what it smooths; Show selection shows what that is.', params: [
       /* #1116, his answer (11 Oct): "Soften Skin stronger by default" with the helper's proposal — Amount 0.85, 10 px, Keep detail
@@ -25081,6 +25213,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'gap', label: 'Gap', min: 0, max: 30, step: 1, def: 0, unit: 'px' },
       { key: 'contrast', label: 'Contrast', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'cycle', label: 'Colour swap', min: 0, max: 10, step: 0.5, def: 0, unit: '/s', note: 'The squares pass their colours along, this many times a second' },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Holds each square’s recolouring back on skin tones · the grid stays in place' },
+      { key: 'mix', label: 'Colour mix', min: 0, max: 100, step: 1, def: 100, unit: '%', note: 'How much of each square’s new colour shows over its plain picture · at 0 the grid stays, in the picture’s own colours' },
     ] },
   ];
   E1_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
@@ -25098,6 +25232,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      the peak instead of holding them. Each instant's speed takes the same floor of 0 the plain path gives it. An unkeyed Speed is the
      old product, literally, so every saved Colour Cycle draws byte for byte; Rainbow across (hueSpread966) is handed this same angle. */
   PIXEL_FX.huecycle = function (d, W, H, p, t) {
+    /* #966 opts24: keep the layer clock when tone13 runs this same kernel without the new keys. */
+    const sk24 = p.skin == null ? 0 : FM.evalProp(p.skin, t), mx24 = p.mix == null ? 100 : FM.evalProp(p.mix, t), args24 = arguments;
+    if (sk24 > 0 || mx24 < 100) {
+      tone13(d, W, H, p, t, function (a24, w24, h24, q24, t24) { PIXEL_FX.huecycle(a24, w24, h24, q24, t24, args24[5], args24[6], args24[7]); }, ['skin', 'mix'], 0, mx24, sk24); return;
+    }
     const lay = arguments[7], tl = lay ? FM.fxLocalTime(lay, t) : t;
     const speed = Math.max(0, fparam(p, 'speed', 90, t)), phase = fparam(p, 'phase', 60, t);
     const stepped = Math.round(fparam(p, 'style', 0, t)) === 1, steps = Math.max(2, Math.min(12, Math.round(fparam(p, 'steps', 6, t))));
@@ -25426,18 +25565,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.drawImage(A, bb.x, bb.y, bb.w, bb.h, x, y, w, h);
       let img; try { img = B.getImageData(x, y, w, h); } catch (e) { continue; }
       const d = img.data, m = style === 0 ? e1HueM(k * 360 / (n * n)) : null, duo = E1_DUO[k % 9], post = E1_POST[k % 9], cf = 1 + con * 0.8;
-      for (let i = 0; i < d.length; i += 4) {
-        if (d[i + 3] === 0) continue;
-        let r = (d[i] - 128) * cf + 128, g = (d[i + 1] - 128) * cf + 128, b = (d[i + 2] - 128) * cf + 128;
-        if (style === 0) { d[i] = m[0] * r + m[1] * g + m[2] * b; d[i + 1] = m[3] * r + m[4] * g + m[5] * b; d[i + 2] = m[6] * r + m[7] * g + m[8] * b; continue; }
-        let L = (0.299 * r + 0.587 * g + 0.114 * b) / 255; L = L < 0 ? 0 : L > 1 ? 1 : L;
-        if (style === 1) { d[i] = duo[0][0] + (duo[1][0] - duo[0][0]) * L; d[i + 1] = duo[0][1] + (duo[1][1] - duo[0][1]) * L; d[i + 2] = duo[0][2] + (duo[1][2] - duo[0][2]) * L; }
-        else { const c = post[L < 0.34 ? 0 : L < 0.67 ? 1 : 2]; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; }
-      }
+      /* #966 opts24: protect the resized picture in each cell, before its colours change; Mix never removes the grid. */
+      const sk24 = p.skin == null ? 0 : FM.evalProp(p.skin, t), mx24 = p.mix == null ? 100 : FM.evalProp(p.mix, t);
+      const recolour24 = function (d) {
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] === 0) continue;
+          let r = (d[i] - 128) * cf + 128, g = (d[i + 1] - 128) * cf + 128, b = (d[i + 2] - 128) * cf + 128;
+          if (style === 0) { d[i] = m[0] * r + m[1] * g + m[2] * b; d[i + 1] = m[3] * r + m[4] * g + m[5] * b; d[i + 2] = m[6] * r + m[7] * g + m[8] * b; continue; }
+          let L = (0.299 * r + 0.587 * g + 0.114 * b) / 255; L = L < 0 ? 0 : L > 1 ? 1 : L;
+          if (style === 1) { d[i] = duo[0][0] + (duo[1][0] - duo[0][0]) * L; d[i + 1] = duo[0][1] + (duo[1][1] - duo[0][1]) * L; d[i + 2] = duo[0][2] + (duo[1][2] - duo[0][2]) * L; }
+          else { const c = post[L < 0.34 ? 0 : L < 0.67 ? 1 : 2]; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; }
+        }
+      };
+      if (sk24 > 0 || mx24 < 100) tone13(d, w, h, p, t, recolour24, ['skin', 'mix'], 0, mx24, sk24);
+      else recolour24(d);
       B.putImageData(img, x, y);
     }
     B.restore();
   };
+  FM._popArt24 = CANVAS_FX.popart;   // suite seam: the cell recolour through its real canvas pass
   /* #966 opts5 — POP ART'S COLOUR SWAP, as a whole number of swaps since the clip began: rate x the clip's own time `tl`, or for a
      keyframed rate the integral of it from the clip's start (FM.integrateCount, the F1 rule: easing the rate down never swaps
      backwards or re-times the past). The rate is held to 0–10 a second; nothing before the clip starts. */
@@ -29724,6 +29870,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   function collectGroupUnits(scene, t) {
     let map = null;
     const units = [];
+    const childrenOf = new Map(), index = new Map(), byId = {};
+    scene.layers.forEach((l, i) => {
+      byId[l.id] = l;
+      if (!index.has(l)) index.set(l, i);
+      if (l.parent !== l.parent) return;   // NaN never matched the old strict parent comparison
+      if (!childrenOf.has(l.parent)) childrenOf.set(l.parent, []);
+      childrenOf.get(l.parent).push(l);
+    });
     for (const g of scene.layers) {
       // bughunt4 #1: a tilted group is a unit too, so its flat picture can be leant (the exported unit test the other editor reads is unchanged)
       const tilts = g.type === 'group' && groupTilts(g, t);
@@ -29738,7 +29892,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // exactly as unopenable as before the fix. A cycle must degrade, never take the app with it.
         if (seen.has(gid)) return;
         seen.add(gid);
-        scene.layers.forEach(l => { if (l.parent === gid) { members.push(l); if (l.type === 'group') walk(l.id); } });
+        const children = childrenOf.get(gid) || [];
+        children.forEach(l => { members.push(l); if (l.type === 'group') walk(l.id); });
       })(g.id);
       const drawable = members.filter(l => l.type !== 'group' && l.type !== 'camera' && l.type !== 'adjustment' && l.type !== 'null');
       // bughunt4 #2: opacity is the group's only look and a member reads the frame below → pass-through (drawPassUnit).
@@ -29749,8 +29904,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // masking needs a mask + at least one clipped member; effects-only units work from 1 member
       let maskId = null, maskLin = null, maskSet = null;
       if (g.maskGroup && drawable.length >= 2) {
-        let mask = drawable[0], mi = scene.layers.indexOf(drawable[0]);
-        drawable.forEach(l => { const idx = scene.layers.indexOf(l); if (idx < mi) { mi = idx; mask = l; } });
+        let mask = drawable[0], mi = index.get(drawable[0]);
+        drawable.forEach(l => { const idx = index.get(l); if (idx < mi) { mi = idx; mask = l; } });
         /* bughunt4 #7: THE MASK IS THE TOP MEMBER, AND THAT MEMBER MAY BE A GROUP. `members` is the recursive walk and `drawable`
            drops every group, so the top-most LEAF above was the mask even when it sat inside a nested group: that group's other
            pieces were drawn as clipped content (a three-piece mask revealed the photo through its first piece only), and a styled
@@ -29796,8 +29951,6 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * Depth fixes both, and is also the plate index. Two units at the SAME depth are never alive at
      * once — a sibling is fully flattened and blitted before the next one starts — so a plate per
      * depth is exactly enough, and needs no counter the way _cfPool and _pfPool do. */
-    const byId = {};
-    scene.layers.forEach(l => { byId[l.id] = l; });
     const unitByGroup = {};
     units.forEach(u => { unitByGroup[u.group.id] = u; });
     units.forEach(u => {
@@ -29826,6 +29979,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     });
     return map;
   }
+  FM._collectGroupUnits = collectGroupUnits;   // suite seam (#1008)
   const _mgPool = [];   // one { A, B } per NESTING DEPTH — see collectGroupUnits for why depth is the right index
   /* Flatten a group unit into the `_flat` proxy that carries the group's own effects/opacity/blend.
    * Split out of drawGroupUnit so the backdrop pass can reach a fill that lives on the GROUP: that
@@ -30415,7 +30569,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
     // GROUP units (masking / effects / opacity / blend): members composite as ONE flattened unit,
     // drawn at the z-slot of the group's bottom-most member so stacking stays correct.
-    const memberToUnit = collectGroupUnits(scene, t);
+    const memberToUnit = FM._collectGroupUnits(scene, t);
     const soloActive = scene.layers.some(l => l.solo);   // if any layer is soloed, only draw soloed ones
     /* ISOLATE — a VIEW-ONLY override driven by the ⧉ layers button. Ezra: "make sure you dont actually
        make it move on the timeline at all, this shouldnt change anything but just be its own little
@@ -30461,6 +30615,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       while (u && !_isoSet.has(u.group.id) && n++ < 64) u = u.childOwner && u.childOwner[id];
       return (u && _isoSet.has(u.group.id)) ? u : null;
     };
+    /* …AND SOLO GETS THE SAME RULE (#1201). A soloed member of a styled group reached its unit, which draws EVERY member: the
+       export card said "Only the Title layer" and the file held the photo beside it too, faded or shadowed as the group is, its video
+       playing with no sound. A member draws through a unit only when that unit's group is itself soloed (exportSoloPrep solos a
+       group's descendants, so exporting a styled GROUP still draws it as its unit); else it draws on its own, without the group's look. */
+    const _soloUnit = function (id) {
+      let u = memberToUnit && memberToUnit[id], n = 0;
+      while (u && !u.group.solo && n++ < 64) u = u.childOwner && u.childOwner[id];
+      return (u && u.group.solo) ? u : null;
+    };
     const _isoLift = function (L) {
       const own = memberToUnit && memberToUnit[L.id];
       return _isoSet.has(L.id) && !(own && !_isoSet.has(own.group.id));
@@ -30479,7 +30642,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (soloActive && !L.solo) return null;
       if (_iso && _iso.mode === 1 && !_isoSet.has(L.id)) return null;
       if (L.type === 'camera' || L.type === 'adjustment' || L.type === 'null') return null;
-      const unit = memberToUnit && ((_iso && _iso.mode === 1) ? _isoUnit(L.id) : memberToUnit[L.id]);   // bughunt4 #9: as the loop dispatches
+      const unit = memberToUnit && ((_iso && _iso.mode === 1) ? _isoUnit(L.id) : soloActive ? _soloUnit(L.id) : memberToUnit[L.id]);   // bughunt4 #9 / #1201: as the loop dispatches
       if (unit) {
         /* A unit draws as ONE flattened plate, so there are two fills to find here and they are
          * built from different pixels: the GROUP's own, which needs the unit flattened first, and
@@ -30509,7 +30672,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (_iso && _iso.mode === 1 && !_isoSet.has(L.id)) continue;   // isolate: this layer alone (a group: with its members)
       if (_isoTop && _isoLift(L)) continue;                          // …drawn after the loop instead
       if (L.type === 'camera') continue;   // the camera drives the composite; it is never rasterized
-      const unit = memberToUnit && ((_iso && _iso.mode === 1) ? _isoUnit(L.id) : memberToUnit[L.id]);
+      const unit = memberToUnit && ((_iso && _iso.mode === 1) ? _isoUnit(L.id) : soloActive ? _soloUnit(L.id) : memberToUnit[L.id]);
       if (unit) { if (!unit.drawn) { unit.drawn = true; drawGroupUnit(target, unit, t, scene); } continue; }
       if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(target, L, t, scene); }
       else {
@@ -30701,6 +30864,32 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        line, as one wide letter always has. Plain text is one grapheme per code unit, so every ASCII line breaks exactly
        where it did; the 1-code-unit test first keeps that common case from building a grapheme list at all. */
     const chop = s => {
+      /* #1048: Canvas widths need not be monotonic (kerning or negative letter spacing). Keep the old
+         loop, including its whole-remainder-fits check, exactly for remainders under 512 characters
+         (trailing spaces not counted: the while below decides, the if is only a cheap gate), covering
+         ordinary captions, titles and paragraphs. Only longer runs use a binary search for
+         the longest fitting prefix; a pathological font may cut those one character differently.
+         Exponentially bracket each cut so we never measure the whole long remainder per line. Keep
+         cuts on the old loop's grapheme boundaries; do not clamp or discard any of the text. */
+      if (s.length >= 512) {
+        const solid = trim(s), tail = s.slice(solid.length), gs = graphemes(solid), ends = [0];
+        gs.forEach(g => ends.push(ends[ends.length - 1] + g.length));
+        let at = 0;
+        while (solid.length - ends[at] >= 512 && at < gs.length - 1) {
+          const fitsCount = n => fits(solid.slice(ends[at], ends[at + n]));
+          const left = gs.length - at;
+          let lo = 1, hi = 2;
+          while (hi < left && fitsCount(hi)) { lo = hi; hi = Math.min(left, hi * 2); }
+          if (hi === left && fitsCount(hi)) break;
+          while (lo + 1 < hi) {
+            const mid = Math.floor((lo + hi) / 2);
+            if (fitsCount(mid)) lo = mid; else hi = mid;
+          }
+          out.push(solid.slice(ends[at], ends[at + lo]));
+          at += lo;
+        }
+        s = solid.slice(ends[at]) + tail;
+      }
       while (trim(s).length > 1 && !fits(trim(s))) {
         const solid = trim(s), gs = graphemes(solid);
         if (gs.length < 2) break;

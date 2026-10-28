@@ -1581,7 +1581,7 @@ window.FM = window.FM || {};
        with its params, #482 15.2). Strength stays his: it is the one control the row is about, and plain Reset puts it back. */
     const lookId = (FM.isFxContainer && FM.isFxContainer(fx) && FM.filters && FM.filters.idOfInstance) ? FM.filters.idOfInstance(fx) : null;
     if (lookId) items.splice(1, 0, { label: 'Reset to original look', action: () => {
-      const fresh = FM.filters.makeInstance(lookId);
+      const fresh = FM.filters.makeInstance(lookId, layer.start || 0);   // his saved look's keys on THIS clip's clock (#1210)
       const fitted = fresh ? FM.fxRegistry.fitToLayer(fresh, layer) : null;
       const nm = fx.name || (FM.filters.get(lookId) || {}).name || 'filter';
       if (!fitted || !Array.isArray(fitted.effects) || !fitted.effects.length) { if (FM.toast) FM.toast('Couldn’t reset “' + nm + '” — its look does not suit this layer', 2200); return; }
@@ -2290,7 +2290,7 @@ window.FM = window.FM || {};
     const out = [];
     if (!L || !FM.filters || !FM.filters.makeInstance) return out;
     _fltPicks.forEach(id => {
-      const box = FM.filters.makeInstance(id);
+      const box = FM.filters.makeInstance(id, L.start || 0);   // on the previewed clip's clock, as Add lands it (#1210)
       const fitted = box ? FM.fxRegistry.fitToLayer(box, L) : null;
       if (fitted) out.push(atStrength(fitted));
     });
@@ -2338,7 +2338,7 @@ window.FM = window.FM || {};
       const L = onto || layer;
       const f = FM.filters.get(id);
       if (!f) return { ok: false, why: 'gone' };
-      const box = FM.filters.makeInstance(id);
+      const box = FM.filters.makeInstance(id, L.start || 0);   // its keys start with the clip it lands on (#1210)
       if (!box) return { ok: false, why: 'unavailable', name: (f && f.name) || id };
       const fitted = FM.fxRegistry.fitToLayer(box, L);
       if (!fitted) return { ok: false, why: 'unsuited', name: f.name };
@@ -3236,6 +3236,8 @@ window.FM = window.FM || {};
     if (fx.type === 'hslmixer' && ((q.skin != null && q.skin !== 0) || (q.mix != null && q.mix !== 100))) return null;
     // #966 opts20: skin protection can hold the tones back even when the colour has room for them
     if (fx.type === 'splittone' && q.skin != null && q.skin !== 0) return null;
+    // #966 opts21: the glow may be held back even when there is a bright source
+    if (fx.type === 'lightglow' && ((q.skin != null && q.skin !== 0) || (q.mix != null && q.mix !== 100))) return null;
     return NOOP_WHY[fx.type];
   }
   FM._noopWhy20 = noopWhy;   // suite seam (#966 opts20)

@@ -664,6 +664,20 @@ window.FM = window.FM || {};
        difference into fix ops. Never sanitize live objects — storage's sanitizers REASSIGN effects,
        masks, audioFx, behaviors and kf, which detaches every reference the app is holding (§11.2). */
     function applyAndFix(ops, m, rejOut, indexOf, resyncOut) {
+      /* Keep the pre-tx layers until every invariant has succeeded. Structural repair can
+         touch neighbours too; ordinary edits only need copies of the layers they name. */
+      const beforeOrder = Array.isArray(base.layers) ? base.layers.slice() : [];
+      const beforeLayers = Object.create(null);
+      const structuralTx = ops.some(function (op) {
+        return op.o === 'li' || op.o === 'lr' || op.o === 'mv' ||
+          (op.p && op.p[0] === 'L' && (op.p.length <= 2 || op.p[op.p.length - 1] === 'parent'));
+      });
+      beforeOrder.forEach(function (l) {
+        if (!l) return;
+        if (structuralTx || ops.some(function (op) { return layerOf(op) === l.id; })) beforeLayers[l.id] = clone(l);
+      });
+      const beforeProject = ops.some(function (op) { return op.p && op.p[0] === 'P'; }) ? clone(base.project) : null;
+      const beforeGone = new Map(gone), beforeNotes = new Map(goneNotes);
       const accepted = [];
       const touched = Object.create(null);
       let projectTouched = false, structural = false;
@@ -680,6 +694,11 @@ window.FM = window.FM || {};
         cBytes += add;
         return false;
       }
+      /* queue 1002: the op loop AND the invariants run inside one try, so a throw anywhere after the snapshot above puts
+         base back whole. `rej0` marks where this tx's own refusals start: an op the loop already refused keeps its
+         real reason ('limit', 'gone'), because the guest's onClash counts refusals BY REASON. */
+      const rej0 = rejOut.length;
+      try {
       for (let i = 0; i < ops.length; i++) {
         /* ⚠️ A GUEST'S WHOLE COMMENT LIST, WHERE BASE ALREADY HAS ONE, BECOMES INSERTS (S7 review). The role
            check ran against the PRE-tx base, so two `s P/comments` in one tx both passed it as "the first
@@ -738,7 +757,21 @@ window.FM = window.FM || {};
            Any write AT a layer is treated as structural; the repair is idempotent and costs one clone. */
         if (op.p && op.p[0] === 'L' && op.p.length <= 2) structural = true;
       }
-      return { accepted: accepted, fix: invariantFix(touched, projectTouched, structural) };
+        return { accepted: accepted, fix: invariantFix(touched, projectTouched, structural) };
+      } catch (e) {
+        /* Never silent: a real invariant bug has to reach `diag` (the rule orderFix states). */
+        note({ t: now(), what: 'invariant-throw', err: String(e && e.message || e).slice(0, 200) });
+        if (Array.isArray(base.layers)) {
+          base.layers.splice(0, base.layers.length, ...beforeOrder.map(function (l) { return l && beforeLayers[l.id] || l; }));
+        }
+        if (beforeProject) base.project = beforeProject;
+        gone.clear(); beforeGone.forEach(function (v, k) { gone.set(k, v); });
+        goneNotes.clear(); beforeNotes.forEach(function (v, k) { goneNotes.set(k, v); });
+        const refused = Object.create(null);
+        for (let i = rej0; i < rejOut.length; i++) refused[rejOut[i][0]] = 1;
+        for (let i = 0; i < ops.length; i++) if (!refused[indexOf(i)]) rejOut.push([indexOf(i), 'bad']);
+        return { accepted: [], fix: [] };
+      }
     }
 
     function invariantFix(touched, projectTouched, structural) {

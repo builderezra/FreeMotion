@@ -225,3 +225,11 @@
 2026-10-28 05:12	WEAK	1188 the size read of a stored original is bounded: a header that never answers gives up at its deadline, a broken file answers null, a real photo gives its size	setup: FM._storedSize is not exposed
 2026-10-28 08:26	WEAK	1188 a released clip replaced at another resolution keeps the in-memory control’s on-screen size, fitted from its stored original when nothing of it is in memory	setup: FM._storedSize (the bounded size read) is not exposed
 2026-10-28 08:26	WEAK	1188 the size read of a stored original is bounded: a header that never answers gives up at its deadline, a broken file answers null, a real photo gives its size	setup: FM._storedSize is not exposed
+2026-10-28 11:59	WEAK	1008 one pass indexes 250 groups and a 50-deep nest	collector seam is missing
+2026-10-28 11:59	WEAK	1008 indexed units equal the old oracle for adversarial scenes	collector seam is missing
+2026-10-28 11:59	WEAK	1008 nested render pixels equal the old collector with one scene scan	collector seam is missing
+2026-10-28 11:59	WEAK	1003 a Duplicate refused at its own document write says space when there was no room, failed otherwise, and leaves no card	FM.projects.lastDuplicateWhy is not a function
+2026-10-28 15:17	WEAK	1008 one pass indexes 250 groups and a 50-deep nest	collector seam is missing
+2026-10-28 15:17	WEAK	1008 indexed units equal the old oracle for adversarial scenes	collector seam is missing
+2026-10-28 15:17	WEAK	1008 nested render pixels equal the old collector with one scene scan	collector seam is missing
+2026-10-28 15:17	WEAK	1003 a Duplicate refused at its own document write says space when there was no room, failed otherwise, and leaves no card	FM.projects.lastDuplicateWhy is not a function

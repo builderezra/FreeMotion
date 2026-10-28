@@ -174,6 +174,15 @@ window.FM = window.FM || {};
       return layer;
     }
 
+    /* 1046: ONE BATCH IS ONE UNDO STEP, WHOEVER CALLS. deleteLayer goes through FM.deleteLayer, which commits for itself, and
+       of this file's callers only the Assistant (js/ai-chat.js applyTurn) muted around it: a Director build, a re-roll and
+       Refine (js/ai.js) did not. So a Refine of [change A, remove B, change C] was two steps, and the first Undo gave back C
+       alone, with B still gone and A still changed. Muted here around the whole loop, so no caller can forget; the caller's
+       own commit closes the step. history.js counts mutes, so this nests inside applyTurn's. Not re-indented, so the loop
+       keeps its history. */
+    var hist = FM.history;
+    if (hist && hist.mute) hist.mute();
+    try {
     for (var i = 0; i < (ops || []).length; i++) {
       var o = ops[i];
       if (!o || typeof o !== 'object' || FM.AI_OP_NAMES.indexOf(o.op) < 0) { drop(o && o.op, o && o.ref, 'unknown op'); continue; }
@@ -504,6 +513,7 @@ window.FM = window.FM || {};
         drop(o.op, ref, 'exception: ' + (e && e.message));
       }
     }
+    } finally { if (hist && hist.unmute) hist.unmute(); }   // 1046: see the mute above the loop
 
     return { appliedCount: applied, dropped: dropped, results: results };
   }

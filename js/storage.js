@@ -223,8 +223,13 @@ window.FM = window.FM || {};
   // JSON can outgrow the ~5MB quota on a heavy project; silently swallowing it stops persistence
   // with no sign, and a reload then reverts to the last write that fit. (#15)
   let _quotaWarned = false;
+  /* queue 1003: how many writes have been refused for SPACE this session, counted before any latch. duplicateFrom reads
+     it across its own writes, so Home can say "storage is full" only when that was the cause, not for a failed read. */
+  let _quotaHits = 0;
+  let _dupWhy = null;   // see FM.projects.lastDuplicateWhy
   function warnQuota(e) {
     const quota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
+    if (quota) _quotaHits++;
     if (quota && !_quotaWarned) { _quotaWarned = true; if (FM.toast) FM.toast('Storage full — autosave paused. Use ⚙ → Save project file to keep your work.', 5000); }
   }
 
@@ -291,7 +296,7 @@ window.FM = window.FM || {};
    * next healthy boot sweep deleted the file as well. readMedia(key, { strict: true }) is the same read, through the
    * same pointer rule, except that it REJECTS when the store cannot be opened, the transaction cannot be made or the
    * request fails, and resolves null only when nothing is stored (a pointer whose shared copy is gone still reads as
-   * nothing, as above). Only use() asks for it; every other reader keeps the quiet null it was written against. */
+   * nothing, as above). use() and project duplication ask for it; ordinary readers keep their quiet null. */
   function idbGetChecked(db, key) {
     return new Promise((res, rej) => {
       const tx = db.transaction(STORE, 'readonly');   // a connection that is closing throws here, and the throw rejects
@@ -425,6 +430,7 @@ window.FM = window.FM || {};
   function storeWrote() { _storeWarned.clear(); }
   function warnStore(e, key) {
     const quota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
+    if (quota) _quotaHits++;
     if (quietKey(key)) return;
     const what = key == null ? '' : String(key);
     if (_storeWarned.has(what) || !FM.toast) return;
@@ -1929,6 +1935,8 @@ window.FM = window.FM || {};
            lost Favourite for good. An id is a short plain word (a library id, or a saved preset's `u…`) — nothing else. */
         if (typeof f.fid === 'string' && f.fid.length <= 64 && /^[A-Za-z0-9_-]+$/.test(f.fid)) out.fid = f.fid;
       }
+      // the clip menu's own Unsharp Mask (app.js improveQuality, #1209) — only exactly 1, only on that effect
+      if (f.iq === 1 && f.type === 'unsharpmask') out.iq = 1;
       return out;
     };
     l.effects = l.effects.slice(0, FX_MAX).map(f => sane(f, 0)).filter(Boolean);
@@ -1962,6 +1970,9 @@ window.FM = window.FM || {};
     if (l.labelColor != null && !safeColor(l.labelColor)) delete l.labelColor;   // → transparent stripe
     if (l.clipColor != null && !safeColor(l.clipColor)) delete l.clipColor;      // → default clip colour
     if (l.clipColorSet != null) l.clipColorSet = !!l.clipColorSet;               // deliberate-choice flag: boolean only
+    const gradient = l.fillGradient;
+    if (!gradient || typeof gradient !== 'object' || Array.isArray(gradient) ||
+        (Object.getPrototypeOf(gradient) !== Object.prototype && Object.getPrototypeOf(gradient) !== null)) delete l.fillGradient;
     if (l.fillGradient) {
       if (l.fillGradient.c0 != null && !safeColor(l.fillGradient.c0)) l.fillGradient.c0 = '#3a7bd5';
       if (l.fillGradient.c1 != null && !safeColor(l.fillGradient.c1)) l.fillGradient.c1 = '#0a0c10';
@@ -3399,6 +3410,7 @@ window.FM = window.FM || {};
       // the store grew for the whole session and a re-used id could inherit a stranger's frame.
       if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
       if (FM.releaseTiltPools) FM.releaseTiltPools();   // bughunt8 #9: the outgoing project's tilt plates go back (compositor.js)
+      if (FM._pruneFillImages) FM._pruneFillImages(true);   // queue 1009: the outgoing project's fill pictures (compositor.js getFillImage)
       if (FM._resetPlayQuality) FM._resetPlayQuality();   // queue 690: the playback quality learned on the outgoing project is not evidence about this one
       if (FM.viewport) FM.viewport.reset();   // fresh project → fresh view (preview pan/zoom is never saved)
       FM.scene.selectedId = null; FM.scene.selectedIds = []; FM.scene.layers = []; FM.time = 0;
@@ -3486,6 +3498,7 @@ window.FM = window.FM || {};
        a clip that could not be copied, take the half-copy back out (every key below is one this call
        minted a moment ago — nothing of his is touched) and say false. */
     async duplicate(id) {
+      _dupWhy = null;
       /* bughunt8 #2b: "the OPEN project" is THIS tab's (tabId), not the shared fm.currentProject a second tab moves: with another tab
          on a project of its own, Duplicate here skipped the flush and the copy missed the last 600 ms of edits. */
       if (id === tabId() && FM.storage && FM.storage.flushSync) FM.storage.flushSync();   // duplicating the OPEN project must copy the last 600ms of edits, not the stale doc
@@ -3498,6 +3511,11 @@ window.FM = window.FM || {};
          rollback rules to keep in step, and those were paid for once already. */
       return (await this.duplicateFrom(doc, { name: ((this.list().find(p => p.id === id) || {}).name || 'Project') + ' copy', srcIds: [id] })) !== null;
     },
+    /* queue 1003: WHY the last duplicate made no copy, beside its true/false (915.3 and the bulk bar read that boolean, so
+       it stays a boolean). 'space' when a write was refused for room, 'failed' for anything else (a clip that could not be
+       read), null after a whole copy. Home's toast blames storage only on 'space'. A cause still PENDING ({ q0 }, the doc
+       write's — see duplicateFrom) is settled here, by the same rule failWhy uses. */
+    lastDuplicateWhy() { return _dupWhy && typeof _dupWhy === 'object' ? (_quotaHits !== _dupWhy.q0 ? 'space' : 'failed') : _dupWhy; },
     /* Make a NEW project out of a document — fresh project id, fresh layer ids, its media copied under
        those ids, and the whole half-copy taken back out if any part of it fails (queue 915.3). Returns
        the new project id, or null.
@@ -3509,6 +3527,9 @@ window.FM = window.FM || {};
        hands over a live one — reIdLayers rewrites layer ids in place, and doing that to the caller's
        object would re-id the project he is still editing. */
     async duplicateFrom(doc, opts) {
+      _dupWhy = null;
+      const q0 = _quotaHits;
+      const failWhy = () => { _dupWhy = _quotaHits !== q0 ? 'space' : 'failed'; };
       opts = opts || {};
       if (!doc || !doc.project) return null;
       /* #1091: a WATCH-ONLY copy (a Viewer's or Commenter's while the owner has exporting off) is nobody's to copy. This
@@ -3528,9 +3549,14 @@ window.FM = window.FM || {};
          Home both cards read X — the copy he had just changed and the original, indistinguishable, which is exactly
          when the wrong one gets deleted. Every caller's name (Duplicate, bulk Duplicate, collab's "my version", a
          restored checkpoint, a detached linked copy) is the name the new project should carry everywhere. */
+      /* queue 1003: the doc write's own line is the Simple editor's (2.4b), which the Full-unchanged lock keeps as it is, so
+         its `return null` cannot call failWhy. Its cause stands PENDING across it — lastDuplicateWhy settles it by failWhy's
+         rule, any write refused for room since q0 — and is cleared the moment the doc lands. */
+      _dupWhy = { q0: q0 };
       const projCopy = Object.assign(JSON.parse(JSON.stringify(doc.project)), { name: name });
       if (FM.remapCommentPins) FM.remapCommentPins(projCopy, doc.layers || [], re.map);   // 2.4b: anchored comment pins follow their layers
       if (!writeJSON('fm.proj.' + nid, { project: projCopy, layers: re.layers, selectedId: null, selectedIds: [] })) return null;
+      _dupWhy = null;   // the doc landed: any later failure names its own cause (failWhy)
       FM._mediaBusy = (FM._mediaBusy || 0) + 1;
       const done = (ok) => { FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1); return ok ? nid : null; };
       // index the copy BEFORE the (slow, awaited) media copies — killing the tab mid-copy used to
@@ -3542,17 +3568,18 @@ window.FM = window.FM || {};
          member, each displacing the other. detachLinked stripped it afterwards; every copy is made here. */
       delete card.collab;
       idx.unshift(card);
-      if (!this.saveIndex(idx)) { try { localStorage.removeItem('fm.proj.' + nid); } catch (e) {} return done(false); }
+      if (!this.saveIndex(idx)) { failWhy(); try { localStorage.removeItem('fm.proj.' + nid); } catch (e) {} return done(false); }
       // duplicate the media blobs under the new layer ids so the copy survives deleting the original
       const wrote = [];
       let whole = true;
+      let copyDB = null;
       try {
-        const db = await openDB();
+        const db = copyDB = await openDB();
         for (const oldId of Object.keys(re.map)) {
           /* queue 915 phase A: RESOLVED, so a reused clip's pointer is copied as the FILE — this release writes
              no pointers, and a whole copy is one every older build can read. A pointer at a shared copy that is
              gone answers null, like a clip with no record, and is not copied onward. */
-          const rec = await idbGetMedia(db, oldId);
+          const rec = await idbGetMedia(db, oldId, idbGetChecked);
           if (!rec) continue;
           /* queue 915 phase B: still the FILE, deliberately — a project copy is a whole copy any build can read,
              and it is a rare act next to a tile tap. The `ref` the reader now reports is left behind, so the copy
@@ -3562,9 +3589,10 @@ window.FM = window.FM || {};
           wrote.push(re.map[oldId]);
         }
         if (whole && id) { const th = await idbGet(db, 'thumb:' + id); if (th) { await idbPut(db, 'thumb:' + nid, th); _thumbCache.set(nid, th); } }   // copy the card thumbnail too (cosmetic — not part of "whole")
-        db.close();
       } catch (e) { whole = false; }
+      finally { if (copyDB) { try { copyDB.close(); } catch (e) {} } }
       if (whole) return done(true);
+      failWhy();
       try { const db = await openDB(); for (const k of wrote) await idbDel(db, k); await delThumb(db, nid); db.close(); } catch (e) {}
       try { localStorage.removeItem('fm.proj.' + nid); } catch (e) {}
       this.saveIndex(this.list().filter(p => p.id !== nid));

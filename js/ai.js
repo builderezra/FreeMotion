@@ -193,6 +193,17 @@ window.FM = window.FM || {};
    * before he left was saved with that project when he left it (projects.open flushes first). */
   function openId() { return FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null; }
   function leftSince(pid) { return pid != null && openId() !== pid; }
+  /* 1046: what a Director build can change — every layer and the project — leaving out the brief it only records (aiIntent)
+     and the runtime `_` flags snapshots never hold. A cancelled build used to commit only when the layer COUNT moved, which
+     was safe only while a deleteLayer op committed for itself; now that applyOps is muted, a build stopped after removing one
+     layer and adding one (or after only changing some) would leave its work in no step at all, to be taken back by the Undo
+     of whatever he did next. Compared against the start of the build instead, so it commits whenever the scene moved, and a
+     build stopped before it changed anything still adds no step he cannot see. */
+  function builtDoc() {
+    try {
+      return JSON.stringify([FM.scene.layers, FM.scene.project], function (k, v) { return (k === 'aiIntent' || (k && k.charAt(0) === '_')) ? undefined : v; });
+    } catch (e) { return 'unreadable ' + Date.now() + Math.random(); }
+  }
 
   /* ═══ ASPECT ON AUTO NEVER RESHAPES A PROJECT THAT ALREADY HAS SOMETHING IN IT (queue 690, hunt d) ═══════════════════
    * The Director builds into the project he has open — it is handed his media and told not to recreate it — but with the
@@ -224,6 +235,7 @@ window.FM = window.FM || {};
     P.reset();
     var refMap = {};
     var beforeLen = FM.scene.layers.length;
+    var docWas = builtDoc();   // 1046: the cancel path below commits when the scene moved, not only when the layer count did
     var mctx = { prompt: prompt, chips: chips };
     var home = openId(), homeName = (FM.scene.project && FM.scene.project.name) || 'Untitled';   // queue 690
     // queue 690 (hunt d): the canvas he already has — see sizeKept above
@@ -344,7 +356,7 @@ window.FM = window.FM || {};
         return { error: err, left: true };
       }
       // commit whatever applied so the user keeps it (cancel = keep)
-      if (FM.scene.layers.length !== beforeLen) { FM.refreshAll(); if (FM.history) FM.history.commit(); }
+      if (FM.scene.layers.length !== beforeLen || builtDoc() !== docWas) { FM.refreshAll(); if (FM.history) FM.history.commit(); }
       if (err && err.cancelled) { P.done({ cancelled: true, layersAdded: FM.scene.layers.length - beforeLen }); }
       else { P.error((err && err.message) || 'Something went wrong'); }
       return { error: err };

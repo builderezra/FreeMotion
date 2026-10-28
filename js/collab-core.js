@@ -179,7 +179,12 @@ window.FM = window.FM || {};
      the plain exposure's, not its channel gaps, so a rev-38 build draws an Exposure with Keep colour above 0 differently. Every
      default draws what the effect drew before, but a rev-38 sanitiser drops the new keys, so the two would normalise one project
      differently. */
-  C.SCHEMA_REV = 39;
+  /* Rev 40 (v18.11, #966 idle work rounds twenty-one to twenty-four): new controls on twelve existing effects, each a `skin`
+     (Protect skin 0 to 100, default 0) and a `mix` (Mix 0 to 100, default 100; Colour mix on Pop Art): Heat Map, Highlight Bloom,
+     Shadow Bloom, Bump Map, Oil Slick, Colour Wash, Light Leak, Dreamy Bloom, Corner Colours, Palette Map, Colour Cycle and Pop
+     Art. Every default draws what the effect drew before, but a rev-39 sanitiser drops the new keys, so the two would normalise
+     one project differently. */
+  C.SCHEMA_REV = 40;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -418,7 +423,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =424103012518769;   // SCHEMA_REV 39 (v18.10, #966 round twenty): three new effect params on Split Toning, Tint and Faded Film, and Exposure's Keep colour re-drawn. Pinned 28 Oct with fp.js at rev 39; before: 1719698363167737 at rev 38.
+  C.SCHEMA_FP =6290761865100751;   // SCHEMA_REV 40 (v18.11, #966 rounds twenty-one to twenty-four): twenty-four new effect params on twelve effects. Pinned 28 Oct with fp.js at rev 40; before: 424103012518769 at rev 39.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════

@@ -530,6 +530,12 @@ window.FM = window.FM || {};
     /* In tap order, and quietly — addEffect closes the browser and jumps the inspector on its own,
        which is right for one tap and wrong nine times in a row. */
     let added = 0;
+    /* 1047: ONE ADD IS ONE UNDO STEP. Mask (addMaskFromBrowser) commits even on this quiet path, so Mask picked FIRST and,
+       say, Gaussian Blur after it made two steps: the first Undo took back the Blur and left the Mask (Blur first, then Mask,
+       happened to be one, because the Mask's commit then held both). Muted around every add, so the commit below is the
+       only one; unmuted in a finally, so a throw cannot leave history off. Not re-indented, so the loop keeps its history. */
+    if (FM.history && FM.history.mute) FM.history.mute();   // 1047
+    try {
     list.forEach((id, i) => {
       /* A pseudo-tile is not an effect instance, so it cannot go through addEffect — it changes the
          LAYER (a mask, or the object motion-blur flag). Routed by the same table the tiles are built
@@ -540,6 +546,7 @@ window.FM = window.FM || {};
     });
     // …and the preset he tapped last lands last, numbered after his picks the way it was chosen (queue 690).
     if (tail && addEffect(tail.id, tail.preset || null, true)) added++;
+    } finally { if (FM.history && FM.history.unmute) FM.history.unmute(); }   // 1047: see the mute above the loop
     FM.fxBrowser.close();
     if (FM.inspector) { if (FM.inspector.openCategory) FM.inspector.openCategory('effects'); else FM.inspector.refresh(); }
     if (FM.refreshAll) FM.refreshAll();

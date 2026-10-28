@@ -5875,7 +5875,7 @@ window.FM = window.FM || {};
     // is what actually gets exported — not the on-screen preview, which is a scaled-down view of it.
     const stretch = Math.max(P.width / sw, P.height / sh);
     layer.effects = layer.effects || [];
-    const already = layer.effects.find(e => e && e.type === 'unsharpmask' && e._iq);
+    const already = layer.effects.find(e => e && e.type === 'unsharpmask' && e.iq === 1);
     if (already) {
       /* Toggle, not stack. Pressing it twice used to be the obvious way to "improve it more", and two
        * unsharp masks on one clip is a halo, not detail. */
@@ -5894,7 +5894,10 @@ window.FM = window.FM || {};
      * amplifies the compression blocks. */
     const k = Math.max(1, Math.min(4, stretch));
     inst.params = { amount: +(0.5 + 0.35 * (k - 1)).toFixed(2), radius: Math.max(1, Math.min(6, Math.round(k * 1.5))) };
-    inst._iq = 1;                       // so the toggle above can find the one WE added
+    /* So the toggle above can find the one WE added. A SAVED key, kept by storage.js's effect whitelist (#1209):
+       it was `_iq`, and snap(), save and clone all strip a leading underscore, so after any undo, redo, duplicate or
+       reload the menu offered Sharpen again and a second press stacked a second Unsharp Mask. */
+    inst.iq = 1;
     layer.effects.push(inst);
     if (FM.timeline) FM.timeline.rebuild();
     if (FM.inspector) FM.inspector.refresh();
@@ -5939,7 +5942,7 @@ window.FM = window.FM || {};
          promises invented pixels; this sharpens what is there when the clip is being stretched. The
          label is the first place to be honest, and the toast is the second. */
       {
-        const on = (layer.effects || []).some(e => e && e.type === 'unsharpmask' && e._iq);
+        const on = (layer.effects || []).some(e => e && e.type === 'unsharpmask' && e.iq === 1);
         items.push({ label: on ? 'Remove sharpening' : 'Sharpen for upscaling…', action: () => FM.improveQuality(layer) });
       }
     }
@@ -5963,10 +5966,15 @@ window.FM = window.FM || {};
     if (layer.type === 'video') {
       items.push({ label: layer.reversed ? 'Un-reverse' : 'Reverse', action: async () => {
         layer.reversed = !layer.reversed;
+        /* ⚠️ ITS OWN STEP BEFORE THE LONG FRAME BUILD (#1211), as the Speed panel's checkbox and swapInMedia commit.
+           The commit used to come AFTER the await, so an Undo pressed while "Preparing frames… N%" was up found no Reverse on
+           the stack and took back his previous, unrelated edit instead — and anything he did during the build was merged
+           into the same step as the Reverse. */
+        if (FM.history) FM.history.commit();   // the Reverse, before the build
         if (layer.reversed) { if (FM.ensureReverseCache) await FM.ensureReverseCache(layer); } else if (FM.maybeClearCache) FM.maybeClearCache(layer);
+        if (FM.layerById(FM.scene, layer.id) !== layer) return;   // an undo replaced it meanwhile: restore has already redrawn
         FM.timeline.rebuild(); FM.requestRender(); FM.seekVideosToTime();
         if (FM.reconcileAudio) FM.reconcileAudio();   // same reason as the Speed panel's checkbox — see there
-        if (FM.history) FM.history.commit();
       } });
       if (FM.isAnimated(layer.speed) || Math.abs((layer.speed || 1) - 1) > 1e-3) {   // ramped speed is an object — offer reset for it too
         items.push({ label: 'Reset speed (1×)', action: () => {
@@ -6212,15 +6220,27 @@ window.FM = window.FM || {};
     FM._importing = (FM._importing || 0) + 1;
     try {
     const pickedIn = FM.startedIn(), notAdded = [];   // queue 690 (hunt 5): see FM.stillIn above
+    /* 1043: SEVERAL FILES PICKED OR DROPPED TOGETHER ARE ONE UNDO STEP. Each one used to land through addMediaLayer's own
+       commit, so three photos picked at once took three Undos to take back (measured: the stack grew by 3). With more than
+       one file, each is OPENED in turn below as before, but held in `later` until the batch is read, and then they all land
+       together, muted, under one commit. Nothing of the batch is in the scene while the rest are opening, so an edit he
+       makes meanwhile stays a step of its own, and an Undo he presses meanwhile cannot strand a clip no snapshot holds.
+       One file is never held: it lands the moment it is open, with its own commit, exactly as before.
+       Held files show nothing until the last one is open (several songs are seconds each), so a batch still opening after
+       600 ms says so, once; a quick pair of photos lands before the timer and says nothing. Cleared at the drain. */
+    let later = files.length > 1 ? [] : null;
+    const slow = (later && FM.toast) ? setTimeout(function () { FM.toast('Opening ' + files.length + ' files…', 2400); }, 600) : 0;
     /* SIMPLE MODE P1 (DESIGN.md §15.1, §5.2 import stacks). Every layer of one pick carries `pick: {b, i}`, so the Simple
        view can tell "four clips picked together" from a stacked take. With `opts.at` (Simple's +) the files are laid END
        TO END from there, each at the end of the one before; without it nothing about placement changes. */
     const pickB = 'pk' + Date.now().toString(36).slice(-6) + Math.floor(Math.random() * 1296).toString(36);
     let pickI = 0, at = (opts && typeof opts.at === 'number' && isFinite(opts.at)) ? Math.max(0, opts.at) : null;
-    const add = function (rec, file) {
+    const add = function (rec, file, said) {
+      if (later) { later.push([rec, file, said]); return false; }   // 1043: lands with the rest of its batch, after the loop
       if (!FM.stillIn(pickedIn)) { FM.letGoMedia(rec); notAdded.push(file); return false; }
       const got = FM.addMediaLayer(rec, { at: at, pick: files.length > 1 ? { b: pickB, i: pickI++ } : null });
       if (at != null && got) at = got.start + got.duration;
+      if (said) said();   // 1043: what is said about a file is said once it is in, not while it waits for its batch
       return true;
     };
     for (const file of files) {
@@ -6233,7 +6253,7 @@ window.FM = window.FM || {};
           const wav = await audioFromVideo(file);
           if (!FM.stillIn(pickedIn)) { notAdded.push(file); continue; }
           if (wav) {
-            if (add(await FM.loadVideoFile(wav), file) && FM.toast) FM.toast('Added the audio from “' + (file.name || 'that clip') + '”');
+            add(await FM.loadVideoFile(wav), file, function () { if (FM.toast) FM.toast('Added the audio from “' + (file.name || 'that clip') + '”'); });
           } else {
             // Say what happened and still do the useful thing, rather than importing nothing.
             if (FM.toast) FM.toast('No sound could be read from “' + (file.name || 'that clip') + '” — added it as a video instead', 5200);
@@ -6250,6 +6270,37 @@ window.FM = window.FM || {};
         // importer being broken rather than the file being unsupported.
         else alert('Can’t use “' + file.name + '” — FreeMotion takes video, images and audio.');
       } catch (e) { FM.reportError('importing “' + (file && file.name || 'a file') + '”', e, 'FreeMotion could not open “' + (file && file.name || 'that file') + '”.\n\nIf it plays elsewhere on this device it is usually the format — try exporting it as MP4 (video) or WAV/M4A (audio) and importing that.'); }
+    }
+    /* 1043: the batch lands here, in the order it was picked, as ONE step — see `later` above. Muted around the adds and
+       unmuted in a finally, so a throw cannot leave history (and autosave with it) off; one commit, only if something landed. */
+    if (later) {
+      clearTimeout(slow);
+      const batch = later, H = FM.history;
+      let landed = false;
+      later = null;
+      /* What is still pending lands as its own step first, the way history.undo() does it: a debounced camera zoom, or
+         words typed in the open text editor (an add moves the selection, which closes the editor, and its commit would
+         be muted here), so one Undo of the batch never takes his words back with the photos. */
+      if (FM.flushPendingCommit) FM.flushPendingCommit();
+      if (FM.textEdit && FM.textEdit.flush) FM.textEdit.flush();
+      if (H && H.mute) H.mute();
+      try {
+        for (const job of batch) {
+          try {
+            if (add(job[0], job[1], job[2])) {
+              landed = true;
+              /* A video held while the rest of its batch opened may have had its decoder refuse it meanwhile, and its
+                 error fired with nobody listening: loadVideoFile's own listener is spent once metadata settles, and
+                 wireVideoRepaint's (queue 129) is attached only by the add above. The element keeps the error, so it
+                 is raised again now that the listener is there, which also clears the decode timer the add started.
+                 A record let go by a project switch is never added, so it is never wired and never says anything. */
+              const el = job[0] && job[0].el;
+              if (el && el.error && el.dispatchEvent) el.dispatchEvent(new Event('error'));
+            }
+          } catch (e) { FM.reportError('importing “' + (job[1] && job[1].name || 'a file') + '”', e, 'FreeMotion could not open “' + (job[1] && job[1].name || 'that file') + '”.\n\nIf it plays elsewhere on this device it is usually the format — try exporting it as MP4 (video) or WAV/M4A (audio) and importing that.'); }
+        }
+      } finally { if (H && H.unmute) H.unmute(); }
+      if (landed && H && H.commit) H.commit();
     }
     if (notAdded.length && FM.toast) {
       FM.toast(notAdded.length === 1

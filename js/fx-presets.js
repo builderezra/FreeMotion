@@ -156,7 +156,7 @@ window.FM = window.FM || {};
       }
     }
     if (!Object.keys(params).length) { _why = 'none of its values are settings ' + reg.label + ' has'; return null; }
-    return {
+    const out = {
       id: String(raw.id || '').slice(0, 40) || ('u' + Math.random().toString(36).slice(2, 9)),
       fx: reg.type,
       name: String(raw.name || 'Preset').slice(0, 40),
@@ -167,6 +167,8 @@ window.FM = window.FM || {};
       // simply is not there and nothing downstream has to know about containers.
       effects: saneKids(raw.effects),
     };
+    if (raw.rel === 1) out.rel = 1;   // its children's keys are relative too (#1210, capture) — only exactly 1
+    return out;
   }
 
   function readCustom() {
@@ -233,12 +235,20 @@ window.FM = window.FM || {};
         : null;
       // …and a container with no own params is still worth saving, which the guard below would refuse.
       if (!any && !(kids && kids.length)) return null;
+      /* THE CHILDREN ARE ON THE SAME CLOCK (#1210). Their keys were stored as they stood on the clip — absolute —
+         while the container's were rebased to 0, so a saved look's Strength fade-in landed already at full strength on a
+         clip not starting at 0, and an animated ingredient fired at the ORIGINAL clip's time. One minT across both, and
+         the preset says so with `rel: 1`: one saved before this has absolute children, and shifting those would move
+         them a second time, so a preset without the mark lands its children exactly as before. */
+      const kidProps = (kids && FM.fxListAnimatedProps) ? FM.fxListAnimatedProps(kids) : [];
+      kidProps.forEach(c => c.kf.forEach(k => { if (k && Number.isFinite(k.t)) { minT = Math.min(minT, k.t); maxT = Math.max(maxT, k.t); } }));
       if (!Number.isFinite(minT)) minT = 0;   // no animated params → static preset
       const r4 = v => Math.round(v * 10000) / 10000;   // 8.5−8.2 leaves float dirt (0.2999…) in every rebased time
       Object.keys(params).forEach(key => {
         const c = params[key];
         if (c && typeof c === 'object' && Array.isArray(c.kf)) c.kf.forEach(k => { k.t = r4(Math.max(0, (k.t || 0) - minT)); });
       });
+      kidProps.forEach(c => c.kf.forEach(k => { if (k && typeof k === 'object') k.t = r4(Math.max(0, (k.t || 0) - minT)); }));
       _clamped = 0;
       const out = sanePreset({
         id: 'u' + Math.random().toString(36).slice(2, 9),
@@ -246,6 +256,7 @@ window.FM = window.FM || {};
         dur: r4(Math.max(0, maxT - minT)),
         params: params,
         effects: kids || undefined,
+        rel: kids ? 1 : undefined,
       });
       // A trim that happened HERE is invisible to save() — by then the keyframes are already gone.
       // Hand it over by id (each capture mints a fresh one) so the save that follows can say so, and
@@ -305,6 +316,7 @@ window.FM = window.FM || {};
          drops them. Asking it is correct, and asking a not-yet-populated instance is circular. */
       if (Array.isArray(preset.effects) && preset.effects.length) {
         inst.effects = JSON.parse(JSON.stringify(preset.effects));
+        if (preset.rel === 1 && FM.shiftFxKeyframes) FM.shiftFxKeyframes(inst.effects, t0);   // re-anchored with the container's (#1210)
         if (FM.reconcileMaskMarkers) FM.reconcileMaskMarkers(inst);   // a preset's mask markers point at masks the target may not have (queue 560)
         /* A saved FILTER lands named and identified (queue 986, hunt C9), exactly as FM.filters.makeInstance lands it from
            its tile: the row reads the name he typed, not "Filter", and `fid` is what the row's ⋯ stars. */

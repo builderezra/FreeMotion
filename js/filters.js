@@ -742,8 +742,12 @@ window.FM = window.FM || {};
         if (isFinite(pd.min)) v = Math.max(pd.min, v);
         if (isFinite(pd.max)) v = Math.min(pd.max, v);
       }
-      inst.params[k] = v;
+      // a copy, not the definition's own object: makeInstance re-anchors a saved filter's keys in place (#1210)
+      inst.params[k] = (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v;
     });
+    /* …and an ingredient he switched OFF stays off (#1210). His saved look came back with it on again — an extra
+       vignette or grain he had turned off. A library recipe never sets `enabled`, so it lands exactly as before. */
+    if (def.enabled === false) inst.enabled = false;
     return inst;
   }
 
@@ -848,12 +852,16 @@ window.FM = window.FM || {};
       // which "Save this effect as preset…" stores (fx-presets capture) and this used to drop on the way back out.
       return { id: saved.id, name: saved.name || 'My filter', desc: 'Your filter',
                section: 'custom', custom: true, effects: saved.effects,
-               params: (saved.params && typeof saved.params === 'object') ? saved.params : null };
+               params: (saved.params && typeof saved.params === 'object') ? saved.params : null,
+               rel: saved.rel === 1 ? 1 : 0 };   // its ingredients' keys are relative too (#1210) — makeInstance reads it
     },
     /* The one creation path: a definition in, a real filter container out — the same shape "+ Add
      * Filter" produces, so everything downstream (render, inspector row, save/load, copy, presets)
      * treats it as an ordinary filter, because it is one. */
-    makeInstance: function (id) {
+    /* `atTime`: the start of the clip it lands on (#1210). A saved filter's keys are stored from 0, the way every
+       preset's are, and are re-anchored here as FM.effectPresets.makeInstance re-anchors them — its own (Strength, the
+       finish) always, its ingredients' only when the preset says they were stored relative (`rel`). Absent, nothing moves. */
+    makeInstance: function (id, atTime) {
       const def = this.get(id);
       if (!def || !FM.fxRegistry) return null;
       const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
@@ -865,6 +873,11 @@ window.FM = window.FM || {};
          lands exactly as it did. */
       if (def.params) {
         FM.fxRegistry.paramsOf(FM.FX_CONTAINER).forEach(pd => { if (pd && Object.prototype.hasOwnProperty.call(def.params, pd.key) && def.params[pd.key] != null) box.params[pd.key] = JSON.parse(JSON.stringify(def.params[pd.key])); });
+      }
+      const t0 = Number.isFinite(atTime) ? atTime : 0;
+      if (def.custom && t0 && FM.shiftFxKeyframes) {
+        Object.keys(box.params || {}).forEach(k => { const v = box.params[k]; if (FM.isAnimated(v)) v.kf.forEach(f => { if (f && typeof f === 'object') f.t = (f.t || 0) + t0; }); });
+        if (def.rel === 1) FM.shiftFxKeyframes(box.effects, t0);
       }
       box.name = def.name;      // so the row reads "Teal & Orange", not "Filter"
       /* queue 812: WHICH filter this is, not just what it is called. Without it the container carried no

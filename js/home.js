@@ -1447,7 +1447,12 @@ window.FM = window.FM || {};
             const had = new Set(FM.projects.list().map(x => x.id));
             const ok = await FM.projects.duplicate(p.id);
             render();
-            if (!ok) { if (FM.toast) FM.toast('Could not duplicate — storage is full'); return; }
+            if (!ok) {
+              // queue 1003: storage is blamed only when a write was refused for room; a clip that could not be read is not "full"
+              const full = FM.projects.lastDuplicateWhy && FM.projects.lastDuplicateWhy() === 'space';
+              if (FM.toast) FM.toast(full ? 'Could not make the copy — storage is full' : 'Could not make the copy');
+              return;
+            }
             const made = FM.projects.list().find(x => !had.has(x.id));
             if (made) revealCard(made.id);   // the copy lists FIRST — from down the list it landed off screen and Duplicate looked like it did nothing
           } },

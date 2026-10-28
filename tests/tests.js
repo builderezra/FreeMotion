@@ -11413,6 +11413,59 @@
     }
   });
 
+  /* #1212 — the same class again, for the two ONGOING presets: Wave and Jitter read their phase from the clip's own
+     start (textClocks' whole clock), so the tail half of a split Wave restarted its wave at the cut and the whole word jumped.
+     A split already keeps the phase for every other time-driven effect in B.fxTimeOffset (queue 823); the text clock now reads it.
+     Model: the split-textanim test above (ink by colour, FM.time + FM.splitLayer), with the ink's centroid instead of its count.
+     Expected numbers from the code: 96 px letters wave 12.5 px each, phases 0.55 apart, so the word's centroid swings ~9 px and
+     a 0.5 s restart moves it up to ~12 px; the same arithmetic on both sides of a correct split differs by 0. */
+  test('1212 splitting a Wave text keeps every letter where it was at each frame after the cut', { item: '1212' }, async function () {
+    const _isoK = isoKeep();
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    const pw = FM.scene.project.width, ph = FM.scene.project.height;
+    try {
+      const W = 640, H = 360;
+      FM.scene.project.width = W; FM.scene.project.height = H;
+      const cy = t => {
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        FM.renderScene(ctx, FM.scene, t);
+        const d = ctx.getImageData(0, 0, W, H).data;
+        let n = 0, s = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] > 140 && d[i + 1] > 140 && d[i + 2] > 140) { n++; s += Math.floor((i >> 2) / W); }
+        return n > 50 ? s / n : NaN;
+      };
+      const times = [1.0, 1.5, 2.2];
+      const measure = async preset => {
+        FM.scene.layers.length = 0;
+        const A = FM.makeLayer('text', { name: 'title', text: 'HELLO', fontSize: 96, color: '#ffffff', fill: '#ffffff' });
+        A.start = 0; A.duration = 4;
+        A.textAnim = { preset: preset, unit: 'char', durIn: 0, durOut: 0, stagger: 0 };
+        FM.scene.layers.push(A);
+        const before = times.map(cy);
+        if (before.some(v => !isFinite(v))) throw new Error('setup: the probe drew no ' + preset + ' text (' + before + ')');
+        FM.time = 0.5;
+        await FM.splitLayer(A.id);
+        if (FM.scene.layers.length !== 2) throw new Error('setup: the split did not produce two halves');
+        const after = times.map(cy);
+        return { before: before, after: after, worst: Math.max.apply(null, times.map((t, i) => Math.abs(after[i] - before[i]))) };
+      };
+      // CONTROL: an entrance that has finished does not move, before or after the split
+      const fade = await measure('fade');
+      if (!(fade.worst < 1)) throw new Error('CONTROL: a finished Fade moved ' + fade.worst.toFixed(2) + ' px after the split (' + fade.before + ' / ' + fade.after + ')');
+      const wave = await measure('wave');
+      // CONTROL: the probe sees the wave at all
+      if (!(Math.abs(wave.before[0] - wave.before[1]) > 3)) throw new Error('CONTROL: the Wave text sits at ' + wave.before + ' — its centroid does not move between 1.0 s and 1.5 s, so this probe cannot see a jump');
+      if (!(wave.worst < 1))
+        throw new Error('after a split at 0.5 s the Wave text sits ' + wave.worst.toFixed(1) + ' px away from where it was (' + wave.before.map(v => v.toFixed(1)) + ' before, ' + wave.after.map(v => v.toFixed(1)) + ' after) — the tail half restarted its wave at the cut');
+    } finally {
+      FM.scene.layers = layers0; FM.time = t0;
+      FM.scene.project.width = pw; FM.scene.project.height = ph;
+      _isoK.put();
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   test('split: cutting a clip does not fade it to black and silent at the cut', { item: 'split-fade' }, async function () {
     /* BUG HUNT (21 Aug). A split is meant to be INVISIBLE — two halves end to end should look and sound
        exactly like the one clip did. They did not. `FM.fadeMul` measures the fade from each clip's OWN
@@ -13040,6 +13093,49 @@
       FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
       if (FM.refreshAll) FM.refreshAll();
       await sleep(80);
+    }
+  });
+
+  /* #1208 — dragging the easing handles in Move mode wrote kf.bez on BOTH channels' keys but left a Bounce/Elastic `ez` on
+     the one that had it, and evalProp reads `ez` first: the graph said Cubic Bezier Easing while the vertical motion still bounced in
+     the preview and the export. Model: the graph-editor part of the gesture-cancel test above (a hidden host,
+     FM.buildEasingEditor(A, 'move'), a pointerdown on .es-canvas, then the window's pointermove and pointerup). */
+  test('1208 dragging the easing handles in Move mode takes a Bounce off the other channel’s key, so it moves on the curve the graph shows', { item: '1208' }, async function () {
+    if (!FM.buildEasingEditor || !FM.bezierAt) throw new Error('FM.buildEasingEditor / FM.bezierAt is not reachable');
+    const _isoK = isoKeep();
+    const layers0 = FM.scene.layers.slice(), t0 = FM.time;
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:0;top:0;width:340px;height:360px;opacity:0;z-index:-1';
+    document.body.appendChild(host);
+    const pe = (type, x, y) => new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 80, isPrimary: true, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y });
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#ffffff' }); L.start = 0; L.duration = 4;
+      L.transform.x = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 100, e: 'linear' }, { t: 3, v: 200, e: 'linear' }] };
+      L.transform.y = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 3, v: 300, e: 'easeInOut', ez: { fam: 'bounce', preset: 'bounce', p: { n: 3, d: 0.5 } } }] };
+      FM.scene.layers.length = 0; FM.scene.layers.push(L);
+      FM.time = 2;
+      host.appendChild(FM.buildEasingEditor(L, 'move'));
+      const gc = host.querySelector('.es-canvas');
+      if (!gc) throw new Error('setup: the easing editor built no canvas, so nothing below drives a real graph drag');
+      const bounced = FM.evalProp(L.transform.y, 1.5);
+      const gr = gc.getBoundingClientRect();
+      gc.dispatchEvent(pe('pointerdown', gr.left + gr.width * 0.3, gr.top + gr.height * 0.6));
+      window.dispatchEvent(pe('pointermove', gr.left + gr.width * 0.2, gr.top + gr.height * 0.25));
+      window.dispatchEvent(pe('pointerup', gr.left + gr.width * 0.2, gr.top + gr.height * 0.25));
+      await sleep(30);
+      // CONTROL: the drag ran — X's key (the one the canvas draws) has the new handles
+      const xb = L.transform.x.kf[2].bez;
+      if (!Array.isArray(xb) || xb.length !== 4) throw new Error('CONTROL: the drag wrote no handles on X’s key (' + JSON.stringify(L.transform.x.kf[2]) + '), so nothing below is a real drag');
+      const yk = L.transform.y.kf[1];
+      if (!Array.isArray(yk.bez)) throw new Error('setup: the drag never reached Y’s key (' + JSON.stringify(yk) + ') — Move mode is not editing both channels here');
+      if ('ez' in yk) throw new Error('after dragging the handles Y’s key still carries ' + JSON.stringify(yk.ez) + ' — it keeps bouncing while the graph shows a Cubic Bezier');
+      const want = 300 * FM.bezierAt(yk.bez[0], yk.bez[1], yk.bez[2], yk.bez[3], 0.5), got = FM.evalProp(L.transform.y, 1.5);
+      if (!(Math.abs(got - want) < 1e-6)) throw new Error('Y at 1.5 s is ' + got + ' (the bounce gave ' + bounced + '), not ' + want + ' on the curve the graph shows');
+    } finally {
+      host.remove(); try { FM.graphEditor.stop(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l));
+      FM.time = t0;
+      _isoK.put();
     }
   });
 
@@ -20078,6 +20174,328 @@
       if (r.sky < 95) throw new Error(fbSays(r, 'stacked as [' + pair.join(' + ') + ']') + ' — the fill stopped filling once it was stacked');
     });
   });
+
+  // Pre-#1008 code kept as the oracle, including its repeated scene scans.
+  function old1008(scene, t) {
+  // (bughunt4 #2: a group whose ONLY look is its opacity is still a unit, but one whose members read the frame below
+  // goes pass-through — drawPassUnit. groupOwnLook is the rest of the list; groupNeedsUnit answers exactly as before.)
+  function groupOwnLook(g) {
+    if (g.maskGroup) return true;
+    if (g.fillMode && g.fillMode !== 'none') return true;   // fill recolours the flattened silhouette
+    if (g.effects && g.effects.some(e => e.enabled !== false)) return true;
+    if (g.blendMode && g.blendMode !== 'normal') return true;
+    if (g.shadow && g.shadow.enabled) return true;
+    if (g.stroke && g.stroke.enabled && (FM.isAnimated(g.stroke.width) || (g.stroke.width || 0) > 0)) return true;   // border around the silhouette
+    const cg = g.colorGrade;
+    if (cg && ((cg.hue || 0) !== 0 || (cg.sat != null && Math.abs(cg.sat - 1) > 1e-3) || (cg.lift || 0) !== 0 || (cg.gamma != null && Math.abs(cg.gamma - 1) > 1e-3) || (cg.gain != null && Math.abs(cg.gain - 1) > 1e-3))) return true;
+    return false;
+  }
+  function groupNeedsUnit(g, t) {
+    if (groupOwnLook(g)) return true;
+    const op = g.transform ? FM.evalProp(g.transform.opacity, t) : 1;
+    if (op < 0.999 || (FM.isAnimated && FM.isAnimated(g.transform && g.transform.opacity))) return true;
+    return false;
+  }
+
+  function tilt3D(layer, t) {
+    const tr = layer.transform; if (!tr) return null;
+    let rx = tr.rotationX != null ? FM.evalProp(tr.rotationX, t) : 0;   // absent ⇒ no evalProp, no tilt (byte-identical)
+    let ry = tr.rotationY != null ? FM.evalProp(tr.rotationY, t) : 0;
+    if (!isFinite(rx)) rx = 0;
+    if (!isFinite(ry)) ry = 0;
+    if (rx === 0 && ry === 0) return null;
+    return { rx: rx * Math.PI / 180, ry: ry * Math.PI / 180 };
+  }
+
+    function isAnimatedProp(p) { return p && typeof p === 'object' && Array.isArray(p.kf); }
+    function groupTilts(g, t) {
+      const tr = g.transform;
+      return !!tr && (!!tilt3D(g, t) || !!isAnimatedProp(tr.rotationX) || !!isAnimatedProp(tr.rotationY));
+    }
+    function readsBelow(l) {
+      if (!l || l.visible === false || l.type === 'camera' || l.type === 'null') return false;
+      if (l.type === 'adjustment') return true;
+      if (l.blendMode && l.blendMode !== 'normal') return true;
+      return !!(FM.needsBgSnap && FM.needsBgSnap(l));
+    }
+  function collectGroupUnits(scene, t) {
+    let map = null;
+    const units = [];
+    for (const g of scene.layers) {
+      // bughunt4 #1: a tilted group is a unit too, so its flat picture can be leant (the exported unit test the other editor reads is unchanged)
+      const tilts = g.type === 'group' && groupTilts(g, t);
+      if (g.type !== 'group' || !g.visible || !(tilts || groupNeedsUnit(g, t))) continue;
+      const members = [];
+      const seen = new Set();
+      (function walk(gid) {
+        // v5.06 gave FM.groupBounds and FM.groupDescendants this guard and missed THIS walk, which is
+        // the one that runs per unit-group PER FRAME. On a document that already carried a parent
+        // cycle it still recursed until the stack blew — measured on v5.72: renderScene AND refreshAll
+        // both died here (compositor.js:6987), load() threw inside its promise, and the project stayed
+        // exactly as unopenable as before the fix. A cycle must degrade, never take the app with it.
+        if (seen.has(gid)) return;
+        seen.add(gid);
+        scene.layers.forEach(l => { if (l.parent === gid) { members.push(l); if (l.type === 'group') walk(l.id); } });
+      })(g.id);
+      const drawable = members.filter(l => l.type !== 'group' && l.type !== 'camera' && l.type !== 'adjustment' && l.type !== 'null');
+      // bughunt4 #2: opacity is the group's only look and a member reads the frame below → pass-through (drawPassUnit).
+      // Such a unit may hold nothing but adjustment layers: their grade is what the group's opacity fades.
+      // bughunt4 #1: a tilted group needs its isolated plate to lean, so it never passes through
+      const pass = !tilts && !groupOwnLook(g) && members.some(readsBelow);
+      if (!drawable.length && !(pass && members.some(l => l.type === 'adjustment'))) continue;
+      // masking needs a mask + at least one clipped member; effects-only units work from 1 member
+      let maskId = null, maskLin = null, maskSet = null;
+      if (g.maskGroup && drawable.length >= 2) {
+        let mask = drawable[0], mi = scene.layers.indexOf(drawable[0]);
+        drawable.forEach(l => { const idx = scene.layers.indexOf(l); if (idx < mi) { mi = idx; mask = l; } });
+        /* bughunt4 #7: THE MASK IS THE TOP MEMBER, AND THAT MEMBER MAY BE A GROUP. `members` is the recursive walk and `drawable`
+           drops every group, so the top-most LEAF above was the mask even when it sat inside a nested group: that group's other
+           pieces were drawn as clipped content (a three-piece mask revealed the photo through its first piece only), and a styled
+           inner group, drawn whole as a unit, painted the mask's own colour inside the mask. Now the masking group's DIRECT child
+           that holds that top-most leaf is the mask. A plain layer is exactly the leaf it always was (the bughunt2 #8 branch below,
+           unchanged). A group is the mask with its whole subtree (maskSet): none of it is drawn as content, and buildGroupUnit draws
+           all of it, nested units whole, into the mask plate (drawGroupMask). It still needs a member to clip outside the mask. */
+        const inG = {};
+        members.forEach(l => { inG[l.id] = l; });
+        let top = mask, hops = 0;
+        while (top && top.parent !== g.id && hops++ < 64) top = inG[top.parent];
+        if (top && top !== mask && top.parent === g.id && top.type === 'group') {
+          const sub = new Set([top.id]);
+          let grew = true;
+          while (grew) {   // the top group's subtree, out of the walk above; a set that only grows, so a cycle cannot spin it
+            grew = false;
+            members.forEach(l => { if (!sub.has(l.id) && sub.has(l.parent)) { sub.add(l.id); grew = true; } });
+          }
+          if (drawable.some(l => !sub.has(l.id))) { maskId = top.id; maskSet = sub; }
+        } else {
+          /* bughunt2 #8: A SPLIT MASK IS STILL THE MASK, BOTH HALVES OF IT. The mask is the top member, and a split puts the
+             tail half just under the head (FM.splitLayer), so by id alone the head stayed the mask and the TAIL was drawn as
+             an ordinary member: past the cut the head was off screen ("hidden mask"), every member showed unclipped and the
+             mask's own picture was drawn on top of them. Every half of the top member's lineage is the mask (isUnitMask), and
+             the one drawn is the half on screen at t (FM.refLayerAt, drawGroupUnit). It still needs a member to clip that is
+             not part of it, the same "mask + at least one member" rule: a group holding only one split clip is not masked,
+             as it was not before the split. A mask never split: maskLin stays null and nothing below changes.
+             (bughunt4 #7: a split piece INSIDE a top group shares that group, so it is in maskSet and needs none of this.) */
+          const lin = mask.splitOf || null;
+          if (!lin || drawable.some(l => l.splitOf !== lin)) { maskId = mask.id; maskLin = lin; }
+        }
+      }
+      units.push({ group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, maskLin: maskLin, maskSet: maskSet, drawn: false, depth: 0, pass: pass });
+    }
+    if (!units.length) return null;
+    /* NESTING. A group inside another group is a unit in its own right, and both of them own the same
+     * leaves — `walk` above is recursive, so an outer unit's memberIds already contains every
+     * descendant. Claiming those leaves first-come by scene order is what broke nested groups: the
+     * outer unit took them and the inner one was never drawn (its opacity/effects/blend silently
+     * dropped), or, in the reversed scene order that Edit group → Add → Group produces, the inner
+     * unit took them and the outer loop drew the same leaves a second time on top.
+     *
+     * Depth fixes both, and is also the plate index. Two units at the SAME depth are never alive at
+     * once — a sibling is fully flattened and blitted before the next one starts — so a plate per
+     * depth is exactly enough, and needs no counter the way _cfPool and _pfPool do. */
+    const byId = {};
+    scene.layers.forEach(l => { byId[l.id] = l; });
+    const unitByGroup = {};
+    units.forEach(u => { unitByGroup[u.group.id] = u; });
+    units.forEach(u => {
+      let d = 0, p = byId[u.group.parent], n = 0;
+      while (p && n++ < 64) { if (unitByGroup[p.id]) d++; p = byId[p.parent]; }   // n: the same parent-cycle guard `walk` carries
+      u.depth = d;
+    });
+    map = {};                // the SHALLOWEST — the one renderScene dispatches, so the whole nest goes down as one
+    units.forEach(u => u.memberIds.forEach(id => {
+      if (!map[id] || u.depth < map[id].depth) map[id] = u;
+    }));
+    // Every unit draws only its IMMEDIATE nested unit. Routing all leaves to the deepest unit
+    // skips middle groups once three or more styled groups are nested, then draws their leaves
+    // again at the outer level. A plain transform-only group does not interrupt this ancestry.
+    units.forEach(u => { u.childOwner = Object.create(null); });
+    units.forEach(child => {
+      let p = byId[child.group.parent], n = 0;
+      while (p && n++ < 64) {
+        const parent = unitByGroup[p.id];
+        if (parent) {
+          child.memberIds.forEach(id => { parent.childOwner[id] = child; });
+          break;
+        }
+        p = byId[p.parent];
+      }
+    });
+    return map;
+  }
+    return collectGroupUnits(scene, t);
+  }
+
+  function fixture1008(kind) {
+    const A = FM.makeLayer('group', { name: '1008 outer', x: 0, y: 0 });
+    const B = FM.makeLayer('group', { name: '1008 inner', x: 0, y: 0 });
+    A.transform.opacity = 0.5; B.transform.opacity = 0.5; B.parent = A.id;
+    const leaf = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 60, shapeH: 40, fill: '#ffffff' });
+    const other = FM.makeLayer('shape', { shape: 'rect', x: 65, y: 45, shapeW: 30, shapeH: 20, fill: '#ff0000' });
+    leaf.parent = B.id; other.parent = A.id;
+    let layers = [A, B, leaf, other];
+    if (kind === 'reversed') layers.reverse();
+    if (kind === 'maskGroup') { A.maskGroup = true; layers = [leaf, B, A, other]; }
+    if (kind === 'parent cycle') A.parent = B.id;
+    if (kind === 'missing parent') B.parent = '1008 absent';
+    if (kind === 'hidden group') B.visible = false;
+    if (kind === 'empty group') layers = [A, B, other];
+    return scene(layers, { project: { width: 120, height: 90, fps: 30, duration: 5, background: '#000000' } });
+  }
+
+  // Counts every ELEMENT READ of sc.layers while fn runs, through a Proxy swapped in for the scene's own array.
+  // A rescan reads the entries again whatever it is written with: forEach, filter, find, some, for...of or an
+  // indexed loop. Looking up indexOf is counted as a linear search. The array is put back by its descriptor.
+  function count1008(sc, fn) {
+    const descriptor = Object.getOwnPropertyDescriptor(sc, 'layers');
+    if (!descriptor || !Array.isArray(descriptor.value)) throw new Error('1008: the scene has no own layers array to count');
+    const work = { reads: 0, searches: 0, value: null };
+    const counted = new Proxy(descriptor.value, { get(o, k, r) {
+      if (typeof k === 'string' && /^(0|[1-9]\d*)$/.test(k)) work.reads++;
+      else if (k === 'indexOf') work.searches++;
+      return Reflect.get(o, k, r);
+    } });
+    try {
+      Object.defineProperty(sc, 'layers', Object.assign({}, descriptor, { value: counted }));
+      work.value = fn();
+      return work;
+    } finally {
+      Object.defineProperty(sc, 'layers', descriptor);
+    }
+  }
+
+  // Every unit the map can reach, nested ones too: walked through childOwner (cyclic under a parent cycle, hence
+  // seen), so a nested unit's depth, mask fields, pass and members are compared, not only the shallowest units.
+  function fields1008(map) {
+    if (!map) return null;
+    function unit(u) {
+      return { group: u.group.id, memberIds: Array.from(u.memberIds), maskId: u.maskId,
+        maskLin: u.maskLin, maskSet: u.maskSet && Array.from(u.maskSet), drawn: u.drawn, depth: u.depth, pass: u.pass,
+        childOwner: Object.keys(u.childOwner).map(id => [id, u.childOwner[id].group.id]) };
+    }
+    const order = [], seen = new Set();
+    const visit = u => {
+      if (!u || seen.has(u)) return;
+      seen.add(u); order.push(u);
+      Object.keys(u.childOwner).forEach(id => visit(u.childOwner[id]));
+    };
+    Object.keys(map).forEach(id => visit(map[id]));
+    return { map: Object.keys(map).map(id => [id, map[id].group.id]), units: order.map(unit) };
+  }
+
+  function equal1008(a, b, where) {
+    if (a === b) return;
+    if (a == null || b == null || typeof a !== 'object' || typeof b !== 'object')
+      throw new Error(where + ': unit field differs');
+    const ak = Object.keys(a), bk = Object.keys(b);
+    if (ak.length !== bk.length) throw new Error(where + ': field count differs');
+    ak.forEach((key, i) => {
+      if (key !== bk[i]) throw new Error(where + ': field order differs');
+      equal1008(a[key], b[key], where + '.' + key);
+    });
+  }
+
+  test('1008 one pass indexes 250 groups and a 50-deep nest', { item: '1008' }, function () {
+    if (typeof FM._collectGroupUnits !== 'function') throw new Error('collector seam is missing');
+    const layers = [];
+    let parent = null;
+    for (let i = 0; i < 300; i++) {
+      const g = FM.makeLayer('group', { name: '1008 ' + i });
+      g.transform.opacity = 0.5;
+      if (i >= 250) { if (parent) g.parent = parent.id; parent = g; }
+      const leaf = FM.makeLayer('shape', { shape: 'rect' }); leaf.parent = g.id;
+      layers.push(g, leaf);
+    }
+    // Also exercise indexOf's old mask path, without changing the requested opacity workload.
+    layers[0].maskGroup = true;
+    const second = FM.makeLayer('shape', { shape: 'rect' }); second.parent = layers[0].id; layers.push(second);
+    const sc = scene(layers), n = layers.length;
+    const control = count1008(sc, () => old1008(sc, 0));
+    if (control.reads < 5 * n || !control.searches || !control.value)
+      throw new Error('CONTROL: old scans and mask searches were not exercised');
+    const got = count1008(sc, () => FM._collectGroupUnits(sc, 0));
+    equal1008(fields1008(got.value), fields1008(control.value), 'large scene');
+    if (got.reads >= 5 * n || got.searches !== 0)
+      throw new Error('collector read ' + got.reads + ' scene entries for ' + n + ' layers and did ' + got.searches + ' linear searches');
+  });
+
+  test('1008 indexed units equal the old oracle for adversarial scenes', { item: '1008' }, function () {
+    if (typeof FM._collectGroupUnits !== 'function') throw new Error('collector seam is missing');
+    const kinds = ['nested', 'reversed', 'maskGroup', 'parent cycle', 'missing parent', 'hidden group', 'empty group'];
+    for (const kind of kinds) {
+      const sc = fixture1008(kind), n = sc.layers.length;
+      const old = count1008(sc, () => old1008(sc, 0)), expected = fields1008(old.value);
+      // CONTROL: the read budget below separates the two collectors on this very fixture.
+      if (old.reads <= 2 * n) throw new Error('CONTROL: ' + kind + ': the old collector read only ' + old.reads + ' entries of ' + n);
+      const got = count1008(sc, () => FM._collectGroupUnits(sc, 0));
+      equal1008(fields1008(got.value), expected, kind);
+      // Red against the old collector even when its output is identical: it reads the scene again per group walk.
+      if (got.reads > 2 * n || got.searches !== 0)
+        throw new Error(kind + ': collector rescanned the scene, ' + got.reads + ' reads of ' + n + ' layers, ' + got.searches + ' linear searches');
+    }
+    // No cross-frame cache: the same scene at the same t, asked again after each change.
+    const sc = fixture1008('nested'), before = fields1008(old1008(sc, 0));
+    equal1008(fields1008(FM._collectGroupUnits(sc, 0)), before, 'first call');
+    sc.layers[0].visible = false;
+    const changed = fields1008(old1008(sc, 0));
+    if (JSON.stringify(before) === JSON.stringify(changed)) throw new Error('CONTROL: hiding the outer group did not change the oracle');
+    let rejected = false;
+    try { equal1008(before, changed, 'CONTROL'); } catch (e) { rejected = true; }
+    if (!rejected) throw new Error('CONTROL: comparator accepted different units');
+    equal1008(fields1008(FM._collectGroupUnits(sc, 0)), changed, 'fresh visibility');
+    sc.layers[1].transform.opacity = 1;
+    const after = fields1008(old1008(sc, 0));
+    if (JSON.stringify(after) === JSON.stringify(changed)) throw new Error('CONTROL: the inner opacity change did not change the oracle');
+    equal1008(fields1008(FM._collectGroupUnits(sc, 0)), after, 'fresh opacity');
+  });
+
+  test('1008 nested render pixels equal the old collector with one scene scan', { item: '1008' }, function () {
+    if (typeof FM._collectGroupUnits !== 'function') throw new Error('collector seam is missing');
+    const descriptor = Object.getOwnPropertyDescriptor(FM, '_collectGroupUnits');
+    const collector = FM._collectGroupUnits;
+    const sc = fixture1008('nested'), n = sc.layers.length;
+    function frame() {
+      const canvas = offscreen(120, 90), ctx = canvas.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, sc, 0);
+      return ctx.getImageData(0, 0, 120, 90).data;
+    }
+    let calls = 0, reads = 0, searches = 0, oldReads = 0;
+    try {
+      FM._collectGroupUnits = function (s, t) {
+        const got = count1008(s, () => old1008(s, t));
+        oldReads += got.reads;
+        return got.value;
+      };
+      const expected = frame();
+      // CONTROL: the counter sees the old collector's rescans inside a real render.
+      if (oldReads <= 2 * n) throw new Error('CONTROL: the old collector read only ' + oldReads + ' scene entries in the render');
+      FM._collectGroupUnits = function (s, t) {
+        calls++;
+        const got = count1008(s, () => collector(s, t));
+        reads += got.reads; searches += got.searches;
+        return got.value;
+      };
+      const actual = frame();
+      for (let i = 0; i < expected.length; i++) {
+        if (actual[i] !== expected[i]) throw new Error('pixel byte ' + i + ' differs: ' + actual[i] + ' versus ' + expected[i]);
+      }
+      if (calls !== 1 || reads > 2 * n || searches !== 0)
+        throw new Error('render collector: ' + calls + ' calls, ' + reads + ' reads of ' + n + ' layers, ' + searches + ' searches');
+      // CONTROL: use the same draw and geometry with both fades removed; measure a real pixel difference.
+      sc.layers[0].transform.opacity = 1; sc.layers[1].transform.opacity = 1;
+      FM._collectGroupUnits = old1008;
+      const control = frame();
+      let changed = 0, painted = 0;
+      for (let i = 0; i < expected.length; i += 4) {
+        if (expected[i] || expected[i + 1] || expected[i + 2]) painted++;
+        if (control[i] !== expected[i] || control[i + 1] !== expected[i + 1] || control[i + 2] !== expected[i + 2]) changed++;
+      }
+      if (!painted || !changed) throw new Error('CONTROL: nested content and opacity did not affect pixels');
+    } finally {
+      Object.defineProperty(FM, '_collectGroupUnits', descriptor);
+    }
+  });
+
 
   test('groups: a group nested inside another group keeps its own opacity', { item: 'nested-groups' }, function () {
     /* collectGroupUnits builds one flattened unit per group that has visual state of its own, then
@@ -30617,6 +31035,204 @@
     h4.join('g1', { role: 'editor' });
     h4.receive('g1', { cid: 1, bs: 0, ops: [{ o: 'li', id: 'A', a: null, v: jclone921(stale) }] });
     if (h4.base.layers[0].text !== 'old text') throw new Error('CONTROL: a LIVE li was refused as well, so the clash above is not CAS talking');
+  });
+
+  test('1002 malformed gradients are dropped and the next editor transaction is sequenced', { item: '1002' }, async function () {
+    const C = need921('1002 receive');
+    const host = C.Host({ base: scene([{ id: 'a', type: 'shape', shape: 'rect', duration: 2 }]), invariants: invariants921(), epoch: 'e1' });
+    host.join('g', { role: 'editor' });
+    const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+    let ack;
+    loop.a.onmessage = function (ch, tx) { const r = host.receive('g', tx); loop.a.send('ctl', r.ack); };
+    loop.b.onmessage = function (ch, msg) { ack = msg; };
+    function send(cid, field, value) {
+      ack = null;
+      loop.b.send('ctl', { cid: cid, bs: host.seq, ops: [{ o: 's', p: ['L', 'a', field], v: value }] });
+      loop.pump(); loop.pump();
+      if (!ack) throw new Error('no acknowledgement crossed the manual link');
+      return ack;
+    }
+    try {
+      const bad = send(1, 'fillGradient', 'bad');
+      if (!bad.rej.length && !bad.fix.some(op => op.o === 'd' && op.p.join('/') === 'L/a/fillGradient')) throw new Error('bad gradient was neither rejected nor dropped in the ack');
+      if ('fillGradient' in host.base.layers[0]) throw new Error('the malformed gradient survived');
+      if (send(2, 'name', 'next').seq === null) throw new Error('the next edit was not sequenced');
+      const control = send(3, 'fillGradient', { c0: '#fff', angle: '999' });
+      if (control.seq === null || host.base.layers[0].fillGradient.angle !== 360) throw new Error('CONTROL: a real gradient was not accepted and clamped');
+    } finally { loop.a.close(); loop.b.close(); }
+  });
+
+  test('1002 a throwing invariant rolls back the whole transaction and sends a repair', { item: '1002' }, async function () {
+    const C = need921('1002 atomic receive');
+    const inv = invariants921(), real = inv.layer;
+    inv.layer = function (l) { if (l.name === 'throw') throw new Error('1002 invariant'); real(l); };
+    const host = C.Host({ base: scene([{ id: 'a', type: 'shape', name: 'before', duration: 2 }]), invariants: inv, epoch: 'e1' });
+    host.join('g', { role: 'editor' });
+    const loop = C.link.LoopLink({ aTag: 'h', bTag: 'g', mode: 'manual' });
+    let answer;
+    loop.a.onmessage = function (ch, tx) { loop.a.send('ctl', host.receive('g', tx)); };
+    loop.b.onmessage = function (ch, msg) { answer = msg; };
+    function send(tx) { answer = null; loop.b.send('ctl', tx); loop.pump(2); if (!answer) throw new Error('no host answer'); return answer; }
+    try {
+      const r = send({ cid: 1, bs: 0, ops: [
+        { o: 's', p: ['L', 'a', 'duration'], v: 4 },
+        { o: 's', p: ['L', 'a', 'name'], v: 'throw' }
+      ] });
+      if (host.base.layers[0].name !== 'before' || host.base.layers[0].duration !== 2) throw new Error('transaction half-applied');
+      if (!r.ack || r.ack.seq !== null || r.ack.rej.length !== 2 || r.ack.rej.some(e => e[1] !== 'bad') || !r.ack.fix.length) throw new Error('missing normal refusal and repair');
+      /* A STRUCTURAL tx that also writes the project (review fold 3): a move of a layer that is not there, a new layer, a
+         reorder, a project width and the throwing name. The order, the layer list and the project must all come back as
+         they were, and the missing layer keeps its own 'gone' (the guest counts refusals by reason): one 'bad' for each
+         of the other four, none on top of the 'gone'. */
+      const s = send({ cid: 2, bs: 0, ops: [
+        { o: 'mv', id: 'zz', a: null },
+        { o: 'li', id: 'n', a: 'a', v: { id: 'n', type: 'shape', name: 'new', duration: 1 } },
+        { o: 'mv', id: 'a', a: 'n' },
+        { o: 's', p: ['P', 'width'], v: 640 },
+        { o: 's', p: ['L', 'a', 'name'], v: 'throw' }
+      ] });
+      const ids = host.base.layers.map(l => l && l.id).join(',');
+      if (ids !== 'a') throw new Error('a structural transaction half-applied: layers are ' + ids);
+      if (host.base.layers[0].name !== 'before' || host.base.layers[0].duration !== 2) throw new Error('the structural rollback kept a changed layer: ' + JSON.stringify(host.base.layers[0]));
+      if (host.base.project.width !== 320) throw new Error('the project write survived the rollback: width ' + host.base.project.width);
+      const reasons = s.ack ? s.ack.rej.map(e => e[0] + ':' + e[1]).sort().join(',') : '';
+      if (!s.ack || s.ack.seq !== null || reasons !== '0:gone,1:bad,2:bad,3:bad,4:bad') throw new Error('the structural refusal was not gone for the missing layer and one bad per other op: ' + reasons);
+      const c = send({ cid: 3, bs: 0, ops: [{ o: 's', p: ['L', 'a', 'name'], v: 'healthy' }] });
+      if (!c.ack || c.ack.seq === null || host.base.layers[0].name !== 'healthy') throw new Error('CONTROL: the same invariant never accepts a healthy edit');
+    } finally { loop.a.close(); loop.b.close(); }
+  });
+
+  test('1002 loading discards primitive gradients and keeps a plain gradient', { item: '1002' }, async function () {
+    for (const v of [true, 7, 'x', false, null, []]) {
+      const l = FM.makeLayer('shape'); l.fillGradient = v;
+      FM.storage._sanitizeLayers([l]);
+      if ('fillGradient' in l) throw new Error('invalid gradient survived: ' + JSON.stringify(v));
+    }
+    const l = FM.makeLayer('shape'); l.fillGradient = { c0: '#fff', angle: '999' };
+    FM.storage._sanitizeLayers([l]);
+    if (!l.fillGradient || l.fillGradient.c0 !== '#fff' || l.fillGradient.angle !== 360) throw new Error('CONTROL: plain gradient was not kept and clamped');
+  });
+
+  test('1003 duplicate rolls back a failed clip read but skips a genuinely absent clip', { item: '1003', budgetMs: 90000 }, async function () {
+    const orig = FM.projects.currentId(), wasOpen = FM.home.isOpen(), made = [];
+    const within = function (p, name) { return q1191Within(p, 10000, '1003 ' + name); };
+    const keys = function () { const a = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^fm\.proj\./.test(k)) a.push(k); } return a.sort().join('|'); };
+    /* The copy's clips are stored under reIdLayers' fresh `l_` ids, so this listing is exactly what a copy can leave behind. */
+    const media = async function (name) { return (await within(FM.storage.listMediaKeys('l_'), name)).slice().sort(); };
+    const pause = ms => new Promise(r => setTimeout(r, ms));
+    let restore = null, clip, failing;
+    try {
+      if (wasOpen) { FM.home.close(); await pause(100); }
+      const id = await within(FM.projects.create({ name: 'FX1003 read', width: 320, height: 240 }), 'create');
+      if (!id) throw new Error('setup: create failed');
+      made.push(id);
+      /* Two stored clips, and the read of the SECOND fails (review fold 4): the first one has been copied by then, so
+         the rollback has a real clip of the copy's to take back out. */
+      clip = FM.makeLayer('image', { name: 'stored clip' });
+      failing = FM.makeLayer('image', { name: 'failing clip' });
+      const absent = FM.makeLayer('image', { name: 'absent clip' });
+      FM.scene.layers.push(clip, failing, absent);
+      const file = new File([new Uint8Array(64)], '1003.png', { type: 'image/png' });
+      if (!await within(FM.storage.writeMedia(clip.id, { file: file, kind: 'image' }), 'store clip')) throw new Error('setup: clip was not stored');
+      if (!await within(FM.storage.writeMedia(failing.id, { file: new File([new Uint8Array(32)], '1003b.png', { type: 'image/png' }), kind: 'image' }), 'store failing clip')) throw new Error('setup: the second clip was not stored');
+      FM.storage.markDirty(); await within(FM.storage.save(), 'save');
+      const before = keys(), cards = FM.projects.list().map(p => p.id).sort().join('|');
+      const mediaBefore = await media('media before');
+      let failed = 0;
+      restore = q1191Stub(IDBObjectStore.prototype, 'get', function (real) {
+        return function (key) {
+          if (key !== failing.id || failed) return real.apply(this, arguments);
+          failed++;
+          const rq = { error: new DOMException('1003 read failure', 'UnknownError'), onerror: null, onsuccess: null };
+          setTimeout(function () { if (rq.onerror) rq.onerror({ target: rq }); }, 0);
+          return rq;
+        };
+      });
+      let result;
+      try { result = await within(FM.projects.duplicate(id), 'failed duplicate'); } finally { restore(); }
+      if (failed !== 1) throw new Error('CONTROL: the stored clip read was not failed exactly once');
+      if (result !== false || keys() !== before || FM.projects.list().map(p => p.id).sort().join('|') !== cards) throw new Error('read failure reported success or left a copy behind');
+      const mediaAfter = await media('media after');
+      if (mediaAfter.join('|') !== mediaBefore.join('|')) throw new Error('the failed copy left media behind: ' + mediaBefore.length + ' keys before, ' + mediaAfter.length + ' after');
+      if (FM.projects.lastDuplicateWhy() !== 'failed') throw new Error('a failed read was blamed on ' + FM.projects.lastDuplicateWhy() + ', not on the read');
+      if (await within(FM.storage.readMedia(absent.id, { strict: true }), 'absent control') !== null) throw new Error('CONTROL: absent clip is actually stored');
+      const ok = await within(FM.projects.duplicate(id), 'healthy duplicate');
+      const copies = FM.projects.list().filter(p => p.name === 'FX1003 read copy');
+      copies.forEach(p => made.push(p.id));
+      if (ok !== true || copies.length !== 1) throw new Error('CONTROL: healthy copy with an absent clip did not make exactly one card');
+      const doc = JSON.parse(localStorage.getItem('fm.proj.' + copies[0].id));
+      const copied = doc.layers.find(l => l.name === 'stored clip');
+      const rec = await within(FM.storage.readMedia(copied.id, { strict: true }), 'copied clip control');
+      if (!rec || rec.file.size !== file.size) throw new Error('CONTROL: the successful copy has no stored clip');
+      const copied2 = doc.layers.find(l => l.name === 'failing clip');
+      const rec2 = await within(FM.storage.readMedia(copied2.id, { strict: true }), 'copied second clip control');
+      if (!rec2 || rec2.file.size !== 32) throw new Error('CONTROL: the successful copy has no second clip');
+      const listed = await media('media of the copy');
+      if (!listed.includes(copied.id) || !listed.includes(copied2.id)) throw new Error('CONTROL: the media listing does not show the copy clips, so the before/after comparison proves nothing');
+      if (FM.projects.lastDuplicateWhy() !== null) throw new Error('CONTROL: a whole copy still carries a failure cause: ' + FM.projects.lastDuplicateWhy());
+    } finally {
+      if (restore) restore();
+      FM.projects.list().filter(p => p.name === 'FX1003 read copy').forEach(p => { if (!made.includes(p.id)) made.push(p.id); });
+      if (orig && FM.projects.currentId() !== orig) await within(FM.projects.open(orig), 'restore project');
+      for (const id of made) await within(FM.projects.remove(id), 'remove fixture');
+      if (clip) await within(FM.storage.removeMedia(clip.id), 'remove clip');
+      if (failing) await within(FM.storage.removeMedia(failing.id), 'remove failing clip');
+      if (wasOpen) FM.home.open();
+    }
+  });
+
+  /* queue 1003, the copy's DOCUMENT write (v18.11 assembly): that write's line is the Simple editor's and stays as it is
+     (the Full-unchanged lock), so its refusal leaves a PENDING cause that lastDuplicateWhy settles. The test above fails a
+     clip read; this one refuses the first write a copy makes, for room and then for anything else. */
+  test('1003 a Duplicate refused at its own document write says space when there was no room, failed otherwise, and leaves no card', { item: '1003', budgetMs: 30000 }, async function () {
+    const orig = FM.projects.currentId(), wasOpen = FM.home.isOpen(), made = [];
+    const within = function (p, name) { return q1191Within(p, 10000, '1003 doc ' + name); };
+    const keys = function () { const a = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^fm\.proj\./.test(k)) a.push(k); } return a.sort().join('|'); };
+    const pause = ms => new Promise(r => setTimeout(r, ms));
+    let restore = null;
+    try {
+      if (wasOpen) { FM.home.close(); await pause(100); }
+      const id = await within(FM.projects.create({ name: 'FX1003 doc', width: 320, height: 240 }), 'create');
+      if (!id) throw new Error('setup: create failed');
+      made.push(id);
+      FM.storage.markDirty(); await within(FM.storage.save(), 'save');
+      const before = keys(), cards = FM.projects.list().map(p => p.id).sort().join('|');
+      /* A copy's document is the one fm.proj. key no card has yet: exactly that write is refused. */
+      const known = new Set(FM.projects.list().map(p => 'fm.proj.' + p.id));
+      let refused = 0, kind = 'room';
+      restore = q1191Stub(Storage.prototype, 'setItem', function (real) {
+        return function (key) {
+          if (this !== localStorage || typeof key !== 'string' || key.indexOf('fm.proj.') !== 0 || known.has(key)) return real.apply(this, arguments);
+          refused++;
+          throw kind === 'room' ? new DOMException('1003 full store', 'QuotaExceededError') : new Error('1003 refused for another reason');
+        };
+      });
+      let room, whyRoom, other, whyOther;
+      try {
+        room = await within(FM.projects.duplicate(id), 'duplicate with no room');
+        whyRoom = FM.projects.lastDuplicateWhy();
+        kind = 'other';
+        other = await within(FM.projects.duplicate(id), 'duplicate refused for another reason');
+        whyOther = FM.projects.lastDuplicateWhy();
+      } finally { restore(); restore = null; }
+      if (refused !== 2) throw new Error('CONTROL: the copy document write was refused ' + refused + ' times, not twice, so neither copy reached it');
+      if (room !== false || other !== false) throw new Error('a refused document write reported a copy: ' + room + ', ' + other);
+      if (keys() !== before || FM.projects.list().map(p => p.id).sort().join('|') !== cards) throw new Error('a refused document write left a card or a document behind');
+      if (whyRoom !== 'space') throw new Error('a copy refused for room was blamed on ' + whyRoom + ', so Home would not say storage is full');
+      if (whyOther !== 'failed') throw new Error('a copy refused for another reason was blamed on ' + whyOther + ', not failed');
+      FM.storage.markDirty(); await within(FM.storage.save(), 'save after the refusals');
+      const ok = await within(FM.projects.duplicate(id), 'healthy duplicate');
+      FM.projects.list().filter(p => p.name === 'FX1003 doc copy').forEach(p => made.push(p.id));
+      if (ok !== true) throw new Error('CONTROL: a copy with room did not land, so the refusals above prove nothing');
+      if (FM.projects.lastDuplicateWhy() !== null) throw new Error('CONTROL: a whole copy still carries a cause: ' + FM.projects.lastDuplicateWhy());
+    } finally {
+      if (restore) restore();
+      FM.projects.list().filter(p => p.name === 'FX1003 doc copy').forEach(p => { if (!made.includes(p.id)) made.push(p.id); });
+      if (orig && FM.projects.currentId() !== orig) await within(FM.projects.open(orig), 'restore project');
+      for (const id of made) await within(FM.projects.remove(id), 'remove fixture');
+      FM.storage.markDirty(); await within(FM.storage.save(), 'save clears the full-storage latch');
+      if (wasOpen) FM.home.open();
+    }
   });
 
   test('921 S1 the host sanitises on a CLONE: the fix goes out and every live array keeps its identity', { item: '921' }, function () {
@@ -45171,6 +45787,103 @@
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
     }
     } finally { _isoK.put(); }
+  });
+
+  /* #1209 — the mark that says WHICH Unsharp Mask the menu added was a runtime `_iq`, and snap(), save and clone all
+     strip a leading underscore (history.js snap, FM.jsonReplacer), so after an undo or a reload the menu forgot it: it offered
+     Sharpen again, and the second press stacked a second mask. Model: the two tests above (iqLayer, isoKeep). */
+  test('1209 after an undo or a reload the clip menu still offers Remove sharpening, and pressing it removes the one it added', { item: '1209' }, function () {
+    const _isoK = isoKeep(); try {
+    const layers0 = FM.scene.layers.slice();
+    const masks = function (l) { return (l.effects || []).filter(function (e) { return e && e.type === 'unsharpmask'; }).length; };
+    const label = function (l) { return FM.layerMenuItems(l).map(function (i) { return i.label; }).filter(function (t) { return /sharpen/i.test(t); }).join(' / '); };
+    const reload = function (l) { const back = JSON.parse(JSON.stringify([l], FM.jsonReplacer)); FM.storage._sanitizeLayers(back); return back[0]; };
+    try {
+      if (!FM.jsonReplacer || !FM.storage || !FM.storage._sanitizeLayers) throw new Error('FM.jsonReplacer / FM.storage._sanitizeLayers is not reachable');
+      const L = iqLayer(270, 480);
+      FM.scene.layers.push(L);
+      FM.history.commit();
+      FM.improveQuality(L);
+      // CONTROL: one press is a real sharpen and the menu flips (the test above, no undo in between)
+      if (masks(L) !== 1 || !/remove sharpening/i.test(label(L))) throw new Error('CONTROL: after one press there are ' + masks(L) + ' masks and the menu says ' + label(L));
+      // an unrelated edit, then Undo it: the scene comes back from a snapshot
+      L.transform.x += 1; FM.history.commit();
+      FM.history.undo();
+      const L2 = FM.layerById(FM.scene, L.id);
+      if (!L2) throw new Error('setup: the clip is gone after the undo');
+      if (masks(L2) !== 1) throw new Error('setup: undoing the move left ' + masks(L2) + ' Unsharp Masks, not the one');
+      if (!/remove sharpening/i.test(label(L2))) throw new Error('after an undo the clip menu says ' + label(L2) + ' — it forgot which Unsharp Mask it added');
+      FM.improveQuality(L2);
+      if (masks(L2) !== 0) throw new Error('after an undo, pressing the menu again left ' + masks(L2) + ' Unsharp Masks — it stacked a second instead of removing its own');
+
+      // …and through a reload: the saved JSON, through the load whitelist
+      FM.improveQuality(L2);
+      const R = reload(L2);
+      FM.scene.layers.splice(FM.scene.layers.indexOf(L2), 1, R);
+      if (masks(R) !== 1) throw new Error('setup: the reload kept ' + masks(R) + ' Unsharp Masks, not the one');
+      if (!/remove sharpening/i.test(label(R))) throw new Error('after a reload the clip menu says ' + label(R) + ' — it forgot which Unsharp Mask it added');
+      FM.improveQuality(R);
+      if (masks(R) !== 0) throw new Error('after a reload, pressing the menu again left ' + masks(R) + ' Unsharp Masks');
+
+      // CONTROL: an Unsharp Mask he added by hand is still not the menu's, after a reload too
+      const M = iqLayer(270, 480);
+      M.effects = [FM.fxRegistry.makeInstance('unsharpmask')];
+      const M2 = reload(M);
+      FM.scene.layers.push(M2);
+      if (/remove sharpening/i.test(label(M2))) throw new Error('CONTROL: a hand-added Unsharp Mask reads as the menu’s own after a reload (' + label(M2) + ')');
+      FM.improveQuality(M2);
+      if (masks(M2) !== 2) throw new Error('CONTROL: pressing Sharpen beside a hand-added Unsharp Mask left ' + masks(M2) + ', not the hand one plus ours');
+    } finally {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+    }
+    } finally { _isoK.put(); }
+  });
+
+  /* #1211 — the clip menu's Reverse committed AFTER its long frame build, so an Undo pressed while "Preparing frames…"
+     was up found no Reverse on the stack and took back his previous, unrelated edit; the build then finished and committed the
+     un-reversed scene, which cut the redo that could have brought it back. Model: the Simple S9 Reverse test (FM.ensureReverseCache
+     and FM.maybeClearCache stubbed, put back in a finally) and the tests above (iqLayer-style layers, isoKeep). */
+  test('1211 Undo pressed while the clip menu Reverse is still preparing frames takes back the Reverse and nothing else', { item: '1211' }, async function () {
+    const _isoK = isoKeep();
+    const layers0 = FM.scene.layers.slice();
+    const real = FM.ensureReverseCache, realClr = FM.maybeClearCache;
+    let release = null;
+    FM.ensureReverseCache = function () { return new Promise(function (r) { release = r; }); };
+    FM.maybeClearCache = function () {};
+    const run = async function (undoWhileBuilding) {
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      const V = FM.makeLayer('video', { name: 'V' }); V.start = 0; V.duration = 4;
+      const X = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#ffffff' }); X.start = 0; X.duration = 4;
+      FM.scene.layers.push(V, X); FM.history.commit();
+      const x0 = X.transform.x;
+      X.transform.x = x0 + 50; FM.history.commit();   // his previous, unrelated edit
+      const item = FM.layerMenuItems(V).filter(function (i) { return i.label === 'Reverse'; })[0];
+      if (!item) throw new Error('setup: no Reverse in the clip menu of a video layer');
+      release = null;
+      let err = null;
+      const done = Promise.resolve(item.action()).catch(function (e) { err = e; });
+      if (!release) throw new Error('setup: the Reverse did not start a frame build');
+      const finish = what => Promise.race([done, sleep(3000).then(function () { throw new Error('the Reverse action did not finish within 3 s ' + what); })]);
+      if (!undoWhileBuilding) { release(); await finish('after its frames were ready'); }
+      FM.history.undo();
+      if (undoWhileBuilding) { release(); await finish('after the undo'); }
+      await sleep(30);
+      if (err) throw new Error('the Reverse action threw: ' + (err && err.message || err));
+      const X2 = FM.layerById(FM.scene, X.id), V2 = FM.layerById(FM.scene, V.id);
+      return { x: X2 ? X2.transform.x : NaN, want: x0 + 50, reversed: V2 ? !!V2.reversed : null };
+    };
+    try {
+      // CONTROL: the build finishes first, then Undo — it takes back only the Reverse (today and after)
+      const c = await run(false);
+      if (c.x !== c.want || c.reversed !== false) throw new Error('CONTROL: Undo after the frames were ready left the moved shape at x ' + c.x + ' (want ' + c.want + ') and the clip reversed ' + c.reversed);
+      const u = await run(true);
+      if (u.reversed !== false) throw new Error('Undo during Preparing frames left the clip reversed (' + u.reversed + ')');
+      if (u.x !== u.want) throw new Error('Undo pressed while Reverse was still preparing frames took back his earlier move of another layer: the shape is at x ' + u.x + ', not ' + u.want);
+    } finally {
+      FM.ensureReverseCache = real; FM.maybeClearCache = realClr;
+      FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+      _isoK.put();
+    }
   });
 
   test('the perf verdict recognises a stutter the median cannot see', { item: 'perf-verdict' }, function () {
@@ -124253,6 +124966,78 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
+  /* ═══ #1196 — HIS PHONE'S BLUR LOOP (runCssOpsOnGPU), only where ctx.filter is dead ═══════════════════════════
+   * (1) A blur at 0 (typed, a blur-in before its first key, Focus Pull landing on 0) made FM.glColor.blur refuse, and the
+   *     refusal abandoned the whole pass, so the Grayscale beside it went too: full colour on the phone, grey on the PC.
+   *     Model: queue 836's glow test, the same trap for Glow, and its dead-filter descriptor swap.
+   * (2) The blur ran on STRAIGHT colour, so a transparent neighbour pulled the edge toward black: over black the 50% edge of
+   *     a blurred white square came out near 64 where ctx.filter draws near 128, a dark ring round every blurred title,
+   *     sticker or shape. Model: the 986 C24 test above (reference with ctx.filter alive, candidate with it dead).
+   * 📐 RING_BOUND MEASURED (28 Oct, this laptop's Chrome, 3476 ramp pixels): the opaque control 1.565 on both trees; the square
+   * over transparency 1.565 with the fix and 46.131 on 6f8db2e3 (straight colour). 12 sits between them. */
+  test('1196 on a device without ctx.filter a Blur at 0 keeps the layer grade, and a blur over transparency draws no dark ring', { item: '1196' }, function () {
+    if (!FM.ctxFilterOK || !FM.ctxFilterOK()) throw new Error('no ctx.filter in this browser, so there is no reference picture to compare against');
+    if (!FM.glColor || !FM.glColor.available()) throw new Error('WebGL is not available, so his phone’s path cannot be exercised: ' + (FM.glColor ? FM.glColor.stats().reason : 'no FM.glColor'));
+    const W = 120, H = 120, RING_BOUND = 12;
+    const desc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'filter');
+    const was = { force: FM._forceNoCtxFilter, noGL: FM._noGL };
+    const live = () => { if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc); FM._forceNoCtxFilter = false; FM._noGL = false; FM.glColor._reset(); };
+    const dead = () => {
+      if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', { configurable: true, get: function () { return 'none'; }, set: function () {} });
+      FM._forceNoCtxFilter = true; FM._noGL = false; FM.glColor._reset();
+    };
+    const grey = p => Math.abs(p[0] - p[1]) < 14 && Math.abs(p[1] - p[2]) < 14;   // measured jitter 0-2; the fault is the red square, 164 apart
+    const redGrey = (radius) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 60, shapeH: 60, fill: '#e8443f' }); L.start = 0; L.duration = 4;
+      L.effects = [_986fx('grayscale'), _986fx('blur', { radius: radius })];
+      const r = _986shot([L], 0.5, W, H), i = ((r.h >> 1) * r.w + (r.w >> 1)) * 4;
+      return [r.d[i], r.d[i + 1], r.d[i + 2], r.d[i + 3]];
+    };
+    // the edge ramp of a blurred white square on black: mean |R| difference between the dead-filter path and ctx.filter
+    const ring = (mk) => {
+      live(); const ref = _986shot(mk(), 0.5, W, H).d;
+      dead(); let cand, gpu;
+      try { cand = _986shot(mk(), 0.5, W, H).d; gpu = FM.glColor.stats().gpu; } finally { live(); }
+      let s = 0, n = 0;
+      for (let i = 0; i < ref.length; i += 4) if (ref[i] >= 20 && ref[i] <= 235) { s += Math.abs(cand[i] - ref[i]); n++; }
+      return { mean: n ? s / n : NaN, n: n, gpu: gpu };
+    };
+    const art = document.createElement('canvas'); art.width = W; art.height = H;
+    const ax = art.getContext('2d'); ax.fillStyle = '#000000'; ax.fillRect(0, 0, W, H); ax.fillStyle = '#ffffff'; ax.fillRect(38, 38, 44, 44);
+    const had = FM.media.get('_h2i2');
+    FM.media.set('_h2i2', { kind: 'image', el: art, width: W, height: H, duration: 0 });
+    try {
+      // CONTROLS for (1): the PC keeps the grade at 0, and the phone path keeps it when the blur can draw.
+      live();
+      const pc0 = redGrey(0);
+      if (!grey(pc0)) throw new Error('CONTROL: with ctx.filter working, Grayscale plus a 0 blur gave ' + pc0.slice(0, 3) + ', not grey — the fixture is not grading');
+      dead();
+      const ph4 = redGrey(4), gpu4 = FM.glColor.stats().gpu;
+      if (!(gpu4 > 0)) throw new Error('CONTROL: the GPU path never ran for Grayscale plus a 4 px blur (' + FM.glColor.stats().reason + ')');
+      if (!grey(ph4)) throw new Error('CONTROL: on the phone path Grayscale plus a 4 px blur gave ' + ph4.slice(0, 3) + ', not grey');
+      FM.glColor._reset();
+      const ph0 = redGrey(0);
+      live();
+      if (!grey(ph0)) throw new Error('on a device without ctx.filter, Grayscale plus a Blur at 0 drew ' + ph0.slice(0, 3) + ' (the PC draws ' + pc0.slice(0, 3) + ') — the blur that cannot draw threw away the whole grade');
+      if (!(ph0[3] > 200)) throw new Error('with a Blur at 0 the layer did not draw at all on the phone path (alpha ' + ph0[3] + ')');
+
+      // CONTROL for (2): the same square painted INTO an opaque full-frame picture, so no pixel has a transparent neighbour.
+      const opaque = ring(() => { const l = FM.makeLayer('image', { x: 60, y: 60, start: 0, duration: 4 }); l.id = '_h2i2'; l.effects = [_986fx('blur', { radius: 8 })]; return [l]; });
+      if (!(opaque.gpu > 0)) throw new Error('CONTROL: the GPU path never ran for the opaque picture');
+      if (!(opaque.n > 200)) throw new Error('CONTROL: the reference has only ' + opaque.n + ' edge pixels on the opaque picture — the blur is not softening the square');
+      if (!(opaque.mean < RING_BOUND)) throw new Error('CONTROL: on an opaque picture the phone blur is ' + opaque.mean.toFixed(2) + ' levels off ctx.filter across the edge — the comparison is loose, so the ring check proves nothing');
+      const clear = ring(() => { const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 44, shapeH: 44, fill: '#ffffff' }); L.start = 0; L.duration = 4; L.effects = [_986fx('blur', { radius: 8 })]; return [L]; });
+      if (!(clear.gpu > 0)) throw new Error('CONTROL: the GPU path never ran for the square on transparency');
+      if (!(clear.n > 200)) throw new Error('CONTROL: the reference has only ' + clear.n + ' edge pixels on the square — the blur is not softening it');
+      if (!(clear.mean < RING_BOUND))
+        throw new Error('over transparency the phone blur is ' + clear.mean.toFixed(2) + ' levels off ctx.filter across the edge of a white square on black (the opaque control: ' + opaque.mean.toFixed(2) + ', bound ' + RING_BOUND + ') — it blurs straight colour, so the transparent neighbours pull the edge toward black: a dark ring round every blurred title, sticker or shape');
+    } finally {
+      if (desc) Object.defineProperty(CanvasRenderingContext2D.prototype, 'filter', desc);
+      FM._forceNoCtxFilter = was.force; FM._noGL = was.noGL; FM.glColor._reset();
+      if (had) FM.media.set('_h2i2', had); else if (FM.media.remove) FM.media.remove('_h2i2');
+    }
+  });
+
   test('986 C8 Vignette is one renderer: every vignette runs, first in the stack on every layer, and never darkens a transparent corner', { item: '986' }, function () {
     /* MEASURED on 913186b6: a second vignette on a photo changed the corner from 351 to 351 (only the first ran); a round
        PNG over blue had the transparent corner of its box painted to 14 where the blue behind reads 336 (sum of RGB);
@@ -124450,6 +125235,48 @@
     } finally {
       FM.time = was.time; FM._exporting = was.exp;
       if (had) FM.media.set('_986kfc', had); else if (FM.media.remove) FM.media.remove('_986kfc');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* #1213 — the same playhead-crop fault, in Squircle Corners: the roundcorners kernel sized its local-space mask with
+     FM.layerSize (the crop at the PLAYHEAD), so an exported frame where the crop is smaller than at the parked playhead got a mask
+     box bigger than the picture and its corners came out square. Model: the 986 C8 keyframed-crop test above (its clip, its
+     playhead-parked-elsewhere render), reading the alpha just inside the crop's top-left corner on a transparent background. */
+  test('1213 an exported frame of a clip with a keyframed crop gets rounded corners at that frame’s crop, wherever the playhead is parked', { item: '1213', budgetMs: 60000 }, function () {
+    const W = 240, H = 320;
+    const art = document.createElement('canvas'); art.width = W; art.height = H;
+    const ax = art.getContext('2d'); const gr = ax.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#f0e0c0'); gr.addColorStop(1, '#80c0f0'); ax.fillStyle = gr; ax.fillRect(0, 0, W, H);
+    const had = FM.media.get('_h2i19');
+    FM.media.set('_h2i19', { kind: 'image', el: art, width: W, height: H, duration: 0 });
+    const kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 4, v: b, e: 'linear' }] });
+    const clip = (fx, crop) => { const l = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); l.id = '_h2i19'; l.crop = crop || { x: 0, y: 0, w: kf(240, 80), h: kf(320, 120) }; l.effects = fx; return l; };
+    const corners = () => [{ type: 'roundcorners', enabled: true, params: { radius: 40, style: 0 } }];
+    // at 2 s the crop is 160x220 about the centre: x 40..200, y 50..270 — (41, 51) is just inside its top-left corner
+    const alphaAt = (r, rs) => r.d[((Math.floor(51 * rs)) * r.w + Math.floor(41 * rs)) * 4 + 3];
+    const was = { time: FM.time, exp: FM._exporting };
+    const bad = [];
+    try {
+      FM._exporting = true;
+      for (const rs of [1, 0.5]) {
+        // CONTROL: with no effect the corner pixel is the picture, wherever the playhead is
+        FM.time = 2; const b2 = alphaAt(_986shot([clip([])], 2, W, H, rs, null), rs);
+        FM.time = 0; const b0 = alphaAt(_986shot([clip([])], 2, W, H, rs, null), rs);
+        if (!(b2 > 247 && b0 > 247)) throw new Error('CONTROL at scale ' + rs + ': with no effect the pixel inside the crop’s corner has alpha ' + b2 + ' (playhead 2 s) and ' + b0 + ' (playhead 0) — the probe is not on the picture');
+        FM.time = 2; const here = alphaAt(_986shot([clip(corners())], 2, W, H, rs, null), rs);
+        if (!(here < 8)) throw new Error('CONTROL at scale ' + rs + ': with the playhead on the frame the corner pixel has alpha ' + here + ' — Squircle Corners did not round it, so this probe cannot see the fault');
+        FM.time = 0; const parked = alphaAt(_986shot([clip(corners())], 2, W, H, rs, null), rs);
+        if (Math.abs(parked - here) > 8) bad.push('at scale ' + rs + ' the frame at 2 s exported with the playhead parked at 0 has alpha ' + parked + ' just inside the crop’s corner, where the same frame with the playhead on it has ' + here + ' — its corner came out square');
+        // CONTROL: a crop that is not keyframed renders the same frame byte for byte wherever the playhead is
+        const still = { x: 0, y: 0, w: 160, h: 220 };
+        FM.time = 2; const s2 = _986shot([clip(corners(), still)], 2, W, H, rs, null);
+        FM.time = 0; const s0 = _986shot([clip(corners(), still)], 2, W, H, rs, null);
+        let nd = 0; for (let i = 0; i < s2.d.length; i++) if (s2.d[i] !== s0.d[i]) nd++;
+        if (nd) throw new Error('CONTROL at scale ' + rs + ': a still 160x220 crop renders ' + nd + ' values differently with the playhead at 0 and at 2');
+      }
+    } finally {
+      FM.time = was.time; FM._exporting = was.exp;
+      if (had) FM.media.set('_h2i19', had); else if (FM.media.remove) FM.media.remove('_h2i19');
     }
     if (bad.length) throw new Error(bad.join(' · '));
   });
@@ -137660,6 +138487,68 @@
       });
     } finally {
       if (id && FM.effectPresets && FM.effectPresets.remove) FM.effectPresets.remove(id);
+    }
+  });
+
+  /* #1210 — HIS SAVED LOOK COMES BACK AS HE SAVED IT. Two faults on the way out of the preset store:
+     (a) filters.js saneChild rebuilt each ingredient from the registry and copied only its params, so one he had switched off
+         came back on; (b) the ingredients' keys were stored absolute while the container's were rebased to 0, and
+         FM.filters.makeInstance re-anchored neither, so a Strength fade-in landed already at full strength on a clip not starting
+         at 0 and an animated ingredient fired at the original clip's time. Model: the 482 15.2 tests above (capture, save,
+         FM.filters.makeInstance, remove in a finally). */
+  test('1210 a saved filter lands with its switched-off ingredients still off and its keyframes on the clock of the clip it lands on', { item: '1210' }, function () {
+    const ids = [];
+    const look = b => (b.effects || []).map(e => JSON.stringify([e.type, e.enabled !== false, e.params])).join('|');
+    try {
+      // (a) an ingredient switched off
+      const box = FM.filters.makeInstance('noir');
+      if (!box || !Array.isArray(box.effects) || box.effects.length < 2) throw new Error('setup: Noir has ' + (box && box.effects ? box.effects.length : 0) + ' ingredients, the test needs two');
+      if (box.effects.some(e => e.enabled === false)) throw new Error('CONTROL: a library Noir lands with an ingredient switched off');
+      box.effects[1].enabled = false;
+      const cap = FM.effectPresets.capture(box, 'hunt2 off 16');
+      if (!cap || !FM.effectPresets.save(cap)) throw new Error('setup: could not save the filter preset');
+      ids.push(cap.id);
+      const viaPreset = FM.effectPresets.makeInstance(cap, 0);
+      if (!viaPreset || !viaPreset.effects || !viaPreset.effects[1] || viaPreset.effects[1].enabled !== false) throw new Error('CONTROL: the saved preset itself lost the switched-off ingredient');
+      const back = FM.filters.makeInstance(cap.id);
+      if (!back || back.effects.length !== box.effects.length) throw new Error('setup: the saved filter came back with ' + (back ? back.effects.length : 0) + ' ingredients, not ' + box.effects.length);
+      if (back.effects[1].enabled !== false) throw new Error('his saved filter came back from the Filters tab with the ingredient he had switched off (' + back.effects[1].type + ') on again');
+      // CONTROL: a static saved filter, and a library look, land the same whatever the clip's start
+      const at30 = FM.filters.makeInstance(cap.id, 30);
+      if (look(at30) !== look(back)) throw new Error('CONTROL: a saved filter with no keyframes lands differently on a clip at 30 s');
+      if (look(FM.filters.makeInstance('noir', 30)) !== look(FM.filters.makeInstance('noir'))) throw new Error('CONTROL: a library Noir lands differently on a clip at 30 s');
+
+      // (b) the clock: a filter on a clip at 10 s, its Strength fading in and an ingredient's blur animated
+      const anim = FM.filters.makeInstance('noir');
+      const blur = FM.fxRegistry.makeInstance('blur');
+      if (!blur) throw new Error('setup: no blur in the registry');
+      blur.params.radius = { kf: [{ t: 10, v: 20 }, { t: 11, v: 0 }] };
+      anim.params = Object.assign({}, anim.params, { strength: { kf: [{ t: 10, v: 0 }, { t: 11, v: 1 }] } });
+      anim.effects = [blur];
+      if (anim.params.strength.kf[0].t !== 10 || anim.effects[0].params.radius.kf[0].t !== 10) throw new Error('CONTROL: on the original filter the first keys are not both at 10 s');
+      const cap2 = FM.effectPresets.capture(anim, 'hunt2 clock 16');
+      if (!cap2 || !FM.effectPresets.save(cap2)) throw new Error('setup: could not save the animated filter preset');
+      ids.push(cap2.id);
+      const first = (p) => (p && Array.isArray(p.kf) && p.kf[0]) ? p.kf[0].t : NaN;
+      const b = FM.filters.makeInstance(cap2.id, 30);
+      if (!b || !b.effects[0]) throw new Error('setup: the animated saved filter did not come back');
+      const s0 = first(b.params.strength), r0 = first(b.effects[0].params.radius);
+      if (!(Math.abs(s0 - 30) < 1e-4)) throw new Error('his saved filter on a clip at 30 s starts its Strength fade-in at ' + s0 + ' s, before the clip — so the clip opens at full strength');
+      if (!(Math.abs(r0 - 30) < 1e-4)) throw new Error('his saved filter on a clip at 30 s starts its animated ingredient at ' + r0 + ' s — the original clip’s time, not this one’s');
+      const p2 = FM.effectPresets.makeInstance(cap2, 30);
+      const pr0 = p2 && p2.effects && p2.effects[0] ? first(p2.effects[0].params.radius) : NaN;
+      if (!(Math.abs(pr0 - 30) < 1e-4)) throw new Error('as an effect preset on a clip at 30 s, the animated ingredient starts at ' + pr0 + ' s, not 30');
+
+      // CONTROL: a preset stored before the fix (absolute ingredients, no rel) keeps its ingredients' times exactly as before
+      const old = JSON.parse(JSON.stringify(cap2));
+      delete old.rel; old.id = 'uh2old16'; old.name = 'hunt2 old 16';
+      old.effects[0].params.radius = { kf: [{ t: 10, v: 20 }, { t: 11, v: 0 }] };
+      if (!FM.effectPresets.save(old)) throw new Error('setup: could not save the old-style preset');
+      ids.push(old.id);
+      const ob = FM.filters.makeInstance(old.id, 30);
+      if (!ob || first(ob.effects[0].params.radius) !== 10) throw new Error('CONTROL: a filter saved before the fix moved its ingredient’s key to ' + (ob ? first(ob.effects[0].params.radius) : 'nothing') + ' s — it was absolute, and must stay at 10');
+    } finally {
+      ids.forEach(id => { try { FM.effectPresets.remove(id); } catch (e) {} });
     }
   });
 
@@ -164680,14 +165569,37 @@
       return s;
     };
     const TEXTS = ['Hello brave new world', 'two lines\nof caption text', 'a', '', 'Mixed CASE 2026 & co!', 'tab\there', String.fromCharCode(201) + 'cole de ' + String.fromCharCode(233) + 't' + String.fromCharCode(233)];
+    /* …except Capitalize Words on the accented sample, changed ON PURPOSE by #1214: the old \b\w capitalised the letter after
+       the accent (“éCole De éTé”), and it now reads “École De Été”. Every other text and case is still the old kernel's. */
+    const CHANGED = {}; CHANGED['2|' + TEXTS[6]] = String.fromCharCode(201) + 'cole De ' + String.fromCharCode(201) + 't' + String.fromCharCode(233);
+    const want = (m, s) => Object.prototype.hasOwnProperty.call(CHANGED, m + '|' + s) ? CHANGED[m + '|' + s] : OLD(m, s);
     const bad = [];
     TEXTS.forEach(s => {
-      [0, 1, 2, 3, 7].forEach(m => { const got = _o4Tx('texttransform', { mode: m }, s); if (got !== OLD(m, s)) bad.push('case ' + m + ' writes “' + got + '” for “' + s + '”, not “' + OLD(m, s) + '”'); });
+      [0, 1, 2, 3, 7].forEach(m => { const got = _o4Tx('texttransform', { mode: m }, s); if (got !== want(m, s)) bad.push('case ' + m + ' writes “' + got + '” for “' + s + '”, not “' + want(m, s) + '”'); });
       const bare = _o4Tx('texttransform', {}, s);
       if (bare !== OLD(0, s)) bad.push('a saved Change Case with no mode writes “' + bare + '” for “' + s + '”, not UPPERCASE');
     });
     const four = [0, 1, 2, 3].map(m => _o4Tx('texttransform', { mode: m }, 'mIxEd case Text'));
     if (new Set(four).size !== 4) bad.push('CONTROL: the four old cases write ' + four.join(' / ') + ' — not four different strings');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* #1214 — Capitalize Words by letter. The old \b\w is ASCII-only and breaks a word at an apostrophe, so title-cased captions
+     read “Don'T” and “I'M” on almost every English sentence, accented words got the capital on the wrong letter and Russian none.
+     Model: the two Change Case tests above (_o4Tx, exact strings). */
+  test('1214 Change Case Capitalize Words writes I’m, Don’t, École and Привет — a contraction is one word, an accented or Cyrillic letter starts one (CONTROL: plain English, digits, symbols and a tab read as before)', { item: '1214' }, function () {
+    _o4CaseNeed();
+    const T = s => _o4Tx('texttransform', { mode: 2 }, s);
+    const E = String.fromCharCode(201), e = String.fromCharCode(233), Q = '’';
+    const bad = [];
+    // …and an emoji with its selector (a MARK) still starts a word after it, as \b\w did (its review, F1)
+    [['hello brave new world', 'Hello Brave New World'], ['Mixed CASE 2026 & co!', 'Mixed Case 2026 & Co!'], ['tab\there', 'Tab\tHere'], ['❤️love', '❤️Love']].forEach(([s, w]) => {
+      const got = T(s); if (got !== w) bad.push('CONTROL: “' + s + '” reads “' + got + '”, not “' + w + '”');
+    });
+    [["i'm here, don't go", "I'm Here, Don't Go"], ['it' + Q + 's fine', 'It' + Q + 's Fine'], [e + 'cole de ' + e + 't' + e, E + 'cole De ' + E + 't' + e],
+     ['привет мир', 'Привет Мир']].forEach(([s, w]) => {
+      const got = T(s); if (got !== w) bad.push('Capitalize Words writes “' + got + '” for “' + s + '”, not “' + w + '”');
+    });
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
@@ -171615,6 +172527,49 @@
       } finally {
         FM.isolate = iso0;
       }
+    });
+  });
+
+  /* #1201 — SOLO GETS THE ISOLATE'S RULE. Export only this layer solos one layer (FM._exportSoloPrep); a member of a styled group
+     then reached its group's unit, which draws EVERY member, so the file held the whole group, faded as the group is, and the other
+     members' video played with no sound (the audio follows solo). Model: the bughunt4 #9 test above (_bh2With, a group of two blocks,
+     _bh2Frame), with the export's own solo in place of the isolate. The hold exportSoloPrep takes is let go the way exportSoloRestore
+     lets it go (js/app.js), so no saved copy of these layers reads a held solo afterwards. */
+  test('1201 Export only this layer on a member of a styled group draws that member alone, at full strength, without the other member (CONTROLS: a plain group does the same; exporting the styled group itself draws both members at the group look)', { item: '1201' }, async function () {
+    if (typeof FM._exportSoloPrep !== 'function') throw new Error('setup: FM._exportSoloPrep is not reachable');
+    const unprep = r => {
+      const held = FM._exportSoloHeld;
+      r.forEach(([l, v]) => { l.solo = v; const h = held && held.get(l); if (h && --h.n <= 0) held.delete(l); });
+      if (held && !held.size && FM._exportSoloHeld === held) FM._exportSoloHeld = null;
+    };
+    await _bh2With(async function () {
+      const exp0 = FM._exporting;
+      const G = FM.makeLayer('group', { name: 'h2i7 group', x: 0, y: 0, start: 0, duration: 4 });
+      G.start = 0; G.duration = 4; G.transform.x = 0; G.transform.y = 0;
+      const block = (name, x, fill) => { const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 120, shapeW: 40, shapeH: 40, fill: fill, start: 0, duration: 4 }); L.start = 0; L.duration = 4; L.parent = G.id; return L; };
+      const A = block('h2i7 red', 60, '#ff0000'), B = block('h2i7 blue', 180, '#0000ff');
+      FM.scene.layers = [G, A, B];
+      const px = (f, x) => { const i = (120 * 320 + x) * 4; return [f.d[i], f.d[i + 1], f.d[i + 2]]; };
+      const near = (p, q, tol) => Math.abs(p[0] - q[0]) <= tol && Math.abs(p[1] - q[1]) <= tol && Math.abs(p[2] - q[2]) <= tol;
+      const exported = target => {
+        const r = FM._exportSoloPrep(target);
+        FM._exporting = true;
+        try { const f = _bh2Frame(1); return { a: px(f, 60), b: px(f, 180) }; } finally { FM._exporting = exp0; unprep(r); }
+      };
+      const BLACK = [0, 0, 0], BLUE = [0, 0, 255];
+      // CONTROL: a plain group — exporting the blue block draws it alone, today and after
+      const plain = exported(B);
+      if (!near(plain.a, BLACK, 3) || !near(plain.b, BLUE, 3)) throw new Error('CONTROL: in a plain group, exporting the blue block reads ' + plain.a + ' where the red one is and ' + plain.b + ' on itself, not black and blue');
+      // the group styled: 80 %, so it composites as one flattened unit
+      G.transform.opacity = 0.8;
+      const all = _bh2Frame(1), look = [px(all, 60), px(all, 180)];
+      if (!near(look[0], [204, 0, 0], 4) || !near(look[1], [0, 0, 204], 4)) throw new Error('CONTROL: at 80 % the blocks read ' + look[0] + ' and ' + look[1] + ' where 0.8 × 255 is 204 — the group’s look did not reach them, so this case does not take the unit route');
+      // CONTROL: exporting the styled GROUP draws both members at the group look, today and after
+      const whole = exported(G);
+      if (!near(whole.a, [204, 0, 0], 4) || !near(whole.b, [0, 0, 204], 4)) throw new Error('CONTROL: exporting the styled group reads ' + whole.a + ' and ' + whole.b + ', not both blocks at 80 %');
+      const one = exported(B);
+      if (!near(one.a, BLACK, 3)) throw new Error('Export only the blue block, inside an 80 % group, drew the red block beside it too (' + one.a + ' where the background is black) — the blue block reached its group’s unit, which draws every member');
+      if (!near(one.b, BLUE, 3)) throw new Error('Export only the blue block, inside an 80 % group, drew it at ' + one.b + ', not on its own at full strength (' + BLUE + ') — the group’s fade came with it');
     });
   });
 
@@ -185354,6 +186309,453 @@
     });
   });
   // ── end 966 opts20 ──
+  const _O21_NEW = { thermal: ['skin', 'mix'], lightglow: ['skin', 'mix'], darkglow: ['skin', 'mix'] };
+  const _o21Active = type => type === 'lightglow' ? { threshold: 0 } : (type === 'darkglow' ? { threshold: 100 } : {});
+  /* WHAT TONE13 DRAWS ON THE SHARED WRAPPER'S PATH (rfx2124 H1, as the refuter xfx2124 widened it): _o13Lay where the kernel kept a
+     pixel's alpha; where it CHANGED it (Glow past the edges lays a halo into clear and part-clear pixels) colour and alpha laid in
+     together, premultiplied, in tone13's own order and arithmetic — alpha aO + (aK − aO)·w, colour (cO·aO + (cK·aK − cO·aO)·w) over
+     it — and a pixel left with no alpha written clear. A share of exactly 1 keeps the kernel's bytes, as in _o13Lay. */
+  const _o21Lay = (pic, ker, wf) => {
+    const o = _o13Lay(pic, ker, wf);
+    for (let i = 0; i < pic.length; i += 4) {
+      const aO = pic[i + 3], aK = ker[i + 3];
+      if (aK === aO) continue;
+      const r = pic[i], g = pic[i + 1], b = pic[i + 2], w = wf(r, g, b);
+      if (w === 1) continue;
+      const aN = aO + (aK - aO) * w;
+      if (!(aN > 0)) { o[i] = 0; o[i + 1] = 0; o[i + 2] = 0; o[i + 3] = 0; continue; }
+      o[i] = (r * aO + (ker[i] * aK - r * aO) * w) / aN; o[i + 1] = (g * aO + (ker[i + 1] * aK - g * aO) * w) / aN; o[i + 2] = (b * aO + (ker[i + 2] * aK - b * aO) * w) / aN;
+      o[i + 3] = aN;
+    }
+    return o;
+  };
+  /* round thirteen's busy picture inside a clear border 12 px wide: Glow past the edges lays its halo into the border */
+  const _o21Border = (W, H) => E1.frame(W, H, (x, y) => (x < 12 || y < 12 || x >= W - 12 || y >= H - 12) ? [0, 0, 0, 0] : [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  /* H1's own case, for the three glows: on a layer with a clear border and Glow past the edges On, Mix 1 and 40 lay the halo in at that
+     share of its coverage, premultiplied (_o21Lay). On fx24 the halo kept the kernel's full alpha under a colour pulled toward the
+     border's black: Highlight and Dreamy Bloom drew a dark ring, Shadow Bloom's black ring stayed at full strength at any Mix above 0.
+     CONTROL: the kernel does change the border's alpha, so the premultiplied branch is reached. */
+  const _o21EdgeMix = (type, active) => {
+    const pic = _o21Border(96, 72), q = _o13P(type, Object.assign({}, active, { outside: 1 }));
+    const kernel = _o13Run(type, _o13Del(q, ['skin', 'mix']), 96, 72, pic.slice(), 0.5);
+    let grew = 0;
+    for (let i = 3; i < pic.length; i += 4) if (kernel[i] !== pic[i]) grew++;
+    if (!grew) throw new Error('CONTROL: Glow past the edges laid no halo into the clear border, so the premultiplied lay-in is never reached');
+    [1, 40].forEach(mix => {
+      const got = _o13Run(type, Object.assign({}, q, { mix: mix }), 96, 72, pic.slice(), 0.5);
+      const m = E1.maxDiff(got, _o21Lay(pic, kernel, () => mix / 100));
+      if (m) throw new Error(type + ' at Mix ' + mix + ' with Glow past the edges is up to ' + m + ' levels off the halo laid in premultiplied at ' + mix + ' % coverage');
+    });
+  };
+  /* One pin per control, as in opts20. The blooms are absent from ADJ_OK and PIXEL_ADJ: no adjustment surface is enabled here.
+     At the starting Shadow Bloom threshold a flat skin tone need not glow; the CONTROL raises it on the same surface.
+     No guessed tolerance: byte identity is exact, and every CONTROL is a nonzero count, not a measured value. Each test is red on
+     the old code at _o19Need, which requires both new registry rows.
+     The sweep renders the wrapper against itself, so it could not see rfx2124's B1 or B2; the two oracle checks at the end can. */
+  const _o21IdentPin = (type, key) => {
+    _o19Need(type, _O21_NEW[type]);
+    const P = _o13P(type), fx = p => ({ type: type, enabled: true, params: p });
+    const card = f => { const L = _o13Rect(f); L.transform.opacity = 0.8; L.fillOpacity = 0.6; L.transform.rotation = 12; return L; };
+    const ways = [f => [_o13Rect(f)], f => [card(f)]];
+    if (type === 'thermal') ways.push(f => { const L = FM.makeLayer('adjustment', { start: 0, duration: 4 }); L.effects = f ? [f] : []; return [L, _o13Rect(null)]; });
+    ways.forEach(make => [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+      const shot = p => _o13shot(make(p ? fx(p) : null), t, 160, 120, rs, '#808080');
+      [P, Object.assign({}, P, _o21Active(type))].forEach(q => {
+        if (E1.maxDiff(shot(q), shot(_o13Del(q, [key])))) throw new Error(type + ' ' + key + ' changed the default surface');
+      });
+      const q = Object.assign({}, P, _o21Active(type)), a = shot(q), on = Object.assign({}, q);
+      on[key] = key === 'skin' ? 100 : 0;
+      if (!E1.count(a, shot(null), 0)) throw new Error('CONTROL: effect did not grade the surface');
+      if (!E1.count(a, shot(on), 0)) throw new Error('CONTROL: control did not move the surface');
+    })));
+    [{}, _o21Active(type), { amount: _o13KF(0.2, 1) }, { blend: 2, knee: 40, passes: 3, outside: 1 }, { palette: 4, blend: 4, cycle: 0.5 }].forEach(over => {
+      [1, 0.5].forEach(ps => {
+        const q = _o13P(type, over), pic = _o13Pic(96, 72);
+        const run = p => _o13Run(type, p, 96, 72, pic.slice(), 0.37, ps);
+        if (E1.maxDiff(run(q), run(_o13Del(q, [key])))) throw new Error(type + ' ' + key + ' changed the dispatcher default');
+      });
+    });
+    /* rfx2124's oracles, outside the wrapper. The wrapper must keep its kernel's arity (pxToPlate reads it) and name its kernel
+       (fxFillValue reads that). */
+    const K21 = FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof K21.__fmKernel !== 'function') throw new Error('the ' + type + ' wrapper does not name its kernel (__fmKernel), so the 793 fill reads the wrapper, not the kernel');
+    if (K21.length !== K21.__fmKernel.length) throw new Error('the ' + type + ' wrapper takes ' + K21.length + ' arguments and its kernel ' + K21.__fmKernel.length + ', so pxToPlate scales its px params wrongly');
+    if (type === 'lightglow' || type === 'darkglow') {
+      /* B1: a half preview plate blurs at half the px Radius, so the default drawn there is the full-plate kernel at Radius 3. On fx24
+         it blurred at the full 6, twice the export. CONTROL: Radius 6 and 3 draw differently on the same full plate. */
+      const q = Object.assign({}, P, _o21Active(type)), pic = _o13Pic(96, 72);
+      const full = _o13Run(type, q, 96, 72, pic.slice(), 0.37, 1), halfR = _o13Run(type, Object.assign({}, q, { radius: q.radius / 2 }), 96, 72, pic.slice(), 0.37, 1);
+      if (!E1.count(full, halfR, 0)) throw new Error('CONTROL: Radius ' + q.radius + ' and ' + (q.radius / 2) + ' draw the same, so the plate check cannot fail');
+      const m = E1.maxDiff(_o13Run(type, q, 96, 72, pic.slice(), 0.37, 0.5), halfR);
+      if (m) throw new Error(type + ' on a half plate is up to ' + m + ' levels off the full-plate kernel at half the Radius: the preview blurs at the export size (#691)');
+    }
+    if (type === 'thermal') {
+      /* B2: Cycle speed runs on the clip's own clock (arguments[7]), on the plain path and through Mix. A clip from 0.25 s has run
+         exactly 0.5 s at 0.75 s, so it draws what no clip draws at 0.5 s. On fx24 the clip was dropped and it drew project time 0.75.
+         CONTROL: with no clip, 0.75 s and 0.5 s draw differently. */
+      [{}, { mix: 60 }].forEach(over => {
+        const q = Object.assign({}, P, { cycle: 0.4 }, over), at = (t, lay) => E1.px('thermal', q, 256, 2, _o13Lv(), t, lay);
+        const want = at(0.5);
+        if (!E1.count(at(0.75), want, 0)) throw new Error('CONTROL: Cycle 0.4 draws the same at 0.75 s and 0.5 s, so the clock check cannot fail');
+        const m = E1.maxDiff(at(0.75, { start: 0.25, duration: 4 }), want);
+        if (m) throw new Error('Heat Map Cycle speed ' + JSON.stringify(over) + ' on a clip from 0.25 s is up to ' + m + ' levels off its half second at 0.75 s: it runs on project time, not the clip clock');
+      });
+    }
+  };
+  const _o21SkinPin = type => {
+    _o19Need(type, _O21_NEW[type]);
+    const bad = _o13Rows(type, [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }
+    ], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp(type, { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp(type, { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    const pic = _o13Row(_O13_SKIN)(), N = _O13_SKIN.length;
+    const run = over => _o13Run(type, _o13P(type, Object.assign({}, _o21Active(type), over)), N, 1, pic.slice(), 0.5);
+    const plain = run({ skin: 0 });
+    if (!E1.count(plain.slice(0, 8), pic.slice(0, 8), 0)) throw new Error('CONTROL: plain grade did not move skin');
+    if (!E1.count(plain.slice(8), pic.slice(8), 0)) throw new Error('CONTROL: plain grade did not move non-skin');
+    [40, 100].forEach(skin => {
+      const want = _o13Lay(pic, plain, (r, g, b) => 1 - skin / 100 * _o13Skin(r, g, b));
+      if (E1.maxDiff(run({ skin: skin }), want)) throw new Error(type + ' skin weight differs');
+      if (!E1.count(run({ skin: skin }), plain, 0)) throw new Error('CONTROL: Protect skin did not move the grade');
+    });
+    if (E1.maxDiff(run({ skin: _o13KF(0, 100) }), run({ skin: 50 }))) throw new Error('keyed skin differs');
+    [{}, { mix: 60, blend: 2, knee: 40, passes: 3 }, { palette: 4, blend: 4, cycle: 0.5 }].forEach(extra => {
+      const src = _o13Pic(96, 72);
+      for (let i = 3; i < src.length; i += 4) src[i] = (i % 12) === 3 ? 128 : 255;
+      const q = _o13P(type, Object.assign({}, _o21Active(type), extra));
+      const grade = p => _o13Run(type, p, 96, 72, src.slice(), 0.5);
+      const plain = grade(Object.assign({}, q, { skin: 0, mix: 100 }));
+      const sk = 70, mx = q.mix;
+      const want = _o13Lay(src, plain, (r, g, b) => mx / 100 * (1 - sk / 100 * _o13Skin(r, g, b)));
+      const got = grade(Object.assign({}, q, { skin: sk }));
+      if (E1.maxDiff(got, want)) throw new Error(type + ' busy skin weight differs');
+      if (!E1.count(got, grade(Object.assign({}, q, { skin: 0 })), 0)) throw new Error('CONTROL: skin did not move the busy grade');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  };
+  const _o21MixPin = type => {
+    _o19Need(type, _O21_NEW[type]);
+    const pic = _o13Pic(96, 72);
+    [{}, { skin: 70 }, { blend: 2, knee: 40, passes: 3, outside: 1 }, { palette: 3, cycle: 0.5 }].forEach(extra => {
+      const q = _o13P(type, Object.assign({}, _o21Active(type), extra));
+      const run = mix => _o13Run(type, Object.assign({}, q, { mix: mix }), 96, 72, pic.slice(), 0.5);
+      const plain = run(100);
+      const kernel = _o13Run(type, _o13Del(q, ['skin', 'mix']), 96, 72, pic.slice(), 0.5);
+      if (!E1.count(plain, pic, 0)) throw new Error('CONTROL: full grade did not move the picture');
+      [0, 40].forEach(mix => {
+        /* Mix 0 is the picture, alpha and all: tone13 returns before the kernel runs. Above 0 it is the wrapper's lay-in, _o21Lay: this
+           picture is opaque, so no alpha changes here and that is _o13Lay's picture; a halo laid past the layer's edges is
+           _o21EdgeMix's case, below. */
+        const want = mix === 0 ? pic : _o21Lay(pic, kernel, (r, g, b) => mix / 100 * (1 - q.skin / 100 * _o13Skin(r, g, b)));
+        if (E1.maxDiff(run(mix), want)) throw new Error(type + ' Mix differs');
+        if (!E1.count(run(mix), plain, 0)) throw new Error('CONTROL: Mix did not move the grade');
+      });
+      if (E1.maxDiff(run(_o13KF(0, 100)), run(50))) throw new Error('keyed Mix differs');
+    });
+    if (type !== 'thermal') _o21EdgeMix(type, _o21Active(type));
+  };
+  ['thermal', 'lightglow', 'darkglow'].forEach(type => {
+    ['skin', 'mix'].forEach(key => {
+      test('966 opts21 ' + type + ' ' + key + ' default byte-identity on every supported surface (CONTROL: effect and control move the fixture)', { item: '966', budgetMs: 90000 }, async function () { _o21IdentPin(type, key); });
+    });
+    test('966 opts21 ' + type + ' Protect skin keeps skin and leaves non-skin graded, with registry and saved values (CONTROL: skin 0 grades both)', { item: '966', budgetMs: 60000 }, async function () { _o21SkinPin(type); });
+    test('966 opts21 ' + type + ' Mix lays the grade over the picture, keyed too (CONTROL: Mix 100 grades the picture)', { item: '966', budgetMs: 60000 }, async function () { _o21MixPin(type); });
+  });
+  test('966 opts21 Highlight Bloom gives no false source reason when skin or Mix holds it back (CONTROL: the unprotected glow retains its reason)', { item: '966' }, async function () {
+    _o19Need('lightglow', _O21_NEW.lightglow);
+    const why = params => FM._noopWhy20({ type: 'lightglow', params: params });
+    if (!/bright/.test(why({ skin: 0, mix: 100 }))) throw new Error('CONTROL: source reason missing');
+    [{ skin: 100 }, { skin: _o13KF(0, 100) }, { mix: 0 }, { mix: _o13KF(0, 100) }].forEach(q => {
+      if (why(q) !== null) throw new Error('held-back glow blamed on its source');
+    });
+  });
+  // ── end 966 opts21 ──
+  const _O22_NEW = { bumpmap: ['skin', 'mix'], iridescence: ['skin', 'mix'], gradientoverlay: ['skin', 'mix'] };
+  const _o22Active = type => type === 'bumpmap' ? { shine: 60, color: '#ff8040' } : (type === 'iridescence' ? { blur: 3, bands: 8 } : { shape: 1, centerx: 20, centery: 80 });
+  /* All three are absent from ADJ_OK and PIXEL_ADJ: adjustment surfaces are deliberately absent.
+     Every CONTROL is a nonzero count, not a measured value. Byte equality uses no tolerance.
+     Each pin fails on the old registry at _o19Need before judging the new behaviour. */
+  const _o22IdentPin = (type, key) => {
+    _o19Need(type, _O22_NEW[type]);
+    const P = _o13P(type), fx = p => ({ type: type, enabled: true, params: p });
+    const card = f => { const L = _o13Rect(f); L.transform.opacity = 0.8; L.fillOpacity = 0.6; L.transform.rotation = 12; return L; };
+    const ways = [f => [_o13Rect(f)], f => [card(f)]];
+    ways.forEach(make => [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+      const shot = p => _o13shot(make(p ? fx(p) : null), t, 160, 120, rs, '#808080');
+      [P, Object.assign({}, P, _o22Active(type))].forEach(q => {
+        if (E1.maxDiff(shot(q), shot(_o13Del(q, [key])))) throw new Error(type + ' ' + key + ' changed the default surface');
+      });
+      const q = Object.assign({}, P, _o22Active(type)), a = shot(q), on = Object.assign({}, q);
+      on[key] = key === 'skin' ? 100 : 0;
+      if (!E1.count(a, shot(null), 0)) throw new Error('CONTROL: effect did not grade the surface');
+      if (!E1.count(a, shot(on), 0)) throw new Error('CONTROL: control did not move the surface');
+    })));
+    [{}, _o22Active(type), { amount: _o13KF(0.2, 1) }, { angle: 60, relief: 300, ambient: 15, shine: 60, color: '#ff8040', shape: 1, centerx: 20, centery: 80, blur: 3 }, { blend: 4, bands: 8, scale: 180, shape: 2, mid: 0.3, dither: 1 }].forEach(over => {
+      [1, 0.5].forEach(ps => {
+        const q = _o13P(type, over), pic = _o13Pic(96, 72);
+        const run = p => _o13Run(type, p, 96, 72, pic.slice(), 0.37, ps);
+        if (E1.maxDiff(run(q), run(_o13Del(q, [key])))) throw new Error(type + ' ' + key + ' changed the dispatcher default');
+      });
+    });
+  };
+  const _o22SkinPin = type => {
+    _o19Need(type, _O22_NEW[type]);
+    const bad = _o13Rows(type, [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }
+    ], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp(type, { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp(type, { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    const pic = _o13Row(_O13_SKIN)(), N = _O13_SKIN.length;
+    const run = over => _o13Run(type, _o13P(type, Object.assign({}, _o22Active(type), over)), N, 1, pic.slice(), 0.5);
+    const plain = run({ skin: 0 });
+    if (!E1.count(plain.slice(0, 8), pic.slice(0, 8), 0)) throw new Error('CONTROL: plain grade did not move skin');
+    if (!E1.count(plain.slice(8), pic.slice(8), 0)) throw new Error('CONTROL: plain grade did not move non-skin');
+    [40, 100].forEach(skin => {
+      const want = _o13Lay(pic, plain, (r, g, b) => 1 - skin / 100 * _o13Skin(r, g, b));
+      if (E1.maxDiff(run({ skin: skin }), want)) throw new Error(type + ' skin weight differs');
+      if (!E1.count(run({ skin: skin }), plain, 0)) throw new Error('CONTROL: Protect skin did not move the grade');
+    });
+    if (E1.maxDiff(run({ skin: _o13KF(0, 100) }), run({ skin: 50 }))) throw new Error('keyed skin differs');
+    [{}, { mix: 60, angle: 60, shine: 60, shape: 1, blur: 3 }, { blend: 4, bands: 8, scale: 180, shape: 2, mid: 0.3, dither: 1 }].forEach(extra => {
+      const src = _o13Pic(96, 72);
+      for (let i = 3; i < src.length; i += 4) src[i] = (i % 12) === 3 ? 128 : 255;
+      const q = _o13P(type, Object.assign({}, _o22Active(type), extra));
+      const grade = p => _o13Run(type, p, 96, 72, src.slice(), 0.5);
+      const plain = grade(Object.assign({}, q, { skin: 0, mix: 100 }));
+      const sk = 70, mx = q.mix;
+      const want = _o13Lay(src, plain, (r, g, b) => mx / 100 * (1 - sk / 100 * _o13Skin(r, g, b)));
+      const got = grade(Object.assign({}, q, { skin: sk }));
+      if (E1.maxDiff(got, want)) throw new Error(type + ' busy skin weight differs');
+      if (!E1.count(got, grade(Object.assign({}, q, { skin: 0 })), 0)) throw new Error('CONTROL: skin did not move the busy grade');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  };
+  const _o22MixPin = type => {
+    _o19Need(type, _O22_NEW[type]);
+    const pic = _o13Pic(96, 72);
+    [{}, { skin: 70 }, { angle: 60, relief: 300, ambient: 15, shine: 60, color: '#ff8040', shape: 1, centerx: 20, centery: 80, blur: 3 }, { bands: 8, scale: 180, shape: 2, centerx: 20 }].forEach(extra => [1, 0.5].forEach(ps => {
+      const q = _o13P(type, Object.assign({}, _o22Active(type), extra));
+      const run = mix => _o13Run(type, Object.assign({}, q, { mix: mix }), 96, 72, pic.slice(), 0.5, ps);
+      const plain = run(100);
+      const kernel = _o13Run(type, _o13Del(q, ['skin', 'mix']), 96, 72, pic.slice(), 0.5, ps);
+      if (!E1.count(plain, pic, 0)) throw new Error('CONTROL: full grade did not move the picture');
+      [0, 40].forEach(mix => {
+        /* Mix 0 is the picture, alpha and all: tone13 returns before the kernel runs. Above 0 it is the wrapper's lay-in, _o21Lay: none
+           of these three kernels changes a pixel's alpha, so that is _o13Lay's picture byte for byte. */
+        const want = mix === 0 ? pic : _o21Lay(pic, kernel, (r, g, b) => mix / 100 * (1 - q.skin / 100 * _o13Skin(r, g, b)));
+        if (E1.maxDiff(run(mix), want)) throw new Error(type + ' Mix differs');
+        if (!E1.count(run(mix), plain, 0)) throw new Error('CONTROL: Mix did not move the grade');
+      });
+      if (E1.maxDiff(run(_o13KF(0, 100)), run(50))) throw new Error('keyed Mix differs');
+    }));
+  };
+  ['bumpmap', 'iridescence', 'gradientoverlay'].forEach(type => {
+    ['skin', 'mix'].forEach(key => {
+      test('966 opts22 ' + type + ' ' + key + ' default byte-identity on every supported surface (CONTROL: effect and control move the fixture)', { item: '966', budgetMs: 90000 }, async function () { _o22IdentPin(type, key); });
+    });
+    test('966 opts22 ' + type + ' Protect skin keeps skin and leaves non-skin graded, with registry and saved values (CONTROL: skin 0 grades both)', { item: '966', budgetMs: 60000 }, async function () { _o22SkinPin(type); });
+    test('966 opts22 ' + type + ' Mix lays the grade over the picture, keyed too (CONTROL: Mix 100 grades the picture)', { item: '966', budgetMs: 60000 }, async function () { _o22MixPin(type); });
+  });
+
+  // ── end 966 opts22 ──
+  const _O23_NEW = { lightleak: ['skin', 'mix'], softglow: ['skin', 'mix'], fourcolor: ['skin', 'mix'] };
+  const _o23Active = type => type === 'lightleak' ? { speed: 0, x: 0, y: 0, size: 400 } : (type === 'softglow' ? { threshold: 0 } : {});
+  const _o23Cases = type => type === 'lightleak' ? [{}, { blend: 1, color2: '#4080ff', flicker: 0.4 }, { blend: 2, speed: 60, wander: 180 }] :
+    (type === 'fourcolor' ? [{}, { blend: 3, spread: 160, spin: 80, centerx: 20, centery: 80 }, { blend: 4, amount: _o13KF(0.2, 1) }] :
+      [{}, { blend: 1, knee: 40, passes: 3, outside: 1 }, { blend: 2, radius: 180, amount: _o13KF(0.2, 1) }]);
+  /* All three are absent from ADJ_OK and PIXEL_ADJ: no adjustment surface is enabled here.
+     Dreamy Bloom precedes Corner Colours in the registry and can affect mid-tones, so Palette Map waits for the next round.
+     Each pin is red on the old registry at _o19Need.
+     Every CONTROL is a nonzero count, not a measured value. All equality checks are exact bytes.
+     Dreamy Bloom's Glow past the edges lays a halo into clear and part-clear pixels, so its Protect skin and Mix pins expect the
+     wrapper's premultiplied lay-in (_o21Lay), and its Mix pin runs _o21EdgeMix as round twenty-one's glows do.
+     As in opts21 and opts22, this round has its own default sweep rather than changing opts10's measured fixtures. */
+  const _o23IdentPin = (type, key) => {
+    _o19Need(type, _O23_NEW[type]);
+    const P = _o13P(type), fx = p => ({ type: type, enabled: true, params: p });
+    const card = f => { const L = _o13Rect(f); L.transform.opacity = 0.8; L.fillOpacity = 0.6; L.transform.rotation = 12; return L; };
+    const ways = [f => [_o13Rect(f)], f => [card(f)]];
+    ways.forEach(make => [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+      const shot = p => _o13shot(make(p ? fx(p) : null), t, 160, 120, rs, '#808080');
+      [P, Object.assign({}, P, _o23Active(type))].forEach(q => {
+        if (E1.maxDiff(shot(q), shot(_o13Del(q, [key])))) throw new Error(type + ' ' + key + ' changed the default surface');
+      });
+      const q = Object.assign({}, P, _o23Active(type)), a = shot(q), on = Object.assign({}, q);
+      on[key] = key === 'skin' ? 100 : 0;
+      if (!E1.count(a, shot(null), 0)) throw new Error('CONTROL: effect did not grade the surface');
+      if (!E1.count(a, shot(on), 0)) throw new Error('CONTROL: control did not move the surface');
+    })));
+    _o23Cases(type).forEach(over => [1, 0.5].forEach(ps => {
+      const q = _o13P(type, over), pic = _o13Pic(96, 72);
+      const run = p => _o13Run(type, p, 96, 72, pic.slice(), 0.37, ps);
+      if (E1.maxDiff(run(q), run(_o13Del(q, [key])))) throw new Error(type + ' ' + key + ' changed the dispatcher default');
+    }));
+  };
+  const _o23SkinPin = type => {
+    _o19Need(type, _O23_NEW[type]);
+    const bad = _o13Rows(type, [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, unit: '%', def: 100 }
+    ], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp(type, { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp(type, { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    const pic = _o13Row(_O13_SKIN)(), N = _O13_SKIN.length;
+    const run = over => _o13Run(type, _o13P(type, Object.assign({}, _o23Active(type), over)), N, 1, pic.slice(), 0.5);
+    const plain = run({ skin: 0 });
+    if (!E1.count(plain.slice(0, 8), pic.slice(0, 8), 0)) throw new Error('CONTROL: plain grade did not move skin');
+    if (!E1.count(plain.slice(8), pic.slice(8), 0)) throw new Error('CONTROL: plain grade did not move non-skin');
+    [40, 100].forEach(skin => {
+      const want = _o13Lay(pic, plain, (r, g, b) => 1 - skin / 100 * _o13Skin(r, g, b));
+      if (E1.maxDiff(run({ skin: skin }), want)) throw new Error(type + ' skin weight differs');
+      if (!E1.count(run({ skin: skin }), plain, 0)) throw new Error('CONTROL: Protect skin did not move the grade');
+    });
+    if (E1.maxDiff(run({ skin: _o13KF(0, 100) }), run({ skin: 50 }))) throw new Error('keyed skin differs');
+    _o23Cases(type).forEach(extra => [1, 0.5].forEach(ps => {
+      const src = _o13Pic(96, 72);
+      for (let i = 3; i < src.length; i += 4) src[i] = (i % 12) === 3 ? 128 : 255;
+      const q = _o13P(type, Object.assign({}, _o23Active(type), extra, { mix: 60 }));
+      const grade = p => _o13Run(type, p, 96, 72, src.slice(), 0.5, ps);
+      const plain = grade(Object.assign({}, q, { skin: 0, mix: 100 }));
+      /* the wrapper's lay-in: Dreamy Bloom's Glow past the edges case lays its halo into this picture's part-clear pixels, and there
+         colour and alpha go in together, premultiplied (rfx2124 H1); everywhere else it is _o13Lay's picture */
+      const want = _o21Lay(src, plain, (r, g, b) => 0.6 * (1 - 0.7 * _o13Skin(r, g, b)));
+      const got = grade(Object.assign({}, q, { skin: 70 }));
+      if (E1.maxDiff(got, want)) throw new Error(type + ' busy skin weight differs');
+      if (!E1.count(got, grade(Object.assign({}, q, { skin: 0 })), 0)) throw new Error('CONTROL: skin did not move the busy grade');
+    }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  };
+  const _o23MixPin = type => {
+    _o19Need(type, _O23_NEW[type]);
+    const pic = _o13Pic(96, 72);
+    _o23Cases(type).forEach(extra => [0, 70].forEach(skin => [1, 0.5].forEach(ps => {
+      const q = _o13P(type, Object.assign({}, _o23Active(type), extra, { skin: skin }));
+      const run = mix => _o13Run(type, Object.assign({}, q, { mix: mix }), 96, 72, pic.slice(), 0.5, ps);
+      const plain = run(100);
+      const kernel = _o13Run(type, _o13Del(q, ['skin', 'mix']), 96, 72, pic.slice(), 0.5, ps);
+      if (!E1.count(plain, pic, 0)) throw new Error('CONTROL: full grade did not move the picture');
+      [0, 40].forEach(mix => {
+        const want = mix === 0 ? pic : _o21Lay(pic, kernel, (r, g, b) => mix / 100 * (1 - skin / 100 * _o13Skin(r, g, b)));
+        if (E1.maxDiff(run(mix), want)) throw new Error(type + ' Mix differs');
+        if (!E1.count(run(mix), plain, 0)) throw new Error('CONTROL: Mix did not move the grade');
+      });
+      if (E1.maxDiff(run(_o13KF(0, 100)), run(50))) throw new Error('keyed Mix differs');
+    })));
+    if (type === 'softglow') _o21EdgeMix(type, _o23Active(type));
+  };
+  ['lightleak', 'softglow', 'fourcolor'].forEach(type => {
+    ['skin', 'mix'].forEach(key => {
+      test('966 opts23 ' + type + ' ' + key + ' default byte-identity on every supported surface (CONTROL: effect and control move the fixture)', { item: '966', budgetMs: 90000 }, async function () { _o23IdentPin(type, key); });
+    });
+    test('966 opts23 ' + type + ' Protect skin keeps skin and leaves non-skin graded, with registry and saved values (CONTROL: skin 0 grades both)', { item: '966', budgetMs: 60000 }, async function () { _o23SkinPin(type); });
+    test('966 opts23 ' + type + ' Mix lays the grade over the picture, keyed too (CONTROL: Mix 100 grades the picture)', { item: '966', budgetMs: 60000 }, async function () { _o23MixPin(type); });
+  });
+  // ── end 966 opts23 ──
+  const _O24_NEW = { palettemap: ['skin', 'mix'], huecycle: ['skin', 'mix'], popart: ['skin', 'mix'] };
+  const _o24Cases = type => type === 'palettemap' ? [{}, { mode: 0, count: 6, amount: 0.7 }, { match: 1, count: 3, color2: '#4080ff' }] :
+    (type === 'huecycle' ? [{}, { style: 1, steps: 8, speed: _o13KF(180, 0) }, { spread: 240, sangle: 90, boost: 0.7 }] :
+      [{}, { layout: 1, style: 1, gap: 2, cycle: 2 }, { layout: 2, style: 2, contrast: _o13KF(0, 1) }]);
+  /* Pop Art's controls act on each resized cell, not on the grid geometry. The plain grid below is the reference picture.
+     Colour Cycle and Pop Art are absent from ADJ_OK / PIXEL_ADJ: no adjustment surface is enabled for either.
+     Like opts21–23, this is its own sweep; opts10's measured fixtures stay pinned.
+     Every CONTROL is a nonzero count, not a measured value; every comparison below is exact bytes.
+     Pop Art's mix row is labelled Colour mix (rfx2124 M3): at 0 the grid stays, in the picture's own colours. */
+  const _o24Canvas = (W, H, pic) => {
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    if (pic) { const im = g.createImageData(W, H); im.data.set(pic); g.putImageData(im, 0, 0); }
+    return g;
+  };
+  const _o24Grid = (p, W, H, pic, t, ps) => {
+    const A = _o24Canvas(W, H, pic), B = _o24Canvas(W, H), n = [2, 3, 4][Math.round(FM.evalProp(p.layout, t))], gap = FM.evalProp(p.gap, t) * ps;
+    const w = (W - gap * (n - 1)) / n, h = (H - gap * (n - 1)) / n;
+    B.imageSmoothingEnabled = true; B.imageSmoothingQuality = 'high';
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) B.drawImage(A.canvas, 0, 0, W, H, Math.round(x * (w + gap)), Math.round(y * (h + gap)), Math.round(w), Math.round(h));
+    return B.getImageData(0, 0, W, H).data;
+  };
+  const _o24Run = (type, p, W, H, pic, t, ps) => {
+    if (type !== 'popart') return _o13Run(type, p, W, H, pic.slice(), t, ps);
+    const A = _o24Canvas(W, H, pic), B = _o24Canvas(W, H);
+    FM._popArt24(A.canvas, B, W, H, { x: 0, y: 0, w: W, h: H }, p, t, t, null, ps);
+    return B.getImageData(0, 0, W, H).data;
+  };
+  const _o24Base = (type, p, W, H, pic, t, ps) => type === 'popart' ? _o24Grid(p, W, H, pic, t, ps) : pic;
+  const _o24IdentPin = (type, key) => {
+    _o19Need(type, _O24_NEW[type]);
+    const P = _o13P(type), fx = p => ({ type: type, enabled: true, params: p });
+    const card = f => { const L = _o13Rect(f); L.transform.opacity = 0.8; L.fillOpacity = 0.6; L.transform.rotation = 12; return L; };
+    const ways = [f => [_o13Rect(f)], f => [card(f)]];
+    if (type === 'palettemap') ways.push(f => { const L = FM.makeLayer('adjustment', { start: 0, duration: 4 }); L.effects = f ? [f] : []; return [L, _o13Rect(null)]; });
+    ways.forEach(make => [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+      const shot = p => _o13shot(make(p ? fx(p) : null), t, 160, 120, rs, '#808080');
+      if (E1.maxDiff(shot(P), shot(_o13Del(P, [key])))) throw new Error(type + ' ' + key + ' changed the default surface');
+      const on = Object.assign({}, P); on[key] = key === 'skin' ? 100 : 0;
+      if (!E1.count(shot(P), shot(null), 0)) throw new Error('CONTROL: effect did not grade this surface');
+      if (!E1.count(shot(P), shot(on), 0)) throw new Error('CONTROL: control did not move this surface');
+    })));
+    _o24Cases(type).forEach(over => [1, 0.5].forEach(ps => {
+      const p = _o13P(type, over), pic = _o13Pic(96, 72), run = q => _o24Run(type, q, 96, 72, pic, 0.37, ps);
+      if (E1.maxDiff(run(p), run(_o13Del(p, [key])))) throw new Error(type + ' changed the absent-key kernel');
+      const on = Object.assign({}, p); on[key] = key === 'skin' ? 100 : 0;
+      if (!E1.count(run(p), run(on), 0)) throw new Error('CONTROL: kernel control did not act');
+    }));
+  };
+  const _o24SkinPin = type => {
+    _o19Need(type, _O24_NEW[type]);
+    /* Pop Art's mix row reads Colour mix (rfx2124 M3): at 0 its grid still stands, so it is not the Mix every other effect has */
+    const bad = _o13Rows(type, [
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'mix', label: type === 'popart' ? 'Colour mix' : 'Mix', min: 0, max: 100, unit: '%', def: 100 }
+    ], { skin: 40, mix: 70 });
+    bad.push.apply(bad, _o13Clamp(type, { skin: 150, mix: -5 }, { skin: 100, mix: 0 }));
+    bad.push.apply(bad, _o13Clamp(type, { skin: -5, mix: 150 }, { skin: 0, mix: 100 }));
+    const W = type === 'popart' ? 96 : _O13_SKIN.length, H = type === 'popart' ? 72 : 1;
+    const pic = type === 'popart' ? E1.frame(W, H, x => x < W / 2 ? [200, 140, 90] : [40, 100, 210]) : _o13Row(_O13_SKIN)();
+    const p = _o13P(type), src = _o24Base(type, p, W, H, pic, 0.5, 1);
+    const run = skin => _o24Run(type, Object.assign({}, p, { skin: skin }), W, H, pic, 0.5, 1), plain = run(0);
+    let skinMoved = 0, otherMoved = 0;
+    /* RGB compared by hand: E1.count walks whole pixels and reads the fourth byte, so a 3-byte slice gave NaN and counted
+       nothing — this CONTROL failed on every tree (v18.11 assembly) */
+    for (let i = 0; i < src.length; i += 4) {
+      if (src[i] === plain[i] && src[i + 1] === plain[i + 1] && src[i + 2] === plain[i + 2]) continue;
+      if (_o13Skin(src[i], src[i + 1], src[i + 2]) === 1) skinMoved++;
+      if (_o13Skin(src[i], src[i + 1], src[i + 2]) === 0) otherMoved++;
+    }
+    if (!skinMoved || !otherMoved) throw new Error('CONTROL: skin 0 must grade both skin and non-skin');
+    [40, 100].forEach(skin => {
+      const want = _o13Lay(src, plain, (r, g, b) => 1 - skin / 100 * _o13Skin(r, g, b));
+      if (E1.maxDiff(run(skin), want)) throw new Error(type + ' skin weight differs');
+      if (!E1.count(run(skin), plain, 0)) throw new Error('CONTROL: Protect skin did not act');
+    });
+    if (E1.maxDiff(run(_o13KF(0, 100)), run(50))) throw new Error('keyed skin differs');
+    if (bad.length) throw new Error(bad.join(' · '));
+  };
+  const _o24MixPin = type => {
+    _o19Need(type, _O24_NEW[type]);
+    _o24Cases(type).forEach(extra => [1, 0.5].forEach(ps => [0, 70].forEach(skin => {
+      const pic = _o13Pic(96, 72), p = _o13P(type, extra), src = _o24Base(type, p, 96, 72, pic, 0.5, ps);
+      const run = mix => _o24Run(type, Object.assign({}, p, { skin: skin, mix: mix }), 96, 72, pic, 0.5, ps);
+      const ker = _o24Run(type, _o13Del(p, ['skin', 'mix']), 96, 72, pic, 0.5, ps), plain = run(100);
+      if (!E1.count(plain, src, 0)) throw new Error('CONTROL: full grade did not act');
+      [0, 40].forEach(mix => {
+        const want = _o13Lay(src, ker, (r, g, b) => mix / 100 * (1 - skin / 100 * _o13Skin(r, g, b)));
+        if (E1.maxDiff(run(mix), want)) throw new Error(type + ' Mix differs');
+        if (!E1.count(run(mix), plain, 0)) throw new Error('CONTROL: Mix did not act');
+      });
+      if (E1.maxDiff(run(_o13KF(0, 100)), run(50))) throw new Error('keyed Mix differs');
+    })));
+  };
+  ['palettemap', 'huecycle', 'popart'].forEach(type => {
+    ['skin', 'mix'].forEach(key => {
+      test('966 opts24 ' + type + ' ' + key + ' default byte-identity on every supported surface (CONTROL: effect and control move the fixture)', { item: '966', budgetMs: 90000 }, async function () { _o24IdentPin(type, key); });
+    });
+    test('966 opts24 ' + type + ' Protect skin keeps skin and leaves non-skin graded, with registry and saved values (CONTROL: skin 0 grades both)', { item: '966', budgetMs: 60000 }, async function () { _o24SkinPin(type); });
+    test('966 opts24 ' + type + ' Mix lays the grade over the picture, keyed too (CONTROL: Mix 100 grades the picture)', { item: '966', budgetMs: 60000 }, async function () { _o24MixPin(type); });
+  });
+  // ── end 966 opts24 ──
   /* ═══ SIMPLE 2.7 · TRANSITIONS (#1122 clause 2, his pick A: a ◇ above each cut and a Transition row in the tray — the sheet he picked
      from is tools/design/plans/simple-mode/transition-options/sheet.jpg on plans/simple-transitions; DESIGN §12.1, D13 A, §0.4 N2).
      Ported from hunt/simple-transitions (ca85b2a5: its T1–T10 and T8b) onto this tree, never its tests/_cdp_h52.py: the transition
@@ -188380,6 +189782,732 @@
           if (raised) throw new Error('at ' + width + ' in Full a slow swipe that started on the Speed card raised "Reset Speed" 480 ms after the touch');
         });
       });
+    }
+  });
+
+  /* ═══ #1009 and #1010 (hunt LOW) — TWO CACHES THAT HELD MEMORY THEY DID NOT NEED ═══════════════════════════════════════
+     Both are counted WITHOUT a heap number or a garbage collection: a stand-in for the constructor counts what is made, and
+     the cache itself is asked what it still holds. Every await races its own named deadline (q1009Within, q1009Until), so a
+     red run fails by name instead of holding the suite. */
+  function q1009Within(p, ms, what) {
+    let t = null;
+    const dl = new Promise(function (res, rej) { t = setTimeout(function () { rej(new Error(what + ' did not settle within ' + Math.round(ms / 1000) + ' s')); }, ms); });
+    return Promise.race([Promise.resolve(p), dl]).finally(function () { clearTimeout(t); });
+  }
+  async function q1009Until(what, pred, ms) {
+    const end = Date.now() + ms;
+    for (;;) {
+      if (pred()) return true;
+      if (Date.now() > end) throw new Error(what + ' did not happen within ' + Math.round(ms / 1000) + ' s');
+      await sleep(40);
+    }
+  }
+  function q1009Png(n) {
+    const c = offscreen(64, 64), g = c.getContext('2d');
+    g.fillStyle = 'hsl(' + (n * 37 % 360) + ',70%,' + (30 + n % 40) + '%)'; g.fillRect(0, 0, 64, 64);
+    g.fillStyle = '#fff'; g.fillRect(n % 50, (n * 7) % 50, 9, 9);
+    return c.toDataURL('image/png');
+  }
+
+  /* #1009 — FILL PICTURES FROM A PROJECT HE HAS LEFT STAYED DECODED ALL SESSION (js/compositor.js getFillImage). The cache
+     evicted ONE entry per miss, only past 40, so a project with many image fills left every picture (and its data-URL
+     string) alive after he moved on. Two readings, neither a heap number:
+       · a picture of the left project still holding its data URL is one nothing released;
+       · FM.fillPanLimit asks the cache for a fill and answers only from a decoded picture, so asked for each fill of the
+         left project, an entry the cache still holds answers at once and makes no new Image, a forgotten one makes one.
+     It starts with a project of ONE fill, left first: a switch away from a small project (8 fills or fewer, where a miss
+     prunes nothing) must release its picture too, so the forced prune cannot hide behind the size test (review F3).
+     FAILS on 6f8db2e3: the one-fill project's picture still holds its data URL after the switch (and past that, all 60
+     pictures still hold theirs, and the cache still answers for 59 or 60 of them).
+     CONTROLS: the one fill and the 60 fills go through the cache and decode in their project, a second draw there decodes
+     none of the 60 again (the thrash the old eviction comment warned of), and the one fill of the project he moved to is
+     decoded and answered. */
+  test('1009 fill pictures from a project he has left are released and forgotten by the cache, even a project with one fill, while the fills of the project he is in are decoded once (CONTROLS: the one fill and the 60 fills decode, a second draw decodes none again, the new project fill is answered)', { item: '1009', budgetMs: 120000 }, async function () {
+    if (typeof FM.fillPanLimit !== 'function' || typeof FM.renderScene !== 'function') throw new Error('setup: FM.fillPanLimit or FM.renderScene is not reachable');
+    const orig = FM.projects.currentId(), wasOpen = FM.home.isOpen(), made = [];
+    const dImage = Object.getOwnPropertyDescriptor(window, 'Image'), RealImage = window.Image, imgs = [];
+    const N = 60, urlsA = new Set(), layersA = [];
+    const srcOf = function (im) { return im.getAttribute('src') || ''; };
+    const fromA = function (list) { return list.filter(function (im) { return urlsA.has(srcOf(im)); }); };
+    const draw = function () { const c = offscreen(160, 120); FM.renderScene(c.getContext('2d'), FM.scene, 0.5); };
+    try {
+      if (wasOpen) FM.home.close();
+      window.Image = function (w, h) { const im = arguments.length ? new RealImage(w, h) : new RealImage(); imgs.push(im); return im; };
+      window.Image.prototype = RealImage.prototype;
+      window.__fmStep = '1009: make the one-fill project he leaves first';
+      const s = await q1009Within(FM.projects.create({ name: 'FX1009 one fill first', width: 320, height: 240, confirmed: true }), 20000, '1009 deadline: FM.projects.create for the one-fill project he leaves first');
+      if (!s) throw new Error('setup: the one-fill project he leaves first was not made');
+      made.push(s);
+      const urlS = q1009Png(700);
+      const LS = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 60, shapeH: 60, fill: '#fff' });
+      LS.start = 0; LS.duration = 3; LS.fillMode = 'media'; LS.fillImage = urlS;
+      FM.scene.layers.push(LS);
+      draw();
+      await q1009Until('1009 deadline: CONTROL: the fill of the one-fill project to decode', function () { return FM.fillPanLimit(LS, 0) !== null; }, 20000);
+      const picsS = imgs.filter(function (im) { return srcOf(im) === urlS; });
+      if (!picsS.length) throw new Error('CONTROL: drawing the one-fill project made no picture for its fill, so the switch below proves nothing');
+
+      window.__fmStep = '1009: make the 60-fill project';
+      const a = await q1009Within(FM.projects.create({ name: 'FX1009 sixty fills', width: 320, height: 240, confirmed: true }), 20000, '1009 deadline: FM.projects.create for the 60-fill project');
+      if (!a) throw new Error('setup: the 60-fill project was not made');
+      made.push(a);
+      const heldS = picsS.filter(function (im) { return srcOf(im) === urlS; }).length;
+      if (heldS) throw new Error('the fill picture of a project with one fill still holds its data URL after he moved to another project: a switch away from a project with 8 fills or fewer released nothing');
+      for (let i = 0; i < N; i++) {
+        const url = q1009Png(i); urlsA.add(url);
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 20 + (i % 10) * 28, y: 20 + Math.floor(i / 10) * 28, shapeW: 24, shapeH: 24, fill: '#fff' });
+        L.start = 0; L.duration = 3; L.fillMode = 'media'; L.fillImage = url;
+        FM.scene.layers.push(L); layersA.push(L);
+      }
+      if (urlsA.size !== N) throw new Error('setup: ' + urlsA.size + ' distinct fill pictures, not ' + N);
+      window.__fmStep = '1009: draw the 60 fills';
+      draw();
+      const drawnA = fromA(imgs).length;
+      if (drawnA < N) throw new Error('CONTROL: drawing the project made ' + drawnA + ' of its ' + N + ' fill pictures, so the fills did not go through the cache and nothing below would mean anything');
+      await q1009Until('1009 deadline: CONTROL: the ' + N + ' fill pictures to decode in their project', function () { return layersA.every(function (L) { return FM.fillPanLimit(L, 0) !== null; }); }, 20000);
+      const before = imgs.length;
+      draw(); await sleep(60); draw();
+      const again = fromA(imgs.slice(before)).length;
+      if (again) throw new Error('CONTROL: inside the project that uses them a second draw decoded ' + again + ' of the ' + N + ' fill pictures again: the cache is thrashing, so what follows could be that and not the move');
+      const picsA = fromA(imgs);
+
+      window.__fmStep = '1009: move to the one-fill project';
+      const b = await q1009Within(FM.projects.create({ name: 'FX1009 one fill', width: 320, height: 240, confirmed: true }), 20000, '1009 deadline: FM.projects.create for the project he moves to');
+      if (!b) throw new Error('setup: the project he moves to was not made');
+      made.push(b);
+      const LB = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 60, shapeH: 60, fill: '#fff' });
+      LB.start = 0; LB.duration = 3; LB.fillMode = 'media'; LB.fillImage = q1009Png(500);
+      FM.scene.layers.push(LB);
+      draw();
+      await q1009Until('1009 deadline: CONTROL: the fill of the project he moved to to decode and be answered', function () { return FM.fillPanLimit(LB, 0) !== null; }, 20000);
+
+      window.__fmStep = '1009: what the left project still holds';
+      const held = picsA.filter(function (im) { return urlsA.has(srcOf(im)); }).length;
+      if (held) throw new Error(held + ' of the ' + picsA.length + ' fill pictures of the project he left still hold their data URL after he moved to another project: getFillImage keeps them decoded for the whole session');
+      const asked = imgs.length;
+      const answered = layersA.filter(function (L) { return FM.fillPanLimit(L, 0) !== null; }).length;
+      const remade = fromA(imgs.slice(asked)).length;
+      if (remade !== N || answered) throw new Error('after he moved to another project the fill cache still held ' + (N - remade) + ' of the ' + N + ' fill pictures of the project he left (' + answered + ' answered at once with a decoded picture): getFillImage forgets a left project only one entry at a time past 40');
+    } finally {
+      if (dImage) Object.defineProperty(window, 'Image', dImage); else window.Image = RealImage;
+      await q1009Within(q915aCleanup(made, orig, wasOpen, [], [], []), 30000, '1009 deadline: the clean-up back to the project the suite was on');
+    }
+  });
+
+  /* #1009 (review F1) — A FILL OF THE PROJECT HE IS IN IS NEVER FORGOTTEN BY THE 30 s RULE (js/compositor.js pruneFillImages).
+     The preview draws only when asked, so after a 30 s pause every fill ON SCREEN is unused for 30 s. As first written, the
+     next miss (a new photo shape, whose timeline row's thumbnail asks first) dropped every other fill, and the canvas, the
+     rows and an export (which never waits for a decode) drew the placeholder in their place. That is the case here:
+     performance.now is stood in at +31 s, so every record is old, and the ONE miss is the new shape asking for its fill
+     with no draw in between. Two readings, from the cache itself:
+       · each of the 9 fills of the open project still answers FM.fillPanLimit with a decoded picture and makes no new Image;
+       · each of the 9 fills drawn only in a mini scene ({ project, layers }, as a template or element thumbnail draws, not
+         FM.scene) was forgotten by the same miss: one new Image each, and no answer. That half also shows the prune RAN
+         with the clock moved, so the first reading is not empty.
+     FAILS on 6f8db2e3: nothing is dropped below 40 records, so the 9 mini-scene fills still answer. FAILS on 2581a900: the
+     same miss drops the 9 fills of the open project too.
+     CONTROLS: all 18 fills decode first, the miss is the one new picture the new shape asks for, and a project switch (the
+     forced prune) still drops every fill, the live ones included: every picture this test made is blank after it. */
+  test('1009 a fill of the project he is in is never forgotten by the 30 s rule, while a fill drawn only in a mini scene is (CONTROLS: the 18 fills decode, the new shape makes one picture, a project switch still forgets every fill)', { item: '1009', budgetMs: 90000 }, async function () {
+    if (typeof FM.fillPanLimit !== 'function' || typeof FM.renderScene !== 'function') throw new Error('setup: FM.fillPanLimit or FM.renderScene is not reachable');
+    const orig = FM.projects.currentId(), wasOpen = FM.home.isOpen(), made = [];
+    const dImage = Object.getOwnPropertyDescriptor(window, 'Image'), RealImage = window.Image, imgs = [];
+    const K = 9, urlsLive = new Set(), urlsMini = new Set(), live = [], mini = [];
+    const srcOf = function (im) { return im.getAttribute('src') || ''; };
+    const madeFor = function (list, urls) { return list.filter(function (im) { return urls.has(srcOf(im)); }).length; };
+    const shape = function (i, url) {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 24 + (i % 9) * 32, y: 40 + Math.floor(i / 9) * 60, shapeW: 28, shapeH: 28, fill: '#fff' });
+      L.start = 0; L.duration = 3; L.fillMode = 'media'; L.fillImage = url;
+      return L;
+    };
+    const dNow = Object.getOwnPropertyDescriptor(performance, 'now'), realNow = performance.now;
+    try {
+      if (wasOpen) FM.home.close();
+      window.Image = function (w, h) { const im = arguments.length ? new RealImage(w, h) : new RealImage(); imgs.push(im); return im; };
+      window.Image.prototype = RealImage.prototype;
+      window.__fmStep = '1009 live: make the project he stays in';
+      const p = await q1009Within(FM.projects.create({ name: 'FX1009 live fills', width: 320, height: 240, confirmed: true }), 20000, '1009 deadline: FM.projects.create for the project he stays in');
+      if (!p) throw new Error('setup: the project he stays in was not made');
+      made.push(p);
+      for (let i = 0; i < K; i++) {
+        const u = q1009Png(800 + i), v = q1009Png(900 + i);
+        urlsLive.add(u); urlsMini.add(v);
+        const L = shape(i, u); FM.scene.layers.push(L); live.push(L);
+        mini.push(shape(K + i, v));
+      }
+      if (new Set(Array.from(urlsLive).concat(Array.from(urlsMini))).size !== 2 * K) throw new Error('setup: the 18 fill pictures are not all different');
+      const LN = shape(2 * K, q1009Png(990));
+      if (urlsLive.has(LN.fillImage) || urlsMini.has(LN.fillImage)) throw new Error('setup: the new shape picture is one of the 18');
+
+      window.__fmStep = '1009 live: draw the scene and a mini scene';
+      const P = Object.assign({}, FM.scene.project);
+      FM.renderScene(offscreen(160, 120).getContext('2d'), FM.scene, 0.5);
+      FM.renderScene(offscreen(160, 120).getContext('2d'), { project: P, layers: mini, selectedId: null, selectedIds: [] }, 0.5);
+      if (madeFor(imgs, urlsLive) < K || madeFor(imgs, urlsMini) < K) throw new Error('CONTROL: the draws made ' + madeFor(imgs, urlsLive) + ' scene and ' + madeFor(imgs, urlsMini) + ' mini-scene fill pictures, not ' + K + ' and ' + K + ', so the fills did not go through the cache');
+      await q1009Until('1009 deadline: CONTROL: the 18 fill pictures to decode', function () { return live.concat(mini).every(function (L) { return FM.fillPanLimit(L, 0) !== null; }); }, 20000);
+
+      window.__fmStep = '1009 live: one miss with the clock 31 s on';
+      let missMade = -1, keptLive = -1, remadeLive = -1, answeredMini = -1, remadeMini = -1;
+      try {
+        performance.now = function () { return realNow.call(performance) + 31000; };
+        FM.scene.layers.unshift(LN);
+        const b1 = imgs.length;
+        FM.fillPanLimit(LN, 0);
+        missMade = imgs.length - b1;
+        const b2 = imgs.length;
+        keptLive = live.filter(function (L) { return FM.fillPanLimit(L, 0) !== null; }).length;
+        remadeLive = madeFor(imgs.slice(b2), urlsLive);
+        const b3 = imgs.length;
+        answeredMini = mini.filter(function (L) { return FM.fillPanLimit(L, 0) !== null; }).length;
+        remadeMini = madeFor(imgs.slice(b3), urlsMini);
+      } finally {
+        if (dNow) Object.defineProperty(performance, 'now', dNow); else delete performance.now;
+      }
+      if (missMade !== 1) throw new Error('CONTROL: the new photo shape made ' + missMade + ' pictures when it asked for its fill, not 1, so it was not the one miss this test is about');
+      if (keptLive !== K || remadeLive) throw new Error((K - keptLive) + ' of the ' + K + ' fills of the project he is in were forgotten by one miss after a 30 s pause (' + remadeLive + ' decoded again): pruneFillImages drops fills that are on screen, and the canvas, the rows and an export draw the placeholder in their place');
+      if (answeredMini || remadeMini !== K) throw new Error('one miss after a 30 s pause forgot ' + remadeMini + ' of the ' + K + ' fills drawn only in a mini scene (' + answeredMini + ' still answered with a decoded picture): records no layer of the open scene uses are not dropped by the 30 s rule');
+
+      window.__fmStep = '1009 live: switch to another project';
+      const q = await q1009Within(FM.projects.create({ name: 'FX1009 after live fills', width: 320, height: 240, confirmed: true }), 20000, '1009 deadline: FM.projects.create for the project he switches to');
+      if (!q) throw new Error('setup: the project he switches to was not made');
+      made.push(q);
+      const ours = new Set(Array.from(urlsLive).concat(Array.from(urlsMini), [LN.fillImage]));
+      const held = madeFor(imgs, ours);
+      if (held) throw new Error('CONTROL: after a project switch ' + held + ' pictures this test made still hold their data URL: the forced prune kept fills, so the live set must be guarding it too');
+    } finally {
+      if (dImage) Object.defineProperty(window, 'Image', dImage); else window.Image = RealImage;
+      await q1009Within(q915aCleanup(made, orig, wasOpen, [], [], []), 30000, '1009 deadline: the clean-up back to the project the suite was on');
+    }
+  });
+
+  /* #1010 — THE CPU BLUR MADE TWO BIG Float32Arrays ON EVERY CALL (js/compositor.js cpuBlurCanvas). It is the no-filter blur's
+     last resort (no ctx.filter and no WebGL blur), and since #1114 every blurred or feathered Censor runs it each frame. The
+     GPU blur is stood in by one that answers null, so FM._drawBlurredNoFilter takes the CPU path on every machine, and a
+     stand-in for window.Float32Array counts every array of 100,000 floats or more.
+     Then the two ends of the cap (review F4, F5): a 990x478 plate at r 5 pads to 1024x512, exactly CPU_BLUR_CAP floats, so
+     it takes the kept pair and must GROW it past the warm call's size (else it reads and writes past the end, alpha 0 in
+     its middle); and an 800x800 plate at r 6 pads to 840x840, past the cap, so two blurs of it make exactly 4 new big arrays
+     (two per call, none kept). In suite order an earlier test may already have left a cap-sized pair; then the growth does
+     not run here but nothing breaks either, and the lone run (?only=1010, the mutation) is the proof of the growth.
+     FAILS on 6f8db2e3: three blurs of one 160x120 plate make 6 new big arrays.
+     CONTROLS: a kept pair cannot show through (the pink blur drawn again after a green one is the same to the byte), the green
+     and the pink blur differ, the blurred plate is still pink in its middle, and a plate past the cap still blurs. */
+  test('1010 the CPU blur keeps its two scratch buffers between calls, draws the same picture every time, grows them for a plate the size of the cap, and a plate past the cap still blurs and is not kept (CONTROLS: green and pink differ, the middle stays pink)', { item: '1010', budgetMs: 60000 }, async function () {
+    if (typeof FM._drawBlurredNoFilter !== 'function') throw new Error('setup: the no-filter blur seam FM._drawBlurredNoFilter is missing');
+    const dF32 = Object.getOwnPropertyDescriptor(window, 'Float32Array'), RealF32 = window.Float32Array;
+    const gl = FM.glColor || null, dBlur = gl ? Object.getOwnPropertyDescriptor(gl, 'blur') : null;
+    let big = 0, bigFloats = 0;
+    const run = function (w, h, r, shade) {
+      const src = offscreen(w, h), sg = src.getContext('2d');
+      sg.fillStyle = shade; sg.fillRect(w * 0.3, h * 0.3, w * 0.4, h * 0.4);
+      const dst = offscreen(w, h), dg = dst.getContext('2d');
+      FM._drawBlurredNoFilter(dg, src, r, 0, 0, w, h);
+      return dg.getImageData(0, 0, w, h).data;
+    };
+    try {
+      if (gl) gl.blur = function () { return null; };
+      window.Float32Array = new Proxy(RealF32, { construct: function (t, args, nt) { if (typeof args[0] === 'number' && args[0] >= 100000) { big++; bigFloats += args[0]; } return Reflect.construct(t, args, nt); } });
+      window.__fmStep = '1010: three CPU blurs of one plate';
+      await q1009Within(Promise.resolve().then(function () {
+        run(160, 120, 5, '#ff4d6d');
+        big = 0; bigFloats = 0;
+        const first = run(160, 120, 5, '#ff4d6d');
+        const other = run(160, 120, 5, '#22c55e');
+        const again = run(160, 120, 5, '#ff4d6d');
+        const madeBig = big, madeMB = Math.round(bigFloats * 4 / 1e5) / 10;
+        let mid = 0;
+        for (let i = 0; i < other.length; i += 4) if (other[i + 3] > 0 && other[i] !== first[i]) mid++;
+        if (!mid) throw new Error('CONTROL: the green and the pink blur came out the same, so the byte comparison below proves nothing');
+        const c0 = (60 * 160 + 80) * 4;
+        if (Math.abs(first[c0] - 255) > 2 || Math.abs(first[c0 + 1] - 77) > 2 || Math.abs(first[c0 + 2] - 109) > 2 || first[c0 + 3] !== 255) throw new Error('CONTROL: the middle of the blurred pink plate is ' + Array.prototype.slice.call(first, c0, c0 + 4).join(',') + ', not 255,77,109,255: the blur is broken, not just slow');
+        if (madeBig > 0) throw new Error('three blurs of the same 160x120 plate made ' + madeBig + ' new big Float32Arrays (' + madeMB + ' MB): cpuBlurCanvas allocates its scratch pair on every call');
+        let diff = 0;
+        for (let i = 0; i < first.length; i++) if (first[i] !== again[i]) diff++;
+        if (diff) throw new Error('the same blur drawn again after a different picture differs in ' + diff + ' bytes: the kept buffers carry the previous picture into the next');
+        window.__fmStep = '1010: a plate exactly the size of the cap';
+        const capped = run(990, 478, 5, '#ff4d6d');
+        const m0 = (239 * 990 + 495) * 4, e0 = (239 * 990 + 294) * 4;
+        if (capped[m0 + 3] !== 255 || !(capped[e0 + 3] > 0 && capped[e0 + 3] < 255)) throw new Error('a plate whose padded size is exactly the cap (990x478 at r 5, 1024x512 padded) did not blur: middle alpha ' + capped[m0 + 3] + ', alpha 3 px outside its edge ' + capped[e0 + 3] + ': the kept buffers did not grow to fit it');
+        window.__fmStep = '1010: two plates past the cap';
+        big = 0; bigFloats = 0;
+        const huge = run(800, 800, 6, '#ff4d6d');
+        run(800, 800, 6, '#ff4d6d');
+        const hugeBig = big, hugeMB = Math.round(bigFloats * 4 / 1e5) / 10;
+        const h0 = (400 * 800 + 400) * 4, edge = (400 * 800 + 237) * 4;
+        if (huge[h0 + 3] !== 255 || !(huge[edge + 3] > 0 && huge[edge + 3] < 255)) throw new Error('a plate past the buffer cap did not blur: middle alpha ' + huge[h0 + 3] + ', alpha 3 px outside its edge ' + huge[edge + 3]);
+        if (hugeBig !== 4) throw new Error('two blurs of an 800x800 plate (840x840 padded, past the cap) made ' + hugeBig + ' new big Float32Arrays (' + hugeMB + ' MB), not 4: a plate past the cap must allocate two per call and keep none, or the kept pair stays that big for the session');
+      }), 30000, '1010 deadline: the CPU blurs');
+    } finally {
+      if (dF32) Object.defineProperty(window, 'Float32Array', dF32); else window.Float32Array = RealF32;
+      if (gl) { if (dBlur) Object.defineProperty(gl, 'blur', dBlur); else delete gl.blur; }
+    }
+  });
+
+  /* ═══ 1043 (hunt LOW): SEVERAL FILES PICKED OR DROPPED TOGETHER WERE ONE UNDO STEP PER FILE ═══════════════════════════════════
+     js/app.js handleFiles ran each file through FM.addMediaLayer, which commits for itself, so three photos picked together took
+     three Undos to take back, and the first Undo left two of them in. Driven through FM._handleFiles (the picker and the drop both
+     call handleFiles) with three real PNGs; steps are counted by FM.history._commitSeq, which counts real pushes, so the stack's
+     120-step cap cannot hide one. FAILS BEFORE THE FIX: three steps, and one Undo leaves the red and green photos in.
+     CONTROL, which holds before and after: one photo picked alone is one step, and one Undo takes it out.
+     Restores FM.storage.save and FM.mediaLib.add by descriptor, the layers, the selection, the playhead, the project and the media
+     records the imports made. */
+  test('1043 three photos picked together are ONE undo step: one Undo takes all three out and one Redo brings all three back (CONTROL: one photo alone is one step)', { item: '1043' }, async function () {
+    if (typeof FM._handleFiles !== 'function' || !FM.history || typeof FM.history._commitSeq !== 'function' || !FM.storage || !FM.mediaLib) throw new Error('setup: FM._handleFiles, FM.history._commitSeq, FM.storage or FM.mediaLib is not reachable');
+    const by = function (p, ms, what) {
+      let t = 0;
+      const late = new Promise(function (_, rej) { t = setTimeout(function () { rej(new Error('1043 deadline: ' + what + ' did not finish within ' + ms + ' ms')); }, ms); });
+      return Promise.race([p, late]).finally(function () { clearTimeout(t); });
+    };
+    const png = function (color, name) {
+      return new Promise(function (res) {
+        const c = offscreen(32, 32), x = c.getContext('2d');
+        x.fillStyle = color; x.fillRect(0, 0, 32, 32);
+        c.toBlob(function (b) { res(new File([b], name + '.png', { type: 'image/png' })); }, 'image/png');
+      });
+    };
+    const dSave = Object.getOwnPropertyDescriptor(FM.storage, 'save'), realSave = FM.storage.save;
+    const dLib = Object.getOwnPropertyDescriptor(FM.mediaLib, 'add'), realLib = FM.mediaLib.add;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, sels0 = (FM.scene.selectedIds || []).slice(), time0 = FM.time;
+    const proj0 = FM.scene.project, size0 = { width: proj0.width, height: proj0.height, duration: proj0.duration };
+    const media0 = isoMediaSnap();
+    const names = function () { return FM.scene.layers.map(function (l) { return l.name; }).join(', '); };
+    const bad = [];
+    try {
+      window.__fmStep = '1043 setup: drawing the photos';
+      const files = await by(Promise.all([png('#ff0000', '1043 red'), png('#00ff00', '1043 green'), png('#0000ff', '1043 blue')]), 8000, 'drawing the three photos');
+      const one = await by(png('#ffff00', '1043 yellow'), 8000, 'drawing the one photo');
+      FM.storage.save = function () {};
+      FM.mediaLib.add = function () {};
+      const base = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 80, shapeH: 80, fill: '#888888' });
+      base.start = 0; base.duration = 5; base.name = '1043 base';
+      FM.scene.layers = [base];
+      FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      FM.time = 0;
+      FM.refreshAll(); FM.history.commit();
+      const n0 = names();
+      /* CONTROL: one photo picked alone is one step, and one Undo takes it out */
+      window.__fmStep = '1043 control: one photo';
+      let s = FM.history._commitSeq();
+      await by(FM._handleFiles([one]), 20000, 'importing one photo');
+      if (FM.scene.layers.length !== 2) throw new Error('setup: the one picked photo did not land (' + names() + ')');
+      const added1 = FM.history._commitSeq() - s;
+      if (added1 !== 1) throw new Error('CONTROL: one photo picked alone made ' + added1 + ' undo steps, not 1');
+      FM.history.undo(); await sleep(60);
+      if (names() !== n0) throw new Error('CONTROL: one Undo after one photo picked alone left ' + names() + ' (want ' + n0 + ')');
+      /* three photos picked together */
+      window.__fmStep = '1043 three photos picked together';
+      s = FM.history._commitSeq();
+      await by(FM._handleFiles(files), 30000, 'importing three photos picked together');
+      const n3 = names();
+      if (FM.scene.layers.filter(function (l) { return l.type === 'image'; }).length !== 3) throw new Error('setup: the three picked photos did not all land (' + n3 + ')');
+      const added3 = FM.history._commitSeq() - s;
+      FM.history.undo(); await sleep(60);
+      const back = names();
+      FM.history.redo(); await sleep(60);
+      const again = names();
+      if (added3 !== 1) bad.push('three photos picked together made ' + added3 + ' undo steps, not 1');
+      if (back !== n0) bad.push('one Undo after picking three photos together left ' + back + ' (want ' + n0 + ')');
+      if (again !== n3) bad.push('one Redo after that brought back ' + again + ' (want ' + n3 + ')');
+    } finally {
+      if (dSave) Object.defineProperty(FM.storage, 'save', dSave); else FM.storage.save = realSave;
+      if (dLib) Object.defineProperty(FM.mediaLib, 'add', dLib); else FM.mediaLib.add = realLib;
+      FM.scene.project = proj0; proj0.width = size0.width; proj0.height = size0.height; proj0.duration = size0.duration;
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sels0;
+      FM.time = time0;
+      try { FM.refreshAll(); } catch (e) {}
+      isoMediaPut(media0);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1046 (hunt LOW): AN AI DIRECTOR CHANGE THAT REMOVES A LAYER TOOK TWO UNDOS ═══════════════════════════════════════════════
+     The deleteLayer op goes through FM.deleteLayer, which commits for itself, and js/ai.js never muted around FM.aiOps.applyOps:
+     so a Refine of [change A, remove B, change C] was two steps, and one Undo gave back C alone, with A still changed and B still
+     gone. Driven through FM.ai.refine and FM.ai.generateScene on the dry run, with FM.aiMock.respond answering the critic (and the
+     planner) with exactly those ops; steps counted by FM.history._commitSeq. Three runs, each on three fresh layers committed first:
+       1. CONTROL: a Refine that removes nothing ([change A, change C]) is one step, and one Undo puts both back.
+       2. a Refine that removes B is ONE step; one Undo puts A, B and C back as they were; one Redo brings the change back.
+       3. a Director build cancelled after its first stage, which removed B and added X, is ONE step; one Undo puts A, B and C
+          back, and one Redo brings back exactly what the build left (B gone, X there). The layer count did not move, which is
+          all the cancel path used to look at.
+       4. CONTROL for the other half of that cancel path: a Director build stopped before it changed anything adds NO step,
+          though it has written a new brief (aiIntent) into the project. It has its own prompt, so that brief differs from the
+          one run 3 left: with the same prompt the mock writes the same brief, a commit would be an identical snapshot, and a
+          cancel path that committed every time would go unseen (the refuter's F3). Holds before and after the fix.
+     FAILS BEFORE THE FIX: run 2 is two steps and its Undo leaves A changed and B gone; run 3's Redo brings back the removal of B
+     without X (the delete's own commit was its only step, and X was in none).
+     Restores FM.ai.DRY_RUN and FM.aiMock.respond by descriptor, the project's aiIntent by descriptor, and the layers, selection,
+     playhead and project. */
+  test('1046 an AI Director Refine or build that removes a layer is ONE undo step: one Undo puts every layer back as it was (CONTROL: a Refine that removes nothing is one step)', { item: '1046' }, async function () {
+    if (!FM.ai || typeof FM.ai.refine !== 'function' || typeof FM.ai.generateScene !== 'function' || typeof FM.ai.cancel !== 'function' || !FM.aiMock || typeof FM.aiMock.respond !== 'function' || !FM.history || typeof FM.history._commitSeq !== 'function') throw new Error('setup: FM.ai.refine / generateScene / cancel, FM.aiMock.respond or FM.history._commitSeq is not reachable');
+    const by = function (p, ms, what) {
+      let t = 0;
+      const late = new Promise(function (_, rej) { t = setTimeout(function () { rej(new Error('1046 deadline: ' + what + ' did not finish within ' + ms + ' ms')); }, ms); });
+      return Promise.race([p, late]).finally(function () { clearTimeout(t); });
+    };
+    const dDry = Object.getOwnPropertyDescriptor(FM.ai, 'DRY_RUN'), realDry = FM.ai.DRY_RUN;
+    const dResp = Object.getOwnPropertyDescriptor(FM.aiMock, 'respond'), realResp = FM.aiMock.respond;
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, sels0 = (FM.scene.selectedIds || []).slice(), time0 = FM.time, proj0 = FM.scene.project;
+    const dIntent = Object.getOwnPropertyDescriptor(proj0, 'aiIntent');
+    let critique = [], scaffold = [];
+    const asked = { critique: 0, plan: 0 };
+    const state = function () { return FM.scene.layers.map(function (l) { return l.name + ' ' + l.fill; }).join(' | '); };
+    const fresh = function (tag) {
+      const mk = function (n, fill, x) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: x, y: 120, shapeW: 60, shapeH: 60, fill: fill });
+        L.start = 0; L.duration = 4; L.name = '1046 ' + tag + ' ' + n;
+        return L;
+      };
+      const A = mk('A', '#ff0000', 60), B = mk('B', '#00ff00', 140), C = mk('C', '#ffffff', 220);
+      FM.scene.layers = [C, B, A];
+      FM.scene.selectedId = null; FM.scene.selectedIds = [];
+      FM.refreshAll(); FM.history.commit();
+      return { A: A.id, B: B.id, C: C.id, st0: state() };
+    };
+    const bad = [];
+    try {
+      FM.ai.DRY_RUN = true;
+      if (FM.aiBudget && FM.aiBudget.reset) FM.aiBudget.reset();
+      FM.aiMock.respond = function (name) {
+        if (name === 'emit_critique') { asked.critique++; return { assessment: '1046 stand-in', ops: JSON.parse(JSON.stringify(critique)) }; }
+        if (name === 'emit_plan') { asked.plan++; FM.ai.cancel(); return { scaffoldOps: JSON.parse(JSON.stringify(scaffold)), tasks: [] }; }
+        return realResp.apply(this, arguments);
+      };
+      /* 1. CONTROL: a Refine that removes nothing */
+      window.__fmStep = '1046 control: a Refine that removes nothing';
+      let f = fresh('r1');
+      critique = [{ op: 'setProp', ref: f.A, path: 'fill', value: '#0000ff' }, { op: 'setProp', ref: f.C, path: 'fill', value: '#000000' }];
+      let s = FM.history._commitSeq(), q = asked.critique;
+      await by(FM.ai.refine('1046 make A blue and C black'), 15000, 'the control Refine');
+      if (asked.critique !== q + 1) throw new Error('setup: the control Refine never asked the critic (a run still going, or the spend cap), so nothing here measured it');
+      const r1 = state();
+      if (r1.indexOf('#0000ff') < 0 || r1.indexOf('#000000') < 0) throw new Error('setup: the control Refine did not apply both changes (' + r1 + ')');
+      const added1 = FM.history._commitSeq() - s;
+      if (added1 !== 1) throw new Error('CONTROL: a Refine that removes nothing made ' + added1 + ' undo steps, not 1');
+      FM.history.undo(); await sleep(60);
+      if (state() !== f.st0) throw new Error('CONTROL: one Undo after a Refine that removes nothing left ' + state() + ' (want ' + f.st0 + ')');
+      /* 2. a Refine that removes B */
+      window.__fmStep = '1046 a Refine that removes B';
+      f = fresh('r2');
+      critique = [{ op: 'setProp', ref: f.A, path: 'fill', value: '#0000ff' }, { op: 'deleteLayer', ref: f.B }, { op: 'setProp', ref: f.C, path: 'fill', value: '#000000' }];
+      s = FM.history._commitSeq(); q = asked.critique;
+      await by(FM.ai.refine('1046 make A blue, remove B, make C black'), 15000, 'the Refine that removes B');
+      if (asked.critique !== q + 1) throw new Error('setup: the Refine that removes B never asked the critic, so nothing here measured it');
+      const r2 = state();
+      if (FM.layerById(FM.scene, f.B) || r2.indexOf('#0000ff') < 0 || r2.indexOf('#000000') < 0) throw new Error('setup: the Refine did not apply all three ops (' + r2 + ')');
+      const added2 = FM.history._commitSeq() - s;
+      FM.history.undo(); await sleep(60);
+      const back2 = state();
+      FM.history.redo(); await sleep(60);
+      const again2 = state();
+      if (added2 !== 1) bad.push('a Refine that removed a layer made ' + added2 + ' undo steps, not 1');
+      if (back2 !== f.st0) bad.push('one Undo after that Refine left ' + back2 + ' (want ' + f.st0 + ')');
+      if (again2 !== r2) bad.push('one Redo after that Refine brought back ' + again2 + ' (want ' + r2 + ')');
+      /* 3. a Director build cancelled after its first stage removed B and added X */
+      window.__fmStep = '1046 a Director build cancelled after it removed B and added X';
+      f = fresh('b3');
+      scaffold = [{ op: 'deleteLayer', ref: f.B }, { op: 'addShape', ref: 'x1046', shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#0000ff', duration: 4, name: '1046 b3 X' }];
+      s = FM.history._commitSeq(); q = asked.plan;
+      const res3 = await by(FM.ai.generateScene('1046 build', null, { skipCritic: true }), 15000, 'the Director build that is cancelled');
+      if (asked.plan !== q + 1) throw new Error('setup: the build never asked the planner, so nothing here measured it');
+      if (!res3 || !res3.error || !res3.error.cancelled) throw new Error('setup: the build did not end as cancelled after its first stage (' + JSON.stringify(res3 && res3.error) + ')');
+      const r3 = state();
+      if (FM.layerById(FM.scene, f.B) || r3.indexOf('1046 b3 X') < 0 || FM.scene.layers.length !== 3) throw new Error('setup: the cancelled build did not leave B removed and X added (' + r3 + ')');
+      const added3 = FM.history._commitSeq() - s;
+      FM.history.undo(); await sleep(60);
+      const back3 = state();
+      FM.history.redo(); await sleep(60);
+      const again3 = state();
+      if (added3 !== 1) bad.push('a Director build cancelled after it removed a layer and added one made ' + added3 + ' undo steps, not 1');
+      if (back3 !== f.st0) bad.push('one Undo after that build left ' + back3 + ' (want ' + f.st0 + ')');
+      if (again3 !== r3) bad.push('one Redo after that build brought back ' + again3 + ' (want what the build left: ' + r3 + ')');
+      /* 4. CONTROL: a Director build stopped before it changed anything adds no step */
+      window.__fmStep = '1046 control: a Director build stopped before it changed anything';
+      f = fresh('b4');
+      scaffold = [];
+      const brief4 = JSON.stringify(FM.scene.project.aiIntent || null);
+      s = FM.history._commitSeq(); q = asked.plan;
+      const res4 = await by(FM.ai.generateScene('1046 build stopped before it changed anything', null, { skipCritic: true }), 15000, 'the Director build stopped before it changed anything');
+      if (asked.plan !== q + 1) throw new Error('setup: the build stopped before it changed anything never asked the planner, so nothing here measured it');
+      if (!res4 || !res4.error || !res4.error.cancelled) throw new Error('setup: the build stopped before it changed anything did not end as cancelled (' + JSON.stringify(res4 && res4.error) + ')');
+      if (state() !== f.st0) throw new Error('setup: the build stopped before it changed anything changed the layers (' + state() + ', want ' + f.st0 + ')');
+      if (JSON.stringify(FM.scene.project.aiIntent || null) === brief4) throw new Error('setup: the build stopped before it changed anything wrote the same brief the project already held, so a step it should not make could not be seen');
+      const added4 = FM.history._commitSeq() - s;
+      if (added4 !== 0) bad.push('a Director build stopped before it changed anything made ' + added4 + ' undo steps, not 0 (a step that only records the brief, which Undo shows as nothing)');
+    } finally {
+      if (dResp) Object.defineProperty(FM.aiMock, 'respond', dResp); else FM.aiMock.respond = realResp;
+      if (dDry) Object.defineProperty(FM.ai, 'DRY_RUN', dDry); else FM.ai.DRY_RUN = realDry;
+      try { if (FM.aiPanel && FM.aiPanel.hide) FM.aiPanel.hide(); } catch (e) {}
+      FM.scene.project = proj0;
+      if (dIntent) Object.defineProperty(proj0, 'aiIntent', dIntent); else delete proj0.aiIntent;
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sels0;
+      FM.time = time0;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ 1047 (hunt LOW): THE EFFECTS SHEET — MASK PICKED FIRST, THEN ANOTHER EFFECT, WAS TWO UNDO STEPS ════════════════════════
+     js/fx-browser.js addMaskFromBrowser commits even on commitPicks' quiet path, so with Mask picked FIRST the Mask landed in a
+     step of its own and the effect after it in a second: the first Undo took back the Gaussian Blur and left the Mask. Driven
+     like the queue 321 test: the sheet opened on a shape, each tile found by search and tapped (click), then Add. Steps counted
+     by FM.history._commitSeq. FAILS BEFORE THE FIX: Mask then Gaussian Blur is two steps, and one Undo leaves the Mask on.
+     CONTROL, which holds before and after: Gaussian Blur then Mask is one step (the Mask's own commit held both), and one Undo
+     takes both off. Restores the layers, the selection, the playhead and the project, and closes the sheet and the mask tool. */
+  test('1047 Effects sheet: Mask picked first, then Gaussian Blur, then Add is ONE undo step, and one Undo takes both off (CONTROL: Gaussian Blur first, then Mask, is one step)', { item: '1047' }, async function () {
+    if (!FM.fxBrowser || typeof FM.fxBrowser.open !== 'function' || typeof FM._fxPicks !== 'function' || !FM.history || typeof FM.history._commitSeq !== 'function') throw new Error('setup: FM.fxBrowser.open, FM._fxPicks or FM.history._commitSeq is not reachable');
+    const by = function (p, ms, what) {
+      let t = 0;
+      const late = new Promise(function (_, rej) { t = setTimeout(function () { rej(new Error('1047 deadline: ' + what + ' did not finish within ' + ms + ' ms')); }, ms); });
+      return Promise.race([p, late]).finally(function () { clearTimeout(t); });
+    };
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, sels0 = (FM.scene.selectedIds || []).slice(), time0 = FM.time, proj0 = FM.scene.project;
+    const TERM = { _mask: 'mask', blur: 'gaussian' };
+    let id = null;
+    const onLayer = function () {
+      const L = FM.layerById(FM.scene, id) || {};
+      const fx = (L.effects || []).filter(Boolean);
+      return { masks: (L.masks || []).length, blurs: fx.filter(function (e) { return e.type === 'blur'; }).length, pens: fx.filter(function (e) { return e.type === 'penmask'; }).length };
+    };
+    const say = function (o) { return o.masks + ' mask(s), ' + o.blurs + ' Gaussian Blur(s), ' + o.pens + ' mask row(s)'; };
+    const pickAndAdd = async function (order) {
+      FM.fxBrowser.open(FM.layerById(FM.scene, id));
+      await sleep(320);
+      const root = document.getElementById('fx-browser');
+      if (!root || !root.classList.contains('fxb-sheet')) throw new Error('setup: the effects browser is not open in sheet mode, so the pick-then-Add flow is not the one under test');
+      const sb = root.querySelector('.fxb-search-btn'), si = root.querySelector('.fxb-search-input');
+      if (!sb || !si) throw new Error('setup: the effects browser has no search');
+      if (si.classList.contains('hidden')) { sb.click(); await sleep(150); }
+      for (const fx of order) {
+        si.value = TERM[fx];
+        si.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(320);
+        const tile = root.querySelector('.fxb-search-grid [data-fxid="' + fx + '"]') || root.querySelector('[data-fxid="' + fx + '"]');
+        if (!tile) throw new Error('setup: searching ' + TERM[fx] + ' did not find the ' + fx + ' tile');
+        tile.click();
+        await sleep(200);
+      }
+      if (FM._fxPicks().join(',') !== order.join(',')) throw new Error('setup: the picks are [' + FM._fxPicks().join(', ') + '], not [' + order.join(', ') + ']');
+      const go = root.querySelector('.fxb-commit .fxb-commit-go');
+      if (!go) throw new Error('setup: nothing offers to add the picks');
+      const s = FM.history._commitSeq();
+      go.click();
+      await sleep(320);
+      const landed = onLayer(), added = FM.history._commitSeq() - s;
+      FM.history.undo(); await sleep(80);
+      return { landed: landed, added: added, back: onLayer() };
+    };
+    const bad = [];
+    try {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 90, shapeH: 90, fill: '#c04070' });
+      L.start = 0; L.duration = 5; L.name = '1047 shape';
+      id = L.id;
+      FM.scene.layers = [L];
+      FM.selectLayer(L.id); FM.refreshAll(); FM.history.commit();
+      await sleep(180);
+      /* CONTROL: Gaussian Blur first, then Mask */
+      window.__fmStep = '1047 control: Gaussian Blur, then Mask';
+      const c = await by(pickAndAdd(['blur', '_mask']), 20000, 'picking Gaussian Blur then Mask, then Add');
+      if (!c.landed.masks || !c.landed.blurs) throw new Error('setup: Add did not land both picks (' + say(c.landed) + ')');
+      if (c.added !== 1) throw new Error('CONTROL: Gaussian Blur then Mask made ' + c.added + ' undo steps, not 1');
+      if (c.back.masks || c.back.blurs || c.back.pens) throw new Error('CONTROL: one Undo after Gaussian Blur then Mask left ' + say(c.back));
+      /* Mask first, then Gaussian Blur */
+      window.__fmStep = '1047 Mask, then Gaussian Blur';
+      const m = await by(pickAndAdd(['_mask', 'blur']), 20000, 'picking Mask then Gaussian Blur, then Add');
+      if (!m.landed.masks || !m.landed.blurs) throw new Error('setup: Add did not land both picks (' + say(m.landed) + ')');
+      if (m.added !== 1) bad.push('Mask picked first, then Gaussian Blur, made ' + m.added + ' undo steps for one Add, not 1');
+      if (m.back.masks || m.back.blurs || m.back.pens) bad.push('one Undo after that Add left ' + say(m.back) + ' on the layer (want none)');
+    } finally {
+      try { if (FM.maskTool && FM.maskTool.close) FM.maskTool.close(); } catch (e) {}
+      try { if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close(); } catch (e) {}
+      FM.scene.project = proj0;
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sels0;
+      FM.time = time0;
+      try { FM.selectLayer(sel0 || null); FM.refreshAll(); } catch (e) {}
+      await sleep(120);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  function deadline1048(p, name, ms) {
+    let timer;
+    return Promise.race([p, new Promise(function (_, reject) {
+      timer = setTimeout(function () { reject(new Error(name + ' deadline')); }, ms || 15000);
+    })]).finally(function () { clearTimeout(timer); });
+  }
+
+  test('1048 wrapping preserves old cuts and measures fewer than forty times the input characters', { item: '1048', budgetMs: 60000 }, async function () {
+    const c = offscreen(10, 10).getContext('2d');
+    c.font = '16px monospace';
+    /* Pre-#1048 code: the reference retains the whole-remainder check and forward grapheme walk. */
+    function oldWrap(ctx, ww, src) {
+      const out = [], paraOf = [], trim = s => s.replace(/\s+$/, ''), fits = s => ctx.measureText(s).width <= ww;
+      const chop = s => {
+        while (trim(s).length > 1 && !fits(trim(s))) {
+          const solid = trim(s), gs = FM._graphemes(solid);
+          if (gs.length < 2) break;
+          let cut = 1, head = gs[0];
+          while (cut < gs.length && fits(head + gs[cut])) { head += gs[cut]; cut++; }
+          out.push(head);
+          s = solid.slice(head.length) + s.slice(solid.length);
+        }
+        return s;
+      };
+      const paras = src.split('\n');
+      paras.forEach((para, pi) => {
+        while (paraOf.length < out.length) paraOf.push(pi - 1);
+        if (para === '') { out.push(''); return; }
+        const words = para.match(/\S+\s*/g) || [para];
+        let line = '';
+        words.forEach(w => {
+          if (line === '') { line = chop(w); return; }
+          if (fits(trim(line + w))) { line += w; return; }
+          out.push(trim(line)); line = chop(w);
+        });
+        out.push(trim(line));
+      });
+      while (paraOf.length < out.length) paraOf.push(paras.length - 1);
+      out.para = paraOf;
+      return out;
+    }
+    const unit = c.measureText('x').width;
+    if (!(unit > 0)) throw new Error('CONTROL: font measures no width');
+    const fixtures = ['the quick brown fox  jumps\n\nagain', '天地玄黃宇宙洪荒'.repeat(20), 'abc天地 def玄黃 '.repeat(20), 'Supercalifragilistic'.repeat(20), 'x'.repeat(2000)];
+    [2.5, 9.5, 23.5].forEach(n => fixtures.forEach(src => {
+      const ww = unit * n, was = oldWrap(c, ww, src), now = FM.textLines(c, { wrapWidth: ww }, src);
+      if (JSON.stringify(Array.from(now)) !== JSON.stringify(Array.from(was)) || JSON.stringify(now.para) !== JSON.stringify(was.para)) throw new Error('wrap differs from pre-#1048 at ' + n + ' characters');
+      if (now.length <= src.split('\n').length) throw new Error('CONTROL: fixture did not wrap at ' + n + ' characters');
+    }));
+    const desc = Object.getOwnPropertyDescriptor(c, 'measureText'), measure = c.measureText;
+    let measured = 0, calls = 0;
+    try {
+      Object.defineProperty(c, 'measureText', { configurable: true, value: function (s) {
+        measured += s.length; calls++; return measure.call(this, s);
+      } });
+      const src = 'x'.repeat(30000), lines = FM.textLines(c, { wrapWidth: unit * 9.5 }, src);
+      if (calls < 100 || lines.length < 100 || lines.join('') !== src || lines[0] !== 'x'.repeat(9)) throw new Error('CONTROL: counting context did not wrap the complete long run into nine-character lines');
+      if (measured >= 40 * src.length) throw new Error('measured ' + measured + ' characters for ' + src.length + ' input characters');
+    } finally {
+      if (desc) Object.defineProperty(c, 'measureText', desc); else delete c.measureText;
+    }
+    /* Widths that can shrink: any five-character string measures 999, everything else 10 per character. Only in
+       such a font do the old walk and the binary search cut differently, so only here is the 512 rule visible.
+       The short run carries a trailing space: the rule counts visible characters, so 511 plus a space is old walk. */
+    const spiky = { font: '10px spiky', letterSpacing: '', wordSpacing: '', measureText: s => ({ width: s.length === 5 ? 999 : s.length * 10 }) };
+    const short = 'x'.repeat(511) + ' ', long = 'x'.repeat(512);
+    const shortNow = FM.textLines(spiky, { wrapWidth: 75 }, short), shortWas = oldWrap(spiky, 75, short);
+    if (shortWas[0] !== 'xxxx') throw new Error('CONTROL: the old walk did not stop at the spike');
+    if (JSON.stringify(Array.from(shortNow)) !== JSON.stringify(Array.from(shortWas))) throw new Error('a 511-character run and its trailing space, in a font with shrinking widths, wrap differently from pre-#1048: ' + shortNow[0]);
+    const longNow = FM.textLines(spiky, { wrapWidth: 75 }, long);
+    if (longNow.join('') !== long) throw new Error('the 512-character run lost text');
+    if (longNow[0] !== 'x'.repeat(7)) throw new Error('a 512-character run did not take the binary search: ' + longNow[0]);
+    if (longNow[1] !== 'xxxx') throw new Error('the last 505 characters of a 512-character run did not go back to the old walk: ' + longNow[1]);
+  });
+
+  test('1060 activation removes an old FreeMotion cache and keeps other apps offline', { item: '1060', budgetMs: 30000 }, async function () {
+    const src = await deadline1048(fetch('../sw.js?probe=1060').then(r => r.text()), '1060 worker source');
+    const keys = new Set(['freemotion-v0', 'freemotion-v1', 'listing-kit-v92', 'pr-v5']), handlers = {};
+    const current = src.match(/const CACHE\s*=\s*['"]([^'"]+)/);
+    if (!current || current[1] === 'freemotion-v0') throw new Error('CONTROL: no distinct current cache');
+    keys.add(current[1]);
+    let claimed = false, held;
+    const scope = { addEventListener: (t, fn) => { handlers[t] = fn; }, location: { origin: location.origin }, clients: { claim: () => { claimed = true; return Promise.resolve(); } } };
+    const cache = { keys: () => Promise.resolve(Array.from(keys)), delete: k => Promise.resolve(keys.delete(k)) };
+    new Function('self', 'caches', 'fetch', 'Response', 'URL', src)(scope, cache, fetch, Response, URL);
+    if (!handlers.activate) throw new Error('CONTROL: no activate handler');
+    handlers.activate({ waitUntil: p => { held = p; } });
+    if (!held) throw new Error('CONTROL: activation did not extend its lifetime');
+    await deadline1048(held, '1060 activation');
+    if (!claimed || keys.has('freemotion-v0') || !keys.has(current[1])) throw new Error('CONTROL: activation did not replace only the old FreeMotion cache');
+    if (!keys.has('listing-kit-v92') || !keys.has('pr-v5')) throw new Error('activation deleted another app’s offline cache');
+  });
+
+  test('1060 version chip unregisters only its scope and deletes only FreeMotion caches', { item: '1060', budgetMs: 30000 }, async function () {
+    const html = await deadline1048(fetch('../index.html?probe=1060').then(r => r.text()), '1060 chip source');
+    /* Run the shipping cleanup chain with local parameters, including done, so no navigation or global stub is needed. */
+    const start = html.indexOf('(navigator.serviceWorker ? navigator.serviceWorker.getRegistrations()');
+    const end = html.indexOf('.then(done, done);', start);
+    if (start < 0 || end < 0) throw new Error('CONTROL: chip cleanup chain missing');
+    const href = 'https://builderezra.github.io/FreeMotion/index.html?fresh=1', scope = new URL('./', href).href;
+    const removed = [], deleted = [], keys = ['freemotion-v1', 'listing-kit-v92', 'pr-v5'];
+    const registrations = [scope, 'https://builderezra.github.io/listing-kit/', 'https://builderezra.github.io/Claude-game-2/'].map(s => ({ scope: s, unregister: () => { removed.push(s); return Promise.resolve(true); } }));
+    const cache = { keys: () => Promise.resolve(keys), delete: k => { deleted.push(k); return Promise.resolve(true); } };
+    let finished = false;
+    const run = new Function('navigator', 'window', 'caches', 'location', 'URL', 'done', 'return ' + html.slice(start, end + '.then(done, done);'.length));
+    await deadline1048(run({ serviceWorker: { getRegistrations: () => Promise.resolve(registrations) } }, { caches: cache }, cache, { href: href }, URL, () => { finished = true; }), '1060 chip cleanup');
+    if (!finished || removed.indexOf(scope) < 0 || deleted.indexOf('freemotion-v1') < 0) throw new Error('CONTROL: chip did not unregister FreeMotion and delete its old cache');
+    if (removed.length !== 1 || deleted.length !== 1) throw new Error('chip removed other apps: ' + JSON.stringify({ removed: removed, deleted: deleted }));
+  });
+
+  test('1063 rotate handle crosses the left pivot in two-degree steps without a full-turn jump', { item: '1063', budgetMs: 90000 }, async function () {
+    const saved = FM.scene.layers.slice(), selected = FM.scene.selectedId, time = FM.time;
+    const group = FM.groupContext, view = { x: FM.viewport.x, y: FM.viewport.y, scale: FM.viewport.scale };
+    const home = FM.home && FM.home.isOpen && FM.home.isOpen();
+    if (home) FM.home.close();
+    try {
+      await deadline1048(atPhoneWidth(() => onScreen924(async function () {
+        FM.groupContext = null;
+        FM.viewport.x = 0; FM.viewport.y = 0; FM.viewport.scale = 1; FM.viewport.apply();
+        /* v18.11's suite found the handle outside the window ("covered by nothing") after the whole suite ran, never alone:
+           real input lands only inside the frame's own window, so the page starts unscrolled here */
+        window.scrollTo(0, 0);
+        if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+        const project = FM.scene.project;
+        /* …and that was not a scroll: an earlier test leaves a tiny project open (the full suite measured the handle 454 px from the
+           pivot of a 382 px preview), so a fixed 160 px square overflowed it. The square is now a third of the project's short side. */
+        const side = Math.max(8, Math.round(Math.min(project.width, project.height) / 3));
+        const L = FM.makeLayer('shape', { shape: 'rect', x: project.width / 2, y: project.height / 2, shapeW: side, shapeH: side, start: 0, duration: 5 });
+        FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.time = 0;
+        FM.timeline.rebuild(); FM.selectLayer(L.id); FM.refreshAll();
+        for (const start of [10, 170]) {
+          FM.shiftTransform(L, 'rotation', start + 90, 0);
+          FM.canvasEdit.update();
+          const canvas = document.getElementById('preview'), knob = document.querySelector('#select-box .sb-rot');
+          if (!canvas || !knob) throw new Error('CONTROL: preview or rotate handle missing');
+          const cr = canvas.getBoundingClientRect();
+          const pivot = { x: cr.left + cr.width / 2, y: cr.top + cr.height / 2 };
+          /* Account for the selection border's subpixel offset before placing the handle at 10 or 170 degrees. */
+          for (let i = 0; i < 3; i++) {
+            const r = knob.getBoundingClientRect();
+            const a = Math.atan2(r.top + r.height / 2 - pivot.y, r.left + r.width / 2 - pivot.x) * 180 / Math.PI;
+            FM.shiftTransform(L, 'rotation', FM.evalProp(L.transform.rotation, 0) + start - a, 0);
+            FM.canvasEdit.update();
+          }
+          const kr = knob.getBoundingClientRect();
+          const x = kr.left + kr.width / 2, y = kr.top + kr.height / 2;
+          const radius = Math.hypot(x - pivot.x, y - pivot.y), actual = Math.atan2(y - pivot.y, x - pivot.x) * 180 / Math.PI;
+          /* Half a pixel on both driver axes bounds the coordinate error; two rounded rotation readings add at most 0.1 degrees. */
+          const error = Math.abs(actual - start), coordinateError = Math.atan2(Math.SQRT1_2, radius - Math.SQRT1_2) * 180 / Math.PI;
+          const tolerance = error + coordinateError + 0.1;
+          if (!(radius > 15) || error > coordinateError) throw new Error('CONTROL: handle is not at the requested angle about the canvas centre: ' + actual);
+          const initial = FM.evalProp(L.transform.rotation, 0);
+          const over = document.elementFromPoint(x, y);
+          const box = r => Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height);
+          if (!knob.contains(over)) throw new Error('CONTROL: the rotate handle is covered at ' + start + ' degrees by ' + (over ? over.tagName.toLowerCase() + (over.id ? '#' + over.id : '') + (typeof over.className === 'string' && over.className ? '.' + over.className.trim().split(/\s+/).join('.') : '') : 'nothing') +
+            ' (handle at ' + Math.round(x) + ',' + Math.round(y) + ' in a ' + window.innerWidth + 'x' + window.innerHeight + ' window scrolled ' + Math.round(window.scrollY) + '; preview ' + box(cr) + '; body ' + box(document.body.getBoundingClientRect()) + ')');
+          await deadline1048(realInput924([{ t: 'mouseMove', x: x, y: y, ms: 20 }, { t: 'mouseDown', x: x, y: y, ms: 30 }], '1063 grab rotate handle'), '1063 pointer down');
+          let previous = initial;
+          for (let step = 2; step <= 20; step += 2) {
+            const a = (start + step) * Math.PI / 180;
+            await deadline1048(realInput924([{ t: 'mouseMove', x: pivot.x + radius * Math.cos(a), y: pivot.y + radius * Math.sin(a), ms: 20 }], '1063 rotate by ' + step), '1063 pointer move');
+            const value = FM.evalProp(L.transform.rotation, 0);
+            if (Math.abs(value - previous - 2) > 2 * tolerance) throw new Error((start === 10 ? 'CONTROL: ' : '') + 'rotation jumped from ' + previous + ' to ' + value);
+            previous = value;
+          }
+          if (Math.abs(previous - initial - 20) > tolerance) throw new Error((start === 10 ? 'CONTROL: ' : '') + 'rotation did not advance twenty degrees');
+          await deadline1048(realInput924([{ t: 'mouseUp', x: x, y: y, ms: 20 }], '1063 release rotate handle'), '1063 pointer up');
+        }
+      })), '1063 real input gesture', 75000);
+    } finally {
+      try { await deadline1048(realInput924([{ t: 'mouseUp', x: 5, y: 5, ms: 0 }], '1063 cleanup release'), '1063 cleanup input'); } finally {
+        if (FM._resetVpPointers) FM._resetVpPointers();
+        FM.scene.layers.length = 0; saved.forEach(l => FM.scene.layers.push(l)); FM.time = time;
+        FM.groupContext = group;
+        FM.viewport.x = view.x; FM.viewport.y = view.y; FM.viewport.scale = view.scale; FM.viewport.apply();
+        FM.selectLayer(selected || null); FM.timeline.rebuild(); FM.refreshAll();
+        if (home) FM.home.open();
+      }
     }
   });
 })();
