@@ -2862,7 +2862,7 @@ window.FM = window.FM || {};
     // is already on screen (a thumbnail grab, a migrate, a sort change) the clear is SOFT — arrowSoon() below holds the arrow
     // and its redraw carries the draw on from where it was, instead of starting it again from the middle of it
     if (FM.homeArrow) FM.homeArrow.clear({ soft: !root.classList.contains('hidden') });
-    root.querySelectorAll('.hm-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    root.querySelectorAll('.hm-tab').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
     if (tab !== 'tutorials' && FM.tutorials) FM.tutorials.close();   // #1082: an open lesson belongs to its tab
     // Keep the legacy programmatic Select control in sync; cards' menus are the visible entry.
     const selBtn = document.getElementById('hm-select-btn');
@@ -3437,6 +3437,7 @@ window.FM = window.FM || {};
   function npDismiss() {
     const dlg = document.getElementById('hm-dialog');
     if (dlg && !dlg.classList.contains('hidden')) dlg.classList.add('hidden');
+    if (dlg) FM.modalFocus(dlg, null);
   }
 
   /* queue 991 — THE SUGGESTED NAME GETS OUT OF HIS WAY. Ezra, 29 Sep: *"On mobile when naming a project you have to delete
@@ -3486,6 +3487,8 @@ window.FM = window.FM || {};
     npUpdate();
     dlg.classList.remove('hidden');
     npEntrance(dlg, orb, orbRect);   // queue 947: the +'s own entrance, the ripple he picked
+    npAutoFocus = true;
+    try { FM.modalFocus(dlg, orb); } finally { npAutoFocus = false; }
     // Focus the name field on a real keyboard only. On a phone, auto-focus throws the software
     // keyboard up the instant the dialog opens and pushes Create/Cancel off the visual viewport
     // (measured: a 667pt screen leaves ~380pt, the card is ~550pt) — the name already has a sane
@@ -3499,6 +3502,7 @@ window.FM = window.FM || {};
     const s = npCompute(), fps = npFps();
     try { localStorage.setItem(NEWP_KEY, JSON.stringify({ aspect: npAspect, res: npEl('hm-new-res').value, fps: fps, bg: npBg, w: s.w, h: s.h })); } catch (e) {}
     dlg.classList.add('hidden');
+    FM.modalFocus(dlg, null);
     if (!(await leaveOk())) return;   // #967 B3: New project is another project too — Stay leaves him on Home
     /* ⚠️ queue 690 (HUNT-a): A TILE IS A PROMISE. Only Custom says Auto adjusts (his words, #659); the other five
        name a shape and a size, and he picked one. The first clip or photo used to replace that size with the
@@ -3766,6 +3770,7 @@ window.FM = window.FM || {};
       if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
       const push = !!(opts && opts.push) && !root.classList.contains('hidden');
       document.getElementById('hm-dialog').classList.add('hidden');
+      FM.modalFocus(document.getElementById('hm-dialog'), null);
       lnClose(true);   // #948: the + card is Home's too — it must not ride into the editor
       document.body.classList.remove('home-open');
       if (push) {

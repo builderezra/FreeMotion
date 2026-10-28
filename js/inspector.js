@@ -16,6 +16,14 @@ window.FM = window.FM || {};
   }
   function round(v, dp) { const m = Math.pow(10, dp); return Math.round(v * m) / m; }
   function commitH() { if (FM.history) FM.history.commit(); }
+  function keyframeName(button, label, read) {
+    button._fmKeyframeName = () => {
+      const props = [].concat(read()), animated = props.some(p => FM.isAnimated(p)), here = props.some(p => FM.hasKeyframeAt(p, FM.time));
+      const name = here ? 'Remove ' + label + ' keyframe' : animated ? 'Add ' + label + ' keyframe at playhead' : 'Animate ' + label;
+      if (button.getAttribute('aria-label') !== name) button.setAttribute('aria-label', name);
+    };
+    button._fmKeyframeName();
+  }
 
   function section(title) { const s = el('div', 'insp-section'); s.appendChild(el('h4', null, title)); return s; }
 
@@ -43,6 +51,7 @@ window.FM = window.FM || {};
     const animated = FM.isAnimated(p);
     const onHere = FM.hasKeyframeAt(p, FM.time);
     const kf = el('button', 'kf-btn' + (animated ? ' active' : '') + (onHere ? ' here' : ''), '◆');
+    keyframeName(kf, label, () => layer.transform[key]);
     kf.title = animated ? 'Keyframe at playhead (click to remove)' : 'Animate this property — adds a keyframe at the playhead';
     kf.addEventListener('click', () => {
       FM.toggleKeyframe(layer, key, FM.time);
@@ -1211,6 +1220,7 @@ window.FM = window.FM || {};
     if (p.keyframable) {
       const c = fx.params[p.key];
       const kfb = el('button', 'fx-kf' + (FM.isAnimated(c) ? ' active' : '') + (FM.hasKeyframeAt(c, FM.time) ? ' here' : ''), '◆');
+      keyframeName(kfb, p.label || p.key, () => fx.params[p.key]);
       kfb.title = FM.isAnimated(c) ? 'Keyframe at playhead (click to remove)' : 'Animate this parameter';
       kfb.addEventListener('click', () => { FM.toggleProp(fx.params, p.key, FM.time, followed ? followed() : fallback); afterFx(); });
       row.appendChild(kfb);
@@ -1448,6 +1458,7 @@ window.FM = window.FM || {};
     const read = () => { const c = container[key]; return FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : dflt); };
     const c0 = container[key];
     const kfb = el('button', 'fx-kf' + (FM.isAnimated(c0) ? ' active' : '') + (FM.hasKeyframeAt(c0, FM.time) ? ' here' : ''), '◆');
+    keyframeName(kfb, label, () => container[key]);
     kfb.title = FM.isAnimated(c0) ? 'Keyframe at playhead (click to remove)' : 'Animate this';
     kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt); afterKf(); });
     row.appendChild(kfb);
@@ -1480,6 +1491,7 @@ window.FM = window.FM || {};
     const read = () => { const c = container[key]; return (FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : dflt / disp)) * disp; };
     const c0 = container[key];
     const kfb = el('button', 'fx-kf' + (FM.isAnimated(c0) ? ' active' : '') + (FM.hasKeyframeAt(c0, FM.time) ? ' here' : ''), '◆');
+    keyframeName(kfb, label, () => container[key]);
     kfb.title = FM.isAnimated(c0) ? 'Keyframe at playhead (click to remove)' : 'Animate this';
     kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dflt / disp); afterKf(); });
     row.appendChild(kfb);
@@ -1510,6 +1522,7 @@ window.FM = window.FM || {};
     const row = el('div', 'prop-row kf-color-row');
     const c0 = container[key];
     const kfb = el('button', 'fx-kf' + (FM.isAnimated(c0) ? ' active' : '') + (FM.hasKeyframeAt(c0, FM.time) ? ' here' : ''), '◆');
+    keyframeName(kfb, label, () => container[key]);
     kfb.title = FM.isAnimated(c0) ? 'Keyframe at playhead (click to remove)' : 'Animate colour';
     kfb.addEventListener('click', () => { FM.toggleProp(container, key, FM.time, dv()); afterKf(); });
     row.appendChild(kfb);
@@ -3675,6 +3688,7 @@ window.FM = window.FM || {};
       const anim = FM.isAnimated(mask.path);
       const here = anim && FM.hasKeyframeAt(mask.path, FM.time);
       const kf = el('button', 'kf-btn' + (anim ? ' active' : '') + (here ? ' here' : ''), '◆');
+      keyframeName(kf, 'Mask path', () => mask.path);
       kf.title = anim ? 'Path keyframe at playhead (click to remove)' : 'Animate the mask path — adds a keyframe at the playhead';
       kf.addEventListener('click', () => { toggleMaskPathKf(mask, FM.time); afterMasks(layer); });
       head.appendChild(kf);
@@ -4733,6 +4747,7 @@ window.FM = window.FM || {};
       const anim = ref.keys.some(k => FM.isAnimated(ref.obj && ref.obj[k]));
       const at = anim && ref.keys.some(k => FM.hasKeyframeAt(ref.obj && ref.obj[k], FM.time));
       kfBtn.textContent = at ? '◆' : '◇';
+      keyframeName(kfBtn, 'Position', () => ref.keys.map(k => ref.obj && ref.obj[k]));
       kfBtn.classList.toggle('on', !!anim);
       kfBtn.classList.toggle('here', !!at);
       kfBtn.title = anim ? ('Position keyframes — tap to ' + (at ? 'remove the one here' : 'add one here'))
@@ -4798,6 +4813,7 @@ window.FM = window.FM || {};
         const p = layer[ckey], anim = FM.isAnimated(p);
         const at = anim && p.kf.some(k => Math.abs(k.t - FM.time) < 1e-3);
         kfBtn.textContent = at ? '◆' : '◇';
+        keyframeName(kfBtn, 'Color', () => layer[ckey]);
         kfBtn.classList.toggle('on', !!anim);
         kfBtn.classList.toggle('here', !!at);   // amber when the playhead is on a keyframe (press = delete)
         kfBtn.title = anim ? (p.kf.length + ' colour keyframe' + (p.kf.length === 1 ? '' : 's') + ' — tap to ' + (at ? 'remove one here' : 'add one here')) : 'Animate colour: add a keyframe at the playhead';
@@ -5087,7 +5103,7 @@ window.FM = window.FM || {};
       if (on) kf.classList.add('on');
       else if (FM.isAnimated(kL.transform[kKey])) kf.classList.add('anim');
       kf.title = (on ? 'Remove the ' : 'Add a ') + labelText + ' keyframe at the playhead';
-      kf.setAttribute('aria-label', kf.title);
+      keyframeName(kf, labelText, () => kL.transform[kKey]);
       kf.addEventListener('click', (e) => {
         e.stopPropagation();
         if (kL.transform[kKey] == null) kL.transform[kKey] = MT_DEF[kKey];
@@ -5300,6 +5316,7 @@ window.FM = window.FM || {};
     const onHere = !!layer.crop && CK.some(k => FM.hasKeyframeAt(layer.crop[k], FM.time));
     const kfBtn = el('button', 'mt-kf' + (anim ? ' active' : '') + (onHere ? ' here' : ''), '◆');
     kfBtn.title = onHere ? 'Remove crop keyframe at playhead' : 'Keyframe the crop at the playhead';
+    keyframeName(kfBtn, 'Crop', () => CK.map(k => layer.crop && layer.crop[k]));
     kfBtn.addEventListener('click', () => {
       ensureCrop(layer);
       CK.forEach(k => { if (layer.crop[k] == null) layer.crop[k] = def(k); });
@@ -5471,6 +5488,7 @@ window.FM = window.FM || {};
     const subsAnim = !!(FM.isAnimated && FM.isAnimated(layer.subs));
     const subsHere = subsAnim && FM.hasKeyframeAt(layer.subs, FM.time);
     const kfBtn = el('button', 'mt-kf' + (subsAnim ? ' active' : '') + (subsHere ? ' here' : ''), '◆');
+    keyframeName(kfBtn, 'Points', () => layer.subs);
     kfBtn.title = subsHere ? 'Remove the point keyframe at the playhead'
       : subsAnim ? 'Keyframe these points at the playhead'
       : 'Animate the points — adds a keyframe at the playhead';
@@ -5577,6 +5595,7 @@ window.FM = window.FM || {};
     })();
     const onHere = litProps.some(k => FM.hasKeyframeAt(layer.transform[k], FM.time));
     const kfBtn = el('button', 'mt-kf' + (anyAnim ? ' active' : '') + (onHere ? ' here' : ''), '◆');
+    keyframeName(kfBtn, { move: 'Position', rotate: 'Rotation', scale: 'Scale', skew: 'Skew' }[mode] || mode, () => litProps.map(k => layer.transform[k]));
     kfBtn.title = onHere ? 'Remove keyframe at playhead' : 'Add a keyframe at the playhead';
     kfBtn.addEventListener('click', () => {
       // recompute at CLICK time — the build-time value goes stale the moment the playhead scrubs
@@ -6280,6 +6299,7 @@ window.FM = window.FM || {};
     const anim = FM.isAnimated(layer.volume), onHere = FM.hasKeyframeAt(layer.volume, FM.time);
     const kfBtn = el('button', 'mt-kf' + (anim ? ' active' : '') + (onHere ? ' here' : ''), '◆');
     kfBtn.title = onHere ? 'Remove volume keyframe at playhead' : 'Keyframe the volume at the playhead';
+    keyframeName(kfBtn, 'Volume', () => layer.volume);
     kfBtn.addEventListener('click', () => { FM.toggleProp(layer, 'volume', FM.time, 1); FM.requestRender(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); });
     left.appendChild(kfBtn);
     const easeBtn = el('button', 'mt-ease'); easeBtn.innerHTML = MT_ICONS.ease; easeBtn.title = 'Volume easing curve';
@@ -6733,6 +6753,7 @@ window.FM = window.FM || {};
       const rail = el('div', 'mt-rail mt-rail-left');
       const spAnim = FM.isAnimated(layer.speed), spHere = FM.hasKeyframeAt(layer.speed, FM.time);
       const kfBtn = el('button', 'mt-kf' + (spAnim ? ' active' : '') + (spHere ? ' here' : ''), '◆');
+      keyframeName(kfBtn, 'Speed', () => layer.speed);
       kfBtn.title = spHere ? 'Remove the speed keyframe at the playhead' : 'Keyframe the speed at the playhead (speed ramp)';
       kfBtn.addEventListener('click', () => { FM.toggleProp(layer, 'speed', FM.time, 1); FM.requestRender(); FM.seekVideosToTime(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); commitH(); });
       rail.appendChild(kfBtn);
@@ -7714,6 +7735,7 @@ window.FM = window.FM || {};
   FM._presetIcoSrc = function () { return ICO_PRESETS; };
 
   FM.inspector = {
+    syncKeyframeNames() { if (!root || FM.playing) return; root.querySelectorAll('.kf-btn,.fx-kf,.mt-kf,.mt-vbox-kf,.fill-kf').forEach(b => { if (b._fmKeyframeName) b._fmKeyframeName(); }); },
     currentView() { return view; },   // read by the scrub probe (queue 768): which panel was open while he scrubbed
     _styleBlockedReason: styleBlockedReason,   // suite seam (queue 737)
     _mergedStack: mergedStack,   // seam: the 560 tests drive the merged effects+masks list without a pointer drag

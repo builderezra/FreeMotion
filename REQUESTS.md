@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 28 Oct at v18.12
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Oct at v18.13
 >
-> **State:** v18.12 — **in the full editor Tab moves through the buttons** (#1017) and **GIF and PNG-frame exports offer the share sheet** (#1031); **downloads keep their names in any language** (#1044) and **a full phone no longer says a preset saved** (#1045); **a two-finger twist past half a turn no longer jumps the layer** (#1215); **an export no longer starts before its fill pictures have loaded** (#1217). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+> **State:** v18.13 — **the dialogs, toasts and export progress work with a screen reader** (#1021–#1024); **a voice take survives the microphone going away** (#1035); **Pixelate's Block aspect and Edges work on an adjustment layer** (#1055) and **a sharp hold speed drop keeps the footage in step** (#1061). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+>
+> v18.12 — **in the full editor Tab moves through the buttons** (#1017) and **GIF and PNG-frame exports offer the share sheet** (#1031); **downloads keep their names in any language** (#1044) and **a full phone no longer says a preset saved** (#1045); **a two-finger twist past half a turn no longer jumps the layer** (#1215); **an export no longer starts before its fill pictures have loaded** (#1217). **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
 > v18.11 — **twelve more effects have Protect skin and Mix** (#966); **three undo steps that took two presses now take one** (#1043 #1046 #1047); **FreeMotion no longer deletes your other apps' offline copies** on the same site (#1060); **nine wrong results fixed** from the PM's hunt (#1196 to #1214: a phone blur, Export only this layer, the easing handles, Sharpen, saved filters, Undo during Reverse, a split Wave, rounded corners, Capitalize Words). A live session needs both devices on v18.11. **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
 >
@@ -35500,24 +35502,28 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 9
       Where: index.html:711, 792, 795, 837, 957; js/app.js ~6142/6170/6200 (status text), ~6244 (ready card, no focus) · He sees: Screen reader only: the dialogs are not announced, and export progress and "Done" are never spoken · Fix: Markup: role, aria-modal, aria-labelledby (give the titles ids). #export-status role=status with throttled milestones. #export-bar role=progressbar. Focus the ready card · Test: A static DOM test for the four ids. An export test: the live text says Done when #export-ready unhides, and focus is inside it
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.13 (28 Oct): shipped** (codex/a11y, review, refuter, rework a11yb, check, folds, refuter; landed as land/a11yb): the four dialogs carry role=dialog, aria-modal and a name; export progress is a progressbar with a hidden status line spoken about once a second, its result at once; a second export starts at Preparing.
 
 - [ ] **1022 — No focus trap and no focus return on those three dialogs (hunt LOW #1022)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 10
       Where: js/app.js:5720-5727, :5861-5864, :7100-7140, :8240-8300; js/home.js:3035, :3259 · He sees: Keyboard: Tab walks the editor behind the Export scrim, and closing the dialog drops focus · Fix: One FM.modalFocus(dialog, opener) helper: inert the siblings, focus the first control, restore the opener · Test: Open Export from #btn-export: focus is inside, the editor is inert. On close, focus is back on #btn-export. Mutate the restore line
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.13 (28 Oct): shipped** (in a11yb): FM.modalFocus moves focus in, traps Tab, makes what is behind inert (toasts and asks stay live) and returns focus to the opener on close.
 
 - [ ] **1023 — Ordinary toasts (244 call sites, the app's main error channel) are not announced (hunt LOW #1023)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 11
       Where: index.html:638; js/app.js:1393-1396 (strips role) · He sees: Screen reader: "storage full" and similar messages are silent · Fix: A permanent visually hidden #toast-sr role=status, written on the next frame. Not on #toast itself, because the tappable branch swaps its role · Test: FM.toast('hello') puts the text in #toast-sr. The tappable path keeps role=status
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.13 (28 Oct): shipped** (in a11yb): every toast is also written to a hidden status line; a relabelled progress toast is spoken at most once a second, a different message at once.
 
 - [ ] **1024 — The keyframe ◆ buttons are named just "◆" and expose no state (hunt LOW #1024)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 12
       Where: js/inspector.js:1137-1138, 1346-1347, 1378-1379, 1408-1409 (these lines may shift: inspector.js is modified in the tree) · He sees: Screen reader hears "◆" with no parameter and no state. There are three states, so plain aria-pressed is not enough · Fix: A single helper that sets an aria-label from the state and the parameter ("Add Blur keyframe at playhead") · Test: The label contains "Animate" before the click and "Remove"/"keyframe" after it (re-acquire the button). One control from each builder
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.13 (28 Oct): shipped** (in a11yb): the keyframe buttons are named for their setting and say keyed / not keyed / keyed here.
 
 - [ ] **1025 — Glass-theme --text-faint is about 4.0:1 (needs 4.5) (hunt LOW #1025)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35530,6 +35536,7 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 14
       Where: index.html:697-703; js/home.js:2540 (class only), :3061 · He sees: Screen reader can't hear which tab is on. home.js:2849-2852 already does aria-pressed for the aspect buttons · Fix: Set aria-pressed (or aria-selected plus role=tab) next to the class toggle · Test: Click Templates: it is true and the other three are false
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.13 (28 Oct): shipped** (in a11yb): the Home tabs carry aria-pressed.
 
 - [ ] **1027 — Keyframe diamonds are pointer-only. No keyboard way to read a keyframe's time or retime it (hunt LOW #1027)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35542,6 +35549,7 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 16
       Where: index.html:414 · He sees: Screen reader announces nothing for the main surface · Fix: role="img" aria-label="Video preview" · Test: The aria-label is non-empty and the role is img
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.13 (28 Oct): shipped** (in a11yb): the preview canvas is role=img, named Video preview.
 
 - [ ] **1029 — Long project names are cut off on one line with no tooltip (hunt LOW #1029)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35568,6 +35576,7 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 21
       Where: js/settings.js:463 · He sees: A single short scroll in Settings · Fix: Use behavior: reduce ? 'auto' : 'smooth' · Test: Stubbed matchMedia: scrollIntoView gets 'auto'
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.13 (28 Oct): shipped** (in a11yb): the reports jump scrolls with behavior auto under reduced motion.
 
 - [ ] **1033 — Test gap: one unreadable file in a multi-file pick is named and the rest still import (hunt LOW #1033)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35582,6 +35591,7 @@ re-opened #480, which I had marked done and had not fixed.
 - [ ] **1035 — Test gap (needs app code): the mic going away mid-take — voice-rec listens for no track ended / mute (hunt LOW #1035)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 4
+      📍 **v18.13 (28 Oct): shipped** (codex/h1035, review, refuter, rework h1035b, check): voice-rec listens for the track ending or muting; a take whose microphone goes lands in review with the bytes it has and the line The microphone stopped; muted shows while recording.
 
 - [ ] **1036 — Test gap: rotating 390 → 844 crosses into Studio and keeps the selection, panel and playhead (hunt LOW #1036)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35719,6 +35729,7 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 16
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.13 (28 Oct): shipped** (codex/h1055, review, refuter, rework h1055b, check, folds F1-F4): the adjustment Pixelate reads Block aspect and Edges; FM.adjNeedsFrame renders the whole comp for Soft or aspect above 100.
 
 - [x] **1056 — Mosaic's Average mode gives cutout edges a dark fringe (hunt LOW #1056)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       ✅ **SHIPPED IN v17.44** (20 Oct hand-off audit): Mosaic Average's fringe fixed in v17.44.
@@ -35763,12 +35774,14 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 3
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.13 (28 Oct): shipped** (in h1055b): a hold key inside a speed window joins the integration grid at its left limit; a ramp with no hold keeps the Float32 table byte for byte.
 
 - [ ] **1062 — Motion Blur (Footage), Pixel Motion style: the smear is built at 480 px in preview, 720 px in export (hunt LOW #1062)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 4
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **28 Oct (builder):** not built in codex/h1055 (its review kept it out). Building the preview's smear at export's 720 px costs speed, so it needs a timing at 380 px first.
+      📍 **v18.13 (28 Oct): not built** — h1055 dropped it; it stays open.
 
 - [ ] **1063 — Dragging the rotate handle across the left of the pivot makes the rotation box jump by 360 (hunt LOW #1063)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -35780,6 +35793,7 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 6
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
+      📍 **v18.13 (28 Oct): shipped** (codex/h1064, review, refuter, rework h1064b, check; F1 folded at landing): ship.sh bumps every stale ?v= it can, inner references first, and refuses only the ones it cannot.
 
 - [x] **1065 — Remove the ? (keyboard shortcuts) help button from the MOBILE version (PC keeps its own)** (2 Oct, ~09:31 AWST, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
@@ -35826,6 +35840,8 @@ re-opened #480, which I had marked done and had not fixed.
       Structural, his rule: git fetch ssh first, refuse if ssh/main is not an ancestor of HEAD ("live has moved on: pull first"). Measured 5 Oct: live was f7716576 (ChatGPT's v17.22), the tree 28104a3e.
       🔨 5 Oct (shipped with v17.23's tooling): the gate is in tools/ship.sh, right after the mutation check — fetch, refuse if ssh/main is not an ancestor of HEAD, warn and carry on when offline. Checked both ways by hand (this tree passes; 28104a3e would be refused). Left open for one thing: a self-test that keeps it honest, like _classify.py's.
       🔨 **6 Oct ~03:55 — the gate now also refuses when GitHub cannot be reached** (it used to warn and carry on). github.com dropped out from this Mac twice in one night (03:14, 03:50 — ssh and https both), and a ship launched into that spends ~90 minutes for a push that cannot land; a fetch with no limit also HANGS rather than fails. The fetch now gets 15 s to connect (measured against the real outage: exit 128 after 15 s) and an unreachable remote stops the ship before anything runs; FM_SHIP_OFFLINE=1 commits locally anyway. Ships with the next release.
+      📍 **v18.13 (28 Oct): shipped** (in h1064b): ship.sh refuses before the suite when ssh/main is not an ancestor, with the no-stash steps in its reason.
+
 - [x] **1067 — PM lane split: the verified ChatGPT bug lists are ChatGPT's to fix; the builder lands its verified commits** (5 Oct, ~16:15 AWST, via INBOX — the logging chat as project manager; NOT his words) ✅ **LOGGED**
       Moved from INBOX.md whole:
       ### 05 Oct 2026, ~16:15 AWST — PM lane split: the VERIFIED ChatGPT bug lists are now ChatGPT's to fix; you land them, you don't build them

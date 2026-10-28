@@ -165,7 +165,98 @@ awk '/^BUSTER_MISS="\$\(python3 - <<.PYEOF.$/{f=1; next} f && /^PYEOF$/{exit} f{
 out="$(cd "$G" && PATH="$TMP/badgit:$PATH" python3 "$TMP/buster.py" 2>&1)"; rc=$?
 [ "$rc" != 0 ] && ok "the cache-buster gate: a failing git ends it non-zero (ship.sh refuses), never 'no stale buster'" || bad "the cache-buster gate read a failing git as 'nothing changed' (exit 0): $out"
 out="$(cd "$G" && python3 "$TMP/buster.py" 2>&1)"; rc=$?
-[ "$rc" = 0 ] && printf '%s' "$out" | grep -q 'js/a.js (still ?v=1)' && ok "control: with a working git it names js/a.js's stale buster" || bad "buster control: rc=$rc $out"
+[ "$rc" = 0 ] && printf '%s' "$out" | grep -q 'Bumped js/a.js in index.html to ?v=2' && grep -qF 'js/a.js?v=2' "$G/index.html" && ok "control: with a working git it bumps js/a.js's stale buster" || bad "buster control: rc=$rc $out"
+
+echo "── cache-busters cover every versioned src and href in index.html (#1064) ──"
+C="$TMP/busters"; mkdir -p "$C/tools" "$C/vendor"
+cp tools/_shipgates.py "$C/tools/"
+awk '/^BUSTER_MISS=/{f=1} f && /^# ---- THE SUMMARY/{exit} f{print}' tools/ship.sh > "$TMP/buster-gate.sh"
+( cd "$C" && git init -q . && git config user.email t@t && git config user.name t
+  printf '<link href="manifest.json?v=3">\n<script src="vendor/x.js?v=2"></script>\n<link href="asset.dat?v=4">\n<img src="icon.png?v=3"><img src="apple-touch-icon.png?v=3"><img src="icon.png?v=31">\n<link href="./odd.dat?v=1">\n' > index.html
+  echo base > manifest.json; echo base > vendor/x.js; echo base > asset.dat
+  echo base > icon.png; echo base > apple-touch-icon.png; echo base > odd.dat
+  git add -A && git commit -qm base )
+buster_gate() { ( cd "$C" && bash "$TMP/buster-gate.sh" ); }
+out="$(buster_gate 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "control: unchanged versioned files pass" || bad "unchanged busters: rc=$rc $out"
+for asset in manifest.json vendor/x.js asset.dat; do
+  echo changed >> "$C/$asset"
+  out="$(buster_gate 2>&1)"; rc=$?
+  [ "$rc" = 0 ] && printf '%s' "$out" | grep -qF "Bumped $asset in index.html to ?v=" && ok "$asset stale gets bumped, then passes" || bad "$asset stale: rc=$rc $out"
+done
+out="$(buster_gate 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "control: bumping all three changed references passes" || bad "bumped busters: rc=$rc $out"
+echo changed >> "$C/icon.png"
+out="$(buster_gate 2>&1)"; rc=$?
+[ "$rc" = 0 ] && grep -qF 'src="icon.png?v=4"' "$C/index.html" && grep -qF 'src="icon.png?v=32"' "$C/index.html" \
+  && grep -qF 'src="apple-touch-icon.png?v=3"' "$C/index.html" && ok "auto-bump anchors the path and version digits; control: the unchanged longer name stays at 3" || bad "anchored bump: rc=$rc $out"
+echo new > "$C/new.bin"; echo '<img src="new.bin?v=1">' >> "$C/index.html"
+out="$(buster_gate 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "a new versioned file passes (no previous buster)" || bad "new buster: rc=$rc $out"
+echo changed >> "$C/odd.dat"
+out="$(buster_gate 2>&1)"; rc=$?
+[ "$rc" = 1 ] && printf '%s' "$out" | grep -qF 'odd.dat (still ?v=1)' && ok "an unbumpable relative spelling refuses; control: the same reference passed unchanged" || bad "unbumpable buster: rc=$rc $out"
+
+echo "── inner cache-busters settle before index.html (#1064) ──"
+C="$TMP/inner-busters"; mkdir -p "$C/tools" "$C/js" "$C/fx-art"
+cp tools/_shipgates.py "$C/tools/"
+( cd "$C" && git init -q . && git config user.email t@t && git config user.name t
+  printf '<link href="styles.css?v=5"><link href="theme-glass.css?v=5"><link href="manifest.json?v=5"><script src="js/fx-thumbs.js?v=5"></script><script src="js/art.js?v=5"></script>\n' > index.html
+  printf 'a { background: url(brand-wordmark-m.png?v=1); }\n' > styles.css
+  printf 'b { background: url("brand-wordmark-m.png?v=1"); }\n' > theme-glass.css
+  printf '{"icons":[{"src":"icon-192.png?v=3"},{"src":"icon-512.png?v=3"}]}\n' > manifest.json
+  printf "var art = 'fx-art/' + key + '.jpg?v=1';\n" > js/fx-thumbs.js
+  printf "var art = 'brand-wordmark-m.png?v=1';\n" > js/art.js
+  for asset in brand-wordmark-m.png icon-192.png icon-512.png fx-art/tile.jpg; do echo base > "$asset"; done
+  git add -A && git commit -qm base )
+out="$(buster_gate 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "control: unchanged CSS, manifest, JS and shared fx-art references pass" || bad "inner control: rc=$rc $out"
+for asset in brand-wordmark-m.png icon-192.png icon-512.png fx-art/tile.jpg; do echo changed >> "$C/$asset"; done
+out="$(buster_gate 2>&1)"; rc=$?
+[ "$rc" = 0 ] && grep -qF 'brand-wordmark-m.png?v=2' "$C/styles.css" && grep -qF 'brand-wordmark-m.png?v=2' "$C/theme-glass.css" \
+  && grep -qF 'brand-wordmark-m.png?v=2' "$C/js/art.js" && grep -qF 'icon-192.png?v=4' "$C/manifest.json" \
+  && grep -qF 'icon-512.png?v=4' "$C/manifest.json" && grep -qF '.jpg?v=2' "$C/js/fx-thumbs.js" \
+  && ok "wordmark, both manifest icons and fx-art/tile.jpg repair their inner busters" || bad "inner repairs: rc=$rc $out"
+for asset in styles.css theme-glass.css manifest.json js/fx-thumbs.js js/art.js; do
+  grep -qF "$asset?v=6" "$C/index.html" && ok "$asset repaired inside also bumps its index reference" || bad "$asset parent buster was left stale"
+done
+out="$(buster_gate 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "control: settled inner and outer repairs pass without another bump" || bad "inner re-check: rc=$rc $out"
+( cd "$C" && git add -A && git commit -qm settled )
+echo new > "$C/fx-art/new.jpg"
+out="$(buster_gate 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && grep -qF '.jpg?v=2' "$C/js/fx-thumbs.js" && ok "a NEW fx-art tile leaves the shared .jpg buster alone (new files are exempt)" || bad "new fx-art tile: rc=$rc $out"
+echo changed >> "$C/fx-art/tile.jpg"
+out="$(buster_gate 2>&1)"; rc=$?
+[ "$rc" = 0 ] && grep -qF '.jpg?v=3' "$C/js/fx-thumbs.js" && ok "control: a changed tracked tile beside the new one still bumps the shared .jpg buster" || bad "fx-art control: rc=$rc $out"
+
+echo "── live must be an ancestor before a suite can run (#1066) ──"
+L="$TMP/live"; mkdir -p "$L/tools"
+cp tools/_shiplock.sh tools/_platform.sh tools/_testfloor.sh tools/_shipgates.sh "$L/tools/"
+# Run the real ship prefix through its fetch gate; the suite is a marker-writing stub.
+awk '/^# ⚠️ A RE-RECORDED BASELINE/{exit} {print}' tools/ship.sh > "$L/tools/ship.sh"
+printf '\nbash suite-stub\n' >> "$L/tools/ship.sh"
+printf '#!/bin/bash\necho ran > suite-marker\n' > "$L/suite-stub"
+awk '/^if git fetch -q ssh/{f=NR} /^ship_phase prove/{p=NR} END{exit !(f && p && f < p)}' tools/ship.sh \
+  && ok "the fetch gate precedes the proof suite" || bad "fetch gate is after the proof suite"
+( cd "$L" && git init -q . && git config user.email t@t && git config user.name t && git checkout -qb main
+  echo '<span>v1.2</span>' > index.html
+  git add -A && git commit -qm base
+  git init -q --bare "$TMP/live.git" && git remote add ssh "$TMP/live.git" && git push -q ssh main )
+live_gate() { ( cd "$L" && FM_SHIP_ALLOW_NON_MAC=1 bash tools/ship.sh release ); }
+out="$(live_gate 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ -f "$L/suite-marker" ] && ok "control: equal remote reaches the suite stub" || bad "equal remote: rc=$rc $out"
+rm -f "$L/suite-marker"
+( cd "$L" && git commit -q --allow-empty -m local )
+out="$(live_gate 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ -f "$L/suite-marker" ] && ok "control: remote behind HEAD reaches the suite stub" || bad "remote behind: rc=$rc $out"
+rm -f "$L/suite-marker"
+( cd "$L" && git push -q ssh main )
+git clone -q --branch main "$TMP/live.git" "$TMP/other-live"
+( cd "$TMP/other-live" && git config user.email t@t && git config user.name t && git commit -q --allow-empty -m remote && git push -q origin main )
+out="$(live_gate 2>&1)"; rc=$?
+[ "$rc" = 1 ] && [ ! -f "$L/suite-marker" ] && printf '%s' "$out" | grep -q '^❌ LIVE HAS MOVED ON' \
+  && printf '%s' "$out" | grep -qi 'no stash' && grep -q 'no stash' "$L/.last-ship" && ok "live ahead refuses (1), says no stash, and never runs the suite" || bad "live ahead: rc=$rc $out"
 
 echo "── _srcfiles: a release that only bumps the version label, the fm-build stamp and ?v= busters has nothing to prove (24 Oct, v17.99) ──"
 # v17.98 added <meta name="fm-build" content="vX.YY"> beside the label, bumped by every release. _srcfiles.py's own mask did not
@@ -1006,6 +1097,10 @@ echo "── ship.sh runs THIS test whenever a file it proves changes (6 Oct, th
 TRIG="$(grep -E '^if \[ -n "\$\(git status --porcelain -- .*tools/test-port\.sh' tools/ship.sh | head -1)"
 if [ -z "$TRIG" ]; then bad "ship.sh has no 'git status --porcelain -- … tools/test-port.sh …' trigger line — this check cannot see when it runs"
 else
+  printf '%s\n' "$TRIG" | tr ' ' '\n' | grep -qxF 'tools/_platform.sh' \
+    && ok "control: the test-port trigger reader finds its existing platform helper" || bad "the trigger reader missed the platform helper"
+  printf '%s\n' "$TRIG" | tr ' ' '\n' | grep -qxF 'tools/_shiplock.sh' \
+    && ok "test-port trigger includes the ship lock used by the live fixture" || bad "the live fixture ship lock is absent from the trigger"
   _untrig=""
   for f in $(grep -oE '(tools|tests)/[A-Za-z0-9_.-]+\.(sh|py)' "$REPO/tools/test-port.sh" | sort -u); do
     printf '%s\n' "$TRIG" | tr ' ' '\n' | grep -qxF "$f" || _untrig="$_untrig $f"

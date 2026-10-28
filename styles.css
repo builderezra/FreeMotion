@@ -3655,7 +3655,7 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
   box-shadow: 0 24px 70px rgba(0,0,0,.6);
 }
 .export-title { font-weight: 700; margin-bottom: 14px; font-size: 16px; }
-#export-status { color: var(--text-dim); margin-bottom: 14px; font-variant-numeric: tabular-nums; }
+#export-status-visual { color: var(--text-dim); margin-bottom: 14px; font-variant-numeric: tabular-nums; }
 .progress { height: 8px; background: var(--bg); border-radius: 5px; overflow: hidden; margin-bottom: 18px; }
 #export-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .1s; }
 .field { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
@@ -3810,7 +3810,7 @@ body:has(> #tpl-fill:not(.hidden)) > #toast { z-index: 170; }
 .xr-meta.xr-nosound { color: var(--warn, #ffb03a); font-weight: 600; }
 /* The in-export equivalent (queue 215): #export-status normally reads "Encoding audio + video… 60%",
    and when the soundtrack has been lost it has to stop looking like progress. */
-#export-status.export-status-warn { color: var(--warn, #ffb03a); font-weight: 600; }
+#export-status-visual.export-status-warn { color: var(--warn, #ffb03a); font-weight: 600; }
 /* The device-cannot-run-filters banner in the effects browser (queue 661). It is the honest cause
    of seven tiles saying 'no change at this value', and it has to read as INFORMATION rather than
    an error — nothing is wrong with his project. */
@@ -12398,3 +12398,6 @@ body.sm-dragging { user-select: none; -webkit-user-select: none; cursor: grabbin
    session on it ever saw this. Light Home keeps a dark thumb. */
 :root { scrollbar-color: var(--text-faint) transparent; }
 body.white-chrome { scrollbar-color: rgba(18, 25, 38, .30) transparent; }
+/* Live announcements stay available without taking up space. */
+#hm-dialog:focus,#export-dialog:focus,#export-overlay:focus,#export-ready:focus,#canvas-dialog:focus{outline:none}
+.fm-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }

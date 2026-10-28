@@ -69,12 +69,14 @@ window.FM = window.FM || {};
   var MIN_SECONDS = 0.25;
   var SILENT_RMS = 0.006;    // below this the mic is hearing nothing worth calling signal
   var SILENT_AFTER = 3;      // …and after this many seconds of it, say so
+  var MIC_GONE = 'The microphone stopped, so the take stopped there.';
 
   /* ---- module state --------------------------------------------------------------------------- */
 
   var state = 'closed';      // closed | idle | recording | review | error
   var root = null, ui = {};
   var stream = null, micTracks = [];
+  var trackListeners = [], trackMuted = false;
   var recorder = null, chunks = [], mime = '';
   var ac = null, analyser = null, srcNode = null, levelBuf = null, rafId = 0;
   var startedAt = 0, seconds = 0, tickId = 0, watchId = 0, silentFor = 0, lastLevelAt = 0;
@@ -179,6 +181,7 @@ window.FM = window.FM || {};
      closing a closed context and cancelling a dead rAF are all no-ops, so calling it twice is safe
      and calling it from a path that never acquired anything is safe. */
   function releaseMic() {
+    unlistenTracks();
     if (rafId) { try { cancelAnimationFrame(rafId); } catch (e) {} rafId = 0; }
     if (srcNode) { try { srcNode.disconnect(); } catch (e) {} srcNode = null; }
     analyser = null; levelBuf = null;
@@ -244,7 +247,31 @@ window.FM = window.FM || {};
 
     var now = Date.now(), dt = (now - lastLevelAt) / 1000; lastLevelAt = now;
     silentFor = rms < SILENT_RMS ? silentFor + dt : 0;
-    if (ui.quiet) ui.quiet.classList.toggle('hidden', !(silentFor > SILENT_AFTER));
+    if (ui.quiet) ui.quiet.classList.toggle('hidden', !(trackMuted || silentFor > SILENT_AFTER));
+  }
+
+  function unlistenTracks() {
+    trackListeners.forEach(function (l) { l.track.removeEventListener(l.type, l.fn); });
+    trackListeners = []; trackMuted = false;
+  }
+  function listenTracks() {
+    unlistenTracks();
+    var tracks = stream.getAudioTracks();
+    function quiet() {
+      trackMuted = tracks.some(function (t) { return t.muted; });
+      silentFor = 0;
+      if (ui.quiet) ui.quiet.classList.toggle('hidden', !trackMuted);
+    }
+    tracks.forEach(function (track) {
+      function listen(type, fn) {
+        track.addEventListener(type, fn);
+        trackListeners.push({ track: track, type: type, fn: fn });
+      }
+      listen('ended', function () { stop(MIC_GONE); });
+      listen('mute', quiet);
+      listen('unmute', quiet);
+    });
+    quiet();
   }
 
   /* ---- the panel ------------------------------------------------------------------------------- */
@@ -617,6 +644,7 @@ window.FM = window.FM || {};
 
   function start() {
     if (state !== 'idle' || !stream) return;
+    ui._note = '';
     if (FM.playing && FM.pause) { try { FM.pause(); } catch (e) {} }   // belt and braces
     mime = pickMime(window.MediaRecorder && MediaRecorder.isTypeSupported
       ? MediaRecorder.isTypeSupported.bind(MediaRecorder) : null);
@@ -633,6 +661,7 @@ window.FM = window.FM || {};
     try { recorder.start(250); } catch (e) { fail('This browser refused to start a recording.'); return; }
     startedAt = Date.now(); seconds = 0; silentFor = 0;
     state = 'recording';
+    listenTracks();
     say('');
     paint();
     startTick();
@@ -653,22 +682,21 @@ window.FM = window.FM || {};
 
   // `note` is shown after the take lands in review — used by the cap and by the backgrounding path.
   function stop(note) {
-    if (state !== 'recording') return;
+    if (state !== 'recording' || watchId) return;
+    unlistenTracks();
     seconds = (Date.now() - startedAt) / 1000;
     stopTick();
     ui._note = note || '';
-    if (recorder && recorder.state !== 'inactive') {
-      try {
-        recorder.stop();
-        /* onstop is the FAST path, not the only one. A MediaRecorder stopped in the same tick it
-           started has no encoded data to flush, and there is no guarantee across browsers that it
-           still fires 'stop' — and if it does not, the panel sits on "Recording…" with a stop button
-           that does nothing, forever. That is the worst failure this screen can have, so it gets a
-           watchdog: finish() runs either way, and whichever arrives second is a no-op because
-           finish() only acts while the state is still 'recording'. */
-        watchId = setTimeout(function () { watchId = 0; finish(); }, 900);
-        return;
-      } catch (e) {}
+    if (recorder) {
+      try { if (recorder.state !== 'inactive') recorder.stop(); } catch (e) {}
+      /* onstop is the FAST path, not the only one. A MediaRecorder stopped in the same tick it
+         started has no encoded data to flush, and there is no guarantee across browsers that it
+         still fires 'stop' — and if it does not, the panel sits on "Recording…" with a stop button
+         that does nothing, forever. That is the worst failure this screen can have, so it gets a
+         watchdog: finish() runs either way, and whichever arrives second is a no-op because
+         finish() only acts while the state is still 'recording'. */
+      watchId = setTimeout(function () { watchId = 0; finish(); }, 900);
+      return;
     }
     finish();
   }
@@ -677,6 +705,8 @@ window.FM = window.FM || {};
   function finish() {
     if (state !== 'recording') return;
     stopWatch();
+    if (tickId) { seconds = (Date.now() - startedAt) / 1000; stopTick(); }
+    if (!ui._note && micTracks.some(function (t) { return t && t.readyState === 'ended'; })) ui._note = MIC_GONE;
     recorder = null;
     // THE MIC GOES DOWN THE INSTANT THE TAKE ENDS. Review, retake and Add all work off the blob, so
     // there is no reason to keep the indicator lit while you listen back.

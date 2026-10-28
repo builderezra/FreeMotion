@@ -1088,6 +1088,30 @@ window.FM = window.FM || {};
   // byte-identical). KEYFRAMED speed = SPEED RAMPING: numerically integrate the eased curve with a
   // cached cumulative table (trapezoid @120Hz) so every lookup — scrub, playback, export — is O(1).
   const _spInt = {};   // layerId -> { sig, tab, SR } (module cache; never serialized with the layer)
+  /* #1061: A HOLD KEY IS A JUMP IN SPEED, and the 120 Hz trapezoid below averaged the two speeds across the one sample that
+     holds it. On a 100x speed held into a 1x key that left a lasting +0.08 s of footage after the hold, -0.12 s just before it,
+     and a different offset on each half of a split (the jump lands at another phase of the grid there). So when a hold key
+     falls inside the window, its time joins the grid, the trapezoid that ends on it ends at the key's LEFT limit (the speed
+     held into it, kf[ki - 1].v, which is what evalProp reads just before a hold), and the entry carries `times` for the
+     lookup (a binary search; the grid is no longer even). ONLY holds: a ramp with no hold key in its window keeps the
+     Float32 table and the index lookup below byte for byte. */
+  function holdSpeedTable(sp, layer, n, SR, lo, sig, boundaries) {
+    const times = [];
+    for (let i = 0; i < n; i++) times.push(layer.start + i / SR);
+    boundaries.forEach(k => { if (times.indexOf(k.t) < 0) times.push(k.t); });
+    times.sort((a, b) => a - b);
+    const values = new Float64Array(times.length);
+    let acc = 0, prev = Math.max(lo, evalProp(sp, layer.start));
+    for (let i = 1; i < times.length; i++) {
+      const v = Math.max(lo, evalProp(sp, times[i]));
+      const key = boundaries.find(k => k.t === times[i]);
+      const ki = key ? sp.kf.indexOf(key) : -1;
+      const left = key && key.e === 'hold' && ki > 0 ? Math.max(lo, sp.kf[ki - 1].v) : v;
+      acc += (prev + left) * (times[i] - times[i - 1]) / 2;
+      values[i] = acc; prev = v;
+    }
+    return { sig: sig, tab: values, times: times, SR: SR };
+  }
   FM.layerSourceAdvance = function (layer, into) {
     const sp = layer.speed;
     // THROUGH speedAt, for the reason written on it: `sp || 1` returns an OBJECT for a malformed
@@ -1110,8 +1134,18 @@ window.FM = window.FM || {};
         tab[i] = acc; prev = v;
       }
       c = _spInt[layer.id] = { sig: sig, tab: tab, SR: SR };
+      const boundaries = sp.kf.filter(k => k.e === 'hold' && k.t > layer.start && k.t < layer.start + (n - 1) / SR);
+      if (boundaries.length) c = _spInt[layer.id] = holdSpeedTable(sp, layer, n, SR, lo, sig, boundaries);   // #1061, above
       const keys = Object.keys(_spInt);   // bounded: drop a stale entry if the cache grows
       if (keys.length > 24) delete _spInt[keys[0]];
+    }
+    // #1061: a hold key in the window, so the grid is not even
+    if (c.times) {
+      const at = Math.max(c.times[0], Math.min(c.times[c.times.length - 1], layer.start + into));
+      let low = 0, high = c.times.length - 1;
+      while (high - low > 1) { const mid = (low + high) >> 1; if (c.times[mid] <= at) low = mid; else high = mid; }
+      const f = (at - c.times[low]) / (c.times[high] - c.times[low]);
+      return c.tab[low] + (c.tab[high] - c.tab[low]) * f;
     }
     const x = Math.max(0, Math.min(c.tab.length - 1, into * c.SR));
     const i0 = Math.floor(x), f = x - i0;

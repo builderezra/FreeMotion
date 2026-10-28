@@ -134,8 +134,9 @@ export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o ConnectTimeout=15 -o ServerAli
 if git fetch -q ssh 2>/dev/null; then
   if ! git merge-base --is-ancestor ssh/main HEAD; then
     echo "❌ LIVE HAS MOVED ON: ssh/main ($(git rev-parse --short ssh/main)) is not in this tree's history (HEAD $(git rev-parse --short HEAD))."
-    echo "   Bring it in first — commit this work to a branch (no stash, no clean), fast-forward main to ssh/main, re-apply it"
-    echo "   (git cherry-pick --no-commit <branch>), renumber if the versions collide. Shipping now would run the whole suite and then fail at the push."
+    echo "   Commit this work to a branch (no stash, no clean), fast-forward main to ssh/main, then re-apply it"
+    echo "   (git cherry-pick --no-commit <branch>), renumber if the versions collide, then ship."
+    _WHY="live has moved on — commit to a branch (no stash), fast-forward main, cherry-pick --no-commit"
     exit 1
   fi
 elif [ "${FM_SHIP_OFFLINE:-}" = "1" ]; then
@@ -518,80 +519,75 @@ fi
 # NEW files are exempt: they have no previous ?v= to differ from, and being referenced at all is enough.
 BUSTER_MISS="$(python3 - <<'PYEOF'
 import subprocess, re, sys
+from pathlib import Path
 sys.path.insert(0, 'tools'); from _shipgates import sh   # a failed git exits 3 here, never "nothing changed" (6 Oct)
 changed = set()
 for line in sh("git status --porcelain").splitlines():
     parts = line[3:].split(" -> ")
     changed.add(parts[-1].strip())
-watched = [f for f in changed if re.match(r'^(js/.*\.js|styles\.css|theme-glass\.css)$', f)]   # theme-glass.css joined 5 Sep: it ships too (queue 553)
-if not watched: sys.exit(0)
-now = open('index.html', encoding='utf-8').read()
-was = sh("git show HEAD:index.html")
-def buster(txt, f):
-    m = re.search(re.escape(f) + r'\?v=([0-9.]+)', txt)
-    return m.group(1) if m else None
-for f in sorted(watched):
-    b_now = buster(now, f)
-    if b_now is None: continue          # not referenced by index.html (a tool, a test helper) — not cached
-    b_was = buster(was, f)
-    if b_was is None: continue          # brand new reference — nothing to bump
-    if b_now == b_was:
-        print("%s (still ?v=%s)" % (f, b_now))
+from html.parser import HTMLParser
+from urllib.parse import urlsplit, unquote, parse_qs
+import posixpath
+class References(HTMLParser):
+    def __init__(self, text, source='index.html'):
+        super().__init__()
+        self.busters = {}
+        if source == 'index.html':
+            self.feed(text)
+        else:
+            for value in re.findall(r'''["'(]([^\s"'()]+\?v=[^\s"'()]+)''', text):
+                self.add(value)
+            if source == 'js/fx-thumbs.js':
+                self.busters['fx-art/*.jpg'] = set(re.findall(r'''["']\.jpg\?v=([^"']+)''', text))
+    def add(self, value):
+        url = urlsplit(value)
+        if url.scheme or url.netloc: return
+        versions = parse_qs(url.query, keep_blank_values=True).get('v', [])
+        path = posixpath.normpath(unquote(url.path).lstrip('/'))
+        self.busters.setdefault(path, set()).update(versions)
+    def handle_starttag(self, tag, attrs):
+        for name, value in attrs:
+            if name not in ('src', 'href') or not value or '?v=' not in value: continue
+            self.add(value)
+sources = [p for p in ('styles.css', 'theme-glass.css', 'manifest.json') if Path(p).is_file()]
+sources += sorted(str(p) for p in Path('js').glob('*.js'))
+sources += ['index.html']
+tracked = set(sh('git ls-tree -r --name-only HEAD').splitlines())
+previous = {p: References(sh(['git', 'show', 'HEAD:' + p]), p).busters if p in tracked else {} for p in sources}
+# A NEW tile is exempt, as every new file is: only a tracked fx-art photo that changed moves the shared .jpg buster.
+if any(p.startswith('fx-art/') and p.endswith('.jpg') and p in tracked for p in changed): changed.add('fx-art/*.jpg')
+def stale(text, source):
+    current, old = References(text, source).busters, previous[source]
+    return [(f, version) for f in sorted(changed & current.keys() & old.keys())
+            for version in sorted(current[f] & old[f])]
+# Inner repairs can change a file referenced by another source. Settle those before the final check.
+for turn in range(len(sources) + 1):
+    repaired = False
+    for source in sources:
+        now = original = Path(source).read_text(encoding='utf-8')
+        for f, version in stale(now, source):
+            if not re.fullmatch(r'[0-9]+', version): continue
+            path = '.jpg' if f == 'fx-art/*.jpg' else f
+            pattern = r'([\"\'(])' + re.escape(path) + r'\?v=' + re.escape(version) + r'(?![0-9])'
+            now, count = re.subn(pattern, lambda m: m[1] + path + '?v=' + str(int(version) + 1), now)
+            if count: print('Bumped %s in %s to ?v=%s' % (f, source, int(version) + 1), file=sys.stderr)
+        if now != original:
+            Path(source).write_text(now, encoding='utf-8')
+            changed.add(source)
+            repaired = True
+    if not repaired: break
+# STILL: re-parse what will ship, refusing unsupported spellings and non-integer versions.
+for source in sources:
+    for f, version in stale(Path(source).read_text(encoding='utf-8'), source):
+        print('%s (still ?v=%s) in %s' % (f, version, source))
 PYEOF
 )" || { echo "❌ the cache-buster gate could not run (git or its own error, above) — not shipping on a guess."; _WHY="git could not answer the cache-buster gate"; exit 1; }
 if [ -n "$BUSTER_MISS" ]; then
-  # ⚠️ IT BUMPS THEM RATHER THAN REFUSING (6 Sep). This gate refused twice in one day, on two different
-  # releases, for the same reason both times — and a gate that only says "you forgot" leaves the forgetting
-  # possible. His rule is the one this whole file is built on: "every safe guard needs to be structural…
-  # anything that could be forgotten needs to be structural." A number that must be incremented whenever a
-  # file changes is exactly the kind of thing a person forgets and a script never does, so the script does
-  # it. It still SAYS which ones it bumped, loudly, because a silent edit to index.html would be its own
-  # kind of surprise — and it still refuses below if the bump did not take.
-  echo "→ cache-busters were stale — bumping them (a changed file MUST be re-fetched by the phone):"
+  echo "❌ A FILE CHANGED WITHOUT BUMPING ITS CACHE-BUSTER — not committing, not pushing."
   echo "$BUSTER_MISS" | sed 's/^/   · /'
-  python3 - <<'PYEOF'
-import re
-names = []
-import subprocess
-import sys; sys.path.insert(0, 'tools'); from _shipgates import sh
-out = sh("git status --porcelain")
-for line in out.splitlines():
-    f = line[3:].split(" -> ")[-1].strip()
-    if re.match(r'^(js/.*\.js|styles\.css|theme-glass\.css)$', f): names.append(f)
-src = open('index.html', encoding='utf-8').read()
-was = sh("git show HEAD:index.html")
-for f in sorted(set(names)):
-    m_now = re.search(re.escape(f) + r'\?v=([0-9]+)', src)
-    m_was = re.search(re.escape(f) + r'\?v=([0-9]+)', was)
-    if not m_now or not m_was: continue
-    if m_now.group(1) != m_was.group(1): continue          # already bumped by hand
-    src = src.replace(m_now.group(0), f + '?v=' + str(int(m_now.group(1)) + 1))
-    print("   ✅ %s ?v=%s → ?v=%d" % (f, m_now.group(1), int(m_now.group(1)) + 1))
-open('index.html', 'w', encoding='utf-8').write(src)
-PYEOF
-  [ $? = 0 ] || { echo "❌ the cache-buster bump could not run (git or its own error, above) — not shipping on a guess."; _WHY="git could not answer the cache-buster gate"; exit 1; }
-  STILL="$(python3 - <<'PYEOF'
-import subprocess, re, sys
-sys.path.insert(0, 'tools'); from _shipgates import sh   # a failed git exits 3 here, never "nothing changed" (6 Oct)
-changed = set()
-for line in sh("git status --porcelain").splitlines():
-    changed.add(line[3:].split(" -> ")[-1].strip())
-watched = [f for f in changed if re.match(r'^(js/.*\.js|styles\.css|theme-glass\.css)$', f)]
-now = open('index.html', encoding='utf-8').read(); was = sh("git show HEAD:index.html")
-def b(t, f):
-    m = re.search(re.escape(f) + r'\?v=([0-9.]+)', t); return m.group(1) if m else None
-for f in sorted(watched):
-    n, o = b(now, f), b(was, f)
-    if n is None or o is None: continue
-    if n == o: print("%s (still ?v=%s)" % (f, n))
-PYEOF
-)" || { echo "❌ the cache-buster re-check could not run (git or its own error, above) — not shipping on a guess."; _WHY="git could not answer the cache-buster gate"; exit 1; }
-  if [ -n "$STILL" ]; then
-    echo "❌ A FILE CHANGED AND ITS CACHE-BUSTER COULD NOT BE BUMPED — not committing, not pushing."
-    echo "$STILL" | sed 's/^/   /'
-    echo "   Without it the phone keeps serving the OLD file, the app looks unchanged, and the fix reads as broken."
-    exit 1
-  fi
+  echo "   Bump the named reference first, or the phone keeps serving the OLD file."
+  _WHY="a changed file has a stale cache-buster"
+  exit 1
 fi
 
 # ---- THE SUMMARY EZRA READS MUST NOT BE STALE (22 Aug) -------------------------------------------
@@ -680,7 +676,7 @@ fi
 # …and the port's own (6 Oct, #1071): NOT RUN HERE as the judges read it, and the review's fixes to the gates and the driver.
 # EVERY script tools/test-port.sh exercises is listed, and test-port.sh checks that itself (6 Oct, the port audit): a release
 # that edited only tools/_shipgates.py — the feature gate, and the sh() that makes a failed git a refusal — ran no self-test.
-if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_shipidle.sh tools/_classify.py tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tests/_slow_pass.py tests/_win_pass.py tests/_win_suite.py tools/record-baselines.sh 2>/dev/null)" ]; then
+if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_shiplock.sh tools/_shipidle.sh tools/_classify.py tools/_testfloor.sh tools/_docsonly.py tools/_redtitles.py tools/tick.sh tools/_spotjudge.py tools/spotcheck.sh tools/_platform.sh tools/_shipgates.sh tools/_shipgates.py tools/_srcfiles.py tools/_spottests.py tools/serve.sh tools/ship.sh tools/prove.sh tools/mutate.sh tests/_cdp.py tests/_platform.py tests/_shot.sh tests/_touch_pass.py tests/_slow_pass.py tests/_win_pass.py tests/_win_suite.py tools/record-baselines.sh 2>/dev/null)" ]; then
   echo "→ the port's gates or the driver changed — proving them before shipping"
   if ! ./tools/test-port.sh; then
     echo "❌ THE PORT'S GATES OR THE DRIVER ARE BROKEN — not committing, not pushing."

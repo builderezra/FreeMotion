@@ -28,6 +28,188 @@
       layers: layers, selectedId: null, selectedIds: []
     }, over || {});
   }
+  var T = [];
+  test('1055 Pixelate Block aspect and Edges on an adjustment match the layer and change the picture', { item: '1055', budgetMs: 30000 }, async function () {
+    const W = 240, H = 180, tex = offscreen(W, H), g = tex.getContext('2d'), img = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      img.data[i] = x * 255 / (W - 1); img.data[i + 1] = y * 255 / (H - 1);
+      img.data[i + 2] = (x * 7 + y * 13) % 256; img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    const L = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 });
+    L.transform.scale = 1.1; L.start = 0; L.duration = 4;
+    const A = FM.makeLayer('adjustment', { start: 0, duration: 4 }); A.start = 0; A.duration = 4;
+    const shot = function (adj, params) {
+      const fx = { type: 'pixelate', enabled: true, params: params };
+      L.effects = adj ? [] : [fx]; A.effects = [fx];
+      const c = offscreen(W, H), ctx = c.getContext('2d');
+      FM.renderScene(ctx, { project: { width: W, height: H, fps: 30, duration: 4, background: '#102030' }, layers: adj ? [A, L] : [L], selectedId: null, selectedIds: [] }, 0.5);
+      return ctx.getImageData(0, 0, W, H).data;
+    };
+    const diff = function (a, b) { let max = 0; for (let i = 0; i < a.length; i++) max = Math.max(max, Math.abs(a[i] - b[i])); return max; };
+    FM.media.set(L.id, { kind: 'image', el: tex, width: W, height: H, duration: 0 });
+    try {
+      /* MEASURED 28 Oct, 1280 and 380 wide: the clip path and the adjustment path differ by 0 levels at the defaults and at
+         aspect 25, aspect 400 and Soft on this tree; on 6f8db2e3 (the fault) the adjustment misses the layer by 204, 211 and 110
+         levels, and each control moves the picture by 204, 211 and 110. XTOL 3 sits between: above the measured 0, so one level of
+         premultiply rounding on another raster backend does not read as the fault, and far below 110. */
+      const XTOL = 3;
+      const base = { size: 12, aspect: 100, smooth: 0 }, own = shot(false, base), adj = shot(true, base);
+      if (diff(own, adj) > XTOL) throw new Error('CONTROL: default Pixelate does not match on the two paths (' + diff(own, adj) + ' levels)');
+      for (const params of [{ size: 12, aspect: 25, smooth: 0 }, { size: 12, aspect: 400, smooth: 0 }, { size: 12, aspect: 100, smooth: 1 }]) {
+        const clip = shot(false, params), grade = shot(true, params);
+        if (!(diff(clip, own) > XTOL)) throw new Error('CONTROL: the layer control did not change the picture: ' + JSON.stringify(params));
+        if (diff(clip, grade) > XTOL) throw new Error('adjustment differs from layer: ' + JSON.stringify(params));
+        if (!(diff(grade, adj) > XTOL)) throw new Error('adjustment control did not change the picture');
+      }
+    } finally { FM.media.remove(L.id); }
+  });
+
+  test('1061 Hold speed drop integrates exactly and a split preserves footage time', { item: '1061', budgetMs: 30000 }, async function () {
+    const layers = FM.scene.layers, time = FM.time, selected = FM.scene.selectedId, ids = FM.scene.selectedIds;
+    const stubs = [];
+    const stub = function (obj, key) {
+      stubs.push([obj, key, Object.getOwnPropertyDescriptor(obj, key)]);
+      Object.defineProperty(obj, key, { configurable: true, writable: true, value: function () {} });
+    };
+    let timer;
+    const splitDeadline = function (promise) {
+      return Promise.race([promise, new Promise(function (_, reject) { timer = setTimeout(function () { reject(new Error('1061 split deadline')); }, 10000); })]).finally(function () { clearTimeout(timer); });
+    };
+    const ts = 0.5 + 0.4 / 120, start = 3, bad = [], made = [];
+    const clip = function (reversed) {
+      const c = FM.makeLayer('video', { start: start, duration: 2 });
+      c.start = start; c.duration = 2; c.trimStart = 0; c.reversed = !!reversed;
+      c.speed = { kf: [{ t: start, v: 100, e: 'linear' }, { t: start + ts, v: 1, e: 'hold' }] };
+      made.push(c);
+      return c;
+    };
+    const exact = function (t) { return 100 * Math.min(t, ts) + Math.max(0, t - ts); };
+    const L = clip(false);
+    /* MEASURED 28 Oct, 1280 and 380 wide: on this tree every footage time below is within 8.7e-9 s of the exact integral (that one
+       on the at-key split's tail, which has no hold left in its window and so reads the Float32 table; 1e-13 s everywhere else).
+       On 6f8db2e3 (the fault) the smallest miss is 0.0825 s, the lasting offset after the hold: 0.115-0.165 s around it, 0.198-0.247 s
+       reversed, 0.116-0.297 s from the split at 0.253 s, and 0.165 s on the tail of a split exactly at the key. 1 ms sits between. */
+    const tol = 0.001;
+    try {
+      stub(FM, 'refreshAll'); stub(FM, 'seekVideosToTime');
+      if (FM.storage) stub(FM.storage, 'save');
+      if (FM.history) stub(FM.history, 'commit');
+      FM.scene.layers = [L];
+      if (FM.speedAt(L, start + ts - 0.001) !== 100 || FM.speedAt(L, start + ts + 0.001) !== 1) throw new Error('CONTROL: hold drop is not active');
+      if (Math.abs(FM.layerSourceAdvance(L, 0.25) - 25) > tol) throw new Error('CONTROL: pre-drop advance is not 25 s');
+      const frames = [ts - 0.001, ts, ts + 0.001, 1.2, 1.5];
+      const before = frames.map(function (t) { return FM.layerLocalTime(L, start + t); });
+      frames.forEach(function (t, i) {
+        const expected = 100 * Math.min(t, ts) + Math.max(0, t - ts);
+        if (Math.abs(before[i] - expected) > tol) bad.push('at ' + t + ': footage ' + before[i] + ', expected ' + expected);
+      });
+      FM.time = start + 0.253;
+      await splitDeadline(FM.splitLayer(L.id));
+      const B = FM.scene.layers.find(function (l) { return l !== L; });
+      if (!B || B.start !== FM.time || FM.scene.layers.length !== 2) throw new Error('CONTROL: split did not create the tail');
+      if (Math.abs(B.trimStart - 25.3) > tol) throw new Error('CONTROL: split did not advance the source trim');
+      frames.forEach(function (t, i) { if (Math.abs(FM.layerLocalTime(B, start + t) - before[i]) > tol) bad.push('split moved footage at ' + t); });
+      made.push(B);
+      // REVERSED: the source plays end to start, footage = total - advance. After the hold the lasting offset sits in both and
+      // cancels, so only the frames up to ts + 1/120 can tell; the late frame is the CONTROL that the reversed fixture is right.
+      const R = clip(true), total = exact(2);
+      FM.scene.layers = [R];
+      if (Math.abs(FM.layerLocalTime(R, start + 1.5) - (total - exact(1.5))) > tol) throw new Error('CONTROL: the reversed clip does not read total minus advance late in the clip');
+      frames.filter(function (t) { return t <= ts + 1 / 120; }).forEach(function (t) {
+        const got = FM.layerLocalTime(R, start + t), want = total - exact(t);
+        if (Math.abs(got - want) > tol) bad.push('reversed at ' + t + ': footage ' + got + ', expected ' + want);
+      });
+      // A SPLIT EXACTLY ON THE HOLD KEY: no seam key is added, the tail keeps the hold key alone and starts at the left-limit integral.
+      const S = clip(false);
+      FM.scene.layers = [S];
+      FM.time = start + ts;
+      if (FM.time !== S.speed.kf[1].t) throw new Error('CONTROL: the playhead is not exactly on the hold key');
+      await splitDeadline(FM.splitLayer(S.id));
+      const S2 = FM.scene.layers.find(function (l) { return l !== S; });
+      if (!S2 || S2.start !== FM.time || FM.scene.layers.length !== 2 || Math.abs(S.duration - ts) > 1e-9) throw new Error('CONTROL: the split at the hold key did not make a head and a tail');
+      made.push(S2);
+      if (Math.abs(S2.trimStart - exact(ts)) > tol) bad.push('a split exactly at the hold key starts the tail at ' + S2.trimStart + ' s of footage, expected ' + exact(ts));
+      frames.forEach(function (t) {
+        const l = [S, S2].find(function (x) { return start + t >= x.start && start + t < x.start + x.duration; });
+        const got = l ? FM.layerLocalTime(l, start + t) : null;
+        if (got == null || Math.abs(got - exact(t)) > tol) bad.push('a split exactly at the hold key: footage at ' + t + ' is ' + got + ', expected ' + exact(t));
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    } finally {
+      clearTimeout(timer);
+      made.forEach(function (l) { FM.media.remove(l.id); });
+      FM.scene.layers = layers; FM.time = time; FM.scene.selectedId = selected; FM.scene.selectedIds = ids;
+      stubs.reverse().forEach(function (s) { if (s[2]) Object.defineProperty(s[0], s[1], s[2]); else delete s[0][s[1]]; });
+    }
+  });
+
+  /* 1055, zoomed in. A zoomed preview renders a SLICE (the visible area plus app.js CROP_MARGIN, 18 %, on every side), and an
+   * adjustment Pixelate lays the export's block grid on it (pixelateOnFrameGrid); a block whose centre lies past the slice reads
+   * the stretched edge pixel. Blocks up to 4x taller (Block aspect above 100) or blended with their neighbours (Soft) reach
+   * past the margin, so for those FM.adjNeedsFrame keeps the whole frame; wide blocks (aspect 25) reach half a Block size and
+   * stay on the slice, which must then draw them where the export does. Same harness as the 690 zoom test (a slice at 1:1 and
+   * at 2x against the whole frame at that scale, only the part the preview shows, per-pixel threshold 24). CONTROLS: a default
+   * adjustment Pixelate asks for nothing and matches in the slice; an adjustment Auto Grade is seen by FM.adjNeedsFrame. */
+  test('1055 zoomed adjustment Pixelate: Soft or tall blocks keep the whole frame, and wide blocks sit where the export draws them', { item: '1055', budgetMs: 60000 }, function () {
+    const PW = 320, PH = 240, T0 = 0.5, CROP_MARGIN = 0.18, TOL = 24;
+    const tex = offscreen(PW, PH), tc = tex.getContext('2d');
+    for (let y = 0; y < PH; y += 10) for (let x = 0; x < PW; x += 10) { tc.fillStyle = ((x + y) / 10) % 2 ? '#e8e8e8' : '#1c4aa8'; tc.fillRect(x, y, 10, 10); }
+    tc.fillStyle = '#d0302a'; tc.fillRect(20, 30, 50, 40);
+    const img = FM.makeLayer('image', { name: '1055 plate', x: PW / 2, y: PH / 2, start: 0, duration: 3 });
+    img.start = 0; img.duration = 3;
+    const pix = function (params) { const f = FM.fxRegistry.makeInstance('pixelate'); if (!f) throw new Error('setup: pixelate is not in the catalog'); Object.assign(f.params, params || {}); return f; };
+    const adj = function (f) { const A = FM.makeLayer('adjustment', { name: '1055 adjust', start: 0, duration: 3 }); A.start = 0; A.duration = 3; A.visible = true; A.effects = [f]; return A; };
+    const sc = function (layers) { return { project: { width: PW, height: PH, fps: 30, duration: 3, background: '#000000' }, layers: layers, selectedId: null, selectedIds: [] }; };
+    const render = function (layers, st) {
+      const cv = offscreen(st.w, st.h);
+      cv.__fmRS = st.rs; cv.__fmOX = st.ox; cv.__fmOY = st.oy; cv.__fmCrop = !!st.crop;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, sc(layers), T0);
+      return { d: ctx.getImageData(0, 0, st.w, st.h).data, w: st.w };
+    };
+    const PASSES = [
+      { name: '1:1', full: { rs: 1, ox: 0, oy: 0, w: PW, h: PH }, crop: { rs: 1, ox: 73, oy: 51, w: 120, h: 90, crop: true }, dx: 73, dy: 51 },
+      { name: '2x zoom', full: { rs: 2, ox: 0, oy: 0, w: PW * 2, h: PH * 2 }, crop: { rs: 2, ox: 73, oy: 51, w: 240, h: 180, crop: true }, dx: 146, dy: 102 },
+    ];
+    // the shown part of slice B against A at (dx, dy): the share of pixels more than TOL apart on any channel, and the largest gap
+    const band = function (A, B, p, dx, dy) {
+      const f = CROP_MARGIN / (1 + 2 * CROP_MARGIN), mx = Math.ceil(p.crop.w * f), my = Math.ceil(p.crop.h * f);
+      let n = 0, all = 0, max = 0;
+      for (let y = my; y < p.crop.h - my; y++) for (let x = mx; x < p.crop.w - mx; x++) {
+        const i = (y * B.w + x) * 4, j = ((y + dy) * A.w + (x + dx)) * 4;
+        const m = Math.max(Math.abs(A.d[j] - B.d[i]), Math.abs(A.d[j + 1] - B.d[i + 1]), Math.abs(A.d[j + 2] - B.d[i + 2]));
+        all++; if (m > TOL) n++; if (m > max) max = m;
+      }
+      return { frac: n / all, max: max };
+    };
+    const pct = function (f) { return (f * 100).toFixed(1) + '%'; };
+    FM.media.set(img.id, { kind: 'image', el: tex, width: PW, height: PH });
+    const bad = [];
+    try {
+      if (FM.adjNeedsFrame(sc([adj(pix()), img])) !== null) throw new Error('CONTROL: a default adjustment Pixelate asks for the whole frame, so a zoomed preview would never use the slice');
+      if (!FM.adjNeedsFrame(sc([adj({ type: 'autograde', enabled: true, params: {} }), img]))) throw new Error('CONTROL: an adjustment Auto Grade does not ask for the whole frame, so FM.adjNeedsFrame does not see this fixture');
+      if (!FM.adjNeedsFrame(sc([adj(pix({ smooth: 1 })), img]))) bad.push('an adjustment Pixelate with Soft edges lets a zoomed preview crop, so its blocks blend with the stretched pixels past the margin');
+      if (!FM.adjNeedsFrame(sc([adj(pix({ aspect: 400 })), img]))) bad.push('an adjustment Pixelate at Block aspect 400 lets a zoomed preview crop, so its tall blocks take their colour from past the margin');
+      if (FM.adjNeedsFrame(sc([adj(pix({ aspect: 25 })), img])) !== null) bad.push('wide blocks (Block aspect 25) ask for the whole frame, though they reach only half a Block size');
+      PASSES.forEach(function (p) {
+        const sq = [adj(pix()), img], wide = [adj(pix({ aspect: 25, smooth: 0 })), img];
+        const sqCrop = render(sq, p.crop), ctl = band(render(sq, p.full), sqCrop, p, p.dx, p.dy);
+        if (ctl.frac > 0.01) throw new Error('CONTROL: ' + p.name + ', a default adjustment Pixelate differs in the slice on ' + pct(ctl.frac) + ' of the shown pixels, so the harness misplaces the slice');
+        const wCrop = render(wide, p.crop), moved = band(sqCrop, wCrop, p, 0, 0), vsFull = band(render(wide, p.full), wCrop, p, p.dx, p.dy);
+        /* MEASURED 28 Oct, 1280 and 380 wide: Block aspect 25 changes 31.4 % (1:1) and 38.1 % (2x) of the shown slice on this tree,
+           0.0 % on 6f8db2e3 (the fault: the slice used Block size for both axes), so the bound is 10 %. Against the whole frame
+           the wide blocks differ on 0.0 % of the shown pixels past 24 levels (at most 13 levels at 1:1, 7 at 2x), under 690's 1 %. */
+        if (!(moved.frac > 0.1)) bad.push(p.name + ': zoomed in, Block aspect 25 does not change the adjustment slice (' + pct(moved.frac) + ' of the shown pixels differ from square blocks)');
+        if (vsFull.frac > 0.01) bad.push(p.name + ': zoomed in, the wide blocks differ from the export on ' + pct(vsFull.frac) + ' of the shown pixels (up to ' + vsFull.max + ' levels)');
+      });
+      if (bad.length) throw new Error(bad.join(' · '));
+    } finally {
+      FM.media.remove(img.id);
+    }
+  });
+
   function offscreen(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
   function px(ctx, x, y) { return ctx.getImageData(x, y, 1, 1).data; }
 
@@ -93,7 +275,6 @@
     return m && m[1] === m[2] ? m[1] : cs.backgroundColor;
   }
 
-  var T = [];
   function test(name, opts, fn) {
     if (typeof opts === 'function') { fn = opts; opts = {}; }
     T.push({ name: name, pending: !!opts.pending, item: opts.item || '', fn: fn , budgetMs: (opts && opts.budgetMs) || 0, pinned: !!(opts && opts.pinned)});
@@ -25599,6 +25780,188 @@
       if (takes.length !== 1 || FM.scene.layers.length !== 2) throw new Error('setup: the layer did not go in before the throw (' + takes.length + ' take layer(s), ' + FM.scene.layers.length + ' in all), so this is not the case under test');
       if (FM.voiceRec._state() !== 'closed' || !vrEl('#vr-overlay').classList.contains('hidden')) throw new Error('the take went in and the recorder came back anyway (state ' + FM.voiceRec._state() + ', panel ' + (vrEl('#vr-overlay').classList.contains('hidden') ? 'hidden' : 'showing') + '): it says it did not go in over a layer that did, and Add again would put in a second copy');
     });
+  });
+
+  function deadline1035(promise, name, ms) {
+    var timer;
+    return Promise.race([promise, new Promise(function (_, reject) {
+      timer = setTimeout(function () { reject(new Error('1035 deadline: ' + name)); }, ms || 15000);
+    })]).finally(function () { clearTimeout(timer); });
+  }
+  async function with1035(body, noTimeslice) {
+    var desc = Object.getOwnPropertyDescriptor(FM.voiceRec, '_openMic'), mics = [], restores = [], listeners = [];
+    FM.voiceRec.close();
+    Object.defineProperty(FM.voiceRec, '_openMic', { configurable: true, writable: true, value: function () {
+      var mic = vrFakeMic(); mics.push(mic);
+      var track = mic.stream.getAudioTracks()[0], muted = false;
+      function stub(key, value) {
+        var original = Object.getOwnPropertyDescriptor(track, key);
+        restores.push(function () { if (original) Object.defineProperty(track, key, original); else delete track[key]; });
+        Object.defineProperty(track, key, value);
+      }
+      var add = track.addEventListener, remove = track.removeEventListener;
+      stub('addEventListener', { configurable: true, value: function (type, fn, opts) {
+        if (/^(ended|mute|unmute)$/.test(type)) listeners.push({ track: track, type: type, fn: fn });
+        return add.call(this, type, fn, opts);
+      } });
+      stub('removeEventListener', { configurable: true, value: function (type, fn, opts) {
+        listeners = listeners.filter(function (l) { return !(l.track === track && l.type === type && l.fn === fn); });
+        return remove.call(this, type, fn, opts);
+      } });
+      stub('muted', { configurable: true, get: function () { return muted; } });
+      mic.endState = function () { stub('readyState', { configurable: true, get: function () { return 'ended'; } }); };
+      mic.fire = function (type) {
+        if (type === 'mute') muted = true;
+        if (type === 'unmute') muted = false;
+        track.dispatchEvent(new Event(type));
+      };
+      return deadline1035(mic.ready, 'fake tone ready').then(function () { return mic.stream; });
+    } });
+    var ctx = {
+      recorders: [],
+      endState: function () { mics[mics.length - 1].endState(); },
+      listeners: function () { return listeners.length; },
+      fire: function (type) { mics[mics.length - 1].fire(type); },
+      take: async function () {
+        FM.voiceRec.open();
+        await deadline1035(FM.voiceRec._micPending(), 'mic acquisition');
+        if (vrStates().join() !== 'live') throw new Error('1035 setup: fake mic is not live');
+        vrEl('.vr-rec').click();
+        if (FM.voiceRec._state() !== 'recording') throw new Error('1035 setup: take never started');
+        var began = Date.now(), hold = Math.max(500, FM.voiceRec.MIN_SECONDS * 1000 + 250);
+        await deadline1035(new Promise(function (resolve) { setTimeout(resolve, hold); }), 'take past MIN_SECONDS');
+        if ((Date.now() - began) / 1000 <= FM.voiceRec.MIN_SECONDS) throw new Error('1035 setup: take did not pass MIN_SECONDS');
+      },
+      review: async function () {
+        await deadline1035(vrWait(function () { return FM.voiceRec._state() === 'review'; }, 8000, '1035 review'), 'review');
+        var response = await deadline1035(fetch(vrEl('.vr-audio').src), 'review blob response');
+        var take = await deadline1035(response.blob(), 'review blob bytes');
+        if (!take.size || vrEl('.vr-btn--add').disabled) throw new Error('1035: review has no usable take');
+        if (ctx.listeners()) throw new Error('1035: track listeners survived the take');
+      },
+    };
+    try {
+      if (noTimeslice) {
+        var recorderDesc = Object.getOwnPropertyDescriptor(window, 'MediaRecorder'), RealRecorder = window.MediaRecorder;
+        restores.push(function () { if (recorderDesc) Object.defineProperty(window, 'MediaRecorder', recorderDesc); else delete window.MediaRecorder; });
+        Object.defineProperty(window, 'MediaRecorder', { configurable: true, writable: true, value: class extends RealRecorder {
+          constructor() { super(...arguments); ctx.recorders.push(this); }
+          start() { super.start(); }
+        } });
+      }
+      await deadline1035(body(ctx), 'test body', 45000);
+    }
+    finally {
+      FM.voiceRec.close();
+      restores.reverse().forEach(function (restore) { restore(); });
+      if (desc) Object.defineProperty(FM.voiceRec, '_openMic', desc); else delete FM.voiceRec._openMic;
+      mics.forEach(function (mic) { mic.dispose(); });
+    }
+  }
+
+  test('1035 ended mid-take keeps the recorded bytes in review and says the microphone stopped', { item: '1035', budgetMs: 60000 }, async function () {
+    await deadline1035(with1035(async function (ctx) {
+      // CONTROL: the same tone and ordinary Stop produce a usable review without a microphone warning.
+      await deadline1035(ctx.take(), 'CONTROL take');
+      vrEl('.vr-rec').click();
+      await deadline1035(ctx.review(), 'CONTROL review');
+      if (vrEl('.vr-msg').textContent || !vrEl('.vr-msg').classList.contains('hidden')) throw new Error('1035 CONTROL: ordinary Stop showed a warning');
+      FM.voiceRec.close();
+      await deadline1035(ctx.take(), 'interrupted take');
+      ctx.fire('ended');
+      await deadline1035(ctx.review(), 'interrupted review');
+      if (!/microphone stopped/i.test(vrEl('.vr-msg').textContent) || vrEl('.vr-msg').classList.contains('hidden')) throw new Error('1035: the panel did not say the microphone stopped');
+    }), 'ended test', 50000);
+  });
+
+  test('1035 recorder stopped before ended still says the microphone stopped', { item: '1035', budgetMs: 60000 }, async function () {
+    await deadline1035(with1035(async function (ctx) {
+      // CONTROL: the no-timeslice recorder delivers usable bytes on an ordinary Stop, without a warning.
+      await deadline1035(ctx.take(), 'self-stop CONTROL take');
+      vrEl('.vr-rec').click();
+      await deadline1035(ctx.review(), 'self-stop CONTROL review');
+      if (ctx.recorders.length !== 1 || vrEl('.vr-msg').textContent || !vrEl('.vr-msg').classList.contains('hidden')) throw new Error('1035 CONTROL: no-timeslice Stop did not give an ordinary review');
+      FM.voiceRec.close();
+      await deadline1035(ctx.take(), 'self-stopped take');
+      ctx.endState();
+      var rec = ctx.recorders[1];
+      if (!rec || rec.state !== 'recording') throw new Error('1035 setup: no active second recorder');
+      var stopped = new Promise(function (resolve) { rec.addEventListener('stop', resolve, { once: true }); });
+      rec.stop();
+      await deadline1035(stopped, 'recorder stop before ended');
+      await deadline1035(new Promise(function (resolve) { setTimeout(resolve, 0); }), 'macrotask after recorder stop');
+      ctx.fire('ended');
+      await deadline1035(ctx.review(), 'self-stopped review');
+      if (!/microphone stopped/i.test(vrEl('.vr-msg').textContent) || vrEl('.vr-msg').classList.contains('hidden')) throw new Error('1035: a recorder stopped before ended lost the microphone warning');
+    }, true), 'self-stop test', 50000);
+  });
+
+  test('1035 recorder inactive at ended keeps the take', { item: '1035', budgetMs: 60000 }, async function () {
+    await deadline1035(with1035(async function (ctx) {
+      // CONTROL: the no-timeslice recorder delivers usable bytes on an ordinary Stop, without a warning.
+      await deadline1035(ctx.take(), 'inactive CONTROL take');
+      vrEl('.vr-rec').click();
+      await deadline1035(ctx.review(), 'inactive CONTROL review');
+      if (ctx.recorders.length !== 1 || vrEl('.vr-msg').textContent || !vrEl('.vr-msg').classList.contains('hidden')) throw new Error('1035 CONTROL: no-timeslice Stop did not give an ordinary review');
+      FM.voiceRec.close();
+      await deadline1035(ctx.take(), 'inactive take');
+      ctx.endState();
+      var rec = ctx.recorders[1];
+      if (!rec || rec.state !== 'recording') throw new Error('1035 setup: no active second recorder');
+      rec.stop();
+      if (rec.state !== 'inactive') throw new Error('1035 setup: stop did not synchronously make the recorder inactive');
+      ctx.fire('ended');
+      await deadline1035(ctx.review(), 'inactive review with final bytes');
+      if (!/microphone stopped/i.test(vrEl('.vr-msg').textContent) || vrEl('.vr-msg').classList.contains('hidden')) throw new Error('1035: inactive at ended lost the microphone warning');
+    }, true), 'inactive test', 50000);
+  });
+
+  test('1035 mute shows the no-sound line until unmute clears it', { item: '1035', budgetMs: 60000 }, async function () {
+    await deadline1035(with1035(async function (ctx) {
+      await deadline1035(ctx.take(), 'mute take');
+      var quiet = vrEl('.vr-quiet');
+      // CONTROL: a running tone without a mute event has no no-sound warning.
+      if (!quiet.classList.contains('hidden')) throw new Error('1035 CONTROL: unmuted tone already shows no sound');
+      ctx.fire('mute');
+      if (quiet.classList.contains('hidden') || !/No sound is reaching/.test(quiet.textContent)) throw new Error('1035: mute did not show the no-sound line');
+      await deadline1035(new Promise(function (resolve) { requestAnimationFrame(function () { requestAnimationFrame(resolve); }); }), 'meter frames while muted');
+      if (quiet.classList.contains('hidden')) throw new Error('1035: the meter cleared the mute warning');
+      ctx.fire('unmute');
+      if (!quiet.classList.contains('hidden') || FM.voiceRec._state() !== 'recording') throw new Error('1035: unmute did not clear the line and continue the take');
+      vrEl('.vr-rec').click();
+      await deadline1035(ctx.review(), 'unmuted review');
+    }), 'mute test', 50000);
+  });
+
+  test('1035 closing a take removes every track listener and later ended does nothing', { item: '1035', budgetMs: 60000 }, async function () {
+    await deadline1035(with1035(async function (ctx) {
+      await deadline1035(ctx.take(), 'close take');
+      // CONTROL: all three listeners really were installed on this live take before close.
+      if (ctx.listeners() !== 3) throw new Error('1035 CONTROL: expected ended, mute and unmute listeners, got ' + ctx.listeners());
+      FM.voiceRec.close();
+      if (ctx.listeners()) throw new Error('1035: closing left track listeners attached');
+      ctx.fire('mute');
+      await deadline1035(new Promise(function (resolve) { setTimeout(resolve, 1000); }), 'late recorder stop');
+      if (FM.voiceRec._state() !== 'closed' || !vrEl('.vr-quiet').classList.contains('hidden')) throw new Error('1035: a mute after close changed the panel');
+    }), 'close test', 50000);
+  });
+
+  test('1035 a take stopped while muted leaves no no-sound line for the retake', { item: '1035', budgetMs: 60000 }, async function () {
+    await deadline1035(with1035(async function (ctx) {
+      await deadline1035(ctx.take(), 'muted stop take');
+      var quiet = vrEl('.vr-quiet');
+      ctx.fire('mute');
+      // CONTROL: this take really is muted and its no-sound line is showing before Stop.
+      if (quiet.classList.contains('hidden') || !/No sound is reaching/.test(quiet.textContent)) throw new Error('1035 CONTROL: mute did not show the no-sound line');
+      vrEl('.vr-rec').click();
+      await deadline1035(ctx.review(), 'muted stop review');
+      if (!quiet.classList.contains('hidden')) throw new Error('1035: muted review kept the no-sound line');
+      vrEl('.vr-actions:not(.vr-actions--primary) .vr-btn:last-child').click();
+      await deadline1035(FM.voiceRec._micPending(), 'retake mic acquisition');
+      if (FM.voiceRec._state() !== 'idle' || vrStates().join() !== 'live') throw new Error('1035 setup: retake did not acquire a fresh live mic');
+      await deadline1035(new Promise(function (resolve) { requestAnimationFrame(function () { requestAnimationFrame(resolve); }); }), 'retake meter frames');
+      if (!quiet.classList.contains('hidden')) throw new Error('1035: the fresh retake inherited the muted take no-sound line');
+    }), 'muted retake test', 50000);
   });
 
   test('voice: a long take stops itself at the cap, and keeps what it got', { item: 'voice-rec' }, async function () {
@@ -160693,6 +161056,475 @@
     o.click();
     await sleep(30);
   }
+  // Accessibility checks share the export card's synthetic project fixture below.
+  function a11yDeadline(promise, name) {
+    let timer;
+    const deadline = new Promise(function (_, reject) { timer = setTimeout(function () { reject(new Error('deadline: ' + name)); }, 5000); });
+    return Promise.race([promise, deadline]).finally(function () { clearTimeout(timer); });
+  }
+  function a11yFrame(name) {
+    return a11yDeadline(new Promise(function (resolve) { requestAnimationFrame(resolve); }), name);
+  }
+  function a11yWait(check, name) {
+    return a11yDeadline(new Promise(function (resolve) {
+      const until = performance.now() + 4500;
+      function poll() { if (check() || performance.now() >= until) resolve(); else setTimeout(poll, 20); }
+      poll();
+    }).then(function () { if (!check()) throw new Error(name); }), name);
+  }
+
+  test('1021 dialogs have modal names and the export ready card receives focus', { item: '1021', budgetMs: 20000 }, async function () {
+    const W = t985World({});
+    let ready, tail;
+    try {
+      ['hm-dialog', 'export-dialog', 'canvas-dialog', 'export-overlay'].forEach(function (id) {
+        const d = document.getElementById(id);
+        if (!d) throw new Error('CONTROL: missing real dialog ' + id);
+        const title = document.getElementById(d.getAttribute('aria-labelledby'));
+        if (d.getAttribute('role') !== 'dialog' || d.getAttribute('aria-modal') !== 'true' || !title || !title.textContent.trim() || !d.contains(title)) throw new Error(id + ' lacks a modal role and its own non-empty title');
+      });
+      const status = document.getElementById('export-status'), bar = document.getElementById('export-bar');
+      if (status.getAttribute('role') !== 'status' || bar.getAttribute('role') !== 'progressbar' || bar.getAttribute('aria-valuenow') === null) throw new Error('export progress is not exposed');
+      await a11yDeadline(FM.showExportDialog(), '1021 open Export');
+      const picker = document.getElementById('export-dialog');
+      if (picker.classList.contains('hidden')) throw new Error('CONTROL: Export did not open');
+      tail = picker.querySelector('.export-card')._popTail;
+      picker.classList.add('hidden');
+      await a11yFrame('1021 close Export');
+      let saves = 0;
+      ready = FM._showExportReady({ name: '1021.mp4', blob: new Blob(['1021']), seconds: 1, width: 320, height: 240, fps: 30, save: function () { saves++; return Promise.resolve('saved'); } });
+      const card = document.getElementById('export-ready');
+      if (card.classList.contains('hidden') || document.getElementById('xr-name').textContent !== '1021.mp4') throw new Error('CONTROL: the real ready card did not show the fixture');
+      if (!card.contains(document.activeElement)) throw new Error('ready card has no focus inside it');
+      document.getElementById('xr-save').click();
+      await a11yDeadline(ready, '1021 save ready card');
+      if (saves !== 1 || !card.classList.contains('hidden')) throw new Error('CONTROL: Save did not finish the ready card');
+    } finally {
+      if (ready) { document.getElementById('xr-discard').click(); await a11yDeadline(ready, '1021 discard cleanup'); }
+      if (FM._expPop) { FM._expPop(); FM._expPop = null; }
+      const tailLeft = tail && tail.isConnected;
+      await a11yDeadline(t985Restore(W), '1021 restore');
+      if (tailLeft) throw new Error('Export cleanup left its lifted tail behind');
+    }
+  });
+
+  test('1021 rendering focuses the progress container without arming Cancel and returns to its real opener', { item: '1021', budgetMs: 20000 }, async function () {
+    const W = t985World({}), ex = FM.exporter, runDesc = Object.getOwnPropertyDescriptor(ex, 'run');
+    const overlay = document.getElementById('export-overlay'), cancel = document.getElementById('export-cancel');
+    const opener = ['btn-export', 'm-export'].map(function (id) { return document.getElementById(id); }).find(function (b) { return b && b.getClientRects().length; });
+    let release, pending, entered = false;
+    const gate = new Promise(function (resolve) { release = resolve; });
+    try {
+      Object.defineProperty(ex, 'run', { configurable: true, value: async function () { entered = true; await a11yDeadline(gate, '1021 held encoder'); } });
+      opener.focus();
+      await a11yDeadline(FM.showExportDialog(), '1021 render picker');
+      document.getElementById('exp-format').value = 'mp4';
+      document.getElementById('exp-range').value = 'whole';
+      pending = FM._runExport();
+      await a11yWait(function () { return entered; }, '1021 encoder entered');
+      if (overlay.classList.contains('hidden') || !cancel.getClientRects().length || cancel.disabled) throw new Error('CONTROL: the render did not show a live Cancel button');
+      if (!overlay.contains(document.activeElement) || document.activeElement === cancel) throw new Error('render focus is outside its dialog or arms Cancel for Space and Enter');
+      if (getComputedStyle(overlay).outlineStyle !== 'none') throw new Error('the focused progress container draws an outline');
+      release(); await a11yDeadline(pending, '1021 render completion');
+      await a11yFrame('1021 render focus return');
+      if (document.activeElement !== opener) throw new Error('render did not return focus to the actual opener');
+    } finally {
+      release();
+      try { if (pending) await a11yDeadline(pending, '1021 held render cleanup'); }
+      finally {
+        if (runDesc) Object.defineProperty(ex, 'run', runDesc); else delete ex.run;
+        if (FM._expPop) { FM._expPop(); FM._expPop = null; }
+        await a11yDeadline(t985Restore(W), '1021 render restore');
+      }
+    }
+  });
+
+  test('1021 a short real render reaches 100 with fewer spoken updates than visual frames', { item: '1021', budgetMs: 20000 }, async function () {
+    const W = t985World({}), ex = FM.exporter, runDesc = Object.getOwnPropertyDescriptor(ex, 'run'), realRun = ex.run;
+    const report = localStorage.getItem('fm.lastExportReport'), codecs = {};
+    ['VideoEncoder', 'AudioEncoder', 'Mp4Muxer'].forEach(function (key) { codecs[key] = Object.getOwnPropertyDescriptor(window, key); });
+    const spoken = document.getElementById('export-status'), visual = document.getElementById('export-status-visual') || spoken;
+    const bar = document.getElementById('export-bar');
+    let visualChanges = 0, spokenChanges = 0, made, pending, progressStart = null, progressEnd = null;
+    const visualWatch = new MutationObserver(function (rows) { visualChanges += rows.length; });
+    const spokenWatch = new MutationObserver(function (rows) { spokenChanges += rows.length; });
+    try {
+      Object.assign(FM.scene.project, { width: 160, height: 120, duration: 0.2, fps: 30 });
+      W.box.duration = 0.2;
+      await a11yDeadline(FM.showExportDialog(), '1021 progress picker');
+      document.getElementById('exp-format').value = 'mp4'; document.getElementById('exp-range').value = 'whole';
+      Object.defineProperty(ex, 'run', { configurable: true, value: function (o) {
+        return realRun.call(ex, Object.assign({}, o, {
+          onProgress: function () {
+            progressEnd = performance.now();
+            if (progressStart === null) progressStart = progressEnd;
+            return o.onProgress.apply(null, arguments);
+          },
+          onReady: async function (out) { made = out; }
+        }));
+      } });
+      visualWatch.observe(visual, { childList: true }); spokenWatch.observe(spoken, { childList: true });
+      await a11yDeadline(ax2WithOpusPath(false, function () {
+        pending = FM._runExport();
+        return pending;
+      }), '1021 short real render');
+      await a11yFrame('1021 progress mutations');
+      /* Measured (refuter, 28 Oct): fixed, 1 spoken and 7 visual changes in 2 ms, limit 3; the fault on v18.08 spoke all 6 of its 6.
+         One spoken update a second plus three (the first, the stage change and the 100) sits between the two. */
+      const limit = Math.floor((progressEnd - progressStart) / 1000) + 3;
+      if (!made || !made.blob || !made.blob.size || visualChanges <= limit) throw new Error('CONTROL: no encoded file or too few visual changes to distinguish throttling (' + visualChanges + ', limit ' + limit + ')');
+      if (bar.getAttribute('aria-valuenow') !== '100' || spokenChanges > limit || spokenChanges >= visualChanges) throw new Error('progress did not reach 100 with throttled spoken updates (' + spokenChanges + ' spoken, ' + visualChanges + ' visual, limit ' + limit + ')');
+    } finally {
+      visualWatch.disconnect(); spokenWatch.disconnect();
+      try { if (pending) await a11yDeadline(pending, '1021 real render cleanup'); }
+      finally {
+        if (runDesc) Object.defineProperty(ex, 'run', runDesc); else delete ex.run;
+        ['VideoEncoder', 'AudioEncoder', 'Mp4Muxer'].forEach(function (key) { if (codecs[key]) Object.defineProperty(window, key, codecs[key]); else delete window[key]; });
+        if (report === null) localStorage.removeItem('fm.lastExportReport'); else localStorage.setItem('fm.lastExportReport', report);
+        try { if (pending && FM.exportResume) await a11yDeadline(FM.exportResume.clear(), '1021 resume cleanup'); }
+        finally {
+          if (FM._expPop) { FM._expPop(); FM._expPop = null; }
+          await a11yDeadline(t985Restore(W), '1021 progress restore');
+        }
+      }
+    }
+  });
+
+  test('1022 Export traps focus makes the editor inert and returns focus on close', { item: '1022', budgetMs: 20000 }, async function () {
+    const W = t985World({}), opener = ['btn-export', 'm-export'].map(function (id) { return document.getElementById(id); }).find(function (b) { return b && b.getClientRects().length; });
+    const d = document.getElementById('export-dialog'), editor = document.getElementById('stage');
+    const blocked = function () { return !!editor.closest('[inert]'); };
+    const live = document.createElement('div'), changed = document.createElement('div'), prior = document.createElement('div');
+    live.setAttribute('role', 'status'); changed.setAttribute('inert', 'owned'); prior.setAttribute('inert', 'saved');
+    document.body.appendChild(live); document.body.appendChild(changed); document.body.appendChild(prior);
+    let nested;
+    try {
+      if (!opener || blocked()) throw new Error('CONTROL: no visible opener or editor was inert before opening');
+      opener.focus(); opener.click();
+      await a11yWait(function () { return !d.classList.contains('hidden'); }, '1022 open from Export button');
+      if (!d.contains(document.activeElement)) throw new Error('opening Export did not focus a control inside it');
+      if (!blocked()) throw new Error('editor behind Export is not inert');
+      if (opener.classList.contains('pop-src') && opener.closest('[inert]')) throw new Error('lifted Export opener is inert');
+      if (live.inert || document.getElementById('toast').inert) throw new Error('modal silenced a live region or blocked a tappable toast');
+      if (!changed.inert) throw new Error('CONTROL: ordinary body sibling was not isolated');
+      changed.inert = false;
+      const controls = [].filter.call(d.querySelectorAll('button, input, select, textarea, a[href], [tabindex]'), function (n) { return !n.disabled && n.tabIndex >= 0 && !n.closest('[inert]') && n.getClientRects().length && getComputedStyle(n).visibility !== 'hidden'; });
+      if (controls.length < 2) throw new Error('CONTROL: no controls to exercise the Tab boundary');
+      controls[controls.length - 1].focus();
+      const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+      document.activeElement.dispatchEvent(tab);
+      if (!tab.defaultPrevented || document.activeElement !== controls[0]) throw new Error('Tab did not wrap to the first control');
+      const backTab = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+      document.activeElement.dispatchEvent(backTab);
+      if (!backTab.defaultPrevented || document.activeElement !== controls[controls.length - 1]) throw new Error('Shift Tab did not wrap to the last control');
+      let picked = 0;
+      FM.contextMenu.show(8, 8, [{ label: '1022 modal menu', action: function () { picked++; } }]);
+      const menu = document.getElementById('ctx-menu'), choice = menu.querySelector('[role="menuitem"]');
+      if (menu.inert || !menu.contains(document.activeElement)) throw new Error('the modal blocked its body-level menu');
+      choice.click();
+      if (picked !== 1) throw new Error('CONTROL: the real menu action did not run');
+      nested = FM.ask({ title: '1022 nested confirmation', single: true, ok: 'OK' });
+      const ask = document.getElementById('fm-ask');
+      if (ask.inert || !ask.contains(document.activeElement) || !blocked()) throw new Error('the modal blocked its nested confirmation or released the editor');
+      ask.querySelector('.fm-ask-ok').click();
+      if (await a11yDeadline(nested, '1022 nested confirmation') !== true) throw new Error('CONTROL: the real confirmation did not answer OK');
+      document.getElementById('exp-cancel').click();
+      await a11yFrame('1022 close Export');
+      if (document.activeElement !== opener) throw new Error('closing Export did not return focus to its opener');
+      if (blocked()) throw new Error('CONTROL: editor stayed inert after close');
+      if (changed.inert || prior.getAttribute('inert') !== 'saved') throw new Error('close clobbered a later inert change or the saved attribute');
+      await a11yDeadline(FM.showExportDialog(), '1022 reopen Export');
+      d.classList.add('hidden');
+      await a11yFrame('1022 external close');
+      if (blocked()) throw new Error('external hidden path left the editor inert');
+    } finally {
+      if (nested) {
+        document.querySelector('#fm-ask .fm-ask-cancel').click();
+        await a11yDeadline(nested, '1022 nested confirmation cleanup');
+      }
+      if (FM.contextMenu) FM.contextMenu.hide();
+      d.classList.add('hidden');
+      await a11yFrame('1022 release modal cleanup');
+      if (FM._expPop) { FM._expPop(); FM._expPop = null; }
+      live.remove(); changed.remove(); prior.remove();
+      await a11yDeadline(t985Restore(W), '1022 restore');
+    }
+  });
+
+  test('1022 Canvas isolates the editor while its raised profile keeps keyboard focus', { item: '1022', budgetMs: 20000 }, async function () {
+    const W = t985World({});
+    try {
+      await a11yDeadline(withLabs921(async function (ui) {
+        let profile;
+        try {
+          FM.openCanvasDialog({ block: 'friends' });
+          profile = ui.profile({ force: true });
+          await a11yFrame('1022 profile focus');
+          const card = document.getElementById('collab-profile'), input = card && card.querySelector('.collab-name');
+          if (!input || document.getElementById('canvas-dialog').classList.contains('hidden')) throw new Error('CONTROL: the profile was not raised over Canvas');
+          if (!document.getElementById('stage').closest('[inert]')) throw new Error('Canvas left the editor live behind the raised profile');
+          if (document.activeElement !== input) throw new Error('Canvas stole focus from the profile name');
+          const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+          input.dispatchEvent(tab);
+          if (tab.defaultPrevented || document.activeElement !== input) throw new Error('Canvas trapped Tab from the profile');
+        } finally {
+          ui.close();
+          if (profile) await a11yDeadline(profile, '1022 profile cleanup');
+          FM.closeCanvasDialog();
+        }
+      }), '1022 collaboration fixture');
+    } finally { await a11yDeadline(t985Restore(W), '1022 Canvas restore'); }
+  });
+
+  test('1022 New project isolates Home and returns focus to the plus', { item: '1022', budgetMs: 15000 }, async function () {
+    const wasOpen = FM.home.isOpen(), prior = document.querySelector('.hm-tab.active');
+    const savedView = localStorage.getItem('fm.view');
+    const dlg = document.getElementById('hm-dialog'), orb = document.getElementById('hm-new');
+    try {
+      if (!wasOpen) FM.home.open();
+      const tabBtn = document.querySelector('.hm-tab[data-tab="projects"]');
+      if (tabBtn) tabBtn.click();
+      await a11yFrame('1022 Home open');
+      orb.focus(); orb.click();
+      if (dlg.classList.contains('hidden')) throw new Error('CONTROL: tapping plus did not open New project');
+      // #hm-dialog lives INSIDE #home-screen, so Home itself stays live: what must go inert is what sits behind the dialog.
+      const behind = [orb, document.querySelector('#home-screen .hm-grid'), document.querySelector('#home-screen .hm-tabs')];
+      if (behind.some(function (n) { return !n; })) throw new Error('CONTROL: Home has no plus, project grid or tab row to isolate');
+      if (!dlg.contains(document.activeElement) || dlg.closest('[inert]')) throw new Error('New project did not focus its own live dialog');
+      if (behind.some(function (n) { return !n.closest('[inert]'); })) throw new Error('New project left the plus, the project grid or the tabs live behind it');
+      await a11yDeadline(sleep(60), '1022 name focus timer');
+      document.getElementById('hm-cancel').click();
+      await a11yFrame('1022 New project close');
+      if (document.activeElement !== orb || orb.closest('[inert]')) throw new Error('New project did not release Home and return focus');
+    } finally {
+      document.getElementById('hm-cancel').click();
+      await a11yFrame('1022 New project cleanup');
+      if (prior) prior.click();
+      if (!wasOpen) FM.home.close();
+      if (savedView === null) localStorage.removeItem('fm.view'); else localStorage.setItem('fm.view', savedView);
+    }
+  });
+
+  test('1023 a toast is also written to the hidden status line and tappable toasts keep their role', { item: '1023' }, async function () {
+    const t = document.getElementById('toast');
+    try {
+      FM.toast('hello', 0);
+      if (t.textContent !== 'hello' || t.classList.contains('hidden')) throw new Error('CONTROL: the ordinary visible toast did not show');
+      await a11yFrame('1023 ordinary toast announcement');
+      const sr = document.getElementById('toast-sr');
+      if (!sr || sr.getAttribute('role') !== 'status' || sr.textContent !== 'hello') throw new Error('ordinary toast was not written to a permanent status line');
+      if (t.hasAttribute('role')) throw new Error('ordinary visible toast acquired a live role');
+      const cs = getComputedStyle(sr);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || cs.clipPath !== 'inset(50%)') throw new Error('status line is not visually clipped and available to assistive technology');
+      let tapped = 0;
+      FM.hideToast();
+      FM.toast('tap hello', 0, function () { tapped++; });
+      await a11yFrame('1023 tappable toast announcement');
+      if (sr.textContent !== 'tap hello' || t.getAttribute('role') !== 'button' || t.getAttribute('tabindex') !== '0') throw new Error('tappable toast lost its button role or announcement');
+      t.click();
+      if (tapped !== 1) throw new Error('CONTROL: the tappable branch did not call its action');
+      if (sr.textContent) throw new Error('hidden toast kept a stale announcement');
+      FM.toast('pending', 0); FM.hideToast();
+      await a11yFrame('1023 cancel pending announcement');
+      if (sr.textContent) throw new Error('a pending frame announced a hidden toast');
+    } finally { FM.hideToast(); }
+  });
+
+  test('1023 progress toasts throttle speech by elapsed time and clear pending speech on hide', { item: '1023', budgetMs: 15000 }, async function () {
+    const t = document.getElementById('toast'), clockDesc = Object.getOwnPropertyDescriptor(performance, 'now');
+    let now = performance.now();
+    try {
+      Object.defineProperty(performance, 'now', { configurable: true, value: function () { return now; } });
+      FM.hideToast(); FM.toast('Tracking 0%', 0);
+      await a11yFrame('1023 first progress announcement');
+      if (t.textContent !== 'Tracking 0%' || t.classList.contains('hidden')) throw new Error('CONTROL: progress toast did not show');
+      const sr = document.getElementById('toast-sr');
+      if (!sr || sr.textContent !== 'Tracking 0%') throw new Error('first progress toast was not announced');
+      now += 999; FM.toast('Tracking 50%', 0);
+      await a11yFrame('1023 throttled progress announcement');
+      if (t.textContent !== 'Tracking 50%') throw new Error('CONTROL: the visual progress did not advance');
+      if (sr.textContent !== 'Tracking 0%') throw new Error('progress was reannounced before one second');
+      now += 1; FM.toast('Tracking 75%', 0);
+      await a11yFrame('1023 next progress announcement');
+      if (sr.textContent !== 'Tracking 75%') throw new Error('changed progress was not announced after one second');
+      now += 1000; FM.toast('Tracking 100%', 0); FM.hideToast();
+      await a11yFrame('1023 hidden progress announcement');
+      if (sr.textContent) throw new Error('hidden progress left stale or pending speech');
+    } finally {
+      if (clockDesc) Object.defineProperty(performance, 'now', clockDesc); else delete performance.now;
+      FM.hideToast();
+    }
+  });
+
+  // A progress toast relabels itself ('Tracking… N%'); a DIFFERENT toast that replaces it within the second must still be spoken.
+  // (tracker.js itself hides its toast before showing the result, so it was never the failing case; any other replacer is.)
+  // Steps of 200 ms sit inside the 1000 ms throttle window app.js sets, so only the kind of text decides what is spoken.
+  test('1023 a result toast right after a progress toast is spoken at once', { item: '1023', budgetMs: 15000 }, async function () {
+    const t = document.getElementById('toast'), clockDesc = Object.getOwnPropertyDescriptor(performance, 'now');
+    const result = 'Tracked — 3 keyframes added, drag them to touch up';
+    let now = performance.now();
+    try {
+      Object.defineProperty(performance, 'now', { configurable: true, value: function () { return now; } });
+      FM.hideToast(); FM.toast('Tracking… 8%', 0);
+      await a11yFrame('1023 first tracking announcement');
+      const sr = document.getElementById('toast-sr');
+      if (!sr || sr.textContent !== 'Tracking… 8%') throw new Error('the first progress toast was not announced');
+      now += 200; FM.toast('Tracking… 16%', 0);
+      await a11yFrame('1023 throttled tracking announcement');
+      if (t.textContent !== 'Tracking… 16%' || sr.textContent !== 'Tracking… 8%') throw new Error('CONTROL: a second progress update inside one second was spoken, so the throttle is not in force');
+      now += 200; FM.toast(result, 0);
+      await a11yFrame('1023 result announcement');
+      if (t.textContent !== result || t.classList.contains('hidden')) throw new Error('CONTROL: the visible toast did not change to the result');
+      if (sr.textContent !== result) throw new Error('the result that replaced a progress toast inside one second was never spoken');
+    } finally {
+      if (clockDesc) Object.defineProperty(performance, 'now', clockDesc); else delete performance.now;
+      FM.hideToast();
+    }
+  });
+
+  test('1024 every keyframe row builder names its parameter and all three states', { item: '1024', budgetMs: 30000 }, async function () {
+    const W = t985World({ select: true }), L = W.box, view = FM.inspector.currentView();
+    const mtMode = FM._mtMode, playing = FM.playing, audioReport = localStorage.getItem('fm.lastAudioReport');
+    let mediaLayer;
+    const diamonds = function (category, selector, expected) {
+      FM.inspector.openCategory(category);
+      const buttons = [].slice.call(document.querySelectorAll('#inspector ' + selector));
+      if (!buttons.length) throw new Error('CONTROL: ' + category + ' built no ' + selector + ' diamonds');
+      buttons.forEach(function (b) {
+        if (b.textContent !== '◆' && b.textContent !== '◇' && !b.querySelector('svg path')) throw new Error('CONTROL: expected a diamond in ' + category);
+        if (!/^(Animate .+|Remove .+ keyframe|Add .+ keyframe at playhead)$/.test(b.getAttribute('aria-label') || '')) throw new Error(category + ' left a diamond unnamed');
+      });
+      if (expected && !buttons.some(function (b) { return b.getAttribute('aria-label') === 'Animate ' + expected; })) throw new Error(category + ' did not name its ' + expected + ' diamond');
+      return buttons;
+    };
+    const rowButton = function (label, cls) {
+      const rows = [].slice.call(document.querySelectorAll('#inspector .prop-row, #inspector .fx-scrub-row'));
+      const row = rows.find(function (r) { const name = r.querySelector('label, .fx-scrub-label'); return name && name.textContent.trim() === label && r.querySelector(cls); });
+      if (!row) throw new Error('CONTROL: no ' + label + ' row for ' + cls);
+      return row.querySelector(cls);
+    };
+    const check = function (category, label, cls, prop) {
+      FM.time = 3; FM.inspector.openCategory(category);
+      let b = rowButton(label, cls);
+      if (b.textContent !== '◆' || FM.isAnimated(prop())) throw new Error('CONTROL: ' + label + ' did not start as a static diamond');
+      if (b.getAttribute('aria-label') !== 'Animate ' + label) throw new Error(label + ' does not announce Animate');
+      b.click(); b = rowButton(label, cls);
+      if (!FM.isAnimated(prop()) || !FM.hasKeyframeAt(prop(), FM.time)) throw new Error('CONTROL: ' + label + ' click did not add a real keyframe');
+      if (b.getAttribute('aria-label') !== 'Remove ' + label + ' keyframe') throw new Error(label + ' does not announce Remove after the rebuild');
+      FM.time = 4; FM.updateReadout(); b = rowButton(label, cls);
+      if (b.getAttribute('aria-label') !== 'Add ' + label + ' keyframe at playhead') throw new Error(label + ' does not distinguish animation away from a keyframe');
+      b.click(); b = rowButton(label, cls);
+      if (!FM.hasKeyframeAt(prop(), 4) || b.getAttribute('aria-label') !== 'Remove ' + label + ' keyframe') throw new Error(label + ' did not update after adding at the new playhead');
+    };
+    try {
+      L.stroke = { enabled: true, width: 8, color: '#ffffff' };
+      L.trimPath = { enabled: true, start: 0, end: 1, offset: 0 };
+      const fx = FM.fxRegistry.makeInstance('blur'); fx._expanded = true; L.effects = [fx];
+      check('effects', 'Radius', '.fx-kf', function () { return fx.params.radius; });
+      check('border', 'Size', '.fx-kf', function () { return L.stroke.width; });
+      check('border', 'Start', '.fx-kf', function () { return L.trimPath.start; });
+      check('border', 'Color', '.fx-kf', function () { return L.stroke.color; });
+      check('blend', 'Opacity', '.kf-btn', function () { return L.transform.opacity; });
+      const mask = FM.masks.make('add'); mask.path = [[0, 0], [80, 0], [80, 80]]; mask._expanded = true;
+      L.masks = [mask];
+      diamonds('effects', '.kf-btn', 'Mask path');
+      L.fillMode = 'solid'; diamonds('color', '.fill-kf', 'Color');
+      L.fillMode = 'gradient';
+      L.fillGradient = { enabled: true, type: 'linear', angle: 90, c0: '#ffffff', c1: '#000000' };
+      diamonds('color', '.fill-pos .fill-kf', 'Position');
+      L.fillMode = 'solid';
+      ['move', 'rotate', 'scale', 'skew'].forEach(function (mode) {
+        FM._mtMode = mode;
+        diamonds('transform', '.mt-kf', { move: 'Position', rotate: 'Rotation', scale: 'Scale', skew: 'Skew' }[mode]);
+        diamonds('transform', '.mt-vbox-kf');
+      });
+      FM._mtMode = 'move'; FM.time = 3; FM.inspector.openCategory('transform');
+      const b = document.querySelector('#inspector .mt-kf');
+      if (!b || b.getAttribute('aria-label') !== 'Animate Position') throw new Error('CONTROL: no static Position diamond before playback');
+      L.transform.x = { kf: [{ t: 3, v: 540, e: 'linear' }] };
+      if (!FM.hasKeyframeAt(L.transform.x, 3)) throw new Error('CONTROL: the playback probe did not add a keyframe');
+      FM.playing = true; FM.updateReadout();
+      if (b.getAttribute('aria-label') !== 'Animate Position') throw new Error('playback still updates inspector keyframe labels');
+      FM.pause();
+      if (b.getAttribute('aria-label') !== 'Remove Position keyframe') throw new Error('pause did not refresh the keyframe label');
+      L.shape = 'path'; L.subs = [[[0.1, 0.1], [0.9, 0.2], [0.5, 0.9]]];
+      if (!FM.isPointShape(L)) throw new Error('CONTROL: Points fixture is not a point shape');
+      diamonds('element', '.mt-kf', 'Points');
+      FM.pointEdit.stop();
+      mediaLayer = FM.makeLayer('video', { name: '1024 media', x: 80, y: 60, start: 0, duration: 24 });
+      const cv = document.createElement('canvas'); cv.width = 160; cv.height = 120;
+      FM.media.set(mediaLayer.id, { kind: 'video', el: cv, width: 160, height: 120, duration: 24, hasAudio: true });
+      FM.scene.layers.push(mediaLayer); FM.selectLayer(mediaLayer.id); FM.refreshAll();
+      diamonds('element', '.mt-kf', 'Crop');
+      diamonds('volume', '.mt-kf', 'Volume');
+      diamonds('speed', '.mt-kf', 'Speed');
+    } finally {
+      FM.playing = playing; FM._mtMode = mtMode;
+      if (audioReport === null) localStorage.removeItem('fm.lastAudioReport'); else localStorage.setItem('fm.lastAudioReport', audioReport);
+      if (FM.pointEdit && FM.pointEdit.isActive()) FM.pointEdit.stop();
+      if (mediaLayer) FM.media.remove(mediaLayer.id);
+      await a11yDeadline(t985Restore(W), '1024 restore');
+      FM.inspector.openCategory(view);
+    }
+  });
+
+  test('1026 clicking Templates exposes one selected Home tab and three unselected tabs', { item: '1026', budgetMs: 15000 }, async function () {
+    const wasHome = FM.home.isOpen(), prior = document.querySelector('.hm-tab.active');
+    try {
+      FM.home.open();
+      const tabs = [].slice.call(document.querySelectorAll('.hm-tab'));
+      if (tabs.length !== 4) throw new Error('CONTROL: Home does not have four tabs');
+      tabs.find(function (b) { return b.dataset.tab === 'templates'; }).click();
+      tabs.forEach(function (b) {
+        const on = b.dataset.tab === 'templates';
+        if (b.classList.contains('active') !== on) throw new Error('CONTROL: click did not select Templates visually');
+        if (b.getAttribute('aria-pressed') !== (on ? 'true' : 'false')) throw new Error(b.dataset.tab + ' does not expose its selected state');
+      });
+    } finally {
+      if (prior) prior.click();
+      if (!wasHome) FM.home.close();
+    }
+  });
+
+  test('1028 the main preview canvas exposes an image role and a name', { item: '1028' }, async function () {
+    const c = document.getElementById('preview');
+    if (!c || c.tagName !== 'CANVAS' || !document.getElementById('app').contains(c) || c.width <= 0 || c.height <= 0) throw new Error('CONTROL: this is not the real editor preview canvas');
+    if (c.getAttribute('role') !== 'img' || !(c.getAttribute('aria-label') || '').trim()) throw new Error('preview canvas has no named image role');
+  });
+
+  test('1032 the reports jump uses auto for reduced motion and smooth otherwise', { item: '1032', budgetMs: 15000 }, async function () {
+    const wasHome = FM.home.isOpen(), wasSettings = FM.settings.isOpen();
+    const mmDesc = Object.getOwnPropertyDescriptor(window, 'matchMedia'), realMM = window.matchMedia;
+    let reports, scrollDesc, scrollStubbed = false, reduce = false;
+    const calls = [];
+    try {
+      FM.settings.close();
+      await a11yWait(function () { return !document.querySelector('.set-scrim'); }, '1032 previous Settings close');
+      FM.home.close(); FM.settings.open();
+      reports = document.getElementById('set-reports');
+      const jump = document.querySelector('.set-panel .set-jump button');
+      if (!reports || !jump) throw new Error('CONTROL: the real reports jump is missing');
+      scrollDesc = Object.getOwnPropertyDescriptor(reports, 'scrollIntoView');
+      Object.defineProperty(reports, 'scrollIntoView', { configurable: true, value: function (opts) { calls.push(opts); } });
+      scrollStubbed = true;
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: function (q) {
+        if (q === '(prefers-reduced-motion: reduce)') return { matches: reduce, media: q, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {} };
+        return realMM.call(window, q);
+      } });
+      jump.click();
+      if (calls.length !== 1 || calls[0].behavior !== 'smooth' || calls[0].block !== 'start') throw new Error('CONTROL: without reduced motion the real jump did not request smooth scrolling to the start');
+      reduce = true; jump.click();
+      if (calls.length !== 2 || calls[1].behavior !== 'auto') throw new Error('reduced motion still requests smooth scrolling');
+    } finally {
+      if (mmDesc) Object.defineProperty(window, 'matchMedia', mmDesc); else delete window.matchMedia;
+      if (scrollStubbed) { if (scrollDesc) Object.defineProperty(reports, 'scrollIntoView', scrollDesc); else delete reports.scrollIntoView; }
+      FM.settings.close();
+      await a11yWait(function () { return !document.querySelector('.set-scrim'); }, '1032 Settings cleanup');
+      if (wasHome) FM.home.open();
+      if (wasSettings) FM.settings.open();
+    }
+  });
+
   // a 24 s portrait project (1080×1920 at 30 fps — the size #917 finding 7 measured) with export marks at 6 to 12 s
   function t985World(opts) {
     const o = opts || {};

@@ -787,6 +787,7 @@ window.FM = window.FM || {};
     // Keep the open Move & Transform readouts (value boxes, dial, scale strip) in step with the
     // playhead for animated props — every time-change path passes through here. (#2)
     if (FM.inspector && FM.inspector.syncTransform) FM.inspector.syncTransform();
+    if (FM.inspector && FM.inspector.syncKeyframeNames) FM.inspector.syncKeyframeNames();
     // The clip-action row swaps trim/split for move/extend when the playhead leaves the clip — this is
     // the one place every time-change passes through, and syncPlayhead only acts on the crossing.
     if (FM.inspector && FM.inspector.syncPlayhead) FM.inspector.syncPlayhead();
@@ -1532,13 +1533,95 @@ window.FM = window.FM || {};
       .catch(() => null);
   };
 
+  // One modal session owns focus and restores the exact inert attributes it found on the way in.
+  let modalSession = null;
+  FM.modalFocus = function (dialog, opener) {
+    if (opener === null) {
+      if (modalSession && modalSession.dialog === dialog) modalSession.close();
+      return;
+    }
+    if (modalSession && modalSession.dialog === dialog && !dialog.classList.contains('hidden')) return;
+    if (modalSession) modalSession.close();
+    const back = opener || document.activeElement, saved = [];
+    /* #983: EVERY LIFTED BUTTON STAYS LIVE, not only an opener that is one. On a PC the Canvas pair hangs off the cog whichever door
+       opened it (the people chip, LIVE, a box-less person+), and a pair a phone opened is hung there again when the window widens —
+       after this ran. An inert cog drops out of hit testing, so it sat under the blur and its second click (#944) never landed. */
+    let lifted = [];
+    const isolate = () => {
+      const live = new Set();
+      lifted = Array.from(document.querySelectorAll('.pop-src'));
+      [dialog].concat(lifted).forEach(n => {   // an opener that is lifted is in `lifted`
+        for (; n && n !== document.body; n = n.parentElement) live.add(n);
+      });
+      live.forEach(branch => {
+        Array.from(branch.parentElement.children).forEach(n => {
+          // These body-level surfaces belong to controls inside the dialog too.
+          if (live.has(n) || ['toast', 'fm-ask', 'ctx-menu'].indexOf(n.id) >= 0 || n.matches('[role=status],[role=alert],[aria-live]:not([aria-live=off])') || saved.some(s => s[0] === n)) return;
+          saved.push([n, n.getAttribute('inert')]);
+          n.inert = true;
+        });
+      });
+    };
+    const restore = () => {
+      saved.forEach(([n, value]) => { if (n.inert) { if (value === null) n.removeAttribute('inert'); else n.setAttribute('inert', value); } });
+      saved.length = 0;
+    };
+    isolate();
+    // …and taken again when a button is lifted or let down while the dialog is open
+    const lifts = new MutationObserver(() => {
+      const now = Array.from(document.querySelectorAll('.pop-src'));
+      if (now.length === lifted.length && now.every((n, i) => n === lifted[i])) return;
+      restore(); isolate();
+    });
+    const shown = id => { const n = document.getElementById(id); return n && !n.classList.contains('hidden') ? n : null; };
+    const controls = () => [dialog, shown('ctx-menu')].filter(Boolean).reduce((all, scope) => all.concat(Array.from(scope.querySelectorAll('button, input, select, textarea, a[href], [tabindex]'))), []).filter(n =>
+      !n.disabled && n.tabIndex >= 0 && !n.closest('[inert]') && n.getClientRects().length && getComputedStyle(n).visibility !== 'hidden');
+    const focusFirst = () => {
+      if (!dialog.hasAttribute('tabindex')) dialog.tabIndex = -1;
+      dialog.focus({ preventScroll: true });
+    };
+    const trap = e => {
+      if (e.key !== 'Tab' || shown('fm-ask')) return;
+      const active = document.activeElement, menu = shown('ctx-menu');
+      if (active !== document.body && !dialog.contains(active) && !(menu && menu.contains(active))) return;
+      const list = controls(), at = list.indexOf(document.activeElement);
+      if (!list.length) { e.preventDefault(); return; }
+      if (at < 0 || (e.shiftKey ? at === 0 : at === list.length - 1)) {
+        e.preventDefault(); list[e.shiftKey ? list.length - 1 : 0].focus({ preventScroll: true });
+      }
+    };
+    const watch = new MutationObserver(() => { if (dialog.classList.contains('hidden')) close(); });
+    function close() {
+      watch.disconnect(); lifts.disconnect();
+      document.removeEventListener('keydown', trap, true);
+      restore();
+      modalSession = null;
+      if (back && back.isConnected && back.getClientRects().length && !back.closest('[inert]')) back.focus({ preventScroll: true });
+    }
+    modalSession = { dialog, close };
+    watch.observe(dialog, { attributes: true, attributeFilter: ['class'] });
+    lifts.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    document.addEventListener('keydown', trap, true);
+    focusFirst();
+  };
+
+  let toastFrame = 0, toastSpoken = '', toastSpokenAt = 0;
   /* The optional THIRD argument makes a toast tappable. Added for the "playback is struggling"
    * offer (queue 95/125/202): the app knows the moment it is failing, and that is the only moment
    * asking him to measure is any use — a minute later he has moved on. Strictly additive, because
    * 244 call sites pass two arguments and none of them may change behaviour. */
   FM.toast = function (msg, ms, onTap) {
     const t = document.getElementById('toast'); if (!t) return;
+    const wasHidden = t.classList.contains('hidden'), now = performance.now();
     t.textContent = msg;
+    const sr = document.getElementById('toast-sr'), text = String(msg);
+    // Only a progress relabel (the same words, new numbers) waits a second; any other line is spoken at once.
+    const relabel = text.replace(/\d+/g, '') === toastSpoken.replace(/\d+/g, '');
+    if (sr && (wasHidden || !relabel || (text !== toastSpoken && now - toastSpokenAt >= 1000))) {
+      toastSpoken = text; toastSpokenAt = now;
+      cancelAnimationFrame(toastFrame); sr.textContent = '';
+      toastFrame = requestAnimationFrame(() => { sr.textContent = msg; });
+    }
     t.onclick = null; t.onkeydown = null; t.classList.remove('toast-tap'); t.removeAttribute('role'); t.removeAttribute('tabindex');
     if (typeof onTap === 'function') {
       t.classList.add('toast-tap');
@@ -1725,6 +1808,9 @@ window.FM = window.FM || {};
   };
 
   FM.hideToast = function () {
+    cancelAnimationFrame(toastFrame); toastFrame = 0;
+    const sr = document.getElementById('toast-sr');
+    if (sr) sr.textContent = '';
     const t = document.getElementById('toast');
     if (t) { t.classList.add('hidden'); t.onclick = null; t.onkeydown = null; t.classList.remove('toast-tap', 'toast-in'); }
   };
@@ -2918,6 +3004,7 @@ window.FM = window.FM || {};
     CLK.on = false;                                             // the transport clock stops with the transport
     if (rafId) cancelAnimationFrame(rafId);
     FM.time = FM.snapFrame ? FM.snapFrame(FM.time) : FM.time;   // land ON a frame, never between two
+    if (FM.inspector && FM.inspector.syncKeyframeNames) FM.inspector.syncKeyframeNames();
     if (FM.audioPlay) FM.audioPlay.stop();
     FM.scene.layers.forEach(layer => {
       const m = FM.media.get(layer.id);
@@ -6395,6 +6482,8 @@ window.FM = window.FM || {};
      js/simple-tools.js. It goes through every gate below (pause, the owner's export switch, the notepad, clips still arriving) and then
      straight to runExport with those fixed settings, never the dialog. Every other caller passes nothing, so Full's dialog is today's. */
   async function showExportDialog(sx) {
+    const opener = document.activeElement;
+    exportOpener = opener;
     /* STOP THE TRANSPORT FIRST (queue 247). Ezra: "when you open the export menu playback should pause."
      * Before the notepad confirm on purpose — that is itself a modal, so leaving the transport running
      * through it would keep the very thing he is complaining about, just behind one more sheet. And
@@ -6426,9 +6515,9 @@ window.FM = window.FM || {};
       if (!ok) return;
     }
     if (sx && sx.fmSimple) return runExport(sx);   // Simple mode 2.7 (SU1 #20): Simple's one-tap Export passes the same gates, then skips the dialog
-    return showExportDialogNow();
+    return showExportDialogNow(opener);
   }
-  function showExportDialogNow() {
+  function showExportDialogNow(opener) {
     // Build resolution presets from THIS project's size. "p" = the shorter side (1080p portrait =
     // 1080 wide); value stays a SCALE factor so the exporter math is unchanged. Full first, then
     // each standard rung below the native short side (downscale only — no blurry upscales), each
@@ -6543,6 +6632,7 @@ window.FM = window.FM || {};
     }
     checkExportAudioSupport();
     if (FM.exportCard) FM.exportCard.opened();   // queue 985: the card opens on what you'll get, its lists and More options shut
+    FM.modalFocus(document.getElementById('export-dialog'), opener);
   }
 
   /* ═══ SAY THE EXPORT WILL BE SILENT BEFORE HE RENDERS IT, NOT AFTER (queue 215).
@@ -6617,7 +6707,7 @@ window.FM = window.FM || {};
    * read off the selection, because the whole point of the change is that you can pick a layer without
    * first selecting it. The hidden #exp-solo-clip mirrors it so the export path below, and anything
    * else that reads that field, keeps one thing to look at. */
-  let expSoloId = null;
+  let expSoloId = null, exportOpener = null;
   // Read by the suite: which layer the export will isolate, null for all of them. Exposed because the
   // solo itself happens deep inside run(), so without this the picker's EFFECT is untestable and only
   // its label gets guarded — which is how a control that looks right but does nothing ships.
@@ -6679,6 +6769,7 @@ window.FM = window.FM || {};
   function hideExportDialog() {
     if (FM._expPop) { FM._expPop(); FM._expPop = null; }   // or the card keeps `position: fixed` and the button stays lifted
     document.getElementById('export-dialog').classList.add('hidden');
+    FM.modalFocus(document.getElementById('export-dialog'), null);
     if (FM.exportCard) FM.exportCard.closed();   // queue 985: its open list and More options fold away
   }
 
@@ -6933,6 +7024,7 @@ window.FM = window.FM || {};
   async function runExport(sx) {
     sx = (sx && sx.fmSimple === true) ? sx : null;
     if (!sx) expPrefsSave();   // whatever you just chose becomes the default everywhere, including a new project
+    const opener = exportOpener || document.activeElement;
     hideExportDialog();
     /* An audio-effect audition is not the transport, so the FM.pause() below never reaches it — stop it
        here, for EVERY format (queue 916, clause 2). The exporter's own entry points do the same; this one
@@ -7008,8 +7100,22 @@ window.FM = window.FM || {};
     let from = rr.from, to = rr.to;
     const overlay = document.getElementById('export-overlay');
     const bar = document.getElementById('export-bar');
-    const status = document.getElementById('export-status');
+    const status = document.getElementById('export-status-visual');
+    const spoken = document.getElementById('export-status');
+    let milestone = -1, lastStage = '', lastSpoken = 0;
+    const exportStatus = (text, p, stage) => {
+      status.textContent = text;
+      const pct = Math.max(0, Math.min(100, Math.round((p || 0) * 100)));
+      bar.setAttribute('aria-valuenow', String(pct));
+      const step = Math.floor(pct / 10), now = performance.now();
+      if (stage === undefined || pct === 100 || ((step !== milestone || stage !== lastStage) && now - lastSpoken >= 1000)) {
+        if (spoken.textContent !== text) spoken.textContent = text;
+        milestone = step; lastStage = stage; lastSpoken = now;
+      }
+    };
+    exportStatus('Preparing…', 0);
     overlay.classList.remove('hidden');
+    FM.modalFocus(overlay, opener);
     // Taken here, still inside the tap on Export, and let go in the finally below (queue 690) — see expWakeTake.
     expWakeHold();
     if (FM.playing) FM.pause();
@@ -7020,7 +7126,7 @@ window.FM = window.FM || {};
        runs on (that decode has no clock of its own: bounded by its work, not by a total). */
     if (stillRun) {
       FM._exportCancel = false;
-      bar.style.width = '0%'; status.textContent = 'Saving the frame first…';
+      bar.style.width = '0%'; exportStatus('Saving the frame first…', 0);
       while (stillRun && !FM._exportCancel) await Promise.race([stillRun.then(null, () => {}), new Promise(r => setTimeout(r, 100))]);
       if (FM._exportCancel) { overlay.classList.add('hidden'); expWakeDrop(); return; }
     }
@@ -7048,7 +7154,7 @@ window.FM = window.FM || {};
          nobody could ever see it work. */
       const onProgress = (p, what, verbatim) => {
         bar.style.width = Math.round(p * 100) + '%';
-        status.textContent = verbatim ? what : 'Encoding ' + what + '… ' + Math.round(p * 100) + '%';
+        exportStatus(verbatim ? what : 'Encoding ' + what + '… ' + Math.round(p * 100) + '%', p, verbatim ? 'preparing' : what);
       };
       /* THE OTHER REASON: the message was a toast, and #toast is z-index 60 under #export-overlay's
          100 plus its 65% black backdrop — so it was painted behind the screen it is about. This note
@@ -7071,7 +7177,7 @@ window.FM = window.FM || {};
         await FM.exporter.runFrames({ scale, fps, from, to, name: expName, transparent, format: 'png', outW, outH, onProgress, onReady: showExportReady });
       } else {
         await FM.exporter.run({ scale, fps, bitrate, name: expName, from, to, outW, outH, onProgress, onNote,
-                                onReady: showExportReady });
+                                onReady: out => showExportReady(out, opener) });
       }
       // Every format ends on its ready card, which says what was made and where memory kept anything back.
       overlay.classList.add('hidden');
@@ -7164,7 +7270,7 @@ window.FM = window.FM || {};
    *
    * Returns a promise the exporter awaits, so `finally` (which frees the export frame caches and drops
    * the crash-resume data) does not run until the file has been handed over or deliberately discarded. */
-  function showExportReady(out) {
+  function showExportReady(out, opener) {
     return new Promise(function (resolve) {
       const overlay = document.getElementById('export-ready');
       const prog = document.getElementById('export-overlay');
@@ -7237,6 +7343,7 @@ window.FM = window.FM || {};
         saveBtn.removeEventListener('click', onSave);
         discardBtn.removeEventListener('click', onDiscard);
         overlay.classList.add('hidden');
+        FM.modalFocus(overlay, null);
         resolve();
       }
       function onSave() {
@@ -7261,6 +7368,7 @@ window.FM = window.FM || {};
       saveBtn.addEventListener('click', onSave);
       discardBtn.addEventListener('click', onDiscard);
       overlay.classList.remove('hidden');
+      FM.modalFocus(overlay, opener || document.activeElement);
       saveBtn.focus();
     });
   }
@@ -9709,6 +9817,7 @@ window.FM = window.FM || {};
         cvWatchWidth(true);
         cvRoleNote();
         cvDialog.classList.remove('hidden');
+        FM.modalFocus(cvDialog, o.from || (FM.settings && FM.settings.lastCanvasOpener) || document.activeElement);
         cvOpenFp = cvPendingFp();   // LAST: every control is seeded from the project, so "pending" means his unapplied picks only
       };
       /* ONE CLOSE for every way out (queue 945) — backdrop, Cancel, Apply, App settings…, and through Cancel the cog's second
@@ -9723,6 +9832,7 @@ window.FM = window.FM || {};
         cvEdFit(null);
         (FM._cvPop && (FM._cvPop(), FM._cvPop = null), document.body.classList.remove('cv-anchored', 'cv-up'));
         cvDialog.classList.add('hidden');
+        FM.modalFocus(cvDialog, null);
       };
       FM.closeCanvasDialog = cvClose;
       /* #978 review: THE SWITCH IN THE PAIR MOVES THE BUTTON IT HANGS FROM. On a PC the Friends block holds the only Work
