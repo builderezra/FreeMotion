@@ -45,7 +45,13 @@ window.FM = window.FM || {};
      OfflineAudioContext and the recipes ask in a fixed order, so the same sound renders the same twice. And it
      is structural, so a recipe written tomorrow cannot fall into it. */
   const _seedUse = new WeakMap();   // context -> Map(seed -> times already handed out in it)
+  /* VARIATION ON A SOUND WITHOUT `choices` (#482 9.2): set only while its recipe builds, which is synchronous, so every noise it
+     asks for is another noise, and through varied() a bed's crackles, pops, drops and gusts land at other moments. 0 is every
+     other render, and leaves each seed exactly as it was. */
+  let _noiseSalt = 0;
+  function varied(seed) { return seeded(_noiseSalt ? (seed ^ Math.imul(_noiseSalt, 0x85EBCA6B)) >>> 0 : seed); }
   function noiseSeed(ctx, base) {
+    if (_noiseSalt) base = (base ^ Math.imul(_noiseSalt, 0x9E3779B1)) >>> 0;
     let used = _seedUse.get(ctx);
     if (!used) { used = new Map(); _seedUse.set(ctx, used); }
     const k = used.get(base) || 0;
@@ -91,9 +97,8 @@ window.FM = window.FM || {};
      the very start and end (BED_EDGE), or LOOP-READY: no fades at all, and the last half second crossfaded into the first
      (loopFold), so the clip's end runs straight on into its start and a looped clip has no seam.
      NOTHING CHANGES UNTIL AN OPTION IS ASKED FOR. renderBuffer(def) with no options (every row in the list, every Add
-     today) runs the recipe exactly as before, sample for sample; a bed is only built from options, which the "options
-     before adding" drawer (backlog 9.2, drawn and shown to him first) will offer. Until then the bed is reached through
-     FM.sfx.renderBuffer / preview / add with an options object. Seeded throughout (never Math.random), so the same
+     today) runs the recipe exactly as before, sample for sample; a bed is only built from options, which the ⋯ drawer
+     offers (backlog 9.2) and FM.sfx.renderBuffer / preview / add take as an options object. Seeded throughout (never Math.random), so the same
      options render the same twice — this file's queue 709 promise. */
   const BED_LENGTHS = [2.5, 10, 30, 60];
   const BED_MIN = 2.5, BED_MAX = 60, BED_EDGE = 0.3, LOOP_XFADE = 0.5;
@@ -108,7 +113,10 @@ window.FM = window.FM || {};
     const o = {};
     if (typeof opts.length === 'number' && isFinite(opts.length)) o.length = Math.max(BED_MIN, Math.min(BED_MAX, opts.length));
     if (opts.loop === true) o.loop = true;
+    if (typeof opts.pitch === 'number' && isFinite(opts.pitch) && Math.round(opts.pitch)) o.pitch = Math.round(Math.max(-12, Math.min(12, opts.pitch)));
+    if (opts.reverse === true) o.reverse = true;
     (def.bedExtras || []).forEach(k => { const allowed = BED_EXTRAS[k]; if (allowed && allowed.indexOf(opts[k]) >= 0) o[k] = opts[k]; });
+    if (typeof opts.variation === 'number' && opts.variation > 1) o.variation = Math.min(8, Math.round(opts.variation));   // #482 9.2: 1 is the sound as written
     return Object.keys(o).length ? o : null;
   }
   const BED_EXTRAS = { intensity: ['light', 'medium', 'heavy'], surface: ['open', 'roof'] };   // the values each extra takes (9.4)
@@ -394,19 +402,20 @@ window.FM = window.FM || {};
     },
     // ---------- texture ----------
     {
-      id: 'sparkle', level: 0.75, name: 'Sparkle', cat: 'Texture', dur: 1.2,
+      id: 'sparkle', level: 0.75, name: 'Sparkle', cat: 'Texture', dur: 1.2, varies: true,   // no noise, but Variation deals the pitches out differently (#482 9.2)
       render(ctx, t0, d, out) {
         // fixed offsets, not Math.random — the same effect renders the same twice (queue 709; Glass break's rule)
         const SPARK = [0.03, 0.61, 0.22, 0.48, 0.09, 0.67, 0.35, 0.14, 0.55, 0.27, 0.42, 0.69, 0.18, 0.51];
         const PITCH = [0.72, 0.18, 0.44, 0.91, 0.06, 0.63, 0.29, 0.85, 0.37, 0.12, 0.58, 0.77, 0.23, 0.49];
+        const turn = 3 * _noiseSalt;
         for (let i = 0; i < 14; i++) {
           const at = t0 + SPARK[i] * d;
           const o = ctx.createOscillator(); o.type = 'sine';
-          o.frequency.value = 1800 + PITCH[i] * 3600;
+          o.frequency.value = 1800 + PITCH[(i + turn) % 14] * 3600;
           const g = ctx.createGain();
           g.gain.setValueAtTime(0, at);
           g.gain.linearRampToValueAtTime(0.16, at + 0.004);
-          g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22 + PITCH[(i + 5) % 14] * 0.2);
+          g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22 + PITCH[(i + 5 + turn) % 14] * 0.2);
           o.connect(g); g.connect(out);
           o.start(at); o.stop(Math.min(t0 + d, at + 0.5));
         }
@@ -499,8 +508,8 @@ window.FM = window.FM || {};
         // 0.84, not 0.9 — same reason as Reverse swell above: 1.233 raw = 1.011 in preview (queue 566).
         env(ng.gain, t0, [[0, 0], [0.004, 0.84], [0.09, 0.06], [d, 0]]);
         n.connect(hp); hp.connect(ng); ng.connect(out); n.start(t0); n.stop(t0 + d);
-        [[0.06, 5200], [0.11, 3900], [0.17, 6400], [0.24, 4600], [0.33, 7100], [0.45, 5000]].forEach(function (p) {
-          const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = p[1];
+        [[0.06, 5200], [0.11, 3900], [0.17, 6400], [0.24, 4600], [0.33, 7100], [0.45, 5000]].forEach(function (p, i, all) {
+          const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = all[(i + (_noiseSalt ? (_noiseSalt - 1) % 5 + 1 : 0)) % 6][1];   // Variation: the same shards, other pitches (never a whole turn of 6, which is the row's)
           const g = ctx.createGain();
           g.gain.setValueAtTime(0, t0 + p[0]);
           g.gain.linearRampToValueAtTime(0.28, t0 + p[0] + 0.004);
@@ -599,7 +608,7 @@ window.FM = window.FM || {};
         const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
         const g = ctx.createGain(); g.gain.value = 0.22;
         n.connect(hp); hp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
-        const r = seeded(0x7a11c);
+        const r = varied(0x7a11c);
         playTrack(ctx, t0, d, out, (buf, sr) => eventTimes(r, 0.05, d - 0.05, 0.31, 0.06).forEach(at =>
           burst(buf, sr, r, at, { len: 0.05, tone: 900 + Math.floor(r() * 7) * 130, peak: 0.3 * (0.7 + 0.3 * r()), atk: 0.002, dec: 0.03 })));
       },
@@ -623,7 +632,7 @@ window.FM = window.FM || {};
         const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'brown');
         const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.7;
         const g = ctx.createGain();
-        const r = seeded(0x9e3a7), v = () => 0.8 + 0.4 * r();
+        const r = varied(0x9e3a7), v = () => 0.8 + 0.4 * r();
         const fp = [], gp = [];
         for (let t = 0; t < d; ) {
           const c = 2.6 * (0.75 + 0.5 * r());
@@ -661,7 +670,7 @@ window.FM = window.FM || {};
         const g = ctx.createGain(); g.gain.value = k ? k.bed : 0.6;
         n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
         if (!k) return;
-        const r = seeded(roof ? 0x2f00f : 0xd2095);
+        const r = varied(roof ? 0x2f00f : 0xd2095);
         playTrack(ctx, t0, d, out, (buf, sr) => eventTimes(r, 0.02, d - 0.03, 1 / k.rate, 0.002).forEach(at => {
           const len = roof ? 0.008 + 0.01 * r() : 0.003 + 0.005 * r();
           const f = roof ? 700 * Math.pow(2500 / 700, r()) : 2000 * Math.pow(3, r());
@@ -679,7 +688,7 @@ window.FM = window.FM || {};
         const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
         const g = ctx.createGain(); g.gain.value = 0.45;
         n.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
-        const r = seeded(0xf17ec);
+        const r = varied(0xf17ec);
         playTrack(ctx, t0, d, out, (buf, sr) => eventTimes(r, 0.05, d - 0.06, 0.24, 0.05).forEach(at =>
           burst(buf, sr, r, at, { len: 0.05, f: 1800 + Math.floor(r() * 4) * 700, q: 2, peak: 0.5, atk: 0.003, dec: 0.045 })));
       },
@@ -716,8 +725,8 @@ window.FM = window.FM || {};
        1 is the recipe as written), Length (0.5–3×, a stretch), and a few of its own (a bleep's length and tone, a
        countdown's gap, a flatline). FM.sfx.variant(def, options) hands back a SOUND — an ordinary def with its own id,
        length and name ("Boing (+3 st, variation 2)") — that renderBuffer, preview and add take exactly as they take a row,
-       and Add names the clip after it. No options, nonsense or only defaults: the row itself. Nothing offers them yet —
-       the options drawer is backlog 9.2, drawn and shown to him first. */
+       and Add names the clip after it. No options, nonsense or only defaults: the row itself. The ⋯ drawer offers them (backlog
+       9.2, see drawerFor). */
   const packSemis = st => Math.pow(2, st / 12);
   function packHash(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; }
   // A seeded stream of a sound's own: fixed for Variation 1 (the sound as written), another for each other Variation.
@@ -772,15 +781,17 @@ window.FM = window.FM || {};
   /* A pack sound with options, as a sound of its own: its id says the options (so the render cache keeps it apart from the
      row), its length follows them, its name is the clip's name. The row itself when there is nothing to change. */
   function variant(def, opts) {
-    const o = packOpts(def, opts);
-    if (!o) return def;
+    const o = packOpts(def, opts), rev = !!(opts && opts.reverse === true && !def.choices.reverse);   // #482 9.2: any sound reverses, and the recipe never needs to know
+    if (!o && !rev) return def;
+    const all = rev ? Object.assign({}, o, { reverse: true }) : o;
     const v = {
-      id: def.id + '|' + JSON.stringify(o), name: def.name + ' (' + packLabel(def, o) + ')', cat: def.cat, level: def.levelFor ? def.levelFor(packFill(def, o)) : def.level, tags: def.tags,
-      variantOf: def.id, options: o, dur: def.durFor(packFill(def, o)),
-      render(ctx, t0, d, out) { def.render(ctx, t0, d, out, o); },
+      id: def.id + '|' + JSON.stringify(all), name: def.name + ' (' + [o ? packLabel(def, o) : '', rev ? 'reversed' : ''].filter(Boolean).join(', ') + ')', cat: def.cat, level: def.levelFor ? def.levelFor(packFill(def, o)) : def.level, tags: def.tags,
+      variantOf: def.id, options: all, dur: def.durFor(packFill(def, o)),
+      render(ctx, t0, d, out) { if (o) def.render(ctx, t0, d, out, o); else def.render(ctx, t0, d, out); },
     };
+    if (rev) v.post = { pitch: 0, reverse: true, direction: null };
     // A loop-ready bed (#966 B35, an Ambience sound's `loop` choice): renderBuffer folds it to exactly its length (ambFold).
-    if (o.loop === true) v.loop = true;
+    if (o && o.loop === true) v.loop = true;
     return v;
   }
   // What a pack sound can take, plain data for a drawer (9.2): null for the thirty older sounds and for a variant.
@@ -1995,11 +2006,22 @@ window.FM = window.FM || {};
     })
   );
 
-  /* Icons for the new headings — PLACEHOLDERS: the real ones are a #545 design item, drawn and picked with him. Drawn to
+  /* Icons for the sections — PLACEHOLDERS: the real ones are a #545 design item, drawn and picked with him. Drawn to
      the audio browser's rules (js/audio-fx-browser.js AUDIO_CAT_ICON): a 24 × 24 box, stroked, no fill, and each says what
-     it draws. Nothing shows them yet — the sheet's headings are words; the place for an icon is backlog 9.1's category
-     chips, drawn first. */
+     it draws. The sheet's headings are words; backlog 9.1's chips are where these show. */
   const SFX_CAT_ICON = {
+    // a pointed arrow behind three lines of speed
+    Movement: '<path d="M3 8h9M3 12h13M3 16h9"/><path d="M15 6.5l5.5 5.5-5.5 5.5"/>',
+    // a burst: eight lines flung out from a point
+    Impact: '<path d="M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4M6 6l2.8 2.8M15.2 15.2 18 18M18 6l-2.8 2.8M8.8 15.2 6 18"/>',
+    // four bars, each taller than the last: it builds
+    Build: '<path d="M5 19.5v-3M10 19.5v-7M15 19.5v-10.5M20 19.5v-15"/>',
+    // a switch, the thing an interface is made of
+    Interface: '<rect x="3.5" y="6.5" width="17" height="11" rx="5.5"/><circle cx="15" cy="12" r="2.6"/>',
+    // a sparkle and a small one beside it
+    Texture: '<path d="M11 4l1.6 4.4L17 10l-4.4 1.6L11 16l-1.6-4.4L5 10l4.4-1.6z"/><path d="M18 15.5v4M16 17.5h4"/>',
+    // a leaf and its vein
+    Nature: '<path d="M5 19c0-8 5-14 15-15 0 10-5 15-12 15-1.2 0-2.2-.2-3-.6"/><path d="M5 19c2.5-4.5 5.5-7.5 9.5-10"/>',
     // a coiled spring with a ball on top: the boing
     Cartoon: '<circle cx="12" cy="4.6" r="2"/><path d="M7.5 9.2h9l-9 3h9l-9 3h9l-9 3h9M8 20.6h8"/>',
     // a game pad: the cross on the left, two buttons on the right
@@ -2056,13 +2078,15 @@ window.FM = window.FM || {};
     if (o) return renderBed(def, o);
     /* A LOOP-READY bed (#966 B35) renders AMB_FOLD past its end instead of the 0.05 s tail, and ambFold lays that overrun over
        its start and cuts it to exactly `dur`, so its last sample runs on into its first. Every other sound: as it always was. */
-    const ctx = offlineCtx(def.dur + (def.loop ? AMB_FOLD : 0.05));
+    const raw = def.rawDur || def.dur;   // #482 9.2: a variant whose Pitch shortens it renders at this length, then plainPost resamples it
+    const ctx = offlineCtx(raw + (def.loop ? AMB_FOLD : 0.05));
     if (!ctx) return Promise.reject(new Error('no OfflineAudioContext'));
     // Everything the recipes connect to goes through the trim first.
     const trim = ctx.createGain(); trim.gain.value = MASTER;
     trim.connect(ctx.destination);
-    def.render(ctx, 0, def.dur, trim);
-    return ctx.startRendering().then(buf => normalise(def.loop ? ambFold(ctx, buf, def.dur) : buf, def.level));
+    def.render(ctx, 0, raw, trim);
+    const done = ctx.startRendering().then(buf => normalise(def.loop ? ambFold(ctx, buf, def.dur) : buf, def.level));
+    return def.post ? done.then(buf => plainPost(buf, def.post, def.level)) : done;
   }
   /* A bed (9.3): `o.length` seconds (the sound's own length if none is asked for), its 0.3 s edges faded — or, loop-ready,
      rendered half a second longer with no fades and folded (loopFold). Normalised like every sound, after the fold. */
@@ -2074,8 +2098,10 @@ window.FM = window.FM || {};
     trim.connect(ctx.destination);
     let out = trim;
     if (!o.loop) { out = ctx.createGain(); env(out.gain, 0, [[0, 0], [BED_EDGE, 1], [secs - BED_EDGE, 1], [secs, 0]]); out.connect(trim); }
-    def.bed(ctx, 0, secs + extra, out, o);
-    return ctx.startRendering().then(buf => normalise(o.loop ? loopFold(ctx, buf, secs) : buf, def.level));
+    _noiseSalt = o.variation || 0;
+    try { def.bed(ctx, 0, secs + extra, out, o); } finally { _noiseSalt = 0; }
+    const done = ctx.startRendering().then(buf => normalise(o.loop ? loopFold(ctx, buf, secs) : buf, def.level));
+    return o.pitch || o.reverse ? done.then(buf => plainPost(buf, { pitch: o.pitch || 0, reverse: !!o.reverse, direction: null }, def.level)) : done;
   }
 
   /* WAV, not WebM: this is decoded again immediately by FM.loadVideoFile, and 16-bit PCM is the one
@@ -2152,7 +2178,7 @@ window.FM = window.FM || {};
      at most two of those are kept (the oldest goes first). With no options the key is the id, as it always was. */
   const LONG_KEEP = 2;
   function cacheKey(def, opts) { const o = bedOpts(def, opts); return o ? def.id + '|' + JSON.stringify(o) : def.id; }
-  function isLong(def, key) { const o = key === def.id ? null : bedOpts(def, JSON.parse(key.slice(def.id.length + 1))); return !!(o && (o.length || def.dur) > 10); }
+  const _longKeys = new Set();   // which keys those are: the drawer reaches long pack sounds and pitched-down ones too, not only beds
   function rendered(def, opts) {
     const key = cacheKey(def, opts);
     let p = _rendered.get(key);
@@ -2161,7 +2187,9 @@ window.FM = window.FM || {};
     _rendered.set(key, p);
     p.catch(() => { if (_rendered.get(key) === p) _rendered.delete(key); });   // a failed render is not remembered
     while (_rendered.size > RENDER_CACHE_MAX) _rendered.delete(_rendered.keys().next().value);
-    const longs = [..._rendered.keys()].filter(k => { const d = byId(k.split('|')[0]); return d && isLong(d, k); });
+    const o = bedOpts(def, opts);
+    if (((o && o.length) || def.dur) / packSemis((o && o.pitch) || 0) > 10) _longKeys.add(key);
+    const longs = [..._rendered.keys()].filter(k => _longKeys.has(k));
     while (longs.length > LONG_KEEP) _rendered.delete(longs.shift());
     return p;
   }
@@ -2195,7 +2223,7 @@ window.FM = window.FM || {};
   }
   function markRow(def, on) {   // every row of this sound in the open sheet
     document.querySelectorAll('.sfx-row .sfx-star[data-sfxid]').forEach(star => {
-      const row = star.dataset.sfxid === def.id && star.closest('.sfx-row');
+      const row = star.dataset.sfxid === (def.variantOf || def.id) && star.closest('.sfx-row');   // a sound with options lights its own row (#482 9.2)
       if (row) paintRow(row, on, def);
     });
   }
@@ -2231,8 +2259,9 @@ window.FM = window.FM || {};
         src.buffer = buf;                         // the very samples Add puts on the timeline, at unity
         src.connect(ctx.destination);
         src.onended = () => { if (_cur === me) { _cur = null; markRow(def, false); } try { src.disconnect(); } catch (e) {} };
-        // A long bed (9.3) is heard for its first PREVIEW_MAX seconds; anything shorter starts exactly as it always did.
-        if (buf.duration > PREVIEW_MAX) src.start(ctx.currentTime + 0.01, 0, PREVIEW_MAX); else src.start(ctx.currentTime + 0.01);
+        // A long bed (9.3) is heard for its first PREVIEW_MAX seconds; anything shorter starts exactly as it always did. An older sound
+        // the drawer stretched is heard whole: a Riser at 3× has its peak past the cap, and that peak is what Add gives you.
+        if (buf.duration > PREVIEW_MAX && !def.hearAll) src.start(ctx.currentTime + 0.01, 0, PREVIEW_MAX); else src.start(ctx.currentTime + 0.01);
         me.src = src;
         return true;
       } catch (e) { return fail(e); }
@@ -2263,6 +2292,9 @@ window.FM = window.FM || {};
     if (o.intensity) parts.push(o.intensity);
     if (o.surface === 'roof') parts.push('on a roof');
     if (o.loop) parts.push('loop-ready');
+    if (o.variation) parts.push('variation ' + o.variation);
+    if (o.pitch) parts.push(CH_PITCH.say(o.pitch));
+    if (o.reverse) parts.push('reversed');
     return def.name + ' (' + parts.join(', ') + ').wav';
   }
   async function add(def, opts) {
@@ -2284,15 +2316,130 @@ window.FM = window.FM || {};
     } finally { FM._importing = Math.max(0, (FM._importing || 1) - 1); }
   }
 
+  /* ═══ OPTIONS BEFORE ADDING, AND THE WORDS TO FIND A SOUND BY (#482 9.1 / 9.2) ═════════════════════════════════════════════
+     Three kinds of sound, one drawer. A pack sound has its `choices` and FM.sfx.variant. A bed (Wind, Rain, Fire, Vinyl) has
+     bedOpts. The rest had nothing, so they take Pitch and Reverse, a Length where the recipe is built to stretch, a Direction
+     on the Movement sounds, and a Variation only if it would change something: a plain tone has nothing to vary, and a slider
+     that does nothing is a bug (usesNoise asks the recipe itself rather than a list that could go stale; Sparkle has no noise
+     and says `varies`, because it deals its own pitches out). */
+  const PLAIN_STRETCH = ['whoosh', 'riser', 'sub-drop', 'reverse-cymbal'];
+  const CH_REVERSE = { values: [false, true], def: false, say: () => 'reversed' };
+  const CH_DIRECTION = { values: ['centre', 'lr', 'rl'], def: 'centre', say: v => v === 'lr' ? 'left to right' : 'right to left', label: v => v === 'lr' ? 'L → R' : v === 'rl' ? 'R → L' : 'Centre' };
+  function usesNoise(def) {
+    if (def._noisy == null) {
+      const ctx = offlineCtx(def.dur + 0.05);
+      if (!ctx) return false;
+      def.render(ctx, 0, def.dur, ctx.createGain());
+      def._noisy = _seedUse.has(ctx);   // noiseSeed files a context the first time one asks
+    }
+    return def._noisy;
+  }
+  function plainChoices(def) {
+    if (!def || def.choices || def.variantOf || typeof def.bed === 'function') return null;
+    const c = { pitch: CH_PITCH };
+    if (def.varies || usesNoise(def)) c.variation = CH_VARIATION;
+    if (PLAIN_STRETCH.indexOf(def.id) >= 0) c.length = CH_LENGTH;
+    if (def.cat === 'Movement') c.direction = CH_DIRECTION;
+    c.reverse = CH_REVERSE;
+    return c;
+  }
+  /* A sound with no `choices`, with options, as a sound of its own — the same shape FM.sfx.variant hands back, so the ▶, Add and
+     the render cache take it as they take a row. Only defaults or nonsense: the row itself. */
+  function plainVariant(def, opts) {
+    const ch = plainChoices(def), o = ch && packOpts({ choices: ch }, opts);
+    if (!o) return def;
+    const raw = Math.round(def.dur * (o.length || 1) * 1000) / 1000;
+    return {
+      id: def.id + '|' + JSON.stringify(o), name: def.name + ' (' + packLabel({ choices: ch }, o) + ')', cat: def.cat, level: def.level, tags: def.tags,
+      variantOf: def.id, options: o, rawDur: raw, dur: Math.round(raw / packSemis(o.pitch || 0) * 1000) / 1000, hearAll: true,
+      post: o.pitch || o.reverse || o.direction ? { pitch: o.pitch || 0, reverse: !!o.reverse, direction: o.direction || null } : null,
+      render(ctx, t0, d, out) { _noiseSalt = o.variation || 0; try { def.render(ctx, t0, d, out); } finally { _noiseSalt = 0; } },
+    };
+  }
+  /* After the recipe: Pitch is a tape-style resample in a second context, so higher is also shorter, and it is normalised again
+     because the resample moves the peak a little. Reverse mirrors the samples, which are this render's own. Direction makes it
+     stereo, equal power from one side to the other. */
+  async function plainPost(buf, post, level) {
+    let b = buf;
+    if (post.pitch) {
+      const rate = packSemis(post.pitch), ctx = offlineCtx(b.duration / rate);
+      if (!ctx) throw new Error('no OfflineAudioContext');
+      const src = ctx.createBufferSource();
+      src.buffer = b; src.playbackRate.value = rate; src.connect(ctx.destination); src.start(0);
+      b = normalise(await ctx.startRendering(), level);
+    }
+    if (post.reverse) b.getChannelData(0).reverse();
+    if (post.direction) {
+      const ctx = offlineCtx(b.duration);
+      if (!ctx) throw new Error('no OfflineAudioContext');
+      const st = ctx.createBuffer(2, b.length, b.sampleRate), d = b.getChannelData(0), L = st.getChannelData(0), R = st.getChannelData(1), n = Math.max(1, b.length - 1);
+      for (let i = 0; i < b.length; i++) {
+        const a = (post.direction === 'lr' ? i / n : 1 - i / n) * Math.PI / 2;
+        L[i] = d[i] * Math.cos(a); R[i] = d[i] * Math.sin(a);
+      }
+      b = st;
+    }
+    return b;
+  }
+  // What the ▶ and Add take for this sound with these options: a sound, and the options a bed is asked with.
+  function picked(def, picks) {
+    if (!picks) return { def: def, opts: undefined };
+    if (def.choices) return { def: variant(def, picks), opts: undefined };
+    if (typeof def.bed === 'function') return { def: def, opts: bedOpts(def, picks) || undefined };
+    return { def: plainVariant(def, picks), opts: undefined };
+  }
+  /* Rain's two extras as drawer choices. Off is the row: Rain with no options has no drops (9.4), so Medium cannot be the default the drawer
+     lights, or the middle setting is the one with no drops in it (the review of v18.16). A roof always has drops (rain.bed), so `then`
+     keeps what is lit true: picking Roof lights Medium, and picking Off goes back to Open. */
+  const BED_EXTRA_CH = {
+    intensity: { values: [null].concat(BED_EXTRAS.intensity), def: null, label: v => v || 'off', then: p => { if (!p.intensity && p.surface === 'roof') delete p.surface; } },
+    surface: { values: BED_EXTRAS.surface, def: 'open', then: p => { if (p.surface === 'roof' && !p.intensity) p.intensity = 'medium'; } },
+  };
+  const OPT_LABELS = { pitch: 'Pitch', variation: 'Variation', length: 'Length', decay: 'Decay', direction: 'Direction', reverse: 'Reverse', loop: 'Loop-ready', gap: 'Gap', tone: 'Tone', rate: 'Rate' };
+  const optLabel = k => OPT_LABELS[k] || (k.charAt(0).toUpperCase() + k.slice(1));
+  // The drawer's rows, in order: [{ key, label, c }], c a choice as packOpts reads one. Empty for a variant.
+  function drawerFor(def) {
+    let ch = null;
+    if (def && def.choices) ch = def.choices.reverse ? def.choices : Object.assign({}, def.choices, { reverse: CH_REVERSE });
+    else if (def && typeof def.bed === 'function') {
+      const rows = [
+        { key: 'length', label: 'Length', c: { values: [null].concat(BED_LENGTHS.filter(s => s >= def.dur * 1.5)), def: null, label: v => (v == null ? def.dur : v) + ' s' } },
+        { key: 'loop', label: 'Loop-ready', c: { values: [false, true], def: false } },
+      ];
+      (def.bedExtras || []).forEach(k => rows.push({ key: k, label: optLabel(k), c: BED_EXTRA_CH[k] }));
+      rows.push({ key: 'pitch', label: 'Pitch', c: CH_PITCH }, { key: 'variation', label: 'Variation', c: CH_VARIATION }, { key: 'reverse', label: 'Reverse', c: CH_REVERSE });
+      return rows;
+    } else ch = plainChoices(def);
+    return ch ? Object.keys(ch).map(k => ({ key: k, label: optLabel(k), c: ch[k] })) : [];
+  }
+  /* FINDING A SOUND. A pack sound brought its own words; these are the thirty older ones', on a table of their own so the recipes
+     stay as they are. Every word typed must be found in the name, the category or a tag. */
+  const OLD_TAGS = {
+    'whoosh': ['air', 'fast', 'swoosh', 'pass', 'transition'], 'swish': ['whip', 'fast', 'whoosh', 'sword', 'transition'], 'reverse-whoosh': ['backwards', 'rewind', 'suck', 'whoosh', 'transition'],
+    'impact': ['boom', 'hit', 'slam', 'cinematic', 'trailer', 'bass'], 'thud': ['hit', 'thump', 'bump', 'fall', 'heavy', 'low'], 'sub-drop': ['boom', 'bass', 'sub', 'low', 'rumble', 'trailer', 'cinematic'],
+    'riser': ['rise', 'tension', 'up', 'swell', 'trailer', 'transition'], 'build-tick': ['tick', 'clock', 'tension', 'suspense', 'countdown'], 'click': ['tap', 'button', 'mouse', 'ui'],
+    'pop': ['bubble', 'appear', 'tap', 'cartoon', 'ui'], 'ding': ['notification', 'ping', 'alert', 'bell', 'chime', 'ui'], 'bell': ['ring', 'chime', 'school', 'alert'],
+    'typewriter': ['type', 'keys', 'keyboard', 'text', 'writing', 'vintage'], 'shutter': ['camera', 'photo', 'click', 'snap', 'picture'], 'sparkle': ['magic', 'twinkle', 'shine', 'glitter', 'fairy', 'chime'],
+    'zap': ['electric', 'laser', 'shock', 'spark', 'sci-fi'], 'bubble': ['water', 'pop', 'underwater', 'blub'], 'swoosh-by': ['pass by', 'swoosh', 'car', 'fly by', 'whoosh', 'doppler', 'transition'],
+    'slide-up': ['rise', 'swipe', 'whoosh', 'ui', 'transition'], 'punch': ['hit', 'fight', 'boxing', 'slap', 'whack', 'action'], 'glass-break': ['smash', 'shatter', 'crash', 'window'],
+    'reverse-cymbal': ['reverse', 'cymbal', 'swell', 'rise', 'crash', 'transition'], 'heartbeat': ['heart', 'pulse', 'tension', 'suspense', 'beat', 'thump'], 'success': ['win', 'correct', 'achievement', 'positive', 'chime', 'ta-da', 'yes'],
+    'error': ['wrong', 'fail', 'buzzer', 'no', 'negative', 'alert', 'ui'], 'swipe': ['slide', 'page', 'flick', 'ui', 'transition'], 'vinyl': ['record', 'lofi', 'lo-fi', 'retro', 'old', 'dust', 'texture'],
+    'wind': ['breeze', 'air', 'storm', 'outside', 'ambience', 'bed'], 'rain': ['storm', 'water', 'drops', 'weather', 'roof', 'ambience', 'bed'], 'fire': ['campfire', 'flame', 'burn', 'cosy', 'ambience', 'bed'],
+  };
+  SFX.forEach(s => { if (!s.tags && OLD_TAGS[s.id]) s.tags = OLD_TAGS[s.id]; });
+  function searchSounds(text) {
+    const words = String(text == null ? '' : text).toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return SFX.slice();
+    return SFX.filter(s => { const hay = [s.name, s.cat].concat(s.tags || []).join(' ').toLowerCase(); return words.every(w => hay.indexOf(w) >= 0); });
+  }
+
   /* ---- the panel -------------------------------------------------------------------------------
-   * Deliberately the notepad's shape (a scrim + a card), not a full-screen browser: this is a short
-   * list you pick one thing from, and the effects browser's machinery — search, favourites, live
-   * thumbnails — would be scaffolding around sixteen rows. Every row previews on tap and adds with a
-   * button, because the whole difficulty with sound effects is that you cannot tell what one is from
-   * its name. */
+   * Deliberately the notepad's shape (a scrim + a card), not a full-screen browser: this is a list you
+   * pick one thing from. Every row previews on tap and adds with a button, because the whole difficulty
+   * with sound effects is that you cannot tell what one is from its name. */
   function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
 
-  function close() { stopPreview(); document.querySelectorAll('.sfx-scrim').forEach(n => n.remove()); }
+  function close() { stopPreview(); document.querySelectorAll('.sfx-scrim').forEach(n => { if (n._sfxUnwatch) n._sfxUnwatch(); n.remove(); }); }
 
   /* ---------- STARRING (queue 311) ---------------------------------------------------------------
    * His words: *"Make it so you can star sound effects and they show up at the top of the sound effect
@@ -2347,24 +2494,113 @@ window.FM = window.FM || {};
     head.appendChild(el('div', 'sfx-title', 'Sound effects'));
     card.appendChild(head);
     card.appendChild(el('div', 'sfx-hint', 'Tap a name to hear it. These are generated in the app, so they cost nothing to download.'));
+    /* #482 9.1: the list has outgrown one scroll, so it can be searched, and the chips jump to a section. Neither takes focus on
+       open: on a phone that would bring the keyboard up over the list. */
+    const search = el('input', 'sfx-q');
+    search.type = 'search'; search.placeholder = 'Search sounds'; search.setAttribute('aria-label', 'Search sounds'); search.autocomplete = 'off'; search.enterKeyHint = 'search';
+    search.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); search.blur(); } });   // the list filters as he types, so Search only has the keyboard to put away
+    card.appendChild(search);
+    const chips = el('div', 'sfx-chips');
+    card.appendChild(chips);
+    let query = '', openKey = null;   // openKey: which row's drawer is open, by section and sound (a starred sound has two rows)
+    const picks = new Map();          // sound id -> the options chosen for it while this sheet is open
+    const adding = new Set();         // sounds whose Add is rendering: a redraw must not hand back a live Add (a long bed takes seconds)
 
     const body = el('div', 'sfx-list');
+    const soundOf = def => picked(def, picks.get(def.id));
+    const secsOf = def => { const s = soundOf(def), o = s.opts || {}; return ((o.length || s.def.dur) / packSemis(o.pitch || 0)).toFixed(2).replace(/0$/, '') + 's'; };
+    const rowsOf = id => [...body.querySelectorAll('.sfx-star')].filter(n => n.dataset.sfxid === id).map(n => n.closest('.sfx-row'));   // a starred sound has two
+    function setPick(def, key, v, c, drawer) {
+      const p = Object.assign({}, picks.get(def.id));
+      if (v === c.def) delete p[key]; else p[key] = v;
+      if (c.then) c.then(p);
+      if (Object.keys(p).length) picks.set(def.id, p); else picks.delete(def.id);
+      if (_cur && (_cur.def.variantOf || _cur.def.id) === def.id) stopPreview();   // what is playing is no longer what the row says
+      if (c.then) { const top = body.scrollTop; fillList(); body.scrollTop = top; return; }   // it may have moved another choice, so what is lit is redrawn
+      rowsOf(def.id).forEach(r => {
+        r.querySelector('.sfx-dur').textContent = secsOf(def);
+        r.querySelector('.sfx-more').classList.toggle('changed', picks.has(def.id));
+        paintRow(r, false, soundOf(def).def);   // the ▶ names what a tap will play now
+      });
+      if (drawer) drawer.querySelector('.sfx-reset').hidden = !picks.has(def.id);
+    }
+    function drawerOf(def) {
+      const box = el('div', 'sfx-drawer'), cur = picks.get(def.id) || {};
+      drawerFor(def).forEach(r => {
+        const c = r.c, line = el('div', 'sfx-opt'), now = r.key in cur ? cur[r.key] : c.def;
+        line.appendChild(el('span', 'sfx-opt-label', r.label));
+        if (c.values) {
+          const seg = el('div', 'fx-seg');
+          c.values.forEach(v => {
+            const text = c.label ? c.label(v) : typeof v === 'boolean' ? (v ? 'On' : 'Off') : String(c.say ? c.say(v) : v);
+            const b = el('button', 'fx-seg-btn' + (v === now ? ' on' : ''), text.charAt(0).toUpperCase() + text.slice(1));
+            b.type = 'button';
+            b.addEventListener('click', () => {
+              seg.querySelectorAll('.fx-seg-btn').forEach(n => n.classList.toggle('on', n === b));
+              setPick(def, r.key, v, c, box);
+            });
+            seg.appendChild(b);
+          });
+          line.appendChild(seg);
+        } else {
+          const say = v => (c.unit === 'st' && v > 0 ? '+' : '') + v + (c.unit === 'x' ? '×' : c.unit ? ' ' + c.unit : '');
+          const range = el('input', 'sfx-range'), val = el('span', 'sfx-opt-val', say(now));
+          range.type = 'range'; range.min = c.min; range.max = c.max; range.step = c.step; range.value = now;
+          range.setAttribute('aria-label', r.label);
+          range.addEventListener('input', () => {
+            const v = parseFloat(range.value);
+            val.textContent = say(v);
+            setPick(def, r.key, v, c, box);
+          });
+          /* A finger that lands on a slider on its way to scrolling the list: Chrome on Android moves the value to the finger at once, then
+             the list takes the swipe and cancels the touch. The cancel hands the value back, or a scroll silently changes the sound. */
+          let before = null;
+          range.addEventListener('pointerdown', e => { before = e.pointerType === 'touch' ? range.value : null; });
+          range.addEventListener('pointercancel', () => {
+            if (before === null) return;
+            const was = before; before = null;
+            if (range.value !== was) { range.value = was; range.dispatchEvent(new Event('input')); }
+          });
+          line.append(range, val);
+        }
+        box.appendChild(line);
+      });
+      const reset = el('button', 'sfx-reset', 'Reset');
+      reset.type = 'button'; reset.hidden = !picks.has(def.id);
+      reset.addEventListener('click', () => {
+        if (_cur && (_cur.def.variantOf || _cur.def.id) === def.id) stopPreview();
+        picks.delete(def.id);
+        const top = body.scrollTop; fillList(); body.scrollTop = top;
+      });
+      box.appendChild(reset);
+      return box;
+    }
+    function put(def, section) {
+      const key = section + ':' + def.id, row = rowFor(def, key);
+      body.appendChild(row);
+      if (openKey === key) body.appendChild(drawerOf(def));
+    }
     /* ONE ROW BUILDER for both the favourites block and the categories. The obvious way to add a
        "starred at the top" section is to copy the row-building loop, and this file already carries a
        note about what happens when two things meant to be identical each get their own copy — the
        ★ would be wired in one of them and dead in the other the first time either changed. */
-    function rowFor(def) {
+    function rowFor(def, key) {
       const row = el('div', 'sfx-row');
-      const play = el('button', 'sfx-play');
+      row.dataset.key = key;
+      const play = el('button', 'sfx-play'), hearName = 'Hear ' + soundOf(def).def.name;
       play.type = 'button';
-      play.title = 'Hear ' + def.name;
-      play.setAttribute('aria-label', 'Hear ' + def.name);
+      play.title = hearName;
+      play.setAttribute('aria-label', hearName);
       play.innerHTML = PLAY_GLYPH; play.dataset.glyph = 'play';
       const name = el('button', 'sfx-name', def.name);
       name.type = 'button';
-      const secs = el('span', 'sfx-dur', def.dur.toFixed(2).replace(/0$/, '') + 's');
+      const secs = el('span', 'sfx-dur', secsOf(def));
       // Tap = hear it; tap a row of the sound that is playing = stop it (queue 986). preview() owns the highlight now.
-      const hear = () => { if (_cur && _cur.def.id === def.id) { stopPreview(); return; } preview(def); };
+      const hear = () => {
+        if (_cur && (_cur.def.variantOf || _cur.def.id) === def.id) { stopPreview(); return; }
+        const s = soundOf(def);   // with the options the drawer has set (#482 9.2)
+        preview(s.def, s.opts);
+      };
       play.addEventListener('click', hear);
       name.addEventListener('click', hear);
       const star = el('button', 'sfx-star' + (isFav(def.id) ? ' on' : ''), '★');
@@ -2384,19 +2620,74 @@ window.FM = window.FM || {};
         fillList();
         body.scrollTop = top;
       });
-      const addBtn = el('button', 'btn sfx-add', 'Add');
+      const addBtn = el('button', 'btn sfx-add', adding.has(def.id) ? '…' : 'Add');
       addBtn.type = 'button';
+      addBtn.disabled = adding.has(def.id);
       addBtn.addEventListener('click', async () => {
-        addBtn.disabled = true; addBtn.textContent = '…';
-        try { await add(def); close(); }
-        catch (e) { addBtn.disabled = false; addBtn.textContent = 'Add'; if (FM.toast) FM.toast('Could not add that sound'); }
+        adding.add(def.id);
+        rowsOf(def.id).forEach(r => { const b = r.querySelector('.sfx-add'); b.disabled = true; b.textContent = '…'; });
+        const s = soundOf(def);
+        try { await add(s.def, s.opts); close(); }
+        catch (e) {
+          adding.delete(def.id);
+          rowsOf(def.id).forEach(r => { const b = r.querySelector('.sfx-add'); b.disabled = false; b.textContent = 'Add'; });
+          if (FM.toast) FM.toast('Could not add that sound');
+        }
       });
-      row.append(play, name, secs, star, addBtn);
-      if (_cur && _cur.def.id === def.id) paintRow(row, true, def);   // rebuilt (the ★) while it plays: still lit, still Stop
+      // ⋯ opens this sound's options under this row (#482 9.2). A dot says it has some set, so a closed row still reads as changed.
+      const more = el('button', 'sfx-more' + (openKey === key ? ' on' : '') + (picks.has(def.id) ? ' changed' : ''), '⋯');
+      more.type = 'button';
+      more.title = 'Options for ' + def.name;
+      more.setAttribute('aria-label', 'Options for ' + def.name);
+      more.setAttribute('aria-expanded', openKey === key ? 'true' : 'false');
+      /* The row that was tapped stays under the finger: a drawer closing above it would otherwise throw it up the list. Then a new drawer
+         is brought into view, without pushing its own row off the top. */
+      more.addEventListener('click', () => {
+        const y = row.getBoundingClientRect().top, top = body.scrollTop;
+        openKey = openKey === key ? null : key;
+        fillList();
+        body.scrollTop = top;
+        const now = [...body.querySelectorAll('.sfx-row')].find(n => n.dataset.key === key);
+        if (!now) return;
+        body.scrollTop += now.getBoundingClientRect().top - y;
+        if (openKey === key) {
+          const box = body.getBoundingClientRect(), over = now.nextElementSibling.getBoundingClientRect().bottom - box.bottom + 6;
+          if (over > 0) body.scrollTop += Math.min(over, now.getBoundingClientRect().top - box.top);
+        }
+      });
+      row.append(play, name, secs, star, more, addBtn);
+      if (_cur && (_cur.def.variantOf || _cur.def.id) === def.id) paintRow(row, true, _cur.def);   // rebuilt (the ★) while it plays: still lit, still Stop
       return row;
+    }
+    function fillChips() {
+      const left = chips.scrollLeft;
+      chips.innerHTML = '';
+      chips.hidden = !!query;
+      const heads = [...(readFavs().length ? ['★ Favourites'] : []), ...categoriesOf()];
+      heads.forEach(cat => {
+        const c = el('button', 'sfx-chip', cat), icon = catIcon(cat);
+        c.type = 'button';
+        if (icon) c.insertAdjacentHTML('afterbegin', icon);   // this file's own table, never user text
+        c.addEventListener('click', () => {
+          const h = [...body.querySelectorAll('.sfx-cat')].find(n => n.textContent === cat);
+          if (h) body.scrollTop += h.getBoundingClientRect().top - body.getBoundingClientRect().top;
+        });
+        chips.appendChild(c);
+      });
+      chips.scrollLeft = left;   // a ★ or a ⋯ redraws the list, and must not throw the chips back to the start
     }
     function fillList() {
       body.innerHTML = '';
+      fillChips();
+      if (query) {
+        const hits = searchSounds(query);
+        if (!hits.length) body.appendChild(el('div', 'sfx-empty', 'No sound matches “' + query + '”.'));
+        else {
+          body.appendChild(el('div', 'sfx-cat', hits.length + (hits.length === 1 ? ' sound' : ' sounds')));
+          hits.forEach(def => put(def, 'found'));
+        }
+        return;
+      }
       /* FAVOURITES FIRST — *"they show up at the top of the sound effect list"*. In the order they were
          starred, which is the order the stored list already holds; re-sorting them by name or category
          would make a list he built himself come back arranged by something else.
@@ -2406,13 +2697,14 @@ window.FM = window.FM || {};
       const favs = readFavs().map(byId).filter(Boolean);
       if (favs.length) {
         body.appendChild(el('div', 'sfx-cat', '★ Favourites'));
-        favs.forEach(def => body.appendChild(rowFor(def)));
+        favs.forEach(def => put(def, 'fav'));
       }
       categoriesOf().forEach(cat => {
         body.appendChild(el('div', 'sfx-cat', cat));
-        SFX.filter(s => s.cat === cat).forEach(def => body.appendChild(rowFor(def)));
+        SFX.filter(s => s.cat === cat).forEach(def => put(def, cat));
       });
     }
+    search.addEventListener('input', () => { query = search.value.trim(); fillList(); body.scrollTop = 0; });
     fillList();
     card.appendChild(body);
 
@@ -2425,6 +2717,15 @@ window.FM = window.FM || {};
     scrim.appendChild(card);
     document.body.appendChild(scrim);
     scrim.addEventListener('pointerdown', e => { if (e.target === scrim) close(); });
+    /* THE KEYBOARD covers the page without moving it (FM.screen, queue 814), so a sheet that stayed its full height would keep half its rows
+       and Close behind it, out of reach of any swipe. While it is up the sheet is what is left above it, and sits at the top. */
+    const fit = () => {
+      const m = FM.screen.metrics(), up = m.fixedBottom > 40 && m.scale < 1.01;
+      scrim.style.alignItems = up ? 'flex-start' : '';
+      scrim.style.paddingTop = up ? (18 + m.fixedTop) + 'px' : '';
+      card.style.height = up ? Math.max(180, m.bottom - m.top - 36) + 'px' : '';
+    };
+    if (FM.screen && FM.screen.watch) { scrim._sfxUnwatch = FM.screen.watch(fit); fit(); }
   }
   function categoriesOf() { return SFX.reduce((a, s) => (a.indexOf(s.cat) < 0 ? a.concat(s.cat) : a), []); }
 
@@ -2437,7 +2738,7 @@ window.FM = window.FM || {};
     categories: categoriesOf,
     byId: byId,
     renderBuffer: renderBuffer,   // exposed so the suite can measure what each recipe actually makes; (def, options) since 9.3
-    /* What the options drawer (backlog 9.2, not drawn yet) can offer a sound (#482 polish 9.3 / 9.4): null for a sound with
+    /* What the options drawer (backlog 9.2) can offer a bed (#482 polish 9.3 / 9.4): null for a sound with
        no bed, else { lengths, loop, and the extras with the values each takes }. */
     optionsFor: def => (def && typeof def.bed === 'function') ? Object.assign({ lengths: BED_LENGTHS.slice(), loop: true },
       ...(def.bedExtras || []).map(k => ({ [k]: BED_EXTRAS[k].slice() }))) : null,
@@ -2453,4 +2754,7 @@ window.FM = window.FM || {};
   FM.sfx.variant = variant;                 // (def, options) → a sound with those options (or the row itself); preview / add / renderBuffer take it
   FM.sfx.packOptionsFor = packOptionsFor;   // what a pack sound can take, for the options drawer (9.2); null for the thirty older sounds
   FM.sfx.catIcon = catIcon;                 // a category's icon (placeholder SVG), or null
+  // #482 9.1 / 9.2 — suite seams: what a search finds, the drawer's rows, a sound with options as the ▶ and Add take it.
+  FM.sfx.search = searchSounds; FM.sfx.drawerFor = drawerFor; FM.sfx.picked = picked;
+  FM.sfx.longKept = () => [..._rendered.keys()].filter(k => _longKeys.has(k)).length;   // how many long renders the cache is holding
 })(window.FM);

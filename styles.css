@@ -8267,7 +8267,7 @@ body.fm-pushing #toast { z-index: 213; }
    somewhere warm instead of being painted orange. The rows, text and buttons inside are untouched.
    Kept off `--panel` itself: that variable is the app's ground everywhere, and warming it here would
    mean this sheet no longer matched the surfaces it sits on. */
-.sfx-card { display: flex; flex-direction: column; width: min(420px, 94vw); max-height: min(86vh, 86dvh);
+.sfx-card { display: flex; flex-direction: column; width: min(420px, 94vw); height: min(86vh, 86dvh);   /* a height, not a maximum: a search that finds little must not shrink the sheet and re-centre the box being typed in */
   background:
     radial-gradient(120% 70% at 0% 0%, rgba(255, 176, 92, .13), transparent 60%),
     radial-gradient(95% 60% at 100% 100%, rgba(255, 122, 74, .10), transparent 62%),
@@ -8280,7 +8280,7 @@ body.fm-pushing #toast { z-index: 213; }
 .sfx-head { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
 .sfx-title { font-weight: 800; font-size: 16px; }
 .sfx-hint { font-size: 12px; color: var(--text-dim); padding: 10px 16px 4px; }
-.sfx-list { overflow-y: auto; min-height: 0; padding: 4px 10px 8px; }
+.sfx-list { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 4px 10px 8px; }
 .sfx-cat { font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-faint);
   padding: 12px 6px 5px; }
 .sfx-row { display: flex; align-items: center; gap: 9px; padding: 5px 6px; border-radius: 10px; }
@@ -8291,13 +8291,13 @@ body.fm-pushing #toast { z-index: 213; }
 .sfx-row.playing .sfx-play { color: var(--accent); border-color: var(--accent); }
 .sfx-play[data-glyph="stop"] svg { margin-left: 0; }   /* #482 polish 3.1: the ■ is centred as drawn; only the ▶ takes the optical nudge */
 .sfx-name { flex: 1 1 auto; min-width: 0; text-align: left; background: none; border: 0; color: var(--text);
-  font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; padding: 6px 0; }
+  font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; padding: 6px 0; overflow-wrap: anywhere; }
 .sfx-dur { flex: none; font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 /* The ★ (queue 311). Sits between the duration and Add, so the two things you press by accident —
    hearing it and adding it — stay where they were and the star is the new thing in the gap. Quiet
    until it is on, because most rows are not favourites and thirty lit stars would be noise. */
 .sfx-star {
-  flex: none; width: 30px; height: 30px; padding: 0; border: 0; background: none; cursor: pointer;
+  flex: none; position: relative; width: 30px; height: 30px; padding: 0; border: 0; background: none; cursor: pointer;
   font-size: 15px; line-height: 1; color: var(--text-faint);
   border-radius: 50%; transition: color .12s, transform .09s;
 }
@@ -8307,6 +8307,37 @@ body.fm-pushing #toast { z-index: 213; }
 @media (prefers-reduced-motion: reduce) { .sfx-star { transition: none; } }
 .sfx-add { flex: none; padding: 6px 12px; }
 .sfx-actions { flex: none; display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--line); }
+/* #482 9.1: search and the section chips. 16px text, or an iPhone zooms the page when the field takes focus. */
+.sfx-q { flex: none; box-sizing: border-box; min-width: 0; height: 40px; margin: 6px 16px 0; padding: 0 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font: inherit; font-size: 16px; }
+.sfx-chips { flex: none; display: flex; gap: 6px; overflow-x: auto; padding: 8px 16px 4px; scrollbar-width: none; }
+.sfx-chips::-webkit-scrollbar { display: none; }
+.sfx-chips[hidden] { display: none; }
+.sfx-chip { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--text-dim); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.sfx-chip svg { flex: none; width: 15px; height: 15px; }
+.sfx-empty { padding: 18px 8px; font-size: 13px; color: var(--text-dim); text-align: center; overflow-wrap: anywhere; }
+/* #482 9.2: the ⋯ on a row and the drawer it opens under that row. The dot says a closed row has options set. */
+.sfx-more { flex: none; position: relative; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: none;
+  color: var(--text-faint); font-size: 16px; line-height: 1; cursor: pointer; }
+.sfx-more.on { color: var(--accent); background: var(--panel-3); }
+/* A finger's 36 px on two small round buttons, reaching into the row's gaps: Add is right beside the ⋯, and a tap that lands on it closes the sheet. */
+.sfx-more::before, .sfx-star::before { content: ''; position: absolute; inset: -3px; }
+.sfx-more.changed::after { content: ''; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.sfx-drawer { display: flex; flex-direction: column; gap: 8px; margin: 0 6px 6px; padding: 8px 10px 10px; border-radius: 10px; background: var(--panel-2); }
+.sfx-opt { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sfx-opt-label { flex: none; width: 72px; font-size: 12.5px; color: var(--text-dim); }
+.sfx-opt .fx-seg { min-width: 0; }
+/* input[type=range] above draws a 4 px bar the size of the whole control: here a finger-sized box, with the track and thumb inside it. */
+input[type=range].sfx-range { flex: 1 1 auto; min-width: 0; height: 36px; margin: 0; background: transparent; cursor: pointer; touch-action: pan-y; }
+input[type=range].sfx-range::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--panel-3); }
+input[type=range].sfx-range::-moz-range-track { height: 6px; border-radius: 3px; background: var(--panel-3); }
+input[type=range].sfx-range::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: -9px; }
+input[type=range].sfx-range::-moz-range-thumb { width: 24px; height: 24px; border: 0; border-radius: 50%; background: var(--accent); }
+.sfx-opt-val { flex: none; min-width: 42px; text-align: right; font-size: 12.5px; color: var(--text); font-variant-numeric: tabular-nums; }
+.sfx-reset { align-self: flex-end; min-height: 36px; padding: 6px 8px; border: 0; background: none; color: var(--accent); font: inherit; font-size: 12.5px; cursor: pointer; }
+.sfx-reset[hidden] { display: none; }
+@media (max-width: 480px) { .sfx-row { gap: 6px; } }
 @media (prefers-reduced-motion: reduce) { .sfx-row { transition: none; } }
 
 /* ---------- "still loading" indicator (queue 201) ----------

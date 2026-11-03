@@ -145200,6 +145200,504 @@
   });
   // ── end 482 9.8 ──
 
+  /* #482 9.1 / 9.2 — THE SOUND LIST: search, section chips, and the ⋯ drawer that finally offers the options the packs and beds were
+     built with. Three kinds of sound, one drawer: a pack sound's `choices`, a bed's options, and for the older sounds a Pitch and a
+     Reverse in a post-render step, a Length where the recipe stretches, a Direction on Movement, a Variation only where the recipe
+     asks for noise or deals its own pitches. Nothing changes until an option is set. */
+  const SAME_EPS_B92 = 1e-4;   // OfflineAudioContext renders are not bit-identical. Measured over 26 sounds, three rounds: two renders of one recipe differ by at most 1.8e-7 (bell), the smallest Variation 2 move is 0.23 (bell): the same recipe rendered twice is not bit-identical in Chrome
+  const b92Sleep = ms => new Promise(r => setTimeout(r, ms));
+  async function b92Sheet(fn) {
+    const favKey = 'fm.sfx.fav'; let saved = null;
+    try { saved = localStorage.getItem(favKey); localStorage.removeItem(favKey); } catch (e) {}
+    try {
+      FM.sfx.open(); await b92Sleep(300);
+      const o = {
+        S: FM.sfx,
+        card: () => attached(document.querySelector('.sfx-card'), 'the sound sheet'),
+        list: () => attached(document.querySelector('.sfx-list'), 'the sound list'),
+        names: () => [].slice.call(document.querySelectorAll('.sfx-row .sfx-name')).map(n => n.textContent),
+        type: async t => { const q = attached(document.querySelector('.sfx-q'), 'the Search sounds field'); q.value = t; q.dispatchEvent(new Event('input', { bubbles: true })); await b92Sleep(50); },
+        row: id => { const s = document.querySelector('.sfx-row .sfx-star[data-sfxid="' + id + '"]'); return s && s.closest('.sfx-row'); },
+        more: async id => { attached(o.row(id).querySelector('.sfx-more'), 'the ⋯ of ' + id).click(); await b92Sleep(50); return o.row(id).nextElementSibling; },
+        opt: (d, label) => [].slice.call(d.querySelectorAll('.sfx-opt')).filter(l => l.querySelector('.sfx-opt-label').textContent === label)[0],
+        slide: (d, label, v) => { const r = o.opt(d, label).querySelector('input[type=range]'); r.value = v; r.dispatchEvent(new Event('input', { bubbles: true })); },
+        pick: (d, label, text) => { const b = [].slice.call(o.opt(d, label).querySelectorAll('.fx-seg-btn')).filter(n => n.textContent === text)[0]; if (!b) throw new Error('no ' + text + ' under ' + label); attached(b, text).click(); },
+      };
+      await fn(o);
+    } finally {
+      try { FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {}
+      try { if (saved === null) localStorage.removeItem(favKey); else localStorage.setItem(favKey, saved); } catch (e) {}
+      await b92Sleep(100);
+    }
+  }
+
+  test('482 9.1 Search sounds finds a sound by its name, its section or a word for it, every word typed must match, any case, nothing it finds hides under a section, and what was typed is shown as text (CONTROL: empty, it lists them all)', { item: '482', budgetMs: 30000 }, async function () {
+    await b92Sheet(async function (o) {
+      const all = o.S.list(), n0 = o.names().length;
+      if (n0 !== all.length) throw new Error('CONTROL: the open sheet lists ' + n0 + ' rows of ' + all.length + ' sounds');
+      o.card().getAnimations().forEach(a => a.finish());   // the sheet pops open: a reading taken during that is 27 px off
+      const spot = () => Math.round(document.querySelector('.sfx-q').getBoundingClientRect().top) + ' / ' + Math.round(document.querySelector('.sfx-done').getBoundingClientRect().top), spot0 = spot();
+      const fails = [], has = (want, what) => { const got = o.names(); want.forEach(w => { if (got.indexOf(w) < 0) fails.push(what + ' did not find ' + w + ' (found ' + got.join(', ') + ')'); }); };
+      const hasnt = (not, what) => { const got = o.names(); not.forEach(w => { if (got.indexOf(w) >= 0) fails.push(what + ' found ' + w); }); };
+      await o.type('boom'); has(['Impact', 'Sub drop', 'Explosion'], 'boom'); hasnt(['Ding', 'Whoosh', 'Boing'], 'boom');
+      if (JSON.stringify(o.names().slice().sort()) !== JSON.stringify(['Explosion', 'Impact', 'Sub drop'])) fails.push('boom found ' + JSON.stringify(o.names()));
+      if (document.querySelectorAll('.sfx-cat').length !== 1) fails.push('the results sit under ' + document.querySelectorAll('.sfx-cat').length + ' headings, not one count');
+      if (!document.querySelector('.sfx-chips').hidden) fails.push('the chips still show while searching: they jump to sections that are not there');
+      await o.type('CENSOR'); has(['Censor bleep'], 'CENSOR (any case)');
+      await o.type('cartoon'); has(all.filter(d => d.cat === 'Cartoon').map(d => d.name), 'a section name');
+      await o.type('transition'); has(['Whoosh', 'Tape stop'], 'a tag on an older sound and on a pack sound');
+      await o.type('slide whistle'); if (o.names().length !== 2) fails.push('slide whistle found ' + JSON.stringify(o.names()) + ', not the two whistles');
+      await o.type('whistle slide'); if (o.names().length !== 2) fails.push('the words the other way round found ' + JSON.stringify(o.names()));
+      await o.type('slide trombone'); if (o.names().length !== 0) fails.push('two words no one sound has found ' + JSON.stringify(o.names()));
+      // nothing found: the box being typed in and the Close under the list stay where they were (a shorter list used to shrink the sheet and re-centre it, seen at 380)
+      if (spot() !== spot0) fails.push('the search box and the bottom bar moved from ' + spot0 + ' to ' + spot() + ' as the results shrank');
+      // what was typed goes on the page as text
+      window.__b92 = 0;
+      const nasty = '<img src=x onerror=window.__b92=1>';
+      await o.type(nasty); await b92Sleep(100);
+      const empty = document.querySelector('.sfx-empty');
+      if (!empty || empty.textContent.indexOf(nasty) < 0) fails.push('a search that finds nothing does not say so with what was typed (' + (empty ? empty.textContent : 'no line') + ')');
+      if (o.card().querySelector('img') || window.__b92) fails.push('what was typed became markup');
+      delete window.__b92;
+      // every sound can be found, by its own name and by a word that is not in its name
+      const lost = [], bare = [];
+      all.forEach(d => { if (o.S.search(d.name).indexOf(d) < 0) lost.push(d.name); if (!(d.tags && d.tags.length)) bare.push(d.id); });
+      if (lost.length) fails.push('not found by their own names: ' + lost.join(', '));
+      if (bare.length) fails.push('no words to be found by: ' + bare.join(', '));
+      await o.type('');
+      if (o.names().length !== n0) fails.push('clearing it gave back ' + o.names().length + ' of ' + n0 + ' rows');
+      if (document.querySelector('.sfx-chips').hidden) fails.push('clearing it did not bring the chips back');
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
+
+  test('482 9.1 the chips: one per section with its icon, a tap brings its heading to the top of the list, Favourites has one only when something is starred, and a ★ leaves the chips where they were scrolled (CONTROL: the heading starts below the fold)', { item: '482', budgetMs: 30000 }, async function () {
+    await b92Sheet(async function (o) {
+      const cats = o.S.categories(), chips = () => [].slice.call(document.querySelectorAll('.sfx-chips .sfx-chip'));
+      if (cats.length < 6) throw new Error('CONTROL: only ' + cats.length + ' sections');
+      const fails = [];
+      if (JSON.stringify(chips().map(c => c.textContent)) !== JSON.stringify(cats)) fails.push('the chips read ' + JSON.stringify(chips().map(c => c.textContent)) + ', the sections ' + JSON.stringify(cats));
+      chips().forEach(c => { if (!c.querySelector('svg')) fails.push('the ' + c.textContent + ' chip has no icon'); });
+      const cat = cats[Math.floor(cats.length / 2)], head = () => [].slice.call(document.querySelectorAll('.sfx-cat')).filter(n => n.textContent === cat)[0];
+      const gap = () => head().getBoundingClientRect().top - o.list().getBoundingClientRect().top;
+      if (!(gap() > o.list().clientHeight)) throw new Error('CONTROL: the ' + cat + ' heading is already showing (' + Math.round(gap()) + ' px down a ' + o.list().clientHeight + ' px list)');
+      attached(chips().filter(c => c.textContent === cat)[0], 'the ' + cat + ' chip').click(); await b92Sleep(50);
+      if (Math.abs(gap()) > 2) fails.push('the ' + cat + ' chip left its heading ' + Math.round(gap()) + ' px from the top of the list');
+      // a chip is big enough for a finger and the row of them does not widen the sheet
+      if (chips()[0].getBoundingClientRect().height < 30) fails.push('a chip is ' + chips()[0].getBoundingClientRect().height + ' px tall');
+      if (o.card().scrollWidth > o.card().clientWidth + 1) fails.push('the chips widen the sheet (' + o.card().scrollWidth + ' of ' + o.card().clientWidth + ')');
+      // a ★: Favourites gets its chip, first, and it jumps there; the chips stay where they were scrolled
+      const row = document.querySelector('.sfx-chips');
+      if (row.scrollWidth > row.clientWidth) row.scrollLeft = 40;
+      const left = row.scrollLeft;
+      attached(o.row('ding').querySelector('.sfx-star'), 'the ★ of Ding').click(); await b92Sleep(60);
+      if (chips()[0].textContent !== '★ Favourites') fails.push('the first chip after a star reads ' + chips()[0].textContent);
+      if (row.scrollLeft !== left) fails.push('a ★ threw the chips from ' + left + ' to ' + row.scrollLeft);
+      o.list().scrollTop = 900; attached(chips()[0], 'the Favourites chip').click(); await b92Sleep(50);
+      const fh = document.querySelector('.sfx-cat');
+      if (fh.textContent !== '★ Favourites' || Math.abs(fh.getBoundingClientRect().top - o.list().getBoundingClientRect().top) > 2) fails.push('the Favourites chip did not bring its heading up');
+      attached(o.row('ding').querySelector('.sfx-star'), 'the ★ of Ding').click(); await b92Sleep(60);
+      if (chips()[0].textContent === '★ Favourites') fails.push('the Favourites chip outlived the last star');
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
+
+  test('482 9.2 the ⋯ opens one drawer under its own row: every sound has one, a second ⋯ closes the first, and a starred sound opens under the copy that was tapped (CONTROL: closed, there is no drawer)', { item: '482', budgetMs: 30000 }, async function () {
+    await b92Sheet(async function (o) {
+      const fails = [], drawers = () => document.querySelectorAll('.sfx-drawer').length;
+      if (drawers()) throw new Error('CONTROL: a drawer is open before any ⋯ was tapped');
+      const noMore = [].slice.call(document.querySelectorAll('.sfx-row')).filter(r => !r.querySelector('.sfx-more'));
+      if (noMore.length) fails.push(noMore.length + ' rows have no ⋯');
+      const noOpts = o.S.list().filter(d => !o.S.drawerFor(d).length).map(d => d.id);
+      if (noOpts.length) fails.push('nothing to offer on ' + noOpts.join(', '));
+      const d1 = await o.more('boing');
+      if (!d1 || !d1.classList.contains('sfx-drawer')) fails.push('the ⋯ of Boing opened nothing under its row');
+      if (o.row('boing').querySelector('.sfx-more').getAttribute('aria-expanded') !== 'true') fails.push('the ⋯ does not say it is open');
+      await o.more('ding');
+      if (drawers() !== 1) fails.push('a second ⋯ left ' + drawers() + ' drawers open');
+      if (!o.row('ding').nextElementSibling.classList.contains('sfx-drawer')) fails.push('the drawer is not under Ding');
+      attached(o.row('ding').querySelector('.sfx-more'), 'the ⋯ of Ding').click(); await b92Sleep(50);
+      if (drawers()) fails.push('a second tap on the ⋯ did not close its drawer');
+      attached(o.row('ding').querySelector('.sfx-star'), 'the ★ of Ding').click(); await b92Sleep(50);
+      const copies = () => [].slice.call(document.querySelectorAll('.sfx-row .sfx-star[data-sfxid="ding"]')).map(s => s.closest('.sfx-row'));
+      if (copies().length !== 2) throw new Error('setup: a starred Ding has ' + copies().length + ' rows');
+      attached(copies()[1].querySelector('.sfx-more'), 'the ⋯ of the second Ding').click(); await b92Sleep(50);
+      if (drawers() !== 1 || !copies()[1].nextElementSibling.classList.contains('sfx-drawer') || copies()[0].nextElementSibling.classList.contains('sfx-drawer')) fails.push('a starred sound opened its drawer on ' + drawers() + ' rows, not only the one tapped');
+      attached(copies()[0].querySelector('.sfx-star'), 'the ★ of Ding').click(); await b92Sleep(50);
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
+
+  test('482 9.2 a pack sound: the drawer’s Pitch and Length are what the ▶ plays and what Add names, the row’s length follows, the dot says options are set, a change stops what is playing, a ★ keeps them and Reset clears them (CONTROL: with no options Add gives the plain name)', { item: '482', budgetMs: 30000 }, async function () {
+    const lv = Object.getOwnPropertyDescriptor(FM, 'loadVideoFile'), am = Object.getOwnPropertyDescriptor(FM, 'addMediaLayer'), got = [];
+    Object.defineProperty(FM, 'loadVideoFile', { configurable: true, writable: true, value: async f => { got.push(f.name); return {}; } });
+    Object.defineProperty(FM, 'addMediaLayer', { configurable: true, writable: true, value: () => {} });
+    try {
+      const fails = [];
+      await b92Sheet(async function (o) {
+        attached(o.row('boing').querySelector('.sfx-add'), 'Add on Boing').click(); await b92Sleep(250);
+        if (got[0] !== 'Boing.wav') throw new Error('CONTROL: with no options Add names the clip ' + got[0]);
+      });
+      await b92Sheet(async function (o) {
+        const def = o.S.byId('boing'), want = o.S.variant(def, { pitch: 3, length: 2 });
+        const d = await o.more('boing');
+        ['Pitch', 'Variation', 'Length'].forEach(l => { if (!o.opt(d, l)) fails.push('Boing’s drawer has no ' + l); });
+        if (o.row('boing').querySelector('.sfx-more').classList.contains('changed')) fails.push('the dot is lit before anything was set');
+        if (!d.querySelector('.sfx-reset').hidden) fails.push('Reset shows before anything was set');
+        o.slide(d, 'Pitch', 3); o.slide(d, 'Length', 2);
+        if (o.opt(d, 'Pitch').querySelector('.sfx-opt-val').textContent !== '+3 st') fails.push('Pitch reads ' + o.opt(d, 'Pitch').querySelector('.sfx-opt-val').textContent);
+        if (o.row('boing').querySelector('.sfx-dur').textContent !== want.dur.toFixed(2).replace(/0$/, '') + 's') fails.push('the row reads ' + o.row('boing').querySelector('.sfx-dur').textContent + ' for a sound of ' + want.dur + ' s');
+        if (!o.row('boing').querySelector('.sfx-more').classList.contains('changed')) fails.push('the dot did not light');
+        if (d.querySelector('.sfx-reset').hidden) fails.push('Reset did not show');
+        attached(o.row('boing').querySelector('.sfx-play'), 'the ▶ of Boing').click(); await b92Sleep(120);
+        if (o.S.previewing() !== want.id) fails.push('the ▶ plays ' + o.S.previewing() + ', not ' + want.id);
+        if (!o.row('boing').classList.contains('playing')) fails.push('the row of a sound with options does not light while it plays');
+        if (!/^Stop /.test(o.row('boing').querySelector('.sfx-play').getAttribute('aria-label'))) fails.push('its ▶ does not say Stop');
+        o.slide(d, 'Pitch', 4); await b92Sleep(50);
+        if (o.S.previewing() !== null) fails.push('changing an option left ' + o.S.previewing() + ' playing');
+        if (o.row('boing').classList.contains('playing')) fails.push('changing an option left the row lit');
+        o.slide(d, 'Pitch', 3);
+        attached(o.row('boing').querySelector('.sfx-star'), 'the ★ of Boing').click(); await b92Sleep(60);
+        const copies = [].slice.call(document.querySelectorAll('.sfx-row .sfx-star[data-sfxid="boing"]')).map(s => s.closest('.sfx-row'));
+        if (!copies.every(r => r.querySelector('.sfx-more').classList.contains('changed'))) fails.push('a ★ forgot the options on one of Boing’s rows');
+        attached(copies[0].querySelector('.sfx-star'), 'the ★ of Boing').click(); await b92Sleep(60);
+        attached(o.row('boing').querySelector('.sfx-add'), 'Add on Boing').click(); await b92Sleep(250);
+        if (got[got.length - 1] !== 'Boing (+3 st, 2x length).wav') fails.push('Add named the clip ' + got[got.length - 1]);
+        if (document.querySelector('.sfx-card')) fails.push('Add left the sheet open');
+      });
+      await b92Sheet(async function (o) {
+        const plain = o.S.byId('boing').dur.toFixed(2).replace(/0$/, '') + 's', d = await o.more('boing');
+        o.slide(d, 'Pitch', 5);
+        attached(d.querySelector('.sfx-reset'), 'Reset').click(); await b92Sleep(60);
+        if (o.row('boing').querySelector('.sfx-dur').textContent !== plain) fails.push('Reset left the row at ' + o.row('boing').querySelector('.sfx-dur').textContent);
+        if (o.row('boing').querySelector('.sfx-more').classList.contains('changed')) fails.push('Reset left the dot lit');
+        const d2 = o.row('boing').nextElementSibling;
+        if (!d2 || !d2.classList.contains('sfx-drawer')) fails.push('Reset closed the drawer');
+        else if (d2.querySelector('input[aria-label=Pitch]').value !== '0') fails.push('Reset left Pitch at ' + d2.querySelector('input[aria-label=Pitch]').value);
+        const n = got.length;
+        attached(o.row('boing').querySelector('.sfx-add'), 'Add on Boing').click(); await b92Sleep(250);
+        if (got[n] !== 'Boing.wav') fails.push('after Reset Add named the clip ' + got[n]);
+      });
+      if (fails.length) throw new Error(fails.join(' · '));
+    } finally { Object.defineProperty(FM, 'loadVideoFile', lv); Object.defineProperty(FM, 'addMediaLayer', am); }
+  });
+
+  test('482 9.2 a bed: Rain offers its own length first, then 10, 30 and 60 s, Loop-ready, Intensity, Surface, Pitch, Variation and Reverse; Intensity starts Off as the row has no drops, Medium is a real choice and a roof lights it; a length is what the row reads, the ▶ plays and Add names, and its default sets nothing (CONTROL: a bed with no options is the row)', { item: '482', budgetMs: 60000 }, async function () {
+    const lv = Object.getOwnPropertyDescriptor(FM, 'loadVideoFile'), am = Object.getOwnPropertyDescriptor(FM, 'addMediaLayer'), got = [];
+    Object.defineProperty(FM, 'loadVideoFile', { configurable: true, writable: true, value: async f => { got.push(f.name); return {}; } });
+    Object.defineProperty(FM, 'addMediaLayer', { configurable: true, writable: true, value: () => {} });
+    try {
+      await b92Sheet(async function (o) {
+        const def = o.S.byId('rain'), own = def.dur + ' s', fails = [];
+        if (o.S.picked(def, undefined).opts !== undefined || o.S.picked(def, { intensity: 'nonsense' }).opts !== undefined) throw new Error('CONTROL: a bed with no options, or nonsense, is not the row');
+        const d = await o.more('rain');
+        const labels = [].slice.call(d.querySelectorAll('.sfx-opt-label')).map(n => n.textContent);
+        if (JSON.stringify(labels) !== JSON.stringify(['Length', 'Loop-ready', 'Intensity', 'Surface', 'Pitch', 'Variation', 'Reverse'])) fails.push('Rain offers ' + JSON.stringify(labels));
+        if (o.S.drawerFor(o.S.byId('vinyl'))[0].c.values.indexOf(2.5) >= 0) fails.push('Vinyl offers 2.5 s beside its own 2.2 s');
+        const lengths = [].slice.call(o.opt(d, 'Length').querySelectorAll('.fx-seg-btn')).map(n => n.textContent);
+        if (JSON.stringify(lengths) !== JSON.stringify([own, '10 s', '30 s', '60 s'])) fails.push('Rain’s lengths read ' + JSON.stringify(lengths));
+        if (!o.opt(d, 'Length').querySelector('.fx-seg-btn.on') || o.opt(d, 'Length').querySelector('.fx-seg-btn.on').textContent !== own) fails.push('Rain’s own length is not the lit one');
+        const now = () => o.row('rain').nextElementSibling, lit = label => o.opt(now(), label).querySelector('.fx-seg-btn.on').textContent, tap = (label, text) => o.pick(now(), label, text), changed = () => o.row('rain').querySelector('.sfx-more').classList.contains('changed');
+        if (lit('Intensity') !== 'Off') fails.push('Intensity starts on ' + lit('Intensity') + ', and the row it stands for has no drops');
+        tap('Intensity', 'Heavy'); tap('Intensity', 'Off');
+        if (changed()) fails.push('going back to Off still counts as a change');
+        tap('Surface', 'Roof');
+        if (lit('Intensity') !== 'Medium') fails.push('a roof has drops, yet Intensity reads ' + lit('Intensity'));
+        tap('Intensity', 'Off');
+        if (lit('Surface') !== 'Open' || changed()) fails.push('Off on a roof left Surface on ' + lit('Surface'));
+        tap('Intensity', 'Medium');
+        if (!changed()) fails.push('Medium counts as no change, so it never reaches the sound');
+        tap('Length', '10 s');
+        if (o.row('rain').querySelector('.sfx-dur').textContent !== '10.0s') fails.push('the row reads ' + o.row('rain').querySelector('.sfx-dur').textContent + ' for 10 s');
+        if (lit('Length') !== '10 s') fails.push('the tapped length did not light');
+        // what the ▶ really starts: the samples of the 10 s Rain, not the row's 2.6 s
+        const st = Object.getOwnPropertyDescriptor(AudioBufferSourceNode.prototype, 'start'); let heard = 0;
+        AudioBufferSourceNode.prototype.start = function () { if (!(this.context instanceof OfflineAudioContext)) heard = this.buffer ? this.buffer.duration : -1; return st.value.apply(this, arguments); };   // what is heard, not the sources inside the render
+        try {
+          attached(o.row('rain').querySelector('.sfx-play'), 'the ▶ of Rain').click();
+          for (let i = 0; i < 80 && !heard; i++) await b92Sleep(100);
+        } finally { Object.defineProperty(AudioBufferSourceNode.prototype, 'start', st); }
+        if (Math.abs(heard - 10.05) > 0.01) fails.push('the ▶ played ' + heard + ' s, not the 10 s the row reads (and a render’s 0.05 s tail)');
+        if (o.S.previewing() !== 'rain' || !o.row('rain').classList.contains('playing')) fails.push('the ▶ of a bed with options reports ' + o.S.previewing());
+        attached(o.row('rain').querySelector('.sfx-play'), 'the ▶ of Rain').click(); await b92Sleep(60);
+        if (o.S.previewing() !== null) fails.push('a second tap did not stop it');
+        attached(o.row('rain').querySelector('.sfx-add'), 'Add on Rain').click();
+        for (let i = 0; i < 60 && !got.length; i++) await b92Sleep(100);
+        if (got[0] !== 'Rain (10 s, medium).wav') fails.push('Add named the clip ' + got[0]);
+        if (fails.length) throw new Error(fails.join(' · '));
+      });
+    } finally { Object.defineProperty(FM, 'loadVideoFile', lv); Object.defineProperty(FM, 'addMediaLayer', am); }
+  });
+
+  test('482 9.2 the older sounds: Pitch +12 is half as long and an octave up, Reverse mirrors the samples, Direction pans from side to side on Movement only, Length stretches only what stretches, and Variation is offered only where it changes the sound — and the row is untouched by any of it (CONTROL: a default is the row itself)', { item: '482', budgetMs: 120000 }, async function () {
+    const S = FM.sfx, fails = [], plain = S.list().filter(d => !d.choices && typeof d.bed !== 'function');
+    if (plain.length < 25) throw new Error('CONTROL: only ' + plain.length + ' older sounds');
+    plain.forEach(d => { if (S.picked(d, { pitch: 0, variation: 1, length: 1, reverse: false, direction: 'centre' }).def !== d) fails.push('all defaults on ' + d.id + ' is not the row itself'); });
+    if (fails.length) throw new Error('CONTROL: ' + fails.join(' · '));
+    const render = async (d, o) => { const s = S.picked(d, o); return S.renderBuffer(s.def, s.opts); };
+    const diff = (a, b) => { const x = a.getChannelData(0), y = b.getChannelData(0); if (x.length !== y.length) return Infinity; let m = 0; for (let i = 0; i < x.length; i++) m = Math.max(m, Math.abs(x[i] - y[i])); return m; };
+    const same = (a, b) => diff(a, b) <= SAME_EPS_B92;
+    const offers = (d, k) => S.drawerFor(d).some(r => r.key === k);
+    // every one offers Pitch and Reverse; Direction only on Movement; Length only on the four built to stretch
+    plain.forEach(d => {
+      if (!offers(d, 'pitch') || !offers(d, 'reverse')) fails.push(d.id + ' lacks Pitch or Reverse');
+      if (offers(d, 'direction') !== (d.cat === 'Movement')) fails.push(d.id + ' (' + d.cat + ') offers Direction: ' + offers(d, 'direction'));
+      if (offers(d, 'length') !== ['whoosh', 'riser', 'sub-drop', 'reverse-cymbal'].includes(d.id)) fails.push(d.id + ' offers Length: ' + offers(d, 'length'));
+    });
+    // Variation is honest: where offered it changes the samples, and it is withheld only where a recipe draws no noise
+    const row0 = {};
+    for (const d of plain) {
+      const r1 = await render(d); row0[d.id] = r1;
+      const r2 = await render(d, { variation: 2 });
+      if (offers(d, 'variation') && same(r1, r2)) fails.push(d.id + ' offers Variation and Variation 2 changes nothing');
+    }
+    const offered = plain.filter(d => offers(d, 'variation')).length;
+    if (offered < 10 || offered === plain.length) fails.push('Variation is offered on ' + offered + ' of ' + plain.length + ' older sounds - the check above is not looking at both kinds');
+    // the salt does not leak: the row after all of that is the row before it, byte for byte, and options render the same twice
+    const again = await render(S.byId('whoosh'));
+    if (!same(again, row0.whoosh)) fails.push('a Whoosh after a Variation render is not the Whoosh before it');
+    const v2a = await render(S.byId('whoosh'), { variation: 3 }), v2b = await render(S.byId('whoosh'), { variation: 3 });
+    if (!same(v2a, v2b)) fails.push('Variation 3 renders differently twice');
+    // Pitch +12: half as long and twice the zero crossings of a tone (Ding draws no noise)
+    const ding = S.byId('ding'), up = await render(ding, { pitch: 12 }), base = row0.ding;
+    if (Math.abs(up.duration - base.duration / 2) > 0.01) fails.push('Pitch +12 lasts ' + up.duration.toFixed(3) + ' s of ' + base.duration.toFixed(3));
+    if (Math.abs(S.picked(ding, { pitch: 12 }).def.dur - ding.dur / 2) > 0.002) fails.push('Pitch +12 says it lasts ' + S.picked(ding, { pitch: 12 }).def.dur + ' s of ' + ding.dur);
+    const rate = b => { const x = b.getChannelData(0), n = Math.floor(x.length * 0.5); let c = 0; for (let i = 1; i < n; i++) if ((x[i - 1] < 0) !== (x[i] < 0)) c++; return c / n; };
+    const ratio = rate(up) / rate(base);
+    if (!(ratio > 1.8 && ratio < 2.2)) fails.push('Pitch +12 multiplied the zero crossings by ' + ratio.toFixed(2));
+    const peak = b => { const x = b.getChannelData(0); let p = 0; for (let i = 0; i < x.length; i++) p = Math.max(p, Math.abs(x[i])); return p; };
+    if (Math.abs(peak(up) - peak(base)) > 0.001) fails.push('Pitch +12 lands at peak ' + peak(up).toFixed(3) + ', the row at ' + peak(base).toFixed(3));
+    // Reverse: the row's samples, last first
+    const rv = await render(ding, { reverse: true }), a = base.getChannelData(0), b = rv.getChannelData(0);
+    let off = a.length !== b.length ? 1 : 0;
+    for (let i = 0; i < a.length && !off; i++) if (Math.abs(a[i] - b[a.length - 1 - i]) > 1e-6) off = 1;
+    if (off) fails.push('Reverse is not the row’s samples mirrored');
+    // Direction: stereo, from the side it names; at 20 % of the way the far side is well under the near one, at 80 % the other way round
+    const pow = (x, f, t) => { let s = 0; for (let i = Math.floor(x.length * f); i < Math.floor(x.length * t); i++) s += x[i] * x[i]; return s; };
+    const whoosh = S.byId('whoosh'), lr = await render(whoosh, { direction: 'lr' }), rl = await render(whoosh, { direction: 'rl' });
+    if (lr.numberOfChannels !== 2 || rl.numberOfChannels !== 2) fails.push('Direction renders ' + lr.numberOfChannels + ' channels');
+    else {
+      const L = lr.getChannelData(0), R = lr.getChannelData(1), L2 = rl.getChannelData(0), R2 = rl.getChannelData(1);
+      if (!(pow(L, 0.15, 0.25) > 3 * pow(R, 0.15, 0.25) && pow(R, 0.75, 0.85) > 3 * pow(L, 0.75, 0.85))) fails.push('L → R does not move from left to right');
+      if (!(pow(R2, 0.15, 0.25) > 3 * pow(L2, 0.15, 0.25) && pow(L2, 0.75, 0.85) > 3 * pow(R2, 0.75, 0.85))) fails.push('R → L does not move from right to left');
+    }
+    // Length: twice as long, and the row's own length is what the variant says
+    const long = await render(whoosh, { length: 2 });
+    if (Math.abs(long.duration - (whoosh.dur * 2 + 0.05)) > 0.01) fails.push('Length 2× on Whoosh lasts ' + long.duration.toFixed(3) + ' s');
+    const tail = long.getChannelData(0).subarray(Math.round(long.length * 0.55), Math.round(long.length * 0.8)).reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+    if (tail < 0.02) fails.push('Length 2× on Whoosh is the same sound with silence after it (peak ' + tail.toFixed(4) + ' past the middle)');
+    // a name that says what was done, and a bed's Variation (the backlog's own test: Fire, 2 differs, and 1 is the row)
+    const named = S.picked(whoosh, { pitch: 3, reverse: true, direction: 'lr' }).def;
+    if (S.fileName(named) !== 'Whoosh (+3 st, left to right, reversed).wav') fails.push('the clip would be named ' + S.fileName(named));
+    const fire = S.byId('fire');
+    if (S.picked(fire, { variation: 1 }).opts !== undefined) fails.push('Fire at Variation 1 is not the row');
+    const f1 = await S.renderBuffer(fire, { length: 10 }), f2 = await S.renderBuffer(fire, { length: 10, variation: 2 });
+    if (same(f1, f2)) fails.push('Fire at Variation 2 is the same samples as Variation 1');
+    if (S.fileName(fire, { variation: 2 }) !== 'Fire crackle (variation 2).wav') fails.push('Fire’s clip would be named ' + S.fileName(fire, { variation: 2 }));
+    /* A bed's Variation moves what you hear, not only the hiss under it: the windows where a click stands out must be mostly other windows at
+       Variation 2. Fire and rain count by first difference, so the low roar counts for little; vinyl's pops are ~1 kHz tones under a hiss
+       highpassed at 1800, so they never show that way (0 windows) and it counts by plain energy. Measured at 6× the median: fire 69 windows,
+       5 kept at Variation 2; vinyl 33, 2 kept; rain 64, 1 kept; a second render of Variation 1 keeps all of them, so 50% sits well between. */
+    const clicks = (b, ms, energy) => { const x = b.getChannelData(0), w = Math.round(b.sampleRate * ms / 1000), e = []; for (let i = 0; i + w < x.length; i += w) { let s = 0; for (let j = i + 1; j < i + w; j++) { const dx = energy ? x[j] : x[j] - x[j - 1]; s += dx * dx; } e.push(s); } const th = e.slice().sort((p, q) => p - q)[e.length >> 1] * 6; return e.map((v, i) => v > th ? i : -1).filter(i => i >= 0); };
+    for (const [id, o, ms, energy] of [['fire', { length: 10 }, 10, false], ['vinyl', { length: 10 }, 10, true], ['rain', { length: 10, intensity: 'light' }, 5, false]]) {
+      const d = S.byId(id), A = clicks(await S.renderBuffer(d, o), ms, energy), B = new Set(clicks(await S.renderBuffer(d, Object.assign({ variation: 2 }, o)), ms, energy)), both = A.filter(i => B.has(i)).length;
+      if (A.length < 10) fails.push(id + ': only ' + A.length + ' clicks found at Variation 1, so this measures nothing');
+      else if (both > A.length * 0.5) fails.push(id + ' at Variation 2 clicks in ' + both + ' of the same ' + A.length + ' windows: its crackles did not move');
+    }
+    // …and Wind's breath: the level over a quarter of a second follows another curve (measured: 1.31 dB apart on average at Variation 2, 0.00 on a second render)
+    const curve = b => { const x = b.getChannelData(0), w = Math.round(b.sampleRate / 4), e = []; for (let i = 0; i + w < x.length; i += w) { let s = 0; for (let j = i; j < i + w; j++) s += x[j] * x[j]; e.push(10 * Math.log10(s / w + 1e-12)); } return e; };
+    const wind = S.byId('wind'), w1 = curve(await S.renderBuffer(wind, { length: 10 })), w2 = curve(await S.renderBuffer(wind, { length: 10, variation: 2 }));
+    const moved = w1.reduce((s, v, i) => s + Math.abs(v - w2[i]), 0) / w1.length;
+    if (moved < 0.5) fails.push('Wind at Variation 2 breathes the same: the level differs by only ' + moved.toFixed(2) + ' dB on average');
+    /* Glass break's Variation moves its shards' pitches, not only the noise under them: the shard at 0.33 s rings at 7100 Hz on the row and at
+       5200 Hz at Variation 2, and with the table left alone the noise still differs, so only the tones can tell. */
+    const tone = (b, t, f) => { const x = b.getChannelData(0), sr = b.sampleRate, i0 = Math.round(t * sr), n = Math.round(0.04 * sr); let re = 0, im = 0; for (let i = 0; i < n; i++) { const a = 2 * Math.PI * f * i / sr; re += x[i0 + i] * Math.cos(a); im += x[i0 + i] * Math.sin(a); } return Math.hypot(re, im); };
+    const glass = S.byId('glass-break'), g1 = await S.renderBuffer(glass), g2 = await S.renderBuffer(S.picked(glass, { variation: 2 }).def);
+    if (!(tone(g1, 0.335, 7100) > tone(g1, 0.335, 5200))) fails.push('CONTROL: Glass break on the row does not ring at 7100 Hz at 0.33 s (' + tone(g1, 0.335, 7100).toFixed(1) + ' against ' + tone(g1, 0.335, 5200).toFixed(1) + ' at 5200)');
+    if (!(tone(g2, 0.335, 5200) > tone(g2, 0.335, 7100))) fails.push('Glass break at Variation 2 kept its shard pitches (' + tone(g2, 0.335, 7100).toFixed(1) + ' at 7100 Hz against ' + tone(g2, 0.335, 5200).toFixed(1) + ' at 5200)');
+    // Sparkle has no noise and Variation still changes it, by pitch: the row keeps its own (the row byte-identical is the pin above)
+    if (!offers(S.byId('sparkle'), 'variation')) fails.push('Sparkle does not offer Variation');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('482 9.2 every sound reverses and a bed can be pitched: Reverse is its own samples mirrored and says so in its name, and a bed at Pitch +12 is half as long (CONTROL: forward is not mirrored)', { item: '482', budgetMs: 60000 }, async function () {
+    const S = FM.sfx, fails = [];
+    const mirrored = (a, b) => { const x = a.getChannelData(0), y = b.getChannelData(0); if (x.length !== y.length) return false; for (let i = 0; i < x.length; i += 7) if (Math.abs(x[i] - y[y.length - 1 - i]) > SAME_EPS_B92) return false; return true; };
+    const noReverse = S.list().filter(d => !S.drawerFor(d).some(r => r.key === 'reverse')).map(d => d.id);
+    if (noReverse.length) fails.push('no Reverse on ' + noReverse.join(', '));
+    const rain = S.byId('rain'), boing = S.byId('boing');
+    const r0 = await S.renderBuffer(rain, { length: 10 }), r1 = await S.renderBuffer(rain, { length: 10, reverse: true });
+    if (mirrored(r0, r0)) throw new Error('CONTROL: Rain forward reads as its own mirror image, so this can tell nothing');
+    if (!mirrored(r0, r1)) fails.push('Rain at Reverse is not Rain’s samples mirrored');
+    const b0 = await S.renderBuffer(boing), rv = S.picked(boing, { reverse: true }).def, b1 = await S.renderBuffer(rv);
+    if (!mirrored(b0, b1)) fails.push('Boing at Reverse is not Boing’s samples mirrored');
+    if (S.fileName(rv) !== 'Boing (reversed).wav') fails.push('Boing reversed is named ' + S.fileName(rv));
+    const both = S.picked(boing, { reverse: true, pitch: 3 }).def;
+    if (S.fileName(both) !== 'Boing (+3 st, reversed).wav') fails.push('Boing +3 reversed is named ' + S.fileName(both));
+    const up = await S.renderBuffer(rain, { length: 10, pitch: 12 });
+    if (Math.abs(up.duration - 5) > 0.05) fails.push('Rain at 10 s and Pitch +12 lasts ' + up.duration.toFixed(3) + ' s');
+    if (S.fileName(rain, { length: 10, pitch: 12, reverse: true }) !== 'Rain (10 s, +12 st, reversed).wav') fails.push('it is named ' + S.fileName(rain, { length: 10, pitch: 12, reverse: true }));
+    await b92Sheet(async function (o) {
+      const d = await o.more('rain');
+      o.pick(d, 'Length', '10 s'); o.slide(d, 'Pitch', 12);
+      if (o.row('rain').querySelector('.sfx-dur').textContent !== '5.0s') fails.push('Rain at 10 s and Pitch +12 reads ' + o.row('rain').querySelector('.sfx-dur').textContent);
+    });
+    // a whole turn of the table would be the row's own shards
+    const glass = S.byId('glass-break'), tone6 = (b, t, f) => { const x = b.getChannelData(0), sr = b.sampleRate, i0 = Math.round(t * sr), n = Math.round(0.04 * sr); let re = 0, im = 0; for (let i = 0; i < n; i++) { const a = 2 * Math.PI * f * i / sr; re += x[i0 + i] * Math.cos(a); im += x[i0 + i] * Math.sin(a); } return Math.hypot(re, im); };
+    const g6 = await S.renderBuffer(S.picked(glass, { variation: 6 }).def);
+    if (tone6(g6, 0.335, 7100) > tone6(g6, 0.335, 4600) && tone6(g6, 0.335, 7100) > tone6(g6, 0.335, 5000)) fails.push('Glass break at Variation 6 rings at the row’s own 7100 Hz');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('482 9.2 the ⋯ keeps the row that was tapped where it was and brings its drawer into view, a change shows on every copy of a starred sound, and a redraw does not hand back a live Add while one renders (CONTROL: the list has scrolled, so a row could move)', { item: '482', budgetMs: 30000 }, async function () {
+    const lv = Object.getOwnPropertyDescriptor(FM, 'loadVideoFile'), am = Object.getOwnPropertyDescriptor(FM, 'addMediaLayer'); let adds = 0;
+    Object.defineProperty(FM, 'loadVideoFile', { configurable: true, writable: true, value: async () => { adds++; await b92Sleep(400); return {}; } });
+    Object.defineProperty(FM, 'addMediaLayer', { configurable: true, writable: true, value: () => {} });
+    try {
+      await b92Sheet(async function (o) {
+        const fails = [], list = o.list(), lt = () => list.getBoundingClientRect(), y = id => o.row(id).getBoundingClientRect().top;
+        // a drawer open above, scrolled almost out of the top: Swish sits just under it
+        const d0 = await o.more('whoosh');
+        list.scrollTop += d0.getBoundingClientRect().bottom - lt().top - 20;
+        await b92Sleep(30);
+        if (!(list.scrollTop > 60)) throw new Error('CONTROL: the list scrolled only ' + list.scrollTop + ' px, so nothing could move');
+        const y0 = y('swish');
+        await o.more('swish');
+        if (Math.abs(y('swish') - y0) > 1 && y('swish') < lt().top - 1) fails.push('closing the drawer above threw Swish off the top of the list (' + Math.round(y0) + ' to ' + Math.round(y('swish')) + ')');
+        if (y('swish') < lt().top - 1) fails.push('the tapped row is above the list');
+        attached(o.row('swish').querySelector('.sfx-more'), 'the ⋯ of Swish').click(); await b92Sleep(30);
+        // the last row on screen: its drawer comes up into view, it does not open out of sight
+        const shown = [].slice.call(document.querySelectorAll('.sfx-row')).filter(r => { const b = r.getBoundingClientRect(); return b.bottom <= lt().bottom && b.top >= lt().top; });
+        const last = shown[shown.length - 1], lastId = last.querySelector('.sfx-star').dataset.sfxid;
+        const d1 = await o.more(lastId);
+        if (d1.getBoundingClientRect().bottom > lt().bottom + 1) fails.push('the drawer of the last row on screen ends ' + Math.round(d1.getBoundingClientRect().bottom - lt().bottom) + ' px below the list');
+        if (y(lastId) < lt().top - 1) fails.push('bringing the drawer up pushed its own row off the top');
+        attached(o.row(lastId).querySelector('.sfx-more'), 'the ⋯ of ' + lastId).click(); await b92Sleep(30);
+        // a starred sound: both rows say the same, and both ▶ name what they will play
+        attached(o.row('boing').querySelector('.sfx-star'), 'the ★ of Boing').click(); await b92Sleep(40);
+        const copies = () => [].slice.call(document.querySelectorAll('.sfx-row .sfx-star[data-sfxid="boing"]')).map(s => s.closest('.sfx-row'));
+        if (copies().length !== 2) throw new Error('setup: a starred Boing has ' + copies().length + ' rows');
+        attached(copies()[1].querySelector('.sfx-more'), 'the ⋯ of the second Boing').click(); await b92Sleep(40);
+        o.slide(copies()[1].nextElementSibling, 'Pitch', 12);
+        const durs = copies().map(r => r.querySelector('.sfx-dur').textContent), dots = copies().map(r => r.querySelector('.sfx-more').classList.contains('changed')), hear = copies().map(r => r.querySelector('.sfx-play').title);
+        if (durs[0] !== durs[1]) fails.push('the two rows of Boing read ' + durs.join(' and '));
+        if (!dots[0] || !dots[1]) fails.push('the dot is on ' + dots.join(' and '));
+        if (hear.some(t => t.indexOf('+12 st') < 0)) fails.push('the ▶ say ' + hear.join(' and '));
+        // Add is rendering, and a redraw comes: the rebuilt row is not a second Add
+        attached(copies()[1].querySelector('.sfx-add'), 'Add on Boing').click(); await b92Sleep(20);
+        attached(copies()[1].querySelector('.sfx-more'), 'the ⋯ of the second Boing').click(); await b92Sleep(20);
+        if (copies().some(r => !r.querySelector('.sfx-add').disabled)) fails.push('a redraw during Add handed back a live Add');
+        for (let i = 0; i < 60 && !adds; i++) await b92Sleep(50);
+        await b92Sleep(100);
+        if (adds !== 1) fails.push('Add ran ' + adds + ' times');
+        if (fails.length) throw new Error(fails.join(' · '));
+      });
+    } finally { Object.defineProperty(FM, 'loadVideoFile', lv); Object.defineProperty(FM, 'addMediaLayer', am); }
+  });
+
+  test('482 9.1 with the keyboard up the sheet fits what is left above it, so its rows and Close can be reached, Enter puts the keyboard away, and the sheet comes back when the keyboard goes (CONTROL: no keyboard, the sheet is full height)', { item: '482', budgetMs: 30000 }, async function () {
+    await b92Sheet(async function (o) {
+      const fails = [], vvd = Object.getOwnPropertyDescriptor(window, 'visualViewport'), kb = Math.round(innerHeight * 0.55);
+      o.card().getAnimations().forEach(a => a.finish());
+      const h0 = o.card().getBoundingClientRect().height;
+      if (Math.abs(h0 - innerHeight * 0.86) > 2) throw new Error('CONTROL: the sheet is ' + Math.round(h0) + ' px in a ' + innerHeight + ' px window');
+      Object.defineProperty(window, 'visualViewport', { configurable: true, get: () => ({ height: kb, width: innerWidth, offsetTop: 0, offsetLeft: 0, scale: 1, addEventListener() {}, removeEventListener() {} }) });
+      try {
+        window.dispatchEvent(new Event('resize')); await b92Sleep(40);
+        const c = o.card().getBoundingClientRect(), q = document.querySelector('.sfx-q').getBoundingClientRect(), done = document.querySelector('.sfx-done').getBoundingClientRect();
+        if (c.bottom > kb + 1) fails.push('the sheet ends at ' + Math.round(c.bottom) + ', behind a keyboard that starts at ' + kb);
+        if (done.bottom > kb + 1) fails.push('Close ends at ' + Math.round(done.bottom) + ', behind a keyboard that starts at ' + kb);
+        if (q.top < 0 || q.bottom > kb) fails.push('the search box is at ' + Math.round(q.top) + ' with the keyboard at ' + kb);
+        if (!(o.list().clientHeight > 60)) fails.push('only ' + o.list().clientHeight + ' px of list is left');
+      } finally {
+        if (vvd) Object.defineProperty(window, 'visualViewport', vvd); else delete window.visualViewport;
+        window.dispatchEvent(new Event('resize')); await b92Sleep(40);
+      }
+      if (Math.abs(o.card().getBoundingClientRect().height - h0) > 1) fails.push('with the keyboard gone the sheet stayed ' + Math.round(o.card().getBoundingClientRect().height) + ' px, not ' + Math.round(h0));
+      const box = document.querySelector('.sfx-q');
+      box.focus();
+      if (document.activeElement !== box) throw new Error('setup: the search box did not take focus');
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      if (document.activeElement === box) fails.push('the keyboard’s Search key left the box focused, so the keyboard stays up');
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
+
+  test('482 9.2 long renders from the drawer: at most two are kept whatever made them, a bed is heard for its first 8 s, and a swell the drawer stretched past that is heard whole (CONTROL: two are kept)', { item: '482', budgetMs: 120000 }, async function () {
+    const S = FM.sfx, fails = [], st = Object.getOwnPropertyDescriptor(AudioBufferSourceNode.prototype, 'start'); let args = null;
+    AudioBufferSourceNode.prototype.start = function () { if (!(this.context instanceof OfflineAudioContext)) args = [].slice.call(arguments); return st.value.apply(this, arguments); };   // what is heard, not the sources inside a render
+    const hear = async (d, o) => { args = null; S.preview(d, o); for (let i = 0; i < 300 && !args; i++) await b92Sleep(100); S.stopPreview(); await b92Sleep(50); return args; };
+    try {
+      const packs = S.list().filter(d => d.cat === 'Ambience' && d.choices && d.choices.length && d.choices.length.max >= 30).slice(0, 3);
+      if (packs.length < 3) throw new Error('CONTROL: only ' + packs.length + ' long-able Ambience sounds');
+      for (const d of packs) if (!await hear(S.picked(d, { length: 30 }).def)) fails.push('the ▶ of ' + d.id + ' at 30 s never started');
+      if (S.longKept() !== 2) fails.push(S.longKept() + ' long renders are kept after three, not two');
+      const riser = await hear(S.picked(S.byId('riser'), { length: 3, pitch: -12 }).def);
+      if (!riser || riser.length !== 1) fails.push('Riser at 3× and Pitch -12 is cut short: start(' + JSON.stringify(riser) + ')');
+      const bed = await hear(S.byId('rain'), { length: 10 });
+      if (!bed || bed[2] !== S.PREVIEW_MAX) fails.push('a 10 s Rain is not capped at ' + S.PREVIEW_MAX + ' s: start(' + JSON.stringify(bed) + ')');
+    } finally { Object.defineProperty(AudioBufferSourceNode.prototype, 'start', st); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('482 9.2 a finger: a swipe up that starts on a slider scrolls the list and leaves the option alone, and a drag along the slider moves it (CONTROL: the drag)', { item: '482', budgetMs: 60000 }, async function () {
+    needsTouch924();
+    await onScreen924(() => atPhoneWidth(() => b92Sheet(async function (o) {   // the runner's frame sits off screen, out of a real finger's reach, until this
+      const fails = [], d = await o.more('whoosh'), list = o.list(), range = () => o.opt(o.row('whoosh').nextElementSibling, 'Pitch').querySelector('input[type=range]');
+      o.card().getAnimations().forEach(a => a.finish());
+      await b92Sleep(100);
+      const r = range().getBoundingClientRect(), top0 = list.scrollTop;
+      await realInput924(touchDrag927(r.left + r.width * 0.8, r.top + r.height / 2, 0, -140, 10), 'a finger swiping up from the Pitch slider');
+      await b92Sleep(400);
+      if (!(list.scrollTop > top0 + 40)) fails.push('a swipe from the slider moved the list ' + Math.round(list.scrollTop - top0) + ' px');
+      if (range().value !== '0') fails.push('a swipe up from the slider left Pitch at ' + range().value);
+      if (o.row('whoosh').querySelector('.sfx-more').classList.contains('changed')) fails.push('a swipe up from the slider counts as a change to the sound');
+      range().scrollIntoView({ block: 'center' });   // the swipe carried it up the list
+      await b92Sleep(100);
+      const r2 = range().getBoundingClientRect();
+      await realInput924(touchDrag927(r2.left + r2.width * 0.5, r2.top + r2.height / 2, 60, 0, 10), 'a finger dragging the Pitch slider along');
+      await b92Sleep(200);
+      if (!(parseFloat(range().value) > 0)) fails.push('CONTROL: a drag along the slider left Pitch at ' + range().value);
+      if (fails.length) throw new Error(fails.join(' · '));
+    }), 380));
+  });
+
+  test('482 9.2 the drawer fits the phone: nothing in it or its row runs off the sheet, the rows hold with a long name, and every control can be hit where it is drawn', { item: '482', budgetMs: 30000 }, async function () {
+    await b92Sheet(async function (o) {
+      const fails = [], card = o.card().getBoundingClientRect();
+      const chip = document.querySelector('.sfx-chip').getBoundingClientRect();
+      if (chip.height < 36) fails.push('a chip is only ' + Math.round(chip.height) + ' px tall');
+      const dw = await o.more('boing'); o.slide(dw, 'Pitch', 3);
+      const rs = dw.querySelector('.sfx-reset').getBoundingClientRect();
+      if (rs.height < 36) fails.push('Reset is only ' + Math.round(rs.height) + ' px tall');
+      attached(dw.querySelector('.sfx-reset'), 'Reset').click(); await b92Sleep(40);
+      attached(o.row('boing').querySelector('.sfx-more'), 'the ⋯ of Boing').click(); await b92Sleep(40);
+      for (const id of ['slide-whistle-down', 'rain', 'whoosh', 'foley-footsteps']) {
+        const d = await o.more(id), row = o.row(id);
+        row.scrollIntoView({ block: 'start' }); await b92Sleep(40);
+        const parts = [].slice.call(row.querySelectorAll('button')).concat([].slice.call(d.querySelectorAll('button:not([hidden]), input')));
+        parts.forEach(n => {
+          const r = n.getBoundingClientRect(), what = id + ' ' + (n.textContent || n.getAttribute('aria-label') || n.className);
+          if (r.right > card.right + 0.5 || r.left < card.left - 0.5) fails.push(what + ' runs off the sheet (' + Math.round(r.left) + '..' + Math.round(r.right) + ' of ' + Math.round(card.left) + '..' + Math.round(card.right) + ')');
+          if (r.width < 24 || r.height < 24) fails.push(what + ' is only ' + Math.round(r.width) + ' x ' + Math.round(r.height));
+        });
+        if (o.list().scrollWidth > o.list().clientWidth + 1) fails.push(id + ': its drawer widens the list (' + o.list().scrollWidth + ' of ' + o.list().clientWidth + ')');
+        d.querySelectorAll('input[type=range]').forEach(n => { if (n.getBoundingClientRect().height < 36) fails.push(id + ': a slider is only ' + Math.round(n.getBoundingClientRect().height) + ' px tall'); });
+        const more = row.querySelector('.sfx-more');
+        parts.forEach(n => {
+          n.scrollIntoView({ block: 'nearest' });
+          const r = n.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (!(hit === n || n.contains(hit))) fails.push(id + ': ' + (n.textContent || n.getAttribute('aria-label') || n.className) + ' is covered by ' + (hit ? hit.className : 'nothing'));
+        });
+        const m3 = more.getBoundingClientRect(), edge = document.elementFromPoint(m3.right + 2, m3.top + m3.height / 2);
+        if (edge !== more) fails.push(id + ': a tap 2 px past the ⋯, on the way to Add, lands on ' + (edge ? edge.className : 'nothing') + ', so the ⋯ is under a finger’s 36 px');
+        attached(more, 'the ⋯ of ' + id).click(); await b92Sleep(40);
+      }
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
+  // ── end 482 9.1 / 9.2 ──
+
   /* #1155 — his answer to sheet 1 (14 Oct): "dots yes". Poster Print's recipe prints in Colour dots, so a red poster stays red
      through its dots; Mono (what it printed before, and what a saved Poster Print still prints) turns it black and white. */
   test('1155 Poster Print prints Colour dots - a red square stays red through its dots, where the Mono print it had turns it black and white', { item: '1155' }, async function () {
