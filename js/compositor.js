@@ -2513,6 +2513,10 @@ window.FM = window.FM || {};
         { key: 'range', label: 'Tonal range', def: 0, options: [[0, 'All'], [1, 'Shadows'], [2, 'Midtones'], [3, 'Highlights']] },
         { key: 'rangesoft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] },
         { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+        /* APPLY AS (#482 4.6): how the filtered picture is laid over the picture without it. Normal is the old cross-fade;
+           the others draw it over that picture in a canvas blend mode first (fcApplyPlate), and Strength then fades THAT in,
+           so Brightness only can never turn a hue and Colour only never moves a brightness. Normal (0) draws as before. */
+        { key: 'blend', label: 'Apply as', def: 0, options: [[0, 'Normal'], [1, 'Colour only'], [2, 'Brightness only'], [3, 'Soft light'], [4, 'Overlay'], [5, 'Screen'], [6, 'Multiply']] },
         /* FINISH (#482 15.2): five sliders that finish the look without opening the group. Each is an ordinary effect added
            after the children AT RENDER TIME (fcFinish) and never written into the filter's effects. 0 adds nothing, so every
            saved filter and the library draw as they did. `adjNo`: an adjustment layer grades colour only (fx-registry ADJ_OK),
@@ -7059,6 +7063,28 @@ window.FM = window.FM || {};
     return out;
   }
   FM._fcFinish = fcFinish;   // suite seam (#482 15.2)
+  /* ═══ APPLY AS (#482 4.6) ═══════════════════════════════════════════════════════════════════════════════════════════
+   * The filter's own picture B laid over the picture without it, A, in a blend mode — before Strength, Tonal range, Protect
+   * skin and Over-drive mix the two, which then take this plate as B. Over an opaque A, B drawn in a mode at alpha s is
+   * exactly A cross-faded with mode(A, B) at s, so every mix after it stays the mix it was. Normal returns null and nothing
+   * changes, which is what keeps a saved filter and the library on the old path. */
+  const FC_APPLY_AS = [null, 'color', 'luminosity', 'soft-light', 'overlay', 'screen', 'multiply'];
+  function fcApplyAs(fx, t) {
+    const p = (fx && fx.params) || {};
+    const v = p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0);
+    return FC_APPLY_AS[v > 0 && v < FC_APPLY_AS.length ? v : 0];
+  }
+  function fcApplyPlate(A, B, P, mode) {
+    const N = P.N || (P.N = document.createElement('canvas'));
+    if (N.width !== A.width || N.height !== A.height) { N.width = A.width; N.height = A.height; }
+    const n = N.getContext('2d');
+    n.setTransform(1, 0, 0, 1, 0, 0); n.globalAlpha = 1; n.filter = 'none';
+    n.globalCompositeOperation = 'source-over'; n.clearRect(0, 0, N.width, N.height); n.drawImage(A, 0, 0);
+    n.globalCompositeOperation = mode; n.drawImage(B, 0, 0);
+    n.globalCompositeOperation = 'source-over';
+    return N;
+  }
+  FM._fcApplyAs = fcApplyAs;   // suite seam (#482 4.6)
   const _fcPool = [];
   let _fcDepth = 0;
   const FC_MAX_DEPTH = 4;   // capped, unlike the older pools — see FILTERS-DESIGN.md §3
@@ -7084,7 +7110,8 @@ window.FM = window.FM || {};
 
     if (s <= 0 || !kids.length) return drawLayer(ctx, asLayer(rest), t, scene);
     const pxo = _fcDepth < FC_MAX_DEPTH ? fcPixelOpts(fx, t) : null;   // #482 15.1/15.3: a range, a skin guard or Over-drive mixes per pixel, at any Strength
-    if (!pxo && (s >= 1 || _fcDepth >= FC_MAX_DEPTH)) return drawLayer(ctx, asLayer(spliced), t, scene);
+    const mode = _fcDepth < FC_MAX_DEPTH ? fcApplyAs(fx, t) : null;    // #482 4.6: Apply as lays the filter over the layer in a mode, at any Strength
+    if (!pxo && !mode && (s >= 1 || _fcDepth >= FC_MAX_DEPTH)) return drawLayer(ctx, asLayer(spliced), t, scene);
 
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = proj.width, PH = proj.height;
@@ -7111,15 +7138,16 @@ window.FM = window.FM || {};
       };
       plate(P.A, rest);        // the layer as if the filter were not there
       plate(P.B, spliced);     // …and as if its children were simply part of the stack
+      const PB = mode ? fcApplyPlate(P.A, P.B, P, mode) : P.B;   // #482 4.6: …laid over the first in its Apply as mode
       const m = P.M.getContext('2d');
       m.setTransform(1, 0, 0, 1, 0, 0); m.clearRect(0, 0, W, H); m.filter = 'none';
       if (pxo) {               // #482 15.1: the same mix, weighted per pixel
-        const ia = P.A.getContext('2d').getImageData(0, 0, W, H), ib = P.B.getContext('2d').getImageData(0, 0, W, H);
+        const ia = P.A.getContext('2d').getImageData(0, 0, W, H), ib = PB.getContext('2d').getImageData(0, 0, W, H);
         fcMixPixels(ia.data, ib.data, s, pxo);
         m.putImageData(ia, 0, 0); FM._fxStats.fcPixel++;
       } else {
         m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - s; m.drawImage(P.A, 0, 0);
-        m.globalCompositeOperation = 'lighter';     m.globalAlpha = s;     m.drawImage(P.B, 0, 0);
+        m.globalCompositeOperation = 'lighter';     m.globalAlpha = s;     m.drawImage(PB, 0, 0);
       }
       m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
       ctx.save();
@@ -29474,7 +29502,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const e = effs[i];
       if (!adjLiveBox(e) || !adjKids(e, t).length) continue;
       const s = adjStrength(e, t);
-      if (s > 0 && (s < 1 || fcPixelOpts(e, t))) { fi = i; fs = s; break; }   // #482 15.1/15.3: a range, skin guard or Over-drive mixes per pixel at full Strength too
+      if (s > 0 && (s < 1 || fcPixelOpts(e, t) || fcApplyAs(e, t))) { fi = i; fs = s; break; }   // #482 15.1/15.3/4.6: a range, skin guard, Over-drive or Apply as mixes at full Strength too
     }
     if (fi < 0) { applyAdjustment(ctx, layer, t, scene, adjFlatten(effs, t), P.M); return P.M; }
     const box = effs[fi];
@@ -29483,7 +29511,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const a = P.A.getContext('2d');
     a.setTransform(1, 0, 0, 1, 0, 0); a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
     a.clearRect(0, 0, cw, ch); a.drawImage(adjFilterPlate(ctx, layer, t, scene, rest, depth + 1), 0, 0);   // the grade as if the filter were not there
-    const B = adjFilterPlate(ctx, layer, t, scene, spliced, depth + 1);                                     // …and as if its children stood in its place
+    const mode = fcApplyAs(box, t), B0 = adjFilterPlate(ctx, layer, t, scene, spliced, depth + 1);        // …and as if its children stood in its place,
+    const B = mode ? fcApplyPlate(P.A, B0, P, mode) : B0;                                                   // laid over the first in its Apply as mode (#482 4.6)
     const m = P.M.getContext('2d');
     m.setTransform(1, 0, 0, 1, 0, 0); m.filter = 'none'; m.clearRect(0, 0, cw, ch);
     const pxo = fcPixelOpts(box, t);
@@ -29499,7 +29528,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return P.M;
   }
   function applyAdjustmentFilters(ctx, layer, t, scene, own) {
-    const frac = own.some(e => adjLiveBox(e) && adjKids(e, t).length && (s => s > 0 && (s < 1 || !!fcPixelOpts(e, t)))(adjStrength(e, t)));
+    const frac = own.some(e => adjLiveBox(e) && adjKids(e, t).length && (s => s > 0 && (s < 1 || !!fcPixelOpts(e, t) || !!fcApplyAs(e, t)))(adjStrength(e, t)));
     if (!frac) { applyAdjustment(ctx, layer, t, scene, adjFlatten(own, t)); return; }
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;

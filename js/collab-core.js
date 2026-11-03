@@ -184,7 +184,7 @@ window.FM = window.FM || {};
      Shadow Bloom, Bump Map, Oil Slick, Colour Wash, Light Leak, Dreamy Bloom, Corner Colours, Palette Map, Colour Cycle and Pop
      Art. Every default draws what the effect drew before, but a rev-39 sanitiser drops the new keys, so the two would normalise
      one project differently. */
-  C.SCHEMA_REV = 40;
+  C.SCHEMA_REV = 41;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -426,7 +426,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =6290761865100751;   // SCHEMA_REV 40 (v18.11, #966 rounds twenty-one to twenty-four): twenty-four new effect params on twelve effects. Pinned 28 Oct with fp.js at rev 40; before: 424103012518769 at rev 39.
+  C.SCHEMA_FP =7533255701768435;   // SCHEMA_REV 41 (v18.15, #482 4.6): the Filter's Apply as. Measured 29 Oct by `921 S1 the schema fingerprint gate` at rev 41; before: 6290761865100751 at rev 40.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════

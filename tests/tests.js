@@ -144252,6 +144252,58 @@
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
+  test('482 4.6 pin: the Filter’s Apply as on Normal leaves every filter as it was — saved, filled and new, at every Strength, on a layer, a see-through card and an adjustment layer, and all the library filters', { item: '482', budgetMs: 240000 }, function () {
+    b15FilterPins({ blend: 0 }, { blend: 2 });
+  });
+
+  /* Hue in degrees (null for a pixel too grey to have one) and the blend modes' own brightness, Lum = 0.3 R + 0.59 G + 0.11 B.
+     At a chroma of 40 or more an 8-bit pixel's hue is good to about 1.5°, so 2° is the rounding and not a loose test. */
+  const b46Hue = (d, i) => { const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), c = mx - Math.min(r, g, b); if (c < 40) return null; const h = 60 * (mx === r ? ((g - b) / c + 6) % 6 : mx === g ? (b - r) / c + 2 : (r - g) / c + 4); return h; };
+  const b46Gap = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+  const b46Lum = (d, i) => d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
+  test('482 4.6 the Filter’s Apply as: Brightness only keeps every pixel’s hue while a Hue Shift filter turns it (also with a Tonal range, and on an adjustment layer), Colour only keeps its brightness, Screen never darkens and Multiply never lightens, Strength 0.5 lands half way, and all seven draw seven pictures (CONTROL: Normal turns the hue)', { item: '482', budgetMs: 60000 }, function () {
+    const P = b15P(), N = P.width * P.height * 4;
+    const plate = () => b15Plate(P, '#c04838', '#3870c0');   // brick red to blue: every pixel has a hue
+    const run = box => { const L = plate(); L.effects = box ? [box] : []; return b15Px([L], 0.5, P); };
+    const adj = box => { const A = FM.makeLayer('adjustment', { name: 'b46 adj', start: 0, duration: 5 }); A.effects = [box]; return b15Px([A, plate()], 0.5, P); };
+    const hueBox = over => b15Box(Object.assign({ strength: 1 }, over), [b15Fx('hue', { deg: 120 })]);
+    const A = run(null);
+    // how many pixels with a hue on both sides kept it within 2°, of how many were measured
+    const kept = (d) => { let n = 0, k = 0; for (let i = 0; i < N; i += 4) { const a = b46Hue(A, i), o = b46Hue(d, i); if (a == null || o == null) continue; n++; if (b46Gap(a, o) <= 2) k++; } return [k, n]; };
+    const [nk, nn] = kept(run(hueBox({})));
+    if (nn < N / 8 || nk > nn * 0.05) throw new Error('CONTROL: a Hue Shift filter on Normal kept the hue of ' + nk + ' of ' + nn + ' pixels - this test proves nothing');
+    const fails = [];
+    [['Brightness only', run(hueBox({ blend: 2 }))], ['Brightness only with Tonal range on the midtones', run(hueBox({ blend: 2, range: 2 }))],
+     ['Brightness only at Strength 0.6', run(hueBox({ blend: 2, strength: 0.6 }))], ['Brightness only on an adjustment layer', adj(hueBox({ blend: 2 }))]].forEach(([what, d]) => {
+      const [k, n] = kept(d);
+      if (n < N / 8 || k < n * 0.98) fails.push(what + ' kept the hue of only ' + k + ' of ' + n + ' pixels');
+    });
+    const [ak, an] = kept(adj(hueBox({})));
+    if (ak > an * 0.05) fails.push('CONTROL: on an adjustment layer Normal kept the hue of ' + ak + ' of ' + an + ' pixels');
+    // Colour only: a brightening filter moves no pixel's brightness (Normal moves it a long way)
+    const bright = over => b15Box(Object.assign({ strength: 1 }, over), [b15Fx('brightness', { amount: 1.6 })]);
+    const lumOff = d => { let m = 0; for (let i = 0; i < N; i += 4) m = Math.max(m, Math.abs(b46Lum(d, i) - b46Lum(A, i))); return m; };
+    const bn = lumOff(run(bright({}))), bc = lumOff(run(bright({ blend: 1 })));
+    if (!(bn > 30)) fails.push('CONTROL: a brightening filter on Normal moved the brightness only ' + bn.toFixed(1));
+    if (bc > 3) fails.push('Colour only moved a pixel’s brightness by ' + bc.toFixed(1));
+    // Screen never darkens, Multiply never lightens (an Invert filter, which on Normal does both)
+    const inv = over => b15Box(Object.assign({ strength: 1 }, over), [b15Fx('invert', { amount: 1 })]);
+    const scr = run(inv({ blend: 5 })), mul = run(inv({ blend: 6 }));
+    let dark = 0, light = 0, up = 0, dn = 0;
+    for (let i = 0; i < N; i++) { if ((i & 3) === 3) continue; if (scr[i] < A[i] - 1) dark++; if (scr[i] > A[i] + 4) up++; if (mul[i] > A[i] + 1) light++; if (mul[i] < A[i] - 4) dn++; }
+    if (dark) fails.push('Screen darkened ' + dark + ' channels');
+    if (light) fails.push('Multiply lightened ' + light + ' channels');
+    if (up < N / 8 || dn < N / 8) fails.push('Screen lightened ' + up + ' and Multiply darkened ' + dn + ' channels - one of them did next to nothing');
+    // Strength 0.5 lands half way between the layer and the mode at full Strength
+    const half = run(inv({ blend: 5, strength: 0.5 }));
+    let off = 0; for (let i = 0; i < N; i++) if ((i & 3) !== 3 && Math.abs(half[i] - (A[i] + scr[i]) / 2) > 2) off++;
+    if (off) fails.push('Screen at Strength 0.5 is ' + off + ' channels off half way');
+    // all seven draw a picture of their own
+    const seen = {};
+    [0, 1, 2, 3, 4, 5, 6].forEach(v => { const h = b15Hash(run(inv({ blend: v }))); if (seen[h] != null) fails.push('Apply as ' + v + ' draws the same picture as ' + seen[h]); else seen[h] = v; });
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
   /* LEVELS (#482 15.5) is a pure pixel kernel, so its pins are hashes of its bytes on a ramp that holds every level in every
      channel (and see-through pixels), captured on fc8866f1 and the same on any machine. */
   function b15Ramp(W, H) { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255; d[i + 3] = (x + y) % 17 === 0 ? 0 : ((x * y) % 9 === 0 ? 128 : 255); } return d; }
@@ -189330,6 +189382,16 @@
       };
     });
     const onDisk = async id => { const r = await FM.storage.readMedia(id); return !!(r && r.file); };
+    /* A file goes behind the app only while no save of the app's own is armed or running. FM.projects.create arms the 600 ms autosave
+       (history.reset commits), and the first delete comes about 485 ms later, so on a hot laptop that save landed on the delete and wrote
+       the file back, which is right, and this setup check failed the phone pass of v18.15 (it passes alone). flushSync clears the armed
+       timer and writes nothing to the media store; settled waits out any save already running. */
+    const goBehind = async (id, what) => {
+      FM.storage.flushSync();
+      await FM.storage.settled();
+      await rawDel(id);
+      if (await onDisk(id)) throw new Error('setup: ' + what + ' deleted behind the app is still in IndexedDB (saves running: ' + FM.storage.pendingSaves() + ')');
+    };
     try {
       if (wasOpen) FM.home.close();
       await sleep(100);
@@ -189352,22 +189414,21 @@
       await FM.storage.settled();
       await FM.storage.save();
       for (const id of ids) { if (!(await onDisk(id))) throw new Error('setup: the first save did not land the file of clip ' + id + ', so there is nothing known to be stored'); }
+      await FM.storage.save();   // reads each clip just written back once, so all 20 are trusted: without this the CONTROL passes with no refused bypass at all (a mutation of it SURVIVED)
 
       /* CONTROL: the store refuses the document, a file goes behind the app, and the next save puts it back */
       const toasts = [];
       Storage.prototype.setItem = function (k, v) { if (k === key) throw new DOMException('refused by the 860 test', 'QuotaExceededError'); return realSet.call(this, k, v); };
       FM.toast = function (m) { toasts.push(String(m)); };
       try {
-        await rawDel(ids[0]);
-        if (await onDisk(ids[0])) throw new Error('setup: the file deleted behind the app is still in IndexedDB');
+        await goBehind(ids[0], 'the file');
         FM.scene.layers[0].name = '860 save 0, renamed while the store is full';
         await FM.storage.save();
         if (!FM.storage.lastWriteRefused()) throw new Error('setup: the full store did not refuse the project document, so this control measured nothing');
         if (!(await onDisk(ids[0]))) {
           throw new Error('CONTROL: with the project document refused (a full store) a clip file deleted behind the app was NOT written again by the next save: the save trusted what it last knew, and on a full store that is exactly when another tab can sweep the file away');
         }
-        await rawDel(ids[2]);
-        if (await onDisk(ids[2])) throw new Error('setup: the third file deleted behind the app is still in IndexedDB');
+        await goBehind(ids[2], 'the third file');
       } finally { Storage.prototype.setItem = realSet; FM.toast = realToast; }
       await FM.storage.save();   // the document lands again
       if (FM.storage.lastWriteRefused()) throw new Error('setup: with the store no longer full the project document was still refused');
@@ -189380,8 +189441,7 @@
       FM.scene.layers.splice(at3, 1); FM.refreshAll();
       await FM.storage.save();
       if (FM.storage.lastWriteRefused()) throw new Error('setup: the document without clip 3 was refused');
-      await rawDel(ids[3]);
-      if (await onDisk(ids[3])) throw new Error('setup: the fourth file deleted behind the app is still in IndexedDB');
+      await goBehind(ids[3], 'the fourth file');
       FM.scene.layers.splice(at3, 0, L3); FM.refreshAll();
       await FM.storage.save();
       if (!(await onDisk(ids[3]))) {
@@ -189401,8 +189461,7 @@
       }
 
       /* GUARD: the regular full check still exists */
-      await rawDel(ids[1]);
-      if (await onDisk(ids[1])) throw new Error('setup: the second file deleted behind the app is still in IndexedDB');
+      await goBehind(ids[1], 'the second file');
       let back = 0;
       for (let n = 1; n <= 40 && !back; n++) { await FM.storage.save(); if (await onDisk(ids[1])) back = n; }
       if (!back) throw new Error('GUARD: a clip file deleted behind the app was not written again in 40 saves, so a file lost some other way stays lost while the session thinks it is stored');
