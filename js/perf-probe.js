@@ -162,7 +162,7 @@ window.FM = window.FM || {};
       lines.push('');
       lines.push('NOTE: this project is ' + P.width + '×' + P.height + ' (' + mp.toFixed(1) + ' megapixels).');
       lines.push('That is photo-sized, and every frame composites all of it. Almost certainly the');
-      lines.push('biggest single cost here, and the easiest to fix — see Canvas settings.');
+      lines.push('biggest single cost here, and the easiest to fix — see ⚙ → Canvas.');
     }
     return lines;
   }

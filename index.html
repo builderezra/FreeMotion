@@ -27,7 +27,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.17">
+<meta name="fm-build" content="v18.18">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -44,8 +44,8 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=781">
-<link rel="stylesheet" href="theme-glass.css?v=68">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<link rel="stylesheet" href="styles.css?v=782">
+<link rel="stylesheet" href="theme-glass.css?v=69">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=3">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
@@ -301,7 +301,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.17</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.18</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1095,7 +1095,15 @@
 
   <div id="canvas-dialog" class="hidden" role="dialog" aria-modal="true" aria-labelledby="canvas-dialog-title">
     <div class="export-card">
-      <div class="export-title" id="canvas-dialog-title">Canvas settings</div>
+      <!-- #1132: the Canvas block's bar: the whole block while it is closed, its header with the ⤡ while it is open. FIRST in the card,
+           so Tab goes from the ⤡ into the fields (queue 945 kept it last, when it showed only while the block was closed). -->
+      <div class="cv-mini" id="cv-mini">
+        <span class="cv-mini-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8a1.5 1.5 0 0 1 1.5 1.5v15A1.5 1.5 0 0 1 16 21H8a1.5 1.5 0 0 1-1.5-1.5v-15A1.5 1.5 0 0 1 8 3z"/></svg></span>
+        <!-- (#967 batch 2's App settings chip on this bar went with #1132: the App settings bar is there in every state.) -->
+        <span class="cv-mini-txt"><span class="cv-mini-trow"><span class="cv-mini-t">Canvas</span></span><span class="cv-mini-s" id="cv-mini-sub"></span></span>
+        <button type="button" class="cv-mini-exp" id="cv-mini-exp" aria-label="Open Canvas settings" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg></button>
+      </div>
+      <div class="export-title" id="canvas-dialog-title">Settings</div>
       <!-- Queue 490: the oversize instruction lives HERE, where the work is done. It used to be an
            11-second toast that this dialog opened on top of 400ms later and covered completely. -->
       <div class="cv-oversize hidden" id="cv-oversize" role="note"></div>
@@ -1143,26 +1151,11 @@
            row is shown only when there is actually something to move (see cvUpdate). -->
       <label class="field hidden" id="cv-scale-row"><span>Scale the layers to fit</span><input id="cv-scale" type="checkbox" checked aria-label="Move and resize the existing layers to match the new canvas size"></label>
       <div class="dialog-actions">
-        <!-- The door to the APP's settings (v6.13). The cog now opens THIS dialog on desktop as well as
-             on the phone — before, the same gear icon meant "canvas" on a phone and "app preferences" on
-             a PC, which is what Ezra was reporting as the cog opening the wrong menu. One icon, one
-             destination, and the app-wide preferences keep a labelled way in from here (plus the home
-             screen's own cog). Left-aligned and plain, because it LEAVES this dialog — it is not a third
-             way to answer Cancel/Apply. -->
-        <button id="cv-appset" class="btn cv-appset">App settings…</button>
+        <!-- #1132: the door to the APP's settings left this row (v6.13 put it here) for a block of its own, the App settings
+             bar under the cog's other blocks. His words: "When canvas settings is expanded get rid of the button to access app
+             settings." -->
         <button id="cv-cancel" class="btn">Cancel</button>
         <button id="cv-go" class="btn btn-accent">Apply</button>
-      </div>
-      <!-- queue 945: Canvas settings SHRUNK to a bar (a tile, side by side on a PC), shown while Friends is the big block — the
-           pair, every width (#978). LAST in the card on
-           purpose: code and tests find this card's first button, and the ⤢ here must never be it. -->
-      <div class="cv-mini" id="cv-mini">
-        <span class="cv-mini-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8a1.5 1.5 0 0 1 1.5 1.5v15A1.5 1.5 0 0 1 16 21H8a1.5 1.5 0 0 1-1.5-1.5v-15A1.5 1.5 0 0 1 8 3z"/></svg></span>
-        <!-- #967 batch 2: while Friends is the big card the dialog's own "App settings…" is set aside with the rest of this card
-             (0×0), and from the editor on a phone that was the only door to Settings — so the bar carries one (js/app.js), on
-             the title's line, so the canvas summary under it keeps its full width. -->
-        <span class="cv-mini-txt"><span class="cv-mini-trow"><span class="cv-mini-t">Canvas</span><button type="button" class="cv-mini-app" id="cv-mini-app">App settings…</button></span><span class="cv-mini-s" id="cv-mini-sub"></span></span>
-        <button type="button" class="cv-mini-exp" id="cv-mini-exp" aria-label="Open Canvas settings" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg></button>
       </div>
     </div>
     <!-- queue 945: FRIENDS — the live-sharing block that opens WITH Canvas settings (his design: a bar above the card; ⤢ swaps
@@ -1179,10 +1172,16 @@
       </div>
       <div id="cv-fr-body"></div>
     </div>
+    <!-- #1132, his words (11 Oct): "In this menu move the app settings button to be its own button like how friends and simple
+         edit are." A block of its own, the LAST bar (furthest from the cog: it is the one that leaves it). It never grows, so its
+         end shows an "opens elsewhere" arrow, not ⤢; the whole bar is the one button (js/app.js: closes the cog, opens Settings). -->
+    <div id="cv-app" role="group" aria-label="App settings">
+      <button type="button" class="cv-mini cv-app-bar" id="cv-app-bar"><span class="cv-mini-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="cv-mini-txt"><span class="cv-mini-t">App settings</span></span><span class="cv-mini-exp cv-app-go" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V8a1.5 1.5 0 0 1 1.5-1.5H10"/></svg></span></button>
+    </div>
   </div>
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
-  <script src="js/perf-probe.js?v=12"></script>
+  <script src="js/perf-probe.js?v=13"></script>
   <script src="js/drawn-x.js?v=1"></script>
   <script src="js/variant.js?v=3"></script>   <!-- queue 974: every animation with options plays one AT RANDOM (FM.variant); before timeline/home/app -->
   <script src="js/settings.js?v=60"></script>
@@ -1237,7 +1236,7 @@
   <script src="js/audio-fx-live.js?v=17"></script>
   <script src="js/audio-fx-browser.js?v=17"></script>
   <script src="js/history.js?v=43"></script>
-  <script src="js/storage.js?v=85"></script>
+  <script src="js/storage.js?v=86"></script>
   <script src="js/export-resume.js?v=10"></script>
   <script src="js/medialib.js?v=10"></script>
   <script src="js/template-fill.js?v=4"></script>
@@ -1256,7 +1255,7 @@
   <script src="js/captions.js?v=64"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=7"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=514"></script>
+  <script src="js/app.js?v=515"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->

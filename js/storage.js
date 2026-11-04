@@ -230,7 +230,7 @@ window.FM = window.FM || {};
   function warnQuota(e) {
     const quota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
     if (quota) _quotaHits++;
-    if (quota && !_quotaWarned) { _quotaWarned = true; if (FM.toast) FM.toast('Storage full — autosave paused. Use ⚙ → Save project file to keep your work.', 5000); }
+    if (quota && !_quotaWarned) { _quotaWarned = true; if (FM.toast) FM.toast('Storage full — autosave paused. Use ⚙ → App settings → Save a project file to keep your work.', 5000); }
   }
 
   function openDB() {
@@ -3184,7 +3184,7 @@ window.FM = window.FM || {};
     }).then(v => !!v);
     return FM.ask({
       title: 'Storage full — “' + name + '” is not saved',
-      message: 'What you changed since it last saved is only on this screen. ' + why + ' To keep it, stay and use ⚙ → Save project file inside it.',
+      message: 'What you changed since it last saved is only on this screen. ' + why + ' To keep it, stay and use ⚙ → App settings → Save a project file inside it.',
       ok: (how && how.ok) || 'Leave anyway', cancel: 'Stay', danger: true,
     }).then(v => !!v);
   }
