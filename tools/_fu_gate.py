@@ -850,6 +850,9 @@ def loosenings(root):
     hn, nn = conditional_plants(head[2]), conditional_plants(now[2])
     out += ['the %s plant may now go unmeasured (needs %s)' % (n, nn[n]) for n in sorted(nn) if n in hp and hn.get(n) != nn[n]]
     out += ['the pictures stop comparing %s' % u for u in sorted(nu - hu)]
+    # a window written in code, which none of the knobs below can see: said in the line he reads (#1132, the review's finding)
+    if 'def cog_shell(' in now[1] and 'def cog_shell(' not in head[1]:
+        out.append('the cog shell window: the cog’s pictures and the cog’s blocks and bars stop comparing in the release that adds #cv-app')
     # the probe's own lists, and the widths the driver runs
     hl, nl = probe_lists(head[3]), probe_lists(now[3])
     for name in PROBE_LISTS:

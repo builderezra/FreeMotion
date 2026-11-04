@@ -344,6 +344,267 @@ def fu6_parts(f6):
                 yield size, part, v[part]
 
 
+# ═══ THE COG'S SHELL (#1132) ═════════════════════════════════════════════════════════════════════════════════════════════
+# His words, 11 Oct: "In this menu move the app settings button to be its own button like how friends and simple edit are.
+# Change the simple edit what should I use? Button to just be the same expand button as the others. And where it says simple
+# and full to switch when you haven't expanded yet should just have icons so it feels less cluttered. When canvas settings is
+# expanded get rid of the button to access app settings. Also when you first open the settings cog to see all of those menus
+# they should all be closed so it isn't overwhelming, and you should be able to tap on the current open one to close it".
+# That is a change to Full's cog that he asked for, so the release that builds it has to pass with it. It is ONE release: the
+# one whose HEAD is COG_SHELL_HEAD and whose tree has the App settings block where HEAD has none (cog_shell). Once it ships both
+# sides have the block, and every comparison below goes back to exact, the all-closed cog included (FU6's `closed` and
+# `tapClosed`, fu1-cog-closed). In that release, and nowhere else:
+#   · LOOSENED: the blocks and bars themselves — where they stand, how big, how they are styled, what the cog's classes, focus
+#     and aria-expanded say — and the pictures of the cog (COG_PICTURE). COG_SHELL names the rows one by one. A bar's words are
+#     not loosened.
+#   · STILL EXACT: inside an open block (shell_diff: every row's size, words and the 29 STYLES, its place inside the block, the
+#     order of the rows), the scrim, every flight the old cog had (flight_diff: its timing and keyframes, all but the px), what
+#     Apply and Cancel do, everything on the cog's screen outside the dialog (shell_screen), and every other screen, edit and
+#     export. And nothing inside a block that was on screen may leave it.
+#   · NOT SEEN IN THIS ONE RELEASE: paint inside a block that no STYLES column holds (a text-shadow): only its pictures show that,
+#     and they are the cog's. So that release's own CSS is read by hand; from the next release on, fu1-cog's pictures are compared.
+COG_SHELL_HEAD = 'v18.17'
+COG_SCREEN, COG_CLOSED_SCREEN = 'fu1-cog', 'fu1-cog-closed'
+COG_HOVER = 'cog bar'
+COG_PICTURE = re.compile(r'^fu1-(cog|hover-cog-bar)')
+COG_END = r'(?![\w-])'
+COG_ROOT = re.compile(r'^div#canvas-dialog' + COG_END + r'[^>]*$')
+COG_CARD = re.compile(r'^div#canvas-dialog' + COG_END + r'[^>]*>div\.export-card' + COG_END + r'[^>]*')
+COG_APP = re.compile(r'^div#cv-app' + COG_END)
+COG_TAIL = re.compile(r'>span\.pop-tail(?:[.:][^>]*)?$')
+COG_SHELL = re.compile(r'^(?:CARD$|CARD>div\.dialog-actions$'
+                       r'|(?:div#cv-mini|div#canvas-dialog-title|span#cv-mini-sub|button#cv-mini-exp|button#cv-mini-app|button#cv-appset'
+                       r'|div#cv-fr-bar|span#cv-fr-sub|span#cv-fr-faces|button#cv-fr-exp|button#cv-app-bar)' + COG_END +
+                       r'|div#cv-friends(?:[.:][^>]*)?$|div#cv-app(?:[.:][^>]*)?$'
+                       r'|div#cv-fr-body(?:::\w+)?$|div#cv-fr-body>div\.cs-body(?:::\w+)?$|div#cv-fr-body>div\.cs-foot(?:::\w+)?$)')
+# They stand where the block's box ends, so the block's height moves them: as a group, and below the first row. The first two groups
+# stay on the screen. The third, Friends' switch row, does not on a phone under 696 px: with a fourth bar the block is too short to hold
+# it and Done, so it scrolls with the body (styles.css "THE OPEN FRIENDS BLOCK ON A SHORT SCREEN"; test '1132 with Friends open on a short phone').
+COG_PINNED = (re.compile(r'^(?:CARD>div\.dialog-actions>|button#cv-cancel' + COG_END + r'|button#cv-go' + COG_END + r')'),
+              re.compile(r'^div#cv-fr-body>div\.cs-foot>'), re.compile(r'^div#cv-fr-body>div\.cs-offrow'))
+# Cancel and Apply may be shorter at 320 wide and nowhere else: "App settings…" (his clause 4 removes it) wrapped to two lines there
+# and stretched its row to 46 px; without it they are the 32 px they are at every other size.
+COG_ROW_BUTTON = re.compile(r'^button#cv-(?:cancel|go)' + COG_END)
+
+
+def has_app(rec):
+    """Does this run's record show the App settings block, in FU6 or on the cog's own screen?"""
+    lists = [r.get('layout') for _s, _p, r in fu6_parts((rec or {}).get('fu6'))]
+    lists.append(((rec or {}).get('screens') or {}).get(COG_SCREEN, {}).get('layout'))
+    return any(isinstance(l, list) and any(x and COG_APP.match(str(x[0])) for x in l) for l in lists)
+
+
+def cog_shell(A, B):
+    return ((A or {}).get('app') or {}).get('version') == COG_SHELL_HEAD and has_app(B) and not has_app(A)
+
+
+def shell_key(k):
+    return COG_CARD.sub('CARD', k)
+
+
+def shell_rows(rec):
+    """{path: row} for what is INSIDE an open block: the card's own path is written CARD, whatever its classes say."""
+    out = {}
+    for k, r in keyed_rows((rec or {}).get('layout')).items():
+        k2 = shell_key(k)
+        if not (COG_ROOT.match(k) or COG_SHELL.match(k2)):
+            out[k2] = r
+    return out
+
+
+def shell_numeric(*rows):
+    return all(isinstance(r[i], (int, float)) for r in rows for i in (1, 2, 3, 4))
+
+
+def shell_inside(r, frame):
+    return bool(frame) and r[1] >= -1 and r[2] >= -1 and r[1] + r[3] <= frame[0] + 1 and r[2] + r[4] <= frame[1] + 1
+
+
+def shell_frame(s):
+    m = re.match(r'^(\d+)x(\d+)$', str(s or ''))
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def shell_diff(pa, pb, where, out, limit, fields=None, frame=None):
+    """Inside the open block, exact: no row new or gone, the same order, every size, word and style the same, every place the same
+    relative to the block's first row (the block itself may stand elsewhere: that is the shell). A bar's words are compared; the
+    scrim is compared; and what was on screen stays on screen."""
+    A, B = shell_rows(pa), shell_rows(pb)
+    for k in sorted(set(A) | set(B)):
+        if k not in A or k not in B:
+            out.append('%s: %s — %s' % (where, k, 'NEW on the tree' if k not in A else 'GONE on the tree'))
+        elif A[k][3:] != B[k][3:]:
+            shorter = COG_ROW_BUTTON.match(k) and frame and frame[0] == 320 and A[k][3] == B[k][3] and A[k][5:] == B[k][5:] and B[k][4] < A[k][4]
+            if not shorter:
+                out.append('%s: %s — more than its place changed: %s → %s' % (where, k, short(A[k][3:], 70), short(B[k][3:], 70)))
+    both = [k for k in A if k in B]
+    if both != [k for k in B if k in A]:
+        out.append('%s: the rows inside the block are in another order' % where)
+    ra, rb = keyed_rows((pa or {}).get('layout')), keyed_rows((pb or {}).get('layout'))
+    sa, sb = dict((shell_key(k), r) for k, r in ra.items()), dict((shell_key(k), r) for k, r in rb.items())
+    for k in sorted(set(sa) & set(sb)):
+        if COG_SHELL.match(k) and len(sa[k]) > 5 and len(sb[k]) > 5 and sa[k][5] != sb[k][5]:
+            out.append('%s: %s — its words changed: %s → %s' % (where, k, short(sa[k][5], 60), short(sb[k][5], 60)))
+    ca, cb = [r for k, r in ra.items() if COG_ROOT.match(k)], [r for k, r in rb.items() if COG_ROOT.match(k)]
+    if ca and cb and fields:
+        for f in ('background-color', 'backdrop-filter'):
+            if f in fields and fields.index(f) < min(len(ca[0]), len(cb[0])) and ca[0][fields.index(f)] != cb[0][fields.index(f)]:
+                out.append('%s: the scrim’s %s changed: %s → %s' % (where, f, short(ca[0][fields.index(f)]), short(cb[0][fields.index(f)])))
+    pinned = lambda k: any(p.match(k) for p in COG_PINNED)
+    free = [k for k in both if not pinned(k)]
+    if free:
+        k0 = free[0]
+        for k in free[1:]:
+            if not shell_numeric(A[k], B[k], A[k0], B[k0]):
+                if A[k][1:3] != B[k][1:3]:
+                    out.append('%s: %s — a place that is not a number changed: %s → %s' % (where, k, short(A[k][1:3]), short(B[k][1:3])))
+                continue
+            dx, dy = (B[k][1] - B[k0][1]) - (A[k][1] - A[k0][1]), (B[k][2] - B[k0][2]) - (A[k][2] - A[k0][2])
+            if abs(dx) > 1 or abs(dy) > 1:
+                out.append('%s: %s moved inside its block by %s, %s' % (where, k, round(dx, 1), round(dy, 1)))
+        for p in COG_PINNED:
+            grp = [k for k in both if p.match(k) and shell_numeric(A[k], B[k])]
+            if not grp or not shell_numeric(A[k0], B[k0]):
+                continue
+            g0 = grp[0]
+            if B[g0][2] < B[k0][2] - 1:
+                out.append('%s: %s stands above the block’s first row (%s, %s)' % (where, g0, B[g0][2], B[k0][2]))
+            if abs((B[g0][1] - B[k0][1]) - (A[g0][1] - A[k0][1])) > 1:
+                out.append('%s: %s moved sideways inside its block' % (where, g0))
+            for k in grp[1:]:
+                dx, dy = (B[k][1] - B[g0][1]) - (A[k][1] - A[g0][1]), (B[k][2] - B[g0][2]) - (A[k][2] - A[g0][2])
+                if abs(dx) > 1 or abs(dy) > 1:
+                    out.append('%s: %s left the row it is pinned with, by %s, %s' % (where, k, round(dx, 1), round(dy, 1)))
+    if frame:
+        for k in both:
+            if (k == (free[0] if free else None) or any(p.match(k) for p in COG_PINNED[:2])) and shell_numeric(A[k], B[k]) and shell_inside(A[k], frame) and not shell_inside(B[k], frame):
+                out.append('%s: %s was on the %dx%d screen and is not now: %s' % (where, k, frame[0], frame[1], short(B[k][1:5])))
+    del out[limit:]
+
+
+def shell_flights(rec):
+    out = {}
+    for k, v in keyed_motion((rec or {}).get('motion')).items():
+        kind, _, path = k.partition(' ')
+        out['%s %s' % (kind, 'ROOT' if COG_ROOT.match(path.split('#')[0] + '#' + path.split('#', 1)[1] if '#' in path else path) else shell_key(path))] = v
+    return out
+
+
+def flight_diff(pa, pb, where, out, limit):
+    """Every flight the old cog had is still there with the same timing and keyframes, all but the px; only a bar's own flight may
+    go, and only a bar's may be new. CONTROL: a record that flew must still have a flight in common, or this reads nothing."""
+    MA, MB = shell_flights(pa), shell_flights(pb)
+    both = set(MA) & set(MB)
+    if MA and not both:
+        out.append('%s: what it animated: none of its flights is left: %s → %s' % (where, short(sorted(MA), 70), short(sorted(MB), 70)))
+    for k in sorted(set(MA) - both):
+        if not COG_SHELL.match(k.partition(' ')[2]):
+            out.append('%s: what it animated: the flight %s is gone' % (where, k))
+    for k in sorted(set(MB) - both):
+        if MA and not COG_SHELL.match(k.partition(' ')[2]) and k.partition(' ')[2] != 'ROOT':
+            out.append('%s: what it animated: a new flight %s' % (where, k))
+    for k in sorted(both):
+        ta, tb = [PX.sub('#', json.dumps(m[2:] if isinstance(m, list) else m, sort_keys=True)) for m in (MA[k], MB[k])]
+        if ta != tb:
+            out.append('%s: what it animated: the flight %s changed: %s → %s' % (where, k, short(ta, 80), short(tb, 80)))
+    del out[limit:]
+
+
+def shell_part(s):
+    """The dialog's rows of a cog screen (its `dlg` is the paths the probe read inside it, in order, repeats included)."""
+    left, rows = list((s or {}).get('dlg') or []), []
+    for r in (s or {}).get('layout') or []:
+        if r and r[0] in left:
+            left.remove(r[0])
+            rows.append(r)
+    return {'layout': rows}
+
+
+def shell_screen(s):
+    """The cog's own screen with the dialog taken out, and what the rest of it animated: the tail is compared but not its place,
+    because it hangs from a block."""
+    s = dict(s)
+    left, dlg, rows = list(s.pop('dlg', None) or []), set(s.get('dlg') or []), []
+    dlg = set(left)
+    for r in (s.get('layout') or []):
+        if r and r[0] in left:
+            left.remove(r[0])
+        elif r and not COG_ROOT.match(r[0]):
+            if COG_TAIL.search(r[0]):
+                r = list(r)
+                r[1:3] = [0, 0]
+                r[-1] = ''
+            rows.append(r)
+    s['layout'] = rows
+    s['motion'] = [m for m in (s.get('motion') or []) if (motion_row(m) or [None, ''])[1] not in dlg and not COG_ROOT.match(str((motion_row(m) or [None, ''])[1]))]
+    s.pop('focus', None)
+    return s
+
+
+def shell_selftest():
+    """The shell's rules against made-up records: what he asked to change passes, each way a change inside a block could slip
+    through is caught. Run with the other self-tests before a Chrome starts."""
+    fails = []
+    F = ['path', 'x', 'y', 'w', 'h', 'text', 'background-color', 'backdrop-filter']
+    row = lambda p, x, y, w=100, h=20, s='x', bg='a', bd='b': [p, x, y, w, h, s, bg, bd]
+    fl = lambda key, kf='[{"top":"10px"}]', opt='{"duration":460}': json.dumps(['W', key, kf, opt])
+    inner = lambda dx=0, dy=0, s='x', w=100: [row('div#aspect-row', 10 + dx, 50 + dy), row('div#aspect-row>button', 12 + dx, 52 + dy, w, 20, s), row('label#res', 12 + dx, 74 + dy), row('button#cv-cancel', 12 + dx, 90 + dy), row('button#cv-go', 120 + dx, 90 + dy)]
+    flights = [fl('div#cv-friends'), fl('div#aspect-row'), fl('div#cv-mini.cv-mini'), fl('div#canvas-dialog.cv-pair>div.export-card')]
+    bar = row('span#cv-fr-sub', 0, 0, 100, 20, 'Not sharing')
+    pa = {'layout': [row('div#canvas-dialog.cv-pair', 0, 0), row('div#canvas-dialog.cv-pair>div.export-card', 5, 40), bar] + inner() + [row('div#cv-friends', 0, 0)], 'motion': flights}
+    fb = [fl('div#cv-friends'), fl('div#aspect-row'), fl('div#cv-app'), fl('div#canvas-dialog.cv-bars.cv-pair>div.export-card')]
+
+    def caught(name, pb, want=True, frame=(800, 800)):
+        out = []
+        shell_diff(pa, pb, 'self-test', out, 50, F, frame)
+        flight_diff(pa, pb, 'self-test', out, 50)
+        if bool(out) != want:
+            fails.append('%s: %s' % (name, ('not caught' if want else 'refused: %s' % out[:2])))
+    shell = [row('div#canvas-dialog.cv-bars.cv-none.cv-pair', 0, 0), row('div#canvas-dialog.cv-bars.cv-pair>div.export-card.pop-card', 300, 400, 50, 60, 'x', 'q'), row('span#cv-fr-sub', 9, 9, 50, 20, 'Not sharing'), row('div#cv-friends', 9, 9, 50, 60, 'x', 'q'), row('div#cv-app', 1, 2), row('button#cv-app-bar.cv-mini>span', 1, 2)]
+    good = shell + inner(290, 360)
+    pin = lambda c, g: shell + inner(290, 360)[:3] + [c, g]
+    caught('the shell moved, restyled and gained App settings, with the inside the same', {'layout': good, 'motion': fb}, False)
+    caught('the pinned pair stands lower with its block', {'layout': pin(row('button#cv-cancel', 302, 500), row('button#cv-go', 410, 500)), 'motion': fb}, False)
+    caught('Cancel and Apply shorter at 320 wide', {'layout': shell + inner(0, 360)[:3] + [row('button#cv-cancel', 12, 450, 100, 12), row('button#cv-go', 120, 450, 100, 12)], 'motion': fb}, False, (320, 800))
+    caught('Cancel and Apply shorter at another width', {'layout': pin(row('button#cv-cancel', 302, 450, 100, 12), row('button#cv-go', 410, 450, 100, 12)), 'motion': fb})
+    caught('Cancel and Apply taller at 320 wide', {'layout': shell + inner(0, 360)[:3] + [row('button#cv-cancel', 12, 450, 100, 40), row('button#cv-go', 120, 450, 100, 40)], 'motion': fb}, True, (320, 800))
+    caught('Apply reworded', {'layout': pin(row('button#cv-cancel', 302, 450), row('button#cv-go', 410, 450, 100, 20, 'y')), 'motion': fb})
+    caught('the pair above the form', {'layout': pin(row('button#cv-cancel', 302, 100), row('button#cv-go', 410, 100)), 'motion': fb})
+    caught('the pair broken apart', {'layout': pin(row('button#cv-cancel', 302, 450), row('button#cv-go', 410, 500)), 'motion': fb})
+    caught('the pair moved sideways', {'layout': pin(row('button#cv-cancel', 330, 450), row('button#cv-go', 438, 450)), 'motion': fb})
+    caught('Apply off the screen', {'layout': pin(row('button#cv-cancel', 302, 900), row('button#cv-go', 410, 900)), 'motion': fb})
+    caught('the whole block off the screen', {'layout': shell + inner(290, 2000), 'motion': fb})
+    caught('a row inside restyled', {'layout': shell + inner(290, 360, 'y'), 'motion': fb})
+    caught('a row inside resized', {'layout': shell + inner(290, 360, 'x', 90), 'motion': fb})
+    caught('a row inside gone', {'layout': shell + inner(290, 360)[:2] + inner(290, 360)[3:], 'motion': fb})
+    caught('a row inside new', {'layout': shell + inner(290, 360) + [row('div#aspect-row>i', 0, 0)], 'motion': fb})
+    caught('a row inside whose id only starts like a bar’s', {'layout': shell + inner(290, 360) + [row('div#cv-mini-note', 0, 0)], 'motion': fb})
+    caught('a row in Friends beside its bar', {'layout': shell + inner(290, 360) + [row('div#cv-friends>div.tip', 0, 0)], 'motion': fb})
+    caught('a row moved inside its block', {'layout': shell + inner(290, 360)[:1] + [row('div#aspect-row>button', 302, 416)] + inner(290, 360)[2:], 'motion': fb})
+    caught('the rows reordered in the document', {'layout': shell + [inner(290, 360)[1], inner(290, 360)[0]] + inner(290, 360)[2:], 'motion': fb})
+    caught('a bar reworded', {'layout': [row('span#cv-fr-sub', 9, 9, 50, 20, 'Something else')] + [x for x in good if not x[0].startswith('span#cv-fr-sub')], 'motion': fb})
+    caught('the scrim recoloured', {'layout': [row('div#canvas-dialog.cv-bars.cv-pair', 0, 0, 100, 20, 'x', 'z')] + good[1:], 'motion': fb})
+    caught('a flight retimed', {'layout': good, 'motion': [fl('div#cv-friends', opt='{"duration":700}')] + fb[1:]})
+    caught('the card’s flight retimed, whatever its classes', {'layout': good, 'motion': fb[:3] + [fl('div#canvas-dialog.cv-bars.cv-pair>div.export-card', opt='{"duration":700}')]})
+    caught('a flight’s keyframes changed', {'layout': good, 'motion': [fl('div#cv-friends', '[{"top":"10px","offset":0.9}]')] + fb[1:]})
+    caught('a content flight gone', {'layout': good, 'motion': [fb[0]] + fb[2:]})
+    caught('a new flight inside', {'layout': good, 'motion': fb + [fl('label#res')]})
+    caught('no flight at all', {'layout': good, 'motion': []})
+    A1 = {'app': {'version': COG_SHELL_HEAD}, 'fu6': {}}
+    with_app = {'screens': {COG_SCREEN: {'layout': [row('div#cv-app', 0, 0)]}}}
+    if not cog_shell(A1, with_app) or cog_shell(dict(with_app, app={'version': COG_SHELL_HEAD}), with_app) or cog_shell({'app': {'version': 'v1'}, 'fu6': {}}, with_app) or cog_shell(A1, {'screens': {COG_SCREEN: {'layout': [row('div#cv-appendix', 0, 0)]}}}):
+        fails.append('the shell opens in a release it should not, or not in the one it should')
+    s = shell_screen({'focus': 'x', 'dlg': ['div#aspect-row'], 'layout': [row('button#btn-settings.pop-src', 0, 0), row('div#aspect-row', 0, 0), row('div#canvas-dialog.cv-pair', 0, 0), ['html>body>span.pop-tail', 9, 9, 1, 1, 'x', 'style']],
+                      'motion': [json.dumps(['W', 'div#transport', '[]', '{}']), json.dumps(['W', 'div#aspect-row', '[]', '{}'])]})
+    if [r[0] for r in s['layout']] != ['button#btn-settings.pop-src', 'html>body>span.pop-tail'] or s['layout'][1][1] != 0 or s['layout'][1][-1] != '' or len(s['motion']) != 1 or 'focus' in s:
+        fails.append('the cog’s screen does not keep exactly what lies outside the dialog: %s' % short(s, 160))
+    if [r[0] for r in shell_part({'dlg': ['div#aspect-row'], 'layout': [row('button#x', 0, 0), row('div#aspect-row', 0, 0)]})['layout']] != ['div#aspect-row']:
+        fails.append('the cog’s screen does not give up its dialog’s rows')
+    for f in fails:
+        print('❌ THE COG SHELL’S SELF-TEST: ' + f)
+    return 3 if fails else 0
+
+
 def write_price(work, dest):
     """From a run's kept records (head = without the block, tree = with it): every element's rect delta and every flight's px
     deltas, per run, size and part. REFUSES (exit 2) when anything moved outside PRICED, or the two differ by more than a
@@ -897,7 +1158,9 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
             continue
         A, B = apply_mask(A, keys), apply_mask(B, keys)
         A, B = simple_normalize(A), simple_normalize(B)
+        shell = cog_shell(A, B)   # #1132: the one release that adds App settings, and the rows it is free to change
         fields = A.get('fields') or FIELDS_V1
+        run_frame = shell_frame('%sx%s' % (B.get('w'), B.get('h')))
         out = []
         if A.get('fields') != B.get('fields'):
             out.append('%s the layout record’s columns: %s → %s' % (w, short(A.get('fields')), short(B.get('fields'))))
@@ -917,10 +1180,23 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                 if sb.get('err') and not sa.get('err'):
                     out.append('%s %s: the tree could not reach this screen: %s' % (w, name, sb['err']))
                     continue
+                if shell and name in (COG_SCREEN, COG_CLOSED_SCREEN) and not sa.get('deferred'):
+                    if not sa.get('dlg') or not sb.get('dlg'):
+                        out.append('%s %s: no record of which rows are the dialog’s, so the rest of the screen cannot be told from it' % (w, name))
+                    if name == COG_SCREEN:
+                        # the Canvas block open on both, at every run's size (FU6 only measures its fourteen). The flight out of all
+                        # closed is on the tree alone, and what opening the cog animates is read on fu1-cog-closed
+                        shell_diff(shell_part(sa), shell_part(sb), '%s %s' % (w, name), out, limit, fields, run_frame)
+                        sa, sb = dict(sa, motion=[]), dict(sb, motion=[])
+                    else:
+                        flight_diff(sa, sb, '%s %s' % (w, name), out, limit)
+                    sa, sb = shell_screen(sa), shell_screen(sb)
                 if 'hovers' in sa or 'hovers' in sb:
                     ha, hb = sa.get('hovers') or {}, sb.get('hovers') or {}
                     for hk in list(ha.keys()) + [k for k in hb if k not in ha]:
                         va, vb = ha.get(hk) or {}, hb.get(hk) or {}
+                        if shell and hk == COG_HOVER:   # the bar he asked to change: that it still hovers, not how
+                            va, vb = dict((k, va.get(k)) for k in ('target', 'none')), dict((k, vb.get(k)) for k in ('target', 'none'))
                         where = '%s %s %s' % (w, name, hk)
                         if va.get('target') != vb.get('target') or va.get('none') != vb.get('none'):
                             out.append('%s: hovered %s → %s' % (where, va.get('target') or va.get('none'), vb.get('target') or vb.get('none')))
@@ -1013,7 +1289,10 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
             local = []
             fa4, fb4 = A.get('fu4'), B.get('fu4')
             ca, cb = fu4_cog(A), fu4_cog(B)
-            if price is not None and ca and cb and priced(FU4_COG, 'friends', run_size):
+            if shell and ca and cb:
+                shell_diff(ca, cb, '%s FU4 leave: the cog’s Friends' % w, out, limit, fields, run_frame)
+                fa4, fb4 = without_fu4_cog(fa4), without_fu4_cog(fb4)
+            elif price is not None and ca and cb and priced(FU4_COG, 'friends', run_size):
                 # FU4's Friends panel in the session, held to its own measured price; the rest of FU4 exactly
                 price_diff(ca, cb, (price.get(FU4_COG) or {}).get('friends'), '%s FU4 leave: the cog’s Friends' % w, out, limit)
                 fa4, fb4 = without_fu4_cog(fa4), without_fu4_cog(fb4)
@@ -1033,10 +1312,16 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                 vb = f6b.get(size) or {}
                 if va.get('noCog') != vb.get('noCog'):
                     out.append('%s FU6 %s: where the cog is: %s → %s' % (w, size, short(va.get('noCog')), short(vb.get('noCog'))))
-                for part in ('canvas', 'friends', 'reopened'):
+                for part in ('closed', 'canvas', 'friends', 'reopened', 'tapClosed'):
+                    if shell and part in ('closed', 'tapClosed'):
+                        continue    # all closed is what he asked for, and HEAD has no such state yet: exact from the next release on
                     if part in va or part in vb:
                         pa_, pb_ = va.get(part) or {}, vb.get(part) or {}
                         where = '%s FU6 %s %s' % (w, size, part)
+                        if shell:
+                            shell_diff(pa_, pb_, where, out, limit, fields, shell_frame(size))
+                            flight_diff(pa_, pb_, where, out, limit)
+                            continue
                         if price is not None and priced(size, part, run_size):
                             price_diff(pa_, pb_, (price.get(size) or {}).get(part), where, out, limit)
                         else:
@@ -1050,7 +1335,13 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
                             out += ['%s FU6 %s %s: %s' % (w, size, part, x) for x in local]
                 if size == 'function':
                     va, vb = dict(va), dict(vb)
-                    if price is not None:
+                    if shell:
+                        # the swap's two cog records: inside the block and the timing; the rest of the function (Cancel, Apply) exactly, below
+                        for k in SWAP_PARTS:
+                            ra, rb = va.pop(k, None) or {}, vb.pop(k, None) or {}
+                            shell_diff(ra, rb, '%s FU6 function %s' % (w, k), out, limit, fields, run_frame)
+                            flight_diff(ra, rb, '%s FU6 function %s' % (w, k), out, limit)
+                    elif price is not None:
                         # the swap's two cog records, taken at the run's own size: what the block moved there is priced,
                         # and the rest of each (which way it is open, its focus) is compared exactly below
                         for k in SWAP_PARTS:
@@ -1087,6 +1378,8 @@ def compare(ref_dir, cand_dir, widths, groups, limit, per_step=6):
             da, db = os.path.join(ref_dir, 'shots-%s' % w), os.path.join(cand_dir, 'shots-%s' % w)
             for name in sorted(os.listdir(da)) if os.path.isdir(da) else []:
                 if not name.endswith('.png'):
+                    continue
+                if shell and COG_PICTURE.match(name):
                     continue
                 pb = os.path.join(db, name)
                 if not os.path.exists(pb):
@@ -1302,7 +1595,7 @@ def main():
         if cmd == 'selftest':
             # tools/full-unchanged.sh runs this BEFORE a Chrome starts (7 Oct, the laptop: no numpy, so a run measured
             # for 22 minutes, died on this file's import at the end and said NOT PASS — about the machine, not the app)
-            return png_gate(True) or price_selftest()
+            return png_gate(True) or price_selftest() or shell_selftest()
         if cmd == 'plant':
             return plant(sys.argv[2], sys.argv[3])
         if cmd == 'linkcopy':
@@ -1326,7 +1619,7 @@ def main():
     a = ap.parse_args()
     tol, chan = envint('FU_TOL_PX'), envint('FU_CHAN')
     ftol, fchan = envint('FU_FAINT_TOL_PX', 10 ** 9), envint('FU_FAINT_CHAN', 255)
-    if png_gate(a.png_selftest) or price_selftest():
+    if png_gate(a.png_selftest) or price_selftest() or shell_selftest():
         return 3
     if a.runs:
         runs = [x.split('=', 1) for x in a.runs.split()]

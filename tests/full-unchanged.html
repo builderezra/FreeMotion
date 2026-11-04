@@ -619,6 +619,7 @@
       }
       DUMP.screens[name] = { layout: rec, focus: D.activeElement ? pathOf(D.activeElement) : '', canvasesQuiet: quiet,
         pv: pvs.pv || null, pvHash: pvs.pvHash || '', motion: motion };
+      if (opts.dlg) { var dlgEl = D.querySelector(opts.dlg); DUMP.screens[name].dlg = dlgEl ? layoutRecord(dlgEl, opts.skip).map(function (x) { return x[0]; }) : []; }
       if (toastRec) DUMP.screens[name].toast = toastRec;
       if (!opts.noShot) {
         // `hide`: what the record skips is also kept out of the picture (visibility only, so nothing else moves)
@@ -1294,8 +1295,14 @@
        both sides, whatever the build — FU6 compares it there exactly when there is no block. */
     if ((W === 320 && H === 568) || (W === 375 && H === 553) || (W === 380 && H === 667)) {
       DUMP.screens['fu1-cog'] = { deferred: 'the cog at a size COG-DESIGN §6.4 prices is judged by FU6' };
+      DUMP.screens['fu1-cog-closed'] = { deferred: 'the cog at a size COG-DESIGN §6.4 prices is judged by FU6' };
     } else {
-      await screen('fu1-cog', async function () { FM.selectLayer(null); var b = firstVisible(['btn-settings', 'm-settings']); if (!b) throw new Error('no cog on screen'); b.click(); }, { skip: '#cv-editor', hide: '#cv-editor' });
+      /* #1132: the cog opens all closed. fu1-cog-closed is that, and fu1-cog keeps showing the Canvas block open, because its
+         pictures are the only ones of the inside of a block, at the only run sizes that reach it. On a build that opens on Canvas
+         the two are the same screen. `dlg`: which rows are the dialog's (tools/_fu_compare.py shell_screen). */
+      var cogTap = function () { FM.selectLayer(null); var b = firstVisible(['btn-settings', 'm-settings']); if (!b) throw new Error('no cog on screen'); b.click(); };
+      await screen('fu1-cog-closed', async function () { cogTap(); }, { skip: '#cv-editor', hide: '#cv-editor', dlg: '#canvas-dialog' });
+      await screen('fu1-cog', async function () { cogTap(); await settle(300); await openCanvasBlock(); }, { skip: '#cv-editor', hide: '#cv-editor', dlg: '#canvas-dialog' });
     }
     /* Overlays drawn over the preview, which v1's pictures could not see: onion skin and the guides, on a selected clip
        with keys (the selection box, its handles, the ghosts, the thirds). */
@@ -2956,6 +2963,15 @@
     if (!bar || !bar.getClientRects().length) throw new Error('no Friends bar to open');
     bar.click(); await settle(350);
   }
+  /* #1132: the cog opens all closed, and each block by its own ⤢. On a build where it opens on a block these do nothing, so both
+     sides record the same open block whichever build they are. */
+  function cogClosed() { return D.getElementById('canvas-dialog').classList.contains('cv-none'); }
+  async function openCanvasBlock() {
+    if (!cogClosed()) return;
+    var x = D.getElementById('cv-mini-exp');
+    if (!x || !x.getClientRects().length) throw new Error('no Canvas bar to open');
+    x.click(); await settle(350);
+  }
   async function FU6() {
     await freshCopy('FU6');
     try { w.localStorage.removeItem('fm.cvPair'); } catch (e) {}
@@ -2967,13 +2983,23 @@
         await atSize(sz[0], sz[1], async function () {
           try { w.localStorage.removeItem('fm.cvPair'); } catch (e) {}
           if (!(await openCog())) { r.noCog = cogWhere(); return; }
-          r.canvas = cogRecord();
+          r.closed = cogRecord();       // what the cog opens to (#1132: all closed)
+          motionStart();                // …and the flight out of it, which a build that opens on a block does not have
+          await openCanvasBlock();
+          r.canvas = cogRecord(); r.canvas.motion = motionTake();
           /* the Canvas → Friends flight is element.animate() (js/app.js): what it animated, the script's calls included
              (the second review, 6 Oct: 460 ms spring → 700 ms ease-in-out passed at all fourteen sizes) */
           motionStart();
           await openFriends(); r.friends = cogRecord(); r.friends.motion = motionTake();
           FM.closeCanvasDialog(); await settle();
-          await mustOpenCog(); r.reopened = cogRecord();     // the cog remembers the last of Canvas / Friends
+          await mustOpenCog(); if (cogClosed()) await openFriends();     // (before #1132 the cog came back on the last of Canvas / Friends)
+          r.reopened = cogRecord();
+          /* #1132, his words: "you should be able to tap on the current open one to close it". A build whose open block has no ⤡ on
+             screen does nothing here. */
+          motionStart();
+          var frX = D.getElementById('cv-fr-exp');
+          if (frX && frX.getClientRects().length) { frX.click(); await settle(350); }
+          r.tapClosed = cogRecord(); r.tapClosed.motion = motionTake();
           FM.closeCanvasDialog(); await settle();
         });
       } catch (e) { r.err = String(e && e.message || e); closeTransient(); }
@@ -2983,19 +3009,19 @@
     var fn = DUMP.fu6.function = { err: '' };
     try {
       step('FU6 Canvas Cancel');
-      await mustOpenCog(); takeToasts();
+      await mustOpenCog(); await openCanvasBlock(); takeToasts();
       var setSel = function (id, v) { var e = D.getElementById(id); if (!e) throw new Error('no #' + id); e.value = v; e.dispatchEvent(new w.Event('input', { bubbles: true })); e.dispatchEvent(new w.Event('change', { bubbles: true })); };
       try { setSel('cv-fps', '24'); } catch (e) {}
       press('#cv-cancel'); await settle(250);
       fn.cancel = await stateRecord({ noFrames: true });
       step('FU6 Canvas Apply');
-      await mustOpenCog(); takeToasts();
+      await mustOpenCog(); await openCanvasBlock(); takeToasts();
       try { setSel('cv-fps', '24'); } catch (e) { fn.fpsErr = e.message; }
       try { var bg = D.getElementById('cv-bg'); if (bg) { bg.value = '#203040'; bg.dispatchEvent(new w.Event('input', { bubbles: true })); bg.dispatchEvent(new w.Event('change', { bubbles: true })); } } catch (e) { fn.bgErr = e.message; }
       press('#cv-go'); await settle(300);
       fn.apply = await stateRecord();
       step('FU6 the Canvas ↔ Friends swap');
-      await mustOpenCog(); motionStart(); await openFriends(); fn.swapToFriends = cogRecord(); fn.swapToFriends.motion = motionTake();
+      await mustOpenCog(); await openCanvasBlock(); motionStart(); await openFriends(); fn.swapToFriends = cogRecord(); fn.swapToFriends.motion = motionTake();
       var cvBar = D.getElementById('cv-mini-exp') || D.getElementById('cv-mini');
       motionStart();
       if (cvBar && cvBar.getClientRects().length) { cvBar.click(); await settle(350); }
