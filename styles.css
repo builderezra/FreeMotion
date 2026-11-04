@@ -2470,11 +2470,6 @@ html:not([data-home="light"]):not(.splash-on):has(#home-screen:not(.hidden)) { b
 /* (The dark look's dim-to-black ending was removed in queue 776 — it hid the film before the splash dissolved. See index.html.) */
 #splash-vid.playing + #splash-poster { opacity: 0; }
 #splash-poster { opacity: 1; transition: opacity .2s linear; pointer-events: none; }
-#splash-skip {
-  position: absolute; bottom: max(24px, env(safe-area-inset-bottom)); left: 0; right: 0;
-  text-align: center; color: rgba(232, 236, 244, .45); font-size: 12px; letter-spacing: .4px;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, .8);
-}
 /* View-bar second group (v5.03): rate, loop, export marks, timeline zoom. Reuses .vb-btn / .vb-z so
    the new controls are the same object as the ones already there — a separate look would have made
    the bar read as two toolbars that happen to touch. */

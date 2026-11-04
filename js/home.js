@@ -3000,8 +3000,9 @@ window.FM = window.FM || {};
    * scripts finish — so the first version of this played the entire stagger behind an opaque splash
    * and was finished 200ms BEFORE the dissolve even started (measured: intro done at t=2101ms, fade
    * began at t=2281ms). Nobody ever saw it. It now waits for the splash's own dismiss event and
-   * starts 150ms into the dissolve, while the black is still ~95% up — so the cards rise in through
-   * the clearing black rather than being revealed already in place.
+   * starts 20ms into the cut (.28s ease since #1223; it was 150ms into a .9s dissolve), while the black
+   * is still ~95% up — so the cards rise in through the clearing black rather than being revealed
+   * already in place.
    *
    * No splash (same-session reload, reduced motion, a skipped launch) → run immediately.
    * The 6s fallback covers a splash that is torn down some other way; go() is idempotent. */
@@ -3044,7 +3045,7 @@ window.FM = window.FM || {};
       // re-read every thumbnail out of IndexedDB for nothing
       stampIntro();
     };
-    document.addEventListener('fm:splash-dismiss', () => setTimeout(go, 150), { once: true });
+    document.addEventListener('fm:splash-dismiss', () => setTimeout(go, 20), { once: true });
     setTimeout(go, 6000);   // a splash torn down some other way must never leave the screen blank
   }
 
@@ -3820,6 +3821,7 @@ window.FM = window.FM || {};
        ADDS everything a second time. Re-render only while Home is on screen; a hidden grid is rebuilt on open. */
     refresh() { if (root && !root.classList.contains('hidden')) render(); },
     _splashIsUp: splashIsUp,   // exposed for the regression test — see armIntro
+    _armIntro: armIntro,   // the same, for #1223's test of when the entrance starts
     /* The card-tap path itself, as a seam. "Save project file…" reaches it with keepOpen, which is the
        one route that leaves home OPEN and then serializes FM.media — so the media release (queue 385)
        has to be driven through THIS, not through close(), to prove that path is safe. */

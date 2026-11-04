@@ -27,7 +27,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.18">
+<meta name="fm-build" content="v18.19">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -44,9 +44,9 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=782">
+<link rel="stylesheet" href="styles.css?v=783">
 <link rel="stylesheet" href="theme-glass.css?v=69">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
-<link rel="manifest" href="manifest.json?v=3">
+<link rel="manifest" href="manifest.json?v=4">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
      MY OWN regression: v6.78 added `html, body { overflow-x: hidden; overflow-x: clip; }`, and
@@ -90,84 +90,52 @@
      — putting the class in the markup so a refresh could not flash the old layout — is superseded by
      there no longer being an old layout. -->
 <body>
-  <!-- Splash: the app's OWN logo, the Keyframes animation (#1180; his pick on 23 Oct, "i love the first one"), once
-       per session (fresh tab / PWA cold launch). FIRST in <body> deliberately: it parses and paints BEFORE the app's
-       scripts, so on a cold load the splash covers the load instead of appearing after it. It is inline SVG + SMIL, so it
-       costs no download at all — the film it replaces (splash-v2.mp4, kept in the repo, no longer loaded) was 2.8MB.
-       FROM THE CANVAS TO THE APP (tools/design/logo-1180/canvas/D2-Round2.dc.html, card 7, ids nC_): on the canvas it
-       LOOPS. Here every animation runs ONCE (`fill="freeze"`, no repeatCount) on the canvas's own 5.5s timeline, so every
-       keyTime is the designer's; the canvas's loop fade-out (its outer group, opacity 1 -> 0 at 0.86-0.95 of the cycle)
-       is gone, because a one-shot has nothing to loop back to. The last thing to move is the tagline, EDITING, EVOLVED,
-       rising into place under the name; it settles at 0.61 of the cycle (3.36s). The end frame holds 0.4s and then the
-       splash dissolves into the app exactly as the film's natural end did.
+  <!-- Splash: the app's OWN logo, take H2 "Scrub" (#1223; his words, 28 Oct, of #1180's Keyframes splash: "looks very Ai
+       made ... try making it feel more human"), once per build per session (fresh tab / PWA cold launch). FIRST in <body>
+       deliberately: it parses and paints BEFORE the app's scripts, so on a cold load the splash covers the load instead of
+       appearing after it. It is inline SVG + SMIL, so it costs no download at all — the film it replaced (splash-v2.mp4, kept
+       in the repo, no longer loaded) was 2.8MB.
+       ONE IDEA, THE GESTURE AN EDITOR'S HAND MAKES: the playhead cuts in at the clips' start (0.15s), holds a beat, sweeps right
+       (0.40 to 0.98s) with the clips revealed exactly at its edge (the clip rect's width and the playhead run on one spline),
+       overshoots to x=112, rocks back like a hand scrubbing tape (1.16 / 1.30 / 1.41 / 1.50s, each swing shorter), stops on
+       its frame, and the name cuts in on that frame. No glow, no rings, no tagline, no fade-ups, no scale-from-0.
+       FROM THE BOARD TO THE APP ("Human intro, four takes", project/Human-Intro.dc.html, card H2): there its keyTimes sit on a
+       4s loop; here the same seconds sit on one 1.6s pass (`fill="freeze"`, no repeatCount), so a keyTime is seconds / 1.6. The
+       end frame holds 0.6s, a beat to read the name, and then the splash cuts to the app in .28s: an editor cuts, he does not
+       dissolve.
        Skips: a reload of the same build in the same session (sessionStorage holds the build, meta fm-build), tap/click,
-       Esc-Enter-Space, a cap measured from when the animation's clock starts, and a 15s ceiling. Reduced motion, a browser
-       that cannot run SMIL, or one that has paused it (iOS with Auto-Play Animated Images off, or a clock that has not
-       started 1s after the load): the END FRAME as a still, no animation, then the hand-over.
-       The wordmark and tagline name Sora first, as the canvas does, but the app ships no Sora (no download, no webfont), so
-       they render in the system font: SF on an iPhone, Segoe on Windows. -->
-  <!-- THE GROUND IS CARD 7's OWN #0b0b0d: the diamonds' strokes and the playhead's backing are #0b0b0d knock-outs drawn
-       for it, so on this ground they vanish as designed. Queue 920's split, as theme-glass.css does for the light Home:
-       the ground you SEE is a background-IMAGE layer, and background-COLOR is what iOS reads for the status strip (a fixed
-       full-screen element's first, else the root's). So in the light look (data-home="light", set by settings.js before
-       load) only the COLOUR ramps to the light Home's #fafdff over the dissolve: the box stays dark under his mark while
-       iOS hands the strip to the light Home, instead of a dark strip over a light Home that snaps when #splash is removed.
-       The canvas rule carries :has(#splash) to tie theme-glass.css's light-Home rule and win on order, so the canvas
+       Esc-Enter-Space, a cap measured from when the animation's clock starts, and a ceiling. Reduced motion, a browser that
+       cannot run SMIL, or one that has paused it (iOS with Auto-Play Animated Images off, or a clock that has not started 1s
+       after the load): the END FRAME as a still, no animation, then the hand-over.
+       The name is set in the font the app really shows (no download, no webfont): SF on an iPhone, Segoe on Windows. -->
+  <!-- THE GROUND IS TRUE BLACK, #000: the colour the iPhone launch images already use (above), so launch screen and first
+       frame are one colour; the playhead's backing is a #000 knock-out drawn for it. Queue 920's split, as theme-glass.css
+       does for the light Home: the ground you SEE is a background-IMAGE layer, and background-COLOR is what iOS reads for the
+       status strip (a fixed full-screen element's first, else the root's). So in the light look (data-home="light", set by
+       settings.js before load) only the COLOUR ramps to the light Home's #fafdff over the cut: the box stays black under his
+       mark while iOS hands the strip to the light Home, instead of a dark strip over a light Home that snaps when #splash is
+       removed. The canvas rule carries :has(#splash) to tie theme-glass.css's light-Home rule and win on order, so the canvas
        holds the ground while the splash is up (Home is open under it on a first load). -->
   <style id="splash-css">
-    #splash.splash-kf { background-color: #0b0b0d; background-image: linear-gradient(#0b0b0d, #0b0b0d); display: flex; align-items: center; justify-content: center; }
-    html.splash-on.splash-kf-on:has(#splash), html.splash-on.splash-kf-on body { background: #0b0b0d; }
-    #splash.splash-kf.splash-out { transition: opacity .9s cubic-bezier(.45, 0, .55, 1), background-color .9s cubic-bezier(.45, 0, .55, 1); }
-    #splash.splash-kf.splash-out.splash-cut { transition: opacity .28s ease, background-color .28s ease; }
+    #splash.splash-kf { background-color: #000; background-image: linear-gradient(#000, #000); display: flex; align-items: center; justify-content: center; }
+    html.splash-on.splash-kf-on:has(#splash), html.splash-on.splash-kf-on body { background: #000; }
+    #splash.splash-kf.splash-out { transition: opacity .28s ease, background-color .28s ease; }
     html[data-home="light"].splash-kf-out:has(#home-screen:not(.hidden)) #splash.splash-kf.splash-out { background-color: #fafdff; }
-    html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash):has(#home-screen:not(.hidden)), html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#home-screen:not(.hidden)) body { background-color: #fafdff; transition: background-color .9s cubic-bezier(.45, 0, .55, 1); }
-    html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash.splash-cut):has(#home-screen:not(.hidden)), html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash.splash-cut):has(#home-screen:not(.hidden)) body { transition: background-color .28s ease; }
+    html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash):has(#home-screen:not(.hidden)), html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#home-screen:not(.hidden)) body { background-color: #fafdff; transition: background-color .28s ease; }
     #splash-mark { display: block; width: min(92vw, 48vh); height: auto; aspect-ratio: 200 / 260; pointer-events: none; }
-    /* Before the mark's clock starts (the whole boot, on a cold launch) its first frame is empty, so only the dark ground
-       shows: no 'tap to skip' over an empty box (the PM, 23 Oct). A tap still skips: the listener is on #splash. */
-    #splash.splash-wait #splash-skip { visibility: hidden; }
   </style>
   <div id="splash" class="hidden" aria-hidden="true">
     <svg id="splash-mark" viewBox="0 0 200 260" aria-hidden="true" focusable="false">
 <defs>
-<linearGradient id="nC_g" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="100"><stop offset="0" stop-color="#f5f5f7"/><stop offset="1" stop-color="#3a3a3f"/></linearGradient>
-<radialGradient id="nC_w"><stop offset="0" stop-color="#ffffff" stop-opacity="0.5"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
-<radialGradient id="nC_t"><stop offset="0" stop-color="#29d9bb" stop-opacity="0.55"/><stop offset="1" stop-color="#29d9bb" stop-opacity="0"/></radialGradient>
+<linearGradient id="h2_g" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="100"><stop offset="0" stop-color="#f5f5f7"/><stop offset="1" stop-color="#3a3a3f"/></linearGradient>
+<clipPath id="h2_c"><rect id="h2_reveal" x="14" y="0" width="0" height="120"><animate attributeName="width" values="0;0;98;98" keyTimes="0;0.25;0.6125;1" calcMode="spline" keySplines="0 0 1 1;0.77 0 0.175 1;0 0 1 1" dur="1.6s" fill="freeze"/></rect></clipPath>
 </defs>
-<g id="nC_mark">
-<g transform="translate(40 30)">
-<rect id="nC_clip1" x="106" y="20" width="0" height="22" rx="5" fill="url(#nC_g)"><animate attributeName="x" values="106;106;10.5;14;14" keyTimes="0;0.16;0.26;0.295;1" calcMode="spline" keySplines="0 0 1 1;0.2 0.9 0.3 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/><animate attributeName="width" values="0;0;95.5;92;92" keyTimes="0;0.16;0.26;0.295;1" calcMode="spline" keySplines="0 0 1 1;0.2 0.9 0.3 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/></rect>
-<rect id="nC_clip2" x="76" y="49" width="0" height="22" rx="5" fill="url(#nC_g)"><animate attributeName="x" values="76;76;11;14;14" keyTimes="0;0.178;0.278;0.313;1" calcMode="spline" keySplines="0 0 1 1;0.2 0.9 0.3 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/><animate attributeName="width" values="0;0;65;62;62" keyTimes="0;0.178;0.278;0.313;1" calcMode="spline" keySplines="0 0 1 1;0.2 0.9 0.3 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/></rect>
-<rect id="nC_clip3" x="40" y="78" width="0" height="22" rx="5" fill="url(#nC_g)"><animate attributeName="x" values="40;40;11.8;14;14" keyTimes="0;0.196;0.296;0.331;1" calcMode="spline" keySplines="0 0 1 1;0.2 0.9 0.3 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/><animate attributeName="width" values="0;0;28.2;26;26" keyTimes="0;0.196;0.296;0.331;1" calcMode="spline" keySplines="0 0 1 1;0.2 0.9 0.3 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/></rect>
-<g transform="translate(106 31)">
-<circle r="13" fill="url(#nC_w)" opacity="0"><animate attributeName="opacity" values="0;0;0.9;0;0" keyTimes="0;0.05;0.08;0.18;1" dur="5.5s" fill="freeze"/></circle>
-<g transform="scale(1)"><animateTransform attributeName="transform" type="scale" values="1;1;2.6;2.6" keyTimes="0;0.065;0.145;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/><polygon points="0,-6 6,0 0,6 -6,0" fill="none" stroke="#f5f5f7" stroke-width="1.1" stroke-linejoin="round" opacity="0"><animate attributeName="opacity" values="0;0;0.75;0;0" keyTimes="0;0.065;0.07;0.145;1" dur="5.5s" fill="freeze"/><animate attributeName="stroke-width" values="1.1;1.1;0.4;0.4" keyTimes="0;0.065;0.145;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/></polygon></g>
-<g opacity="0"><animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.03;0.05;0.39;0.42;1" dur="5.5s" fill="freeze"/><g transform="rotate(-45)"><animateTransform attributeName="transform" type="rotate" values="-45;-45;0;0;45;45" keyTimes="0;0.03;0.1;0.375;0.42;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1;0.5 0 0.75 0;0 0 1 1" dur="5.5s" fill="freeze"/><g transform="scale(0)"><animateTransform attributeName="transform" type="scale" values="0;0;1.3;0.92;1;1;0.82;1.12;1;1;1.16;0;0" keyTimes="0;0.03;0.075;0.095;0.115;0.138;0.16;0.19;0.225;0.35;0.375;0.42;1" calcMode="spline" keySplines="0 0 1 1;0.25 0.8 0.35 1;0.4 0 0.6 1;0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1;0.2 0.8 0.3 1;0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1;0.5 0 0.75 0;0 0 1 1" dur="5.5s" fill="freeze"/><polygon points="0,-6 6,0 0,6 -6,0" fill="#f5f5f7" stroke="#0b0b0d" stroke-width="1.6" stroke-linejoin="round"/></g></g></g>
+<g transform="translate(21 30)">
+<g clip-path="url(#h2_c)"><rect id="h2_clip1" x="14" y="20" width="92" height="22" rx="5" fill="url(#h2_g)"/><rect id="h2_clip2" x="14" y="49" width="62" height="22" rx="5" fill="url(#h2_g)"/><rect id="h2_clip3" x="14" y="78" width="26" height="22" rx="5" fill="url(#h2_g)"/></g>
+<g id="h2_head" opacity="0"><animate attributeName="opacity" values="0;1;1" keyTimes="0;0.09375;1" calcMode="discrete" dur="1.6s" fill="freeze"/><g id="h2_move" transform="translate(-68 0)"><animateTransform attributeName="transform" type="translate" values="-68 0;-68 0;30 0;-12 0;8 0;-3 0;0 0;0 0" keyTimes="0;0.25;0.6125;0.725;0.8125;0.88125;0.9375;1" calcMode="spline" keySplines="0 0 1 1;0.77 0 0.175 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0 0 1 1" dur="1.6s" fill="freeze"/><rect x="79.5" y="14" width="5" height="96" rx="2.5" fill="#000000"/><rect x="80.5" y="14" width="3" height="96" rx="1.5" fill="#29d9bb"/><polygon points="77,3 89,8.5 77,14" fill="#29d9bb"/></g></g>
 </g>
-<g transform="translate(76 60)">
-<circle r="13" fill="url(#nC_w)" opacity="0"><animate attributeName="opacity" values="0;0;0.9;0;0" keyTimes="0;0.068;0.098;0.198;1" dur="5.5s" fill="freeze"/></circle>
-<g transform="scale(1)"><animateTransform attributeName="transform" type="scale" values="1;1;2.6;2.6" keyTimes="0;0.083;0.163;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/><polygon points="0,-6 6,0 0,6 -6,0" fill="none" stroke="#f5f5f7" stroke-width="1.1" stroke-linejoin="round" opacity="0"><animate attributeName="opacity" values="0;0;0.75;0;0" keyTimes="0;0.083;0.088;0.163;1" dur="5.5s" fill="freeze"/><animate attributeName="stroke-width" values="1.1;1.1;0.4;0.4" keyTimes="0;0.083;0.163;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/></polygon></g>
-<g opacity="0"><animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.048;0.068;0.408;0.438;1" dur="5.5s" fill="freeze"/><g transform="rotate(-45)"><animateTransform attributeName="transform" type="rotate" values="-45;-45;0;0;45;45" keyTimes="0;0.048;0.118;0.393;0.438;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1;0.5 0 0.75 0;0 0 1 1" dur="5.5s" fill="freeze"/><g transform="scale(0)"><animateTransform attributeName="transform" type="scale" values="0;0;1.3;0.92;1;1;0.82;1.12;1;1;1.16;0;0" keyTimes="0;0.048;0.093;0.113;0.133;0.156;0.178;0.208;0.243;0.368;0.393;0.438;1" calcMode="spline" keySplines="0 0 1 1;0.25 0.8 0.35 1;0.4 0 0.6 1;0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1;0.2 0.8 0.3 1;0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1;0.5 0 0.75 0;0 0 1 1" dur="5.5s" fill="freeze"/><polygon points="0,-6 6,0 0,6 -6,0" fill="#f5f5f7" stroke="#0b0b0d" stroke-width="1.6" stroke-linejoin="round"/></g></g></g>
-</g>
-<g transform="translate(40 89)">
-<circle r="13" fill="url(#nC_w)" opacity="0"><animate attributeName="opacity" values="0;0;0.9;0;0" keyTimes="0;0.086;0.116;0.216;1" dur="5.5s" fill="freeze"/></circle>
-<g transform="scale(1)"><animateTransform attributeName="transform" type="scale" values="1;1;2.6;2.6" keyTimes="0;0.101;0.181;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/><polygon points="0,-6 6,0 0,6 -6,0" fill="none" stroke="#f5f5f7" stroke-width="1.1" stroke-linejoin="round" opacity="0"><animate attributeName="opacity" values="0;0;0.75;0;0" keyTimes="0;0.101;0.106;0.181;1" dur="5.5s" fill="freeze"/><animate attributeName="stroke-width" values="1.1;1.1;0.4;0.4" keyTimes="0;0.101;0.181;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/></polygon></g>
-<g opacity="0"><animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.066;0.086;0.426;0.456;1" dur="5.5s" fill="freeze"/><g transform="rotate(-45)"><animateTransform attributeName="transform" type="rotate" values="-45;-45;0;0;45;45" keyTimes="0;0.066;0.136;0.411;0.456;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1;0.5 0 0.75 0;0 0 1 1" dur="5.5s" fill="freeze"/><g transform="scale(0)"><animateTransform attributeName="transform" type="scale" values="0;0;1.3;0.92;1;1;0.82;1.12;1;1;1.16;0;0" keyTimes="0;0.066;0.111;0.131;0.151;0.174;0.196;0.226;0.261;0.386;0.411;0.456;1" calcMode="spline" keySplines="0 0 1 1;0.25 0.8 0.35 1;0.4 0 0.6 1;0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1;0.2 0.8 0.3 1;0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1;0.5 0 0.75 0;0 0 1 1" dur="5.5s" fill="freeze"/><polygon points="0,-6 6,0 0,6 -6,0" fill="#f5f5f7" stroke="#0b0b0d" stroke-width="1.6" stroke-linejoin="round"/></g></g></g>
-</g>
-<g opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.42;0.45;1" dur="5.5s" fill="freeze"/>
-<g transform="translate(0 -28)"><animateTransform attributeName="transform" type="translate" values="0 -28;0 -28;0 2.5;0 0;0 0" keyTimes="0;0.42;0.485;0.515;1" calcMode="spline" keySplines="0 0 1 1;0.3 0 0.2 1;0.4 0 0.6 1;0 0 1 1" dur="5.5s" fill="freeze"/>
-<circle cx="82" cy="8.5" r="16" fill="url(#nC_t)" opacity="0"><animate attributeName="opacity" values="0;0;1;0;0" keyTimes="0;0.475;0.495;0.6;1" dur="5.5s" fill="freeze"/></circle>
-<rect x="79.5" y="14" width="5" height="0" rx="2.5" fill="#0b0b0d"><animate attributeName="height" values="0;0;96;96" keyTimes="0;0.435;0.545;1" calcMode="spline" keySplines="0 0 1 1;0.45 0 0.2 1;0 0 1 1" dur="5.5s" fill="freeze"/></rect>
-<rect x="80.5" y="14" width="3" height="0" rx="1.5" fill="#29d9bb"><animate attributeName="height" values="0;0;96;96" keyTimes="0;0.435;0.545;1" calcMode="spline" keySplines="0 0 1 1;0.45 0 0.2 1;0 0 1 1" dur="5.5s" fill="freeze"/></rect>
-<polygon points="77,3 89,8.5 77,14" fill="#29d9bb"/>
-</g>
-</g>
-</g>
-<g id="nC_name" opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.5;0.57;1" dur="5.5s" fill="freeze"/><g transform="translate(0 8)"><animateTransform attributeName="transform" type="translate" values="0 8;0 8;0 0;0 0" keyTimes="0;0.5;0.59;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/><text x="100" y="196" text-anchor="middle" font-family="Sora, system-ui, sans-serif" font-size="24" font-weight="600" fill="#f5f5f7">FreeMotion</text></g></g>
-<g id="nC_tag" opacity="0"><animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.52;0.59;1" dur="5.5s" fill="freeze"/><g transform="translate(0 6)"><animateTransform attributeName="transform" type="translate" values="0 6;0 6;0 0;0 0" keyTimes="0;0.52;0.61;1" calcMode="spline" keySplines="0 0 1 1;0.16 1 0.3 1;0 0 1 1" dur="5.5s" fill="freeze"/><text x="100" y="218" text-anchor="middle" font-family="Sora, system-ui, sans-serif" font-size="8" letter-spacing="3" fill="#8e8e93">EDITING, EVOLVED</text></g></g>
-</g>
+<g id="h2_name" opacity="0"><animate attributeName="opacity" values="0;1;1" keyTimes="0;0.9375;1" calcMode="discrete" dur="1.6s" fill="freeze"/><text x="35" y="196" font-family="-apple-system, 'SF Pro Display', system-ui, 'Segoe UI', sans-serif" font-size="24" font-weight="600" letter-spacing="-0.3" fill="#f5f5f7">FreeMotion</text></g>
     </svg>
-    <div id="splash-skip">tap to skip</div>
   </div>
   <script id="splash-boot">
     /* queue 942: IS THIS THE FIRST LOAD SINCE THE APP WAS OPENED? Ezra, 26 Sep: *"every time you load into the app for the
@@ -190,12 +158,13 @@
         REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
         sessionStorage.setItem('fm.splashed', BUILD);
       } catch (e) { return; }
-      var sp = document.getElementById('splash'), svg = document.getElementById('splash-mark'), skip = document.getElementById('splash-skip');
+      var sp = document.getElementById('splash'), svg = document.getElementById('splash-mark');
       if (!sp || !svg) return;
-      /* The animation's own clock. END_S is the canvas timeline's last movement (the tagline's rise, 0.61 x 5.5s = 3.355s);
-         HOLD_S is how long the finished mark is held before the hand-over; STILL_MS is how long the still is shown when there
-         is no animation to wait for. */
-      var END_S = 3.36, HOLD_S = 0.4, STILL_MS = 1000;
+      /* The animation's own clock. END_S is the last movement (the playhead stops and the name cuts in, 1.5s); HOLD_S is how
+         long the finished mark is held before the hand-over; STILL_MS is how long the still is shown when there is no
+         animation to wait for. LAND_S is the longest the finished logo waits for the app under it, from when the clock starts
+         (or from the load, for the still): as long as the 3.76s mark and its .9s dissolve used to cover a slow restore. */
+      var END_S = 1.5, HOLD_S = 0.6, STILL_MS = 1000, LAND_S = 4.7;
       /* CAN THIS BROWSER RUN THE SMIL? iOS Safari and Chrome do. Anything that cannot gets the end frame instead of a blank
          box: every <animate> is replaced by its own LAST value, which is by construction the frame the animation ends on. */
       var ANIM = !REDUCE && typeof svg.getCurrentTime === 'function' && typeof svg.setCurrentTime === 'function' && typeof window.SVGAnimationElement !== 'undefined';
@@ -209,25 +178,21 @@
         for (var j = list.length - 1; j >= 0; j--) list[j].parentNode.removeChild(list[j]);
       }
       if (!ANIM) { try { endFrame(); } catch (e) {} }
-      if (skip && window.matchMedia && matchMedia('(hover: hover)').matches) skip.textContent = 'click to skip';
       sp.classList.add('splash-kf');
       sp.classList.remove('hidden');
       // Canvas and splash share one ground for as long as it is up (queue 162) — see html.splash-on in styles.css.
       try { document.documentElement.classList.add('splash-on', 'splash-kf-on'); } catch (e) {}
-      if (ANIM) { try { svg.setCurrentTime(0); } catch (e) {} sp.classList.add('splash-wait'); }
+      if (ANIM) { try { svg.setCurrentTime(0); } catch (e) {} }
       var gone = false;
-      // Two speeds, deliberately (v4.92), the same two the film had:
-      //   - NATURAL end: the finished mark has held, and the splash takes ~900ms to dissolve, so the home backdrop blooms
-      //     up THROUGH it.
-      //   - CUT (tap to skip, the hard cap): 280ms and the animation stops. Making someone wait a second after they asked
-      //     to skip is worse than the cut ever was.
+      // One speed since #1223: 280ms, because an editor cuts. A tap or the hard cap (`quick`) also stops the animation where it
+      // is and is marked splash-cut; the natural end has already stopped on its frame.
       function dismiss(quick) {
         if (gone) return; gone = true;
         if (quick) { try { svg.pauseAnimations(); } catch (e) {} sp.classList.add('splash-cut'); }
-        // splash-kf-out starts the light look's status-strip ramp (splash-css above) in the same style change as the dissolve.
+        // splash-kf-out starts the light look's status-strip ramp (splash-css above) in the same style change as the cut.
         try { document.documentElement.classList.add('splash-kf-out'); } catch (e) {}
         sp.classList.add('splash-out');
-        // home.js holds its entry animation until this fires, so the cards arrive as the splash thins out.
+        // home.js holds its entry animation until this fires, so the cards arrive as the splash goes.
         try { document.dispatchEvent(new CustomEvent('fm:splash-dismiss', { detail: { quick: !!quick } })); } catch (e) {}
         setTimeout(function () {
           sp.remove();
@@ -235,45 +200,61 @@
              canvas white for the rest of the session — his white bar). 'splash-on-light' is the film's ground ramp; nothing
              adds it now, and it stays in this list so it can never outlive a splash again. */
           try { document.documentElement.classList.remove('splash-on', 'splash-on-light', 'splash-kf-on', 'splash-kf-out'); } catch (e) {}
-        }, quick ? 320 : 1000);
+        }, 320);
+      }
+      /* HAS THE APP UNDER IT LANDED? (#1223's review.) Home only opens after the last project's clips are restored, one by one,
+         and the shorter mark can finish before that: he would see the logo, then a half-booted editor, then Home. So the
+         finished logo waits for window.FM_LANDED (app.js), up to LAND_S. A page with no FM at all has nothing to wait for. A
+         tap, a key and the ceiling below never wait. */
+      function landed() { return !window.FM || window.FM_LANDED === true; }
+      function whenLanded(go, ms) {
+        var from = Date.now();
+        (function wait() {
+          if (gone) return;
+          if (landed() || Date.now() - from >= ms) go();
+          else setTimeout(wait, 40);
+        })();
       }
       if (ANIM) {
-        /* Read the animation's OWN clock rather than a timer: if the boot holds the main thread, the hold still starts
-           when the mark has really finished. Polled on a timer: requestAnimationFrame never fires in a frame that is not
-           painting.
+        /* Read the animation's OWN clock rather than a timer: its clock runs on through a stalled main thread, so the hold is
+           ALSO counted in wall time from the first reading that sees the mark finished (doneAt, #1223's review): a stall after
+           the load cannot eat the 0.6s he gets to read the name, or hand over a logo that was never painted. Polled on a timer:
+           requestAnimationFrame never fires in a frame that is not painting.
            THE CLOCK STARTS LATE ON A REAL LAUNCH (the refuter of the 1180 review, B3): an inline SVG's timeline starts from
            the document's load, after all the app's parser-blocking scripts and its synchronous init, and reads 0 until
            then. So the cap is measured from the moment the clock STARTS (`started`, the first reading above 0), not from
-           this script: a late load still gets the whole animation, the hold and the natural dissolve. The cap only cuts a
-           clock that started and then ran slow (END_S + HOLD_S of wall time, plus 800ms, without reaching the hold).
+           this script: a late load still gets the whole animation, the hold and the natural hand-over. The cap only cuts a
+           clock that started and then ran slow (END_S + HOLD_S of wall time, plus 800ms, without reaching END_S). A clock that
+           reaches END_S and then stops counting is released 800ms after the hold, the same slack.
            A CLOCK THAT NEVER RUNS (#1180): iOS with Auto-Play Animated Images off pauses every SMIL clock, so it reads 0 for
            ever and the first frame, which is empty, showed as a dark box until the backstop. Once the page has loaded, a
            paused timeline (svg.animationsPaused()) or a clock still at 0 one second after the load gets the END FRAME as a
            still and the natural hand-over STILL_MS later, as reduced motion does. */
-        var started = 0, loadedAt = 0, stilled = false;
+        var started = 0, loadedAt = 0, stilled = false, doneAt = 0;
         if (document.readyState === 'complete') loadedAt = Date.now();
         else window.addEventListener('load', function () { loadedAt = Date.now(); });
         var toStill = function () {
           stilled = true;
           try { endFrame(); } catch (e) {}
-          sp.classList.remove('splash-wait');
-          setTimeout(function () { dismiss(false); }, STILL_MS);
+          setTimeout(function () { whenLanded(function () { dismiss(false); }, LAND_S * 1000 - STILL_MS); }, STILL_MS);
         };
         (function watch() {
           if (gone || stilled) return;
           var t = 0, paused = false;
           try { t = svg.getCurrentTime(); } catch (e) {}
           try { paused = !!(loadedAt && typeof svg.animationsPaused === 'function' && svg.animationsPaused()); } catch (e) {}
-          if (t > 0 && !started) { started = Date.now(); sp.classList.remove('splash-wait'); }
+          if (t > 0 && !started) started = Date.now();
+          if (t >= END_S && !doneAt) doneAt = Date.now();
+          var since = doneAt ? Date.now() - doneAt : 0, held = doneAt && since >= HOLD_S * 1000 && (t >= END_S + HOLD_S || since >= HOLD_S * 1000 + 800);
           if (paused || (!started && loadedAt && Date.now() - loadedAt > 1000)) toStill();
-          else if (t >= END_S + HOLD_S) dismiss(false);
-          else if (started && Date.now() - started > (END_S + HOLD_S) * 1000 + 800) dismiss(true);
+          else if (held && (landed() || Date.now() - started >= LAND_S * 1000)) dismiss(false);
+          else if (!doneAt && started && Date.now() - started > (END_S + HOLD_S) * 1000 + 800) dismiss(true);
           else setTimeout(watch, 40);
         })();
       } else {
         /* The still is held for STILL_MS from the page's LOAD, not from this script: started here it handed over while the
            boot was still running, so he saw the logo, then a half-booted page, then Home (the review of the fold, S3). */
-        var still = function () { setTimeout(function () { dismiss(REDUCE); }, STILL_MS); };
+        var still = function () { setTimeout(function () { whenLanded(function () { dismiss(REDUCE); }, LAND_S * 1000 - STILL_MS); }, STILL_MS); };
         if (document.readyState === 'complete') still(); else window.addEventListener('load', still);
       }
       sp.addEventListener('pointerdown', function (e) { e.preventDefault(); dismiss(true); });   // preventDefault kills the synthesized post-touch click (it punched through to editor controls)
@@ -281,10 +262,10 @@
       /* The CEILING, from this script: nothing holds the editor hostage. It was an 8s backstop, and a boot that yields
          (scripts arriving one by one on a phone) took longer than that to reach the load, so it cut the animation before
          its clock had even started (#1180). The clock's own cap above and the still now end every ordinary case; this
-         only catches a load that never comes. home.js and storage.js arm 6s fallbacks of their own when Home opens: they
-         fall after the hold whenever Home opens less than 2.2s before the load, the usual order: Home opens after
-         DOMContentLoaded and an IndexedDB read, and the load follows DOMContentLoaded. */
-      setTimeout(function () { dismiss(true); }, 15000);
+         only catches a load that never comes. It was 15s when the mark took 3.76s, so a load as late as 11.2s kept its whole
+         animation; 13.3s keeps that with the 2.1s mark (#1223). home.js and storage.js arm 6s fallbacks of their own when Home
+         opens: the finished logo waits for that same moment (landed above), so they only catch a splash torn down another way. */
+      setTimeout(function () { dismiss(true); }, 13300);
     })();
   </script>
   <div id="app">
@@ -301,7 +282,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.18</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.19</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1242,7 +1223,7 @@
   <script src="js/template-fill.js?v=4"></script>
   <script src="js/home-arrow.js?v=5"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
   <script src="js/tutorials.js?v=1"></script>   <!-- #1082: the lessons in Home's Tutorials tab -->
-  <script src="js/home.js?v=209"></script>
+  <script src="js/home.js?v=210"></script>
   <script src="js/graph-editor.js?v=20"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
@@ -1255,7 +1236,7 @@
   <script src="js/captions.js?v=64"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=7"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=515"></script>
+  <script src="js/app.js?v=516"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->
@@ -1341,6 +1322,8 @@
         /* #1180: a takeover reload in the middle of the intro cut his logo off; it waits until the splash is dissolving. */
         var spl = document.getElementById('splash');
         if (spl && !spl.classList.contains('hidden') && !spl.classList.contains('splash-out')) return 'the intro is still playing';
+        /* #1223's review: the shorter intro lifted that hold before a slow restore had finished, and a reload then landed in the editor instead of Home. */
+        if (window.FM && !window.FM_LANDED) return 'the app is still opening';
       } catch (e) { return 'the app could not be asked'; }
       return '';
     }

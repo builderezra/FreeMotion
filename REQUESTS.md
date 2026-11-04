@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 4 Nov at v18.18
+> ## 📌 WHAT I NEED FROM YOU — updated 5 Nov at v18.19
 >
-> **State:** v18.18 — **your ⚙ cog is as you asked (#1132): it opens with every block closed, App settings is its own bar, the Editor has the same ⤢ as the others and icons in place of Simple and Full, and you tap the open block to close it. Not yet tried on a real iPhone.** **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+> **State:** v18.19 — **your intro is rebuilt to feel hand-made (#1223): the playhead sweeps across and reveals your logo, rocks back like a hand on tape, and the name cuts in. No glow, no tagline, true black, about 2 seconds. Tell us if you want another take. Not yet tried on a real iPhone.** **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+>
+> v18.18 — your ⚙ cog as you asked (#1132): every block closed on open, App settings its own bar, the same ⤢ on the Editor, icons for Simple and Full, and tap the open block to close it.
 >
 > v18.17 — the lock that keeps Full unchanged got ready for these cog changes; nothing changed on your screen.
 >
@@ -36877,7 +36879,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⤷ **Left open ON PURPOSE, oldest-first:** every clause is done; it is ticked when its turn comes after #980 (ship.sh's queue gate refuses closing it before then — the rule working).
       📍 **16 Oct (builder): every clause above is ticked. REMAINS OPEN only for the queue order** — ship.sh will not close it while #912 is workable ahead of it (v17.52's first launch was refused for exactly that); it closes when the queue reaches it.
       📍 **REMAINS OPEN only for the queue order (v17.54's gate):** #929 is workable ahead of it; it closes when the queue reaches it.
-
+      📍 **4 Nov, moved from #1155, built as decided, his to overrule:** 720p in Simple's export list too, or only 1080p (both are in) · the time pill's total: the whole timeline, or up to the last clip like the export · "Clip 2b" or "Clip 2 (2)" (Clip 2b is in) · the preview shrinks when More opens (as built), or keeps its size with a shorter panel. Still to show him: the SU1 #15 tray fade, which he should feel on the phone; the audio preset chips and the Filters "On my clip" switch (pm23).
 - [ ] **1124 — Standing instruction: push every release's tree to a branch so the helper tests it in the cloud first; find order-dependent reds with short slices, not full releases** (10 Oct, ~21:00 AWST, typed in the builder's chat — HIS WORDS)
       **STATUS: 📌 NOTE — nothing to build**
       **His words (verbatim):** "Before each release, push the version to a branch so the helper can test it in the cloud first. Find order-dependent failures with short test slices instead of full releases."
@@ -37065,12 +37067,12 @@ re-opened #480, which I had marked done and had not fixed.
       2. The **Friends block** (collapsed): "Share live with friends" and a ⤢ expand button.
       3. **Canvas settings, EXPANDED:** the aspect tiles 16:9 / 9:16 / 4:5 / 1:1 / 4:3 / Custom, Resolution, Frame rate, Background swatches, Size, "Scale the layers to fit", and at the bottom "App settings…", Cancel and Apply.
       **His clauses:**
-      1. [ ] "App settings…" becomes its OWN block in the cog, like Friends and the Editor (Simple) block.
-      2. [ ] The Editor block's "What should you use?" button becomes the same ⤢ expand button the other blocks use.
-      3. [ ] In the collapsed Editor block, the "Simple ⇄ Full" switch shows ICONS instead of the words, so it feels less cluttered.
-      4. [ ] With Canvas settings expanded, the "App settings…" button is gone (it lives in its own block now).
-      5. [ ] When the cog first opens, ALL the blocks are closed ("so it isn't overwhelming").
-      6. [ ] Tapping the block that is currently open closes it.
+      1. [x] "App settings…" becomes its OWN block in the cog, like Friends and the Editor (Simple) block.
+      2. [x] The Editor block's "What should you use?" button becomes the same ⤢ expand button the other blocks use.
+      3. [x] In the collapsed Editor block, the "Simple ⇄ Full" switch shows ICONS instead of the words, so it feels less cluttered.
+      4. [x] With Canvas settings expanded, the "App settings…" button is gone (it lives in its own block now).
+      5. [x] When the cog first opens, ALL the blocks are closed ("so it isn't overwhelming").
+      6. [x] Tapping the block that is currently open closes it.
       **Logger's plan:** the PM is researching the cog's code and design history (which block opens on open, the shared expand button, the lock's pricing of the cog), and will add a ready-to-build plan block. The Simple/Full icons are a look choice, so they will be drawn as options through the app (asked of the helper in the cloud) before anything ships (#545).
       Moved from INBOX.md whole (its plan):
       ### 11 Oct 2026, ~11:30 AWST — PM plan for the ⚙ cog redesign (his 6 clauses in the block above, ~11:00) — READY TO BUILD once he has seen the picture
@@ -37112,8 +37114,7 @@ re-opened #480, which I had marked done and had not fixed.
       6. ✅ "you should be able to tap on the current open one to close it": the ⤡ on the open block closes it, back to all closed.
       Measured on this tree: all 113 tests that drive the cog at 380 and 1280 (109 in the page, 4 with a real finger), and 30 mutations each caught; 3 older ones no longer apply because what they broke came out. Seen in the real app at 380 (all closed, Canvas open, tapped closed, no console errors, no sideways scroll). Not checked on a real iPhone. The two labels left are #1227 item 5.
 
-- [ ] **1133 — "the builder looks like its slacking again" (hunt HIGH #21: tick.sh hides the queue during a ship, so the loop idles)** (11 Oct, ~11:35 AWST, via INBOX — HIS WORDS, filed by the logger)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1133 — "the builder looks like its slacking again" (hunt HIGH #21: tick.sh hides the queue during a ship, so the loop idles)** (11 Oct, ~11:35 AWST, via INBOX — HIS WORDS, filed by the logger)
       Moved from INBOX.md whole:
       ### 11 Oct 2026, ~11:35 AWST — "the builder looks like its slacking again" (hunt HIGH #21: tick.sh hides the queue during a ship, so the loop idles)
       **His words (verbatim):** "the builder looks like its slacking again"
@@ -37123,12 +37124,13 @@ re-opened #480, which I had marked done and had not fixed.
       - p24-dry, where the BX1d tray fix (5f10fdb) is meant to go, is untouched since 05:27.
       **The cause, which is structural:** while a ship runs, `tools/tick.sh` exits at its line 49 with "the queue and the rest wait for its verdict … Build in a worktree meanwhile". It never names an item. So the tick has nothing to act on, and the LOOP.md rule "Build during ships" (B2) is held up only by remembering, which is the failure CLAUDE.md says to make impossible.
       **Logger's plan (build in a worktree, land after the ship):**
-      1. [ ] While a ship runs, tick.sh still prints `tools/next.sh`'s top workable item, plus every `.claude/worktrees/*` with its branch and newest edit time.
-      2. [ ] When no worktree file has changed for 15 min during a live ship, tick.sh prints `⚠️ IDLE DURING SHIP: N min since the last worktree edit — build <item> in <worktree>` as its LAST line, so it is what the tick ends on.
-      3. [ ] A self-test for tick.sh (stub lock + temp worktree with an old mtime → the IDLE line; a fresh mtime → no IDLE line), run by ship.sh when tick.sh changes.
-      4. [ ] The PM relayed this to the builder at 11:36, along with the build list: the tray fix into p24, Simple after 2.6, then his visible asks (#920, the glow burst, #1082) in next.sh order.
+      1. [x] While a ship runs, tick.sh still prints `tools/next.sh`'s top workable item, plus every `.claude/worktrees/*` with its branch and newest edit time.
+      2. [x] When no worktree file has changed for 15 min during a live ship, tick.sh prints `⚠️ IDLE DURING SHIP: N min since the last worktree edit — build <item> in <worktree>` as its LAST line, so it is what the tick ends on.
+      3. [x] A self-test for tick.sh (stub lock + temp worktree with an old mtime → the IDLE line; a fresh mtime → no IDLE line), run by ship.sh when tick.sh changes.
+      4. [x] The PM relayed this to the builder at 11:36, along with the build list: the tray fix into p24, Simple after 2.6, then his visible asks (#920, the glow burst, #1082) in next.sh order.
       🔨 **v17.40 (13 Oct):** clauses 1–2 shipped (611e6b47): tick.sh names the top item and the worktrees during a ship, and ends on IDLE after 15 min with no worktree edit.
       📍 **v18.09 (28 Oct): clause 3 shipped (tools only)** (codex/idle1133, checked and folded): tools/_shipidle.sh reads every worktree git knows for this repo, .claude/worktrees and each child of FM_WORKTREE_ROOTS (default ~/fm-helper-wt and ~/fm-codex-wt), statting only the files work happens in plus each worktree's reflog (1.2 s for ~300 worktrees); on 27 Oct the old reader said 5922 min idle while the builder was committing. tools/test-shipidle.sh (8 checks, one a CONTROL against v18.07's reader), run by ship.sh when tick.sh, _shipidle.sh or its test changes. The tick waits behind #1122 and #1132.
+      ✅ **CLOSED 4 Nov:** tools/test-shipidle.sh run again on v18.18 and passed. One difference from clause 1: during a ship the tick names the next item and the NEWEST worktree edit, not every worktree with its branch, because about 300 worktrees would bury the line it exists to show. The ship-time ticks themselves have stopped since 17 Oct (the PM's rule: sleep on one waiter during a ship), so this line only speaks if a tick does fire then; #1220 is the open question about its finger phases.
 
 - [ ] **1134 — Export has no audio (#215/#604/#677): the cloud helper's AX1 findings + a guard queued (hunt MEDIUM #22)** (11 Oct, ~12:02 AWST, via INBOX — HIS WORDS, filed by the logger)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
@@ -37155,8 +37157,7 @@ re-opened #480, which I had marked done and had not fixed.
       🔨 **v17.41 (13 Oct): AX2 SHIPPED** — a zero-chunk AudioEncoder drops the empty track and says so (dropped encode-empty); Your last export counts frames, KB, seconds and a decoded peak. His next export's Copy tells encoder from Photos.
       📍 **v17.89 (21 Oct): the likely cause found and fixed — not ticked until his Photos plays an export.** A hunt and a refuter (21 Oct) found that Safari 26's WebCodecs AAC encoder gives `decoderConfig.description` as Apple's 39-byte magic cookie (an ES_Descriptor, 03 → 04 → 05) instead of the 2-byte AudioSpecificConfig, and vendor/mp4-muxer.js wrote it verbatim into the esds, so Apple players found an undecodable audio track (WebKit bug 302253, open; its fix is an unmerged PR). js/exporter.js aacAscFor / aacMeta now walk the descriptor to its own ASC (or build it from rate and channels) before the muxer and the decoders; fileAacCheck reads the finished file's esds and marks track-undecodable, so the card stops saying Sound ✓; the export report gains 'aac desc' and 'file audio esds' lines. Five 215 tests, red on v17.88; the real-AAC Windows pass 4/4. First diagnosed in tools/audit-2026-09-05.md (the #677 section) and never built.
 
-- [ ] **1135 — Hand-off from the cloud helper chat + who builds next (API credits first, then the builder chat)** (12 Oct, ~18:55 AWST, via INBOX — HIS WORDS, routed by the PM)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1135 — Hand-off from the cloud helper chat + who builds next (API credits first, then the builder chat)** (12 Oct, ~18:55 AWST, via INBOX — HIS WORDS, routed by the PM)
       Moved from INBOX.md whole:
       ### 12 Oct 2026, ~18:55 AWST — Hand-off from the cloud helper chat + who builds next (API credits first, then the builder chat)
       **His words (verbatim):** "alright hand off time from cloud chat i got working to burn my cloud only usage coming up -  and also basically i need u to get my api credits running doing the coding to use up those then my chatgpt sub running too, chatgpt is open on this computer and if you access chrome on this claude account u should be able to log into my api stuff and set it up and get it working. once api usage runs out get the builder chat to start work along side chatgpt. I want u to do this all urself without my help at all - if theres something u absoulutely cant do like log into my claude account on google then fine ill log u in etc" — then: "nvm chatgpt sub ran out lol"
@@ -37185,7 +37186,7 @@ re-opened #480, which I had marked done and had not fixed.
       - When it stops (money cap or stop time; see `~/.fm-api-builder/progress.log` and `.claude/api-handover.md`), the PM wakes the builder chat with the loop line, and it re-arms its cron.
       - ChatGPT is out of usage, so it's not used now.
       🔨 **12 Oct (the API builder):** logged. "API builder: yes" is done — `~/fm-api-builder.sh` is running. The branch swaps (hunt/simple-firstuser-fixes into wip/v17.39-tree; hunt/labs-on-fixes for hunt/labs-on; hunt/fix-land-b3 for hunt/land-b3) are applied as each tree ships. Decisions 1–4's builds are in the builder chat's lane (#1136).
-
+      ✅ **CLOSED 4 Nov:** read against v18.18. A hand-off that routed work; each piece landed under another release, not by these branch names (none of the four is an ancestor of main). Tests on main: leaving Simple gives Full its panel, the playhead line and the time readout (simple P2.2 · review); a fresh swap code (921 S3); the ✂ under the playhead (SU1 #11); More pressed again closes (SU1 #4); the long first title in Simple (SU1 #8). The 12 keyed-speed effects are in v17.44's log line; his B for the More layout is #1155. Decision 2 was reversed by the PM on 12 Oct: Radial Wipe at Progress 0 stays hidden, like hard Wipe, and tests pin it. The API builder ran and has gone. One piece was NOT done: decision 3's Full half, so it is now #1228. Decision 4's other two stand as his picks.
 - [x] **1136 — For the API builder: three facts from the builder chat (now in the helper lane)** (12 Oct, ~21:00 AWST, via INBOX — the builder chat's words, a teammate, not Ezra) (team)
       ✅ **DONE** (20 Oct hand-off audit): facts (1) and (2) shipped; (3) Filters layout A and Mosaic in v17.44, Glitch in v17.47. The Full slow-swipe fix is moved to #1122.
       Moved from INBOX.md whole:
@@ -37512,8 +37513,7 @@ re-opened #480, which I had marked done and had not fixed.
       - **A saved filter and the bar's Strength:** the bar STARTS at the saved Strength, so 60% saved lands as 60%.
       - **Cog #1132 PC deviation:** accepted as built.
 
-- [ ] **1155 — HIS ANSWERS to see/hear sheet 1: "B, dots yes, 1A, 2A" — More docks under the tools (B), Poster Print → Colour dots, Undo after a drag puts the playhead back (1A), Simple next = the four small rows (2A)** (14 Oct, ~07:40 AWST, via INBOX — HIS WORDS, quoted by the PM)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1155 — HIS ANSWERS to see/hear sheet 1: "B, dots yes, 1A, 2A" — More docks under the tools (B), Poster Print → Colour dots, Undo after a drag puts the playhead back (1A), Simple next = the four small rows (2A)** (14 Oct, ~07:40 AWST, via INBOX — HIS WORDS, quoted by the PM)
       🔨 **All four picks built (15 Oct):** B (More docks under the tools) and 1A + 2A's four rows ride v17.48; "dots yes" shipped at v17.47. Left open, not ticked: what remains is the ❓ list above for his next sheet (decided as built meanwhile, rule 16), and the queue gate keeps it open while older items are.
       ANSWERED BY EZRA (14 Oct, ~07:40 AWST): "B, dots yes, 1A, 2A".
       🔨 **14 Oct, built code-only during the s24 lock (none in a browser yet; each waits on a slice, a lock and, for the looks, a picture):**
@@ -37536,7 +37536,7 @@ re-opened #480, which I had marked done and had not fixed.
         ANSWERED BY EZRA. This is the next Simple stage, before the ten-second hint, Look and Captions.
       **Sounds (fx-b7, Telephone ×5, Distortion ×6):** sent with the sheet. He raised no objection, so they stand as built.
       **Still open, for the NEXT sheet:** the SU1 #15 tray fade, which a still image can't show and which he should feel on the phone. Also the audio preset chips and the Filters "On my clip" switch (pm23).
-
+      ✅ **CLOSED 4 Nov:** all four picks shipped: dots at v17.47, More docked, 1A and the four rows at v17.48, with tests on main (1155 Poster Print, simple P2.7 · 1A, simple P2.7 · 2A row 21, SU1 #5 in the docked sheet). The questions it held for his next sheet are built as decided and moved to #1123, so he can still overrule them.
 - [ ] **1156 — PM → API builder: start ONE code-only subagent at the START of every lock or ship wait (no browser, no node/python runs, red-first tests unrun, tests.js parse-check first); order = #1155's picks, then pm23's decisions** (14 Oct, ~09:10 AWST, via INBOX — the PM lane)
       **STATUS: 📌 NOTE — nothing to build**
       📌 **Standing note — this is the receipt** (20 Oct hand-off audit): its four items shipped (Colour dots v17.47, 1A + 2A rows v17.48, pm23's decisions v17.47); the one-agent-during-every-wait rule lives in the builder's memory note build-while-ship-runs.
@@ -37582,8 +37582,7 @@ re-opened #480, which I had marked done and had not fixed.
       🔁 **Second instance the same day (v17.46's first ship):** Simple 2.5's `smDragEnv` set the timeline zoom to 28 px/s and never restored it; '690 a sideways swipe that starts on a keyframe diamond…', ~29,000 lines later, found its diamonds packed too close for its control swipe (passed alone). Fixed in the helper for v17.46. The runner's put-back list should hold `FM.timeline.getZoom()` too — built for the side bars on `wip/fx-pm23` 5b1d3e52; add the zoom there.
       ⚠️ tests.js's runner is suite instrument: check whether the lock gate treats a `run()` change as an instrument change before choosing the release it rides in.
 
-- [ ] **1159 — PM → API builder: keep HIS order for #1155 (More dock, Colour dots, 1A, the four rows, THEN the first-run hint); and grant the helper a 40-min browser slot (`~/.fm-browser-slot`) after every ship verdict, before the next lock or slice** (14 Oct, ~12:15 AWST, via INBOX — the PM lane; seen 14:17)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1159 — PM → API builder: keep HIS order for #1155 (More dock, Colour dots, 1A, the four rows, THEN the first-run hint); and grant the helper a 40-min browser slot (`~/.fm-browser-slot`) after every ship verdict, before the next lock or slice** (14 Oct, ~12:15 AWST, via INBOX — the PM lane; seen 14:17)
       ✅ 15 Oct (API builder): his order kept to the end — dots at v17.47, then B, 1A, the four rows AND the hint after them at v17.48 (one lock). The slot was granted after every verdict of v17.47's four launches.
       ✅ 14 Oct 14:18 (API builder): seen only after v17.45 landed and the 2.5+2.6 lock had started (14:16) — stopped that lock at once, wrote `helper <now+40 min>` to ~/.fm-browser-slot (to 14:57), and the lock restarts when the slot ends. Standing from now: slot first after every verdict. The order already matches the chain: c41-dock (B) → fx-extras (dots) → c41-p27 (1A + the four rows) → c41-hint (first-run hint, built, lands after the rows). None of #1155 is released yet.
       Moved from INBOX.md whole:
@@ -37606,7 +37605,7 @@ re-opened #480, which I had marked done and had not fixed.
       - **The fix is the slot pm-rules already allowed.** Right after each ship's verdict, BEFORE you start the next lock or slice, write `~/.fm-browser-slot` with one line, `helper <expiry-epoch>`, set to now + 40 min.
       - Do code-only work until it expires, or until the helper deletes it (it releases early when done). Start no Chrome, lock or slice of your own while it exists and is unexpired.
       - That costs ≤ 40 min per cycle, and it is the only way his new effects reach a release.
-
+      ✅ **CLOSED 4 Nov:** his order held to the end (both ✅ notes above), and the API builder that this was addressed to has stopped. The browser slot it asked for was for that builder and the helper; the PM's rule now is nothing beside a ship, agents in gaps only.
 - [x] **1160 — PM: the helper's 14:18–14:48 slot verdicts — fxnew-all (#966 §B, the combined new effects) PROVEN at 41ad4291, rev 11 FP 8082352878296088; Clarity & Dehaze nearly; boom/drums next slot; land fxnew-all after #1155's picks** (14 Oct, ~15:10 AWST, via INBOX — the PM lane) (team)
       ✅ **DONE** (20 Oct hand-off audit): fxnew-all shipped in v17.49 d7cdfc9e.
       Noted 14 Oct 15:30 (API builder): the landing order is v17.46 (2.5+2.6, lock running) → the Full effects release (fx-pm23: batches 7–15, batch 9, Colour dots, pm23's decisions, #1110) → the Simple picks release (c41-dock B, c41-p27 1A + the four rows, then the hint) → fxnew-all. fxnew-all sits on the effects landing (8004fa16 lineage), so it needs porting onto whatever the effects release ships as, and its rev 11 FP re-measured on that tree.
@@ -37636,8 +37635,7 @@ re-opened #480, which I had marked done and had not fixed.
       - **Still to prove:** fxnew-drums (§B22 Drum hits). It's next, in the slot you granted at ~22:08.
       - **Three of four are ready:** fxnew-all, clarity and boom. Land them in pm26's order, after #1155's picks or alongside them if they fit the same lock.
 
-- [ ] **1162 — Ezra: go faster; use the weekly subscription up to near the Monday reset** (14 Oct, ~23:35 AWST, via INBOX — HIS WORDS)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1162 — Ezra: go faster; use the weekly subscription up to near the Monday reset** (14 Oct, ~23:35 AWST, via INBOX — HIS WORDS)
       Noted 15 Oct 04:35 (API builder): seen. The API builder runs on his monthly API credits, not the weekly subscription, so this sets the builder chat's pace; on this side the chain keeps moving at full speed (v17.47 shipped 04:27, v17.48's lock next).
       Moved from INBOX.md whole:
       ### 14 Oct 2026, ~23:35 AWST — Ezra: go faster; use the weekly subscription up to near the Monday reset
@@ -37650,7 +37648,7 @@ re-opened #480, which I had marked done and had not fixed.
       - **The PM paces it.** It reads get_usage every tick and tells the builder to ease off only if it is heading past ~95% early.
       - **Builder chat:** back to full pace now. Code-only fan-out in its own clone is allowed again (up to ~3 agents). New effects are un-paused.
       - **When the API builder stops at its spend cap,** the builder chat becomes the full builder of ~/FreeMotion.
-
+      ✅ **CLOSED 4 Nov:** a pace for one week, ending at the Monday 19 Oct reset. The target itself lives on with the PM, which reads the meter and sends the band each time it changes.
 - [x] **1163 — PM: new helper/done branches (#966 §B; builder chat), plus one integration trap** (15 Oct, ~01:15 AWST, via INBOX — the PM lane) (team)
       ✅ **DONE** (20 Oct hand-off audit): v17.50 612cefce (B&W Mixer, Graphic EQ, Cartoon).
       Noted 15 Oct 04:35 (API builder): prep49 (the next Full release) already applies 8a7b84dc — clarity is taken to its tip before boom's own commits — so the trap does not bite there. B33, B34, B31 are code only and wait for their proofs.
@@ -37959,21 +37957,21 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **Builder, 22 Oct:** applied on branches, each decision to be named in its release's POLISH line: Simple 2.7's More transition controls ON (hunt/sm6p, ships as v17.92); #1084's grow ON, Laser Beam's core shows the colour picked, and the Wipe borders slide off at the end (hunt/picks, after the #845 audio guard). #1175's batch already shipped in v17.61 and #982 is closed with the picks release. The Filter layer tile waits on one check: its Full-only guard names FM.editor, a Simple hook.
 
 - [ ] **1180 — A FreeMotion logo made of timeline pieces (the "Edit Grid" F), then a build-up loading animation** (22 Oct, ~00:15 AWST, via INBOX — his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       **His words, verbatim:** "Draft up a logo design from the circled image where it's basically like an F created from like timeline stuff. I feel like that looks cool and could be a really sick design and like it could even have like a very cool loading screen animation coming in where like I don't know but like you could just be very well very cool with all of the layers moving in ways that like where it's like building it I don't know definitely that would be sick and yeah, just come up with a draft for that come up with heaps of different options for me to choose from make some animations after I decide which ones I like. Best of the animation goes into it wait for me to decide which one's best."
       **His image:** a sheet of 10 AI-made FreeMotion logo ideas. He circled 04 "EDIT GRID": three grey rounded clip bars (long, medium, short square) stacked left-aligned to make an F, a white playhead line through them with a ▶ on top, and "FreeMotion / EDITING, EVOLVED". Saved at C:\Users\build\.claude\uploads\038c53db-a288-427b-b4c4-2509b19d3eaf\ad60fed0-image.jpg (Windows side).
       Clauses (his):
       1. [x] Draft a logo from the circled image: an F made of timeline pieces. Done by the PM chat 22 Oct: 12 options on one canvas, each big, with the wordmark, and at 20 px. https://claude.ai/artifact/4ot9bNBsNL6HCv6Nei8QN7
       2. [x] Heaps of options to choose from. The 12 are: 01 Edit Grid (his, refined), 02 Spine (the playhead IS the F's stem; RECOMMENDED: clearest F at icon size), 03 Tracks, 04 Split, 05 Keyframes, 06 Clip colours, 07 Trim, 08 Waveform, 09 Outline, 10 Knockout, 11 Motion trail, 12 App icon (02 on a tile, teal #29d9bb = the app's --accent).
       3. [x] **WAIT FOR HIS PICK** ("wait for me to decide"). This is the one design item his 21 Oct "fine with ur choices" rule does NOT cover, because he said to wait.
-      4. [ ] After he picks: animation options for a loading screen where the layers "build" the logo, each drawn and shown to him. Directions to draw:
+      4. [x] After he picks: animation options for a loading screen where the layers "build" the logo, each drawn and shown to him. Directions to draw:
          - (a) clips slide in onto their tracks one by one and snap, then the playhead drops in;
          - (b) the playhead sweeps left to right and the clips "record" in behind it;
          - (c) clips fall from above and stack, with a bounce;
          - (d) a split: one long clip is cut by the playhead into the F's pieces;
          - (e) keyframe diamonds pop, then the bars grow out of them;
          - (f) a scrub: the F rewinds and plays like a timeline.
-      5. [ ] The best animation goes into the app as the loading screen, after he decides. Today the app opens with an intro film (splash-v2.mp4, see #1096). The new one should be CSS/SVG, not a video, so it costs no memory (#1096's point).
+      5. [x] The best animation goes into the app as the loading screen, after he decides. Today the app opens with an intro film (splash-v2.mp4, see #1096). The new one should be CSS/SVG, not a video, so it costs no memory (#1096's point).
       **His follow-up, ~00:35, verbatim:** "Just try making a bunch more that are very close to my circled one but playing with colours and grading a lot. Spend a lot of time and effort"
       - [x] Done by the PM chat 00:45. 32 studies on the same canvas, all on his exact circled geometry, in four boards:
         - A, greys and metals: baseline, sheen, brushed silver, chrome, gunmetal, graphite bloom, frosted glass, light mode;
@@ -37993,7 +37991,7 @@ re-opened #480, which I had marked done and had not fixed.
          - `README.md`: the options, the link, and how to re-render.
          - **Builder:** commit this folder with the next release (ship.sh's add -A does it). It's docs only, outside the lock's hash. Don't delete it.
       2. [x] **D2 animations:** four looping drafts added to the canvas as artboard "D2 · four loading animations": 1 Snap in, 2 Record (the playhead lays the clips down), 3 Light falls, 4 Stack. Each is shown on a phone-sized splash with the FreeMotion wordmark. https://claude.ai/artifact/4ot9bNBsNL6HCv6Nei8QN7
-      3. [ ] **WAITING ON HIS PICK** of animation (and logo). Nothing goes into the app until then. When he picks, the builder makes it the splash in CSS/SVG (no mp4; see #1096).
+      3. [x] **WAITING ON HIS PICK** of animation (and logo). Nothing goes into the app until then. When he picks, the builder makes it the splash in CSS/SVG (no mp4; see #1096).
       📥 **23 Oct 2026, ~11:35 AWST — Ezra PICKS the loading animation (#1180): "Keyframes" on the D2 logo** (via INBOX — his words and the PM's plan):
       **His words, verbatim:** "i love the first one"
       He had the canvas's round-2 board open with the **Keyframes** animation selected (number 7 on "D2 · twelve loading animations (round 2)", id prefix nC_) and sent a screenshot of it beside Trim in. "The first one" is Keyframes:
@@ -38096,6 +38094,7 @@ re-opened #480, which I had marked done and had not fixed.
       🔨 **Builder, 21:50:** RELEASE 1 is built on hunt/1180r1 (items 1-5, tests a-d), reviewed and refuted (no blocker; probe origin guard + maxGap folded), and joins v17.98, whose first ship was refused for two load-dependent reds. The refuter found the FU gate's _BUMP mask does not cover the new fm-build meta: an INSTRUMENT CHANGE release on its own (v17.99) must follow before any Simple or instrument release. Asked him (via the PM): is Auto-Play Animated Images off; does a cold launch open on Home.
       📍 **v17.98 (23 Oct): RELEASE 1 shipped** — the intro keyed on the build (<meta name=fm-build>, pinned to the version label by a test), an update waits while it is up (fmSwBusy), the cut timed from the clock with a 15 s ceiling, the finished logo as a still when the animation cannot run (paused clock, or none 1 s after load), the probe opening the app top-level with an origin guard and a maxGap column, and four red-first tests. Next: v17.99 (INSTRUMENT CHANGE, alone) teaches the Full-unchanged gate the new meta; then his answer, and the probe on his phone, decide RELEASE 2 (the compositor CSS rebuild).
       📍 **v17.99 (24 Oct): the gate follow-up shipped** (INSTRUMENT CHANGE, alone): tools/_fu_gate.py's version mask covers the fm-build stamp (two self-test cases), and the lock probe seeds the per-build intro flag from each served copy and waits 20 s for the splash. Next: his answer and the probe on his phone (tests/probe-1180-firstpaint.html) decide RELEASE 2 (the compositor CSS rebuild).
+      ⏸ **4 Nov — BUILT OUT UNTIL HE says whether he sees the opening animation on his iPhone** (✔ reply checked 4 Nov: the answer recorded above was his Keyframes pick, not this) (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off), and runs tests/probe-1180-firstpaint.html there. His pick (Keyframes on D2) shipped at v17.97 and RELEASE 1 at v17.98, so clauses 4 and 5 are ticked. RELEASE 2, the compositor CSS rebuild, only happens if his phone shows a pre-roll over 1 s or a frozen build-up. The look itself moves on in #1223.
 - [ ] **1181 — In Windows Chrome a Glow Scan that sweeps Once or waits between sweeps is measured as unknown, so the effect panel would tell him a working effect changes nothing (hunt MEDIUM #1181)** (23 Oct — found by the first real run of #1098's Windows tool; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       `python3 tests/_win_suite.py --linux-control --only '482 6.7'` at 1280 px: the Linux control passed 2 of 2; Windows Chrome 156 (headless, on the laptop) passed 1 of 2 and filed one WINDOWS ONLY red: `482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing…` — a Glow Scan with {loop 1, pause 2, span 1} on a 10 s clip is measured as unknown: its sweep falls between the moments the check looks at.
@@ -38927,10 +38926,10 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **Where it is (28 Oct):** hunt/gu1219 b8450140 (on codex/h1008): unit.order and unitMembers are computed once. Test '1219 a frame with many styled groups'; its bound is MEASURE: pending. Needs its premise run and a review.
       📍 **v18.12 (28 Oct): shipped** (hunt/gu1219, the 3100 leftover reads accounted for — 2380 were per-child parent finds — then a refuter and its folds): a per-frame id index serves parent, mask and group-mask lookups; group units carry their members in draw order.
 
-- [ ] **1220 — The tick's idle check (#1133) may not count a ship's finger phases as a ship (hunt LOW #1220 — TO CONFIRM)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1220 — The tick's idle check (#1133) may not count a ship's finger phases as a ship (hunt LOW #1220 — TO CONFIRM)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       A note from a tick on 28 Oct with no detail behind it. _shipidle.sh shows nothing wrong, so this is logged to be confirmed, not built.
       📍 **Where it is (28 Oct):** Nothing built.
+      ✅ **CLOSED 4 Nov:** confirmed there is no fault. tick.sh decides a ship is running from the lock's pid alone, and ship.sh only changes the phase word (`ship_phase "touch-$3"`), keeping the same pid and lock for the whole run. Run on the real reader with a lock saying phase=touch-phone: it returned the live pid. Not watched during a real ship, because ticks do not fire during one now.
 - [ ] **1221 — The other export filenames — video, audio, PNG and the export card — still drop letters that are not plain English (hunt LOW #1221)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Found by the refuter on codex/h1044: #1044 fixed the download filenames it named; the same strip runs in the other export paths.
@@ -38939,13 +38938,12 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found by Codex while reworking codex/h1055 (#1055 #1061): js/app.js (~5706-5707).
       📍 **Where it is (28 Oct):** Nothing built.
-- [ ] **1223 — The intro (the launch splash) looks AI-made: make it feel human — build H2 "Scrub", recommended** (28 Oct ~14:15 AWST, his words; the PM's plan ~15:00; moved from INBOX.md verbatim)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1223 — The intro (the launch splash) looks AI-made: make it feel human — build H2 "Scrub", recommended** ✅ **DONE v18.19.** (28 Oct ~14:15 AWST, his words; the PM's plan ~15:00; moved from INBOX.md verbatim)
       **His words, verbatim:** "THe intro u have on the app rn looks very Ai made, try making it feel more human, research what makes ai stuff feel ai when it comes to claude design and stuff."
       **His clauses:**
       1. [x] research what makes AI stuff feel AI (the PM: 3 researchers, ~45 sources, the seven tells below)
-      2. [ ] make the intro feel more human: H2 built into index.html's splash, the six steps below
-      3. [ ] he sees it before it is called done: a 380 px and a desktop check, and a three-frame strip (0.2 s, 1.0 s, end)
+      2. [x] make the intro feel more human: H2 built into index.html's splash, the six steps below
+      3. [x] he sees it before it is called done: a 380 px and a desktop check, and a three-frame strip (0.2 s, 1.0 s, end)
       Builds on #1180 (the Keyframes splash, his pick on 23 Oct). Options drawn: the board "Human intro · four takes" (H1–H4); his standing rule since 21 Oct is to ship the recommended pick ON and let him correct it.
       **The INBOX blocks, verbatim:**
       ### 28 Oct 2026, ~14:15 AWST — the intro looks AI-made; make it feel human (#1180's Keyframes splash)
@@ -39030,6 +39028,12 @@ re-opened #480, which I had marked done and had not fixed.
       **Not decided by the PM:** a timecode readout (the research suggested a frame counter that freezes on the stop; left out
       as an extra element), sound (none in the app's splash today), and whether the logo's own grey gradient should go flat (it is
       his chosen grade, so it is kept).
+      ✅ **CLOSED v18.19, his clauses first:**
+      1. ✅ "research what makes ai stuff feel ai": the PM's seven tells above, each now has a line in the first 1223 test.
+      2. ✅ "try making it feel more human": take H2 in index.html's splash, all six steps of the plan. Step 4's hold is 0.6 s and the cut .28 s; step 5's ceiling is 13.3 s and every #1180 test is re-pointed; the old titles are declared in the commit.
+      3. ✅ he sees it first: the three-frame strip (0.2 s, 1.0 s, end) went to him before the ship, and frames were checked at 380, 320, 1280 and a phone sideways.
+      **Beyond the plan, from the 8-agent review:** the finished logo waits for the app to land (window.FM_LANDED, up to 4.7 s); the hold is also counted in wall time, so a stall cannot eat it; the update hold waits for the same flag; Home's entrance moved from 150 ms to 20 ms after the dismiss; the discrete keys end on keyTime 1 for phones older than iOS 16.4; the manifest's launch colour is #000 and its buster went to 4. One finding was rejected: that the playhead would stay hidden on his iPhone. WebKit fixed that in January 2023 (bug 250643) and his phone is well past it.
+      Measured on this tree: 59 tests at 380 and 1280, 23 mutations each caught, a real boot timed at both widths. Not checked on a real iPhone, and no suite here runs WebKit. Not decided by the PM and left out: a timecode readout, sound, and flattening the logo's grade.
 - [ ] **1224 — A test earlier in the suite leaves a tiny landscape project open, so later tests that draw at fixed sizes run off the frame (hunt LOW #1224)** (28 Oct ~18:05 AWST — the builder's own finding from the v18.11 refusal; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Found when v18.11's first ship was refused on '1063 rotate handle crosses the left pivot…': in suite order the preview was 382x287 (landscape) where alone it is 162x289 (1080x1920), and the fixed 160 px square put the handle outside the window (elementFromPoint null, "covered by nothing"). Nothing he sees; the test now sizes its square from the open project (v18.11).
@@ -39049,3 +39053,15 @@ re-opened #480, which I had marked done and had not fixed.
       3. Vinyl and Fire: moving Variation renders the bed, which has 0.3 s edge fades, where the row's own recipe does not (Vinyl has none at all, Fire 0.2 s). So Variation changes the edges as well as the crackles.
       4. Not new: Escape does not close the sheet and can step the inspector behind it, and a tap on the scrim closes it and then deselects the layer, which Close does not.
       5. (From #1132's review, not the sound sheet.) The phone cog is still named "Canvas settings" to a screen reader and the PC cog's tooltip still says "Settings — appearance, layout, defaults", though the menu holds four things. Both are on every screen, so renaming them needs a line of its own in the Full-unchanged lock; they were taken out of #1132 to keep its window tight.
+- [ ] **1228 — A new title in Full still comes in at the default size and can run off the frame; Simple's fits (the Full half of #1135 decision 3) (hunt LOW #1228)** (4 Nov — split out of #1135 by the builder; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      The PM's decision on 12 Oct: "A new title fits the frame width with a margin. Simple first (a beginner's first minute), Full in the next Full batch as its own lock-priced change." Simple's shipped and is tested (SU1 #8: "My Summer Trip" at 160 on 1080×1920 shrinks to fit). The entry that recorded it says "(Simple only)", and no test or log line says Full got it.
+      📍 **Where it is (4 Nov):** Nothing built, and not yet measured in Full: measure first. It changes what Full draws, so it needs its own lock window.
+- [ ] **1229 — A reload after an update has no intro over it, so the editor shows bare while the project restores (hunt LOW #1229)** (4 Nov — from the #1223 review's refuters; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      The takeover reload (and any same-build reload) finds fm.splashed already set, so no splash runs, and the editor is uncovered for the whole restore. Older than #1223 and not made worse by it; traced by reading only, not run. The update hold now waits for FM_LANDED on the first load, which covers the wider gap the shorter intro opened, but not this.
+      📍 **Where it is (4 Nov):** Nothing built.
+- [ ] **1230 — A one-second scan refused v18.19 an hour into its ship; it could answer in the gates (hunt LOW #1230)** (5 Nov — my own finding; NOT his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      Test 497 only reads tests.js, index.html and the scripts, and it is the same at any width. On 4 Nov it refused v18.19 at the end of the desktop pass, 61 minutes in, over a name I could have declared before launching. ship.sh could run 497, and any other test that only reads text, in its gates phase, so this costs seconds and not a pass.
+      📍 **Where it is (5 Nov):** Nothing built.

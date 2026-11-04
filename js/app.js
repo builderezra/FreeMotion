@@ -7905,6 +7905,7 @@ window.FM = window.FM || {};
         const firstLoad = window.FM_FIRST_LOAD !== false;
         if (firstLoad || !(restored && lastView === 'editor')) FM.home.open();
       }
+      window.FM_LANDED = true;   // #1223: the splash holds its finished logo until here, so it never uncovers a half-booted page (index.html)
       /* ⚠️ WARN ABOUT THE PROJECT HE IS ACTUALLY IN (queue 487). `warnOversizeProject` had exactly one
          caller — `projects.open()` — and a refresh does not go through it: the boot above restores the
          last document and drops him straight back into the editor. So the one case the warning exists
@@ -7928,6 +7929,7 @@ window.FM = window.FM || {};
       // because init() had never built it). Whatever the cause, land on Home and say so.
       try { console.error('FreeMotion: project load failed', err); } catch (e) {}
       if (FM.home) { try { FM.home.init(); FM.home.open(); } catch (e) {} }
+      window.FM_LANDED = true;
       /* #967: the boot has landed (on Home) — live collaboration holds every resume until it is told so. */
       if (FM.collab && FM.collab.ui && FM.collab.ui.markBooted) { try { FM.collab.ui.markBooted(); } catch (e) {} }
       // …and only SAY they are back at their projects if they actually are. init()/open() can throw
@@ -7942,6 +7944,7 @@ window.FM = window.FM || {};
       }, 600);
       if (FM.mediaLib) { try { FM.mediaLib.backfill(); FM.mediaLib.repairBackfilled(); FM.mediaLib.repairMisfiledVideos(); } catch (e) {} }
     });
+    else window.FM_LANDED = true;
     // ‹ crumb pill exits the Edit Group view
 
     // desktop: clicking the brand goes Home (mobile uses the ‹ back arrow)
