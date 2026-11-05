@@ -22876,10 +22876,13 @@
       if (states.select1['m-export'] || states.select1['proj-name-m']) {
         throw new Error('one layer selected in select mode still shows the project header — the first frame of every long-press belongs to no state: ' + seen);
       }
-      // 2. a destructive control is never up alongside the project's own controls
+      // 2. a destructive control is never up alongside the project's own controls, with ONE exception: Export in the
+      //    clip bar (#1074, v18.21). An import selects the new clip, so a beginner's bar had no Export until the back
+      //    arrow. What this rule guards is the thumb, so the clip bar keeps Export on its own pixels (3) and the bin
+      //    off every pixel Export or the cog held in the project's bar (4, which covers 'editing' too since then).
       ['select1', 'select2', 'project', 'editing'].forEach(k => {
         if (!states[k]['m-del']) return;
-        const up = PROJECT.filter(p => states[k][p]);
+        const up = PROJECT.filter(p => states[k][p] && !(k === 'editing' && p === 'm-export'));
         if (up.length) throw new Error('state "' + k + '" has the delete bin up while the project header still shows ' + up.join(', '));
       });
       // 3. Export and back are learned by position: one slot each, across every state
@@ -22891,7 +22894,8 @@
       });
       // 4. the bin never lands on the pixels Export or the cog were occupying
       const exp = states.project['m-export'], cog = states.project['m-settings'];
-      ['select1', 'select2'].forEach(k => {
+      if (!states.editing['m-export']) throw new Error('one clip selected hides Export, so straight after an import there is no way to export (#1074): ' + seen);
+      ['editing', 'select1', 'select2'].forEach(k => {
         const d = states[k]['m-del'];
         if (!d) throw new Error('state "' + k + '" offers no way to delete the selection');
         [['Export', exp], ['the settings cog', cog]].forEach(([what, b]) => {
@@ -99630,6 +99634,58 @@
       FM.scene = saved; FM.setTime(savedT); FM.selectLayer(null);
       try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
     }
+  });
+
+  /* #1074: an import selects the new clip, and the clip header had no Export until he found the back arrow. */
+  test('1074 with one clip selected on a phone Export stays in the top bar, on screen, last in the row, and nothing covers it', { item: '1074', budgetMs: 30000 }, async function () {
+    const saved = FM.scene, sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      for (const w of [380, 320]) {
+        await atPhoneWidth(async function () {
+          if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+          const L = FM.makeLayer('shape', { name: 'A clip with a rather long name for this bar', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#e0245e', start: 0, duration: 4 });
+          FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+          FM.selectLayer(L.id); FM.refreshAll();
+          await sleep(250);
+          if (!document.body.classList.contains('m-editing')) throw new Error('setup: one clip selected at ' + w + ' is not the clip header');
+          const ex = document.getElementById('m-export'), r = ex.getBoundingClientRect();
+          if (!(r.width >= 28 && r.height >= 28)) throw new Error('at ' + w + ' Export is ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' with a clip selected, so he cannot find how to export');
+          if (r.right > window.innerWidth + 0.5 || r.left < 0) throw new Error('at ' + w + ' Export runs off the bar (right ' + Math.round(r.right) + ')');
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (!hit || !ex.contains(hit)) throw new Error('at ' + w + ' something covers Export: ' + (hit ? hit.id || hit.className : 'nothing'));
+          const more = document.getElementById('m-more').getBoundingClientRect();
+          if (!(more.width > 0) || more.right > r.left + 0.5) throw new Error('at ' + w + ' Export is not after ⋯ in the row, or ⋯ is gone (⋯ ends ' + Math.round(more.right) + ', Export starts ' + Math.round(r.left) + ')');
+          const name = document.getElementById('clip-name-m').getBoundingClientRect();
+          if (name.width < 40) throw new Error('at ' + w + ' Export squeezed the clip name to ' + Math.round(name.width) + 'px');
+          const bar = document.getElementById('topbar-m');
+          if (bar.scrollWidth > bar.clientWidth + 1) throw new Error('at ' + w + ' the bar scrolls sideways (' + bar.scrollWidth + ' in ' + bar.clientWidth + ')');
+        }, w);
+      }
+    } finally { FM.scene = saved; FM.selectLayer(null); try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+  /* #1075: a real finger, because the hold's timer and the pointer capture are what make the grab. */
+  test('1075 a real finger holding a clip lifts it, and letting go puts it down', { item: '1075', budgetMs: 60000 }, async function () {
+    needsTouch924();
+    const saved = FM.scene, sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          const made = await stack924(2, 2);
+          const clip = document.querySelector('.clip[data-id="' + made[0].id + '"]');
+          if (!clip) throw new Error('setup: no clip for the first layer');
+          const r = clip.getBoundingClientRect(), x = Math.min(r.left + 60, window.innerWidth - 40), y = r.top + r.height / 2;
+          const rest = getComputedStyle(clip).boxShadow;
+          await realInput924([{ t: 'touchStart', x: x, y: y, ms: 500 }], 'a finger holding the clip');
+          await sleep(80);
+          const held = tracksHeld1075();
+          if (!held) { await realInput924([{ t: 'touchEnd', x: x, y: y, ms: 0 }], 'lifting'); throw new Error('a held clip shows no lift, and on an iPhone, which has no vibrate, nothing else says it is in hand (at rest ' + rest + ')'); }
+          await realInput924([{ t: 'touchEnd', x: x, y: y, ms: 0 }], 'lifting');
+          await sleep(120);
+          if (document.querySelector('.clip-lifted')) throw new Error('letting go left the clip lifted');
+        });
+      }, 380);
+    } finally { FM.scene = saved; FM.selectLayer(null); try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+    function tracksHeld1075() { const c = document.querySelector('.clip-lifted'); return !!(c && getComputedStyle(c).boxShadow !== 'none'); }
   });
 
   test('924 on PC the add line dragged into the auto-scroll edge keeps moving the switch as the list scrolls, and lands under the pointer', { item: '924', budgetMs: 60000 }, async function () {
@@ -193952,7 +194008,10 @@
     const hidden = card.classList.contains('hidden');
     const shares = [], downloads = [];
     let running = null;
+    const dm = Object.getOwnPropertyDescriptor(window, 'matchMedia'), mm0 = window.matchMedia;
     try {
+      /* #1081: only a phone's Save opens the sheet, and this frame's pointer is fine (the suite's 380 pass is not a phone either) */
+      Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: function (q) { return /pointer: coarse/.test(q) ? { matches: true, media: q } : mm0.call(window, q); } });
       await hunt1017Within(_bh6KeysToEditor(), '1031 close overlays');
       FM.scene = scene([], { project: { width: 8, height: 8, fps: 10, duration: 0.1, background: '#000000' } });
       Object.defineProperty(navigator, 'share', { configurable: true, value: function (data) { shares.push(data); return Promise.resolve(); } });
@@ -193999,10 +194058,336 @@
       if (ds) Object.defineProperty(navigator, 'share', ds); else delete navigator.share;
       if (da) Object.defineProperty(HTMLAnchorElement.prototype, 'click', da); else delete HTMLAnchorElement.prototype.click;
       if (dscene) Object.defineProperty(FM, 'scene', dscene); else delete FM.scene;
+      if (dm) Object.defineProperty(window, 'matchMedia', dm); else delete window.matchMedia;
       flags.forEach(function (entry) { if (entry[1]) Object.defineProperty(FM, entry[0], entry[1]); else delete FM[entry[0]]; });
       if (hidden) card.classList.add('hidden');
       keep.put(); FM.refreshAll();
       if (focus && document.contains(focus) && focus.focus) focus.focus({ preventScroll: true });
+    }
+  });
+  /* #1081: on Windows the OS Share window has no way to put a file on disk, and canShare says yes there. The pointer answer is stubbed both ways: the suite has a mouse. */
+  test('1081 on a PC Save downloads the finished file even where the browser could share it, and on a phone it opens the share sheet', { item: '1081', budgetMs: 60000 }, async function () {
+    const dc = Object.getOwnPropertyDescriptor(navigator, 'canShare'), ds = Object.getOwnPropertyDescriptor(navigator, 'share');
+    const da = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'click'), dscene = Object.getOwnPropertyDescriptor(FM, 'scene');
+    const dm = Object.getOwnPropertyDescriptor(window, 'matchMedia'), mm0 = window.matchMedia;
+    const keep = isoKeep();
+    const flags = ['_exporting', '_exportCancel', '_exportTransparent', '_exportThinned'].map(function (key) { return [key, Object.getOwnPropertyDescriptor(FM, key)]; });
+    const shares = [], downloads = [];
+    let running = null, asked = 0;
+    try {
+      await hunt1017Within(_bh6KeysToEditor(), '1081 close overlays');
+      FM.scene = scene([], { project: { width: 8, height: 8, fps: 10, duration: 0.1, background: '#000000' } });
+      Object.defineProperty(navigator, 'share', { configurable: true, value: function (data) { shares.push(data); return Promise.resolve(); } });
+      Object.defineProperty(navigator, 'canShare', { configurable: true, value: function () { asked++; return true; } });
+      Object.defineProperty(HTMLAnchorElement.prototype, 'click', { configurable: true, value: function () { downloads.push(this.download); } });
+      for (const phone of [false, true]) {
+        shares.length = 0; downloads.length = 0; asked = 0;
+        Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: function (q) { return /pointer: coarse/.test(q) ? { matches: phone, media: q } : mm0.call(window, q); } });
+        let said = null;
+        running = FM.exporter.runGif({ name: '1081-probe', fps: 10, from: 0, to: 0.1, onReady: function (out) { return out.save().then(function (r) { said = r; return r; }); } });
+        await hunt1017Within(running, '1081 render and Save at ' + (phone ? 'a phone' : 'a PC'), 15000);
+        running = null;
+        if (phone) {
+          if (shares.length !== 1 || downloads.length) throw new Error('on a phone Save must open the share sheet: ' + shares.length + ' share(s), ' + downloads.length + ' download(s)');
+          if (said !== 'shared') throw new Error('CONTROL: the phone answer reports ' + said);
+        } else {
+          if (shares.length) throw new Error('on a PC Save opened the OS Share window, and on Windows that window has no way to put the file on disk');
+          if (downloads.join() !== '1081-probe.gif' || said !== 'downloaded') throw new Error('on a PC Save did not download the file: ' + JSON.stringify(downloads) + ', reported ' + said);
+        }
+      }
+    } finally {
+      if (running) { FM._exportCancel = true; try { await hunt1017Within(running, '1081 cancel unfinished export', 10000); } catch (e) {} }
+      if (dc) Object.defineProperty(navigator, 'canShare', dc); else delete navigator.canShare;
+      if (ds) Object.defineProperty(navigator, 'share', ds); else delete navigator.share;
+      if (da) Object.defineProperty(HTMLAnchorElement.prototype, 'click', da); else delete HTMLAnchorElement.prototype.click;
+      if (dscene) Object.defineProperty(FM, 'scene', dscene); else delete FM.scene;
+      if (dm) Object.defineProperty(window, 'matchMedia', dm); else delete window.matchMedia;
+      flags.forEach(function (entry) { if (entry[1]) Object.defineProperty(FM, entry[0], entry[1]); else delete FM[entry[0]]; });
+      keep.put(); FM.refreshAll();
+    }
+  });
+  /* #1086, the card: it runs everywhere with a made-up result, and the next test sends a real file through where AAC exists. */
+  test('1086 the ready card says Sound with the number of clips missing, where one clip failed and the file still has sound', { item: '1086', budgetMs: 30000 }, async function () {
+    const card = document.getElementById('export-ready'), hidden = card.classList.contains('hidden');
+    const out = function (extra) { return Object.assign({ blob: new Blob(['x']), name: 'x.mp4', poster: null, width: 8, height: 8, fps: 10, seconds: 1, hasAudio: true, audioDropped: null, thinned: [], save: function () { return Promise.resolve('downloaded'); } }, extra); };
+    const line = async function (extra) {
+      const p = FM._showExportReady(out(extra));
+      const meta = document.getElementById('xr-meta'), text = meta.textContent, warned = meta.classList.contains('xr-nosound');
+      document.getElementById('xr-discard').click();
+      await p;
+      return { text: text, warned: warned };
+    };
+    try {
+      const good = await line({ audioMissing: [] });
+      if (!/Sound ✓/.test(good.text) || good.warned) throw new Error('CONTROL: with every clip in the file the card reads ' + good.text);
+      const one = await line({ audioMissing: ['song (its audio would not decode)'] });
+      if (/Sound ✓/.test(one.text) || !/Sound — 1 clip missing/.test(one.text)) throw new Error('with one clip’s sound missing the card reads ' + one.text);
+      if (!one.warned) throw new Error('the missing-sound line is not drawn as a warning');
+      const two = await line({ audioMissing: ['a', 'b'] });
+      if (!/Sound — 2 clips missing/.test(two.text)) throw new Error('with two missing the card reads ' + two.text);
+      const none = await line({ hasAudio: false, audioMissing: ['a'], audioDropped: 'all-unreadable' });
+      if (!/NO SOUND/.test(none.text)) throw new Error('CONTROL: an export with no sound at all reads ' + none.text);
+    } finally { if (hidden) card.classList.add('hidden'); }
+  });
+  test('1086 a real export with one good clip and one with no file hands the card the missing clip by name', { item: '1086', budgetMs: 60000 }, async function () {
+    /* No needsAac: the mix, and with it the list of clips it lost, is built BEFORE the AAC probe (js/exporter.js run), so a browser
+       with no AAC encoder still hands the card that list. There the file has no sound for a reason the card names
+       (aac-unavailable), which is the one other answer the CONTROL accepts. */
+    const keep = isoKeep(), P = FM.scene.project, saved = { layers: FM.scene.layers.slice(), dur: P.duration, w: P.width, h: P.height };
+    try {
+      let got = null;
+      await q215SilentProbeOut1086(function (out) { got = out; });
+      if (!got) throw new Error('CONTROL: the export never reached its ready card');
+      if (!got.hasAudio && got.audioDropped !== 'aac-unavailable') throw new Error('CONTROL: the good clip did not make a file with sound (dropped ' + got.audioDropped + ')');
+      if (!Array.isArray(got.audioMissing) || got.audioMissing.length !== 1 || !/broken song/.test(got.audioMissing[0])) throw new Error('the export did not hand the card the clip it lost: ' + JSON.stringify(got.audioMissing));
+    } finally {
+      FM.scene.layers = saved.layers; P.duration = saved.dur; P.width = saved.w; P.height = saved.h;
+      FM._audioTrackDropped = null; FM._lastMixPeak = undefined;
+      keep.put(); FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild();
+    }
+    async function q215SilentProbeOut1086(onOut) {
+      const realToast = FM.toast;
+      FM.toast = function () {};
+      try {
+        P.duration = 0.3; P.width = 64; P.height = 64;
+        FM.scene.layers.length = 0;
+        const box = FM.makeLayer('shape', { name: 'box', shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 20, fill: '#3a7bd5' });
+        box.start = 0; box.duration = 0.3; FM.scene.layers.push(box);
+        const song = FM.makeLayer('video', { name: 'good song' });
+        song.start = 0; song.duration = 0.3; song.trimStart = 0; song.trimEnd = 0.3;
+        const broken = FM.makeLayer('video', { name: 'broken song' });
+        broken.start = 0; broken.duration = 0.3; broken.trimStart = 0; broken.trimEnd = 0.3;
+        FM.scene.layers.push(song, broken);
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const buf = ac.createBuffer(2, Math.floor(48000 * 0.3), 48000);
+        for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 30) * 0.4; }
+        FM.media.set(song.id, { file: new Blob(['a']), duration: 0.3, audioBuffer: buf });
+        FM.media.set(broken.id, { duration: 0.3 });
+        FM._audioTrackDropped = null; FM._lastMixPeak = undefined;
+        await FM.exporter.run({ fps: 10, scale: 1, name: 'q1086', onReady: async function (out) { onOut(out); } });
+      } finally { FM.toast = realToast; }
+    }
+  });
+  /* #1102: FontFace is stubbed as 915's test does it, so no real font is needed and nothing is fetched. */
+  test('1102 an embedded font is listed in the app’s own css form, whatever string the opened file carries', { item: '1102', budgetMs: 20000 }, async function () {
+    const realFF = window.FontFace, family = 'FMFguard1102';
+    const hostile = family + ', sans-serif; } body { display: none';
+    const had = FM.fonts.list().map(function (f) { return f.id; });
+    try {
+      window.FontFace = function () { this.load = function () { return Promise.resolve(); }; };
+      document.fonts.add = function () {};
+      const failed = await deadline1033(FM.fonts.applyEmbedded({ x: { family: family, name: '1102.ttf', css: hostile, dataURL: 'data:font/ttf;base64,AAAAAAAAAAA=' } }), 'embedded font');
+      const f = FM.fonts.list().filter(function (x) { return x.family === family; })[0];
+      if (failed || !f) throw new Error('CONTROL: the embedded font was not listed (failed ' + failed + ')');
+      if (f.css !== family + ', sans-serif') throw new Error('the font index stored the file’s own css string: ' + f.css);
+    } finally {
+      window.FontFace = realFF; delete document.fonts.add;
+      for (const f of FM.fonts.list()) { if (had.indexOf(f.id) < 0) { try { await deadline1033(FM.fonts.remove(f.id), 'font cleanup'); } catch (e) {} } }
+    }
+  });
+  /* #1077: the badge on a tile that does nothing here answers a tap with why, and must not pick the effect (it is a question about
+     the tile, not a choice of it). So the answer says how to add it anyway, and that way has to work: the browser opens as the sheet,
+     where a tap on the picture picks and Add puts it on. A full-frame photo, as 906 builds it, is where Drop Shadow is badged. */
+  test('1077 a tap on the Drop Shadow badge of a full-frame photo says to tap the picture to add it anyway, picks nothing, and the picture adds it', { item: '1077', budgetMs: 30000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, P = FM.scene.project;
+    const realToast = FM.toast, said = [];
+    const keys = ['fm.fx.recents', 'fm.fx.presetHint'], kept = {};
+    keys.forEach(k => { try { kept[k] = localStorage.getItem(k); } catch (e) {} });
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      const g = c.getContext('2d'); g.fillStyle = '#446688'; g.fillRect(0, 0, P.width, P.height);
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('image', { x: P.width / 2, y: P.height / 2, start: 0, duration: 3 });
+      L.name = 'FX1077';
+      FM.scene.layers.push(L);
+      FM.media.set(L.id, { el: c, kind: 'image', w: P.width, h: P.height, width: P.width, height: P.height });
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(180);
+      const why = FM._fxDeadHereWhy && FM._fxDeadHereWhy('dropshadow');
+      if (!why) throw new Error('setup: Drop Shadow is not called dead on a photo that fills the frame, so there is no badge to tap');
+      FM.toast = function (m) { said.push(String(m)); };
+      FM.fxBrowser.open(L); await sleep(300);
+      const root = document.getElementById('fx-browser');
+      const btn = root && root.querySelector('.fxb-search-btn'), input = root && root.querySelector('.fxb-search-input');
+      if (!btn || !input) throw new Error('setup: the effects browser has no search button or field');
+      btn.click(); await sleep(60);
+      input.value = 'drop shadow'; input.dispatchEvent(new Event('input', { bubbles: true })); await sleep(320);
+      const tile = [].slice.call(root.querySelectorAll('.fxb-search-grid .fxb-tile')).filter(t => ((t.querySelector('.fxb-tile-name') || {}).textContent || '').trim() === 'Drop Shadow')[0];
+      if (!tile) throw new Error('setup: searching drop shadow shows no Drop Shadow tile');
+      const badge = tile.querySelector('.fxb-dead');
+      if (!badge) throw new Error('setup: the Drop Shadow tile carries no does-nothing-here badge on a full-frame photo');
+      const has = () => ((FM.layerById(FM.scene, L.id) || {}).effects || []).some(f => f.type === 'dropshadow');
+      said.length = 0;
+      badge.click(); await sleep(60);
+      if (has() || tile.classList.contains('is-picked')) throw new Error('a tap on the badge picked or added Drop Shadow: the badge is a question about the tile, not a choice of it');
+      if (said.length !== 1 || said[0].indexOf(why) !== 0) throw new Error('a tap on the badge toasted ' + JSON.stringify(said) + ', not the reason');
+      if (!/tap the picture to add it anyway/i.test(said[0])) throw new Error('the badge says why Drop Shadow does nothing here but not how to add it anyway, so someone who wants it is stuck: ' + JSON.stringify(said[0]));
+      const pic = tile.firstElementChild;
+      if (!pic || pic === badge || pic.classList.contains('fxb-tile-name')) throw new Error('setup: the tile does not lead with its picture');
+      pic.click(); await sleep(150);
+      if (!has() && !tile.classList.contains('is-picked')) throw new Error('the toast says to tap the picture, and a tap on the picture neither picked nor added Drop Shadow');
+      if (!has()) {
+        const go = root.querySelector('.fxb-commit .fxb-commit-go');
+        if (!go) throw new Error('setup: Drop Shadow is picked and there is no Add button');
+        go.click(); await sleep(250);
+      }
+      if (!has()) throw new Error('Drop Shadow was picked from its picture and Add did not put it on the layer');
+    } finally {
+      FM.toast = realToast;
+      try { FM.fxBrowser.close(); } catch (e) {}
+      keys.forEach(k => { try { if (kept[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, kept[k]); } catch (e) {} });
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+    } finally { _isoK.put(); }
+  });
+  /* #1078: Shadow only on a layer that fills the frame hides the layer and its shadow falls outside the edges, so the picture goes
+     black and reads as broken. The row now says so, under itself, where he is looking. */
+  test('1078 Drop Shadow’s Shadow only row says a full-frame layer goes black and to shrink it first, on screen at 380 and 1280 px', { item: '1078', budgetMs: 40000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const check = async where => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'S1078', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance('dropshadow'); inst._expanded = true;
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+      const lab = [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-label')).filter(e => (e.textContent || '').trim() === 'Shadow only')[0];
+      const row = lab && lab.closest('.fx-seg-row');
+      if (!row) throw new Error(where + ': the open Drop Shadow shows no Shadow only row');
+      const note = row.nextElementSibling;
+      if (!note || !note.classList.contains('fx-range-note')) throw new Error(where + ': the Shadow only row carries no note, so a full-frame clip just turns black with nothing saying why');
+      const t = note.textContent || '';
+      if (!/fills the frame/i.test(t) || !/shrink the layer/i.test(t)) throw new Error(where + ': the Shadow only note does not name the full-frame case and the cure: ' + JSON.stringify(t));
+      note.scrollIntoView({ block: 'nearest' }); await sleep(20);
+      const nb = note.getBoundingClientRect(), panel = document.getElementById('inspector-panel').getBoundingClientRect();
+      if (!(nb.width > 0 && nb.height > 0) || nb.left < panel.left - 1 || nb.right > panel.right + 1 || note.scrollWidth > note.clientWidth + 1) throw new Error(where + ': the Shadow only note sits at ' + Math.round(nb.left) + '-' + Math.round(nb.right) + ' in a panel at ' + Math.round(panel.left) + '-' + Math.round(panel.right));
+    };
+    try {
+      await atPhoneWidth(() => check('at 380 px'), 380);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+  /* #1088: the sound-only export clicked its file onto an <a download> the moment the mix finished (no fresh tap, so an iPhone
+     may never show it), let its address go after 1 s, and toasted Audio exported. Now it ends on the Save card and the file leaves
+     only through Save (FM.exporter.deliver, stood in for here so nothing is shared or downloaded). Watched on the way: no object
+     URL is made before Save. A real two-second song through the real mixer and the real WAV writer. */
+  test('1088 a sound-only export ends on the Save card naming a two-second WAV with its sound, and the file leaves only through Save', { item: '1088', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const _isoK = isoKeep(); try {
+    const saved = FM.scene, last0 = FM._lastAudioExport;
+    const rangeEl = document.getElementById('exp-range'), range0 = rangeEl ? rangeEl.value : null;
+    const card = document.getElementById('export-ready');
+    if (!card) throw new Error('setup: no Save card (#export-ready) in this document');
+    if (!FM.exporter || typeof FM._runAudioOnlyExport !== 'function') throw new Error('setup: FM._runAudioOnlyExport is not reachable');
+    const dDel = Object.getOwnPropertyDescriptor(FM.exporter, 'deliver');
+    const realCOU = URL.createObjectURL;
+    let urls = 0, pending = null, ended = false;
+    const handed = [];
+    try {
+      await hbAudScene([], 2);
+      if (rangeEl) rangeEl.value = 'whole';
+      FM._lastAudioExport = undefined;
+      URL.createObjectURL = function (b) { urls++; return realCOU.call(URL, b); };
+      FM.exporter.deliver = function (blob, name) { handed.push({ blob: blob, name: name }); return Promise.resolve('downloaded'); };
+      pending = FM._runAudioOnlyExport({ m4a: false });
+      pending.then(() => { ended = true; }, () => { ended = true; });
+      const t0 = Date.now();
+      while (card.classList.contains('hidden') && !ended && Date.now() - t0 < 30000) await sleep(100);
+      if (!FM._lastAudioExport) throw new Error('setup: the export wrote no sound file (the mixer found nothing in the two-second song), so the Save card cannot be judged');
+      if (card.classList.contains('hidden')) throw new Error('a sound-only export ended without its Save card (' + urls + ' object URLs made), so on an iPhone the file was handed over with no fresh tap');
+      if (handed.length || urls) throw new Error('the sound file was handed over before Save was tapped (' + handed.length + ' deliver, ' + urls + ' object URLs)');
+      const nm = (document.getElementById('xr-name') || {}).textContent || '', meta = (document.getElementById('xr-meta') || {}).textContent || '';
+      if (!/\.wav$/.test(nm)) throw new Error('the Save card names the file ' + JSON.stringify(nm) + ', not a .wav');
+      if (!/ · WAV · /.test(meta) || /fps|×/.test(meta) || meta.indexOf(' · 0:02 · ') < 0 || meta.indexOf('Sound ✓') < 0) throw new Error('the Save card line for a two-second WAV reads ' + JSON.stringify(meta));
+      const pvw = card.querySelector('.xr-preview');
+      if (pvw && !pvw.classList.contains('hidden')) throw new Error('the Save card for a sound file shows an empty picture box');
+      document.getElementById('xr-save').click();
+      const t1 = Date.now();
+      while (!ended && Date.now() - t1 < 5000) await sleep(50);
+      if (!ended) throw new Error('Save was tapped and the sound-only export never finished');
+      pending = null;
+      if (handed.length !== 1 || handed[0].name !== nm || !handed[0].blob || handed[0].blob.type !== 'audio/wav' || !(handed[0].blob.size > 1000)) throw new Error('Save handed over ' + JSON.stringify(handed.map(h => [h.name, h.blob && h.blob.type, h.blob && h.blob.size])) + ', not the one ' + nm);
+      if (!card.classList.contains('hidden')) throw new Error('the Save card stayed up after the file was handed over');
+    } finally {
+      URL.createObjectURL = realCOU;
+      if (dDel) Object.defineProperty(FM.exporter, 'deliver', dDel); else delete FM.exporter.deliver;
+      if (!card.classList.contains('hidden')) { const d = document.getElementById('xr-discard'); if (d) d.click(); }
+      if (pending) { try { await pending; } catch (e) {} }
+      if (rangeEl && range0 != null) rangeEl.value = range0;
+      FM._lastAudioExport = last0;
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+    } finally { _isoK.put(); }
+  });
+  /* #1101's fix went in with #966 opts11 (the hashed tuple carries a button row's values), and nothing would notice it going. */
+  test('1101 a button row that gains one option moves the collab schema fingerprint, and its label alone does not', { item: '1101', budgetMs: 20000 }, async function () {
+    const C = FM.collab;
+    if (!C || !C.schemaFingerprint) throw new Error('setup: no FM.collab.schemaFingerprint');
+    const got = C.schemaFingerprint();
+    if (got === null) throw new Error('setup: the fingerprint could not be computed');
+    const realAll = FM.fxRegistry.all;
+    const change = function (fn) {
+      FM.fxRegistry.all = function () {
+        let done = false;
+        return (realAll.call(FM.fxRegistry) || []).map(function (e) {
+          if (done) return e;
+          const i = (e.params || []).findIndex(function (p) { return (p.options || []).length; });
+          if (i < 0) return e;
+          done = true;
+          const params = e.params.slice();
+          params[i] = Object.assign({}, params[i], { options: fn(params[i].options.slice()) });
+          return Object.assign({}, e, { params: params });
+        });
+      };
+      try { return C.schemaFingerprint(); } finally { FM.fxRegistry.all = realAll; }
+    };
+    if (change(function (o) { o.push([9901, 'A new choice']); return o; }) === got) throw new Error('a button row gained an option and the fingerprint stayed, so an older build joins and silently strips the newer one’s choice');
+    if (change(function (o) { o[0] = [o[0][0], 'Reworded']; return o; }) !== got) throw new Error('rewording a button moved the fingerprint: labels are not in the schema, and a reword must not split two builds');
+    if (C.schemaFingerprint() !== got) throw new Error('CONTROL: the registry was not put back');
+  });
+  /* #1080, through the real file picker's step with a real WAV and a real PNG, because the rule lives in that step and asks what the loader made of the file. */
+  test('1080 a song picked with the playhead at the end starts at 0, a song picked inside the project starts at the playhead, and a picture at the end still comes next', { item: '1080', budgetMs: 60000 }, async function () {
+    if (!FM._handleFiles) throw new Error('setup: FM._handleFiles is not reachable');
+    const keep = isoKeep(), t0 = FM.time, saved = FM.scene;
+    const ac = new OfflineAudioContext(1, 8000, 8000), buf = ac.createBuffer(1, 8000, 8000), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 8) * 0.3;
+    const wav = FM.sfx.encodeWav(buf);
+    const c = offscreen(8, 8); c.getContext('2d').fillRect(0, 0, 8, 8);
+    const png = await deadline1033(new Promise(function (resolve) { c.toBlob(resolve, 'image/png'); }), 'PNG fixture');
+    const added = async function (file, at) {
+      const A = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 40, shapeH: 40, fill: '#3366cc', start: 0, duration: 4 });
+      FM.scene = scene([A], { project: { width: 320, height: 240, fps: 30, duration: 4, background: '#000000' } });
+      FM.time = at;
+      await deadline1033(FM._handleFiles([file]), file.name + ' pick', 20000);
+      const L = FM.scene.layers.filter(function (x) { return x !== A; })[0];
+      if (!L) throw new Error('CONTROL: ' + file.name + ' was not added');
+      const start = L.start;
+      FM.media.remove(L.id);
+      return start;
+    };
+    try {
+      const song = new File([wav], '1080 song.wav', { type: 'audio/wav' }), pic = new File([png], '1080 pic.png', { type: 'image/png' });
+      let s = await added(song, 4);
+      if (s !== 0) throw new Error('a song picked with the playhead at the end of the project starts at ' + s + ', after the video, playing over nothing');
+      s = await added(song, 4 - 0.25 / 30);
+      if (s !== 0) throw new Error('within half a frame of the end the song starts at ' + s);
+      s = await added(song, 2);
+      if (s !== 2) throw new Error('CONTROL: a song picked at 2 s starts at ' + s + ', not at the playhead');
+      s = await added(pic, 4);
+      if (s !== 4) throw new Error('a picture picked with the playhead at the end starts at ' + s + ', where it should come next');
+    } finally {
+      FM.scene = saved; FM.setTime(t0); keep.put(); FM.refreshAll();
     }
   });
   // Batch 2 guards: all asynchronous boundaries name the operation that failed to finish.
@@ -194226,6 +194611,109 @@
         if (templates0 !== null) localStorage.setItem('fm.templates', templates0); else localStorage.removeItem('fm.templates');
         keys.forEach(function (key, i) { restore1033(FM.fonts, key, descriptors[i]); });
         keep.put(); FM.setTime(t0);
+      }
+    }
+  });
+  /* #1037, the half the 5 Nov review found open. The clip strip is the only picture path that goes through createImageBitmap (js/frames.js
+     _extractStrip); the test above reads FM.renderThumb, which draws m.el as the preview does. A change to that call's options would turn
+     his photos sideways on the timeline and nowhere else. Two sizes, because stripSize only resizes a picture taller than the strip's 64 px:
+     80x48 turned is 80 tall and takes the options, 40x24 turned is 40 tall and does not. */
+  test('1037 the clip strip of an EXIF rotated JPEG is upright too, resized or not', { item: '1037', budgetMs: 60000 }, async function () {
+    const recs = [];
+    const quads = function (bm) {
+      const c = offscreen(bm.width, bm.height), g = c.getContext('2d');
+      g.drawImage(bm, 0, 0);
+      return [[0.25,0.25], [0.75,0.25], [0.25,0.75], [0.75,0.75]].map(function (p) {
+        const q = g.getImageData(Math.floor(bm.width * p[0]), Math.floor(bm.height * p[1]), 1, 1).data;
+        const palette = [[255,0,0], [0,0,255], [0,255,0], [255,255,0]], names = ['red', 'blue', 'green', 'yellow'];
+        const far = palette.map(function (rgb) { return rgb.reduce(function (sum, v, i) { return sum + (q[i] - v) * (q[i] - v); }, 0); });
+        return names[far.indexOf(Math.min.apply(null, far))];
+      }).join(',');
+    };
+    const load = async function (name, parts) {
+      const r = await deadline1033(FM.loadImageFile(new File(parts, name, { type: 'image/jpeg' })), name + ' load');
+      recs.push(r);
+      return r;
+    };
+    // APP1: Exif, little-endian TIFF, one SHORT orientation entry (6 = 90 degrees clockwise), as in the test above.
+    const exif = new Uint8Array([255,225,0,34,69,120,105,102,0,0,73,73,42,0,8,0,0,0,1,0,18,1,3,0,1,0,0,0,6,0,0,0,0,0,0,0]);
+    try {
+      for (const size of [[80, 48], [40, 24]]) {
+        const w = size[0], h = size[1], c = offscreen(w, h), g = c.getContext('2d');
+        ['#ff0000', '#0000ff', '#00ff00', '#ffff00'].forEach(function (col, i) { g.fillStyle = col; g.fillRect((i % 2) * w / 2, Math.floor(i / 2) * h / 2, w / 2, h / 2); });
+        const jpeg = await deadline1033(new Promise(function (resolve) { c.toBlob(resolve, 'image/jpeg', 1); }), 'JPEG fixture encoding');
+        const bytes = new Uint8Array(await deadline1033(jpeg.arrayBuffer(), 'JPEG fixture bytes'));
+        const plain = await load('1037 plain ' + w + '.jpg', [bytes]);
+        const turned = await load('1037 upright ' + w + '.jpg', [bytes.slice(0, 2), exif, bytes.slice(2)]);
+        if (turned.width !== h || turned.height !== w) throw new Error('CONTROL: at ' + w + 'x' + h + ' the EXIF tag did not swap the loaded picture (' + turned.width + 'x' + turned.height + '), so this cannot tell upright from sideways');
+        await deadline1033(FM.buildClipStrip(plain), 'clip strip of the untagged JPEG');
+        await deadline1033(FM.buildClipStrip(turned), 'clip strip of the EXIF JPEG');
+        const a = plain.stripFrames && plain.stripFrames[0], b = turned.stripFrames && turned.stripFrames[0];
+        if (!a || !b) throw new Error('at ' + w + 'x' + h + ' the clip strip built nothing (untagged ' + !!a + ', EXIF ' + !!b + ')');
+        if (quads(a) !== 'red,blue,green,yellow') throw new Error('CONTROL: the untagged strip at ' + w + 'x' + h + ' reads ' + quads(a));
+        const wantH = w > 64 ? 64 : w, wantW = w > 64 ? Math.round(h * 64 / w) : h;
+        if (b.width !== wantW || b.height !== wantH) throw new Error('at ' + w + 'x' + h + ' the EXIF strip is ' + b.width + 'x' + b.height + ', where the upright picture gives ' + wantW + 'x' + wantH);
+        if (quads(b) !== 'green,red,yellow,blue') throw new Error('at ' + w + 'x' + h + ' the clip strip of an EXIF photo is sideways: it reads ' + quads(b) + ', and the upright picture reads green,red,yellow,blue');
+      }
+    } finally {
+      recs.forEach(function (r) { try { FM.clearClipStrip(r); FM._releaseMediaRecord(r); } catch (e) {} });
+    }
+  });
+  /* #1038, the half the 5 Nov review found open. The test above relabels a project file as a template, and the older template test passes with
+     an empty fonts list, so nothing drove the real FM.templates.exportFile with a font, and storage.js' embedFonts note warns of exactly that
+     drift. The pack is stubbed, which needs no project made or saved; serializeWith, embedFonts, saveLibFile and importObject are the real ones. */
+  test('1038 a template file from the real exportFile carries the used custom font, and opening that file hands it to the font loader', { item: '1038', budgetMs: 60000 }, async function () {
+    const templates0 = localStorage.getItem('fm.templates');
+    const fontKeys = ['list', 'getFile', 'applyEmbedded'];
+    const fontDesc = fontKeys.map(function (key) { return Object.getOwnPropertyDescriptor(FM.fonts, key); });
+    const packDesc = Object.getOwnPropertyDescriptor(FM.templates, 'getPack');
+    const pageDesc = [[URL, 'createObjectURL'], [HTMLAnchorElement.prototype, 'click']].map(function (p) { return [p[0], p[1], Object.getOwnPropertyDescriptor(p[0], p[1])]; });
+    const bytes = new Uint8Array(3000);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 37 + 11) & 255;
+    const face = { id: 'guard1038tpl', name: '1038 template face', family: 'FMFguard1038tpl', css: 'FMFguard1038tpl, sans-serif' };
+    const other = { id: 'guard1038other', name: '1038 unused face', family: 'FMFguard1038other', css: 'FMFguard1038other, sans-serif' };
+    const asked = [];
+    let blob = null, dl = null, received = null, templateId = null;
+    const P = { name: '1038 template', width: 320, height: 240, fps: 30, duration: 2 };
+    const packOf = function (layers) { return { project: Object.assign({}, P), layers: layers, media: {} }; };
+    const write = async function (layers) {
+      blob = null; dl = null;
+      FM.templates.getPack = function () { return Promise.resolve(packOf(layers)); };
+      const r = await deadline1033(FM.templates.exportFile('guard1038'), 'template file write');
+      if (!r || !blob) throw new Error('setup: the template file was not written');
+      return JSON.parse(await deadline1033(blob.text(), 'template file read'));
+    };
+    try {
+      URL.createObjectURL = function (b) { blob = b; return 'blob:t1038'; };
+      HTMLAnchorElement.prototype.click = function () { dl = this.download; };
+      FM.fonts.list = function () { return [other, face]; };
+      FM.fonts.getFile = function (id) { asked.push(id); return Promise.resolve(new File([bytes], id + '.ttf', { type: 'font/ttf' })); };
+      FM.fonts.applyEmbedded = function (fonts) { received = fonts; return Promise.resolve(0); };
+      const L = FM.makeLayer('text', { text: 'A portable template' }); L.fontFamily = face.css;
+      const file = await write([L]);
+      if (file.kind !== 'template' || !/\.fmtemplate\.json$/.test(String(dl))) throw new Error('CONTROL: that was not a template file (' + dl + ', kind ' + file.kind + ')');
+      if (asked.join() !== face.id) throw new Error('the template file read the wrong fonts: ' + JSON.stringify(asked) + ', where only the one its text uses should be read');
+      const fd = file.fonts && file.fonts[face.id];
+      if (!fd) throw new Error('a template whose text uses a custom font was saved without that font (fonts ' + JSON.stringify(Object.keys(file.fonts || {})) + '), so it opens in the wrong face on the phone he sends it to');
+      if (fd.family !== face.family || fd.css !== face.css || !/^data:/.test(fd.dataURL)) throw new Error('the template file lost the font family or its bytes');
+      if (file.fonts[other.id]) throw new Error('the template file carries a font none of its text uses');
+      const back = new Uint8Array(await deadline1033((await deadline1033(fetch(fd.dataURL), 'embedded font fetch')).arrayBuffer(), 'embedded font bytes'));
+      if (back.length !== bytes.length || back.some(function (b, i) { return b !== bytes[i]; })) throw new Error('the font bytes changed in the template file');
+      const r = await deadline1033(FM.templates.importObject(JSON.parse(JSON.stringify(file))), 'template file open');
+      templateId = r && r.id;
+      if (!templateId) throw new Error('CONTROL: the template file was refused when opened (' + (r && r.why) + ')');
+      if (!received || !received[face.id] || received[face.id].dataURL !== fd.dataURL) throw new Error('opening the template file did not hand its font to the font loader');
+      asked.length = 0;
+      const none = await write([FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 20, shapeH: 20, fill: '#ff0000' })]);
+      if (asked.length || Object.keys(none.fonts || {}).length) throw new Error('CONTROL: a template with no text still read or carried a font (' + JSON.stringify(asked) + ')');
+    } finally {
+      try {
+        if (templateId) await deadline1033(FM.templates.remove(templateId), 'template font cleanup');
+      } finally {
+        if (templates0 !== null) localStorage.setItem('fm.templates', templates0); else localStorage.removeItem('fm.templates');
+        fontKeys.forEach(function (key, i) { restore1033(FM.fonts, key, fontDesc[i]); });
+        restore1033(FM.templates, 'getPack', packDesc);
+        pageDesc.forEach(function (p) { restore1033(p[0], p[1], p[2]); });
       }
     }
   });

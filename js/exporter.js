@@ -63,10 +63,14 @@ window.FM = window.FM || {};
   // Takes the finished file as a BLOB (see createMp4Sink). It used to take the muxer's ArrayBuffer and
   // do `new Blob([buffer])` here, which meant that at the moment of delivery the whole movie existed
   // TWICE — once on the JS heap, once in blob storage. A blob in, a blob out: no copy. (#47)
+  /* #1081: ON A PC, SAVE SAVES. canShare is true in Chrome and Edge on Windows and in Safari on a Mac, so Save opened the OS Share window, and on Windows that window
+     has no way to put the file on disk: dismiss it and deliver reports 'cancelled'. The sheet is the phone's road to Photos, so only a phone takes it. The primary
+     pointer is the answer because a touch-screen laptop driven by its trackpad wants the file on disk too. */
+  function savesByShare() { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } }
   async function deliver(blob, name) {
     let file = null;
     try { file = new File([blob], name, { type: blob.type || 'video/mp4' }); } catch (e) {}
-    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+    if (file && savesByShare() && navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file], title: name }); return 'shared'; }
       catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; }
     }
@@ -1883,6 +1887,7 @@ window.FM = window.FM || {};
     /* suite seam (Simple 2.7): the frame path's own seek, so a test can run it without encoding */
     seekAllVideos,
     buildAudioMix,
+    deliver,   // #1088: the one way a finished file leaves; the sound-only export (js/app.js) hands its file to the Save card with it
     mediaBack,   // bughunt3 #2: FM.snapshotPNG (js/app.js) waits through it too
     encodeM4A,
     aacSupported,
@@ -2401,6 +2406,7 @@ window.FM = window.FM || {};
           blob: outBlob, name: outName, poster: poster,
           width: outW, height: outH, fps: fps, seconds: Math.max(0, end - start),
           hasAudio: !!mix && !trackBad, audioDropped: FM._audioTrackDropped || null,
+          audioMissing: (FM._lastAudioDrops || []).slice(),   // #1086: clips whose sound is not in a file that has sound; the toast saying so is behind the export overlay
           resumedPct: resumedPct, resumedParts: resumedParts,
           thinned: (FM._exportThinned || []).slice(),   // #860 (1): clips given fewer frames than their length needs
           protected: !recorder ? null : (recorder.recording ? true : recorder.capped ? 'capped' : false),

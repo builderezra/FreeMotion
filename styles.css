@@ -3264,6 +3264,8 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
    as the clip flickering. */
 .clip.sel .clip-grip { transition: background .16s ease; }
 .clip.sel .clip-grip.armed { background: var(--accent); box-shadow: 0 0 0 2px rgba(41,217,187,.35); }
+/* #1075: A HELD CLIP LIFTS. The hold's only tell was navigator.vibrate, which Safari does not have, so on his iPhone nothing said the clip was in hand. */
+.clip.clip-lifted { z-index: 5; filter: brightness(1.14); box-shadow: 0 0 0 2px var(--accent), 0 6px 14px rgba(0,0,0,.5); }
 /* queue 822: the slip pill arms on a hold like the grips do, and says so the same way. */
 .clip-slip.armed { background: var(--accent); color: #06212a; box-shadow: 0 0 0 2px rgba(41,217,187,.35); }
 .clip.sel .clip-grip.armed::after { border-top-color: #06212a; border-right-color: #06212a; }
@@ -4463,7 +4465,10 @@ body.home-open #toast { z-index: 205; }
   #clip-name-m, #m-selcount, #m-dup, #m-del, #m-group, #m-maskgroup, #m-more { display: none; }
   /* (#btn-share left this list and the Select one below with #967 batch 2 — his pick A, "with a layer selected the person chip
      stays visible". They were written when the phone's Share lived in this bar; since S7 it is the person+ on the video.) */
-  body.m-editing #proj-name-m, body.m-editing #m-settings, body.m-editing #m-export, body.m-editing #m-proj-more, body.m-editing #m-notes { display: none; }
+  body.m-editing #proj-name-m, body.m-editing #m-settings, body.m-editing #m-proj-more, body.m-editing #m-notes { display: none; }
+  /* #1074: EXPORT STAYS (the PM's call of 11 Oct under his standing rule). An import selects the new clip, so straight after his first clip the bar had no way
+     to Export until he found the back arrow, and a second back goes Home. Last in the row, where it sits in the project's bar. */
+  body.m-editing #m-export { order: 9; }
   body.m-editing #clip-name-m { display: block; flex: 1; min-width: 0; }
   body.m-editing #m-dup, body.m-editing #m-del, body.m-editing #m-more { display: flex; }
 

@@ -1093,8 +1093,8 @@ window.FM = window.FM || {};
     const s = el('span', 'fxb-needs fxb-dead', deadShortLabel(why));
     s.title = why;
     /* Tappable, and it must NOT also pick the effect — the badge sits inside the tile, whose own tap
-       adds or picks. A tap here is a question about the tile, not a choice of it. */
-    s.addEventListener('click', (ev) => { ev.stopPropagation(); ev.preventDefault(); if (FM.toast) FM.toast(why, 5200); });
+       adds or picks. A tap here is a question about the tile, not a choice of it. #1077: so the answer says how to choose it anyway. */
+    s.addEventListener('click', (ev) => { ev.stopPropagation(); ev.preventDefault(); if (FM.toast) FM.toast(why + ' Tap the picture to add it anyway.', 5200); });
     s.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); });
     return s;
   }

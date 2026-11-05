@@ -1,0 +1,58 @@
+--- a/js/timeline.js
++++ b/js/timeline.js
+@@ -3336,7 +3336,7 @@
+   FM._areaFx = { area: emptyArea, fire: areaFx, PULSE_MS: FX_PULSE_MS, PULSE_TRAVEL: FX_PULSE_TRAVEL, PRESS_MS: FX_PRESS_MS, CALM_MS: FX_CALM_MS, MAX: FX_MAX, RIM_IN: RIM_IN };
+   FM._isEmptyStart = isEmptyStart;   // seam: the suite asks the real condition, not a copy of it
+ 
+-  function buildAddRow() {
++  function buildAddRow(solo) {
+     /* TWO RENDERINGS, ONE IDEA (queue 294, clause 7). On a phone it is a layer: "an actual full layer".
+        On PC he asked for something smaller — "instead of being like an actual full layer and like taking
+        up all that face on the timeline instead it could just be a line between layers to signify where
+@@ -3435,7 +3435,7 @@
+     row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') open(e); });
+     if (phone) {
+       row.addEventListener('click', open);
+-      row.appendChild(buildAddGrip(row));      // ≡ on the right, like every other row
++      if (!solo) row.appendChild(buildAddGrip(row));      // ≡ on the right, like every other row (not in the solo view, #1079)
+     } else {
+       attachLineDrag(row, open);               // the line is both the button and the handle
+       /* THE THREE LINES AS A HINT, NOT A HANDLE (queue 307, clauses 2 and 3). His words: *"when you're
+@@ -3908,7 +3908,11 @@
+     /* AT ITS OWN INDEX (queue 294, clause 5). The row is drawn before the layer that currently sits at
+        FM.addAt, and FM.insertLayer splices new layers at that same number — so what you add appears
+        directly BELOW the row, exactly as he described, and the row stays where you left it. */
+-    if (addRowWanted() && !soloId) {
++    /* …AND IN THE PHONE'S SOLO VIEW TOO (#1079, the PM's call of 11 Oct under his standing rule). An import selects the new
++       clip, so straight after his first video the timeline showed that one row and no way to add a title or a song until he
++       found the back arrow. The row keeps its place against the one row on screen, as everywhere else, and comes without
++       its drag grip, for queue 522's reason: there is no second row to drag it past. */
++    if (addRowWanted()) {
+       const at = FM.clampAddAt ? FM.clampAddAt() : 0;
+       /* Counted against the rows ON SCREEN rather than scene.layers, because a collapsed group hides
+          members: the marker belongs beside what the eye can see. */
+@@ -3917,7 +3921,7 @@
+         const i = hd ? parseInt(hd.dataset.idx, 10) : -1;
+         return isFinite(i) && i >= at;
+       })[0];
+-      tracksEl.insertBefore(buildAddRow(), before || null);
++      tracksEl.insertBefore(buildAddRow(!!soloId), before || null);
+     }
+     /* The view rail's Camera and Layers buttons describe the same layers this just drew (queue 926): every change a
+        person can see — the eye, undo, a remote edit, the camera button itself — ends in a rebuild, so this is the one
+--- a/js/mobile.js
++++ b/js/mobile.js
+@@ -307,7 +307,12 @@
+         // No rows at all (an empty project) → the container is the only thing there is to measure.
+         if (!bottom) bottom = tracks.getBoundingClientRect().bottom;
+       }
+-      var top = Math.min(Math.round(bottom + 6), Math.round(window.innerHeight * 0.66));
++      /* #1079: the solo view now draws the add row too, and it pushes the clip down one row. The cap keeps the sheet its room on a
++         short phone; it grows by that row, so on a 320x640 phone the sheet starts below the clip instead of over it (measured:
++         clip row 413-455, sheet at 422 with the old cap; 461 with this one). */
++      var soloAdd = tracks ? tracks.querySelector('.tl-addrow') : null;
++      var cap = Math.round(window.innerHeight * 0.66) + (soloAdd ? Math.round(soloAdd.getBoundingClientRect().height) + 2 : 0);
++      var top = Math.min(Math.round(bottom + 6), cap);
+       insp.style.top = top + 'px';
+       insp.style.maxHeight = 'none';
+     }

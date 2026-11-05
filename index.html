@@ -27,7 +27,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.20">
+<meta name="fm-build" content="v18.21">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -44,7 +44,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=784">
+<link rel="stylesheet" href="styles.css?v=785">
 <link rel="stylesheet" href="theme-glass.css?v=70">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=4">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -282,7 +282,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.20</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.21</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1181,19 +1181,19 @@
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=5"></script>
   <script src="js/gl-color.js?v=5"></script>
-  <script src="js/compositor.js?v=263"></script>
+  <script src="js/compositor.js?v=264"></script>
   <script src="js/fx-registry.js?v=43"></script>
   <script src="js/filters.js?v=25"></script>
   <script src="js/fx-presets.js?v=13"></script>
   <script src="js/fx-thumbs.js?v=61"></script>
-  <script src="js/timeline.js?v=271"></script>
+  <script src="js/timeline.js?v=272"></script>
   <script src="js/simple-timeline.js?v=13"></script>   <!-- Simple mode P1: FM.simpleTimeline, read-only; after timeline.js -->
   <script src="js/tilefit.js?v=1"></script>
   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
   <script src="js/addmenu.js?v=84"></script>
   <script src="js/inspector.js?v=442"></script>
   <script src="js/simple-tools.js?v=11"></script>   <!-- Simple mode P2.2: FM.simpleTools, the tray row and the project tools (D10) — after inspector.js -->
-  <script src="js/fx-browser.js?v=103"></script>
+  <script src="js/fx-browser.js?v=104"></script>
   <script src="js/elements-browser.js?v=5"></script>
   <script src="js/color-wheel.js?v=53"></script>
   <script src="js/canvas-edit.js?v=130"></script>
@@ -1217,7 +1217,7 @@
   <script src="js/audio-fx-live.js?v=17"></script>
   <script src="js/audio-fx-browser.js?v=17"></script>
   <script src="js/history.js?v=43"></script>
-  <script src="js/storage.js?v=86"></script>
+  <script src="js/storage.js?v=87"></script>
   <script src="js/export-resume.js?v=10"></script>
   <script src="js/medialib.js?v=10"></script>
   <script src="js/template-fill.js?v=4"></script>
@@ -1227,7 +1227,7 @@
   <script src="js/graph-editor.js?v=20"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
-  <script src="js/exporter.js?v=145"></script>
+  <script src="js/exporter.js?v=146"></script>
   <script src="js/sample.js?v=11"></script>
   <script src="js/contextmenu.js?v=49"></script>
   <script src="js/ask.js?v=4"></script>
@@ -1236,7 +1236,7 @@
   <script src="js/captions.js?v=64"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=7"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=517"></script>
+  <script src="js/app.js?v=518"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->

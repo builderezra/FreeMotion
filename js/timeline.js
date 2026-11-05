@@ -350,6 +350,7 @@ window.FM = window.FM || {};
   const KF_DRAG_SLOP = 6;
   let trimDrag = null;
   let clipMove = null;   // dragging a clip body to reposition it in time
+  function unliftClips() { if (tracksEl) tracksEl.querySelectorAll('.clip-lifted').forEach(c => c.classList.remove('clip-lifted')); }   // #1075: the lift ends with the gesture, however it ends
 
   let slipDrag = null;   // SLIP: sliding the media inside a clip while its timeline position stays put
   let cueDrag = null;    // moving / trimming one CAPTION CUE inside its track's clip
@@ -493,7 +494,7 @@ window.FM = window.FM || {};
   })();
   function recoverStuckGesture() {
     restoreGestures();   // queue 796: the clip (and its group), trim, keyframes and slip go BACK where they started — not left where the lost pointer dropped them
-    reorderActive = false; kfDrag = null; trimDrag = null; clipMove = null; slipDrag = null;
+    reorderActive = false; kfDrag = null; trimDrag = null; clipMove = null; slipDrag = null; unliftClips();
     FM._dragOrderIds = null; FM.dragLayerId = null; FM.dragAddAt = null; FM.dragLayerAt = null; FM.dragLayerIds = null; FM.dragLayerSpan = null;
     abandonActiveReorder = null;
     /* …AND THE THINGS THE GESTURE PUT ON SCREEN (queue 751, hunt MEDIUM #34). This recovers a drag whose pointer was lost,
@@ -602,7 +603,7 @@ window.FM = window.FM || {};
       (clipMove.group || []).forEach(g => { g.layer.start = g.origStart; });
       // Before clipMove is nulled — the restore reads the width it borrowed off the gesture. (queue 115)
       endClipEdgeScroll();
-      clipMove = null;
+      clipMove = null; unliftClips();
       FM._sheetSuppressFor = null;   // the gesture is over by every route, not only the tidy one (queue 433)
     }
     if (trimDrag) {
@@ -2320,6 +2321,7 @@ window.FM = window.FM || {};
                    panel up over the timeline you were dragging on. This flag says "a clip drag owns
                    the screen"; the sheet consults it and stays down. Cleared on pointerup/cancel. */
                 clipTap = null;
+                clip.classList.add('clip-lifted');   // #1075: the tell an iPhone can see
                 if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
               } else {
                 armHold();   // finger still moving → keep waiting for it to settle
@@ -5521,7 +5523,7 @@ window.FM = window.FM || {};
           return;
         }
         if (clipMove) {
-          const cm = clipMove; clipMove = null; hideSnap();
+          const cm = clipMove; clipMove = null; hideSnap(); unliftClips();
           /* THE GRAB IS OVER, SO THE SUPPRESSION IS OVER (queue 433 clause 2). The note where this is
              stamped has always said "Cleared on pointerup/cancel" and nothing ever cleared it — the
              sheet consumed it instead, and turned it into a latch that shut that layer's panel for the

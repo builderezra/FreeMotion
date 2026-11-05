@@ -4942,7 +4942,7 @@ window.FM = window.FM || {};
         let put = false;   // queue 915 clause 2: registered for this session either way, but only a stored font is listed
         try { const db = await openDB(); put = await idbPut(db, 'font:' + nid, { file: file }); db.close(); } catch (e) {}
         if (!put) { _fontReg.delete(nid); failed++; continue; }
-        idx.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.css || (fd.family + ', sans-serif') });
+        idx.push({ id: nid, name: fd.name || 'Imported font', family: fd.family, css: fd.family + ', sans-serif' });   // #1102: the app's own form, never the opened file's string
         haveFam.add(fd.family);
         added++;
       }

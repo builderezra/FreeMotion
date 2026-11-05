@@ -6323,6 +6323,10 @@ window.FM = window.FM || {};
     let pickI = 0, at = (opts && typeof opts.at === 'number' && isFinite(opts.at)) ? Math.max(0, opts.at) : null;
     const add = function (rec, file, said) {
       if (later) { later.push([rec, file, said]); return false; }   // 1043: lands with the rest of its batch, after the loop
+      /* #1080: A SONG PICKED WITH THE PLAYHEAD AT THE END STARTS AT THE START. Butting onto the end is right for a clip, which comes next. A song is laid UNDER the work, and
+         someone who had just watched their video to the end got the song after it, playing over nothing. Half a frame, so a playhead the last frame left there counts. Only
+         with no place given (Simple's + gives one), and the playhead moves rather than the placement changing: the import follows the clip there anyway. */
+      if (at == null && rec.kind === 'video' && !(rec.width > 0 && rec.height > 0) && FM.scene.layers.length && FM.time >= (FM.scene.project.duration || 0) - 0.5 / (FM.scene.project.fps || 30)) FM.time = 0;
       if (!FM.stillIn(pickedIn)) { FM.letGoMedia(rec); notAdded.push(file); return false; }
       const got = FM.addMediaLayer(rec, { at: at, pick: files.length > 1 ? { b: pickB, i: pickI++ } : null });
       if (at != null && got) at = got.start + got.duration;
@@ -6925,18 +6929,20 @@ window.FM = window.FM || {};
       ext = 'wav';
     }
     if (!blob) { if (FM.toast) FM.toast('Could not write the audio file'); return; }
-    if (fellBack && FM.toast) {
-      FM.toast(fellBack === 'aac-unavailable' || fellBack === 'no-muxer'
-        ? 'This browser cannot encode AAC — exported as WAV instead'
-        : 'The M4A encode failed — exported as WAV instead', 5200);
-    }
     FM._lastAudioExport = { ext: ext, fellBack: fellBack, bytes: blob.size };   // read by the suite
     const name = ((P.name || 'project').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()) || 'project';
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = name + '.' + ext;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    if (FM.toast) FM.toast('Audio exported — ' + (Math.round((to - from) * 10) / 10) + 's', 2600);
+    const fileName = name + '.' + ext;
+    /* #1088: THE SOUND FILE LEAVES THROUGH THE SAVE CARD, LIKE EVERY OTHER EXPORT. It was clicked onto an <a download> the moment the
+       mix finished, with no fresh tap (a long mix outlives the one that started it, and an iPhone needs one to show the file), its
+       address was let go after 1 s, and the toast said Audio exported whatever had happened. Now the card says what was made, Save
+       is the fresh tap, and deliver() shares on a phone and downloads on a PC (#1081). The M4A fallback is said on the card too: a
+       toast is painted behind it. `opts.onReady` stands in for the card, as exporter.run's does. */
+    const card = { blob: blob, name: fileName, poster: null, width: 0, height: 0, fps: 0, seconds: to - from,
+      audioOnly: ext === 'm4a' ? 'M4A' : 'WAV', fellBack: fellBack, hasAudio: true, audioMissing: (FM._lastAudioDrops || []).slice(),
+      save: () => FM.exporter.deliver(blob, fileName) };
+    const ready = (opts && typeof opts.onReady === 'function') ? opts.onReady : FM._showExportReady;
+    if (ready) await ready(card);
+    else await card.save();
   }
   FM._runAudioOnlyExport = runAudioOnlyExport;   // read by the suite
 
@@ -7284,6 +7290,9 @@ window.FM = window.FM || {};
         poster.getContext('2d').drawImage(out.poster, 0, 0);
         poster.classList.remove('hidden');
       } else if (poster) { poster.classList.add('hidden'); }
+      /* #1088: a sound file has no picture, so the card has no picture box (it showed an empty one); every other export keeps it */
+      const pv = poster && poster.parentElement;
+      if (pv && pv.classList.contains('xr-preview')) pv.classList.toggle('hidden', !!out.audioOnly);
 
       document.getElementById('xr-name').textContent = out.name;
       // Size, length and shape — the three things you would check before saving, and the three the OS
@@ -7313,15 +7322,22 @@ window.FM = window.FM || {};
         // #215: the finished file was read back and its audio track is one no player can decode (exporter.js fileAacCheck)
         'track-undecodable': 'the audio track in the file cannot be played',
       };
+      /* #1086: one clip's sound failing still made a file with sound, so this said Sound ✓ with that clip missing from it */
+      const missing = out.audioMissing ? out.audioMissing.length : 0;
       const sound = out.audioDropped ? ('NO SOUND — ' + (AUDIO_WHY[out.audioDropped] || out.audioDropped))
+                  : (out.hasAudio && missing) ? ('Sound — ' + missing + ' clip' + (missing === 1 ? '' : 's') + ' missing')
                   : out.hasAudio ? 'Sound ✓'
                   : 'no soundtrack';
+      /* #1088: a sound-only file has no picture, so its kind (WAV or M4A, and why a WAV when M4A was asked for) takes the size and rate's place */
+      const shape = out.audioOnly
+        ? out.audioOnly + (out.fellBack ? (out.fellBack === 'aac-unavailable' || out.fellBack === 'no-muxer' ? ', as this browser cannot encode M4A' : ', as the M4A encode failed') : '')
+        : out.width + '×' + out.height + ' · ' + Math.round(out.fps) + ' fps';
       document.getElementById('xr-meta').textContent =
         (mb < 0.1 ? (Math.round(out.blob.size / 1000) + ' KB') : (mb.toFixed(1) + ' MB')) +
-        ' · ' + mmss + ' · ' + out.width + '×' + out.height + ' · ' + Math.round(out.fps) + ' fps' +
+        ' · ' + mmss + ' · ' + shape +
         ' · ' + sound;
       const xrm = document.getElementById('xr-meta');
-      if (xrm) xrm.classList.toggle('xr-nosound', !!out.audioDropped);
+      if (xrm) xrm.classList.toggle('xr-nosound', !!out.audioDropped || (!!out.hasAudio && missing > 0));
       /* …AND SAY IT SURVIVED (queue 47, v14.34). This card is the last thing on screen, and until now
          a resumed export looked exactly like an ordinary one from here. Four releases built
          crash-resume and nothing has ever told him it worked — which is why the entry cannot be closed

@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 5 Nov at v18.20
+> ## 📌 WHAT I NEED FROM YOU — updated 6 Nov at v18.21
 >
-> **State:** v18.20 — **a pinch with one finger on a corner square now resizes the layer (#834), effect option rows wrap evenly and never leave one button alone (#917), the custom colour box has a rainbow ring, and on a PC window ⋯ no longer hides under the version chip with two layers selected (#970). That last one makes the video about 40 px shorter on windows from 1227 to about 1391 px wide: say if you would rather have the height back. Not yet tried on a real phone.** **Five things from you:** **play the 25 intro takes at https://claude.ai/artifact/A4XVNiWtcoZJgXoYCG5pa1 and send the numbers you like (#1231)**; tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+> **State:** v18.21 — **on a phone, Export stays in the top bar when a clip is selected, and a clip you hold to move lifts so you can see it in hand. A sound-only export (WAV or M4A) now ends on the Save card, so your iPhone gets the file on the Save tap. Also: an effect's does-nothing-here badge says how to add it anyway, Shadow only says why a full-frame clip goes black, a song picked at the end of the project starts at 0, and on a PC Save downloads instead of opening Share. Not yet tried on a real phone.** **From you, most useful first:** **play the 25 intro takes at https://claude.ai/artifact/A4XVNiWtcoZJgXoYCG5pa1 and send the numbers you like (#1231)**; export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956).
+>
+> v18.20 — a pinch with one finger on a corner square resizes the layer, option rows wrap evenly, the custom colour box has a rainbow ring, and on a PC window ⋯ no longer hides under the version chip with two layers selected (the video is about 40 px shorter from 1227 to about 1391 px wide: say if you want the height back).
 >
 > v18.19 — your intro is rebuilt to feel hand-made (#1223): the playhead sweeps across and reveals your logo, rocks back like a hand on tape, and the name cuts in. No glow, no tagline, true black, about 2 seconds. Tell us if you want another take.
 >
@@ -599,6 +601,7 @@ better still, keep working inside the turn rather than parking work for a later 
       4. [ ] Not done: a run in macOS Safari (safaridriver needs his password to enable) — the one measurement that would speak for his phone's engine. Still ⏸ **BUILT OUT UNTIL HE pastes "A clip with no picture"** — and now the paste will say something true. ✔ reply checked 5 Sep — his 27 Aug answer was to the older question
       ❓ASK: has a screen recording (or any clip) landed on the timeline with no picture since v15.69? If so: Settings → A clip with no picture → Copy, and paste it — it names the file and what your phone can play, so you do not need to know anything about the file. ✔ reply checked 30 Sep — his 27 Aug "I have no idea" answered the older .mov/.mp4 question, struck above.
       🔎 Side clue from the logging chat (29 Sep), a hint and not proof: his 27 Aug upload was an .mp4 screen recording, which leans toward the codec theory over the container one.
+      ⏸ **6 Nov — BUILT OUT UNTIL HE says whether a video has landed on the timeline with no picture since September; if one has, Settings → Reports → A clip with no picture → Copy.** If none has, this closes. ✔ reply checked 6 Nov: the answers recorded above are to older asks.
 
 - [x] **130 — One 2-second clip, one project, and it lags — and the quality tier does not drop. THE TIER HALF IS DONE (v7.57, verified 15 Aug). The lag itself lives on in #125.** His
       words: *"I have got no other projects, just one; and I managed to add one screen recording that's
@@ -10180,6 +10183,8 @@ better still, keep working inside the turn rather than parking work for a later 
       📍 **17 Oct — the v17.40 wait above is over: AX2 shipped in v17.41** (POLISH-LOG v17.41: an encoder that makes no sound and no error no longer leaves an empty soundtrack — the export drops it and says so — and Settings → Your last export counts frames and bytes and reads back the decoded peak). His 11 Oct "Export has no audio" came BEFORE that. Nothing more can be built until a report from his iPhone says which of the two it is: a silent encoder (now named in the report) or the file losing its sound on the way to Photos.
       ⏸ **17 Oct — BUILT OUT UNTIL HE exports something short with sound on his iPhone (v17.41 or later), plays it from Photos, and pastes Settings → Your last export → Copy.** One paste answers this, #604 and #677.
       📍 **v17.89 (21 Oct): the likely cause found and fixed — not ticked until his Photos plays an export.** A hunt and a refuter (21 Oct) found that Safari 26's WebCodecs AAC encoder gives `decoderConfig.description` as Apple's 39-byte magic cookie (an ES_Descriptor, 03 → 04 → 05) instead of the 2-byte AudioSpecificConfig, and vendor/mp4-muxer.js wrote it verbatim into the esds, so Apple players found an undecodable audio track (WebKit bug 302253, open; its fix is an unmerged PR). js/exporter.js aacAscFor / aacMeta now walk the descriptor to its own ASC (or build it from rate and channels) before the muxer and the decoders; fileAacCheck reads the finished file's esds and marks track-undecodable, so the card stops saying Sound ✓; the export report gains 'aac desc' and 'file audio esds' lines. Five 215 tests, red on v17.88; the real-AAC Windows pass 4/4. First diagnosed in tools/audit-2026-09-05.md (the #677 section) and never built.
+      📍 **6 Nov re-check of the 20 parked entries: a reader and a skeptic per entry, read-only):** everything the parking line names is in the tree: Settings → Reports → Your last export with Copy, the encode-empty guard, v17.89's AAC cookie repair and file check, and five 215 tests. The one question left is whether an export made on his iPhone since v17.89 plays with sound in Photos, and only his phone can answer it.
+      ⏸ **6 Nov — BUILT OUT UNTIL HE exports something short with sound on his iPhone (v17.89 or later), saves it, plays it in Photos and says whether there is sound; if there is none, Settings → Reports → Your last export → Copy.** One answer covers this, #604 and #677. ✔ reply checked 6 Nov: the answers recorded above are to older asks.
 
 - [ ] **202 — One simple video layer lags badly, and the video does not load properly.**
       **STATUS: ⏸ BUILT OUT — waiting on your answer**
@@ -18928,6 +18933,7 @@ re-opened #480, which I had marked done and had not fixed.
       phase 2 joining while the editor does its first build — is where to look first**, because a curve
       cannot smooth over a frame that never rendered.
         ✅ **v15.05 — THE INSTRUMENT IS BUILT, the step this entry named.** Every push from Home now records its frames on the device that runs it — from the moment the card starts to glide until 400ms after the home screen is gone (the editor's first build lands in that tail, the suspect named above) — and writes a report to **Settings → Your last project open → Copy**: frames, span, median and worst gap, every frame over 33ms with its time, cards on screen, layers in the project, viewport and renderer, and a one-line verdict. Test `508:` drives a real push at phone width and reads the report back. Nothing about the transition itself changed. **BUILT OUT UNTIL HE opens a project on his phone and pastes that report** — it will say which frames ran long instead of the next guess.
+      ⏸ **6 Nov — BUILT OUT UNTIL HE opens any project from the Projects screen on his iPhone, then pastes Settings → Reports → Your last project open → Copy, or says it looks smooth now.** ✔ reply checked 6 Nov: the answers recorded above are to older asks.
 
 - [x] **509 — The play row's numbers may not be centred.** (24 Aug.)
       ✅ **Measured, and your hedge was the accurate part.** On a desktop you would have been wrong: at
@@ -21904,6 +21910,8 @@ re-opened #480, which I had marked done and had not fixed.
       🔨 **v17.40 (13 Oct):** tests/_win_pass.py shipped — ship.sh runs the AAC tests in Windows Chrome on the laptop, so AX2 (hunt/ax2-export-audio) can land next.
       📍 **17 Oct:** AX2 shipped in v17.41 (see #215's 17 Oct line). ⏸ **BUILT OUT UNTIL HE pastes a v17.41+ export report — #215's ask; one paste answers all three.**
       📍 **v17.89 (21 Oct): the likely cause found and fixed — not ticked until his Photos plays an export.** A hunt and a refuter (21 Oct) found that Safari 26's WebCodecs AAC encoder gives `decoderConfig.description` as Apple's 39-byte magic cookie (an ES_Descriptor, 03 → 04 → 05) instead of the 2-byte AudioSpecificConfig, and vendor/mp4-muxer.js wrote it verbatim into the esds, so Apple players found an undecodable audio track (WebKit bug 302253, open; its fix is an unmerged PR). js/exporter.js aacAscFor / aacMeta now walk the descriptor to its own ASC (or build it from rate and channels) before the muxer and the decoders; fileAacCheck reads the finished file's esds and marks track-undecodable, so the card stops saying Sound ✓; the export report gains 'aac desc' and 'file audio esds' lines. Five 215 tests, red on v17.88; the real-AAC Windows pass 4/4. First diagnosed in tools/audit-2026-09-05.md (the #677 section) and never built.
+      📍 **6 Nov re-check:** nothing separate to ask: the export half waits on #215's one iPhone check. The playback half (a sound effect cutting in and out) lives with #663 and #845.
+      ⏸ **6 Nov — BUILT OUT UNTIL HE answers #215's iPhone export check** (one answer covers #215, #604 and #677). ✔ reply checked 6 Nov: the answers recorded above are to older asks.
 
 - [x] **605 — The Visual / Filters / Audio buttons are too small and sit in a weird position.** ✅ **DONE v13.45.**
       (27 Aug, annotated phone screenshot at v13.43.)
@@ -22793,8 +22801,7 @@ re-opened #480, which I had marked done and had not fixed.
       ⚠️ **"I'm not sure work very well" is a soft opening on a real judgement** — read with **#617** on
       the same day, the Elements feature is not landing for him.
 
-- [ ] **619 — 🔴 Pressing a template just forks it into a project. It should offer to SWAP THE MEDIA.
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+- [x] **619 — 🔴 Pressing a template just forks it into a project. It should offer to SWAP THE MEDIA.
       He says he has asked many times — and he is right: this is #343 clause 1, which was marked DONE.**
       (27 Aug, at v13.51.)
       His words, verbatim:
@@ -22873,6 +22880,7 @@ re-opened #480, which I had marked done and had not fixed.
         ⏸ **2 Sep — BUILT OUT UNTIL HE has seen the fill-in sheet** — and one change he should know about before he looks: his 1 Sep answer on #505 ("the element opens as its own document", asked for elements AND templates) makes the PRIMARY tap on a template card open it for EDITING; the swap-your-media flow this entry asked for stays exactly as built, one tap away under ⋯ → **New project from template**. "Pressing a template just forks it into a project" is therefore over either way: the tap no longer forks anything. Re-checked today for strict oldest-first: this line is what is left.
       ❓ASK: have a look at the fill-in sheet: Home → Templates → a template card's ⋯ → **New project from template**, then tap each slot (a clip, a caption, a shape) and put in your own. Is that what you asked for? (Tapping the card itself now opens the template for editing — your 1 Sep answer on #505.)
       📍 **REMAINS OPEN (builder, 16 Oct):** the fixes above shipped (v13.68, v13.72). What is left is his look at the fill-in sheet (the 2 Sep line), and swapping the media from the Simple editor (DESIGN §8.5 template Replace — Simple Phase 3, not built yet).
+      ✅ **CLOSED v18.21 (6 Nov re-check of the 20 parked entries: a reader and a skeptic per entry, read-only).** Both of his clauses are true: pressing a template no longer forks it (the tap opens it for editing, his 1 Sep pick on #505), and ⋯ → New project from template opens the fill-in sheet, where each slot takes your own clip, caption or shape (v13.68, v13.72, v15.04). The hold on whether he has looked is lifted under his 21 Oct rule ("im pretty fine with ur choices then correcting later if i think its bad"). Swapping media from the Simple editor is #980 Phase 3 work (built on hunt/sm3-replace b388d245), not one of his clauses here.
 
 - [x] **620 — The magnet button should switch off snapping on the CANVAS too, not just the timeline.** ✅ **DONE v13.69.**
       (27 Aug, at v13.51.)
@@ -27187,6 +27195,8 @@ re-opened #480, which I had marked done and had not fixed.
          His call: ship it from the Mac, or accept AX2's codec-rename tests as the AAC proof on the laptop (see #604).
       📍 **17 Oct:** AX2 shipped in v17.41 (see #215's 17 Oct line). ⏸ **BUILT OUT UNTIL HE pastes a v17.41+ export report — #215's ask; one paste answers all three.**
       📍 **v17.89 (21 Oct): the likely cause found and fixed — not ticked until his Photos plays an export.** A hunt and a refuter (21 Oct) found that Safari 26's WebCodecs AAC encoder gives `decoderConfig.description` as Apple's 39-byte magic cookie (an ES_Descriptor, 03 → 04 → 05) instead of the 2-byte AudioSpecificConfig, and vendor/mp4-muxer.js wrote it verbatim into the esds, so Apple players found an undecodable audio track (WebKit bug 302253, open; its fix is an unmerged PR). js/exporter.js aacAscFor / aacMeta now walk the descriptor to its own ASC (or build it from rate and channels) before the muxer and the decoders; fileAacCheck reads the finished file's esds and marks track-undecodable, so the card stops saying Sound ✓; the export report gains 'aac desc' and 'file audio esds' lines. Five 215 tests, red on v17.88; the real-AAC Windows pass 4/4. First diagnosed in tools/audit-2026-09-05.md (the #677 section) and never built.
+      📍 **6 Nov re-check:** nothing separate to ask: the export half waits on #215's one iPhone check.
+      ⏸ **6 Nov — BUILT OUT UNTIL HE answers #215's iPhone export check** (one answer covers #215, #604 and #677). ✔ reply checked 6 Nov: the answers recorded above are to older asks.
 
 - [x] **678 — Stress-test the draggable ADD-LAYER row and the draggable TIMELINE — he says both are
       His words, verbatim:
@@ -27628,8 +27638,7 @@ re-opened #480, which I had marked done and had not fixed.
       hand-edits would be 32 chances to get one wrong in a way no test would notice. A kernel that DOES
       take `ps` is skipped by its own declared argument count, or it would scale twice.
 
-- [ ] **692 — 🔴 THE LAG HAS A MEASURED CAUSE: every pixel effect walks the WHOLE FRAME no matter how
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+- [x] **692 — 🔴 THE LAG HAS A MEASURED CAUSE: every pixel effect walks the WHOLE FRAME no matter how
       **ANSWERED BY EZRA 10 Sep — he pasted the report this was waiting on; see #844.** The playback paste gives the phone number this was missing: 32 of 133 frames dropped with the colour effects on the graphics chip. Feeds #845.
       ✅ **ROUND 3 — v14.82, three more kernels, and the list re-ranked first rather than trusted.**
       Re-measured every one of the 105 pixel kernels at its OWN defaults on a 180x150 subject in a
@@ -27934,6 +27943,7 @@ re-opened #480, which I had marked done and had not fixed.
       🔧 **25 Sep, v16.95 (#935):** see #202's note — three measured slowdown/memory causes fixed.
       ❓ASK: (asked once, with #202 and the unnumbered "Editing lags" entry) since v16.95, is it still laggy on your phone, or fine now? ✔ reply checked 30 Sep — the 10 Sep paste answered the 5 Sep ask struck above.
       ⏸ **30 Sep — BUILT OUT UNTIL HE answers #202's ask** (still laggy since v16.95, or fine now; if laggy, one What's slow → Measure report taken while playing) — one answer closes this, #202 and the unnumbered "Editing lags" entry. ✔ reply checked 30 Sep — same.
+      ✅ **CLOSED v18.21 (6 Nov re-check of the 20 parked entries: a reader and a skeptic per entry, read-only).** Everything the numbers pointed at shipped: 15 kernels walk only the layer's box (BOUNDED_FX), the readback crop is in, and Inner Blur's rim is an option, as he said on 1 Sep. The ask it waited on was answered on 11 Oct (#1131 item 2): "When I add a bunch of effects to a layer it gets slow. Probably as expected tho". What is left of stacked-effect speed goes to the unnumbered Editing lags entry.
 - [x] **693 — The test harness leaked a Chrome per KILLED run, and it eventually stopped the suite
       starting at all.** Found 1 Sep when a release failed for no visible reason. ✅ v14.78
       **DONE — reaped at startup, and verified in the case it exists for.**
@@ -31408,8 +31418,7 @@ re-opened #480, which I had marked done and had not fixed.
       Also: `tools/serve.sh` added and `.claude/launch.json` repointed at it, because the preview launcher spawns `python3` without a login shell and so misses `~/.zshenv`.
       ⤷ **The clean permanent fix is still one line he can run**, and it is worth doing because this affects his whole Mac, not just FreeMotion: `sudo xcode-select -s /Library/Developer/CommandLineTools`. Logged as a question in #882 rather than left as a silent workaround.
 
-- [ ] **882 — ❓ QUESTIONS FOR HIM — the loop's cadence and cost, and the Xcode fix.** (20 Sep, raised by Claude, not his words.)
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+- [x] **882 — ❓ QUESTIONS FOR HIM — the loop's cadence and cost, and the Xcode fix.** (20 Sep, raised by Claude, not his words.)
       1. [x] ~~❓ ASK — loop cadence.~~ **ANSWERED BY EZRA, 20 Sep:** *"That was on chatgpt, u dont do that. so its fine"*.
              **One minute, as originally asked.** He is clear the quota blowout was Codex's behaviour, not Claude's.
              Asked in the same breath whether to disable the session's multi-agent mode, he said: *"again, i dont usually
@@ -31421,12 +31430,13 @@ re-opened #480, which I had marked done and had not fixed.
              is:** it already skips the phone pass and the prove step when no source changed (measured on this very ship
              — docs-only ran ONE suite, not two), and its 12-minute docs-only gate already forces notes to batch. The
              ~8-minute double run only happens on a real code change, which is the case #875 itself exempts.
-      3. [ ] ❓ **ASK — Xcode, per #881.** Whether to leave the `DEVELOPER_DIR` workaround in place, or for him to run the one permanent line himself: `sudo xcode-select -s /Library/Developer/CommandLineTools`.
-      4. [ ] ❓ **ASK — the ChatGPT logs.** He offered them ("send you chatgpts chat logs"). On the evidence of #870 they contain no code, but they may contain **requests he made to Codex that were never written into any inbox** — which is the one thing that would be genuinely lost. Worth having for that reason only.
+      3. [x] ✅ moot 6 Nov: FreeMotion left the Mac on 7 Oct and this laptop ships it; the sudo line is his whole-Mac choice and CLAUDE.md keeps it. Was: ❓ **ASK — Xcode, per #881.** Whether to leave the `DEVELOPER_DIR` workaround in place, or for him to run the one permanent line himself: `sudo xcode-select -s /Library/Developer/CommandLineTools`.
+      4. [x] ✅ decided 6 Nov, not needed: #870 shows the INBOX entries were the whole trace of that time, and nothing since points to a lost request. Taken if he ever sends them; not asked. Was: ❓ **ASK — the ChatGPT logs.** He offered them ("send you chatgpts chat logs"). On the evidence of #870 they contain no code, but they may contain **requests he made to Codex that were never written into any inbox** — which is the one thing that would be genuinely lost. Worth having for that reason only.
       ⏸ **BUILT OUT UNTIL HE answers 3 or 4.** Both of the remaining clauses are things only he can do: the Xcode ✔ reply checked 24 Sep — his 20 Sep answer closed clause 1 (cadence); 3 and 4 are still his.
       line needs his password (and the `DEVELOPER_DIR` workaround is already permanent in `~/.zshenv`, so nothing
       is broken meanwhile), and the ChatGPT logs are his to send. Clauses 1 and 2 are answered and struck.
       📋 **30 Sep — the logging chat's #993 note:** `env -u DEVELOPER_DIR xcode-select -p` still prints the Xcode.app path, so the sudo line for clause 3 has not been run yet.
+      ✅ **CLOSED v18.21 (6 Nov re-check of the 20 parked entries: a reader and a skeptic per entry, read-only).** Clauses 1 and 2 were answered on 20 Sep; 3 and 4 are settled above without asking him again.
 
 
 - [x] **883 — 🔴 A WHITE BAR AT THE TOP WHEN YOU ARE INSIDE A PROJECT. (hunt HIGH #883)** ✅ FIXED v16.18. (20 Sep, in chat. His words, verbatim and in full:)
@@ -33764,6 +33774,8 @@ re-opened #480, which I had marked done and had not fixed.
       Clauses:
       1. [ ] Noted: he still has to go through the page and answer everything on it. No decisions from it here.
       BUILT OUT UNTIL HE answers the questions on the page at the link above (his answers come back through the inbox as their own blocks).
+      📍 **6 Nov re-check:** the page opens only in his other Claude account, so nothing here can read it.
+      ⏸ **6 Nov — BUILT OUT UNTIL HE goes through the 26 Sep question page in his other Claude account, or says it is out of date** (then this reminder closes).
 
 - [x] **957 — Home: the drawn arrow's tip lands INSIDE the + button; and in an empty project the “Tap +” text goes, replaced by a clapperboard that claps** (26 Sep, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
@@ -34206,16 +34218,15 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v18.10 (28 Oct): round twenty shipped** (codex/fx20: Codex, then a Claude review, a refuter, a fold and a check): Split Toning, Tint and Faded Film `skin` (Protect skin); Exposure Keep colour re-drawn with a gamut bound (a look change, said in the POLISH line); SCHEMA_REV 39. Next: round twenty-one.
       📍 **v18.11 (28 Oct): rounds twenty-one to twenty-four shipped** (codex/fx21..fx24, reviewed, refuted, folded and checked): Protect skin and Mix on twelve effects; SCHEMA_REV 40. Next: the CSS-chain effects (Brightness, Contrast, Saturation, Hue Shift, Grayscale, Sepia, Invert, Glow) need their own design round.
 
-- [ ] **967 — Live collaboration feels extremely underbaked on his phone: pull it all up, make sure it's all there and working, and make it simple enough for someone who's never used it** (26 Sep, builder chat — his words)
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+- [x] **967 — Live collaboration feels extremely underbaked on his phone: pull it all up, make sure it's all there and working, and make it simple enough for someone who's never used it** (26 Sep, builder chat — his words)
       His words, verbatim, in full: *"I hope the like new friends joining or like Collab feature isn’t finished because it’s extremely extremely underbaked from what I’ve seen on my phone like there’s just 1 million things that are missing that you can’t do like you can’t even send it to your friends like there’s a switch to turn it on, but you can never turn it off on any project ever like it just doesn’t seem finished at all and I saw you doing a lot of stuff so I feel like it should be finished like you have all you’ve built the things for it. I feel like it’s just that there’s no way to use them at the moment. I don’t know if you’ve buried it all in a deeper setting or something like I don’t know what’s going on with this but just make sure you actually pull it up and make sure it’s all there and it’s all working and all good and actually makes sense for someone who doesn’t know how to use it to use it like how to use actually use it doesn’t make sense. It’s simple like you know all that stuff."*
       Clauses (his):
-      1. [ ] On his phone the collaboration ("friends joining") feature is "extremely extremely underbaked" — "1 million things that are missing that you can't do".
-      2. [ ] "you can't even send it to your friends" — sending a project/invite to a friend has to be obvious and work.
-      3. [ ] "there's a switch to turn it on, but you can never turn it off on any project ever" — turning it off (per project, and the switch) has to be findable and work.
-      4. [ ] "I saw you doing a lot of stuff … you've built the things for it … there's no way to use them at the moment … buried it all in a deeper setting" — surface what was built; nothing useful buried.
-      5. [ ] "pull it up and make sure it's all there and it's all working and all good" — an end-to-end check of every part on a phone.
-      6. [ ] "actually makes sense for someone who doesn't know how to use it … It's simple" — a first-timer can use it without help.
+      1. [x] On his phone the collaboration ("friends joining") feature is "extremely extremely underbaked" — "1 million things that are missing that you can't do".
+      2. [x] "you can't even send it to your friends" — sending a project/invite to a friend has to be obvious and work.
+      3. [x] "there's a switch to turn it on, but you can never turn it off on any project ever" — turning it off (per project, and the switch) has to be findable and work.
+      4. [x] "I saw you doing a lot of stuff … you've built the things for it … there's no way to use them at the moment … buried it all in a deeper setting" — surface what was built; nothing useful buried.
+      5. [x] "pull it up and make sure it's all there and it's all working and all good" — an end-to-end check of every part on a phone.
+      6. [x] "actually makes sense for someone who doesn't know how to use it … It's simple" — a first-timer can use it without help.
       🔎 **26 Sep — THE AUDIT HE ASKED FOR, DONE** (a 6-agent workflow: five walked a journey each in the real app at 390×844 — share, join, live-and-off, every other surface, the words — 485 real actions incl. a two-Chrome connection-code join proven end to end; one merged, checked against the code and ranked). Full reports + plan: `tools/design/plans/2026-09-26-collab-audit/audit.json` (screenshots were in the session scratchpad).
       **Summary, as sent to him:** The hard part works. Two phones really do connect and edit the same project live, both ways. What's broken is everything around it, and on a phone that's most of what you see: - The only way in is the cog, which says "Canvas settings". - The switch that turns sharing on disappears after one tap. The real off switch is at the very bottom of Settings, under test reports, and the app tells you to look in a "Labs" section that doesn't exist. - A project you shared once turns itself back on the next time the app opens. - Nothing on the video shows you're live. - Your friend has no Join button until they find that buried switch, and then it's a ⎇ squiggle. - Swapping codes gives your friend 20 seconds, so in real life it almost always fails. - The words talk about relays and PeerJS.  The plan: 1. Fix the broken parts now. Nothing changes how it looks. 2. Draw you options for the doors: an off switch next to the on switch, a worded Join on Home, and a Live marker. 3. Show which projects are shared, and stop them sharing again by themselves. 4. Plain words and one name for the feature. 5. Comments you can find.  The invite link couldn't be tested here because it needs the online relays. It needs one real test from your phone once 1 and 2 are done.
       **Root causes:**
@@ -34255,6 +34266,7 @@ re-opened #480, which I had marked done and had not fixed.
       Clauses: 1 ✅ v17.06–v17.10 (all five batches of the audit built); 3 ✅ v17.06 + v17.08 (off really means off, and the switch stays where he turned it on); 4 ✅ v17.08 (doors he can see: the person+ on the video, Join on Home, LIVE on the stage, Settings' switch first); 6 ✅ v17.08 + v17.10 (How it works in three lines, one name, plain words). 2 and 5 are built end to end and tested between two Chromes on the swap-code route, but the LINK route needs the public helpers this Mac refuses by design.
       BUILT OUT UNTIL HE sends himself an invite link from his phone to his PC (or another phone) and joins with it once — the one check nothing here can make. Tick clauses 2 and 5 when he says it worked; if it did not, what he saw is the next fix.
       Builder's context (not his words): at v17.02 on his phone the only door to sharing was a small person+ on the stage, and only with Settings → Labs on — nothing in Canvas settings, no Stop sharing he could find once Labs was on. v17.04 (shipped today) added the Friends block in Canvas settings on the phone (Start sharing / Stop sharing, the Labs switch in place). This entry is the end-to-end audit he is asking for, done as a first-time user on a phone, and whatever it finds.
+      ✅ **HE ANSWERED 11 Oct ~10:55 (#1131): "Friends thing worked."** Clauses 2 and 5 are ticked with it. **CLOSED v18.21 (6 Nov re-check of the 20 parked entries: a reader and a skeptic per entry, read-only):** all five batches shipped (v17.06 to v17.10), and Work with friends has been on for everyone since v17.41.
 
 - [x] **968 — Notes and the Help menu open SMALL by default, and remember their size PER PROJECT (a new project starts small again)** (26 Sep, ~22:40–22:41 AWST, via INBOX — his words)
       Moved from INBOX.md whole — two blocks; the second CORRECTS the first (Help, not Settings; remembered per project), and its plan REPLACES the first's:
@@ -35598,16 +35610,16 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 5
       📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
       ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: Nothing changes for him: a test now guards that rotating a phone into Studio keeps the selection, the open panel and the playhead. Code: tests/tests.js:193287. Test: 1036 rotating 390 to 844 enters Studio and keeps selection, panel and playhead.
-- [ ] **1037 — Test gap: a JPEG with an EXIF rotation tag shows upright everywhere, including export (hunt LOW #1037)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1037 — Test gap: a JPEG with an EXIF rotation tag shows upright everywhere, including export (hunt LOW #1037)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 6
       📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
       📍 **5 Nov (read-only review, nothing run), still open because:** The entry says upright everywhere, and the test misses the clip strip. Test-gaps-VETTED rank 6 names canvas, clip strip and Home thumbnail, and says a change to createImageBitmap options would rotate his photos unseen. The only image path using createImageBitmap is _extractStrip (frames.js:459), and the test never builds or reads stripFrames. Its 'thumbnail' is FM.renderThumb, which draws m.el directly (compositor.js:31617), the same source as the preview. 'exif' appears nowhere else in the suite, so that regression would pass.
-- [ ] **1038 — Test gap: a custom font travels inside a template or project file (hunt LOW #1038)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.21, the clip-strip half the 5 Nov review found missing.** A new guard test builds the clip strip of an EXIF-rotated JPEG through the real strip extractor, at full size and resized, and checks it is upright. Like v18.12's test it passes on v18.20 by design: the app already does this, and the test holds it there.
+- [x] **1038 — Test gap: a custom font travels inside a template or project file (hunt LOW #1038)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 7
       📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
       📍 **5 Nov (read-only review, nothing run), still open because:** The template half of the gap is still open. VERIFIED §4 item 7 names the queue 343 template test, which passes with an empty fonts list, and it still does (tests.js:81172 only checks that a map exists). The new test serialises a project with serializeScene and relabels it kind:'template' for import. It never drives FM.templates.exportFile with a font, and no other test does. The embedFonts comment (storage.js:1330-1333) warns of exactly this drift. App code does embed (exportFile uses serializeWith, :4256); only the guard is missing. The loader is also stubbed, so no real font reopens.
+      ✅ **CLOSED v18.21, the template half the 5 Nov review found missing.** A new guard test makes a template file through the real FM.templates.exportFile with a custom font in use, and checks that the file carries the font and that opening it hands the font to the loader. It passes on v18.20 by design.
 - [x] **1039 — ChatGPT batch 3 verified — 18 new issues: logged as #1040–#1057** (1 Oct, via INBOX — the logging chat's verification of ChatGPT's read-only reports; NOT his words) ✅ **LOGGED**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 01 Oct 2026, ~21:19 AWST — VERIFIED: ChatGPT batch 3 (12 reports) gives 18 confirmed new issues (2 MEDIUM, 16 LOW). Log them as hunt items
@@ -35729,9 +35741,11 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **HE ANSWERED 11 Oct, ~10:05 AWST (#1130):** FIX the Mosaic Average dark fringe; old projects changing is fine.
 
 - [ ] **1057 — Stills are decoded and kept at full source resolution, with no preview proxy (hunt LOW #1057)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 18
       Note from the verification: device run first.
+      📍 **6 Nov:** the verification's own note says a device run comes first: a smaller preview copy built blind could cost picture quality on a phone that never had the problem.
+      ❓ASK, waiting on your phone: on your iPhone, make a slideshow of about 20 photos from your camera roll, play it through once, and say whether the app reloads or stutters.
 
 - [x] **1058 — ChatGPT batch 4 verified — 6 new issues: logged as #1059–#1064** (1 Oct, via INBOX — the logging chat's verification of ChatGPT's read-only reports; NOT his words) ✅ **LOGGED**
       Moved from INBOX.md whole, as the logging chat wrote it:
@@ -36087,41 +36101,44 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **HE ANSWERED 10 Oct, ~11:20 AWST (#1117):** "you just decide whats best for the chatgpt" — the PM decided under that: the six
       ChatGPT fixes land as ONE release right after v17.36 (the Simple switch), before Phase 2's first editing step; #1013 held.
       ✅ **UNBLOCKED 11 Oct, ~10:05 AWST — decided by the PM under his standing rule (#1130: "Go through each one and see where it's an obvious yes"); he can overrule:** (c) yes: correct his global CLAUDE.md (collab relays do send data; the moved folders; the old Slot game copy).
-- [ ] **1074 — Phone: after the first import, Export is hidden (hunt LOW #1074)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1074 — Phone: after the first import, Export is hidden (hunt LOW #1074)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
       1. **Phone: after the first import, Export is hidden.** The new clip is auto-selected (app.js:3099-3100), which sets body.m-editing (app.js:1007), and `body.m-editing #m-export { display:none }` (styles.css:4214) removes the Export button until the user finds the back arrow. Tapping back a second time goes to Home. A beginner who just added their first clip cannot see how to export. Options to draw: keep Export visible in the clip header, or do not auto-select after the first import.
       ✅ **UNBLOCKED 11 Oct, ~10:05 AWST — decided by the PM under his standing rule (#1130: "Go through each one and see where it's an obvious yes"); he can overrule:** an obvious phone fix, no options: keep Export visible after the first import.
+      ✅ **CLOSED v18.21 (queue 1074), as the PM decided on 11 Oct; he can overrule it.** With one clip selected on a phone, Export stays in the top bar, last in the row, where it sits in the project's bar. Its test fails on v18.20, where Export was 0×0 at 380. The first ship was refused by v5.72's top-bar test, whose rule was that no project control shares the bar with the bin. That rule now lets Export stay in the clip bar, and the same test checks what the rule was for: Export sits on the same pixels in the clip bar as in the project's bar, and the bin is never on Export's or the cog's pixels.
 
-- [ ] **1075 — Phone: grabbing a clip to move it gives no visual signal on iPhone (hunt LOW #1075)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1075 — Phone: grabbing a clip to move it gives no visual signal on iPhone (hunt LOW #1075)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
       2. **Phone: grabbing a clip to move it gives no visual signal on iPhone.** It only calls navigator.vibrate(10), which Safari does not support. The edge grips turn teal, but the clip body shows nothing. A lift or shadow on grab would fix it.
+      ✅ **CLOSED v18.21 (queue 1075).** A clip held to move lifts the moment the hold takes it: brighter, with an accent outline and a shadow under it. It goes back down when the finger lets go or the gesture is lost. The hold's only tell was a vibrate, which Safari does not have. A real-finger test at 380 fails on v18.20.
 
-- [ ] **1076 — PC: the S key splits only when the playhead is over the selected clip (hunt LOW #1076)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1076 — PC: the S key splits only when the playhead is over the selected clip (hunt LOW #1076)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
       3. **PC: the S key splits only when the playhead is over the selected clip.** Otherwise it STRETCHES the clip's near edge out to the playhead (app.js KeyA/KeyS/KeyD), a surprising, different edit from a "split" key.
+      ✅ **CLOSED v18.21, no change: this is his own rule.** #765 records his words: "if ur not hovering over the clip tho and you press s no matter which side it will extend the clip to the playhead". S stretching the near edge out to the playhead when the playhead is off the clip is what he asked for.
 
-- [ ] **1077 — Effects browser: the "does nothing here" badge swallows the tap (hunt LOW #1077)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1077 — Effects browser: the "does nothing here" badge swallows the tap (hunt LOW #1077)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
       4. **Effects browser: the "does nothing here" badge swallows the tap.** On a full-frame clip, tapping the badge on the Drop Shadow tile shows a toast and does NOT pick the tile (fx-browser.js ~929). The user has to know to tap the picture instead.
+      ✅ **CLOSED v18.21 (queue 1077).** A tap on the badge still answers why and does not pick the effect (it is a question about the tile, not a choice of it), and the answer now ends: Tap the picture to add it anyway. Its test taps the badge on a full-frame photo's Drop Shadow, then the picture, then Add, and the shadow is on the layer.
 
-- [ ] **1078 — Drop Shadow → Shadow only on a full-frame clip turns the whole picture black (hunt LOW #1078)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1078 — Drop Shadow → Shadow only on a full-frame clip turns the whole picture black (hunt LOW #1078)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
       5. **Drop Shadow → Shadow only on a full-frame clip turns the whole picture black**, which reads as broken. A hint in the control, such as "make the clip smaller first", would help.
+      ✅ **CLOSED v18.21 (queue 1078).** Under Shadow only it now says: "Hides the layer and keeps its shadow. A layer that fills the frame has nothing around it, so the picture goes black: shrink the layer first." On screen and uncut at 380 and 1280.
 
 - [ ] **1079 — Phone: while a clip is selected, the "Tap to add a layer" row and the + are not drawn at all (hunt LOW #1079)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
       **STATUS: 🟢 READY — nothing is stopping this**
       6. **Phone: while a clip is selected, the "Tap to add a layer" row and the + are not drawn at all** (timeline.js:3966 `addRowWanted() && !soloId`; styles.css:4205). Import auto-selects the new clip, so straight after importing a video a beginner cannot find how to add a title or a song. This is the same family as trap 1 (Export hidden), and one fix could cover both. Draw options: keep "add" reachable in the solo view, or do not auto-select after import.
       ✅ **UNBLOCKED 11 Oct, ~10:05 AWST — decided by the PM under his standing rule (#1130: "Go through each one and see where it's an obvious yes"); he can overrule:** an obvious phone fix, no options: keep the "Tap to add a layer" row and + visible while a clip is selected.
+      📍 **6 Nov — built, measured, and taken back out of v18.21; not the obvious yes it was decided as.** The row drawn in the phone's solo view (above the selected clip, no grip, its tap opens the Add menu) pushes the clip down one row, so the docked options lose that row: 251 px of a 760 px screen, where #835's test holds his words "Make sure that menu still opens up fully and covers the same area it does now". Next: draw options that keep add reachable without taking the menu's room (an Add tile in the empty slot of the options grid, a + in the clip's top bar, a slim row), mark one recommended and ship it on under his 21 Oct rule. The built row, its test and its pictures are kept in tools/design/1079/.
 
 - [ ] **1080 — A song or file is added AT THE PLAYHEAD (hunt LOW #1080)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
       **STATUS: 🟢 READY — nothing is stopping this**
       7. **A song or file is added AT THE PLAYHEAD** (app.js:3055), clamped to the project end. Someone who has just watched their video to the end gets the song starting after the video. Options: start audio at 0 when the playhead is at the project end, or show where it landed.
       📍 **5 Nov (read-only review, nothing run), still open because:** Not built. js/app.js:3419 still places a song at the playhead clamped to the project end; neither option (start audio at 0, or show where it landed) exists, and there is no test.
+      📍 **6 Nov — built in v18.21:** a song picked with the playhead at the end of the project starts at 0, not after the video; picked inside the project it still starts at the playhead, and a picture picked at the end still goes after. Its test fails on v18.20 and passes here. Ticked in the next release as SHIPPED IN v18.21: #1079 is older and still open, so the order gate holds the tick, not the code.
 - [ ] **1081 — PC export: Save may open the OS Share window with no way to save the MP4 on Windows (hunt MEDIUM #1081)** (6 Oct, ~03:55 — the PM's tutorial review, round 3; NOT his words; PLAUSIBLE, not yet run)
       **STATUS: 🟢 READY — nothing is stopping this**
       1. **(hunt MEDIUM) PC Save → share sheet. PLAUSIBLE, not yet run.** `deliver()` (exporter.js:66-75) calls `navigator.share` whenever `canShare({files})` is true, and nothing checks whether the device is a phone. The ready card has only Save and Discard (app.js:6305-6320). Desktop Chrome/Edge on Windows and Safari on Mac support sharing files, so a PC user likely gets the OS Share window instead of a download, and on Windows that window has no "save to disk". It matters more now that he is moving to a Windows laptop.
          - **Test:** on Windows Chrome, export, then Save. Is there any way to get the file onto disk?
          - **Likely fix:** on a non-touch, wide screen, download the file, or offer Download beside Share.
+      📍 **6 Nov — built in v18.21:** on a PC Save downloads the file; only a phone (a touch screen as its main pointer) opens the share sheet. Its test fails on v18.20 and passes here. Ticked in the next release as SHIPPED IN v18.21: #1079 is older and still open, so the order gate holds the tick, not the code.
 
 - [x] **1082 — Show the checked tutorials in Home's Tutorials tab? (hunt LOW #1082)** (6 Oct, ~03:55 — the PM's note, NOT his words)
       ✅ **SHIPPED IN v17.41** (20 Oct hand-off audit): layout A, 20 Full + 13 Simple lessons, in v17.41 7d381f8b; v17.42 2e5dcf07 added the check that every shown lesson matches the app; js/tutorials.js uses textContent only.
@@ -36277,6 +36294,7 @@ re-opened #480, which I had marked done and had not fixed.
          - Cause: `FM._audioTrackDropped` is set only when ALL clips fail (exporter.js:748), and the amber warning lives in the overlay that app.js:6247 hides before the card opens.
          - Fix: add `audioMissing` (the length of FM._lastAudioDrops) to the run result (exporter.js:1620) and show "Sound — N clip(s) missing" on the card (app.js:6281). Test with one good clip plus one undecodable clip.
       3. WRONG, don't do it: the audit's "missing AAC description means encode-failed" check. The bundled muxer supplies its own AAC config (vendor/mp4-muxer.js:1639-1653), so that check would CREATE silent exports.
+      📍 **6 Nov — built in v18.21:** the ready card says Sound — N clip(s) missing, in amber, when the file has sound but some clips' sound could not be read, and the export hands the card those clips by name. Its test fails on v18.20 and passes here. Ticked in the next release as SHIPPED IN v18.21: #1079 is older and still open, so the order gate holds the tick, not the code.
 
 - [ ] **1087 — Export decodes each source file whole, with no size ceiling — a long 4K clip can kill the tab at export start (phones) (hunt MEDIUM #1087)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -36288,6 +36306,7 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       4. PARTLY: audio-only export (WAV/M4A) downloads with no fresh tap, revokes the URL after 1 s, and always says "Audio exported" (app.js:6001-6004). On an iPhone the file may never appear.
          - Fix: route it through the ready card's Save button (give deliver() a type parameter), and use a 4 s revoke as a stopgap.
+      📍 **6 Nov — built in v18.21:** a sound-only export (WAV or M4A) ends on the Save card (its name, length, WAV or M4A and Sound, no picture box), and the file leaves only through Save, a fresh tap: a phone gets the share sheet, a PC a download. A WAV given where M4A was asked for says why on the card. Its test fails on v18.20 and passes here. Ticked in the next release as SHIPPED IN v18.21: #1079 is older and still open, so the order gate holds the tick, not the code.
 
 - [ ] **1089 — Phone memory: the autosave thumbnail canvas, the compositor's scratch pools, decoded export audio and the reverse / frame-blend caches never shrink (hunt MEDIUM #1089)** (7 Oct — the PM's adversarial check of the cloud helper's audits against v17.23; NOT his words. Verdicts with file:line: tools/design/pm/helper-hunts-verified.json)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -36356,9 +36375,9 @@ re-opened #480, which I had marked done and had not fixed.
       367x652 canvases are `_cfPool` (js/compositor.js ~11581, one pair per stack depth, never trimmed); with its trim patch
       the 12 effects-browser categories go 1131 MB → 179 MB, and its test is red with the patch reverted at 1280 and 380.
 
-- [ ] **1096 — The intro film (splash-v2.mp4) stays loaded in memory for the whole session after the splash has gone (~176 MB) (hunt MEDIUM #1096)** (7 Oct — the #1085 measurement; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1096 — The intro film (splash-v2.mp4) stays loaded in memory for the whole session after the splash has gone (~176 MB) (hunt MEDIUM #1096)** (7 Oct — the #1085 measurement; NOT his words)
       dismiss() removes #splash but never empties the <video>, so its decoded frames (media/frame_buffers ~163 MB + webmediaplayer 13 MB) live on. A fix is written and committed on branch suite-mem-fix (597ca2ef, 'the intro film lets go once the splash has gone') — LOCAL to the Mac until pushed; verify on his phone.
+      ✅ **CLOSED v18.21. SHIPPED IN v17.97.** The film is not loaded at all any more: v17.97 replaced it with the drawn splash, and its commit removed the line that set the film's source. index.html names it only in a comment, so the suite-mem-fix branch on the Mac is not needed. splash-v2.mp4 and splash.mp4 are still in the repo, unused.
 
 - [x] **1097 — The laptop cannot ship ANY app change until the ~80 real-finger tests run on Linux** (7 Oct — found while writing SWITCHOVER.md; NOT his words; part of the move, #1071)
       On Linux headless Chrome those tests report NOT RUN HERE (turning touch emulation off wipes the Mac-like mouse settings), and while any of them is NOT RUN the feature gate refuses every shipped-source change, by design. The Mac can no longer run a full suite (8 GB, #1085). So every Simple-mode release waits on this. Lead: drive hover/pointer through CDP Emulation.setEmulatedMedia and re-apply after each touch batch. Fallback: the Mac runs ONLY the NOT RUN tests for an exact tree and writes an attestation the gate accepts.
@@ -36431,15 +36450,16 @@ re-opened #480, which I had marked done and had not fixed.
 
       📥 **The INBOX item, verbatim:** **(hunt MEDIUM) The project card's thumbnail renders the WHOLE project at full size, on every import and on every autosave (at most once every 12 s while editing, when nothing is playing).** `makeThumb` (js/storage.js:2133-2161) and `makeLayerThumb` (:2210-2229) build a 1080x1920 canvas, render the scene, then halve it down; called from importObject (:2009 via touchCurrent(true)) and from save (:752 → touchCurrent :2468). On a heavy project that is a full main-thread render every 12 s — a plausible cause of the oldest "editing lags" reports. The helper measured 10 glows: 8.4 s full size vs 108 ms at card scale (not re-run by the PM). Change: render straight onto a ~360 px canvas (renderScene already scales by canvas.width / P.width, js/compositor.js:18745-18748; the manual `__fmRS` lines in the helper's snippet are redundant). ⚠️ It changes what the cards look like: the halving loop exists because one big downscale made "mushy cards" (:2130-2132). So per #545: render old vs new cards for a project with a big photo, a video frame and small text, show him both, then build. Test: a timing test that the 12-s card refresh of a 40-effect project stays under a budget, plus a picture test that the new card matches the old within a measured tolerance on a media project.
 
-- [ ] **1101 — Work with friends: the collab fingerprint ignores a segment's options list, so an older build strips a newer one's choice (hunt MEDIUM #1101)** (7 Oct ~12:25 AWST — via INBOX, the PM's verified finding from its read-only check of the cloud helper's batch 3 against v17.24; verdicts with file:line in tools/design/pm/helper-batch3-verified.json; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1101 — Work with friends: the collab fingerprint ignores a segment's options list, so an older build strips a newer one's choice (hunt MEDIUM #1101)** (7 Oct ~12:25 AWST — via INBOX, the PM's verified finding from its read-only check of the cloud helper's batch 3 against v17.24; verdicts with file:line in tools/design/pm/helper-batch3-verified.json; NOT his words)
 
       📥 **The INBOX item, verbatim:** **(hunt MEDIUM) Work with friends: the collab fingerprint ignores a segment's options list.** SCHEMA_FP hashes key, type, default, legacy, min, max and keyframable (js/collab-core.js:226-228), not `options`, while the sanitiser drops any segment value not in its options (js/storage.js:1392-1397). So two builds that differ only by an appended option (e.g. a new Particles shape) join one live session, and the older one silently strips the newer one's choice. Change: add the options list to the hashed tuple and bump SCHEMA_REV (js/collab-core.js:44). Test: a fixture param with one appended option must change SCHEMA_FP (fails today).
+      ✅ **CLOSED v18.21. SHIPPED IN v17.91.** #966 round eleven put a button row's values into the hashed tuple (js/collab-core.js schemaFingerprint; labels are not hashed). v18.21 adds the test that would notice it going: one more option moves the fingerprint, a reworded label does not. It passes on v18.20 by design.
 
 - [ ] **1102 — An embedded font's css string is stored verbatim from the opened file (hunt LOW #1102)** (7 Oct ~12:25 AWST — via INBOX, the PM's verified finding from its read-only check of the cloud helper's batch 3 against v17.24; verdicts with file:line in tools/design/pm/helper-batch3-verified.json; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
 
       📥 **The INBOX item, verbatim:** **(hunt LOW) An embedded font's `css` string is stored verbatim from the file.** applyEmbedded writes `fd.css` from an opened file straight into the font index (js/storage.js:3755). Write the app's own `family + ', sans-serif'` form instead. Test: a file whose font css carries extra declarations is stored in the app's form.
+      📍 **6 Nov — built in v18.21:** an embedded font from an opened file is stored in the app's own form (its family, then sans-serif), never the file's own css string. Its test fails on v18.20 and passes here. Ticked in the next release as SHIPPED IN v18.21: #1079 is older and still open, so the order gate holds the tick, not the code.
 
 - [ ] **1103 — A working Glow Scan that pauses between sweeps is told it "changes nothing" (hunt MEDIUM #1)** (8 Oct, ~15:40 AWST, via INBOX — the helper's H52 census, filed by the logger; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
@@ -37923,8 +37943,7 @@ re-opened #480, which I had marked done and had not fixed.
       - **Still his, because only his hands or his files can do them:** the iPhone export → Photos sound check; the laptop virus scan or reset question (#1071); any edit to his own global CLAUDE.md; money, accounts and passwords.
       📍 **Builder, 22 Oct:** applied on branches, each decision to be named in its release's POLISH line: Simple 2.7's More transition controls ON (hunt/sm6p, ships as v17.92); #1084's grow ON, Laser Beam's core shows the colour picked, and the Wipe borders slide off at the end (hunt/picks, after the #845 audio guard). #1175's batch already shipped in v17.61 and #982 is closed with the picks release. The Filter layer tile waits on one check: its Full-only guard names FM.editor, a Simple hook.
 
-- [ ] **1180 — A FreeMotion logo made of timeline pieces (the "Edit Grid" F), then a build-up loading animation** (22 Oct, ~00:15 AWST, via INBOX — his words)
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+- [x] **1180 — A FreeMotion logo made of timeline pieces (the "Edit Grid" F), then a build-up loading animation** (22 Oct, ~00:15 AWST, via INBOX — his words)
       **His words, verbatim:** "Draft up a logo design from the circled image where it's basically like an F created from like timeline stuff. I feel like that looks cool and could be a really sick design and like it could even have like a very cool loading screen animation coming in where like I don't know but like you could just be very well very cool with all of the layers moving in ways that like where it's like building it I don't know definitely that would be sick and yeah, just come up with a draft for that come up with heaps of different options for me to choose from make some animations after I decide which ones I like. Best of the animation goes into it wait for me to decide which one's best."
       **His image:** a sheet of 10 AI-made FreeMotion logo ideas. He circled 04 "EDIT GRID": three grey rounded clip bars (long, medium, short square) stacked left-aligned to make an F, a white playhead line through them with a ▶ on top, and "FreeMotion / EDITING, EVOLVED". Saved at C:\Users\build\.claude\uploads\038c53db-a288-427b-b4c4-2509b19d3eaf\ad60fed0-image.jpg (Windows side).
       Clauses (his):
@@ -38062,6 +38081,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v17.98 (23 Oct): RELEASE 1 shipped** — the intro keyed on the build (<meta name=fm-build>, pinned to the version label by a test), an update waits while it is up (fmSwBusy), the cut timed from the clock with a 15 s ceiling, the finished logo as a still when the animation cannot run (paused clock, or none 1 s after load), the probe opening the app top-level with an origin guard and a maxGap column, and four red-first tests. Next: v17.99 (INSTRUMENT CHANGE, alone) teaches the Full-unchanged gate the new meta; then his answer, and the probe on his phone, decide RELEASE 2 (the compositor CSS rebuild).
       📍 **v17.99 (24 Oct): the gate follow-up shipped** (INSTRUMENT CHANGE, alone): tools/_fu_gate.py's version mask covers the fm-build stamp (two self-test cases), and the lock probe seeds the per-build intro flag from each served copy and waits 20 s for the splash. Next: his answer and the probe on his phone (tests/probe-1180-firstpaint.html) decide RELEASE 2 (the compositor CSS rebuild).
       ⏸ **4 Nov — BUILT OUT UNTIL HE says whether he sees the opening animation on his iPhone** (✔ reply checked 4 Nov: the answer recorded above was his Keyframes pick, not this) (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off), and runs tests/probe-1180-firstpaint.html there. His pick (Keyframes on D2) shipped at v17.97 and RELEASE 1 at v17.98, so clauses 4 and 5 are ticked. RELEASE 2, the compositor CSS rebuild, only happens if his phone shows a pre-roll over 1 s or a frozen build-up. The look itself moves on in #1223.
+      ✅ **CLOSED v18.21 (6 Nov re-check of the 20 parked entries: a reader and a skeptic per entry, read-only).** The logo shipped in v17.97, Release 1 in v17.98 and its gate in v17.99. Release 2 (rebuilding the Keyframes splash in CSS) and the Sora font are moot: v18.19 (#1223) replaced that splash and dropped the tagline and the name's font. The iPhone check that still matters is for the next intro, and #1231 now carries it.
 - [ ] **1181 — In Windows Chrome a Glow Scan that sweeps Once or waits between sweeps is measured as unknown, so the effect panel would tell him a working effect changes nothing (hunt MEDIUM #1181)** (23 Oct — found by the first real run of #1098's Windows tool; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       `python3 tests/_win_suite.py --linux-control --only '482 6.7'` at 1280 px: the Linux control passed 2 of 2; Windows Chrome 156 (headless, on the laptop) passed 1 of 2 and filed one WINDOWS ONLY red: `482 6.7 Glow Scan - a scan that sweeps Once or waits between sweeps on a 10 s clip is not told it changes nothing…` — a Glow Scan with {loop 1, pause 2, span 1} on a 10 s clip is measured as unknown: its sweep falls between the moments the check looks at.
@@ -39054,4 +39074,5 @@ re-opened #480, which I had marked done and had not fixed.
       ❓ASK: which takes he likes (he sends numbers).
       1. [ ] "the new intro is dogshit, make a but tone of diff options for me to pick and actually try": the logger drew 25 takes to play on the page above; what is left is his pick, then the six-step build in the block above.
       His question in the same message, about how much more progress full or unlimited usage would make, is the logging chat's to answer, as its block says; nothing here builds it.
+      📍 **6 Nov (from #1180's close):** step 6's check on his iPhone includes tests/probe-1180-firstpaint.html once the new take ships: read its reduced-motion and paused columns.
       ⏸ **6 Nov — BUILT OUT UNTIL HE sends the numbers of the takes he likes.** He asked to pick, so the recommended-pick-on rule does not apply and the intro in the app stays H2 "Scrub" until then. Nothing of a take goes into the splash before that.

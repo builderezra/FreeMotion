@@ -983,7 +983,7 @@ window.FM = window.FM || {};
          overriddenBy, and this is the second condition. */
       { key: 'smooth', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1, overriddenBy: 'softness', liveAbove: 0, alsoGate: { by: 'spread', deadAt: 100 } },
       { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 100, unit: '%' },   // queue 904: Opacity — every shadow was full strength
-      { key: 'shadowonly', label: 'Shadow only', def: 0, options: [[0, 'Off'], [1, 'On']] }], color: true, defColor: '#000000', colorLabel: 'Shadow' },
+      { key: 'shadowonly', label: 'Shadow only', def: 0, options: [[0, 'Off'], [1, 'On']], note: 'Hides the layer and keeps its shadow. A layer that fills the frame has nothing around it, so the picture goes black: shrink the layer first.' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // note: #1078
     { type: 'chromaticaberration', label: 'Chromatic Aberration', params: [{ key: 'amount', label: 'Amount', min: 0, max: 30, step: 1, def: 8, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },
       /* TOWARD EDGES (queue 798). The description has always said "fringing toward the edges, the way a real lens misfocuses
          each colour" and the kernel shifted every pixel by the same vector — RGB Split under another name (both read Δ9.9 on

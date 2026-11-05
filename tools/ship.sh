@@ -383,6 +383,10 @@ VER="$(grep -o 'class="ver"[^>]*>v[0-9]\+\.[0-9]\+' index.html | grep -o 'v[0-9]
 LOG="$(grep -o '^- v[0-9]\+\.[0-9]\+' POLISH-LOG.md | tail -1 | sed 's/^- //')"
 [ -n "$VER" ] || { echo "❌ could not read the version label out of index.html — fix this gate before shipping"; exit 1; }
 [ "$VER" = "$LOG" ] || { echo "❌ index.html says $VER but the newest POLISH-LOG entry is $LOG — write the log entry first"; exit 1; }
+# The build stamp beside the label (#1180, v17.98) names the same version. Its test says so too, but only near the end of a
+# full desktop pass: on 6 Nov v18.21 was refused after an hour for this one string, bumped by a script that knew only the label.
+BUILD="$(sed -n 's/.*<meta name="fm-build" content="\(v[0-9.]*\)".*/\1/p' index.html | head -1)"
+[ "$BUILD" = "$VER" ] || { echo "❌ index.html's fm-build stamp says ${BUILD:-nothing} but the label says $VER — bump both together (#1180)"; exit 1; }
 # No log line may appear TWICE. On 6 Sep the log was found carrying v2.31..v15.00 twice: at v15.00 a bad append glued
 # a second copy of the whole file onto its own last line, and for 79 releases nothing noticed, because every check here
 # reads only the newest line. Whole lines, not version numbers: thirteen versions legitimately have two differently
