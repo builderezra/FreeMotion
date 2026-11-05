@@ -2542,6 +2542,7 @@ window.FM = window.FM || {};
             seg.appendChild(b);
           });
           line.appendChild(seg);
+          if (FM.evenSeg) FM.evenSeg(seg);   // #917 finding 17
         } else {
           const say = v => (c.unit === 'st' && v > 0 ? '+' : '') + v + (c.unit === 'x' ? '×' : c.unit ? ' ' + c.unit : '');
           const range = el('input', 'sfx-range'), val = el('span', 'sfx-opt-val', say(now));

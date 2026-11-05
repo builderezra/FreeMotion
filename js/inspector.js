@@ -1421,6 +1421,51 @@ window.FM = window.FM || {};
     row.appendChild(dt);
   }
 
+  /* #917 finding 17: AN OPTION ROW THAT WRAPS, WRAPS EVENLY. Left to flex-wrap a row breaks wherever the next word runs out of room,
+     and most of them left one button alone under the others: measured over all 324 option rows, 16 at 380 and 76 at 320, the
+     last line a single button stretched across the panel. A row that fits on one line is left alone. One that does not gives up the
+     label's column first (`.fx-seg-stack`, the label on its own line costs less than a second row of 44px buttons), and if it
+     still does not fit its buttons go in equal columns, as few lines as the widest label allows and shared out evenly. A count that
+     would still leave one over gives it to the FIRST button, on a line of its own at the top (`.fx-seg-first`): nearly always
+     the general choice (All, Everywhere, Colour + contrast), where it reads as meant and not as what was left over.
+     It has to be measured: only the words know whether a row fits. Decided at once when the row is built and attached, so no frame
+     shows the uneven wrap, and again when its width changes (a turned phone, a hidden card opening). */
+  const segWidth = new WeakMap();   // the width each row was last decided at: only a new width can change the answer
+  function segDecide(seg) {
+    if (!seg.isConnected) return;
+    if (!seg.clientWidth || segWidth.get(seg) === seg.clientWidth) return;
+    const row = seg.parentElement, stacks = !!(row && row.classList.contains('fx-seg-row'));
+    const btns = seg.children, n = btns.length;
+    seg.classList.remove('fx-seg-even', 'fx-seg-first');
+    if (stacks) row.classList.remove('fx-seg-stack');
+    const oneLine = () => n < 2 || btns[n - 1].offsetTop === btns[0].offsetTop;
+    if (!oneLine() && stacks) row.classList.add('fx-seg-stack');
+    if (!oneLine()) {
+      seg.classList.add('fx-seg-natural');
+      let widest = 0;
+      for (let i = 0; i < n; i++) widest = Math.max(widest, Math.ceil(btns[i].getBoundingClientRect().width));
+      seg.classList.remove('fx-seg-natural');
+      const GAP = 3, room = seg.clientWidth - 2 * GAP;   // .fx-seg's own gap and padding
+      const lines = Math.ceil(n / Math.min(n, Math.max(1, Math.floor((room + GAP) / (widest + GAP)))));
+      const cols = Math.ceil(n / lines);
+      seg.style.setProperty('--seg-cols', cols);
+      seg.classList.add('fx-seg-even');
+      seg.classList.toggle('fx-seg-first', cols > 1 && n % cols === 1);
+    }
+    segWidth.set(seg, seg.clientWidth);
+  }
+  const segRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(list => list.forEach(en => {
+    const seg = en.target;
+    if (!seg.isConnected) { segRO.unobserve(seg); return; }
+    /* a timer, not here: changing the row's height inside this callback raises "ResizeObserver loop completed" (#970 measured it) */
+    if (segWidth.get(seg) !== seg.clientWidth) setTimeout(() => segDecide(seg), 0);
+  })) : null;
+  FM.evenSeg = function (seg) {
+    if (segRO) segRO.observe(seg);
+    Promise.resolve().then(() => segDecide(seg));
+    return seg;
+  };
+
   // `after`: as fxToggle's (#482 polish 7.1) — the audio rows commit through afterAudioFx.
   function fxSegment(fx, p, after) {
     const row = el('div', 'fx-seg-row');
@@ -1445,6 +1490,7 @@ window.FM = window.FM || {};
       seg.appendChild(b);
     });
     row.appendChild(seg);
+    FM.evenSeg(seg);
     return row;
   }
 
@@ -6173,6 +6219,7 @@ window.FM = window.FM || {};
       seg.appendChild(b);
     });
     row.appendChild(seg);
+    FM.evenSeg(seg);
     return row;
   }
 

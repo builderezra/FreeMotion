@@ -47385,12 +47385,15 @@
     }
   });
 
-  test('801: in the PC layout the far-right run never covers the selected layer toolbar, at 900 and at 760, and stays one row at 1280', { item: '801', budgetMs: 40000 }, async function () {
+  test('801: in the PC layout the far-right run never covers the selected layer toolbar, at 900 and at 760, and stays one row on a wide window', { item: '801', budgetMs: 40000 }, async function () {
     /* Found 6 Sep by using the PC layout at 900px with a layer selected: #t-far is absolute (so play stays centred) and #t-sel is
        a flex child of the right column, so below ~1150px the far run sat on top of parent / delete / more — 123px of overlap at
        900, all of it at 760, with undo and redo half covered. Below 1160 the far run now hangs in a band under the row. This selects a
        layer, narrows the runner to 900 and 760, and asks elementFromPoint what is on top of the delete button; then confirms
-       the row is still ONE row at 1280 (the far run's top on the transport's first row), so the wrap does not leak wide. */
+       the row is still ONE row on a wide window (the far run's top on the transport's first row), so the wrap does not leak wide.
+       ⚠️ The wide check was at 1280 until queue 970, and 1280 is no longer wide for this row: with two layers selected the
+       group reaches the far run to ~1370 (the ⋯ sat under the version chip), so the band is now MEASURED against the widest
+       group above the 1226 line and is deliberately on at 1280. 1600 is past that reach. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
@@ -47412,12 +47415,12 @@
           if (far.getBoundingClientRect().right > tr.right + 1) throw new Error('at ' + w + 'px the far run runs past the row (' + Math.round(far.getBoundingClientRect().right) + ' > ' + Math.round(tr.right) + ')');
         }, w);
       }
-      // wide: still one row — the far run's top sits on the transport's first row, beside the undo button (1280 explicitly: the runner's own frame may be narrower)
+      // wide: still one row — the far run's top sits on the transport's first row, beside the undo button (1600 explicitly: the runner's own frame may be narrower)
       await atWideWidth(async function () {
         FM.refreshAll(); await sleep(250);
         const far = document.getElementById('t-far'), undo = document.getElementById('btn-undo');
         if (far && undo && Math.abs(far.getBoundingClientRect().top - undo.getBoundingClientRect().top) > 6) throw new Error('at ' + innerWidth + 'px the far run has dropped under the row (' + Math.round(far.getBoundingClientRect().top) + ' vs undo at ' + Math.round(undo.getBoundingClientRect().top) + ') — the band leaked into the wide layout');
-      }, 1280);
+      }, 1600);
     } finally {
       FM.scene = saved; FM.scene.selectedId = savedSel;
       try { FM.refreshAll(); } catch (e) {}
@@ -79985,6 +79988,128 @@
     });
   });
 
+  /* #917 15b, and #918 finding 11 is the same box: it starts black and read as a second Black swatch. */
+  test('917 15b the custom colour box wears a spectrum ring in New project and Canvas settings, stays in its row, and shows the colour it holds', { item: '917' }, async function () {
+    const judge = (where, box) => {
+      if (!box) throw new Error(where + ': no custom colour box');
+      const cs = getComputedStyle(box), row = box.closest('.hm-bg-row').getBoundingClientRect(), r = box.getBoundingClientRect();
+      if (!/conic-gradient/.test(cs.backgroundImage)) throw new Error(where + ': no spectrum on the box (background ' + cs.backgroundImage + '), so it reads as a second Black swatch');
+      if (cs.backgroundClip.indexOf('border-box') < 0 || parseFloat(cs.borderTopWidth) !== 2 || cs.borderTopColor !== 'rgba(0, 0, 0, 0)') throw new Error(where + ': the spectrum is not a ring (clip ' + cs.backgroundClip + ', border ' + cs.borderTopWidth + ' ' + cs.borderTopColor + ')');
+      if (r.right > row.right + 0.5) throw new Error(where + ': the box runs ' + (r.right - row.right).toFixed(1) + 'px past its row');
+      if (r.width < 27 || r.height < 24) throw new Error(where + ': the box is only ' + r.width.toFixed(0) + 'x' + r.height.toFixed(0) + ' to tap');
+      const was = box.value; box.value = '#123456';
+      if (box.value !== '#123456') throw new Error(where + ': the box no longer holds a colour');
+      box.value = was;
+    };
+    await each917Dialog([320, 380], async function (which, dlg, w) {
+      judge((which === 'new' ? 'New project' : 'Canvas settings') + ' at ' + w, document.getElementById(which === 'new' ? 'hm-new-bg' : 'cv-bg'));
+    });
+    await editorWithShape(async function () {
+      FM.selectLayer(null); await sleep(120);
+      const cdlg = document.getElementById('canvas-dialog');
+      try {
+        FM.openCanvasDialog();
+        if (cdlg.classList.contains('hidden')) throw new Error('Canvas settings did not open');
+        await sleep(450);
+        cdlg.getAnimations({ subtree: true }).forEach(a => { try { a.finish(); } catch (e) {} });
+        judge('Canvas settings at the frame width ' + window.innerWidth, document.getElementById('cv-bg'));
+      } finally {
+        const c = document.getElementById('cv-cancel'); if (c && !cdlg.classList.contains('hidden')) c.click();
+        cdlg.classList.add('hidden');
+      }
+    });
+  });
+
+  /* #917 finding 17: every option row of every effect, at the two widths that wrapped. The measured counts before the fix are in the note at FM.evenSeg. */
+  test('917 17 an effect option row that wraps does it evenly: equal columns, nothing clipped, and no button left alone at the end', { item: '917', budgetMs: 120000 }, async function () {
+    const settle = () => new Promise(r => setTimeout(r, 30));
+    const R = FM.fxRegistry, S = FM.scene, layers0 = S.layers.slice(), sel0 = S.selectedId;
+    const seen = {};
+    const judge = (k, w, bad) => {
+      [...document.querySelectorAll('.fx-seg')].forEach(seg => {
+        const btns = [...seg.children];
+        if (!btns.length || !seg.clientWidth) return;
+        const lab = seg.parentElement.querySelector('.fx-scrub-label'), name = k + ' ' + (lab ? lab.textContent.trim() : '') + ' at ' + w;
+        const lines = [];
+        btns.forEach(b => { const l = lines[lines.length - 1]; if (l && l[0].offsetTop === b.offsetTop) l.push(b); else lines.push([b]); });
+        seen[w] = seen[w] || { rows: 0, stacked: 0, even: 0, first: 0, fits: 0 };
+        seen[w].rows++;
+        if (lines.length === 1) seen[w].fits++;
+        if (seg.parentElement.classList.contains('fx-seg-stack')) seen[w].stacked++;
+        if (seg.classList.contains('fx-seg-even')) seen[w].even++;
+        if (seg.classList.contains('fx-seg-first')) seen[w].first++;
+        const body = lines.slice(seg.classList.contains('fx-seg-first') ? 1 : 0), most = Math.max(...body.map(l => l.length));
+        if (lines.length > 1 && lines[lines.length - 1].length === 1 && most > 1) bad.push(name + ' leaves one button alone at the end (' + lines.map(l => l.length).join('+') + ')');
+        if (body.slice(0, -1).some(l => l.length !== most)) bad.push(name + ' is uneven (' + lines.map(l => l.length).join('+') + ')');
+        if (seg.classList.contains('fx-seg-even')) {
+          const full = body.filter(l => l.length === most).flat().map(b => b.getBoundingClientRect().width);
+          if (Math.max(...full) - Math.min(...full) > 1) bad.push(name + ' has unequal columns (' + full.map(x => x.toFixed(0)).join(', ') + ')');
+        }
+        btns.forEach(b => {
+          const r = b.getBoundingClientRect();
+          if (r.right > window.innerWidth + 0.5 || r.left < -0.5) bad.push(name + ': "' + b.textContent + '" is off-screen');
+          if (b.scrollWidth > b.clientWidth + 1) bad.push(name + ': "' + b.textContent + '" is clipped (' + b.scrollWidth + ' in ' + b.clientWidth + ')');
+        });
+      });
+    };
+    try {
+      for (const w of [380, 320]) {
+        await atPhoneWidth(async function () {
+          const L = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 200, shapeH: 200, fill: '#e8a33d' });
+          S.layers = [L]; FM.selectLayer(L.id);
+          const keys = (R.allIncludingHidden ? R.allIncludingHidden() : R.all()).map(f => f.key || f.id), bad = [];
+          for (const k of keys) {
+            let inst; try { inst = R.makeInstance(k); } catch (e) { continue; }
+            L.effects = [inst];
+            FM.inspector.openCategory('effects');
+            const disc = document.querySelector('.fx-disc'); if (disc) disc.click();
+            await settle();
+            judge(k, w, bad);
+          }
+          L.effects = [];
+          if (bad.length) throw new Error(bad.length + ' row problem(s) at ' + w + ': ' + bad.slice(0, 8).join(' · '));
+        }, w);
+      }
+      for (const w of [380, 320]) {
+        const s = seen[w];
+        if (!s || s.rows < 300) throw new Error('CONTROL: only ' + (s ? s.rows : 0) + ' option rows were measured at ' + w + ', so the panel stopped building them');
+        if (!s.fits || !s.stacked || !s.even) throw new Error('CONTROL: at ' + w + ' the sweep did not meet every kind of row (' + JSON.stringify(s) + '), so it is not looking at what it claims');
+      }
+    } finally {
+      S.layers = layers0; S.selectedId = sel0;
+      try { FM.inspector.openCategory('home'); } catch (e) {}
+    }
+  });
+  test('917 17 a row is decided again when its width changes, and one that fits again goes back to one line beside its label', { item: '917', budgetMs: 40000 }, async function () {
+    const R = FM.fxRegistry, S = FM.scene, layers0 = S.layers.slice(), sel0 = S.selectedId;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    try {
+      await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 200, shapeH: 200, fill: '#e8a33d' });
+        S.layers = [L]; FM.selectLayer(L.id);
+        L.effects = [R.makeInstance('lumakey')];
+        FM.inspector.openCategory('effects');
+        const disc = document.querySelector('.fx-disc'); if (disc) disc.click();
+        await sleep(80);
+        const seg = [...document.querySelectorAll('.fx-seg')].find(s => { const l = s.parentElement.querySelector('.fx-scrub-label'); return l && l.textContent.trim() === 'Removes'; });
+        if (!seg) throw new Error('setup: Luma Key has no Removes row');
+        const line = () => [...seg.children].every(b => b.offsetTop === seg.children[0].offsetTop);
+        if (!line() || seg.parentElement.classList.contains('fx-seg-stack')) throw new Error('setup: at 380 Removes should sit on one line beside its label');
+        const frame = window.frameElement, w0 = frame.style.width;
+        frame.style.width = '320px'; window.dispatchEvent(new Event('resize'));
+        await sleep(200);
+        if (!seg.parentElement.classList.contains('fx-seg-stack')) throw new Error('narrowed to 320, Removes was not decided again: its label is still beside it and its width is ' + seg.clientWidth);
+        frame.style.width = w0; window.dispatchEvent(new Event('resize'));
+        await sleep(200);
+        if (seg.parentElement.classList.contains('fx-seg-stack') || seg.classList.contains('fx-seg-even') || !line()) throw new Error('widened again, Removes did not go back to one line beside its label');
+        L.effects = [];
+      }, 380);
+    } finally {
+      S.layers = layers0; S.selectedId = sel0;
+      try { FM.inspector.openCategory('home'); } catch (e) {}
+    }
+  });
+
   /* 917.15 — each dialog's two dropdowns shrink-wrapped their own longest option, so Resolution and Frame rate
      were different widths and their left edges sat 13px (New project) and 40px (Canvas settings) apart. */
   test('917.15 the Resolution and Frame rate dropdowns share one left edge in New project and Canvas settings', { item: '917' }, async function () {
@@ -99403,6 +99528,108 @@
         });
       }, 360);
     } finally { FM.scene = saved; FM.dragLayerId = null; FM.dragLayerAt = null; FM.dragAddAt = null; try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {} }
+  });
+
+  /* #834 clause 18, measured at last with real fingers (5 Nov). The hunt said a pinch with one finger on a corner square is thrown away and the
+     layer is dragged instead. On 7 Sep it was parked after reading only the THIRD-finger line in startHandle, which a second finger passes; the
+     guard above that line, `if (drag) return`, is what turned a second finger away, because the first finger on the layer has a drag live by then.
+     The corner pads are 17 px bigger than the corner all round (styles.css .sb-handle::before), so on a phone this is not a rare landing.
+     Each case moves ONE finger at a time, because with both moving a one-finger corner drag gives the same ratio as a pinch and proves nothing. */
+  test('834 a pinch with a finger on a corner square resizes the layer and does not drag it, whichever finger landed first', { item: '834', budgetMs: 120000 }, async function () {
+    needsTouch924();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, savedT = FM.time, rows = [], bad = [];
+    const CASES = [
+      { what: 'two fingers on the layer (the control)', a: 'body', b: 'body2', control: true },
+      { what: 'one on the layer, then one on a corner', a: 'body', b: 'se' },
+      { what: 'one on a corner, then one on the layer', a: 'se', b: 'body' },
+      { what: 'one on a corner, then one on another corner', a: 'nw', b: 'se' },
+      { what: 'one on the layer, then one on the turn knob', a: 'body', b: 'rot' },
+      { what: 'a locked layer, one on it, then one on a corner', a: 'body', b: 'se', locked: true }
+    ];
+    try {
+      await atPhoneWidth(async function () {
+        await onScreen924(async function () {
+          for (const c of CASES) {
+            if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+            const L = FM.makeLayer('shape', { name: 'S834', shape: 'rect', x: 540, y: 960, shapeW: 900, shapeH: 900, fill: '#e0245e', start: 0, duration: 4 });
+            FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+            L.locked = !!c.locked;
+            FM.selectLayer(null); if (FM.pause) FM.pause(); FM.setTime(0);
+            FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild();
+            await sleep(300);
+            if (FM._resetVpPointers) FM._resetVpPointers();
+            FM.selectLayer(L.id); FM.canvasEdit.update();
+            await sleep(300);
+            const box = document.getElementById('select-box').getBoundingClientRect();
+            const at = k => {
+              if (k === 'body') return { x: box.left + box.width * 0.35, y: box.top + box.height * 0.35 };
+              if (k === 'body2') return { x: box.left + box.width * 0.7, y: box.top + box.height * 0.7 };
+              const r = document.querySelector('#select-box .sb-' + k).getBoundingClientRect();
+              return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+            };
+            const A = at(c.a), B = at(c.b);
+            for (const [k, P] of [[c.a, A], [c.b, B]]) {
+              const el = document.elementFromPoint(P.x, P.y);
+              const want = k === 'body' || k === 'body2' ? (el && el.id === 'preview') : (el && el.classList.contains('sb-' + k));
+              if (!want) throw new Error('setup (' + c.what + '): the finger for ' + k + ' at ' + Math.round(P.x) + ',' + Math.round(P.y) + ' would land on ' + (el ? (el.id || el.className) : 'nothing'));
+            }
+            const d0 = Math.hypot(B.x - A.x, B.y - A.y);
+            if (d0 < 60) throw new Error('setup (' + c.what + '): the fingers are only ' + Math.round(d0) + ' px apart');
+            const ux = (B.x - A.x) / d0, uy = (B.y - A.y) / d0;
+            const B1 = { x: B.x + ux * 40, y: B.y + uy * 40 }, A1 = { x: A.x - ux * 30, y: A.y - uy * 30 };
+            const read = () => ({ s: FM.evalProp(L.transform.scale, FM.time), x: FM.evalProp(L.transform.x, FM.time), y: FM.evalProp(L.transform.y, FM.time), rot: FM.evalProp(L.transform.rotation, FM.time) || 0 });
+            const v0 = read(), view0 = { scale: FM.viewport.scale, x: FM.viewport.x, y: FM.viewport.y };
+            let fingers = -1, live = false, v1 = null, v2 = null, view2 = 0;
+            try {
+              await realInput924([{ t: 'touchStart', x: A.x, y: A.y, ms: 90 }, { t: 'touchMove', x: B.x, y: B.y, pts: [A, B], ms: 90 }], c.what + ', landing');
+              await sleep(60);
+              fingers = FM._vpPointerCount(); live = FM.canvasGestureLive();
+              const steps1 = [];
+              for (let i = 1; i <= 5; i++) steps1.push({ t: 'touchMove', x: B.x, y: B.y, pts: [A, { x: B.x + ux * 8 * i, y: B.y + uy * 8 * i }], ms: 30 });
+              await realInput924(steps1, c.what + ', the second finger moves');
+              await sleep(60); v1 = read();
+              const steps2 = [];
+              for (let i = 1; i <= 5; i++) steps2.push({ t: 'touchMove', x: A.x, y: A.y, pts: [{ x: A.x - ux * 6 * i, y: A.y - uy * 6 * i }, B1], ms: 30 });
+              await realInput924(steps2, c.what + ', the first finger moves');
+              await sleep(60); v2 = read(); view2 = FM.viewport.scale;
+            } finally {
+              await realInput924([{ t: 'touchEnd', x: A1.x, y: A1.y, ms: 90 }], c.what + ', lifting');
+            }
+            await sleep(120);
+            FM.viewport.scale = view0.scale; FM.viewport.x = view0.x; FM.viewport.y = view0.y; FM.viewport.apply();
+            const ratio1 = Math.hypot(B1.x - A.x, B1.y - A.y) / d0, ratio2 = Math.hypot(B1.x - A1.x, B1.y - A1.y) / d0;
+            const left = FM._vpPointerCount(), still = FM.canvasGestureLive();
+            const row = c.what + ': ' + fingers + ' finger(s) held, scale ' + v0.s + ' → ' + v1.s + ' (a pinch gives ' + (v0.s * ratio1).toFixed(3) + ') → ' + v2.s + ' (' + (v0.s * ratio2).toFixed(3) + '), x ' + v0.x + ' → ' + v2.x + ', y ' + v0.y + ' → ' + v2.y + ', turn ' + v2.rot;
+            rows.push(row);
+            const wrong = [];
+            if (c.locked) {
+              if (fingers !== 2) wrong.push('only ' + fingers + ' finger(s) were counted');
+              if (v2.s !== v0.s || v2.x !== v0.x || v2.y !== v0.y) wrong.push('a locked layer changed');
+              if (!(Math.abs(view2 - view0.scale * ratio2) < 0.03 * view0.scale * ratio2)) wrong.push('the view did not pinch (' + view0.scale + ' → ' + view2 + ', a pinch gives ' + (view0.scale * ratio2).toFixed(3) + ')');
+              if (left !== 0 || still) wrong.push('lifting left ' + left + ' finger(s) in the tracker, gesture live ' + still);
+              if (wrong.length) bad.push(wrong.join(', ') + ' [' + row + ']');
+              continue;
+            }
+            if (fingers !== 2) wrong.push('only ' + fingers + ' finger(s) were counted');
+            if (!(Math.abs(v1.s - v0.s * ratio1) < 0.03 * v0.s * ratio1)) wrong.push('the second finger moving did not resize it as a pinch');
+            if (!(Math.abs(v2.s - v0.s * ratio2) < 0.03 * v0.s * ratio2)) wrong.push('the first finger moving did not resize it as a pinch');
+            if (Math.abs(v2.x - v0.x) > 0.5 || Math.abs(v2.y - v0.y) > 0.5) wrong.push('the layer was dragged');
+            if (Math.abs(v2.rot - v0.rot) > 0.5) wrong.push('the layer turned');
+            if (left !== 0 || still) wrong.push('lifting left ' + left + ' finger(s) in the tracker, gesture live ' + still);
+            if (wrong.length) {
+              if (c.control) throw new Error('CONTROL: two fingers on the layer did not pinch, so nothing below tests a live pinch: ' + wrong.join(', ') + ' [' + row + ']');
+              bad.push(wrong.join(', ') + ' [' + row + ']');
+            }
+          }
+        });
+      }, 380);
+      if (bad.length) throw new Error('a pinch with a finger on a corner square is not a pinch: ' + bad.join(' ·· '));
+    } finally {
+      if (FM._resetVpPointers) FM._resetVpPointers();
+      FM.scene = saved; FM.setTime(savedT); FM.selectLayer(null);
+      try { FM.refreshAll(); if (FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+    }
   });
 
   test('924 on PC the add line dragged into the auto-scroll edge keeps moving the switch as the list scrolls, and lands under the pointer', { item: '924', budgetMs: 60000 }, async function () {
@@ -124205,7 +124432,8 @@
      from 1160 was #970's — but #970's clause is TWO selected, and with ONE selected (#801's own case) the ⋯ sat under the
      version chip from 1162 to 1178 (its centre; its right end to 1206), where a click force-updates the app instead of
      opening the layer menu. So one selected and none are swept to 1440, and the band's line moved to 1226 (styles.css).
-     Two selected stops at that line: above it, and with Settings → Work with friends on, is #970's, held for his pick.
+     Two selected stopped at that line until queue 970 (27 Oct) measured the band against the widest group above it; since
+     then two selected are swept to 1440 like the others, and the tail below holds the band off the phone too.
      Every width is measured SETTLED — after timeline.js has republished --tl-panel-left (150ms after a resize), because
      from ~1170 the inspector widens with the window, and until then play sits up to ~24px off centre for a moment.
      CONTROL first: a transparent box over the copy button's centre at 1100 must be reported, and be the ONLY report. */
@@ -124245,7 +124473,12 @@
       const pan = document.getElementById('timeline-panel'), L = parseFloat(document.documentElement.style.getPropertyValue('--tl-panel-left'));
       return !pan || !isFinite(L) || Math.abs(L - pan.getBoundingClientRect().left) < 0.6;
     };
+    /* A NAMED DEADLINE under the 240s budget (970 review F6): the sweep grew to ~580 states with two more frames on each, and
+       a run that overran would have failed with no word of where. Each width sets __fmStep; the deadline quotes it. */
+    const DEADLINE_MS = 225000;
+    let stopped = false, dlTimer = 0;
     const setW = async w => {
+      if (stopped) throw new Error('979: stopped by its own deadline before ' + w + 'px');
       fe.style.width = w + 'px';
       window.dispatchEvent(new Event('resize'));
       await frames(3);
@@ -124257,17 +124490,18 @@
         if (performance.now() - t0 > 1500) throw new Error('setup at ' + w + 'px: --tl-panel-left never caught up with the panel, so play is not where he would see it');
         await frames(1);
       }
-      await frames(1);
+      // …and the row's own re-decision (steps and, since queue 970, the band): it lands on the frame after the panel moves play
+      await frames(3);
     };
     const WIDTHS = [];
     for (let w = 701; w <= 899; w += 3) WIDTHS.push(w);
     for (let w = 900; w <= 1156; w += 4) WIDTHS.push(w);
     for (let w = 1158; w <= 1240; w += 2) WIDTHS.push(w);
     for (let w = 1250; w <= 1440; w += 10) WIDTHS.push(w);
-    const BAND_LINE = 1226;   // styles.css — two selected above it is #970's (held for his pick), so it is not asserted here
+    // (two selected above 1226 used to be skipped here as #970's; queue 970 built it, so every state is asserted)
     const fails = [];
     let states = 0, folded = 0;
-    try {
+    const body = async function () {
       if (hadHome) FM.home.close();
       const mk = (n, c) => FM.makeLayer('shape', { name: n, shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: c, start: 0, duration: 3 });
       const A = mk('a979', '#c05030'), B = mk('b979', '#3050c0'), C = mk('c979', '#30c050');
@@ -124275,6 +124509,7 @@
       FM.selectLayer(null); FM.refreshAll(); await frames(2);
 
       // CONTROL — the checker must be able to see a covered control, and 1100 with nothing selected must otherwise be clean.
+      window.__fmStep = '979: the control at 1100';
       await setW(1100); await wait(60);
       const lm = document.getElementById('btn-layermenu'), lr = vis(lm);
       if (!lr) throw new Error('setup: no copy button on the row at 1100');
@@ -124286,12 +124521,13 @@
       if (!(seen.length === 1 && seen[0].indexOf('#btn-layermenu centre is under') === 0)) throw new Error('CONTROL: a box laid over the copy button centre at 1100 should be the one thing reported, got: ' + (seen.join('; ') || 'nothing'));
 
       for (const n of [0, 1, 2]) {
+        if (stopped) throw new Error('979: stopped by its own deadline before selecting ' + n);
         if (n === 0) FM.selectLayer(null);
         else if (n === 1) FM.selectLayer(A.id);
         else { FM.selectLayer(A.id); FM.toggleSelect(B.id); }
         FM.refreshAll(); await frames(2);
         for (const w of WIDTHS) {
-          if (n === 2 && w > BAND_LINE) continue;
+          window.__fmStep = '979: ' + n + ' selected at ' + w + 'px (state ' + (states + 1) + ')';
           await setW(w);
           states++;
           const where = w + 'px, ' + n + ' selected: ';
@@ -124330,24 +124566,589 @@
       if (states < 450) throw new Error('setup: only ' + states + ' states were measured');
       /* …and none of it reaches the phone. From the tightest PC state (701, two selected: every step on) to 380, the steps
          come off with the PC row — the phone row is #405's and this item must leave it exactly as it was. */
+      window.__fmStep = '979: the tightest PC state, then the phone';
       await setW(701);
       const tightest = document.getElementById('transport').className;
       if (!/\bt-fold\b/.test(tightest)) fails.push('701px, 2 selected: the row should be fully stepped down, got (' + tightest + ')');
+      if (stopped) throw new Error('979: stopped by its own deadline before the phone tail');
       await atPhoneWidth(async function () {
         FM.refreshAll(); await frames(3);   // the app's next refresh is what gives a narrowed window its phone row back (#405)
         const t = document.getElementById('transport');
-        if (/\bt-(snug|small|fold)\b/.test(t.className)) fails.push('380px: the PC steps stayed on the phone row (' + t.className + ')');
+        if (/\bt-(snug|small|fold|band)\b/.test(t.className)) fails.push('380px: the PC steps stayed on the phone row (' + t.className + ')');
         if (document.getElementById('t-sel')) fails.push('380px: the PC layer group is still built on the phone');
       }, 380);
       if (fails.length) throw new Error(fails.length + ' of ' + states + ' width × selection states fail — ' + fails.slice(0, 6).join(' | ') + (fails.length > 6 ? ' | …' : '') + ' (queue 979)');
       if (!folded) throw new Error('with two selected at 701 the whole group cannot fit on the row, yet nothing was folded into ⋯ and nothing was reported — the fold check never ran');
+    };
+    const deadline = new Promise((_, reject) => {
+      dlTimer = setTimeout(() => {
+        stopped = true;
+        reject(new Error('979 deadline: the sweep was still running after ' + DEADLINE_MS / 1000 + ' s, at ' + (window.__fmStep || 'its start') + ', ' + states + ' states measured — a width that never settles or a slow machine, not a verdict on the row'));
+      }, DEADLINE_MS);
+    });
+    // the restore waits (bounded) for body() to stop, so nothing it is still doing lands after it (as in 970)
+    const bodyP = body();
+    try {
+      await Promise.race([bodyP, deadline]);
     } finally {
+      clearTimeout(dlTimer); stopped = true;
+      await Promise.race([bodyP.catch(() => {}), wait(8000)]);
       fe.style.width = w0;
       window.dispatchEvent(new Event('resize'));
       FM.scene = saved;
       try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();
       await wait(120);
+    }
+  });
+
+  /* ---- 970 (hunt MEDIUM): two or more layers selected — ⋯ and every control on the PC row take their own click, 900–1920 ----
+     Found 26 Sep by the corners planner (hunt MEDIUM #970): with TWO layers selected the layer group is five buttons (parent ·
+     delete · group · masking group · ⋯), 80px wider than one layer's three, and #801's band only reached a line measured with
+     ONE selected (1160; 1226 since #979). Play holds screen centre and the far run holds the row's right edge, so the group
+     closes on the far run at half the rate the window narrows and the collision runs ~160px past that line: measured on
+     v17.11 with two selected, the ⋯ sat under the version chip from 1180 to 1360 (at 1280 elementFromPoint on its centre
+     returned `.ver`, where a click force-updates the app instead of opening the layer menu).
+     Ported 27 Oct onto v18.07 from the Mac's fix-970: pcTransportRoom measures the WIDEST the group gets against the far run,
+     and `.t-band` carries the band past 1226 wherever that widest group would come within 8px of it.
+     This sweeps every 20px from 900 to 1920 with one, two and three selected, each width SETTLED (--tl-panel-left caught up,
+     and the row's next-frame decision made), and asks the page what is on top: at ⋯'s centre and four corners (4px in), at
+     the centre and both ends of every other control on the row, and across the version chip. Then: selecting a second layer
+     does not move the row (the band is the widest group's, not the selection's); the band is off where everything fits
+     (1600 and 1920 with three selected); and a far run that grows with the window LEFT ALONE (a stand-in control, as Share
+     once did) makes the row re-decide, and is swept where the wider run collides.
+     Expected red on v18.07 (75cacf0e) — written without a run, so prove.sh is the first reading: with two and three
+     selected, from 1240 to ~1380 ⋯'s centre or right corners under the far run (the version chip at 1280 on v17.11), and
+     at 1280 with one selected the far run on the row; a far run grown by 96px at 1500 stays on the row (no observer on it).
+     CONTROLS: ⋯ must be a real on-screen box before any pass counts, the row must show at least twelve controls, and a box
+     laid over ⋯'s centre must be reported. It races its own named deadline, so a width that never settles fails by name. */
+  test('970 on a PC window from 900 to 1920 px the layer options button and every control on the transport row take their own click with one, two and three layers selected, and the band does not move with the selection', { item: '970', budgetMs: 210000 }, async function () {
+    if (!matchMedia('(min-width: 701px)').matches) return;   // the phone pass: this is the PC row, and 979's tail holds the phone row free of it
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to reach PC widths');
+    const DEADLINE_MS = 180000;
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const frames = n => new Promise(r => { const go = k => { if (!k) return r(); requestAnimationFrame(() => go(k - 1)); }; go(n); });
+    const w0 = fe.style.width, saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    let stopped = false, standIn = null, lid = null, dlTimer = 0;
+    const nm = el => {
+      const c = el && el.closest ? (el.closest('button, .ver, [id]') || el) : el;
+      return !c ? 'nothing' : (c.id ? '#' + c.id : (typeof c.className === 'string' && c.className ? '.' + c.className.trim().split(/\s+/)[0] : c.tagName.toLowerCase()));
+    };
+    const topAt = (el, x, y) => { const h = document.elementFromPoint(x, y); return (h && (h === el || el.contains(h))) ? null : nm(h); };
+    const box = id => document.getElementById(id).getBoundingClientRect();
+    const panelSettled = () => {
+      const pan = document.getElementById('timeline-panel'), L = parseFloat(document.documentElement.style.getPropertyValue('--tl-panel-left'));
+      return !pan || !isFinite(L) || Math.abs(L - pan.getBoundingClientRect().left) < 0.6;
+    };
+    const setW = async w => {
+      if (stopped) throw new Error('970: stopped by its own deadline before ' + w + 'px');
+      fe.style.width = w + 'px';
+      window.dispatchEvent(new Event('resize'));
+      await frames(3);
+      if (Math.abs(innerWidth - w) > 1) throw new Error('setup: the frame is ' + innerWidth + 'px wide, not ' + w);
+      if (matchMedia('(max-width: 700px)').matches) throw new Error('setup: ' + w + 'px measured the phone layout');
+      const t0 = performance.now();
+      while (!panelSettled()) {
+        if (performance.now() - t0 > 1500) throw new Error('setup at ' + w + 'px: --tl-panel-left never caught up with the panel, so play is not where he would see it');
+        await frames(1);
+      }
+      await frames(3);   // the row re-decides on the frame after anything moves it (pcTransportRoomSoon)
+    };
+    /* One width, one selection: every problem found, as words. */
+    const survey = (w, n) => {
+      const bad = [];
+      const t = document.getElementById('transport'), more = document.getElementById('btn-more-layer'), ver = document.querySelector('#transport .ver');
+      if (!t || !more || !ver || !document.getElementById('t-far') || !document.getElementById('t-sel')) throw new Error('setup at ' + w + 'px: the PC transport row is not built');
+      const r = more.getBoundingClientRect();
+      // CONTROL: every pass below would also pass against a ⋯ that is not on screen
+      if (!(r.width >= 24 && r.height >= 24)) throw new Error('CONTROL at ' + w + 'px, ' + n + ' selected: ⋯ is ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' — not on screen, so no hit test below would mean anything');
+      if (r.left < 0 || r.right > innerWidth || r.top < 0 || r.bottom > vh921()) bad.push('⋯ is off the window (' + Math.round(r.left) + '–' + Math.round(r.right) + ' of ' + innerWidth + ')');
+      [['centre', r.left + r.width / 2, r.top + r.height / 2], ['top-left', r.left + 4, r.top + 4], ['top-right', r.right - 4, r.top + 4],
+       ['bottom-left', r.left + 4, r.bottom - 4], ['bottom-right', r.right - 4, r.bottom - 4]].forEach(p => {
+        const on = topAt(more, p[1], p[2]);
+        if (on) bad.push('⋯ ' + p[0] + ' is under ' + on);
+      });
+      // the version chip stays readable: nothing lies across it
+      const vr = ver.getBoundingClientRect();
+      if (!(vr.width > 20)) bad.push('the version chip is ' + Math.round(vr.width) + 'px wide');
+      [vr.left + 3, vr.left + vr.width / 2, vr.right - 3].forEach(x => { const on = topAt(ver, x, vr.top + vr.height / 2); if (on) bad.push('the version chip is covered by ' + on + ' at x ' + Math.round(x)); });
+      // …and every other control on the row takes its own click
+      let seen = 0;
+      Array.prototype.forEach.call(t.querySelectorAll('button, [role=button]'), b => {
+        const br = b.getBoundingClientRect();
+        if (!(br.width > 4 && br.height > 4) || getComputedStyle(b).visibility === 'hidden') return;
+        seen++;
+        [br.left + br.width / 2, br.left + 4, br.right - 4].forEach(x => { const on = topAt(b, x, br.top + br.height / 2); if (on) bad.push(nm(b) + ' is under ' + on + ' at x ' + Math.round(x)); });
+      });
+      // CONTROL: back, copy, the switch, skip ×2, the pill, undo, redo, the group and the far run — the real PC row
+      if (seen < 12) throw new Error('CONTROL at ' + w + 'px, ' + n + ' selected: only ' + seen + ' visible controls on the row — this is not the real PC row');
+      return bad.length ? w + 'px, ' + n + ' selected: ' + bad.slice(0, 3).join('; ') : '';
+    };
+    const body = async function () {
+      if (hadHome) FM.home.close();
+      const mk = (name, x) => FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 600, shapeW: 200, shapeH: 200, fill: '#c05030', start: 0, duration: 3 });
+      const L = [mk('k970a', 250), mk('k970b', 540), mk('k970c', 830)];
+      FM.scene = scene(L, { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      const select = async n => {
+        if (stopped) throw new Error('970: stopped by its own deadline before selecting ' + n);
+        FM.selectLayer(L[0].id);
+        for (let i = 1; i < n; i++) FM.toggleSelect(L[i].id);
+        FM.refreshAll(); await frames(4);
+        if (FM.selectionIds().length !== n) throw new Error('setup: ' + FM.selectionIds().length + ' selected, not ' + n);
+      };
+      const widths = [];
+      for (let w = 900; w <= 1920; w += 20) widths.push(w);
+      const fails = [];
+      for (const n of [1, 2, 3]) {
+        await select(n);
+        for (const w of widths) {
+          window.__fmStep = '970: ' + n + ' selected at ' + w + 'px';
+          await setW(w);
+          const f = survey(w, n);
+          if (f) fails.push(f);
+        }
+      }
+      if (fails.length) {
+        const dots = fails.filter(f => /⋯/.test(f));   // the finding itself first, then the rest of the row
+        throw new Error(fails.length + ' of ' + widths.length * 3 + ' width × selection states have a covered control, ' + dots.length + ' of them the ⋯ (queue 970) — ' + dots.concat(fails.filter(f => !/⋯/.test(f))).slice(0, 4).join(' | '));
+      }
+
+      /* The band is the WIDEST group's, not the selection's: at 1280 it is already there with one selected (two would reach the
+         far run), so shift-clicking a second layer never moves the row. */
+      window.__fmStep = '970: one then two selected at 1280';
+      await setW(1280);
+      await select(1);
+      const far1 = box('t-far').top, row1 = box('transport').top, undo1 = box('btn-undo');
+      if (!(far1 >= row1 + 30)) throw new Error('at 1280px with ONE selected the far run is on the row (its top ' + Math.round(far1) + ', the row\'s ' + Math.round(row1) + ') — the band must be decided by the widest the group gets (two selected reach the far run here), or selecting a second layer moves the whole row (queue 970)');
+      await select(2);
+      const far2 = box('t-far').top, row2 = box('transport').top, undo2 = box('btn-undo');
+      if (Math.abs(far1 - far2) > 1 || Math.abs(row1 - row2) > 1 || Math.abs(undo1.top - undo2.top) > 1) throw new Error('at 1280px selecting a second layer moved the row (far run ' + Math.round(far1) + ' → ' + Math.round(far2) + ', row ' + Math.round(row1) + ' → ' + Math.round(row2) + ') — the band must not come and go with the selection (queue 970)');
+
+      /* …and only where it is needed: a band that were simply always on would pass every hit test above and cost the stage 40px
+         on every PC. Wide, with the widest group showing, the far run is on the row beside undo.
+         setW drives and checks the width itself — no atWideWidth around it (970 review F3: on a deadline, an atWideWidth still
+         unwinding put back the 1280 it had started from AFTER this test's own restore, and every later test ran 1280 wide). */
+      for (const w of [1600, 1920]) {
+        window.__fmStep = '970: no band at ' + w;
+        await setW(w); await select(3);
+        const fr = box('t-far'), ur = box('btn-undo');
+        if (Math.abs(fr.top + fr.height / 2 - (ur.top + ur.height / 2)) > 6) throw new Error('at ' + w + 'px with three selected the far run hangs under the row (its middle at ' + Math.round(fr.top + fr.height / 2) + ', undo\'s at ' + Math.round(ur.top + ur.height / 2) + ') — the band has leaked to a width where everything fits on one row (queue 970)');
+        if (document.getElementById('transport').classList.contains('t-band')) throw new Error('at ' + w + 'px the row carries .t-band with room to spare (queue 970)');
+      }
+
+      /* A WIDER FAR RUN, with the window LEFT ALONE: a control arriving in it (Share once did, before Export) must make the row
+         re-decide from the far run's own size, not wait for a resize — then the widths where the wider run collides are swept.
+         The stand-in is 96px (970 review F4): one 34px button closed a gap the two estimates put at 23 to 35px, so whether a
+         row that never re-decided showed a covered ⋯ corner was a guess. 96px is past either, and the band itself is asserted.
+         At 1500, not 1440: the gap there is ~30px wider, so the no-band control below keeps its margin on a wider chip font
+         (both estimates of the line, ~1385 to ~1410, were Mac readings or arithmetic), and 96px still closes it. */
+      window.__fmStep = '970: the far run grows at 1500';
+      await setW(1500); await select(2);
+      const farTop = () => box('t-far').top, rowTop = () => box('transport').top;
+      // CONTROL: the far run must be ON the row here before it grows, or the band below would prove nothing about re-deciding
+      if (farTop() >= rowTop() + 30) throw new Error('CONTROL at 1500px, 2 selected: the far run is already in the band before it grows (its top ' + Math.round(farTop()) + ', the row\'s ' + Math.round(rowTop()) + '), so this cannot show the row re-deciding');
+      const exp = document.getElementById('btn-export');
+      if (stopped) throw new Error('970: stopped by its own deadline before the stand-in went in');
+      standIn = document.createElement('button');
+      standIn.className = 'icon-btn'; standIn.type = 'button'; standIn.textContent = '+';
+      standIn.style.width = '96px'; standIn.style.minWidth = '96px';
+      standIn.setAttribute('aria-label', 'stand-in for a wider far run (test 970)');
+      exp.parentNode.insertBefore(standIn, exp);
+      await frames(4); await wait(30);
+      const sw = standIn.getBoundingClientRect().width;
+      if (!(sw >= 90)) throw new Error('setup: the stand-in is ' + Math.round(sw) + 'px wide, not 96 — the far run was not really widened');
+      // straight after the insert, with the window untouched: the row re-decided from the far run's own size and hung the band
+      if (!(farTop() >= rowTop() + 30)) throw new Error('the far run grew by ' + Math.round(sw) + 'px at 1500px with the window left alone and stayed on the row (its top ' + Math.round(farTop()) + ', the row\'s ' + Math.round(rowTop()) + ') — the row never re-decided from the far run\'s own size (queue 970)');
+      const still = survey(1500, 2);
+      if (still) throw new Error('the far run grew by ' + Math.round(sw) + 'px with the window left alone and a control is still covered — ' + still + ' (queue 970)');
+      const wide = [];
+      for (const w of [1340, 1360, 1400, 1420, 1440, 1460]) {
+        window.__fmStep = '970: the wider far run at ' + w;
+        await setW(w);
+        const f = survey(w, 2);
+        if (f) wide.push(f);
+      }
+      if (wide.length) throw new Error('with the far run ' + Math.round(sw) + 'px wider the row still collides — ' + wide.slice(0, 3).join(' | ') + ' (queue 970)');
+      standIn.remove(); standIn = null;
+
+      /* POSITIVE CONTROL for the hit test: something really lying over ⋯ is reported. Without it every pass above could be a
+         hit test that never sees anything. */
+      window.__fmStep = '970: the hit-test control';
+      await setW(1440);
+      const mr = box('btn-more-layer');
+      if (stopped) throw new Error('970: stopped by its own deadline before the hit-test control');
+      lid = document.createElement('div');
+      lid.style.cssText = 'position:fixed;z-index:2147483647;background:transparent;left:' + (mr.left + mr.width / 2 - 4) + 'px;top:' + mr.top + 'px;width:8px;height:' + mr.height + 'px';
+      document.body.appendChild(lid);
+      const got = survey(1440, 2);
+      lid.remove(); lid = null;
+      if (!/⋯ centre is under/.test(got)) throw new Error('CONTROL: a box laid over ⋯ was not reported by the hit test (' + (got || 'nothing reported') + ') — every pass above proves nothing');
+    };
+    const deadline = new Promise((_, reject) => {
+      dlTimer = setTimeout(() => {
+        stopped = true;
+        reject(new Error('970 deadline: the sweep was still running after ' + DEADLINE_MS / 1000 + ' s, at ' + (window.__fmStep || 'its start') + ' — a width that never settles, not a verdict on the row'));
+      }, DEADLINE_MS);
+    });
+    /* The deadline only stops the WAITING; body() goes on until its next stopped check. So the restore below first lets it
+       finish (bounded), or a body still running would select, insert or resize AFTER the restore (970 review F3). */
+    const bodyP = body();
+    try {
+      await Promise.race([bodyP, deadline]);
+    } finally {
+      clearTimeout(dlTimer); stopped = true;
+      await Promise.race([bodyP.catch(() => {}), wait(8000)]);
+      if (lid) lid.remove();
+      if (standIn) standIn.remove();
+      fe.style.width = w0;
+      window.dispatchEvent(new Event('resize'));
+      FM.scene = saved;
+      try { FM.selectLayer(savedSel || null); FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await wait(150);
+    }
+  });
+
+  /* ---- 970 review F2: a band that arrives with no resize of its own still carries the open ⚙ pop-up ----------------------
+     Above 1226px the band is a CLASS that pcTransportRoom sets a frame after every window resize listener has run (or with no
+     resize at all), and it moves the stage's bottom and the transport row up by 40px. The ⚙ Timeline options pop-up is
+     MEASURED — FM.fitBarsTogether centres it on the stage and holds its bottom 4px above the row — and that ran only on a
+     resize, on its own open or close and on a divider drag (#866). So without the fold's door it kept the fit of a row with
+     no band: 20px below the stage's centre, or, held at its floor, its bottom 36px inside the transport row.
+     Opened at 1920 (no band), the window narrowed to 1300 (the band comes on), nothing else touched: the pop-up must sit where
+     the app's own fit puts it on the layout he now sees, and its bottom must be clear of the row.
+     The stylesheet's timeline height, not a dragged one: a dragged --tl-h is inline and wins, and then the band's 40px come
+     out of the tracks, the stage does not move, and there is nothing for the pop-up to follow (the same trade as at 1226).
+     CONTROLS: the band must be OFF at 1920 and ON at 1300, or nothing here moved; and the comparison must tell a pop-up fitted
+     for the row WITHOUT its band from one fitted with it — built on purpose and synchronously (class off, fit, class back,
+     fit), so no frame runs in between to re-decide or heal it.
+     Red on 75cacf0e: there is no band above 1226, so the 1300 control throws. Red with the door's call taken out of
+     pcTransportRoom: the pop-up keeps 1300's no-band fit, 20 to 40px from the band's. */
+  test('970 on a PC window the open Timeline options pop-up follows the band when the window narrows from 1920 to 1300 px with nothing else resizing', { item: '970', budgetMs: 60000 }, async function () {
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to reach PC widths');
+    const DEADLINE_MS = 40000;
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const frames = n => new Promise(r => { const go = k => { if (!k) return r(); requestAnimationFrame(() => go(k - 1)); }; go(n); });
+    const w0 = fe.style.width, saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const rootEl = document.documentElement, savedTlH = rootEl.style.getPropertyValue('--tl-h');
+    let stopped = false, dlTimer = 0, bar = null, btn = null, opened = false;
+    const panelSettled = () => {
+      const pan = document.getElementById('timeline-panel'), L = parseFloat(rootEl.style.getPropertyValue('--tl-panel-left'));
+      return !pan || !isFinite(L) || Math.abs(L - pan.getBoundingClientRect().left) < 0.6;
+    };
+    const setW = async w => {
+      if (stopped) throw new Error('970 pop-up: stopped by its own deadline before ' + w + 'px');
+      fe.style.width = w + 'px';
+      window.dispatchEvent(new Event('resize'));
+      await frames(3);
+      if (Math.abs(innerWidth - w) > 1) throw new Error('setup: the frame is ' + innerWidth + 'px wide, not ' + w);
+      if (matchMedia('(max-width: 700px)').matches) throw new Error('setup: ' + w + 'px measured the phone layout');
+      const t0 = performance.now();
+      while (!panelSettled()) {
+        if (performance.now() - t0 > 1500) throw new Error('setup at ' + w + 'px: --tl-panel-left never caught up with the panel');
+        await frames(1);
+      }
+      await frames(3);   // the row re-decides (steps, band) on the frame after anything moves it
+    };
+    const bandOn = () => { const t = document.getElementById('transport'); return !!(t && t.classList.contains('t-band')); };
+    const place = () => ({ b: parseFloat(bar.style.bottom), h: parseFloat(bar.style.maxHeight) });
+    const px = v => (isFinite(v) ? Math.round(v) + 'px' : String(v));
+    const body = async function () {
+      if (hadHome) FM.home.close();
+      rootEl.style.removeProperty('--tl-h');
+      const mk = (name, x) => FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 600, shapeW: 200, shapeH: 200, fill: '#3050c0', start: 0, duration: 3 });
+      const L = [mk('p970a', 300), mk('p970b', 760)];
+      FM.scene = scene(L, { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      window.__fmStep = '970 pop-up: opening it at 1920';
+      await setW(1920);
+      if (stopped) throw new Error('970 pop-up: stopped by its own deadline before selecting');
+      FM.selectLayer(L[0].id); FM.toggleSelect(L[1].id);
+      FM.refreshAll(); await frames(4);
+      bar = document.getElementById('opt-bar'); btn = document.getElementById('btn-opts');
+      if (!bar || !btn || !document.getElementById('stage') || !document.getElementById('t-far') || !document.getElementById('t-sel')) throw new Error('setup at 1920px: the ⚙ button, its pop-up, the stage or the PC transport row is missing');
+      if (FM.selectionIds().length !== 2) throw new Error('setup: ' + FM.selectionIds().length + ' selected, not 2');
+      if (bandOn()) throw new Error('CONTROL at 1920px: the row already carries .t-band, so narrowing cannot show the band arriving');
+      if (stopped) throw new Error('970 pop-up: stopped by its own deadline before opening the pop-up');
+      if (bar.classList.contains('hidden')) { FM.setSideBar(bar, btn, true); opened = true; await wait(420); }
+      if (bar.classList.contains('hidden')) throw new Error('setup at 1920px: the ⚙ Timeline options pop-up did not open');
+
+      window.__fmStep = '970 pop-up: narrowed to 1300';
+      await setW(1300);
+      await wait(250);   // past timeline.js' 150ms republish of --tl-panel-left and the preview's 120ms re-scale: nothing still on its way
+      if (stopped) throw new Error('970 pop-up: stopped by its own deadline at 1300px');
+      const t = document.getElementById('transport');
+      if (!bandOn()) throw new Error('CONTROL at 1300px: the band did not come on (' + t.className + '), so nothing moved and nothing below is tested');
+      if (bar.classList.contains('hidden')) throw new Error('setup at 1300px: the pop-up closed when the window narrowed');
+      const tr = t.getBoundingClientRect(), br = bar.getBoundingClientRect();
+      if (!(br.width >= 20 && br.height >= 40)) throw new Error('setup at 1300px: the pop-up is ' + Math.round(br.width) + 'x' + Math.round(br.height) + ', not on screen');
+      const was = place();
+      if (!(isFinite(was.b) && isFinite(was.h))) throw new Error('setup at 1300px: the app never placed the pop-up (bottom ' + (bar.style.bottom || 'unset') + ', max-height ' + (bar.style.maxHeight || 'unset') + ')');
+      FM.fitBarsTogether();
+      const fit = place();
+
+      // CONTROL: the comparison below can tell a pop-up fitted for the row WITHOUT its band from one fitted with it
+      window.__fmStep = '970 pop-up: the control';
+      t.classList.remove('t-band'); FM.fitBarsTogether(); const off = place();
+      t.classList.add('t-band'); FM.fitBarsTogether(); const on = place();
+      if (!(Math.abs(off.b - on.b) >= 10 || Math.abs(off.h - on.h) >= 10)) throw new Error('CONTROL: the band moves the pop-up\'s fit by under 10px (bottom ' + px(off.b) + ' to ' + px(on.b) + ', max-height ' + px(off.h) + ' to ' + px(on.h) + '), so a pop-up left behind could not be told apart from one that followed');
+
+      const fails = [];
+      if (br.bottom > tr.top - 2) fails.push('its bottom (' + Math.round(br.bottom) + ') is on the transport row (top ' + Math.round(tr.top) + ')');
+      if (Math.abs(was.b - fit.b) > 1.5 || Math.abs(was.h - fit.h) > 1.5) fails.push('it kept bottom ' + px(was.b) + ', max-height ' + px(was.h) + ' where this layout puts it at bottom ' + px(fit.b) + ', max-height ' + px(fit.h) + ' (the no-band fit is bottom ' + px(off.b) + ')');
+      if (fails.length) throw new Error('at 1300px, after the band came on with no resize of its own, the open ⚙ Timeline options pop-up did not follow it: ' + fails.join('; ') + ' (queue 970)');
+    };
+    const deadline = new Promise((_, reject) => {
+      dlTimer = setTimeout(() => {
+        stopped = true;
+        reject(new Error('970 pop-up deadline: still running after ' + DEADLINE_MS / 1000 + ' s, at ' + (window.__fmStep || 'its start') + ' — a width that never settles, not a verdict on the pop-up'));
+      }, DEADLINE_MS);
+    });
+    const bodyP = body();
+    try {
+      await Promise.race([bodyP, deadline]);
+    } finally {
+      clearTimeout(dlTimer); stopped = true;
+      await Promise.race([bodyP.catch(() => {}), wait(8000)]);
+      try { if (opened && bar && btn) FM.setSideBar(bar, btn, false); } catch (e) {}
+      if (savedTlH) rootEl.style.setProperty('--tl-h', savedTlH); else rootEl.style.removeProperty('--tl-h');
+      fe.style.width = w0;
+      window.dispatchEvent(new Event('resize'));
+      FM.scene = saved;
+      try { FM.selectLayer(savedSel || null); FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await wait(200);
+      try { if (FM.fitBarsTogether) FM.fitBarsTogether(); } catch (e) {}
+    }
+  });
+
+  /* ---- 970 review K1: an open card hung off a far-run button follows the band ---------------------------------------------
+     The ? · notes · cog · Export cards pop out of their own buttons (queue 548), and all four buttons live in #t-far, which is
+     exactly what #970's band drops. A card is placed at its open and on a window resize, and above 1226px the band lands a frame
+     AFTER every resize listener has run (or with no resize at all), so the card stayed hung where its button had been.
+     With a DRAGGED timeline height (an inline --tl-h, which a PC keeps from its last drag), because that is where the button
+     moves: at the stylesheet's height the panel grows by the band's 40px upward and the far run lands where it was.
+     Export (placed by popfrom.js) and the cog's pair (placed by its own code), each opened at 1920 (no band), the window then
+     narrowed to 1300 (the band comes on): the card's edge must stand as far from its button as it did at 1920, within 3px
+     (both readings are whole pixels: popfrom.js and the cog's anchor round), and its tail must point at the button's centre
+     within 6px (queue 548's own tolerance).
+     CONTROLS: the band OFF at 1920 and ON at 1300, and the button really carried down by it (at least 30px), or nothing moved
+     and nothing below is tested.
+     Expected red, written without a run: on 75cacf0e the 1300 control throws (no band above 1226); on f4b34ad6 both cards
+     keep their 1920 edge with the button ~40px lower, Export from popfrom.js' resize placement, the cog's pair from its open. */
+  test('970 on a PC window an open Export card and the cog pair stay hung off their buttons when the window narrows from 1920 to 1300 px and the band drops the buttons', { item: '970', budgetMs: 90000 }, async function () {
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to reach PC widths');
+    const DEADLINE_MS = 60000;
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const frames = n => new Promise(r => { const go = k => { if (!k) return r(); requestAnimationFrame(() => go(k - 1)); }; go(n); });
+    const w0 = fe.style.width, saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const rootEl = document.documentElement, savedTlH = rootEl.style.getPropertyValue('--tl-h');
+    let stopped = false, dlTimer = 0;
+    const panelSettled = () => {
+      const pan = document.getElementById('timeline-panel'), L = parseFloat(rootEl.style.getPropertyValue('--tl-panel-left'));
+      return !pan || !isFinite(L) || Math.abs(L - pan.getBoundingClientRect().left) < 0.6;
+    };
+    const setW = async w => {
+      if (stopped) throw new Error('970 cards: stopped by its own deadline before ' + w + 'px');
+      fe.style.width = w + 'px';
+      window.dispatchEvent(new Event('resize'));
+      await frames(3);
+      if (Math.abs(innerWidth - w) > 1) throw new Error('setup: the frame is ' + innerWidth + 'px wide, not ' + w);
+      if (matchMedia('(max-width: 700px)').matches) throw new Error('setup: ' + w + 'px measured the phone layout');
+      const t0 = performance.now();
+      while (!panelSettled()) {
+        if (performance.now() - t0 > 1500) throw new Error('setup at ' + w + 'px: --tl-panel-left never caught up with the panel');
+        await frames(1);
+      }
+      await frames(3);   // the row re-decides (steps, band) on the frame after anything moves it
+    };
+    const bandOn = () => { const t = document.getElementById('transport'); return !!(t && t.classList.contains('t-band')); };
+    const shut = () => {
+      try { const d = document.getElementById('export-dialog'), c = document.getElementById('exp-cancel'); if (d && c && !d.classList.contains('hidden')) c.click(); } catch (e) {}
+      try { const d = document.getElementById('canvas-dialog'); if (d && !d.classList.contains('hidden') && FM.closeCanvasDialog) FM.closeCanvasDialog(); } catch (e) {}
+    };
+    const CASES = [
+      { id: 'btn-export', name: 'Export', card: () => document.querySelector('#export-dialog .export-card') },
+      { id: 'btn-settings', name: 'the cog', card: () => document.querySelector('#canvas-dialog .pop-card') }
+    ];
+    const aim = c => {
+      const b = document.getElementById(c.id), card = c.card();
+      if (!b || !card || !card._popTail || !(card.getBoundingClientRect().width > 0)) return null;
+      const g = FM._popGeom(card, b);
+      return { up: g.up, gap: g.gap, dx: g.tailCx - g.btnCx, top: Math.round(b.getBoundingClientRect().top) };
+    };
+    const body = async function () {
+      if (hadHome) FM.home.close();
+      if (typeof FM._popGeom !== 'function') throw new Error('setup: FM._popGeom is missing, so js/popfrom.js did not load');
+      rootEl.style.setProperty('--tl-h', '300px');
+      const mk = (name, x) => FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 600, shapeW: 200, shapeH: 200, fill: '#30a070', start: 0, duration: 3 });
+      const L = [mk('q970a', 300), mk('q970b', 760)];
+      FM.scene = scene(L, { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      window.__fmStep = '970 cards: building the row at 1920';
+      await setW(1920);
+      if (stopped) throw new Error('970 cards: stopped by its own deadline before selecting');
+      FM.selectLayer(L[0].id); FM.toggleSelect(L[1].id);
+      FM.refreshAll(); await frames(4);
+      if (!document.getElementById('t-far') || !document.getElementById('btn-export') || !document.getElementById('btn-settings')) throw new Error('setup at 1920px: the PC transport row with Export and the cog is missing');
+      const fails = [];
+      for (const c of CASES) {
+        window.__fmStep = '970 cards: ' + c.name + ' opened at 1920';
+        await setW(1920);
+        if (bandOn()) throw new Error('CONTROL at 1920px: the row already carries .t-band, so narrowing cannot show the band arriving');
+        if (stopped) throw new Error('970 cards: stopped by its own deadline before opening ' + c.name);
+        document.getElementById(c.id).click();
+        await wait(450);
+        const a0 = aim(c);
+        if (!a0) throw new Error('setup at 1920px: ' + c.name + ' did not open as a card with its tail');
+        window.__fmStep = '970 cards: ' + c.name + ' narrowed to 1300';
+        await setW(1300);
+        await wait(250);   // past timeline.js' 150ms republish of --tl-panel-left: nothing still on its way
+        if (stopped) throw new Error('970 cards: stopped by its own deadline at 1300px');
+        if (!bandOn()) throw new Error('CONTROL at 1300px: the band did not come on (' + document.getElementById('transport').className + '), so nothing moved and nothing below is tested');
+        const a1 = aim(c);
+        if (!a1) throw new Error('setup at 1300px: ' + c.name + ' closed or lost its tail when the window narrowed');
+        if (!(a1.top - a0.top >= 30)) throw new Error('CONTROL at 1300px: the ' + c.id + ' button moved ' + (a1.top - a0.top) + 'px down, so the band did not carry it and nothing below is tested');
+        const bad = [];
+        if (a1.up !== a0.up) bad.push('it turned to open ' + (a1.up ? 'upward' : 'downward'));
+        if (Math.abs(a1.gap - a0.gap) > 3) bad.push('its edge is ' + a1.gap + 'px from the button, where it was ' + a0.gap + 'px at 1920');
+        if (!(Math.abs(a1.dx) <= 6)) bad.push('its tail points ' + a1.dx + 'px off the button\'s centre');
+        if (bad.length) fails.push(c.name + ': ' + bad.join(', '));
+        shut(); await wait(450);
+      }
+      if (fails.length) throw new Error('at 1300px, after the band carried the far run down with no resize of its own, an open card stayed hung where its button had been: ' + fails.join(' | ') + ' (queue 970)');
+    };
+    const deadline = new Promise((_, reject) => {
+      dlTimer = setTimeout(() => {
+        stopped = true;
+        reject(new Error('970 cards deadline: still running after ' + DEADLINE_MS / 1000 + ' s, at ' + (window.__fmStep || 'its start') + ' — a width that never settles, not a verdict on the cards'));
+      }, DEADLINE_MS);
+    });
+    const bodyP = body();
+    try {
+      await Promise.race([bodyP, deadline]);
+    } finally {
+      clearTimeout(dlTimer); stopped = true;
+      await Promise.race([bodyP.catch(() => {}), wait(8000)]);
+      shut();
+      if (savedTlH) rootEl.style.setProperty('--tl-h', savedTlH); else rootEl.style.removeProperty('--tl-h');
+      fe.style.width = w0;
+      window.dispatchEvent(new Event('resize'));
+      FM.scene = saved;
+      try { FM.selectLayer(savedSel || null); FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await wait(450);
+    }
+  });
+
+  /* ---- 970 review K2: a raised add menu is held at its floor when the band raises the floor -------------------------------
+     A raised add menu (body.am-floating) may never stand below its floor, the band's height (bandH): under it, the panel's
+     emptied grid slot shows a strip of bare background, which is #478's black bar. --am-h was re-clamped to the floor only on a
+     window resize, and above 1226px #970's band lands a frame after that, adding 40px to the floor of a timeline at the
+     stylesheet's height. So a menu raised by less than 40px was left up to 40px under it.
+     Raised 20px at 1560 (no band, and the same stylesheet height as 1300: both sit under the 1600px step), then narrowed to 1300.
+     CONTROLS: at 1300 the band must raise the floor by at least 30px (built synchronously, class off and back on, so no frame
+     runs in between to re-decide it); at 1560 the band must be OFF and the floor the same as 1300's without the band, so the
+     raise is a real 20px one that the resize's own clamp leaves alone; at 1300 the band ON and the menu still floating.
+     Expected red, written without a run: on f4b34ad6 the menu stays 20px under its new floor; on 75cacf0e the 1300 control throws. */
+  test('970 on a PC window a raised add menu is held at its floor when the window narrows from 1560 to 1300 px and the band raises that floor', { item: '970', budgetMs: 60000 }, async function () {
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html\'s iframe to reach PC widths');
+    const DEADLINE_MS = 40000;
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const frames = n => new Promise(r => { const go = k => { if (!k) return r(); requestAnimationFrame(() => go(k - 1)); }; go(n); });
+    const w0 = fe.style.width, saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const rootEl = document.documentElement, savedTlH = rootEl.style.getPropertyValue('--tl-h'), savedAmH = rootEl.style.getPropertyValue('--am-h');
+    const hadFloat = document.body.classList.contains('am-floating');
+    let stopped = false, dlTimer = 0;
+    const panelSettled = () => {
+      const pan = document.getElementById('timeline-panel'), L = parseFloat(rootEl.style.getPropertyValue('--tl-panel-left'));
+      return !pan || !isFinite(L) || Math.abs(L - pan.getBoundingClientRect().left) < 0.6;
+    };
+    const setW = async w => {
+      if (stopped) throw new Error('970 add menu: stopped by its own deadline before ' + w + 'px');
+      fe.style.width = w + 'px';
+      window.dispatchEvent(new Event('resize'));
+      await frames(3);
+      if (Math.abs(innerWidth - w) > 1) throw new Error('setup: the frame is ' + innerWidth + 'px wide, not ' + w);
+      if (matchMedia('(max-width: 700px)').matches) throw new Error('setup: ' + w + 'px measured the phone layout');
+      const t0 = performance.now();
+      while (!panelSettled()) {
+        if (performance.now() - t0 > 1500) throw new Error('setup at ' + w + 'px: --tl-panel-left never caught up with the panel');
+        await frames(1);
+      }
+      await frames(3);   // the row re-decides (steps, band) on the frame after anything moves it
+    };
+    const bandOn = () => { const t = document.getElementById('transport'); return !!(t && t.classList.contains('t-band')); };
+    const amNow = () => parseInt(getComputedStyle(rootEl).getPropertyValue('--am-h'), 10);
+    const body = async function () {
+      if (hadHome) FM.home.close();
+      if (typeof FM._bandH !== 'function' || typeof FM.clampAddMenuH !== 'function' || !document.getElementById('inspector-panel')) throw new Error('setup: the band height, the add menu clamp or the inspector panel is missing');
+      if (FM.dropAddMenuFloat) FM.dropAddMenuFloat();
+      rootEl.style.removeProperty('--tl-h');
+      const mk = (name, x) => FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 600, shapeW: 200, shapeH: 200, fill: '#a07030', start: 0, duration: 3 });
+      const L = [mk('r970a', 300), mk('r970b', 760)];
+      FM.scene = scene(L, { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      window.__fmStep = '970 add menu: the floors at 1300';
+      await setW(1300);
+      if (stopped) throw new Error('970 add menu: stopped by its own deadline before the row was built');
+      FM.selectLayer(null); FM.refreshAll(); await frames(4);
+      await frames(3);
+      if (stopped) throw new Error('970 add menu: stopped by its own deadline before measuring the floors');
+      const t = document.getElementById('transport');
+      if (!t || !document.getElementById('t-far')) throw new Error('setup at 1300px: the PC transport row is not built');
+      if (!bandOn()) throw new Error('CONTROL at 1300px: the band is not on (' + t.className + '), so it cannot raise the floor');
+      // CONTROL: the band really raises the floor here, built with no frame in between to re-decide it
+      const onFloor = FM._bandH();
+      t.classList.remove('t-band'); const offFloor = FM._bandH(); t.classList.add('t-band');
+      if (!(onFloor - offFloor >= 30)) throw new Error('CONTROL at 1300px: the band raises the add menu\'s floor by ' + (onFloor - offFloor) + 'px (' + offFloor + ' to ' + onFloor + '), so a menu left under it could not be told from one held at it');
+      window.__fmStep = '970 add menu: raised at 1560';
+      await setW(1560);
+      if (bandOn()) throw new Error('CONTROL at 1560px: the row carries .t-band, so narrowing cannot show the band arriving');
+      const floor0 = FM._bandH();
+      if (Math.abs(floor0 - offFloor) > 1) throw new Error('CONTROL at 1560px: the floor is ' + floor0 + 'px, not the ' + offFloor + 'px that 1300 has without the band, so the narrowing itself moves it');
+      if (stopped) throw new Error('970 add menu: stopped by its own deadline before raising the menu');
+      const raised = offFloor + 20;
+      rootEl.style.setProperty('--am-h', raised + 'px');
+      document.body.classList.add('am-floating');
+      if (FM._amRepin) FM._amRepin();
+      await frames(2);
+      if (amNow() !== raised) throw new Error('setup at 1560px: the raised add menu is ' + amNow() + 'px, not ' + raised);
+      window.__fmStep = '970 add menu: narrowed to 1300';
+      await setW(1300);
+      await wait(150);
+      if (stopped) throw new Error('970 add menu: stopped by its own deadline at 1300px');
+      if (!bandOn()) throw new Error('CONTROL at 1300px: the band did not come on (' + t.className + '), so the floor did not move');
+      if (!document.body.classList.contains('am-floating')) throw new Error('setup at 1300px: narrowing dropped the float, so there is no raised menu to hold');
+      const h = amNow(), floor = FM._bandH();
+      if (!(h >= floor - 1)) throw new Error('at 1300px, after the band came on with no resize of its own, the raised add menu is ' + h + 'px, ' + (floor - h) + 'px under its floor of ' + floor + 'px: the strip between them is bare background, #478\'s black bar (queue 970)');
+    };
+    const deadline = new Promise((_, reject) => {
+      dlTimer = setTimeout(() => {
+        stopped = true;
+        reject(new Error('970 add menu deadline: still running after ' + DEADLINE_MS / 1000 + ' s, at ' + (window.__fmStep || 'its start') + ' — a width that never settles, not a verdict on the menu'));
+      }, DEADLINE_MS);
+    });
+    const bodyP = body();
+    try {
+      await Promise.race([bodyP, deadline]);
+    } finally {
+      clearTimeout(dlTimer); stopped = true;
+      await Promise.race([bodyP.catch(() => {}), wait(8000)]);
+      try { if (FM.dropAddMenuFloat) FM.dropAddMenuFloat(); } catch (e) {}
+      if (hadFloat) { if (savedAmH) rootEl.style.setProperty('--am-h', savedAmH); document.body.classList.add('am-floating'); }
+      if (savedTlH) rootEl.style.setProperty('--tl-h', savedTlH); else rootEl.style.removeProperty('--tl-h');
+      fe.style.width = w0;
+      window.dispatchEvent(new Event('resize'));
+      FM.scene = saved;
+      try { FM.selectLayer(savedSel || null); FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await wait(200);
     }
   });
 

@@ -1,0 +1,316 @@
+<!--DEV--><!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><!--/DEV-->
+<title>FreeMotion Intro Takes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Anton&family=Archivo+Black&family=Archivo:wght@400;500;600&family=Bebas+Neue&family=Courier+Prime:wght@400;700&family=Permanent+Marker&family=Press+Start+2P&family=Reenie+Beanie&family=Rock+Salt&family=Special+Elite&display=swap">
+<style>
+/* A clip bin: numbered takes in one column, and a player that fills the phone the way the app's launch does. */
+:root {
+  --bg: #e4e6e3; --fg: #17191a; --soft: #565b5c; --line: #c4c8c4; --row: #eff1ee; --accent: #0b7f6c; --accent-on: #ffffff; --kept: #c9efe6;
+  --display: 'Anton', Impact, 'Arial Narrow Bold', sans-serif;
+  --body: 'Archivo', -apple-system, system-ui, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1b1e20; --fg: #eceeeb; --soft: #a2a8a8; --line: #363b3d; --row: #24282a; --accent: #4fd8c0; --accent-on: #0b1d1a; --kept: #17443c; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #1b1e20; --fg: #eceeeb; --soft: #a2a8a8; --line: #363b3d; --row: #24282a; --accent: #4fd8c0; --accent-on: #0b1d1a; --kept: #17443c; color-scheme: dark }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 15px/1.45 var(--body); }
+#list { max-width: 620px; margin: 0 auto; padding-block: 22px 120px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font: 400 clamp(40px, 12vw, 58px)/1 var(--display); letter-spacing: .005em; margin: 0 0 10px; text-transform: uppercase; }
+.lede { margin: 0 0 18px; color: var(--soft); max-width: 60ch; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+#playall { display: block; width: 100%; padding: 15px 16px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-on); font-weight: 600; font-size: 17px; }
+h2 { font: 600 13px/1.2 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--soft); margin: 26px 0 8px; }
+.takes { display: grid; gap: 6px; }
+.take { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 2px 10px; background: var(--row); border-radius: 6px; padding: 10px 10px 10px 8px; }
+.take.kept { background: var(--kept); }
+.play { display: contents; }
+.no { font: 400 30px/1 var(--display); text-align: center; font-variant-numeric: tabular-nums; }
+.what { min-width: 0; text-align: left; background: none; border: 0; padding: 2px 0; }
+.what b { display: block; font-weight: 600; font-size: 16px; }
+.what em { font-style: normal; font-weight: 600; font-size: 12px; color: var(--accent-on); background: var(--accent); border-radius: 4px; padding: 1px 6px; margin-left: 4px; white-space: nowrap; }
+.what span { display: block; color: var(--soft); font-size: 14px; }
+.keep { border: 1px solid var(--line); background: transparent; border-radius: 6px; min-width: 62px; min-height: 44px; padding: 0 10px; font-weight: 500; font-size: 14px; }
+.take.kept .keep { border-color: var(--accent); color: var(--fg); font-weight: 600; }
+#picks { position: fixed; left: 0; right: 0; bottom: 0; background: var(--fg); color: var(--bg); padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; }
+#picks p { margin: 0; min-width: 0; }
+#copy { border: 1px solid currentColor; background: transparent; border-radius: 6px; min-height: 40px; padding: 0 12px; }
+
+/* The player. It always sits on black, whichever theme the list is in. */
+#player { position: fixed; inset: 0; background: #000; z-index: 20; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; }
+#stage { position: relative; overflow: hidden; }
+#bar { position: absolute; left: 0; right: 0; bottom: 0; background: #101213; color: #f2f3f1; padding: 10px max(12px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+#barinfo { display: flex; gap: 10px; align-items: baseline; margin: 0 0 8px; min-width: 0; }
+#barinfo b { font: 400 22px/1 'Anton', Impact, sans-serif; flex: none; }
+#barinfo span { min-width: 0; font-weight: 500; font-size: 14px; color: #cfd2d0; }
+#btns { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+#btns button { min-height: 46px; border-radius: 6px; border: 1px solid #454a4c; background: #1d2022; color: #f2f3f1; font-weight: 600; font-size: 14px; padding: 0 4px; }
+#btns button.on { background: #bdeee3; border-color: #bdeee3; color: #06241f; }
+#btns #bnext { background: #f2f3f1; color: #111; border-color: #f2f3f1; }
+.broke { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: #fff; background: #111; }
+
+/* Used only when checking frames. */
+#strip { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; background: #777; font: 12px monospace; color: #000; }
+#strip figure { margin: 0; }
+#strip figcaption { background: #fff; padding: 1px 4px; }
+#strip .box { position: relative; overflow: hidden; }
+</style>
+
+<main id="list">
+  <h1>Intro takes</h1>
+  <p class="lede" id="lede"></p>
+  <button id="playall" type="button">Play them all, one after another</button>
+  <div id="groups"></div>
+</main>
+<div id="picks" hidden><p id="pickstext"></p><button id="copy" type="button">Copy the numbers</button></div>
+<div id="player" hidden>
+  <div id="stage"></div>
+  <div id="bar" hidden>
+    <p id="barinfo"><b id="barno"></b><span id="barname"></span></p>
+    <div id="btns">
+      <button id="bagain" type="button">Again</button>
+      <button id="bkeep" type="button">Keep</button>
+      <button id="blist" type="button">List</button>
+      <button id="bnext" type="button">Next</button>
+    </div>
+  </div>
+</div>
+
+<script src="kit.js"></script>
+<script src="options/hand.js"></script>
+<script src="options/slapstick.js"></script>
+<script src="options/film.js"></script>
+<script src="options/type.js"></script>
+<script src="options/layers.js"></script>
+<script src="options/editor.js"></script>
+<script src="options/machines.js"></script>
+<script src="options/street.js"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const opts = FMI.options;
+  const HOLD = 0.7;
+  const RECOMMENDED = 'layers-stack';                          // the closest to his own words: the layers moving and building it
+  const FONTS = ['Abril Fatface', 'Anton', 'Archivo Black', 'Bebas Neue', 'Courier Prime', 'Permanent Marker', 'Press Start 2P', 'Reenie Beanie', 'Rock Salt', 'Special Elite'];
+  const fontsReady = Promise.all(FONTS.map((f) => document.fonts.load('40px "' + f + '"').catch(() => null)));
+
+  function kept() { try { return JSON.parse(localStorage.getItem('fm-intro-kept') || '[]'); } catch (e) { return []; } }
+  function setKept(a) { try { localStorage.setItem('fm-intro-kept', JSON.stringify(a)); } catch (e) {} mem = a; }
+  let mem = kept();
+
+  // iPhones cap canvas memory and free it late, so every canvas a take made is emptied before the next take starts.
+  let liveCanvases = [];
+  const realCreate = document.createElement.bind(document);
+  document.createElement = function (tag, o) {
+    const e = realCreate(tag, o);
+    if (String(tag).toLowerCase() === 'canvas') liveCanvases.push(e);
+    return e;
+  };
+  function freeCanvases() {
+    for (const c of liveCanvases) { c.width = 0; c.height = 0; }
+    liveCanvases = [];
+    FMI.dropCaches.forEach((drop) => drop());
+  }
+
+  // One mounted intro, on a stage of a given logical size. Returns its seek, or null when it broke.
+  function mount(o, host, w, h, dpr) {
+    host.innerHTML = '';
+    host.style.background = o.ground || '#000';
+    try {
+      const seek = o.make(host, FMI.makeKit(host, w, h, dpr));
+      return (t) => { try { seek(t); } catch (e) { console.error(o.id, e); host.innerHTML = '<div class="broke">This take broke: ' + o.id + '</div>'; } };
+    } catch (e) {
+      console.error(o.id, e);
+      host.innerHTML = '<div class="broke">This take broke: ' + o.id + '</div>';
+      return null;
+    }
+  }
+
+  // ---- Checking frames (only with a query string, so never in the published page) ----
+  const q = new URLSearchParams(location.search);
+  function stripOf(o, n, cellH, W, H, parent) {
+    const scale = cellH / H;
+    for (let i = 0; i < n; i++) {
+      const t = (o.dur * i) / (n - 1);
+      const fig = document.createElement('figure');
+      const box = document.createElement('div');
+      box.className = 'box';
+      box.style.cssText = 'width:' + W * scale + 'px;height:' + cellH + 'px';
+      const st = document.createElement('div');
+      st.style.cssText = 'position:absolute;left:0;top:0;overflow:hidden;width:' + W + 'px;height:' + H + 'px;transform-origin:0 0;transform:scale(' + scale + ')';
+      box.appendChild(st);
+      const cap = document.createElement('figcaption');
+      cap.textContent = o.id + ' ' + t.toFixed(2) + 's';
+      fig.append(box, cap);
+      parent.appendChild(fig);
+      const s = mount(o, st, W, H, 1);
+      if (s) s(t);
+    }
+  }
+  if (q.get('strip') || q.get('lane') || q.get('sheet') || q.get('o')) {
+    $('list').hidden = true;
+    fontsReady.then(() => {
+      const W = +q.get('w') || 390, H = +q.get('h') || 844;
+      if (q.get('o')) {
+        const o = opts.find((x) => x.id === q.get('o'));
+        $('player').hidden = false;
+        const st = $('stage');
+        const fit = Math.min(innerWidth / W, innerHeight / H, 1);
+        st.style.cssText = 'width:' + W + 'px;height:' + H + 'px;transform:scale(' + fit + ');flex:none';
+        const seek = mount(o, st, W, H, Math.min(devicePixelRatio || 1, 2));
+        if (q.has('t')) { seek(+q.get('t')); return; }
+        window.__fmi = { frames: 0, worst: 0, total: 0 };
+        let start = 0, last = 0;
+        (function loop(now) {
+          if (!start) { start = now; last = now; }
+          const a = performance.now();
+          seek(((now - start) / 1000) % (o.dur + HOLD));
+          const cost = performance.now() - a;
+          window.__fmi.frames++; window.__fmi.total += cost; window.__fmi.worst = Math.max(window.__fmi.worst, cost);
+          requestAnimationFrame(loop);
+        })(performance.now());
+        return;
+      }
+      const strip = document.createElement('div');
+      strip.id = 'strip';
+      document.body.appendChild(strip);
+      if (q.get('strip')) {
+        const n = +q.get('n') || 8, o = opts.find((x) => x.id === q.get('strip'));
+        const perRow = Math.ceil(n / 2);
+        const cellH = Math.min((innerHeight - 60) / 2, (innerWidth / perRow - 10) * (H / W));
+        stripOf(o, n, cellH, W, H, strip);
+      } else {
+        const list = q.get('lane') ? opts.filter((x) => x.lane === q.get('lane')) : opts;
+        const n = +q.get('n') || 5;
+        list.forEach((o) => stripOf(o, n, +q.get('cell') || 240, W, H, strip));
+      }
+      window.__fmiReady = true;
+    });
+    return;
+  }
+
+  // ---- The page he uses ----
+  $('lede').textContent = opts.length + ' different intros, none of them like the last. Tap one and it plays full screen, the way the app would open. Keep the ones you like, then tell me the numbers.';
+  const groups = $('groups');
+  let curLane = null, wrap = null;
+  opts.forEach((o, i) => {
+    if (o.lane !== curLane) {
+      curLane = o.lane;
+      const h = document.createElement('h2');
+      h.textContent = o.lane;
+      wrap = document.createElement('div');
+      wrap.className = 'takes';
+      groups.append(h, wrap);
+    }
+    const row = document.createElement('div');
+    row.className = 'take';
+    row.id = 'take-' + i;
+    const no = document.createElement('div');
+    no.className = 'no'; no.textContent = i + 1;
+    const what = document.createElement('button');
+    what.className = 'what'; what.type = 'button';
+    const b = document.createElement('b'), s = document.createElement('span');
+    b.textContent = o.name; s.textContent = o.blurb;
+    if (o.id === RECOMMENDED) { const r = document.createElement('em'); r.textContent = 'Recommended'; b.append(' ', r); }
+    if (o.id === 'type-slam') s.textContent += ' It flashes bright colours fast.';
+    what.append(b, s);
+    what.onclick = () => play(i);
+    const keep = document.createElement('button');
+    keep.className = 'keep'; keep.type = 'button';
+    keep.onclick = () => toggle(i);
+    row.append(no, what, keep);
+    wrap.appendChild(row);
+  });
+  function refresh() {
+    opts.forEach((o, i) => {
+      const on = mem.includes(o.id), row = $('take-' + i);
+      row.classList.toggle('kept', on);
+      row.querySelector('.keep').textContent = on ? 'Kept' : 'Keep';
+    });
+    const nums = opts.map((o, i) => (mem.includes(o.id) ? i + 1 : 0)).filter(Boolean);
+    $('picks').hidden = !nums.length;
+    $('pickstext').textContent = 'Tell me: ' + nums.join(', ');
+    if (cur >= 0) { const on = mem.includes(opts[cur].id); $('bkeep').textContent = on ? 'Kept' : 'Keep'; $('bkeep').classList.toggle('on', on); }
+  }
+  function toggle(i) {
+    const id = opts[i].id;
+    setKept(mem.includes(id) ? mem.filter((x) => x !== id) : mem.concat(id));
+    refresh();
+  }
+  let cur = -1, raf = 0, seek = null, start = 0, ended = false;
+  function size() {
+    const W = innerWidth, H = innerHeight;
+    if (W > 620) { const h = Math.min(H, 900), w = Math.round(h * 0.4617); return [w, h]; }
+    return [W, H];
+  }
+  function play(i) {
+    cancelAnimationFrame(raf);
+    cur = i; ended = false;
+    $('stage').innerHTML = '';
+    freeCanvases();
+    document.body.style.overflow = 'hidden';
+    $('player').hidden = false;
+    $('bar').hidden = true;
+    const [w, h] = size(), st = $('stage');
+    st.style.width = w + 'px'; st.style.height = h + 'px';
+    $('barno').textContent = i + 1;
+    $('barname').textContent = opts[i].name;
+    $('bnext').textContent = i === opts.length - 1 ? 'Done' : 'Next';
+    refresh();
+    fontsReady.then(() => {
+      if (cur !== i) return;
+      seek = mount(opts[i], st, w, h, Math.min(devicePixelRatio || 1, 2));
+      if (!seek) { $('bar').hidden = false; return; }
+      seek(0);
+      start = 0;
+      raf = requestAnimationFrame(tick);
+    });
+  }
+  function tick(now) {
+    if (!start) start = now;
+    const t = (now - start) / 1000, o = opts[cur];
+    seek(Math.min(t, o.dur));
+    if (t >= o.dur + HOLD) { ended = true; $('bar').hidden = false; return; }
+    raf = requestAnimationFrame(tick);
+  }
+  function close() { cancelAnimationFrame(raf); document.body.style.overflow = ''; $('player').hidden = true; $('stage').innerHTML = ''; freeCanvases(); const was = cur; cur = -1; if (was >= 0) $('take-' + was).scrollIntoView({ block: 'center' }); }
+  function next() { if (cur >= opts.length - 1) close(); else play(cur + 1); }
+  function prev() { if (cur > 0) play(cur - 1); }
+  $('playall').onclick = () => play(0);
+  $('bagain').onclick = () => play(cur);
+  $('bkeep').onclick = () => toggle(cur);
+  $('blist').onclick = close;
+  $('bnext').onclick = next;
+  $('copy').onclick = () => {
+    const t = $('pickstext').textContent;
+    const done = () => { $('copy').textContent = 'Copied'; };
+    const fail = () => { const r = document.createRange(); r.selectNodeContents($('pickstext')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+    try { navigator.clipboard.writeText(t).then(done, fail); } catch (e) { fail(); }
+  };
+  // A tap during a take brings the buttons up. A swipe moves between takes.
+  let dx = null, dy = 0;
+  const pl = $('player');
+  pl.addEventListener('pointerdown', (e) => { dx = e.clientX; dy = e.clientY; });
+  pl.addEventListener('pointerup', (e) => {
+    if (dx === null) return;
+    const mx = e.clientX - dx, my = e.clientY - dy;
+    dx = null;
+    if (Math.abs(mx) > 60 && Math.abs(mx) > Math.abs(my)) { if (mx < 0) next(); else prev(); return; }
+    if (!e.target.closest('#bar')) $('bar').hidden = false;
+  });
+  addEventListener('keydown', (e) => {
+    if (cur < 0) return;
+    if (e.key === 'ArrowRight') next();
+    if (e.key === 'ArrowLeft') prev();
+    if (e.key === 'Escape') close();
+    if (e.key === ' ') { e.preventDefault(); play(cur); }
+  });
+  // Only a turn of the phone restarts a take: a toolbar sliding away changes the height alone.
+  let lastW = innerWidth;
+  addEventListener('resize', () => { if (innerWidth === lastW) return; lastW = innerWidth; if (cur >= 0) play(cur); });
+  refresh();
+})();
+</script>

@@ -457,17 +457,21 @@ window.FM = window.FM || {};
          the handles never did. */
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       releaseTypingFocus(e);   // queue 690: a corner or the rotate knob lets go of a box too — before the layer is read
-      const layer = FM.selectedLayer(FM.scene);
-      if (!layer || layer.locked) return;   // lock means LOCKED — scale/rotate too, not just move
-      if (FM.collab && FM.collab.readOnly && FM.collab.readOnly()) return;   // queue 921 S7: a Viewer's handles are a locked layer's
-      if (drag) return;                     // another pointer's drag is live — don't overwrite it
       if (e.pointerType === 'touch') {
         // register in the pinch pointer cache like body touches — otherwise handle-finger + canvas-finger
         // silently became two independent drags instead of a pinch
+        /* #834 clause 18: BEFORE EVERY GUARD BELOW, as startMove does it. `if (drag) return` sat above this, and the first finger on the
+           layer has a drag live by the time the second lands, so a second finger on a corner or the knob was never counted: the pinch was
+           thrown away and the layer followed the other finger (real fingers at 380, 540,960 to 399,819 with the scale still 1). A locked
+           layer or a Viewer's is the same: the view still pinches, and startPinch decides what the pinch moves. */
         if (vpPtrs.size >= 2 && !vpPtrs.has(e.pointerId)) return;
         vpPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (vpPtrs.size === 2) { finishDrag(); startPinch(); return; }
       }
+      const layer = FM.selectedLayer(FM.scene);
+      if (!layer || layer.locked) return;   // lock means LOCKED — scale/rotate too, not just move
+      if (FM.collab && FM.collab.readOnly && FM.collab.readOnly()) return;   // queue 921 S7: a Viewer's handles are a locked layer's
+      if (drag) return;                     // another pointer's drag is live — don't overwrite it
       if (FM.playing) FM.pause();   // scale/rotate during playback used a stale centre + drifted keyframes
       const p = eventToProject(e);
       let cx = FM.evalProp(layer.transform.x, FM.time), cy = FM.evalProp(layer.transform.y, FM.time);

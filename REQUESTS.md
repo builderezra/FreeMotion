@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 5 Nov at v18.19
+> ## 📌 WHAT I NEED FROM YOU — updated 5 Nov at v18.20
 >
-> **State:** v18.19 — **your intro is rebuilt to feel hand-made (#1223): the playhead sweeps across and reveals your logo, rocks back like a hand on tape, and the name cuts in. No glow, no tagline, true black, about 2 seconds. Tell us if you want another take. Not yet tried on a real iPhone.** **Four things from you:** tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+> **State:** v18.20 — **a pinch with one finger on a corner square now resizes the layer (#834), effect option rows wrap evenly and never leave one button alone (#917), the custom colour box has a rainbow ring, and on a PC window ⋯ no longer hides under the version chip with two layers selected (#970). That last one makes the video about 40 px shorter on windows from 1227 to about 1391 px wide: say if you would rather have the height back. Not yet tried on a real phone.** **Five things from you:** **play the 25 intro takes at https://claude.ai/artifact/A4XVNiWtcoZJgXoYCG5pa1 and send the numbers you like (#1231)**; tell us if you see the opening animation now (and whether Settings → Accessibility → Motion → Auto-Play Animated Images is off); export something short with sound on your iPhone and play it in Photos (v17.89's fix); say yes if you want the free Sora font for the logo's name; and say whether sound still cuts in and out on your phone.
+>
+> v18.19 — your intro is rebuilt to feel hand-made (#1223): the playhead sweeps across and reveals your logo, rocks back like a hand on tape, and the name cuts in. No glow, no tagline, true black, about 2 seconds. Tell us if you want another take.
 >
 > v18.18 — your ⚙ cog as you asked (#1132): every block closed on open, App settings its own bar, the same ⤢ on the Editor, icons for Simple and Full, and tap the open block to close it.
 >
@@ -30092,8 +30094,7 @@ re-opened #480, which I had marked done and had not fixed.
       1. [x] Fixed. — v15.99. A keyframed path takes the new stroke at the playhead and leaves the other keyframes alone; a keyframed position is SHIFTED by the same delta the flat assignment used to overwrite.
       2. [x] A test that FAILS without the fix. — v15.99
 
-- [ ] **834 — Twenty more findings from the same hunt, seen by one reader only (hunt MEDIUM #95)** (6 Sep)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **834 — Twenty more findings from the same hunt, seen by one reader only (hunt MEDIUM #95)** (6 Sep)
       ✅ **ALL NINETEEN CHECKED, 6 Sep** (one of the twenty was a duplicate of #829). Each went to its own reader
       told to argue both sides: **15 confirmed · 1 already cured by today's fixes · 2 refuted.** In his terms:
       **STATUS 7 Sep (v16.07): every confirmed finding is fixed and proven. Two are refuted (clauses 5 and 17)
@@ -30141,14 +30142,14 @@ re-opened #480, which I had marked done and had not fixed.
       15. [x] Bulk Duplicate silently does nothing for drafts on the Templates/Elements tabs (low) ✅ v16.07 — drafts are skipped by name and the toast counts what actually copied
       16. [x] The + button's project picker on Templates/Elements offers hidden drafts and truncates to 14 in creation order (low) ✅ v16.07 — one function now answers "which projects, in what order" for both the grid and the menu, and the menu says when it is short
       17. [x] Extract audio / Remove vocals park full-fidelity PCM on the media record for the rest of the session, unbounded (low) ✅ v16.75 — measured first: Extract Audio never decodes (it duplicates the layer); the two that did are Remove vocals and Save audio as WAV, via layerAudioBuffer. A fresh decode is no longer kept; one export/reverse/audio-react already cached is still reused.
-      18. [ ] Pinch-to-resize silently fails when the second finger lands on a selection handle (low)
+      18. [x] ✅ v18.20 — Pinch-to-resize silently fails when the second finger lands on a selection handle (low)
       19. [x] A corner-handle drag does nothing on a layer whose scale keyframes to ~0 at the playhead, and silently adds 0.02 to every scale keyframe (low) ✅ v16.07 — the gesture is refused with a sentence instead of quietly lifting the whole animation off zero
       20. [x] ✅ v17.15 — The sketching bar's "Cancel" does not cancel — every stroke is already a committed layer (low)
       📋 **30 Sep — the logging chat's #993 note:** under LOOP.md rule 16 the builder can ship B for clause 20 (rename the sketching bar's Cancel to Close) and tell him "say A to change it" — which leaves only the pinch reading (clause 18) for him.
       ✅ **v17.15** (queue 834 partial): clause 20 built as B — the Sketching bar's button reads Close (its strokes are already kept); Custom shape keeps Cancel. Say “A” to make Cancel really discard. Clause 18 (the pinch) still waits on his reading.
       ✅ **UNBLOCKED 11 Oct, ~10:05 AWST — decided by the PM under his standing rule (#1130: "Go through each one and see where it's an obvious yes"); he can overrule:** the sketching bar stays Close and keeps strokes.
       📍 **28 Oct (builder):** clause 18 need not wait on him: the pinch that starts on a corner square can be measured with the real-input driver. Owed in a machine gap; nothing else changes until it is.
-
+      ✅ **CLOSED v18.20, clause 18 measured at last, and the reading of 7 Sep was wrong.** startHandle turned the second finger away with `if (drag) return`, above the third-finger line that note read. Real fingers at 380, before the fix: one on the layer then one on a corner dragged it from 540,960 to 399,819 with the scale still 1; one on a corner then another counted one finger; one on the layer then the turn knob dragged it too; one on a corner then one on the layer already pinched. Now every order pinches at 380 and 1280, with two on the layer as the control and a locked layer pinching the view. Test: 834 a pinch with a finger on a corner square. It needed no reading from his phone, which is why clause 18 no longer waits on him. Not checked on a real phone.
 - [x] **835 — Get rid of the CLIP OPTIONS / Done row on the phone.** (7 Sep, his words in full:) ✅ DONE v16.06.
       > *"Get rid of the row that says clip options and done. Make sure that menu still opens up fully and covers the
       > same area it does now but with the icons adjusted to fit it accordingly. Idk why this was even added i never
@@ -32489,7 +32490,7 @@ re-opened #480, which I had marked done and had not fixed.
       a saved one keeps its Darkest, so it looks exactly as before), and Blink's Rate reads true blinks a second (a saved 4 Hz opens
       reading 2.00 Hz and blinks at the same speed). The line above that says they were not built is from the morning of 16 Oct.
       📍 **DONE v17.52 — REMAINS OPEN only for the queue order:** an audit entry closes after his own items, and #929 is workable ahead of it (v17.54's gate).
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** Swing's second half (the entry's own "finding 5"): the pivot comes from a box clipped to the frame, so a part-off-frame layer still pivots in the wrong place. It has no number and no test. Flash, Blink and the 8 px default are in, and the catalogue controls I read are there. I did not read every one of the 54 kernels.
 - [x] **905 — Deleting a layer left the EFFECTS BROWSER open over it: a full panel of tiles that does nothing. (hunt MEDIUM #905)** (21 Sep — found by hammering, under his #860 durability brief. Not his words.) ✅ FIXED v16.25.
       **His words in #860 were "a bit broken and foggy ... you can do certain things to mess it up", and this is one of them.**
       `FM.deleteLayer` already stops the text editor, the crop tool, the point editor, the fill drag and the tracker when the
@@ -32836,8 +32837,7 @@ re-opened #480, which I had marked done and had not fixed.
          *What he would see:* When he auditions an effect with animated (keyframed) settings on a sped-up or slowed clip, the sweep he hears is out of step with the real playback and export, which sample the settings at the correct timeline time.
          *Fix sketch:* Compute scene time with the speed: `start + (currentTime - trimStart) / FM.speedAt(layer, layer.start)` for static speed, or invert FM.layerSourceAdvance for a ramp.
 
-- [ ] **917 — #912 audit: Visual issues — PHONE layout (380 / 320) — 17 findings. (hunt MEDIUM #917)** (22 Sep, found by the #912 audit workflow under his words "do a bug hunt" / "check for visual issues" — NOT his words.)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **917 — #912 audit: Visual issues — PHONE layout (380 / 320) — 17 findings. (hunt MEDIUM #917)** (22 Sep, found by the #912 audit workflow under his words "do a bug hunt" / "check for visual issues" — NOT his words.)
       **JUMPED: a container of independent findings (the #904 lesson) — each closes on its own as `queue 917 (partial)`; it must not hold the queue.** Full detail per finding (repro, evidence, both skeptics' verdicts): `audits/912-audit.json` → `visual-phone`.
       1. [x] ✅ already fixed by v16.76 (re-verified with touch emulation) [high] Home > Settings panel (gear) — In the LIGHT home look the Settings panel is still the dark-glass panel. Measured .set-panel background is rgba(12,28,37 — `380x800 home light (also 320x700 home light)` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* In the LIGHT home look the Settings panel is still the dark-glass panel. Measured .set-panel background is rgba(12,28,37,.82), which renders as muddy slate over the light page. No html[data-home="light"] rule for .set-panel/.set-group/.set-row exists anywhere. The only rules are the dark ones at the
@@ -32851,7 +32851,7 @@ re-opened #480, which I had marked done and had not fixed.
          *What he would see:* The background swatch row (.hm-bg-row, 202-214px wide) is wider than the row it sits in. In New project at 320 it ends at x=318 while .hm-fld ends at 288. The custom-colour input #hm-new-bg is clipped at the right, and .hm-dlg-scroll gets horizontal scroll (scrollWidth 291 > clientWidth 264) with a 
       6. [x] ✖ not real (re-verified: the bar is meant to float; the list scrolls out from under it) [medium] Effects browser, after picking an effect card — Picking an effect card brings up the commit bar ('Clear / Add naked / Add 1 effect'). It lands on top of the gold FAVES — `380x800 editor` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* Picking an effect card brings up the commit bar ('Clear / Add naked / Add 1 effect'). It lands on top of the gold FAVES button and covers half of it, cutting the '★ FAVES' label in two. Measured: .fxb-commit has a transparent background, z-index 4 and spans y 742-800; .fxb-favmore spans y 717-778. T
-      7. [ ] ➜ **tracked in #985** (folded in 30 Sep — the Export menu redesign re-lays these rows, so the look is chosen there) [medium] Export dialog — The Resolution and Frame rate selects are 179px wide (155px at 320), so they cut off their own value. 'Same as project — — `380x800 and 320x700 editor` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
+      7. [x] ➜ ✅ closed by #985, shipped; re-measured 5 Nov at 320: the Export dialog has no dropdowns now, and Size reads Same as project · 1080×1920 in full; **tracked in #985** (folded in 30 Sep — the Export menu redesign re-lays these rows, so the look is chosen there) [medium] Export dialog — The Resolution and Frame rate selects are 179px wide (155px at 320), so they cut off their own value. 'Same as project — — `380x800 and 320x700 editor` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* The Resolution and Frame rate selects are 179px wide (155px at 320), so they cut off their own value. 'Same as project — 1080×1920' shows as 'Same as project …' and at 320 as 'Same as proj…'. The part that tells you the actual size and fps is exactly the part that gets hidden.
       8. [x] ✅ v16.79 (before/after sent) [medium] Inspector > Position / Scale: X Y Z value boxes — The X/Y/Z value boxes (.mt-vbox-val) run out of room. At 320, even the default '540.0' and '960.0' touch the box edges, — `320x700 editor (also 380x800)` — ✔ both skeptics confirmed
          *What he would see:* The X/Y/Z value boxes (.mt-vbox-val) run out of room. At 320, even the default '540.0' and '960.0' touch the box edges, and the keyframe diamond sits on top of the '.0' (crop-n320-xyz.png). With an off-canvas value such as -1234.5 the text is clipped: scrollWidth 74 > clientWidth 59 renders '-1234.'
@@ -32871,19 +32871,19 @@ re-opened #480, which I had marked done and had not fixed.
          *What he would see:* The Resolution and Frame rate selects are different widths, so their left edges don't line up (x≈447 vs 421 in the @2x shot). The custom-colour input #hm-new-bg defaults to #000 and looks like a second copy of the Black swatch next to it, with nothing marking it as a colour picker.
       16. [x] ✅ v16.79 (before/after sent) [low] Inspector > Presets — The 'Save look + animations…' and 'Save effects only as preset' buttons are thin (about 20px tall) with small text. They — `380x800 editor` — ✔ both skeptics confirmed
          *What he would see:* The 'Save look + animations…' and 'Save effects only as preset' buttons are thin (about 20px tall) with small text. They are inset about 5px further than the search field and section labels above them. They don't match the other inspector buttons, such as the large '+ Add Effect' in Effects.
-      17. [ ] [low] Effect control rows: segmented option rows — The option rows (.fx-seg) wrap unevenly and leave one item alone on its last line. Match Grade 'Contrast only' at 380 (f — `380x800 and 320x700 editor` — ✔ both skeptics confirmed
+      17. [x] ✅ v18.20 [low] Effect control rows: segmented option rows — The option rows (.fx-seg) wrap unevenly and leave one item alone on its last line. Match Grade 'Contrast only' at 380 (f — `380x800 and 320x700 editor` — ✔ both skeptics confirmed
          *What he would see:* The option rows (.fx-seg) wrap unevenly and leave one item alone on its last line. Match Grade 'Contrast only' at 380 (fx-match.png). At 320: HSL Bands 'Custom', Squish 'Floor + ceiling' and 'Every layer' (n320-fx-hsl.png, n320-fx-squish.png). The label column ('Band', 'Walls') takes about a third o
 
       ❓ Look choices left for him (not bugs; everything is on screen and tappable): 7 — the Export dialog's Resolution / Frame rate values are cut on a phone (labels above the dropdowns, or shorter wording) → folded into #985, 30 Sep; 11b — the Add sheet is see-through glass, so the timeline shows faintly through it (more solid, or keep the glass); 15b — the custom-colour box starts black and looks like a second Black swatch (a rainbow ring like Settings' shape-colour swatch) — #918 finding 11 is the same question, asked once, here; 17 — some effect option rows leave one button alone on a second line at 320px (labels above buttons on phones).
       ~~⏸ **built out until he picks the four looks** listed just above (7, 11b, 15b, 17) — they are choices, not bugs, and every other finding here is fixed. All four are on the unblock page source.~~ — 7 folded into #985 (30 Sep); the three left are on the line below.
       ⏸ **30 Sep — BUILT OUT UNTIL HE picks the three looks left: 11b, 15b and 17** (listed above). 15b also answers #918 finding 11 — the same question, asked once, here.
       ✅ **UNBLOCKED 11 Oct, ~10:05 AWST — decided by the PM under his standing rule (#1130: "Go through each one and see where it's an obvious yes"); he can overrule:** 15b, a rainbow ring on the custom colour box; 11b keep the glass Add menu (status quo); 17 the builder’s call (even wrapping).
-- [ ] **918 — #912 audit: Visual issues — PC layout (1280 / 900) — 15 findings. (hunt MEDIUM #918)** (22 Sep, found by the #912 audit workflow under his words "do a bug hunt" / "check for visual issues" — NOT his words.)
-      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+      ✅ **CLOSED v18.20, the three picks the PM made on 11 Oct:** 15b the rainbow ring on the custom colour box, in New project and Canvas settings, on the light Home too. 11b the glass Add menu stays, no change. 17 even wrapping, and the numbers were worse than this entry said: over all 324 option rows 16 left one button alone at 380 and 76 at 320, and now none does; rows that wrap at all fell from 35 to 17 at 380 and from 97 to 31 at 320. FM.evenSeg measures each row: one that fits is untouched, one that does not gives up the label's column first, then goes in equal columns, and any one over goes first on its own line at the top. Tests: 917 15b, two 917 17. Before and after sheets went to him. Not checked on a real phone.
+- [x] **918 — #912 audit: Visual issues — PC layout (1280 / 900) — 15 findings. (hunt MEDIUM #918)** (22 Sep, found by the #912 audit workflow under his words "do a bug hunt" / "check for visual issues" — NOT his words.)
       **JUMPED: a container of independent findings (the #904 lesson) — each closes on its own as `queue 918 (partial)`; it must not hold the queue.** Full detail per finding (repro, evidence, both skeptics' verdicts): `audits/912-audit.json` → `visual-pc`.
       1. [x] ✅ already fixed by v16.76 (re-verified) [high] Home › Settings panel (light look) — With the light Home look on, the Settings panel still draws in the dark theme: dark teal panel rgba(12,28,37,.82), light — `1280x900 home light; also 900x700 home light` — ✔ both skeptics confirmed
          *What he would see:* With the light Home look on, the Settings panel still draws in the dark theme: dark teal panel rgba(12,28,37,.82), light text rgb(233,244,247), and a dark scrim over the white page. This is the exact thing Ezra asked to check ("make sure the settings menu stays light in light mode"). theme-glass.css
-      2. [ ] [high] Editor › timeline toolbar (narrow PC window) — The Layer actions button (#btn-layermenu, the copy icon) and the Back to projects button (#btn-back, <) overlap. At 900x — `900x700 editor (also 800x700)` — ✔ both skeptics confirmed
+      2. [x] ✅ v17.13 and v18.20 [high] Editor › timeline toolbar (narrow PC window) — The Layer actions button (#btn-layermenu, the copy icon) and the Back to projects button (#btn-back, <) overlap. At 900x — `900x700 editor (also 800x700)` — ✔ both skeptics confirmed
          *What he would see:* The Layer actions button (#btn-layermenu, the copy icon) and the Back to projects button (#btn-back, <) overlap. At 900x700 they sit at x 298-332 and 314-348, 18px on top of each other, and they read as one glyph. elementFromPoint in the overlap returns btn-back, so a click aimed at the layer/copy m
       3. [x] ✅ v16.79 (before/after sent) [medium] Editor › Inspector category tiles (layer selected) — Category tile labels are cut off on PC. 'Outline & Shadows' shows as 'Outline &', 'Position / Scale' as 'Position /'  — `1280x900, 900x700 and 1280x700 editor` — ✔ both skeptics confirmed
          *What he would see:* Category tile labels are cut off on PC. 'Outline & Shadows' shows as 'Outline &', 'Position / Scale' as 'Position /' and 'Customise Shape' as 'Customise'. The tops of the hidden second line show as stray marks under each label. Measured .cat-label: scrollHeight 24, clientHeight 14, overflow hidden. 
@@ -32901,7 +32901,7 @@ re-opened #480, which I had marked done and had not fixed.
          *What he would see:* The white top bar in the light look has a near-black 1px bottom border (rgb(18,32,41)) that curves round its 20px bottom corners, like a dark outline under a light card. It comes from html[data-theme="glass"] .hm-top { border-bottom: 1px solid var(--line-soft) } (theme-glass.css:256-262, --line-soft
       10. [x] ✅ v16.79 (before/after sent) [low] Editor › Layer actions menu (#btn-layermenu) — The Layer actions menu opens detached from its button. js/app.js (~line 5813) places it at r.right − 200, but the menu i — `1280x900 and 900x700 editor` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* The Layer actions menu opens detached from its button. js/app.js (~line 5813) places it at r.right − 200, but the menu is only about 151px wide, so its right edge lands 49px left of the button. At 1280 it opens over the Back chevron (menu at x 322-473, button at 488-522). At 900 it opens over the in
-      11. [ ] ➜ asked once, under **#917 15b** (the same question, 30 Sep) [low] Editor › ⚙ Canvas settings pop-up; Home › New project dialog — The custom background colour picker is a bare native input[type=color]. In Canvas settings it is a 50×27 bo — `1280x900 and 900x700 editor; home light/dark` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
+      11. [x] ✅ v18.20 ➜ asked once, under **#917 15b** (the same question, 30 Sep) [low] Editor › ⚙ Canvas settings pop-up; Home › New project dialog — The custom background colour picker is a bare native input[type=color]. In Canvas settings it is a 50×27 bo — `1280x900 and 900x700 editor; home light/dark` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* The custom background colour picker is a bare native input[type=color]. In Canvas settings it is a 50×27 box with a white frame and a black bar. Its right edge (x 1134) runs 19px past the column where the selects and values end (1115), only 6px from the card edge (1140). It is also not the same size
       12. [x] ✅ v16.79 (before/after sent) [low] Editor › Export pop-up — The Resolution and Frame rate values are cut off to 'Same as project …' in the 179px selects on the 330px card. The full — `1280x900 and 900x700 editor` — ⚠️ NOT double-checked (network drop mid-run) — re-verify before fixing
          *What he would see:* The Resolution and Frame rate values are cut off to 'Same as project …' in the 179px selects on the 330px card. The full values are 'Same as project — 1080×1920' and 'Same as project — 30 fps', so the actual size and rate never show. 'Export just this layer' (#exp-solo-btn, 'All layers') is a button
@@ -32914,6 +32914,7 @@ re-opened #480, which I had marked done and had not fixed.
 
       ❓ Left for him: 2 — at a 900px PC window Layer actions and Back overlap; this is #775, waiting on his pick for the narrow row. 11 — Canvas settings' custom colour picker is a bare native box 19px past its column; a look to choose (same as #917 15b — asked once, there, 30 Sep). 16 — NEW, found while re-checking: a v16.76 light-Home rule also darkened the editor's Canvas settings size text — ✅ fixed v16.79.
       ⏸ **BUILT OUT UNTIL HE picks** the two left above (2 — the narrow-PC row, which is #775's pick; 11 — the custom colour picker's look, asked once under #917 15b). Every other finding here is fixed.
+      ✅ **CLOSED v18.20:** finding 2 went with #979 in v17.13, and #970's test now clicks every control on the row from 900 to 1920 px with one, two and three layers selected. Finding 11 is #917 15b: the box wears the ring and ends on its column (right edge 1115, the field's 1115, at 1280), where it ran 19 px past.
 - [x] **919 — Replace Home's native pop-ups (Rename, Delete, Save as template / element, Update template, …) with FreeMotion's own dialogs that follow light/dark and animate.** (22 Sep, his answer to the #912 big-change ask, verbatim: **"Yes, make our own (Recommended)"**, to: *"Rename, Delete, Save as template and similar pop-ups on Home are the phone's built-in grey boxes. They can't follow light/dark or animate. Replace them with FreeMotion's own pop-ups?"*)
       The 13 call sites (from the #912 audit): js/home.js:1289, 1304, 1312, 1319, 1348, 1563, 1728, 1818, 1959, 1967, 2025, 2047, 2058 — `window.prompt()` / `window.confirm()`.
       **JUMPED: (22 Sep, v16.77)** #916's ten audio/export fixes were built in parallel with this and finished first, while this one was cut off half-built by the session limit. Holding finished, proven fixes behind a half-built dialog helps nothing, so v16.77 ships them. **#919 is the very next thing built** — the half-built work is on branch `fm-popups` (worktree wt/popups: js/ask.js + CSS, no tests yet).
@@ -34362,17 +34363,16 @@ re-opened #480, which I had marked done and had not fixed.
       ✅ **v17.11 — SHIPPED** (queue 969): his A (no pick came, the plan's rule) — small Help on a phone is ~half the screen with 28px margins (324×416 against big 360×780 at 380 wide); PC unchanged. Say “Help B” for the 40% version.
       ✅ **HE ANSWERED 28 Sep (#975): “you just decide what is best as long as the small version doesn't take up the whole screen and is like a box on the screen and big takes up the whole thing”** — A as shipped meets it; Notes gets the same rule under #975.
 
-- [ ] **970 — PC ~1160–1386px wide, two layers selected: the ⋯ layer-options button sits under the version chip and cannot be clicked (hunt MEDIUM #970)** (26 Sep, found by the logging chat's corners planner — NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **970 — PC ~1160–1386px wide, two layers selected: the ⋯ layer-options button sits under the version chip and cannot be clicked (hunt MEDIUM #970)** (26 Sep, found by the logging chat's corners planner — NOT his words)
       - **NEW, found by the corners planner, already on HEAD (hunt MEDIUM):** on a PC window about 1160–~1386px wide with TWO layers selected, the ⋯ layer-options button sits under the version chip and cannot be clicked. The picture is `2026-09-26-corners/finding-1280-two-selected-overlap.png`. Log it as its own hunt item.
-      1. [ ] With two layers selected at any PC width, ⋯ is fully clickable (nothing covers it).
+      1. [x] ✅ v18.20 — With two layers selected at any PC width, ⋯ is fully clickable (nothing covers it).
       🔨 **28 Sep — BUILT, HELD FOR HIS EYE** (branch fix-970, commit bebd4560 on 2d06a3f5, reviewed): the cause was #801's band threshold (1160px) measured with ONE layer selected — with two or more the group is 80px wider, so at 1180–1360 (to 1440 with sharing on) the version chip covered ⋯ (37 of 156 width × selection states had a covered control). The fix measures the widest group and drops the right-hand run into a band under the row whenever it would collide: 0 of 156 covered, and 701–899 fixed too. **But it makes the video 40px shorter at those widths** (560 → 520px tall at 1280×800), whether or not anything is selected — a visible change to his PC screen, so it waits for him. Before/after at 1280 sent 28 Sep.
       ✅ (answered 11 Oct, ~10:05 AWST, #1130) ❓ASK: A — the band under the row below ~1380px (the build; video 40px shorter there) · B — keep one row and put the band on only while two or more layers are selected (the row jumps when a second layer is shift-clicked). A recommended.
       ✅ (answered 11 Oct, ~10:05 AWST, #1130) BUILT OUT UNTIL HE picks A or B for the band.
       📋 **30 Sep — the logging chat's #993 note:** branch `fix-970` (bebd4560) is based on v17.11 — rebase it on v17.13 before merging.
       ✅ **UNBLOCKED 11 Oct, ~10:05 AWST — decided by the PM under his standing rule (#1130: "Go through each one and see where it's an obvious yes"); he can overrule:** option A (built).
       📍 **27 Oct: ported** onto v18.07 as hunt/fix970b (a build, a review, a refuter, a fold), for a later Full release. Decision input (option A stands under rule 16; he can overrule): the band is on from 1227 to about 1391 px whatever is selected, so on a 1366×768 laptop or a 1920 screen at 150 % the video is about 40 px (about 12 %) shorter; the no-height alternative is folding Group and Masking group into ⋯ above 1226 px.
-
+      ✅ **CLOSED v18.20, option A as the PM decided on 11 Oct; he can overrule it.** hunt/fix970b (reviewed, refuted and folded on v18.07 by the helper) applied cleanly and its tests pass at both widths. pcTransportRoom measures the widest layer group against the far run and sets `.t-band`. Measured at 1280x800 with two selected: before, elementFromPoint on ⋯ gave `.ver`, which force-updates the app; after, ⋯ itself, and the row no longer moves when a second layer is selected. The price is the one he was told: the video 515 to 478 tall at 1280x800, on windows from 1227 to about 1391 px whatever is selected. The picture went to him. The other way, if he prefers the height, is folding Group and Masking group into ⋯ above 1226 px.
 - [x] **971 — Collab: an edit made while a friend's phone is paused can take up to ~a minute to reach them after they come back (hunt LOW #971)** (27 Sep — found by #967's two-Chrome re-check; NOT his words)
       Measured (2 of 9 runs, two Chromes, the guest's Chrome SIGSTOPped 25 s while the owner added a layer 3 s in): the guest came back online, then went Offline again and stayed so until ~60 s, while both sides read 'connected' and the owner's send buffer grew (ctl 205→1584, pres 168→9772) — then everything flushed at once and caught up, no data lost. Looks like the SCTP data channel's retransmit backoff after a long outage, not app logic. With no edit during the pause it never happened (3/3).
       Suggested fix (the reviewer's): don't send ctl batches or presence to a member while its link is disconnected/down; flush when it recovers — so no reliable data is queued into a backed-off channel.
@@ -35293,7 +35293,7 @@ re-opened #480, which I had marked done and had not fixed.
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct (via INBOX — the PM's check of the helper's batch 3; NOT his words):** **#1000 (HIGH, stale tab overwrites newer media) / #1001 / #996 / #1003 (ChatGPT's lane):** when reviewing or building: after writeScene, skip the blob loop when `_writeFail === 'stale'` and move notePending to just after writeScene, skipping it on stale (js/storage.js:743-747, :768-800); `_stale` is only set inside writeScene, so "compute _stale first" does not work. #1001: delete a non-plain-object `fillGradient` in sanitizeUnsafeValues (:1537-1543; strict mode throws on a string); a failed import reopens the previous project with `{confirmed:true}`, or null when none was open (as restoreBackup does at :1958). #996: remove the test layer BY ID — after redo `indexOf(L)` is -1 and `splice(-1,1)` deletes a real layer. #1003: tell a read error from an absence in duplicateFrom.
       📍 **v18.09 (28 Oct): built and shipped** (codex/h1000: Codex, then a Claude review, a refuter, a fold and a check). A stale save writes no document and no file over a record; saveUnseenMedia still stores a clip whose key holds nothing and that this session never stored (an import made only in that tab), as a pointer when its shared copy is there. Not built: N1 (the pending note now lands after the document).
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** The entry declares "Not built: N1": the pending note lands after the document write (js/storage.js:1027-1031), in the same tick.
 - [ ] **1001 — An import that throws leaves an empty "Imported project" behind (hunt LOW #1001)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       📍 **DUPLICATE OF AU28-1 in #1126** (the hand-off audit, 20 Oct: the same empty "Imported project" left by a throwing import). Closes with #1126.
@@ -35301,33 +35301,30 @@ re-opened #480, which I had marked done and had not fixed.
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct:** see the note on #1000, which covers this entry too.
 
-- [ ] **1002 — A collaborator's bad edit can half-apply on the host's copy and crash its receive loop (hunt LOW #1002)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1002 — A collaborator's bad edit can half-apply on the host's copy and crash its receive loop (hunt LOW #1002)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.3
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.11 (28 Oct): shipped** (codex/h1002, folded and checked): a malformed gradient or a throwing invariant refuses the whole collab tx and puts the base back.
-
-- [ ] **1003 — Duplicate says "done" even when it could not read a clip (hunt LOW #1003)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: A collaborator's malformed gradient is dropped, and an edit that makes the host's checks throw is refused whole with the host's copy put back, so later edits still go through. Code: js/collab-host.js:708-785; js/storage.js:1975-1977. Test: 1002 a throwing invariant rolls back the whole transaction and sends a repair.
+- [x] **1003 — Duplicate says "done" even when it could not read a clip (hunt LOW #1003)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.4
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct:** see the note on #1000, which covers this entry too.
       📍 **v18.11 (28 Oct): shipped** (codex/h1002): a Duplicate that runs out of room rolls back every file it wrote and says it was space. On assembly the doc write's line (the Simple editor's, v17.45) went back byte for byte and its cause stands pending across it, so the Full-unchanged lock did not fire; test '1003 a Duplicate refused at its own document write…' covers it.
-
-- [ ] **1004 — A project file that will not open gets overwritten with a blank one (hunt LOW #1004)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: A Duplicate that cannot read a clip or runs out of room leaves no copy and says it failed, blaming storage only when storage was the cause. Code: js/storage.js:3589, 3599-3606, 3525; js/home.js:1452-1453. Test: 1003 duplicate rolls back a failed clip read but skips a genuinely absent clip.
+- [x] **1004 — A project file that will not open gets overwritten with a blank one (hunt LOW #1004)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.5
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct (via INBOX — the PM's check of the helper's batch 3; NOT his words):** **#1004 / #1005 (HIGH, corrupt doc overwritten with a blank; boot sweep deletes clips of an unreadable project) / #1006 / #1007:** refuse in open() BEFORE any teardown (right after the vanished-card check, storage.js:2494-2497); after :2524-2535 a `false` no longer means "nothing was torn down", which is what home.js:2311/2457 and storage.js:3228/3468 assume. Keep the unbind in load() for the boot path (app.js:6847-6861). Keep the corrupt copy under `fm.unreadable.<id>` and delete it in projects.remove: `fm.proj.<id>.unreadable` (VERIFIED.md §1.5) is read as a project by five scanners (storage.js:2937, :2876; medialib.js:393; collab-media.js:145, :245) and would stall the boot sweep forever. #1005: fail closed (no deletions in a boot where any fm.proj.* doc is non-empty and has no .project). #1007: also ask before reading in Settings → Restore from a backup (js/settings.js:734), one shared helper.
       📍 **v18.09 (28 Oct): built and shipped** (codex/h1004: Codex, then a Claude review, a refuter, two folds, two checks). An unreadable project is refused at open and at the boot load, its stored copy kept (fm.unreadable.<id> when it differs), the toast says what was kept; a refused landing closes to Home; template and element drafts take the same path (switchAwayTo).
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.09.** Read against the code by a review and its refuter, nothing run: A project that cannot be read is refused at open and at boot, its stored text is kept, and a blank is never saved over it. Code: js/storage.js:22-48, 1211, 3370-3373, 3751, 3841, 4076. Test: 1004 boot load unbinds an unreadable doc before a lifecycle flush.
 - [ ] **1005 — The boot cleanup deletes media that belongs to an unreadable project (hunt LOW #1005)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.6
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct:** see the note on #1004, which covers this entry too.
       📍 **v18.09 (28 Oct): built and shipped** (codex/h1004). The boot sweep keeps every unreadable doc's media and gives an unindexed one a card; its Delete asks "This project can’t be opened. Deleting it removes it for good." with Save a copy (the raw stored text, as <name> (unreadable copy).txt) and Delete. Not tested: the copy write's quiet failure (module state the suite cannot reset). Checked at 380 by its slice only.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** The entry declares "Not tested": the quiet failure of the copy write (js/storage.js:45). No test refuses that write. It also says the 380 check was by its slice only.
 - [ ] **1006 — Opening a pre-v2.25 install with a full disk deletes the only scene (hunt LOW #1006)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.7
@@ -35335,27 +35332,24 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **PM-verified 7 Oct:** see the note on #1004, which covers this entry too.
       ⏸ **HELD (28 Oct, v18.09 ships no fix):** Codex's fix was reviewed and refuted: it still loses the legacy clips at the same boot (the sweep keeps only what fm.proj.* docs name, the retry never runs again once any project exists, and on the per-origin cap the copy can never fit beside the original). VERIFIED §1.7: no real device has fm.scene (nothing has written it since v2.25). A sound fix is a move with rollback, a separate design.
 
-- [ ] **1007 — Opening a huge project file has no size warning (hunt LOW #1007)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1007 — Opening a huge project file has no size warning (hunt LOW #1007)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.8
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **PM-verified 7 Oct:** see the note on #1004, which covers this entry too.
       📍 **v18.09 (28 Oct): built and shipped** (codex/h1006: Codex, then a Claude review, a refuter, a fold and a check). readImportFile asks, with the size, before reading a file over LARGE_READ_BYTES (96 MiB, labelled MB like every size in the app), a phone warning level and never a cap; Cancel returns FM.storage.IMPORT_CANCELLED and reads nothing; a file whose JSON is just null still reaches the import and is refused there.
-
-- [ ] **1008 — Group rendering rescans the whole scene once per group, every frame (hunt LOW #1008)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.09.** Read against the code by a review and its refuter, nothing run: Import and Restore ask, showing the size, before reading a file over 96 MB and read nothing on Cancel; the write-up's optional re-ID in place was not done (reIdLayers still clones), and the warning level allows for that clone. Code: js/storage.js:2763-2776, 2791; js/settings.js:797. Test: 1007 Import project asks before reading a large file, Cancel reads nothing, a null file is not a Cancel.
+- [x] **1008 — Group rendering rescans the whole scene once per group, every frame (hunt LOW #1008)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.9
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.11 (28 Oct): shipped** (codex/h1008, review, refuter, fold, check): collectGroupUnits in one pass. Follow-up: buildGroupUnit still walked the scene per unit — #1219, built on hunt/gu1219.
-
-- [ ] **1009 — Image fills from a previous project stay in memory all session (hunt LOW #1009)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: Big projects with many styled groups find their layers in one pass over the scene each frame with the same picture, and the buildGroupUnit follow-up (#1219) has shipped too. Code: js/compositor.js:29959-29986, 30034, 30079. Test: 1008 one pass indexes 250 groups and a 50-deep nest.
+- [x] **1009 — Image fills from a previous project stay in memory all session (hunt LOW #1009)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.10
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 8 Oct — the helper's H27 (hunt/p9-leak-patches; NOT yet PM-verified) has a format-patch with a test for this (fill cache by last use):
       red on main, green patched, at both widths.
       📍 **v18.11 (28 Oct): shipped** (hunt/leak1009): a switch prunes every fill of the outgoing project; fills of the open one stay decoded. Its review's F2 (an export never waited for a fill) is #1217, built on hunt/fill2.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: Switching projects lets go of the old project's fill pictures while the open project's stay decoded, and an export waits for its fills (#1217). Code: js/compositor.js:22377-22390; js/storage.js:3420; js/exporter.js:1760. Test: 1009 fill pictures from a project he has left are released and forgotten by the cache, even a project with one fill, while the fills of the project he is in are decoded once (CONTROLS: the one fill and the 60 fills decode, a second draw decodes none again, the new project fill is answered).
 - [ ] **1010 — The no-GPU blur fallback allocates two big buffers per call (hunt LOW #1010)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md §1.11
@@ -35363,7 +35357,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 8 Oct — the helper's H27 (hunt/p9-leak-patches; NOT yet PM-verified) has a format-patch with a test for this (CPU blur buffers):
       red on main, green patched, at both widths.
       📍 **v18.11 (28 Oct): shipped** (hunt/leak1009): the CPU blur reuses one buffer; plates below about r 37 on a full-frame layer still allocate ~34-36 MB per call.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** Declared in the entry and the code comment: a no-filter plate below about r 37 on a full-frame layer still makes two new arrays of about 34-36 MB per call (js/compositor.js:2904).
 - [ ] **1011 — Reopen #671's leftover: an export that fails closes its VideoFrame only on success (js/exporter.js ~1494–1498) (hunt LOW #1011)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/VERIFIED.md (batch 1 inbox block)
@@ -35495,139 +35489,125 @@ re-opened #480, which I had marked done and had not fixed.
       Where: js/app.js:8956 (preventDefault unless inEdit at :8796 or an overlay owns the screen at :8771-8785). Layer head is a plain div at js/timeline.js:1345, eye/lock spans at :1349/:1369 · He sees: A keyboard user cannot Tab around the editor. Layer rows are not exposed to a screen reader. A/S/D, the arrows and ,/. do still move and trim clips (ChatGPT and the orchestrator both missed this) · Fix: Cycle layers only when activeElement is body or the timeline. Roving tabindex plus role/aria-label/aria-selected on .tl-head · Test: Focus #btn-export and press Tab: defaultPrevented is false and the selection is unchanged. Control: with focus on body, Tab still cycles
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.12 (28 Oct): shipped** (codex/h1017b, review, refuter, rework, check; landed as land/h1017b): Tab moves through the controls when a button has focus, and a canvas click gives Tab back to the layers — in the full editor only (the early return waits for #timeline to be visible, which Simple hides), so Simple's Tab is unchanged: #1225.
-
-- [ ] **1018 — The persistent-storage result is thrown away, so nobody can tell whether his install is protected from eviction (hunt LOW #1018)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      📍 **5 Nov (read-only review, nothing run), still open because:** The entry's own Fix line is half unbuilt: layer heads have no roving tabindex, role, aria-label or aria-selected (js/timeline.js:1408-1411), so rows are still hidden from a screen reader. Simple's Tab is tracked as #1225, nothing built.
+- [x] **1018 — The persistent-storage result is thrown away, so nobody can tell whether his install is protected from eviction (hunt LOW #1018)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 6
       Where: js/storage.js:326-333 (only call site). The quota toast warnStore is at :313-324 · He sees: Nothing visible. A diagnosis gap if projects ever vanish · Fix: Store FM.storagePersisted, then show it in the quota toast and the Labs report. Otherwise stay silent · Test: Stub persisted/persist to resolve false and assert FM.storagePersisted === false. Force a quota error: the toast mentions protection
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.12 (28 Oct): shipped** (in h1017b):FM.storagePersisted records the browser's answer; the quota warning adds that storage was not protected when it was not.
-
-- [ ] **1019 — Offline Undo/Redo steps skip the outbox op/byte cap, and acks then make the counters undercount (hunt LOW #1019)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: The app records whether the browser protected its storage, says so in the out-of-space warning when it did not, and lists it in the Labs connection report (that report line has no test). Code: js/storage.js:449-453, 439-440; js/collab-ui.js:3823. Test: 1018 refused persistence is recorded and quota warns only when protection was refused.
+- [x] **1019 — Offline Undo/Redo steps skip the outbox op/byte cap, and acks then make the counters undercount (hunt LOW #1019)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 7
       Where: js/collab-session.js:1219 (no accounting), :296-304 (accounting only in pushLocal), :913-914 (onAck subtracts every entry), limits js/collab-core.js:77 · He sees: Long outage plus repeated Undo of big steps: memory grows past the cap (reproduced at 25,200 ops against the 5000 cap). The cost is a slow resend, not data loss. ChatGPT's "medium" is too high · Fix: One enqueue(entry) helper for pushLocal, runStep and recoverOutbox. runStep honours outboxFull · Test: 1200-layer guest offline: big edit, then alternate undo/redo until past the cap. outboxFull becomes true and onOutboxFull fires. After the acks, an edit just over the cap still trips it
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.14 (29 Oct): shipped** (codex/h1019b, check folds F1 F2 N-a N-c; landed as land/h1019b): runStep counts its entry through counted() on the line after the push a Simple release wrote; the 1019 drain waits for the paced tail.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.14.** Read against the code by a review and its refuter, nothing run: A guest's offline Undo and Redo now count toward the outbox cap, are refused once it is full, and the counters return to zero after the acks. Code: js/collab-session.js:1551 (counted), :1440 (refuses when full), :187-196, :1128-1135. Test: 1019 offline undo and redo count ops and acknowledgements leave no debt (also the bytes variant).
 - [ ] **1020 — The held-message queue is uncapped while frozen or busy. On the owner it fills at the peers' rate (hunt LOW #1020)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 8
       Where: js/collab-session.js:117, :625 (owner), :817 (guest), :1282-1291 (drain) · He sees: Honest use: negligible. A buggy or hostile Editor during a long export could grow the owner's memory without limit · Fix: Cap by count and bytes. Past the cap, drop and resync from host.base · Test: Owner with FM._exporting=true, feed Editor txs past the cap: S._queued() stays at or below the cap. After unfreeze the live doc hashes equal to base
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.14 (29 Oct): shipped** (in h1019b): the owner holds one sequence while frozen; a guest that overflows keeps acks and control and asks again from the first gap's seq (hello and a reload both use it); the owner test refills the guest pace through S._txRefill.
-
-- [ ] **1021 — The New project, Export, Canvas and export-progress dialogs have no role=dialog, aria-modal or name, and export progress and completion are silent (hunt LOW #1021)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      📍 **5 Nov (read-only review, nothing run), still open because:** Once a guest has overflowed, non-document messages skip the cap (js/collab-session.js:234, :243). Acks, role and settings stay bounded, but a hostile host could still grow the queue during a freeze with other message types. No test covers this.
+- [x] **1021 — The New project, Export, Canvas and export-progress dialogs have no role=dialog, aria-modal or name, and export progress and completion are silent (hunt LOW #1021)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 9
       Where: index.html:711, 792, 795, 837, 957; js/app.js ~6142/6170/6200 (status text), ~6244 (ready card, no focus) · He sees: Screen reader only: the dialogs are not announced, and export progress and "Done" are never spoken · Fix: Markup: role, aria-modal, aria-labelledby (give the titles ids). #export-status role=status with throttled milestones. #export-bar role=progressbar. Focus the ready card · Test: A static DOM test for the four ids. An export test: the live text says Done when #export-ready unhides, and focus is inside it
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.13 (28 Oct): shipped** (codex/a11y, review, refuter, rework a11yb, check, folds, refuter; landed as land/a11yb): the four dialogs carry role=dialog, aria-modal and a name; export progress is a progressbar with a hidden status line spoken about once a second, its result at once; a second export starts at Preparing.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.13.** Read against the code by a review and its refuter, nothing run: A screen reader now hears the four dialogs by name, export progress about once a second and at 100, and focus lands on Save on the ready card. Code: index.html:751, :832, :836, :850, :888, :1077; js/app.js:7106-7115, :7371-7372. Test: 1021 dialogs have modal names and the export ready card receives focus.
 - [ ] **1022 — No focus trap and no focus return on those three dialogs (hunt LOW #1022)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 10
       Where: js/app.js:5720-5727, :5861-5864, :7100-7140, :8240-8300; js/home.js:3035, :3259 · He sees: Keyboard: Tab walks the editor behind the Export scrim, and closing the dialog drops focus · Fix: One FM.modalFocus(dialog, opener) helper: inert the siblings, focus the first control, restore the opener · Test: Open Export from #btn-export: focus is inside, the editor is inert. On close, focus is back on #btn-export. Mutate the restore line
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.13 (28 Oct): shipped** (in a11yb): FM.modalFocus moves focus in, traps Tab, makes what is behind inert (toasts and asks stay live) and returns focus to the opener on close.
-
-- [ ] **1023 — Ordinary toasts (244 call sites, the app's main error channel) are not announced (hunt LOW #1023)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      📍 **5 Nov (read-only review, nothing run), still open because:** GIF and PNG-frame exports call showExportReady with no opener (js/app.js:7175, :7177; MP4 passes it at :7180), so closing their ready card drops focus to the page instead of returning to Export. From reading only, and no test covers it.
+- [x] **1023 — Ordinary toasts (244 call sites, the app's main error channel) are not announced (hunt LOW #1023)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 11
       Where: index.html:638; js/app.js:1393-1396 (strips role) · He sees: Screen reader: "storage full" and similar messages are silent · Fix: A permanent visually hidden #toast-sr role=status, written on the next frame. Not on #toast itself, because the tappable branch swaps its role · Test: FM.toast('hello') puts the text in #toast-sr. The tappable path keeps role=status
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.13 (28 Oct): shipped** (in a11yb): every toast is also written to a hidden status line; a relabelled progress toast is spoken at most once a second, a different message at once.
-
-- [ ] **1024 — The keyframe ◆ buttons are named just "◆" and expose no state (hunt LOW #1024)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.13.** Read against the code by a review and its refuter, nothing run: Every toast is also written to a hidden status line that a screen reader announces, and a relabelled progress toast speaks at most once a second. Code: index.html:672; js/app.js:1617-1624, :1812-1813. Test: 1023 a toast is also written to the hidden status line and tappable toasts keep their role.
+- [x] **1024 — The keyframe ◆ buttons are named just "◆" and expose no state (hunt LOW #1024)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 12
       Where: js/inspector.js:1137-1138, 1346-1347, 1378-1379, 1408-1409 (these lines may shift: inspector.js is modified in the tree) · He sees: Screen reader hears "◆" with no parameter and no state. There are three states, so plain aria-pressed is not enough · Fix: A single helper that sets an aria-label from the state and the parameter ("Add Blur keyframe at playhead") · Test: The label contains "Animate" before the click and "Remove"/"keyframe" after it (re-acquire the button). One control from each builder
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.13 (28 Oct): shipped** (in a11yb): the keyframe buttons are named for their setting and say keyed / not keyed / keyed here.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.13.** Read against the code by a review and its refuter, nothing run: Each keyframe button now says its setting and state, such as Animate Radius, Add Radius keyframe at playhead, or Remove Radius keyframe. Code: js/inspector.js:19-26 (used by all 14 builders), :7738; js/app.js:790, :3007. Test: 1024 every keyframe row builder names its parameter and all three states.
 - [ ] **1025 — Glass-theme --text-faint is about 4.0:1 (needs 4.5) (hunt LOW #1025)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 13
       Where: Tokens in theme-glass.css; light-Home override theme-glass.css:1125 (#7d8798 on #f7f9fc = 3.44); .cat-num opacity styles.css (hidden on touch at :1129) · He sees: Small secondary labels are a bit faint. ChatGPT's 2.58 is for the dark theme, which no longer exists (js/settings.js:16, :123). "High" was wrong · Fix: Lighten to about #7593a0 and darken the light override to about #66707f. Design rule: show him before and after (about 66 uses) · Test: Computed colour composited over the nearest opaque background gives a ratio of at least 4.5
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
 
-- [ ] **1026 — Home tabs don't expose which tab is selected (hunt LOW #1026)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1026 — Home tabs don't expose which tab is selected (hunt LOW #1026)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 14
       Where: index.html:697-703; js/home.js:2540 (class only), :3061 · He sees: Screen reader can't hear which tab is on. home.js:2849-2852 already does aria-pressed for the aspect buttons · Fix: Set aria-pressed (or aria-selected plus role=tab) next to the class toggle · Test: Click Templates: it is true and the other three are false
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.13 (28 Oct): shipped** (in a11yb): the Home tabs carry aria-pressed.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.13.** Read against the code by a review and its refuter, nothing run: A screen reader now hears which Home tab is on through aria-pressed. Code: js/home.js:2865. Test: 1026 clicking Templates exposes one selected Home tab and three unselected tabs.
 - [ ] **1027 — Keyframe diamonds are pointer-only. No keyboard way to read a keyframe's time or retime it (hunt LOW #1027)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 15
       Where: js/timeline.js:2663-2671; partial path via the inspector ◆ (js/inspector.js:1137-1139) and frame stepping · He sees: Keyboard users can add and delete keyframes at the playhead but not move one · Fix: Previous/next keyframe shortcuts plus a modifier nudge that reuses the drag's retime code · Test: Next-key goes to 0.5 s. The nudge moves the key by 1/fps with its value unchanged
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
 
-- [ ] **1028 — The preview canvas has no accessible name (hunt LOW #1028)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1028 — The preview canvas has no accessible name (hunt LOW #1028)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 16
       Where: index.html:414 · He sees: Screen reader announces nothing for the main surface · Fix: role="img" aria-label="Video preview" · Test: The aria-label is non-empty and the role is img
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.13 (28 Oct): shipped** (in a11yb): the preview canvas is role=img, named Video preview.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.13.** Read against the code by a review and its refuter, nothing run: The preview canvas is announced as an image named Video preview. Code: index.html:427. Test: 1028 the main preview canvas exposes an image role and a name.
 - [ ] **1029 — Long project names are cut off on one line with no tooltip (hunt LOW #1029)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 17
       Where: styles.css:5504; js/home.js:1371, 1989, 2088, 2196 (aria-label has the full name at :1360) · He sees: A long name shows "…". A visual change, so draw options first · Fix: Two-line clamp and/or a title · Test: A 60-character name shows two lines or the title equals the full name
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
 
-- [ ] **1030 — Comment "x min ago" mixes the host's clock with the viewer's (hunt LOW #1030)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1030 — Comment "x min ago" mixes the host's clock with the viewer's (hunt LOW #1030)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 19
       Where: js/collab-host.js:532-533; js/collab-comments.js:79-85; the pong's hc (js/collab-session.js:617) is never read · He sees: Only with a device clock that is manually wrong. Cosmetic · Fix: Estimate hostOffset from pongs and use it in ago() · Test: Guest clock 3 h behind: a fresh comment reads "just now"
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.12 (28 Oct): shipped** (in h1017b): comment times use the host's clock offset measured from a pong.
-
-- [ ] **1031 — GIF and PNG-frame exports never offer the share sheet (hunt LOW #1031)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: Once a pong has arrived, a guest whose clock is wrong sees comment ages in host time, so a fresh comment reads just now. Code: js/collab-session.js:1007-1012; js/collab-comments.js:79-91, :213, :231. Test: 1030 a guest three hours ahead or behind reads and posts comments in host time after a pong.
+- [x] **1031 — GIF and PNG-frame exports never offer the share sheet (hunt LOW #1031)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 20
       Where: js/exporter.js:1730, :1800 (plain download()) · He sees: On iPhone a GIF lands in Files, not Photos · Fix: Route GIF through the ready card and deliver() · Test: Stub canShare/share: runGif offers share
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.12 (28 Oct): shipped** (in h1017b): GIF and PNG-frame exports end on the ready card with Save and Share.
-
-- [ ] **1032 — One smooth scroll ignores reduced motion (hunt LOW #1032)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: GIF and PNG-frame exports now end on the ready card, and Save opens the share sheet where the device offers it, otherwise it downloads. Code: js/app.js:7175, :7177; js/exporter.js:2527-2533, :2621-2627. Test: 1031 GIF and PNG frames ready cards share their files and download without file sharing.
+- [x] **1032 — One smooth scroll ignores reduced motion (hunt LOW #1032)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §1b item 21
       Where: js/settings.js:463 · He sees: A single short scroll in Settings · Fix: Use behavior: reduce ? 'auto' : 'smooth' · Test: Stubbed matchMedia: scrollIntoView gets 'auto'
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.13 (28 Oct): shipped** (in a11yb): the reports jump scrolls with behavior auto under reduced motion.
-
-- [ ] **1033 — Test gap: one unreadable file in a multi-file pick is named and the rest still import (hunt LOW #1033)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.13.** Read against the code by a review and its refuter, nothing run: The jump to reports in Settings no longer animates when reduced motion is on. Code: js/settings.js:497-498. Test: 1032 the reports jump uses auto for reduced motion and smooth otherwise.
+- [x] **1033 — Test gap: one unreadable file in a multi-file pick is named and the rest still import (hunt LOW #1033)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 2
       📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
-
-- [ ] **1034 — Test gap: a GIF over the memory budget is shrunk but drawn full size, and freed on removal (hunt LOW #1034)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: When one picked file cannot be read, the message names it and the files around it still import. Code: js/app.js:6332-6358. Test: 1033 an unreadable file is named and the files on either side still import.
+- [x] **1034 — Test gap: a GIF over the memory budget is shrunk but drawn full size, and freed on removal (hunt LOW #1034)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 3
       📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
-
-- [ ] **1035 — Test gap (needs app code): the mic going away mid-take — voice-rec listens for no track ended / mute (hunt LOW #1035)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: A GIF over the memory budget keeps every frame at a smaller decode, still fills its original size on screen, and frees its frames when removed. Code: js/media.js:842, :994, :1003, :59, :982-985; js/compositor.js:25040-25043. Test: 1034 a GIF over budget keeps every frame, draws at its original size and closes every frame on removal.
+- [x] **1035 — Test gap (needs app code): the mic going away mid-take — voice-rec listens for no track ended / mute (hunt LOW #1035)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 4
       📍 **v18.13 (28 Oct): shipped** (codex/h1035, review, refuter, rework h1035b, check): voice-rec listens for the track ending or muting; a take whose microphone goes lands in review with the bytes it has and the line The microphone stopped; muted shows while recording.
-
-- [ ] **1036 — Test gap: rotating 390 → 844 crosses into Studio and keeps the selection, panel and playhead (hunt LOW #1036)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.13.** Read against the code by a review and its refuter, nothing run: If the microphone goes during a take, the take lands in review with what it recorded and says the microphone stopped, and a muted mic shows the no-sound line while recording. Code: js/voice-rec.js:253-275, :664, :686, :709, :72. Test: 1035 ended mid-take keeps the recorded bytes in review and says the microphone stopped (also the mute, close and retake tests).
+- [x] **1036 — Test gap: rotating 390 → 844 crosses into Studio and keeps the selection, panel and playhead (hunt LOW #1036)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 5
       📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: Nothing changes for him: a test now guards that rotating a phone into Studio keeps the selection, the open panel and the playhead. Code: tests/tests.js:193287. Test: 1036 rotating 390 to 844 enters Studio and keeps selection, panel and playhead.
 - [ ] **1037 — Test gap: a JPEG with an EXIF rotation tag shows upright everywhere, including export (hunt LOW #1037)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 6
       📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** The entry says upright everywhere, and the test misses the clip strip. Test-gaps-VETTED rank 6 names canvas, clip strip and Home thumbnail, and says a change to createImageBitmap options would rotate his photos unseen. The only image path using createImageBitmap is _extractStrip (frames.js:459), and the test never builds or reads stripFrames. Its 'thumbnail' is FM.renderThumb, which draws m.el directly (compositor.js:31617), the same source as the preview. 'exif' appears nowhere else in the suite, so that regression would pass.
 - [ ] **1038 — Test gap: a custom font travels inside a template or project file (hunt LOW #1038)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch2/VERIFIED.md §4 item 7
       📍 **v18.12 (28 Oct): shipped** (codex/h1033b): a guard test; it passes on v18.11 by design, and its mutations prove it.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** The template half of the gap is still open. VERIFIED §4 item 7 names the queue 343 template test, which passes with an empty fonts list, and it still does (tests.js:81172 only checks that a map exists). The new test serialises a project with serializeScene and relabels it kind:'template' for import. It never drives FM.templates.exportFile with a font, and no other test does. The embedFonts comment (storage.js:1330-1333) warns of exactly this drift. App code does embed (exportFile uses serializeWith, :4256); only the guard is missing. The loader is also stubbed, so no real font reopens.
 - [x] **1039 — ChatGPT batch 3 verified — 18 new issues: logged as #1040–#1057** (1 Oct, via INBOX — the logging chat's verification of ChatGPT's read-only reports; NOT his words) ✅ **LOGGED**
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 01 Oct 2026, ~21:19 AWST — VERIFIED: ChatGPT batch 3 (12 reports) gives 18 confirmed new issues (2 MEDIUM, 16 LOW). Log them as hunt items
@@ -35677,53 +35657,46 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 3
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
 
-- [ ] **1043 — Picking or dropping several media files makes one undo step per file (hunt LOW #1043)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1043 — Picking or dropping several media files makes one undo step per file (hunt LOW #1043)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 4
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.11 (28 Oct): shipped** (hunt/undo1043, folded and checked): several files picked together are one undo step, with an Opening N files… toast.
-
-- [ ] **1044 — Project and template download filenames drop every non-ASCII character (hunt LOW #1044)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: Several files picked or dropped together now land as one undo step, and a slow batch says Opening N files. Code: js/app.js:6317. Test: 1043 three photos picked together are ONE undo step: one Undo takes all three out and one Redo brings all three back (CONTROL: one photo alone is one step).
+- [x] **1044 — Project and template download filenames drop every non-ASCII character (hunt LOW #1044)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 5
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.12 (28 Oct): shipped** (codex/h1044b, landed as land/h1044b): safeFileName keeps every letter and strips only what a file name cannot hold; main's newer Save a copy (#1005) names through it too, with its own test.
-
-- [ ] **1045 — Saving a preset on a full phone says "saved" when nothing was saved (hunt LOW #1045)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: Project and template files keep every letter of their name; video and PNG-frame exports still strip non-ASCII (app.js:4824, 6934, 7144; export-card.js:441), but this entry did not ask about those. Code: js/storage.js:2472. Test: 1044 project and template downloads keep Unicode filenames.
+- [x] **1045 — Saving a preset on a full phone says "saved" when nothing was saved (hunt LOW #1045)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 6
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.12 (28 Oct): shipped** (in h1044b): a preset save on full storage says it was not saved.
-
-- [ ] **1046 — An AI Director build, re-roll or refine that deletes a layer takes 2+ undo presses (hunt LOW #1046)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: On full storage both preset saves return false, so only Storage full shows, and rename writes before it moves tags. Code: js/inspector.js:417. Test: 1045 full storage refuses presets without claiming success.
+- [x] **1046 — An AI Director build, re-roll or refine that deletes a layer takes 2+ undo presses (hunt LOW #1046)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 7
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.11 (28 Oct): shipped** (hunt/undo1043): an AI Director build or Refine that removes a layer is one undo step; one stopped before it changed anything is none.
-
-- [ ] **1047 — Effects sheet: picking Mask first, then another effect, makes 2 undo steps (hunt LOW #1047)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: A Director build, re-roll or Refine that removes a layer is one undo step because applyOps mutes itself; the test drives Refine and build, re-roll shares the same mute. Code: js/ai-ops.js:184. Test: 1046 an AI Director Refine or build that removes a layer is ONE undo step: one Undo puts every layer back as it was (CONTROL: a Refine that removes nothing is one step).
+- [x] **1047 — Effects sheet: picking Mask first, then another effect, makes 2 undo steps (hunt LOW #1047)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 8
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.11 (28 Oct): shipped** (hunt/undo1043): Mask then another effect from the Effects sheet is one step each.
-
-- [ ] **1048 — A long unbroken text run wraps in quadratic time and freezes the page (hunt LOW #1048)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: Mask then another effect from the Effects sheet is one undo step, and one Undo takes both off. Code: js/fx-browser.js:537. Test: 1047 Effects sheet: Mask picked first, then Gaussian Blur, then Add is ONE undo step, and one Undo takes both off (CONTROL: Gaussian Blur first, then Mask, is one step).
+- [x] **1048 — A long unbroken text run wraps in quadratic time and freezes the page (hunt LOW #1048)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 9
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.11 (28 Oct): shipped** (codex/h1048, folded and checked): under 512 visible characters a run wraps by today's loop; past it a binary search, handing the tail back to the old walk.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: A very long unbroken run of text wraps by binary search instead of freezing the page; ordinary text keeps its old cuts. Code: js/compositor.js:30982. Test: 1048 wrapping preserves old cuts and measures fewer than forty times the input characters.
 - [ ] **1049 — The boot sweep and project delete still fail open on unreadable template, element or font indexes and on failed checkpoint reads (hunt LOW #1049)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 10
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
 
-- [ ] **1050 — Recent colours: each window overwrites the other's picks (hunt LOW #1050)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1050 — Recent colours: each window overwrites the other's picks (hunt LOW #1050)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 11
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.12 (28 Oct): shipped** (in h1044b): recent colours merge what is stored with what this window picked.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: Each colour pick re-reads the stored list, so two windows no longer wipe each other's recent colours. Code: js/inspector.js:259. Test: 1050 recent colours merge another window at pick time.
 - [ ] **1051 — A project that is a plain value ("project":"x") passes the import gate and throws (hunt LOW #1051)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 12
@@ -35739,18 +35712,16 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 14
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
 
-- [ ] **1054 — The ? shortcut sheet: the 1-5 row has no "nothing selected" condition, the 1-9 card keys are missing, and Ctrl+Y and Backspace are not listed (hunt LOW #1054)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1054 — The ? shortcut sheet: the 1-5 row has no "nothing selected" condition, the 1-9 card keys are missing, and Ctrl+Y and Backspace are not listed (hunt LOW #1054)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 15
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.12 (28 Oct): shipped** (in h1044b): the ? sheet: the 1-5 row says Nothing selected, the 1-9 card keys are listed, Ctrl+Y and Delete / Backspace are right.
-
-- [ ] **1055 — Pixelate's Block aspect and Edges do nothing on an adjustment layer (hunt LOW #1055)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: The ? sheet now says Nothing selected on the 1-5 row and lists the 1-9 card keys, Delete / Backspace and Ctrl+Y. Code: js/shortcuts.js:16. Test: 1054 shortcut sheet names selection conditions and alternate keys.
+- [x] **1055 — Pixelate's Block aspect and Edges do nothing on an adjustment layer (hunt LOW #1055)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 16
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.13 (28 Oct): shipped** (codex/h1055, review, refuter, rework h1055b, check, folds F1-F4): the adjustment Pixelate reads Block aspect and Edges; FM.adjNeedsFrame renders the whole comp for Soft or aspect above 100.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.13.** Read against the code by a review and its refuter, nothing run: Block aspect and Edges now change the picture on an adjustment layer and match the clip path, including when zoomed in (js/compositor.js:29651). Code: js/compositor.js:29743. Test: 1055 Pixelate Block aspect and Edges on an adjustment match the layer and change the picture.
 - [x] **1056 — Mosaic's Average mode gives cutout edges a dark fringe (hunt LOW #1056)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       ✅ **SHIPPED IN v17.44** (20 Oct hand-off audit): Mosaic Average's fringe fixed in v17.44.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch3/VERIFIED.md §1 item 17
@@ -35789,13 +35760,12 @@ re-opened #480, which I had marked done and had not fixed.
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 2
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.11 (28 Oct): shipped** (codex/h1048): sw.js activate and the version chip touch only freemotion- caches and FreeMotion's own registration.
-
-- [ ] **1061 — A hold speed key that drops sharply leaves a lasting footage offset, and a split changes it (hunt LOW #1061)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      📍 **5 Nov (read-only review, nothing run), still open because:** FreeMotion's half is done (sw.js:56, index.html:1470). The frequent direction is not: Listing Kit and Spin need the same prefix filter in their own sw.js, in repos outside this one, and no entry tracks that.
+- [x] **1061 — A hold speed key that drops sharply leaves a lasting footage offset, and a split changes it (hunt LOW #1061)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 3
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.13 (28 Oct): shipped** (in h1055b): a hold key inside a speed window joins the integration grid at its left limit; a ramp with no hold keeps the Float32 table byte for byte.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.13.** Read against the code by a review and its refuter, nothing run: A sharp hold-key speed drop leaves no lasting footage offset, and a split no longer changes it; ramps with no hold keep the old table. Code: js/scene.js:1098. Test: 1061 Hold speed drop integrates exactly and a split preserves footage time.
 - [ ] **1062 — Motion Blur (Footage), Pixel Motion style: the smear is built at 480 px in preview, 720 px in export (hunt LOW #1062)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 4
@@ -35803,18 +35773,16 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **28 Oct (builder):** not built in codex/h1055 (its review kept it out). Building the preview's smear at export's 720 px costs speed, so it needs a timing at 380 px first.
       📍 **v18.13 (28 Oct): not built** — h1055 dropped it; it stays open.
 
-- [ ] **1063 — Dragging the rotate handle across the left of the pivot makes the rotation box jump by 360 (hunt LOW #1063)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1063 — Dragging the rotate handle across the left of the pivot makes the rotation box jump by 360 (hunt LOW #1063)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 5
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.11 (28 Oct): shipped** (codex/h1048): the rotate drag adds up its steps, so crossing the left of the pivot no longer jumps by 360. The pinch twist had the same fault: #1215, built on hunt/twist.
-
-- [ ] **1064 — ship.sh's cache-buster gate misses every ?v= file that isn't js/*.js or the two stylesheets (hunt LOW #1064)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: The rotate drag adds up wrapped steps, so crossing the left of the pivot no longer jumps the rotation box by 360. Code: js/canvas-edit.js:729. Test: 1063 rotate handle crosses the left pivot in two-degree steps without a full-turn jump.
+- [x] **1064 — ship.sh's cache-buster gate misses every ?v= file that isn't js/*.js or the two stylesheets (hunt LOW #1064)** (1 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): tools/design/chatgpt-tasks/reports/batch4/VERIFIED.md §1 item 6
       JUMPED: assigned to ChatGPT via the PM (5 Oct lane split) — its fix arrives as a verified commit; land it, don't rebuild it
       📍 **v18.13 (28 Oct): shipped** (codex/h1064, review, refuter, rework h1064b, check; F1 folded at landing): ship.sh bumps every stale ?v= it can, inner references first, and refuses only the ones it cannot.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.13.** Read against the code by a review and its refuter, nothing run: ship.sh now checks every ?v= file, including vendor, manifest, icons, wordmark and fx-art, bumps what it can and refuses the rest. Code: tools/ship.sh:520. Test: tools/test-port.sh: cache-busters cover every versioned src and href in index.html (#1064), and inner cache-busters settle before index.html (#1064).
 - [x] **1065 — Remove the ? (keyboard shortcuts) help button from the MOBILE version (PC keeps its own)** (2 Oct, ~09:31 AWST, via INBOX — his words)
       Moved from INBOX.md whole, as the logging chat wrote it:
       ### 02 Oct 2026, ~09:31 AWST — Remove the ? (keyboard shortcuts) help button from mobile
@@ -35854,14 +35822,13 @@ re-opened #480, which I had marked done and had not fixed.
       1065 test is red, with it all green. Two effect-preview tests that were red in that same pass (277+390 sheet preview, the
       Presets live tile) were GREEN in both of those runs — intermittent, not caused by this; watched in the re-ship.
 
-- [ ] **1066 — ship.sh does not check whether live (ssh/main) has moved on — it runs the ~90-minute suite and then fails at the push; refuse before the suite starts (hunt MEDIUM #1066)** (5 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+- [x] **1066 — ship.sh does not check whether live (ssh/main) has moved on — it runs the ~90-minute suite and then fails at the push; refuse before the suite starts (hunt MEDIUM #1066)** (5 Oct — a ChatGPT finding, verified against the code by the logging chat; NOT his words)
       Full write-up (file:line, what he sees, fix direction, test idea): the 5 Oct HANDOFF block (in #980)
       Structural, his rule: git fetch ssh first, refuse if ssh/main is not an ancestor of HEAD ("live has moved on: pull first"). Measured 5 Oct: live was f7716576 (ChatGPT's v17.22), the tree 28104a3e.
       🔨 5 Oct (shipped with v17.23's tooling): the gate is in tools/ship.sh, right after the mutation check — fetch, refuse if ssh/main is not an ancestor of HEAD, warn and carry on when offline. Checked both ways by hand (this tree passes; 28104a3e would be refused). Left open for one thing: a self-test that keeps it honest, like _classify.py's.
       🔨 **6 Oct ~03:55 — the gate now also refuses when GitHub cannot be reached** (it used to warn and carry on). github.com dropped out from this Mac twice in one night (03:14, 03:50 — ssh and https both), and a ship launched into that spends ~90 minutes for a push that cannot land; a fetch with no limit also HANGS rather than fails. The fetch now gets 15 s to connect (measured against the real outage: exit 128 after 15 s) and an unreachable remote stops the ship before anything runs; FM_SHIP_OFFLINE=1 commits locally anyway. Ships with the next release.
       📍 **v18.13 (28 Oct): shipped** (in h1064b): ship.sh refuses before the suite when ssh/main is not an ancestor, with the no-stash steps in its reason.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.13.** Read against the code by a review and its refuter, nothing run: A ship fetches first and refuses before any suite if live has moved on or GitHub cannot be reached; the self-test the entry waited for now exists. Code: tools/ship.sh:134. Test: tools/test-port.sh: live must be an ancestor before a suite can run (#1066).
 - [x] **1067 — PM lane split: the verified ChatGPT bug lists are ChatGPT's to fix; the builder lands its verified commits** (5 Oct, ~16:15 AWST, via INBOX — the logging chat as project manager; NOT his words) ✅ **LOGGED**
       Moved from INBOX.md whole:
       ### 05 Oct 2026, ~16:15 AWST — PM lane split: the VERIFIED ChatGPT bug lists are now ChatGPT's to fix; you land them, you don't build them
@@ -36149,7 +36116,7 @@ re-opened #480, which I had marked done and had not fixed.
 - [ ] **1080 — A song or file is added AT THE PLAYHEAD (hunt LOW #1080)** (6 Oct — the PM's tutorial review against v17.23; NOT his words. Evidence: tools/design/tutorials/REVIEW.md, check-*.json)
       **STATUS: 🟢 READY — nothing is stopping this**
       7. **A song or file is added AT THE PLAYHEAD** (app.js:3055), clamped to the project end. Someone who has just watched their video to the end gets the song starting after the video. Options: start audio at 0 when the playhead is at the project end, or show where it landed.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** Not built. js/app.js:3419 still places a song at the playhead clamped to the project end; neither option (start audio at 0, or show where it landed) exists, and there is no test.
 - [ ] **1081 — PC export: Save may open the OS Share window with no way to save the MP4 on Windows (hunt MEDIUM #1081)** (6 Oct, ~03:55 — the PM's tutorial review, round 3; NOT his words; PLAUSIBLE, not yet run)
       **STATUS: 🟢 READY — nothing is stopping this**
       1. **(hunt MEDIUM) PC Save → share sheet. PLAUSIBLE, not yet run.** `deliver()` (exporter.js:66-75) calls `navigator.share` whenever `canShare({files})` is true, and nothing checks whether the device is a phone. The ready card has only Save and Discard (app.js:6305-6320). Desktop Chrome/Edge on Windows and Safari on Mac support sharing files, so a PC user likely gets the OS Share window instead of a download, and on Windows that window has no "save to disk". It matters more now that he is moving to a Windows laptop.
@@ -36381,7 +36348,7 @@ re-opened #480, which I had marked done and had not fixed.
 
       **Also seen:** two headless Chromes from about 10 h ago (pids 27887/27888, `--disable-gpu --hide-scrollbars`, profiles `tmp.5Y5UB…`/`tmp.2clbC…`, parents 27132/27133 still alive, ~54 MB, idle). These look like a hung screenshot helper. Clean them up after the ship.
       🔨 7 Oct ~00:55: built into tests/_cdp.py in release/v17.24 (unshipped). MEASURED, INCONCLUSIVE: secd ran 31–84% with the flag and 34–84% without, against 63–98% with no test Chrome at all — other apps drive most of it; kept as harmless (921 S0 12/12 both ways). Still to do: tests/_kbdevice.py, tests/_shot.sh, tools/shot.py. The two 10-hour-old headless Chromes (pids 27887/27888) are NOT the builder's: their parents are `./shot.sh terremoto …` and `./shot.sh pandc …` screenshots of outside sites, so they were left for whoever ran them.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** tests/_kbdevice.py:366 and tests/_shot.sh:32 still launch Chrome without --use-mock-keychain; only _cdp.py and tools/shot.py (via _cdp.launch) have it. The measurement was inconclusive, and no test guards the flag.
 - [ ] **1095 — Phone and PC: after picking from the effects browser, ~335 full-size (1080x1920) canvases stay alive — about 2.2 GB — so a long editing session can run a phone out of memory (hunt HIGH #1095)** (7 Oct — found by the #1085 suite-memory measurement on the Mac; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Measured per test with a heap walk: test #1279 ('every tile in the browser picks instead of applying') left 335 detached 1080x1920 canvases plus ~115 thumbnails of 192x192 (memory-infra canvas 2072 MB, malloc 2.4 GB). It is the app holding them, not the test — a user browsing effects for a while would hit the same. Also: the compositor's scratch canvases (_tiA/_tiB, _thA/_thB, _wpPool) and fx-thumbs' caches only grow (#1089 overlaps). Evidence: tests/1085-memory-measurement.json on branch suite-mem-fix (LOCAL to the Mac until pushed). Fix with a test that fails first (count the live canvases after browsing N effects), then measure a long session on his phone.
@@ -36554,7 +36521,7 @@ re-opened #480, which I had marked done and had not fixed.
         1. Typing the number a slider already shows changed the value, because 26 shipped defaults sit between the slider's step notches.
         2. Paste look put a text-only effect from inside a copied filter onto a shape.
         3. Multi-select Align moved LOCKED clips, and moved group bars without the layers inside them.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** Two of three not fixed in the code. Number entry: js/inspector.js:1259 still rounds a typed value to the step (Threshold def 0.25, step 0.02 becomes 0.26). Paste look: js/inspector.js:3859 uses supportsLayer on the filter type, not fitToLayer. No test carries item 1108; branch hunt/audit-inspector looks unlanded.
 - [ ] **1109 — Undo, working with friends, export and phone swipes: 8 more bugs found, fixes ready (hunt MEDIUM #7)** (9 Oct, ~22:30 AWST, via INBOX — the helper's deep audit, filed by the logger; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole:
@@ -36782,7 +36749,7 @@ re-opened #480, which I had marked done and had not fixed.
         - landing-order.md is updated. **It was built on v17.34, so rebuild it on v17.35 or later before landing.**
       - **`plans/helper-31` and `plans/helper-32`:** plans for the next 10 oldest open items.
       ✅ **v17.38 (11 Oct) SHIPPED AU24's FM.canvasGestureLive**, inside release 2.1 (#980). Left open only so the oldest-first gate can close it in turn.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** AU23 defects 2 and 3 are still in the code: cleanName (js/collab-ui.js:101, same in js/collab-comments.js:60) does not strip bidi overrides and its .slice can cut an emoji in half. No test covers either; branch hunt/audit-unread-1 looks unlanded.
 - [ ] **1119 — In Full too, a lost mouse release leaves a canvas drag live (the layer follows the mouse); the relay socket drops on a burst of valid packets; the duplicate-comment ordering gap is fixed (hunt MEDIUM #16)** (10 Oct, ~14:50 AWST, via INBOX — a helper finding, filed by the logger; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole:
@@ -37932,7 +37899,7 @@ re-opened #480, which I had marked done and had not fixed.
       > - #1093: a ~50 MP cap in collab-media.js writeRecord.
       📍 **Also logged 19 Oct (bug hunt 4, not built):** #12 the old feathered layer mask's shared canvas is UNREACHABLE today — that mask is the innermost pass in drawLayer, so nothing can nest inside it (its fixer had to force nesting by wrapping FM.isLayerVisibleAt to get a red test); pool it only if the dispatch order ever changes. #6 right-to-left text under an animator stays logged (not cheap).
       ✅ **DONE in v17.74 (bughunt2 #10; was: STILL OPEN — the next agent job when the PM says go, ~22:00, 18 Oct):** the exporter warms Audio Drive's sound data for the HEAD half of a split clip only (`js/exporter.js` ~1148), so in an export the tail half's audio-driven motion is dead. A real export bug in the same family; red-first, then its own release.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** Simple's fade (spine-edit.js:2177) ignores fadeInLead/fadeOutTail; Duplicate still has no wait on running saves (storage.js:3507, #6); hidden matte source still blanks the layer (hunt 4 #11, pinned at tests.js:66631); groupNeedsUnit ignores a static tilt (compositor.js:29949); other declared for-later items (Controller tilt, re-parent mirror, N0 bracket rule, Word spacing on mixed-direction Word Highlight, v17.90's Simple lines) have no recorded fix; NEEDS YOU stamp is stale.
 - [ ] **1177 — Standing instruction, 18 Oct (verbatim): go overtime and use the whole weekly before the reset** (18 Oct ~12:15, via INBOX from the logging chat)
       **STATUS: 📌 NOTE — nothing to build**
       **His words, verbatim:** "alright get builder working overtime now, weeks about to reset. burn all usage in smart ways tho"
@@ -38136,7 +38103,7 @@ re-opened #480, which I had marked done and had not fixed.
       - `966 opts14 every new control at its default draws what the effect drew without it — each of the round’s effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the ` — colorbalance at 0.61 s: a new one draws up to 1 levels away from the same one without skin / mix · colorbalance at 0.61 s on a half-size plate: a new one draws up to 1 levels away from the same one without skin / mix · highlightsshadows at 0.61 s on a half-siz
       Next, in order: (1) does `ctx.filter` apply in headless Windows Chrome at all (one probe page: blur a square, read pixels) — if not, whether it does in his real Windows Chrome; (2) is the 2D canvas deterministic there (render the same frame twice, compare); (3) only then decide which tests need a Windows tolerance and which differences are real.
       📍 **v18.00 (24 Oct): a probe shipped** — tests/probe-1183-ctxfilter.html (open it in his Windows Chrome: it shows whether blur and the other canvas filters move pixels, whether a filtered frame repeats byte for byte, whether text draws, and the GPU) and two tests ('1183 canvas filters change pixels …' and '1183 the stack-order control parts each draw something here …'). The builder's reading of the stack-order red: its CONTROL is pixelate plus mirror, neither of which is a canvas filter, so the red pointed at the Ag7 text layer drawing nothing in headless Windows Chrome, not at ctx.filter. Next: run both tests through tests/_win_suite.py --linux-control, then decide which of the 24 need a Windows tolerance.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** The 24 Windows-only reds are still unexplained; no recorded run of the two probe tests through tests/_win_suite.py; the decision on which need a Windows tolerance and which are real differences is not made.
 - [ ] **1184 — Three tests cannot see their fault in Windows Chrome: the emoji flag (Windows has no flag pictures), the airport-sign people at 48 px (Windows fonts merge the legs), and the 904 Trail control (hunt LOW #1184)** (23 Oct — found by #1098's first whole run, `tests/_win_suite.py --linux-control` on the v17.98 tree, Windows Chrome 156 headless at 1280 px, red there and green in this machine's Linux Chrome; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       - `904: Noise grain size scales to the preview plate, and a new Trail shows copies on a full-frame clip` — control: at 100% a full-frame Trail already shows copies, so this test cannot see the defect
@@ -38227,7 +38194,7 @@ re-opened #480, which I had marked done and had not fixed.
       > - For the zombie, the clip the user sees stall depends on the reloaded guest asking for a different file first (orderKey follows the playhead and selection). The endless 25 ms loop per dead job happens every time.
       > - No bytes are lost. It is a stall with a status that lies. 'Export anyway' still works.
       📍 **v18.07 (26 Oct): built and shipped** (hunt/cm1186: a build, a review, a refuter, a fold, a fold check, each folded). Owner side: M.forget ends sends to the member who left and re-asks what they were sending (requeue, no try counted). Guest side: M.relink on the owner's welcome, and reachable() refuses a want on a new link before that welcome (so a late T_START can no longer delete stored parts). serve() ends a job on a stopped job or a replaced/closed link; at the cap a want for another file replaces the stalest job. A no-progress backstop, LIMITS.STALL 60 s (MEASURE: pending: the throttled 921 S8 run and a two-Chrome SIGSTOP run), paused during this side's own part writes and after a device pause; the sender's window is at least the link grace. The two 921 S4 hand-clears are gone. Follow-ups, not built: F4 (a stalled guest can hold both slots), F5, F6, F8, N4, the card's low % after a sweep, and a guest link change that never gets a welcome holding its queued wants; the relink queue kick is untested.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** LIMITS.STALL 60 s is still MEASURE: pending (collab-media.js:71), and the test's GAP/WIN are stand-ins; no two-Chrome SIGSTOP check recorded; follow-ups F4, F5, F6, F8, N4 not built; card's low % after a sweep; a guest link change with no welcome holds queued wants (reachable, :855); relink queue kick untested.
 - [ ] **1187 — Opening another project, or a new build reloading the app, frees a clip whose file never reached storage (a voice take is lost for good) (hunt MEDIUM #1187)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 2 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38267,7 +38234,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **26 Oct: built, folded, all 4 mutations CAUGHT — and PARKED, not shipped.** Its slices hung in suite order: 921 S2/S3 project-switch tests each sat at their 180 s budget (one alone passes on both trees), most likely an earlier test leaving a clip whose file can never be stored, so the new question waits on an answer no test gives. Parked as v107-assembled.patch (#1190 rides with it). Before shipping: bisect the leak with ?after/upto slices, and check the real-user side the PM raised: a file that can NEVER be stored (storage permanently full) must not make every project switch ask the clip question forever.
       📍 **27 Oct, carried from #1192's review (MEDIUM):** a switch while the Undo's restore is still fetching, or while its save is still writing, and on relaunch hydrate, reportPending and pruneOrphans' missing prev: exemption can delete his original. Check it against this entry's unlandedFiles() wait when it lands.
       📍 **v18.09 (28 Oct): built and shipped** (hunt/dl52d: a build, a review, a refuter, two folds, two checks; titles renamed from hunt dl2). unlandedFiles() names the clips a save would write whose revision has not landed; open, create, confirmLeave and fmSwTry ask through landOrAsk, which waits only while saves move: each whole-file put (idbPut, idbPutSharedOnce) carries its own deadline from its own start (LAND_STALL_MS 10 s floor + bytes at LAND_FLOOR_BPMS, MEASURE: pending), spent once; a return from the background moves live deadlines by the hidden time. 35 of 36 mutations CAUGHT; SURVIVED: `let due = Math.max(_savesMovedAt, since) + LAND_STALL_MS;` → `since + …` (the movement stamp matters only for a save moving with no whole-file put in flight, a case no leg builds). Follow-ups, not built: a leg for that case; K5 (a gap rule and a ceiling on the hidden-look stamp; a page that reports hidden for ever never asks), M2 (a put handed to a stalled store still buys silence: count only the oldest put), M3 (template and element packs keep files under media; putBegin reads only val.file), M4, M5, M7, no leg proves idbPutSharedOnce's count, the hydrate after a switch is unbounded (F1), F4, F6, medialib.js ~220 and index.html ~1337 unbounded waits.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** LAND_STALL_MS and LAND_FLOOR_BPMS still MEASURE: pending (storage.js:876); K5, M2, M3, M4, M5, M7, F1 (hydrate unbounded), F4, F6 not built; unbounded waits at medialib.js ~220 and index.html ~1337; one surviving mutation with no leg; #1192's carried Undo-restore check not recorded, and the sweep still has no prev: exemption.
 - [ ] **1188 — Replace media: Undo cannot bring the original back, and nothing says so (hunt MEDIUM #1188)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 3 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38313,7 +38280,7 @@ re-opened #480, which I had marked done and had not fixed.
       > - A clip reused from a lib: shared copy keeps that copy.
       📍 **v18.07 (26 Oct): built and shipped** (hunt/rp1188: a build, a review, a refuter, a fold, a fold check). swapInMedia keeps the original from storage when it is not in memory (only at the layer's own revision), asks before replacing when the keep is refused ('Keep it' leaves the clip and its saved file as they were), keeps quiet where the question speaks for it, and takePrevMedia answers from memory and writes the slot back (quietly) when another window's boot sweep took it. HELD, Simple's own call: in the Simple editor a refused keep still replaces without asking (spine-edit passes simple: true). Not built: #3 (goes with #1191's checked read), #4, #7; N1 (fitReplacedMedia with no outgoing record) for the PM.
       📍 **v18.10 (28 Oct): N1 shipped** (codex/n1188: Codex, then a Claude review, a refuter, my edits, a check, a fold): with nothing of the clip in memory, Replace media fits from the stored original's size, read from its header (storedSize: a video's metadata, an image's load, 8 s deadline, MEASURE: pending), never through the full loaders, and only when the new file has a picture. F3 still HELD for a Simple release.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** Held (F3): in Simple a refused keep still replaces without asking (app.js:5440, spine-edit.js:2332); #3 not built, app.js:5447 still uses the non-strict read; #4 and #7 not built; redo-side stash result still discarded (app.js:5247); STORED_SIZE_MS still MEASURE: pending (app.js:5308).
 - [ ] **1189 — Restore from a backup or importing a .fmotion.json throws away footage this device cannot open, then tells him it was never in the file (hunt MEDIUM #1189)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 4 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38345,9 +38312,8 @@ re-opened #480, which I had marked done and had not fixed.
       > - The real routes are a Safari-unplayable container from the PC, an unconverted HEIC sent to the PC, and the 20 s metadata timer firing after an iOS suspension mid-restore. In that last case the clip would have played on the next launch.
       > - The original backup file is never damaged. What is lost is this device's copy.
       📍 **v18.08 (27 Oct): built and shipped** (hunt/rs1189: a build, a review, a refuter, a fold, a fold check). applyScene stores a clip's bytes (quietly, under FM._mediaBusy) before decoding it, and records the rev in _stored, so a clip this device cannot open keeps its file and the next hydrate tries it again. The import's sentence splits the unopened clips into "kept with the project" and "could not be kept here — keep the file", and a data: embed whose fetch throws is no longer called absent. KNOWN GAP (the check's finding 1, MEDIUM, not a regression on v18.07): when a clip that decodes was refused in the same import, the save's retry toast replaces the not-kept sentence a moment after it goes up; the fix is to await the import's save before the Project imported toast and add a clause from the PENDING_KEY note. Not built: 5 (another window's boot sweep during the decode loop) and 6 (the quiet restore's final summary carries no count).
-
-- [ ] **1190 — Export: the overlay can stick for good with a dead Cancel when an IndexedDB delete aborts while committing (hunt LOW #1190)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 5 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
-      **STATUS: 🟢 READY — nothing is stopping this**
+      📍 **5 Nov (read-only review, nothing run), still open because:** KNOWN GAP: the import's save is not awaited before its toast (storage.js:2747-2749), so a retry toast can replace the not-kept sentence; #5 another window's boot sweep during the decode loop; #6 the restore's final summary carries no count (settings.js:803).
+- [x] **1190 — Export: the overlay can stick for good with a dead Cancel when an IndexedDB delete aborts while committing (hunt LOW #1190)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 5 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       Moved from INBOX.md whole (the PM's write-up, not his words):
       (The hunt's shared notes, for all nine, are in #1186.)
       > ITEM 5 [LOW] Export: the overlay can stick for good with a dead Cancel when an IndexedDB delete aborts while committing
@@ -38373,9 +38339,8 @@ re-opened #480, which I had marked done and had not fixed.
       > - It is rated low and is a one-line fix, so it can ride along with any release.
       📍 **26 Oct ~01:10: building now** in hunt/dl52 (one lane, the PM's pace), items 5 and 2 together, then a review and a refuter.
       📍 **v18.09 (28 Oct): built and shipped** (in hunt/dl52d, titles renamed from hunt dl5): idbDel settles on tx.onabort, so clearing an export's resume parts ends instead of hanging, and Cancel works.
-
-- [ ] **1191 — Media library: tapping a tile while storage cannot be read deletes the tile, and sometimes the file (hunt LOW #1191)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 6 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.09.** Read against the code by a review and its refuter, nothing run: If a storage delete aborts during an export, the export now ends and its overlay goes when he taps Cancel, with no reload needed. Code: js/storage.js:464. Test: 1190 an IndexedDB delete that aborts while committing still settles: clearing an export’s resume parts ends instead of hanging, which is what kept the export overlay up with a dead Cancel (CONTROL: the same abort on a put already makes writeMedia answer false).
+- [x] **1191 — Media library: tapping a tile while storage cannot be read deletes the tile, and sometimes the file (hunt LOW #1191)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 6 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       Moved from INBOX.md whole (the PM's write-up, not his words):
       (The hunt's shared notes, for all nine, are in #1186.)
       > ITEM 6 [LOW] Media library: tapping a tile while storage cannot be read deletes the tile, and sometimes the file
@@ -38402,9 +38367,8 @@ re-opened #480, which I had marked done and had not fixed.
       > - It needs a real IndexedDB fault at the moment of the tap, but that fault is a long-running WebKit bug on exactly his setup.
       > - A tile whose key is a lib: shared copy never loses its file. The file is erased only when no project still names the key. Otherwise only the tile is lost.
       📍 **v18.08 (27 Oct): built and shipped** (hunt/ml1191: a build, a review, a refuter, a fold, a fold check). readMedia(key, { strict: true }) rejects when storage cannot be opened, a transaction cannot be made or the request fails, and answers null only when nothing is stored; the Media library's use() reads strictly (both reads, and the re-read after the running saves), so a failed read says Could not open that file and keeps the tile, and a row with no key is dropped at once. Every other readMedia caller is unchanged. Follow-up: the strict-read test can go red falsely if a real autosave takes the failed open under load (it can never be falsely green).
-
-- [ ] **1192 — Undo of a Replace media, then a quick switch to another app: the undone file comes back on relaunch (hunt LOW #1192)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 7 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.08.** Read against the code by a review and its refuter, nothing run: A tap while storage cannot be read now says Could not open that file and keeps the tile and the file; a tile that was never stored is still dropped. Code: js/medialib.js:219 (and :229, :214); js/storage.js:1155, 300-312. Test: 1191 a tile tapped while storage cannot be opened keeps its tile and its file, and says it could not open it.
+- [x] **1192 — Undo of a Replace media, then a quick switch to another app: the undone file comes back on relaunch (hunt LOW #1192)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 7 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       Moved from INBOX.md whole (the PM's write-up, not his words):
       (The hunt's shared notes, for all nine, are in #1186.)
       > ITEM 7 [LOW] Undo of a Replace media, then a quick switch to another app: the undone file comes back on relaunch
@@ -38428,7 +38392,7 @@ re-opened #480, which I had marked done and had not fixed.
       > - A new-build reload is safe, because fmSwTry runs a real save() first. Going Home does not flush.
       > - The original is probably still in his Photos or Files, so he can re-replace it by hand.
       📍 **v18.08 (27 Oct): built and shipped** (hunt/ml1191). restoreReplacedOnce marks the project dirty and saves at once, like every other path that changes a clip's file, so a hidden-page flushSync can no longer cancel the save that writes the original back. Only the app-switch half: the project-switch half is #1187's. Follow-up (the review's finding 1, MEDIUM, carried to #1187): a switch while the restore is still fetching, or while its save is still writing, and on relaunch hydrate, reportPending and pruneOrphans' missing prev: exemption can still delete his original.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.08.** Read against the code by a review and its refuter, nothing run: Undo of a Replace followed by a quick app switch now saves his original at once; a switch during the restore itself is recorded under #1187 (g4.md line 38), not here. Code: js/app.js:5261. Test: 1192 Undo of a Replace media, then a switch to another app at once, still saves the original and not the file he undid.
 - [ ] **1193 — Voice-over: if adding the take fails, the recording is thrown away — PLAUSIBLE (hunt LOW #1193)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 8 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38456,7 +38420,7 @@ re-opened #480, which I had marked done and had not fixed.
       > - So the only route is an iOS suspension straddling the 20 s timer just after tapping Add, or an addMediaLayer throw, which would be a general import bug.
       > - No hang either way. It is cheap insurance: build it when the queue reaches it, not ahead of the CONFIRMED items.
       📍 **v18.08 (27 Oct): built and shipped** (hunt/cj1193: a build, a review, a refuter, a fold, a fold check). The panel still closes at once, and if the add fails, reviewAgain puts the same take back in review (its listeners re-armed, Add enabled, a line saying it did not go in) and pauses the project if it was playing, so Lands at names the frame it will land on; an add that threw after its layer went in does not come back for a second copy. Follow-up: when the take did land, the toast still says Could not add the recording.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** Its declared follow-up is still there: when the take did land, voice-rec.js:814 still shows Could not add the recording.
 - [ ] **1194 — Collab: a join whose link closes during the copy setup shows 'Live' over a dead copy — PLAUSIBLE (hunt LOW #1194)** (26 Oct, ~00:40 AWST — the PM's read-only hang / data-loss hunt, item 9 of 9, via INBOX; started by his "use up my usage its about to reset, go hard")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38486,7 +38450,7 @@ re-opened #480, which I had marked done and had not fixed.
       > - Low priority, and a two-line fix.
       📍 **v18.08 (27 Oct): built and shipped** (hunt/cj1193). C.join and C.reopen mark the session offline when the link closed during the copy setup (ep.open === false on an active session), down the existing markOffline → onOffline path, which shows Offline and starts the reconnect; nothing changes in setLink. Follow-up (its refuter): a join the guest CANCELS in the tail still opens the copy with a You're in toast; built as codex/rjoin, for v18.10.
       📍 **v18.10 (28 Oct): the refuter's follow-up shipped** (codex/rjoin, folded and checked): a join the guest cancels in its tail does not open the copy (or closes it the way a failed join does), and the You're in toast shows only while the session is online.
-
+      📍 **5 Nov (read-only review, nothing run), still open because:** Swap-code joins miss the v18.10 rule: guestJoin (collab-ui.js:4157) passes no cancelled, and its You're in toast at :4119 has no online check. The 921 S6 test covers the relay path only.
 - [ ] **1195 — Duplicating, importing or pasting a layer wipes Neon Outline / Tiles / Timecode's 'source' choice (hunt HIGH #1195)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 1 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38515,8 +38479,8 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. One correction: Timecode defaults to 0, so it is only hit after he picked Timeline time. On a flat shape or text, Both and Layer look about the same, so the visible damage is on photos and videos. Neon Outline and Tiles are hit at their DEFAULTS.
       >
       📍 **Where it is (28 Oct):** codex/h2a 13c8d822 (with item 3), built, NOT reviewed or run yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 1' until it lands, then #1195.
-- [ ] **1196 — Phone (no ctx.filter): a blur at 0 switches the whole grade off, and every blur draws a dark halo on transparency (hunt HIGH #1196)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 2 of 20, via INBOX; started by his "go way way harder")
-      **STATUS: 🟢 READY — nothing is stopping this**
+      📍 **5 Nov (read-only review, nothing run), still open because:** Not on main. storage.js:2871, app.js:5150-5152 and inspector.js:528 still clear a numeric source, there is no FM.fxHasLayerRef and no test. Only built on codex/h2a, never reviewed.
+- [x] **1196 — Phone (no ctx.filter): a blur at 0 switches the whole grade off, and every blur draws a dark halo on transparency (hunt HIGH #1196)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 2 of 20, via INBOX; started by his "go way way harder")
       Moved from INBOX.md whole (the PM's write-up, not his words):
       (The hunt's shared notes, for all twenty, are in #1195.)
       > ITEM 2 [HIGH] Phone (no ctx.filter): a blur at 0 switches the whole grade off, and every blur draws a dark halo on transparency
@@ -38538,7 +38502,7 @@ re-opened #480, which I had marked done and had not fixed.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 2' until it lands, then #1196.
       📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: On the phone a Blur at 0 no longer switches off the grade beside it, and blurred titles and shapes lose the dark ring. Code: js/compositor.js:15417-15418. Test: 1196 on a device without ctx.filter a Blur at 0 keeps the layer grade, and a blur over transparency draws no dark ring.
 - [ ] **1197 — Keyframe 'is there a key here' still uses 1 ms in seven places: a button deletes a key it offers to add, edits land on a twin key, and an ease goes on the wrong move (hunt HIGH #1197)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 3 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38565,6 +38529,7 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: KF-1 and KF-2 were confirmed with high confidence by all four votes. KF-5 was confirmed at medium confidence. Its 'intended' refuter notes that the graph draws the segment the playhead is inside, so the graph and playback agree with each other. What breaks is only which move a lit diamond edits. It stays low on its own and rides along because the fix is the same token. Refuters also note that the 1e-3 values were copied from before queue 683, which only unified hasKeyframeAt and toggleKeyframe.
       >
       📍 **Where it is (28 Oct):** codex/h2a 13c8d822 (with item 1), built, NOT reviewed or run yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 3' until it lands, then #1197.
+      📍 **5 Nov (read-only review, nothing run), still open because:** Not on main. inspector.js:4814, 3574, 5477, point-edit.js:90, 107, mask-tool.js:115 and graph-editor.js:156, 163, 164 still use 1e-3, and there is no test. Only built on codex/h2a, never reviewed.
 - [ ] **1198 — Captions > Detect speech > 'The whole project' puts his typed captions on the wrong speech, or drops them (hunt HIGH #1198)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 4 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38583,6 +38548,7 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. The scope choice is remembered for the session (FM._capScope), so once picked it becomes the default. The only project-mode detect test uses start 0 and empty captions.
       >
       📍 **Where it is (28 Oct):** codex/h2b 3cd8818b (with item 5), built, NOT reviewed or run yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 4' until it lands, then #1198.
+      📍 **5 Nov (read-only review, nothing run), still open because:** Not on main. captions.js:343 still compares new cues with old ones unshifted, and there is no test. Only built on codex/h2b, never reviewed.
 - [ ] **1199 — Undo then tapping another clip (or a no-move slider tap) silently destroys Redo; a ghost step makes Undo look dead (hunt MEDIUM #1199)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 5 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38603,6 +38569,7 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. The 690 test (tests.js:99010-99013) already treats a selection-only step as a bug, but only checks an unchanged selection. The impact is the lost redo tail; project content is never damaged.
       >
       📍 **Where it is (28 Oct):** codex/h2b 3cd8818b (with item 4), built, NOT reviewed or run yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 5' until it lands, then #1199.
+      📍 **5 Nov (read-only review, nothing run), still open because:** Not on main. history.js:347 is still an exact compare, history.js:147-150 still re-stamps from the parsed string, and there is no test. Only built on codex/h2b, never reviewed.
 - [ ] **1200 — Hold-to-reset Speed (and Paste look with Speed ticked) leaves the clip length, so half of it freezes on one frame (hunt MEDIUM #1200)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 6 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38625,8 +38592,8 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. openPasteStyle pre-ticks every tile that is not blocked, so Speed is ticked by default. A reversed clip reset this way freezes its first half instead. A sped-up clip loses the end of its footage.
       >
       📍 **Where it is (28 Oct):** queued for Codex as h2c (with items 9 and 10). The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 6' until it lands, then #1200.
-- [ ] **1201 — Export 'Only one layer' on a member of a styled group exports the whole group, with the other members' pictures but not their sound (hunt MEDIUM #1201)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 7 of 20, via INBOX; started by his "go way way harder")
-      **STATUS: 🟢 READY — nothing is stopping this**
+      📍 **5 Nov (read-only review, nothing run), still open because:** Never built on main. inspector.js:3844 still just assigns speed, there is no FM.resetClipSpeed and no test. It was only queued as h2c.
+- [x] **1201 — Export 'Only one layer' on a member of a styled group exports the whole group, with the other members' pictures but not their sound (hunt MEDIUM #1201)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 7 of 20, via INBOX; started by his "go way way harder")
       Moved from INBOX.md whole (the PM's write-up, not his words):
       (The hunt's shared notes, for all twenty, are in #1195.)
       > ITEM 7 [MEDIUM] Export 'Only one layer' on a member of a styled group exports the whole group, with the other members' pictures but not their sound
@@ -38643,7 +38610,7 @@ re-opened #480, which I had marked done and had not fixed.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 7' until it lands, then #1201.
       📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: Exporting one member of a styled group now gives that member alone, without its group's look or the other members' pictures, and exporting the group itself still draws the group. Code: js/compositor.js:30729-30733, 30752, 30782. Test: 1201 Export only this layer on a member of a styled group draws that member alone, at full strength, without the other member (CONTROLS: a plain group does the same; exporting the styled group itself draws both members at the group look).
 - [ ] **1202 — This-frame PNG draws a reversed (or frame-blend slow-mo) clip from the small preview cache (hunt MEDIUM #1202)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 8 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38663,6 +38630,7 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. The toolbar's #btn-snapshot sits in a hidden div, but the Export dialog's 'This frame (PNG)' reaches the same path. frames.js:133-139 already calls this exact softness a bug for the other export paths.
       >
       📍 **Where it is (28 Oct):** queued for Codex as h2e. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 8' until it lands, then #1202.
+      📍 **5 Nov (read-only review, nothing run), still open because:** Never built on main. compositor.js:25049 still reads m.frameCache for the still, there is no FM.captureFrameAt, stillClipFrames or _stillCache, and no test. It was only queued as h2e.
 - [ ] **1203 — Cancelling a keyframe drag after it crossed a neighbour leaves the list unsorted, freezing the animation (hunt MEDIUM #1203)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 9 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38679,6 +38647,7 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. Correction to the finding: history.restore runs sanitizeKeyframes, which sorts, so an undo or redo heals it, but the abort itself triggers neither. The trigger is rare on the PC, needing a stale-gesture recovery or a window blur. Medium severity or a little lower.
       >
       📍 **Where it is (28 Oct):** queued for Codex as h2c (with items 6 and 10). The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 9' until it lands, then #1203.
+      📍 **5 Nov (read-only review, nothing run), still open because:** Never built on main. timeline.js:626 still restores the times without sorting, and no test covers an abort after crossing a neighbour. It was only queued as h2c.
 - [ ] **1204 — After splitting a parent, a child that outlives it snaps back to the pose at the cut (hunt MEDIUM #1204)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 10 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38698,6 +38667,7 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. At exactly t = 10 the inclusive end still returns the tail, so the snap starts just after 10 s. It only shows if the parent is still moving after the cut.
       >
       📍 **Where it is (28 Oct):** queued for Codex as h2c (with items 6 and 9). The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 10' until it lands, then #1204.
+      📍 **5 Nov (read-only review, nothing run), still open because:** Never built on main. scene.js:912 clipAt still ends in return p, and no test has an item number for it. It was only queued as h2c.
 - [ ] **1205 — Split mid-morph freezes a roto mask before the cut, then jumps back and races after it (hunt MEDIUM #1205)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 11 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38717,6 +38687,7 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. The 'snap to the key before' comment only guards against evalProp turning arrays into strings. It never claims the snap is correct, and 914.7 calls this same snap-back a bug for point sets.
       >
       📍 **Where it is (28 Oct):** queued for Codex as h2d (with items 12 and 13). The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 11' until it lands, then #1205.
+      📍 **5 Nov (read-only review, nothing run), still open because:** Never built. js/app.js:5827-5831 still seams a mask path on the key before the cut (no evalMaskPath branch). No test.
 - [ ] **1206 — Word Highlight (Spoken timing) races or lags after a split caption track is trimmed (hunt MEDIUM #1206)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 12 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38737,6 +38708,7 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. Correction: with stored `words`, the tail half after a head trim is fully wrong, not partly. Remaining doubt with this fix: a cue whose edge he dragged away from the cut, and which a later trim pushes back past the clip edge, would honour its old mark again. That is rare.
       >
       📍 **Where it is (28 Oct):** queued for Codex as h2d (with items 11 and 13). The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 12' until it lands, then #1206.
+      📍 **5 Nov (read-only review, nothing run), still open because:** Never built. shiftCues (js/timeline.js:4426) still leaves animFrom/animTo behind, and hlCueSpan (js/compositor.js:5068-5069) still needs the exact edge. No test.
 - [ ] **1207 — Text Reverse and Type-On cut emoji and flags in half (boxes on screen and in the export) (hunt MEDIUM #1207)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 13 of 20, via INBOX; started by his "go way way harder")
       **STATUS: 🟢 READY — nothing is stopping this**
       Moved from INBOX.md whole (the PM's write-up, not his words):
@@ -38755,8 +38727,8 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. Caveat: Text Reverse's boxes show in the preview at once, so that half is a visible wrong render rather than a silent one. The Type-On flicker is brief while editing but ends up in the MP4. A static Progress of 0.5 does not hit it for these strings.
       >
       📍 **Where it is (28 Oct):** queued for Codex as h2d (with items 11 and 12). The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 13' until it lands, then #1207.
-- [ ] **1208 — Dragging the easing curve's handles leaves a Bounce/Elastic on the other channel (hunt MEDIUM #1208)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 14 of 20, via INBOX; started by his "go way way harder")
-      **STATUS: 🟢 READY — nothing is stopping this**
+      📍 **5 Nov (read-only review, nothing run), still open because:** Never built. js/compositor.js:3745, :3763 and :3846 still cut by code unit, not FM._graphemes. No test.
+- [x] **1208 — Dragging the easing curve's handles leaves a Bounce/Elastic on the other channel (hunt MEDIUM #1208)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 14 of 20, via INBOX; started by his "go way way harder")
       Moved from INBOX.md whole (the PM's write-up, not his words):
       (The hunt's shared notes, for all twenty, are in #1195.)
       > ITEM 14 [MEDIUM] Dragging the easing curve's handles leaves a Bounce/Elastic on the other channel
@@ -38772,9 +38744,8 @@ re-opened #480, which I had marked done and had not fixed.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 14' until it lands, then #1208.
       📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
-
-- [ ] **1209 — 'Sharpen for upscaling' forgets it was added after any undo or reload, so a second press stacks a second Unsharp Mask (hunt MEDIUM #1209)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 15 of 20, via INBOX; started by his "go way way harder")
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: Dragging the curve's handles now takes a Bounce or Elastic off both channels, so the motion follows the curve he sees; setEzParams was left alone as the entry said. Code: js/graph-editor.js:364. Test: 1208 dragging the easing handles in Move mode takes a Bounce off the other channel’s key, so it moves on the curve the graph shows.
+- [x] **1209 — 'Sharpen for upscaling' forgets it was added after any undo or reload, so a second press stacks a second Unsharp Mask (hunt MEDIUM #1209)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 15 of 20, via INBOX; started by his "go way way harder")
       Moved from INBOX.md whole (the PM's write-up, not his words):
       (The hunt's shared notes, for all twenty, are in #1195.)
       > ITEM 15 [MEDIUM] 'Sharpen for upscaling' forgets it was added after any undo or reload, so a second press stacks a second Unsharp Mask
@@ -38792,9 +38763,8 @@ re-opened #480, which I had marked done and had not fixed.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 15' until it lands, then #1209.
       📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
-
-- [ ] **1210 — A saved filter lands with switched-off ingredients back on, and its keyframes on the wrong clock (hunt MEDIUM #1210)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 16 of 20, via INBOX; started by his "go way way harder")
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: After an undo or reload the menu still says Remove sharpening, and pressing it removes that mask instead of stacking a second; collab-diff has no effect-level sm list to extend. Code: js/app.js:5987; js/app.js:5965; js/app.js:6032; js/storage.js:1941. Test: 1209 after an undo or a reload the clip menu still offers Remove sharpening, and pressing it removes the one it added.
+- [x] **1210 — A saved filter lands with switched-off ingredients back on, and its keyframes on the wrong clock (hunt MEDIUM #1210)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 16 of 20, via INBOX; started by his "go way way harder")
       Moved from INBOX.md whole (the PM's write-up, not his words):
       (The hunt's shared notes, for all twenty, are in #1195.)
       > ITEM 16 [MEDIUM] A saved filter lands with switched-off ingredients back on, and its keyframes on the wrong clock
@@ -38814,9 +38784,8 @@ re-opened #480, which I had marked done and had not fixed.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 16' until it lands, then #1210.
       📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
-
-- [ ] **1211 — Pressing Undo while 'Preparing frames…' runs after the menu's Reverse undoes an earlier, unrelated edit (hunt LOW #1211)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 17 of 20, via INBOX; started by his "go way way harder")
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: A saved look comes back with switched-off ingredients still off and its animation starting with the clip it lands on; older presets keep their ingredients' times. Code: js/filters.js:750; js/filters.js:877-881; js/fx-presets.js:243-259; js/fx-presets.js:319; js/inspector.js:1600; js/inspector.js:2309; js/inspector.js:2357. Test: 1210 a saved filter lands with its switched-off ingredients still off and its keyframes on the clock of the clip it lands on.
+- [x] **1211 — Pressing Undo while 'Preparing frames…' runs after the menu's Reverse undoes an earlier, unrelated edit (hunt LOW #1211)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 17 of 20, via INBOX; started by his "go way way harder")
       Moved from INBOX.md whole (the PM's write-up, not his words):
       (The hunt's shared notes, for all twenty, are in #1195.)
       > ITEM 17 [LOW] Pressing Undo while 'Preparing frames…' runs after the menu's Reverse undoes an earlier, unrelated edit
@@ -38839,9 +38808,8 @@ re-opened #480, which I had marked done and had not fixed.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 17' until it lands, then #1211.
       📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
-
-- [ ] **1212 — Splitting a Wave text jolts every letter at the cut (hunt LOW #1212)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 18 of 20, via INBOX; started by his "go way way harder")
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: Undo during Preparing frames now takes back only the Reverse, and his earlier edit stays. Code: js/app.js:6054-6065. Test: 1211 Undo pressed while the clip menu Reverse is still preparing frames takes back the Reverse and nothing else.
+- [x] **1212 — Splitting a Wave text jolts every letter at the cut (hunt LOW #1212)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 18 of 20, via INBOX; started by his "go way way harder")
       Moved from INBOX.md whole (the PM's write-up, not his words):
       (The hunt's shared notes, for all twenty, are in #1195.)
       > ITEM 18 [LOW] Splitting a Wave text jolts every letter at the cut
@@ -38860,9 +38828,8 @@ re-opened #480, which I had marked done and had not fixed.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 18' until it lands, then #1212.
       📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
-
-- [ ] **1213 — Rounded corners on a clip with a keyframed crop export square wherever the crop is smaller than at the parked playhead (hunt LOW #1213)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 19 of 20, via INBOX; started by his "go way way harder")
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: A split Wave text keeps waving through the cut with no jump. Code: js/compositor.js:4488-4489; js/compositor.js:4826; js/compositor.js:4830. Test: 1212 splitting a Wave text keeps every letter where it was at each frame after the cut.
+- [x] **1213 — Rounded corners on a clip with a keyframed crop export square wherever the crop is smaller than at the parked playhead (hunt LOW #1213)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 19 of 20, via INBOX; started by his "go way way harder")
       Moved from INBOX.md whole (the PM's write-up, not his words):
       (The hunt's shared notes, for all twenty, are in #1195.)
       > ITEM 19 [LOW] Rounded corners on a clip with a keyframed crop export square wherever the crop is smaller than at the parked playhead
@@ -38878,9 +38845,8 @@ re-opened #480, which I had marked done and had not fixed.
       >
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 19' until it lands, then #1213.
       📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
-
-- [ ] **1214 — Change Case > Capitalize Words writes "Don'T", "I'M", 'éCole' and leaves Cyrillic lowercase (hunt LOW #1214)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 20 of 20, via INBOX; started by his "go way way harder")
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: Exported rounded corners now follow each frame's crop, wherever the playhead is parked. Code: js/compositor.js:20551. Test: 1213 an exported frame of a clip with a keyframed crop gets rounded corners at that frame’s crop, wherever the playhead is parked.
+- [x] **1214 — Change Case > Capitalize Words writes "Don'T", "I'M", 'éCole' and leaves Cyrillic lowercase (hunt LOW #1214)** (28 Oct, ~03:20 AWST — the PM's wrong-result hunt, item 20 of 20, via INBOX; started by his "go way way harder")
       Moved from INBOX.md whole (the PM's write-up, not his words):
       (The hunt's shared notes, for all twenty, are in #1195.)
       > ITEM 20 [LOW] Change Case > Capitalize Words writes "Don'T", "I'M", 'éCole' and leaves Cyrillic lowercase
@@ -38895,37 +38861,32 @@ re-opened #480, which I had marked done and had not fixed.
       >   refuter notes: Both refuters confirmed with high confidence. The preview shows the error at once, so on one title he would notice. Across a long Detect-speech caption track he is unlikely to check every cue.
       📍 **Where it is (28 Oct):** hunt/blur2 (built inline by the builder 28 Oct, one commit per item, with items 2, 7 and 14-20), NOT reviewed yet. The PM's rule for every one of these: its red-first test must FAIL on v18.08 before its fix is judged; one that cannot go red is dropped, not shipped as a no-op. Its test titles say 'hunt2 item 20' until it lands, then #1214.
       📍 **v18.11 (28 Oct): shipped** (hunt/blur2: built inline, its premise shown red on v18.08 at the fault, then a Claude review and a refuter that kept all nine, three folds).
-
-- [ ] **1215 — A two-finger twist carried past half a turn jumps the layer by 360° (hunt MEDIUM #1215)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.11.** Read against the code by a review and its refuter, nothing run: Capitalize Words now writes Don't, I'm, École and Привет correctly; it walks code points instead of the proposed lookbehind, and the old pin was updated. Code: js/compositor.js:3922-3932. Test: 1214 Change Case Capitalize Words writes I’m, Don’t, École and Привет — a contraction is one word, an accented or Cyrillic letter starts one (CONTROL: plain English, digits, symbols and a tab read as before).
+- [x] **1215 — A two-finger twist carried past half a turn jumps the layer by 360° (hunt MEDIUM #1215)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       Found by the refuter on codex/h1048 (#1063, the rotate handle): the pinch has the same fault. js/canvas-edit.js (~606) turns the layer by the raw angle between the fingers, wrapped to ±180°, so a twist carried past 180° flips by a whole turn mid-gesture.
       📍 **Where it is (28 Oct):** hunt/twist 62095d19 (~/fm-claude-wt/twist, on 6f8db2e3): the twist adds up its steps, as #1063 did for the handle. Test '1215 a two-finger twist carried past half a turn'. Needs its premise run (red on the base, green on the branch) and a review; waits for v18.12.
       📍 **v18.12 (28 Oct): shipped** (hunt/twist): the twist is summed move by move, each step wrapped, so it can pass a full turn.
-
-- [ ] **1216 — Two tests clean up through FM.canvasEdit._finishDrag, which no longer exists, so their cleanup does nothing (hunt LOW #1216)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: A two-finger twist can go past half a turn and keeps turning, with no 360 degree jump. Code: js/canvas-edit.js:322; js/canvas-edit.js:610-618. Test: 1215 a two-finger twist carried past half a turn keeps turning the layer, it does not jump by 360.
+- [x] **1216 — Two tests clean up through FM.canvasEdit._finishDrag, which no longer exists, so their cleanup does nothing (hunt LOW #1216)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       Test hygiene, found beside #1215: two calls in tests/tests.js (around 55721 and 55773 on v18.10) reach for a function the app removed. Nothing he sees; a drag a failing test leaves open is not closed for the next test.
       📍 **Where it is (28 Oct):** hunt/twist 62095d19, with #1215.
       📍 **v18.12 (28 Oct): shipped** (hunt/twist): the two tests clean up through FM._resetVpPointers.
-
-- [ ] **1217 — An export can start before the fill pictures are decoded, so its first frames draw without them (hunt MEDIUM #1217)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: Nothing changes for him: both tests now clean up through FM._resetVpPointers, and _finishDrag survives only in comments; no separate test guards the cleanup. Code: tests/tests.js:57465; tests/tests.js:57517. Test: a right-click on a scale or rotate handle starts no drag (queue 834 u11); a corner drag on a layer scaled to nothing is refused, instead of lifting every scale keyframe off zero (queue 834 u18).
+- [x] **1217 — An export can start before the fill pictures are decoded, so its first frames draw without them (hunt MEDIUM #1217)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       F2 of the review of hunt/leak1009 (#1009): a switch now lets go of the old project's fill pictures, and the exporter never waited for a fill to decode again.
       📍 **Where it is (28 Oct):** hunt/fill2 52a0f9c5 (on hunt/leak1009, so it lands with v18.11 or after it): FM.prewarmFillImages, awaited in the exporter's prepareCaches step (d). Needs its premise run and a review.
       📍 **v18.12 (28 Oct): shipped** (hunt/fill2, its premise re-run and the test rebuilt — a cold fill draws the layer's own fill colour, so the old fixture could not tell — then a refuter): the exporter's pre-flight awaits FM.prewarmFillImages, bounded at 8 s.
-
-- [ ] **1218 — Live collaboration: an edit the host drops for coming too fast is never sent again, and a later edit makes it look like a duplicate (hunt HIGH #1218)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: An export now waits for fill pictures to decode, up to 8 s, so its first frames carry them. Code: js/exporter.js:1760-1762; js/compositor.js:22411-22428. Test: 1217 an export decodes every media fill before its first frame, so a fill nothing has drawn yet is in the file, not its placeholder colour (CONTROLS: the same kind of cold fill drawn straight away is the placeholder, and the picture once it lands).
+- [x] **1218 — Live collaboration: an edit the host drops for coming too fast is never sent again, and a later edit makes it look like a duplicate (hunt HIGH #1218)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       Found by the refuter on codex/h1019 (#1019 #1020). When the host's rate limit drops a guest's edit, nothing resends it; the guest's next edit carries a later id, so the dropped one can never land — the two devices quietly disagree.
       📍 **Where it is (28 Oct):** codex/h1218 e8d2d162 (Codex, on 6f8db2e3, from the design in the builder's codex-h1218.txt: the host records the hole and answers 'rl'; the guest paces itself at half the host's bucket and resends from the hole). Needs a Claude review and a refuter before it lands.
       📍 **v18.14 (29 Oct): shipped** (codex/h1218, review rh1218: folds B1 B2 M1 M2 m2 m3 by the builder, three new tests and one for S.tick's due flush; landed as land/h1218 under land/h1019b): the host owns the first rate hole only for a guest whose hello says rl; a new hole is told at once; a duplicate never becomes the hole; the guest resends from an empty bucket at half the host refill; a due paced flush also goes out on the next tick. Left: #1226.
-
-- [ ] **1219 — A project with many styled groups walks the whole scene once per group every frame (hunt LOW #1219)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.14.** Read against the code by a review and its refuter, nothing run: A guest's edit dropped for coming too fast is now resent in order and the devices agree; the one wasted resend it left is tracked as its own open entry, #1226, and a guest on an older build keeps the old rule. Code: js/collab-host.js:1021-1034; js/collab-host.js:338-347; js/collab-session.js:923; js/collab-session.js:1015-1024; js/collab-session.js:515-531; js/collab-session.js:1614. Test: 1218 a host rate hole blocks the next cid and both replay in order.
+- [x] **1219 — A project with many styled groups walks the whole scene once per group every frame (hunt LOW #1219)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       From the review of codex/h1008 (#1008): collectGroupUnits is one pass now, but buildGroupUnit still rescans the scene for each unit.
       📍 **Where it is (28 Oct):** hunt/gu1219 b8450140 (on codex/h1008): unit.order and unitMembers are computed once. Test '1219 a frame with many styled groups'; its bound is MEASURE: pending. Needs its premise run and a review.
       📍 **v18.12 (28 Oct): shipped** (hunt/gu1219, the 3100 leftover reads accounted for — 2380 were per-child parent finds — then a refuter and its folds): a per-frame id index serves parent, mask and group-mask lookups; group units carry their members in draw order.
-
+      ✅ **CLOSED v18.20 (5 Nov). SHIPPED IN v18.12.** Read against the code by a review and its refuter, nothing run: A project with many styled groups no longer rescans the scene per group or child, and draws the same pixels; the test's bound is now measured, not pending. Code: js/compositor.js:4136-4151; js/compositor.js:4164; js/compositor.js:30034-30035; js/compositor.js:30078-30083; js/compositor.js:30167. Test: 1219 a frame reads the scene a fixed number of times however many styled groups it holds, not once per group or per child (CONTROL: the old walk draws the same pixels and grows about four-fold when the groups double).
 - [x] **1220 — The tick's idle check (#1133) may not count a ship's finger phases as a ship (hunt LOW #1220 — TO CONFIRM)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       A note from a tick on 28 Oct with no detail behind it. _shipidle.sh shows nothing wrong, so this is logged to be confirmed, not built.
       📍 **Where it is (28 Oct):** Nothing built.
@@ -38934,10 +38895,12 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Found by the refuter on codex/h1044: #1044 fixed the download filenames it named; the same strip runs in the other export paths.
       📍 **Where it is (28 Oct):** Nothing built.
+      📍 **5 Nov (read-only review, nothing run), still open because:** Never built. The old ASCII strip is still at js/app.js:4824 (PNG), js/app.js:6934 (audio), js/app.js:7144 (video) and js/export-card.js:441. No test for these paths.
 - [ ] **1222 — A split less than a millisecond before a hold speed key can drop the cut's tail and lose the footage's advance (hunt LOW #1222)** (28 Oct, ~11:40 AWST — the builder's own finding, logged after v18.10 shipped; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Found by Codex while reworking codex/h1055 (#1055 #1061): js/app.js (~5706-5707).
       📍 **Where it is (28 Oct):** Nothing built.
+      📍 **5 Nov (read-only review, nothing run), still open because:** Never built. js/app.js:5842-5843 keeps the same 1e-4 filter and 1e-3 seam check. The 1061 test covers a split at the key and at 0.253 s, not under 1 ms before it.
 - [x] **1223 — The intro (the launch splash) looks AI-made: make it feel human — build H2 "Scrub", recommended** ✅ **DONE v18.19.** (28 Oct ~14:15 AWST, his words; the PM's plan ~15:00; moved from INBOX.md verbatim)
       **His words, verbatim:** "THe intro u have on the app rn looks very Ai made, try making it feel more human, research what makes ai stuff feel ai when it comes to claude design and stuff."
       **His clauses:**
@@ -39042,6 +39005,7 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       #1017 shipped in v18.12 for the full editor only: Simple runs the same keydown handler, and the Full-unchanged lock keeps a Full release out of Simple's behaviour (the fix named #sm-timeline, a Simple hook). Simple's Tab is exactly as on v18.11.
       📍 **Where it is (28 Oct):** nothing built. A Simple release (it ships alone, after a full-unchanged PASS) can take the same early return for #sm-timeline.
+      📍 **5 Nov (read-only review, nothing run), still open because:** Never built. The early return at js/app.js:10333 applies only while #timeline shows, with no #sm-timeline case. The 1017 tests cover Full only. Needs a Simple release.
 - [ ] **1226 — Live collaboration: after a replayed edit is answered, the guest sends its document once more (hunt LOW #1226)** (29 Oct ~03:20 AWST — the builder's own, measured while landing #1218; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       Measured in "1218 a host rate hole…": cids 2 and 3 are resent with q:1 after an rl; between ack 2 and ack 3 the guest sends cid 4, which sets the name cid 3 already carried. Harmless (it converges, and the set is idempotent) but one wasted tx per replay. The test allows one trailing cid for now.
@@ -39053,10 +39017,12 @@ re-opened #480, which I had marked done and had not fixed.
       3. Vinyl and Fire: moving Variation renders the bed, which has 0.3 s edge fades, where the row's own recipe does not (Vinyl has none at all, Fire 0.2 s). So Variation changes the edges as well as the crackles.
       4. Not new: Escape does not close the sheet and can step the inspector behind it, and a tap on the scrim closes it and then deselects the layer, which Close does not.
       5. (From #1132's review, not the sound sheet.) The phone cog is still named "Canvas settings" to a screen reader and the PC cog's tooltip still says "Settings — appearance, layout, defaults", though the menu holds four things. Both are on every screen, so renaming them needs a line of its own in the Full-unchanged lock; they were taken out of #1132 to keep its window tight.
+      📍 **5 Nov (read-only review, nothing run), still open because:** All five items remain listed, unbuilt: 1 iPhone swipe on the slider thumb (needs a real iPhone), 2 Reverse opening on a sound's end silence, 3 Vinyl and Fire edge fades on Variation, 4 Escape and scrim on the sheet, 5 cog names (still at index.html:342 and :403). Only item 5 was re-read in the code.
 - [ ] **1228 — A new title in Full still comes in at the default size and can run off the frame; Simple's fits (the Full half of #1135 decision 3) (hunt LOW #1228)** (4 Nov — split out of #1135 by the builder; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       The PM's decision on 12 Oct: "A new title fits the frame width with a margin. Simple first (a beginner's first minute), Full in the next Full batch as its own lock-priced change." Simple's shipped and is tested (SU1 #8: "My Summer Trip" at 160 on 1080×1920 shrinks to fit). The entry that recorded it says "(Simple only)", and no test or log line says Full got it.
       📍 **Where it is (4 Nov):** Nothing built, and not yet measured in Full: measure first. It changes what Full draws, so it needs its own lock window.
+      📍 **5 Nov (read-only review, nothing run), still open because:** Never built or measured in Full. fitNewTitle runs only in Simple (js/text-edit.js:789), and Full's add text uses the default size (js/app.js:3512). Needs measuring and its own lock window.
 - [ ] **1229 — A reload after an update has no intro over it, so the editor shows bare while the project restores (hunt LOW #1229)** (4 Nov — from the #1223 review's refuters; NOT his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       The takeover reload (and any same-build reload) finds fm.splashed already set, so no splash runs, and the editor is uncovered for the whole restore. Older than #1223 and not made worse by it; traced by reading only, not run. The update hold now waits for FM_LANDED on the first load, which covers the wider gap the shorter intro opened, but not this.
@@ -39065,3 +39031,27 @@ re-opened #480, which I had marked done and had not fixed.
       **STATUS: 🟢 READY — nothing is stopping this**
       Test 497 only reads tests.js, index.html and the scripts, and it is the same at any width. On 4 Nov it refused v18.19 at the end of the desktop pass, 61 minutes in, over a name I could have declared before launching. ship.sh could run 497, and any other test that only reads text, in its gates phase, so this costs seconds and not a pass.
       📍 **Where it is (5 Nov):** Nothing built.
+- [ ] **1231 — The new intro (v18.19, #1223) is "dogshit": a ton of different options to pick from and actually try** (5 Nov ~23:12 and 6 Nov ~00:05 AWST, via INBOX, his words and the logger's plan)
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
+      Moved from INBOX.md whole:
+      ### 5 Nov 2026, ~23:12 AWST — the new intro (v18.19, #1223) is "dogshit": a ton of different options to pick from and actually try
+      **His words (verbatim):** "Lets say hypothetically I were to use all my usage every week on you and push you to the max, how much more progress per week would we make as a % and also if i were to give you unlimited usage, then whats the max it could jump? you have told me that most of the work can only have one agent because multiple messing with code at once is recipe for disaster but still lmk what u think. and think hard - also the new intro is dogshit, make a but tone of diff options for me to pick and actually try"
+      **Logger's plan (not his words):** the logger chat answers the usage question itself. For the intro, the logger is drawing a page of many different intros he can play full screen on his phone (a private artifact; the link goes in a follow-up block, with his picks). Nothing changes in the app until he picks. His 21 Oct "fine with ur choices" rule does NOT apply here: he asked to pick, so the builder waits for his numbers. H2 "Scrub" stays live until then. Each take is drawn as a pure function of time on a canvas, so the picked one can be moved into the splash as SVG/SMIL or as a small canvas script; that build is planned once he picks.
+      ❓ASK: which takes he likes (the page collects the numbers).
+
+      ### 6 Nov 2026, ~00:05 AWST — intro tryouts are drawn: 25 takes on one page, waiting for his pick
+      **His words (verbatim):** "the new intro is dogshit, make a but tone of diff options for me to pick and actually try" (the whole message is in the 5 Nov ~23:12 block above).
+      **Logger's plan (not his words):** the page is https://claude.ai/artifact/A4XVNiWtcoZJgXoYCG5pa1 (private, phone first). The sources are in tools/design/intro-takes/: one file per lane in options/, kit.js, try.html, assemble.py.
+      **BUILDER: do not build anything yet.** He asked to pick, so his 21 Oct "fine with ur choices" rule does not apply. H2 "Scrub" stays live until his numbers arrive. The take marked Recommended is 13, Exploded Stack.
+      When he picks, the build is:
+      1. Move the take's code from options/<lane>.js into the splash as an inline canvas script, before the app's scripts, driven by one requestAnimationFrame loop calling its seek(t). kit.js's helpers go with it, trimmed to what the take uses. A take is a pure function of t, and the end frame is seek(dur).
+      2. Keep what the splash does today: the skips (tap, Esc, Enter, Space), the clock-based cap and the ceiling, once per build per session, the quick cut to Home. Reduced motion or a clock that does not start gets the end frame as a still. Re-derive the cap from the take's dur plus its hold.
+      3. Fonts: the app loads no web fonts at launch and works offline, and most takes use a Google font. Bake those letters into the take as drawn outlines, or embed only the glyphs it needs.
+      4. Remove the private jokes before it goes in: take 3 (Marker signature) has faint "too AI", "dogshit" and "thin bars??" ghost writing on its whiteboard. Take 14 names a clip intro_v47_FINAL_final2.mov and take 16 has _final_v3_FINAL; ask him about those two.
+      5. Wide windows: the takes were drawn for portrait phones (320x568 to 430x932). The picker letterboxes them on a PC; the splash cannot, so the pick needs a landscape layout or a centred portrait stage on its own ground.
+      6. Cost: the takes pre-render in make() (Stencil about 200 ms, Darkroom about 170 ms, Grade about 120 ms on this laptop at dpr 2) and this has to run before the first frame, on a cold launch, while the app loads. Measure on his iPhone before calling it done, and check the first frame still matches the launch screen colour (#000 today; most takes have their own ground, so the launch images may need to change too).
+      Checked by the logger: all 25 draw at 390x844 with no errors, real-speed playback on this laptop was smooth (one to two dropped frames in five takes), the player's Keep, Next, Again and List all work at 380 wide, and replays work after the player frees each take's canvases. NOT checked: a real iPhone.
+      ❓ASK: which takes he likes (he sends numbers).
+      1. [ ] "the new intro is dogshit, make a but tone of diff options for me to pick and actually try": the logger drew 25 takes to play on the page above; what is left is his pick, then the six-step build in the block above.
+      His question in the same message, about how much more progress full or unlimited usage would make, is the logging chat's to answer, as its block says; nothing here builds it.
+      ⏸ **6 Nov — BUILT OUT UNTIL HE sends the numbers of the takes he likes.** He asked to pick, so the recommended-pick-on rule does not apply and the intro in the app stays H2 "Scrub" until then. Nothing of a take goes into the splash before that.

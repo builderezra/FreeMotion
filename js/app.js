@@ -7427,7 +7427,7 @@ window.FM = window.FM || {};
        unless it has been registered, so getPropertyValue hands back the token stream the stylesheet wrote
        — measured on a fresh profile at 1280x800: "clamp(232px, 30vh, 300px)" — and parseInt of that is
        NaN. All four readers below then fell to their fallback of 232 while the real band was 240 (300 on
-       a 1080p window; 40 more below 1226px, where the transport hangs under the row). Measured
+       a 1080p window; 40 more wherever the transport hangs its band under the row, queue 801/970). Measured
        consequences, all three from this one line-pattern: a 10px drag DOWN on the add menu's handle
        detached the panel at 232px inside a 240px row and opened an 8px strip of bare background above it;
        a CLICK on the timeline divider persisted 232, so the next load opened with a shorter band than the
@@ -7485,8 +7485,27 @@ window.FM = window.FM || {};
     const bandMoved = () => {
       try { if (FM.fxSheetReplace) FM.fxSheetReplace(); } catch (_) {}       // queue 805/811 — the fx browser sheet
       try { if (FM.fitBarsTogether) FM.fitBarsTogether(); } catch (_) {}     // queue 866 — the ⚙ timeline-options pop-up
+      /* queue 970 review K1: the cards that pop out of the far run's buttons (? · notes · the cog · Export). They are placed on
+         their own open and on a window resize, and #970's band drops those buttons a frame AFTER the resize (or with no resize
+         at all): 40px on a dragged timeline height, which the panel does not grow by. So an open card stayed hung off the row
+         the button had left. The cog's pair is placed by its own code,
+         so it has its own door; the other three, and the cog's tail, re-run the placement popfrom.js keeps on the card. */
+      try { if (FM.canvasPairFollow) FM.canvasPairFollow(); } catch (_) {}
+      document.querySelectorAll('.pop-card').forEach(c => { try { if (c._popPlace && c.getClientRects().length) c._popPlace(); } catch (_) {} });
     };
     const amSheetFollow = bandMoved;   // the old name, kept so every existing call site still reads right
+    /* …AND ONE DOOR FOR A BAND THAT CHANGES HEIGHT ON ITS OWN (queue 970 review). Above 1226px pcTransportRoom hangs the far
+       run in #801's band by MEASURING, so `.t-band` (and the 40px of --tl-h it carries) can arrive a frame after every
+       window resize listener has run, or with no resize at all: switching editor, a Viewer's role, the first open. That
+       moves the stage and the band exactly as a divider drag does, so it gets what a drag gets: the stage's own follow-ups
+       (the selection outline, the preview's scale) and everything pinned to the band (the fx browser sheet, the ⚙ pop-up).
+       One door, so a later member of either family joins it without anyone remembering this caller. */
+    FM.tlBandResized = () => {
+      /* K2: a raised add menu's floor is the band's height, which just changed; the window resize that re-clamps it ran first */
+      try { if (document.body.classList.contains('am-floating') && FM.clampAddMenuH) { const h = amHeightNow(), c = FM.clampAddMenuH(h); if (c !== h) root.style.setProperty('--am-h', c + 'px'); } } catch (_) {}
+      try { stageResized(); } catch (_) {}
+      bandMoved();
+    };
 
     let dragging = false, startY = 0, startH = 0;
     rez.addEventListener('pointerdown', (e) => {
@@ -8901,14 +8920,21 @@ window.FM = window.FM || {};
      cannot flip itself back. The limit is the row's own edge padding (14px), the same inset the far run keeps; on the
      very narrowest windows the last step still ends inside the window rather than inside that inset (at 701, ⋯ is 667–695
      and its group's edge ~698),
-     which is the most the row can do without a second band (#970's pick). */
+     which is the most the row can do without a second band (#970's pick).
+     ⚠️ …AND THE SAME MEASUREMENT DECIDES THE BAND (queue 970). Under 1226px the far run hangs in #801's band whatever is
+     selected (styles.css' media block). Above it, that line was ONE selected's: with two or more the group is 80px wider
+     and the ⋯ sat under the version chip to ~1370 (at 1280 its centre hit `.ver`, and a click there force-updates the
+     app). So with the steps decided, the widest group is compared with the far run's left edge, and `.t-band` drops the
+     far run into the band wherever the group would come within one far-run gap (8px) of it. Horizontal positions do not
+     depend on the band — the far run is absolute at the row's right and the band only moves it down — so the decision
+     cannot flip itself back; and against the widest group, so shift-clicking a second layer never moves the row. */
   function pcTransportRoom() {
     const t = document.getElementById('transport');
     if (!t) return;
     /* The PC row outlives a narrowed window until the next refresh tears it down (#405), and every rule these classes
        drive is inside the 701px block — so below it there is nothing to decide, and nothing is measured. */
     const pc = !window.matchMedia || window.matchMedia('(min-width: 701px)').matches;
-    if (!t._pcBuilt || !pc) { t.classList.remove('t-snug', 't-small', 't-fold'); return; }
+    if (!t._pcBuilt || !pc) { t.classList.remove('t-snug', 't-small', 't-fold', 't-band'); return; }
     const tr = t.getBoundingClientRect();
     if (tr.width < 2) return;                                   // not laid out (Home in front) — the observer decides when it is
     const right = t.querySelector('.t-right'), sel = document.getElementById('t-sel');
@@ -8920,6 +8946,7 @@ window.FM = window.FM || {};
       Array.prototype.forEach.call(right.children, c => { const b = c.getBoundingClientRect(); if (b.width > 0 && b.height > 0) r = Math.max(r, b.right); });
       return r;
     };
+    let band = false;
     try {
       kids.forEach(k => { k.style.display = ''; });
       if (sel) sel.classList.add('has-sel');
@@ -8929,15 +8956,24 @@ window.FM = window.FM || {};
         if (reach() <= limit) break;
         t.classList.add(step);
       }
+      // queue 970: the widest group, as stepped, against the far run (8px = #t-far's own gap, the chip's to its neighbours)
+      const far = document.getElementById('t-far'), fr = far ? far.getBoundingClientRect() : null;
+      band = !!(fr && fr.width > 0 && fr.height > 0 && reach() + 8 > fr.left);
     } finally {
       kids.forEach((k, i) => { k.style.display = was[i]; });
       if (sel && !had) sel.classList.remove('has-sel');
     }
+    const wasBand = t.classList.contains('t-band');
+    t.classList.toggle('t-band', band);
+    /* queue 970 review: the stage just changed height with no window resize of its own, so whatever follows the band
+       (the ⚙ pop-up, the fx sheet, the selection outline, the preview's scale) is told here, through the divider's door. */
+    if (wasBand !== band && FM.tlBandResized) { try { FM.tlBandResized(); } catch (e) {} }
   }
   /* Re-decided on a window resize, and by a ResizeObserver on the row (the panel changes width without one — the PC text
      editor folds the inspector away, #519; measured at 760 with two selected: .t-snug .t-small .t-fold → .t-snug while
      it is open, and back when it closes), on the pill (its width is the font's) and on the layer group (a Viewer's copy hides
-     its buttons with !important, which the measuring cannot un-hide, so the widest it can get changes with the role).
+     its buttons with !important, which the measuring cannot un-hide, so the widest it can get changes with the role),
+     and on the far run (queue 970: its width is the chip's label and whatever it holds, and it sets where the band starts).
      On the next animation frame: a resize's own handlers (timeline.js republishes --tl-panel-left, which sets where
      play sits) run first, and a frame requested from a resize event still runs before that frame is painted; deciding
      inside an observer callback is what #970 measured raising "ResizeObserver loop completed with undelivered
@@ -8951,7 +8987,7 @@ window.FM = window.FM || {};
     if (t._roomRO) { try { t._roomRO.disconnect(); } catch (e) {} t._roomRO = null; }
     if (typeof ResizeObserver !== 'undefined') {
       const ro = (t._roomRO = new ResizeObserver(pcTransportRoomSoon));
-      [t, document.getElementById('time-readout'), document.getElementById('t-sel')].forEach(el => { if (el) ro.observe(el); });
+      [t, document.getElementById('time-readout'), document.getElementById('t-sel'), document.getElementById('t-far')].forEach(el => { if (el) ro.observe(el); });
     }
     if (!pcRoomResizeHooked) { pcRoomResizeHooked = true; window.addEventListener('resize', pcTransportRoomSoon); }
     pcTransportRoom();
@@ -8980,7 +9016,7 @@ window.FM = window.FM || {};
     ['t-home', 't-sel', 't-far'].forEach(id => { const w = document.getElementById(id); if (w && !w.childNodes.length) w.remove(); else if (w) w.remove(); });
     t._pcHomes = null; t._pcBuilt = false;
     if (t._roomRO) { try { t._roomRO.disconnect(); } catch (e) {} t._roomRO = null; }   // queue 979: the fit is the PC row's, and the row is gone
-    t.classList.remove('t-snug', 't-small', 't-fold');
+    t.classList.remove('t-snug', 't-small', 't-fold', 't-band');
   }
   FM.pcTransportTeardown = pcTransportTeardown;
   FM.pcTransportLayout = pcTransportLayout;
@@ -9931,6 +9967,13 @@ window.FM = window.FM || {};
         const onScreen = !!(cvSrc && cvSrc.isConnected && cvSrc.getBoundingClientRect().width > 0);
         cvPlace(onScreen ? cvSrc : document.getElementById('btn-settings'));
       });
+      /* queue 970 review K1: …AND WHEN THE BAND MOVES THE COG. Above 1226px the far run, the cog with it, drops into #801's band
+         a frame after a window resize (or with no resize at all), 40px on a dragged timeline height, and the pair is hung only at open and on a phone-width
+         crossing: it was left 40px above the cog with its tail pointing at the row the cog had left. bandMoved calls this. */
+      FM.canvasPairFollow = () => {
+        if (cvDialog.classList.contains('hidden') || !cvSrc) return;
+        cvPlace(cvSrc);
+      };
       /* queue 921 S7 review: A VIEWER OR COMMENTER IS TOLD IN THE CARD, BEFORE THEY TRY — Apply is off and a
          line says why, in words that fit the role. It was a toast from Apply, and the toast (z 60) sat under
          this dialog's own full-screen backdrop (z 100), which stayed open: pressing Apply did nothing

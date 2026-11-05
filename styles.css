@@ -2017,6 +2017,13 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 @media (max-width: 700px) {
   .fx-seg-btn { min-height: 44px; font-size: 12.5px; }
 }
+/* #917 finding 17: js/inspector.js measures each row and sets these. .5px under the exact share, so the sum of a line's buttons
+   cannot round past the row and break it one early; flex-grow takes the half pixel back. */
+.fx-seg-row.fx-seg-stack { flex-wrap: wrap; row-gap: 4px; }
+.fx-seg-stack > .fx-seg { flex: 1 1 100%; }
+.fx-seg-natural > .fx-seg-btn { flex: 0 0 auto; }
+.fx-seg-even > .fx-seg-btn { flex: 1 1 calc((100% - (var(--seg-cols) - 1) * 3px) / var(--seg-cols) - .5px); min-width: 0; }
+.fx-seg-first > .fx-seg-btn:first-child { flex-basis: 100%; }
 .fx-add-btn { width: 100%; margin-top: 10px; padding: 13px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .fx-add-btn:hover { border-color: var(--accent); }
 .fx-stack-tools { display: flex; gap: 6px; margin-top: 9px; justify-content: center; }
@@ -2887,8 +2894,8 @@ body.white-chrome #btn-addside .sw-track { transition: top 220ms cubic-bezier(.2
       (FM.layerMenuItems: "Group selection" / "Masking group" whenever two or more are selected, exactly when these
       show). Parent and delete stay: parent is in no menu, and delete was taken out of ⋯ on his word (#221).
       !important because syncTopBar owns the Group button's display inline; the class only ever hides.
-   The far run's band is #970's, held for his pick — except its line, which moved from 1160 to 1226px because one selected
-   put ⋯ under the version chip from 1162 (#801's own case, re-measured; see the note at the band). */
+   The far run's band line moved from 1160 to 1226px because one selected put ⋯ under the version chip from 1162 (#801's
+   own case, re-measured; see the note at the band) — and past that line the band is #970's: measured, see `.t-band`. */
 @media (min-width: 701px) {
   #transport { --t-gap: 6px; --t-home-w: 34px; }
   #transport:has(> #t-home) .t-left { padding-left: calc(var(--t-home-w) + var(--t-gap)); }
@@ -5961,7 +5968,14 @@ body.hm-selecting #hm-new { visibility: hidden; pointer-events: none; }
 .hm-bg-none { background: repeating-conic-gradient(#8b93a5 0% 25%, #464d5c 0% 50%) 50% / 10px 10px; }
 /* #cv-bg is the SAME control in the Canvas settings dialog and was never given this rule — it rendered
    as the browser's default 50x27 colour well with a white rim, which is most of why that row overflowed. */
-#hm-new-bg, #cv-bg { flex: 0 1 38px; min-width: 31px; height: auto; aspect-ratio: 38 / 34; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); cursor: pointer; }
+/* #917 15b, the same as #918 finding 11: IT STARTS BLACK, SO IT READ AS A SECOND BLACK SWATCH. A ring in the spectrum Settings' shape-colour
+   swatch wears says this one is any colour, and the swatch inside is the colour it holds. The two backgrounds are the usual
+   gradient border: the panel inside the padding box, the spectrum in the border box. Each pseudo-element is its own rule: a browser
+   that does not know one drops the whole list it is in. */
+#hm-new-bg, #cv-bg { --bg-ring-in: var(--panel-2); flex: 0 1 38px; min-width: 31px; height: auto; aspect-ratio: 38 / 34; padding: 0; border: 2px solid transparent; border-radius: 8px; background: linear-gradient(var(--bg-ring-in), var(--bg-ring-in)) padding-box, conic-gradient(#ff4f8b, #ffb03a, #49e39b, #4fc3ff, #9b5cff, #ff4f8b) border-box; cursor: pointer; }
+#hm-new-bg::-webkit-color-swatch-wrapper, #cv-bg::-webkit-color-swatch-wrapper { padding: 1px; }
+#hm-new-bg::-webkit-color-swatch, #cv-bg::-webkit-color-swatch { border: 0; border-radius: 5px; }
+#hm-new-bg::-moz-color-swatch, #cv-bg::-moz-color-swatch { border: 0; border-radius: 5px; }
 /* ONE LEFT EDGE FOR THE TWO DROPDOWNS (queue 917 finding 15). A <select> shrink-wraps its longest
    option, so Resolution came out 118px and Frame rate 131 ("60 fps (smooth)") and their left edges sat
    13px apart, one above the other — the same ragged column the export dialog fixed for itself in queue
@@ -8690,9 +8704,9 @@ input[type=range].sfx-range::-moz-range-thumb { width: 24px; height: 24px; borde
    (elementFromPoint returned `.ver`, and a real click there hit the chip, which force-updates the app, instead of
    opening the layer menu), and its right end to 1206; they touch until ~1209. The line is where ⋯ stands one far-run
    gap (8px, the chip's own spacing to its neighbours) clear of the chip: at 1227 it is 8.8px. Selection-independent,
-   exactly as #801 was, so the row never jumps when a layer is selected. NOT covered by this line, and #970's (held for
-   his pick): TWO selected (the group is 80px wider — to ~1370) and Settings → Work with friends on (#btn-share makes the
-   far run 42px wider — one selected to ~1290), both of which are the band-or-not question he is being asked.
+   exactly as #801 was, so the row never jumps when a layer is selected. NOT covered by this line, and #970's (built after
+   this note, in the block below it): TWO selected (the group is 80px wider — to ~1370) and a wider far run (#btn-share
+   once made it 42px wider; #983 took Share out of the row, but the chip's label and whatever else lands there still move it).
    The '979 on a PC window…' test sweeps one selected to 1440, so a far run that grows again is red, not shipped. */
   @media (max-width: 1226px) {
     /* The band's 40px come from the STAGE, not the tracks: the panel grows by the band's height (the base
@@ -8703,6 +8717,34 @@ input[type=range].sfx-range::-moz-range-thumb { width: 24px; height: 24px; borde
     #timeline-panel { grid-template-rows: 80px 1fr; }
     #transport { align-self: start; height: 40px; }
     #t-far { top: 100%; bottom: auto; height: 40px; }
+  }
+  /* ---- …AND PAST 1226px THE BAND IS MEASURED, NOT A WIDTH (queue 970) ----------------------------------------------
+     1226 is ONE selected's line. With two or more the layer group is 80px wider (parent · delete · group · masking group ·
+     ⋯), and since play holds screen centre while the far run holds the right edge, the gap between them grows by only
+     half of every extra pixel of window — so the collision runs ~160px further: measured on v17.11 with two selected, the
+     ⋯ sat under the version chip from 1180 to 1360 (at 1280 elementFromPoint on its centre returned `.ver`, and a click
+     there force-updates the app instead of opening the layer menu). A second width would only move the cliff, because the
+     far run changes width with the chip's label and whatever lives in it. So app.js (pcTransportRoom) MEASURES: the far
+     run drops into the band whenever the WIDEST the layer group gets — every button it holds shown, as with two or more
+     selected — would come within one far-run gap (8px) of it, and the row gets `.t-band`.
+     Against the widest group, not the selection, ON PURPOSE: the band costs the stage 40px (560 → 520 at 1280x800 on the
+     Mac's v17.11 build), and a band that came and went with the selection would move the whole row up and down every time
+     a second layer was shift-clicked. Simple hides the layer group (its own rule, in Simple's block), so there the widest
+     group is nothing and the row above 1226 stays exactly as it was.
+     The rules are #801's, scoped ABOVE the line rather than replacing its media block: at 1226 and under, that block alone
+     decides, exactly as before, so `.t-band` only ever ADDS the band where the line used to leave ⋯ under the chip.
+     `not all and (max-width: 1226px)` rather than a min-width of 1227: the exact complement, so a zoomed window at
+     1226.5px is in one block or the other, never neither. */
+  @media not all and (max-width: 1226px) {
+    :root:has(#transport.t-band) { --tl-h: calc(clamp(232px, 30vh, 300px) + 40px); }
+    #timeline-panel:has(> #transport.t-band) { grid-template-rows: 80px 1fr; }
+    #transport.t-band { align-self: start; height: 40px; }
+    #transport.t-band #t-far { top: 100%; bottom: auto; height: 40px; }
+  }
+  /* the bigger screen's own base (see "Bigger screens have room to spare") plus the band; a height he DRAGGED is inline on
+     <html> and wins over both, as it always has */
+  @media (min-width: 1600px) {
+    :root:has(#transport.t-band) { --tl-h: calc(clamp(300px, 33vh, 460px) + 40px); }
   }
 
   /* ---- the LAST control comes down off the header (v7.75, queue 229) -------------------------

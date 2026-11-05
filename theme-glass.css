@@ -1054,10 +1054,11 @@ html[data-home="light"] .hm-num-pair { color: #5f6b7d; }
 html[data-home="light"] #hm-new-name,
 #fm-ask.fm-ask-light .fm-ask-input, .collab-scrim.collab-light .fm-ask-input,
 html[data-home="light"] .hm-fld select,
-html[data-home="light"] #hm-new-bg,
 html[data-home="light"] .hm-aspect {
   background-color: rgba(16, 30, 52, .045); border-color: rgba(16, 30, 52, .14); color: #10151f;
 }
+/* #917 15b: the custom colour box is a field too, but its border is the spectrum ring, so only the sliver inside the ring takes this paper */
+html[data-home="light"] #hm-new-bg { --bg-ring-in: #f1f3f6; }
 html[data-home="light"] .hm-aspect span,
 html[data-home="light"] .hm-aspect .ac-frame { color: #5f6b7d; }
 /* THE SELECTED STATE. The dark theme's `--accent` is a pale cyan chosen to glow on near-black; the
