@@ -86672,6 +86672,109 @@
     if (seen.length) throw new Error('icons with no ink on screen — this is what he means by "the icons don\'t display properly": ' + seen.join(' | '));
   });
 
+  /* ═══ 860 b: THE ICONS THAT ARE NOT SVG (the 6 Nov re-check of #860). The guard above reads only <svg>. Many of the app's
+     icons are a character (⋯, ⚙, ⤢, ◐, ❖, 🗑 and more) or a CSS mask over a coloured box, and those fail differently: a
+     character the phone's fonts do not have is drawn as an empty box (or not at all), and a mask whose image does not load
+     shows nothing. #1184 found Windows drawing flag emoji as letters, so this is a real way for an icon to go.
+     A character icon is drawn on a canvas in the element's own font and compared with a character no font has (U+10FFFD):
+     the same picture, or no ink at all, is a missing glyph. A mask icon's image is loaded, and the box under it must have a colour.
+     CONTROL FIRST: a planted button showing U+10FFFD and a planted mask with a broken image must both be reported, and the
+     sweep must meet at least three character icons, or a clean result means nothing. Not run in Windows Chrome yet: the ship
+     sends only tests the Linux pass could not run there. */
+  test('860 b: no character or mask icon on screen draws an empty box or nothing, in the states the suite can drive', { item: '860', budgetMs: 40000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const ICONISH = /[←-⯿⸀-⹿-\u{1F000}-\u{1FAFF}]/u;
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    const drawn = function (ch, family) {
+      g.clearRect(0, 0, 64, 64); g.font = '40px ' + family; g.textBaseline = 'middle'; g.fillStyle = '#000';
+      g.fillText(ch, 8, 32);
+      const d = g.getImageData(0, 0, 64, 64).data;
+      let n = 0, sig = '';
+      for (let i = 3; i < d.length; i += 4) { const on = d[i] > 40; if (on) n++; sig += on ? '1' : '0'; }
+      return { n: n, sig: sig };
+    };
+    const tofu = {}, cache = {}, glyphsSeen = new Set();
+    const missing = function (ch, family) {
+      const k = ch + '|' + family;
+      if (!(k in cache)) {
+        if (!tofu[family]) tofu[family] = drawn('\u{10FFFD}', family);
+        const d = drawn(ch, family);
+        cache[k] = d.n === 0 ? 'draws nothing' : (d.sig === tofu[family].sig ? 'draws the missing-character box' : '');
+      }
+      return cache[k];
+    };
+    const shown = function (el) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4 || r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) return false;
+      const cs = getComputedStyle(el);
+      return cs.display !== 'none' && cs.visibility !== 'hidden' && +cs.opacity > 0;
+    };
+    const nameOf = function (el) {
+      const owner = el.closest('[aria-label],[title]');
+      return owner ? (owner.getAttribute('aria-label') || owner.getAttribute('title')) : String(el.className || el.tagName).slice(0, 40);
+    };
+    const masks = {};
+    const maskOk = function (url) {
+      if (!(url in masks)) masks[url] = new Promise(function (res) {
+        const im = new Image(); const to = setTimeout(function () { res(false); }, 3000);
+        im.onload = function () { clearTimeout(to); res(im.naturalWidth > 0 || /svg/i.test(url)); };
+        im.onerror = function () { clearTimeout(to); res(false); };
+        im.src = url;
+      });
+      return masks[url];
+    };
+    const audit = async function () {
+      const out = [];
+      const els = document.querySelectorAll('body *');
+      for (const el of els) {
+        if (el.closest('svg') || /^(SCRIPT|STYLE|CANVAS|VIDEO|IMG|svg)$/i.test(el.tagName)) continue;
+        /* a character icon: the element's own text is one or two characters, and they are symbols */
+        let own = '';
+        el.childNodes.forEach(function (n) { if (n.nodeType === 3) own += n.nodeValue; });
+        own = own.trim();
+        if (own && Array.from(own).length <= 2 && ICONISH.test(own) && shown(el)) {
+          const fam = getComputedStyle(el).fontFamily || 'sans-serif';
+          glyphsSeen.add(own);
+          const why = missing(own, fam);
+          if (why) out.push(nameOf(el) + ' (' + own + ' ' + why + ')');
+        }
+        /* a mask icon */
+        const cs = getComputedStyle(el), mi = cs.maskImage || cs.webkitMaskImage || '';
+        const m = /url\(["']?([^"')]+)["']?\)/.exec(mi);
+        if (m && shown(el)) {
+          if (!(await maskOk(m[1]))) out.push(nameOf(el) + ' (its mask image does not load)');
+          else if ((cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent') && cs.backgroundImage === 'none') out.push(nameOf(el) + ' (nothing coloured under its mask)');
+        }
+      }
+      return out;
+    };
+
+    /* CONTROL FIRST: a planted missing glyph and a planted broken mask, on screen. */
+    const plant = document.createElement('div');
+    plant.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99999;display:flex;gap:8px;';
+    plant.innerHTML = '<button type="button" aria-label="planted glyph" style="font-size:24px;width:40px;height:40px">\u{10FFFD}</button>'
+      + '<span aria-label="planted mask" style="display:inline-block;width:32px;height:32px;background:#fff;-webkit-mask-image:url(data:image/png;base64,AAAA);mask-image:url(data:image/png;base64,AAAA)"></span>';
+    document.body.appendChild(plant);
+    let control;
+    try { control = await audit(); } finally { plant.remove(); }
+    if (!control.some(function (s) { return /planted glyph/.test(s); })) throw new Error('CONTROL: a button showing a character no font has (U+10FFFD) was not reported (' + control.join(', ') + '), so the audit cannot see a missing glyph');
+    if (!control.some(function (s) { return /planted mask/.test(s); })) throw new Error('CONTROL: a mask whose image does not load was not reported (' + control.join(', ') + ')');
+    glyphsSeen.clear();
+
+    /* …then the same sweep as the svg guard above. */
+    const seen = [];
+    const at = async function (state) { await sleep(260); const f = await audit(); if (f.length) seen.push(state + ': ' + f.join(', ')); };
+    await at('as found');
+    const tabs = [].slice.call(document.querySelectorAll('.hm-tab'));
+    for (let i = 0; i < tabs.length; i++) { tabs[i].click(); await at('home tab ' + (tabs[i].textContent || '').trim()); }
+    if (tabs.length) { const pj = tabs.filter(function (b) { return /Projects/.test(b.textContent || ''); })[0]; if (pj) { pj.click(); await sleep(200); } }
+    const amTabs = [].slice.call(document.querySelectorAll('.addmenu-tab'));
+    for (let i = 0; i < amTabs.length; i++) { amTabs[i].click(); await at('add-menu tab ' + (amTabs[i].textContent || '').trim()); }
+    if (glyphsSeen.size < 3) throw new Error('CONTROL: the sweep met only ' + glyphsSeen.size + ' character icon(s) (' + Array.from(glyphsSeen).join(' ') + '), so it says nothing about them');
+    if (seen.length) throw new Error('character or mask icons that draw nothing or an empty box on screen, which is what he means by "the icons don\'t display properly": ' + seen.join(' | '));
+  });
+
   /* ═══ 903: NOTHING PAINTS A HEAVY COLOUR WASH BEHIND THE HOME SCREEN'S CONTROLS.
      He reported this THREE times and the first two fixes missed, because both of them went after the
      BAR: *"a white bar that's fading on top of the buttons in the main menu"*, then after `.hm-top` was
