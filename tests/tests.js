@@ -88235,6 +88235,74 @@
     }
   });
 
+  /* #768 N1 (the 22 Oct hunt; the 6 Nov plan). In Simple the left panel is the band's one line (refresh's band branch), and that
+   * branch returned without clearing quickSideSig, the side of the clip that Full's clip-action row was last built for. After a
+   * switch from Full with the playhead inside the selected clip, every scrub step on the other side of it made syncPlayhead see a
+   * crossing, find no row to swap and call refresh(), which drew the band again and stamped nothing: one full rebuild per scrub
+   * step and per playback frame (both reach syncPlayhead through updateReadout), and on the phone mobile.js's wrapper re-docked
+   * the sheet each time.
+   * Driven in a throwaway project at phone width: Full, clip B (3 to 6 s) selected with the playhead at 4.5 s inside it, then
+   * Simple, then 20 FM.scrubTime steps from 6.3 to 8.2 s (past B, over C), a frame each, counting FM.inspector.refresh.
+   * FAILS BEFORE THE FIX: 20 rebuilds in 20 steps (one a step), and the band line held before the scrub is a new element after it.
+   * CONTROLS: Full's row was really built inside B (Split) before the switch, so the stale stamp exists; the band is what Simple
+   * shows; the counter sees a real change (selecting clip C in Simple rebuilds the panel); and back in Full the clip-action row
+   * still follows the playhead across C's start edge (Split inside, Move clip left before it), so clearing the stamp in the band
+   * does not switch the watch off for Full. */
+  test('768 N1: in Simple a scrub past the selected clip does not rebuild the inspector on every step after a switch from Full, and a new selection still does', { item: '768', budgetMs: 60000 }, async function () {
+    if (!FM.editor || !FM.editor.apply || !FM.simpleTools || !FM.simpleTools.bandIdle) throw new Error('FM.editor or FM.simpleTools is missing: Simple mode did not load');
+    const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    const realRefresh = FM.inspector.refresh;
+    let refreshes = 0;
+    const counting = function () { refreshes++; return realRefresh.apply(this, arguments); };
+    try {
+      await atPhoneWidth(async function () {
+        await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+          const root = document.getElementById('inspector');
+          const titles = () => Array.prototype.map.call(root.querySelectorAll(':scope > .quick-row .qr-btn'), b => b.title).join(' | ');
+          if (FM.editor.isSimple()) FM.editor.apply('full', { force: true, quiet: true });
+          if (FM.simpleTools._reset) FM.simpleTools._reset();
+          const B = v.L('B'), C = v.L('C');
+          if (!B || !C) throw new Error('setup: the throwaway project has no clips B and C');
+          FM.selectLayer(B.id);
+          FM.setTime(4.5); FM.inspector.refresh(); await v.sleep(150);
+          /* a glide an earlier test left running moves the playhead on every frame: place it again once it has stopped */
+          if (Math.abs(FM.time - 4.5) > 1e-3) { FM.setTime(4.5); FM.inspector.refresh(); await v.sleep(100); }
+          const full0 = titles();
+          if (!/Split at playhead/.test(full0)) throw new Error('CONTROL: in Full at 4.5 s, inside clip B, the row does not offer Split (' + full0 + '): Full never built the row whose stamp the switch leaves behind');
+          FM.editor.apply('simple', { force: true, quiet: true }); await v.sleep(200);
+          if (!FM.editor.isSimple()) throw new Error('setup: the switch to Simple did not happen (mode ' + FM.editor.mode() + ')');
+          const hint = root.querySelector(':scope > .sm-band-hint');
+          if (!hint || root.querySelector(':scope > .quick-row')) throw new Error('CONTROL: in Simple with clip B selected the left panel is not the band line (' + root.innerHTML.slice(0, 160) + ')');
+          FM.inspector.refresh = counting;
+          for (let i = 1; i <= 20; i++) { FM.scrubTime(6.2 + i * 0.1); await frame(); }
+          FM.inspector.refresh = realRefresh;
+          const scrubbed = refreshes, rebuilt = !hint.isConnected;
+          if (FM.time < 8.1) throw new Error('setup: the playhead stopped at ' + FM.time + ' s and never reached 8.2 s');
+          if (FM.scene.selectedId !== B.id) throw new Error('setup: the scrub changed the selection (now ' + FM.scene.selectedId + '), so its count is not about clip B');
+          if (!FM.editor.isSimple()) throw new Error('setup: the editor left Simple during the scrub');
+          if (scrubbed > 1) throw new Error('in Simple, 20 scrub steps past the selected clip rebuilt the inspector ' + scrubbed + ' times (want none)' + (rebuilt ? ', and the band line was thrown away and drawn again' : '') + ': the side Full’s clip-action row was built for still stood, so every step read as a crossing');
+          /* CONTROL: a real change still rebuilds the panel, and the counter sees it */
+          refreshes = 0; FM.inspector.refresh = counting;
+          FM.selectLayer(C.id); await v.sleep(150);
+          FM.inspector.refresh = realRefresh;
+          if (!refreshes) throw new Error('CONTROL: selecting clip C in Simple did not rebuild the inspector, so the counter is blind and the count above proves nothing');
+          if (!root.querySelector(':scope > .sm-band-hint')) throw new Error('CONTROL: after selecting clip C in Simple the band does not show its line');
+          /* CONTROL: back in Full the clip-action row still follows the playhead across a clip edge */
+          FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(200);
+          if (FM.editor.isSimple()) throw new Error('setup: the switch back to Full did not happen');
+          const full1 = titles();
+          if (!/Split at playhead/.test(full1)) throw new Error('CONTROL: back in Full at ' + FM.time + ' s, inside clip C, the row does not offer Split (' + full1 + ')');
+          for (let i = 1; i <= 25; i++) { FM.scrubTime(8.2 - i * 0.1); await frame(); }
+          const full2 = titles();
+          if (FM.time > 5.8) throw new Error('setup: the Full scrub stopped at ' + FM.time + ' s and never crossed clip C’s start');
+          if (!/Move clip left to the playhead/.test(full2)) throw new Error('back in Full, a scrub from inside clip C to ' + FM.time + ' s, before it, left the row at (' + full2 + '), want Move clip left: after a trip to Simple the row stopped following the playhead');
+        }, { full: true });
+      });
+    } finally {
+      FM.inspector.refresh = realRefresh;
+    }
+  });
+
   /* #768 H4 (the 22 Oct hunt, built as its refuter's memo variant). Every render with a layer selected ran placeRotKnob: both
    * knob classes off, three getBoundingClientRect reads (the stage, the knob, the box: a forced layout straight after the
    * box's styles were written), and a class back on whenever the knob is off the stage, which is every layer reaching the
