@@ -2487,6 +2487,69 @@ window.FM = window.FM || {};
     if (!m || m._errBias == null || !isFinite(m._errBias)) return true;   // seeding: the step takes it whole anyway
     return Math.abs(rawErr - m._errBias) <= SYNC_DEAD;
   };
+  /* ═══ A ROUTED SEEK THAT DID NOT FIX IT IS NOT REPEATED (#663, finding 2 of the 23 Oct hunt, as its refuter corrected it) ═══
+   * His words: "audio still cuts in and out on mobile".
+   * A routed clip (m._mes) is never rate-trimmed, so since v17.93 an error over 0.1 s, or one out of the dead band for a second,
+   * is corrected by a seek. A seek throws the bias away and re-seeds it from the first warm sample (FM._noteSyncSeek). If the
+   * element's latency is still settling when that sample is taken, the seed is short by the part still to come; that part then
+   * reads as lag, it is never learned (out of the band, queue 690) and never trimmed (routed), so it is seeked again, the seek
+   * re-seeds short again, and so on: a seek about every 1–2 s for as long as the clip plays, and on WebKit every seek on a routed
+   * element is a gap while its tap refills. The element was never late at all: each seek put it exactly where it already was.
+   * So the SAME error coming back after a routed seek is taken as latency and adopted into the bias, not seeked again:
+   *   · only within MES_REPEAT_MS of a routed seek, and only while that seek is still what last seated the element (any other seek, FM.play, a loop wrap, a seam pre-roll or a restart all stamp m._syncAt and close the window), and only in the same direction;
+   *   · each adoption no bigger than the error that seek was for, to within the dead band — a bigger fault is a new one, seeked;
+   *   · in all, no more than SYNC_HARD since that seek.
+   * What it keeps: a one-off stall is still pulled back by ONE seek (B2, test 845), because after that seek the re-seed matches
+   * the steady state and the error never comes back. A second stall the same size and direction inside the window was kept as
+   * latency by this rule alone (the probe: 268 / 371 ms late); since the redesign below only an error that RAMPED IN is adopted.
+   * _syncMayLearn is untouched (queue 690 and 916 pin it). */
+  const MES_REPEAT_MS = 5000;
+  /* ═══ …AND ONLY AN ERROR THAT RAMPED IN, NEVER A STEP (#663 finding 2, the PM's redesign, 24 Oct) ═══
+   * The rule above, measured by its own probe ('663 measure routed seek loop', &measure663=1), was held: for a latency that settles
+   * late after a seek it cut 3-9 seeks to 1, but a REAL stall of 0.12 s or 0.17 s coming back inside the window passed every test
+   * above (same direction, same size) and was adopted too, leaving the clip 268 / 371 ms behind the playhead (29 ms without it).
+   * The two have different shapes. A latency that settles RAMPS IN: at the re-seed after the seek the error is zero by construction
+   * and it grows a little at each look. A stall is a STEP: the element stops (in the probe's fake, is pulled back) while the playhead
+   * runs, so while the stop lasts the error grows as fast as the playhead moves, or faster.
+   * So from each re-seed the RAW error (local - el.currentTime: no bias in it, so neither the EMA nor an adoption moves it) is
+   * followed against the clip's own time, in spans of at least MES_RAMP_SPAN; one span whose error moved more than MES_RAMP_SLOPE per
+   * second of clip time marks a step (m._mesJump), and until the next re-seed a repeat is seeked exactly as before, never adopted.
+   * The numbers, from the probe's own fakes (tests.js seekLatEl663 and settlesLate663; q148Run looks about every 80 ms):
+   *   · settling d later over a 0.6 s ramp: a slope of d/0.6, 0.08-0.25 for d = 0.05-0.15 and 0.40 at d = 0.24, the steepest;
+   *     the 2 s ramp from half: 0.06;
+   *   · a real stall of 0.12 / 0.17 s inside one ~0.08 s look: 1.5 / 2.1; on a phone, an element whose clock has stopped: exactly 1;
+   *   · MES_RAMP_SLOPE 0.6 lies between: 1.5x the steepest settling fake, under a stopped clock. MEASURE: computed from the fakes,
+   *     not yet run; confirm with the probe.
+   *   · whatever the slope, a rise past the dead band (SYNC_DEAD) within one span is a step. The slope bound grows with the look, so
+   *     without that cap a stop inside ONE slow look passed as a ramp (anything up to 0.6 of the look) and, over 0.1 s, was adopted
+   *     on that tick; his phone has such looks (16 Aug: a worst frame gap of 494 ms). A ramp seen through a look that slow is
+   *     seeked instead, the v17.93 cost.
+   * WHAT IT STILL MISSES, stated: a stop split across two spans adds only part of itself to each, so one of up to about 0.06-0.07 s
+   * at 30-60 fps, and up to two dead bands (0.09 s) at any slower rate, can read as a ramp and, once out of the band for a second, be
+   * adopted; and an element that loses 30 ms or less at a time, again and again, has a ramp's slope and is adopted like one, within
+   * the size and SYNC_HARD limits above. F3's counters on his phone are what would show either.
+   * A slope and not a per-tick step, because the app looks every animation frame (16 ms at 60 fps): there a stopped element moves the
+   * error 16 ms a look, which a step bound sized from the probe's 80 ms looks would pass as a ramp. A span shorter than MES_RAMP_SPAN
+   * (0.05 s of clip time) is judged as if it were that long, so a one-frame jump still counts (0.12 > 0.6 x 0.05) while up to 30 ms
+   * of jitter between two frames does not. Jitter worse than that costs a seek (the v17.93 rule), never a kept lag. MEASURE as well:
+   * MES_RAMP_SPAN is 60 fps arithmetic, not a phone reading; F3's counters on his phone are what would show it. */
+  const MES_RAMP_SLOPE = 0.6, MES_RAMP_SPAN = 0.05;
+  FM._mesRampNote = function (m, rawErr, local, fresh) {
+    if (!m) return;
+    if (fresh) m._mesJump = false;   // the re-seed (after a seek, play, a wrap, a seam): the error starts from zero here
+    const dl = local - m._mesRampAt;
+    if (fresh || m._mesRampAt == null || !(dl >= 0) || !isFinite(rawErr) || !isFinite(m._mesRampErr)) { m._mesRampAt = local; m._mesRampErr = rawErr; return; }
+    if (Math.abs(rawErr - m._mesRampErr) > Math.min(SYNC_DEAD, MES_RAMP_SLOPE * Math.max(dl, MES_RAMP_SPAN))) m._mesJump = true;   // past the dead band inside one span is a step at any look length
+    if (dl >= MES_RAMP_SPAN) { m._mesRampAt = local; m._mesRampErr = rawErr; }
+  };
+  FM._mesRepeatIsLatency = function (m, err, now) {
+    if (!m || !m._mesSeekAt || m._syncAt !== m._mesSeekAt || !(now - m._mesSeekAt < MES_REPEAT_MS)) return false;
+    if (m._mesJump) return false;   // the error since the re-seed stepped in: a stall, seeked (FM._mesRampNote)
+    const was = m._mesSeekErr;
+    if (!(isFinite(was) && isFinite(err) && err * was > 0)) return false;
+    if (Math.abs(err) > Math.abs(was) + SYNC_DEAD) return false;
+    return Math.abs((m._mesAdopted || 0) + err) <= SYNC_HARD;
+  };
   FM._noteSyncError = function (v, now) {
     const p = FM.playbackStats; if (!p) return;
     const es = p.errs || (p.errs = []), et = p.errT || (p.errT = []);
@@ -2728,18 +2791,28 @@ window.FM = window.FM || {};
                "worst" figure the report prints. Computed once, here, from the bias the controller is
                actually acting on. */
             const step = FM._syncBiasStep(m, rawErr, FM._syncMayLearn(m, rawErr));   // a stall is corrected, not learned (queue 690)
+            if (m._mes) FM._mesRampNote(m, rawErr, local, step.fresh);   // #663: since the re-seed, did the error ramp in or step?
             let plan = FM.mediaSyncPlan(step.deBiased, base, m._syncAt == null ? Infinity : now - m._syncAt);
             /* #845 (the pre-ship review's B2 and its refuter, 22 Oct): a routed clip is never rate-trimmed (below), so the trim band
                would be a place its sound stays late for good — a 200 ms stall left it 200 ms behind until the clip ended. There, a lag
                over 0.1 s, or one that has stayed out of the dead band for a second, is corrected by the (de-clicked) seek instead, no
                more often than SEEK_MIN_GAP. In-band jitter never seeks. */
+            let mesRule = false;
             if (m._mes && plan.action === 'trim') {
               if (!m._mesOutAt) m._mesOutAt = now;
-              if ((Math.abs(step.deBiased) > 0.1 || now - m._mesOutAt >= 1000) && !(m._syncAt != null && now - m._syncAt < SEEK_MIN_GAP)) plan = { action: 'seek', rate: base };
+              if ((Math.abs(step.deBiased) > 0.1 || now - m._mesOutAt >= 1000) && !(m._syncAt != null && now - m._syncAt < SEEK_MIN_GAP)) { plan = { action: 'seek', rate: base }; mesRule = true; }
+              /* #663 (finding 2 of the 23 Oct hunt, as its refuter corrected it): a routed seek that did not fix it is not repeated.
+                 See FM._mesRepeatIsLatency: the same error back after the re-seed is latency the seed missed, so it joins the bias. */
+              if (mesRule && FM._mesRepeatIsLatency(m, step.deBiased, now)) {
+                m._errBias += step.deBiased; m._mesAdopted = (m._mesAdopted || 0) + step.deBiased; m._mesAdopts = (m._mesAdopts || 0) + 1;
+                m._mesOutAt = 0; plan = { action: 'hold', rate: base }; mesRule = false;
+              }
             } else if (m._mesOutAt) m._mesOutAt = 0;
             if (plan.action === 'seek') {
               m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++;
               FM._noteSyncSeek(m);
+              /* #663: remember what a routed seek was meant to fix, for FM._mesRepeatIsLatency; any other seek closes that window */
+              if (mesRule) { m._mesSeekAt = now; m._mesSeekErr = step.deBiased; m._mesAdopted = 0; } else m._mesSeekAt = 0;
               /* #845 (the audio hunt's refuter, N1): a drift seek jumps a waveform that is PLAYING to an arbitrary sample, the click
                  play() and wrapTo() de-click, missed here since v6.05. The restart fades in over 45 ms (declickGain) through el.volume;
                  on an iPhone, where el.volume cannot be set, only a clip with a level stage (m._boost) fades, and an effect-only clip
