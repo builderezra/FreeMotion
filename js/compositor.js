@@ -25153,8 +25153,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         if (keyed) ctx.filter = 'none';                   // filter already applied to the keyed source
         /* #202 VIDEO line (js/perf-probe.js). FM._videoDrawSink exists only while What's slow is measuring, so outside a
            measurement this costs one property read. Only a draw of the clip ITSELF counts (src is still the element: not a
-           saved frame of a reversed or slowed clip, a held frame, a grade or a key), and only in the preview, never an export. */
-        const vS = (src === m.el && m.kind === 'video' && !FM._exporting) ? FM._videoDrawSink : null;
+           saved frame of a reversed or slowed clip, a held frame, a grade or a key), only one with a picture (a song is a video
+           record of 0 x 0, whose draw does nothing), and only in the preview, never an export. */
+        const vS = (src === m.el && m.kind === 'video' && w > 0 && h > 0 && !FM._exporting) ? FM._videoDrawSink : null;
         const v0 = vS ? performance.now() : 0;
         try {
           // Sample the crop sub-rect (cr.x,cr.y,cr.w,cr.h) of the full source into the frame box (cw×ch)

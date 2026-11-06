@@ -63512,7 +63512,13 @@
       for (let j = i + 1; j < ls.length && /^ {9}\S/.test(ls[j]); j++) out.push(ls[j]);
       return out.join('\n');
     };
-    let rig = null, looping = false, loopFrames = 0;
+    let rig = null, looping = false, loopFrames = 0, songLayer = null;
+    const dropSong = function () {
+      if (!songLayer) return;
+      const i = FM.scene.layers.indexOf(songLayer); if (i >= 0) FM.scene.layers.splice(i, 1);
+      if (FM.media.delete) FM.media.delete(songLayer.id);
+      songLayer = null;
+    };
     /* one frame of the rig: both clocks step, and the scene is drawn through the real compositor */
     const startLoop = function (el, cx) {
       let k = 0;
@@ -63541,6 +63547,13 @@
       g.fillStyle = '#ff0000'; g.fillRect(0, 0, 64, 48);
       el.readyState = 4; el.paused = false; el.currentTime = 0;
       FM.media.set(rig.layer.id, { kind: 'video', el: el, width: 64, height: 48, duration: 20, stripFrames: [] });
+      /* …and a song beside it: a song is a video record with no picture (0 x 0), whose draw does nothing, so it must not be
+         counted as drawing the video (the review of 6 Nov). */
+      songLayer = FM.makeLayer('video', { name: 'song', start: 0, duration: 20 });
+      const songEl = offscreen(1, 1);
+      songEl.readyState = 4; songEl.paused = false; songEl.currentTime = 0;
+      FM.scene.layers.push(songLayer);
+      FM.media.set(songLayer.id, { kind: 'video', el: songEl, width: 0, height: 0, duration: 20, stripFrames: [] });
       realRender(cx, FM.scene, 0);
       const px = cx.getImageData(160, 120, 1, 1).data;
       if (!(px[0] > 180 && px[1] < 70 && px[2] < 70)) throw new Error('CONTROL: the rig’s clip did not draw (the middle of the picture is rgb(' + px[0] + ',' + px[1] + ',' + px[2] + ')), so the compositor never drew the stand-in and nothing below is under test');
@@ -63559,6 +63572,7 @@
       if (ph[2] > 2) throw new Error('the playhead stood still on ' + ph[2] + ' of ' + ph[3] + ' frames; the rig moves it every frame:\n' + block);
       const dr = num(block, /drawing the video: ([\d.]+)ms each time, worst ([\d.]+)ms · drawn (\d+) times, (\d+) of them at a new point in the clip/, 'what drawing the video cost');
       if (dr[2] < 8) throw new Error('the report counted ' + dr[2] + ' draws of the video; the rig drew it on each of ' + loopFrames + ' frames:\n' + block);
+      if (dr[2] > loopFrames + 2) throw new Error('the report counted ' + dr[2] + ' draws of the video over ' + loopFrames + ' frames: the song beside it (a video record with no picture) was counted as drawing the video, which doubles the count and halves the cost each time:\n' + block);
       if (dr[3] < 3 || dr[3] > dr[2] * 0.75 + 1) throw new Error(dr[3] + ' of ' + dr[2] + ' draws were counted at a new point in the clip; the rig moves the clip on every second frame, so about half:\n' + block);
       if (!(dr[0] <= dr[1] + 0.01) || dr[1] > 1000) throw new Error('the draw times do not add up (' + dr[0] + 'ms each, worst ' + dr[1] + 'ms):\n' + block);
       if (FM._videoDrawSink) throw new Error('the compositor is still timing video draws after the sample ended');
@@ -63567,6 +63581,7 @@
       FM.playing = false;
       const paused = videoBlock(await measure());
       if (!paused || !/the video did not play during this sample, so its clock was not measured/.test(paused) || /smallest step/.test(paused)) throw new Error('CONTROL: with nothing playing the VIDEO line should say the clock was not measured, and quote no steps:\n' + paused);
+      dropSong();
       rig.restore(); rig = null;
 
       /* ── CONTROL: no video in the project, while the playhead moves */
@@ -63580,6 +63595,7 @@
       looping = false;
       if (FM.perfProbe.running) FM.perfProbe.stop();
       FM.playing = false;
+      dropSong();
       if (rig) rig.restore();
       FM.playing = wasPlaying;
       if (FM._resetPlayQuality) FM._resetPlayQuality();
