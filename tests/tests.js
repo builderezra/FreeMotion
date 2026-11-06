@@ -76923,6 +76923,108 @@
     if (!(later > atSeek)) throw new Error('after the de-clicked seek the volume did not come back up (' + later + ')');
   });
 
+  /* #845 part 1 (P27's write flood, plans/helper-27, reworked 6 Nov for today's code). The live preview calls applyAt every
+   * screen frame, and every effect wrote every one of its AudioParams again each time, moving or not: P27 counted 15,960
+   * setValueAtTime events per 120 frames across the 27 effects of v17.33, against 133 for one frame. Now a key that is not
+   * keyframed is set HELD, and its effect writes only a value that moved (js/audio-fx.js, HELD above unit()).
+   * Counted the way P27's probe counted (helper-plans-27-scripts/aw_per.js on plans/helper-27): every AudioParam scheduling call
+   * stubbed on the prototype, one effect per chain at its defaults, 120 frames at 60 fps. Only the calls made inside a
+   * synchronous block of applyAt calls are counted, so nothing else on the page can add to a count.
+   * FAILS BEFORE THE FIX: every effect at rest writes about 119 times its first frame over the next 119 frames.
+   * CONTROLS: every effect's first frame writes something (the rig drives each one); a Gain moved 0 to 6 dB is written once, as
+   * 1.995; a keyframed Gain, a keyframed Gain held flat (the not-keyframed half of the rule) and a keyframed Chorus Depth are
+   * written on every frame; and the frame after Loudness Match's measurement lands moves its gain toward the matched level with
+   * no control touched, which a skip of an unchanged set in applyAt (P27's own patch) swallows. */
+  test('845 P27 the live audio chain stops rewriting parameters nobody is moving: no effect at rest adds AudioParam events after its first frame, a moved slider is written once, a keyframed one every frame, and a landing loudness measurement still moves the Loudness Match gain', { item: '845', budgetMs: 60000 }, async function () {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext, reg = FM.audioFxRegistry;
+    if (!OAC || !window.AudioParam || !FM.buildAudioFxChain || !reg || !FM.loudness) throw new Error('setup: the audio effect chain is not reachable');
+    const AP = window.AudioParam.prototype, orig = {}, log = [], chains = [];
+    const NAMES = ['setValueAtTime', 'linearRampToValueAtTime', 'exponentialRampToValueAtTime', 'setTargetAtTime', 'setValueCurveAtTime', 'cancelScheduledValues', 'cancelAndHoldAtTime'];
+    let on = false, mediaSet = false;
+    const hadMedia = FM.media, oldGet = hadMedia ? hadMedia.get : null;
+    NAMES.forEach(function (n) {
+      if (typeof AP[n] !== 'function') return;
+      orig[n] = AP[n];
+      AP[n] = function (v) { if (on) log.push({ m: n, v: v }); return orig[n].apply(this, arguments); };
+    });
+    /* the AudioParam calls one synchronous block makes, and only those */
+    const count = function (fn) { log.length = 0; on = true; try { fn(); } finally { on = false; } return log.slice(); };
+    const build = function (layer) {
+      const chain = FM.buildAudioFxChain(new OAC(2, 48000, 48000), layer, 0);
+      if (chain) chains.push(chain);
+      return chain;
+    };
+    const inst = function (type, over) { const x = reg.makeInstance(type); if (!x) throw new Error('setup: there is no ' + type + ' effect'); Object.assign(x.params, over || {}); return x; };
+    /* events on each of frames 1..n after the first, dt apart */
+    const perFrame = function (chain, n, dt) { const z = []; for (let i = 1; i <= n; i++) z.push(count(function () { chain.applyAt(i * dt); }).length); return z; };
+    try {
+      // 1. EVERY EFFECT AT REST: frame 0, then 119 more frames with nothing moved
+      const types = reg.all().map(function (d) { return d.type; });
+      if (types.length < 20) throw new Error('setup: only ' + types.length + ' audio effects are registered');
+      const rest = [], dead = [];
+      let first = 0, more = 0;
+      types.forEach(function (t) {
+        const chain = build({ audioFx: [inst(t)] });
+        if (!chain) { dead.push(t + ' (built no chain)'); return; }
+        const f = count(function () { chain.applyAt(0); }).length;
+        const r = count(function () { for (let i = 1; i < 120; i++) chain.applyAt(i / 60); }).length;
+        if (!(f > 0)) dead.push(t);
+        first += f; more += r;
+        if (r) rest.push([t, r]);
+      });
+      if (dead.length) throw new Error('CONTROL: the first frame wrote nothing at all for ' + dead.join(', ') + ' - the rig is not driving those effects, so a quiet count for them would prove nothing');
+      if (rest.length) {
+        rest.sort(function (a, b) { return b[1] - a[1]; });
+        throw new Error('at rest, the 119 frames after the first wrote ' + more + ' more AudioParam events across ' + types.length + ' effects (their first frames wrote ' + first + '; P27 counted 15,960 per 120 frames for 27): ' + rest.slice(0, 12).map(function (x) { return x[0] + ' ' + x[1]; }).join(', ') + (rest.length > 12 ? ' and ' + (rest.length - 12) + ' more' : '') + ' - every parameter nobody is moving is written again every screen frame');
+      }
+      // 2. A MOVED SLIDER IS WRITTEN, ONCE, WITH ITS NEW VALUE
+      const g = inst('gain', { gain: 0 }), c2 = build({ audioFx: [g] });
+      c2.applyAt(0); c2.applyAt(1 / 60);
+      g.params.gain = 6;
+      const moved = count(function () { c2.applyAt(2 / 60); c2.applyAt(3 / 60); c2.applyAt(4 / 60); });
+      if (moved.length !== 1 || moved[0].m !== 'setValueAtTime' || Math.abs(moved[0].v - Math.pow(10, 6 / 20)) > 1e-6) throw new Error('CONTROL: a Gain moved 0 to 6 dB was written ' + moved.length + ' times in 3 frames, as ' + JSON.stringify(moved) + ' - want once, setValueAtTime 1.995: a moved slider must still reach the sound');
+      // 3. A KEYFRAMED ONE IS WRITTEN ON EVERY FRAME: a glide, a key held flat, and a custom setter (Chorus Depth)
+      const frozen = [];
+      const kfGain = function (a, b) { return { gain: { kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] } }; };
+      const c3 = build({ audioFx: [inst('gain', kfGain(-6, 6))] }); c3.applyAt(0);
+      const z3 = perFrame(c3, 30, 1 / 30);
+      if (z3.indexOf(0) >= 0) frozen.push('a Gain keyed -6 to +6 dB was not written on ' + z3.filter(function (x) { return !x; }).length + ' of 30 frames (it would stair-step)');
+      const c3b = build({ audioFx: [inst('gain', kfGain(3, 3))] }); c3b.applyAt(0);
+      const z3b = perFrame(c3b, 30, 1 / 30);
+      if (z3b.indexOf(0) >= 0) frozen.push('a Gain keyed at +3 dB and held there was not written on ' + z3b.filter(function (x) { return !x; }).length + ' of 30 frames (only a key that is not keyframed may be skipped)');
+      const dp = reg.paramsOf('chorus').filter(function (p) { return p.key === 'depth'; })[0];
+      if (!dp) throw new Error('setup: the Chorus has no Depth');
+      const c4 = build({ audioFx: [inst('chorus', { depth: { kf: [{ t: 0, v: dp.min, e: 'linear' }, { t: 2, v: dp.max, e: 'linear' }] } })] }); c4.applyAt(0);
+      const z4 = perFrame(c4, 30, 1 / 15);
+      if (z4.indexOf(0) >= 0) frozen.push('a Chorus with Depth keyed ' + dp.min + ' to ' + dp.max + ' was not written on ' + z4.filter(function (x) { return !x; }).length + ' of 30 frames');
+      if (frozen.length) throw new Error('CONTROL: ' + frozen.join(' · '));
+      // 4. LOUDNESS MATCH: its gain moves on the frame its measurement lands, with no control touched
+      const id = 'q845p27-lm', lm = inst('loudnessmatch', { guard: 0 });
+      const n = 96000, buf = new AudioBuffer({ numberOfChannels: 2, length: n, sampleRate: 48000 });
+      let s = 845;
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < n; i++) { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; d[i] = 0.02 * (s / 4294967296 * 2 - 1); } }
+      const media = { audioBuffer: buf }, layer = { id: id, type: 'video', name: id, start: 0, duration: 2, trimStart: 0, speed: 1, audioFx: [lm] };
+      const get = function (k) { return k === id ? media : (oldGet ? oldGet.call(hadMedia, k) : undefined); };
+      if (hadMedia) hadMedia.get = get; else FM.media = { get: get };
+      mediaSet = true;
+      const c5 = build(layer);   /* the build starts the measurement; it lands in a later microtask */
+      if (!c5) throw new Error('setup: Loudness Match built no chain');
+      c5.applyAt(0); c5.applyAt(1 / 60);
+      const st0 = FM.loudness.state(layer, lm);
+      if (st0.state !== 'measuring') throw new Error('setup: before its measurement could land, Loudness Match says ' + st0.state + ' - ' + JSON.stringify(st0.text) + ' - so its landing cannot be watched');
+      const m = await FM.loudness.prepare(layer, media);
+      const want = m ? FM.loudness.gainOf(m, lm.params.target, 0, lm.params.ceiling) : null;
+      if (!want || !(want.g > 1.5)) throw new Error('setup: the clip measured ' + JSON.stringify(m) + ', a gain of ' + JSON.stringify(want) + ' - want a quiet clip turned well up');
+      const landed = count(function () { c5.applyAt(2 / 60); });
+      const hit = landed.filter(function (e) { return e.m === 'setTargetAtTime' && Math.abs(e.v - want.g) <= 1e-9 * want.g; });
+      if (!hit.length) throw new Error('CONTROL: the frame after Loudness Match measured the clip wrote ' + JSON.stringify(landed) + ' - want its gain moved toward ' + want.g.toFixed(4) + ' (setTargetAtTime): a skip has swallowed the one write the effect exists to make');
+    } finally {
+      NAMES.forEach(function (n) { if (orig[n]) AP[n] = orig[n]; });
+      if (mediaSet) { if (hadMedia) hadMedia.get = oldGet; else delete FM.media; }
+      chains.forEach(function (c) { try { c.dispose(); } catch (e) {} });
+    }
+  });
+
   /* Queue 202 — is the ladder actually WIRED to playback? A different question from whether it decides
    * correctly, and the one no existing test could answer.
    * "the quality ladder actually steps down when shedding pixels helps" already pins the DECISION, and
