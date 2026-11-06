@@ -107,6 +107,12 @@ window.FM = window.FM || {};
   let _frameSig = '';   // FM.adjNeedsFrame's answer at the last render ('' = nothing needs the whole frame)
   function render() {
     if (!ctx) return;
+    /* A TIER STEP IS APPLIED BY THE NEXT FRAME (the unnumbered Editing lags entry, (b), 6 Nov). The ladder used to resize
+       the canvas AND repaint it from inside notePlaybackCost, straight after the frame it had just judged, so every step
+       drew the heaviest frame of the run twice in one display interval: on a layer with five effects at a 4x throttle,
+       that is the hitch you feel each time the preview softens or sharpens. The ladder now only asks, and this frame
+       sizes the new backing store and paints it once. The frame after a step is still the one _skipCost leaves out. */
+    if (_resizePending) { sizeCanvas(); syncDrawOverlay(); }
     /* THE PREVIEW ONLY (queue 549). Ezra: "when you go to the end of a layer you can't see it anymore…
        even if it wasn't the last thing it should still be visible when you're at the end of it".
        A layer's window is half-open, which is the right convention — and the EXPORTER must keep it, or a
@@ -151,9 +157,16 @@ window.FM = window.FM || {};
       renderQueued = false;
       const _t0 = performance.now();
       render();
-      noteMotion(performance.now() - _t0);
+      const ms = performance.now() - _t0;
+      _queuedMs += ms;
+      noteMotion(ms);
     });
   };
+  /* The time queued repaints have taken, in total (the unnumbered Editing lags entry, (c), the review of 6 Nov). The effects
+     sheet's preview leaves the phone as long as each frame took, and on a video layer a frame's seek lands as a `seeked`
+     repaint INSIDE that wait: this lets the sheet count it as time the phone was busy, not free. */
+  let _queuedMs = 0;
+  FM._queuedRenderMs = () => _queuedMs;
 
   // How many canvas pixels to keep per project pixel, so vector edges rasterise at the real screen
   // resolution instead of being a stretched bitmap. Zooming to 4x on a phone spreads a 1080px comp
@@ -174,7 +187,9 @@ window.FM = window.FM || {};
    * effectively never leaves it.
    */
   const PLAY_TIERS = [1, 0.8, 0.62, 0.48, 0.36, 0.28];
-  let _playTier = 0, _renderAvg = 0, _tierCooldown = 0;
+  let _playTier = 0, _renderAvg = 0, _tierCooldown = 0, _resizePending = false;   // _resizePending: a tier step the next frame applies
+  let _coolMin = Infinity, _coolFrames = 0, _coolBudget = 0;   // a step's settle measured in time as well as frames (Editing lags (a))
+  const COOL_MIN_FRAMES = 3;
   /* A read-only window onto the adaptive ladder, for probes and the suite (queue 130). Ezra reports
    * "it also still doesn't compress the quality in the canvas playback" — a claim about this state
    * that was, until now, impossible to check from outside without reading the source and guessing.
@@ -192,7 +207,7 @@ window.FM = window.FM || {};
    * it, which then played soft from its first frame. A fresh project is judged the way a fresh session
    * is. Called by FM.projects.open, which has already paused, so nothing is resized here. */
   FM._resetPlayQuality = function () {
-    _playTier = 0; _renderAvg = 0; _gapAvg = 0; _tierCooldown = 0; _skipCost = 0; _costCtx = '';
+    _playTier = 0; _renderAvg = 0; _gapAvg = 0; _tierCooldown = 0; _coolBudget = 0; _skipCost = 0; _costCtx = '';
     _dropFrom = 0; _locked = 0; _lockAt = 0; _noLowerPx = 0;
     _climbFrom = 0; _climbLockAt = 0; _bandHits = 0;
   };
@@ -242,6 +257,14 @@ window.FM = window.FM || {};
    * at 200ms the idle timer fired mid-drag and snapped back to full resolution. (#123) */
   const MOTION_FRAMES = 3, MOTION_GAP = 500, MOTION_IDLE = 700;
   let _inMotion = false, _mFrames = 0, _mLast = 0, _mIdle = null, _movingCls = false;   // _movingCls: #768 H1, body.fm-moving
+  let _pacedFrom = 0, _pacedUntil = 0;   // the wait the effects sheet's preview chose, see noteMotion
+  /* js/fx-browser.js says how long it is about to wait before its next preview frame. A wait that continues one which has
+     just ended (the sheet waiting again for a repaint that landed in it) extends that window rather than starting one. */
+  FM._pacedWait = function (ms) {
+    const n = performance.now();
+    if (!(n - _pacedUntil < 20)) _pacedFrom = n;
+    _pacedUntil = n + Math.max(0, ms || 0);
+  };
   function noteMotion(ms) {
     if (FM.playing) return;                       // playback has its own measurement below
     /* #768 (the 22 Oct hunt's refuter, H1): body.fm-moving while anything re-renders. styles.css pauses the category cards' two
@@ -249,11 +272,17 @@ window.FM = window.FM || {};
        with a layer selected the grid is up for the whole scrub. The idle timeout below clears it, so it cannot stick. */
     if (!_movingCls) { _movingCls = true; document.body.classList.add('fm-moving'); }
     const now = performance.now();
-    const gap = _mLast ? (now - _mLast) : 0;
+    /* A WAIT THE EFFECTS SHEET CHOSE IS NOT A FRAME'S COST (the unnumbered Editing lags entry, (c), the review of 6 Nov). The
+       sheet's preview waits between its frames on purpose (FM._pacedWait). Left in, that wait read as lateness: a cheap
+       frame's 41 ms cadence sits on the drag ladder's late line, so it dropped a tier for nothing and latched; and a heavy
+       frame's wait reset the motion count, so the ladder never saw the scene that needed it. So the part of the interval
+       that the sheet chose to wait is taken out of both. */
+    const waited = _mLast ? Math.max(0, Math.min(now - ms, _pacedUntil) - Math.max(_mLast, _pacedFrom)) : 0;
+    const gap = _mLast ? (now - _mLast - waited) : 0;
     /* #1131 (the lag hunt's refuter, R2, 21 Oct): what resets the count is the IDLE time before this render began, not the gap from
        the last render's end to this one's end, which contains this render. A frame dearer than MOTION_GAP never counted as motion,
        so the heavy scene, the one that needs relief, was scrubbed and dragged at full size and the ladder was never asked. */
-    if (now - ms - _mLast > MOTION_GAP) _mFrames = 0;
+    if (now - ms - _mLast - waited > MOTION_GAP) _mFrames = 0;
     _mLast = now;
     _mFrames++;
     if (!_inMotion && _mFrames >= MOTION_FRAMES) { _inMotion = true; resizeCanvas(); }
@@ -334,6 +363,10 @@ window.FM = window.FM || {};
   FM._notePlaybackCost = notePlaybackCost;
 
   function notePlaybackCost(ms, gapMs) {
+    /* A step asked for and not yet applied by a frame. In the app a render always comes between two calls, so this never
+       fires there; the suite drives this seam with no frames in between, and gets the old resize-and-paint, so the judging
+       below reads the canvas the step made. */
+    if (_resizePending) resizeCanvas();
     if (!FM.playing && !_inMotion) return;
     const mode = (FM.settings && FM.settings.get('playbackQuality')) || 'auto';
     // 'detail' never trades sharpness, so the ladder controls nothing at all. Park it at the top
@@ -352,7 +385,28 @@ window.FM = window.FM || {};
     if (_skipCost) { _skipCost = 0; return; }
     _renderAvg = _renderAvg ? (_renderAvg * 0.8 + ms * 0.2) : ms;
     if (gapMs > 0) _gapAvg = _gapAvg ? (_gapAvg * 0.8 + gapMs * 0.2) : gapMs;
-    if (_tierCooldown > 0) { _tierCooldown--; return; }
+    /* A STEP'S SETTLE IS FRAMES OR TIME, WHICHEVER COMES FIRST (the unnumbered Editing lags entry, (a), 6 Nov). The settle
+       after a step was a frame count only: 24 frames in playback, 8 in a drag. Frames at budget make that 0.8 s of a 30 fps
+       comp; frames of a heavy stack at 200 ms make it 4.8 s, so the ladder that exists to rescue exactly that scene took
+       about 15 s to walk three rungs, stuttering the whole way. Now the settle also ends once the frames it has waited
+       through have measured the same TIME the count was meant to buy, after at least COOL_MIN_FRAMES of them, so the cost
+       average it judges by has something in it. Frames at or under budget never reach that time first, so for them
+       nothing changes. play()'s own opening settle of 8 frames ends the same way.
+       The time is the CHEAPEST frame of the settle times the frames so far, not their sum: one hitch (a GC, a clip starting
+       at a cut, a finger resting on a drag) must not end the settle by itself, because the verdict that follows would then
+       read that hitch, still large in the averages, as the new tier's cost, undo a good step and latch it (the review of
+       6 Nov). Only frames that are ALL slow end it early.
+       A playback frame with no interval (the first after every Play: FM.pause() clears the last paint) is left out of it:
+       its own time is the JavaScript part only, which on a scene the GPU or the video decode holds up is a few ms, and as
+       the minimum it would keep Play's opening settle at its full 8 frames for exactly the scenes the interval sees. */
+    if (_tierCooldown > 0) {
+      _tierCooldown--;
+      if (_coolBudget && (gapMs > 0 || !FM.playing)) {
+        _coolMin = Math.min(_coolMin, Math.max(ms, gapMs > 0 ? gapMs : 0));
+        if (++_coolFrames >= COOL_MIN_FRAMES && _coolMin * _coolFrames >= _coolBudget) _tierCooldown = 0;
+      }
+      return;
+    }
     /* THE BUDGET DEPENDS ON WHICH REGIME WE ARE IN (queue 202/125, from his first on-device sample).
      * A scrub should repaint every display interval, so 1000/60 is right for it. PLAYBACK should not:
      * a 30fps comp on a 60Hz screen renders every OTHER rAF by design, so a perfectly healthy
@@ -463,7 +517,11 @@ window.FM = window.FM || {};
     if (_playTier !== before || cost > budget * 0.72) _bandHits = 0;
     // Playback wants a LONG settle — resolution pumping mid-shot is uglier than being one tier low.
     // A drag is short and you're watching position, not detail, so it may find its level quickly.
-    if (_playTier !== before) { _tierCooldown = FM.playing ? 24 : 8; _renderAvg = 0; _gapAvg = 0; _skipCost = 1; resizeCanvas(); }
+    if (_playTier !== before) {
+      _tierCooldown = FM.playing ? 24 : 8; _renderAvg = 0; _gapAvg = 0; _skipCost = 1;
+      _coolMin = Infinity; _coolFrames = 0; _coolBudget = _tierCooldown * budget;   // the settle's time, see the top of the cooldown
+      _resizePending = true;   // applied by the next frame (top of render())
+    }
     // `spent` is computed HERE, where the ladder's own state lives, and passed in — so the offer's
     // rule ("the ladder is out of moves and we are still late") can be driven by a test without
     // reaching into module-private tier bookkeeping.
@@ -635,6 +693,18 @@ window.FM = window.FM || {};
   }
 
   function resizeCanvas() {
+    sizeCanvas();
+    render();
+    syncDrawOverlay();
+  }
+  // The drawing overlay is sized and positioned off this canvas, so it has to be told. Not just on
+  // window resize: the adaptive quality tier re-allocates the canvas mid-drag, which is precisely
+  // when a stroke is in progress.
+  function syncDrawOverlay() { if (FM.drawTool && FM.drawTool.sync) FM.drawTool.sync(); }
+  // The canvas's size and place for the current zoom, crop and quality tier, without painting it: resizeCanvas paints
+  // straight after, and a tier step leaves the painting to the frame that applies it (see the top of render()).
+  function sizeCanvas() {
+    _resizePending = false;
     _noLowerPx = 0;   // the ladder's "nothing lower changes a pixel" answer is only valid for one canvas geometry
     const P = FM.scene.project;
     const wrapEl = document.getElementById('canvas-wrap');
@@ -684,11 +754,6 @@ window.FM = window.FM || {};
     }
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }   // assigning re-allocates the backing store, so only on a real change
     document.documentElement.style.setProperty('--comp-ar', P.width + ' / ' + P.height);   // canvas-wrap holds this aspect → preview always contains in the stage
-    render();
-    // The drawing overlay is sized and positioned off this canvas, so it has to be told. Not just on
-    // window resize: the adaptive quality tier re-allocates the canvas mid-drag, which is precisely
-    // when a stroke is in progress.
-    if (FM.drawTool && FM.drawTool.sync) FM.drawTool.sync();
   }
   /* ---- ONE pointer→comp conversion for every on-canvas tool -----------------------------------
    * The preview canvas is NOT 1:1 with the comp. It is supersampled when the comp is displayed
@@ -2782,8 +2847,18 @@ window.FM = window.FM || {};
       const started = W.els.some(w => (w.el.currentTime || 0) > w.from + 0.008);
       /* #202 H2: held while any element is inside its own deadline and was not refused */
       const holding = W.els.some(w => !(W.refused && W.refused.has(w.el)) && nowW <= w.until);
-      if (started || !holding) _startWait = null;
-      else {
+      if (started || !holding) {
+        _startWait = null;
+        /* #202 N2: the reversed clips' voices leave with the transport, the way FM.play() starts them when nothing holds the
+           start. Whenever the project has a reversed clip, not only when the press found one due: one shown during the hold
+           was started there, and is put back in step here. They leave from where the clock IS (the held frame plus the
+           frame that saw the release): anchoring at the held frame itself threw that frame's time away, 0.2 s of transport
+           against the wall clock on a 200 ms comp (v18.22's first ship, 'a comp that costs 200 ms a frame …'). A project
+           with no reversed clip is not touched at all. */
+        if (FM.audioPlay && FM.scene.layers.some(l => l.type === 'video' && l.reversed)) {
+          FM.time = FM.clockNow(); clockAnchor(FM.time); FM.audioPlay.start(); clockAdopt();
+        }
+      } else {
         clockAnchor(FM.time);
         render(); FM.timeline.updatePlayhead(); updateReadout();
         rafId = requestAnimationFrame(tick);
@@ -2863,6 +2938,9 @@ window.FM = window.FM || {};
        two different windows, nothing saying so — and his 10 Sep paste is exactly that report. */
     if (FM.audioHealth && FM.audioHealth.reset) FM.audioHealth.reset();
     _renderAvg = 0; _tierCooldown = 8; _dropFrom = 0; _climbFrom = 0; _bandHits = 0;   // let the first few frames settle before judging the machine, with no verdict pending from before
+    /* …ended early the same way a step's settle is (Editing lags (a)): measured on his phone's shape (dpr 3, a 4x throttle,
+       five warps on a video) eight frames of 350 ms were three seconds of stutter before the first judgement. */
+    _coolMin = Infinity; _coolFrames = 0; _coolBudget = _tierCooldown * costBudgetMs();
     resizeCanvas();                                     // …and re-size the canvas into playback quality
     // Play is the user gesture that unlocks the AudioContext; route the effected clips before they start.
     if (FM.audioFxLive) { FM.audioFxLive.resume(); FM.audioFxLive.syncAll(); }
@@ -2971,7 +3049,14 @@ window.FM = window.FM || {};
     // reversed buffers to audioCtx.currentTime, so both take their origin from the same reading.
     // If that call is what CREATED the context, adopt it immediately after, at the same scene time.
     clockAnchor(FM.time);
-    if (FM.audioPlay) FM.audioPlay.start();   // reversed clips: play synthesized reversed audio
+    /* #202 N2 (the 21-22 Oct hunt): reversed clips play synthesized reversed audio, started off the audio context's own clock,
+       and the start wait above holds only the transport. Started here while a cold clip held the start (up to
+       START_WAIT_COLD_MS), the reversed sound ran on while the picture and every forward clip waited, and stayed that far
+       ahead for the rest of the play. So while a wait is armed its voices are started by the tick that releases it, and
+       the press only primes them: that is the tap iOS needs to start or resume the audio context, which the release
+       frame is not (the review of 6 Nov). */
+    if (_startWait) { if (FM.audioPlay && FM.audioPlay.prime) FM.audioPlay.prime(); }
+    else if (FM.audioPlay) FM.audioPlay.start();
     clockAdopt();
     document.getElementById('btn-play').innerHTML = '<svg viewBox="0 0 24 24" class="tco" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';   // pause icon
     document.body.classList.add('fm-playing');      // the pill is the play control now (queue 364) — it has to be able to say it is playing

@@ -63381,6 +63381,108 @@
     } finally { if (hadHome && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open(); }
   });
 
+  /* #202 N2 (the 21-22 Oct hunt). FM.play() starts a reversed clip's voice with the clock, off the audio context, and the
+     start wait holds only the transport: after a cold clip held the start for most of a second, the picture and the forward
+     clip left from the held frame while the reversed sound had been running the whole time, that far ahead for the rest of
+     the play. The voices now leave with the transport, from the held frame, started by the tick that ends the hold.
+     FM.audioPlay.start is recorded rather than run (the rig has no audio context). CONTROLS: the same rig with a warm clip
+     starts them within a few frames of the press, so the wait cannot simply be holding them back; and the cold rig with
+     nothing reversed still plays. */
+  test('202 a reversed clip’s sound waits with the picture while a cold clip holds the start, and leaves with it from the held frame', { item: '202', budgetMs: 30000 }, async function () {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const realAP = FM.audioPlay;
+    const run = async function (withReversed, stallMs, hidden, jankMs) {
+      const rig = transportRig(jankMs ? { duration: 20, jankMs: jankMs } : { duration: 20 });
+      const starts = [], primes = [];
+      let inPress = false;
+      try {
+        const rec = FM.media.get(rig.layer.id);
+        if (rec && rec.stripFrames === undefined) rec.stripFrames = [];   // no filmstrip build, so nothing else seeks the rig's element
+        if (withReversed) {
+          const back = FM.makeLayer('video', { name: 'backwards', start: 0, duration: 20 });
+          back.reversed = true;   // makeLayer copies only props.extra, so a reversed: true in its props is dropped
+          if (hidden) back.visible = false;   // hidden at the press: shown during the hold, its voice starts there
+          FM.scene.layers.push(back);
+          if (!FM.scene.layers.some(l => l.type === 'video' && l.reversed)) throw new Error('setup: the project has no reversed clip, so this cannot tell the fix from the bug');
+        }
+        FM.audioPlay = Object.assign({}, realAP, {
+          start: function () { starts.push({ t: FM.time, at: performance.now() }); },
+          stop: function () {},
+          prime: function () { primes.push({ inPress: inPress }); return FM.scene.layers.some(l => l.type === 'video' && l.reversed); },
+        });
+        if (stallMs) {
+          rig.el.readyState = 2;   // cold at the press
+          const realPlay = rig.el.play;
+          rig.el.play = function () { const p = realPlay.call(rig.el); rig.el._stall = performance.now() + stallMs; return p; };   // its sound begins stallMs after Play
+        } else rig.el.readyState = 4;
+        const held = FM.time, t0 = performance.now();
+        inPress = true;
+        try { FM.play(); } finally { inPress = false; }
+        await sleep(1400);
+        return { held, primes: primes.slice(), starts: starts.map(s => ({ t: s.t, after: Math.round(s.at - t0) })), playing: !!FM.playing, clock: FM.clockNow() };
+      } finally { FM.audioPlay = realAP; rig.restore(); }
+    };
+    try {
+      const plain = await run(false, 700);
+      if (!plain.playing || !(plain.clock > 0.3)) throw new Error('CONTROL: the cold rig did not play (clock ' + plain.clock.toFixed(3) + ' s after 1.4 s)');
+      /* With no reversed clip in the project the release touches neither the voices nor the clock: a re-anchor there threw
+         away the time of the frame that saw the release (v18.22's first ship, 'a comp that costs 200 ms a frame …'). */
+      if (plain.starts.length !== 0) throw new Error('with no reversed clip in the project the release still restarted the reversed voices (' + JSON.stringify(plain.starts) + '), re-anchoring the clock for nothing');
+      /* A reversed clip hidden at the press (shown during the hold, its voice started there) is put back in step at the release. */
+      const hid = await run(true, 700, true);
+      if (hid.starts.length !== 1 || hid.starts[0].after < 500) throw new Error('with a reversed clip hidden at the press the release did not restart its voice (' + JSON.stringify(hid.starts) + '): one shown during the hold would play ahead of the picture');
+      const warm = await run(true, 0);
+      if (!warm.starts.length || warm.starts[0].after > 300) throw new Error('CONTROL: with a warm clip the reversed sound was not started within 300 ms of Play (' + JSON.stringify(warm.starts) + '), so this cannot tell a wait from a sound that never starts');
+      const rev = await run(true, 700);
+      const early = rev.starts.filter(s => s.after < 500);
+      if (early.length) throw new Error('a cold clip held the start for about 700 ms and the reversed clip’s sound was started at ' + early.map(s => s.after + ' ms').join(', ') + ' (' + JSON.stringify(rev.starts) + '): it ran on while the picture held, so it plays that far ahead of the picture for the rest of the play');
+      if (rev.starts.length !== 1) throw new Error('the reversed sound was started ' + rev.starts.length + ' times (' + JSON.stringify(rev.starts) + '); it should leave once, with the picture');
+      if (Math.abs(rev.starts[0].t - rev.held) > 0.05) throw new Error('the reversed sound left from ' + rev.starts[0].t.toFixed(3) + ' s, not from the held frame at ' + rev.held.toFixed(3) + ' s');
+      /* …and on a comp that costs 200 ms a frame the release keeps the time of the frame that saw it: the voices leave from where
+         the clock is, a frame past the held one, not from the held frame itself (which threw that frame away: v18.22's first ship). */
+      const heavy = await run(true, 700, false, 200);
+      if (heavy.starts.length !== 1) throw new Error('CONTROL: on the 200 ms comp the reversed sound was started ' + heavy.starts.length + ' times (' + JSON.stringify(heavy.starts) + ')');
+      if (!(heavy.starts[0].t - heavy.held >= 0.1)) throw new Error('on a 200 ms comp the reversed sound left from ' + heavy.starts[0].t.toFixed(3) + ' s, the held frame (' + heavy.held.toFixed(3) + ' s): the release re-anchored the clock there and threw away the frame it took, about 0.2 s against the wall clock');
+      /* The press itself must touch the audio context (prime): iOS starts or resumes one only inside the tap, and the frame
+         that releases the wait is not a tap, so a voice started only there would play on a context that never runs. */
+      if (!rev.primes.length || !rev.primes[0].inPress) throw new Error('the press did not prime the reversed voices inside the tap (' + JSON.stringify(rev.primes) + '): on an iPhone the audio context would then be started outside a gesture and the reversed sound stay silent');
+    } finally { if (hadHome && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open(); }
+  });
+
+  /* #202 N2, the real prime (the review of 6 Nov): the test above stubs FM.audioPlay whole, so nothing ran the prime the press
+     relies on. Here it runs for real against an OfflineAudioContext standing in for the app's own (FM.audioCtx), which builds
+     real buffers and plays nothing. FAILS BEFORE THE FIX: there is no prime. CONTROL: with nothing reversed due it touches no
+     context at all, so a project with no reversed clip never spends one on the press. */
+  test('202 the press primes the real reversed voices: it wakes the audio context and builds the reversed sound, and spends no context when none is due', { item: '202' }, function () {
+    const off = new OfflineAudioContext(1, 800, 8000);
+    const realCtx = FM.audioCtx, saved = FM.scene, t0 = FM.time;
+    let calls = 0;
+    const L = FM.makeLayer('video', { name: 'prime', start: 0, duration: 0.1 });
+    L.reversed = true; L.trimStart = 0; L.speed = 1; L.visible = true;
+    const ab = off.createBuffer(1, 800, 8000);
+    try {
+      if (!FM.audioPlay || typeof FM.audioPlay.prime !== 'function') throw new Error('FM.audioPlay.prime is missing: the press has nothing to wake the audio context with, and on an iPhone only the press can');
+      FM.audioCtx = function () { calls++; return off; };
+      FM.scene = scene([L], { project: { width: 320, height: 240, fps: 30, duration: 1, background: '#000000' } });
+      FM.media.set(L.id, { kind: 'video', audioBuffer: ab });
+      FM.time = 0;
+      const on = FM.audioPlay.prime();
+      if (on !== true) throw new Error('with a visible reversed clip whose sound is decoded, prime said ' + on + ': the press would not count it as due');
+      if (calls !== 1) throw new Error('prime touched the audio context ' + calls + ' time(s): it must wake it once, inside the press');
+      const rec = FM.media.get(L.id);
+      if (!rec || !rec._revBuf || rec._revBuf.length !== 800) throw new Error('prime did not build the reversed sound (' + (rec && rec._revBuf ? rec._revBuf.length : 'none') + '), so the frame that ends the wait pays for it');
+      L.visible = false; calls = 0;
+      const off2 = FM.audioPlay.prime();
+      if (off2 !== false) throw new Error('with the reversed clip hidden prime said ' + off2);
+      if (calls !== 0) throw new Error('with nothing reversed due prime still touched the audio context ' + calls + ' time(s)');
+    } finally {
+      FM.audioCtx = realCtx;
+      FM.media.remove(L.id);
+      FM.scene = saved; FM.time = t0;
+    }
+  });
+
   test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
     var keep = FM.scene.layers.slice(), keepT = FM.time;
     var fps = FM.scene.project.fps || 30;
@@ -76887,7 +76989,12 @@
          first version used 500k and produced a 33 ms frame here, so the test tripped its own
          "is it even struggling?" control instead of measuring anything. */
       const px0 = Math.max(1, cv ? cv.width * cv.height : 1);
+      /* The frames' own intervals, read here rather than off the ladder's average (Editing lags (a), 6 Nov): the ladder now ends
+         its opening settle once three slow frames have been measured, so by the first 250 ms sample it has often stepped already,
+         and a step resets its average to 0, which read as a scene that was not struggling. */
+      const stamps = [];
       FM.renderScene = function () {
+        stamps.push(performance.now());
         const px = cv ? cv.width * cv.height : px0;
         const ms = o.flat ? o.costMs : (px / px0) * o.costMs;
         const t0 = performance.now(); while (performance.now() - t0 < ms) { /* burn */ }
@@ -76900,9 +77007,11 @@
       for (let i = 0; i < (o.samples || 12); i++) { await sleep(250); const st = FM._perfState(); trace.push(st); }
       const last = FM._perfState();
       FM.pause();
+      const iv = stamps.slice(1).map((t, i) => t - stamps[i]);
+      const med = a => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[b.length >> 1] : 0; };
       return { reset: reset, before: before, last: last, trace: trace,
                deepest: Math.max.apply(null, trace.map(x => x.tier)),
-               firstGap: trace[0].gapAvg, lastGap: last.gapAvg };
+               firstGap: med(iv.slice(0, 3)), lastGap: med(iv.slice(-4)) };   // the first three frames are before any step can land
     } finally {
       try { FM.pause(); } catch (e) {}
       FM.renderScene = saved.render;
@@ -100564,6 +100673,136 @@
     }
   });
 
+  /* The unnumbered Editing lags entry, (c), 6 Nov. The effects sheet's preview ran on setInterval(…, 1000 / 24), and
+     FM.setTime paints synchronously: on a layer whose frame costs more than 42 ms the ticks ran back to back, and the sheet
+     he was tapping in had no main thread left between them (his 11 Oct words, #1131: "When I add a bunch of effects to a
+     layer it gets slow"). A heavy frame is modelled by holding FM.setTime for 80 ms; the gap that matters is from the end
+     of one frame to the start of the next, after a frame that really took the 80 ms. The cheap half is the control that
+     the loop is running at all, and that it still runs at about 24 a second. */
+  test('editing lags c - the effects sheet preview leaves the phone as long as a heavy frame took before the next, and keeps 24 a second when frames are cheap', { item: 'editing-lags', budgetMs: 60000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, realSet = FM.setTime, HEAVY = 80;
+    let cost = 0;
+    const runs = [];
+    try {
+      await atPhoneWidth(async function () {
+        if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        const L = FM.makeLayer('shape', { name: 'lags c', shape: 'rect', x: 540, y: 700, shapeW: 300, shapeH: 300, fill: '#20a060', start: 0, duration: 5 });
+        FM.scene = scene([L], { project: { width: 1080, height: 1350, fps: 30, duration: 5, background: '#000000' } });
+        FM.selectLayer(L.id); FM.refreshAll(); await sleep(250);
+        FM.setTime = function () {
+          const t0 = performance.now();
+          try { return realSet.apply(this, arguments); }
+          finally { const hold = cost; while (performance.now() - t0 < hold) { /* a heavy stack */ } runs.push([t0, performance.now()]); }
+        };
+        const watch = async function (ms, c) { cost = c; await sleep(40); runs.length = 0; await sleep(ms); const got = runs.slice(); cost = 0; return got; };
+        FM.fxBrowser.open(L);
+        await sleep(300);
+        const root = document.getElementById('fx-browser');
+        if (!root || root.classList.contains('hidden')) throw new Error('setup: the effects browser did not open');
+        const cheap = await watch(1000, 0);
+        if (cheap.length < 15) throw new Error('CONTROL: with cheap frames the sheet preview drew ' + cheap.length + ' frames in a second: it should run at about 24, so the loop is not running or has been slowed');
+        const heavy = await watch(1500, HEAVY);
+        const gaps = [];
+        for (let i = 1; i < heavy.length; i++) if (heavy[i - 1][1] - heavy[i - 1][0] >= HEAVY * 0.95) gaps.push(Math.round(heavy[i][0] - heavy[i - 1][1]));
+        if (gaps.length < 3) throw new Error('CONTROL: only ' + gaps.length + ' gaps after a ' + HEAVY + ' ms frame in 1.5 s (' + heavy.length + ' frames), so nothing was measured');
+        const short = gaps.filter(g => g < HEAVY * 0.8);
+        if (short.length) throw new Error('after a ' + HEAVY + ' ms preview frame the next began ' + short.join(', ') + ' ms later (all gaps: ' + gaps.join(', ') + '): the sheet preview kept the phone busy back to back, so the taps he makes in the sheet wait behind it. It should leave at least as long as the frame took');
+      }, 380);
+    } finally {
+      cost = 0; FM.setTime = realSet;
+      try { FM.fxBrowser.close(); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+      if (FM._resetPlayQuality) FM._resetPlayQuality();   // its 80 ms frames taught the drag ladder a lesson about this test only
+      try { FM.resizeCanvas(); } catch (e) {}
+    }
+  });
+
+  /* The unnumbered Editing lags entry, (c), the review of 6 Nov: three ways the self-paced preview above still went wrong.
+     The cost is put inside the scene render this time (FM.renderScene on the #preview canvas), so the app measures it as
+     a frame's cost, the way a heavy stack's is.
+     1. Cheap frames: the sheet's own wait made each interval 41 ms, the drag ladder's late line, so it dropped a tier for
+        nothing and latched. Its waits are now taken out of the interval the ladder reads.
+     2. Frames of 800 ms: the wait after each reset the motion count, or (as long as the frame) outlasted the detector's
+        700 ms idle and ended the motion inside it, so the ladder never saw the scene that needed it.
+     3. A repaint that lands in the wait (a video layer's seek, emulated by a requestRender after each frame) took the time
+        the wait had left free; it is now counted as busy, so the phone is still left about as long as it was busy. */
+  test('editing lags d - the effects sheet preview keeps a heavy stack in motion for the quality ladder, its own waits are not read as late frames, and a repaint inside a wait is time it owes', { item: 'editing-lags', budgetMs: 90000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const saved = FM.scene, realSet = FM.setTime, realRS = FM.renderScene, mode0 = FM.settings.get('playbackQuality');
+    let cost = 0, alsoQueue = false;
+    const paints = [];
+    try {
+      await atPhoneWidth(async function () {
+        if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+        FM.settings.set('playbackQuality', 'auto');
+        const L = FM.makeLayer('shape', { name: 'lags d', start: 0, duration: 5 });
+        FM.scene = scene([L], { project: { width: 1080, height: 1350, fps: 30, duration: 5, background: '#000000' } });
+        FM.selectLayer(L.id); FM.refreshAll(); await sleep(250);
+        FM.renderScene = function (cx) {
+          const t0 = performance.now();
+          try { return realRS.apply(this, arguments); }
+          finally {
+            if (cx && cx.canvas && cx.canvas.id === 'preview') {
+              const hold = cost; while (performance.now() - t0 < hold) { /* a heavy stack */ }
+              paints.push([t0, performance.now()]);
+            }
+          }
+        };
+        FM.setTime = function () {
+          try { return realSet.apply(this, arguments); }
+          finally { if (alsoQueue) FM.requestRender(); }   // the seeked repaint a video layer gets after each preview frame
+        };
+        const fresh = async function (c, queue) {
+          try { FM.fxBrowser.close(); } catch (e) {}
+          await sleep(900);   // past the motion detector's idle, so each half starts from rest
+          if (FM._resetPlayQuality) FM._resetPlayQuality();
+          cost = c; alsoQueue = !!queue;
+          FM.fxBrowser.open(L);
+          const root = document.getElementById('fx-browser');
+          if (!root || root.classList.contains('hidden')) throw new Error('setup: the effects browser did not open');
+        };
+        /* 1. cheap frames */
+        await fresh(2, false);
+        await sleep(1800);
+        const cheap = FM._perfState();
+        if (!cheap.inMotion) throw new Error('CONTROL: two seconds of cheap preview frames never counted as motion, so the ladder read nothing (' + JSON.stringify(cheap) + ')');
+        if (!(cheap.gapAvg > 0) || cheap.gapAvg > 30) throw new Error('with cheap frames the ladder read the preview interval as ' + (cheap.gapAvg || 0).toFixed(1) + ' ms, the sheet’s own wait: about 41 ms is the drag ladder’s late line, so a cheap layer is dropped a tier for nothing and latched there');
+        if (cheap.tier !== 0) throw new Error('cheap preview frames moved the ladder to tier ' + cheap.tier + ' (' + JSON.stringify(cheap) + ')');
+        /* 2. 800 ms frames: dearer than the detector's 700 ms idle, so a wait as long as the frame would end the motion inside it */
+        await fresh(800, false);
+        let latched = false, dropped = false;
+        for (let i = 0; i < 50; i++) {
+          await sleep(100);
+          const s = FM._perfState();
+          if (s.inMotion) latched = true;
+          else if (latched) throw new Error('an 800 ms preview frame let the motion end inside the wait the sheet left (after ' + (i * 100) + ' ms): the canvas went back to full size mid-preview');
+          if (s.tier > 0) dropped = true;
+          if (latched && dropped && i >= 30) break;
+        }
+        if (!latched) throw new Error('five seconds of 800 ms preview frames never counted as motion: the wait after each reset the count, so the quality ladder never saw the stack that needed it');
+        if (!dropped) throw new Error('five seconds of 800 ms preview frames never moved the quality ladder (' + JSON.stringify(FM._perfState()) + ')');
+        /* 3. a repaint after each frame, 80 ms each */
+        await fresh(80, true);
+        await sleep(600);
+        paints.length = 0;
+        const w0 = performance.now();
+        await sleep(2400);
+        const w1 = performance.now();
+        const busy = paints.reduce((a, p) => a + Math.max(0, Math.min(p[1], w1) - Math.max(p[0], w0)), 0) / (w1 - w0);
+        if (paints.length < 8) throw new Error('CONTROL: only ' + paints.length + ' preview paints in 2.4 s with a repaint after each frame, so nothing was measured');
+        if (busy > 0.62) throw new Error('with a repaint after each 80 ms preview frame the phone was busy ' + Math.round(busy * 100) + '% of the time (' + paints.length + ' paints in 2.4 s): the repaint used up the wait the sheet left, so his taps still waited behind it');
+      }, 380);
+    } finally {
+      cost = 0; alsoQueue = false; FM.setTime = realSet; FM.renderScene = realRS;
+      try { FM.fxBrowser.close(); } catch (e) {}
+      FM.settings.set('playbackQuality', mode0 || 'auto');
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+      if (FM._resetPlayQuality) FM._resetPlayQuality();
+      try { FM.resizeCanvas(); } catch (e) {}
+    }
+  });
+
   test('690 a real tap on an effect or opacity value box selects the number, so what he types replaces it', { item: '690', budgetMs: 60000 }, async function () {
     /* The comment on rangeRow says it plainly: "Typing an exact number still has to work: the ruler is for feel, the box
        is for precision." Every effect parameter (fxScrubber) and every rangeRow (fill opacity, stroke width, corner
@@ -104955,6 +105194,141 @@
       FM.settings.set('playbackQuality', mode0 || 'auto');
       if (FM._resetPerfOffer) FM._resetPerfOffer();
       FM.scene = saved; FM.selectLayer(null); FM.refreshAll();
+    }
+  });
+  /* The unnumbered Editing lags entry, (b), 6 Nov. A quality step used to resize the canvas AND repaint it from inside the
+     ladder, straight after the frame the ladder had just judged, so the heaviest frame of the run was drawn twice in one
+     display interval: the hitch each time the preview softens. The step is now applied by the next frame, which sizes the
+     new backing store and paints it once. FM.playing is set by hand rather than through FM.play(), so the only frame that
+     runs here is the one this test asks for, and every paint is counted at FM.renderScene. */
+  test('editing lags b - a playback quality step paints the heavy frame once, on the next frame, and never inside the ladder', { item: 'editing-lags', budgetMs: 30000 }, async function () {
+    if (typeof FM._notePlaybackCost !== 'function' || !FM.playbackQualityInfo || !FM._perfState) throw new Error('the quality ladder is not reachable from the suite (FM._notePlaybackCost)');
+    const saved = FM.scene, mode0 = FM.settings.get('playbackQuality'), realToast = FM.toast, realRS = FM.renderScene, play0 = FM.playing;
+    const q = () => FM.playbackQualityInfo(), px = () => FM._perfState().canvasPx;
+    const park = () => { const p = FM.playing; FM.playing = true; FM.settings.set('playbackQuality', 'detail'); FM._notePlaybackCost(1, 16); FM.playing = p; FM.settings.set('playbackQuality', 'auto'); };
+    const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    let paints = 0;
+    try {
+      if (FM.pause) FM.pause();
+      FM.toast = function () {};   // the struggle offer may fire under this cost; not what this is about
+      const L = FM.makeLayer('shape', { name: 'lags b', shape: 'rect', x: 540, y: 675, shapeW: 400, shapeH: 400, fill: '#22c55e', start: 0, duration: 60 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1350, fps: 60, duration: 60, background: '#000000' } });
+      FM.selectLayer(null); FM.setTime(0); FM.refreshAll();
+      park();
+      FM.playing = true;
+      FM.resizeCanvas();   // into playback quality, as FM.play() does
+      FM.renderScene = function () { paints++; return realRS.apply(this, arguments); };
+      let step = null;
+      for (let i = 0; i < 400 && !step; i++) {
+        const t0 = q().tier, p0 = paints, px0 = px(), c = 294.69 * Math.pow(0.6, t0);
+        FM._notePlaybackCost(c, c * 1.06);
+        if (q().tier !== t0) step = { at: i, from: t0, to: q().tier, painted: paints - p0, px0: px0, px1: px() };
+      }
+      if (!step) throw new Error('CONTROL: 400 frames over budget never moved the ladder (tier ' + q().tier + '), so nothing below means anything');
+      if (step.painted) throw new Error('the quality step (tier ' + step.from + ' to ' + step.to + ', frame ' + step.at + ') painted the frame ' + step.painted + ' time(s) inside the ladder, straight after the frame it judged: on a heavy layer that is the same heavy frame twice in one display interval');
+      if (step.px1 !== step.px0) throw new Error('the quality step re-allocated the canvas (' + step.px0 + ' to ' + step.px1 + ' px) before any frame could paint it; the next frame is what applies it');
+      const p1 = paints;
+      FM.requestRender();
+      await frame();
+      const after = px();
+      if (paints - p1 !== 1) throw new Error('the frame after the step painted ' + (paints - p1) + ' time(s); it should size the new canvas and paint it once');
+      if (after === step.px0) throw new Error('the frame after the step still drew at ' + after + ' px: the step was asked for and never applied');
+    } finally {
+      FM.renderScene = realRS;
+      FM.toast = realToast;
+      FM.playing = play0;
+      park();
+      FM.settings.set('playbackQuality', mode0 || 'auto');
+      if (FM._resetPerfOffer) FM._resetPerfOffer();
+      FM.scene = saved; FM.selectLayer(null); FM.refreshAll(); FM.resizeCanvas();
+    }
+  });
+  /* The unnumbered Editing lags entry, (a), 6 Nov. After a step the ladder waited 24 frames before judging again, however
+     long they took: 0.8 s at a 30 fps budget, 4.8 s at the 200 ms a heavy stack costs under a 4x throttle, so three rungs
+     took about 15 s of stutter. The settle now also ends once its frames have measured the time it was meant to buy (after
+     at least three). The control half: frames that arrive on time keep the full 24-frame settle. */
+  test('editing lags a - on a heavy stack the settle after a quality step ends once its frames have taken its time, and on-time frames keep the full 24', { item: 'editing-lags', budgetMs: 30000 }, async function () {
+    if (typeof FM._notePlaybackCost !== 'function' || !FM.playbackQualityInfo || !FM._perfState) throw new Error('the quality ladder is not reachable from the suite (FM._notePlaybackCost)');
+    const saved = FM.scene, mode0 = FM.settings.get('playbackQuality'), realToast = FM.toast, play0 = FM.playing;
+    const q = () => FM.playbackQualityInfo();
+    const park = () => { const p = FM.playing; FM.playing = true; FM.settings.set('playbackQuality', 'detail'); FM._notePlaybackCost(1, 16); FM.playing = p; FM.settings.set('playbackQuality', 'auto'); };
+    /* the first step, then how many frames until the next one; `cost` is the frame's cost at a tier, `gapOf` its interval,
+       given the frame's number k after the first step (-1 before it). cools[k] is the settle left after frame k. */
+    const run = function (cost, gapOf) {
+      park(); FM.playing = true;
+      let first = -1, second = -1;
+      const cools = [];
+      for (let i = 0; i < 300 && second < 0; i++) {
+        const t0 = q().tier, c = cost(t0);
+        FM._notePlaybackCost(c, gapOf(c, first >= 0 ? i - first : -1));
+        if (q().tier !== t0) { if (first < 0) first = i; else second = i; }
+        if (first >= 0 && i - first <= 30) cools[i - first] = FM._perfState().cooldown;
+      }
+      FM.playing = play0;
+      return { first: first, second: second, cools: cools };
+    };
+    try {
+      if (FM.pause) FM.pause();
+      FM.toast = function () {};   // the struggle offer may fire at the bottom of the heavy run; not what this is about
+      const L = FM.makeLayer('shape', { name: 'lags a', shape: 'rect', x: 540, y: 675, shapeW: 400, shapeH: 400, fill: '#22c55e', start: 0, duration: 60 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1350, fps: 30, duration: 60, background: '#000000' } });
+      FM.selectLayer(null); FM.setTime(0); FM.refreshAll();
+      const budget = 1000 / 30;
+      /* CONTROL: on-time frames (26 ms of a 33 ms frame, over the drop line, and each drop pays) keep the full settle. */
+      const onTime = run(t => 26 * Math.pow(0.6, t), () => budget);
+      if (onTime.first < 0) throw new Error('CONTROL: frames over the drop line never moved the ladder, so nothing below means anything');
+      /* The step's own frame sets 24, the next (a fresh canvas) is left out, and each after takes one: after frame 24 one is left.
+         Frames 33.3 ms apart have then measured 23 × 33.3 = 767 ms of the 800, so the time cannot have ended it either. */
+      if (onTime.cools[24] !== 1) throw new Error('frames that arrive on time ended the settle early: 24 frames after the step the ladder had ' + onTime.cools[24] + ' frames of settle left, where the 24-frame settle leaves 1 (' + onTime.cools.join(',') + ')');
+      /* ONE HITCH MUST NOT END IT (the review of 6 Nov): the same on-time frames with one 900 ms interval, a GC or a clip starting at
+         a cut. Summed, 33 + 900 + 33 passes the settle's 800 ms on its third frame, and the verdict then reads the hitch, still large
+         in the average, as the new tier's cost. */
+      const hitch = run(t => 26 * Math.pow(0.6, t), (c, k) => (k === 3 ? 900 : budget));
+      if (hitch.first < 0) throw new Error('CONTROL: the hitch run never stepped');
+      if (hitch.cools[8] !== 25 - 8) throw new Error('one 900 ms interval in the settle ended it: 8 frames after the step ' + hitch.cools[8] + ' frames were left, where on-time frames leave 17 (' + hitch.cools.join(',') + ')');
+      /* A HEAVY STACK: 200 ms frames at the top tier, each drop paying for itself, so the ladder keeps walking down. */
+      const heavy = run(t => 200 * Math.pow(0.6, t), c => c * 1.05);
+      if (heavy.first < 0 || heavy.second < 0) throw new Error('CONTROL: 200 ms frames did not take the ladder down two steps (' + JSON.stringify(heavy) + ')');
+      /* After the first step the frames cost 120 ms (126 ms apart): the settle's 24 × 33.3 ms = 800 ms is up after seven of
+         them, plus the one fresh-canvas frame left out and the deciding frame, so 9. The 24-frame settle makes it 26. */
+      const between = heavy.second - heavy.first;
+      if (between > 12) throw new Error('on a stack whose frames take 200 ms the ladder waited ' + between + ' frames between its first two steps, about ' + (between * 0.2).toFixed(1) + ' s of stutter per rung: the settle counted 24 frames and not the time they took');
+      /* …but never on fewer than three frames, so the average it judges by has something in it: one 1.2 s frame is more than the
+         whole 800 ms by itself. The step, the fresh-canvas frame, three settle frames and the deciding one: 5 apart at least. */
+      const huge = run(t => 2000 * Math.pow(0.6, t), c => c * 1.05);
+      if (huge.first < 0 || huge.second < 0) throw new Error('CONTROL: 2 s frames did not take the ladder down two steps (' + JSON.stringify({ first: huge.first, second: huge.second }) + ')');
+      if (huge.second - huge.first < 5) throw new Error('with frames dearer than the whole settle the next step came ' + (huge.second - huge.first) + ' frames after the first: the settle ended before three frames had been measured');
+      /* PLAY'S OPENING SETTLE (8 frames, before the first judgement) ends the same way: measured at dpr 3 under a 4x throttle, eight
+         350 ms frames were three seconds of stutter before the ladder was asked at all. Frames fed straight after FM.play(), in the
+         same task, so no real playback frame lands between them. CONTROL: on-time frames keep all eight. */
+      /* As the app feeds them: the first frame after Play has no interval (FM.pause() clears the last paint), every later one
+         has. `c` is the JavaScript time of each frame and `g` the interval of the later ones. */
+      const opening = function (c, g, n) {
+        park();
+        if (FM._resetPlayQuality) FM._resetPlayQuality();   // no fresh-canvas frame left over from park()
+        FM.play();
+        try { const out = []; for (let k = 0; k < n; k++) { FM._notePlaybackCost(c, k === 0 ? 0 : g); out.push(FM._perfState().cooldown); } return out; }
+        finally { FM.pause(); }
+      };
+      /* Read as a sequence: on-time frames count 8, 7 … 1 and reach 0 only from 1; slow ones cut it to 0 from 4 or more. */
+      const cut = seq => seq.some((v, i) => i > 0 && v === 0 && seq[i - 1] > 1);
+      const fastOpen = opening(10, budget, 9);
+      if (cut(fastOpen) || fastOpen.indexOf(1) < 0) throw new Error('on-time frames after Play ended its opening settle early (' + fastOpen.join(',') + '): it is eight frames, counted down one at a time');
+      /* 120 ms frames: three of them (378 ms) pass the opening settle's own 8 × 33.3 = 267 ms and not the 800 ms of a step's, so
+         this pins the opening's budget as well as its early end. */
+      const slowOpen = opening(120, 126, 5);
+      if (!cut(slowOpen)) throw new Error('after Play, 120 ms frames ran its opening settle down one frame at a time (' + slowOpen.join(',') + '): eight of them are a second of stutter before the ladder is asked');
+      /* …and so do frames the graphics chip or the video decode holds up: 2 ms of JavaScript each, 315 ms apart. The first
+         frame's 2 ms, with no interval to go with it, must not stand as the settle's cheapest frame. */
+      const gpuOpen = opening(2, 315, 5);
+      if (!cut(gpuOpen)) throw new Error('after Play, frames 315 ms apart whose JavaScript takes 2 ms ran its opening settle down one frame at a time (' + gpuOpen.join(',') + '): the first frame, which has no interval, set the settle by its JavaScript time alone');
+    } finally {
+      FM.toast = realToast;
+      FM.playing = play0;
+      park();
+      FM.settings.set('playbackQuality', mode0 || 'auto');
+      if (FM._resetPerfOffer) FM._resetPerfOffer();
+      FM.scene = saved; FM.selectLayer(null); FM.refreshAll(); FM.resizeCanvas();
     }
   });
 

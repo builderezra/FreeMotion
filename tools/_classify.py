@@ -140,6 +140,10 @@ def classify(body):
     # 16 Oct parking line, stamped READY), and a builder's note that only mentioned the word kept #980 READY (the 21 Oct audit).
     # A lift now silences what precedes it, exactly as his answer does: the parking line is read after the later of the two.
     ptail = body.split('UNBLOCKED')[-1] if unblocked else body
+    # SO IS A "WANTS A SESSION OF ITS OWN" MARK (6 Nov). It was read anywhere in the entry and nothing could lift it, so
+    # "Editing lags" stayed BIG after its 6 Nov UNBLOCKED line, which a long-running session wrote while working it. Only a
+    # later UNBLOCKED lifts it: his answer does not make an item smaller.
+    btail = body.split('UNBLOCKED')[-1] if unblocked else body
     if len(ptail) > len(tail):
         ptail = tail
     return ('only long-term ideas left' if hedged_only else
@@ -148,7 +152,7 @@ def classify(body):
             'waiting on the logging chat' if (PLAN_PENDING.search(body) and 'PLAN LANDED' not in body) else
             'built out — waiting on him' if BUILT_OUT.search(ptail) else
             'blocked on Ezra' if (not unblocked and (needs_eye or BLOCKED.search(tail))) else
-            'needs its own session' if BIG.search(body) else 'ACTIONABLE')
+            'needs its own session' if BIG.search(btail) else 'ACTIONABLE')
 
 
 # ── WHICH ITEM SHOULD BE WORKED NEXT ────────────────────────────────────────────────────────────────
@@ -631,6 +635,12 @@ _CASES = [
      'ACTIONABLE',
      'MENTIONING a standing note must not hide the entry (21 Aug: it hid five real items)'),
     ('- [ ] **10 — x** wants a session of its own', 'needs its own session', 'big items are flagged, not hidden'),
+    ('- [ ] **10b — x** wants a session of its own\n      UNBLOCKED 6 Nov: the long-running session works it now.', 'ACTIONABLE',
+     'a later UNBLOCKED lifts the session-of-its-own mark (Editing lags, 6 Nov)'),
+    ('- [ ] **10c — x**\n      UNBLOCKED 1 Nov: decided.\n      then it was found that it wants a session of its own', 'needs its own session',
+     'a mark written after the lift still flags the entry'),
+    ('- [ ] **10d — x** wants a session of its own\n      ANSWERED BY EZRA: yes do it', 'needs its own session',
+     'his answer does not lift the mark: answering does not make an item smaller'),
     ('- [ ] **11 — x**\n 1. [ ] do this (long term)\n 2. [ ] and this (long term)', 'only long-term ideas left',
      'an entry whose every open clause is hedged is not queued work (#277, #343)'),
 ]

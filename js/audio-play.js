@@ -216,6 +216,18 @@ window.FM = window.FM || {};
         }
       });
     },
+    /* #202 N2: Play keeps the reversed voices until its start wait ends, and that is a later animation frame, not the tap.
+       iOS starts or resumes an AudioContext only inside a gesture (audio-fx-live.js and sfx.js rely on the same rule), so
+       the press calls this: it touches the context, and builds the reversed buffers so the frame that releases the wait
+       does not pay for them. True when a voice is due and there is a context to play it on. */
+    prime() {
+      const due = FM.scene.layers.filter(audible);
+      if (!due.length) return false;
+      const audioCtx = ctx();
+      if (!audioCtx) return false;
+      due.forEach(layer => { try { reversedBuffer(audioCtx, FM.media.get(layer.id).audioBuffer, layer); } catch (e) {} });
+      return true;
+    },
     stop() {
       active.forEach(n => { try { n.stop(); n.disconnect(); } catch (e) {} });
       active = [];

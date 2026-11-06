@@ -398,7 +398,7 @@ window.FM = window.FM || {};
      isolated before the sheet opened — so `_isoWas` was null, the guard never fired, and closing the
      sheet LEFT THE LAYER ISOLATED with every other layer invisible. Found by closing it and looking,
      not by reading the code. */
-  let _loopTimer = 0, _isoWas = null, _isoHeld = false, _loopFrom = 0;
+  let _loopTimer = 0, _isoWas = null, _isoHeld = false, _loopFrom = 0, _loopGen = 0;   // _loopGen: which preview loop a booked frame belongs to
   /* THE PARKED PLAYHEAD (queue 722, hunt HIGH #5). The sheet's preview loop drives FM.time from the moment the browser
      opens, and a preset's keyframes were anchored at FM.time when its row was tapped — wherever the loop happened to
      be, a different point from the one the row's thumbnail previewed. "Park the playhead on the beat, add Beat Slam,
@@ -406,7 +406,9 @@ window.FM = window.FM || {};
   let _anchorTime = null, _anchorScene = null;
   /* `backTo` is the parked time to put the playhead back on (queue 690) — see close(). Without one it repaints where it is. */
   function stopPreview(backTo) {
-    if (_loopTimer) { clearInterval(_loopTimer); _loopTimer = 0; }
+    _loopGen++;   // a frame already running books no successor
+    if (_loopTimer) { clearTimeout(_loopTimer); _loopTimer = 0; }
+    if (FM._pacedWait) FM._pacedWait(0);   // the wait it had booked is over: the next drag's frame interval is all real
     FM._fxPreview = null;
     if (_isoHeld) { FM.isolate = _isoWas; _isoWas = null; _isoHeld = false; }
     /* THE REPAINT CANNOT BE ALLOWED TO TAKE THE CLOSE DOWN WITH IT. `FM.setTime` walks the media
@@ -479,15 +481,55 @@ window.FM = window.FM || {};
     if (FM.playing && FM.pause) FM.pause();            // the sheet owns the clock while it is open
     const st = layer.start || 0, du = Math.max(0.25, layer.duration || 0);
     _loopFrom = Date.now();
-    if (FM.setTime) FM.setTime(st);                    // "take you back to the start of that layer"
-    if (_loopTimer) clearInterval(_loopTimer);
+    if (_loopTimer) { clearTimeout(_loopTimer); _loopTimer = 0; }
+    const gen = ++_loopGen;
+    let spent = 0, frameEnd = 0, busyAt = 0, extended = false, threw = null;
+    const t00 = performance.now();
+    try { if (FM.setTime) FM.setTime(st); }            // "take you back to the start of that layer"
+    catch (e) { threw = e; }                           // …and like any frame, one that throws still books the next (below)
+    spent = performance.now() - t00; frameEnd = performance.now();
     fadePreview(0);                                    // queue 995: the first frame is already on the wave, at its weakest
-    _loopTimer = setInterval(() => {
-      if (!sheetMode() || !FM.setTime) return;
-      fadePreview(Date.now() - _loopFrom);             // …before the repaint, so the frame drawn is the value set
-      FM.setTime(st + (((Date.now() - _loopFrom) / 1000) % du));
-    }, 1000 / 24);
+    /* EACH FRAME BOOKS THE NEXT (the unnumbered Editing lags entry, (c), 6 Nov). This was setInterval(…, 1000 / 24), which
+       fires whether or not the last frame has finished. FM.setTime paints synchronously, so on a layer whose frame costs
+       more than 42 ms the ticks ran back to back and the sheet he was tapping in had no main thread left between them.
+       Now each frame, the restart's own included, books its successor when it is done: 24 a second while frames are
+       cheap, and otherwise not before the phone has been left as long as it was busy. Busy counts the repaints that
+       landed inside the wait too (a video layer's seek repaints when its frame decodes: FM._queuedRenderMs), so a heavy
+       clip keeps the same share as a shape; that top-up is asked once per frame, so a stream of other repaints cannot
+       stall the preview. The wait is told to the app (FM._pacedWait), whose motion detector takes it out of the frame
+       interval: chosen idle is neither lateness nor a still hand. It never exceeds PACE_CAP, under the detector's own
+       500 ms and 700 ms, so a heavy stack stays a motion and the quality ladder can bring it down to where it fits; until
+       it has, a frame dearer than that gets less than its own time back. A frame that throws (a media element not ready,
+       see stopPreview) still books the next, as the interval did, and one from a stopped or restarted loop books nothing. */
+    const FRAME = 1000 / 24, PACE_CAP = 400;
+    const queued = () => (FM._queuedRenderMs ? FM._queuedRenderMs() : 0);
+    const book = ms => {
+      if (FM._pacedWait) FM._pacedWait(ms);
+      _loopTimer = setTimeout(frame, ms);
+    };
+    const arm = () => { busyAt = queued(); book(Math.min(PACE_CAP, Math.max(FRAME - spent, spent))); };
+    const frame = () => {
+      if (gen !== _loopGen) return;
+      _loopTimer = 0;
+      const extra = queued() - busyAt;                 // repaints inside the wait: time the phone was not his
+      const owed = Math.min(PACE_CAP, spent + extra) - ((performance.now() - frameEnd) - extra);
+      if (!extended && extra > 1 && owed > 4) { extended = true; busyAt = queued(); book(owed); return; }
+      extended = false;
+      const t0 = performance.now();
+      try {
+        if (sheetMode() && FM.setTime) {
+          fadePreview(Date.now() - _loopFrom);         // …before the repaint, so the frame drawn is the value set
+          FM.setTime(st + (((Date.now() - _loopFrom) / 1000) % du));
+        }
+      } finally {
+        spent = performance.now() - t0; frameEnd = performance.now();
+        if (gen === _loopGen) arm();
+      }
+    };
+    arm();
+    if (threw) throw threw;   // the tap that restarted it still hears why, as it did before; the loop is booked first
   }
+  FM._fxPreviewLoop = () => ({ booked: !!_loopTimer, gen: _loopGen });   // for the suite
 
   function togglePick(id) {
     const i = pickIndex(id);
