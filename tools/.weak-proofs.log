@@ -248,3 +248,5 @@
 2026-11-06 14:53	WEAK	1231 a stall while the take plays does not eat the hold: he still gets the finished logo for 0.7 s after it	Cannot read properties of undefined (reading 'shown')
 2026-11-06 14:53	WEAK	1231 when frames stop while the take plays and the cap goes by, it still ends on the finished logo, not a cut from the middle	Cannot read properties of undefined (reading 'shown')
 2026-11-06 14:53	WEAK	1231 the finished logo waits for the app under it to land, on the animated path and the still, and the wait has a limit	Cannot read properties of undefined (reading 'ended')
+2026-11-06 19:09	WEAK	663 a routed seek stops opening the adoption window once play, a loop wrap, a seam pre-roll or a restart seats the element again	setup: FM._mesRepeatIsLatency is not exposed, so this test cannot reach the rule
+2026-11-06 19:09	WEAK	663 a repeat bigger than the error its routed seek was for, by more than the dead band, is seeked as a new fault, and the adoptions stop at the hard limit	setup: FM._mesRepeatIsLatency is not exposed, so this test cannot reach the rule

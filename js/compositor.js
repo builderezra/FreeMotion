@@ -25103,9 +25103,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
               if (stale) {
                 if (!m._lastFrame) m._lastFrame = document.createElement('canvas');
                 if (m._lastFrame.width !== hw || m._lastFrame.height !== hh) { m._lastFrame.width = hw; m._lastFrame.height = hh; }
+                /* #202 VIDEO line (the pre-ship review, 6 Nov): this copy is the FIRST draw of each new frame of the clip, so it is
+                   the one that pays to convert it (a repeat draw of the same frame is cached by both engines). Timed while What's
+                   slow measures, into its own counters, so the composite's draw count stays one a frame. */
+                const hS = FM._videoDrawSink, h0 = hS ? performance.now() : 0;
                 try {
                   const lx = m._lastFrame.getContext('2d'); lx.clearRect(0, 0, hw, hh); lx.drawImage(m.el, 0, 0, hw, hh);
                   m._lastFrameT = srcT;
+                  if (hS) { hS.holdDraws++; hS.holdMs += performance.now() - h0; }
                 } catch (e) { m._lastFrameT = -1; }   // a failed copy must not be remembered as done
               }
             }
@@ -25151,6 +25156,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           src = lumaKey(src, w, h, thr, keyed ? 'none' : keyFilter, lksoft, lkm, n, lktol); keyed = true;
         }
         if (keyed) ctx.filter = 'none';                   // filter already applied to the keyed source
+        /* #202 VIDEO line (js/perf-probe.js). FM._videoDrawSink exists only while What's slow is measuring, so outside a
+           measurement this costs one property read. Only a draw of the clip ITSELF counts (src is still the element: not a
+           saved frame of a reversed or slowed clip, a held frame, a grade or a key), only one with a picture (a song is a video
+           record of 0 x 0, whose draw does nothing), and only in the preview, never an export. */
+        const vS = (src === m.el && m.kind === 'video' && w > 0 && h > 0 && !FM._exporting) ? FM._videoDrawSink : null;
+        const v0 = vS ? performance.now() : 0;
         try {
           // Sample the crop sub-rect (cr.x,cr.y,cr.w,cr.h) of the full source into the frame box (cw×ch)
           // at 1:1 density — shrinking the frame shows LESS of the media, it doesn't scale the content.
@@ -25162,6 +25173,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             const sh = src.videoHeight || src.naturalHeight || src.height || 0;
             const kx = (m && m.width && sw) ? sw / m.width : 1, ky = (m && m.height && sh) ? sh / m.height : 1;
             ctx.drawImage(src, cr.x * kx, cr.y * ky, cr.w * kx, cr.h * ky, -cw * anchorX(tr), -ch * anchorY(tr), cw, ch);
+          }
+          if (vS) {   // a draw that threw is not counted
+            const d = performance.now() - v0, vt = m.el.currentTime || 0;
+            vS.draws++; vS.ms += d; if (d > vS.worst) vS.worst = d;
+            if (vS.seen.get(m) !== vt) { vS.fresh++; vS.seen.set(m, vt); }   // a new point in the clip: its time moved since its last draw
           }
         } catch (e) { /* frame not ready */ }
         // (The vignette that used to be drawn here, over the clip rect, is CANVAS_FX.vignette now — #986 C8.)

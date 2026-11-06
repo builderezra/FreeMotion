@@ -78,6 +78,75 @@ window.FM = window.FM || {};
       fx + ' effect' + (fx === 1 ? '' : 's');
   }
 
+  /* ═══ THE VIDEO LINE (#202, its 6 Nov plan). #202 is ONE plain video layer that lags, and this report said nothing about
+   * the video itself. Two things only his phone can say, so they are measured here:
+   *  · THE CLOCK'S STEP. Read once a frame while playing: how far the playing clip's own currentTime moved, and how far the
+   *    playhead (FM.time, set by the transport clock) moved. A clock that moves in big lumps, or stands still on frame after
+   *    frame, makes a smooth picture jerk however cheap the drawing is. Smallest step, usual (median) step, and how many
+   *    frames it did not move at all. A step back or of a second or more is a seek or a loop, not the clock, and is left out.
+   *  · WHAT DRAWING THE VIDEO COSTS. js/compositor.js times its drawImage of the clip itself (FM._videoDrawSink, which exists
+   *    only while this measures, so nothing is paid otherwise), and counts how many of those draws were at a new point in
+   *    the clip (its currentTime had moved since the last draw; the same point twice is the same picture drawn again).
+   *    That is main-thread time: a phone that does the copy on its graphics chip shows the rest in the frame gaps above.
+   * A project with no video says so in one line rather than leaving it out, so a missing line cannot mean a missing feature. */
+  /* A video layer that is only its sound (Extract Audio's twin, and Simple's Add music from a video, which sets the same flag)
+   * is never drawn, so it is not the video, and its element's clock must not be pooled with the picture's (the pre-ship review,
+   * 6 Nov). audioOnly is the flag js/timeline.js reads to tell sound from picture. */
+  function soundOnly(l) { return l.audioOnly === true; }
+  function videoCount() {
+    const L = (FM.scene && FM.scene.layers) || [];
+    let n = 0;
+    for (let i = 0; i < L.length; i++) {
+      const l = L[i];
+      if (!l || l.type !== 'video' || soundOnly(l)) continue;
+      const m = FM.media && FM.media.get ? FM.media.get(l.id) : null;
+      if (m && m.kind === 'video' && !(m.width > 0 && m.height > 0)) continue;   // a song rides the video path with no picture
+      n++;
+    }
+    return n;
+  }
+  function stepText(c) {
+    const s = c.steps.slice().sort((a, b) => a - b), n = s.length + c.still;
+    if (!s.length) return 'did not move at all in ' + n + ' frames';
+    return 'smallest step ' + (s[0] * 1000).toFixed(1) + 'ms · usual step ' + (pct(s, 50) * 1000).toFixed(1) + 'ms · stood still on ' +
+           c.still + ' of ' + n + ' frames';
+  }
+  function videoLines(lines, v) {
+    const c = v.clock, h = v.head, d = v.draw;
+    // judged on the project, not on the draw count: a draw of some other scene's clip (a thumbnail) is not this project's video
+    if (!v.videos && !c.clips.size) { lines.push('VIDEO    no video in this project.'); return lines; }
+    /* a reversed clip's element is paused by the sync every frame while its picture comes from saved frames (or a seek per
+       frame): it has no running clock to measure, and saying it did not play would read as a sample taken while paused */
+    const rev = c.rev ? ' (a reversed clip beside it plays from saved frames, with no clock of its own: left out)' : '';
+    if (c.steps.length + c.still) {
+      lines.push('VIDEO    the video’s own clock: ' + stepText(c) + (c.clips.size > 1 ? ' (' + c.clips.size + ' clips together)' : '') + rev);
+    } else if (c.rev) {
+      lines.push('VIDEO    the video plays reversed, from saved frames or a seek per frame, so it has no running clock of its own to measure.');
+    } else {
+      lines.push('VIDEO    the video did not play during this sample, so its clock was not measured.');
+    }
+    // Play's start wait for a cold clip (up to 2 s, #202 H2) holds the playhead on purpose: left out of both clocks, and said
+    const held = h.held ? 'Play held the start for ' + h.held + ' frame' + (h.held === 1 ? '' : 's') + ' while a clip warmed up (left out)' : '';
+    if (h.steps.length + h.still) {
+      const on = h.srcs.audio && h.srcs.raf ? ' · on the sound clock and the wall clock'
+        : h.srcs.audio ? ' · on the sound clock' : h.srcs.raf ? ' · on the wall clock' : '';
+      lines.push('         the playhead: ' + stepText(h) + on + (held ? ' · ' + held : ''));
+    } else if (held) {
+      lines.push('         the playhead: ' + held + ', and did not run otherwise.');
+    }
+    if (d.draws) {
+      lines.push('         drawing the video: ' + (d.ms / d.draws).toFixed(2) + 'ms each time, worst ' + d.worst.toFixed(2) + 'ms · drawn ' +
+                 d.draws + ' time' + (d.draws === 1 ? '' : 's') + ', ' + d.fresh + ' of them at a new point in the clip');
+    } else {
+      lines.push('         drawing the video: it was not drawn straight from the clip during this sample.');
+    }
+    if (d.holdDraws) {
+      lines.push('         copying it into the held frame (the first draw of each new frame): ' + (d.holdMs / d.holdDraws).toFixed(2) +
+                 'ms each time · ' + d.holdDraws + ' time' + (d.holdDraws === 1 ? '' : 's'));
+    }
+    return lines;
+  }
+
   /* THE VERDICT, as a pure function — because this judgement has already been wrong once, on the
    * very first real measurement, and a wrong verdict is worse than no verdict in a tool built to
    * stop us drawing wrong conclusions. Pure so the suite can put his actual numbers in and read the
@@ -208,6 +277,41 @@ window.FM = window.FM || {};
           colGpu: c ? (c.gpu | 0) : 0, colCpu: c ? (c.cpu | 0) : 0,
         };
       })();
+      /* THE VIDEO LINE's numbers (#202) — see videoLines above. The sink is taken down by finish() and by stop(). */
+      const vSink = { draws: 0, ms: 0, worst: 0, fresh: 0, seen: new Map(), holdDraws: 0, holdMs: 0 };
+      FM._videoDrawSink = vSink;
+      const vClock = { steps: [], still: 0, last: new Map(), clips: new Set() };
+      const pClock = { steps: [], still: 0, last: null, srcs: {} };
+      const vSeen = new Set();
+      const noteStep = function (c, d) {
+        if (d === 0) c.still++;
+        else if (d > 0 && d < 1) c.steps.push(d);   // back, or a second or more: a seek or a loop wrap
+      };
+      const sampleClocks = function () {
+        const t = FM.time;
+        if (typeof t === 'number' && isFinite(t)) {
+          if (pClock.last != null) noteStep(pClock, t - pClock.last);
+          pClock.last = t;
+        }
+        try { const s = FM.clockSource ? FM.clockSource() : ''; if (s === 'audio' || s === 'raf') pClock.srcs[s] = 1; } catch (e) {}
+        const L = (FM.scene && FM.scene.layers) || [];
+        vSeen.clear();
+        for (let i = 0; i < L.length; i++) {
+          const l = L[i];
+          if (!l || l.type !== 'video' || soundOnly(l)) continue;
+          const m = FM.media && FM.media.get ? FM.media.get(l.id) : null;
+          const el = (m && m.kind === 'video' && m.width > 0 && m.height > 0) ? m.el : null;
+          if (!el || vSeen.has(el)) continue;   // a split clip's halves share one element: read it once
+          vSeen.add(el);
+          if (l.reversed && FM.layerLocalTime && FM.layerLocalTime(l, FM.time) != null) { vClock.rev = (vClock.rev || 0) + 1; vClock.last.delete(el); continue; }
+          if (el.paused !== false) { vClock.last.delete(el); continue; }   // a pause is not a step
+          const ct = el.currentTime;
+          if (typeof ct !== 'number' || !isFinite(ct)) continue;
+          vClock.clips.add(el);
+          if (vClock.last.has(el)) noteStep(vClock, ct - vClock.last.get(el));
+          vClock.last.set(el, ct);
+        }
+      };
       let last = t0, frames = 0;
       const gapsPlay = [], gapsDrag = [];   // queue 387 — see the split in tick()
       let tierLow = 99, tierHigh = -1;
@@ -244,6 +348,11 @@ window.FM = window.FM || {};
          * precisely the number that cannot see it. The entry says it needs a reading off HIS phone;
          * this is that reading, and it costs one branch per frame. */
         const playing = !!FM.playing;
+        // #202 VIDEO line: the clocks are read only while playing, and a stop forgets the last reading
+        let held = false;
+        try { held = playing && !!(FM._startWaitHeld && FM._startWaitHeld()); } catch (e) {}
+        if (playing && !held) { try { sampleClocks(); } catch (e) {} }
+        else { vClock.last.clear(); pClock.last = null; if (held) pClock.held = (pClock.held || 0) + 1; }
         let moving = false;
         try { moving = !!(FM.playbackQualityInfo && FM.playbackQualityInfo().inMotion); } catch (e) {}
         if (gap > 0 && gap < 2000) {                    // a tab-switch gap is not a frame
@@ -263,6 +372,7 @@ window.FM = window.FM || {};
       };
 
       function finish(elapsed) {
+        if (FM._videoDrawSink === vSink) FM._videoDrawSink = null;   // the compositor stops timing the moment the sample ends
         if (deadline) { clearTimeout(deadline); deadline = null; }
         document.removeEventListener('visibilitychange', onHide);
         const sorted = gaps.slice().sort((a, b) => a - b);
@@ -396,6 +506,8 @@ window.FM = window.FM || {};
             lines.push('           during the ten seconds.)');
           }
         }
+        // ═══ THE VIDEO ITSELF (#202) — see videoLines.
+        try { videoLines(lines, { videos: videoCount(), clock: vClock, head: pClock, draw: vSink }); } catch (e) {}
         const ps = FM.playbackStats;
         // Everything here is THIS SAMPLE's share, not the whole session's (queue 489).
         const dRate = ps ? Math.max(0, (ps.rateWrites | 0) - ps0.rateWrites) : 0;
@@ -473,7 +585,7 @@ window.FM = window.FM || {};
       return true;
     },
 
-    stop() { this.running = false; },
+    stop() { this.running = false; FM._videoDrawSink = null; },   // a stopped sample never reaches finish(): take the draw timer down here too
     // Exposed so the suite can assert the deadline exists without waiting out a real hidden-tab run.
     _hasDeadline() { return this.running; },
   };

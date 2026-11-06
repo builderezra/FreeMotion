@@ -462,6 +462,24 @@ window.FM = window.FM || {};
     };
   }
 
+  /* ═══ A PARAM NOBODY IS MOVING IS NOT WRITTEN AGAIN (#845 part 1: his sounds glitch on the phone once effects are added) ════
+   * The live preview calls applyAt every screen frame, and applyAt hands EVERY key of every effect to its set(), moving or not.
+   * Each set wrote its AudioParams again with setValueAtTime — one more event in each param's timeline, sixty times a second:
+   * MEASURED by P27 (plans/helper-27), 15,960 events per 120 frames across the 27 effects of v17.33, against 133 for one frame.
+   * Whether that is his glitch is P27's guess, not a measurement (on an iPhone each event is an insertion in the param's
+   * timeline); it is waste either way. So the WRITE is skipped, inside each effect's own setters, when it would leave the param
+   * exactly where the last write left it — never the set() itself. Loudness Match reads its measurement IN its setter every
+   * frame (its gain moves when the measurement lands, with no control touched), and a setter that works one value out from
+   * several keys or from scene time (a Compressor's makeup, a synced Echo) moves params whose own key is still. So applyAt still
+   * calls every set every frame, and:
+   *   HELD is true only while applyAt is inside the set() of a key that is NOT keyframed. Nothing else ever sets it, so the
+   *     export (schedule) and every ramp write exactly what they always did, sample for sample.
+   *   put() (and so multi and unit's own params) skips a held setValueAtTime whose value is the one it last put on that same
+   *     AudioParam (WROTE; a ramp forgets it). pairTargets and cuFade skip a held set that finds their gains already at rest.
+   * A keyframed key is written every frame, as before; a moved slider is written once, on the frame it moves. */
+  let HELD = false;
+  const WROTE = new WeakMap();   // AudioParam -> the value put() last set it to with setValueAtTime
+
   /* One built effect. `params` = keys that ARE a single AudioParam taking the UI value as-is. `xf` =
    * that param needs the value converted first (dB → linear). `custom` = keys that drive several params
    * at once or rebuild a node, handled by hand. */
@@ -491,12 +509,12 @@ window.FM = window.FM || {};
          key that drives has to read the other one at the same moment. Every other setter ignores it. */
       set: function (key, v, when, sceneT) {
         const ap = aps[key];
-        if (ap) { ap.setValueAtTime(xf[key] ? xf[key](v) : v, when); return; }
+        if (ap) { put(ap, xf[key] ? xf[key](v) : v, when, false); return; }   // #845: put skips a held write of the value already there
         if (custom[key]) custom[key](v, when, false, sceneT);
       },
       ramp: function (key, v, when, sceneT) {
         const ap = aps[key];
-        if (ap) { ap.linearRampToValueAtTime(xf[key] ? xf[key](v) : v, when); return; }
+        if (ap) { put(ap, xf[key] ? xf[key](v) : v, when, true); return; }
         if (custom[key]) custom[key](v, when, true, sceneT);
       },
       // Start every LFO at the phase that scene time implies: phase = frac(rate × scene), so scene 0 is
@@ -534,7 +552,7 @@ window.FM = window.FM || {};
         if (typeof list[i] === 'function') { list[i](v, when, ramp); continue; }
         const ap = list[i][0], f = list[i][1];
         const x = typeof f === 'function' ? f(v) : v * (f == null ? 1 : f);
-        if (ramp) ap.linearRampToValueAtTime(x, when); else ap.setValueAtTime(x, when);
+        put(ap, x, when, ramp);
       }
     };
   }
@@ -575,6 +593,8 @@ window.FM = window.FM || {};
     return [function (v, when, ramp) {
       const x = isOn(v) ? 1 : 0;
       if (ramp || target === null || (x === target && when >= t1)) {
+        // #845: a held set at rest finds both gains at x already (a set left them there, or the fade has landed) — no new events
+        if (!ramp && HELD && target !== null) return;
         if (ramp) { on.linearRampToValueAtTime(x, when); off.linearRampToValueAtTime(1 - x, when); }
         else { on.setValueAtTime(x, when); off.setValueAtTime(1 - x, when); }
         target = from = x; t0 = t1 = when;
@@ -623,6 +643,7 @@ window.FM = window.FM || {};
       const x = valuesOf(v);
       const same = target !== null && x.every((y, i) => y === target[i]);
       if (ramp || target === null || (same && when >= t1)) {
+        if (!ramp && HELD && target !== null) return;   // #845: at rest, as in pairTargets — every gain already holds x
         for (let i = 0; i < aps.length; i++) put(aps[i], x[i], when, ramp);
         target = from = x; t0 = t1 = when;
         return;
@@ -633,6 +654,7 @@ window.FM = window.FM || {};
       for (let i = 0; i < aps.length; i++) {
         aps[i].cancelScheduledValues(when); aps[i].setValueAtTime(cur[i], when);
         aps[i].linearRampToValueAtTime(x[i], when + PAIR_FADE);
+        WROTE.delete(aps[i]);   // a fade is not a value put() left there
       }
       from = cur; target = x; t0 = when; t1 = when + PAIR_FADE;
     };
@@ -661,7 +683,13 @@ window.FM = window.FM || {};
     return { input: msIn, output: merge, w: wG };
   }
   // A value written at once or ramped to, onto one AudioParam (a setter that works one out from several keys).
-  function put(ap, x, when, ramp) { if (ramp) ap.linearRampToValueAtTime(x, when); else ap.setValueAtTime(x, when); }
+  // #845 (HELD, above unit): a held set of the very value put() last left on this param adds no event; a ramp forgets it.
+  function put(ap, x, when, ramp) {
+    if (ramp) { ap.linearRampToValueAtTime(x, when); WROTE.delete(ap); return; }
+    if (HELD && WROTE.get(ap) === x) return;
+    ap.setValueAtTime(x, when);
+    WROTE.set(ap, x);
+  }
 
   /* ═══ DE-ESSER (#966 B45, refers to #545; ported from the ChatGPT pile's 081ee145 — tools/design/plans/pile-deesser/NOTES.md) ═══
    * Turns down the harsh "s" and "sh" of a voice, and nothing else. THE BAND is a 0 dB-peak band-pass at Frequency (Q 1/√2:
@@ -1875,8 +1903,7 @@ window.FM = window.FM || {};
         return function (v, when, ramp, sceneT) {
           const at = k => (k === key ? v : valueAt(inst, paramOf('compressor', k), isFinite(sceneT) ? sceneT : 0));
           const g = makeupCancel(at('threshold'), at('knee'), at('ratio'));
-          if (ramp) { c[key].linearRampToValueAtTime(v, when); mk.gain.linearRampToValueAtTime(g, when); }
-          else { c[key].setValueAtTime(v, when); mk.gain.setValueAtTime(g, when); }
+          put(c[key], v, when, ramp); put(mk.gain, g, when, ramp);
         };
       };
       return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, meter: { node: c, dry: wd.dry.gain, wet: wd.wet.gain },
@@ -2165,7 +2192,7 @@ window.FM = window.FM || {};
           drive: function (v, when, ramp) {
             v = clamp(v, 0, 100);
             // Auto level follows Drive, keyframed or not (a real gain, so it ramps with the bank's cross-fade).
-            if (ag) { const g = 1 / distGain0(ct, v); try { ramp ? ag.gain.linearRampToValueAtTime(g, when) : ag.gain.setValueAtTime(g, when); } catch (e) {} }
+            if (ag) { const g = 1 / distGain0(ct, v); try { put(ag.gain, g, when, ramp); } catch (e) {} }
             /* STATIC MUST NEVER BUILD THE BANK. `when == null` is NOT the test — the static path calls
                set(key, value, 0), so `when` is 0 and not null, and an early version of this built a
                12-shaper bank for every plain Distortion in every project. The counter added for the
@@ -3129,8 +3156,7 @@ window.FM = window.FM || {};
     const own = key => (addMix && key === 'mix') || (addOut && key === 'output');
     const drive = function (key, v, when, ramp) {
       if (key === 'mix') { mixSet(v, when, ramp); return; }
-      const x = dbToLin(v);
-      if (ramp) out.gain.linearRampToValueAtTime(x, when); else out.gain.setValueAtTime(x, when);
+      put(out.gain, dbToLin(v), when, ramp);
     };
     // The effect's own setter still gets the key; the dry copy's pair follows it, value for value.
     const flipDry = function (key, v, when, ramp) { if (dryFlip && key === d.dryLagWhile.key) dryFlip(v, when, ramp); };
@@ -3960,7 +3986,12 @@ window.FM = window.FM || {};
         if (!armed) arm(anchor !== null ? anchor : sceneTime - when);   // "the scene is at sceneTime NOW"
         for (let i = 0; i < built.length; i++) {
           const b = built[i], ps = b.def.params;
-          for (let j = 0; j < ps.length; j++) b.u.set(ps[j].key, valueAt(b.inst, ps[j], sceneTime), when, sceneTime);
+          for (let j = 0; j < ps.length; j++) {
+            /* #845 (HELD, above unit): every set still runs, every frame — Loudness Match's gain moves in its setter when the
+               measurement lands — but a key that is not keyframed is set HELD, so its effect writes only a value that moved. */
+            HELD = !FM.isAnimated(b.inst.params ? b.inst.params[ps[j].key] : undefined);
+            try { b.u.set(ps[j].key, valueAt(b.inst, ps[j], sceneTime), when, sceneTime); } finally { HELD = false; }
+          }
         }
       },
       // Offline render: animated params sampled at 30 Hz across the window in ctx time (= scene − from),

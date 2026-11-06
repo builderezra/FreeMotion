@@ -63483,6 +63483,219 @@
     }
   });
 
+  /* #202 the VIDEO line (its 6 Nov plan). #202 is one plain video layer that lags, and the Measure report (Settings, What's
+     slow, Measure; js/perf-probe.js) said nothing about the video itself: not how the clip's own clock moves while it plays,
+     not how the playhead moves, and not what drawing the clip costs. Those are numbers only his phone can give.
+     The rig drives both clocks itself, one step per animation frame, so the steps are known exactly: the playhead moves
+     1/60 s every frame and the clip's clock 1/30 s every second frame. Every frame is drawn through the real FM.renderScene
+     from a canvas standing in for the <video> (drawImage takes both), so the compositor's own timing of that draw is what
+     the report prints. FM.playing is held true for the sample (the transport itself is not run: its clock is the rig's).
+     FAILS BEFORE THE FIX: the report has no VIDEO line at all.
+     CONTROLS: the rig's first frame puts the clip's red in the picture (the compositor really draws the stand-in); the rig's
+     frame loop ran through the sample; the same clip with nothing playing says its clock was not measured, with no step
+     numbers; and a project with no video says so in its VIDEO line, with no numbers, though the playhead moved. */
+  test('202 the Measure report has a VIDEO line: the video clock’s smallest step, the playhead’s, and what drawing the video costs', { item: '202', budgetMs: 30000 }, async function () {
+    if (!FM.perfProbe || typeof FM.perfProbe.run !== 'function') throw new Error('FM.perfProbe.run is missing');
+    if (FM.perfProbe.running) throw new Error('a probe is already running, so this one would be refused and prove nothing');
+    const realRender = FM.renderScene, wasPlaying = FM.playing;
+    const measure = function () {
+      return new Promise(function (res, rej) {
+        const to = setTimeout(function () { rej(new Error('the probe never finished within 8 s')); }, 8000);
+        if (FM.perfProbe.run(1000, function (out) { clearTimeout(to); res(out); }) === false) { clearTimeout(to); rej(new Error('the probe refused to start')); }
+      });
+    };
+    /* the VIDEO line and the indented lines under it */
+    const videoBlock = function (text) {
+      const ls = String(text || '').split('\n'), i = ls.findIndex(function (l) { return l.indexOf('VIDEO') === 0; });
+      if (i < 0) return null;
+      const out = [ls[i]];
+      for (let j = i + 1; j < ls.length && /^ {9}\S/.test(ls[j]); j++) out.push(ls[j]);
+      return out.join('\n');
+    };
+    let rig = null, looping = false, loopFrames = 0, songLayer = null;
+    const dropSong = function () {
+      if (!songLayer) return;
+      const i = FM.scene.layers.indexOf(songLayer); if (i >= 0) FM.scene.layers.splice(i, 1);
+      FM.media.remove(songLayer.id);
+      songLayer = null;
+    };
+    /* one frame of the rig: both clocks step, and the scene is drawn through the real compositor */
+    const startLoop = function (el, cx) {
+      let k = 0;
+      looping = true; loopFrames = 0;
+      const frame = function () {
+        if (!looping) return;
+        k++; loopFrames++;
+        FM.time = k / 60;
+        if (el) el.currentTime = Math.floor(k / 2) / 30;
+        cx.clearRect(0, 0, 320, 240);
+        realRender(cx, FM.scene, FM.time);
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    };
+    const num = function (block, re, what) {
+      const m = block.match(re);
+      if (!m) throw new Error('the VIDEO line does not say ' + what + ' in the words this asserts:\n' + block);
+      return m.slice(1).map(Number);
+    };
+    try {
+      /* ── a playing video */
+      rig = transportRig({ duration: 20 });
+      const cv = offscreen(320, 240), cx = cv.getContext('2d', { willReadFrequently: true });
+      const el = offscreen(64, 48), g = el.getContext('2d');
+      g.fillStyle = '#ff0000'; g.fillRect(0, 0, 64, 48);
+      el.readyState = 4; el.paused = false; el.currentTime = 0;
+      FM.media.set(rig.layer.id, { kind: 'video', el: el, width: 64, height: 48, duration: 20, stripFrames: [] });
+      /* …and a song beside it: a song is a video record with no picture (0 x 0), whose draw does nothing, so it must not be
+         counted as drawing the video (the review of 6 Nov). */
+      songLayer = FM.makeLayer('video', { name: 'song', start: 0, duration: 20 });
+      const songEl = offscreen(1, 1);
+      songEl.readyState = 4; songEl.paused = false; songEl.currentTime = 0;
+      FM.scene.layers.push(songLayer);
+      FM.media.set(songLayer.id, { kind: 'video', el: songEl, width: 0, height: 0, duration: 20, stripFrames: [] });
+      realRender(cx, FM.scene, 0);
+      const px = cx.getImageData(160, 120, 1, 1).data;
+      if (!(px[0] > 180 && px[1] < 70 && px[2] < 70)) throw new Error('CONTROL: the rig’s clip did not draw (the middle of the picture is rgb(' + px[0] + ',' + px[1] + ',' + px[2] + ')), so the compositor never drew the stand-in and nothing below is under test');
+      FM.playing = true;
+      startLoop(el, cx);
+      const text = await measure();
+      looping = false;
+      if (loopFrames < 10) throw new Error('CONTROL: the rig drew only ' + loopFrames + ' frames during the one-second sample, so there was nothing to measure');
+      const block = videoBlock(text);
+      if (!block) throw new Error('the Measure report has no VIDEO line, so a sample taken while one plain video plays says nothing about the video’s clock or what drawing it costs (#202 is exactly that case):\n' + text);
+      const vc = num(block, /the video’s own clock: smallest step ([\d.]+)ms · usual step ([\d.]+)ms · stood still on (\d+) of (\d+) frames/, 'the video clock’s steps');
+      if (Math.abs(vc[0] - 33.3) > 0.6) throw new Error('the video clock’s smallest step reads ' + vc[0] + 'ms; the rig moves it 1/30 s (33.3ms) at a time:\n' + block);
+      if (vc[3] < 8 || vc[2] < vc[3] * 0.25 || vc[2] > vc[3] * 0.75) throw new Error('the video clock stood still on ' + vc[2] + ' of ' + vc[3] + ' frames; the rig moves it every second frame, so about half:\n' + block);
+      const ph = num(block, /the playhead: smallest step ([\d.]+)ms · usual step ([\d.]+)ms · stood still on (\d+) of (\d+) frames/, 'the playhead’s steps');
+      if (Math.abs(ph[0] - 16.7) > 0.6 || Math.abs(ph[1] - 16.7) > 0.6) throw new Error('the playhead’s steps read ' + ph[0] + 'ms smallest and ' + ph[1] + 'ms usual; the rig moves it 1/60 s (16.7ms) every frame:\n' + block);
+      if (ph[2] > 2) throw new Error('the playhead stood still on ' + ph[2] + ' of ' + ph[3] + ' frames; the rig moves it every frame:\n' + block);
+      const dr = num(block, /drawing the video: ([\d.]+)ms each time, worst ([\d.]+)ms · drawn (\d+) times, (\d+) of them at a new point in the clip/, 'what drawing the video cost');
+      if (dr[2] < 8) throw new Error('the report counted ' + dr[2] + ' draws of the video; the rig drew it on each of ' + loopFrames + ' frames:\n' + block);
+      if (dr[2] > loopFrames + 2) throw new Error('the report counted ' + dr[2] + ' draws of the video over ' + loopFrames + ' frames: the song beside it (a video record with no picture) was counted as drawing the video, which doubles the count and halves the cost each time:\n' + block);
+      if (dr[3] < 3 || dr[3] > dr[2] * 0.75 + 1) throw new Error(dr[3] + ' of ' + dr[2] + ' draws were counted at a new point in the clip; the rig moves the clip on every second frame, so about half:\n' + block);
+      if (!(dr[0] <= dr[1] + 0.01) || dr[1] > 1000) throw new Error('the draw times do not add up (' + dr[0] + 'ms each, worst ' + dr[1] + 'ms):\n' + block);
+      /* the held-frame copy is the FIRST draw of each new frame, the one that converts it (the pre-ship review, 6 Nov), so it is reported on its own line */
+      const hc = num(block, /copying it into the held frame \(the first draw of each new frame\): ([\d.]+)ms each time · (\d+) times?/, 'what copying the held frame cost');
+      if (hc[1] < 3 || hc[1] > dr[2] * 0.75 + 1) throw new Error(hc[1] + ' held-frame copies were counted over ' + dr[2] + ' draws; the rig moves the clip on every second frame and only a new point is copied, so about half:\n' + block);
+      if (FM._videoDrawSink) throw new Error('the compositor is still timing video draws after the sample ended');
+
+      /* ── CONTROL: the same clip, nothing playing */
+      FM.playing = false;
+      const paused = videoBlock(await measure());
+      if (!paused || !/the video did not play during this sample, so its clock was not measured/.test(paused) || /smallest step/.test(paused)) throw new Error('CONTROL: with nothing playing the VIDEO line should say the clock was not measured, and quote no steps:\n' + paused);
+      dropSong();
+      rig.restore(); rig = null;
+
+      /* ── CONTROL: no video in the project, while the playhead moves */
+      rig = transportRig({ duration: 20, silent: true });
+      FM.playing = true;
+      startLoop(null, cx);
+      const none = videoBlock(await measure());
+      looping = false;
+      if (none !== 'VIDEO    no video in this project.') throw new Error('CONTROL: a project with only a shape in it should say it has no video, with no numbers; its VIDEO line reads:\n' + none);
+    } finally {
+      looping = false;
+      if (FM.perfProbe.running) FM.perfProbe.stop();
+      FM.playing = false;
+      dropSong();
+      if (rig) rig.restore();
+      FM.playing = wasPlaying;
+      if (FM._resetPlayQuality) FM._resetPlayQuality();
+    }
+  });
+
+  /* #202 the VIDEO line, the pre-ship review of 6 Nov. Three readings the first VIDEO line got wrong, each a case his projects
+     have: a sound-only twin (Extract Audio, or Simple's Add music from a video: a video layer with audioOnly that is never drawn)
+     was counted as the video and its clock pooled with the picture's; a reversed clip, whose element the sync pauses every frame
+     while its picture comes from saved frames, was reported as a video that did not play; and Play's start wait for a cold clip
+     (up to 2 s, #202 H2) was booked as the playhead and the clip standing still.
+     FAILS BEFORE THE FIX: the twin reads as the video's own clock, the reversed clip as did not play, and the held frames as
+     frames the playhead stood still on. CONTROL: the same rig with a plain forward clip and no hold reads its clock as before. */
+  test('202 the VIDEO line leaves out a sound-only twin, says a reversed clip plays from saved frames, and leaves Play’s start wait out of the clocks', { item: '202', budgetMs: 40000 }, async function () {
+    if (!FM.perfProbe || typeof FM.perfProbe.run !== 'function') throw new Error('FM.perfProbe.run is missing');
+    if (FM.perfProbe.running) throw new Error('a probe is already running, so this one would be refused and prove nothing');
+    const realRender = FM.renderScene, wasPlaying = FM.playing, hadHeld = Object.prototype.hasOwnProperty.call(FM, '_startWaitHeld'), realHeld = FM._startWaitHeld;
+    const measure = function () {
+      return new Promise(function (res, rej) {
+        const to = setTimeout(function () { rej(new Error('the probe never finished within 8 s')); }, 8000);
+        if (FM.perfProbe.run(1000, function (out) { clearTimeout(to); res(out); }) === false) { clearTimeout(to); rej(new Error('the probe refused to start')); }
+      });
+    };
+    const videoBlock = function (text) {
+      const ls = String(text || '').split('\n'), i = ls.findIndex(function (l) { return l.indexOf('VIDEO') === 0; });
+      if (i < 0) return null;
+      const out = [ls[i]];
+      for (let j = i + 1; j < ls.length && /^ {9}\S/.test(ls[j]); j++) out.push(ls[j]);
+      return out.join('\n');
+    };
+    let rig = null, looping = false, loopFrames = 0;
+    /* one frame of the rig: the playhead moves 1/60 s unless held, the clip's clock 1/30 s every second frame unless paused */
+    const startLoop = function (el, cx, moveHead) {
+      let k = 0;
+      looping = true; loopFrames = 0;
+      const frame = function () {
+        if (!looping) return;
+        k++; loopFrames++;
+        if (moveHead) FM.time = 1 + k / 60;
+        if (el && el.paused === false) el.currentTime = Math.floor(k / 2) / 30;
+        cx.clearRect(0, 0, 320, 240);
+        realRender(cx, FM.scene, FM.time);
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    };
+    const clip = function (paused) {
+      const el = offscreen(64, 48), g = el.getContext('2d');
+      g.fillStyle = '#ff0000'; g.fillRect(0, 0, 64, 48);
+      el.readyState = 4; el.paused = paused; el.currentTime = 0;
+      return el;
+    };
+    const one = async function (setup, moveHead) {
+      if (rig) { rig.restore(); rig = null; }
+      rig = transportRig({ duration: 20 });
+      const cv = offscreen(320, 240), cx = cv.getContext('2d', { willReadFrequently: true });
+      const el = setup(rig.layer);
+      FM.media.set(rig.layer.id, { kind: 'video', el: el, width: 64, height: 48, duration: 20, stripFrames: [] });
+      FM.time = 1; FM.playing = true;
+      startLoop(el, cx, moveHead);
+      const text = await measure();
+      looping = false;
+      if (loopFrames < 10) throw new Error('CONTROL: the rig drew only ' + loopFrames + ' frames during the one-second sample, so there was nothing to measure');
+      const block = videoBlock(text);
+      if (!block) throw new Error('the Measure report has no VIDEO line at all:\n' + text);
+      return block;
+    };
+    try {
+      /* ── CONTROL: a plain forward clip, nothing held: its clock is read */
+      const plain = await one(function () { return clip(false); }, true);
+      if (!/the video’s own clock: smallest step 33\.\dms/.test(plain)) throw new Error('CONTROL: a plain forward clip playing in the rig should have its clock read (smallest step 33.3ms); its VIDEO line reads:\n' + plain);
+
+      /* ── a sound-only twin, alone: there is no picture video in this project */
+      const twin = await one(function (L) { L.audioOnly = true; L.opacity = 0; return clip(false); }, true);
+      if (twin !== 'VIDEO    no video in this project.') throw new Error('a project whose only video layer is a sound-only twin (Extract Audio, Add music from a video) should say it has no video; the twin was counted as the video and its sound element’s clock read as the picture’s:\n' + twin);
+
+      /* ── a reversed clip on screen: its element is paused every frame, its picture comes from saved frames */
+      const rev = await one(function (L) { L.reversed = true; return clip(true); }, true);
+      if (/did not play/.test(rev) || !/plays reversed, from saved frames/.test(rev)) throw new Error('a reversed clip that played the whole sample was reported as a video that did not play, which reads as a sample taken while paused; it should say it plays reversed from saved frames:\n' + rev);
+
+      /* ── Play holding the start for a cold clip: the playhead and the clip stand still on purpose */
+      FM._startWaitHeld = function () { return true; };
+      const held = await one(function () { return clip(false); }, false);
+      const hn = held.match(/Play held the start for (\d+) frames while a clip warmed up/);
+      if (!hn || +hn[1] < 8) throw new Error('with Play holding the start for a cold clip the whole sample, the VIDEO line should say the start was held for the frames of the sample; it reads:\n' + held);
+      if (/stood still on [1-9]/.test(held)) throw new Error('Play’s deliberate start wait was booked as the playhead or the clip standing still, which reads as a jerky clock:\n' + held);
+    } finally {
+      looping = false;
+      if (FM.perfProbe.running) FM.perfProbe.stop();
+      FM.playing = false;
+      if (hadHeld) FM._startWaitHeld = realHeld; else delete FM._startWaitHeld;
+      if (rig) rig.restore();
+      FM.playing = wasPlaying;
+      if (FM._resetPlayQuality) FM._resetPlayQuality();
+    }
+  });
+
   test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
     var keep = FM.scene.layers.slice(), keepT = FM.time;
     var fps = FM.scene.project.fps || 30;
@@ -76826,7 +77039,7 @@
       FM.scene.layers.length = 0;
       const L = FM.makeLayer('video', { name: 'tone', start: 0, duration: 12, trimStart: 0, speed: 1, volume: 1 });
       FM.scene.layers.push(L); FM.scene.project.duration = 12;
-      const el = spinUpEl(12, o.latency, o.spin);
+      const el = o.makeEl ? o.makeEl() : spinUpEl(12, o.latency, o.spin);   // makeEl: #663, a fake element of the test's own
       FM.media.set(L.id, Object.assign({ kind: 'video', el: el, width: 320, height: 240, duration: 12 }, o.rec || {}));   // rec: #845 (a routed record)
       FM.playing = false; FM.setTime(0); await sleep(40);
       const t0 = performance.now();
@@ -76834,10 +77047,14 @@
       let ticks = 0;
       for (let i = 0; i < (o.ticks || 18); i++) {
         FM.setTime((performance.now() - t0) / 1000);
+        /* #663 (the review of 6 Nov): FM.setTime renders before the controller reads the element, so with a look every frame a
+           long render showed up in the measured error as jitter the app never has: tick() reads the clock and syncs with nothing
+           in between. So with tickMs the clock is read again, just before the sync. */
+        if (o.tickMs) FM.time = Math.min(FM.scene.project.duration, (performance.now() - t0) / 1000);
         if (!FM._syncMediaToClock) throw new Error('FM._syncMediaToClock is not exposed — this test cannot reach the controller');
         FM._syncMediaToClock(); ticks++;
         if (o.each) o.each(el, i);   // #845: what the tick left behind, read before the next one
-        await sleep(75);
+        await sleep(o.tickMs || 75);   // tickMs: #663, a look every animation frame instead
         if (o.at && i === o.at) o.then(el);
       }
       FM.playing = false; el.pause();
@@ -76921,6 +77138,385 @@
     if (atSeek == null) throw new Error('CONTROL: 600 ms of lag after warm-up was never corrected by a seek (' + r.el.seeks + ' seeks in all), so this test proves nothing');
     if (!(atSeek < 0.05)) throw new Error('the drift seek jumped the playing sound at volume ' + atSeek.toFixed(3) + ' — an unfaded jump to an arbitrary sample is a click, the one play() and a loop wrap already avoid');
     if (!(later > atSeek)) throw new Error('after the de-clicked seek the volume did not come back up (' + later + ')');
+  });
+
+  /* #845 part 1 (P27's write flood, plans/helper-27, reworked 6 Nov for today's code). The live preview calls applyAt every
+   * screen frame, and every effect wrote every one of its AudioParams again each time, moving or not: P27 counted 15,960
+   * setValueAtTime events per 120 frames across the 27 effects of v17.33, against 133 for one frame. Now a key that is not
+   * keyframed is set HELD, and its effect writes only a value that moved (js/audio-fx.js, HELD above unit()).
+   * Counted the way P27's probe counted (helper-plans-27-scripts/aw_per.js on plans/helper-27): every AudioParam scheduling call
+   * stubbed on the prototype, one effect per chain at its defaults, 120 frames at 60 fps. Only the calls made inside a
+   * synchronous block of applyAt calls are counted, so nothing else on the page can add to a count.
+   * FAILS BEFORE THE FIX: every effect at rest writes about 119 times its first frame over the next 119 frames.
+   * CONTROLS: every effect's first frame writes something (the rig drives each one); a Gain moved 0 to 6 dB is written once, as
+   * 1.995; a keyframed Gain, a keyframed Gain held flat (the not-keyframed half of the rule) and a keyframed Chorus Depth are
+   * written on every frame; and the frame after Loudness Match's measurement lands moves its gain toward the matched level with
+   * no control touched, which a skip of an unchanged set in applyAt (P27's own patch) swallows. */
+  test('845 P27 the live audio chain stops rewriting parameters nobody is moving: no effect at rest adds AudioParam events after its first frame, a moved slider is written once, a keyframed one every frame, and a landing loudness measurement still moves the Loudness Match gain', { item: '845', budgetMs: 60000 }, async function () {
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext, reg = FM.audioFxRegistry;
+    if (!OAC || !window.AudioParam || !FM.buildAudioFxChain || !reg || !FM.loudness) throw new Error('setup: the audio effect chain is not reachable');
+    const AP = window.AudioParam.prototype, orig = {}, log = [], chains = [];
+    const NAMES = ['setValueAtTime', 'linearRampToValueAtTime', 'exponentialRampToValueAtTime', 'setTargetAtTime', 'setValueCurveAtTime', 'cancelScheduledValues', 'cancelAndHoldAtTime'];
+    let on = false, mediaSet = false;
+    const hadMedia = FM.media, oldGet = hadMedia ? hadMedia.get : null;
+    NAMES.forEach(function (n) {
+      if (typeof AP[n] !== 'function') return;
+      orig[n] = AP[n];
+      AP[n] = function (v) { if (on) log.push({ m: n, v: v }); return orig[n].apply(this, arguments); };
+    });
+    /* the AudioParam calls one synchronous block makes, and only those */
+    const count = function (fn) { log.length = 0; on = true; try { fn(); } finally { on = false; } return log.slice(); };
+    const build = function (layer) {
+      const chain = FM.buildAudioFxChain(new OAC(2, 48000, 48000), layer, 0);
+      if (chain) chains.push(chain);
+      return chain;
+    };
+    const inst = function (type, over) { const x = reg.makeInstance(type); if (!x) throw new Error('setup: there is no ' + type + ' effect'); Object.assign(x.params, over || {}); return x; };
+    /* events on each of frames 1..n after the first, dt apart */
+    const perFrame = function (chain, n, dt) { const z = []; for (let i = 1; i <= n; i++) z.push(count(function () { chain.applyAt(i * dt); }).length); return z; };
+    try {
+      // 1. EVERY EFFECT AT REST: frame 0, then 119 more frames with nothing moved
+      const types = reg.all().map(function (d) { return d.type; });
+      if (types.length < 20) throw new Error('setup: only ' + types.length + ' audio effects are registered');
+      const rest = [], dead = [];
+      let first = 0, more = 0;
+      const atRest = function (t, x) {
+        const chain = build({ audioFx: [x] });
+        if (!chain) { dead.push(t + ' (built no chain)'); return; }
+        const f = count(function () { chain.applyAt(0); }).length;
+        const r = count(function () { for (let i = 1; i < 120; i++) chain.applyAt(i / 60); }).length;
+        if (!(f > 0)) dead.push(t);
+        first += f; more += r;
+        if (r) rest.push([t, r]);
+      };
+      types.forEach(function (t) { atRest(t, inst(t)); });
+      /* …and the settings that build a different setter, which the defaults never reach (the review of 6 Nov): Compressor with
+         Auto makeup off writes through its curve key and its makeup gain, Distortion with Auto level on through its level gain.
+         The other three are cheap neighbours of the same kind. A variant whose type is not registered is left out. */
+      [['compressor', { automakeup: 0 }], ['distortion', { autogain: 1 }], ['width', { trim: 1 }], ['tremolo', { stereo: 90 }], ['chorus', { spread: 0.5 }]].forEach(function (v) {
+        if (types.indexOf(v[0]) >= 0) atRest(v[0] + ' ' + JSON.stringify(v[1]), inst(v[0], v[1]));
+      });
+      if (dead.length) throw new Error('CONTROL: the first frame wrote nothing at all for ' + dead.join(', ') + ' - the rig is not driving those effects, so a quiet count for them would prove nothing');
+      if (rest.length) {
+        rest.sort(function (a, b) { return b[1] - a[1]; });
+        throw new Error('at rest, the 119 frames after the first wrote ' + more + ' more AudioParam events across ' + types.length + ' effects (their first frames wrote ' + first + '; P27 counted 15,960 per 120 frames for 27): ' + rest.slice(0, 12).map(function (x) { return x[0] + ' ' + x[1]; }).join(', ') + (rest.length > 12 ? ' and ' + (rest.length - 12) + ' more' : '') + ' - every parameter nobody is moving is written again every screen frame');
+      }
+      // 2. A MOVED SLIDER IS WRITTEN, ONCE, WITH ITS NEW VALUE
+      const g = inst('gain', { gain: 0 }), c2 = build({ audioFx: [g] });
+      c2.applyAt(0); c2.applyAt(1 / 60);
+      g.params.gain = 6;
+      const moved = count(function () { c2.applyAt(2 / 60); c2.applyAt(3 / 60); c2.applyAt(4 / 60); });
+      if (moved.length !== 1 || moved[0].m !== 'setValueAtTime' || Math.abs(moved[0].v - Math.pow(10, 6 / 20)) > 1e-6) throw new Error('CONTROL: a Gain moved 0 to 6 dB was written ' + moved.length + ' times in 3 frames, as ' + JSON.stringify(moved) + ' - want once, setValueAtTime 1.995: a moved slider must still reach the sound');
+      // 3. A KEYFRAMED ONE IS WRITTEN ON EVERY FRAME: a glide, a key held flat, and a custom setter (Chorus Depth)
+      const frozen = [];
+      const kfGain = function (a, b) { return { gain: { kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] } }; };
+      const c3 = build({ audioFx: [inst('gain', kfGain(-6, 6))] }); c3.applyAt(0);
+      const z3 = perFrame(c3, 30, 1 / 30);
+      if (z3.indexOf(0) >= 0) frozen.push('a Gain keyed -6 to +6 dB was not written on ' + z3.filter(function (x) { return !x; }).length + ' of 30 frames (it would stair-step)');
+      const c3b = build({ audioFx: [inst('gain', kfGain(3, 3))] }); c3b.applyAt(0);
+      const z3b = perFrame(c3b, 30, 1 / 30);
+      if (z3b.indexOf(0) >= 0) frozen.push('a Gain keyed at +3 dB and held there was not written on ' + z3b.filter(function (x) { return !x; }).length + ' of 30 frames (only a key that is not keyframed may be skipped)');
+      const dp = reg.paramsOf('chorus').filter(function (p) { return p.key === 'depth'; })[0];
+      if (!dp) throw new Error('setup: the Chorus has no Depth');
+      const c4 = build({ audioFx: [inst('chorus', { depth: { kf: [{ t: 0, v: dp.min, e: 'linear' }, { t: 2, v: dp.max, e: 'linear' }] } })] }); c4.applyAt(0);
+      const z4 = perFrame(c4, 30, 1 / 15);
+      if (z4.indexOf(0) >= 0) frozen.push('a Chorus with Depth keyed ' + dp.min + ' to ' + dp.max + ' was not written on ' + z4.filter(function (x) { return !x; }).length + ' of 30 frames');
+      if (frozen.length) throw new Error('CONTROL: ' + frozen.join(' · '));
+      // 4. LOUDNESS MATCH: its gain moves on the frame its measurement lands, with no control touched
+      const id = 'q845p27-lm', lm = inst('loudnessmatch', { guard: 0 });
+      const n = 96000, buf = new AudioBuffer({ numberOfChannels: 2, length: n, sampleRate: 48000 });
+      let s = 845;
+      for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < n; i++) { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; d[i] = 0.02 * (s / 4294967296 * 2 - 1); } }
+      const media = { audioBuffer: buf }, layer = { id: id, type: 'video', name: id, start: 0, duration: 2, trimStart: 0, speed: 1, audioFx: [lm] };
+      const get = function (k) { return k === id ? media : (oldGet ? oldGet.call(hadMedia, k) : undefined); };
+      if (hadMedia) hadMedia.get = get; else FM.media = { get: get };
+      mediaSet = true;
+      const c5 = build(layer);   /* the build starts the measurement; it lands in a later microtask */
+      if (!c5) throw new Error('setup: Loudness Match built no chain');
+      c5.applyAt(0); c5.applyAt(1 / 60);
+      const st0 = FM.loudness.state(layer, lm);
+      if (st0.state !== 'measuring') throw new Error('setup: before its measurement could land, Loudness Match says ' + st0.state + ' - ' + JSON.stringify(st0.text) + ' - so its landing cannot be watched');
+      const m = await FM.loudness.prepare(layer, media);
+      const want = m ? FM.loudness.gainOf(m, lm.params.target, 0, lm.params.ceiling) : null;
+      if (!want || !(want.g > 1.5)) throw new Error('setup: the clip measured ' + JSON.stringify(m) + ', a gain of ' + JSON.stringify(want) + ' - want a quiet clip turned well up');
+      const landed = count(function () { c5.applyAt(2 / 60); });
+      const hit = landed.filter(function (e) { return e.m === 'setTargetAtTime' && Math.abs(e.v - want.g) <= 1e-9 * want.g; });
+      if (!hit.length) throw new Error('CONTROL: the frame after Loudness Match measured the clip wrote ' + JSON.stringify(landed) + ' - want its gain moved toward ' + want.g.toFixed(4) + ' (setTargetAtTime): a skip has swallowed the one write the effect exists to make');
+    } finally {
+      NAMES.forEach(function (n) { if (orig[n]) AP[n] = orig[n]; });
+      if (mediaSet) { if (hadMedia) hadMedia.get = oldGet; else delete FM.media; }
+      chains.forEach(function (c) { try { c.dispose(); } catch (e) {} });
+    }
+  });
+
+  /* #663 (finding 2 of the 23 Oct hunt, its refuter, and the builder's note that the refuter's ramp is not red). A fake element
+   * whose reported clock lags its real position by a latency that depends on how far it has played since its last seek or play:
+   * latAt(s). spinUpEl's ramp runs from position 0 only, so it cannot show a transient that comes back after every seek, which
+   * is what this finding is about. `shortBy` makes every seek land that far short of where it was sent and stay there (the
+   * hunt's first model). e._pos is where the element really is, so a test can tell a real lag from a latency. */
+  function seekLatEl663(dur, latAt, shortBy) {
+    const e = { paused: true, muted: false, volume: 1, readyState: 4, duration: dur,
+                seeks: 0, seekT: [], rateWrites: 0, maxRate: 1, _pos: 0, _from: 0, _at: performance.now(), _rate: 1, _stall: 0 };
+    const adv = () => {
+      const n = performance.now();
+      if (!e.paused) { const f = Math.max(e._at, e._stall); if (n > f) e._pos = Math.min(dur, e._pos + (n - f) / 1000 * e._rate); }
+      e._at = n;
+    };
+    Object.defineProperty(e, 'currentTime', {
+      get() { adv(); return Math.max(0, e._pos - latAt(e._pos - e._from)); },
+      set(v) { adv(); e._pos = Math.max(0, v - (shortBy || 0)); e._from = e._pos; e.seeks++; e.seekT.push(performance.now()); e._stall = performance.now() + 30; },
+    });
+    Object.defineProperty(e, 'playbackRate', {
+      get() { return e._rate; },
+      set(v) { adv(); e._rate = v; e.rateWrites++; if (v > e.maxRate) e.maxRate = v; },
+    });
+    e.play = () => { adv(); e.paused = false; e._from = e._pos; return Promise.resolve(); };
+    e.pause = () => { adv(); e.paused = true; };
+    return e;
+  }
+  /* 0.09 s of latency, and `d` more that arrives only after `wait` s of play since the last seek, over `ramp` s: the warm-up
+     (0.25 s of the element's own time) has taken its seed by then, so the seed is short by exactly d. */
+  function settlesLate663(d, wait, ramp) { return s => 0.09 + d * Math.max(0, Math.min(1, (s - wait) / ramp)); }
+  function route663() { return { _mes: { connect() {}, disconnect() {} } }; }
+  /* One routed run of the q148 harness on a 663 fake: seeks, the gaps between them, adoptions, and how far the element REALLY
+     was from the playhead over the last 30 ticks. `lag` pulls the element 0.2 s back at tick 11 (no seek of its own); `pulls`
+     ({ at: [ticks], by: s }) pulls it back `by` at each of those ticks, a real stall each time. */
+  async function run663(mk, ticks, lag, pulls) {
+    let rec = null;
+    const offs = [];
+    const r = await q148Run({ ticks: ticks, rec: route663(), makeEl: mk,
+      at: lag ? 11 : 0, then: el => { void el.currentTime; el._pos = Math.max(0, el._pos - 0.2); },
+      each: (el, i) => {
+        if (!rec) { const all = FM.media.all(); for (const k in all) { if (all[k] && all[k].el === el) rec = all[k]; } }
+        if (pulls && pulls.at.indexOf(i) >= 0) { void el.currentTime; el._pos = Math.max(0, el._pos - pulls.by); }
+        void el.currentTime; offs[i] = FM.time - el._pos;
+      } });
+    const gaps = [];
+    for (let i = 1; i < r.el.seekT.length; i++) gaps.push(Math.round(r.el.seekT[i] - r.el.seekT[i - 1]));
+    const tail = offs.slice(-30).filter(isFinite).map(Math.abs).sort((x, y) => x - y);
+    return { el: r.el, ticks: r.ticks, seeks: r.el.seeks, gaps: gaps, adopts: (rec && rec._mesAdopts) || 0,
+             adopted: (rec && rec._mesAdopted) || 0, offMed: tail.length ? tail[tail.length >> 1] : NaN };
+  }
+
+  /* #663 MEASUREMENT PROBE (the PM's order, 23 Oct: measure before a bound is trusted). The routed harness on 663 fakes whose
+   * latency settles d later after every seek, or whose seeks land d short, for d = 0.05, 0.07, 0.09 and 0.24 s, plus the
+   * builder's computed model (latency 0.24, a 2 s ramp from half that restarts on every seek), and in measure mode only two
+   * REAL-lag cases (the pre-ship review's SHOULD-FIX 2 (a)): a constant 0.09 s latency with the element really pulled back 0.12 or
+   * 0.17 s at ticks 11, 35 and 60, so the cost of adopting a repeat is a number beside its benefit. In measure mode each runs twice:
+   * with the fix and with FM._mesRepeatIsLatency stubbed to false, which is the v17.93 rule.
+   * Normally it runs three short cases and asserts only that each reached the controller, so the probe cannot rot unseen.
+   * Add &measure663=1 to the address and it FAILS ON PURPOSE with every number in its message: seeks, the gaps between them in
+   * ms, adoptions, and the median |playhead − real position| over the last 30 ticks (a seek that lands short shows up there). */
+  test('663 measure routed seek loop: seeks and their spacing for a routed clip whose latency settles late or whose seeks land short, with and without the fix', { item: '663', budgetMs: 420000 }, async function () {
+    let want = false;
+    try { want = new URLSearchParams((window.top || window).location.search).get('measure663') === '1'; } catch (e) {}
+    const cases = [];
+    for (const d of [0.05, 0.07, 0.09, 0.24]) {
+      cases.push({ name: 'settles ' + d + ' s late', mk: () => seekLatEl663(12, settlesLate663(d, 0.5, 0.6)), lag: false, quick: d === 0.07 });
+      cases.push({ name: 'lands ' + d + ' s short', mk: () => seekLatEl663(12, () => 0.09, d), lag: true, quick: d === 0.07 });
+    }
+    cases.push({ name: 'latency 0.24 on a 2 s ramp from half', mk: () => seekLatEl663(12, s => 0.24 * (0.5 + 0.5 * Math.min(1, s / 2))), lag: false, quick: true });
+    cases.push({ name: 'real stalls of 0.12 s at ticks 11, 35, 60', mk: () => seekLatEl663(12, () => 0.09), lag: false, pulls: { at: [11, 35, 60], by: 0.12 }, quick: false });
+    cases.push({ name: 'real stalls of 0.17 s at ticks 11, 35, 60', mk: () => seekLatEl663(12, () => 0.09), lag: false, pulls: { at: [11, 35, 60], by: 0.17 }, quick: false });
+    const lines = [];
+    const keep = FM._mesRepeatIsLatency;
+    for (const c of cases) {
+      if (!want && !c.quick) continue;
+      for (const on of (want ? [true, false] : [true])) {
+        window.__fmStep = '663 probe: ' + c.name + (on ? ' (fix on)' : ' (fix off)');
+        let r;
+        if (!on) FM._mesRepeatIsLatency = () => false;
+        try { r = await run663(c.mk, want ? 100 : 40, c.lag, c.pulls); } finally { FM._mesRepeatIsLatency = keep; }
+        if (!(r.ticks >= (want ? 90 : 36))) throw new Error('the probe run ' + c.name + ' ticked only ' + r.ticks + ' times, so it measured nothing');
+        lines.push(c.name + (on ? ' [fix on]' : ' [fix off]') + ': ' + r.seeks + ' seeks' + (r.gaps.length ? ' (gaps ' + r.gaps.join('/') + ' ms)' : '') +
+                   ', ' + r.adopts + ' adopted (' + Math.round(r.adopted * 1000) + ' ms), median |playhead - position| ' + Math.round(r.offMed * 1000) + ' ms, ' + r.ticks + ' ticks');
+      }
+    }
+    if (want) throw new Error('MEASURE 663 (asked for with measure663=1; a report, not a fault): ' + lines.join(' | '));
+  });
+
+  /* #663 (finding 2 of the 23 Oct hunt, as its refuter corrected it; js/app.js FM._mesRepeatIsLatency). A routed clip whose
+   * reported clock settles d later after every seek, once the warm-up has taken its seed. The element is never late (e._pos
+   * keeps time), but since v17.93 the routed rule reads the settling as lag, seeks, re-seeds short, and seeks again: on WebKit
+   * every one of those seeks on a routed element is a gap while its tap refills.
+   * FAILS BEFORE THE FIX: computed, not yet run, a seek about every 1.9 s at d = 0.07 (about 4 in 100 ticks) and about every
+   * 1 s at d = 0.15. MEASURE: the bound below is the computed one; set it from the probe above once it has run.
+   * d = 0.15 is over the 0.1 s rule, so it also catches the hunt's first fix (learn under 0.1 s), which loops there.
+   * CONTROLS: the settling reached the controller (at least one seek each), the clip really keeps time (median |playhead −
+   * real position| under 0.06 s, the bar test 845 uses), and the rate is never written. A one-off stall is still pulled back by
+   * one seek: test 845 (a routed clip that falls behind) pins that, unchanged. */
+  test('663 a routed clip whose latency settles later after every seek is seeked once, not every second or two for as long as it plays', { item: '663', budgetMs: 60000 }, async function () {
+    const MEASURE_MAX_SEEKS = 1;   // MEASURE: computed; confirm with the probe (?only=663%20measure&measure663=1)
+    for (const d of [0.07, 0.15]) {
+      window.__fmStep = '663 settles ' + d + ' s late';
+      const r = await run663(() => seekLatEl663(12, settlesLate663(d, 0.5, 0.6)), 100, false);
+      if (!(r.ticks >= 90)) throw new Error('setup: only ' + r.ticks + ' sync ticks at d = ' + d + ', so nothing here is under test');
+      if (r.seeks < 1) throw new Error('CONTROL: a routed clip whose latency settled ' + Math.round(d * 1000) + ' ms later was never seeked at all, so the settling never reached the controller and this test proves nothing');
+      if (r.seeks > MEASURE_MAX_SEEKS) throw new Error('a routed clip whose latency settles ' + Math.round(d * 1000) + ' ms later after each seek was seeked ' + r.seeks + ' times in ' + r.ticks + ' ticks (gaps ' + r.gaps.join('/') + ' ms) while it was never late (median ' + Math.round(r.offMed * 1000) + ' ms off) — every seek re-seeds the latency short and the next one follows; on an iPhone each is a gap');
+      if (!(r.offMed < 0.06)) throw new Error('at d = ' + d + ' the element itself ended a median ' + Math.round(r.offMed * 1000) + ' ms off the playhead — the fix kept a real lag as latency');
+      if (r.el.rateWrites !== 0) throw new Error('the routed clip had playbackRate written ' + r.el.rateWrites + ' times');
+    }
+  });
+
+  /* #663 (the pre-ship refuter's SHOULD-FIX 1, 23 Oct; js/app.js FM._mesRepeatIsLatency). The adoption window a routed seek
+   * opens must close the moment anything else seats the element again: FM.play, a loop wrap, a seam pre-roll and the restart all
+   * stamp m._syncAt, and the routed seek stamps _syncAt and _mesSeekAt from the same now. Without that, the first stall of a NEW
+   * pass inside 5 s of the old seek is adopted as latency with no seek at all, which is the #845 B2 hole. */
+  test('663 a routed seek stops opening the adoption window once play, a loop wrap, a seam pre-roll or a restart seats the element again', { item: '663' }, async function () {
+    if (typeof FM._mesRepeatIsLatency !== 'function') throw new Error('setup: FM._mesRepeatIsLatency is not exposed, so this test cannot reach the rule');
+    const m = { _mes: {}, _mesSeekAt: 1000, _syncAt: 1000, _mesSeekErr: 0.07, _mesAdopted: 0 };
+    if (FM._mesRepeatIsLatency(m, 0.07, 2000) !== true) throw new Error('CONTROL: the same error 1 s after a routed seek was not taken as latency, so this test proves nothing');
+    m._syncAt = 1500;   // FM.play, wrapTo, prerollAtSeam and the restart all stamp _syncAt when they seat the element again
+    if (FM._mesRepeatIsLatency(m, 0.07, 2000) !== false) throw new Error('a routed clip seated again after its seek still had its next error adopted as latency, so a stall on the new pass is kept with no seek (#845 B2)');
+    /* …and through a real re-seat, not a hand-set stamp (the review of 6 Nov): a loop wrap, the commonest one, on a real layer and
+       record. If wrapTo stopped stamping _syncAt, the first stall of the new lap inside 5 s of the old seek would be adopted. */
+    if (typeof FM._wrapTo !== 'function') throw new Error('setup: FM._wrapTo is not exposed, so a real re-seat cannot be driven');
+    const keep = { layers: FM.scene.layers.slice(), dur: FM.scene.project.duration, t: FM.time };
+    const media0 = isoMediaSnap();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('video', { name: 'lap', start: 0, duration: 12 });
+      FM.scene.layers.push(L); FM.scene.project.duration = 12;
+      const now = performance.now();
+      const rec = { kind: 'video', el: spinUpEl(12, 0.09, 0.3), width: 320, height: 240, duration: 12,
+        _mes: {}, _mesSeekAt: now - 1000, _syncAt: now - 1000, _mesSeekErr: 0.07, _mesAdopted: 0 };
+      FM.media.set(L.id, rec);
+      if (FM._mesRepeatIsLatency(rec, 0.07, performance.now()) !== true) throw new Error('CONTROL: on the real record the same error 1 s after a routed seek was not taken as latency, so the wrap below proves nothing');
+      FM._wrapTo(1);
+      if (FM._mesRepeatIsLatency(rec, 0.07, performance.now()) !== false) throw new Error('a loop wrap seated the routed clip again and its next error was still adopted as latency: wrapTo no longer closes the adoption window, so a stall on the new lap is kept with no seek (#845 B2)');
+    } finally {
+      FM.scene.layers = keep.layers; FM.scene.project.duration = keep.dur; FM.time = keep.t;
+      isoMediaPut(media0);
+    }
+  });
+
+  /* #663 (finding 2; js/app.js FM._mesRepeatIsLatency). An adoption takes the repeat as latency the seed missed, so it may only be
+   * the SAME error back: same direction, no bigger than the error the routed seek was for by more than the dead band (SYNC_DEAD,
+   * 45 ms), and all the adoptions since that seek no more than SYNC_HARD (0.35 s). A bigger error is a new fault and is seeked.
+   * Written 6 Nov because the v18.24 mutation that removed the size bound SURVIVED: every other 663 test brings back an error the
+   * same size as the seek's, so none of them could tell. The rule is read directly, as the window test above does. */
+  test('663 a repeat bigger than the error its routed seek was for, by more than the dead band, is seeked as a new fault, and the adoptions stop at the hard limit', { item: '663' }, async function () {
+    if (typeof FM._mesRepeatIsLatency !== 'function') throw new Error('setup: FM._mesRepeatIsLatency is not exposed, so this test cannot reach the rule');
+    const fresh = over => Object.assign({ _mes: {}, _mesSeekAt: 1000, _syncAt: 1000, _mesSeekErr: 0.12, _mesAdopted: 0 }, over || {});
+    if (FM._mesRepeatIsLatency(fresh(), 0.12, 2000) !== true) throw new Error('CONTROL: the same 120 ms error 1 s after a routed seek for 120 ms was not taken as latency, so nothing below proves anything');
+    if (FM._mesRepeatIsLatency(fresh(), 0.16, 2000) !== true) throw new Error('a repeat 40 ms bigger than the error its routed seek was for (inside the 45 ms dead band) was not taken as latency, so a latency that settles a little further is seeked again every two seconds');
+    if (FM._mesRepeatIsLatency(fresh(), 0.22, 2000) !== false) throw new Error('a repeat 100 ms bigger than the 120 ms error its routed seek was for was adopted as latency: a new, bigger fault is kept as lag instead of being seeked, so the sound stays that late');
+    if (FM._mesRepeatIsLatency(fresh(), -0.12, 2000) !== false) throw new Error('an error the other way after a routed seek for a lag was adopted as latency: the clip running ahead is kept, not seeked');
+    if (FM._mesRepeatIsLatency(fresh({ _mesAdopted: 0.30 }), 0.12, 2000) !== false) throw new Error('with 300 ms already adopted since the seek, another 120 ms was adopted too, past the 0.35 s hard limit: the bias can walk away from the playhead');
+    if (FM._mesRepeatIsLatency(fresh(), 0.12, 6500) !== false) throw new Error('the same error 5.5 s after the routed seek was still adopted: the window is 5 s, so a stall long after the seek is kept with no seek');
+    if (FM._mesRepeatIsLatency(fresh({ _mesJump: true }), 0.12, 2000) !== false) throw new Error('an error that stepped in since the re-seed (a stall) was adopted as latency');
+  });
+
+  /* #663 (finding 2, the PM's redesign, 24 Oct; js/app.js FM._mesRampNote and FM._mesRepeatIsLatency). The first fix adopted a REAL
+   * stall as latency whenever it came back inside the window at the same size and direction. Its probe ('663 measure routed seek
+   * loop', &measure663=1) measured that: stalls of 0.12 and 0.17 s at ticks 11, 35 and 60 on a clip with a constant 0.09 s latency
+   * left the element a median 268 / 371 ms behind the playhead over the last 30 ticks (29 ms without the fix). A latency that settles
+   * RAMPS IN after the re-seed, a stall is a STEP, and now only the ramp is adopted; a step is seeked as before.
+   * FAILS BEFORE THE REDESIGN (ba994dbb): measured by the probe, 268 and 371 ms against the 60 ms bar test 845 uses.
+   * CONTROLS: each stall run reached the controller (at least one seek), the rate is never written, and a latency that ramps in
+   * (settles 0.07 s late, as in the 663 test above) is still seeked once, not every second or two, so a redesign that simply
+   * adopted nothing at all fails here too. */
+  test('663 a routed clip that stalls again inside the adoption window: a real stall is seeked, not adopted as latency, so stalls of 0.12 and 0.17 s leave it within 0.06 s of the playhead while a latency that ramps in is still seeked once', { item: '663', budgetMs: 90000 }, async function () {
+    for (const by of [0.12, 0.17]) {
+      window.__fmStep = '663 real stalls of ' + by + ' s at ticks 11, 35, 60';
+      const r = await run663(() => seekLatEl663(12, () => 0.09), 100, false, { at: [11, 35, 60], by: by });
+      if (!(r.ticks >= 90)) throw new Error('setup: only ' + r.ticks + ' sync ticks with stalls of ' + by + ' s, so nothing here is under test');
+      if (r.seeks < 1) throw new Error('CONTROL: three real stalls of ' + Math.round(by * 1000) + ' ms were never seeked at all, so they never reached the controller and this test proves nothing');
+      if (!(r.offMed < 0.06)) throw new Error('a routed clip that really stalled ' + Math.round(by * 1000) + ' ms three times (ticks 11, 35 and 60) ended a median ' + Math.round(r.offMed * 1000) + ' ms behind the playhead over its last 30 ticks, after ' + r.seeks + ' seeks and ' + r.adopts + ' adoptions (' + Math.round(r.adopted * 1000) + ' ms): a stall that came back inside the window was adopted as latency, so the sound stays that late until the next play');
+      if (r.el.rateWrites !== 0) throw new Error('the routed clip had playbackRate written ' + r.el.rateWrites + ' times while it was pulled back');
+    }
+    window.__fmStep = '663 settles 0.07 s late (control)';
+    const s = await run663(() => seekLatEl663(12, settlesLate663(0.07, 0.5, 0.6)), 100, false);
+    if (!(s.ticks >= 90)) throw new Error('setup: only ' + s.ticks + ' sync ticks in the settling control, so nothing here is under test');
+    if (s.seeks < 1) throw new Error('CONTROL: a routed clip whose latency settled 70 ms later was never seeked at all, so the settling never reached the controller');
+    if (s.seeks > 1) throw new Error('CONTROL: a routed clip whose latency ramps in 70 ms after each seek was seeked ' + s.seeks + ' times (gaps ' + s.gaps.join('/') + ' ms, ' + s.adopts + ' adopted): a latency that ramps in is no longer adopted, so the #663 seek loop is back');
+  });
+
+  /* #663 (the redesign, 24 Oct; js/app.js FM._mesRampNote). The app looks every animation frame, not every 80 ms as the probe does,
+   * and on a phone a stall is an element whose clock STOPS while the playhead runs: at 60 fps that moves the error about 16 ms a
+   * look, smaller than any per-look step bound sized from the probe's 80 ms looks. The rule judges the error's slope against the
+   * clip's own time instead (a stopped clock is exactly 1, the steepest settling fake 0.4), and this pins that choice.
+   * The fake: a routed clip with a constant 0.09 s latency, looked at every ~16 ms, whose clock stops for 0.12 s at 1.0 s and again at
+   * 3.0 s of playhead time (seekLatEl663's _stall: the element really falls 0.12 s behind each time, and its currentTime stands still).
+   * FAILS BEFORE THE REDESIGN (ba994dbb), computed, not yet run: the first stop is seeked (over 0.1 s), the second comes back about
+   * 2 s later the same size and direction inside the window and is adopted, so the clip ends about 150 ms behind (0.12 kept plus
+   * the fake's 30 ms seek stall) with 1 seek. With the redesign both stops are seeked and it ends about 30 ms off.
+   * CONTROLS: the stops reached the controller (at least one seek), the run really looked at about frame rate (320 looks, under
+   * 35 ms apart on average, so the clip's 12 s are never run past), and the rate is never written. */
+  test('663 at animation-frame rate a routed clip whose clock stops for 0.12 s twice is seeked back both times, not adopted as latency, and ends within 0.06 s of the playhead', { item: '663', budgetMs: 60000 }, async function () {
+    let rec = null, stops = 0, lastT = 0;
+    const offs = [];
+    const r = await q148Run({ ticks: 320, tickMs: 16, rec: route663(), makeEl: () => seekLatEl663(12, () => 0.09),
+      each: (el, i) => {
+        if (!rec) { const all = FM.media.all(); for (const k in all) { if (all[k] && all[k].el === el) rec = all[k]; } }
+        if ((stops === 0 && FM.time >= 1.0) || (stops === 1 && FM.time >= 3.0)) { void el.currentTime; el._stall = performance.now() + 120; stops++; }
+        void el.currentTime; offs[i] = FM.time - el._pos; lastT = FM.time;
+      } });
+    if (!(r.ticks >= 310 && lastT / r.ticks < 0.035)) throw new Error('setup: ' + r.ticks + ' looks over ' + lastT.toFixed(2) + ' s, so this did not look at anything like frame rate and nothing here is under test');
+    if (stops !== 2) throw new Error('setup: the playhead reached only ' + stops + ' of the two stops (it ended at ' + lastT.toFixed(2) + ' s), so nothing here is under test');
+    if (r.el.seeks < 1) throw new Error('CONTROL: a routed clip whose clock stopped 120 ms twice was never seeked at all, so the stops never reached the controller and this test proves nothing');
+    const tail = offs.slice(-60).filter(isFinite).map(Math.abs).sort((x, y) => x - y);
+    const med = tail.length ? tail[tail.length >> 1] : NaN;
+    if (!(med < 0.06)) throw new Error('at frame rate a routed clip whose clock stopped 120 ms twice ended a median ' + Math.round(med * 1000) + ' ms behind the playhead over its last 60 looks, after ' + r.el.seeks + ' seeks and ' + ((rec && rec._mesAdopts) || 0) + ' adoptions: a stopped clock, 16 ms a look, was read as a latency ramping in and kept');
+    if (r.el.rateWrites !== 0) throw new Error('the routed clip had playbackRate written ' + r.el.rateWrites + ' times');
+  });
+
+  /* #663 (the redesign's review SF2 and its refuter, 24 Oct; js/app.js FM._mesRampNote). The positive control test 2 lacks, at the
+   * cadence the app really looks at: a routed clip whose clock stops 0.12 s at 0.5 s is seeked for the stop, and the 70 ms that then
+   * settles in after that seek's re-seed is ADOPTED, because the re-seed clears the step mark and a ramp at frame rate reads as a ramp.
+   * FAILS BEFORE THE FIX (main), computed, not run: the settling is seeked about every 1.9 s (near 0.6, 2.5, 4.4 and 6.3 s). A mark
+   * that outlived the re-seed, or a jitter floor too tight for 16 ms looks, fails the same way.
+   * CONTROLS: the stop happened and reached the controller, and the run looked at about frame rate for over 3.5 s (320 looks under
+   * 35 ms apart on average, so the 12 s clip is never run past). */
+  test('663 at animation-frame rate a latency that settles in after a stopped clock was seeked is adopted, not seeked every two seconds', { item: '663', budgetMs: 60000 }, async function () {
+    let rec = null, stopped = false, lastT = 0, prevT = null, maxGap = 0;
+    const r = await q148Run({ ticks: 320, tickMs: 16, rec: route663(), makeEl: () => seekLatEl663(12, settlesLate663(0.07, 0.5, 0.6)),
+      each: el => {
+        if (!rec) { const all = FM.media.all(); for (const k in all) { if (all[k] && all[k].el === el) rec = all[k]; } }
+        if (prevT != null) maxGap = Math.max(maxGap, FM.time - prevT);
+        prevT = FM.time; lastT = FM.time;
+        if (!stopped && FM.time >= 0.5) { void el.currentTime; el._stall = performance.now() + 120; stopped = true; }
+      } });
+    const ad = (rec && rec._mesAdopts) || 0;
+    if (!(lastT > 3.5 && lastT / r.ticks < 0.035)) throw new Error('setup: ' + r.ticks + ' looks over ' + lastT.toFixed(2) + ' s, so this did not look at anything like frame rate for long enough and nothing here is under test');
+    if (!stopped || r.el.seeks < 1) throw new Error('CONTROL: the 120 ms stop was ' + (stopped ? 'never seeked' : 'never reached') + ', so nothing here is under test');
+    if (r.el.seeks !== 1 || ad < 1) throw new Error('at frame rate a routed clip whose latency settled 70 ms in after a stop was seeked ' + r.el.seeks + ' times with ' + ad + ' adoptions (slowest look ' + Math.round(maxGap * 1000) + ' ms): the settling is seeked every two seconds again, so on an iPhone each is a gap');
+    if (r.el.rateWrites !== 0) throw new Error('the routed clip had playbackRate written ' + r.el.rateWrites + ' times');
+  });
+
+  /* #663 (the redesign's refuter, 24 Oct; js/app.js FM._mesRampNote, the SYNC_DEAD cap). The slope bound grows with the look: a look
+   * h long passed any rise up to 0.6 h as a ramp, so a stop that fell inside ONE slow look read as latency and, over 0.1 s, was adopted
+   * on that same tick: the held fix's hole again, and his phone has such looks (16 Aug: a worst frame gap of 494 ms, 14 of 446 frames
+   * over 42 ms). Now a rise past the dead band inside one look is a step whatever the look's length.
+   * The fake: test 2's clip (a constant 0.09 s latency, looked at every ~16 ms). Its clock stops 0.12 s at 1.0 s, which is seeked and
+   * opens the window, and again at 3.0 s, this time inside one look held about 250 ms long by a busy wait.
+   * FAILS WITHOUT THE CAP (d77fbf4e), computed, not run: 0.12 is under 0.6 x 0.27, so the second stop is adopted and the clip ends about
+   * 150 ms behind with 1 seek. Main seeks it, so on main this test is DEAD; its mutation (Infinity for SYNC_DEAD) is the proof.
+   * CONTROLS: both stops reached, the slow look really happened, at least one seek, and the rate is never written. */
+  test('663 a routed clip whose clock stops 0.12 s inside one slow 0.25 s look after a routed seek is seeked back, not adopted as latency, and ends within 0.06 s of the playhead', { item: '663', budgetMs: 60000 }, async function () {
+    let rec = null, stops = 0, lastT = 0, prevT = null, maxGap = 0;
+    const offs = [];
+    const r = await q148Run({ ticks: 320, tickMs: 16, rec: route663(), makeEl: () => seekLatEl663(12, () => 0.09),
+      each: (el, i) => {
+        if (!rec) { const all = FM.media.all(); for (const k in all) { if (all[k] && all[k].el === el) rec = all[k]; } }
+        if (prevT != null) maxGap = Math.max(maxGap, FM.time - prevT);
+        prevT = FM.time; lastT = FM.time;
+        void el.currentTime; offs[i] = FM.time - el._pos;
+        if (stops === 0 && FM.time >= 1.0) { el._stall = performance.now() + 120; stops++; }
+        else if (stops === 1 && FM.time >= 3.0) {
+          el._stall = performance.now() + 120; stops++;
+          const t1 = performance.now();
+          while (performance.now() - t1 < 250) { /* one slow look: the page is held 250 ms, as a struggling phone holds a frame */ }
+        }
+      } });
+    if (!(lastT / r.ticks < 0.035)) throw new Error('setup: ' + r.ticks + ' looks over ' + lastT.toFixed(2) + ' s, so this did not look at anything like frame rate and nothing here is under test');
+    if (stops !== 2) throw new Error('setup: the playhead reached only ' + stops + ' of the two stops (it ended at ' + lastT.toFixed(2) + ' s), so nothing here is under test');
+    if (!(maxGap > 0.2)) throw new Error('setup: the slowest look was only ' + Math.round(maxGap * 1000) + ' ms, so the second stop was not inside a slow look and nothing here is under test');
+    if (r.el.seeks < 1) throw new Error('CONTROL: a routed clip whose clock stopped 120 ms twice was never seeked at all, so the stops never reached the controller and this test proves nothing');
+    const tail = offs.slice(-60).filter(isFinite).map(Math.abs).sort((x, y) => x - y);
+    const med = tail.length ? tail[tail.length >> 1] : NaN;
+    if (!(med < 0.06)) throw new Error('a routed clip whose clock stopped 120 ms inside one ' + Math.round(maxGap * 1000) + ' ms look, about 2 s after a routed seek, ended a median ' + Math.round(med * 1000) + ' ms behind the playhead over its last 60 looks, after ' + r.el.seeks + ' seeks and ' + ((rec && rec._mesAdopts) || 0) + ' adoptions: a stop seen through a slow look was read as latency ramping in and kept');
+    if (r.el.rateWrites !== 0) throw new Error('the routed clip had playbackRate written ' + r.el.rateWrites + ' times');
   });
 
   /* Queue 202 — is the ladder actually WIRED to playback? A different question from whether it decides
@@ -86187,6 +86783,169 @@
     if (seen.length) throw new Error('icons with no ink on screen — this is what he means by "the icons don\'t display properly": ' + seen.join(' | '));
   });
 
+  /* ═══ 860 b: THE ICONS THAT ARE NOT SVG (the 6 Nov re-check of #860). The guard above reads only <svg>. Many of the app's
+     icons are a character (⋯, ⚙, ⤢, ◐, ❖, 🗑 and more) or a CSS mask over a coloured box, and those fail differently: a
+     character the phone's fonts do not have is drawn as an empty box (or not at all), and a mask whose image does not load
+     shows nothing. #1184 found Windows drawing flag emoji as letters, so this is a real way for an icon to go.
+     A character icon is drawn on a canvas in the element's own font and compared with a character no font has (U+10FFFD):
+     the same picture, or no ink at all, is a missing glyph. A mask icon's image is loaded, and the box under it must have a colour.
+     CONTROL FIRST: a planted button showing U+2B74 (unassigned) and a planted mask with a broken image must both be reported, and the
+     sweep must meet at least three character icons, or a clean result means nothing. Run by hand in Windows Chrome 156 through the win pass on 6 Nov (the ship
+     sends there only tests the Linux pass could not run): green at 380 and 1280. */
+  test('860 b: no character or mask icon on screen draws an empty box or nothing, in the states the suite can drive', { item: '860', budgetMs: 40000 }, async function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const ICONISH = /[←-⯿⸀-⹿-\u{1F000}-\u{1FAFF}]/u;
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    const drawn = function (ch, family) {
+      g.clearRect(0, 0, 64, 64); g.font = '40px ' + family; g.textBaseline = 'middle'; g.fillStyle = '#000';
+      g.fillText(ch, 8, 32);
+      const d = g.getImageData(0, 0, 64, 64).data;
+      let n = 0, sig = '';
+      for (let i = 3; i < d.length; i += 4) { const on = d[i] > 40; if (on) n++; sig += on ? '1' : '0'; }
+      return { n: n, sig: sig };
+    };
+    const tofu = {}, cache = {}, glyphsSeen = new Set();
+    const missing = function (ch, family) {
+      const k = ch + '|' + family;
+      if (!(k in cache)) {
+        if (!tofu[family]) tofu[family] = drawn('\u{10FFFD}', family);
+        const d = drawn(ch, family);
+        cache[k] = d.n === 0 ? 'draws nothing' : (d.sig === tofu[family].sig ? 'draws the missing-character box' : '');
+      }
+      return cache[k];
+    };
+    const shown = function (el) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4 || r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) return false;
+      const cs = getComputedStyle(el);
+      return cs.display !== 'none' && cs.visibility !== 'hidden' && +cs.opacity > 0;
+    };
+    const nameOf = function (el) {
+      const owner = el.closest('[aria-label],[title]');
+      return owner ? (owner.getAttribute('aria-label') || owner.getAttribute('title')) : String(el.className || el.tagName).slice(0, 40);
+    };
+    const masks = {};
+    const maskOk = function (url) {
+      if (!(url in masks)) masks[url] = new Promise(function (res) {
+        const im = new Image(); const to = setTimeout(function () { res(false); }, 3000);
+        im.onload = function () { clearTimeout(to); res(im.naturalWidth > 0 || /svg/i.test(url)); };
+        im.onerror = function () { clearTimeout(to); res(false); };
+        im.src = url;
+      });
+      return masks[url];
+    };
+    const audit = async function () {
+      const out = [];
+      const els = document.querySelectorAll('body *');
+      for (const el of els) {
+        if (el.closest('svg') || /^(SCRIPT|STYLE|CANVAS|VIDEO|IMG|svg)$/i.test(el.tagName)) continue;
+        /* a character icon: the element's own text is one or two characters, and they are symbols */
+        let own = '';
+        el.childNodes.forEach(function (n) { if (n.nodeType === 3) own += n.nodeValue; });
+        own = own.trim();
+        if (own && Array.from(own).length <= 2 && ICONISH.test(own) && shown(el)) {
+          const fam = getComputedStyle(el).fontFamily || 'sans-serif';
+          glyphsSeen.add(own);
+          const why = missing(own, fam);
+          if (why) out.push(nameOf(el) + ' (' + own + ' ' + why + ')');
+        }
+        /* a mask icon, on the element or on its ::before / ::after — every url() mask in the app is on a pseudo-element (the
+           Home wordmark's glint, halo and specular, the collab lock), which getComputedStyle(el) alone never sees (the pre-ship
+           review, 6 Nov). The URL is taken up to its own closing quote: a data: SVG carries the other quote inside it. */
+        const seats = [[getComputedStyle(el), '']];
+        if (shown(el)) for (const ps of ['::before', '::after']) {
+          const pcs = getComputedStyle(el, ps);
+          if (pcs.content && pcs.content !== 'none' && pcs.content !== 'normal' && pcs.display !== 'none') seats.push([pcs, ps]);
+        }
+        for (const seat of seats) {
+          const cs = seat[0], ps = seat[1];
+          if (ps) {
+            /* a character drawn by CSS content (↻, ✓ and the like) */
+            const q = /^(["'])(.*)\1$/.exec(cs.content || '');
+            const ch = q ? q[2].trim() : '';
+            if (ch && Array.from(ch).length <= 2 && ICONISH.test(ch)) {
+              glyphsSeen.add(ch);
+              const why = missing(ch, cs.fontFamily || 'sans-serif');
+              if (why) out.push(nameOf(el) + ps + ' (' + ch + ' ' + why + ')');
+            }
+          }
+          const mi = cs.maskImage || cs.webkitMaskImage || '';
+          const m = /url\((["']?)(.*?)\1\)/.exec(mi);
+          if (m && m[2] && shown(el)) {
+            if (!(await maskOk(m[2]))) out.push(nameOf(el) + ps + ' (its mask image does not load)');
+            else if ((cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent') && cs.backgroundImage === 'none') out.push(nameOf(el) + ps + ' (nothing coloured under its mask)');
+          }
+        }
+      }
+      return out;
+    };
+
+    /* WHAT THE MASK HALF MEETS TODAY, measured 6 Nov: nothing. Every url() mask in the app is on a ::before / ::after, and in the
+       states this sweep drives none of them draws: the Home wordmark's halo and glint are display: none and its ::before and
+       ::after have no content, and the collab lock shows only in a live session. So the mask half is a tripwire for a mask icon
+       that does draw, proved by the planted controls below (one on an element, one on a ::after) rather than by a floor.
+       CONTROL FIRST: a planted missing glyph and a planted broken mask, on screen. The glyph is U+2B74, UNASSIGNED inside the
+       arrows block this audit reads, so it proves the two things a clean sweep rests on: the audit reaches a character icon on a
+       button, and a missing character OTHER than the reference draws the reference's box in this browser. (The first version
+       planted U+10FFFD, the reference itself, which is outside ICONISH: the button was never read and the control was red.)
+       If a font ever draws U+2B74, or a browser draws each missing character differently (Apple's LastResort font does, by
+       block), this control goes red and says so instead of the sweep passing blind. */
+    const plant = document.createElement('div');
+    plant.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99999;display:flex;gap:8px;';
+    plant.innerHTML = '<button type="button" aria-label="planted glyph" style="font-size:24px;width:40px;height:40px">\u{2B74}</button>'
+      + '<span aria-label="planted mask" style="display:inline-block;width:32px;height:32px;background:#fff;-webkit-mask-image:url(data:image/png;base64,AAAA);mask-image:url(data:image/png;base64,AAAA)"></span>';
+    /* …and the same two drawn by CSS on pseudo-elements, which is where the app's masks and its CSS-content characters live */
+    plant.innerHTML += '<span aria-label="planted pseudo glyph" class="fm860b-pg" style="display:inline-block;width:40px;height:40px"></span>'
+      + '<span aria-label="planted pseudo mask" class="fm860b-pm" style="display:inline-block;width:32px;height:32px;position:relative"></span>';
+    const plantCss = document.createElement('style');
+    plantCss.textContent = '.fm860b-pg::before{content:"\\2B74";font-size:24px}'
+      + '.fm860b-pm::after{content:"";position:absolute;inset:0;background:#fff;-webkit-mask-image:url("data:image/png;base64,AAAA");mask-image:url("data:image/png;base64,AAAA")}';
+    document.head.appendChild(plantCss);
+    document.body.appendChild(plant);
+    let control;
+    try { control = await audit(); } finally { plant.remove(); plantCss.remove(); }
+    if (!control.some(function (s) { return /planted pseudo glyph::before/.test(s); })) throw new Error('CONTROL: a ::before drawing an unassigned character (U+2B74) was not reported (' + control.join(', ') + '), so the audit cannot see a missing glyph drawn by CSS');
+    if (!control.some(function (s) { return /planted pseudo mask::after \(its mask image does not load\)/.test(s); })) throw new Error('CONTROL: a ::after whose mask image does not load was not reported (' + control.join(', ') + '), so the audit cannot see the app’s masks, which all sit on pseudo-elements');
+    if (!control.some(function (s) { return /planted glyph/.test(s); })) throw new Error('CONTROL: a button showing an unassigned arrow-block character no font has (U+2B74) was not reported as the missing-character box (' + control.join(', ') + '), so the audit cannot see a missing glyph');
+    if (!control.some(function (s) { return /planted mask/.test(s); })) throw new Error('CONTROL: a mask whose image does not load was not reported (' + control.join(', ') + ')');
+    glyphsSeen.clear();
+
+    /* …then the same sweep as the svg guard above. */
+    const seen = [];
+    const at = async function (state) { await sleep(260); const f = await audit(); if (f.length) seen.push(state + ': ' + f.join(', ')); };
+    await at('as found');
+    const tabs = [].slice.call(document.querySelectorAll('.hm-tab'));
+    for (let i = 0; i < tabs.length; i++) { tabs[i].click(); await at('home tab ' + (tabs[i].textContent || '').trim()); }
+    if (tabs.length) { const pj = tabs.filter(function (b) { return /Projects/.test(b.textContent || ''); })[0]; if (pj) { pj.click(); await sleep(200); } }
+    const amTabs = [].slice.call(document.querySelectorAll('.addmenu-tab'));
+    for (let i = 0; i < amTabs.length; i++) { amTabs[i].click(); await at('add-menu tab ' + (amTabs[i].textContent || '').trim()); }
+    /* …and inside a project, where the character icons live that the home screen does not show: the ⋯ on an open effect row
+       and the effects browser's ★ (most of the app's icons are svg now, so the home and add-menu states above meet only ◱ and ◇,
+       measured 6 Nov). Put back afterwards exactly as the neighbouring tests do. */
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 's860b', shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#fff', start: 0, duration: 4 });
+      const fx = FM.fxRegistry.makeInstance('blur');
+      if (!fx) throw new Error('setup: no blur effect in the registry to open a row with');
+      fx._expanded = true; L.effects = [fx];
+      FM.scene = scene([L]); FM.selectLayer(L.id); if (FM.pause) FM.pause(); FM.refreshAll();
+      FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await at('a layer with its effect open');
+      FM.fxBrowser.open(L); await at('the effects browser');
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open();
+      await sleep(60);
+    }
+    if (glyphsSeen.size < 3) throw new Error('CONTROL: the sweep met only ' + glyphsSeen.size + ' character icon(s) (' + Array.from(glyphsSeen).join(' ') + '), so it says nothing about them');
+    if (seen.length) throw new Error('character or mask icons that draw nothing or an empty box on screen, which is what he means by "the icons don\'t display properly": ' + seen.join(' | '));
+  });
+
   /* ═══ 903: NOTHING PAINTS A HEAVY COLOUR WASH BEHIND THE HOME SCREEN'S CONTROLS.
      He reported this THREE times and the first two fixes missed, because both of them went after the
      BAR: *"a white bar that's fading on top of the buttons in the main menu"*, then after `.hm-top` was
@@ -88234,6 +88993,7 @@
       await sleep(80);
     }
   });
+
 
   /* #768 H4 (the 22 Oct hunt, built as its refuter's memo variant). Every render with a layer selected ran placeRotKnob: both
    * knob classes off, three getBoundingClientRect reads (the stage, the knob, the box: a forced layout straight after the
