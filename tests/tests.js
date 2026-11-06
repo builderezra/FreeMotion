@@ -76963,14 +76963,21 @@
       if (types.length < 20) throw new Error('setup: only ' + types.length + ' audio effects are registered');
       const rest = [], dead = [];
       let first = 0, more = 0;
-      types.forEach(function (t) {
-        const chain = build({ audioFx: [inst(t)] });
+      const atRest = function (t, x) {
+        const chain = build({ audioFx: [x] });
         if (!chain) { dead.push(t + ' (built no chain)'); return; }
         const f = count(function () { chain.applyAt(0); }).length;
         const r = count(function () { for (let i = 1; i < 120; i++) chain.applyAt(i / 60); }).length;
         if (!(f > 0)) dead.push(t);
         first += f; more += r;
         if (r) rest.push([t, r]);
+      };
+      types.forEach(function (t) { atRest(t, inst(t)); });
+      /* …and the settings that build a different setter, which the defaults never reach (the review of 6 Nov): Compressor with
+         Auto makeup off writes through its curve key and its makeup gain, Distortion with Auto level on through its level gain.
+         The other three are cheap neighbours of the same kind. A variant whose type is not registered is left out. */
+      [['compressor', { automakeup: 0 }], ['distortion', { autogain: 1 }], ['width', { trim: 1 }], ['tremolo', { stereo: 90 }], ['chorus', { spread: 0.5 }]].forEach(function (v) {
+        if (types.indexOf(v[0]) >= 0) atRest(v[0] + ' ' + JSON.stringify(v[1]), inst(v[0], v[1]));
       });
       if (dead.length) throw new Error('CONTROL: the first frame wrote nothing at all for ' + dead.join(', ') + ' - the rig is not driving those effects, so a quiet count for them would prove nothing');
       if (rest.length) {
