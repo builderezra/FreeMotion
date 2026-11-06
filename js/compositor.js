@@ -18,6 +18,35 @@ window.FM = window.FM || {};
    * The crop path rescales its sample rect by the source's real size, and grade/key draw the source
    * into their own output box, both precisely so a cache bitmap at this density works. */
   const HOLD_MIN = 640;
+  /* #202 H5: while a forward clip PLAYS, its source time moves every frame, so the copy below (keyed on that time) ran on
+     every playback frame, to cover a dip that only a playback seek makes. Measured with the Measure report's VIDEO line on a
+     1280x1280 clip at 6x CPU throttle (6 Nov): 32ms each copy, on all 65 frames of a 4 s sample, beside 22ms for the draw
+     itself, at 16.8 fps. While playing it is now made at most every HOLD_PLAY_MS, and the playback seeks of a playing clip
+     (the drift seek, a loop wrap, and the restart of one that stopped by itself: js/app.js) refresh it just before they
+     seek, through FM.refreshHold, so their dip still holds the frame from just before it. */
+  const HOLD_PLAY_MS = 250;
+  function holdCopy(m, w, h) {
+    let hw = w, hh = h;
+    while (Math.max(hw, hh) >= HOLD_MIN * 2 && hw > 1 && hh > 1) { hw = hw >> 1; hh = hh >> 1; }
+    if (!m._lastFrame) m._lastFrame = document.createElement('canvas');
+    if (m._lastFrame.width !== hw || m._lastFrame.height !== hh) { m._lastFrame.width = hw; m._lastFrame.height = hh; }
+    /* #202 VIDEO line (the pre-ship review, 6 Nov): this copy is the FIRST draw of each new frame of the clip, so it is
+       the one that pays to convert it (a repeat draw of the same frame is cached by both engines). Timed while What's
+       slow measures, into its own counters, so the composite's draw count stays one a frame. */
+    const hS = FM._exporting ? null : FM._videoDrawSink, h0 = hS ? performance.now() : 0;
+    try {
+      const lx = m._lastFrame.getContext('2d'); lx.clearRect(0, 0, hw, hh); lx.drawImage(m.el, 0, 0, hw, hh);
+      m._lastFrameT = m.el.currentTime || 0; m._lastFrameAt = performance.now();
+      if (hS) { hS.holdDraws++; hS.holdMs += performance.now() - h0; }
+    } catch (e) { m._lastFrameT = -1; }   // a failed copy must not be remembered as done
+  }
+  /* The seeks' refresh: only a forward video with a decoded frame and a picture, never while exporting. */
+  FM.refreshHold = function (m) {
+    if (!m || !m.el || FM._exporting || m.kind !== 'video' || !(m.width > 0 && m.height > 0)) return false;
+    if (!(m.el.readyState >= 2)) return false;   // nothing decoded to hold: keep the last good frame
+    holdCopy(m, m.width, m.height);
+    return true;
+  };
 
   // Alight-Motion-style blend modes -> canvas globalCompositeOperation.
   const BLEND = {
@@ -25099,20 +25128,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
               let hw = w, hh = h;
               while (Math.max(hw, hh) >= HOLD_MIN * 2 && hw > 1 && hh > 1) { hw = hw >> 1; hh = hh >> 1; }
               const srcT = m.el.currentTime || 0;
-              const stale = !m._lastFrame || m._lastFrame.width !== hw || m._lastFrame.height !== hh || m._lastFrameT !== srcT;
-              if (stale) {
-                if (!m._lastFrame) m._lastFrame = document.createElement('canvas');
-                if (m._lastFrame.width !== hw || m._lastFrame.height !== hh) { m._lastFrame.width = hw; m._lastFrame.height = hh; }
-                /* #202 VIDEO line (the pre-ship review, 6 Nov): this copy is the FIRST draw of each new frame of the clip, so it is
-                   the one that pays to convert it (a repeat draw of the same frame is cached by both engines). Timed while What's
-                   slow measures, into its own counters, so the composite's draw count stays one a frame. */
-                const hS = FM._videoDrawSink, h0 = hS ? performance.now() : 0;
-                try {
-                  const lx = m._lastFrame.getContext('2d'); lx.clearRect(0, 0, hw, hh); lx.drawImage(m.el, 0, 0, hw, hh);
-                  m._lastFrameT = srcT;
-                  if (hS) { hS.holdDraws++; hS.holdMs += performance.now() - h0; }
-                } catch (e) { m._lastFrameT = -1; }   // a failed copy must not be remembered as done
-              }
+              /* #202 H5 (HOLD_PLAY_MS above): a playing forward clip refreshes its held frame at most that often; a paused
+                 one (a scrub seeks on every step), a reversed one (it seeks every frame) and, while playing, an element the
+                 transport holds paused while it seeks it for its picture (a crossfade's overhang, every tick: the review of 6 Nov)
+                 on every new source time. */
+              const due = !(FM.playing && !layer.reversed && !m.el.paused) || !(m._lastFrameAt > 0) || performance.now() - m._lastFrameAt >= HOLD_PLAY_MS;
+              const stale = !m._lastFrame || m._lastFrame.width !== hw || m._lastFrame.height !== hh || (m._lastFrameT !== srcT && due);
+              if (stale) holdCopy(m, w, h);
             }
           }
         }

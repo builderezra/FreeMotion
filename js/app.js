@@ -2396,7 +2396,7 @@ window.FM = window.FM || {};
         m.el.playbackRate = rate;
         m.el.currentTime = from; m._syncAt = now;
         const early = lead > PREROLL_S;   // #663: a cold tail primed before the ordinary pre-roll is watched until it plays (seamCold)
-        if (early) { el._fmSeamPriming = true; el._fmSeamRan = false; el._fmSeamFrom = from; }
+        if (early) { if (!el._fmSeamPriming) FM.playbackStats.seamPrimes++; el._fmSeamPriming = true; el._fmSeamRan = false; el._fmSeamFrom = from; }   // a retry after a refusal is the same seam
         // a fresh pass for the drift controller, exactly as FM.play starts one — it learns this element from the cut on
         m._errBias = null; m._rateAt = 0; m._baseRate = null; m._warmCt = null; m._resumedAt = 0;
         m.el.play().then(() => { m._playRefusedAt = 0; if (early) el._fmSeamRan = true; }, e => { m._playRefusedAt = now; try { if (FM.audioHealth) FM.audioHealth.refused(m, e); } catch (_) {} });
@@ -2412,7 +2412,9 @@ window.FM = window.FM || {};
    * median rather than a worst case, which is the number that says whether sync is the problem at
    * all. Both are read by js/perf-probe.js, so his own device can answer the question this entry
    * has been asking his ears. */
-  FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, errs: [], errT: [] };
+  const routedRecords = new Set();
+  FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, routedClips: 0, routedSeeks: 0, plainSeeks: 0, adoptions: 0, filmstripStandDowns: 0, seamPrimes: 0, errs: [], errT: [] };
+  let routedStats = FM.playbackStats;
   /* THE COLLECTOR ITSELF, as a function rather than three lines inside the sync tick (queue 491) — so
      the suite can drive the real thing. A test that pushes into the array with its own copy of this
      logic proves only that its own copy works: the first version of the 491 test did exactly that, and
@@ -2567,6 +2569,7 @@ window.FM = window.FM || {};
       const local = FM.layerLocalTime(layer, t);
       if (!layer.reversed && local != null && !(FM.seekBusy && FM.seekBusy(m))) {
         try {
+          if (FM.refreshHold) FM.refreshHold(m);   // #202 H5: the frame the wrap's dip holds is the one from just before it
           m.el.currentTime = local; m._syncAt = now;
           /* ═══ A LOOP WRAP IS A HARD SEEK ON A WAVEFORM THAT IS ALREADY PLAYING (queue 148) ════════
            * `FM.play()` three hundred lines below opens an element at volume 0 and lets `declickGain`
@@ -2609,6 +2612,7 @@ window.FM = window.FM || {};
      and the thing under test is what `wrapTo` does to a PLAYING element, not the tick's timing. */
   FM._wrapTo = function (t) { return wrapTo(t); };
   function syncMediaToClock() {
+    if (routedStats !== FM.playbackStats) { routedRecords.clear(); routedStats = FM.playbackStats; }
     FM.playbackStats.syncs++;
     const now = performance.now();
     // Reversed clips with a frame cache render from it (smooth). Without a cache, fall
@@ -2617,6 +2621,7 @@ window.FM = window.FM || {};
       if (layer.type !== 'video') return;
       const m = FM.media.get(layer.id);
       if (!m || !m.el) return;
+      if (m._mes) { routedRecords.add(layer.id); FM.playbackStats.routedClips = routedRecords.size; }   // by layer: a replaced record is the same clip
       /* STAND DOWN WHILE A BUILD OWNS THE ELEMENT. This runs every animation frame and writes
          currentTime on three paths below (the reversed seek, the forward resume that also calls
          play(), and the drift correction) — all of them on the very element buildFrameCache is
@@ -2723,6 +2728,7 @@ window.FM = window.FM || {};
                without this the branch re-fires every frame — re-seeking the element and re-rejecting —
                which is what turned one refusal into sixty diagnostic writes a second. Half a second of
                quiet between attempts; a play that succeeds clears the mark by leaving this branch. */
+            if (FM.refreshHold) FM.refreshHold(m);   // #202 H5: a clip that stopped by itself holds the frame it stopped on through this seek's dip
             m.el.currentTime = local; m._syncAt = now;
             m.el.play().then(() => { m._playRefusedAt = 0; }, e => { m._playRefusedAt = now; try { if (FM.audioHealth) FM.audioHealth.refused(m, e); } catch (_) {} });   // re-entered the window → resume; a refusal is recorded, not swallowed (queue 786)
           }
@@ -2805,12 +2811,15 @@ window.FM = window.FM || {};
                  See FM._mesRepeatIsLatency: the same error back after the re-seed is latency the seed missed, so it joins the bias. */
               if (mesRule && FM._mesRepeatIsLatency(m, step.deBiased, now)) {
                 m._errBias += step.deBiased; m._mesAdopted = (m._mesAdopted || 0) + step.deBiased; m._mesAdopts = (m._mesAdopts || 0) + 1;
+                FM.playbackStats.adoptions++;
                 m._mesOutAt = 0; plan = { action: 'hold', rate: base }; mesRule = false;
               }
             } else if (m._mesOutAt) m._mesOutAt = 0;
             if (plan.action === 'seek') {
-              m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++;
+              if (FM.refreshHold) FM.refreshHold(m);   // #202 H5: the dip this seek makes holds the frame from just before it
               FM._noteSyncSeek(m);
+              m.el.currentTime = local; m._syncAt = now; FM.playbackStats.seeks++;
+              if (m._mes) FM.playbackStats.routedSeeks++; else FM.playbackStats.plainSeeks++;
               /* #663: remember what a routed seek was meant to fix, for FM._mesRepeatIsLatency; any other seek closes that window */
               if (mesRule) { m._mesSeekAt = now; m._mesSeekErr = step.deBiased; m._mesAdopted = 0; } else m._mesSeekAt = 0;
               /* #845 (the audio hunt's refuter, N1): a drift seek jumps a waveform that is PLAYING to an arbitrary sample, the click
@@ -3005,7 +3014,8 @@ window.FM = window.FM || {};
    * median rather than a worst case, which is the number that says whether sync is the problem at
    * all. Both are read by js/perf-probe.js, so his own device can answer the question this entry
    * has been asking his ears. */
-  FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, errs: [], errT: [] };
+  routedRecords.clear();
+  FM.playbackStats = { syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0, routedClips: 0, routedSeeks: 0, plainSeeks: 0, adoptions: 0, filmstripStandDowns: 0, seamPrimes: 0, errs: [], errT: [] };
     /* The health watcher resets HERE with the sync counters (queue 849). It never did: reset() had no
        caller outside the suite, so played / with sound / CUT OUT / RESTARTED / events accumulated for the
        whole session while the sync and frame numbers beside them described only the last play. One report,

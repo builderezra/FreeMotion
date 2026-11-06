@@ -62869,6 +62869,70 @@
     }
   });
 
+  /* #202 H5 (the 21-22 Oct hunt). While a clip PLAYS its source time moves every frame, so the copy the test above guards (keyed
+     on that time) ran on every playback frame, up to 640 px each, to cover a dip only a playback seek makes. Now a playing
+     forward clip copies at most every 250 ms, and a playback seek refreshes the held frame just before it seeks.
+     Counted the way the test above counts: drawImage on the hold canvas's own context.
+     FAILS BEFORE THE FIX: ten playing frames at ten new source times make ten copies, and there is no FM.refreshHold.
+     CONTROLS: paused (a scrub, which seeks on every step), the same ten frames still make ten; the refresh copies the frame
+     on screen now; a loop wrap and a drift seek each call it. */
+  test('202 H5 while a clip plays its held frame is copied a few times a second, not on every frame, and a playback seek refreshes it first', { item: '202', budgetMs: 30000 }, async function () {
+    var keep = FM.scene.layers.slice(), keepT = FM.time, wasPlaying = FM.playing, realRefresh = FM.refreshHold, Lid = null;
+    try {
+      var draws = 0, W = 48, H = 32;
+      var fake = document.createElement('canvas'); fake.width = W; fake.height = H;
+      var fg = fake.getContext('2d'); fg.fillStyle = '#ff0000'; fg.fillRect(0, 0, W, H);
+      fake.readyState = 4; fake.currentTime = 0.4;
+      var rec = { kind: 'video', el: fake, width: W, height: H, duration: 5 };
+      var L = FM.makeLayer('video', { start: 0, duration: 5 }); L.trimStart = 0; L.speed = 1; Lid = L.id;
+      FM.scene.layers = [L]; FM.media.set(L.id, rec);
+      var lf = document.createElement('canvas'); lf.width = W; lf.height = H;
+      var realGet = lf.getContext.bind(lf);
+      lf.getContext = function (k, o) {
+        var c = realGet(k, o);
+        if (!c._counted) { var rd = c.drawImage.bind(c); c.drawImage = function () { draws++; return rd.apply(null, arguments); }; c._counted = true; }
+        return c;
+      };
+      rec._lastFrame = lf; rec._lastFrameT = -999;
+      var cv = offscreen(120, 90), cx = cv.getContext('2d');
+      var frames = function (n) { for (var i = 0; i < n; i++) { fake.currentTime = +(fake.currentTime + 1 / 30).toFixed(4); FM.renderScene(cx, FM.scene, 1); } };
+      FM.playing = false; draws = 0; frames(10);
+      if (draws !== 10) throw new Error('CONTROL: paused, ten renders at ten new source times made ' + draws + ' hold copies: a scrub seeks on every step and needs each one, so this rig cannot tell the fix from the bug');
+      FM.playing = true; rec._lastFrameAt = 0; draws = 0;
+      var t0 = performance.now(); frames(10); var took = performance.now() - t0;
+      if (took < 200 && draws > 1) throw new Error('playing, ten frames at ten new source times (' + Math.round(took) + ' ms) made ' + draws + ' hold copies: the held frame is copied on every playback frame, to cover a dip only a playback seek makes');
+      if (typeof FM.refreshHold !== 'function') throw new Error('FM.refreshHold is missing, so a playback seek cannot refresh the frame its dip holds');
+      /* …but an element the transport holds PAUSED while playing, seeking it for its picture (a crossfade's overhang, every tick:
+         the review of 6 Nov), is scrubbed, not played, so every new source time is copied as when paused */
+      fake.paused = true; draws = 0; frames(10);
+      if (draws !== 10) throw new Error('while playing, a paused element seeked for its picture (a crossfade overhang) made ' + draws + ' hold copies at ten new source times, so its dips hold a frame up to 250 ms old and the crossfade twitches back');
+      fake.paused = false;
+      fg.fillStyle = '#00ff00'; fg.fillRect(0, 0, W, H); fake.currentTime = +(fake.currentTime + 1 / 30).toFixed(4);
+      draws = 0;
+      if (FM.refreshHold(rec) !== true || draws !== 1 || rec._lastFrameT !== fake.currentTime) throw new Error('FM.refreshHold did not copy the frame on screen now (' + draws + ' copies, held at ' + rec._lastFrameT + ' s, the clip at ' + fake.currentTime + ' s)');
+      var px = lf.getContext('2d').getImageData(W >> 1, H >> 1, 1, 1).data;
+      if (!(px[1] > 180 && px[0] < 70)) throw new Error('the refreshed held frame is rgb(' + px[0] + ',' + px[1] + ',' + px[2] + '), not the green now on screen');
+      var calls = [], pausedCalls = 0;
+      FM.refreshHold = function (m) { calls.push(m); if (m && m.el && m.el.paused) pausedCalls++; return realRefresh(m); };
+      try { FM._wrapTo(1); } catch (e) {}
+      if (calls.indexOf(rec) < 0) throw new Error('a loop wrap seeked the playing clip without refreshing its held frame first, so its dip would hold a frame up to 250 ms old');
+      FM.playing = false;
+      FM.media.remove(L.id); Lid = null; FM.scene.layers = keep.slice();   // a copy: q148Run empties the live array in place
+      calls.length = 0;
+      await q148Run({ latency: 0.09, spin: 0.3, ticks: 24, at: 11, then: function (el) { el.currentTime = Math.max(0, el.currentTime - 0.6); } });
+      if (!calls.length) throw new Error('a drift seek on a playing clip did not refresh its held frame first (no FM.refreshHold call in 24 ticks with 600 ms of lag)');
+      /* …and a clip that stops by itself while playing (the iPhone case behind his cuts) is restarted by a seek: refreshed first */
+      calls.length = 0; pausedCalls = 0;
+      await q148Run({ latency: 0.02, ticks: 16, at: 8, then: function (el) { el.pause(); } });
+      if (!pausedCalls) throw new Error('a clip that stopped by itself while playing was restarted with a seek and no refresh of its held frame first, so the restart’s dip holds a frame up to 250 ms old');
+    } finally {
+      FM.refreshHold = realRefresh; FM.playing = wasPlaying;
+      if (Lid) FM.media.remove(Lid);
+      FM.scene.layers = keep; FM.time = keepT;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
   /* Capping the held frame's size is only safe because the composite already rescales a crop rect by
    * the source's REAL density — it has to, because the frame cache has always produced downscaled
    * bitmaps. That is a load-bearing assumption and it is invisible: get it wrong and a cropped clip
@@ -63182,12 +63246,15 @@
       const drained = await Promise.race([FM.buildClipStrip(drain, 1).then(() => true), sleep(15000).then(() => false)]);
       if (!drained || !Array.isArray(drain.stripFrames)) throw new Error('setup: the strip queue did not drain within 15 s, so nothing below is measured');
       FM.playing = true;
+      const sd0 = FM.playbackStats.filmstripStandDowns;
       p = FM.buildClipStrip(m, 2);
       let busy = 0;
       const until = performance.now() + 300;
       while (performance.now() < until) { if (FM.seekBusy(m)) busy++; await sleep(20); }
       const whilePlaying = el.writes.slice();
       if (whilePlaying.length || busy) throw new Error('while the clip was playing its filmstrip seeked it ' + whilePlaying.length + ' time(s) (' + whilePlaying.map(v => v.toFixed(3)).join(', ') + ') and held it busy on ' + busy + ' sample(s) — every tick of playback pauses and mutes a busy clip, so its sound cuts out until the strip is done');
+      /* …and Your last playback counts it once (its routed line, #663: filmstrip stood down N×) */
+      if (FM.playbackStats.filmstripStandDowns !== sd0 + 1) throw new Error('the filmstrip waited for the pause and Your last playback counted ' + (FM.playbackStats.filmstripStandDowns - sd0) + ' stand-downs, not 1');
       FM.playing = false;
       const done = await Promise.race([p.then(() => true), sleep(15000).then(() => false)]);
       if (!done) throw new Error('CONTROL: 15 s after playback stopped the filmstrip had still not finished, so it never builds');
@@ -63214,11 +63281,14 @@
     Object.defineProperty(el, 'currentTime', { get() { return this._t || 0; }, set(v) { el.writes.push(v); this._t = v; if (armed) { armed = false; FM.playing = true; this._t = 2.5; } setTimeout(() => el.fire('seeked'), 0); }, configurable: true });
     try {
       FM.playing = false;
+      const sd0 = FM.playbackStats.filmstripStandDowns;
       p = FM.buildClipStrip(m, 2);
       const until = performance.now() + 15000;
       while ((armed || FM.seekBusy(m)) && performance.now() < until) await sleep(20);
       if (armed) throw new Error('setup: the filmstrip never made its first seek, so Play was never pressed under it');
       await sleep(300);
+      /* …and Your last playback counts it once: the stop and the wait for the pause after it are one stand-down (its routed line, #663) */
+      if (FM.playbackStats.filmstripStandDowns !== sd0 + 1) throw new Error('the filmstrip stopped for Play and Your last playback counted ' + (FM.playbackStats.filmstripStandDowns - sd0) + ' stand-downs, not 1 (the stop and the wait after it are one)');
       const writes = el.writes.length, stored = m.stripFrames, busy = FM.seekBusy(m), muted = el.muted;
       if (writes > 1) throw new Error('Play was pressed at the filmstrip’s first seek and it went on to make ' + writes + ' (' + el.writes.map(v => v.toFixed(3)).join(', ') + ') — the rest of the strip and a put-back to a stale time, on a clip that is playing, so its sound cuts out and it restarts cold');
       if (stored !== undefined) throw new Error('a filmstrip cut short by Play was stored (' + (Array.isArray(stored) ? stored.length + ' frame(s)' : stored) + ') — a part-built strip is never built again');
@@ -63575,9 +63645,10 @@
       if (dr[2] > loopFrames + 2) throw new Error('the report counted ' + dr[2] + ' draws of the video over ' + loopFrames + ' frames: the song beside it (a video record with no picture) was counted as drawing the video, which doubles the count and halves the cost each time:\n' + block);
       if (dr[3] < 3 || dr[3] > dr[2] * 0.75 + 1) throw new Error(dr[3] + ' of ' + dr[2] + ' draws were counted at a new point in the clip; the rig moves the clip on every second frame, so about half:\n' + block);
       if (!(dr[0] <= dr[1] + 0.01) || dr[1] > 1000) throw new Error('the draw times do not add up (' + dr[0] + 'ms each, worst ' + dr[1] + 'ms):\n' + block);
-      /* the held-frame copy is the FIRST draw of each new frame, the one that converts it (the pre-ship review, 6 Nov), so it is reported on its own line */
+      /* the held-frame copy is the FIRST draw of each new frame, the one that converts it (the pre-ship review, 6 Nov), so it is reported on its own
+         line; while the clip plays it is made at most every 250 ms (#202 H5), so a one-second sample counts a handful, not one per new frame */
       const hc = num(block, /copying it into the held frame \(the first draw of each new frame\): ([\d.]+)ms each time · (\d+) times?/, 'what copying the held frame cost');
-      if (hc[1] < 3 || hc[1] > dr[2] * 0.75 + 1) throw new Error(hc[1] + ' held-frame copies were counted over ' + dr[2] + ' draws; the rig moves the clip on every second frame and only a new point is copied, so about half:\n' + block);
+      if (hc[1] < 2 || hc[1] > 7) throw new Error(hc[1] + ' held-frame copies were counted over ' + dr[2] + ' draws in a one-second sample of a playing clip; while it plays it is copied at most every 250 ms (#202 H5), so about four:\n' + block);
       if (FM._videoDrawSink) throw new Error('the compositor is still timing video draws after the sample ended');
 
       /* ── CONTROL: the same clip, nothing playing */
@@ -77405,6 +77476,37 @@
     if (FM._mesRepeatIsLatency(fresh({ _mesAdopted: 0.30 }), 0.12, 2000) !== false) throw new Error('with 300 ms already adopted since the seek, another 120 ms was adopted too, past the 0.35 s hard limit: the bias can walk away from the playhead');
     if (FM._mesRepeatIsLatency(fresh(), 0.12, 6500) !== false) throw new Error('the same error 5.5 s after the routed seek was still adopted: the window is 5 s, so a stall long after the seek is kept with no seek');
     if (FM._mesRepeatIsLatency(fresh({ _mesJump: true }), 0.12, 2000) !== false) throw new Error('an error that stepped in since the re-seed (a stall) was adopted as latency');
+  });
+
+  test('663 Your last playback names the routed state and separates plain seeks from routed seeks', { item: '663', budgetMs: 30000 }, async function () {
+    const saved = FM.playbackStats, layers0 = FM.scene.layers.slice(), media0 = isoMediaSnap();
+    const fresh = () => ({ syncs: 0, renders: 0, drops: 0, seeks: 0, trims: 0, rateWrites: 0,
+      routedClips: 0, routedSeeks: 0, plainSeeks: 0, adoptions: 0, filmstripStandDowns: 0, seamPrimes: 0, errs: [], errT: [] });
+    try {
+      FM.playbackStats = fresh();
+      const routed = await run663(() => seekLatEl663(12, settlesLate663(0.07, 0.5, 0.6)), 100, false);
+      if (!(routed.seeks > 0 && routed.adopts > 0)) throw new Error('CONTROL: the routed clip did not both seek and adopt its settling latency, so the playback report was not exercised.');
+      const p = FM.playbackStats;
+      if (p.routedClips !== 1 || p.routedSeeks !== routed.seeks || p.plainSeeks !== 0 || p.adoptions !== routed.adopts) throw new Error('The playback counters did not count one distinct routed clip and its actual seeks and latency adoptions.');
+      let rep = FM.audioHealth.report();
+      const want = 'routed     1 clip through Web Audio · seeks ' + routed.seeks + ' routed / 0 plain · ' + routed.adopts + ' latency adopted · filmstrip stood down 0× · 0 seam primed';
+      if (rep.split('\n').indexOf(want) < 0) throw new Error('Your last playback did not name the routed clip, its seeks and its adopted latency: ' + rep);
+      FM.playbackStats = fresh();
+      const plain = await q148Run({ ticks: 30, makeEl: () => seekLatEl663(12, () => 0.09), at: 11,
+        then: el => { void el.currentTime; el._pos = Math.max(0, el._pos - 0.6); } });
+      if (!(plain.el.seeks > 0)) throw new Error('CONTROL: the plain clip never seeked after falling behind, so the plain seek count was not exercised.');
+      const c = FM.playbackStats;
+      if (c.plainSeeks !== plain.el.seeks || c.routedSeeks !== 0 || c.routedClips !== 0 || c.adoptions !== 0) throw new Error('A plain clip seek was counted as routed, or its plain seek was lost.');
+      rep = FM.audioHealth.report();
+      /* …and the stand-downs and early seam primes are said either way: neither needs a routed clip (the review of 6 Nov) */
+      FM.playbackStats.filmstripStandDowns = 2; FM.playbackStats.seamPrimes = 3;
+      rep = FM.audioHealth.report();
+      if (rep.split('\n').indexOf('routed     no clips through Web Audio · filmstrip stood down 2× · 3 seam primed') < 0) throw new Error('with no clip through Web Audio, Your last playback did not still say how often the filmstrip stood down and how many seams were primed early: ' + rep);
+    } finally {
+      FM.scene.layers = layers0;
+      isoMediaPut(media0);
+      FM.playbackStats = saved;
+    }
   });
 
   /* #663 (finding 2, the PM's redesign, 24 Oct; js/app.js FM._mesRampNote and FM._mesRepeatIsLatency). The first fix adopted a REAL
@@ -114423,18 +114525,23 @@
 
       window.__fmStep = '663 seam warm';
       let fb = fresh(4);
+      const spW = FM.playbackStats.seamPrimes;
       tickAt(CUT - 1.8);
       if (fb.plays || !fb.paused) throw new Error('CONTROL: a WARM second half was started 1.8 s before the cut (' + say(fb) + ') - a warm one keeps the 0.4 s pre-roll');
       tickAt(CUT - 0.5);
       if (fb.plays || !fb.paused) throw new Error('CONTROL: a WARM second half was started 0.5 s before the cut (' + say(fb) + ') - a warm one keeps the 0.4 s pre-roll');
       tickAt(CUT - 0.35);
       if (fb.plays !== 1 || fb.paused || !fb.muted || !near(fb, 0.35)) throw new Error('CONTROL: a WARM second half 0.35 s before the cut is not pre-rolled, muted, from ' + (first - 0.35).toFixed(3) + ' s (' + say(fb) + ') - the 690 pre-roll this builds on is not there');
+      if (FM.playbackStats.seamPrimes !== spW) throw new Error('the ordinary 0.4 s pre-roll of a warm second half was counted as an early seam prime in Your last playback (' + spW + ' before, ' + FM.playbackStats.seamPrimes + ' after)');
 
       window.__fmStep = '663 seam cold';
       fb = fresh(1);
+      const spC = FM.playbackStats.seamPrimes;
       tickAt(CUT - 2.2);
       if (fb.plays || !fb.paused) throw new Error('a COLD second half was started 2.2 s before the cut (' + say(fb) + ') - the early prime is capped at the 2 s FM.play waits for a cold clip');
       tickAt(CUT - 1.8);
+      /* …and Your last playback counts it (its routed line, #663: N seam primed) */
+      if (FM.playbackStats.seamPrimes !== spC + 1) throw new Error('the cold second half was primed early and Your last playback counted ' + (FM.playbackStats.seamPrimes - spC) + ' seam primes, not 1');
       if (fb.plays !== 1 || fb.paused || !fb.muted || !near(fb, 1.8)) {
         throw new Error('a COLD second half (readyState 1, a fresh element as every split makes) is not readied 1.8 s before the cut (' + say(fb) + ', wanted playing, muted, from ' + (first - 1.8).toFixed(3) +
           ' s) - it waits for the 0.4 s pre-roll sized for a warm desktop element, so on a phone the cut opens silent and the start-up is learned as latency for the rest of the clip');
@@ -114462,6 +114569,17 @@
       fb.seeking = false;
       tickAt(CUT - 1.6);
       if (fb.plays !== 1 || fb.paused) throw new Error('a primed second half whose seek has ended but whose play() has not settled was paused 1.6 s before the cut (' + say(fb) + ') - it keeps the long window until it is seen to play, or the pending play() is aborted and lands in his report as refused');
+
+      window.__fmStep = '663 seam refused';
+      fb = fresh(1);
+      fb.play = function () { this.plays++; return new Promise(function () {}); };   // a refusal leaves it paused, never played
+      const spR = FM.playbackStats.seamPrimes;
+      tickAt(CUT - 1.9);
+      bm._playRefusedAt = performance.now() - 600;   // refused 600 ms ago: past the half second between attempts
+      tickAt(CUT - 1.6);
+      if (fb.plays !== 2) throw new Error('setup: an early prime refused 600 ms ago was not tried again (' + say(fb) + '), so this does not test a retry');
+      if (FM.playbackStats.seamPrimes !== spR + 1) throw new Error('one seam whose early prime was refused and tried again was counted as ' + (FM.playbackStats.seamPrimes - spR) + ' seam primes in Your last playback, not 1');
+      bm._playRefusedAt = 0;
 
       window.__fmStep = '663 seam undecodable';
       fb = fresh(1, true);

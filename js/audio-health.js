@@ -234,6 +234,10 @@
          nothing without it — 94 of 96 ticks is a controller pinned against the stops, 94 of 3000 is
          housekeeping. It was the first number I wanted when he pasted his report. */
       lines.push('sync       ' + (p.syncs | 0) + ' ticks: seeks ' + (p.seeks | 0) + ', trims ' + (p.trims | 0) + ', rate writes ' + (p.rateWrites | 0));
+      /* #663: which clips went through Web Audio (iOS routes a clip's sound there for its effects), and how its sync behaved: a
+         routed clip's seeks apart from a plain clip's, the latency the routed seek loop adopted, how often the filmstrip stood
+         down for playback, and how many seams were primed early. One line, so a pasted report says it without a second sample. */
+      lines.push(p.routedClips ? 'routed     ' + p.routedClips + ' clip' + (p.routedClips === 1 ? '' : 's') + ' through Web Audio · seeks ' + (p.routedSeeks | 0) + ' routed / ' + (p.plainSeeks | 0) + ' plain · ' + (p.adoptions | 0) + ' latency adopted · filmstrip stood down ' + (p.filmstripStandDowns | 0) + '× · ' + (p.seamPrimes | 0) + ' seam primed' : 'routed     no clips through Web Audio · filmstrip stood down ' + (p.filmstripStandDowns | 0) + '× · ' + (p.seamPrimes | 0) + ' seam primed');
       lines.push('timing     median |err| ' + (med == null ? '-' : Math.round(med * 1000) + 'ms') +
                  ', worst ' + (worstErr == null ? '-' : Math.round(worstErr * 1000) + 'ms'));
       lines.push('frames     drawn ' + (p.renders | 0) + ', dropped ' + (p.drops | 0));

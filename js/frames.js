@@ -391,19 +391,22 @@ window.FM = window.FM || {};
   const STRIP_PLAY_POLL_MS = 250;
   // #663: the one question every guard below asks — may playback be driving this clip's element right now?
   function stripMustWait(m) { return m.kind !== 'image' && !!FM.playing && !m._released; }
-  function stripWaitsForPause(m) {
+  /* #663: each stand-down is counted once for Your last playback's routed line; the wait after a stop is part of that stop */
+  function stripWaitsForPause(m, counted) {
     if (!stripMustWait(m)) return null;
+    if (FM.playbackStats && !counted) FM.playbackStats.filmstripStandDowns++;
     return new Promise(function (go) {
       (function poll() { if (!stripMustWait(m)) go(); else setTimeout(poll, STRIP_PLAY_POLL_MS); })();
     });
   }
-  function stripRun(m, count) {
-    return Promise.resolve(stripWaitsForPause(m))
+  function stripRun(m, count, counted) {
+    return Promise.resolve(stripWaitsForPause(m, counted))
       .then(function () { return seekLock(m, function () { return _extractStrip(m, count); }); })
       .then(function (r) {
         if (r !== STRIP_ABORTED) return r;
+        if (FM.playbackStats) FM.playbackStats.filmstripStandDowns++;
         // never straight round again: the next try is a timer away, so no slip in the waits can spin the page
-        return new Promise(function (go) { setTimeout(go, STRIP_PLAY_POLL_MS); }).then(function () { return stripRun(m, count); });
+        return new Promise(function (go) { setTimeout(go, STRIP_PLAY_POLL_MS); }).then(function () { return stripRun(m, count, true); });
       });
   }
   FM.buildClipStrip = function (m, count) {
