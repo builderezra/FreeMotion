@@ -190680,51 +190680,47 @@
     }
   });
 
-  /* #1180 — HIS OWN LOGO OPENS THE APP, and since #1223 ("looks very Ai made ... make it feel more human") as take H2, Scrub.
-   * The film is gone from the splash; the mark is inline SVG + SMIL that plays ONCE, holds its end frame and cuts to the app.
-   * Reduced motion (and a browser without SMIL) gets the end frame as a still. These read the SHIPPED index.html and boot its
-   * splash block in a throwaway frame, so they do not depend on whether this session's own splash has already played. */
+  /* #1180 — HIS OWN LOGO OPENS THE APP; #1223 made it take H2 "Scrub"; #1231 — TAKE 13, "EXPLODED STACK", HIS PICK OF 25 (6 Nov,
+   * "I want it now so yes"). The film is gone from the splash; since #1231 the intro is a canvas take (index.html's splash-take
+   * script) played ONCE on its own clock from the page's load, held on its end frame (his logo on black) and cut to the app.
+   * Reduced motion, a take that cannot be drawn, and a page where no animation frame comes get the end frame as a still. These
+   * read the SHIPPED index.html and boot its splash block in a throwaway frame, so they do not depend on whether this session's
+   * own splash has already played. Every behaviour #1180 and #1223 proved of the SVG mark is proved again here of the take. */
   async function src1180() {
     const r = await fetch('index.html?t1180=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error('setup: could not read index.html (' + r.status + ')');
     return r.text();
   }
-  /* The last movement (the playhead stops and the name cuts in, 1.5 s) and the hold on the finished frame: the same numbers,
-   * and the same sum, as END_S and HOLD_S in index.html's splash script, so a clock compared here is compared exactly as the
-   * splash compares it. */
-  const END_S1180 = 1.5, HOLD_S1180 = 0.6;
-  /* The splash's state AT the hand-over. It runs inside the booted frame's own fm:splash-dismiss listener (injected as
-   * source), so a test whose await of the frame's load comes late (a hot or loaded laptop) still sees the still that is
-   * removed 320 ms after the dismiss, instead of reading that it never showed. */
+  /* The take's last frame (2.92 s, the finished logo on black) and the hold on it: the same numbers as END_S (TAKE.dur) and
+   * HOLD_S in index.html's splash script, which the 1231 numbers test pins. */
+  const END_S1231 = 2.92, HOLD_S1231 = 0.7, BONE1231 = 'rgb(231, 226, 213)', COAL1231 = 'rgb(12, 12, 13)';
+  /* The splash's state AT the hand-over, from its test seam (window.FM_SPLASH). It runs inside the booted frame's own
+   * fm:splash-dismiss listener (injected as source), so a test whose await of the frame's load comes late (a hot or loaded
+   * laptop) still sees the still that is removed 320 ms after the dismiss. Times are ms from the frame's __t0. */
   function snap1180() {
-    var sp = document.getElementById('splash'), svg = document.getElementById('splash-mark');
-    var s = { shown: !!(sp && !sp.classList.contains('hidden')), cut: !!(sp && sp.classList.contains('splash-cut')), clock: -1, anims: -1, reveal: null, head: null, move: null, name: null };
-    if (!svg) return s;
-    try { s.clock = svg.getCurrentTime(); } catch (e) {}
-    s.anims = svg.querySelectorAll('animate, animateTransform').length;
-    var at = function (id, attr) { var n = svg.querySelector('#' + id); return n ? n.getAttribute(attr) : null; };
-    s.reveal = at('h2_reveal', 'width'); s.head = at('h2_head', 'opacity'); s.move = at('h2_move', 'transform'); s.name = at('h2_name', 'opacity');
+    var sp = document.getElementById('splash'), S = window.FM_SPLASH, t0 = window.__t0 || 0;
+    var s = { shown: !!(sp && !sp.classList.contains('hidden')), cut: !!(sp && sp.classList.contains('splash-cut')), dark: !!(sp && sp.classList.contains('splash-dark')), canvases: sp ? sp.querySelectorAll('canvas').length : -1, clock: -1, still: null, startedAt: -1, endedAt: -1 };
+    if (!S) return s;
+    try { s.clock = S.shown(); s.still = S.still(); s.startedAt = S.started() ? S.started() - t0 : -1; s.endedAt = S.ended() ? S.ended() - t0 : -1; } catch (e) {}
     return s;
   }
-  /* Boots everything between <body> and #app (the splash's style, markup and boot script) in a same-origin frame, with
-   * fm.splashed cleared so it is a first load of the session, and puts this session's flag back afterwards. A recorder
-   * runs BEFORE the boot script so the dismiss event cannot be missed; each entry carries snap1180() taken at that moment.
+  /* Boots everything between <body> and #app (the splash's style, markup, take and boot script) in a same-origin frame, with
+   * fm.splashed cleared so it is a first load of the session, and puts this session's flag back afterwards. A recorder runs
+   * BEFORE the boot script so the dismiss event cannot be missed; each entry carries snap1180() taken at that moment.
    * Options, all for that frame only:
    *   reduce  stubs matchMedia to report prefers-reduced-motion;
    *   lateMs  adds a synchronous busy-wait of that many ms AFTER the splash block, standing in for the app's ~100
-   *           parser-blocking scripts and its synchronous init, so the frame's load comes that late; it records the
-   *           mark's clock as it ends (window.__late1180);
+   *           parser-blocking scripts and its synchronous init, so the frame's load comes that late; it records what the
+   *           splash shows as it ends (window.__late1180);
    *   css     links the shipped styles.css and theme-glass.css (the hrefs index.html ships, busters included);
    *   attrs   attributes for <html>, e.g. data-theme and data-home;
    *   home    adds a visible <div id=home-screen>, as a first load opens Home under the splash;
-   *   stored  a value for fm.splashed before the boot (a string), instead of clearing it (release 1 of #1180: the flag
-   *           holds the build, meta fm-build, which is copied into the frame's head with the charset);
-   *   after   markup put straight after the splash block (a pause, a yielding boot stand-in);
-   *   ramp    reads the status-strip ramp inside the frame's own dismiss listener (window.__ramp): every background-color
-   *           transition on #splash and <html> finished at once and the colours read, in the same callback, because the splash
-   *           is removed 320 ms later and a test polling from outside can stall past that on a hot laptop;
+   *   stored  a value for fm.splashed before the boot (a string), instead of clearing it;
+   *   after   markup put straight after the splash block (a yielding boot stand-in);
+   *   ramp    reads the status-strip ramp inside the frame's own dismiss listener (window.__ramp);
    *   pre     script text run before the splash block (a stubbed clock, a stand-in for the app's FM);
    *   timers  records the frame's setTimeout calls (window.__timers: { ms, fn }), to read and fire the splash's own;
+   *   size    the frame's [width, height] (380 x 800 by default);
    *   loadWaitMs  how long to wait for the frame's load before returning (4000 by default).
    * The frame's own load time, from __t0, is window.__loadAt. */
   async function boot1180(opts) {
@@ -190749,8 +190745,9 @@
       (opts.pre || '') +
       (opts.reduce ? '(function () { var mm = window.matchMedia.bind(window); window.matchMedia = function (q) { if (/prefers-reduced-motion/.test(q)) return { matches: true, media: q, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {} }; return mm(q); }; })();' : '') +
       '<\/script>';
-    const late = opts.lateMs ? '<script>(function () { var t0 = performance.now(); while (performance.now() - t0 < ' + (+opts.lateMs) + ') {} var c = -1; try { c = document.getElementById(\'splash-mark\').getCurrentTime(); } catch (x) {} window.__late1180 = { ms: Math.round(performance.now() - t0), clock: c }; })();<\/script>' : '';
+    const late = opts.lateMs ? '<script>(function () { var t0 = performance.now(); while (performance.now() - t0 < ' + (+opts.lateMs) + ') {} var c = -2; try { c = window.FM_SPLASH.shown(); } catch (x) {} window.__late1180 = { ms: Math.round(performance.now() - t0), clock: c }; })();<\/script>' : '';
     const home = opts.home ? '<div id="home-screen"></div>' : '';
+    const size = opts.size || [380, 800];
     let had = null;
     try {
       had = sessionStorage.getItem('fm.splashed');
@@ -190758,9 +190755,9 @@
       else sessionStorage.removeItem('fm.splashed');
     } catch (e) {}
     const f = document.createElement('iframe');
-    f.style.cssText = 'position:fixed;left:0;top:0;width:380px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    f.style.cssText = 'position:fixed;left:0;top:0;width:' + size[0] + 'px;height:' + size[1] + 'px;border:0;opacity:0;pointer-events:none;z-index:-1';
     const done = new Promise(function (res) { f.onload = res; });
-    f.srcdoc = '<!doctype html><html' + (opts.attrs ? ' ' + opts.attrs : '') + '><head><meta charset="utf-8">' + (bm ? bm[0] : '') + links + '</head><body>' + pre + html.slice(a + 6, b) + (opts.after || '') + late + home + '</body></html>';
+    f.srcdoc = '<!doctype html><html' + (opts.attrs ? ' ' + opts.attrs : '') + '><head><meta charset="utf-8">' + (bm ? bm[0] : '') + links + '</head><body style="margin:0">' + pre + html.slice(a + 6, b) + (opts.after || '') + late + home + '</body></html>';
     document.body.appendChild(f);
     await Promise.race([done, sleep(opts.loadWaitMs || 4000)]);
     const restore = function () {
@@ -190769,132 +190766,190 @@
     };
     return { f: f, w: f.contentWindow, d: f.contentDocument, restore: restore };
   }
-  /* The finished frame, read off the animated values: the clips wholly revealed, the playhead showing and stopped on its
-     frame, the name shown. The clips themselves do not move: their rects hold the logo's own x and width, and the reveal shows them. */
-  function endFrame1180(svg, where) {
-    const reveal = svg.querySelector('#h2_reveal'), move = svg.querySelector('#h2_move'), head = svg.querySelector('#h2_head'), name = svg.querySelector('#h2_name');
-    if (!reveal || !move || !head || !name) throw new Error(where + ': the mark has lost its reveal, its playhead or its name');
-    const view = svg.ownerDocument.defaultView, gw = reveal.width.animVal.value, gx = move.transform.animVal.getItem(0).matrix.e;
-    if (Math.abs(gw - 98) > 0.05) throw new Error(where + ': the reveal is ' + gw.toFixed(2) + ' wide, not its end frame 98, so the clips are cut off');
-    if (Math.abs(gx) > 0.05) throw new Error(where + ': the playhead is ' + gx.toFixed(2) + ' off its frame');
-    if (view.getComputedStyle(head).opacity !== '1') throw new Error(where + ': the playhead is not showing');
-    if (view.getComputedStyle(name).opacity !== '1') throw new Error(where + ': the FreeMotion name is not showing');
+  /* The take on its end frame at the hand-over, from the snapshot: the clock on 2.92 s and the ground the matte's black. */
+  function endFrame1231(s, how) {
+    if (!s) throw new Error(how + ': setup: the hand-over snapshot was not taken in the frame');
+    if (!s.shown) throw new Error(how + ': the splash never showed');
+    if (s.canvases < 1) throw new Error(how + ': the splash has no canvas: there is no take to see');
+    if (Math.abs(s.clock - END_S1231) > 1e-9) throw new Error(how + ': at the hand-over the take shows ' + s.clock + ' s, not its end frame ' + END_S1231 + ' s');
+    if (!s.dark) throw new Error(how + ': at the hand-over #splash is not on the matte’s black (no splash-dark), so the ground round the logo is not the frame’s');
   }
-  /* The same frame in the attributes a still is left with, from the snapshot taken at the hand-over. */
-  function stillFrame1180(s, how) {
-    if (s.reveal !== '98') throw new Error(how + ' the reveal is ' + s.reveal + ' wide at the hand-over, not the end frame 98, so the clips are cut off');
-    if (s.head !== '1') throw new Error(how + ' the playhead is not shown at the hand-over (opacity ' + s.head + ')');
-    if (s.move !== 'translate(0 0)') throw new Error(how + ' the playhead is at ' + s.move + ' at the hand-over, not on its frame');
-    if (s.name !== '1') throw new Error(how + ' the FreeMotion name is not shown (opacity ' + s.name + ')');
+  /* Pixels of two canvases: how many differ by more than `tol` in any channel, and the biggest difference */
+  function pxDiff1231(a, b, tol) {
+    if (a.width !== b.width || a.height !== b.height) return { n: -1, worst: 255, size: a.width + 'x' + a.height + ' vs ' + b.width + 'x' + b.height };
+    const da = a.getContext('2d').getImageData(0, 0, a.width, a.height).data, db = b.getContext('2d').getImageData(0, 0, b.width, b.height).data;
+    let n = 0, worst = 0;
+    for (let i = 0; i < da.length; i += 4) {
+      const d = Math.max(Math.abs(da[i] - db[i]), Math.abs(da[i + 1] - db[i + 1]), Math.abs(da[i + 2] - db[i + 2]));
+      if (d > worst) worst = d;
+      if (d > tol) n++;
+    }
+    return { n: n, worst: worst, of: da.length / 4 };
   }
 
-  /* 1180 (1) THE SPLASH IS HIS LOGO, NOT A FILM. Proves: #splash in the shipped index.html holds his logo as an animated SVG
-   * (its grade, its three clips, the teal playhead and the name) and no <video>, no <img> (the film's empty poster, #642's
-   * white box), and the boot script loads no .mp4.
-   * FAILS BEFORE THE FIX: on the base #splash holds <video id=splash-vid> and the script sets splash-v2.mp4, so it throws
-   * its first sentence with the film's own element. */
-  test('1180 the splash is his logo as inline SVG, not the film', { item: '1180' }, async function () {
+  /* 1231 (1) THE SPLASH IS TAKE 13 ON A CANVAS. Proves: #splash in the shipped index.html holds the take's stage and no
+   * <video>, no <img>, no <svg> (the film, its poster, the old mark); the take's own script (splash-take, layers-stack, 2.92 s)
+   * and the boot script both run BEFORE the app's first <script src>; the splash block loads no film and asks for no web font
+   * (no Courier Prime outside its comments, and the page links no Google Fonts at all).
+   * FAILS BEFORE THE FIX: on v18.22 #splash holds svg#splash-mark and there is no splash-take, so it throws its first sentence. */
+  test('1231 the splash is take 13 drawn on a canvas before the app’s scripts: no film, no picture, no SVG mark and no web font', { item: '1231' }, async function () {
     const html = await src1180();
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const sp = doc.getElementById('splash');
     if (!sp) throw new Error('index.html has no #splash at all');
-    const vids = sp.querySelectorAll('video');
-    if (vids.length) throw new Error('#splash still holds a <video> (#' + (vids[0].id || '?') + ') — the film is still the intro');
-    const imgs = sp.querySelectorAll('img');
-    if (imgs.length) throw new Error('#splash holds an <img> (#' + (imgs[0].id || '?') + ') — the film’s poster, the empty white box of #642, is back');
-    /* Comments load nothing, and the splash block's own comment names the film it replaced (splash-v2.mp4), so they are
-     * stripped before looking for a film the block would load. */
-    const boot = html.slice(html.indexOf('<body>'), html.indexOf('<div id="app">')).replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-    const mp4 = boot.match(/[\w-]+\.mp4/);
+    const take = doc.getElementById('splash-take');
+    if (!take || !/id: 'layers-stack'/.test(take.textContent) || !/dur: 2\.92,/.test(take.textContent)) throw new Error('index.html has no splash-take script holding layers-stack at 2.92 s (it holds ' + (sp.querySelector('svg') ? 'svg#' + sp.querySelector('svg').id : 'nothing') + ')');
+    if (!sp.querySelector('#splash-stage')) throw new Error('#splash has no #splash-stage for the take to draw on');
+    const odd = sp.querySelector('video, img, svg');
+    if (odd) throw new Error('#splash still holds a <' + odd.localName + '> (#' + (odd.id || '?') + '): the old intro is still in it');
+    const firstSrc = html.indexOf('<script src=');
+    if (!(html.indexOf('<script id="splash-take">') < firstSrc && html.indexOf('<script id="splash-boot">') < firstSrc)) throw new Error('the take or its boot script comes after the app’s first <script src>, so on a cold load the app’s scripts run before the splash can cover them');
+    const block = html.slice(html.indexOf('<body>'), html.indexOf('<div id="app">')).replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const mp4 = block.match(/[\w-]+\.mp4/);
     if (mp4) throw new Error('the splash block still loads a film: ' + mp4[0]);
-    const svg = sp.querySelector('svg#splash-mark');
-    if (!svg) throw new Error('#splash holds no svg#splash-mark — his logo is not the intro');
-    if (svg.getAttribute('viewBox') !== '0 0 200 260') throw new Error('the mark viewBox is ' + svg.getAttribute('viewBox') + ', not the board’s 0 0 200 260');
-    for (const id of ['h2_g', 'h2_reveal', 'h2_clip1', 'h2_clip2', 'h2_clip3', 'h2_head', 'h2_name']) {
-      if (!svg.querySelector('#' + id)) throw new Error('the mark is missing #' + id + ' — it is not take H2');
-    }
-    /* HIS LOGO, exactly: the F of clips at the sizes and places of the app icon, the light-from-above grade */
-    for (const [id, y, wd] of [['h2_clip1', '20', '92'], ['h2_clip2', '49', '62'], ['h2_clip3', '78', '26']]) {
-      const r = svg.querySelector('#' + id);
-      if (r.getAttribute('x') !== '14' || r.getAttribute('y') !== y || r.getAttribute('width') !== wd || r.getAttribute('height') !== '22' || r.getAttribute('rx') !== '5') throw new Error('#' + id + ' is not the logo’s clip (x 14, y ' + y + ', ' + wd + ' wide, 22 tall, rounded 5)');
-    }
-    if (!svg.querySelector('[fill="#29d9bb"]')) throw new Error('the mark has no teal (#29d9bb) playhead');
-    if (!/FreeMotion/.test(svg.textContent)) throw new Error('the mark does not carry the FreeMotion name');
+    if (/Courier Prime/.test(block)) throw new Error('the splash block still asks a canvas for Courier Prime, a web font the app does not load: the labels draw in a fallback');
+    if (/fonts\.googleapis|fonts\.gstatic/.test(html)) throw new Error('index.html links a Google font: the app must open offline with nothing fetched at launch');
   });
 
-  /* 1180 (2) IT PLAYS ONCE. Proves: no animation in the mark repeats (no repeatCount / repeatDur), every one freezes on its
-   * last value, and — by behaviour — the clock run past a whole cycle shows the END frame, where the looping board version
-   * is back at the start (the clips hidden) at 4.1 s, 0.1 s into its second cycle.
-   * FAILS BEFORE THE FIX: the base has no SVG in #splash (the film), so it throws its first sentence. */
-  test('1180 the splash plays once and freezes on its end frame, it never loops', { item: '1180' }, async function () {
-    const html = await src1180();
+  /* 1231 (2) THE NUMBERS ARE THE TAKE'S. Proves: the boot's END_S is the take's own dur and HOLD_S is the 0.7 s the picker held
+   * it for; the take is 2.92 s long, opens on bone and goes black when the matte lands at 2.14 s; the splash's grounds in
+   * splash-css are those two colours (the seen image layer and the colour iOS reads), and no .9 s dissolve is left; the
+   * launch screen stays black (his answer, 6 Nov ~12:10: "just keep 13 as it is coz it ends on black"): the manifest's
+   * launch colour is #000000; nothing says tap to skip (a tap still skips).
+   * FAILS BEFORE THE FIX: v18.22's END_S is 1.5 and HOLD_S 0.6, and its ground is #000. */
+  test('1231 the splash runs on the take’s own numbers: 2.92 s, held 0.7 s, bone until the matte lands at 2.14 s and black after, while the launch screen stays black as he asked', { item: '1231' }, async function () {
+    const html = await src1180(), fails = [];
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    const svg0 = doc.querySelector('#splash svg#splash-mark');
-    if (!svg0) throw new Error('#splash holds no animated logo — the intro is still the film');
-    const anims = Array.from(svg0.querySelectorAll('animate, animateTransform'));
-    if (!anims.length) throw new Error('the mark has no animations at all');
-    for (const a of anims) {
-      const rc = a.getAttribute('repeatCount'), rd = a.getAttribute('repeatDur');
-      if (rc || rd) throw new Error('an <' + a.localName + ' attributeName=' + a.getAttribute('attributeName') + '> repeats (repeatCount ' + rc + ', repeatDur ' + rd + ') — the canvas loop was copied, not the one-shot');
-      if (a.getAttribute('fill') !== 'freeze') throw new Error('an <' + a.localName + ' attributeName=' + a.getAttribute('attributeName') + '> does not freeze — it would snap back when it ends');
-    }
+    if (!/var END_S = TAKE\.dur, HOLD_S = 0\.7,/.test(html)) fails.push('the boot’s END_S is not the take’s dur, or HOLD_S is not 0.7 s');
+    const take = (doc.getElementById('splash-take') || {}).textContent || '';
+    if (!/dur: 2\.92,\s+ground: '#e7e2d5',\s+[\s\S]{0,240}tDark: 2\.14, groundDark: '#0c0c0d'/.test(take)) fails.push('the take is not 2.92 s on bone (#e7e2d5) going black (#0c0c0d) at 2.14 s');
+    if (!/const tDrop = 1\.66, tImp = 2\.14;/.test(take)) fails.push('the matte no longer lands at 2.14 s (tImp), so tDark is not when the frame goes black');
+    const rules = (doc.getElementById('splash-css') || {}).textContent || '';
+    if (!/#splash\.splash-kf \{ background-color: #e7e2d5; background-image: linear-gradient\(#e7e2d5, #e7e2d5\)/.test(rules)) fails.push('#splash’s ground is not the take’s bone in both layers');
+    if (!/#splash\.splash-kf\.splash-dark \{ background-color: #0c0c0d; background-image: linear-gradient\(#0c0c0d, #0c0c0d\)/.test(rules)) fails.push('#splash does not go to the matte’s black in both layers');
+    if (/\.9s/.test(rules)) fails.push('a .9s dissolve is left in the splash’s rules');
+    /* the page canvas's grounds also stand WITHOUT :has(): a browser with no :has() drops a whole list that names it */
+    if (!/html\.splash-on\.splash-kf-on, html\.splash-on\.splash-kf-on body \{ background: #e7e2d5; \}/.test(rules) || !/html\.splash-on\.splash-kf-on\.splash-dark-on, html\.splash-on\.splash-kf-on\.splash-dark-on body \{ background: #0c0c0d; \}/.test(rules)) fails.push('the page canvas’s bone and black grounds have no rule without :has(), so a browser without it shows styles.css’s #000 round a bone splash');
+    if (doc.getElementById('splash-skip')) fails.push('tap to skip is written on the launch screen');
+    const ml = doc.querySelector('link[rel="manifest"]');
+    const man = await (await fetch(ml.getAttribute('href') + '&t1231=' + Date.now(), { cache: 'no-store' })).json();
+    if (man.background_color !== '#000000') fails.push('the manifest launches on ' + man.background_color + ': he asked for the launch to stay black');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* 1231 (3) FRAME FOR FRAME THE TAKE HE PICKED. The picker's own files (tools/design/intro-takes: kit.js and options/layers.js,
+   * the page he played) and the splash's take are made side by side in one frame at 390 x 844, dpr 2 (the picker's own cap),
+   * and seeked to every 24th of a second across the take and its end frame: each pair of canvases is compared pixel for pixel. The picker drew the labels
+   * with fillText in Courier Prime; here its fillText and measureText for that face are routed through the splash's outlines,
+   * so the comparison is of everything else the take draws — every sheet, camera move, shadow, the matte and the logo.
+   * FAILS IF a number or a draw call in the splash's copy drifts from the picker's (a mutation of one keyframe moves pixels at
+   * the moments after it). */
+  test('1231 the splash plays the take he picked frame for frame: every 24th of a second from 0 to 2.92 s its canvas is the picker’s layers-stack pixel for pixel at 390×844 and dpr 2', { item: '1231', budgetMs: 180000 }, async function () {
+    const html = await src1180();
+    const m = html.match(/<script id="splash-take">([\s\S]*?)<\/script>/);
+    if (!m) throw new Error('index.html has no splash-take script');
+    const get = async p => { const r = await fetch(p + '?t1231=' + Date.now(), { cache: 'no-store' }); if (!r.ok) throw new Error('setup: could not read ' + p + ' (' + r.status + ')'); return r.text(); };
+    const kit = await get('tools/design/intro-takes/kit.js'), lane = await get('tools/design/intro-takes/options/layers.js');
+    const route = '(function () { var P = CanvasRenderingContext2D.prototype, ft = P.fillText, mt = P.measureText;' +
+      'function px(f) { var m = /([\\d.]+)px/.exec(f); return m ? +m[1] : 10; }' +
+      'P.fillText = function (s, x, y) { if (/Courier Prime/.test(this.font)) { window.FM_TAKE.mono.fill(this, String(s), px(this.font), x, y, this.textBaseline); window.__routed = (window.__routed || 0) + 1; return; } return ft.apply(this, arguments); };' +
+      'P.measureText = function (s) { if (/Courier Prime/.test(this.font)) return { width: window.FM_TAKE.mono.width(String(s), px(this.font)) }; return mt.apply(this, arguments); }; })();';
     const f = document.createElement('iframe');
-    f.style.cssText = 'position:fixed;left:0;top:0;width:380px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
-    const done = new Promise(function (res) { f.onload = res; });
-    f.srcdoc = '<!doctype html><html><body style="margin:0;background:#111">' + svg0.outerHTML + '</body></html>';
+    f.style.cssText = 'position:fixed;left:0;top:0;width:820px;height:860px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    const done = new Promise(res => { f.onload = res; });
+    f.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0"><div id="a" style="position:absolute;left:0;top:0;width:390px;height:844px;overflow:hidden"></div><div id="b" style="position:absolute;left:400px;top:0;width:390px;height:844px;overflow:hidden"></div>' +
+      '<script>' + m[1] + '<\/script><script>' + route + '<\/script><script>' + kit + '<\/script><script>' + lane + '<\/script></body></html>';
     document.body.appendChild(f);
     try {
-      await Promise.race([done, sleep(4000)]);
-      const svg = f.contentDocument.getElementById('splash-mark');
-      if (!svg || typeof svg.setCurrentTime !== 'function') throw new Error('setup: the mark did not come up in the probe frame');
-      svg.pauseAnimations();
-      svg.setCurrentTime(0.3);
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-      const mid = svg.querySelector('#h2_reveal').width.animVal.value;
-      if (mid !== 0) throw new Error('CONTROL: at 0.3 s the reveal is already ' + mid + ' wide — the clock is not being driven, so the end-frame reading below would prove nothing');
-      for (const t of [1.6, 2.1, 4.1, 30]) {
-        svg.setCurrentTime(t);
-        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-        endFrame1180(svg, 'at ' + t + ' s');
+      await Promise.race([done, sleep(8000)]);
+      const w = f.contentWindow, d = f.contentDocument;
+      if (!w.FMI || !w.FM_TAKE) throw new Error('setup: the picker’s take or the splash’s did not load in the frame');
+      const pick = w.FMI.options.find(o => o.id === 'layers-stack');
+      if (!pick) throw new Error('setup: the picker has no layers-stack');
+      if (pick.dur !== w.FM_TAKE.dur || pick.ground !== w.FM_TAKE.ground) throw new Error('the picker’s take is ' + pick.dur + ' s on ' + pick.ground + ', the splash’s ' + w.FM_TAKE.dur + ' s on ' + w.FM_TAKE.ground);
+      const A = d.getElementById('a'), B = d.getElementById('b');
+      const seekA = pick.make(A, w.FMI.makeKit(A, 390, 844, 2)), seekB = w.FM_TAKE.make(B, w.FM_TAKE.makeKit(B, 390, 844, 2));
+      if (!(w.__routed > 10)) throw new Error('setup: the picker’s labels were not routed through the outlines (' + w.__routed + ' fillText calls), so the frames would differ only by font');
+      const ca = A.querySelector('canvas'), cb = B.querySelector('canvas'), out = [], fails = [];
+      /* every 24th of a second and the end frame (the review of #1231: nine moments missed the slam's last pick-ups, the 8-pass
+         shutter before the hit and the second and third rows cutting to grey) */
+      const at = []; for (let i = 0; i * 1 / 24 < 2.92; i++) at.push(+(i / 24).toFixed(5)); at.push(2.92);
+      for (const t of at) {
+        seekA(t); seekB(t);
+        const r = pxDiff1231(ca, cb, 0);
+        if (r.n) out.push(t + ' s: ' + r.n);
+        if (r.n !== 0) fails.push('at ' + t + ' s ' + (r.n < 0 ? 'the canvases are ' + r.size : r.n + ' of ' + r.of + ' pixels differ (worst by ' + r.worst + ')'));
       }
+      console.log('1231 frame for frame at ' + at.length + ' moments, pixels that differ: ' + (out.join(' · ') || 'none'));
+      if (fails.length) throw new Error('the splash’s take is not the one he picked: ' + fails.join(' · '));
+      /* CONTROL: a frame that differs is seen — the splash's take a hair later than the picker's */
+      seekA(1.5); seekB(1.52);
+      if (pxDiff1231(ca, cb, 0).n < 100) throw new Error('CONTROL: 20 ms apart the two takes still read the same, so the comparison above measures nothing');
     } finally {
+      try { if (f.contentWindow && f.contentWindow.FM_TAKE) f.contentWindow.FM_TAKE.free(); } catch (e) {}
       try { f.remove(); } catch (e) {}
     }
   });
 
-  /* 1180 (3) THE HAND-OVER. Proves: on a first load the splash comes up with the mark, does NOT go while it is still
-   * animating (before END_S + HOLD_S, less 200 ms), then goes NATURALLY (splash-out without splash-cut, fm:splash-dismiss with
-   * quick false) before any cap would cut it, with the mark on its finished frame and its own clock past the 0.6 s hold; then
-   * the splash is removed and every class it put on <html> comes off (any splash- class, so a new one such as splash-kf-out
-   * is covered too).
-   * FAILS BEFORE THE FIX: the base boots the film (<video id=splash-vid>), so it throws that the splash is a film. */
-  test('1180 the splash holds the finished logo, then hands over to the app', { item: '1180', budgetMs: 30000 }, async function () {
+  /* 1231 (4) THE STILL IS THE END FRAME. Reduced motion and a clock that never starts paint TAKE.still, which skips making
+   * the five sheets and the matte. Proves: it paints what seek(2.92) paints, at 390 x 844 and at a PC's stage (369 x 800), at
+   * dpr 2, to within the anti-aliasing of the hit's last ring (its zoom and shake are under 1e-6 by then, which still moves
+   * an edge's coverage): MEASURED 6 Nov in Windows Chrome at 390 x 844, 69 of 1,316,640 pixels differed at all, the worst by
+   * 5 of 255. The bar is no pixel off by more than 24 and at most 0.05% off at all; CONTROL: the still against seek(2.3),
+   * while the rows are still cutting to grey, has thousands of pixels off by more than 24. */
+  test('1231 the still that reduced motion gets is the take’s own end frame, pixel for pixel, on a phone stage and a PC one', { item: '1231', budgetMs: 60000 }, async function () {
+    const T = window.FM_TAKE;
+    if (!T) throw new Error('index.html defined no FM_TAKE');
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-5000px;top:0;width:1000px;height:900px;overflow:hidden;pointer-events:none';
+    document.body.appendChild(host);
+    try {
+      for (const [W, H] of [[390, 844], [369, 800]]) {
+        const a = document.createElement('div'), b = document.createElement('div');
+        [a, b].forEach(x => { x.style.cssText = 'position:relative;width:' + W + 'px;height:' + H + 'px'; host.appendChild(x); });
+        const seek = T.make(a, T.makeKit(a, W, H, 2));
+        T.still(b, T.makeKit(b, W, H, 2));
+        seek(END_S1231);
+        const ca = a.querySelector('canvas'), cb = b.querySelector('canvas');
+        const r = pxDiff1231(ca, cb, 24), loose = pxDiff1231(ca, cb, 0);
+        console.log('1231 still vs seek(2.92) at ' + W + 'x' + H + ': ' + loose.n + ' of ' + loose.of + ' pixels differ at all, worst by ' + loose.worst);
+        if (r.n !== 0 || loose.n > loose.of * 0.0005) throw new Error(W + '×' + H + ': the still is not the end frame: ' + loose.n + ' pixels differ, ' + r.n + ' of them by more than 24 (worst ' + loose.worst + ')');
+        seek(2.3);
+        if (pxDiff1231(ca, cb, 24).n < 1000) throw new Error('CONTROL: ' + W + '×' + H + ': the frame at 2.3 s reads as the still, so the comparison measures nothing');
+        host.textContent = '';
+      }
+    } finally {
+      host.remove();
+      try { T.free(); } catch (e) {}
+    }
+  });
+
+  /* 1231 (5) THE HAND-OVER. Proves: on a first load the splash comes up with the take on a canvas, plays it to its end frame
+   * (2.92 s), holds it at least 0.7 s of wall time from the frame that drew it, then goes NATURALLY (splash-out without
+   * splash-cut, one fm:splash-dismiss with quick false) on the matte's black; then the splash is removed and every class it
+   * put on <html> comes off (any splash- class, so splash-dark-on is covered too). It also proves the take never loops: the
+   * shown time read twice during the hold is 2.92 s both times. */
+  test('1231 the splash plays the take once to its end frame, holds the finished logo 0.7 s, then hands over to the app', { item: '1231', budgetMs: 30000 }, async function () {
     const run = await boot1180({});
     try {
       const d = run.d, w = run.w;
       const sp = d.getElementById('splash');
       if (!sp) throw new Error('the booted splash block has no #splash');
-      if (d.querySelector('#splash video')) throw new Error('the splash that came up is a film (<video>), not his logo');
       if (sp.classList.contains('hidden')) throw new Error('on the first load of a session the splash stayed hidden');
-      const svg = d.getElementById('splash-mark');
-      if (!svg) throw new Error('the splash came up without svg#splash-mark');
-      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (1180 reduced-motion test covers the still)');
-      let outAt = -1, cut = null, clock = -1;
-      for (let i = 0; i < 120; i++) {
-        if (sp.classList.contains('splash-out')) {
-          outAt = w.performance.now() - w.__t0; cut = sp.classList.contains('splash-cut');
-          try { clock = svg.getCurrentTime(); } catch (e) {}
-          break;
-        }
-        await sleep(50);
-      }
-      if (outAt < 0) throw new Error('the splash never began to dissolve within 6 s');
-      if (outAt < (END_S1180 + HOLD_S1180) * 1000 - 200) throw new Error('the splash began to dissolve at ' + Math.round(outAt) + ' ms — before the mark had finished (' + END_S1180 + ' s) and held (' + HOLD_S1180 + ' s)');
-      if (cut) throw new Error('the splash was CUT at ' + Math.round(outAt) + ' ms (splash-cut) — the natural hand-over never came, a cap or an error did it');
-      if (!(clock >= END_S1180 + HOLD_S1180)) throw new Error('the dissolve began with the mark’s own clock at ' + clock.toFixed(2) + ' s — the ' + HOLD_S1180 + ' s hold on the finished frame was skipped');
-      endFrame1180(svg, 'as the dissolve began');
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (the reduced-motion test covers the still)');
+      if (!w.FM_SPLASH || !sp.querySelector('#splash-stage canvas')) throw new Error('the splash came up without the take’s canvas');
+      if (w.FM_SPLASH.still()) throw new Error('the splash went straight to the still: the take did not play (no animation frame, or it broke)');
+      let held = [];
+      for (let i = 0; i < 160 && !w.__rec.length; i++) { if (w.FM_SPLASH.ended()) held.push(w.FM_SPLASH.shown()); await sleep(40); }
       const rec = w.__rec || [];
-      if (rec.length !== 1 || rec[0].quick !== false) throw new Error('fm:splash-dismiss fired ' + rec.length + ' time(s), quick ' + (rec[0] && rec[0].quick) + ' — home.js needs exactly one natural (quick:false) dismiss to time its entrance');
+      if (!rec.length) throw new Error('the splash never handed over within 6.4 s');
+      const s = rec[0].snap;
+      if (rec[0].quick || s.cut) throw new Error('the splash was CUT at ' + Math.round(rec[0].t) + ' ms (quick ' + rec[0].quick + ', splash-cut ' + s.cut + '): the natural hand-over never came');
+      endFrame1231(s, 'at the natural hand-over');
+      if (held.some(x => x !== END_S1231)) throw new Error('during the hold the take showed ' + held.join(', ') + ' s: it moved off its end frame (a loop?)');
+      const hold = rec[0].t - s.endedAt;
+      if (!(s.endedAt > 0) || hold < HOLD_S1231 * 1000 - 50) throw new Error('the dissolve began ' + Math.round(hold) + ' ms after the end frame was drawn: the ' + HOLD_S1231 + ' s hold on the finished logo was skipped');
+      if (rec.length !== 1) throw new Error('fm:splash-dismiss fired ' + rec.length + ' times: home.js needs exactly one natural (quick:false) dismiss to time its entrance');
       for (let i = 0; i < 40 && d.getElementById('splash'); i++) await sleep(50);
       if (d.getElementById('splash')) throw new Error('#splash was still in the page 2 s after its dissolve began');
       const cls = d.documentElement.className;
@@ -190904,14 +190959,10 @@
     }
   });
 
-  /* 1180 (4) REDUCED MOTION. Proves: with prefers-reduced-motion the splash still shows his logo, as the END frame and with
-   * no animation left in it (the clips revealed, the playhead on its frame, the name shown), marks the session as splashed,
-   * and hands over to the app within 2.5 s. The still's state is read from the snapshot taken AT the hand-over inside the
-   * frame (snap1180), never from the page after the test's await of the frame's load: the still is removed 320 ms after
-   * the dismiss, so a late load on a hot laptop would otherwise read that it never showed.
-   * FAILS BEFORE THE FIX: the base returns early under reduced motion and the splash stays hidden, so it throws its first
-   * sentence by behaviour. */
-  test('1180 with reduced motion the splash shows the finished logo as a still, then hands over', { item: '1180', budgetMs: 20000 }, async function () {
+  /* 1231 (6) REDUCED MOTION. Proves: with prefers-reduced-motion the splash still shows his logo, as the END frame painted once
+   * (the still: FM_SPLASH.still() true, the take showing 2.92 s, the matte's black round it, one canvas), marks the session as
+   * splashed for this build, and hands over to the app within 2.5 s. Read from the snapshot taken AT the hand-over. */
+  test('1231 with reduced motion the splash shows the finished logo as a still, then hands over', { item: '1231', budgetMs: 20000 }, async function () {
     const run = await boot1180({ reduce: true });
     try {
       const d = run.d, w = run.w;
@@ -190920,15 +190971,13 @@
       const rec = w.__rec || [];
       const sp = d.getElementById('splash');
       if (!rec.length) {
-        if (!sp || sp.classList.contains('hidden')) throw new Error('with reduced motion the splash never showed — he gets no logo at all');
+        if (!sp || sp.classList.contains('hidden')) throw new Error('with reduced motion the splash never showed: he gets no logo at all');
         throw new Error('with reduced motion the still came up but never handed over (no fm:splash-dismiss within 3 s)');
       }
       const s = rec[0].snap;
-      if (!s) throw new Error('setup: the hand-over snapshot was not taken in the frame');
-      if (!s.shown) throw new Error('with reduced motion the splash never showed — he gets no logo at all');
-      if (s.anims < 0) throw new Error('with reduced motion the splash shows no logo' + (d.querySelector('#splash video') ? ' (it is the film)' : ''));
-      if (s.anims) throw new Error('with reduced motion ' + s.anims + ' animations are still in the mark — it moves');
-      stillFrame1180(s, 'with reduced motion');
+      endFrame1231(s, 'with reduced motion');
+      if (s.still !== true) throw new Error('with reduced motion the splash played the take instead of the still');
+      if (s.canvases !== 1) throw new Error('with reduced motion the splash made ' + s.canvases + ' canvases: the still is one, with no sheets made');
       let flag = null;
       try { flag = sessionStorage.getItem('fm.splashed'); } catch (e) {}
       const bmeta = d.querySelector('meta[name="fm-build"]'), wantFlag = bmeta ? bmeta.content : '1';
@@ -190970,49 +191019,41 @@
     }
   });
 
-  /* 1180 (6) A LATE LOAD (the refuter of the 1180 review, B3). An inline SVG's timeline starts at the document's load, and
-   * on a real launch the load waits for the app's ~100 parser-blocking scripts and its synchronous init; until then the
-   * clock reads 0. A 2000 ms synchronous busy-wait after the splash block stands in for that, deterministically. Proves:
-   * the splash is NOT cut (no splash-cut, exactly one fm:splash-dismiss and it is quick false) and the mark's own clock is
-   * past END_S + HOLD_S when the dissolve begins. The clock read at the end of the busy-wait is printed (console.info and
-   * every message): above 0 means this engine started the clock at parse, 0 means at load.
-   * FAILS BEFORE THE FIX: the base boots the film (<video>), so it throws that the splash is a film. On the branch before
-   * the clock-based cap (42506d20) the 5 s cap ran from the script, so with the clock starting ~2 s late it cut at a clock
-   * of ~3.0 s: splash-cut, quick true. */
-  test('1180 a late page load does not cut the splash short: it starts at the load, holds, and hands over', { item: '1180', budgetMs: 40000 }, async function () {
+  /* 1231 (7) A LATE LOAD. On a real launch the load waits for the app's ~100 parser-blocking scripts and its synchronous init;
+   * a 2000 ms synchronous busy-wait after the splash block stands in for that. Proves: frame 0 is up through it and the take's
+   * clock has NOT started (it shows 0 s at the end of the stand-in: the clock starts at the load, so the take does not freeze
+   * and jump through the boot), then the splash plays from the load, holds, and hands over NATURALLY. */
+  test('1231 a late page load does not cut the splash short: frame 0 waits through it, the take plays from the load, holds, and hands over', { item: '1231', budgetMs: 40000 }, async function () {
     const run = await boot1180({ lateMs: 2000 });
     try {
       const d = run.d, w = run.w;
-      const sp = d.getElementById('splash');
-      if (!sp) throw new Error('the booted splash block has no #splash');
-      if (d.querySelector('#splash video')) throw new Error('the splash that came up is a film (<video>), not his logo');
-      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (1180 reduced-motion test covers the still)');
+      if (!d.getElementById('splash')) throw new Error('the booted splash block has no #splash');
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (the reduced-motion test covers the still)');
       const late = w.__late1180;
       if (!late) throw new Error('setup: the 2000 ms boot stand-in never ran in the frame');
-      const said = ' (the mark’s clock read ' + (+late.clock).toFixed(3) + ' s at the end of the ' + late.ms + ' ms boot stand-in)';
-      try { console.info('[1180] late load: the clock read ' + (+late.clock).toFixed(3) + ' s at the end of a ' + late.ms + ' ms synchronous boot stand-in'); } catch (e) {}
+      if (late.clock !== 0) throw new Error('at the end of a ' + late.ms + ' ms boot stand-in the splash shows ' + late.clock + ' s, not frame 0: ' + (late.clock < 0 ? 'nothing was drawn before the load' : 'the clock ran before the load'));
       for (let i = 0; i < 200 && !(w.__rec && w.__rec.length); i++) await sleep(50);
       const rec = w.__rec || [];
-      if (!rec.length) throw new Error('after a load 2 s late the splash never handed over within 10 s' + said);
+      if (!rec.length) throw new Error('after a load 2 s late the splash never handed over within 10 s');
       const s = rec[0].snap || {};
-      if (rec[0].quick || s.cut) throw new Error('after a load 2 s late the splash was CUT (quick ' + rec[0].quick + ', splash-cut ' + !!s.cut + ') at ' + Math.round(rec[0].t) + ' ms, with the mark’s clock at ' + (+s.clock).toFixed(2) + ' s — the cap ran out before the animation and its hold' + said);
-      if (!(s.clock >= END_S1180 + HOLD_S1180)) throw new Error('the dissolve began with the mark’s clock at ' + (+s.clock).toFixed(2) + ' s, short of the finished frame and its hold (' + (END_S1180 + HOLD_S1180).toFixed(2) + ' s)' + said);
+      if (rec[0].quick || s.cut) throw new Error('after a load 2 s late the splash was CUT (quick ' + rec[0].quick + ', splash-cut ' + !!s.cut + ') at ' + Math.round(rec[0].t) + ' ms, the take at ' + s.clock + ' s');
+      endFrame1231(s, 'after a late load');
+      for (let i = 0; i < 40 && typeof w.__loadAt !== 'number'; i++) await sleep(50);
+      if (!(s.startedAt >= w.__loadAt - 50)) throw new Error('the take’s clock started at ' + Math.round(s.startedAt) + ' ms, before the load at ' + Math.round(w.__loadAt) + ' ms');
+      if (rec[0].t - s.endedAt < HOLD_S1231 * 1000 - 50) throw new Error('after a late load the hold on the finished logo was ' + Math.round(rec[0].t - s.endedAt) + ' ms, not ' + HOLD_S1231 + ' s');
       for (let i = 0; i < 40 && d.getElementById('splash'); i++) await sleep(50);
-      if (rec.length !== 1) throw new Error('fm:splash-dismiss fired ' + rec.length + ' times — home.js needs exactly one natural (quick:false) dismiss to time its entrance' + said);
-      if (d.getElementById('splash')) throw new Error('#splash was still in the page 2 s after its dissolve began' + said);
+      if (rec.length !== 1) throw new Error('fm:splash-dismiss fired ' + rec.length + ' times');
+      if (d.getElementById('splash')) throw new Error('#splash was still in the page 2 s after its dissolve began');
     } finally {
       run.restore();
     }
   });
 
-  /* 1180 R1 (a) A BOOT THAT YIELDS (release 1 of #1180, cause 4; Ezra 23 Oct: "i cant see the animation"). On his phone the
-   * app's ~100 scripts arrive one by one, so the main thread YIELDS between them and timers run during the boot, while the
-   * load, and with it the mark's clock, comes late. Twenty blob: scripts that each hold the thread for 400 ms stand in for
-   * that: 8 s of boot that yields. Proves: the splash still ends NATURALLY (exactly one fm:splash-dismiss, quick false, no
-   * splash-cut) with the mark's clock past END_S + HOLD_S, and the frame's load really came after 7.5 s.
-   * FAILS BEFORE THE FIX: the base's 8 s backstop counts from the splash script, so it fires in the boot's last gap or
-   * straight after it, before the clock has run: a cut (quick true, splash-cut). */
-  test('1180 a boot that yields for 8 s does not cut the splash: it plays from the load and hands over naturally', { item: '1180', budgetMs: 60000 }, async function () {
+  /* 1231 (8) A BOOT THAT YIELDS (#1180's release 1, cause 4; Ezra 23 Oct: "i cant see the animation"). Twenty blob: scripts
+   * that each hold the thread for 400 ms stand in for the app's scripts arriving one by one: 8 s of boot that yields, so timers
+   * and animation frames get turns during it. Proves: the take's clock starts only at the load (after 7.5 s), and the splash
+   * ends NATURALLY on its end frame with its hold. */
+  test('1231 a boot that yields for 8 s does not cut the splash: the take plays from the load and hands over naturally', { item: '1231', budgetMs: 60000 }, async function () {
     const code = '(function () { var t0 = performance.now(); while (performance.now() - t0 < 400) {} })();';
     const urls = [];
     for (let i = 0; i < 20; i++) urls.push(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
@@ -191020,17 +191061,18 @@
     try {
       const d = run.d, w = run.w;
       if (!d.getElementById('splash')) throw new Error('the booted splash block has no #splash');
-      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (1180 reduced-motion test covers the still)');
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (the reduced-motion test covers the still)');
       for (let i = 0; i < 400 && !(w.__rec && w.__rec.length); i++) await sleep(50);
       const rec = w.__rec || [];
       if (!rec.length) throw new Error('after a boot that yields for 8 s the splash never handed over (waited 20 s after the frame load)');
       const s = rec[0].snap || {};
-      if (rec[0].quick || s.cut) throw new Error('after a boot that yields for 8 s the splash was CUT (quick ' + rec[0].quick + ', splash-cut ' + !!s.cut + ') at ' + Math.round(rec[0].t) + ' ms, with the mark’s clock at ' + (+s.clock).toFixed(2) + ' s: a backstop counted from the script ran out before the animation had played');
+      if (rec[0].quick || s.cut) throw new Error('after a boot that yields for 8 s the splash was CUT (quick ' + rec[0].quick + ', splash-cut ' + !!s.cut + ') at ' + Math.round(rec[0].t) + ' ms, the take at ' + s.clock + ' s');
       for (let i = 0; i < 40 && typeof w.__loadAt !== 'number'; i++) await sleep(50);
       if (!(w.__loadAt > 7500)) throw new Error('setup: the frame loaded at ' + w.__loadAt + ' ms, so the 20 x 400 ms boot stand-in did not hold the load past 7.5 s and this proves nothing');
-      if (!(s.clock >= END_S1180 + HOLD_S1180)) throw new Error('the dissolve began with the mark’s clock at ' + (+s.clock).toFixed(2) + ' s, short of the finished frame and its hold (' + (END_S1180 + HOLD_S1180).toFixed(2) + ' s)');
+      if (!(s.startedAt >= w.__loadAt - 50)) throw new Error('the take’s clock started at ' + Math.round(s.startedAt) + ' ms, during the boot (the load came at ' + Math.round(w.__loadAt) + ' ms): it would freeze and jump through it');
+      endFrame1231(s, 'after a boot that yields');
       for (let i = 0; i < 40 && d.getElementById('splash'); i++) await sleep(50);
-      if (rec.length !== 1) throw new Error('fm:splash-dismiss fired ' + rec.length + ' times: home.js needs exactly one natural (quick:false) dismiss to time its entrance');
+      if (rec.length !== 1) throw new Error('fm:splash-dismiss fired ' + rec.length + ' times');
       if (d.getElementById('splash')) throw new Error('#splash was still in the page 2 s after its dissolve began');
     } finally {
       run.restore();
@@ -191038,13 +191080,9 @@
     }
   });
 
-  /* 1180 R1 (b) ONCE PER BUILD, NOT ONCE PER SESSION (cause 1). The flag was '1', set the moment the splash script ran, so a
-   * resumed iPhone app, the update chip (location.replace keeps sessionStorage), a refresh and a takeover's reload all
-   * skipped the intro. It now holds the build (meta fm-build). Proves, each in a fresh frame booted with that fm.splashed:
+  /* 1180 R1 (b) ONCE PER BUILD, NOT ONCE PER SESSION (cause 1). Proves, each in a fresh frame booted with that fm.splashed:
    * v17.97's stored '1' PLAYS (#splash shown), an older build's value plays, a played intro leaves fm.splashed equal to the
-   * build, and the same build's value does NOT play (#splash stays hidden).
-   * FAILS BEFORE THE FIX: the base returns on ANY stored value, so with '1' stored the splash stays hidden and it throws
-   * its first sentence, by behaviour. */
+   * build, and the same build's value does NOT play (#splash stays hidden). */
   test('1180 a new build plays the intro once more in the same session, and a reload of the same build does not', { item: '1180', budgetMs: 30000 }, async function () {
     const html = await src1180();
     const m = html.match(/<meta name="fm-build" content="([^"]*)">/);
@@ -191071,10 +191109,7 @@
     if (same.shown) throw new Error('a reload of the same build (fm.splashed ' + build + ') played the intro again');
   });
 
-  /* 1180 R1 (b2) THE BUILD THE SPLASH COMPARES IS THE VERSION ON SCREEN. Proves: index.html's meta fm-build (in <head>)
-   * equals the version label (.ver), so a release that bumps one without the other goes red here, instead of replaying the
-   * intro for a build that did not change, or never playing it for one that did.
-   * FAILS BEFORE THE FIX: the base has no meta fm-build. */
+  /* 1180 R1 (b2) THE BUILD THE SPLASH COMPARES IS THE VERSION ON SCREEN. */
   test('1180 the fm-build meta names the same version as the on-screen label', { item: '1180' }, async function () {
     const html = await src1180();
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -191085,43 +191120,34 @@
     if (meta.getAttribute('content') !== ver.textContent.trim()) throw new Error('meta fm-build is ' + meta.getAttribute('content') + ' but the version label reads ' + ver.textContent.trim() + ': bump both together');
   });
 
-  /* 1180 R1 (c) A PAUSED CLOCK (cause 3). iOS with Auto-Play Animated Images off pauses every SMIL clock, so getCurrentTime()
-   * stays 0 and the mark's first frame, which is EMPTY, sat as a dark box until the 8 s backstop. pauseAnimations() straight
-   * after the splash block, before the load, stands in for it (svg.animationsPaused() reads true, as it does there).
-   * Proves: the splash hands over within 4 s of the load, NATURALLY (quick false, no splash-cut, one dismiss), and at the
-   * hand-over it shows the END FRAME as a still (no animation left in it, the clips at rest, the name shown).
-   * FAILS BEFORE THE FIX: the base waits for a clock that never moves, and nothing hands over until its 8 s backstop, so it
-   * throws that nothing handed over within 4 s of the load. */
-  test('1180 when the browser pauses SVG animation the splash shows the finished logo as a still, not a dark box until the backstop', { item: '1180', budgetMs: 30000 }, async function () {
-    const run = await boot1180({ after: '<script>try { document.getElementById(\'splash-mark\').pauseAnimations(); } catch (e) {}<\/script>' });
+  /* 1231 (9) NO ANIMATION FRAME EVER COMES (a page that is not painting: the canvas take's stand-in for #1180's paused SMIL
+   * clock). requestAnimationFrame is stubbed to never call back, before the splash block. Proves: the splash hands over within
+   * 4 s of the load, NATURALLY (quick false, no splash-cut, one dismiss), and at the hand-over it shows the END FRAME as a
+   * still (FM_SPLASH.still() true, 2.92 s, the matte's black), not frame 0 frozen until the ceiling. */
+  test('1231 when no animation frame ever comes the splash shows the finished logo as a still, not frame 0 until the ceiling', { item: '1231', budgetMs: 30000 }, async function () {
+    const run = await boot1180({ pre: 'window.requestAnimationFrame = function () { return 0; };' });
     try {
       const d = run.d, w = run.w;
-      const svg = d.getElementById('splash-mark');
-      if (!svg) throw new Error('the booted splash block has no svg#splash-mark');
-      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (1180 reduced-motion test covers the still)');
-      if (!(typeof svg.animationsPaused === 'function' && svg.animationsPaused())) throw new Error('setup: pauseAnimations() before the load did not take (animationsPaused is false), so this proves nothing');
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here (the reduced-motion test covers the still)');
+      if (!w.FM_SPLASH || w.FM_SPLASH.started()) throw new Error('setup: the take’s clock started, so the stubbed requestAnimationFrame did not take and this proves nothing');
       for (let i = 0; i < 80 && !(w.__rec && w.__rec.length); i++) await sleep(50);
       const rec = w.__rec || [];
-      if (!rec.length) throw new Error('with the clock paused nothing handed over within 4 s of the load: he sees the empty first frame, a dark box, until the backstop');
+      if (!rec.length) throw new Error('with no animation frame nothing handed over within 4 s of the load: he sees frame 0 frozen until the ceiling');
       const r = rec[0], s = r.snap || {};
-      if (r.quick || s.cut) throw new Error('with the clock paused the splash was CUT (quick ' + r.quick + ', splash-cut ' + !!s.cut + ') at ' + Math.round(r.t) + ' ms: the still should hand over naturally');
-      if (!s.shown) throw new Error('with the clock paused the splash never showed');
-      if (s.anims) throw new Error('with the clock paused the hand-over came with ' + s.anims + ' animations still in the mark: it showed the paused first frame (empty), not the finished logo');
-      stillFrame1180(s, 'with the clock paused');
+      if (r.quick || s.cut) throw new Error('with no animation frame the splash was CUT (quick ' + r.quick + ', splash-cut ' + !!s.cut + ') at ' + Math.round(r.t) + ' ms: the still should hand over naturally');
+      endFrame1231(s, 'with no animation frame');
+      if (s.still !== true) throw new Error('with no animation frame the hand-over did not come through the still');
       for (let i = 0; i < 50 && d.getElementById('splash'); i++) await sleep(50);
-      if (rec.length !== 1) throw new Error('fm:splash-dismiss fired ' + rec.length + ' times: home.js needs exactly one natural (quick:false) dismiss');
-      if (d.getElementById('splash')) throw new Error('with the clock paused the still never handed over to the app (still up 2.5 s after the dismiss)');
+      if (rec.length !== 1) throw new Error('fm:splash-dismiss fired ' + rec.length + ' times');
+      if (d.getElementById('splash')) throw new Error('with no animation frame the still never handed over to the app');
     } finally {
       run.restore();
     }
   });
 
-  /* 1180 R1 (d) A TAKEOVER WAITS FOR THE INTRO (cause 1's reload). A new service worker that takes over reloads the page
-   * when the app is idle (fmSwReloadWhenIdle), and a reload in the middle of the intro cut his logo off. Proves, on the
-   * live page's own fmSwBusy (FM._swReloadWhenIdle.busy): idle with #splash hidden (the control), BUSY while #splash is up,
-   * and idle again once it is dissolving (splash-out), so the reload waits for the intro and no longer.
-   * FAILS BEFORE THE FIX: the base's fmSwBusy never looks at the splash, so it reads idle while #splash is up and throws
-   * its second sentence, by behaviour. */
+  /* 1180 R1 (d) A TAKEOVER WAITS FOR THE INTRO (cause 1's reload). Proves, on the live page's own fmSwBusy
+   * (FM._swReloadWhenIdle.busy): idle with #splash hidden (the control), BUSY while #splash is up, and idle again once it is
+   * dissolving (splash-out), so the reload waits for the intro and no longer. */
   test('1180 a new build waits for the intro: the update hold counts the app busy while the splash is up', { item: '1180' }, async function () {
     const W = FM._swReloadWhenIdle;
     if (!W || typeof W.busy !== 'function') throw new Error('setup: FM._swReloadWhenIdle.busy is missing');
@@ -191144,21 +191170,14 @@
     }
   });
 
-  /* 1180 (7) THE LIGHT LOOK'S HAND-OVER, AND NEITHER LOOK HIDES THE MARK (the refuter of the 1180 review, B2; it replaces
-   * #646, the light half of 783, and 688's neither-look-hides-it). The light look is the default, and a first load opens
-   * the light Home under the splash, so theme-glass.css's light-Home rule wants the canvas light. iOS paints the status
-   * strip from a fixed full-screen element's background-COLOR, so the splash must hand that colour to the light Home's
-   * #fafdff as it goes, while the ground you SEE (a background-image layer) stays black under the mark.
-   * Booted with the shipped styles.css and theme-glass.css, <html data-theme=glass data-home=light|dark> and a visible
-   * #home-screen. Proves, in each look: while the splash is up the canvas (<html>) is the splash ground #000, #splash's
-   * background-image is the ground, and the mark is displayed at opacity 1 with a size; in the light look, at the end of
-   * #splash's background-color transition, #splash and <html> both read #fafdff; the dark look (the control) is still the
-   * ground at the end of the cut.
-   * FAILS BEFORE THE FIX: on the base the canvas under the film is #111 (rgb(17, 17, 17)) or the light Home's colour, not
-   * the ground; on the branch before the light split (42506d20) theme-glass.css's rule outranked the splash's canvas rule,
-   * so <html> read rgb(250, 253, 255) while the splash was up, and #splash had no ground image and no colour ramp. */
-  test('1180 in the light look the splash hands the status-bar colour to the light Home as it goes, and neither look hides the mark', { item: '1180', budgetMs: 40000 }, async function () {
-    const GROUND = 'rgb(0, 0, 0)', LIGHT = 'rgb(250, 253, 255)';
+  /* 1231 (10) THE GROUND FOLLOWS THE FRAME, AND THE LIGHT LOOK'S HAND-OVER. Booted with the shipped styles.css and theme-glass.css,
+   * <html data-theme=glass data-home=light|dark> and a visible #home-screen (a first load opens the light Home under the
+   * splash, and theme-glass.css's light-Home rule wants the canvas light). Proves, in each look: while the splash is up the
+   * page canvas (<html>) and #splash's seen image layer are the FRAME's ground (bone before the matte lands, its black after),
+   * and the take's canvas is displayed at opacity 1 with a size; in the light look, at the end of #splash's background-color
+   * transition, #splash and <html> both read the light Home's #fafdff; the dark look (the control) is on the matte's black. */
+  test('1231 the ground round the take is the frame’s own, and in the light look the splash hands the status-bar colour to the light Home as it goes', { item: '1231', budgetMs: 40000 }, async function () {
+    const LIGHT = 'rgb(250, 253, 255)';
     for (const look of ['light', 'dark']) {
       const run = await boot1180({ css: true, attrs: 'data-theme="glass" data-home="' + look + '"', home: true, ramp: true });
       try {
@@ -191166,24 +191185,26 @@
         const sp = d.getElementById('splash');
         if (!sp || sp.classList.contains('hidden')) throw new Error('in the ' + look + ' look the splash never came up');
         if (!d.getElementById('home-screen')) throw new Error('setup: the frame has no #home-screen under the splash');
+        const dark = sp.classList.contains('splash-dark'), want = dark ? COAL1231 : BONE1231;
+        if (dark !== !!(w.FM_SPLASH && w.FM_SPLASH.shown() >= 2.14)) throw new Error('in the ' + look + ' look #splash is ' + (dark ? '' : 'not ') + 'on black with the take at ' + (w.FM_SPLASH && w.FM_SPLASH.shown()) + ' s: the ground does not follow the frame');
         const canvas = w.getComputedStyle(root).backgroundColor;
-        if (canvas !== GROUND) throw new Error('in the ' + look + ' look, while the splash is up, the page canvas (<html>) is ' + canvas + ', not the splash ground ' + GROUND + ' — a strip the splash does not cover shows a different colour (queue 162)');
-        const img = w.getComputedStyle(sp).backgroundImage;
-        if (!/linear-gradient\(rgb\(0, 0, 0\), rgb\(0, 0, 0\)\)/.test(img)) throw new Error('in the ' + look + ' look the ground you see on #splash is ' + img + ', not a #000 image layer — the colour iOS reads and the colour he sees are not split (queue 920)');
-        const mk = d.getElementById('splash-mark');
-        if (!mk) throw new Error('in the ' + look + ' look the splash shows no svg#splash-mark');
-        const ms = w.getComputedStyle(mk), box = mk.getBoundingClientRect();
-        if (ms.display === 'none' || ms.visibility === 'hidden' || ms.opacity !== '1' || !(box.width > 0 && box.height > 0)) throw new Error('in the ' + look + ' look a stylesheet hides the mark (display ' + ms.display + ', visibility ' + ms.visibility + ', opacity ' + ms.opacity + ', ' + Math.round(box.width) + 'x' + Math.round(box.height) + ')');
+        if (canvas !== want) throw new Error('in the ' + look + ' look, while the splash is up, the page canvas (<html>) is ' + canvas + ', not the frame’s ground ' + want + ' (queue 162)');
+        const img = w.getComputedStyle(sp).backgroundImage, rgb = want.replace(/[()]/g, '\\$&');
+        if (!new RegExp('linear-gradient\\(' + rgb + ', ' + rgb + '\\)').test(img)) throw new Error('in the ' + look + ' look the ground you see on #splash is ' + img + ', not a ' + want + ' image layer (queue 920)');
+        const cv = sp.querySelector('#splash-stage canvas');
+        if (!cv) throw new Error('in the ' + look + ' look the splash shows no canvas');
+        const cs = w.getComputedStyle(cv), box = cv.getBoundingClientRect();
+        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity !== '1' || !(box.width > 0 && box.height > 0)) throw new Error('in the ' + look + ' look a stylesheet hides the take (display ' + cs.display + ', visibility ' + cs.visibility + ', opacity ' + cs.opacity + ', ' + Math.round(box.width) + 'x' + Math.round(box.height) + ')');
         if (w.getComputedStyle(sp).opacity !== '1') throw new Error('in the ' + look + ' look the splash is at opacity ' + w.getComputedStyle(sp).opacity + ' before its dissolve');
         for (let i = 0; i < 240 && !w.__ramp; i++) await sleep(50);
         const end = w.__ramp || null;
         if (look === 'light') {
           if (!end) throw new Error('in the light look the splash never handed over within 12 s');
-          if (!end.n) throw new Error('in the light look no background-color transition ran on #splash or <html> as the cut began — the status strip stays dark over the light Home, then snaps (queue 920)');
+          if (!end.n) throw new Error('in the light look no background-color transition ran on #splash or <html> as the cut began (queue 920)');
           if (end.sp !== LIGHT || end.root !== LIGHT) throw new Error('in the light look, at the end of the dissolve, #splash’s colour is ' + end.sp + ' and the canvas is ' + end.root + ', not the light Home’s ' + LIGHT);
         } else {
-          if (!end) throw new Error('CONTROL: in the dark look the splash never handed over within 12 s, so the light reading above has nothing to compare with');
-          if (end.n || end.sp !== GROUND || end.root !== GROUND) throw new Error('CONTROL: in the dark look, at the end of the dissolve, #splash’s colour is ' + end.sp + ' and the canvas is ' + end.root + ' (' + end.n + ' background-color transition(s)) — the light hand-over leaked into the dark look');
+          if (!end) throw new Error('CONTROL: in the dark look the splash never handed over within 12 s');
+          if (end.n || end.sp !== COAL1231 || end.root !== COAL1231) throw new Error('CONTROL: in the dark look, at the end of the dissolve, #splash’s colour is ' + end.sp + ' and the canvas is ' + end.root + ' (' + end.n + ' background-color transition(s)), not the matte’s black ' + COAL1231);
         }
       } finally {
         run.restore();
@@ -191191,142 +191212,134 @@
     }
   });
 
-  /* ═══ #1223 — THE INTRO FEELS HUMAN: take H2, Scrub ═══════════════════════════════════════════════════════════════════════
-     His words, 28 Oct: "THe intro u have on the app rn looks very Ai made, try making it feel more human". The PM's research named
-     the tells, and each has a line below: a near-black ground with one bright accent's glow, pulse rings, a tracked tagline, fade-and-rise
-     entrances, one curve on everything, too much for too long, and a centred layout in a font the app does not ship.
-     FAILS BEFORE THE FIX: #1180's Keyframes splash has every one: nC_w and nC_t glows, outline rings, EDITING, EVOLVED, #0b0b0d, a 5.5 s
-     timeline, a centred Sora name. */
-  test('1223 the splash has none of the seven tells: no glow, no rings, no tagline, no fade-up, a true black ground, a left-aligned name in the font the app shows, and it is over in about two seconds', { item: '1223' }, async function () {
-    const html = await src1180(), fails = [];
-    const doc = new DOMParser().parseFromString(html, 'text/html'), svg = doc.querySelector('#splash svg#splash-mark');
-    if (!svg) throw new Error('#splash holds no logo at all');
-    if (svg.querySelector('radialGradient')) fails.push('a radial gradient is left: the glow');
-    if (svg.querySelector('circle')) fails.push('a circle is left: the glow flash');
-    if (svg.querySelector('polygon[fill="none"]')) fails.push('an outline polygon is left: the pulse ring');
-    if (svg.querySelector('[stroke]:not(rect)')) fails.push('something stroked is left');
-    if (svg.textContent.trim() !== 'FreeMotion') fails.push('the mark says ' + JSON.stringify(svg.textContent.trim()) + ', not only his name');
-    if (doc.getElementById('splash-skip')) fails.push('tap to skip is still written on the launch screen (a tap still skips)');
-    const name = svg.querySelector('#h2_name text');
-    if (!name) fails.push('the name has no text');
-    else {
-      if (name.getAttribute('text-anchor') && name.getAttribute('text-anchor') !== 'start') fails.push('the name is ' + name.getAttribute('text-anchor') + '-anchored, not left-aligned on the spine');
-      if (name.getAttribute('x') !== '35') fails.push('the name starts at x ' + name.getAttribute('x') + ', not on the F’s spine (21 + 14 = 35)');
-      if (/sora/i.test(name.getAttribute('font-family') || '')) fails.push('the name asks for Sora, which the app never loads');
+  /* 1231 (11) THE STAGE. The take was drawn for portrait phones. Proves: in a 380 x 800 window it fills the window; in a
+   * 1280 x 800 one it is the picker's own portrait stage, 369 x 800 (800 x 0.4617), centred; in a 1280 x 1000 one it stops at
+   * the picker's 900 px, 416 x 900, centred both ways; the canvas's backing store is the stage at min(dpr, 2); and the
+   * surround (#splash itself, outside the stage) is the frame's ground. Booted with the shipped stylesheets: #splash is a
+   * fixed full-screen box only through styles.css. */
+  test('1231 on a phone the take fills the screen, and on a wide window it plays on the picker’s portrait stage centred on its own ground', { item: '1231', budgetMs: 40000 }, async function () {
+    for (const [fw, fh, sw, sh] of [[380, 800, 380, 800], [1280, 800, 369, 800], [1280, 1000, 416, 900]]) {
+      const run = await boot1180({ size: [fw, fh], css: true });
+      try {
+        const d = run.d, w = run.w, sp = d.getElementById('splash'), st = d.getElementById('splash-stage');
+        if (!sp || !st) throw new Error('the booted splash block has no stage');
+        if (w.innerWidth !== fw) throw new Error('setup: the frame is ' + w.innerWidth + ' wide, not ' + fw);
+        const r = st.getBoundingClientRect(), at = fw + '×' + fh + ': ';
+        if (Math.abs(r.width - sw) > 0.5 || Math.abs(r.height - sh) > 0.5) throw new Error(at + 'the stage is ' + r.width + '×' + r.height + ', want ' + sw + '×' + sh);
+        if (Math.abs(r.left - (fw - sw) / 2) > 1 || Math.abs(r.top - (fh - sh) / 2) > 1) throw new Error(at + 'the stage sits at ' + r.left + ',' + r.top + ', not centred');
+        const dpr = Math.min(w.devicePixelRatio || 1, 2), cv = st.querySelector('canvas');
+        if (!cv || cv.width !== Math.round(sw * dpr) || cv.height !== Math.round(sh * dpr)) throw new Error(at + 'the canvas is ' + (cv ? cv.width + '×' + cv.height : 'missing') + ', want ' + Math.round(sw * dpr) + '×' + Math.round(sh * dpr) + ' at dpr ' + dpr);
+        const want = sp.classList.contains('splash-dark') ? COAL1231 : BONE1231;
+        if (w.getComputedStyle(sp).backgroundColor !== want) throw new Error(at + 'the surround is ' + w.getComputedStyle(sp).backgroundColor + ', not the frame’s ground ' + want);
+      } finally {
+        run.restore();
+      }
     }
-    // every movement on one 1.6 s pass, with no scale and no rise: the only thing that moves is the playhead, and the reveal it causes
-    const anims = [].slice.call(svg.querySelectorAll('animate, animateTransform'));
-    anims.forEach(a => {
-      const what = a.parentNode.id + ' ' + a.getAttribute('attributeName');
-      if (a.getAttribute('dur') !== '1.6s') fails.push(what + ' runs for ' + a.getAttribute('dur'));
-      if (a.getAttribute('type') && a.getAttribute('type') !== 'translate') fails.push(what + ' is a ' + a.getAttribute('type'));
-    });
-    const moved = anims.map(a => a.parentNode.id).sort().join(' ');
-    if (moved !== 'h2_head h2_move h2_name h2_reveal') fails.push('what animates is ' + moved + ', not the playhead (cut in, moved), the reveal and the name’s cut');
-    // the head and the name CUT in: discrete, never a fade
-    [['h2_head', 'the playhead'], ['h2_name', 'the name']].forEach(([id, say]) => {
-      const a = svg.querySelector('#' + id + ' > animate');
-      if (!a || a.getAttribute('calcMode') !== 'discrete') fails.push(say + ' does not cut in (calcMode ' + (a && a.getAttribute('calcMode')) + '): that is a fade-up');
-    });
-    const css = doc.getElementById('splash-css'), rules = css ? css.textContent : '';
-    if (/#0b0b0d/i.test(html.slice(html.indexOf('<body>'), html.indexOf('<div id="app">')).replace(/<!--[\s\S]*?-->/g, ''))) fails.push('the near-black #0b0b0d is still in the splash');
-    if (!/#splash\.splash-kf \{ background-color: #000; background-image: linear-gradient\(#000, #000\)/.test(rules)) fails.push('the ground is not true black in both layers');
-    if (/\.9s/.test(rules)) fails.push('a .9s dissolve is left in the splash’s rules');
-    /* Old WebKit (iOS before 16.4) holds a discrete value until the last key is 1: the playhead would stay hidden until 1.6 s. */
-    anims.forEach(a => {
-      const what = a.parentNode.id + ' ' + a.getAttribute('attributeName'), kt = (a.getAttribute('keyTimes') || '').split(';'), vals = (a.getAttribute('values') || '').split(';');
-      if (kt.length !== vals.length) fails.push(what + ' has ' + kt.length + ' keyTimes for ' + vals.length + ' values');
-      if (+kt[kt.length - 1] !== 1) fails.push(what + ' does not end on keyTime 1 (it ends on ' + kt[kt.length - 1] + ')');
-    });
-    /* The lockup and the grade: the name stands on the F's spine only if the logo sits at 21 across, and the clips wear his grade. */
-    const clip1 = svg.querySelector('#h2_clip1');
-    if (clip1 && clip1.parentNode.parentNode.getAttribute('transform') !== 'translate(21 30)') fails.push('the logo sits at ' + clip1.parentNode.parentNode.getAttribute('transform') + ', not translate(21 30), so the name is off the spine');
-    ['h2_clip1', 'h2_clip2', 'h2_clip3'].forEach(id => { const c = svg.querySelector('#' + id); if (!c || c.getAttribute('fill') !== 'url(#h2_g)') fails.push('#' + id + ' does not wear the logo’s grade'); });
-    const stops = [].slice.call(svg.querySelectorAll('#h2_g stop')).map(s => s.getAttribute('stop-color')).join(' ');
-    if (stops !== '#f5f5f7 #3a3a3f') fails.push('the grade runs ' + stops + ', not his light-from-above #f5f5f7 to #3a3a3f');
-    /* An installed Android or desktop app launches on the manifest's colour, so it is the same black. */
-    const man = await (await fetch('manifest.json?t1223=' + Date.now(), { cache: 'no-store' })).json();
-    if (man.background_color !== '#000000') fails.push('the manifest launches on ' + man.background_color + ', then steps to the splash’s #000');
-    const m = html.match(/var END_S = ([\d.]+), HOLD_S = ([\d.]+),/);
-    if (!m || +m[1] !== END_S1180 || +m[2] !== HOLD_S1180) fails.push('the script’s END_S and HOLD_S are ' + (m ? m[1] + ' and ' + m[2] : 'missing') + ', not ' + END_S1180 + ' and ' + HOLD_S1180);
-    if (fails.length) throw new Error(fails.join(' · '));
   });
 
-  /* The gesture itself, the clock driven by hand in a probe frame. Proves, with the numbers the board drew: nothing shows at first; the playhead
-     cuts in at the clips' start at 0.15 s and holds; at every moment of the sweep the clips end exactly at the playhead (it causes the reveal);
-     it overshoots to 30 past its frame at 0.98 s, then rocks back with each swing shorter (-12, 8, -3) and stops on its frame at 1.50 s; and
-     the name cuts in on that frame, not before.
-     FAILS BEFORE THE FIX: there is no #h2_reveal, the clips grow from their keys and a playhead falls from above. */
-  test('1223 the playhead does it all: it cuts in, its sweep reveals the clips at its own edge, it rocks back like a hand on tape with each swing shorter, and the name cuts in on the frame it stops on', { item: '1223', budgetMs: 20000 }, async function () {
-    const html = await src1180(), doc = new DOMParser().parseFromString(html, 'text/html'), svg0 = doc.querySelector('#splash svg#splash-mark');
-    if (!svg0) throw new Error('#splash holds no logo');
-    const f = document.createElement('iframe');
-    f.style.cssText = 'position:fixed;left:0;top:0;width:380px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
-    const done = new Promise(function (res) { f.onload = res; });
-    f.srcdoc = '<!doctype html><html><body style="margin:0;background:#000">' + svg0.outerHTML + '</body></html>';
-    document.body.appendChild(f);
+  /* 1231 (12) THE SPLASH GIVES BACK ITS CANVAS MEMORY. iPhones cap canvas memory and free it late; the picker emptied every
+   * canvas a take made before the next one. Proves: the take makes its sheets (more than ten canvases, the control), and once the
+   * splash has gone every one of them has been emptied to 0 x 0. */
+  test('1231 when the splash goes it empties every canvas the take made', { item: '1231', budgetMs: 30000 }, async function () {
+    const run = await boot1180({ pre: '(function () { var ce = document.createElement.bind(document); window.__cv = []; document.createElement = function (t, o) { var e = ce(t, o); if (String(t).toLowerCase() === \'canvas\') window.__cv.push(e); return e; }; })();' });
     try {
-      await Promise.race([done, sleep(4000)]);
-      const d = f.contentDocument, svg = d.getElementById('splash-mark'), fails = [];
-      const reveal = d.getElementById('h2_reveal'), move = d.getElementById('h2_move'), head = d.getElementById('h2_head'), name = d.getElementById('h2_name');
-      if (!svg || !reveal || !move || !head || !name) throw new Error('the mark has no reveal, playhead or name to drive');
-      /* The reveal only causes anything if the clips are cut by it: its width animates whether or not anything uses it. */
-      const clip1 = d.getElementById('h2_clip1'), cut = reveal.parentNode, line = move.querySelector('rect[fill="#29d9bb"]');
-      if (!clip1 || !line) throw new Error('the mark has no first clip or teal line to read');
-      if (cut.localName !== 'clipPath' || clip1.parentNode.getAttribute('clip-path') !== 'url(#' + cut.id + ')') throw new Error('the clips are not cut by the reveal: their group has clip-path ' + clip1.parentNode.getAttribute('clip-path') + ', the reveal sits in #' + cut.id);
-      const lineX = line.x.baseVal.value + line.width.baseVal.value / 2;
-      const hit = (x, y) => { const k = clip1.getScreenCTM(); return d.elementFromPoint(k.a * x + k.c * y + k.e, k.b * x + k.d * y + k.f); };
-      /* cubic-bezier(.77,0,.175,1) at progress p, by bisection: the board's ease, worked out here and not read off the markup */
-      const ease = p => { const b = (a, c, s) => 3 * (1 - s) * (1 - s) * s * a + 3 * (1 - s) * s * s * c + s * s * s; let lo = 0, hi = 1, s = 0.5; for (let i = 0; i < 40; i++) { s = (lo + hi) / 2; if (b(0.77, 0.175, s) < p) lo = s; else hi = s; } return b(0, 1, s); };
-      svg.pauseAnimations();
-      const at = async t => {
-        svg.setCurrentTime(t);
-        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-        return { w: reveal.width.animVal.value, x: move.transform.animVal.getItem(0).matrix.e, head: f.contentWindow.getComputedStyle(head).opacity, name: f.contentWindow.getComputedStyle(name).opacity };
-      };
-      const first = await at(0.05);
-      if (first.head !== '0' || first.w !== 0 || first.name !== '0') fails.push('at 0.05 s something already shows: playhead ' + first.head + ', reveal ' + first.w + ', name ' + first.name);
-      if ((await at(0.14)).head !== '0') fails.push('the playhead is already showing at 0.14 s: it cuts in at 0.15 s');
-      if ((await at(0.16)).head !== '1') fails.push('the playhead has not cut in by 0.16 s');
-      const parked = await at(0.39);
-      if (parked.head !== '1') fails.push('the playhead has not cut in by 0.39 s');
-      if (Math.abs(parked.x + 68) > 0.05 || parked.w !== 0) fails.push('at 0.39 s the playhead should still wait at the clips’ start with nothing revealed (the beat before the sweep): it is at ' + parked.x + ', the reveal ' + parked.w);
-      if (hit(60, 31) === clip1) fails.push('with nothing revealed the first clip is already there to hit: the clip path is not cutting it');
-      const swept = await at(0.6), wantX = -68 + 98 * ease((0.6 - 0.4) / 0.58);
-      if (Math.abs(swept.x - wantX) > 0.3) fails.push('at 0.6 s the playhead is ' + swept.x.toFixed(2) + ' off its frame, where the board’s ease puts it at ' + wantX.toFixed(2));
-      /* the line's centre is x 82 + the move, the clips start at 14 and the reveal is width wide: the two are one edge, to the sub-pixel */
-      for (const t of [0.5, 0.6, 0.7, 0.8, 0.9]) {
-        const s = await at(t);
-        if (Math.abs((14 + s.w) - (lineX + s.x)) > 0.05) fails.push('at ' + t + ' s the clips end at ' + (14 + s.w).toFixed(2) + ' and the playhead is at ' + (lineX + s.x).toFixed(2) + ': it is not the playhead that shows them');
-        const edge = 14 + s.w;
-        if (edge > 26 && edge < 100) {
-          if (hit(edge - 6, 31) !== clip1) fails.push('at ' + t + ' s the first clip is not there just behind the playhead (x ' + (edge - 6).toFixed(1) + ')');
-          if (hit(edge + 6, 31) === clip1) fails.push('at ' + t + ' s the first clip already shows just ahead of the playhead (x ' + (edge + 6).toFixed(1) + ')');
-        }
-      }
-      let last = Infinity;
-      for (const [t, want] of [[0.98, 30], [1.16, -12], [1.3, 8], [1.41, -3]]) {
-        const s = await at(t);
-        if (Math.abs(s.x - want) > 0.2) fails.push('at ' + t + ' s the playhead is ' + s.x.toFixed(2) + ' off its frame, not ' + want);
-        if (!(Math.abs(s.x) < last)) fails.push('the swing at ' + t + ' s is no shorter than the one before');
-        last = Math.abs(s.x);
-        if (s.name !== '0') fails.push('the name is already showing at ' + t + ' s, before the playhead stops');
-      }
-      const before = await at(1.49);
-      if (before.name !== '0') fails.push('the name shows at 1.49 s, before the frame the playhead stops on');
-      const landed = await at(1.51);
-      if (Math.abs(landed.x) > 0.05) fails.push('at 1.51 s the playhead is ' + landed.x.toFixed(2) + ' off its frame');
-      if (landed.name !== '1') fails.push('the name has not cut in on the frame the playhead stops on');
-      if (hit(60, 31) !== clip1) fails.push('CONTROL: on the finished frame the first clip is not there to hit, so the misses above prove nothing');
-      if (fails.length) throw new Error(fails.join(' · '));
+      const d = run.d, w = run.w;
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the take’s sheets are never made here');
+      const n = (w.__cv || []).length;
+      if (n <= 10) throw new Error('setup: the take made ' + n + ' canvases, so its sheets were not made and this proves nothing');
+      if ((w.__cv || []).every(c => c.width === 0)) throw new Error('CONTROL: the canvases are already empty while the splash is up');
+      for (let i = 0; i < 200 && d.getElementById('splash'); i++) await sleep(50);
+      if (d.getElementById('splash')) throw new Error('setup: the splash never went within 10 s');
+      const kept = w.__cv.filter(c => c.width || c.height);
+      if (kept.length) throw new Error(kept.length + ' of the take’s ' + n + ' canvases still hold their pixels after the splash went (' + kept.slice(0, 4).map(c => c.width + 'x' + c.height).join(', ') + '): on an iPhone that memory is not given back');
     } finally {
-      try { f.remove(); } catch (e) {}
+      run.restore();
     }
   });
 
-  /* The hand-over is a cut: .28 s through the shipped styles, gone about 320 ms after it starts. A spent splash at opacity 0 still sits over Home and
-     eats taps, so the removal is measured from the dismiss.
-     FAILS BEFORE THE FIX: the natural end took .9 s and stayed up for 1 s. */
+  /* 1231 (13) THE LABELS ARE OUTLINES. Proves: making the take asks no canvas for Courier Prime (every font set on a canvas
+   * context while it is made is recorded), and every character it prints (the seven labels, the timecodes, the ruler's
+   * numbers) draws ink from the outlines; a character with no outline (a lower-case x) draws none, the control. */
+  test('1231 the take’s labels are drawn outlines: making it asks no canvas for a web font, and every character it prints has one', { item: '1231', budgetMs: 30000 }, async function () {
+    const T = window.FM_TAKE;
+    if (!T) throw new Error('index.html defined no FM_TAKE');
+    const P = CanvasRenderingContext2D.prototype, desc = Object.getOwnPropertyDescriptor(P, 'font'), fonts = new Set();
+    Object.defineProperty(P, 'font', { configurable: true, get: desc.get, set: function (v) { fonts.add(String(v)); return desc.set.call(this, v); } });
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-5000px;top:0;width:390px;height:844px;overflow:hidden';
+    document.body.appendChild(host);
+    try {
+      T.make(host, T.makeKit(host, 390, 844, 1));
+    } finally {
+      Object.defineProperty(P, 'font', desc);
+      host.remove();
+      try { T.free(); } catch (e) {}
+    }
+    const asked = Array.from(fonts).filter(f => /courier/i.test(f));
+    if (asked.length) throw new Error('making the take asked a canvas for ' + asked.join(' | ') + ': a web font the app does not load at launch');
+    if (!Array.from(fonts).some(f => /600 [\d.]+px/.test(f))) throw new Error('CONTROL: no font was recorded while the take was made (the wordmark sets one), so the spy saw nothing');
+    const ink = s => { const c = document.createElement('canvas'); c.width = 40; c.height = 40; const x = c.getContext('2d'); x.fillStyle = '#000'; T.mono.fill(x, s, 24, 4, 20, 'middle'); const d = x.getImageData(0, 0, 40, 40).data; let n = 0; for (let i = 3; i < d.length; i += 4) n += d[i] > 64 ? 1 : 0; return n; };
+    const chars = Array.from(new Set(('COLOURCLIP01AUDIO2PLAYHEADMASK1SHAPEMATTE:' + '0123456789').split('')));
+    const none = chars.filter(ch => ink(ch) < 8);
+    if (none.length) throw new Error('these characters the take prints have no outline, so they draw nothing: ' + none.join(' '));
+    if (ink('x') !== 0) throw new Error('CONTROL: a lower-case x, which the take never prints, drew ink, so the reading above proves nothing');
+  });
+
+  /* 1231 (15) WHAT THE TAKE COSTS (measured, printed every run; the ceilings only catch a disaster). make() paints the five
+   * sheets and the matte once before the first frame, on a cold launch while the app loads; a frame paints up to eight
+   * shutter passes. At 390 x 844 and dpr 2, on this machine: make() and the frames at six moments (each mode of the shutter),
+   * flushed with a one-pixel read, then the take played for real on animation frames (window.__fmDump.cost1231 for --dump).
+   * MEASURED 6 Nov on the laptop: headless Chrome (software raster) make() 43 ms, flushed frames 4 to 157 ms (the eight-pass
+   * shutter at 2.0 s the dearest); the same in the GPU Chrome of the app's browser pane, make() 24 to 33 ms and frames 23 to
+   * 35 ms. Fails only on a disaster: make() over 1.5 s or a flushed frame over 1 s here. His iPhone is measured by
+   * tests/probe-1180-firstpaint.html (its make and maxGap columns). */
+  test('1231 what the take costs: make() and a frame of each shutter mode at 390×844, dpr 2, printed every run', { item: '1231', budgetMs: 60000 }, async function () {
+    const T = window.FM_TAKE;
+    if (!T) throw new Error('index.html defined no FM_TAKE');
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-5000px;top:0;width:390px;height:844px;overflow:hidden';
+    document.body.appendChild(host);
+    try {
+      const t0 = performance.now();
+      const seek = T.make(host, T.makeKit(host, 390, 844, 2));
+      const make = performance.now() - t0, cv = host.querySelector('canvas'), out = [];
+      let worst = 0;
+      for (const t of [0.2, 0.8, 1.3, 2.0, 2.3, 2.92]) {
+        const ms = [];
+        for (let i = 0; i < 5; i++) { const a = performance.now(); seek(t + i * 0.004); cv.getContext('2d').getImageData(0, 0, 1, 1); ms.push(performance.now() - a); }
+        ms.sort((p, q) => p - q);
+        out.push(t + ' s ' + ms[2].toFixed(1) + ' ms');
+        worst = Math.max(worst, ms[2]);
+      }
+      /* and the take played for real on animation frames, as the splash plays it: how many frames, and the gaps between them */
+      const gaps = [];
+      let n = 0, last = 0, s0 = 0, work = 0;
+      await new Promise(res => {
+        const f = now => {
+          if (!s0) { s0 = now; last = now; } else gaps.push(now - last);
+          last = now;
+          const t = (now - s0) / 1000, a = performance.now();
+          seek(Math.min(t, T.dur)); work += performance.now() - a; n++;
+          if (t < T.dur && n < 600) requestAnimationFrame(f); else res();
+        };
+        requestAnimationFrame(f);
+        setTimeout(res, 8000);
+      });
+      gaps.sort((p, q) => p - q);
+      const play = n + ' frames in ' + T.dur + ' s, gap median ' + (gaps[gaps.length >> 1] || 0).toFixed(1) + ' ms, p90 ' + (gaps[Math.floor(gaps.length * 0.9)] || 0).toFixed(1) + ', worst ' + (gaps[gaps.length - 1] || 0).toFixed(1) + ', script ' + (work / Math.max(1, n)).toFixed(1) + ' ms a frame';
+      const line = '1231 cost at 390x844 dpr 2: make() ' + make.toFixed(0) + ' ms; a frame (median of 5, flushed): ' + out.join(' · ') + '; played: ' + play;
+      console.log(line);
+      try { window.__fmDump = { cost1231: line }; window.top.__fmDump = { cost1231: line }; } catch (e) {}
+      if (make > 1500) throw new Error('make() took ' + Math.round(make) + ' ms before the first frame');
+      if (worst > 1000) throw new Error('a frame took ' + Math.round(worst) + ' ms: ' + out.join(' · '));
+    } finally {
+      host.remove();
+      try { T.free(); } catch (e) {}
+    }
+  });
+
+  /* The hand-over is a cut: .28 s through the shipped styles, gone about 320 ms after it starts. A spent splash at opacity 0
+     still sits over Home and eats taps, so the removal is measured from the dismiss. */
   test('1223 the splash cuts to the app in .28 s on its natural end, and is gone within a moment of it', { item: '1223', budgetMs: 20000 }, async function () {
     const run = await boot1180({ css: true });
     try {
@@ -191348,17 +191361,16 @@
     }
   });
 
-  /* The label came off on the promise that a tap still skips, so the promise is tested: a tap (no click reaches what is under it) and the keys.
-     FAILS IF the listeners go: nothing else in the suite presses the splash. */
-  test('1223 a tap or a key during the animation cuts straight to the app, and the tap does not reach what is under it', { item: '1223', budgetMs: 40000 }, async function () {
+  /* A tap still skips: a tap (no click reaches what is under it) and the keys, while the take is playing. */
+  test('1231 a tap or a key while the take plays cuts straight to the app, and the tap does not reach what is under it', { item: '1231', budgetMs: 40000 }, async function () {
     for (const how of ['tap', 'Escape', 'Enter', ' ']) {
       const run = await boot1180({});
       try {
-        const d = run.d, w = run.w, sp = d.getElementById('splash'), svg = d.getElementById('splash-mark');
-        if (!sp || !svg) throw new Error('the booted splash block has no mark');
+        const d = run.d, w = run.w, sp = d.getElementById('splash');
+        if (!sp || !w.FM_SPLASH) throw new Error('the booted splash block has no take');
         if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here');
-        for (let i = 0; i < 150 && !(svg.getCurrentTime() > 0.05); i++) await sleep(20);
-        if (!(svg.getCurrentTime() > 0.05)) throw new Error('setup: the mark’s clock never started');
+        for (let i = 0; i < 150 && !(w.FM_SPLASH.shown() > 0.05); i++) await sleep(20);
+        if (!(w.FM_SPLASH.shown() > 0.05)) throw new Error('setup: the take’s clock never started');
         if (w.__rec.length) throw new Error('setup: the splash had already handed over before the ' + how);
         if (how === 'tap') {
           const ev = new w.PointerEvent('pointerdown', { bubbles: true, cancelable: true });
@@ -191367,6 +191379,9 @@
         } else d.dispatchEvent(new w.KeyboardEvent('keydown', { key: how, bubbles: true }));
         if (w.__rec.length !== 1 || !w.__rec[0].quick) throw new Error(JSON.stringify(how) + ' did not cut the splash at once (' + JSON.stringify(w.__rec.map(r => r.quick)) + ')');
         if (!sp.classList.contains('splash-cut')) throw new Error(JSON.stringify(how) + ' did not mark the splash as cut');
+        const at = w.FM_SPLASH.shown();
+        await sleep(120);
+        if (w.FM_SPLASH.shown() !== at) throw new Error(JSON.stringify(how) + ' cut the splash but the take kept playing under the dissolve (' + at + ' → ' + w.FM_SPLASH.shown() + ' s)');
         for (let i = 0; i < 100 && d.getElementById('splash'); i++) await sleep(20);
         if (d.getElementById('splash')) throw new Error('#splash is still in the page 2 s after ' + JSON.stringify(how));
       } finally {
@@ -191375,78 +191390,161 @@
     }
   });
 
-  /* The two last guards against a stuck black screen, and the clock that stops counting. A stubbed clock and the frame's own timers: no waiting 13 s.
-     FAILS IF the ceiling is deleted or put back to 15 s, or the cap is. */
-  test('1223 nothing can leave him on black: the 13.3 s ceiling is armed and ends it, a clock that never arrives is cut by the cap, and one that stops at the end of the animation still hands over', { item: '1223', budgetMs: 40000 }, async function () {
+  /* The last guards against being left on a blank ground, and a clock that stops. A stubbed clock and the frame's own timers.
+     Proves: the ceiling is armed once at 11.2 s + the take + its hold, rounded up (14.9 s), and firing it ends the splash at
+     once; a clock that runs and then sticks at 0.5 s is cut by the cap (quick) no sooner than the take and its hold would
+     take; a clock that stops exactly on the end frame still hands over naturally. */
+  test('1231 nothing can leave him on a blank ground: the 14.9 s ceiling is armed and ends it, a clock that sticks is cut by the cap, and one that stops on the end frame still hands over', { item: '1231', budgetMs: 40000 }, async function () {
     const run = await boot1180({ timers: true });
     try {
       const w = run.w;
       if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here');
-      const ceil = w.__timers.filter(x => x.ms === 13300);
-      if (ceil.length !== 1) throw new Error('the splash arms ' + ceil.length + ' 13.3 s ceilings (timers armed: ' + w.__timers.map(x => x.ms).join(', ') + ')');
+      const ceil = w.__timers.filter(x => x.ms === 14900);
+      if (ceil.length !== 1) throw new Error('the splash arms ' + ceil.length + ' 14.9 s ceilings (timers armed: ' + w.__timers.map(x => x.ms).join(', ') + ')');
       if (w.__rec.length) throw new Error('setup: the splash had already handed over');
       ceil[0].fn();
       if (w.__rec.length !== 1 || !w.__rec[0].quick) throw new Error('firing the ceiling did not end the splash at once');
     } finally {
       run.restore();
     }
-    const slow = await boot1180({ pre: 'SVGSVGElement.prototype.getCurrentTime = function () { return 0.5; };' });
+    const stick = '(function () { var a = null; window.__fmSplashClock = function () { var n = performance.now(); if (a === null) { a = n; return 0; } return Math.min(n - a, 500); }; })();';
+    const slow = await boot1180({ pre: stick });
     try {
       const w = slow.w;
-      for (let i = 0; i < 280 && !w.__rec.length; i++) await sleep(25);
-      if (!w.__rec.length) throw new Error('a clock stuck at 0.5 s was not cut within 7 s: the cap is gone');
-      if (!w.__rec[0].quick) throw new Error('a clock stuck at 0.5 s handed over as if the mark had finished');
-      if (w.__rec[0].t < 2500) throw new Error('the cap cut a slow clock after ' + Math.round(w.__rec[0].t) + ' ms: it allows about 2.9 s');
+      for (let i = 0; i < 320 && !w.__rec.length; i++) await sleep(25);
+      if (!w.__rec.length) throw new Error('a clock stuck at 0.5 s was not cut within 8 s: the cap is gone');
+      if (!w.__rec[0].quick) throw new Error('a clock stuck at 0.5 s handed over as if the take had finished');
+      const s = w.__rec[0].snap, since = w.__rec[0].t - s.startedAt;
+      if (s.clock > 0.51) throw new Error('setup: the stuck clock let the take reach ' + s.clock + ' s');
+      if (since < (END_S1231 + HOLD_S1231) * 1000) throw new Error('the cap cut a slow clock ' + Math.round(since) + ' ms after the take started: it allows ' + Math.round((END_S1231 + HOLD_S1231) * 1000 + 800) + ' ms');
     } finally {
       slow.restore();
     }
-    const stops = await boot1180({ pre: '(function () { var g = SVGSVGElement.prototype.getCurrentTime; SVGSVGElement.prototype.getCurrentTime = function () { return Math.min(g.call(this), 1.6); }; })();' });
+    const stopAt = '(function () { var a = null; window.__fmSplashClock = function () { var n = performance.now(); if (a === null) { a = n; return 0; } return Math.min(n - a, 2920); }; })();';
+    const stops = await boot1180({ pre: stopAt });
     try {
       const w = stops.w;
-      for (let i = 0; i < 280 && !w.__rec.length; i++) await sleep(25);
-      if (!w.__rec.length) throw new Error('a clock that stops at the end of the animation left the splash up for 7 s');
-      if (w.__rec[0].quick) throw new Error('a clock that stops at the end of the animation was cut, not handed over');
+      for (let i = 0; i < 320 && !w.__rec.length; i++) await sleep(25);
+      if (!w.__rec.length) throw new Error('a clock that stops on the end frame left the splash up for 8 s');
+      if (w.__rec[0].quick) throw new Error('a clock that stops on the end frame was cut, not handed over');
     } finally {
       stops.restore();
     }
   });
 
-  /* The clock runs on through a stalled main thread, so reading only the clock let a stall spend the hold. The boot's heaviest work can land just after the load.
-     FAILS BEFORE THE FIX: the first reading after the stall is past 2.1 s and hands over at once. */
-  test('1223 a stall during the animation does not eat the hold: he still gets the finished logo for 0.6 s', { item: '1223', budgetMs: 20000 }, async function () {
+  /* A stall must not spend the hold: a 2.3 s stall of the frame's thread while the take plays. The clock is wall time, so the
+     first frame after the stall is the end frame, and the 0.7 s hold is counted from THAT frame. */
+  test('1231 a stall while the take plays does not eat the hold: he still gets the finished logo for 0.7 s after it', { item: '1231', budgetMs: 20000 }, async function () {
     const run = await boot1180({});
     try {
-      const w = run.w, svg = run.d.getElementById('splash-mark');
+      const w = run.w;
       if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here');
-      for (let i = 0; i < 150 && !(svg.getCurrentTime() > 0.05); i++) await sleep(20);
-      if (!(svg.getCurrentTime() > 0.05)) throw new Error('setup: the mark’s clock never started');
+      for (let i = 0; i < 150 && !(w.FM_SPLASH.shown() > 0.05); i++) await sleep(20);
+      if (!(w.FM_SPLASH.shown() > 0.05)) throw new Error('setup: the take’s clock never started');
+      if (w.FM_SPLASH.ended()) throw new Error('setup: the take had already ended before the stall');
       const t0 = performance.now();
-      while (performance.now() - t0 < 2300) { /* the stall */ }
+      while (performance.now() - t0 < 3300) { /* the stall: longer than the take */ }
       const stallEnd = w.performance.now() - w.__t0;
-      await sleep(0);   // Blink's clock catches up in the next task, which is when the splash's own poll reads it too
-      const clock = svg.getCurrentTime();
-      if (!(clock > END_S1180 + HOLD_S1180)) throw new Error('CONTROL: the clock read ' + clock.toFixed(2) + ' s after the stall, so it did not run on through it and this proves nothing');
       for (let i = 0; i < 160 && !w.__rec.length; i++) await sleep(25);
       if (!w.__rec.length) throw new Error('the splash never handed over within 4 s of the stall');
-      if (w.__rec[0].quick) throw new Error('the stall made the cap cut a mark that had finished');
-      const after = w.__rec[0].t - stallEnd;
-      if (after < 500) throw new Error('the splash handed over ' + Math.round(after) + ' ms after the stall: he got the finished logo for that long, not ' + HOLD_S1180 + ' s');
+      if (w.__rec[0].quick) throw new Error('the stall made the cap cut a take that had finished');
+      const s = w.__rec[0].snap, after = w.__rec[0].t - stallEnd;
+      if (!(s.endedAt >= stallEnd - 5)) throw new Error('CONTROL: the end frame was drawn at ' + Math.round(s.endedAt) + ' ms, before the stall ended at ' + Math.round(stallEnd) + ' ms, so the stall did not land in the take and this proves nothing');
+      if (after < HOLD_S1231 * 1000 - 100) throw new Error('the splash handed over ' + Math.round(after) + ' ms after the stall: he got the finished logo for that long, not ' + HOLD_S1231 + ' s');
     } finally {
       run.restore();
     }
   });
 
-  /* The shorter mark can finish before the last project's clips are restored; Home opens only after that. So the finished logo waits for FM_LANDED, and the wait has a limit.
-     FAILS BEFORE THE FIX: it hands over at 2.1 s whatever the app is doing: the logo, then a half-booted editor, then Home. */
-  test('1223 the finished logo waits for the app under it to land, on the animated path and the still, and the wait has a limit', { item: '1223', budgetMs: 60000 }, async function () {
+  /* 1231 (16) A TAKE THAT CANNOT BE MADE (an iPhone short of canvas memory, a context that never comes): make() throws. Proves:
+     the splash shows the END FRAME as a still (FM_SPLASH.still() true, 2.92 s, black), and hands over NATURALLY, never a cut
+     with no logo drawn. CONTROL: the take's make really was replaced (it threw). */
+  test('1231 a take that cannot be made gives the finished logo as a still and hands over naturally', { item: '1231', budgetMs: 20000 }, async function () {
+    const breakIt = 'Object.defineProperty(window, \'FM_TAKE\', { configurable: true, get: function () { return this.__take1231; }, set: function (v) { v.make = function () { window.__threw1231 = true; throw new Error(\'no canvas\'); }; this.__take1231 = v; } });';
+    const run = await boot1180({ pre: breakIt });
+    try {
+      const d = run.d, w = run.w;
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so make() is never called here');
+      if (!w.__threw1231) throw new Error('setup: the take’s make() was not the broken one, so this proves nothing');
+      for (let i = 0; i < 80 && !(w.__rec && w.__rec.length); i++) await sleep(50);
+      const rec = w.__rec || [];
+      if (!rec.length) throw new Error('with a take that cannot be made nothing handed over within 4 s');
+      if (rec[0].quick || rec[0].snap.cut) throw new Error('with a take that cannot be made the splash was CUT at ' + Math.round(rec[0].t) + ' ms: he got no logo at all');
+      endFrame1231(rec[0].snap, 'with a take that cannot be made');
+      if (rec[0].snap.still !== true) throw new Error('with a take that cannot be made the hand-over did not come through the still');
+      for (let i = 0; i < 50 && d.getElementById('splash'); i++) await sleep(50);
+      if (d.getElementById('splash')) throw new Error('with a take that cannot be made the still never went');
+    } finally {
+      run.restore();
+    }
+  });
+
+  /* A GATE ON THE FRAME'S ANIMATION FRAMES, for the two stall tests below: while window.__gate1231 is true a requested frame is
+     held, and __open1231() lets every held one go. It stands in for the order WebKit may run things in after the main thread
+     was held: the overdue timer first, the animation frame after it (Chrome usually draws the frame first, so a real stall
+     here could not tell right from wrong; the first version of these tests survived both mutations because of it). */
+  const GATE1231 = '(function () { var raf = window.requestAnimationFrame.bind(window), q = []; window.__gate1231 = false; window.requestAnimationFrame = function (cb) { if (!window.__gate1231) return raf(cb); q.push(cb); return 0; }; window.__open1231 = function () { window.__gate1231 = false; var c = q; q = []; c.forEach(function (cb) { raf(cb); }); }; })();';
+
+  /* 1231 (17) NO FRAME COMES WHILE WALL TIME RUNS PAST THE CAP. Early in the take the frames stop (the gate shut) and 4.8 s go
+     by on the frame's timers: past END_S + HOLD_S + 0.8 s with no frame drawn since. Proves: the take still ends NATURALLY on
+     its end frame with its hold, because the watch reads the take's own clock, finds it past its end and draws the end frame
+     itself; never the cap's cut from the frame in the middle. */
+  test('1231 when frames stop while the take plays and the cap goes by, it still ends on the finished logo, not a cut from the middle', { item: '1231', budgetMs: 20000 }, async function () {
+    const run = await boot1180({ pre: GATE1231 });
+    try {
+      const w = run.w;
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here');
+      for (let i = 0; i < 150 && !(w.FM_SPLASH.shown() > 0.05); i++) await sleep(20);
+      if (!(w.FM_SPLASH.shown() > 0.05) || w.FM_SPLASH.ended()) throw new Error('setup: the take was not playing when the frames stopped');
+      w.__gate1231 = true;
+      await sleep(4800);
+      const frozenAt = w.FM_SPLASH.shown();
+      for (let i = 0; i < 80 && !w.__rec.length; i++) await sleep(25);
+      if (!w.__rec.length) throw new Error('the splash never handed over within 2 s of the cap');
+      const r = w.__rec[0];
+      if (r.quick || r.snap.cut) throw new Error('with no frame past the cap the splash was CUT with the take at ' + r.snap.clock + ' s: no finished logo, no hold');
+      endFrame1231(r.snap, 'with no frame past the cap');
+      if (r.t - r.snap.endedAt < HOLD_S1231 * 1000 - 100) throw new Error('with no frame past the cap the finished logo was held ' + Math.round(r.t - r.snap.endedAt) + ' ms, not ' + HOLD_S1231 + ' s');
+      if (!(frozenAt >= END_S1231)) throw new Error('the end frame was not drawn while the frames were held (the take showed ' + frozenAt + ' s), so the watch did not read the clock');
+    } finally {
+      try { run.w.__open1231(); } catch (e) {}
+      run.restore();
+    }
+  });
+
+  /* 1231 (18) A STALL STRAIGHT AFTER THE LOAD. The app's own load work can hold the thread for more than a second before the
+     take's first frame, and after it the overdue timer may run before that frame. A load listener added after the splash's
+     own holds the thread 1.5 s with the frames held, and lets them go 100 ms later (GATE1231). Proves: that is not read as a
+     page that is not painting: the take PLAYS (no still) and hands over naturally. */
+  test('1231 a stall straight after the load does not turn the take into a still: it plays and hands over naturally', { item: '1231', budgetMs: 20000 }, async function () {
+    const run = await boot1180({ pre: GATE1231 + 'window.__gate1231 = true;', after: '<script>window.addEventListener(\'load\', function () { var t = performance.now(); while (performance.now() - t < 1500) {} setTimeout(function () { window.__open1231(); }, 100); });<\/script>' });
+    try {
+      const w = run.w;
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here');
+      for (let i = 0; i < 200 && !w.__rec.length; i++) await sleep(25);
+      if (!w.__rec.length) throw new Error('the splash never handed over within 5 s');
+      const r = w.__rec[0];
+      if (r.snap.still) throw new Error('a 1.5 s stall straight after the load turned the take into the still: he never saw it play');
+      if (r.quick || r.snap.cut) throw new Error('a stall straight after the load ended in a cut');
+      endFrame1231(r.snap, 'after a stall straight after the load');
+      if (!(r.snap.startedAt >= w.__loadAt + 1400)) throw new Error('CONTROL: the take started at ' + Math.round(r.snap.startedAt) + ' ms, not after the 1.5 s stall that followed the load at ' + Math.round(w.__loadAt) + ' ms, so the stall did not land where it should and this proves nothing');
+    } finally {
+      try { run.w.__open1231(); } catch (e) {}
+      run.restore();
+    }
+  });
+
+  /* The take can finish before the last project's clips are restored; Home opens only after that. So the finished logo waits
+     for FM_LANDED, and the wait has a limit (LAND_S, 4.7 s from the take's first frame). */
+  test('1231 the finished logo waits for the app under it to land, on the animated path and the still, and the wait has a limit', { item: '1231', budgetMs: 60000 }, async function () {
     const FMSTUB = 'window.FM = {};';
     const held = await boot1180({ pre: FMSTUB });
     try {
-      const w = held.w, svg = held.d.getElementById('splash-mark');
+      const w = held.w;
       if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here');
-      for (let i = 0; i < 300 && !(svg.getCurrentTime() > END_S1180 + HOLD_S1180 + 0.5); i++) await sleep(20);
-      if (!(svg.getCurrentTime() > END_S1180 + HOLD_S1180 + 0.5)) throw new Error('setup: the clock never got past the hold');
-      if (w.__rec.length) throw new Error('the splash handed over at clock ' + (+w.__rec[0].snap.clock).toFixed(2) + ' s with the app still opening: he sees a half-booted editor');
+      for (let i = 0; i < 300 && !(w.FM_SPLASH.ended() && w.performance.now() - w.FM_SPLASH.ended() > HOLD_S1231 * 1000 + 300); i++) await sleep(20);
+      if (!w.FM_SPLASH.ended()) throw new Error('setup: the take never reached its end frame');
+      if (w.__rec.length) throw new Error('the splash handed over ' + Math.round(w.__rec[0].t - w.__rec[0].snap.endedAt) + ' ms after the end frame with the app still opening: he sees a half-booted editor');
       w.FM_LANDED = true;
       for (let i = 0; i < 40 && !w.__rec.length; i++) await sleep(25);
       if (!w.__rec.length) throw new Error('the app landed and the splash did not hand over within 1 s');
@@ -191460,7 +191558,8 @@
       for (let i = 0; i < 400 && !w.__rec.length; i++) await sleep(25);
       if (!w.__rec.length) throw new Error('with an app that never lands the splash was still up after 10 s: the wait has no limit');
       if (w.__rec[0].quick) throw new Error('the limit cut the splash instead of handing over');
-      if (!(+w.__rec[0].snap.clock >= 4.5)) throw new Error('the limit let go at clock ' + (+w.__rec[0].snap.clock).toFixed(2) + ' s, short of the 4.7 s the old mark covered');
+      const s = w.__rec[0].snap, waited = w.__rec[0].t - s.startedAt;
+      if (!(waited >= 4500)) throw new Error('the limit let go ' + Math.round(waited) + ' ms after the take started, short of LAND_S (4.7 s)');
     } finally {
       never.restore();
     }
@@ -191475,9 +191574,24 @@
     } finally {
       still.restore();
     }
+    /* the still that a page with no animation frame gets waits as well (the review of #1231: nothing tested its wait) */
+    const noFrame = await boot1180({ pre: FMSTUB + 'window.requestAnimationFrame = function () { return 0; };' });
+    try {
+      const w = noFrame.w;
+      for (let i = 0; i < 60 && typeof w.__loadAt !== 'number'; i++) await sleep(50);
+      await sleep(2600);
+      if (!w.FM_SPLASH || w.FM_SPLASH.still() !== true) throw new Error('setup: with no animation frame the splash is not on its still 2.6 s after the load');
+      if (w.__rec.length) throw new Error('the still that came from no animation frame handed over with the app still opening');
+      w.FM_LANDED = true;
+      for (let i = 0; i < 40 && !w.__rec.length; i++) await sleep(25);
+      if (!w.__rec.length) throw new Error('the app landed and that still did not hand over within 1 s');
+      if (w.__rec[0].quick) throw new Error('that still was cut, not handed over');
+    } finally {
+      noFrame.restore();
+    }
   });
 
-  /* The other half: the real app raises the flag, and an update does not reload the page before it. FAILS BEFORE THE FIX: nothing sets FM_LANDED, and the hold is only the intro. */
+  /* The other half: the real app raises the flag, and an update does not reload the page before it. */
   test('1223 the app says when it has landed, and an update waits for it', { item: '1223', budgetMs: 30000 }, async function () {
     for (let i = 0; i < 200 && window.FM_LANDED !== true; i++) await sleep(50);
     if (window.FM_LANDED !== true) throw new Error('the boot never set window.FM_LANDED, so the splash waits out its whole limit on every launch');
@@ -191493,8 +191607,7 @@
     }
   });
 
-  /* Home's entrance runs through the clearing black, so its start follows the black: 150 ms into a .9 s dissolve was about 95% up, and into a .28 s cut it is about 20%.
-     FAILS BEFORE THE FIX: 150, and the bars pop in with hardly any black left over them. */
+  /* Home's entrance runs through the clearing ground, so its start follows the cut: into a .28 s cut it starts 20 ms in. */
   test('1223 Home’s entrance starts 20 ms into the cut, while the black is still up', { item: '1223', budgetMs: 15000 }, async function () {
     const root = document.getElementById('home-screen');
     if (!root || !FM.home || !FM.home._armIntro) throw new Error('setup: no #home-screen, or no seam to arm the entrance');

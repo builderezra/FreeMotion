@@ -88,12 +88,14 @@ h2 { font: 600 13px/1.2 var(--body); letter-spacing: .06em; text-transform: uppe
 <script src="options/editor.js"></script>
 <script src="options/machines.js"></script>
 <script src="options/street.js"></script>
+<script src="options/pc.js"></script>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
   const opts = FMI.options;
   const HOLD = 0.7;
-  const RECOMMENDED = 'layers-stack';                          // the closest to his own words: the layers moving and building it
+  // 6 Nov: he picked 13 and named 14 his runner-up. The PC lane is 13 again, three ways, one recommended.
+  const TAGS = { 'layers-stack': 'Your pick', 'layers-zoomout': 'Runner-up', 'pc-lockup': 'Recommended' };
   const FONTS = ['Abril Fatface', 'Anton', 'Archivo Black', 'Bebas Neue', 'Courier Prime', 'Permanent Marker', 'Press Start 2P', 'Reenie Beanie', 'Rock Salt', 'Special Elite'];
   const fontsReady = Promise.all(FONTS.map((f) => document.fonts.load('40px "' + f + '"').catch(() => null)));
 
@@ -193,7 +195,7 @@ h2 { font: 600 13px/1.2 var(--body); letter-spacing: .06em; text-transform: uppe
   }
 
   // ---- The page he uses ----
-  $('lede').textContent = opts.length + ' different intros, none of them like the last. Tap one and it plays full screen, the way the app would open. Keep the ones you like, then tell me the numbers.';
+  $('lede').textContent = opts.filter((o) => !o.full).length + ' different intros. You picked 13, and 14 is your runner-up. The last three are 13 again, drawn three ways for a computer screen: open those on your PC with the window as big as you use the app, and tell me which one you want.';
   const groups = $('groups');
   let curLane = null, wrap = null;
   opts.forEach((o, i) => {
@@ -214,7 +216,7 @@ h2 { font: 600 13px/1.2 var(--body); letter-spacing: .06em; text-transform: uppe
     what.className = 'what'; what.type = 'button';
     const b = document.createElement('b'), s = document.createElement('span');
     b.textContent = o.name; s.textContent = o.blurb;
-    if (o.id === RECOMMENDED) { const r = document.createElement('em'); r.textContent = 'Recommended'; b.append(' ', r); }
+    if (TAGS[o.id]) { const r = document.createElement('em'); r.textContent = TAGS[o.id]; b.append(' ', r); }
     if (o.id === 'type-slam') s.textContent += ' It flashes bright colours fast.';
     what.append(b, s);
     what.onclick = () => play(i);
@@ -241,8 +243,9 @@ h2 { font: 600 13px/1.2 var(--body); letter-spacing: .06em; text-transform: uppe
     refresh();
   }
   let cur = -1, raf = 0, seek = null, start = 0, ended = false;
-  function size() {
+  function size(o) {
     const W = innerWidth, H = innerHeight;
+    if (o && o.full) return [W, H];                                // the PC takes fill the window, as the app's launch would
     if (W > 620) { const h = Math.min(H, 900), w = Math.round(h * 0.4617); return [w, h]; }
     return [W, H];
   }
@@ -254,7 +257,7 @@ h2 { font: 600 13px/1.2 var(--body); letter-spacing: .06em; text-transform: uppe
     document.body.style.overflow = 'hidden';
     $('player').hidden = false;
     $('bar').hidden = true;
-    const [w, h] = size(), st = $('stage');
+    const [w, h] = size(opts[i]), st = $('stage');
     st.style.width = w + 'px'; st.style.height = h + 'px';
     $('barno').textContent = i + 1;
     $('barname').textContent = opts[i].name;

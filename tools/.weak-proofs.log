@@ -245,3 +245,6 @@
 2026-11-06 03:47	WEAK	1086 a real export with one good clip and one with no file hands the card the missing clip by name	the export did not hand the card the clip it lost: undefined
 2026-11-06 05:02	WEAK	1086 a real export with one good clip and one with no file hands the card the missing clip by name	the export did not hand the card the clip it lost: undefined
 2026-11-06 07:46	RESOLVED	1086 a real export with one good clip and one with no file hands the card the missing clip by name	mutation 6 Nov (seam kept): js/exporter.js — the export's audioMissing list emptied before it reaches the card; the test then fails as "the export did not hand the card the clip it lost: []". The two WEAK lines above were the seam reading undefined on the trees before v18.21.
+2026-11-06 14:53	WEAK	1231 a stall while the take plays does not eat the hold: he still gets the finished logo for 0.7 s after it	Cannot read properties of undefined (reading 'shown')
+2026-11-06 14:53	WEAK	1231 when frames stop while the take plays and the cap goes by, it still ends on the finished logo, not a cut from the middle	Cannot read properties of undefined (reading 'shown')
+2026-11-06 14:53	WEAK	1231 the finished logo waits for the app under it to land, on the animated path and the still, and the wait has a limit	Cannot read properties of undefined (reading 'ended')

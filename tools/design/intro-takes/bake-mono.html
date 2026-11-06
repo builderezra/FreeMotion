@@ -1,0 +1,74 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Bake the take's label letters</title>
+<!-- #1231: take 13 prints its labels (COLOUR, CLIP 01, the timecodes, the ruler) in Courier Prime Bold, which the app does not
+     load at launch. This page bakes the characters it prints into outlines (index.html's MONO, in splash-take) and checks
+     them against the web font drawn by fillText the way the take drew it, at the take's own texture scale. It needs the
+     network (Google Fonts for the comparison, the font file and opentype.js for the outlines), so it is a tool, never part of
+     the app. Open it from a local server; window.__bake holds the result. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/opentype.js/1.3.4/opentype.min.js"></script>
+<style>body { font: 13px system-ui, sans-serif; margin: 16px; } canvas { image-rendering: pixelated; border: 1px solid #999; margin: 2px; } pre { white-space: pre-wrap; word-break: break-all; }</style>
+<div id="out">baking…</div>
+<script>
+(async function () {
+  const FONT_URL = 'https://raw.githubusercontent.com/google/fonts/main/ofl/courierprime/CourierPrime-Bold.ttf';
+  const LABELS = ['COLOUR', 'CLIP 01', 'AUDIO 2', 'PLAYHEAD', 'MASK 1', 'SHAPE', 'MATTE'];
+  const TIMES = []; for (let i = 0; i < 12; i++) TIMES.push('00:04:' + String(11 + i) + ':' + String(3 + i * 7));
+  const RULER = []; for (let i = 0; i < 12; i++) RULER.push(String(i * 12));
+  const CHARS = Array.from(new Set((LABELS.join('') + TIMES.join('') + RULER.join('')).split(''))).filter((c) => c !== ' ').sort().join('');
+  const out = document.getElementById('out');
+  const res = { chars: CHARS };
+  try {
+    const buf = await (await fetch(FONT_URL)).arrayBuffer();
+    const font = opentype.parse(buf);
+    const em = font.unitsPerEm, hh = font.tables.hhea, os2 = font.tables.os2;
+    res.metrics = { em, hheaAsc: hh.ascender, hheaDesc: hh.descender, typoAsc: os2.sTypoAscender, typoDesc: os2.sTypoDescender, winAsc: os2.usWinAscent, winDesc: os2.usWinDescent, useTypo: !!(os2.fsSelection & 128) };
+    const g = {}, advs = new Set();
+    for (const ch of CHARS) {
+      const gl = font.charToGlyph(ch);
+      advs.add(gl.advanceWidth);
+      g[ch] = gl.getPath(0, 0, em).toPathData(0);
+    }
+    advs.add(font.charToGlyph(' ').advanceWidth);
+    if (advs.size !== 1) throw new Error('not one advance for every character: ' + Array.from(advs));
+    const adv = Array.from(advs)[0];
+    /* canvas 'middle': the alphabetic baseline sits (ascent - descent) / 2 below y, from the metrics the platform reads
+       (hhea on Apple's and Chrome's); measured below against this browser's own fillText */
+    const midHhea = (hh.ascender + hh.descender) / 2;   // descender is negative
+    await document.fonts.load('700 40px "Courier Prime"');
+    if (!document.fonts.check('700 12px "Courier Prime"')) throw new Error('the web font did not load, so there is nothing to compare with');
+    const S = 1.6 * 4;   // the take's texture scale (texS = min(dpr 2, 1.6)), magnified four times so the comparison is not all edges
+    function render(fn, w) { const c = document.createElement('canvas'); c.width = Math.ceil(w * S); c.height = Math.ceil(24 * S); const x = c.getContext('2d'); x.scale(S, S); x.fillStyle = '#000'; fn(x); return c; }
+    function alpha(c) { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, a = new Float32Array(c.width * c.height); for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3] / 255; return a; }
+    function outline(x, s, px, X, Y, mid) { const sc = px / em; x.save(); x.translate(X, Y + mid * sc); x.scale(sc, sc); for (const ch of s) { if (g[ch]) x.fill(new Path2D(g[ch])); x.translate(adv, 0); } x.restore(); }
+    function compare(s, px, base) {
+      const w = s.length * px * 0.62 + 10;
+      const ref = alpha(render((x) => { x.font = '700 ' + px + 'px "Courier Prime", monospace'; x.textBaseline = base; x.textAlign = 'left'; x.fillText(s, 2, 12); }, w));
+      let best = null;
+      const mids = base === 'middle' ? [] : [0];
+      if (base === 'middle') for (let m = midHhea - 120; m <= midHhea + 120; m += 2) mids.push(m);
+      for (const m of mids) {
+        const got = alpha(render((x) => outline(x, s, px, 2, 12, m), w));
+        let sum = 0, ink = 0, worst = 0;
+        for (let i = 0; i < ref.length; i++) { const d = Math.abs(ref[i] - got[i]); sum += d; ink += ref[i]; if (d > worst) worst = d; }
+        const score = sum / Math.max(1, ink);
+        if (!best || score < best.score) best = { mid: m, score, worst };
+      }
+      const refW = (() => { const c = document.createElement('canvas').getContext('2d'); c.font = '700 ' + px + 'px "Courier Prime", monospace'; return c.measureText(s).width; })();
+      return { s, px, base, mid: best.mid, diffPerInk: +best.score.toFixed(4), worst: +best.worst.toFixed(3), widthFillText: +refW.toFixed(3), widthOutline: +(s.length * adv * px / em).toFixed(3) };
+    }
+    res.compare = LABELS.map((s) => compare(s, 12, 'middle')).concat(TIMES.slice(0, 3).map((s) => compare(s, 12, 'middle')), RULER.slice(0, 4).map((s) => compare(s, 11, 'alphabetic')));
+    const mids = res.compare.filter((r) => r.base === 'middle').map((r) => r.mid);
+    res.midMeasured = mids.reduce((a, b) => a + b, 0) / mids.length;
+    res.midHhea = midHhea;
+    res.MONO = { em, adv, mid: midHhea, g };
+    window.__bake = res;
+    out.innerHTML = '<pre></pre>';
+    out.firstChild.textContent = JSON.stringify({ metrics: res.metrics, midHhea, midMeasured: res.midMeasured, compare: res.compare }, null, 1) + '\n\nMONO = ' + JSON.stringify(res.MONO);
+  } catch (e) {
+    window.__bake = { error: String(e && e.message || e) };
+    out.textContent = 'FAILED: ' + window.__bake.error;
+  }
+})();
+</script>

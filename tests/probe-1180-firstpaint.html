@@ -34,12 +34,13 @@
    It uses his real projects, exactly as opening the app does. Columns, in the app page's own clock (ms since its
    navigation started):
      FCP        first-contentful-paint;        loadEnd   the navigation entry's loadEventEnd;
-     shown      #splash lost .hidden;            clock     the first poll where the mark's clock reads above 0;
+     shown      #splash lost .hidden;            clock     the first poll after the take's clock started (#1231:
+                                                           FM_SPLASH.started(); it was the SMIL mark's clock);
      out        the dissolve began;              how       natural / cut, and 'still' when the end-frame still was used;
-     clockOut   the mark's clock (s) at out;     gone      #splash removed;
+     clockOut   the take's time (s) at out;      gone      #splash removed;
      maxGap     the longest gap (ms) between two animation frames (requestAnimationFrame) from clock to out;
-     reduce     prefers-reduced-motion (1/0);    paused    svg.animationsPaused() at the load (1 = the browser
-                                                           paused SMIL: iOS Auto-Play Animated Images off).
+     reduce     prefers-reduced-motion (1/0);    make      #1231: what the take's make() cost (ms) before the first
+                                                           frame, on this phone (FM_SPLASH.makeMs).
    READ IT: clock - shown is the empty pre-roll; clock near loadEnd means the clock starts at the load; 'cut' should never
    appear; paused 1 with how 'still natural' is the fix for the paused clock working. maxGap is what 'natural' cannot
    show: SMIL is drawn on the main thread, so a boot that holds it right after the load freezes the build-up and the
@@ -50,7 +51,7 @@
    USE: open /tests/probe-1180-firstpaint.html?runs=5 on the live site (Safari, or the Home Screen app), tap Start, keep
    the phone still, screenshot the table. ?page=../index-film.html compares another copy of the page. */
 var KEY = 'fp1180';
-var COLS = [['fcp', 'FCP'], ['loadEnd', 'loadEnd'], ['shown', 'shown'], ['clockStart', 'clock'], ['out', 'out'], ['how', 'how'], ['clockAtOut', 'clockOut'], ['gone', 'gone'], ['maxGap', 'maxGap'], ['reduce', 'reduce'], ['paused', 'paused']];
+var COLS = [['fcp', 'FCP'], ['loadEnd', 'loadEnd'], ['shown', 'shown'], ['clockStart', 'clock'], ['out', 'out'], ['how', 'how'], ['clockAtOut', 'clockOut'], ['gone', 'gone'], ['maxGap', 'maxGap'], ['reduce', 'reduce'], ['make', 'make']];
 function load() { try { return JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
 function save(st) { try { sessionStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} }
 function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -96,19 +97,17 @@ function recorder1180(cfg) {
     }, 300);
   }
   var poll = setInterval(function () {
-    var sp = document.getElementById('splash'), mk = document.getElementById('splash-mark'), t = now(), clk = null;
+    var sp = document.getElementById('splash'), S = window.FM_SPLASH, t = now(), clk = null;
     if (row.reduce == null && window.matchMedia) row.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0;
-    try { if (mk && typeof mk.getCurrentTime === 'function') clk = mk.getCurrentTime(); } catch (e) {}
+    try { if (S) clk = S.shown(); } catch (e) {}
+    if (row.make == null && S && typeof S.makeMs === 'function' && S.makeMs() >= 0) row.make = Math.round(S.makeMs());
     if (row.shown == null && sp && !sp.classList.contains('hidden')) row.shown = t;
-    if (row.clockStart == null && clk != null && clk > 0) row.clockStart = t;
+    if (row.clockStart == null && S && S.started()) row.clockStart = t;
     var out = !!(sp && sp.classList.contains('splash-out'));
-    if (row.paused == null && document.readyState === 'complete' && mk && !out) {
-      try { row.paused = (typeof mk.animationsPaused === 'function' && mk.animationsPaused()) ? 1 : 0; } catch (e) { row.paused = '?'; }
-    }
     if (row.out == null && out) {
       gapTo(t);
       row.out = t;
-      var still = mk && !mk.querySelector('animate, animateTransform');
+      var still = !!(S && S.still());
       row.how = (still ? 'still ' : '') + (sp.classList.contains('splash-cut') ? 'cut' : 'natural');
       if (clk != null) row.clockAtOut = Math.round(clk * 100) / 100;
     }

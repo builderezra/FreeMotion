@@ -27,7 +27,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.22">
+<meta name="fm-build" content="v18.23">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -71,7 +71,9 @@
      apple-touch-startup-image gets a blank white launch screen while the page boots, and the media
      query has to match the device metrics EXACTLY or it falls back to that white. Each file is solid
      #000 — the same ground the splash video sits on — so launch screen and first frame are one
-     continuous black and there is no seam. ~1KB each. -->
+     continuous black and there is no seam. ~1KB each. #1231 keeps them black, his answer of 6 Nov ~12:10
+     ("just keep 13 as it is coz it ends on black"): the take opens on its own bone straight after, as he
+     played it, and ends on the black the app opens on. -->
 <link rel="apple-touch-startup-image" media="(device-width:320px) and (device-height:568px) and (-webkit-device-pixel-ratio:2) and (orientation:portrait)" href="launch/l-640x1136.png">
 <link rel="apple-touch-startup-image" media="(device-width:375px) and (device-height:667px) and (-webkit-device-pixel-ratio:2) and (orientation:portrait)" href="launch/l-750x1334.png">
 <link rel="apple-touch-startup-image" media="(device-width:414px) and (device-height:736px) and (-webkit-device-pixel-ratio:3) and (orientation:portrait)" href="launch/l-1242x2208.png">
@@ -90,53 +92,710 @@
      — putting the class in the markup so a refresh could not flash the old layout — is superseded by
      there no longer being an old layout. -->
 <body>
-  <!-- Splash: the app's OWN logo, take H2 "Scrub" (#1223; his words, 28 Oct, of #1180's Keyframes splash: "looks very Ai
-       made ... try making it feel more human"), once per build per session (fresh tab / PWA cold launch). FIRST in <body>
-       deliberately: it parses and paints BEFORE the app's scripts, so on a cold load the splash covers the load instead of
-       appearing after it. It is inline SVG + SMIL, so it costs no download at all — the film it replaced (splash-v2.mp4, kept
-       in the repo, no longer loaded) was 2.8MB.
-       ONE IDEA, THE GESTURE AN EDITOR'S HAND MAKES: the playhead cuts in at the clips' start (0.15s), holds a beat, sweeps right
-       (0.40 to 0.98s) with the clips revealed exactly at its edge (the clip rect's width and the playhead run on one spline),
-       overshoots to x=112, rocks back like a hand scrubbing tape (1.16 / 1.30 / 1.41 / 1.50s, each swing shorter), stops on
-       its frame, and the name cuts in on that frame. No glow, no rings, no tagline, no fade-ups, no scale-from-0.
-       FROM THE BOARD TO THE APP ("Human intro, four takes", project/Human-Intro.dc.html, card H2): there its keyTimes sit on a
-       4s loop; here the same seconds sit on one 1.6s pass (`fill="freeze"`, no repeatCount), so a keyTime is seconds / 1.6. The
-       end frame holds 0.6s, a beat to read the name, and then the splash cuts to the app in .28s: an editor cuts, he does not
-       dissolve.
+  <!-- Splash: TAKE 13, "EXPLODED STACK" (#1231, his pick of the 25 takes, 6 Nov: "I want it now so yes"; it replaced #1223's
+       H2 "Scrub", of which he said "the new intro is dogshit, make a but tone of diff options for me to pick and actually try").
+       Once per build per session (fresh tab / PWA cold launch). FIRST in <body> deliberately: it parses and paints BEFORE the
+       app's scripts, so on a cold load the splash covers the load instead of appearing after it. It is an inline canvas script
+       (splash-take below), so it costs no download at all.
+       THE TAKE: the sheets of a comp fly apart and the camera swings round them, then a black matte with an F cut through it
+       slams down and flattens the lot, and it ends on his logo on black at 2.92 s. The end frame holds 0.7 s, the beat the
+       picker held it for him, and then the splash cuts to the app in .28s: an editor cuts, he does not dissolve.
        Skips: a reload of the same build in the same session (sessionStorage holds the build, meta fm-build), tap/click,
-       Esc-Enter-Space, a cap measured from when the animation's clock starts, and a ceiling. Reduced motion, a browser that
-       cannot run SMIL, or one that has paused it (iOS with Auto-Play Animated Images off, or a clock that has not started 1s
-       after the load): the END FRAME as a still, no animation, then the hand-over.
-       The name is set in the font the app really shows (no download, no webfont): SF on an iPhone, Segoe on Windows. -->
-  <!-- THE GROUND IS TRUE BLACK, #000: the colour the iPhone launch images already use (above), so launch screen and first
-       frame are one colour; the playhead's backing is a #000 knock-out drawn for it. Queue 920's split, as theme-glass.css
-       does for the light Home: the ground you SEE is a background-IMAGE layer, and background-COLOR is what iOS reads for the
-       status strip (a fixed full-screen element's first, else the root's). So in the light look (data-home="light", set by
-       settings.js before load) only the COLOUR ramps to the light Home's #fafdff over the cut: the box stays black under his
-       mark while iOS hands the strip to the light Home, instead of a dark strip over a light Home that snaps when #splash is
-       removed. The canvas rule carries :has(#splash) to tie theme-glass.css's light-Home rule and win on order, so the canvas
-       holds the ground while the splash is up (Home is open under it on a first load). -->
+       Esc-Enter-Space, a cap measured from when the take's clock starts, and a ceiling. Reduced motion, a take that cannot be
+       drawn, or a clock that has not started 1 s after the load: the END FRAME as a still, no animation, then the hand-over.
+       The name is set in the font the app really shows (no download, no webfont): SF on an iPhone, Segoe on Windows; the
+       labels on the sheets are drawn outlines (splash-take). -->
+  <!-- THE GROUND IS THE TAKE'S OWN: bone (#e7e2d5) until the matte lands at 2.14 s, then the matte's black (#0c0c0d), on
+       #splash, on the canvas round it (a wide window's surround) and on the document canvas, so nothing round the take is a
+       different colour from the frame. The iPhone launch images and the manifest stay black (his answer, 6 Nov ~12:10:
+       "just keep 13 as it is coz it ends on black"), so the take opens on its bone as he played it.
+       Queue 920's split, as theme-glass.css does for the light Home: the ground you SEE is a background-IMAGE layer, and
+       background-COLOR is what iOS reads for the status strip (a fixed full-screen element's first, else the root's). So in
+       the light look (data-home="light", set by settings.js before load) only the COLOUR ramps to the light Home's #fafdff over
+       the cut: the box keeps its ground while iOS hands the strip to the light Home, instead of a dark strip over a light Home
+       that snaps when #splash is removed. The canvas rule carries :has(#splash) to tie theme-glass.css's light-Home rule and
+       win on order, so the canvas holds the ground while the splash is up (Home is open under it on a first load). The same
+       two grounds come first without :has(), because a browser that has no :has() drops a whole selector list that names it,
+       and the canvas would fall back to styles.css's #000 round a bone splash (the review of #1231). -->
   <style id="splash-css">
-    #splash.splash-kf { background-color: #000; background-image: linear-gradient(#000, #000); display: flex; align-items: center; justify-content: center; }
-    html.splash-on.splash-kf-on:has(#splash), html.splash-on.splash-kf-on body { background: #000; }
+    #splash.splash-kf { background-color: #e7e2d5; background-image: linear-gradient(#e7e2d5, #e7e2d5); display: flex; align-items: center; justify-content: center; }
+    #splash.splash-kf.splash-dark { background-color: #0c0c0d; background-image: linear-gradient(#0c0c0d, #0c0c0d); }
+    html.splash-on.splash-kf-on, html.splash-on.splash-kf-on body { background: #e7e2d5; }
+    html.splash-on.splash-kf-on.splash-dark-on, html.splash-on.splash-kf-on.splash-dark-on body { background: #0c0c0d; }
+    html.splash-on.splash-kf-on:has(#splash), html.splash-on.splash-kf-on body { background: #e7e2d5; }
+    html.splash-on.splash-kf-on.splash-dark-on:has(#splash), html.splash-on.splash-kf-on.splash-dark-on body { background: #0c0c0d; }
     #splash.splash-kf.splash-out { transition: opacity .28s ease, background-color .28s ease; }
     html[data-home="light"].splash-kf-out:has(#home-screen:not(.hidden)) #splash.splash-kf.splash-out { background-color: #fafdff; }
     html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#splash):has(#home-screen:not(.hidden)), html[data-home="light"].splash-on.splash-kf-on.splash-kf-out:has(#home-screen:not(.hidden)) body { background-color: #fafdff; transition: background-color .28s ease; }
-    #splash-mark { display: block; width: min(92vw, 48vh); height: auto; aspect-ratio: 200 / 260; pointer-events: none; }
+    #splash-stage { position: relative; flex: none; overflow: hidden; pointer-events: none; }
   </style>
-  <div id="splash" class="hidden" aria-hidden="true">
-    <svg id="splash-mark" viewBox="0 0 200 260" aria-hidden="true" focusable="false">
-<defs>
-<linearGradient id="h2_g" gradientUnits="userSpaceOnUse" x1="0" y1="20" x2="0" y2="100"><stop offset="0" stop-color="#f5f5f7"/><stop offset="1" stop-color="#3a3a3f"/></linearGradient>
-<clipPath id="h2_c"><rect id="h2_reveal" x="14" y="0" width="0" height="120"><animate attributeName="width" values="0;0;98;98" keyTimes="0;0.25;0.6125;1" calcMode="spline" keySplines="0 0 1 1;0.77 0 0.175 1;0 0 1 1" dur="1.6s" fill="freeze"/></rect></clipPath>
-</defs>
-<g transform="translate(21 30)">
-<g clip-path="url(#h2_c)"><rect id="h2_clip1" x="14" y="20" width="92" height="22" rx="5" fill="url(#h2_g)"/><rect id="h2_clip2" x="14" y="49" width="62" height="22" rx="5" fill="url(#h2_g)"/><rect id="h2_clip3" x="14" y="78" width="26" height="22" rx="5" fill="url(#h2_g)"/></g>
-<g id="h2_head" opacity="0"><animate attributeName="opacity" values="0;1;1" keyTimes="0;0.09375;1" calcMode="discrete" dur="1.6s" fill="freeze"/><g id="h2_move" transform="translate(-68 0)"><animateTransform attributeName="transform" type="translate" values="-68 0;-68 0;30 0;-12 0;8 0;-3 0;0 0;0 0" keyTimes="0;0.25;0.6125;0.725;0.8125;0.88125;0.9375;1" calcMode="spline" keySplines="0 0 1 1;0.77 0 0.175 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0 0 1 1" dur="1.6s" fill="freeze"/><rect x="79.5" y="14" width="5" height="96" rx="2.5" fill="#000000"/><rect x="80.5" y="14" width="3" height="96" rx="1.5" fill="#29d9bb"/><polygon points="77,3 89,8.5 77,14" fill="#29d9bb"/></g></g>
-</g>
-<g id="h2_name" opacity="0"><animate attributeName="opacity" values="0;1;1" keyTimes="0;0.9375;1" calcMode="discrete" dur="1.6s" fill="freeze"/><text x="35" y="196" font-family="-apple-system, 'SF Pro Display', system-ui, 'Segoe UI', sans-serif" font-size="24" font-weight="600" letter-spacing="-0.3" fill="#f5f5f7">FreeMotion</text></g>
-    </svg>
-  </div>
+  <div id="splash" class="hidden" aria-hidden="true"><div id="splash-stage"></div></div>
+  <script id="splash-take">
+    /* #1231 — TAKE 13, "EXPLODED STACK", HIS PICK (6 Nov ~13:05, "I want it now so yes"). The sheets of a comp fly apart and the
+       camera swings round them, then a black matte with an F cut through it slams down and flattens the lot, and it ends on his
+       logo on black. Moved from tools/design/intro-takes/options/layers.js ('layers-stack') with kit.js's helpers, trimmed to
+       what this take uses (footage kinds 0 and 1 of the eight, the camera without unproject): KEPT EXACTLY AS DRAWN, every
+       number and every draw call as he played it. A take is a pure function of t: seek(t) paints the frame at t seconds, and
+       the end frame is seek(dur). The two changes, neither of which moves a pixel he saw:
+       - THE LABELS' LETTERS (COLOUR, CLIP 01, the timecodes, the ruler's numbers) are Courier Prime Bold as OUTLINES (MONO),
+         drawn where fillText drew them: the app loads no web font at launch and works offline, and a web font asked for in a
+         canvas that has not loaded it draws in a fallback.
+       - roundRect is added to a context that has none (iOS before 16), on the take's own contexts only, never the prototype.
+       Nothing here runs unless the splash plays: index.html's splash-boot calls make() and seek(). */
+    (function () {
+      'use strict';
+      const RAD = Math.PI / 180;
+      const TAU = Math.PI * 2;
+      const hypot = Math.hypot;
+
+      // ---- kit.js, trimmed: easing, keyframes, the repeatable "random" numbers, and the logo in its own units ----
+      const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+      const lerp = (a, b, p) => a + (b - a) * p;
+      const map = (t, a, b) => clamp((t - a) / (b - a));
+      const pow = (n) => ({
+        in: (p) => Math.pow(p, n),
+        out: (p) => 1 - Math.pow(1 - p, n),
+        io: (p) => (p < 0.5 ? Math.pow(2 * p, n) / 2 : 1 - Math.pow(2 * (1 - p), n) / 2),
+      });
+      const ease = {
+        lin: (p) => p,
+        in2: pow(2).in, in3: pow(3).in, in4: pow(4).in,
+        out2: pow(2).out, out3: pow(3).out, out4: pow(4).out,
+        io2: pow(2).io, io3: pow(3).io, io4: pow(4).io,
+      };
+      // Keyframes: k(t, [[0, 10], [0.4, 90, 'out3'], [1, 50, 'in2']]). The name on a key eases the segment that ends on it.
+      function k(t, keys) {
+        if (t <= keys[0][0]) return keys[0][1];
+        for (let i = 1; i < keys.length; i++) {
+          if (t <= keys[i][0]) {
+            const a = keys[i - 1], b = keys[i];
+            const p = (t - a[0]) / (b[0] - a[0] || 1e-6);
+            return lerp(a[1], b[1], (ease[b[2]] || ease.lin)(p));
+          }
+        }
+        return keys[keys.length - 1][1];
+      }
+      const frame = (t, fps) => Math.floor(t * fps + 1e-6);
+      function hash(i, seed = 1) {
+        let x = Math.imul((i | 0) + 0x9e3779b9, 0x85ebca6b) ^ Math.imul(seed | 0, 0xc2b2ae35);
+        x = Math.imul(x ^ (x >>> 13), 0x5bd1e995);
+        return ((x ^ (x >>> 15)) >>> 0) / 4294967296;
+      }
+      function rng(seed) {
+        let a = (seed | 0) + 0x6d2b79f5;
+        return function () {
+          a |= 0; a = (a + 0x6d2b79f5) | 0;
+          let z = Math.imul(a ^ (a >>> 15), 1 | a);
+          z = (z + Math.imul(z ^ (z >>> 7), 61 | z)) ^ z;
+          return ((z ^ (z >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+      // THE LOGO, in its own units: three clips stacked on a shared left edge, long / medium / short, and a playhead through them.
+      const F = {
+        clips: [{ x: 14, y: 20, w: 92, h: 22, r: 5 }, { x: 14, y: 49, w: 62, h: 22, r: 5 }, { x: 14, y: 78, w: 26, h: 22, r: 5 }],
+        head: { x: 80.5, y: 14, w: 3, h: 96, r: 1.5, tri: [[77, 3], [89, 8.5], [77, 14]] },
+        box: { x: 14, y: 3, w: 92, h: 107 },
+        top: '#f5f5f7', bottom: '#3a3a3f', teal: '#29d9bb',
+      };
+      const SYS = "-apple-system, 'SF Pro Display', system-ui, 'Segoe UI', sans-serif";
+
+      /* roundRect on a context that has none (iOS before 16): the take's own contexts only, so nothing in the app that
+         feature-detects it ever sees a change. */
+      function rr(x, y, w, h, r) {
+        r = Math.max(0, Math.min(r, w / 2, h / 2));
+        this.moveTo(x + r, y);
+        this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r);
+        this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r);
+        this.closePath();
+      }
+      function ctx(c, opts) {
+        const g = c.getContext('2d', opts);
+        if (g && typeof g.roundRect !== 'function') g.roundRect = rr;
+        return g;
+      }
+      /* Every canvas the take makes, so the splash can empty them all when it goes: iPhones cap canvas memory and free it late
+         (the picker freed each take's canvases the same way). */
+      const made = [];
+      function newCanvas() { const c = document.createElement('canvas'); made.push(c); return c; }
+
+      /* THE LABELS' LETTERS. Courier Prime Bold (Alan Dague-Greene, SIL Open Font License 1.1), the face the picker drew
+         them in, as outlines: font units, baseline at 0, y down. Every character the take prints, and no others. */
+      const MONO = /*MONO-DATA*//* baked 6 Nov by tools/design/intro-takes/bake-mono.html from CourierPrime-Bold.ttf (google/fonts, ofl/courierprime): units per em 2048, every glyph 1228 wide; mid is where canvas textBaseline middle puts the alphabetic baseline, in font units below y: Chrome measured 400.6, WebKit's (ascent - descent) / 2 is 450 (427 with its rounding at 12 px), and 425 is within 0.15 px of every one at the take's 12 px. Redundant line-to-the-same-point commands dropped. */ { em: 2048, adv: 1228, mid: 425, g: {
+        "0": "M614-1209Q761-1209 870-1131Q979-1052 1037-913Q1095-773 1095-593Q1095-413 1037-274Q979-134 870-56Q761 22 614 22Q467 22 358-56Q249-134 191-274Q133-413 133-593Q133-773 191-913Q249-1052 358-1131Q467-1209 614-1209ZM614-982Q510-982 456-884Q401-785 401-593Q401-401 456-303Q510-205 614-205Q718-205 773-303Q827-401 827-593Q827-785 773-884Q718-982 614-982Z",
+        "1": "M1005-205Q1029-205 1042-197Q1055-188 1062-166Q1068-144 1068-102Q1068-60 1062-38Q1055-16 1042-8Q1029 0 1005 0L273 0Q249 0 236-8Q223-16 217-38Q210-60 210-102Q210-144 217-166Q223-188 236-197Q249-205 273-205L519-205L519-879L310-760Q292-750 278-750Q259-750 242-768Q224-786 206-825Q186-869 186-898Q186-919 196-933Q205-947 225-958L647-1196Q675-1212 704-1212Q733-1212 751-1196Q769-1180 769-1148L769-205L1005-205Z",
+        "2": "M600-1209Q731-1209 824-1164Q916-1118 964-1036Q1011-954 1011-844Q1011-743 966-658Q920-573 821-478L548-215L830-215L830-307Q830-342 853-356Q876-370 938-370Q1002-370 1031-356Q1060-341 1060-307L1060-65Q1060-31 1045-16Q1030 0 995 0L221 0Q197 0 184-9Q171-17 165-39Q158-61 158-103Q158-143 163-163Q168-183 182-196L611-609Q694-689 726-738Q757-787 757-839Q757-908 717-950Q677-992 601-992Q514-992 428-950L428-810Q428-775 405-761Q382-747 320-747Q256-747 227-762Q198-776 198-810L198-1047Q198-1088 241-1111Q330-1160 422-1185Q514-1209 600-1209Z",
+        "3": "M590-1209Q792-1209 902-1122Q1011-1034 1011-869Q1011-698 870-624Q953-586 1000-519Q1046-451 1046-356Q1046-169 919-74Q792 22 564 22Q366 22 221-55Q183-74 183-119Q183-146 200-191Q234-275 276-275Q284-275 296-270Q361-239 430-222Q499-205 564-205Q670-205 724-245Q778-284 778-358Q778-430 735-467Q692-503 608-503L505-503Q470-503 456-526Q442-548 442-610Q442-672 456-695Q470-718 505-718L581-718Q670-718 714-751Q757-784 757-854Q757-922 715-957Q673-992 591-992Q516-992 438-969L438-890Q438-855 415-841Q392-827 330-827Q266-827 237-842Q208-856 208-890L208-1077Q208-1122 257-1141Q336-1173 422-1191Q507-1209 590-1209Z",
+        "4": "M758-1209Q816-1209 840-1186Q863-1163 863-1119L863-575L1035-575Q1059-575 1072-567Q1085-558 1092-536Q1098-514 1098-472Q1098-430 1092-408Q1085-386 1072-378Q1059-370 1035-370L863-370L863-205L1005-205Q1029-205 1042-197Q1055-188 1062-166Q1068-144 1068-102Q1068-60 1062-38Q1055-16 1042-8Q1029 0 1005 0L443 0Q419 0 406-8Q393-16 387-38Q380-60 380-102Q380-144 387-166Q393-188 406-197Q419-205 443-205L613-205L613-370L183-370Q159-370 146-378Q133-386 127-408Q120-430 120-472Q120-537 139-561L609-1140Q636-1174 672-1192Q707-1209 758-1209ZM638-867L403-575L622-575L638-867Z",
+        "5": "M921-1187Q956-1187 970-1164Q984-1141 984-1079Q984-1017 970-995Q956-972 921-972L479-972L465-749Q561-786 657-786Q781-786 869-736Q956-685 1001-595Q1046-504 1046-386Q1046-185 921-82Q795 22 574 22Q479 22 386-2Q292-25 214-67Q176-88 176-131Q176-158 193-203Q227-287 269-287Q277-287 289-282Q443-205 574-205Q666-205 722-253Q778-301 778-386Q778-467 733-513Q687-559 604-559Q510-559 412-523Q370-507 330-507Q266-507 240-522Q213-537 215-572L248-1122Q250-1157 265-1172Q279-1187 313-1187L921-1187Z",
+        "6": "M977-1209Q1003-1210 1018-1184Q1032-1158 1037-1102Q1039-1085 1039-1057Q1039-970 998-967Q814-958 694-920Q573-882 507-810Q440-738 420-624Q474-684 541-713Q608-741 695-741Q806-741 893-694Q980-646 1029-561Q1078-476 1078-366Q1078-254 1021-166Q963-77 861-28Q759 22 631 22Q505 22 408-29Q311-80 246-176Q205-237 183-324Q160-411 160-512Q160-723 254-876Q347-1028 530-1114Q713-1199 977-1209ZM638-529Q580-529 535-509Q490-489 465-453Q440-417 440-371Q440-325 463-286Q485-247 529-224Q572-201 630-201Q716-201 768-246Q820-290 820-365Q820-442 772-486Q723-529 638-529Z",
+        "7": "M1017-1187Q1041-1187 1054-1179Q1067-1170 1074-1148Q1080-1126 1080-1084Q1080-1035 1071-1012L654-24Q644-1 620 11Q595 22 561 22Q532 22 504 15Q459 5 431-18Q402-40 402-70Q402-82 408-97L784-972L418-972L418-780Q418-745 395-731Q372-717 310-717Q246-717 217-732Q188-746 188-780L188-1122Q188-1157 204-1172Q219-1187 253-1187L1017-1187Z",
+        "8": "M614-1209Q736-1209 828-1164Q920-1119 969-1042Q1018-964 1018-871Q1018-779 975-717Q932-654 855-619Q950-584 1004-513Q1057-442 1057-335Q1057-225 1002-145Q946-64 846-21Q746 22 614 22Q482 22 382-21Q282-64 227-145Q171-225 171-335Q171-443 224-514Q277-584 373-619Q296-653 253-716Q210-779 210-871Q210-964 259-1042Q308-1119 400-1164Q492-1209 614-1209ZM614-991Q543-991 501-953Q459-914 459-851Q459-788 500-750Q541-712 614-712Q687-712 728-750Q769-788 769-851Q769-914 727-953Q685-991 614-991ZM614-518Q528-518 482-474Q436-430 436-356Q436-282 482-239Q528-196 614-196Q700-196 746-239Q792-282 792-356Q792-430 746-474Q700-518 614-518Z",
+        "9": "M597-1209Q723-1209 820-1158Q917-1107 982-1011Q1023-950 1046-863Q1068-776 1068-675Q1068-349 885-171Q701 7 311 22Q285 23 271-3Q256-29 251-85Q249-102 249-130Q249-217 290-220Q472-229 580-267Q687-304 740-375Q793-446 808-563Q754-503 687-475Q620-446 533-446Q422-446 335-494Q248-541 199-626Q150-711 150-821Q150-933 208-1022Q265-1110 367-1160Q469-1209 597-1209ZM598-986Q512-986 460-942Q408-897 408-822Q408-745 457-702Q505-658 590-658Q648-658 693-678Q738-698 763-734Q788-770 788-816Q788-862 766-901Q743-940 700-963Q656-986 598-986Z",
+        ":": "M614-594Q527-594 488-609Q449-623 449-657L449-871Q449-905 488-920Q527-934 614-934Q701-934 740-920Q779-905 779-871L779-657Q779-623 740-609Q701-594 614-594ZM614 10Q527 10 488-5Q449-19 449-53L449-267Q449-301 488-316Q527-330 614-330Q701-330 740-316Q779-301 779-267L779-53Q779-19 740-5Q701 10 614 10Z",
+        "A": "M697-1187Q737-1187 762-1172Q787-1156 798-1122L1088-205L1175-205Q1199-205 1212-197Q1225-189 1232-167Q1238-145 1238-103Q1238-61 1232-39Q1225-17 1212-9Q1199 0 1175 0L751 0Q727 0 714-9Q701-17 695-39Q688-61 688-103Q688-145 695-167Q701-189 714-197Q727-205 751-205L837-205L792-350L428-350L383-205L457-205Q481-205 494-197Q507-189 514-167Q520-145 520-103Q520-61 514-39Q507-17 494-9Q481 0 457 0L53 0Q29 0 16-9Q3-17-4-39Q-10-61-10-103Q-10-145-4-167Q3-189 16-197Q29-205 53-205L137-205L390-982L223-982Q199-982 186-991Q173-999 167-1021Q160-1043 160-1085Q160-1127 167-1149Q173-1171 186-1179Q199-1187 223-1187L697-1187ZM615-982L609-982L486-555L735-555L615-982Z",
+        "C": "M1006-1209Q1068-1209 1091-1195Q1114-1181 1114-1146L1114-762Q1114-728 1084-714Q1053-699 982-699Q935-699 910-706Q884-712 874-725Q864-738 864-762Q864-862 810-922Q755-982 654-982Q515-982 443-882Q371-782 371-594Q371-408 448-307Q524-205 664-205Q751-205 831-229Q911-252 1005-300Q1021-308 1035-308Q1082-308 1113-225Q1127-187 1127-157Q1127-106 1081-84Q867 22 654 22Q490 22 365-53Q240-128 172-268Q103-407 103-594Q103-780 170-920Q237-1059 356-1134Q474-1209 624-1209Q799-1209 884-1083L884-1146Q884-1180 913-1195Q942-1209 1006-1209Z",
+        "D": "M594-1187Q769-1187 895-1118Q1021-1049 1088-916Q1155-782 1155-594Q1155-406 1088-273Q1021-139 895-70Q769 0 594 0L123 0Q99 0 86-8Q73-16 67-38Q60-60 60-102Q60-144 67-166Q73-188 86-197Q99-205 123-205L220-205L220-982L123-982Q99-982 86-990Q73-998 67-1020Q60-1042 60-1084Q60-1126 67-1148Q73-1170 86-1179Q99-1187 123-1187L594-1187ZM470-972L470-215L574-215Q729-215 808-312Q887-408 887-594Q887-780 808-876Q729-972 574-972L470-972Z",
+        "E": "M1035-1187Q1070-1187 1085-1172Q1100-1157 1100-1122L1100-820Q1100-786 1071-772Q1042-757 978-757Q916-757 893-771Q870-785 870-820L870-972L470-972L470-719L714-719Q749-719 763-696Q777-673 777-611Q777-549 763-527Q749-504 714-504L470-504L470-215L880-215L880-417Q880-451 910-466Q939-480 1006-480Q1072-480 1096-466Q1120-452 1120-417L1120-65Q1120-31 1105-16Q1090 0 1055 0L123 0Q99 0 86-8Q73-16 67-38Q60-60 60-102Q60-144 67-166Q73-188 86-197Q99-205 123-205L220-205L220-982L123-982Q99-982 86-990Q73-998 67-1020Q60-1042 60-1084Q60-1126 67-1148Q73-1170 86-1179Q99-1187 123-1187L1035-1187Z",
+        "H": "M1115-1187Q1139-1187 1152-1179Q1165-1170 1172-1148Q1178-1126 1178-1084Q1178-1042 1172-1020Q1165-998 1152-990Q1139-982 1115-982L1058-982L1058-205L1115-205Q1139-205 1152-197Q1165-188 1172-166Q1178-144 1178-102Q1178-60 1172-38Q1165-16 1152-8Q1139 0 1115 0L741 0Q717 0 704-8Q691-16 685-38Q678-60 678-102Q678-144 685-166Q691-188 704-197Q717-205 741-205L808-205L808-504L420-504L420-205L487-205Q511-205 524-197Q537-188 544-166Q550-144 550-102Q550-60 544-38Q537-16 524-8Q511 0 487 0L113 0Q89 0 76-8Q63-16 57-38Q50-60 50-102Q50-144 57-166Q63-188 76-197Q89-205 113-205L170-205L170-982L113-982Q89-982 76-990Q63-998 57-1020Q50-1042 50-1084Q50-1126 57-1148Q63-1170 76-1179Q89-1187 113-1187L487-1187Q511-1187 524-1179Q537-1170 544-1148Q550-1126 550-1084Q550-1042 544-1020Q537-998 524-990Q511-982 487-982L420-982L420-719L808-719L808-982L741-982Q717-982 704-990Q691-998 685-1020Q678-1042 678-1084Q678-1126 685-1148Q691-1170 704-1179Q717-1187 741-1187L1115-1187Z",
+        "I": "M975-1187Q999-1187 1012-1179Q1025-1170 1032-1148Q1038-1126 1038-1084Q1038-1042 1032-1020Q1025-998 1012-990Q999-982 975-982L739-982L739-205L995-205Q1019-205 1032-197Q1045-188 1052-166Q1058-144 1058-102Q1058-60 1052-38Q1045-16 1032-8Q1019 0 995 0L233 0Q209 0 196-8Q183-16 177-38Q170-60 170-102Q170-144 177-166Q183-188 196-197Q209-205 233-205L489-205L489-982L253-982Q229-982 216-990Q203-998 197-1020Q190-1042 190-1084Q190-1126 197-1148Q203-1170 216-1179Q229-1187 253-1187L975-1187Z",
+        "K": "M1130-1187Q1154-1187 1167-1179Q1180-1170 1187-1148Q1193-1126 1193-1084Q1193-1042 1187-1020Q1180-998 1167-990Q1154-982 1130-982L1087-982L737-641Q793-638 839-611Q885-583 919-535Q942-502 961-467Q980-431 1004-380Q1040-306 1054-282Q1076-245 1100-225Q1124-205 1155-205L1165-205Q1189-205 1202-197Q1215-188 1222-166Q1228-144 1228-102Q1228-60 1222-38Q1215-16 1202-8Q1189 0 1165 0L1026 0Q965 0 923-38Q880-75 844-142Q821-185 796-242Q778-280 759-318Q740-356 724-381Q698-420 666-443Q634-465 600-465Q556-465 521-431L470-381L470-205L585-205Q609-205 622-197Q635-188 642-166Q648-144 648-102Q648-60 642-38Q635-16 622-8Q609 0 585 0L113 0Q89 0 76-8Q63-16 57-38Q50-60 50-102Q50-144 57-166Q63-188 76-197Q89-205 113-205L220-205L220-982L113-982Q89-982 76-990Q63-998 57-1020Q50-1042 50-1084Q50-1126 57-1148Q63-1170 76-1179Q89-1187 113-1187L517-1187Q541-1187 554-1179Q567-1170 574-1148Q580-1126 580-1084Q580-1042 574-1020Q567-998 554-990Q541-982 517-982L470-982L470-662L794-982L741-982Q717-982 704-990Q691-998 685-1020Q678-1042 678-1084Q678-1126 685-1148Q691-1170 704-1179Q717-1187 741-1187L1130-1187Z",
+        "L": "M737-1187Q761-1187 774-1179Q787-1170 794-1148Q800-1126 800-1084Q800-1042 794-1020Q787-998 774-990Q761-982 737-982L519-982L519-215L870-215L870-527Q870-561 901-576Q931-590 1002-590Q1049-590 1075-584Q1100-577 1110-564Q1120-551 1120-527L1120-65Q1120-31 1105-16Q1090 0 1055 0L123 0Q99 0 86-8Q73-16 67-38Q60-60 60-102Q60-144 67-166Q73-188 86-197Q99-205 123-205L269-205L269-982L123-982Q99-982 86-990Q73-998 67-1020Q60-1042 60-1084Q60-1126 67-1148Q73-1170 86-1179Q99-1187 123-1187L737-1187Z",
+        "M": "M1135-1187Q1159-1187 1172-1179Q1185-1170 1192-1148Q1198-1126 1198-1084Q1198-1042 1192-1020Q1185-998 1172-990Q1159-982 1135-982L1081-982L1095-205L1155-205Q1179-205 1192-197Q1205-188 1212-166Q1218-144 1218-102Q1218-60 1212-38Q1205-16 1192-8Q1179 0 1155 0L781 0Q757 0 744-8Q731-16 725-38Q718-60 718-102Q718-144 725-166Q731-188 744-197Q757-205 781-205L873-205L867-797L716-389Q703-354 680-340Q657-325 615-325Q572-325 549-340Q526-354 512-389L360-794L354-205L447-205Q471-205 484-197Q497-188 504-166Q510-144 510-102Q510-60 504-38Q497-16 484-8Q471 0 447 0L73 0Q49 0 36-8Q23-16 17-38Q10-60 10-102Q10-144 17-166Q23-188 36-197Q49-205 73-205L132-205L147-982L93-982Q69-982 56-990Q43-998 37-1020Q30-1042 30-1084Q30-1126 37-1148Q43-1170 56-1179Q69-1187 93-1187L377-1187Q398-1187 412-1180Q425-1173 431-1156L614-665L796-1156Q802-1173 816-1180Q829-1187 850-1187L1135-1187Z",
+        "O": "M614-1209Q778-1209 903-1135Q1028-1060 1097-921Q1165-781 1165-594Q1165-407 1097-268Q1028-128 903-53Q778 22 614 22Q450 22 325-53Q200-128 132-268Q63-407 63-594Q63-781 132-921Q200-1060 325-1135Q450-1209 614-1209ZM614-982Q475-982 403-882Q331-782 331-594Q331-406 403-306Q475-205 614-205Q753-205 825-306Q897-406 897-594Q897-782 825-882Q753-982 614-982Z",
+        "P": "M670-1187Q900-1187 1019-1084Q1137-980 1137-785Q1137-590 1019-486Q900-382 670-382L520-382L520-205L737-205Q761-205 774-197Q787-188 794-166Q800-144 800-102Q800-60 794-38Q787-16 774-8Q761 0 737 0L123 0Q99 0 86-8Q73-16 67-38Q60-60 60-102Q60-144 67-166Q73-188 86-197Q99-205 123-205L270-205L270-982L123-982Q99-982 86-990Q73-998 67-1020Q60-1042 60-1084Q60-1126 67-1148Q73-1170 86-1179Q99-1187 123-1187L670-1187ZM520-972L520-597L639-597Q758-597 819-643Q879-689 879-785Q879-881 819-927Q758-972 639-972L520-972Z",
+        "R": "M650-1187Q861-1187 974-1094Q1087-1001 1087-824Q1087-593 839-533Q893-512 925-471Q946-444 964-415Q981-385 1004-340Q1028-292 1041-271Q1061-238 1081-222Q1101-205 1126-205L1145-205Q1169-205 1182-197Q1195-188 1202-166Q1208-144 1208-102Q1208-60 1202-38Q1195-16 1182-8Q1169 0 1145 0L1048 0Q969 0 920-32Q871-64 830-139Q810-174 782-235Q762-281 744-315Q726-348 704-380Q673-423 635-442Q597-461 544-461L480-461L480-205L577-205Q601-205 614-197Q627-188 634-166Q640-144 640-102Q640-60 634-38Q627-16 614-8Q601 0 577 0L123 0Q99 0 86-8Q73-16 67-38Q60-60 60-102Q60-144 67-166Q73-188 86-197Q99-205 123-205L230-205L230-982L123-982Q99-982 86-990Q73-998 67-1020Q60-1042 60-1084Q60-1126 67-1148Q73-1170 86-1179Q99-1187 123-1187L650-1187ZM480-972L480-676L629-676Q731-676 780-713Q829-749 829-824Q829-899 780-936Q731-972 629-972L480-972Z",
+        "S": "M916-1209Q980-1209 1007-1195Q1034-1180 1034-1146L1034-872Q1034-838 1013-824Q991-809 942-809Q909-809 890-817Q871-825 860-841Q813-915 739-956Q665-996 568-996Q495-996 454-959Q412-922 412-863Q412-834 430-816Q448-797 482-783Q526-766 633-748Q737-728 803-711Q869-693 927-657Q1087-560 1087-344Q1087-234 1041-152Q994-70 901-24Q808 22 672 22Q505 22 389-79L389-41Q389-7 365 8Q340 22 277 22Q213 22 186 8Q159-7 159-41L159-375Q159-409 181-424Q202-438 251-438Q286-438 307-429Q327-420 338-398Q392-295 467-243Q542-191 642-191Q730-191 776-227Q822-263 822-327Q822-367 802-395Q781-422 742-441Q710-457 672-467Q633-477 558-493Q472-511 416-526Q360-541 311-567Q235-607 192-674Q149-740 149-846Q149-952 198-1035Q247-1117 336-1163Q424-1209 538-1209Q618-1209 686-1183Q754-1157 804-1109L804-1146Q804-1180 829-1195Q853-1209 916-1209Z",
+        "T": "M1065-1187Q1100-1187 1115-1172Q1130-1157 1130-1122L1130-700Q1130-667 1103-652Q1075-637 1018-637Q963-637 942-652Q920-666 920-700L920-972L739-972L739-205L955-205Q979-205 992-197Q1005-188 1012-166Q1018-144 1018-102Q1018-60 1012-38Q1005-16 992-8Q979 0 955 0L273 0Q249 0 236-8Q223-16 217-38Q210-60 210-102Q210-144 217-166Q223-188 236-197Q249-205 273-205L489-205L489-972L308-972L308-700Q308-667 281-652Q253-637 196-637Q141-637 120-652Q98-666 98-700L98-1122Q98-1157 114-1172Q129-1187 163-1187L1065-1187Z",
+        "U": "M1115-1187Q1139-1187 1152-1179Q1165-1170 1172-1148Q1178-1126 1178-1084Q1178-1042 1172-1020Q1165-998 1152-990Q1139-982 1115-982L1068-982L1068-413Q1068-275 1013-177Q958-79 856-29Q754 22 614 22Q474 22 372-29Q270-79 215-177Q160-275 160-413L160-982L113-982Q89-982 76-990Q63-998 57-1020Q50-1042 50-1084Q50-1126 57-1148Q63-1170 76-1179Q89-1187 113-1187L487-1187Q511-1187 524-1179Q537-1170 544-1148Q550-1126 550-1084Q550-1042 544-1020Q537-998 524-990Q511-982 487-982L410-982L410-433Q410-318 465-262Q520-205 614-205Q708-205 763-262Q818-318 818-433L818-982L741-982Q717-982 704-990Q691-998 685-1020Q678-1042 678-1084Q678-1126 685-1148Q691-1170 704-1179Q717-1187 741-1187L1115-1187Z",
+        "Y": "M1125-1187Q1149-1187 1162-1179Q1175-1170 1182-1148Q1188-1126 1188-1084Q1188-1042 1182-1020Q1175-998 1162-990Q1149-982 1125-982L1081-982L739-459L739-205L935-205Q959-205 972-197Q985-188 992-166Q998-144 998-102Q998-60 992-38Q985-16 972-8Q959 0 935 0L293 0Q269 0 256-8Q243-16 237-38Q230-60 230-102Q230-144 237-166Q243-188 256-197Q269-205 293-205L489-205L489-460L149-982L103-982Q79-982 66-990Q53-998 47-1020Q40-1042 40-1084Q40-1126 47-1148Q53-1170 66-1179Q79-1187 103-1187L497-1187Q521-1187 534-1179Q547-1170 554-1148Q560-1126 560-1084Q560-1042 554-1020Q547-998 534-990Q521-982 497-982L430-982L616-690L804-982L751-982Q727-982 714-990Q701-998 695-1020Q688-1042 688-1084Q688-1126 695-1148Q701-1170 714-1179Q727-1187 751-1187L1125-1187Z",
+      } }/*/MONO-DATA*/;
+      const glyphs = {};
+      const mono = {
+        width: (s, px) => (s.length * MONO.adv * px) / MONO.em,
+        /* fillText(s, X, Y) at px with textAlign 'left' and the given textBaseline ('middle' or 'alphabetic') */
+        fill(x, s, px, X, Y, base) {
+          const sc = px / MONO.em;
+          x.save();
+          x.translate(X, base === 'middle' ? Y + MONO.mid * sc : Y);
+          x.scale(sc, sc);
+          for (let i = 0; i < s.length; i++) {
+            const ch = s[i];
+            if (MONO.g[ch]) { if (!glyphs[ch]) glyphs[ch] = new Path2D(MONO.g[ch]); x.fill(glyphs[ch]); }
+            x.translate(MONO.adv, 0);
+          }
+          x.restore();
+        },
+      };
+
+      function makeKit(stage, w, h, dpr) {
+        return {
+          w, h, dpr, stage, F, SYS, clamp, lerp, map, ease, k, frame, hash, rng,
+          // A full-stage canvas, already scaled so you draw in CSS pixels.
+          canvas(opts) {
+            const c = newCanvas();
+            c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+            c.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%';
+            stage.appendChild(c);
+            const g = ctx(c, opts && opts.alpha === false ? { alpha: false } : undefined);
+            g.scale(dpr, dpr);
+            return g;
+          },
+          // An off-screen canvas for anything costly: draw it once in make(), then drawImage it per frame.
+          layer(lw, lh) {
+            const c = newCanvas();
+            c.width = Math.round((lw || w) * dpr); c.height = Math.round((lh || h) * dpr);
+            const g = ctx(c);
+            g.scale(dpr, dpr);
+            return { canvas: c, g, w: lw || w, h: lh || h };
+          },
+          // The finished logo, centred on (cx, cy), s CSS pixels per logo unit.
+          drawF(g, cx, cy, s, o) {
+            o = o || {};
+            g.save();
+            g.translate(cx - (F.box.x + F.box.w / 2) * s, cy - (F.box.y + F.box.h / 2) * s);
+            g.scale(s, s);
+            let fill = o.fill || 'grade';
+            if (fill === 'grade') {
+              fill = g.createLinearGradient(0, 20, 0, 100);
+              fill.addColorStop(0, F.top); fill.addColorStop(1, F.bottom);
+            }
+            g.fillStyle = fill;
+            for (const c of F.clips) { g.beginPath(); g.roundRect(c.x, c.y, c.w, c.h, c.r); g.fill(); }
+            if (o.head !== false) {
+              const hd = F.head;
+              if (o.knock) { g.fillStyle = o.knock; g.fillRect(hd.x - 1, hd.y, hd.w + 2, hd.h); }
+              g.fillStyle = o.headFill || F.teal;
+              g.beginPath(); g.roundRect(hd.x, hd.y, hd.w, hd.h, hd.r); g.fill();
+              g.beginPath(); g.moveTo(hd.tri[0][0], hd.tri[0][1]); g.lineTo(hd.tri[1][0], hd.tri[1][1]); g.lineTo(hd.tri[2][0], hd.tri[2][1]); g.fill();
+            }
+            g.restore();
+          },
+          // The name in the font the app really shows.
+          wordmark(g, x, y, px, fill, align) {
+            g.save();
+            g.font = '600 ' + px + 'px ' + SYS;
+            g.fillStyle = fill || F.top;
+            g.textAlign = align || 'left';
+            g.textBaseline = 'alphabetic';
+            g.fillText('FreeMotion', x, y);
+            g.restore();
+          },
+        };
+      }
+
+      // ---- layers.js: where the finished logo sits on any phone ----
+      function logoLayout(kit) {
+        const F = kit.F, W = kit.w, H = kit.h;
+        const s = Math.min(W * 0.6, H * 0.31) / F.box.w;
+        const fh = F.box.h * s, fw = F.box.w * s;
+        const m = ctx(newCanvas());
+        m.font = '600 100px ' + kit.SYS;
+        const wordPx = (fw / m.measureText('FreeMotion').width) * 100;
+        const gap = fh * 0.13;
+        const block = fh + gap + wordPx;
+        const top = 60 + Math.max(0, (H - 110 - 60 - block) / 2);
+        const cx = W / 2, cy = top + fh / 2;
+        return {
+          s, fw, fh, cx, cy, wordPx,
+          left: cx - fw / 2,
+          wordY: top + fh + gap + wordPx * 0.8,
+          X: (lx) => cx + (lx - (F.box.x + F.box.w / 2)) * s,
+          Y: (ly) => cy + (ly - (F.box.y + F.box.h / 2)) * s,
+        };
+      }
+
+      // ---- The camera for things lying in a plane (z is the plane's normal): spin about z, then tip about x ----
+      function Cam(cx, cy) {
+        this.cx = cx; this.cy = cy; this.f = 1000; this.dist = 1000;
+        this.tx = 0; this.ty = 0; this.tz = 0;
+        this.X = 0; this.Y = 0; this.D = 1;
+        this.ca = 1; this.sa = 0; this.cp = 1; this.sp = 0;
+      }
+      Cam.prototype.turn = function (az, pitch) {
+        this.ca = Math.cos(az); this.sa = Math.sin(az);
+        this.cp = Math.cos(pitch); this.sp = Math.sin(pitch);
+      };
+      Cam.prototype.p = function (x, y, z) {
+        x -= this.tx; y -= this.ty; z -= this.tz;
+        const a = x * this.ca - y * this.sa, b = x * this.sa + y * this.ca;
+        const y2 = b * this.cp - z * this.sp, z2 = b * this.sp + z * this.cp;
+        const d = this.dist - z2;
+        this.D = d;
+        const s = this.f / Math.max(d, 0.0001);
+        this.X = this.cx + a * s;
+        this.Y = this.cy + y2 * s;
+      };
+
+      // A picture on a plane, in perspective: cut into small cells, each cell an affine drawImage. mask (optional) skips the
+      // cells that are empty.
+      const meshBuf = new Float64Array(3 * 40 * 40);
+      function drawMesh(g, dpr, cam, img, x0, y0, x1, y1, z, nu, nv, mask) {
+        const cw = img.width / nu, ch = img.height / nv;
+        let n = 0;
+        for (let j = 0; j <= nv; j++) {
+          for (let i = 0; i <= nu; i++) {
+            cam.p(x0 + ((x1 - x0) * i) / nu, y0 + ((y1 - y0) * j) / nv, z);
+            meshBuf[n++] = cam.X; meshBuf[n++] = cam.Y; meshBuf[n++] = cam.D;
+          }
+        }
+        const row = (nu + 1) * 3;
+        for (let j = 0; j < nv; j++) {
+          for (let i = 0; i < nu; i++) {
+            if (mask && !mask[j * nu + i]) continue;
+            const a = (j * (nu + 1) + i) * 3, b = a + 3, c = a + row, d = c + 3;
+            if (meshBuf[a + 2] < 2 || meshBuf[b + 2] < 2 || meshBuf[c + 2] < 2 || meshBuf[d + 2] < 2) continue;
+            let ux = (meshBuf[b] - meshBuf[a] + meshBuf[d] - meshBuf[c]) / 2, uy = (meshBuf[b + 1] - meshBuf[a + 1] + meshBuf[d + 1] - meshBuf[c + 1]) / 2;
+            let vx = (meshBuf[c] - meshBuf[a] + meshBuf[d] - meshBuf[b]) / 2, vy = (meshBuf[c + 1] - meshBuf[a + 1] + meshBuf[d + 1] - meshBuf[b + 1]) / 2;
+            const lu = hypot(ux, uy), lv = hypot(vx, vy);
+            if (lu < 0.02 || lv < 0.02) continue;
+            const eu = (lu + 0.9) / lu, ev = (lv + 0.9) / lv;
+            ux *= eu; uy *= eu; vx *= ev; vy *= ev;
+            const mx = (meshBuf[a] + meshBuf[b] + meshBuf[c] + meshBuf[d]) / 4, my = (meshBuf[a + 1] + meshBuf[b + 1] + meshBuf[c + 1] + meshBuf[d + 1]) / 4;
+            g.setTransform((ux * dpr) / cw, (uy * dpr) / cw, (vx * dpr) / ch, (vy * dpr) / ch, (mx - (ux + vx) / 2) * dpr, (my - (uy + vy) / 2) * dpr);
+            g.drawImage(img, i * cw, j * ch, cw, ch, 0, 0, cw, ch);
+          }
+        }
+        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      // Which cells of a picture have anything in them.
+      function cellMask(img, nu, nv) {
+        const c = newCanvas();
+        c.width = nu * 6; c.height = nv * 6;
+        const x = ctx(c);
+        x.drawImage(img, 0, 0, c.width, c.height);
+        const d = x.getImageData(0, 0, c.width, c.height).data;
+        const m = new Uint8Array(nu * nv);
+        for (let py = 0; py < c.height; py++) {
+          for (let px = 0; px < c.width; px++) {
+            if (d[(py * c.width + px) * 4 + 3] > 1) m[Math.floor(py / 6) * nu + Math.floor(px / 6)] = 1;
+          }
+        }
+        return m;
+      }
+
+      // Real motion blur: n renders across the shutter, averaged. draw(ctx, t) must paint a whole opaque frame.
+      function shutter(g, off, dpr, t, open, n, draw) {
+        if (n <= 1) { draw(g, t); return; }
+        const o = off.g;
+        for (let i = 0; i < n; i++) {
+          o.setTransform(dpr, 0, 0, dpr, 0, 0);
+          draw(o, t - (open * (n - 1 - i)) / (n - 1));
+          g.setTransform(1, 0, 0, 1, 0, 0);
+          g.globalAlpha = 1 / (i + 1);
+          g.drawImage(off.canvas, 0, 0);
+        }
+        g.globalAlpha = 1;
+        g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      function poly(g, pts) {
+        g.beginPath();
+        g.moveTo(pts[0], pts[1]);
+        for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]);
+        g.closePath();
+      }
+
+      // ---- Footage, drawn by hand in a 160 x 90 frame: the two of the eight films this take shows ----
+      function ridge(x, base, amp, step, seed, fill) {
+        x.fillStyle = fill;
+        x.beginPath();
+        x.moveTo(-2, 92);
+        for (let i = 0, px = -2; px < 164; i++, px += step) {
+          const n = (hash01(i, seed) - 0.5) * amp + (hash01(i >> 2, seed + 9) - 0.5) * amp * 1.3;
+          x.lineTo(px, base + n);
+        }
+        x.lineTo(164, 92);
+        x.closePath();
+        x.fill();
+      }
+      function hash01(i, seed) {
+        let v = Math.imul((i | 0) + 0x9e3779b9, 0x85ebca6b) ^ Math.imul(seed | 0, 0xc2b2ae35);
+        v = Math.imul(v ^ (v >>> 13), 0x5bd1e995);
+        return ((v ^ (v >>> 15)) >>> 0) / 4294967296;
+      }
+      function vgrad(x, stops, y0, y1) {
+        const gr = x.createLinearGradient(0, y0 === undefined ? 0 : y0, 0, y1 === undefined ? 90 : y1);
+        stops.forEach((s, i) => gr.addColorStop(i / (stops.length - 1), s));
+        return gr;
+      }
+      function scene(x, X, Y, W, H, kind, ph) {
+        ph = ph || 0;
+        x.save();
+        x.beginPath(); x.rect(X, Y, W, H); x.clip();
+        x.translate(X, Y); x.scale(W / 160, H / 90);
+        if (kind === 0) {           // desert road at sundown
+          x.fillStyle = vgrad(x, ['#54243a', '#b83f35', '#ef8a3a', '#fcd688'], 0, 58); x.fillRect(0, 0, 160, 60);
+          x.fillStyle = '#fff1c9'; x.beginPath(); x.arc(112 - ph * 30, 44 + ph * 8, 12, 0, TAU); x.fill();
+          ridge(x, 50, 13, 9, 3, '#7e2f35');
+          x.fillStyle = '#34161e'; x.beginPath(); x.moveTo(-2, 60); x.lineTo(14, 60); x.lineTo(18, 40); x.lineTo(40, 39); x.lineTo(45, 60); x.lineTo(160, 60); x.lineTo(160, 90); x.lineTo(-2, 90); x.fill();
+          x.fillStyle = '#1b0f12'; x.beginPath(); x.moveTo(78, 58); x.lineTo(84, 58); x.lineTo(150, 90); x.lineTo(16, 90); x.fill();
+          x.fillStyle = '#f2c14e';
+          for (let i = 0; i < 5; i++) { const q = i / 5, y = 60 + q * q * 30, w = 0.5 + q * 2; x.fillRect(81 - w / 2, y, w, 1 + q * 5); }
+          const carQ = 0.35 + ph * 0.5, carY = 60 + carQ * carQ * 30, cw = 4 + carQ * 26;
+          x.fillStyle = '#0c0a0a'; x.fillRect(66 - cw / 2 + ph * 6, carY - cw * 0.5, cw, cw * 0.5);
+          x.fillStyle = '#e8402a'; x.fillRect(66 - cw / 2 + ph * 6, carY - cw * 0.26, cw * 0.18, cw * 0.1); x.fillRect(66 + cw / 2 - cw * 0.18 + ph * 6, carY - cw * 0.26, cw * 0.18, cw * 0.1);
+        } else if (kind === 1) {    // sea, low sun
+          x.fillStyle = vgrad(x, ['#d98a5a', '#f2c690', '#fbeac4'], 0, 50); x.fillRect(0, 0, 160, 52);
+          x.fillStyle = vgrad(x, ['#1f6a70', '#0d3339'], 50, 90); x.fillRect(0, 50, 160, 40);
+          x.fillStyle = '#fff4d6'; x.beginPath(); x.arc(58, 42, 8, 0, TAU); x.fill();
+          for (let i = 0; i < 26; i++) { const y = 52 + i * 1.5; x.fillRect(58 - (2 + i * 0.8) * hash01(i, 4) - 3, y, (5 + i * 1.3) * hash01(i, 5) + 2, 0.7); }
+          x.fillStyle = '#1b1a1c'; x.beginPath(); x.moveTo(104, 52); x.lineTo(118, 42); x.lineTo(129, 46); x.lineTo(160, 33); x.lineTo(160, 58); x.fill();
+        }
+        x.restore();
+      }
+      function wave(x, X, Y, W, H, seed, color, bw, gap) {
+        x.fillStyle = color;
+        const n = Math.floor(W / (bw + gap));
+        for (let i = 0; i < n; i++) {
+          const beat = Math.pow(Math.abs(Math.sin(i * 0.11 + seed)), 3);
+          const a = Math.min(1, (0.16 + 0.84 * beat) * (0.4 + 0.6 * hash01(i, seed + 2)) + 0.08 * hash01(i >> 3, seed + 3));
+          x.fillRect(X + i * (bw + gap), Y + (H * (1 - a)) / 2, bw, Math.max(1, H * a));
+        }
+      }
+
+      // ======================================================================================================
+      // THE STACK: a comp comes apart into hanging sheets, the camera swings round, a black matte drops on them.
+      // ======================================================================================================
+      const take = {
+        id: 'layers-stack',
+        name: 'Exploded Stack',
+        dur: 2.92,
+        ground: '#e7e2d5',
+        /* the matte lands at tImp: from then on every frame is on COAL, the ground the splash's surround turns to */
+        tDark: 2.14, groundDark: '#0c0c0d',
+        make(stage, kit) {
+          const W = kit.w, H = kit.h, dpr = kit.dpr;
+          const g = kit.canvas({ alpha: false });
+          const off = kit.layer();
+          const L = logoLayout(kit), F = kit.F;
+          const NU = 5, NV = 10;
+          const INK = '#16130f', BONE = '#e7e2d5', COAL = '#0c0c0d';
+          const texS = Math.min(dpr, 1.6), fs = W / 390;
+          const tex = (paint) => {
+            const c = newCanvas();
+            c.width = Math.ceil(W * texS); c.height = Math.ceil(H * texS);
+            const x = ctx(c);
+            x.scale(texS, texS);
+            paint(x);
+            return { img: c, mask: cellMask(c, NU, NV) };
+          };
+          const tab = (x, text, on, ink) => {
+            const tw = mono.width(text, 12 * fs) + 12 * fs;
+            x.fillStyle = on; x.fillRect(0, 0, tw, 18 * fs);
+            x.fillStyle = ink;
+            mono.fill(x, text, 12 * fs, 6 * fs, 9.5 * fs, 'middle');
+          };
+          const row = (c) => ({ x: L.X(c.x), y: L.Y(c.y), w: c.w * L.s, h: c.h * L.s, r: c.r * L.s });
+          const R = F.clips.map(row);
+          const keyRows = (x) => { R.forEach((r) => { x.beginPath(); x.roundRect(r.x, r.y, r.w, r.h, r.r); x.fill(); }); };
+          const keyHead = (x) => {
+            const hd = F.head;
+            x.beginPath(); x.roundRect(L.X(hd.x), L.Y(hd.y), hd.w * L.s, hd.h * L.s, hd.r * L.s); x.fill();
+            x.beginPath(); hd.tri.forEach((p, i) => (i ? x.lineTo(L.X(p[0]), L.Y(p[1])) : x.moveTo(L.X(p[0]), L.Y(p[1])))); x.fill();
+          };
+
+          // 0 COLOUR: a flat colour layer, solid, with the swatches it was picked from.
+          const colour = tex((x) => {
+            x.fillStyle = '#e4471d'; x.fillRect(0, 0, W, H);
+            const r = kit.rng(5);
+            for (let i = 0; i < 500; i++) { x.fillStyle = r() < 0.5 ? 'rgba(120,20,0,.16)' : 'rgba(255,190,120,.14)'; x.fillRect(r() * W, r() * H, 1 + r() * 2, 1 + r() * 2); }
+            const sw = ['#f6c544', '#f28a2e', '#e4471d', '#a92a15', '#efe6d0', '#1f7f70'], sh = H / 16;
+            sw.forEach((c, i) => { x.fillStyle = c; x.fillRect(W - sh, H - sh * (6.4 - i), sh, sh + 1); x.fillStyle = INK; x.fillRect(W - sh, H - sh * (6.4 - i), sh, 1); });
+            tab(x, 'COLOUR', INK, BONE);
+          });
+          // 1 CLIP: the same few seconds, frame after frame, with a burned-in counter. Stops above the short row so the colour shows there.
+          const clip = tex((x) => {
+            const fh = (W * 0.94 * 9) / 16, fx = W * 0.03, gapY = 7 * fs;
+            const bottom = R[2].y - 5 * fs;
+            let y = bottom - fh, n = 0;
+            const frames = Math.ceil(bottom / (fh + gapY)) + 1;
+            for (let i = frames - 1; i >= 0; i--) {
+              const ph = 1 - i / frames;
+              scene(x, fx, y, W * 0.94, fh, 0, 1 - ph);
+              x.fillStyle = INK; x.fillRect(fx, y + fh - 17 * fs, 90 * fs, 17 * fs);
+              x.fillStyle = BONE;
+              mono.fill(x, '00:04:' + String(11 + i) + ':' + String(3 + i * 7), 12 * fs, fx + 5 * fs, y + fh - 8 * fs, 'middle');
+              y -= fh + gapY; n++;
+            }
+            x.save(); x.translate(fx, H * 0.77); scene(x, 0, 0, W * 0.94, fh * 0.9, 1, 0); x.restore();
+            tab(x, 'CLIP 01', '#f6c544', INK);
+          });
+          // 2 WAVE: a bone band with the audio in it. Sits on the medium row.
+          const wav = tex((x) => {
+            const by = R[1].y - R[1].h * 0.5, bh = R[1].h * 2;
+            x.fillStyle = BONE; x.fillRect(0, by, W, bh);
+            wave(x, 0, by + 4 * fs, W, bh - 8 * fs, 2.4, INK, 2.2 * fs, 1.4 * fs);
+            x.fillStyle = INK; x.fillRect(0, by, W, 1.4 * fs); x.fillRect(0, by + bh - 1.4 * fs, W, 1.4 * fs);
+            x.save(); x.translate(0, by - 18 * fs); tab(x, 'AUDIO 2', INK, BONE); x.restore();
+          });
+          // 3 HEAD: the playhead on an otherwise empty sheet, with its ruler.
+          const headT = tex((x) => {
+            x.fillStyle = F.teal;
+            x.fillRect(L.X(F.head.x), L.Y(F.head.y), F.head.w * L.s, H - L.Y(F.head.y));
+            x.beginPath(); F.head.tri.forEach((p, i) => (i ? x.lineTo(L.X(p[0]), L.Y(p[1])) : x.moveTo(L.X(p[0]), L.Y(p[1])))); x.fill();
+            const ry = L.Y(F.head.y) - 26 * L.s;
+            x.fillStyle = INK;
+            for (let i = 0; i * 8 * fs < W; i++) { const big = i % 5 === 0; x.fillRect(i * 8 * fs, ry, 2.2 * fs, (big ? 26 : 11) * fs); }
+            for (let i = 0; i * 40 * fs < W; i++) mono.fill(x, String(i * 12), 11 * fs, i * 40 * fs + 3 * fs, ry + 15 * fs, 'alphabetic');
+            tab(x, 'PLAYHEAD', F.teal, INK);
+          });
+          // 4 MASK: a hand-placed outline round the F, anchor points and bezier handles showing.
+          const maskT = tex((x) => {
+            const pts = [[9, 15], [111, 15], [111, 47], [81, 47], [81, 76], [45, 76], [45, 105], [9, 105]].map((p) => [L.X(p[0]), L.Y(p[1])]);
+            x.strokeStyle = INK; x.lineWidth = 4.5 * fs; x.lineJoin = 'miter';
+            x.beginPath(); pts.forEach((p, i) => (i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1]))); x.closePath(); x.stroke();
+            x.lineWidth = 2.4 * fs;
+            const hs = [[1, 52, -30], [2, 40, 34], [4, 46, 26], [6, -40, 36]];
+            hs.forEach(([i, dx, dy]) => {
+              const p = pts[i], a = dx * fs, b = dy * fs;
+              x.beginPath(); x.moveTo(p[0] - a, p[1] - b); x.lineTo(p[0] + a, p[1] + b); x.stroke();
+              x.fillStyle = INK;
+              x.beginPath(); x.arc(p[0] - a, p[1] - b, 5.5 * fs, 0, TAU); x.fill();
+              x.beginPath(); x.arc(p[0] + a, p[1] + b, 5.5 * fs, 0, TAU); x.fill();
+            });
+            pts.forEach((p) => { x.fillStyle = '#fff'; x.fillRect(p[0] - 7 * fs, p[1] - 7 * fs, 14 * fs, 14 * fs); x.strokeStyle = INK; x.lineWidth = 2.6 * fs; x.strokeRect(p[0] - 7 * fs, p[1] - 7 * fs, 14 * fs, 14 * fs); });
+            x.save(); x.translate(pts[0][0], pts[0][1] - 28 * fs); tab(x, 'MASK 1', '#fff', INK); x.restore();
+            tab(x, 'SHAPE', '#fff', INK);
+          });
+          // 5 MATTE: black card, the F and the playhead cut clean through, the name printed in bone.
+          const card = tex((x) => {
+            x.fillStyle = COAL; x.fillRect(0, 0, W, H);
+            x.globalCompositeOperation = 'destination-out';
+            keyRows(x); keyHead(x);
+            x.globalCompositeOperation = 'source-over';
+            kit.wordmark(x, L.left, L.wordY, L.wordPx, F.top);
+            x.save(); x.translate(10 * fs, 10 * fs); tab(x, 'MATTE', BONE, INK); x.restore();
+          });
+          // The whole pile, flat, seen only through the holes.
+          const flat = kit.layer();
+          {
+            const x = flat.g;
+            [colour, clip, wav, headT].forEach((t) => x.drawImage(t.img, 0, 0, W, H));
+            x.globalCompositeOperation = 'destination-in';
+            x.fillStyle = '#000';
+            x.beginPath();
+            R.forEach((r) => x.roundRect(r.x, r.y, r.w, r.h, r.r));
+            x.roundRect(L.X(F.head.x), L.Y(F.head.y), F.head.w * L.s, F.head.h * L.s, F.head.r * L.s);
+            F.head.tri.forEach((p, i) => (i ? x.lineTo(L.X(p[0]), L.Y(p[1])) : x.moveTo(L.X(p[0]), L.Y(p[1]))));
+            x.closePath();
+            x.fill();
+            x.globalCompositeOperation = 'source-over';
+          }
+
+          const sheets = [
+            { t: colour, side: '#8f2a10', solid: true, h: 9 },
+            { t: clip, side: null, gel: 'rgba(255,255,255,.2)' },
+            { t: wav, side: null, gel: 'rgba(255,255,255,.14)' },
+            { t: headT, side: null, gel: 'rgba(41,217,187,.2)' },
+            { t: maskT, side: null, gel: 'rgba(246,197,68,.62)' },
+          ];
+          const gap = H * 0.3;
+          const zRest = [0, 1, 1.82, 2.5, 3.46].map((v) => v * gap);
+          const spread = zRest[4];
+          const delay = [0.03, 0.0, 0.07, 0.045, 0.015];
+          const damp = [7, 5.2, 6.4, 5.6, 4.6], wob = [14, 10, 15.5, 11.5, 9];
+          const tDrop = 1.66, tImp = 2.14;
+          const tFlatten = tImp - 0.15;
+          const cam = new Cam(W / 2, H / 2);
+          cam.f = H * 0.92;
+          // The slab falls, hits the top sheet, and loses a little speed at every sheet it picks up on the way down.
+          const zHit = [spread * 1.12, zRest[3] * 1.04, zRest[2] * 1.02, zRest[1], 0];
+          const hitT = [tDrop + 0.2, tDrop + 0.265, tDrop + 0.315, tDrop + 0.38, tImp];
+          const cardKeys = [[tDrop, spread * 2.05], [hitT[0], zHit[0], 'in2'], [hitT[1], zHit[1], 'in2'], [hitT[2], zHit[2], 'in2'], [hitT[3], zHit[3], 'in2'], [hitT[4], zHit[4], 'in2']];
+          const zCard = (t) => kit.k(t, cardKeys);
+          const stretch = (t) => kit.k(t, [[1.3, 1], [tDrop + 0.1, 1.1, 'io2']]);
+          const zOf = (i, t) => {
+            const q = Math.max(0, t - delay[i]);
+            let z = zRest[i] * (1 - Math.exp(-damp[i] * q) * Math.cos(wob[i] * q));
+            z *= stretch(t);
+            if (t > tDrop) z = Math.min(z, zCard(t));
+            return z;
+          };
+          const lightX = 0.2, lightY = 0.34;
+          const zFloor = -H * 0.06;
+          const corner = [0, 0, 0, 0, 0, 0, 0, 0];
+          const quad = (z) => {
+            const x0 = -W / 2, x1 = W / 2, y0 = -H / 2, y1 = H / 2;
+            cam.p(x0, y0, z); corner[0] = cam.X; corner[1] = cam.Y;
+            cam.p(x1, y0, z); corner[2] = cam.X; corner[3] = cam.Y;
+            cam.p(x1, y1, z); corner[4] = cam.X; corner[5] = cam.Y;
+            cam.p(x0, y1, z); corner[6] = cam.X; corner[7] = cam.Y;
+            return corner;
+          };
+          const shadowOn = (zSheet, zPlane) => {
+            const dz = zSheet - zPlane;
+            const x0 = -W / 2 + dz * lightX, x1 = W / 2 + dz * lightX, y0 = -H / 2 + dz * lightY, y1 = H / 2 + dz * lightY;
+            cam.p(x0, y0, zPlane); const a = cam.X, b = cam.Y;
+            cam.p(x1, y0, zPlane); const c = cam.X, d = cam.Y;
+            cam.p(x1, y1, zPlane); const e = cam.X, f = cam.Y;
+            cam.p(x0, y1, zPlane); const h = cam.X, j = cam.Y;
+            return [a, b, c, d, e, f, h, j];
+          };
+          const handles = (x, q) => {
+            x.fillStyle = '#fff'; x.strokeStyle = INK; x.lineWidth = 1.2;
+            for (let i = 0; i < 8; i += 2) { x.fillRect(q[i] - 3, q[i + 1] - 3, 6, 6); x.strokeRect(q[i] - 3, q[i + 1] - 3, 6, 6); }
+          };
+
+          let azNow = 0, pitchNow = 0;
+          const TWA = [2.5, 8, -7, 10, -13], TWW = [3.4, 4.6, 3.9, 3.1, 2.6];
+          const twist = (i, t) => TWA[i] * Math.sin(TWW[i] * t) * Math.exp(-0.9 * t) * (1 - kit.map(t, tDrop, tDrop + 0.2));
+          const faceSheet = (i, t) => cam.turn((azNow + twist(i, t)) * RAD, pitchNow * RAD);
+          function setCam(t) {
+            const pitch = kit.k(t, [[0, 66], [0.5, 58, 'out2'], [tFlatten, 56], [tImp, 0, 'in3']]);
+            const az = kit.k(t, [[0, -158], [0.1, -164, 'out2'], [0.98, 30, 'io2'], [1.46, 14, 'io2'], [tFlatten, 17, 'io2'], [tImp, 0, 'in3']]);
+            const kd = kit.k(t, [[0, 0.86], [0.62, 2.02, 'out3'], [1.4, 1.84], [tFlatten, 2.0, 'io2'], [tImp, 1, 'in3']]);
+            azNow = az; pitchNow = pitch;
+            cam.turn(az * RAD, pitch * RAD);
+            cam.dist = cam.f * kd;
+            cam.tz = kit.k(t, [[0, 0], [0.6, spread * 0.5, 'out3'], [tDrop, spread * 0.5 * stretch(tDrop)], [tFlatten, spread * 0.36], [tImp, 0, 'in3']]);
+          }
+
+          function scenery(x, t) {
+            x.fillStyle = BONE; x.fillRect(0, 0, W, H);
+            setCam(t);
+            // Shadows on the studio floor, one per sheet.
+            const pile = [];
+            for (let i = 0; i < 5; i++) pile.push(zOf(i, t));
+            const zc = t > tDrop ? zCard(t) : null;
+            x.fillStyle = 'rgba(52,44,32,.13)';
+            for (let i = 0; i < 5; i++) { faceSheet(i, t); poly(x, shadowOn(pile[i], zFloor)); x.fill(); }
+            if (zc !== null) { cam.turn(azNow * RAD, pitchNow * RAD); x.fillStyle = 'rgba(52,44,32,.32)'; poly(x, shadowOn(zc, zFloor)); x.fill(); }
+            const gelOn = kit.map(t, 0.04, 0.34);
+            for (let i = 0; i < 5; i++) {
+              const sh = sheets[i], z = pile[i];
+              faceSheet(i, t);
+              if (sh.solid) {
+                const a = quad(z).slice(), b = quad(z - sh.h);
+                x.fillStyle = sh.side;
+                for (let n = 0; n < 8; n += 2) {
+                  const m = (n + 2) % 8;
+                  poly(x, [a[n], a[n + 1], a[m], a[m + 1], b[m], b[m + 1], b[n], b[n + 1]]); x.fill();
+                }
+              }
+              const q = quad(z).slice();
+              if (sh.gel) { x.globalAlpha *= gelOn; x.fillStyle = sh.gel; poly(x, q); x.fill(); x.globalAlpha = 1; }
+              drawMesh(x, dpr, cam, sh.t.img, -W / 2, -H / 2, W / 2, H / 2, z, NU, NV, sh.t.mask);
+              // The next sheet up throws a hard shadow on this one.
+              if (i < 4) {
+                x.save();
+                poly(x, q); x.clip();
+                x.fillStyle = 'rgba(30,22,14,.22)';
+                poly(x, shadowOn(pile[i + 1], z)); x.fill();
+                x.restore();
+              }
+              x.strokeStyle = INK; x.lineWidth = 1.3;
+              poly(x, q); x.stroke();
+              if (!sh.solid) handles(x, q);
+            }
+            if (zc !== null) {
+              cam.turn(azNow * RAD, pitchNow * RAD);
+              const a = quad(zc).slice(), b = quad(zc - 12);
+              x.fillStyle = '#26262a';
+              for (let n = 0; n < 8; n += 2) {
+                const m = (n + 2) % 8;
+                poly(x, [a[n], a[n + 1], a[m], a[m + 1], b[m], b[m + 1], b[n], b[n + 1]]); x.fill();
+              }
+              drawMesh(x, dpr, cam, card.img, -W / 2, -H / 2, W / 2, H / 2, zc, NU, NV, null);
+            }
+          }
+
+          [colour, clip, wav, headT, maskT, card].forEach((o) => off.g.drawImage(o.img, 0, 0, 1, 1));
+          off.g.drawImage(flat.canvas, 0, 0, 1, 1);
+          return function seek(t) {
+            g.setTransform(dpr, 0, 0, dpr, 0, 0);
+            g.globalAlpha = 1;
+            if (t < tImp) {
+              const n = t < 0.5 ? 7 : t < 1.05 ? 4 : t < tDrop ? 2 : t < tFlatten ? 4 : 8;
+              shutter(g, off, dpr, t, t < 1.05 ? 0.016 : t < tDrop ? 0.01 : t < tFlatten ? 0.012 : 0.011, n, scenery);
+              return;
+            }
+            // Everything is flat now and only the holes show the pile. The whole frame rings from the hit.
+            const q = t - tImp;
+            const zoom = 1 + 0.085 * Math.exp(-15 * q) * Math.cos(44 * q);
+            const fr = kit.frame(q, 24);
+            const amp = 9 * Math.exp(-15 * q);
+            const jx = (kit.hash(fr, 8) - 0.5) * amp, jy = (kit.hash(fr, 9) - 0.5) * amp;
+            g.fillStyle = COAL; g.fillRect(0, 0, W, H);
+            g.save();
+            g.translate(W / 2 + jx, H / 2 + jy); g.scale(zoom, zoom); g.translate(-W / 2, -H / 2);
+            const cut = [0.42, 0.56, 0.62];
+            const allClean = q >= cut[2] + 0.04;
+            if (allClean) {
+              kit.drawF(g, L.cx, L.cy, L.s, { knock: COAL });
+            } else {
+              g.drawImage(flat.canvas, 0, 0, W, H);
+              // Each row cuts to the clean grey on its own beat.
+              g.save();
+              g.translate(L.X(0), L.Y(0)); g.scale(L.s, L.s);
+              const gr = g.createLinearGradient(0, 20, 0, 100);
+              gr.addColorStop(0, F.top); gr.addColorStop(1, F.bottom);
+              g.fillStyle = gr;
+              F.clips.forEach((c, i) => { if (q >= cut[i]) { g.beginPath(); g.roundRect(c.x, c.y, c.w, c.h, c.r); g.fill(); } });
+              g.restore();
+            }
+            kit.wordmark(g, L.left, L.wordY, L.wordPx, F.top);
+            g.restore();
+          };
+        },
+        /* THE END FRAME ALONE, for reduced motion and a clock that never starts: what seek(dur) paints once the ring from the
+           hit has died away (its zoom and shake are under 1e-6 by then), without making the five sheets and the matte first. A
+           test pins it to seek(dur) pixel for pixel. */
+        still(stage, kit) {
+          const g = kit.canvas({ alpha: false });
+          const L = logoLayout(kit), COAL = '#0c0c0d';
+          g.fillStyle = COAL; g.fillRect(0, 0, kit.w, kit.h);
+          kit.drawF(g, L.cx, L.cy, L.s, { knock: COAL });
+          kit.wordmark(g, L.left, L.wordY, L.wordPx, kit.F.top);
+        },
+        makeKit,
+        /* empty every canvas the take made (the splash calls this as it removes itself) */
+        free() { for (const c of made) { c.width = 0; c.height = 0; } made.length = 0; },
+        mono,
+      };
+      window.FM_TAKE = take;
+    })();
+  </script>
   <script id="splash-boot">
     /* queue 942: IS THIS THE FIRST LOAD SINCE THE APP WAS OPENED? Ezra, 26 Sep: *"every time you load into the app for the
        first time like in the loading screen plays it puts you in the home menu not in your project"*. fm.session marks the
@@ -145,11 +804,9 @@
        own early returns, and read by app.js's boot landing. */
     try { window.FM_FIRST_LOAD = !sessionStorage.getItem('fm.session'); sessionStorage.setItem('fm.session', '1'); } catch (e) { window.FM_FIRST_LOAD = true; }
     (function () {
-      /* #1180: reduced motion no longer skips the intro, it gets the END FRAME as a still (his logo, no movement).
-         ONCE PER BUILD, not once per session ("i cant see the animation", 23 Oct): the flag was '1', set the moment this
-         script ran, so a resumed iPhone app, the update chip (location.replace keeps sessionStorage) and a refresh all
-         skipped it. It now holds the build (meta fm-build), and the intro plays when the stored value differs: v17.97's
-         stored '1' plays once on the next release, a reload of the same build stays silent. */
+      /* #1180: reduced motion does not skip the intro, it gets the END FRAME as a still (his logo, no movement).
+         ONCE PER BUILD, not once per session ("i cant see the animation", 23 Oct): fm.splashed holds the build (meta fm-build),
+         and the intro plays when the stored value differs; a reload of the same build stays silent. */
       var REDUCE = false, BUILD = '1';
       try {
         var bm = document.querySelector('meta[name="fm-build"]');
@@ -158,37 +815,64 @@
         REDUCE = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
         sessionStorage.setItem('fm.splashed', BUILD);
       } catch (e) { return; }
-      var sp = document.getElementById('splash'), svg = document.getElementById('splash-mark');
-      if (!sp || !svg) return;
-      /* The animation's own clock. END_S is the last movement (the playhead stops and the name cuts in, 1.5s); HOLD_S is how
-         long the finished mark is held before the hand-over; STILL_MS is how long the still is shown when there is no
-         animation to wait for. LAND_S is the longest the finished logo waits for the app under it, from when the clock starts
-         (or from the load, for the still): as long as the 3.76s mark and its .9s dissolve used to cover a slow restore. */
-      var END_S = 1.5, HOLD_S = 0.6, STILL_MS = 1000, LAND_S = 4.7;
-      /* CAN THIS BROWSER RUN THE SMIL? iOS Safari and Chrome do. Anything that cannot gets the end frame instead of a blank
-         box: every <animate> is replaced by its own LAST value, which is by construction the frame the animation ends on. */
-      var ANIM = !REDUCE && typeof svg.getCurrentTime === 'function' && typeof svg.setCurrentTime === 'function' && typeof window.SVGAnimationElement !== 'undefined';
-      function endFrame() {
-        var list = svg.querySelectorAll('animate, animateTransform');
-        for (var i = 0; i < list.length; i++) {
-          var a = list[i], el = a.parentNode, vals = String(a.getAttribute('values') || '').split(';'), last = vals[vals.length - 1].trim();
-          if (a.localName === 'animateTransform') el.setAttribute('transform', a.getAttribute('type') + '(' + last + ')');
-          else el.setAttribute(a.getAttribute('attributeName'), last);
-        }
-        for (var j = list.length - 1; j >= 0; j--) list[j].parentNode.removeChild(list[j]);
-      }
-      if (!ANIM) { try { endFrame(); } catch (e) {} }
+      var sp = document.getElementById('splash'), stage = document.getElementById('splash-stage'), TAKE = window.FM_TAKE;
+      if (!sp || !stage || !TAKE) return;
+      /* #1231: the take's own clock. END_S is its dur, the last frame (the finished logo on black); HOLD_S is how long that
+         is held before the hand-over, the 0.7 s the picker held it for him; STILL_MS is how long the still is shown when
+         there is nothing to animate. LAND_S is the longest the finished logo waits for the app under it, from when the clock
+         starts (or from the load, for the still). CEIL_MS, the ceiling from this script, keeps a whole animation for a load
+         as late as 11.2 s, as it did for the marks before this one: 11.2 + END_S + HOLD_S, rounded up. */
+      var END_S = TAKE.dur, HOLD_S = 0.7, STILL_MS = 1000, LAND_S = 4.7, CEIL_MS = Math.ceil((11.2 + END_S + HOLD_S) * 10) * 100;
+      /* The clock the take is played on, read at every frame: performance.now unless a test stands one in. Hand-over sums are
+         in Date.now's wall time, so a clock that runs slow is cut by the cap below exactly as the SMIL one was. */
+      var clockNow = function () { return window.__fmSplashClock ? window.__fmSplashClock() : performance.now(); };
       sp.classList.add('splash-kf');
       sp.classList.remove('hidden');
-      // Canvas and splash share one ground for as long as it is up (queue 162) — see html.splash-on in styles.css.
+      // Canvas and splash share one ground for as long as it is up (queue 162) — see the splash-css above.
       try { document.documentElement.classList.add('splash-on', 'splash-kf-on'); } catch (e) {}
-      if (ANIM) { try { svg.setCurrentTime(0); } catch (e) {} }
-      var gone = false;
-      // One speed since #1223: 280ms, because an editor cuts. A tap or the hard cap (`quick`) also stops the animation where it
-      // is and is marked splash-cut; the natural end has already stopped on its frame.
+      /* THE STAGE. The take was drawn for portrait phones (320x568 to 430x932) and fills a phone's whole screen. A window
+         wider than 620 px gets the picker's own stage, a portrait one up to 900 px tall, centred on the take's own ground
+         (#splash's colour follows the frame: bone, then black from the moment the matte lands), until there is a PC take. */
+      var W = sp.clientWidth || window.innerWidth, H = sp.clientHeight || window.innerHeight;
+      if (W > 620) { H = Math.min(H, 900); W = Math.round(H * 0.4617); }
+      stage.style.width = W + 'px'; stage.style.height = H + 'px';
+      var DPR = Math.min(window.devicePixelRatio || 1, 2);   // the picker's own: what he saw
+      var seek = null, gone = false, stilled = false, dark = false, shown = -1, startedPerf = 0, endedPerf = 0, makeMs = -1;
+      function ground(t) {
+        var d = t >= TAKE.tDark;
+        if (d === dark) return;
+        dark = d;
+        sp.classList.toggle('splash-dark', d);
+        try { document.documentElement.classList.toggle('splash-dark-on', d); } catch (e) {}
+      }
+      /* The end frame as a still: drawn ONCE, at once, with no sheets made (reduced motion, a clock that never starts, a take
+         that broke). A still that cannot be drawn either hands over at once: nothing may leave him on a blank ground. */
+      function paintStill() {
+        stage.textContent = '';
+        try { TAKE.still(stage, TAKE.makeKit(stage, W, H, DPR)); shown = END_S; ground(END_S); return true; } catch (e) { return false; }
+      }
+      function draw(t) {
+        try { seek(t); shown = t; ground(t); return true; } catch (e) { return false; }
+      }
+      /* The test seam: what the splash is showing (a time in seconds, END_S for the still, -1 before anything), whether it is
+         the still, when (performance.now) the take's first frame and its end frame were drawn, its stage, and the take
+         itself. Read by tests/tests.js's 1231 tests in a booted frame. */
+      window.FM_SPLASH = { take: TAKE, shown: function () { return shown; }, still: function () { return stilled; }, started: function () { return startedPerf; }, ended: function () { return endedPerf; }, makeMs: function () { return makeMs; }, size: [W, H, DPR] };
+      if (REDUCE) stilled = paintStill();
+      else {
+        /* make() before the first paint, so frame 0 is up from the moment the splash is: it paints the five sheets and the
+           matte once (cost measured: #1231's entry). The clock does not start until the load (below). */
+        var m0 = performance.now();
+        try { seek = TAKE.make(stage, TAKE.makeKit(stage, W, H, DPR)); makeMs = performance.now() - m0; } catch (e) { seek = null; }
+        if (!seek || !draw(0)) { seek = null; stilled = paintStill(); }
+      }
+      var raf = 0;
+      // One speed since #1223: 280ms, because an editor cuts. A tap or the hard cap (`quick`) stops the take where it is and is
+      // marked splash-cut; the natural end has already stopped on its frame.
       function dismiss(quick) {
         if (gone) return; gone = true;
-        if (quick) { try { svg.pauseAnimations(); } catch (e) {} sp.classList.add('splash-cut'); }
+        try { cancelAnimationFrame(raf); } catch (e) {}
+        if (quick) sp.classList.add('splash-cut');
         // splash-kf-out starts the light look's status-strip ramp (splash-css above) in the same style change as the cut.
         try { document.documentElement.classList.add('splash-kf-out'); } catch (e) {}
         sp.classList.add('splash-out');
@@ -196,16 +880,18 @@
         try { document.dispatchEvent(new CustomEvent('fm:splash-dismiss', { detail: { quick: !!quick } })); } catch (e) {}
         setTimeout(function () {
           sp.remove();
+          /* the take's canvases are emptied with it: iPhones cap canvas memory and free it late */
+          try { TAKE.free(); } catch (e) {}
           /* Every class the splash put on <html> comes off WITH it (queue 883: one that outlived the splash held the page
              canvas white for the rest of the session — his white bar). 'splash-on-light' is the film's ground ramp; nothing
              adds it now, and it stays in this list so it can never outlive a splash again. */
-          try { document.documentElement.classList.remove('splash-on', 'splash-on-light', 'splash-kf-on', 'splash-kf-out'); } catch (e) {}
+          try { document.documentElement.classList.remove('splash-on', 'splash-on-light', 'splash-kf-on', 'splash-kf-out', 'splash-dark-on'); } catch (e) {}
         }, 320);
       }
       /* HAS THE APP UNDER IT LANDED? (#1223's review.) Home only opens after the last project's clips are restored, one by one,
-         and the shorter mark can finish before that: he would see the logo, then a half-booted editor, then Home. So the
-         finished logo waits for window.FM_LANDED (app.js), up to LAND_S. A page with no FM at all has nothing to wait for. A
-         tap, a key and the ceiling below never wait. */
+         and the take can finish before that: he would see the logo, then a half-booted editor, then Home. So the finished
+         logo waits for window.FM_LANDED (app.js), up to LAND_S. A page with no FM at all has nothing to wait for. A tap, a key
+         and the ceiling below never wait. */
       function landed() { return !window.FM || window.FM_LANDED === true; }
       function whenLanded(go, ms) {
         var from = Date.now();
@@ -215,57 +901,63 @@
           else setTimeout(wait, 40);
         })();
       }
-      if (ANIM) {
-        /* Read the animation's OWN clock rather than a timer: its clock runs on through a stalled main thread, so the hold is
-           ALSO counted in wall time from the first reading that sees the mark finished (doneAt, #1223's review): a stall after
-           the load cannot eat the 0.6s he gets to read the name, or hand over a logo that was never painted. Polled on a timer:
-           requestAnimationFrame never fires in a frame that is not painting.
-           THE CLOCK STARTS LATE ON A REAL LAUNCH (the refuter of the 1180 review, B3): an inline SVG's timeline starts from
-           the document's load, after all the app's parser-blocking scripts and its synchronous init, and reads 0 until
-           then. So the cap is measured from the moment the clock STARTS (`started`, the first reading above 0), not from
-           this script: a late load still gets the whole animation, the hold and the natural hand-over. The cap only cuts a
-           clock that started and then ran slow (END_S + HOLD_S of wall time, plus 800ms, without reaching END_S). A clock that
-           reaches END_S and then stops counting is released 800ms after the hold, the same slack.
-           A CLOCK THAT NEVER RUNS (#1180): iOS with Auto-Play Animated Images off pauses every SMIL clock, so it reads 0 for
-           ever and the first frame, which is empty, showed as a dark box until the backstop. Once the page has loaded, a
-           paused timeline (svg.animationsPaused()) or a clock still at 0 one second after the load gets the END FRAME as a
-           still and the natural hand-over STILL_MS later, as reduced motion does. */
-        var started = 0, loadedAt = 0, stilled = false, doneAt = 0;
-        if (document.readyState === 'complete') loadedAt = Date.now();
-        else window.addEventListener('load', function () { loadedAt = Date.now(); });
+      if (seek && !stilled) {
+        /* THE CLOCK STARTS AT THE LOAD, as the SMIL one did: before it the app's ~100 parser-blocking scripts and its
+           synchronous init hold the main thread, and a take played through them would freeze and jump. Frame 0 is up until
+           then. From the first frame after the load the take plays on its clock (`started`), one frame per animation frame,
+           and stops on its end frame. The hold is counted in wall time from the first frame that drew the end (doneAt), so a
+           stall cannot eat the 0.7 s he gets to read the name. The cap cuts a clock that started and then ran slow: END_S +
+           HOLD_S of wall time, plus 800 ms, without reaching the end. A CLOCK THAT NEVER RUNS (a page that is not painting, so
+           no animation frame ever comes): one second after the load it gets the END FRAME as a still and the natural
+           hand-over STILL_MS later. The watch is on a timer: requestAnimationFrame never fires in a frame that is not painting. */
+        var started = 0, t0 = 0, loadedAt = 0, doneAt = 0, lastWatch = Date.now();
         var toStill = function () {
           stilled = true;
-          try { endFrame(); } catch (e) {}
+          try { cancelAnimationFrame(raf); } catch (e) {}
+          if (!draw(END_S) && !paintStill()) { dismiss(true); return; }
           setTimeout(function () { whenLanded(function () { dismiss(false); }, LAND_S * 1000 - STILL_MS); }, STILL_MS);
         };
+        var tick = function () {
+          if (gone || stilled) return;
+          var c = clockNow();
+          if (!started) { started = Date.now(); t0 = c; startedPerf = performance.now(); }
+          var t = Math.min(END_S, Math.max(0, (c - t0) / 1000));
+          if (!draw(t)) { toStill(); return; }
+          if (t >= END_S) { if (!doneAt) { doneAt = Date.now(); endedPerf = performance.now(); } return; }   // the end frame stays drawn
+          raf = requestAnimationFrame(tick);
+        };
+        var go = function () { loadedAt = Date.now(); if (!gone && !stilled) raf = requestAnimationFrame(tick); };
+        if (document.readyState === 'complete') go();
+        else window.addEventListener('load', go);
         (function watch() {
           if (gone || stilled) return;
-          var t = 0, paused = false;
-          try { t = svg.getCurrentTime(); } catch (e) {}
-          try { paused = !!(loadedAt && typeof svg.animationsPaused === 'function' && svg.animationsPaused()); } catch (e) {}
-          if (t > 0 && !started) started = Date.now();
-          if (t >= END_S && !doneAt) doneAt = Date.now();
-          var since = doneAt ? Date.now() - doneAt : 0, held = doneAt && since >= HOLD_S * 1000 && (t >= END_S + HOLD_S || since >= HOLD_S * 1000 + 800);
-          if (paused || (!started && loadedAt && Date.now() - loadedAt > 1000)) toStill();
+          /* THE WATCH READS THE TAKE'S CLOCK ITSELF (the review of #1231), as the SMIL watch read its own: after a stall of the
+             main thread this timer can run before the next animation frame, and deciding from what the last frame left would
+             cut a take whose clock has already reached its end. So a clock past END_S draws the end frame here, and the hold
+             starts from it. And a watch that itself ran late (the thread was held) does not count that time against the first
+             frame's second after the load: a stall is not a page that is not painting. */
+          var nowW = Date.now(), lag = nowW - lastWatch - 40;
+          lastWatch = nowW;
+          if (!started && loadedAt && lag > 200) loadedAt += lag;
+          if (started && !doneAt && (clockNow() - t0) / 1000 >= END_S && draw(END_S)) { doneAt = Date.now(); endedPerf = performance.now(); try { cancelAnimationFrame(raf); } catch (e) {} }
+          var held = doneAt && Date.now() - doneAt >= HOLD_S * 1000;
+          if (!started && loadedAt && Date.now() - loadedAt > 1000) toStill();
           else if (held && (landed() || Date.now() - started >= LAND_S * 1000)) dismiss(false);
           else if (!doneAt && started && Date.now() - started > (END_S + HOLD_S) * 1000 + 800) dismiss(true);
           else setTimeout(watch, 40);
         })();
-      } else {
+      } else if (stilled) {
         /* The still is held for STILL_MS from the page's LOAD, not from this script: started here it handed over while the
            boot was still running, so he saw the logo, then a half-booted page, then Home (the review of the fold, S3). */
         var still = function () { setTimeout(function () { whenLanded(function () { dismiss(REDUCE); }, LAND_S * 1000 - STILL_MS); }, STILL_MS); };
         if (document.readyState === 'complete') still(); else window.addEventListener('load', still);
-      }
+      } else { dismiss(true); }
       sp.addEventListener('pointerdown', function (e) { e.preventDefault(); dismiss(true); });   // preventDefault kills the synthesized post-touch click (it punched through to editor controls)
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') dismiss(true); });
-      /* The CEILING, from this script: nothing holds the editor hostage. It was an 8s backstop, and a boot that yields
-         (scripts arriving one by one on a phone) took longer than that to reach the load, so it cut the animation before
-         its clock had even started (#1180). The clock's own cap above and the still now end every ordinary case; this
-         only catches a load that never comes. It was 15s when the mark took 3.76s, so a load as late as 11.2s kept its whole
-         animation; 13.3s keeps that with the 2.1s mark (#1223). home.js and storage.js arm 6s fallbacks of their own when Home
-         opens: the finished logo waits for that same moment (landed above), so they only catch a splash torn down another way. */
-      setTimeout(function () { dismiss(true); }, 13300);
+      /* The CEILING, from this script: nothing holds the editor hostage. It only catches a load that never comes (the clock's
+         own cap and the still end every ordinary case). home.js and storage.js arm 6 s fallbacks of their own when Home opens:
+         the finished logo waits for that same moment (landed above), so they only catch a splash torn down another way. */
+      setTimeout(function () { dismiss(true); }, CEIL_MS);
     })();
   </script>
   <div id="app">
@@ -282,7 +974,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.22</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.23</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
