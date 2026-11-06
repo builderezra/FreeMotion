@@ -76953,6 +76953,10 @@
       let ticks = 0;
       for (let i = 0; i < (o.ticks || 18); i++) {
         FM.setTime((performance.now() - t0) / 1000);
+        /* #663 (the review of 6 Nov): FM.setTime renders before the controller reads the element, so with a look every frame a
+           long render showed up in the measured error as jitter the app never has: tick() reads the clock and syncs with nothing
+           in between. So with tickMs the clock is read again, just before the sync. */
+        if (o.tickMs) FM.time = Math.min(FM.scene.project.duration, (performance.now() - t0) / 1000);
         if (!FM._syncMediaToClock) throw new Error('FM._syncMediaToClock is not exposed — this test cannot reach the controller');
         FM._syncMediaToClock(); ticks++;
         if (o.each) o.each(el, i);   // #845: what the tick left behind, read before the next one
@@ -77270,6 +77274,26 @@
     if (FM._mesRepeatIsLatency(m, 0.07, 2000) !== true) throw new Error('CONTROL: the same error 1 s after a routed seek was not taken as latency, so this test proves nothing');
     m._syncAt = 1500;   // FM.play, wrapTo, prerollAtSeam and the restart all stamp _syncAt when they seat the element again
     if (FM._mesRepeatIsLatency(m, 0.07, 2000) !== false) throw new Error('a routed clip seated again after its seek still had its next error adopted as latency, so a stall on the new pass is kept with no seek (#845 B2)');
+    /* …and through a real re-seat, not a hand-set stamp (the review of 6 Nov): a loop wrap, the commonest one, on a real layer and
+       record. If wrapTo stopped stamping _syncAt, the first stall of the new lap inside 5 s of the old seek would be adopted. */
+    if (typeof FM._wrapTo !== 'function') throw new Error('setup: FM._wrapTo is not exposed, so a real re-seat cannot be driven');
+    const keep = { layers: FM.scene.layers.slice(), dur: FM.scene.project.duration, t: FM.time };
+    const media0 = isoMediaSnap();
+    try {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('video', { name: 'lap', start: 0, duration: 12 });
+      FM.scene.layers.push(L); FM.scene.project.duration = 12;
+      const now = performance.now();
+      const rec = { kind: 'video', el: spinUpEl(12, 0.09, 0.3), width: 320, height: 240, duration: 12,
+        _mes: {}, _mesSeekAt: now - 1000, _syncAt: now - 1000, _mesSeekErr: 0.07, _mesAdopted: 0 };
+      FM.media.set(L.id, rec);
+      if (FM._mesRepeatIsLatency(rec, 0.07, performance.now()) !== true) throw new Error('CONTROL: on the real record the same error 1 s after a routed seek was not taken as latency, so the wrap below proves nothing');
+      FM._wrapTo(1);
+      if (FM._mesRepeatIsLatency(rec, 0.07, performance.now()) !== false) throw new Error('a loop wrap seated the routed clip again and its next error was still adopted as latency: wrapTo no longer closes the adoption window, so a stall on the new lap is kept with no seek (#845 B2)');
+    } finally {
+      FM.scene.layers = keep.layers; FM.scene.project.duration = keep.dur; FM.time = keep.t;
+      isoMediaPut(media0);
+    }
   });
 
   /* #663 (finding 2, the PM's redesign, 24 Oct; js/app.js FM._mesRampNote and FM._mesRepeatIsLatency). The first fix adopted a REAL
