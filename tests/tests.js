@@ -86678,7 +86678,7 @@
      shows nothing. #1184 found Windows drawing flag emoji as letters, so this is a real way for an icon to go.
      A character icon is drawn on a canvas in the element's own font and compared with a character no font has (U+10FFFD):
      the same picture, or no ink at all, is a missing glyph. A mask icon's image is loaded, and the box under it must have a colour.
-     CONTROL FIRST: a planted button showing U+10FFFD and a planted mask with a broken image must both be reported, and the
+     CONTROL FIRST: a planted button showing U+2B74 (unassigned) and a planted mask with a broken image must both be reported, and the
      sweep must meet at least three character icons, or a clean result means nothing. Not run in Windows Chrome yet: the ship
      sends only tests the Linux pass could not run there. */
   test('860 b: no character or mask icon on screen draws an empty box or nothing, in the states the suite can drive', { item: '860', budgetMs: 40000 }, async function () {
@@ -86750,15 +86750,20 @@
       return out;
     };
 
-    /* CONTROL FIRST: a planted missing glyph and a planted broken mask, on screen. */
+    /* CONTROL FIRST: a planted missing glyph and a planted broken mask, on screen. The glyph is U+2B74, UNASSIGNED inside the
+       arrows block this audit reads, so it proves the two things a clean sweep rests on: the audit reaches a character icon on a
+       button, and a missing character OTHER than the reference draws the reference's box in this browser. (The first version
+       planted U+10FFFD, the reference itself, which is outside ICONISH: the button was never read and the control was red.)
+       If a font ever draws U+2B74, or a browser draws each missing character differently (Apple's LastResort font does, by
+       block), this control goes red and says so instead of the sweep passing blind. */
     const plant = document.createElement('div');
     plant.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99999;display:flex;gap:8px;';
-    plant.innerHTML = '<button type="button" aria-label="planted glyph" style="font-size:24px;width:40px;height:40px">\u{10FFFD}</button>'
+    plant.innerHTML = '<button type="button" aria-label="planted glyph" style="font-size:24px;width:40px;height:40px">\u{2B74}</button>'
       + '<span aria-label="planted mask" style="display:inline-block;width:32px;height:32px;background:#fff;-webkit-mask-image:url(data:image/png;base64,AAAA);mask-image:url(data:image/png;base64,AAAA)"></span>';
     document.body.appendChild(plant);
     let control;
     try { control = await audit(); } finally { plant.remove(); }
-    if (!control.some(function (s) { return /planted glyph/.test(s); })) throw new Error('CONTROL: a button showing a character no font has (U+10FFFD) was not reported (' + control.join(', ') + '), so the audit cannot see a missing glyph');
+    if (!control.some(function (s) { return /planted glyph/.test(s); })) throw new Error('CONTROL: a button showing an unassigned arrow-block character no font has (U+2B74) was not reported as the missing-character box (' + control.join(', ') + '), so the audit cannot see a missing glyph');
     if (!control.some(function (s) { return /planted mask/.test(s); })) throw new Error('CONTROL: a mask whose image does not load was not reported (' + control.join(', ') + ')');
     glyphsSeen.clear();
 
@@ -86771,6 +86776,28 @@
     if (tabs.length) { const pj = tabs.filter(function (b) { return /Projects/.test(b.textContent || ''); })[0]; if (pj) { pj.click(); await sleep(200); } }
     const amTabs = [].slice.call(document.querySelectorAll('.addmenu-tab'));
     for (let i = 0; i < amTabs.length; i++) { amTabs[i].click(); await at('add-menu tab ' + (amTabs[i].textContent || '').trim()); }
+    /* …and inside a project, where the character icons live that the home screen does not show: the ⋯ on an open effect row
+       and the effects browser's ★ (most of the app's icons are svg now, so the home and add-menu states above meet only ◱ and ◇,
+       measured 6 Nov). Put back afterwards exactly as the neighbouring tests do. */
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 's860b', shape: 'rect', x: 100, y: 100, shapeW: 60, shapeH: 60, fill: '#fff', start: 0, duration: 4 });
+      const fx = FM.fxRegistry.makeInstance('blur');
+      if (!fx) throw new Error('setup: no blur effect in the registry to open a row with');
+      fx._expanded = true; L.effects = [fx];
+      FM.scene = scene([L]); FM.selectLayer(L.id); if (FM.pause) FM.pause(); FM.refreshAll();
+      FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await at('a layer with its effect open');
+      FM.fxBrowser.open(L); await at('the effects browser');
+    } finally {
+      try { FM.fxBrowser.close(); } catch (e) {}
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open();
+      await sleep(60);
+    }
     if (glyphsSeen.size < 3) throw new Error('CONTROL: the sweep met only ' + glyphsSeen.size + ' character icon(s) (' + Array.from(glyphsSeen).join(' ') + '), so it says nothing about them');
     if (seen.length) throw new Error('character or mask icons that draw nothing or an empty box on screen, which is what he means by "the icons don\'t display properly": ' + seen.join(' | '));
   });
