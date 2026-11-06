@@ -63483,6 +63483,109 @@
     }
   });
 
+  /* #202 the VIDEO line (its 6 Nov plan). #202 is one plain video layer that lags, and the Measure report (Settings, What's
+     slow, Measure; js/perf-probe.js) said nothing about the video itself: not how the clip's own clock moves while it plays,
+     not how the playhead moves, and not what drawing the clip costs. Those are numbers only his phone can give.
+     The rig drives both clocks itself, one step per animation frame, so the steps are known exactly: the playhead moves
+     1/60 s every frame and the clip's clock 1/30 s every second frame. Every frame is drawn through the real FM.renderScene
+     from a canvas standing in for the <video> (drawImage takes both), so the compositor's own timing of that draw is what
+     the report prints. FM.playing is held true for the sample (the transport itself is not run: its clock is the rig's).
+     FAILS BEFORE THE FIX: the report has no VIDEO line at all.
+     CONTROLS: the rig's first frame puts the clip's red in the picture (the compositor really draws the stand-in); the rig's
+     frame loop ran through the sample; the same clip with nothing playing says its clock was not measured, with no step
+     numbers; and a project with no video says so in its VIDEO line, with no numbers, though the playhead moved. */
+  test('202 the Measure report has a VIDEO line: the video clock’s smallest step, the playhead’s, and what drawing the video costs', { item: '202', budgetMs: 30000 }, async function () {
+    if (!FM.perfProbe || typeof FM.perfProbe.run !== 'function') throw new Error('FM.perfProbe.run is missing');
+    if (FM.perfProbe.running) throw new Error('a probe is already running, so this one would be refused and prove nothing');
+    const realRender = FM.renderScene, wasPlaying = FM.playing;
+    const measure = function () {
+      return new Promise(function (res, rej) {
+        const to = setTimeout(function () { rej(new Error('the probe never finished within 8 s')); }, 8000);
+        if (FM.perfProbe.run(1000, function (out) { clearTimeout(to); res(out); }) === false) { clearTimeout(to); rej(new Error('the probe refused to start')); }
+      });
+    };
+    /* the VIDEO line and the indented lines under it */
+    const videoBlock = function (text) {
+      const ls = String(text || '').split('\n'), i = ls.findIndex(function (l) { return l.indexOf('VIDEO') === 0; });
+      if (i < 0) return null;
+      const out = [ls[i]];
+      for (let j = i + 1; j < ls.length && /^ {9}\S/.test(ls[j]); j++) out.push(ls[j]);
+      return out.join('\n');
+    };
+    let rig = null, looping = false, loopFrames = 0;
+    /* one frame of the rig: both clocks step, and the scene is drawn through the real compositor */
+    const startLoop = function (el, cx) {
+      let k = 0;
+      looping = true; loopFrames = 0;
+      const frame = function () {
+        if (!looping) return;
+        k++; loopFrames++;
+        FM.time = k / 60;
+        if (el) el.currentTime = Math.floor(k / 2) / 30;
+        cx.clearRect(0, 0, 320, 240);
+        realRender(cx, FM.scene, FM.time);
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    };
+    const num = function (block, re, what) {
+      const m = block.match(re);
+      if (!m) throw new Error('the VIDEO line does not say ' + what + ' in the words this asserts:\n' + block);
+      return m.slice(1).map(Number);
+    };
+    try {
+      /* ── a playing video */
+      rig = transportRig({ duration: 20 });
+      const cv = offscreen(320, 240), cx = cv.getContext('2d', { willReadFrequently: true });
+      const el = offscreen(64, 48), g = el.getContext('2d');
+      g.fillStyle = '#ff0000'; g.fillRect(0, 0, 64, 48);
+      el.readyState = 4; el.paused = false; el.currentTime = 0;
+      FM.media.set(rig.layer.id, { kind: 'video', el: el, width: 64, height: 48, duration: 20, stripFrames: [] });
+      realRender(cx, FM.scene, 0);
+      const px = cx.getImageData(160, 120, 1, 1).data;
+      if (!(px[0] > 180 && px[1] < 70 && px[2] < 70)) throw new Error('CONTROL: the rig’s clip did not draw (the middle of the picture is rgb(' + px[0] + ',' + px[1] + ',' + px[2] + ')), so the compositor never drew the stand-in and nothing below is under test');
+      FM.playing = true;
+      startLoop(el, cx);
+      const text = await measure();
+      looping = false;
+      if (loopFrames < 10) throw new Error('CONTROL: the rig drew only ' + loopFrames + ' frames during the one-second sample, so there was nothing to measure');
+      const block = videoBlock(text);
+      if (!block) throw new Error('the Measure report has no VIDEO line, so a sample taken while one plain video plays says nothing about the video’s clock or what drawing it costs (#202 is exactly that case):\n' + text);
+      const vc = num(block, /the video’s own clock: smallest step ([\d.]+)ms · usual step ([\d.]+)ms · stood still on (\d+) of (\d+) frames/, 'the video clock’s steps');
+      if (Math.abs(vc[0] - 33.3) > 0.6) throw new Error('the video clock’s smallest step reads ' + vc[0] + 'ms; the rig moves it 1/30 s (33.3ms) at a time:\n' + block);
+      if (vc[3] < 8 || vc[2] < vc[3] * 0.25 || vc[2] > vc[3] * 0.75) throw new Error('the video clock stood still on ' + vc[2] + ' of ' + vc[3] + ' frames; the rig moves it every second frame, so about half:\n' + block);
+      const ph = num(block, /the playhead: smallest step ([\d.]+)ms · usual step ([\d.]+)ms · stood still on (\d+) of (\d+) frames/, 'the playhead’s steps');
+      if (Math.abs(ph[0] - 16.7) > 0.6 || Math.abs(ph[1] - 16.7) > 0.6) throw new Error('the playhead’s steps read ' + ph[0] + 'ms smallest and ' + ph[1] + 'ms usual; the rig moves it 1/60 s (16.7ms) every frame:\n' + block);
+      if (ph[2] > 2) throw new Error('the playhead stood still on ' + ph[2] + ' of ' + ph[3] + ' frames; the rig moves it every frame:\n' + block);
+      const dr = num(block, /drawing the video: ([\d.]+)ms each time, worst ([\d.]+)ms · drawn (\d+) times, (\d+) of them at a new point in the clip/, 'what drawing the video cost');
+      if (dr[2] < 8) throw new Error('the report counted ' + dr[2] + ' draws of the video; the rig drew it on each of ' + loopFrames + ' frames:\n' + block);
+      if (dr[3] < 3 || dr[3] > dr[2] * 0.75 + 1) throw new Error(dr[3] + ' of ' + dr[2] + ' draws were counted at a new point in the clip; the rig moves the clip on every second frame, so about half:\n' + block);
+      if (!(dr[0] <= dr[1] + 0.01) || dr[1] > 1000) throw new Error('the draw times do not add up (' + dr[0] + 'ms each, worst ' + dr[1] + 'ms):\n' + block);
+      if (FM._videoDrawSink) throw new Error('the compositor is still timing video draws after the sample ended');
+
+      /* ── CONTROL: the same clip, nothing playing */
+      FM.playing = false;
+      const paused = videoBlock(await measure());
+      if (!paused || !/the video did not play during this sample, so its clock was not measured/.test(paused) || /smallest step/.test(paused)) throw new Error('CONTROL: with nothing playing the VIDEO line should say the clock was not measured, and quote no steps:\n' + paused);
+      rig.restore(); rig = null;
+
+      /* ── CONTROL: no video in the project, while the playhead moves */
+      rig = transportRig({ duration: 20, silent: true });
+      FM.playing = true;
+      startLoop(null, cx);
+      const none = videoBlock(await measure());
+      looping = false;
+      if (none !== 'VIDEO    no video in this project.') throw new Error('CONTROL: a project with only a shape in it should say it has no video, with no numbers; its VIDEO line reads:\n' + none);
+    } finally {
+      looping = false;
+      if (FM.perfProbe.running) FM.perfProbe.stop();
+      FM.playing = false;
+      if (rig) rig.restore();
+      FM.playing = wasPlaying;
+      if (FM._resetPlayQuality) FM._resetPlayQuality();
+    }
+  });
+
   test('perf: seeking a video to the time it is already at is skipped, not re-issued', { item: 'perf-seek-guard' }, function () {
     var keep = FM.scene.layers.slice(), keepT = FM.time;
     var fps = FM.scene.project.fps || 30;
