@@ -63516,7 +63516,7 @@
     const dropSong = function () {
       if (!songLayer) return;
       const i = FM.scene.layers.indexOf(songLayer); if (i >= 0) FM.scene.layers.splice(i, 1);
-      if (FM.media.delete) FM.media.delete(songLayer.id);
+      FM.media.remove(songLayer.id);
       songLayer = null;
     };
     /* one frame of the rig: both clocks step, and the scene is drawn through the real compositor */
