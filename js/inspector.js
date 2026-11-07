@@ -7947,6 +7947,13 @@ window.FM = window.FM || {};
          one ("More"); otherwise it stays clear above the tray and the tools. bandIdle is false whenever Simple is not on
          screen, so Full's Add menu and layer editor are exactly today's. */
       if (band) {
+        /* #768 N1: THE BAND HAS NO CLIP-ACTION ROW, SO NOTHING MAY WATCH FOR ITS CROSSING. quickSideSig is what the row Full
+           last built was drawn for, and syncPlayhead (every scrub step and every playback frame, through updateReadout) rebuilds
+           when the playhead's side of the clip stops matching it. Left standing here after a switch from Full, the first step
+           on the other side of the clip found no row to swap and called refresh(), which drew the band again without restamping
+           it, so every later step did the same: the band, and on the phone the sheet's docking, rebuilt once a step. Cleared,
+           syncPlayhead stands down until a real row is built again (quickRow and alignRow stamp it themselves). */
+        quickSideSig = null;
         /* …and it forgets the clip only when the selection moved (queue 980). The switch into Simple redraws this band for the clip
            Full had open; forgetting it there made the way back treat the same clip as a new pick, so a trip to Simple and back with
            nothing done closed Full's category and reset its keyframe row, filter preview and tabs. A different clip, or none, is

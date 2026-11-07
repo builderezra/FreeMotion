@@ -10559,6 +10559,10 @@ window.FM = window.FM || {};
            its Tab stays exactly as it was (the Full-unchanged lock); it can take the fix in a release of its own. */
         const rowsTl = document.getElementById('timeline');
         if (rowsTl && getComputedStyle(rowsTl).visibility !== 'hidden' && active && active !== document.body && !rowsTl.contains(active)) return;
+        /* #1225: the same in Simple, whose clip strip (#sm-timeline, on screen with body.ed-simple) runs this handler too and kept
+           v18.11's Tab: a focused button there moves focus, and a focus inside the strip, or none, still walks the layers. */
+        const smTl = document.getElementById('sm-timeline');
+        if (smTl && document.body.classList.contains('ed-simple') && active && active !== document.body && !smTl.contains(active)) return;
         e.preventDefault();
         /* bughunt6 #6: TAB WALKS THE ROWS THE TIMELINE SHOWS. It walked every layer in the project, so inside Edit Group,
            or past the members of a collapsed group, it selected a layer with no row on screen, and a Delete after it

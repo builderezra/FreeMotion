@@ -22,3 +22,8 @@ Follow it; if the tree has moved and a step no longer fits, say so in the entry 
 
 ---
 
+
+### 7 Nov 2026, ~13:50 AWST: "Intro still laggy" (#1232 clause 1, his second report)
+**His words (verbatim):** "Intro still laggy"
+**Logger:** this is #1232 clause 1 again. Nothing has touched the intro since v18.23: v18.24–v18.26 carried other items, and v18.27 (Simple) doesn't touch it either. So "still" is expected, not a failed fix. The plan in #1232 stands: measure first, in a booted app under a 4x CPU throttle, the take's frame times against the app's long tasks after load. The suspect is the post-load restore and Home render running during the 2.92 s take.
+❓ASK: should #1232 jump the queue and go next after v18.27? (He jumped the intro itself, #1231, with "I want it now so yes".) Until he says so, it waits its turn.
