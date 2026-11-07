@@ -2970,7 +2970,16 @@
     if (!cogClosed()) return;
     var x = D.getElementById('cv-mini-exp');
     if (!x || !x.getClientRects().length) throw new Error('no Canvas bar to open');
-    x.click(); await settle(350);
+    x.click();
+    /* …AND ITS FLIGHT LANDS BEFORE A FRAME IS DRAWN (7 Nov, v18.26's lock run: NOT PASS on fu1-cog at 1280, 956x440 and
+       1024x600, and HEAD against HEAD did the same). The flight animates the card's size, and the card's Cancel / Apply row
+       is position: sticky, a layer of its own: whichever frame of the flight last rastered it fixed its sub-pixel offset, so
+       the two words came out one of FOUR ways, run to run, while every record stayed byte for byte the same. Waiting longer
+       changed nothing (3 odd pictures in 8 with a 1 s wait, 3 in 8 without); finishing here, in the tap's own task, gave ONE
+       picture in 10 runs against four in 10. Nothing is lost: finishFinite notes each animation it finishes (noteRunning),
+       so the flight's keyframes, durations and easing are still in the motion record, and the landed card is still pictured. */
+    finishFinite();
+    await settle(350);
   }
   async function FU6() {
     await freshCopy('FU6');

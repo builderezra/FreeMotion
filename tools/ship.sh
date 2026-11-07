@@ -387,6 +387,11 @@ LOG="$(grep -o '^- v[0-9]\+\.[0-9]\+' POLISH-LOG.md | tail -1 | sed 's/^- //')"
 # full desktop pass: on 6 Nov v18.21 was refused after an hour for this one string, bumped by a script that knew only the label.
 BUILD="$(sed -n 's/.*<meta name="fm-build" content="\(v[0-9.]*\)".*/\1/p' index.html | head -1)"
 [ "$BUILD" = "$VER" ] || { echo "❌ index.html's fm-build stamp says ${BUILD:-nothing} but the label says $VER — bump both together (#1180)"; exit 1; }
+# …and no version NEWER than this one may be mentioned ANYWHERE in the log. The suite's version test takes the highest
+# vX.YY in the whole file, not the last line's, so "the two fixes ship next, as v18.27" inside v18.26's line passed the
+# gate above and refused the release after the full desktop pass (7 Nov, 65 minutes). Same rule as the test, in a second.
+HIGH="$(grep -oE '\bv[0-9]+\.[0-9]+\b' POLISH-LOG.md | sed 's/^v//' | sort -t. -k1,1n -k2,2n | tail -1)"
+[ "v$HIGH" = "$VER" ] || { echo "❌ POLISH-LOG.md mentions v$HIGH, newer than this release ($VER) — the suite's version test reads the highest version anywhere in the file; say 'the next release' instead"; grep -n "v$HIGH\b" POLISH-LOG.md | cut -c1-160 | head -3; exit 1; }
 # No log line may appear TWICE. On 6 Sep the log was found carrying v2.31..v15.00 twice: at v15.00 a bad append glued
 # a second copy of the whole file onto its own last line, and for 79 releases nothing noticed, because every check here
 # reads only the newest line. Whole lines, not version numbers: thirteen versions legitimately have two differently
