@@ -127718,7 +127718,7 @@
       const got = {};
       for (const v of ['A', 'B', 'C']) {
         const d = await clapFresh974(v, 'cyan');
-        const m = clapSample974(d, 0);
+        const m = clapSample974(d, 1);
         if (!m.clap) throw new Error('with timing ' + v + ' chosen nothing animates the stick');
         const period = m.tm.duration, S = [];
         for (let ms = 0; ms < period; ms += 20) S.push(m.at(ms));
@@ -192353,6 +192353,138 @@
       host.remove();
       try { T.free(); } catch (e) {}
     }
+  });
+
+  /* 1232 THE INTRO WAS STILL LAGGY (his words, 7 and 8 Nov), and the lag was the take's motion blur: each pass is painted into a
+   * second canvas and blended in, and the blend waits for that canvas, about 17 ms a pass on the laptop (70 at 4x CPU), so the
+   * opening's seven passes held a frame for 120-250 ms; one pass drawn straight to the screen costs under 2 ms. seek(t, most) now
+   * draws at most `most` passes. Proves, counting the blends of a full-size canvas onto the screen's: seven at 0.2 s and eight
+   * at 2.0 s with no cap (the take he picked, pass for pass), two when capped at two, none at one (drawn straight), and a cap
+   * of eight or more is his take to the pixel; the end frame is the same picture at any cap. CONTROL: 0.2 s with one pass
+   * differs from seven, so the comparison can see the blur. */
+  test('1232 the take draws only the blur passes it is allowed: seven at 0.2 s, two when capped at two, none blended at one, his take to the pixel at eight, and the end frame the same at any cap', { item: '1232', budgetMs: 60000 }, async function () {
+    const T = window.FM_TAKE;
+    if (!T) throw new Error('index.html defined no FM_TAKE');
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-5000px;top:0;width:390px;height:844px;overflow:hidden';
+    document.body.appendChild(host);
+    const P = CanvasRenderingContext2D.prototype, di = P.drawImage;
+    try {
+      const seek = T.make(host, T.makeKit(host, 390, 844, 2)), cv = host.querySelector('canvas');
+      if (!cv) throw new Error('setup: the take put no canvas on its stage');
+      let blends = 0;
+      P.drawImage = function (img) {
+        if (this.canvas === cv && img && img !== cv && img.tagName === 'CANVAS' && img.width === cv.width && img.height === cv.height) blends++;
+        return di.apply(this, arguments);
+      };
+      const count = (t, most) => { blends = 0; if (most === undefined) seek(t); else seek(t, most); return blends; };
+      const grab = () => { const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height; di.call(c.getContext('2d'), cv, 0, 0); return c; };
+      const got = { full02: count(0.2), full20: count(2.0), two02: count(0.2, 2), one02: count(0.2, 1), three20: count(2.0, 3) };
+      const want = { full02: 7, full20: 8, two02: 2, one02: 0, three20: 3 };
+      const bad = Object.keys(want).filter(k => got[k] !== want[k]);
+      if (bad.length) throw new Error('blur passes blended onto the screen: ' + bad.map(k => k + ' ' + got[k] + ' (want ' + want[k] + ')').join(', '));
+      P.drawImage = di;
+      for (const t of [0, 2.0]) {
+        seek(t); const his = grab(); seek(t, 8); const at8 = grab();
+        const d8 = pxDiff1231(his, at8, 0);
+        if (d8.n !== 0) throw new Error('at ' + t + ' s a cap of eight passes differs from his take in ' + d8.n + ' pixels (worst ' + d8.worst + '): a fast device no longer plays the take he picked');
+      }
+      seek(T.dur); const e = grab(); seek(T.dur, 1); const e1 = grab();
+      const de = pxDiff1231(e, e1, 0);
+      if (de.n !== 0) throw new Error('the end frame capped at one pass differs from his end frame in ' + de.n + ' pixels (worst ' + de.worst + ')');
+      seek(0.2); const b7 = grab(); seek(0.2, 1); const b1 = grab();
+      const db = pxDiff1231(b7, b1, 2);
+      if (db.n === 0) throw new Error('CONTROL: 0.2 s with one pass is the same picture as with seven, so these comparisons cannot see the blur and prove nothing');
+    } finally {
+      P.drawImage = di;
+      host.remove();
+      try { T.free(); } catch (e) {}
+    }
+  });
+
+  /* 1232 THE SPLASH SPENDS ONLY WHAT THE DEVICE HAS. A budget no device can meet (window.__fmSplashBudgetMs, the seam) stands in
+   * for his slow phone: frame 0 is measured before the load with two passes (not seven) and drawn again with one, passes() is
+   * one, every frame of the take after it is drawn with one pass, and the take still runs to its end frame and hands over
+   * naturally. CONTROL: a budget no frame can exceed keeps passes() at eight, frame 0 is drawn again with all seven passes (his
+   * first picture), and the opening (before 0.5 s) plays with all seven, as he picked it. */
+  test('1232 on a device that cannot afford the blur the splash draws one pass a frame and still ends on its end frame, and with room it draws every pass', { item: '1232', budgetMs: 40000 }, async function () {
+    const play = async function (budget) {
+      const run = await boot1180({ pre: 'window.__fmSplashBudgetMs = ' + budget + ';' });
+      try {
+        const w = run.w;
+        if (!w.FM_SPLASH) throw new Error('setup: the booted splash block has no take');
+        if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the animated path does not run here');
+        if (typeof w.FM_SPLASH.passes !== 'function' || typeof w.FM_SPLASH.costs !== 'function') throw new Error('FM_SPLASH has no passes() or costs(): the splash does not size the blur to the device');
+        for (let i = 0; i < 320 && !w.__rec.length; i++) await sleep(25);
+        if (!w.__rec.length) throw new Error('budget ' + budget + ' ms: the splash never handed over within 8 s');
+        return { rec: w.__rec[0], passes: w.FM_SPLASH.passes(), costs: w.FM_SPLASH.costs() };
+      } finally {
+        run.restore();
+      }
+    };
+    const slow = await play(0.001);
+    const fmt = c => c.slice(0, 6).map(r => r.join('/')).join(' ');
+    if (slow.costs.length < 2 || slow.costs[0][0] !== 0 || slow.costs[0][1] !== 2 || slow.costs[0][3] !== 0) throw new Error('frame 0 was not measured with two passes before the clock started: ' + fmt(slow.costs));
+    if (slow.costs[1][0] !== 0 || slow.costs[1][1] !== 1 || slow.costs[1][3] !== 0) throw new Error('frame 0 was not drawn again, before the clock started, with the one pass every later frame gets, so his first picture is not drawn like the rest: ' + fmt(slow.costs));
+    if (slow.passes !== 1) throw new Error('with a budget no frame can meet, passes() is ' + slow.passes + ', not 1');
+    const heavy = slow.costs.slice(1).filter(r => r[1] > 1);
+    if (heavy.length) throw new Error(heavy.length + ' frames after frame 0 drew more than one pass on a device that cannot afford it: ' + fmt(heavy));
+    if (slow.costs.length < 4) throw new Error('setup: only ' + slow.costs.length + ' frames were drawn, so the take hardly played');
+    if (slow.rec.quick) throw new Error('with one pass a frame the take was cut, not handed over on its end');
+    endFrame1231(slow.rec.snap, 'one pass a frame');
+    const room = await play(1e9);
+    if (room.passes !== 8) throw new Error('CONTROL: with all the time in the world passes() is ' + room.passes + ', not 8');
+    if (!(room.costs.length > 1 && room.costs[1][0] === 0 && room.costs[1][1] === 7 && room.costs[1][3] === 0)) throw new Error('with all the time in the world frame 0 was not drawn again with its seven passes, so his first picture is not the one he picked: ' + fmt(room.costs));
+    if (!room.costs.slice(1).some(r => r[0] < 0.5 && r[1] === 7)) throw new Error('CONTROL: with all the time in the world no frame of the opening drew its seven passes: ' + fmt(room.costs));
+    if (room.rec.quick) throw new Error('CONTROL: the full take was cut, not handed over on its end');
+  });
+
+  /* 1232 clause 2, THE CLAPPER'S LID IS CUT OFF AS IT LIFTS (his words, 7 Nov: "when the lid lifts up, before it snaps down, it
+   * gets cut off by an invisible black barrier"). The drawing lived in a 24-unit box and only overflow:visible let the open
+   * stick (up to y = -3.4 at the lift) and the impact lines (to x = 26.7) show past it; WebKit clips an animated SVG child to
+   * the SVG's own box, which slices the stick along the top edge. Not reproducible here (no WebKit), so this proves the cure
+   * that does not depend on it: through every pose of all three timings (A, B, C, posed by seeking their own animations,
+   * 0 to 1.2 s in 5 ms steps), every corner of the stick, its stripes, the board and the impact lines, widened by half its
+   * stroke, lies INSIDE the svg's own viewBox, read through the live CTMs. And the board sits on the same pixels as before
+   * (2.25 px a unit, the same place in its box, the box the same size), pinned from v18.29 at both widths. */
+  test('1232 the empty project clapper fits its own box through every pose of all three timings, so no engine can cut the lid off as it lifts, and the board has not moved', { item: '1232', budgetMs: 40000 }, async function () {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the clapper does not move here');
+    if (!FM.variant || !FM.variant.force) throw new Error('setup: FM.variant is missing, so the three timings cannot be chosen');
+    return onEmptyStage974(async function () {
+      const STICK = [[3.2, 8.9], [21, 6.5], [20.52, 2.93], [2.72, 5.33], [7.55, 7.5], [7.28, 5.53], [12.0, 6.9], [11.73, 4.93], [16.44, 6.3], [16.18, 4.33]];
+      const BOARD = [[3, 9], [21, 9], [21, 20], [3, 20]];
+      let worst = null, place = null;
+      for (const v of ['A', 'B', 'C']) {
+        const d = await clapFresh974(v, 'cyan');
+        const svg = d.querySelector('.dh-icon svg'), icon = d.querySelector('.dh-icon');
+        const board = d.querySelector('.dh-body > path'), bar = d.querySelector('.dh-stick').querySelectorAll('path')[1];
+        const lines = [].slice.call(d.querySelectorAll('.dh-whack path'));
+        if (!svg || !board || !bar || lines.length !== 3) throw new Error('setup: the clapper is not drawn as a stick, a board and three lines');
+        const vb = svg.viewBox.baseVal, inv = svg.getScreenCTM().inverse();
+        const toSvg = (el, x, y) => new DOMPoint(x, y).matrixTransform(el.getScreenCTM()).matrixTransform(inv);
+        const out = (p, m) => Math.max(vb.x - (p.x - m), (p.x + m) - (vb.x + vb.width), vb.y - (p.y - m), (p.y + m) - (vb.y + vb.height));
+        const note = (o, what) => { if (!worst || o > worst.o) worst = { o: o, what: what }; };
+        const m = clapSample974(d, 0);
+        if (!m.clap) throw new Error('setup: with timing ' + v + ' nothing animates the stick');
+        for (let ms = 0; ms <= 1200; ms += 5) {
+          m.running.forEach(a => { a.pause(); a.currentTime = m.tm.delay + ms; });
+          STICK.forEach(c => note(out(toSvg(bar, c[0], c[1]), 0.8), v + ' at ' + ms + ' ms, the stick at (' + c + ')'));
+        }
+        BOARD.forEach(c => note(out(toSvg(board, c[0], c[1]), 0.8), v + ', the board at (' + c + ')'));
+        lines.forEach((p, i) => { const L = p.getTotalLength(); [p.getPointAtLength(0), p.getPointAtLength(L)].forEach(q => note(out(toSvg(p, q.x, q.y), 0.7), v + ', impact line ' + (i + 1))); });
+        if (v === 'A') {
+          const ir = icon.getBoundingClientRect(), b0 = new DOMPoint(3, 9).matrixTransform(board.getScreenCTM()), b1 = new DOMPoint(21, 20).matrixTransform(board.getScreenCTM());
+          place = { x: +(b0.x - ir.left).toFixed(2), y: +(b0.y - ir.top).toFixed(2), unit: +((b1.x - b0.x) / 18).toFixed(3), w: +ir.width.toFixed(2), h: +ir.height.toFixed(2) };
+        }
+      }
+      if (worst.o > 0.01) throw new Error('the clapper leaves its own box: ' + worst.what + ' is ' + worst.o.toFixed(2) + ' units outside the viewBox, where an engine that clips an animated SVG child to its box cuts it off');
+      /* measured on v18.29 (8 Nov), the same at 380 and 900: the board's top-left 6.75 px right of and 20.25 px below the
+         .dh-icon box's corner, 2.25 px a unit, the box 54 x 72. v18.29's worst pose was B's lift at 380 ms: the stick's far
+         top corner 4.24 units above the box. */
+      const PIN = { x: 6.75, y: 20.25, unit: 2.25, w: 54, h: 72 };
+      const moved = ['x', 'y', 'unit', 'w', 'h'].filter(k => Math.abs(place[k] - PIN[k]) > (k === 'unit' ? 0.001 : 0.5));
+      if (moved.length) throw new Error('the board moved: ' + JSON.stringify(place) + ' where v18.29 had ' + JSON.stringify(PIN));
+    });
   });
 
   /* The hand-over is a cut: .28 s through the shipped styles, gone about 320 ms after it starts. A spent splash at opacity 0

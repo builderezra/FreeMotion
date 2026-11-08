@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 8 Nov at v18.29
+> ## 📌 WHAT I NEED FROM YOU — updated 8 Nov at v18.30
 >
-> **State:** v18.29 — a new project opens in the editor you last used, More turns into Done on a PC, and on a narrow PC window Simple no longer covers the cog and Export (that was a real bug). **Your big list from trying v18.28 is logged word for word as #1243** (74 clauses); the live bugs in it go first, then the rest in your order, with drawn options for the design ones. **From you, most useful first:** **open FreeMotion cold from your Home Screen on your iPhone and say if the new intro looks right (#1231)**; play a project on your iPhone where a clip has an effect on its sound, for a minute, then paste Settings → Reports → Your last playback (#663); export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956).
+> **State:** v18.30 — **the intro on a phone that cannot keep up now drops its blur instead of stuttering** (a fast phone still plays it exactly as you picked it), and **the empty project's clapper lid can no longer be cut off as it lifts** (#1232). Next: the live bugs in your #1243 list, then the Simple bottom area in the logger's planned order. **From you, most useful first:** **open FreeMotion cold from your Home Screen on your iPhone and say if the intro still lags, and if an empty project's clapper lid still gets cut off as it lifts (#1231, #1232)**; play a project on your iPhone where a clip has an effect on its sound, for a minute, then paste Settings → Reports → Your last playback (#663); export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956).
+>
+> v18.29 — a new project opens in the editor you last used, More turns into Done on a PC, and on a narrow PC window Simple no longer covers the cog and Export (that was a real bug). **Your big list from trying v18.28 is logged word for word as #1243** (74 clauses); the live bugs in it go first, then the rest in your order, with drawn options for the design ones.
 >
 > v18.28 — **Simple Phase 3 is in**, with your picks as recommended: Look on a clip (filters and Adjust), Captions, Effects over a clip, Extras under Clips, and the switch morph; on a PC the band grows while a panel is open. The pictures I sent are this build. Full was measured unchanged before it shipped.
 >
@@ -39159,7 +39161,7 @@ re-opened #480, which I had marked done and had not fixed.
       ❓ASK: which PC version (26, 27 or 28). ✔ reply checked 7 Nov — his answers above are to the take pick (13, runner-up 14) and the launch colour, not to this; 26 (centred) ships until he picks.
       📍 **7 Nov:** he reports the intro "is really laggy. Whenever I try to load in" — logged as clause 1 of #1232 (with the clapper report from the same message) and ticked there.
 - [ ] **1232 — The intro lags when he loads in, and the empty-project clapper's lid is cut off by "an invisible black barrier" as it lifts** (7 Nov ~01:48 AWST, via INBOX, his words and the logger's plan)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: ⏸ BUILT OUT — waiting on your answer**
       Moved from INBOX.md whole:
       ### 7 Nov 2026, ~01:50 AWST: the intro lags on load, and the empty-project clapper is cut off at the top (two reports, one message)
       **His words (verbatim, ~01:48):** "For some reason, the intro is really laggy. Whenever I try to load in, also there's an issue with when you have an empty project and it's got that little snap animation on the blank canvas, where basically when the lid lifts up, before it snaps down, it gets cut off by an invisible black barrier. Don't know why that's happening."
@@ -39179,12 +39181,29 @@ re-opened #480, which I had marked done and had not fixed.
       - Test: for each of timings A, B and C, pause the stick at its open, lift, slam and rebound keys (animation-play-state paused + negative animation-delay, or by setting the transform directly), and assert that the getBoundingClientRect of .dh-stick and of each .dh-whack path lies INSIDE the svg's own rect. Chrome reports the unclipped rect, so the test is engine-independent even though Chrome never shows the clip. Mutation: put back viewBox 0 0 24 24 at 54 px → red. Verify at 380 that the board's position hasn't moved (rect of the board path before and after, within 0.5 px).
       ❓ASK (logged, not blocking): was this on his iPhone or the PC?
       His clauses:
-      1. [ ] "the intro is really laggy. Whenever I try to load in" — the take from #1231 (v18.23); measure first, as the plan above says.
-      2. [ ] "when the lid lifts up, before it snaps down, it gets cut off by an invisible black barrier" — the empty-project clapper (#957, #974, #988).
+      1. [x] ✅ v18.30 — "the intro is really laggy. Whenever I try to load in" — the take from #1231 (v18.23); measure first, as the plan above says.
+      2. [x] ✅ v18.30 — "when the lid lifts up, before it snaps down, it gets cut off by an invisible black barrier" — the empty-project clapper (#957, #974, #988).
+      3. [ ] (not his words — what is left) both checked on HIS iPhone: neither the lag nor the clip could be measured on WebKit here, so the entry stays open until he says the intro plays smoothly and the lid is whole (see BUILT OUT below).
       📥 **7 Nov ~13:50 AWST, his second report (via INBOX), verbatim:** "Intro still laggy"
       Logger's note (not his words): clause 1 again. Nothing has touched the intro since v18.23 (v18.24–v18.27 carried other items), so "still" is expected, not a failed fix. The plan stands: measure first, in a booted app under a 4x CPU throttle, the take's frame times against the app's long tasks after load; the suspect is the post-load restore and Home render running during the 2.92 s take.
-      ❓ASK (logger, 7 Nov): should #1232 jump the queue and go next after v18.27? Until he says so it waits its turn (he jumped #1231 itself with "I want it now so yes").
+      ~~❓ASK (logger, 7 Nov): should #1232 jump the queue and go next after v18.27? Until he says so it waits its turn (he jumped #1231 itself with "I want it now so yes").~~ moot: it reached its turn and shipped in v18.30.
       📥 **8 Nov (#1243 G2/G11), his words:** "The intro is still really laggy… The intro's good, just fix it, because it's still laggy… I think it's fine actually… Just leave it." Fix the lag; change nothing he sees.
+      📍 **v18.30 (8 Nov), clause 1, MEASURED on the laptop (390x844, 2x; probe-1180-firstpaint and long-animation-frame attribution):** the
+      longest stall while the intro played was 183 ms at full speed and 833 ms (up to 1083) at 4x CPU, and EVERY one was the intro's own frame,
+      not the app (the plan's first suspect): its motion blur paints the scene 2 to 8 times into a second canvas and blends each in, about
+      17 ms a pass (70 at 4x), while one pass drawn straight costs under 2 ms. Fix: a frame draws only the blur passes the device affords in
+      22 ms (frame 0 timed with 2 passes before the load, then drawn the way the rest will be; a slow frame lowers the count, nothing raises
+      it). Laptop: 73 frames in the intro became 156 (13 → 48 at 4x), the longest stall 183 → 50 ms (833 → 133 at 4x), frame 0 250 → 100 ms
+      before the first paint. In a GPU Chrome (the app's browser pane) a 7-pass frame costs 3–6 ms, so a fast phone keeps every pass and
+      sees his pick to the pixel; a phone that lags gets crisp frames instead of blurred ones (the before/after picture was sent with the
+      release). His "change nothing he sees" holds wherever the intro can play at speed; where it cannot, the blur is what goes.
+      📍 **v18.30, clause 2:** the plan's engine-proof cure, with one change: the viewBox ORIGIN stays 0 0 (36 units, the drawing moved 6 in by
+      a wrapper) because the stick's transform-box: view-box reads it, and WebKit is the engine that could pivot differently. Every pose of
+      A, B and C now fits the svg's own box (v18.29's worst: B's lift, the stick's far corner 4.24 units above it), and the board is on the
+      same pixels (pinned from v18.29 at 380 and 900). Not reproducible here (no WebKit).
+      BUILT OUT UNTIL HE opens FreeMotion cold on his iPhone and says whether the intro still lags, and whether the empty project's clapper
+      lid is still cut off as it lifts. If the intro still stutters, the next lead is the app's own work after the load with his real
+      projects (the laptop profile is empty), which Settings → Reports → What's slow → Measure would show.
 - [ ] **1233 — When the browser's small save space for project files fills up, the app shows one brief toast and stops saving. A reload, or the iPhone closing the app, then loses everything since (hunt HIGH #1233)** (7 Nov, one of #860's leftovers: "#4 project documents to IndexedDB (needs a design note first)"; read against v18.27 by a reader and a skeptic, read-only)
       **STATUS: 🟢 READY — nothing is stopping this**
       **What he would see:** On his PC or iPhone, the browser gives FreeMotion about 5 MB of quick storage for project documents (exact figure differs by browser; not measured here). That space is shared by every project on the device. Clips and photos are not the problem: they live in IndexedDB. The project text (layers, keyframes, captions) and any Fill → Media photo on a shape or text does count, because each fill photo is stored as roughly 0.2-0.5 MB of text inside the project and copied again by every duplicate, split, Paste style and saved look. A dozen or two photo fills, or many projects built up over time, fill the space. When it fills he sees one 5-second toast, 'Storage full — autosave paused', and then the editor looks completely normal. If he opens another project he is asked (good). If he reloads, closes the tab or browser, or iOS kills the backgrounded app, the project reopens at the last version that fit and everything since the toast is gone. Following Settings → Back up every project at that point silently backs up the old version of the open project. 'Save a project file', which the toast names, does read what is on screen and is the one route that works. Saves also get slower as the doc grows: each autosave stringifies the whole doc and reads and writes it to localStorage on the main thread. Not measured.
@@ -39350,3 +39369,57 @@ re-opened #480, which I had marked done and had not fixed.
       5. Verify on HIS phone, after removing and re-adding the app if the meta changes. A desktop/emulated check can't see iOS's strip. Say so in the release line, and ask him for one screenshot of Home and one in a project.
       📍 **Where the clauses go (8 Nov, the loop):** S1–S38 are #980's next work (#980 does NOT park after v18.29); G2/G11 is #1232 clause 1; G6 is #202 (it answers #202's parked ask in substance); G1/G12 belong with the top-bar items (queue 883 / 920 / 162) and the logger's plan above; everything else is new here. Live bugs first within the order: S11, S37, G12, S7, G4, ST3, ST8, S26, G6.
       UNBLOCKED 8 Nov: nothing in this entry waits on him — it IS his answer. The park phrase in the logger's note above quotes #980's old line; it is not this entry's. The design clauses (✏️) are drawn first under #545, then built.
+      📍 **S11, 8 Nov (the loop): not reproduced on the laptop.** A probe on v18.29 recorded a real WebM in the page (a counting clip, 4 s), added it through Simple's own Clips path (FM.spine.cmd.append), and played 1.5 s in each state, at a PC and a phone width: plain; with the Effects picker open (88 live tiles); after adding an effect from it (an adjustment segment with Invert, selected and not); and the effect with the picker open. Every state kept playing: the clock moved with real time and the preview showed 13–15 different pictures in 15 looks, 23–61 frames a second at worst. So the freeze he saw is not a plain Chrome fault in that path; the lead is his iPhone (Safari's video under a full-picture effect layer, at his footage's size). What settles it: when it sticks again, Settings → Reports → What's slow → Measure (or a screen recording of it happening). The probe is in the session scratchpad (s11probe.py), ready for a phone-sized rerun.
+      📥 **Moved verbatim from INBOX (8 Nov, the loop): the logger's plans (16:35) and the reconciliation (17:05). Build the Simple bottom area from 1243-R.md; where R amends A/B/C/F, R wins.**
+      ### 8 Nov 2026, ~16:35 AWST: logger's PLANS for every clause of #1243 are written (7 files) and FX1 is drawn
+      **Where:** `tools/design/plans/2026-11-08-1243/1243-A.md` … `1243-G.md` (about 250 KB). There's one `### #1243 <ID>` section per clause, each with: his words verbatim, what exists now (file:line), steps, tests plus the catching mutation, the pick (or "No pick needed"), and the size. Written by 7 read-only planners against v18.29 (f49b5002). A critic checked coverage: all 74 IDs are covered (G10 is his polish bar), and the file:line cites hold at HEAD. Nothing was run or measured, so every bug cause is "from reading".
+      - A: Simple layout, toolbars and the bottom rows (S3 S4 S5 S9 S14 S15 S23 S24 S25 S31 S34 S35 S38, plus one COMBINED bottom-area design)
+      - B: Simple clip tools, export, sub-menus and the live bugs (S1 S2 S6 S7 S8 S10 S11 S26 S27 S28 S32 S36 S37)
+      - C: Simple effects, looks, adjust, background and FX1 (S12 S13 S18 S19 S21 S22 S30 FX1)
+      - D: Full editor (F1-F10 G6 G7 G8 G9)
+      - E: Settings, Home, global (ST1-ST9 H1-H4 G3 G4 G5)
+      - F: research and feasibility (S16 S17 S20 S29 S33 AI1)
+      - G: the top strip and the intro lag (G1+G12, G2+G11)
+      **FX1 is drawn:** ten animated effect pictures, one per section (Teal & Orange, Chroma Key, Zoom Blur, VHS Tape, Pencil Sketch, Shockwave, Shake, Time Echo, Bolts, Cube), shown at 77 px, 154 px and up close: https://claude.ai/artifact/KLuzrtjNH2175erH6Y6UQu (source: the logger's scratchpad, fx10/). WAITING ON HIM: he said he'll approve or redirect before the rest get pictures. Plan C §FX1 says how approved pictures would replace js/fx-thumbs.js's live renders.
+      **THE CRITIC'S CONFLICTS: settle these in ONE reconciliation pass before building any of the Simple bottom area.** The logger is running that pass now (one agent); it will land as `1243-R.md` in the same folder.
+      1. Look's one home. S12 moves Look to the project row and off the clip tray, but A's COMBINED row, S28, S20's "Clean-up" tab and S35's keyframed sliders all still assume Look sits on a clip.
+      2. ONE clip-tray order. There are three now: A COMBINED, S28's, and S33's sections. S32 needs Replace within the first four. The new tools (S1 Transition, S27 Slide, S19 Match, S30 Effects) belong in none of A's sections yet.
+      3. One sub-row mechanism. S8 uses `#sm-tools[data-sub]`, S9 uses a bar mode 'sub'. The Clips sub-row's contents differ between them.
+      4. Templates' home. S21 makes it a project-row tool; S8 puts it inside Clips.
+      5. S4 says More only goes once "Opacity / Transform" exist. S33 has Flip and Turn, while its "Fine-tune" waits on F6 (concept only, his pick). Define a basic Transform for Simple that doesn't wait on F6.
+      6. S28 relies on v18.29's › cue, which S4 deletes.
+      7. S23 keeps the black band; S37's recommended option removes it.
+      8. S36 removes FM.textEdit.start from Simple; S17's title looks use it.
+      9. The AI panel in Simple (S9/S14) versus F3's docking line: one element, two lines.
+      10. Whole-project layers: S10's refit, S12's fitLook and S22's fitProjectLayers become ONE shared normaliser.
+      **What goes to HIM before shipping (these diverge from his words or reverse his own earlier pick). Everything else ships with its RECOMMENDED option ON, per his "fine with ur choices" (21 Oct), and he corrects later:**
+      - G1+G12: plan G rejects the logger's "recolour #splash" step (WebKit would lock that colour for the session) and recommends masked per-screen tabs. That is close to the sampled-colour trick he said "didn't work" on 11 Oct (it was tried under the old opaque `default` bar). Show him before shipping. Plan G also says no screenshots (#920's rule), against the logger's step 5. Follow plan G there.
+      - S19: a per-clip "Match colour" is an exception to his "you shouldn't have the look menu on each layer". Say so.
+      - S37: the recommended end line replaces his earlier D17 B black-band pick. Say so.
+      - ST7: he asked for "a little TikTok logo". The plan proposes neutral icons because the logos are trademarks. Give him the choice (small platform logos, or neutral icons with the app names written).
+      - S35: use HIS word, "Graph" (not "Curve").
+      **Live bugs, in order (inline, no agents needed), with the leads in plan B/D/E:** S37 (the "Black C…" band: 44 px with no ellipsis, simple-timeline.js:695-706), S10/S11 (S11 did NOT reproduce on v18.29 with s11probe.py; the lead is his iPhone, Safari video under a full-frame effect layer, so ask him for a screen recording or use Measure), S7 (a stuck inline stage height from timeline.js:479-494), S26 (drawGrips draws the same grip at the media end), G6 (#202: Full-only lag), ST3, ST8, G4. Found by planner A: clips under 24 px get no trim handles (simple-timeline.js:268/:543), which matters once Length goes (S25).
+      ### 8 Nov 2026, ~17:05 AWST: #1243 RECONCILED: `tools/design/plans/2026-11-08-1243/1243-R.md` settles the 10 conflicts. Build the Simple bottom area from R, not from A/B/C/F alone.
+      **Three rules hold it together:**
+      - (1) One level on screen at a time: `#sm-bar[data-mode]` = project / item / sub / panel.
+      - (2) Anything that fits one 56 px row is a sub-row; anything needing a grid, tabs, a list or a keyboard is a panel.
+      - (3) One sheet line: on a phone every panel (AI included) starts at #stage's bottom, the F3/F10 line, and Simple's stage never shrinks. On a PC, Simple's panels open in the left band (his D20 A).
+      **The decisions:**
+      - **Look** is project-only (tabs Filters / Adjust / Quality). Match, Steady and Smooth motion are the per-clip exceptions.
+      - **Tray order:** Replace is 4th, Delete is last in its own section, and the sections are separated by thin lines.
+      - **Sub-rows** use A S9's `subFor` + `SUBS` mechanism (S8's `#sm-tools[data-sub]` is dropped).
+      - **Templates** are a project-row tool.
+      - **Basic Transform** (Flip ↔ ↕ / Turn 90° / Size / Centre / Reset) doesn't wait on F6.
+      - **The › cue** goes at every width.
+      - **S37's end line** replaces the black band, and S23 carries it into the lanes.
+      - **Text entry:** S36 owns it, via `FM.simpleText.start`.
+      - **AI panel:** one panel with F3's geometry.
+      - **One normaliser,** `S.fitProjectLayers` in js/spine-edit.js beside `fitTails`.
+      - 12 more contradictions are decided in the file.
+      **Build order:** R lists 19 Simple releases, smallest risk first. Each fires the Full-unchanged lock, which is about 3 h of FU plus about 3 h of ship each, so roughly 5 days at one release per item.
+      **LOGGER'S NOTE:** wherever two releases in that order touch different files and close clauses of the SAME queue item, ship them together. One FU run per release is the bottleneck, not the code.
+      **Goes to HIM before shipping:** R adds three to the earlier four (G1+G12 tabs, S19, S37, ST7):
+      - The PC tray becomes ONE scrolling row, which reverses his pick B (two rows).
+      - On a phone a Simple panel covers the play row and timeline instead of shrinking the canvas.
+      - "Sharpen for 4K" upscales, which breaks Simple export's no-upscale rule. Hold it.
+      📍 **v18.30 (8 Nov): G2/G11 (the intro lag) shipped as #1232 clause 1** — the intro draws only the blur passes the device affords, so a phone that lags gets crisp frames at speed and a fast one keeps his pick to the pixel. #1232's clapper clause rode with it.

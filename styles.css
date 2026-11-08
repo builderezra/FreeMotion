@@ -752,7 +752,10 @@ body.text-editing .sb-wrap { display: none !important; }
    It costs nothing when it cannot be seen: #drop-hint is display:none (.hidden) as soon as there is a layer
    (js/app.js updateDropHint), which removes the animations outright, and body.home-open stops them behind Home
    — the same reasoning as #hm-grain's pause. Coming back to the empty project restarts them, so it claps again. */
-.dh-icon svg { overflow: visible; }   /* the open stick rises ~8 px above the 54 px box; the lines reach ~6 px past its right edge */
+/* #1232: the svg is 81 px with the drawing 13.5 px in from each edge (index.html), so every pose of the stick and the lines
+   fits its own box; the negative margin gives it back the 54 px footprint it had, so the board sits on the same pixels.
+   overflow:visible stays, harmless, but nothing depends on it any more. */
+.dh-icon svg { overflow: visible; margin: -13.5px; }
 /* ═══ ALL THREE TIMINGS AND BOTH LINE COLOURS, ONE AT RANDOM (queue 974) ═══════════════════════════════════════════
    Ezra, 28 Sep: *"make them all happen in the app but it's just random which one so I can decide which is best over
    use time"*. js/app.js picks the timing each time the empty project comes on screen (FM.variant 'clapper.timing' →
