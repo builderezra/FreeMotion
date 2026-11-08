@@ -4,7 +4,7 @@ You'll be able to play a clip faster or slower, turn its sound down, play it bac
 
 Before you start: a project in Simple with two clips (tutorials 01 and 02). <!-- walked 9 Oct at 380 with real touch on hunt/simple-transitions (2.3 to 2.7 on 980-p22-r3), label v17.24; shots/09-01.jpg -->
 
-1. Tap the first clip so it is selected. The row of tools above Clips, Text, Sound and Overlay shows **Length, Audio, Move earlier, Move later, Lift off, Duplicate, Crop, Replace, More, Delete**. Slide the row sideways to reach the ones off the edge. (A picture has no **Audio**.)
+1. Tap the first clip so it is selected. The row of tools above Clips, Text, Sound and Overlay shows **Audio, Look, Lift off, Duplicate, Crop, Replace, More, Delete**. Slide the row sideways to reach the ones off the edge. (A picture has no **Audio**.)
 2. Tap **Audio**. The row turns into **Done, Speed, Volume, Reverse, Take sound out**.
 3. Tap **Speed**. The row turns into **Done, 0.5×, 1×, 1.5×, 2×, 3×**, a slider and the speed (1×).
 4. Tap **2×**. The line says "Clip 1 now plays at 2×", the clip's bar gets half as long (10 s becomes 5 s) and the clip after it slides up to meet it (the video goes from 0:20 to 0:15).

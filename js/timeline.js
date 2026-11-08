@@ -476,21 +476,47 @@ window.FM = window.FM || {};
      and test 699's control swipe then moved nothing one run in two — an inline style on <html> restyles the whole document
      under the gesture. #app is the element whose grid rule reads --stage-h, and there the write touches nothing else.
      Measured: 699 alone 2/4 with the var on <html> (rounded or exact), 4/4 with no writes, 4/4 with it on #app. */
+  /* #1243 S7 (his words, 8 Nov: "switching back and forth between simple and complex, and now… the clips text caption sound buttons are
+     all… pushed up for some reason"). MEASURED at 380 with real touch (CDP touch events; the session's s7touch.py): a finger down on
+     Full's timeline whose release never arrives left Full's stage height (337.6 px) pinned on #app, and back in Simple the stage stayed
+     at Full's height, the project row 134 px above its place with empty space under it, until the next release that reached window. A
+     background trip with the finger down did the same. Which of his gestures lost the release is not measured (no iPhone here); one known
+     way is WebKit's: a touch's release goes to the element it went down on even after a rebuild took that element out of the page, where
+     a listener on window never hears it. So the pin now belongs to ONE gesture in ONE editor: Simple never pins; an editor switch
+     (js/editor-mode.js apply), the page being hidden or going away, the window losing focus, and a hold with no movement for STALE_MS all
+     let it go; and the release is also heard on the element the finger went down on. */
   (function () {
-    let pinned = false;
+    const STALE_MS = 4000;
+    let pinned = false, at = null, lastMove = 0, watch = 0;
     function pin(e) {
       if (pinned || e.pointerType !== 'touch') return;
+      if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) return;   // #1243 S7: Full's pin, for Full's gesture only
       const t = e.target && e.target.closest ? e.target.closest('#timeline') : null;
       if (!t) return;
       const st = document.getElementById('stage'); if (!st) return;
       const h = st.getBoundingClientRect().height; if (!(h > 0)) return;
       const app = document.getElementById('app') || document.documentElement; app.style.setProperty('--stage-h', h.toFixed(3) + 'px'); pinned = true;   // the EXACT height: a rounded one shifted the grid by a fraction of a pixel and rebuilt the timeline under a swipe (5 Sep)
+      at = e.target; lastMove = Date.now();
+      try { at.addEventListener('pointerup', unpin, true); at.addEventListener('pointercancel', unpin, true); } catch (er) {}
+      watch = setInterval(function () { if (pinned && Date.now() - lastMove > STALE_MS) unpin(); }, 500);
     }
-    function unpin() { if (!pinned) return; pinned = false; const app = document.getElementById('app') || document.documentElement; app.style.removeProperty('--stage-h'); }
+    function moved(e) { if (pinned && e.pointerType === 'touch') lastMove = Date.now(); }
+    function unpin() {
+      if (!pinned) return;
+      pinned = false;
+      clearInterval(watch); watch = 0;
+      if (at) { try { at.removeEventListener('pointerup', unpin, true); at.removeEventListener('pointercancel', unpin, true); } catch (er) {} at = null; }
+      const app = document.getElementById('app') || document.documentElement; app.style.removeProperty('--stage-h');
+    }
     window.addEventListener('pointerdown', pin, true);
+    window.addEventListener('pointermove', moved, true);
     window.addEventListener('pointerup', unpin, true);
     window.addEventListener('pointercancel', unpin, true);
+    document.addEventListener('visibilitychange', function () { if (document.hidden) unpin(); });
+    window.addEventListener('pagehide', unpin);
+    window.addEventListener('blur', unpin);
     FM._stagePinned = function () { return pinned; };   // suite seam
+    FM._stageUnpin = unpin;                             // js/editor-mode.js apply: a switch of editor ends the pin
   })();
   function recoverStuckGesture() {
     restoreGestures();   // queue 796: the clip (and its group), trim, keyframes and slip go BACK where they started — not left where the lost pointer dropped them

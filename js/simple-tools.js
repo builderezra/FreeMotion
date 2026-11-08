@@ -21,9 +21,6 @@ window.FM = window.FM || {};
     text: '<path d="M6.4 18.6L12 5.2l5.6 13.4"/><path d="M8.5 14.2h7"/>',
     music: '<path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/>',
     overlay: '<rect x="3" y="3" width="13" height="13" rx="2"/><rect x="8" y="8" width="13" height="13" rx="2" fill="currentColor" fill-opacity=".22"/>',
-    length: '<path d="M3.5 5v14M20.5 5v14M7 12h10M10 9l-3 3 3 3M14 9l3 3-3 3"/>',
-    earlier: '<rect x="12" y="6" width="8.5" height="12" rx="2"/><path d="M8.5 9l-3.5 3 3.5 3M5 12h5"/>',
-    later: '<rect x="3.5" y="6" width="8.5" height="12" rx="2"/><path d="M15.5 9l3.5 3-3.5 3M19 12h-5"/>',
     lift: '<path d="M12 15V5M8 9l4-4 4 4M5 19.5h14"/>',
     drop: '<path d="M12 5v10M8 11l4 4 4-4M5 19.5h14"/>',
     duplicate: '<rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><path d="M7 13V9a2 2 0 0 1 2-2h4"/>',
@@ -67,7 +64,7 @@ window.FM = window.FM || {};
   const W = () => (FM.spineWords && FM.spineWords.tools) || {};
   const phone = window.matchMedia ? window.matchMedia('(max-width: 700px)') : { matches: false };
   let bar = null, sayEl = null, tray = null, tools = null, menu = null;
-  let panelFor = null, lengthFor = null, lengthEdge = 'end', lastSig = '', lastSel = null;
+  let panelFor = null, lastSig = '', lastSel = null;
   let rowFor = null, rowLast = '';   // 2.3: the inline row open on the tray ({kind: 'speed' | 'volume' | 'fade', id}), and the tool that opened it (focus goes back there)
   let fills = 0, lastPress = null;   // how many times the tray was refilled; the tool a pointer's last single click pressed
   let roomy = false;                 // PC, and the band is tall enough for the tray's two rows (roomForTwo)
@@ -349,12 +346,14 @@ window.FM = window.FM || {};
       const audioT = { id: 'audio', label: w.audio || 'Audio', icon: 'volume', title: w.audioTitle || 'Speed, volume, reverse and the clip’s sound', run: () => FM.simpleTools.openRow('audio', id) };
       /* Look third, right after Audio (sheet 1 question 2, pick B, 6 Nov under his 21 Oct rule): the band's hint promises speed or
          look, so Look is on screen with no swipe on a phone, beside Audio, where speed lives. Lift off moves to sixth on a video. */
+      /* #1243 S24 and S25 (his words, 8 Nov): "I do not think we need a move earlier, move later button… people pick it up and drag it…
+         people are going to accidentally press it", and "you also don't need a length button… if you want to change the length, you just
+         grab the end and drag it". So the tray no longer has Length, Move earlier or Move later: a hold-and-drag reorders, the grips trim
+         (a clip too short for them gets them outside its edges, simple-timeline.js drawGrips), and the keyboard keeps Alt+←/→ and A/D
+         (editor-mode.js) for anyone who cannot drag. */
       const out = [
-        { id: 'length', label: w.length || 'Length', icon: 'length', run: () => FM.simpleTools.openLength(id) },
         ...(isVid ? [audioT] : []),
         ...(l.type === 'video' || l.type === 'image' ? [lookT] : []),
-        { id: 'earlier', label: w.earlier || 'Move earlier', icon: 'earlier', disabled: S.moveIndexFor(R, id, -1) < 0, run: () => S.cmd.move(id, -1) },
-        { id: 'later', label: w.later || 'Move later', icon: 'later', disabled: S.moveIndexFor(R, id, 1) < 0, run: () => S.cmd.move(id, 1) },
         { id: 'lift', label: w.lift || 'Lift off', icon: 'lift', title: w.liftTitle, run: () => S.cmd.lift(id) },
         { id: 'duplicateClip', label: w.duplicate || 'Duplicate', icon: 'duplicate', run: () => S.cmd.duplicate(id) },
         crop,
@@ -406,33 +405,8 @@ window.FM = window.FM || {};
       { id: 'backward', label: w.backward || 'Back', icon: 'backward', run: () => S.cmd.z(id, -1) },
       stay, more, del];
   }
-  /* LENGTH (§8.5): the clip's length with − and + of one frame each and a typed value; it commits a ripple trim exactly as
-     D does. The row itself is the panel (a thin one), so the timeline above it never moves. "Start" trims the head. */
-  function lengthRow(R, id) {
-    const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), fps = FM.scene.project.fps || 30;
-    const row = [];
-    const back = tool({ id: 'lenBack', label: w.done || 'Done', icon: 'back', run: () => { lengthFor = null; lastSig = ''; FM.simpleTools.sync(); } });
-    const which = tool({ id: 'lenEdge', label: lengthEdge === 'end' ? (w.lenEnd || 'End') : (w.lenStart || 'Start'), icon: 'length', pressed: lengthEdge === 'start', run: () => { lengthEdge = lengthEdge === 'end' ? 'start' : 'end'; lastSig = ''; FM.simpleTools.sync(); } });
-    const step = sign => tool({ id: sign < 0 ? 'lenMinus' : 'lenPlus', label: sign < 0 ? (w.minusFrame || '−1 frame') : (w.plusFrame || '+1 frame'), icon: sign < 0 ? 'minus' : 'plus', title: sign < 0 ? (w.shorter || 'One frame shorter') : (w.longer || 'One frame longer'),
-      run: () => { const L = FM.layerById(FM.scene, id); if (!L) return; if (lengthEdge === 'end') S.cmd.length(id, L.duration + sign / fps); else S.cmd.trimStartBy(id, -sign / fps); } });
-    const val = el('input', 'sm-len-v'); val.type = 'text'; val.inputMode = 'decimal'; val.enterKeyHint = 'done'; val.value = l ? l.duration.toFixed(2) : '';
-    val.setAttribute('aria-label', w.lengthLabel || 'Length in seconds');
-    /* ONE commit for Enter and for leaving the field (review finding 21): the iPhone's decimal pad has no Return, so its Done
-       or a tap elsewhere — a blur, which fires change — is the only way he can send a typed length. Each value is sent once
-       (Enter blurs, and the blur's change must not send it again should the edit still be in flight), and a value equal to
-       the clip's length sends nothing (no false "Nothing more to trim"). */
-    let sent = null;
-    const commit = () => {
-      const v = parseFloat(String(val.value).replace(',', '.')), L = FM.layerById(FM.scene, id);
-      if (!isFinite(v) || !L || v === sent || Math.abs(v - L.duration) < 0.5 / fps) return;
-      sent = v;
-      if (lengthEdge === 'end') S.cmd.length(id, v); else S.cmd.trimStartBy(id, L.duration - v);
-    };
-    val.addEventListener('keydown', e => { if (e.key !== 'Enter') return; e.preventDefault(); commit(); val.blur(); });
-    val.addEventListener('change', commit);
-    row.push(back, which, step(-1), val, step(1));
-    return row;
-  }
+  /* (Length's row lived here until #1243 S25 took Length off the tray: "you just grab the end and drag it". S.cmd.length and
+     S.cmd.trimStartBy stay, for the grips' commands and the keyboard.) */
 
   /* ═══ RELEASE 2.3: SPEED, VOLUME and FADE are inline rows like Length (the row itself is the panel, so the timeline above never
      moves). Each commits ONE command on release / press; while a slider moves only the DOM and the playback rate change, so the
@@ -628,7 +602,6 @@ window.FM = window.FM || {};
     if (fxPick) return fxPick.on ? itemFxFill() : fxFill();   // Phase 3 · Effect segments: the effects picker owns the row while it is open (· Effects on an item: its item picker too)
     if (rowFor && rowFor.kind === 'audio' && ROWS.audio) tray.setAttribute('data-row', 'audio'); else tray.removeAttribute('data-row');   // S9: the Audio row's five buttons are 317 px at their usual padding, 10 px over the 307 px band at 1280
     if (extrasOpen && !ids.length) return extrasFill();   // Phase 3 · Clips › Extras (PC): Done in the tray row while Extras is in the band
-    if (lengthFor) { lengthRow(R, lengthFor).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (rowFor && ROWS[rowFor.kind]) { ROWS[rowFor.kind](R, rowFor.id).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (!ids.length) { hintUp = R.main.some(e => !e.slot) && !hintSeen(); tray.appendChild(hintUp ? hintLine() : quietLine(R)); return false; }
     if (ids.length > 1) {   // §8.5b: the intersection — Stay put on all, Delete (one main clip at a time in 2.2)
@@ -1267,7 +1240,6 @@ window.FM = window.FM || {};
       const selKey = ids.join(',');
       if (selKey !== lastSel) { if (lastSel !== null && FM.simpleTimeline && FM.simpleTimeline.clearSay) FM.simpleTimeline.clearSay(); lastSel = selKey; }
       if (panelFor && (ids.length !== 1 || ids[0] !== panelFor)) { panelFor = null; panelKind = null; lookUndrag(); }
-      if (lengthFor && (ids.length !== 1 || ids[0] !== lengthFor || !R.isMain(lengthFor))) lengthFor = null;
       if (rowFor && (ids.length !== 1 || ids[0] !== rowFor.id || !FM.layerById(FM.scene, rowFor.id))) rowFor = null;
       if (fxPick && (fxPick.sel !== selKey || (fxPick.id && !FM.layerById(FM.scene, fxPick.id)))) fxPick = null;   // Phase 3 · Effect segments: another selection closes the picker
       growSync();   // 7B: on a PC the band is grown exactly while a panel is up
@@ -1279,19 +1251,19 @@ window.FM = window.FM || {};
          made in the same refresh (Text, Sound effects, Record voice) is synced first from the timeline's previous read, which
          has never heard of it, and drew the overlay tray (Into row, Crop) under a text or a sound; the rebuild's own sync then
          computed the same signature and kept it. Its kind from the fresh read differs, so the tray is drawn again. */
-      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, panelKind, roomy, rowSig, trExtras(), FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly, JSON.stringify(l.trIn || null)].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd, segSig(l)].join('#');
+      const sig = [ids.join(','), panelFor, panelKind, roomy, rowSig, trExtras(), FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly, JSON.stringify(l.trIn || null)].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd, segSig(l)].join('#');
       if (sig === lastSig) return;
       lastSig = sig;
       /* THE PRESSED TOOL KEEPS FOCUS (§3.12 1a, §8.10 item 6; review finding 27): a press that changes the clip rebuilds the
-         row, and focus fell to <body> with the button it was on, so a second Enter on Move later or +1 frame did nothing.
+         row, and focus fell to <body> with the button it was on, so a second Enter on the same tool did nothing.
          Restored only when focus was already in the tray, so a tap on the timeline never pulls focus here. */
       const ae = document.activeElement, hadFocus = !!(ae && ae !== tray && tray.contains(ae));
-      const focusKey = hadFocus ? ((ae.dataset && ae.dataset.tool) || (ae.classList.contains('sm-len-v') ? '#len' : '')) : '';
+      const focusKey = hadFocus ? ((ae.dataset && ae.dataset.tool) || '') : '';
       const afterRow = rowLast; rowLast = '';
       FM.simpleTools._fill(R, ids, one, S);
       if (hadFocus) {
-        const want = focusKey === 'lenBack' ? 'length' : focusKey === 'rowBack' ? (afterRow || 'length') : focusKey;   // Done goes back to the Length / Speed / Volume / Fade that opened the row
-        const n = (want === '#len' ? tray.querySelector('.sm-len-v') : want && tray.querySelector('[data-tool="' + CSS.escape(want) + '"]')) || tray.querySelector('button, input');
+        const want = focusKey === 'rowBack' ? afterRow : focusKey;   // Done goes back to the Speed / Volume / Fade that opened the row
+        const n = (want && tray.querySelector('[data-tool="' + CSS.escape(want) + '"]')) || tray.querySelector('button, input');
         if (n) n.focus({ preventScroll: true });
       }
     },
@@ -1303,12 +1275,12 @@ window.FM = window.FM || {};
          under the finger and a second press found another tool. §3.12 1(a): the pressed tool stays where it was. A new selection,
          or another row (Length, Speed…), starts at the beginning as before. */
       segUndrag();   // Phase 3 · Effect segments: a redraw never leaves the Strength slider's preview in the document
-      const old = tray.querySelector(':scope > .sm-runbox > .sm-run'), key = [ids.join(','), lengthFor || '', rowFor ? rowFor.kind : '', panelFor ? panelKind : '', fxPick ? 'fx/' + (fxPick.id || '') + (fxPick.on ? '/on' : '') : ''].join('#');
+      const old = tray.querySelector(':scope > .sm-runbox > .sm-run'), key = [ids.join(','), rowFor ? rowFor.kind : '', panelFor ? panelKind : '', fxPick ? 'fx/' + (fxPick.id || '') + (fxPick.on ? '/on' : '') : ''].join('#');
       const keepLeft = (old && key === stripKey) ? old.scrollLeft : 0;
       stripKey = key;
       if (runSeen) runSeen.disconnect();   // SU1 #15: the old tool strip goes with the old tools
       tray.textContent = '';
-      tray.classList.toggle('sm-tray-len', !!lengthFor || !!rowFor);
+      tray.classList.toggle('sm-tray-len', !!rowFor);
       let two = false;
       hintUp = false;   // fillTray puts it back when the hint is drawn
       try { two = fillTray(R, ids, one, S); } finally { rows(two); splitMark(hintUp); fxMark(); }
@@ -1371,14 +1343,13 @@ window.FM = window.FM || {};
       if (same && linesTop) root.scrollTop = linesTop;
       return true;
     },
-    openLength(id) { lengthFor = id; lengthEdge = 'end'; lastSig = ''; this.sync(); },
     openRow(kind, id, from) { if (!ROWS[kind]) return; if (fxPick) { fxPick = null; segUndrag(); } rowFor = { kind: kind, id: id, from: from || null }; lastSig = ''; this.sync(); },   // (a row closes the Effects picker, as openEffects closes a row: the 2.7 ◇ pressed with the picker up opens its row at once, the 7 Nov review)   // 2.3: Speed, Volume, Fade; S9: Audio (and `from` = the row Done returns to)
     /* Phase 3 · Effect segments: the effects picker in the tray row, for a new segment (null: the project row's Effects) or for that
        segment's Change effect. Pressed again for the same target it closes. */
     openEffects(id) {
       const want = id || null, sel = (FM.selectionIds ? FM.selectionIds() : []).join(',');
       if (fxPick && fxPick.id === want) { this.closeEffects(); return; }
-      segUndrag(); fxPick = { id: want, sel: sel }; lengthFor = null; rowFor = null; lastSig = ''; this.sync();
+      segUndrag(); fxPick = { id: want, sel: sel }; rowFor = null; lastSig = ''; this.sync();
     },
     closeEffects() { if (!fxPick) return; fxPick = null; lastSig = ''; this.sync(); },
     /* Phase 3 · Effects on an item: the picker in the tray row for an effect ON this item (Add effect in its tray); pressed again for
@@ -1387,7 +1358,7 @@ window.FM = window.FM || {};
       if (!id || !isSimple()) return;
       if (fxPick && fxPick.on && fxPick.id === id) { this.closeEffects(); return; }
       const sel = (FM.selectionIds ? FM.selectionIds() : []).join(',');
-      segUndrag(); fxPick = { id: id, sel: sel, on: true }; lengthFor = null; rowFor = null; lastSig = ''; this.sync();
+      segUndrag(); fxPick = { id: id, sel: sel, on: true }; rowFor = null; lastSig = ''; this.sync();
     },
     fxPick: () => fxPick,
     /* Phase 3 · Clips › Extras: open (nothing selected; a selection is let go first), close, and whether it is up. Only while Simple
@@ -1430,7 +1401,7 @@ window.FM = window.FM || {};
     bandWords: bandWords,
     /* suite seam (sm3 review, lens 6: Look's remembered focus and scroll and the #1171 arm time are state too, so one test's
        Look panel can no longer hand focus, or a held press, to the next) */
-    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; lookLeft = 0; lookTop = 0; lookFocus = ''; sheetArmAt = -1e9; clearTimeout(sheetOff); sheetListen(false); linesSeen = ''; linesTop = 0; lengthFor = null; rowFor = null; fxPick = null; extrasOpen = false; extrasSheetOff(); growTo(false); tfClear(); lastSig = ''; stripKey = ''; closeMenu(); },
+    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; lookLeft = 0; lookTop = 0; lookFocus = ''; sheetArmAt = -1e9; clearTimeout(sheetOff); sheetListen(false); linesSeen = ''; linesTop = 0; rowFor = null; fxPick = null; extrasOpen = false; extrasSheetOff(); growTo(false); tfClear(); lastSig = ''; stripKey = ''; closeMenu(); },
     _menu: () => menu,
     ICON: ICON
   };

@@ -182,12 +182,14 @@ window.FM = window.FM || {};
     },
     tools: {   // Phase 2 (D10): the tray row and the project tools; one name each, never "Edit" (§8.4)
       clips: 'Clips', text: 'Text', sound: 'Sound', overlay: 'Overlay',
-      length: 'Length', earlier: 'Move earlier', later: 'Move later', lift: 'Lift off', liftTitle: 'Lift off the clip row (make it an overlay)',
+      lift: 'Lift off',   /* #1243 S24, S25: Length, Move earlier and Move later left the tray (his "you just grab the end and drag it") */ liftTitle: 'Lift off the clip row (make it an overlay)',
       into: 'Into row', intoTitle: 'Put in the clip row', duplicate: 'Duplicate', crop: 'Crop', more: 'More', moreTitle: 'More settings for this',
       delete: 'Delete', stay: 'Stay put', editWords: 'Edit words', forward: 'Forward', backward: 'Back', openFull: 'Open in Full',
       /* moreDoneTitle (8 Nov, queue 980): the spoken name of More while its panel is open on a PC, where its face is Done */
-      closeGap: 'Close gap', fix: 'Fix', done: 'Done', moreDoneTitle: 'Done · close More’s settings', lenEnd: 'End', lenStart: 'Start', shorter: 'One frame shorter', longer: 'One frame longer', minusFrame: '−1 frame', plusFrame: '+1 frame',
-      lengthLabel: 'Length in seconds', addWhere: 'Add clips', atEnd: 'At the end', afterClip: 'After ', afterCard: 'After the card', beforeFirst: 'Before Clip 1',
+      closeGap: 'Close gap', fix: 'Fix', done: 'Done', moreDoneTitle: 'Done · close More’s settings', shorter: 'shorter', longer: 'longer',   // Fade's − and + (Length's frame words went with it)
+      /* #1243 S26: a grip whose footage has run out (its spoken name's tail) and the drag tip when he pulls it past the end */
+      footageEnds: 'the footage ends here', footageEndTip: 'End of the footage',
+      addWhere: 'Add clips', atEnd: 'At the end', afterClip: 'After ', afterCard: 'After the card', beforeFirst: 'Before Clip 1',
       exportAt: p => p + 'p · Export', exportTitle: 'Export video',   // 2.7 (SU1 #20): Simple's Export list
       music: 'Music from your files', sfx: 'Sound effects', voice: 'Record voice', closeAll: 'Close all gaps', moreOpts: 'Loop and preview speed…',
       selected: n => n + ' selected', bandHint: 'Tap a clip to see its tools', bandHintSel: 'Its tools are below · More opens the rest',
@@ -244,7 +246,8 @@ window.FM = window.FM || {};
     },
     items: {   // FM.spine.itemWord: never layer.name (§8.9 "Naming items in lines")
       clip: 'Clip', sticker: 'the sticker', image: 'the image', videoTop: 'the video on top', song: 'the song',
-      sound: 'the sound', effect: 'the effect', captions: 'the captions', block: 'the group', shape: 'the shape', text: 'the text'
+      sound: 'the sound', effect: 'the effect', captions: 'the captions', block: 'the group', shape: 'the shape', text: 'the text',
+      textLabel: 'Text'   // #1243 S38: an empty text's label on the timeline (FM.spine.itemLabel)
     },
     /* 2.7 (SU1 #14): Simple's time pill, "0:03 / 0:12": the whole seconds already played over the length, rounded as the summary is */
     clock: function (t, total) {

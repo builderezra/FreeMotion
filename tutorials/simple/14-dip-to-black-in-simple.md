@@ -9,7 +9,7 @@ Before you start: a project in Simple with at least two clips next to each other
 3. Tap **+** three times to make it 0.8 s, and use the **next** button to jump to 00:20:00 to look at the join. <!-- walked: 0.5 to 0.8, FM.time 20; shots/14-05.jpg, 14-06.jpg -->
 4. Tap **Done**. <!-- walked: shots/14-07.jpg -->
 
-Note: Simple cannot fade the picture to black at the very end of the video. There is no ◇ after the last clip, and the last clip's tools (Length, Audio, Move earlier, Move later, Lift off, Duplicate, Crop, Replace, More, Delete) have no Fade. A transition only exists on a join between two clips. <!-- walked: with the playhead at 29.9 s the last clip is selected and the tray lists exactly those ten tools; no chip after the last clip (chips stayed 2). Read: js/simple-tools.js trayFor, a Fade tool exists only for kind 'audio' (that is the music fade); DESIGN has no end-of-video dip for Simple -->
+Note: Simple cannot fade the picture to black at the very end of the video. There is no ◇ after the last clip, and the last clip's tools (Audio, Look, Lift off, Duplicate, Crop, Replace, More, Delete) have no Fade. A transition only exists on a join between two clips. <!-- walked: with the playhead at 29.9 s the last clip is selected and the tray lists exactly those ten tools; no chip after the last clip (chips stayed 2). Read: js/simple-tools.js trayFor, a Fade tool exists only for kind 'audio' (that is the music fade); DESIGN has no end-of-video dip for Simple -->
 
 What to do instead: the sound can still fade out (select the music, then **Fade**). For a picture fade to black, open the project in Full (tutorial 08) and fade the last clip's opacity there. <!-- the music Fade is walked in tutorial 09; the Full route is Read, not walked here -->
 

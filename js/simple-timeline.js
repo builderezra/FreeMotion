@@ -240,7 +240,7 @@ window.FM = window.FM || {};
     n.setAttribute('role', 'button');
     n.tabIndex = -1;
     n.style.left = x + 'px'; n.style.width = Math.max(4, w) + 'px';
-    const name = FM.spine.itemWord(layer, R);
+    const name = FM.spine.itemLabel(layer, R);   // #1243 S38: a text wears its own words, no quote marks (sentences keep itemWord's)
     n.setAttribute('aria-label', name); n.title = name;
     n.appendChild(el('span', 'sm-name', name));
     badge(n, u);
@@ -342,6 +342,7 @@ window.FM = window.FM || {};
     e.stopPropagation(); e.preventDefault();
     const r = gateOf(id, !me); if (hardGate(r)) { FM.spine.explain(r, id); return; }
     G = { kind: 'trim', phase: 'drag', side: gp.dataset.side, id: id, main: !!me, pid: e.pointerId, ptype: e.pointerType || 'mouse', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, node: root.querySelector('.sm-item[data-id="' + id + '"]'), capEl: gp,
+          out: gp.classList.contains('sm-grip-out'), atEnd: false, band: 0,
           scrollFrames: 0, edgeScrolled: false, raf: 0, timer: 0, start0: +L.start || 0, dur0: +L.duration || 0, entry: e0, projDur0: (FM.scene.project && FM.scene.project.duration) || 0, touchAt: nowMs(), dirty: false, moved: false, edge: null, t0: FM.time || 0 };
     try { gp.setPointerCapture(e.pointerId); } catch (er) {}
     window.addEventListener('pointermove', onMove, true); window.addEventListener('pointerup', onUp, true); window.addEventListener('pointercancel', onCancel, true);
@@ -409,22 +410,35 @@ window.FM = window.FM || {};
     /* An edge pulled OUT stops where the footage runs out, by the release's own pure maths (FM.trimClipEdge, the media's length), so the
        preview never shows a length the command will not give, and brake 4 knows the edge is pinned (DESIGN §3.8: "a source-limited trim"). */
     const L = FM.layerById(FM.scene, G.id);
+    let over = 0;   // #1243 S26 A: how far, in px, the finger is past the end of the footage (0 when the footage still has more)
     if (L && FM.trimClipEdge && (G.side === 'tail' ? b > e0.end + 1e-9 : a < e0.start - 1e-9)) {
       const m = FM.media && FM.media.get ? FM.media.get(L.id) : null, sd = (m && m.duration > 0) ? m.duration : Infinity;
       const r = FM.trimClipEdge(L, G.side, G.side === 'tail' ? b - e0.end : a - e0.start, sd);
-      if (G.side === 'tail') { if (e0.end + r.landed < b - 1e-9) b = e0.end + r.landed; }
-      else if (e0.start + r.landed > a + 1e-9) a = e0.start + r.landed;
+      if (G.side === 'tail') { if (e0.end + r.landed < b - 1e-9) { over = (b - (e0.end + r.landed)) * p; b = e0.end + r.landed; } }
+      else if (e0.start + r.landed > a + 1e-9) { over = ((e0.start + r.landed) - a) * p; a = e0.start + r.landed; }
     }
     G.edge = G.side === 'tail' ? b : a;
+    /* #1243 S26 A (his words: "if a clip is like reached its end and you can't extend it anymore, it still makes it seem like you can extend it,
+       but you can't"): pulled past the end of its footage, the edge stays where the footage ends and gives at most 8 px of rubber band (it
+       gives less the further he pulls), buzzes once, and the tip says why instead of a length that is not changing. The band is only drawn:
+       G.edge, and so the release, is the footage's end. */
+    const atEnd = over > 0.5;
+    if (atEnd && !G.atEnd && G.ptype !== 'mouse' && navigator.vibrate) { try { navigator.vibrate(6); } catch (e) {} }
+    G.atEnd = atEnd; G.band = atEnd ? 8 * (1 - Math.exp(-over / 24)) : 0;
     /* SU1 (unconfirmed, 07f): where the edge can go no further the way the finger asks — −1 to the left (a tail at its shortest, a head at the
        start of its footage), +1 to the right (a head at its shortest, a tail at the end of its footage). "At its shortest" counts the finger
        exactly ON the floor too: both are on the frame grid, so they meet exactly, and one more frame of scrolling there could only overshoot.
        Brake 4 reads it in BOTH directions. */
     const short = G.side === 'tail' ? want <= a + ml + 1e-6 : want >= b - ml - 1e-6;
     G.pin = G.side === 'tail' ? (short ? -1 : want > G.edge + 1e-6 ? 1 : 0) : (short ? 1 : want < G.edge - 1e-6 ? -1 : 0);
-    node.style.left = (origin() + a * p) + 'px'; node.style.width = Math.max(4, (b - a) * p) + 'px';
-    const grip = G.capEl; if (grip) grip.style.left = (G.side === 'tail' ? origin() + b * p - (GRIP_HIT - GRIP_CAP) : origin() + a * p - GRIP_CAP) + 'px';
-    setLabel((b - a).toFixed(1) + ' s', G.x, G.y);
+    const bandL = G.side === 'tail' ? 0 : G.band, bandR = G.side === 'tail' ? G.band : 0;
+    node.style.left = (origin() + a * p - bandL) + 'px'; node.style.width = Math.max(4, (b - a) * p + G.band) + 'px';
+    /* the grip rides its edge; a short clip's grips sit wholly outside its bar AS DRAWN (G.out, drawGrips: a bar is at least 14 px), so they
+       are placed from the bar's own box, which the two lines above have just set */
+    const grip = G.capEl;
+    if (grip && G.out) grip.style.left = (G.side === 'tail' ? node.offsetLeft + node.offsetWidth : node.offsetLeft - GRIP_HIT) + 'px';
+    else if (grip) grip.style.left = (G.side === 'tail' ? origin() + b * p + bandR - (GRIP_HIT - GRIP_CAP) : origin() + a * p - bandL - GRIP_CAP) + 'px';
+    setLabel(atEnd ? ((W().tools || {}).footageEndTip || 'End of the footage') : (b - a).toFixed(1) + ' s', G.x, G.y);
   }
   /* ── the edge auto-scroll: Full's four brakes, copied (frame cap, far limit frozen at the start, stop at the ceiling, origin shift) ──
      SU1, unconfirmed (hunt/simple-firstuser 07f-music-trim-edge-scroll.jpg: the song's tail grip held at the left edge went from 20 s to 0.1 s
@@ -527,7 +541,8 @@ window.FM = window.FM || {};
       touches.delete(e.pointerId); if (touches.size < 2) pinch = null;
     }
   }
-  /* ── the selected clip's grips: 13 px caps OUTSIDE the edges, each hit ≥ 24 px; not drawn when the gate is shut or the clip is under 24 px ── */
+  /* ── the selected clip's grips: 13 px caps OUTSIDE the edges, each hit ≥ 24 px; not drawn when the gate is shut; a clip under 24 px wide gets its
+     grips wholly outside it (#1243 S25) ── */
   function drawGrips(byId, sel, xOf, p) {
     root.querySelectorAll('.sm-grip').forEach(g => g.remove());
     if (sel.size !== 1) return;
@@ -540,11 +555,30 @@ window.FM = window.FM || {};
     const node = me ? null : root.querySelector('.sm-item[data-id="' + id + '"]');
     if (!me && !node) return;
     const start = me ? me.start : (+L.start || 0), end = me ? me.end : start + (+L.duration || 0);
-    const w = (end - start) * p; if (w < GRIP_HIT) return;
+    /* #1243 S25 (his words, 8 Nov: "if you want to change the length, you just grab the end and drag it"): with Length gone, the grips are the
+       only way to change a length by touch, so a clip too short for two 24 px grips side by side no longer goes without: its grips sit wholly
+       OUTSIDE its edges (.sm-grip-out), each cap still against its edge. It used to get none (a 0.2 s clip at the default zoom). */
+    /* …measured against the bar AS DRAWN: .sm-item's padding and border make it at least 14 px whatever its length, so a 0.2 s clip's time
+       span (6 px at 28 px a second) ends inside its own bar, and a grip put there by time lay over it (the first run of the S25 test). */
+    const bar = me ? mainEl.querySelector('.sm-item[data-id="' + id + '"]') : node;
+    const out = (bar ? bar.offsetWidth : (end - start) * p) < GRIP_HIT;
+    const barL = bar ? bar.offsetLeft : xOf(start), barR = bar ? bar.offsetLeft + bar.offsetWidth : xOf(end);
     const host = me ? mainEl : node.parentNode;
-    [['head', xOf(start) - GRIP_CAP, (W().tools || {}).trimStart || 'Trim the start'], ['tail', xOf(end) - (GRIP_HIT - GRIP_CAP), (W().tools || {}).trimEnd || 'Trim the end']].forEach(a => {
-      const g = el('div', 'sm-grip sm-grip-' + a[0]); g.dataset.id = id; g.dataset.side = a[0]; g.style.left = a[1] + 'px'; g.style.width = GRIP_HIT + 'px';
+    /* #1243 S26 (his words, 8 Nov: "if a clip is like reached its end and you can't extend it anymore, it still makes it seem like you can
+       extend it, but you can't"): a side whose footage has run out wears the end-of-footage cap (styles.css .sm-grip-end) — it still
+       shortens the clip, it just no longer promises more. Asked of the release's own maths (FM.trimClipEdge with the media's length, as the
+       drag's stop is), one outward frame: nothing lands, the footage ends there. A picture, a text or anything without a length never ends. */
+    const md = FM.media && FM.media.get ? FM.media.get(id) : null, sd = (md && md.duration > 0 && isFinite(md.duration)) ? md.duration : Infinity;
+    const fps = (FM.scene.project && FM.scene.project.fps) || 30;
+    const ends = side => {   // one outward frame asked for; under half a frame given means the footage ends at this edge
+      if (!(sd < Infinity) || !FM.trimClipEdge) return false;
+      try { const r = FM.trimClipEdge(L, side, side === 'tail' ? 1 / fps : -1 / fps, sd); return !(Math.abs(+r.landed || 0) >= 0.5 / fps); } catch (e) { return false; }
+    };
+    const endWords = (W().tools || {}).footageEnds || 'the footage ends here';
+    [['head', out ? barL - GRIP_HIT : xOf(start) - GRIP_CAP, (W().tools || {}).trimStart || 'Trim the start'], ['tail', out ? barR : xOf(end) - (GRIP_HIT - GRIP_CAP), (W().tools || {}).trimEnd || 'Trim the end']].forEach(a => {
+      const g = el('div', 'sm-grip sm-grip-' + a[0] + (out ? ' sm-grip-out' : '')); g.dataset.id = id; g.dataset.side = a[0]; g.style.left = a[1] + 'px'; g.style.width = GRIP_HIT + 'px';
       if (!me) { g.classList.add('sm-grip-item'); g.style.top = node.offsetTop + 'px'; g.style.height = node.offsetHeight + 'px'; }
+      if (ends(a[0])) { g.classList.add('sm-grip-end'); a[2] = a[2] + ' · ' + endWords; }
       g.setAttribute('aria-label', a[2]); g.title = a[2]; g.setAttribute('role', 'button');
       g.addEventListener('pointerdown', onGripDown);
       host.appendChild(g);

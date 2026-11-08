@@ -12626,9 +12626,7 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
    row; while it shows, ✂ wears the clip's own selection outline (.sm-item.sel), held, not animated, until the first tap */
 #sm-tray .sm-quiet.sm-hint { white-space: normal; line-height: 1.3; }
 body.ed-simple #btn-sm-split.sm-hinted { box-shadow: inset 0 0 0 2px #fff, 0 0 0 1px #000; }
-#sm-tray.sm-tray-len { align-items: center; }
-.sm-len-v { flex: none; width: 72px; height: 44px; margin: 0 4px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
-  font: 700 16px/1 system-ui, sans-serif; text-align: center; }   /* 16 px: iOS zooms the page into any field under 16 px (as #hm-search-input) */
+#sm-tray.sm-tray-len { align-items: center; }   /* a row (Speed, Volume, Fade) in the tray; Length's typed field went with Length (#1243 S25) */
 #sm-tools { display: flex; align-items: stretch; flex: 0 0 56px; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: content-box; }
 #sm-tools .sm-tool { flex: 1 1 0; min-width: 0; }
 .sm-menu { position: fixed; z-index: 120; min-width: 210px; padding: 6px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line);
@@ -12788,6 +12786,21 @@ body.sm-dragging { user-select: none; -webkit-user-select: none; cursor: grabbin
 #sm-timeline .sm-grip::before { content: ''; position: absolute; top: 8px; bottom: 8px; width: 13px; background: #fff; border-radius: 4px; box-shadow: 0 0 0 1px rgba(0,0,0,.55); }
 #sm-timeline .sm-grip-head::before { left: 0; }
 #sm-timeline .sm-grip-tail::before { right: 0; }
+/* #1243 S25: a clip too short for two grips side by side gets them wholly outside it (js/simple-timeline.js drawGrips); each cap stays
+   against its edge, so the hit area reaches away from the clip and the cap does not */
+#sm-timeline .sm-grip-head.sm-grip-out::before { left: auto; right: 0; }
+#sm-timeline .sm-grip-tail.sm-grip-out::before { right: auto; left: 0; }
+/* #1243 S26, plan B's option A (recommended, shipped ON under his 21 Oct rule): where the footage runs out the cap goes flat and dimmer,
+   with a 2 px end line on the clip's edge and a small chevron pointing INTO the clip, because it still pulls in to shorten; pulled
+   outward it gives a short rubber band and the tip "End of the footage" (renderTrim). The hit area is the same size. */
+#sm-timeline .sm-grip.sm-grip-end::before { background: #8e939b; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.55); }
+#sm-timeline .sm-grip-head.sm-grip-end::before { border-right: 2px solid #fff; }
+#sm-timeline .sm-grip-tail.sm-grip-end::before { border-left: 2px solid #fff; }
+#sm-timeline .sm-grip.sm-grip-end::after { content: ''; position: absolute; top: 50%; width: 4px; height: 4px; margin-top: -3px; border: solid #16181c; border-width: 0 2px 2px 0; pointer-events: none; }
+#sm-timeline .sm-grip-head.sm-grip-end::after { left: 2px; transform: rotate(-45deg); }
+#sm-timeline .sm-grip-tail.sm-grip-end::after { right: 2px; transform: rotate(135deg); }
+#sm-timeline .sm-grip-head.sm-grip-out.sm-grip-end::after { left: auto; right: 5px; }
+#sm-timeline .sm-grip-tail.sm-grip-out.sm-grip-end::after { right: auto; left: 5px; }
 .sm-dragtip { position: fixed; z-index: 99990; transform: translateX(-50%); background: #111; color: #fff; font: 600 13px/1 system-ui, sans-serif; padding: 7px 10px; border-radius: 8px; pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,.5); white-space: nowrap; }
 .sm-dragtip:empty { display: none; }
 

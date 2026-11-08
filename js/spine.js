@@ -234,6 +234,17 @@ window.FM = window.FM || {};
     if (layer.type === 'image') return w.image || 'the image';
     return w.videoTop || 'the video on top';
   };
+  /* #1243 S38 (his words, 8 Nov: "you also don't need like the brackets… for… each text layer… just have it say what is on that text
+     layer"): the label an item WEARS on the timeline. A text shows its own words, whitespace collapsed, with no quote marks and no
+     16-character cut (the bar's CSS ellipsis cuts it); an empty text says "Text". Everything else wears its itemWord. The sentences that
+     NAME an item ("“Hello” runs 3 s past the last clip") keep itemWord and its quotes, where they mark the words off from the sentence. */
+  S.itemLabel = function (layer, R) {
+    if (layer && layer.type === 'text' && !Array.isArray(layer.captions) && !(R && R.index && R.index.has(layer.id))) {
+      const t = String(layer.text || '').trim().replace(/\s+/g, ' ');
+      return t || ((words().items || {}).textLabel || 'Text');
+    }
+    return S.itemWord(layer, R);
+  };
   /* A SOUND IS "THE SONG" (§8.9) when it runs long — the sound rule's `long`, as before — OR when Simple put it in AS MUSIC
      (SU1 #21, first half: the first-user audit's 20 s song was "the sound" on the timeline, in its title and in the black band's
      "the sound runs 13.8 s past the last clip"). Music is pinned (Stay put, D17 B) the moment Sound › Music or the Clips picker

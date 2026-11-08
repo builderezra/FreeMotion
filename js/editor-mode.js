@@ -155,6 +155,9 @@ window.FM = window.FM || {};
     if (FM.editorMorph) { try { if (morph) FM.editorMorph.capture(mode, next); else FM.editorMorph.forget(); } catch (e) {} }
     const had = document.activeElement;
     mode = next;
+    /* #1243 S7: a stage height pinned for a touch on Full's timeline belongs to that gesture in Full; carried into Simple it held the stage at
+       Full's height and left the project row 134 px up (measured at 380, js/timeline.js's pin). A switch ends it. */
+    if (FM._stageUnpin) { try { FM._stageUnpin(); } catch (e) {} }
     /* This project's editor is decided NOW. Without this the rebuild below ran syncProject while lastPid still named no project
        (the last rebuild came before the open id was set, as on every app start), and it re-applied the card's editor: the
        first switch after opening the app turned Simple on and straight back off, with no refusal and no question (cog T10b). */

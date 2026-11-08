@@ -27,7 +27,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.30">
+<meta name="fm-build" content="v18.31">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -44,7 +44,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=788">
+<link rel="stylesheet" href="styles.css?v=789">
 <link rel="stylesheet" href="theme-glass.css?v=70">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=4">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -1002,7 +1002,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.30</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.31</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1891,8 +1891,8 @@
   <script src="js/collab-core.js?v=65"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=133"></script>
-  <script src="js/spine-words.js?v=16"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
-  <script src="js/spine.js?v=9"></script>         <!-- Simple mode P1: FM.spine, the read side — after scene.js, before compositor/storage -->
+  <script src="js/spine-words.js?v=17"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
+  <script src="js/spine.js?v=10"></script>         <!-- Simple mode P1: FM.spine, the read side — after scene.js, before compositor/storage -->
   <script src="js/spine-edit.js?v=15"></script>    <!-- Simple mode P2: FM.spine.edit, the runner and the commands — after spine.js -->
   <script src="js/eases.js?v=3"></script>
   <script src="js/masks.js?v=8"></script>
@@ -1906,13 +1906,13 @@
   <script src="js/filters.js?v=25"></script>
   <script src="js/fx-presets.js?v=13"></script>
   <script src="js/fx-thumbs.js?v=61"></script>
-  <script src="js/timeline.js?v=272"></script>
-  <script src="js/simple-timeline.js?v=14"></script>   <!-- Simple mode P1: FM.simpleTimeline, read-only; after timeline.js -->
+  <script src="js/timeline.js?v=273"></script>
+  <script src="js/simple-timeline.js?v=15"></script>   <!-- Simple mode P1: FM.simpleTimeline, read-only; after timeline.js -->
   <script src="js/tilefit.js?v=1"></script>
   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
   <script src="js/addmenu.js?v=85"></script>
   <script src="js/inspector.js?v=444"></script>
-  <script src="js/simple-tools.js?v=13"></script>   <!-- Simple mode P2.2: FM.simpleTools, the tray row and the project tools (D10) — after inspector.js -->
+  <script src="js/simple-tools.js?v=14"></script>   <!-- Simple mode P2.2: FM.simpleTools, the tray row and the project tools (D10) — after inspector.js -->
   <script src="js/fx-browser.js?v=105"></script>
   <script src="js/elements-browser.js?v=5"></script>
   <script src="js/color-wheel.js?v=53"></script>
@@ -1955,7 +1955,7 @@
   <script src="js/captions-vad.js?v=1"></script>
   <script src="js/captions.js?v=64"></script>
   <script src="js/audio-health.js?v=7"></script>
-  <script src="js/editor-mode.js?v=9"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
+  <script src="js/editor-mode.js?v=10"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
   <script src="js/editor-morph.js?v=1"></script>   <!-- Simple mode P3: FM.editorMorph — the switch morph (D11 B), played as the cog closes -->
   <script src="js/app.js?v=522"></script>
   <script src="js/audio-tools.js?v=12"></script>
