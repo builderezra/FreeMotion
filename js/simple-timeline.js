@@ -30,6 +30,37 @@ window.FM = window.FM || {};
   }
   function el(tag, cls, text) { const d = document.createElement(tag); if (cls) d.className = cls; if (text != null) d.textContent = text; return d; }
 
+  /* THE SECTIONS BOX FILLS THE SCROLLER ABOVE THE CLIP ROWS (bottom-aligned, so the clips and the sound row sit at the bottom of the
+     timeline). Measured at every rebuild, and again two frames later and whenever the scroller's height changes: on a PC the transport's
+     band (40 px of the timeline row, js/app.js #801) can arrive a frame after the first rebuild, and measured once the box kept the
+     taller height, so in a freshly opened Simple the clips and the sound row sat 40 px below the bottom of the timeline until the next
+     redraw (a selection) moved them up (7 Nov, landing #980 Phase 3: 'simple P2.2 · at 1280 the tray …' run alone, red on v18.27 too). */
+  const secWant = () => Math.max(LANE, (scroller.clientHeight || 170) - RULER - MAIN_H - SOUND_H);
+  function fitSec() {
+    if (!secEl || !scroller) return 0;
+    const h = secWant();
+    if (secEl.style.height !== h + 'px') secEl.style.height = h + 'px';
+    return h;
+  }
+  /* …and when the height it wants has changed since, the whole timeline is drawn again, not the box alone: the ◇ lane and every
+     lane's place are laid out in the same rebuild from that height (refitting the box alone left the ◇s 40 px low, under the clips,
+     'simple 2.7 · T8'). Only while Simple is on screen; once the heights agree, nothing more is drawn. Queued on a frame, never run
+     inside the ResizeObserver (a rebuild there re-entered the band's grow mid-drag), held while the divider is being dragged (one
+     rebuild when it ends, not one a frame), and the sections box keeps its place from the bottom (a rebuild scrolls it to the bottom). */
+  let refitQueued = false;
+  function queueRefit() {
+    if (refitQueued) return;
+    refitQueued = true;
+    requestAnimationFrame(() => { refitQueued = false; refitSec(); });
+  }
+  function refitSec() {
+    if (!secEl || !scroller || !scroller.clientHeight || !document.body.classList.contains('ed-simple')) return;
+    if (document.body.classList.contains('tl-resizing')) { queueRefit(); return; }
+    if (secEl.style.height === secWant() + 'px' || !FM.simpleTimeline) return;
+    const fromBottom = secEl.scrollHeight - secEl.scrollTop - secEl.clientHeight;
+    FM.simpleTimeline.rebuild();
+    secEl.scrollTop = Math.max(0, secEl.scrollHeight - secEl.clientHeight - fromBottom);
+  }
   function ensureDom() {
     if (root) return true;
     root = document.getElementById('sm-timeline');
@@ -40,6 +71,7 @@ window.FM = window.FM || {};
     /* 2.7 (#1122, his pick A): THE ◇s' OWN LANE, made here, the first time Simple draws, rather than in index.html. It comes BEFORE the
        sections in the document, so it paints UNDER every item there (a title or an overlay at a cut is still what a press lands on);
        styles.css lets a press through the sections' empty boxes to it. */
+    if (window.ResizeObserver) new ResizeObserver(queueRefit).observe(scroller);   // the scroller's height changed: draw again, a frame later (above)
     trEl = root.querySelector('#sm-trlane');
     if (!trEl && secEl && secEl.parentNode) { trEl = el('div'); trEl.id = 'sm-trlane'; secEl.parentNode.insertBefore(trEl, secEl); }
     sayEl = document.getElementById('sm-say'); liveEl = document.getElementById('sm-live');
@@ -192,6 +224,13 @@ window.FM = window.FM || {};
   function badge(node, u) {
     if (u.pro !== 'none') { const b = el('span', 'sm-pro', '✦'); b.title = (W().lines || {}).pro || 'Has moves and effects'; node.appendChild(b); }
     if (u.media === 'missing') node.appendChild(el('span', 'sm-nofoot', (W().lines || {}).noFootage || 'No footage'));
+    /* Phase 3 · Effects on an item (DESIGN §4.3, Q5): an effect segment that rides a clip but runs on past its end is left alone, and says so */
+    if (u.kind === 'effect' && FM.spine && FM.spine.segmentOver && FM.spine.segmentOver(R, node.dataset.id)) {
+      const hint = (W().lines || {}).segmentOver || 'runs over the next clip';
+      node.appendChild(el('span', 'sm-fx-over', hint));
+      node.title = (node.title ? node.title + ' · ' : '') + hint;
+      node.setAttribute('aria-label', node.title);
+    }
     if (u.hidden) node.classList.add('sm-hidden');
     if (u.kind === 'undecided') node.classList.add('sm-loading');
   }
@@ -529,8 +568,8 @@ window.FM = window.FM || {};
 
       // ── sections box: every non-empty section's lanes, bottom-aligned (Behind lowest, right above the clips) ──
       secEl.textContent = '';
-      const boxH = Math.max(LANE, (scroller.clientHeight || 170) - RULER - MAIN_H - SOUND_H);
-      secEl.style.height = boxH + 'px';
+      fitSec();
+      requestAnimationFrame(queueRefit);   // …and once the transport's band has had its frame (two frames on, refitSec above)
       const stack = el('div', 'sm-secstack');
       SECTIONS.forEach(sec => {
         const lanes = R.lanes[sec] || [];

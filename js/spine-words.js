@@ -135,6 +135,8 @@ window.FM = window.FM || {};
       sped: (name, sp) => name + ' now plays at ' + sp + '×',
       speedShort: 'Too short to speed up that much', speedRamp: 'This clip’s speed changes over time · Use one speed first',
       speedBlock: 'Open in Full to change this speed', replaceBlock: 'Open in Full to replace this',
+      /* Phase 3 · template Replace (queue 980): Insert your Media over Simple, a slot inside a masking frame or another block (§9.1) */
+      replaceInGroup: 'That clip is shorter than its place in the group',
       nothingChanged: 'Nothing changed', oneSpeed: 'One speed now, the same length',
       volumeSet: pct => 'Volume ' + pct + '%', fadeSet: (which, s) => 'Fade ' + which + ' ' + s.toFixed(1) + ' s',
       noReverse: 'Only a video can play backwards', reversed: 'Playing backwards', forwards: 'Playing forwards',
@@ -147,7 +149,36 @@ window.FM = window.FM || {};
       trNone: 'No transition', noTransition: 'A transition needs two clips that meet, with nothing between them',
       trSet: (type, d) => ({ crossfade: 'Crossfade', dipblack: 'Dip to black', dipwhite: 'Dip to white' }[type] || 'Transition') + ' ' + d.toFixed(1) + ' s',
       trAll: n => 'Same transition on all ' + n + ' cuts', trDropped: n => n === 1 ? 'removed a transition' : 'removed ' + n + ' transitions',
-      trTurned: 'Now a crossfade transition'
+      trTurned: 'Now a crossfade transition',
+      /* Phase 3 · Look (queue 980, DESIGN §8.5): a filter and Adjust for one clip; said in #sm-live (§3.12 1a: no button, the tray stays) */
+      lookSet: (name, clip) => name + ' on ' + clip, lookOff: clip => 'No filter on ' + clip,
+      lookStrengthSet: pct => 'Strength ' + pct + '%', adjustSet: (what, v) => what + ' ' + (v > 0 ? '+' : '') + v,
+      adjustReset: 'Adjust is back to zero', lookUnsuited: 'That filter doesn’t work on this clip',
+      /* Phase 3 · Captions (queue 980, DESIGN §8.5, §3.5, §12.3; §8.7 the honest label: it finds WHEN people speak, he types the words) */
+      captionAdded: 'Caption added · type its words', captionRemoved: 'Caption removed',
+      capStays: 'The captions stay with the sound now', capFollows: 'The captions follow the clips again',
+      speechFound: (n, from) => n + (n === 1 ? ' caption' : ' captions') + ' from ' + from + ' · type their words',
+      speechStays: (n, from) => n + (n === 1 ? ' caption' : ' captions') + ' from ' + from + ' · they stay with it',
+      noSpeech: from => 'No speech found in ' + from, noSpeechMusic: from => 'No talking in ' + from + ' · it sounds like music',
+      noSoundHere: 'Nothing here has sound to listen to', speechFailed: from => 'Couldn’t listen to ' + from + ' · its sound didn’t open',
+      listening: (pct, k, n) => 'Listening' + (n > 1 ? ' to ' + k + ' of ' + n : '') + '… ' + pct + '%', listeningBusy: 'Still listening…',
+      theClips: 'the clips', speechMoved: 'The sound moved while it listened · try again', speechNotHere: 'No speech inside these captions',
+      /* Phase 3 · Effect segments (queue 980, DESIGN §8.5c, §4.3): said in #sm-live; the refusals in #sm-say. Strength says lookStrengthSet's words */
+      effectAdded: (name, clip) => name + ' over ' + clip, effectChanged: name => 'Changed to ' + name, effectDeleted: 'Deleted the effect',
+      effectGone: 'That effect was just deleted', segmentNoClip: 'Add a clip first, then an effect over it',
+      segmentOnClip: 'This one goes on a clip — tap a clip first', effectMany: 'This holds several effects · More opens them',
+      /* Phase 3 · Effects on an item (queue 980, DESIGN §8.5c item 3 "Added Shake to Clip 2"; §4.3 / Q5 the hint on a segment's timeline item) */
+      itemFxAdded: (name, item) => 'Added ' + name + ' to ' + item, itemFxGone: 'That was just deleted',
+      itemFxUnsuited: 'That effect doesn’t work on this', segmentOver: 'runs over the next clip',
+      /* Phase 3 · Clips › Extras (queue 980, DESIGN §8.5 the Clips row, §12.2, D21 A). A name is his own words, put in as text */
+      shapeAdded: 'Shape added',
+      elementAdded: name => (name ? '“' + name + '”' : 'The element') + ' added',
+      templateAdded: (name, n) => (name ? '“' + name + '”' : 'The template') + ' added' + (n ? ' · ' + n + (n === 1 ? ' clip' : ' clips') + ' in the row' : ''),
+      packCamera: 'its camera move was left out (Open in Full to use it)',
+      packMissing: 'That one’s data is missing · save it again from a project', packEmpty: 'There’s nothing in that one to add',
+      shapeGone: 'That shape isn’t available',
+      /* a layer of an element or template that moves with the rest of it (§8.5 Block row: "Moves with ‘Hello’") */
+      movesWith: name => 'Moves with ' + name
     },
     tools: {   // Phase 2 (D10): the tray row and the project tools; one name each, never "Edit" (§8.4)
       clips: 'Clips', text: 'Text', sound: 'Sound', overlay: 'Overlay',
@@ -169,7 +200,33 @@ window.FM = window.FM || {};
       speedLabel: 'Speed', volumeLabel: 'Volume in percent', muteClips: 'Clip sound', muteOn: 'Mute clip sound', muteOff: 'Clip sound is off, tap to turn it on',
       /* release 2.7: the ◇'s Transition row, and Turn into a transition on a crossfade (#1122, his pick A) */
       transition: 'Transition', turnTr: 'Turn into a transition', trNone: 'None', trCrossfade: 'Crossfade', trDipBlack: 'Dip to black', trDipWhite: 'Dip to white',
-      trLength: 'Length', trEvery: 'On every cut', trShorter: 'Shorter by 0.1 s', trLonger: 'Longer by 0.1 s'
+      trLength: 'Length', trEvery: 'On every cut', trShorter: 'Shorter by 0.1 s', trLonger: 'Longer by 0.1 s',
+      /* Phase 3 · Look (queue 980, DESIGN §8.5, §8.7): the tray's Look and its panel, Filters and Adjust */
+      look: 'Look', lookTitle: 'Filters and Adjust for this clip', lookFilters: 'Filters', lookAdjust: 'Adjust', lookNone: 'None',
+      lookStrength: 'Strength', lookReset: 'Reset',
+      adjBright: 'Brightness', adjContrast: 'Contrast', adjSat: 'Saturation', adjExposure: 'Exposure', adjWarmth: 'Warmth', adjVignette: 'Vignette',
+      /* §8.5's line under a keyed numeric row; its Open in Full is the button beside it (openFull) */
+      lookKeyed: 'This changes over time. Your change applies to the whole clip',
+      /* Phase 3 · Captions (queue 980, DESIGN §8.5 the Captions tool and the caption-track tray, §8.9 the caption-track switch) */
+      captions: 'Captions', captionsTitle: 'Type captions, find speech, pick a style', typeCaptions: 'Type captions',
+      findSpeech: 'Find speech', findSpeechTitle: 'Finds when people talk · you type the words',
+      editLines: 'Edit lines', editLinesTitle: 'Every caption line, to type or remove', capStyle: 'Style', capStyleTitle: 'How every caption looks',
+      capFollow: 'Follows the clips', capFollowTitle: 'The captions move with the clips',
+      capStay: 'Stays with the sound', capStayTitle: 'The captions stay with the sound they were timed from',
+      /* on a phone the pair's faces are one word each (sheet 1 question 3, pick B, 6 Nov): the whole tray is on show with no swipe */
+      capFollowShort: 'Follows', capStayShort: 'Stays',
+      capAddLine: 'Add a line here', capEmpty: 'Empty · tap to type', capRemove: 'Remove this line', capNone: 'No lines yet',
+      /* Phase 3 · Effect segments (queue 980, DESIGN §8.5: the project row's Effects, the Effect segment tray "Change effect · Strength ·
+         Stay put · 🗑"; §8.5c): the picker in the tray row and the segment's own tools */
+      effects: 'Effects', effectsTitle: 'An effect over the clip at the line', change: 'Change effect', strength: 'Strength', strengthLabel: 'Strength in percent',
+      /* Phase 3 · Effects on an item (queue 980, DESIGN §8.5c item 3): the tray's own face, not "Effects" — the project row's Effects is on
+         screen at the same time (his #310: one face per control on screen) */
+      addEffect: 'Add effect', addEffectTitle: 'Add effect to the selected item',
+      /* Phase 3 · Clips › Extras (queue 980, DESIGN §8.5 "Clips: Add clips · … · Extras", D21 A): Clips opens a short list; Extras shows
+         his saved elements, the shapes and his templates (the Add menu's own tabs) */
+      clipsTitle: 'Add clips, or shapes, elements and templates', addClips: 'Add clips', extras: 'Extras', extrasTitle: 'Shapes, saved elements and templates',
+      extrasNoElements: 'No elements yet', extrasElement: 'Element',
+      extrasElementsHow: 'An element is a piece you build once and drop into any video — a title, a logo, a lower third. To make one, open Full, select its layers and choose ⋯ › Save selection as element.'
     },
     a11y: {
       timeline: 'Timeline',

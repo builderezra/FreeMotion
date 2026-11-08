@@ -1,0 +1,340 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simple Phase 3 Sheet 2</title>
+<!-- THE TEMPLATE. build.py turns it into index.html: every shot-colon-NAME image source becomes NAME.png as a data URI, a
+     shot-question-colon one in a figure marked data-optional is dropped with its figure when that picture was not taken, and every
+     double-braced fact is filled from what capture.py measured (shots.json). ASCII only: every other character is an entity, and
+     the script and style hold none. Copied from the first sheet's sheet.html (tools/design/sheets/sm3-sheet/, never edited). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&amp;family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap">
+<style>
+/* Layout: one phone-width column of question cards, decisions first; options stack, phone screens sit two-up, PC crops run full width. */
+:root {
+  --ground: #0c111b; --surface: #141b27; --raise: #1b2433; --ink: #e9eef6; --muted: #9ba7ba; --line: #2b3548;
+  --accent: #29d9bb; --on-accent: #052620; --flag: #ffd166; --flag-ink: #2a1f00; --shotbg: #000000; --scrim: rgba(4, 7, 12, 0.94);
+  --scrim-ink: #e9eef6;   /* the zoom's words sit on the dark scrim in both themes */
+  --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground: #eef2f6; --surface: #ffffff; --raise: #f3f6f9; --ink: #121926; --muted: #56627a; --line: #d6dde7;
+    --accent: #0a7f6b; --on-accent: #ffffff; --flag: #ffe2a0; --flag-ink: #4d3200; --shotbg: #000000; --scrim: rgba(4, 7, 12, 0.94);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --ground: #eef2f6; --surface: #ffffff; --raise: #f3f6f9; --ink: #121926; --muted: #56627a; --line: #d6dde7;
+  --accent: #0a7f6b; --on-accent: #ffffff; --flag: #ffe2a0; --flag-ink: #4d3200; --shotbg: #000000; --scrim: rgba(4, 7, 12, 0.94);
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--ground); color: var(--ink); font: 17px/1.5 var(--body); }
+.wrap { max-width: 760px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 56px; display: grid; gap: 20px; }
+.kicker, .eyebrow, .part { font-family: var(--display); font-weight: 700; font-size: 12px; line-height: 1.2; letter-spacing: 0.09em; text-transform: uppercase; margin: 0; }
+.kicker, .eyebrow { color: var(--accent); }
+.part { color: var(--muted); border-top: 1px solid var(--line); padding-top: 18px; }
+h1 { font: 800 30px/1.12 var(--display); text-wrap: balance; margin: 8px 0 12px; }
+h2 { font: 800 22px/1.2 var(--display); text-wrap: balance; margin: 0; }
+h3 { font: 700 18px/1.25 var(--display); margin: 0; }
+p { margin: 0; }
+header { display: grid; gap: 10px; }
+.note { color: var(--muted); font-size: 15px; }
+.q { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 16px; display: grid; gap: 14px; min-width: 0; }
+.opts { display: grid; gap: 12px; }
+.opt { background: var(--raise); border: 1px solid var(--line); border-radius: 12px; padding: 14px 12px; display: grid; gap: 10px; min-width: 0; }
+.opt.chosen { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.opt-head { display: flex; gap: 10px; align-items: flex-start; }
+.letter { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--ground); font: 800 16px/1 var(--display); }
+.rec { display: inline-block; margin-left: 6px; padding: 1px 9px; border-radius: 999px; background: var(--flag); color: var(--flag-ink); font: 700 13px/1.5 var(--body); vertical-align: 2px; white-space: nowrap; }
+.drawn { font-size: 14px; color: var(--muted); font-style: italic; }
+.link { padding: 10px 12px; border: 1px dashed var(--accent); border-radius: 8px; }
+figure { margin: 0; display: grid; gap: 6px; min-width: 0; align-content: start; }
+figcaption { font-size: 14px; color: var(--muted); }
+img.shot { display: block; width: 100%; max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); background: var(--shotbg); cursor: zoom-in; }
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pick { justify-self: start; min-height: 44px; padding: 0 20px; border-radius: 999px; border: 2px solid var(--accent); background: transparent; color: var(--accent); font: 700 16px/1 var(--body); cursor: pointer; }
+.pick[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.pick:focus-visible, .copy:focus-visible, summary:focus-visible, img.shot:focus-visible { outline: 3px solid var(--flag); outline-offset: 2px; }
+.why { padding: 10px 12px; border-left: 3px solid var(--flag); background: var(--raise); border-radius: 0 8px 8px 0; }
+ul.facts { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+details { border-top: 1px solid var(--line); padding-top: 4px; }
+summary { cursor: pointer; font-weight: 700; color: var(--accent); min-height: 44px; display: flex; align-items: center; }
+details[open] > div { display: grid; gap: 10px; padding-bottom: 6px; }
+.answers { background: var(--surface); border: 2px solid var(--accent); border-radius: 14px; padding: 18px 16px; display: grid; gap: 12px; }
+.sum { font: 800 24px/1.3 var(--display); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; word-spacing: 0.3em; }
+label { font-weight: 700; }
+textarea { width: 100%; box-sizing: border-box; font: 16px/1.4 var(--body); background: var(--raise); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.copy { justify-self: start; min-height: 48px; padding: 0 22px; border-radius: 12px; border: 0; background: var(--accent); color: var(--on-accent); font: 700 17px/1 var(--body); cursor: pointer; }
+.status { color: var(--muted); min-height: 1.5em; }
+#zoom { position: fixed; inset: 0; z-index: 10; background: var(--scrim); display: grid; place-items: center; padding: 12px; overflow: auto; cursor: zoom-out; }
+#zoom img { max-width: 100%; max-height: calc(100vh - 60px); height: auto; border-radius: 6px; }
+#zoom p { color: var(--scrim-ink); font-size: 14px; margin-top: 8px; text-align: center; }
+</style>
+
+<main class="wrap">
+  <header>
+    <p class="kicker">FreeMotion &middot; Simple editor, Phase 3 &middot; sheet 2</p>
+    <h1>Four picks and two looks before Phase 3 ships</h1>
+    <p>The second sheet. It covers what was built after the first one: Extras under Clips (shapes, your saved elements and templates), effects on one title or picture, and swapping a template&rsquo;s clips. None of it has shipped. Every picture is the app itself, taken {{taken}} from the Phase 3 build ({{tree}}).</p>
+    <p>Tap a picture to see it bigger. Tap <b>Pick</b> under the option you want; the button at the end copies all your answers in one message.</p>
+    <p class="note">The clips are test clips: the beach pictures are drawn, and so are the little pictures on your saved elements and the template. Pictures marked <i>drawn for this sheet</i> show an option the app does not do yet, using the app&rsquo;s real panel and buttons.</p>
+  </header>
+
+  <p class="part">Decide &middot; 4 questions</p>
+
+  <section class="q" id="q1" data-q="1">
+    <p class="eyebrow">1 &middot; On a PC</p>
+    <h2>Extras has almost no room on a PC. How should it open?</h2>
+    <p>Clips &rsaquo; Extras opens in the left band above the tools, where your D20 pick puts every panel. At 1280 by 800 the band is {{r6_band}} px tall and Extras gets {{r6_room}} px of it: {{r6_a}}.</p>
+    <p class="link">This is question 7 of the first sheet (the panels above the tools are short on a PC), for Extras, where it is worst. <b>Your answer to 7 there decides this one too</b>, unless you pick something different here.</p>
+    <div class="opts">
+      <div class="opt" data-o="A">
+        <div class="opt-head"><span class="letter">A</span><h3>As built: Extras squeezes into the band{{rec:1A}}</h3></div>
+        <p>In a smaller 900 by 700 window the band is {{r6_band900}} px and Extras gets {{r6_room900}} px: {{r6_a900}}.</p>
+        <img class="shot" src="shot:r6-a-1280-crop" alt="The left band at 1280 by 800 with Extras open on its Shape tab above Done and the tools">
+        <div class="duo">
+          <figure><img class="shot" src="shot:r6-a-1280" alt="The whole app at 1280 by 800 with Extras open"><figcaption>1280 by 800</figcaption></figure>
+          <figure><img class="shot" src="shot:r6-a-900" alt="The whole app at 900 by 700 with Extras open"><figcaption>900 by 700</figcaption></figure>
+        </div>
+        <button class="pick" type="button" data-q="1" data-o="A" aria-pressed="false">Pick A</button>
+      </div>
+      <div class="opt" data-o="B">
+        <div class="opt-head"><span class="letter">B</span><h3>The band grows while Extras is open{{rec:1B}}</h3></div>
+        <p>The band grows by the height of its two rows of tools ({{r6_b_grow}} px, to {{r6_b_band}} px), so Extras gets {{r6_b_room}} px, {{r6_b_vs_full}}. With it, {{r6_b}}. The picture shrinks {{r6_b_pic}} while Extras is open, and the timeline beside the band grows with it (they are one row). It all goes back when Extras closes.</p>
+        <img class="shot" src="shot:r6-b-1280" alt="The whole app at 1280 by 800 with the band taller and the picture smaller while Extras is open">
+        <img class="shot" src="shot:r6-b-1280-crop" alt="The taller band with Extras on its Shape tab">
+        <p class="drawn">Drawn for this sheet: the real Extras, with the band raised the way dragging the timeline&rsquo;s top edge raises it.</p>
+        <details>
+          <summary>For comparison: Full&rsquo;s own Add menu</summary>
+          <div>
+            <img class="shot" src="shot:r6-full-1280-crop" alt="Full's band at 1280 by 800 with its own Add menu on the Shape tab">
+            <p class="note">{{r6_full}}. Full has no rows of tools under it, which is where Simple&rsquo;s band spends its height.</p>
+          </div>
+        </details>
+        <button class="pick" type="button" data-q="1" data-o="B" aria-pressed="false">Pick B</button>
+      </div>
+      <div class="opt" data-o="C">
+        <div class="opt-head"><span class="letter">C</span><h3>Extras rises as a sheet over the timeline, like the phone{{rec:1C}}</h3></div>
+        <p>It covers the timeline and the play bar beside the band, {{r6_c_room}} px tall, and the band keeps Done and its tools. With it, {{r6_c}}. The picture is not covered; the timeline is, until you pick something or press Done.</p>
+        <img class="shot" src="shot:r6-c-1280" alt="The whole app at 1280 by 800 with Extras as a sheet over the timeline">
+        <p class="drawn">Drawn for this sheet: the real Extras panel moved over the timeline.</p>
+        <button class="pick" type="button" data-q="1" data-o="C" aria-pressed="false">Pick C</button>
+      </div>
+    </div>
+    <p class="why"><b>Why the recommended one:</b> {{why1}}</p>
+  </section>
+
+  <section class="q" id="q2" data-q="2">
+    <p class="eyebrow">2 &middot; Phone and PC</p>
+    <h2>Which editor should a new project open in?</h2>
+    <p>This is D3, one of the questions still open from 1 Oct. You picked A then, but on the old page, where A put two editor cards into New project, a dialog you use in Full, so it was not applied. Asked again in a form that leaves New project exactly as it is.</p>
+    <p>It matters for this sheet: swapping a template&rsquo;s clips the Simple way (6, below) only runs when a template&rsquo;s new project opens in Simple, and today every new project opens in Full. Until this is decided you cannot reach it.</p>
+    <div class="opts">
+      <div class="opt" data-o="A">
+        <div class="opt-head"><span class="letter">A</span><h3>A new project opens in the editor this device last switched to in the &#9881; cog; New project looks and works as today{{rec:2A}}</h3></div>
+        <p>If you last switched to Simple, Create also opens your phone&rsquo;s file picker straight away and the clips you pick become the first clips. A template&rsquo;s New project from template opens in Simple too, with Insert your Media over it (the pictures in 6). If you last switched to Full, everything is as today.</p>
+        <p class="drawn">Not built yet, so not drawn: I&rsquo;d draw it first, before building it.</p>
+        <button class="pick" type="button" data-q="2" data-o="A" aria-pressed="false">Pick A</button>
+      </div>
+      <div class="opt" data-o="B">
+        <div class="opt-head"><span class="letter">B</span><h3>Always start in Full; switch in the cog after{{rec:2B}}</h3></div>
+        <p>As today. Insert your Media over a new template project is always Full&rsquo;s: a shorter clip leaves a gap, and the Simple way in 6 is never reached.</p>
+        <button class="pick" type="button" data-q="2" data-o="B" aria-pressed="false">Pick B</button>
+      </div>
+    </div>
+    <p class="why"><b>Why the recommended one:</b> It is the answer you gave on 1 Oct, in the only form that keeps Full as it is, and both doors get it: Create, and New project from template.</p>
+  </section>
+
+  <section class="q" id="q3" data-q="3">
+    <p class="eyebrow">3 &middot; Phone and PC</p>
+    <h2>A saved element of one picture and a sound: should they be tied together?</h2>
+    <p>The plan said such an element makes no group. Then nothing remembers which sound came with which picture: a whoosh just past a cut rode the next clip, and moving either clip pulled them apart. As built they are tied, the way a lower third&rsquo;s pieces are, and the sound&rsquo;s tools say so:</p>
+    <figure><img class="shot" src="shot:tie-sound-380-crop" alt="The whoosh selected on a phone: its tools, led by a tag saying what it moves with"><figcaption>The whoosh selected: &ldquo;{{tie_with}}&rdquo;</figcaption></figure>
+    <div class="opts">
+      <div class="opt" data-o="A">
+        <div class="opt-head"><span class="letter">A</span><h3>Tied in a group, the picture leads{{rec:3A}}</h3></div>
+        <p>As built. The same rule a lower third already uses. In Full it is an ordinary closed group named after the element, and Ungroup there unties it.</p>
+        <button class="pick" type="button" data-q="3" data-o="A" aria-pressed="false">Pick A</button>
+      </div>
+      <div class="opt" data-o="B">
+        <div class="opt-head"><span class="letter">B</span><h3>No group: each sound linked to the picture as its parent{{rec:3B}}</h3></div>
+        <p>Full would show the sound with a Parent set: a stored link the plan argues against.</p>
+        <button class="pick" type="button" data-q="3" data-o="B" aria-pressed="false">Pick B</button>
+      </div>
+      <div class="opt" data-o="C">
+        <div class="opt-head"><span class="letter">C</span><h3>The group, but whichever starts first leads{{rec:3C}}</h3></div>
+        <p>A whoosh that starts before the picture would lead, and a sound that runs on more than a second past its clip would then make the whole element stay put.</p>
+        <button class="pick" type="button" data-q="3" data-o="C" aria-pressed="false">Pick C</button>
+      </div>
+    </div>
+    <p class="why"><b>Why the recommended one:</b> One rule for every element, nothing new in Full, and Ungroup undoes it.</p>
+  </section>
+
+  <section class="q" id="q4" data-q="4">
+    <p class="eyebrow">4 &middot; Phone and PC</p>
+    <h2>Effects on one title or picture: what should the button say?</h2>
+    <p>A title and a picture on top now have a button that puts an effect on just that item. It opens a row of the effects that item can run: {{fx_tiles}} for a picture, {{fx_presets}} of them presets, first; {{fx_cut}}. One tap adds one effect, as one Undo step.</p>
+    <div class="opts">
+      <div class="opt" data-o="A">
+        <div class="opt-head"><span class="letter">A</span><h3>Add effect{{rec:4A}}</h3></div>
+        <p>As built. The bottom row&rsquo;s Effects (an effect over the clips at the line, for a stretch of the video) is on screen at the same time, so this one has its own name.</p>
+        <img class="shot" src="shot:fx-tray-title-380-crop" alt="A title's tools on a phone: Edit words, Add effect, Stay put, More and the bin, above the bottom row">
+        <button class="pick" type="button" data-q="4" data-o="A" aria-pressed="false">Pick A</button>
+      </div>
+      <div class="opt" data-o="B">
+        <div class="opt-head"><span class="letter">B</span><h3>Effects, as the plan&rsquo;s tables say{{rec:4B}}</h3></div>
+        <p>Two buttons called Effects on screen at once, doing different things.</p>
+        <img class="shot" src="shot:fx-face-effects-380-crop" alt="The same tools with the button reading Effects, above the bottom row's own Effects">
+        <p class="drawn">Drawn for this sheet: the real button with its words changed.</p>
+        <button class="pick" type="button" data-q="4" data-o="B" aria-pressed="false">Pick B</button>
+      </div>
+    </div>
+    <p class="why"><b>Why the recommended one:</b> It keeps your rule from #310: no two buttons on screen with the same name.</p>
+    <p><b>As built, just look.</b> Say a word in the notes to change anything.</p>
+    <figure><img class="shot" src="shot:fx-tray-pic-380-crop" alt="A picture on top selected on a phone: Into row, Add effect, Crop, Forward, Back, Stay put, More and the bin"><figcaption>A picture on top, phone: eight tools; {{fx_pic_phone}}. A title, phone: {{fx_title_phone}}.</figcaption></figure>
+    <figure><img class="shot" src="shot:fx-item-picker-380-crop" alt="Add effect pressed: Done, then a scrolling row of effect tiles"><figcaption>Add effect pressed: Done, then the effects</figcaption></figure>
+    <figure><img class="shot" src="shot:fx-over-380-crop" alt="The phone timeline: an effect over the clips with a tag saying runs over the next clip"><figcaption>An effect over the clips that runs past the clip it rides says &ldquo;runs over the next clip&rdquo; on the timeline; {{fx_over_note}}</figcaption></figure>
+    <details>
+      <summary>The same on a PC (1280 wide)</summary>
+      <div>
+        <figure><img class="shot" src="shot:fx-tray-pic-1280-crop" alt="The PC band with a picture on top selected"><figcaption>A picture on top: {{fx_pic_pc}}</figcaption></figure>
+        <figure><img class="shot" src="shot:fx-tray-title-1280-crop" alt="The PC band with a title selected"><figcaption>A title: {{fx_title_pc}}</figcaption></figure>
+        <figure><img class="shot" src="shot:fx-item-picker-1280-crop" alt="The PC band with the effects row open"><figcaption>Add effect pressed</figcaption></figure>
+      </div>
+    </details>
+    <ul class="facts">
+      <li>What it says: &ldquo;Added Shake to the image&rdquo;, &ldquo;Added Beat Slam to &lsquo;Hi&rsquo;&rdquo;, &ldquo;That effect doesn&rsquo;t work on this&rdquo;.</li>
+      <li>3D, Keying and Repetition are left out of the row, as in the bottom row&rsquo;s Effects.</li>
+      <li>Not on a clip in the clip row yet: a clip&rsquo;s tools are already full on a PC, which is question 1 on the first sheet.</li>
+    </ul>
+  </section>
+
+  <p class="part">Just look &middot; as built, say a word to change anything</p>
+
+  <section class="q" id="extras">
+    <p class="eyebrow">5 &middot; Just look</p>
+    <h2>Extras: shapes, your saved elements and templates in Simple</h2>
+    <p>Clips is now a short list: Add clips (what Clips did before) and Extras. The Clips button&rsquo;s full name, for a screen reader and the hover on a PC, is &ldquo;{{clips_title}}&rdquo;.</p>
+    <img class="shot" src="shot:clips-list-380-crop" alt="Clips pressed on a phone: a short list with Add clips and Extras">
+    <img class="shot" src="shot:clips-list-1280-crop" alt="Clips pressed in the PC band: the same list">
+    <p>On a phone Extras is the Add sheet you know, with only three tabs ({{x_tabs}}). Its title still reads Add: it is Full&rsquo;s own sheet, and changing that word would change Full.</p>
+    <div class="duo">
+      <figure><img class="shot" src="shot:x-elements-380" alt="The Add sheet with Elements open: Lower third and Logo"><figcaption>Elements: your saved elements</figcaption></figure>
+      <figure><img class="shot" src="shot:x-shape-380" alt="The Add sheet with Shape open"><figcaption>Shape</figcaption></figure>
+    </div>
+    <div class="duo">
+      <figure><img class="shot" src="shot:x-template-380" alt="The Add sheet with Template open: Promo"><figcaption>Template</figcaption></figure>
+      <figure><img class="shot" src="shot:x-noelements-380" alt="Elements with nothing saved yet"><figcaption>Elements with nothing saved yet</figcaption></figure>
+    </div>
+    <p>A saved lower third goes in as one piece that moves together, and each part keeps its own tools. Its words say what they move with:</p>
+    <figure><img class="shot" src="shot:x-with-380-crop" alt="The lower third's words selected on a phone: a Moves with the shape tag first in their tools"><figcaption>The words selected, phone</figcaption></figure>
+    <figure><img class="shot" src="shot:x-with-1280-crop" alt="The same in the PC band"><figcaption>On a PC: {{x_with_pc}}</figcaption></figure>
+    <ul class="facts">
+      <li>Stay put on the words is named &ldquo;{{x_with_stay}}&rdquo; for a screen reader.</li>
+      <li>With nothing saved, Elements says &ldquo;{{x_empty_title}}&rdquo;: {{x_empty_lines}}</li>
+      <li>A shape, an element or a template is one tap and one Undo step. What it says: &ldquo;Shape added&rdquo;, &ldquo;&lsquo;Lower third&rsquo; added&rdquo;, &ldquo;&lsquo;Promo&rsquo; added &middot; 2 clips in the row&rdquo;.</li>
+      <li>A template&rsquo;s clips go into the clip row at the cut nearest the line; an element never does. An element&rsquo;s camera move is left out in Simple, and the line says so.</li>
+    </ul>
+  </section>
+
+  <section class="q" id="replace">
+    <p class="eyebrow">6 &middot; Just look</p>
+    <h2>Insert your Media over Simple: a shorter clip closes up</h2>
+    <p>When a template&rsquo;s project is in Simple (question 2), Replace Media on Insert your Media is Simple&rsquo;s own Replace: a shorter clip keeps its place, the clips after it move up with no gap, and a title on it stays on it. In Full it is today&rsquo;s Replace, which leaves a gap.</p>
+    <p>Insert your Media covers the whole screen, so when Simple has something to say it says it on the sheet, between the slots and Replace Media:</p>
+    <div class="duo">
+      <figure><img class="shot" src="shot:fill-lock-380" alt="Insert your Media on a phone with a line on it: That clip is locked, Do it anyway"><figcaption>&ldquo;{{fill_lock_line}}&rdquo; &middot; {{fill_lock_btn}}</figcaption></figure>
+      <figure><img class="shot" src="shot:fill-frame-380" alt="Insert your Media on a phone with a line on it: That clip is shorter than its place in the group, Open in Full"><figcaption>&ldquo;{{fill_frame_line}}&rdquo; &middot; {{fill_frame_btn}}</figcaption></figure>
+    </div>
+    <figure><img class="shot" src="shot:fill-lock-1280-crop" alt="The same line on Insert your Media on a PC"><figcaption>On a PC (1280 by 800), a locked clip after it</figcaption></figure>
+    <figure><img class="shot" src="shot:fill-frame-1280-crop" alt="The group line on Insert your Media on a PC"><figcaption>On a PC, a clip inside a masking frame</figcaption></figure>
+    <details>
+      <summary>The whole PC screen</summary>
+      <div>
+        <img class="shot" src="shot:fill-lock-1280" alt="Insert your Media over Simple at 1280 by 800">
+      </div>
+    </details>
+    <ul class="facts">
+      <li>Do it anyway swaps the clip in one step: the locked clip moves up and stays locked.</li>
+      <li>Open in Full puts Full under the sheet; you press Replace Media again there and pick the file again.</li>
+      <li>A clip inside a group (a photo in a masking frame) only takes a clip at least as long as its place in the group.</li>
+    </ul>
+  </section>
+
+  <section class="answers" id="answers" aria-labelledby="answers-h">
+    <h2 id="answers-h">Your answers</h2>
+    <p class="sum" id="sum">1? 2? 3? 4?</p>
+    <p class="note">1? means: the same as your answer to question 7 on the first sheet.</p>
+    <label for="note">Anything to change, in 4, 5, 6 or any picture</label>
+    <textarea id="note" rows="4"></textarea>
+    <button class="copy" id="copy" type="button">Copy my answers</button>
+    <p class="status" id="status" role="status"></p>
+    <textarea id="copytext" rows="3" readonly hidden></textarea>
+  </section>
+</main>
+
+<div id="zoom" hidden><div><img id="zoom-img" alt=""><p>Tap anywhere to close</p></div></div>
+
+<script>
+(function () {
+  'use strict';
+  var KEY = 'fm-sm3-sheet2-picks';
+  var picks = {}, note = document.getElementById('note');
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { picks = {}; }
+  try { note.value = localStorage.getItem(KEY + '-note') || ''; } catch (e) {}
+  var qs = Array.prototype.map.call(document.querySelectorAll('.q[data-q]'), function (s) { return s.getAttribute('data-q'); });
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); localStorage.setItem(KEY + '-note', note.value); } catch (e) {}
+  }
+  function paint() {
+    Array.prototype.forEach.call(document.querySelectorAll('.pick'), function (b) {
+      var on = picks[b.getAttribute('data-q')] === b.getAttribute('data-o');
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.textContent = (on ? 'Picked ' : 'Pick ') + b.getAttribute('data-o');
+      var card = b.closest('.opt');
+      if (card) card.classList.toggle('chosen', on);
+    });
+    document.getElementById('sum').textContent = qs.map(function (q) { return q + (picks[q] || '?'); }).join(' ');
+  }
+  function message() {
+    var text = 'Simple Phase 3 sheet 2: ' + qs.map(function (q) { return q + (picks[q] || '?'); }).join(' ');
+    if (!picks['1']) text += '\n(1: the same as my answer to question 7 on the first sheet)';
+    if (note.value.trim()) text += '\nNotes: ' + note.value.trim();
+    return text;
+  }
+  var zoom = document.getElementById('zoom'), zimg = document.getElementById('zoom-img');
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.pick');
+    if (b) {
+      var q = b.getAttribute('data-q'), o = b.getAttribute('data-o');
+      if (picks[q] === o) delete picks[q]; else picks[q] = o;
+      save(); paint();
+      return;
+    }
+    var im = e.target.closest('img.shot');
+    if (im) { zimg.src = im.src; zimg.alt = im.alt; zoom.hidden = false; return; }
+    if (!zoom.hidden && zoom.contains(e.target)) { zoom.hidden = true; zimg.removeAttribute('src'); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !zoom.hidden) { zoom.hidden = true; zimg.removeAttribute('src'); }
+    var im = e.target && e.target.closest && e.target.closest('img.shot');
+    if (im && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); im.click(); }
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('img.shot'), function (im) { im.tabIndex = 0; });
+  note.addEventListener('input', save);
+  document.getElementById('copy').addEventListener('click', function () {
+    var text = message(), status = document.getElementById('status'), box = document.getElementById('copytext');
+    function byHand() {
+      box.hidden = false; box.value = text; box.focus(); box.select();
+      status.textContent = 'Copying did not work here. The text is selected below: copy it by hand.';
+    }
+    try {
+      navigator.clipboard.writeText(text).then(function () { box.hidden = true; status.textContent = 'Copied: ' + text.split('\n')[0]; }, byHand);
+    } catch (e) { byHand(); }
+  });
+  paint();
+})();
+</script>
