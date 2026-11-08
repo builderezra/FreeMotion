@@ -67547,9 +67547,15 @@
         c.roomWas = C.ui._testRoom(room, c.pid, map); c.roomObj = room; c.roomMap = map;
         return room;
       };
+      /* isolation (8 Nov, queue 980 2A): set() remembers Simple in fm.editor.last, and a NEW project now opens in the editor that
+         key names — so it is put back, or every New project / New project from template test after this one opened in Simple */
+      let last0 = null; try { last0 = localStorage.getItem('fm.editor.last'); } catch (e) {}
       FM.editor.set('simple');
       try { await fn(c); }
-      finally { if (c.roomWas) C.ui._testRoomBack(c.roomWas); try { FM.editor.apply('full', { force: true, quiet: true }); } catch (e) {} }
+      finally {
+        if (c.roomWas) C.ui._testRoomBack(c.roomWas); try { FM.editor.apply('full', { force: true, quiet: true }); } catch (e) {}
+        try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      }
     });
   }
 
@@ -68526,6 +68532,7 @@
       var _sbIds = ['opt-bar', 'view-bar'], _sb0 = _sbIds.map(function (id) { var el = document.getElementById(id); return !!(el && FM.sideBarOpen && FM.sideBarOpen(el)); });
       var _z0 = (FM.timeline && FM.timeline.getZoom) ? FM.timeline.getZoom() : null;
       var _tl0 = document.documentElement.style.getPropertyValue('--tl-h');
+      var _el0 = null; try { _el0 = localStorage.getItem('fm.editor.last'); } catch (e) {}
       try { _lk0 = { scene: FM.scene, ids: (FM.scene && FM.scene.layers || []).map(function (l) { return l.id; }), pv: FM._fxPreview || null, iso: FM.isolate || null }; } catch (e) {}
       var _fp0 = leakPrint();   // the leak check's BEFORE (see leakPrint, above run)
       var _t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -68606,6 +68613,16 @@
           _stubbed.push('FM.band --tl-h (' + (_tlNow || 'none') + ', was ' + (_tl0 || 'none') + ')');
           try { if (_tl0) document.documentElement.style.setProperty('--tl-h', _tl0); else document.documentElement.style.removeProperty('--tl-h'); if (FM.tlBandResized) FM.tlBandResized(); } catch (e) {}
         }
+        /* …and the editor this device last switched to, fm.editor.last (8 Nov, #980 release C: since sheet 2's 2A a new project opens in
+           it, so a Simple test that hung before its finally would have made every later New project open in Simple — the review's
+           LOW). Put back, and named. */
+        try {
+          var _elNow = localStorage.getItem('fm.editor.last');
+          if (_elNow !== _el0) {
+            _stubbed.push('FM.editor.last (' + (_elNow || 'none') + ', was ' + (_el0 || 'none') + ')');
+            if (_el0 == null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', _el0);
+          }
+        } catch (e) {}
         if (_stubbed.length) {
           var LS = window.__fmSceneLeaks = window.__fmSceneLeaks || [];
           if (LS.length < 60) LS.push({ test: t.name.slice(0, 120), added: _stubbed.map(function (k) { return (k.indexOf('FM.') === 0 ? k + ' left changed' : 'window.' + k + ' left stubbed') + ' (put back)'; }), more: 0, preview: false, isolate: false });
@@ -138336,30 +138353,37 @@
       const id = n => FM.scene.layers.find(l => l.name === n).id;
       const g = c.addGuest({ role: 'editor', name: 'Sam' });
       const sent = c.sentTo(g.loop), batches = () => sent.filter(m => m.t === 'b').length;
+      /* isolation (8 Nov, queue 980 2A): set() remembers Simple in fm.editor.last, which now decides where a NEW project opens — put back below */
+      let last0 = null; try { last0 = localStorage.getItem('fm.editor.last'); } catch (e) {}
       FM.editor.set('simple');
-      const d0 = JSON.stringify(FM.scene.layers);
-      const ok = await FM.spine.cmd.del(id('B'));
-      const say = smSayText();
-      if (ok !== false || JSON.stringify(FM.scene.layers) !== d0) throw new Error('a delete went through with an editor in the session');
-      if (!/^Sam can edit · clips stay put/.test(say)) throw new Error('the live line is wrong: “' + say + '”');
-      if (batches()) throw new Error('a refused delete sent ' + batches() + ' batch(es)');
-      FM.time = 1.5;
-      if (!(await FM.spine.cmd.split(id('A')))) throw new Error('a split (not arranging) was refused live: “' + smSayText() + '”');
-      if (batches() !== 1) throw new Error('a live split should send exactly one batch, sent ' + batches());
-      /* make Sam a Viewer: arranging opens up; one delete is one batch */
-      c.S.setPeerRole(g.mid, 'viewer'); sent.length = 0;
-      if (!(await FM.spine.cmd.del(id('B')))) throw new Error('with only a Viewer in, the delete was refused: “' + smSayText() + '”');
-      if (batches() !== 1) throw new Error('one Simple delete should be one batch, got ' + batches());
-      /* Sam can edit again: undoing that ripple must not be sent (§10.2 door 2) */
-      c.S.setPeerRole(g.mid, 'editor'); sent.length = 0;
-      const d1 = JSON.stringify(FM.scene.layers);
-      const u = FM.history.undo();
-      if (u !== false || JSON.stringify(FM.scene.layers) !== d1 || batches()) throw new Error('undoing an arranging step with an editor in went through (sent ' + batches() + ')');
-      if (!FM.collab.canUndo()) throw new Error('the refused undo used the step up — it should stay for later');
-      /* CONTROL — a Full-made step is never gated: rename a layer in Full and undo it with Sam still in */
-      FM.editor.apply('full', { force: true, quiet: true });
-      const A = FM.scene.layers.find(l => l.name === 'A'); A.name = 'A2'; FM.history.commit();
-      if (FM.history.undo() !== true || !FM.scene.layers.some(l => l.name === 'A')) throw new Error('CONTROL: a Full step’s undo was refused');
+      try {
+        const d0 = JSON.stringify(FM.scene.layers);
+        const ok = await FM.spine.cmd.del(id('B'));
+        const say = smSayText();
+        if (ok !== false || JSON.stringify(FM.scene.layers) !== d0) throw new Error('a delete went through with an editor in the session');
+        if (!/^Sam can edit · clips stay put/.test(say)) throw new Error('the live line is wrong: “' + say + '”');
+        if (batches()) throw new Error('a refused delete sent ' + batches() + ' batch(es)');
+        FM.time = 1.5;
+        if (!(await FM.spine.cmd.split(id('A')))) throw new Error('a split (not arranging) was refused live: “' + smSayText() + '”');
+        if (batches() !== 1) throw new Error('a live split should send exactly one batch, sent ' + batches());
+        /* make Sam a Viewer: arranging opens up; one delete is one batch */
+        c.S.setPeerRole(g.mid, 'viewer'); sent.length = 0;
+        if (!(await FM.spine.cmd.del(id('B')))) throw new Error('with only a Viewer in, the delete was refused: “' + smSayText() + '”');
+        if (batches() !== 1) throw new Error('one Simple delete should be one batch, got ' + batches());
+        /* Sam can edit again: undoing that ripple must not be sent (§10.2 door 2) */
+        c.S.setPeerRole(g.mid, 'editor'); sent.length = 0;
+        const d1 = JSON.stringify(FM.scene.layers);
+        const u = FM.history.undo();
+        if (u !== false || JSON.stringify(FM.scene.layers) !== d1 || batches()) throw new Error('undoing an arranging step with an editor in went through (sent ' + batches() + ')');
+        if (!FM.collab.canUndo()) throw new Error('the refused undo used the step up — it should stay for later');
+        /* CONTROL — a Full-made step is never gated: rename a layer in Full and undo it with Sam still in */
+        FM.editor.apply('full', { force: true, quiet: true });
+        const A = FM.scene.layers.find(l => l.name === 'A'); A.name = 'A2'; FM.history.commit();
+        if (FM.history.undo() !== true || !FM.scene.layers.some(l => l.name === 'A')) throw new Error('CONTROL: a Full step’s undo was refused');
+      } finally {
+        try { if (FM.editor.mode() !== 'full') FM.editor.apply('full', { force: true, quiet: true }); } catch (e) {}
+        try { if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      }
     });
   });
 
@@ -200395,4 +200419,554 @@
       });
     });
   });
+
+  /* ═══ SIMPLE MODE, PHASE 3 — 2A: A NEW PROJECT OPENS IN THE EDITOR THIS DEVICE LAST SWITCHED TO (8 Nov, queue 980) ═══════════
+     Sheet 2's pick 2A (D3 A, decided 6 Nov under his rule). fm.editor.last was only ever written (js/editor-mode.js remember());
+     nothing read it when a project was made, so every new project opened in Full however he worked. Home's two new-project
+     doors — Create in New project, and a template's ⋯ → New project from template — now give the new card the editor that key
+     names (FM.editor.forNew), and the project opens in it; with full, or no key, the card is today's and it opens in Full.
+     Opening an existing project is unchanged: its own card decides. Driven through the real doors (the + and Create, a card,
+     the template card's ⋯); every project and template made here is removed, and fm.editor.last, fm.newproj, the editor and
+     Home are put back as found. */
+  function sm2aLs(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function sm2aLsPut(k, v) { try { if (v === null || v === undefined) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
+  function sm2aKeep() {
+    const ls = {};
+    ['fm.editor.last', 'fm.editor.hint', 'fm.newproj'].forEach(function (k) { ls[k] = sm2aLs(k); });
+    return { wasHome: FM.home.isOpen(), orig: FM.projects.currentId(), made: [], tids: [], mode: FM.editor.mode(), ls: ls };
+  }
+  async function sm2aPut(st) {
+    try { const d = document.getElementById('hm-dialog'); if (d && !d.classList.contains('hidden')) d.classList.add('hidden'); } catch (e) {}
+    try { if (FM.templateFill && FM.templateFill.isOpen && FM.templateFill.isOpen()) FM.templateFill.close(); } catch (e) {}
+    /* a project a template door made that the test never got to read is still the test's */
+    try { FM.projects.list().forEach(function (p) { if (p.fromTemplate && st.tids.indexOf(p.fromTemplate) >= 0 && st.made.indexOf(p.id) < 0) st.made.push(p.id); }); } catch (e) {}
+    for (const id of st.tids) { try { await FM.templates.remove(id); } catch (e) {} }
+    await hcCleanup(st.made, st.orig, st.wasHome);
+    Object.keys(st.ls).forEach(function (k) { sm2aLsPut(k, st.ls[k]); });
+    try { if (FM.editor.mode() !== st.mode) FM.editor.apply(st.mode, { force: true, quiet: true }); } catch (e) {}
+  }
+  /* What a project is in once open: its card's editor field ('(none)' when the card has no such field, which is today's card),
+     the editor on screen, and this device's fm.editor.last */
+  function sm2aRead(pid) {
+    const card = FM.projects.list().find(function (p) { return p.id === pid; }) || null;
+    return { pid: pid, card: card, ed: !card ? '(no card)' : ('editor' in card ? String(card.editor) : '(none)'), mode: FM.editor.mode(),
+             cls: document.body.classList.contains('ed-simple'), last: sm2aLs('fm.editor.last') };
+  }
+  /* A door has OPENED a new project and Home has gone: this tab's project changed and FM.editor has settled the editor for it.
+     syncProject sets lastPid on every open, in Full as in Simple, so this waits the same way on the tree before 2A. */
+  async function sm2aLanded(before, what) {
+    await hcUntil(what, function () { const pid = FM.storage.openProjectId(); return !!pid && pid !== before && !FM.home.isOpen() && FM.editor._state().lastPid === pid; }, 10000);
+    await sleep(350);
+    return FM.storage.openProjectId();
+  }
+  /* Home → + → Create, with this device's fm.editor.last set to `last` first (null: no key at all) */
+  async function sm2aCreate(st, last, what) {
+    sm2aLsPut('fm.editor.last', last);
+    if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
+    FM.home._render('projects'); await sleep(250);
+    const dlg = document.getElementById('hm-dialog'), n0 = FM.projects.list().length, before = FM.storage.openProjectId();
+    document.getElementById('hm-new').click();
+    await hcUntil('the New project dialog (' + what + ')', function () { return !dlg.classList.contains('hidden'); }, 4000);
+    await sleep(400);
+    document.getElementById('hm-create').click();
+    const pid = await sm2aLanded(before, 'the project Create made to open (' + what + ')');
+    st.made.push(pid);
+    const r = sm2aRead(pid);
+    r.made = FM.projects.list().length - n0;
+    return r;
+  }
+  /* Home → a project's own card, the way he opens one he already has */
+  async function sm2aOpenCard(pid, what) {
+    if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
+    FM.home._render('projects'); await sleep(250);
+    const c = heCard(pid);
+    if (!c) throw new Error('setup: ' + what + ' has no card on Home');
+    c.click();
+    await hcUntil(what + ' to open from its card', function () { return FM.storage.openProjectId() === pid && !FM.home.isOpen() && FM.editor._state().lastPid === pid; }, 10000);
+    await sleep(350);
+    return sm2aRead(pid);
+  }
+  /* Home → Templates → the template's ⋯ → New project from template, with fm.editor.last set to `last` first */
+  async function sm2aFromTemplate(st, tid, last, what) {
+    sm2aLsPut('fm.editor.last', last);
+    if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
+    FM.home._render('templates'); await sleep(450);
+    const c = heCard(tid);
+    if (!c) throw new Error('setup: the template has no card under Templates (' + what + ')');
+    const before = FM.storage.openProjectId();
+    c.querySelector('.hm-card-more').click();
+    (await hcMenuItem(/New project from template/)).click();
+    const pid = await sm2aLanded(before, 'the project New project from template made to open (' + what + ')');
+    st.made.push(pid);
+    /* Insert your Media comes up 420 ms after the push (home.js use()): let it, then put it away */
+    await sleep(500);
+    try { if (FM.templateFill && FM.templateFill.isOpen()) FM.templateFill.close(); } catch (e) {}
+    await sleep(150);
+    return sm2aRead(pid);
+  }
+
+  test('simple P3 · 2A at 380 New project opens in the editor this device last switched to: with fm.editor.last simple, Create opens the new project in Simple with simple on its card; with full, and with no key, it opens in Full with a card that names no editor, as today; Create never writes fm.editor.last (CONTROL: each Create made exactly one project and opened it, starting from Full)', { item: '980', budgetMs: 90000 }, async function () {
+    const st = sm2aKeep(), fails = [];
+    try {
+      if (st.wasHome) FM.home.close();
+      await sleep(100);
+      if (FM.editor.mode() !== 'full') FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        if (FM.editor.mode() !== 'full' || document.body.classList.contains('ed-simple')) throw new Error('CONTROL: the editor is not in Full before the first Create, so arriving in Simple would prove nothing');
+        const s = await sm2aCreate(st, 'simple', 'last switched to Simple');
+        if (s.made !== 1 || !s.card) throw new Error('CONTROL: Create made ' + s.made + ' project(s) (card ' + (s.card ? 'found' : 'missing') + '), so nothing below could be judged');
+        if (s.mode !== 'simple' || !s.cls) fails.push('with fm.editor.last simple (he last switched to Simple in the ⚙ cog) Create opened the new project in ' + s.mode + (s.cls ? '' : ' (no body.ed-simple)') + ' — it should open in Simple');
+        if (s.ed !== 'simple') fails.push('the new project’s card says editor ' + s.ed + ', not simple — it would not reopen in Simple');
+        if (s.last !== 'simple') fails.push('Create changed fm.editor.last from simple to ' + s.last);
+        const f = await sm2aCreate(st, 'full', 'last switched to Full');
+        if (f.made !== 1 || !f.card) throw new Error('CONTROL: the second Create made ' + f.made + ' project(s)');
+        if (f.mode !== 'full' || f.cls) fails.push('with fm.editor.last full Create opened the new project in ' + f.mode + (f.cls ? ' (body.ed-simple on)' : '') + ' — it should open in Full, as today');
+        if (f.ed !== '(none)') fails.push('with fm.editor.last full the new card carries editor ' + f.ed + ' — Full’s card must be exactly today’s');
+        if (f.last !== 'full') fails.push('Create changed fm.editor.last from full to ' + f.last);
+        const n = await sm2aCreate(st, null, 'no key');
+        if (n.made !== 1 || !n.card) throw new Error('CONTROL: the third Create made ' + n.made + ' project(s)');
+        if (n.mode !== 'full' || n.cls) fails.push('with no fm.editor.last (a device that never switched) Create opened the new project in ' + n.mode + ' — it should open in Full, as today');
+        if (n.ed !== '(none)') fails.push('with no fm.editor.last the new card carries editor ' + n.ed + ' — it must be today’s card');
+        if (n.last !== null) fails.push('Create wrote fm.editor.last (' + n.last + ') on a device that never switched');
+      }, 380);
+      if (fails.length) throw new Error(fails.join(' · '));
+    } finally { await sm2aPut(st); }
+  });
+
+  test('simple P3 · 2A at 1280 New project from template opens in the editor this device last switched to: with fm.editor.last simple the template’s new project opens in Simple with simple on its card, and with no key in Full with a card that names no editor, as today (CONTROL: each is the template’s own new project — its card names the template and it holds the template’s box)', { item: '980', budgetMs: 90000 }, async function () {
+    const st = sm2aKeep(), fails = [];
+    const name = 'SM2A tpl ' + Date.now().toString(36);
+    try {
+      if (st.wasHome) FM.home.close();
+      await sleep(100);
+      const src = await FM.projects.create({ name: 'SM2A tpl src', width: 320, height: 240 });
+      if (!src) throw new Error('setup: the template’s source project was not made');
+      st.made.push(src);
+      const box = FM.makeLayer('shape', { name: 'SM2A box', shape: 'rect', x: 160, y: 120, shapeW: 120, shapeH: 80, fill: '#e76f51' });
+      box.start = 0; box.duration = 3; FM.scene.layers.push(box); FM.refreshAll(); FM.history.commit();
+      if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
+      await FM.storage.save(); await sleep(200);
+      if (!(await FM.templates.save(name, src))) throw new Error('setup: could not save the template');
+      const tpl = FM.templates.list().find(function (t) { return t.name === name; });
+      if (!tpl) throw new Error('setup: the saved template is not listed');
+      st.tids.push(tpl.id);
+      if (FM.editor.mode() !== 'full') FM.editor.apply('full', { force: true, quiet: true });
+      await atWideWidth(async function () {
+        const own = function (r) { return !!r.card && r.card.fromTemplate === tpl.id && FM.scene.layers.some(function (l) { return l.name === 'SM2A box'; }); };
+        if (FM.editor.mode() !== 'full') throw new Error('CONTROL: the editor is not in Full before the door, so arriving in Simple would prove nothing');
+        const s = await sm2aFromTemplate(st, tpl.id, 'simple', 'last switched to Simple');
+        if (!own(s)) throw new Error('CONTROL: the project the door opened is not the template’s (card fromTemplate ' + (s.card && s.card.fromTemplate) + ', layers ' + FM.scene.layers.map(function (l) { return l.name; }).join(', ') + ')');
+        if (s.mode !== 'simple' || !s.cls) fails.push('with fm.editor.last simple, New project from template opened the new project in ' + s.mode + ' — it should open in Simple');
+        if (s.ed !== 'simple') fails.push('the template’s new project’s card says editor ' + s.ed + ', not simple — it would not reopen in Simple');
+        if (s.last !== 'simple') fails.push('the door changed fm.editor.last from simple to ' + s.last);
+        const n = await sm2aFromTemplate(st, tpl.id, null, 'no key');
+        if (!own(n) || n.pid === s.pid) throw new Error('CONTROL: the second door did not open a new project of the template');
+        if (n.mode !== 'full' || n.cls) fails.push('with no fm.editor.last, New project from template opened the new project in ' + n.mode + ' — it should open in Full, as today');
+        if (n.ed !== '(none)') fails.push('with no fm.editor.last the template’s new card carries editor ' + n.ed + ' — it must be today’s card');
+        if (n.last !== null) fails.push('the door wrote fm.editor.last (' + n.last + ') on a device that never switched');
+      }, 1280);
+      if (fails.length) throw new Error(fails.join(' · '));
+    } finally { await sm2aPut(st); }
+  });
+
+  test('simple P3 · 2A at 380 an existing project keeps its own editor and a new one keeps the editor it was made in: with fm.editor.last simple a project whose card names no editor opens in Full, with full a project whose card says simple opens in Simple, and a project made by New project while he worked in Simple reopens in Simple once the key says full; a hop to Full writes no fm.editor.last, so the next new project still opens in Simple (CONTROL: the two old cards read none and simple)', { item: '980', budgetMs: 90000 }, async function () {
+    const st = sm2aKeep(), fails = [];
+    try {
+      if (st.wasHome) FM.home.close();
+      await sleep(100);
+      const e1 = await FM.projects.create({ name: 'SM2A old Full', width: 320, height: 240 });
+      if (e1) st.made.push(e1);
+      const e2 = await FM.projects.create({ name: 'SM2A old Simple', width: 320, height: 240 });
+      if (e2) st.made.push(e2);
+      if (!e1 || !e2) throw new Error('setup: the two old projects were not made');
+      /* what a ⚙ switch to Simple on that project leaves on this device's card (js/editor-mode.js remember()) */
+      const idx = FM.projects.list(), c2 = idx.find(function (p) { return p.id === e2; });
+      if (c2) { c2.editor = 'simple'; FM.projects.saveIndex(idx); }
+      const r1 = sm2aRead(e1), r2 = sm2aRead(e2);
+      if (r1.ed !== '(none)' || r2.ed !== 'simple') throw new Error('CONTROL: the old cards read ' + r1.ed + ' and ' + r2.ed + ', not none and simple');
+      if (FM.editor.mode() !== 'full') FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        const s = await sm2aCreate(st, 'simple', 'made in Simple');
+        if (s.mode !== 'simple' || s.ed !== 'simple') fails.push('with fm.editor.last simple the new project opened in ' + s.mode + ' with card editor ' + s.ed + ' — it should open in Simple and keep simple on its card');
+        /* a hop (Open in Full from a Simple line or chip) is one look: it writes no editor memory, so it cannot decide where the next project opens */
+        if (FM.editor.mode() === 'simple') {
+          if (!(await FM.editor.request('full', { hop: true }))) fails.push('setup: the hop to Full was refused');
+          await sleep(700);
+          if (sm2aLs('fm.editor.last') !== 'simple') fails.push('a hop to Full rewrote fm.editor.last to ' + sm2aLs('fm.editor.last'));
+          if (sm2aRead(s.pid).ed !== 'simple') fails.push('a hop to Full rewrote the new card’s editor to ' + sm2aRead(s.pid).ed);
+          const s2 = await sm2aCreate(st, sm2aLs('fm.editor.last'), 'after a hop');
+          if (s2.mode !== 'simple') fails.push('after a hop to Full the next new project opened in ' + s2.mode + ' — a hop must not decide where a new project opens');
+        }
+        const a = await sm2aOpenCard(e1, 'the old project whose card names no editor');
+        if (a.mode !== 'full' || a.cls) fails.push('with fm.editor.last simple, an existing project whose card names no editor opened in ' + a.mode + ' — a project he already has follows its own card, as today');
+        if (a.ed !== '(none)' || a.last !== 'simple') fails.push('opening the old Full project wrote its card (' + a.ed + ') or fm.editor.last (' + a.last + ')');
+        sm2aLsPut('fm.editor.last', 'full');
+        const b = await sm2aOpenCard(e2, 'the old project whose card says simple');
+        if (b.mode !== 'simple' || !b.cls) fails.push('with fm.editor.last full, an existing project whose card says simple opened in ' + b.mode + ' — its own card decides, as today');
+        if (b.last !== 'full') fails.push('opening the old Simple project rewrote fm.editor.last to ' + b.last);
+        const n = await sm2aOpenCard(s.pid, 'the project made in Simple');
+        if (n.mode !== 'simple' || n.ed !== 'simple') fails.push('the project made by New project while he worked in Simple reopened in ' + n.mode + ' (card editor ' + n.ed + ') once the key said full — the editor it was made in is on its card, so it should reopen in Simple');
+      }, 380);
+      if (fails.length) throw new Error(fails.join(' · '));
+    } finally { await sm2aPut(st); }
+  });
+
+
+  /* ═══ SIMPLE MODE PHASE 3 · MORE TURNS INTO DONE ON A PC (8 Nov, queue 980: the 6 Oct ask, option 3 of
+     tools/design/plans/simple-mode/p22-review-shots/sheet-tray-more-pc.jpg, decided 6 Nov under his 21 Oct rule) ═══════════════
+     While More's own panel is open on a PC the tray is one row (the panel keeps its room), the tool in More's place reads Done and
+     closes the panel, and a › at the strip's right end shows while tools lie past it. Look's panel keeps today's tray, and the phone
+     keeps its sheet. Each test fails on the tree before it by what it reads there (More still says More, and no › exists), never by
+     a missing function; the Look and 380 halves are the controls that the change stays where it belongs. */
+  const smMdTap = (el, n) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); };
+  const smMdFace = id => { const b = smTool(id), s = b && b.querySelector('.sm-tool-l'); return s ? s.textContent : null; };
+  const smMdCue = () => document.querySelector('#sm-tray .sm-cue');
+  const smMdShown = el => !!el && el.isConnected && parseFloat(getComputedStyle(el).opacity) > 0.9 && el.getBoundingClientRect().width > 0;
+  async function smMdOpen(v, id) {
+    FM.selectLayer(id); await smSettle(150);
+    const m = smTool('more');
+    if (!m) throw new Error('CONTROL: the selected clip’s tray has no More (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+    smMdTap(m, 1); await smSettle(250);
+    if (FM.simpleTools.panelFor() !== id || FM.simpleTools.panelKind() !== 'more') throw new Error('CONTROL: More did not open its panel (panelFor ' + FM.simpleTools.panelFor() + ', kind ' + FM.simpleTools.panelKind() + ')');
+  }
+
+  test('simple P3 · More becomes Done at 1280×800 with More’s panel open the tray is one row, the tool in More’s place reads Done from the words file, and pressing it closes the panel and gives the two rows back; the second click of a double click on More leaves the panel open', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 800, async function () {
+      await smP2(smClips3, async function (v) {
+        try {
+          const B = v.L('B').id, tray = document.getElementById('sm-tray'), say = document.getElementById('sm-say'), fails = [];
+          FM.selectLayer(B); await smSettle(150);
+          const m0 = smTrayBMeasure(), h2 = say.getBoundingClientRect().height;
+          if (m0.rows.length !== 2 || smMdFace('more') !== 'More') throw new Error('CONTROL: before More the clip’s tools are not on two rows with More among them (' + JSON.stringify(m0.rows) + ': ' + m0.order + ')');
+          /* a double click on More: the first click opens the panel, the second comes down where More was and must close nothing */
+          const mr = smTool('more').getBoundingClientRect(), x = mr.left + mr.width / 2, y = mr.top + mr.height / 2;
+          const at = (el, n) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: x, clientY: y }));
+          const doc0 = v.doc(), s0 = v.steps();
+          at(smTool('more'), 1); await smSettle(250);
+          if (FM.simpleTools.panelFor() !== B || FM.simpleTools.panelKind() !== 'more') throw new Error('CONTROL: More did not open its panel (kind ' + FM.simpleTools.panelKind() + ')');
+          if (document.querySelector('#inspector .sm-band-hint')) throw new Error('CONTROL: More’s panel is not in the band');
+          const hit0 = document.elementFromPoint(x, y), under = hit0 && hit0.closest ? hit0.closest('.sm-tool') : null;
+          if (under) { at(under, 2); await smSettle(250); }
+          if (FM.simpleTools.panelFor() !== B) fails.push('the second click of a double click on More (on ' + (under ? under.dataset.tool : 'nothing') + ') closed the panel again');
+          if (v.steps() !== s0 || v.doc() !== doc0) fails.push('the second click of a double click on More pressed ' + (under ? under.dataset.tool : 'something'));
+          if (FM.simpleTools.panelFor() !== B) await smMdOpen(v, B);
+          /* one row, so the panel keeps its room */
+          const m1 = smTrayBMeasure();
+          if (tray.classList.contains('sm-tray-2') || m1.rows.length !== 1 || Math.abs(say.getBoundingClientRect().height - h2 / 2) > 1) fails.push('with More’s panel open the tray is not one row (' + JSON.stringify(m1.rows) + ', ' + say.getBoundingClientRect().height + ' px)');
+          /* the tool in More's place: pinned just before Delete, reading Done */
+          const pins = tray.querySelector('.sm-pins'), d = smTool('more');
+          if (!pins || !d || d.parentNode !== pins || d.nextElementSibling !== smTool('delete')) throw new Error('the tool in More’s place is not pinned just before Delete · ' + fails.join(' · '));
+          if (smMdFace('more') !== FM.spineWords.tools.done || FM.spineWords.tools.done !== 'Done') fails.push('the tool in More’s place reads “' + smMdFace('more') + '”, want “Done” from the words file');
+          if (!/^Done\b/.test(d.getAttribute('aria-label') || '')) fails.push('its spoken name is “' + d.getAttribute('aria-label') + '”, want one that starts with Done');
+          const faces = Array.from(tray.querySelectorAll('.sm-tool .sm-tool-l')).map(s => s.textContent);
+          if (faces.indexOf('More') >= 0) fails.push('a tool in the row still reads More: ' + faces.join(', '));
+          const r = d.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (!hit || !d.contains(hit)) fails.push('the tool in More’s place is covered at its centre by ' + (hit ? hit.getAttribute('class') || hit.tagName : 'nothing'));
+          /* pressed: the panel closes, the selection stays, More and the two rows come back, and nothing is written */
+          smMdTap(d, 1); await smSettle(250);
+          if (FM.simpleTools.panelFor() !== null) fails.push('pressing the tool in More’s place left the panel open (panelFor ' + FM.simpleTools.panelFor() + ')');
+          if (!document.querySelector('#inspector .sm-band-hint')) fails.push('after it the band did not get its words back');
+          if (FM.scene.selectedId !== B) fails.push('it dropped the selection');
+          const m2 = smTrayBMeasure();
+          if (m2.rows.length !== 2 || smMdFace('more') !== 'More') fails.push('after it the tools are not back on two rows with More (' + JSON.stringify(m2.rows) + ', “' + smMdFace('more') + '”)');
+          if (v.steps() !== s0) fails.push('opening and closing More’s panel made ' + (v.steps() - s0) + ' undo step(s)');
+          if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
+        } finally { FM.simpleTools._reset(); }
+      });
+    }, 1280);
+  });
+
+  test('simple P3 · More becomes Done at 1280×800 a › cue sits at the one row’s right end while tools lie past it and goes once the row is scrolled to its end — it takes no clicks, is hidden from screen readers and never lies over Done or Delete; the two rows have none', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 800, async function () {
+      await smP2(smClips3, async function (v) {
+        try {
+          const B = v.L('B').id, fails = [];
+          await smMdOpen(v, B);
+          const run = document.querySelector('#sm-tray > .sm-runbox > .sm-run');
+          if (!run) throw new Error('CONTROL: with More’s panel open the tray has no tool strip');
+          if (!(run.scrollWidth > run.clientWidth + 1)) throw new Error('CONTROL: the clip’s tools fit the one row (' + run.scrollWidth + ' in ' + run.clientWidth + '), so nothing lies past its edge and this measures nothing');
+          run.scrollLeft = 0; await smSettle(200);
+          const cue = smMdCue();
+          if (!cue) throw new Error('1280×800: no › cue at the row’s right end while ' + Math.round(run.scrollWidth - run.clientWidth) + ' px of tools lie past it');
+          if (!smMdShown(cue)) fails.push('the › is not on show while tools lie past the edge (opacity ' + getComputedStyle(cue).opacity + ')');
+          const c = cue.getBoundingClientRect(), b = run.getBoundingClientRect();
+          if (Math.abs(c.right - b.right) > 1 || c.left < b.left) fails.push('the › is not at the strip’s right end (' + Math.round(c.left) + '–' + Math.round(c.right) + ', the strip ends at ' + Math.round(b.right) + ')');
+          if (c.width > 28 || c.top < b.top - 0.5 || c.bottom > b.bottom + 0.5) fails.push('the › is not a small mark inside the row (' + Math.round(c.width) + '×' + Math.round(c.height) + ' px)');
+          ['more', 'delete'].forEach(id => { if (smBoxesMeet(c, smTool(id).getBoundingClientRect())) fails.push('the › lies over ' + id); });
+          if (getComputedStyle(cue).pointerEvents !== 'none') fails.push('the › takes clicks (pointer-events ' + getComputedStyle(cue).pointerEvents + ')');
+          if (cue.getAttribute('aria-hidden') !== 'true') fails.push('the › is not hidden from screen readers');
+          if (!cue.querySelector('svg path')) fails.push('the › draws nothing');
+          const hit = document.elementFromPoint(c.left + c.width / 2, c.top + c.height / 2);
+          if (!hit || !run.contains(hit)) fails.push('a click on the › does not reach the strip under it (' + (hit ? hit.getAttribute('class') || hit.tagName : 'nothing') + ')');
+          /* at the end of the strip it goes; back at the start it comes back */
+          run.scrollLeft = run.scrollWidth; await smSettle(200);
+          if (Math.abs(run.scrollLeft - (run.scrollWidth - run.clientWidth)) > 1) throw new Error('CONTROL: the strip did not scroll to its end (' + run.scrollLeft + ' of ' + (run.scrollWidth - run.clientWidth) + ') · ' + fails.join(' · '));
+          if (smMdShown(smMdCue())) fails.push('the › stays once the row is scrolled to its end');
+          run.scrollLeft = 0; await smSettle(200);
+          if (!smMdShown(smMdCue())) fails.push('the › did not come back with the row at its start again');
+          /* Done: the two rows hold every tool, so no › */
+          smMdTap(smTool('more'), 1); await smSettle(250);
+          if (FM.simpleTools.panelFor() !== null) throw new Error('CONTROL: the tool in More’s place did not close the panel · ' + fails.join(' · '));
+          if (smMdCue()) fails.push('the two rows after the panel closed still hold a › cue');
+          if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
+        } finally { FM.simpleTools._reset(); }
+      });
+    }, 1280);
+  });
+
+  test('simple P3 · More becomes Done at 1280×800 for More’s own panel only — with Look’s panel open the tray is as today: one row, More reads More, no › cue — and More pressed over Look swaps in its own panel and reads Done, Look pressed back gives today’s tray again', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 800, async function () {
+      await smP2(smClips3, async function (v) {
+        try {
+          const B = v.L('B').id, tray = document.getElementById('sm-tray'), fails = [];
+          await smLookOpen(v, B); await smSettle(100);
+          if (FM.simpleTools.panelKind() !== 'look' || FM.simpleTools.panelFor() !== B) throw new Error('CONTROL: Look did not open its own panel (kind ' + FM.simpleTools.panelKind() + ')');
+          const pins = tray.querySelector('.sm-pins');
+          if (tray.classList.contains('sm-tray-2') || smTrayBMeasure().rows.length !== 1) fails.push('with Look open the tray is not today’s one row (' + JSON.stringify(smTrayBMeasure().rows) + ')');
+          if (!pins || !pins.querySelector('[data-tool="more"]') || !pins.querySelector('[data-tool="delete"]')) fails.push('with Look open More and Delete are not pinned together');
+          if (smMdFace('more') !== 'More') fails.push('with Look open More reads “' + smMdFace('more') + '”, want More (Look’s panel is not More’s)');
+          if (smTool('more') && smTool('more').classList.contains('sm-done')) fails.push('with Look open More wears Done’s colour');
+          if (smMdCue()) fails.push('with Look open the tray holds a › cue');
+          if (!smTool('look') || smTool('look').getAttribute('aria-pressed') !== 'true') fails.push('CONTROL: Look does not show pressed with its panel open');
+          /* More over Look: More's own panel swaps in, and now the tool in its place reads Done with the › */
+          smMdTap(smTool('more'), 1); await smSettle(250);
+          if (FM.simpleTools.panelKind() !== 'more' || FM.simpleTools.panelFor() !== B) throw new Error('CONTROL: More over Look did not swap in More’s panel (kind ' + FM.simpleTools.panelKind() + ') · ' + fails.join(' · '));
+          if (smMdFace('more') !== 'Done') fails.push('with More’s own panel swapped in over Look, the tool in More’s place reads “' + smMdFace('more') + '”, want Done');
+          if (!smMdCue()) fails.push('with More’s own panel swapped in over Look, no › cue');
+          if (smTool('look') && smTool('look').getAttribute('aria-pressed') !== 'false') fails.push('Look still shows pressed under More’s panel');
+          /* Look pressed again: Look's panel swaps back, and the tray is today's */
+          smMdTap(smTool('look'), 1); await smSettle(250);
+          if (FM.simpleTools.panelKind() !== 'look') throw new Error('CONTROL: Look over More did not swap Look’s panel back in (kind ' + FM.simpleTools.panelKind() + ') · ' + fails.join(' · '));
+          if (smMdFace('more') !== 'More' || smMdCue()) fails.push('Look swapped back in over More left “' + smMdFace('more') + '”' + (smMdCue() ? ' and the ›' : '') + ' in the tray, want More and no ›');
+          if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
+        } finally { FM.simpleTools._reset(); }
+      });
+    }, 1280);
+  });
+
+  test('simple P3 · More becomes Done on a PC only — at 380 More’s panel leaves the phone as it is: More reads More, pinned with Delete, no › cue, and More pressed again shuts the sheet (control: the same clip at 1280×800 reads Done with a ›)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 800, async function () {
+      await smP2(smClips3, async function (v) {
+        try {
+          await smMdOpen(v, v.L('B').id);
+          if (smMdFace('more') !== 'Done' || !smMdCue()) throw new Error('1280×800 (the control for the phone half): with More’s panel open the tool in More’s place reads “' + smMdFace('more') + '” with ' + (smMdCue() ? 'a' : 'no') + ' › cue, want Done with a ›');
+        } finally { FM.simpleTools._reset(); }
+      });
+    }, 1280);
+    await atPhoneWidth(async function () {
+      await smP2(smClips3, async function (v) {
+        try {
+          const B = v.L('B').id, tray = document.getElementById('sm-tray'), insp = document.getElementById('inspector-panel'), fails = [];
+          FM.selectLayer(B); await smSettle(150);
+          if (insp.classList.contains('open')) throw new Error('CONTROL: selecting a clip raised the sheet without More');
+          if (!smTool('more')) throw new Error('CONTROL: the clip’s tray has no More at 380');
+          smMdTap(smTool('more'), 1); await smSettle(250);
+          if (!insp.classList.contains('open') || FM.simpleTools.panelFor() !== B) throw new Error('CONTROL: More did not raise the sheet at 380');
+          const pins = tray.querySelector('.sm-pins');
+          if (smMdFace('more') !== 'More') fails.push('with the sheet up More reads “' + smMdFace('more') + '”, want More (the phone stays as it is)');
+          if (!pins || !pins.querySelector('[data-tool="more"]') || !pins.querySelector('[data-tool="delete"]')) fails.push('More and Delete are not pinned together');
+          if (smTool('more').classList.contains('sm-done')) fails.push('More wears Done’s colour');
+          if (smMdCue()) fails.push('the phone’s tray holds a › cue');
+          smMdTap(smTool('more'), 1); await smSettle(250);
+          if (insp.classList.contains('open')) fails.push('More pressed again left the sheet up');
+          if (fails.length) throw new Error('380: ' + fails.join(' · '));
+        } finally { FM.simpleTools._reset(); }
+      });
+    }, 380);
+  });
+
+  test('simple P3 · More becomes Done at 1280×800 a double click on Done closes More’s panel and leaves it closed — the second click lands on whatever the two rows put under the pointer and presses nothing (the 8 Nov review; CONTROL: one click on Done closes the panel)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 800, async function () {
+      await smP2(smClips3, async function (v) {
+        const B = v.L('B');
+        const open = async () => { FM.selectLayer(B.id); await v.sleep(150); const m = smTool('more'); if (!m) throw new Error('setup: no More in B’s tray'); m.click(); await v.sleep(250); document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} }); };
+        const click = (el, x, y, n) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: n, clientX: x, clientY: y }));
+        await open();
+        let d = smTool('more');
+        if (!d || !/Done/.test(d.textContent) || FM.simpleTools.panelFor() !== B.id) throw new Error('setup: More’s panel did not open with Done in More’s place (' + (d && d.textContent) + ')');
+        const r = d.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+        click(d, x, y, 1); await v.sleep(200);
+        if (FM.simpleTools.panelFor()) throw new Error('CONTROL: one click on Done left More’s panel open');
+        await open();
+        d = smTool('more');
+        const r2 = d.getBoundingClientRect(), x2 = r2.left + r2.width / 2, y2 = r2.top + r2.height / 2;
+        click(d, x2, y2, 1); await v.sleep(120);
+        const under = document.elementFromPoint(x2, y2), btn = under && under.closest ? under.closest('.sm-tool') : null;
+        if (btn) { click(btn, x2, y2, 2); await v.sleep(250); }
+        if (FM.simpleTools.panelFor()) throw new Error('a double click on Done opened More’s panel again: the second click pressed ' + (btn ? btn.dataset.tool : 'nothing') + ' under the pointer');
+      });
+    }, 1280);
+  });
+
+
+  /* ═══ SIMPLE MODE P3 · 900 — SIMPLE’S TIME PILL KEEPS TO ONE LINE ON A PC (queue 980, 8 Nov) ════════════════════════════════════════
+     Pick 1B (6 Nov) widened Simple’s PC band to clamp(372px, 26vw, 420px), so at a 900 px window the play bar’s content box is about
+     128 px (its right padding chases screen centre, v4.97) and the left track’s floor (#979: the ‹ reserved, ✂, |◀) takes about 116 of
+     it. The grid’s auto centre track then gets only the pill’s MIN-content, and Simple’s “0:03 / 0:06” breaks at its spaces, so the time
+     stood on two or three lines in a 21 px pill (styles.css, the 900 rule; reasoned from the CSS, not measured). Red on today’s tree by
+     “the time … stands on N lines” and “runs out of its pill”. CONTROLS, first: in Full the same counter reads Full’s unbreakable
+     00:03:12 as one line (so a count above one in Simple is the pill, not the counter), and Full’s pill wears no ▶ and did not take
+     Simple’s nowrap; then in Simple the PC row is built (‹ in #t-home), the pill reads Simple’s clock, and at least five play-bar buttons
+     are on show. The far run (#t-far) is not swept: at this width it hangs in the band under the row, out of the pill’s reach. */
+  function sm900Lines(el) {
+    const r = document.createRange(); r.selectNodeContents(el);
+    const rs = Array.from(r.getClientRects()).filter(q => q.width > 0.5 && q.height > 0.5), tops = [];
+    rs.forEach(q => { if (!tops.some(y => Math.abs(y - q.top) < 2)) tops.push(q.top); });
+    return { n: tops.length, box: r.getBoundingClientRect(), line: rs.length ? rs[0].height : 0 };
+  }
+  test('simple P3 · 900 at a 900×700 PC window Simple’s time pill keeps “0:03 / 0:06” on one line inside its own box, and every play-bar button beside it is on screen and pressable at its centre (CONTROL: Full’s pill is today’s, one line, no nowrap)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(900, 700, async function () {
+      await smP2(smClips3, async function (v) {
+        const pill = document.getElementById('time-readout'), t = document.getElementById('transport');
+        if (!pill || !t) throw new Error('CONTROL: the play bar or its time pill is missing');
+        if (Math.abs(innerWidth - 900) > 2) throw new Error('CONTROL: the window is ' + innerWidth + ' px wide, not 900');
+        FM.scrubTime(3.4); await sm7bSettle(v);
+        /* CONTROL, in Full first: today’s pill, read by the same counter */
+        FM.editor.apply('full', { force: true, quiet: true }); FM.refreshAll(); await sm7bSettle(v);
+        if (document.body.classList.contains('ed-simple')) throw new Error('CONTROL: Full did not come on');
+        if (!/^\d\d:\d\d:\d\d$/.test(pill.textContent)) throw new Error('CONTROL: Full’s pill reads “' + pill.textContent + '” (want mm:ss:ff, today’s)');
+        const fg = getComputedStyle(pill, '::before'), fcs = getComputedStyle(pill), fl = sm900Lines(pill);
+        if (fg.content !== 'none' && fg.content !== 'normal') throw new Error('CONTROL: Full’s pill grew a ▶');
+        if (fcs.whiteSpace === 'nowrap' || fcs.textWrapMode === 'nowrap') throw new Error('CONTROL: Full’s pill took Simple’s one-line rule (white-space ' + fcs.whiteSpace + ')');
+        if (fl.n !== 1) throw new Error('CONTROL: the line counter reads Full’s unbreakable “' + pill.textContent + '” as ' + fl.n + ' lines');
+        /* Simple, in the same window */
+        FM.editor.apply('simple', { force: true, quiet: true }); FM.refreshAll(); FM.scrubTime(3.4); await sm7bSettle(v);
+        if (!document.body.classList.contains('ed-simple')) throw new Error('CONTROL: Simple did not come back');
+        if (!t._pcBuilt || !document.getElementById('t-home')) throw new Error('CONTROL: the PC play bar is not built (‹ ' + !!document.getElementById('t-home') + ')');
+        if (pill.textContent !== '0:03 / 0:06') throw new Error('CONTROL: Simple’s pill reads “' + pill.textContent + '”, want “0:03 / 0:06”');
+        const pr = pill.getBoundingClientRect(), L = sm900Lines(pill), fails = [];
+        if (!(pr.width > 0 && pr.height > 0 && L.line > 0)) throw new Error('CONTROL: the pill or its time is not laid out (' + Math.round(pr.width) + '×' + Math.round(pr.height) + ', line ' + L.line + ')');
+        if (L.n !== 1) fails.push('the time “' + pill.textContent + '” stands on ' + L.n + ' lines in a ' + Math.round(pr.width) + '×' + Math.round(pr.height) + ' px pill (' + Math.round(L.box.height) + ' px of text for a ' + Math.round(L.line) + ' px line)');
+        if (L.box.left < pr.left - 0.5 || L.box.right > pr.right + 0.5 || L.box.top < pr.top - 0.5 || L.box.bottom > pr.bottom + 0.5) fails.push('the time runs out of its pill (text ' + [L.box.left, L.box.top, L.box.right, L.box.bottom].map(Math.round).join(',') + ' in ' + [pr.left, pr.top, pr.right, pr.bottom].map(Math.round).join(',') + ')');
+        const shown = el => { const r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+        const btns = Array.from(t.querySelectorAll('#t-home button, .t-left button, .t-right button')).filter(shown);
+        if (btns.length < 5) throw new Error('CONTROL: the play bar shows only ' + btns.length + ' buttons (' + btns.map(b => b.id).join(', ') + ')');
+        btns.concat([pill]).forEach(b => {
+          const r = b.getBoundingClientRect(), id = b.id || b.getAttribute('class') || b.tagName;
+          if (r.left < -0.5 || r.top < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) fails.push(id + ' is off screen (' + Math.round(r.left) + '–' + Math.round(r.right) + ' × ' + Math.round(r.top) + '–' + Math.round(r.bottom) + ' in ' + innerWidth + '×' + innerHeight + ')');
+          const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (!e || !b.contains(e)) fails.push(id + ' is covered at its centre by ' + (e ? e.id || e.getAttribute('class') || e.tagName : 'nothing'));
+        });
+        if (fails.length) throw new Error(fails.join(' · '));
+      });
+    });
+  });
+
+  test('simple P3 · 900 on a PC window of 1226 px and under the far run — ?, notes, the cog, Export, ⋯ and fit — stays pressable in Simple: Simple’s timeline starts below its band instead of covering it (CONTROL: Full at the same size has every one of them pressable; at 1280 the band is gone)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const [w, h] of [[900, 700], [1100, 760], [1226, 800]]) {
+      await smTrayBAt(w, h, async function () {
+        await smP2(smClips3, async function (v) {
+          const press = ed => {
+            const far = document.getElementById('t-far');
+            const btns = far ? Array.from(far.querySelectorAll('button')).filter(b => b.getClientRects().length && b.getBoundingClientRect().width > 0) : [];
+            return { n: btns.length, bad: btns.filter(b => { const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !e || !b.contains(e); })
+              .map(b => { const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return (b.id || 'a button') + ' under ' + (e ? (e.id || String(e.className).split(' ')[0] || e.tagName) : 'nothing'); }) };
+          };
+          FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(250);
+          const f = press('full');
+          if (f.n < 3) throw new Error(w + '×' + h + ': CONTROL: Full shows ' + f.n + ' far-run buttons, so this size has no band to test');
+          if (f.bad.length) throw new Error(w + '×' + h + ': CONTROL: Full’s own far run is covered: ' + f.bad.join(', '));
+          FM.editor.apply('simple', { force: true, quiet: true }); await v.sleep(250);
+          const s = press('simple');
+          if (s.bad.length) fails.push(w + '×' + h + ' in Simple: ' + s.bad.join(', '));
+          const cog = document.getElementById('btn-settings'), tl = document.getElementById('sm-timeline');
+          if (cog && tl && tl.getBoundingClientRect().top < cog.getBoundingClientRect().bottom - 0.5) fails.push(w + '×' + h + ': Simple’s timeline starts at ' + Math.round(tl.getBoundingClientRect().top) + ', above the cog’s foot ' + Math.round(cog.getBoundingClientRect().bottom));
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+
+  /* ═══ #1241 CLAUSE 3 (8 Nov) — OPEN IN FULL BRINGS THE PICKED ROW INTO VIEW (js/editor-mode.js revealPicked). With a short band (a
+     short window, or a height he dragged) the picked layer's Full row could lie below the bottom of Full's track list (#timeline): the
+     hop's morph flew his clip to the list's edge and Full showed the item he had opened off screen. At 1280 with the band made 160 px
+     (the inline --tl-h on <html>; it, the list's scroll and the cog's pairing are put back after). CONTROL: a switch to Full through the
+     ⚙ with B picked and the list at its top leaves B's row below the view, so a hop has something to bring into view — and that switch
+     scrolls nothing (the reveal is a hop's alone). Then, back in Simple with the list at its top again, Open in Full on B: B's row
+     inside the list's view, the morph's flight for B a fly that starts on its Simple box and ends on its Full row (read with every
+     effect at its end, as the Open in Full morph test above reads it), and B's row still in view once the morph has landed and Full has
+     settled (above 1226 px the transport's .t-band arrives a frame or two after a switch and, under an inline --tl-h, takes 40 px off
+     the list). Red on the tree before: nothing scrolls, B's flight is an out flight to the list's bottom edge, and its row stays below. ═══ */
+  test('simple P3 · hop · Open in Full with a short band at 1280 brings the picked row into view: B’s Full row lies inside the track list, the morph’s flight for B lands on it, it stays in view once Full settles, and the cog’s switch scrolls nothing (#1241 clause 3)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const sc = document.getElementById('timeline'), root = document.documentElement;
+    if (!sc) throw new Error('setup: no #timeline in the page');
+    const pair0 = sm3Pair.get(), tl0 = root.style.getPropertyValue('--tl-h'), st0 = sc.scrollTop, fails = [];
+    const rowOf = id => { const c = Array.from(document.querySelectorAll('#tl-tracks .clip[data-id]')).find(n => n.dataset.id === id); return c ? c.closest('.track-row') : null; };
+    /* a layer's Full row against the list's view: under the sticky ruler row, above the scroller's bottom (clientHeight: no scrollbar) */
+    const at = id => {
+      const row = rowOf(id);
+      if (!row) return null;
+      const v = sc.getBoundingClientRect(), ru = document.getElementById('tl-rulerrow'), r = row.getBoundingClientRect();
+      const top = Math.max(v.top + sc.clientTop, ru ? ru.getBoundingClientRect().bottom : v.top), bottom = v.top + sc.clientTop + sc.clientHeight;
+      return { y0: r.top, y1: r.bottom, top: top, bottom: bottom, inside: r.top >= top - 1 && r.bottom <= bottom + 1, below: r.bottom > bottom + 1 };
+    };
+    const said = w => w ? 'its row ' + Math.round(w.y0) + '–' + Math.round(w.y1) + ' in a view ' + Math.round(w.top) + '–' + Math.round(w.bottom) + ', scrollTop ' + Math.round(sc.scrollTop) : 'B has no Full row';
+    try {
+      await atWideWidth(async function () {
+        try {
+          root.style.setProperty('--tl-h', '160px');
+          if (FM.tlBandResized) FM.tlBandResized();
+          await smP2(sm3Proj, async function (v) {
+            const B = v.L('B');
+            FM.selectLayer(B.id); FM.refreshAll(); await v.sleep(150);
+            sc.scrollTop = 0; await v.sleep(60);
+            if (sc.scrollTop !== 0) throw new Error('setup: Full’s track list would not go to its top under Simple (scrollTop ' + sc.scrollTop + ')');
+            /* 1. the ⚙’s switch: B's row lies below the view there (CONTROL), and the list is not scrolled */
+            await sm3CogTo('full');
+            const c0 = at(B.id), t0 = sc.scrollTop;
+            await sm3Landed('the cog’s switch'); await v.sleep(250);
+            const c1 = at(B.id), t1 = sc.scrollTop;
+            if (FM.scene.selectedId !== B.id) throw new Error('setup: B is not picked after the cog’s switch');
+            if (t0 !== 0 || t1 !== 0) throw new Error('the cog’s switch to Full scrolled Full’s track list (scrollTop ' + t0 + ' as it switched, ' + t1 + ' once settled; want 0) — only Open in Full may bring the picked row into view');
+            if (!c0 || !c0.below || !c1 || !c1.below) throw new Error('CONTROL: with the band at 160 px and the list at its top, B’s Full row does not lie below the view (' + said(c0) + ' as it switched; ' + said(c1) + ' once settled), so there is nothing for Open in Full to bring into view');
+            /* 2. back in Simple, the list at its top again, B picked and on screen there */
+            FM.editor.apply('simple', { force: true, quiet: true }); FM.refreshAll(); await v.sleep(150);
+            sc.scrollTop = 0; await v.sleep(60);
+            if (FM.editor.mode() !== 'simple') throw new Error('setup: the quiet apply did not bring Simple back (mode ' + FM.editor.mode() + ')');
+            if (sc.scrollTop !== 0) throw new Error('setup: Full’s track list would not go back to its top under Simple (scrollTop ' + sc.scrollTop + ')');
+            const S = sm3Boxes('simple');
+            if (!S[B.id] || !S[B.id].seen) throw new Error('setup: clip B cannot be seen in Simple (' + sm3S(S[B.id] && S[B.id].r) + ')');
+            /* 3. Open in Full */
+            const ok = await FM.editor.request('full', { hop: true });
+            if (!ok || FM.editor.mode() !== 'full') throw new Error('setup: Open in Full did not reach Full (mode ' + FM.editor.mode() + ')');
+            if (!document.getElementById('ed-morph')) throw new Error('setup: no morph played on Open in Full (no #ed-morph)');
+            sm3Seek(0);
+            const f0 = sm3Fly(B.id), b0 = f0 ? sm3R(f0) : null, kind = f0 ? f0.dataset.edmK : '';
+            sm3Seek(SM3_MS);
+            const F = sm3Boxes('full'), f1 = sm3Fly(B.id), b1 = f1 ? sm3R(f1) : null, h1 = at(B.id);
+            sm3Anims().forEach(a => { try { a.finish(); } catch (e) {} });
+            if (!h1 || !h1.inside) fails.push('Open in Full left B’s Full row outside the track list’s view (' + said(h1) + ')');
+            if (kind !== 'fly') fails.push(kind ? 'the morph’s flight for B is a kind-' + kind + ' flight (its Full row ' + (F[B.id] && F[B.id].seen ? 'can' : 'cannot') + ' be seen), want fly' : 'nothing flies for B');
+            if (!b0 || !sm3Near(b0, S[B.id].r, 1.5)) fails.push('B’s flight starts at ' + sm3S(b0) + ', not on its Simple box ' + sm3S(S[B.id].r));
+            if (!b1 || !F[B.id] || !sm3Near(b1, F[B.id].r, 1.5)) fails.push('B’s flight ends at ' + sm3S(b1) + ', not on its Full row’s box ' + sm3S(F[B.id] && F[B.id].r));
+            else if (!F[B.id].seen) fails.push('B’s flight ends on its Full box ' + sm3S(F[B.id].r) + ', which cannot be seen in the list');
+            const l = await sm3Landed('Open in Full');
+            if (l) fails.push(l);
+            await v.sleep(250);
+            const h2 = at(B.id);
+            if (!h2 || !h2.inside) fails.push('once the morph had landed and Full had settled, B’s Full row was outside the view (' + said(h2) + ')');
+            if (FM.scene.selectedId !== B.id) fails.push('Open in Full did not leave B picked');
+          }, { time: 1.5 });
+        } finally {
+          if (tl0) root.style.setProperty('--tl-h', tl0); else root.style.removeProperty('--tl-h');
+          if (FM.tlBandResized) FM.tlBandResized();
+        }
+      }, 1280);
+    } finally {
+      sm3Pair.put(pair0);
+      sc.scrollTop = st0;
+    }
+    if (fails.length) throw new Error(fails.join(' ¦ '));
+  });
+
 })();

@@ -19,6 +19,7 @@ window.FM = window.FM || {};
   let mode = 'full';                   // what is on screen
   let lastPid = undefined;             // the project that mode was worked out for
   let pendingFx = false;               // a switch made from the cog: its morph (or crossfade) waits for the cog to close (§6.3)
+  let revealWatch = null;              // #1241 clause 3 (8 Nov): a hop's short watch that keeps the picked row in view while Full settles (revealPicked)
   const listeners = [];
 
   const body = () => document.body;
@@ -28,11 +29,25 @@ window.FM = window.FM || {};
   const safe = f => { try { return !!f(); } catch (e) { return false; } };
 
   /* WHICH EDITOR A PROJECT OPENS IN (§7.2): this device's card for that project, else Full. project.sm.home is NEVER read
-     (§0.4 B27). Phase 3, under D3 A (re-asked 1 Oct), gives a NEW project's card `editor` from fm.editor.last at create, in createFromDialog. */
+     (§0.4 B27). A NEW project's card gets its `editor` from forNew() below, at create (8 Nov, queue 980). */
   function homeFor(pid) {
     if (!enabled()) return 'full';
     const c = pid ? card(pid) : null;
     return (c && c.editor === 'simple') ? 'simple' : 'full';
+  }
+  /* A NEW PROJECT OPENS IN THE EDITOR THIS DEVICE LAST SWITCHED TO (8 Nov, queue 980: sheet 2's pick 2A, D3 A, decided 6 Nov).
+     Read by the two doors that make a new project on Home — New project's Create (home.js createFromDialog) and a template's
+     New project from template (home.js use() → templates.useAsNew) — which hand it to projects.create as the new card's
+     `editor`, so the open() that create ends with reaches syncProject with the card already saying Simple and the project
+     arrives in Simple with no Full in between. 'full' for no key and for anything but 'simple': a device that never switched
+     to Simple makes exactly today's card. fm.editor.last is written only by a deliberate switch (set(), from request()); a
+     hop writes none, so one look at an item in Full never decides where the next project opens. Opening an EXISTING project
+     never reads this: its own card decides (homeFor). */
+  function forNew() {
+    if (!enabled()) return 'full';
+    let last = null;
+    try { last = localStorage.getItem('fm.editor.last'); } catch (e) {}
+    return last === 'simple' ? 'simple' : 'full';
   }
   function remember(pid, ed) {
     try { localStorage.setItem('fm.editor.last', ed); } catch (e) {}
@@ -128,6 +143,8 @@ window.FM = window.FM || {};
     if (next === mode && !opts.force) return true;
     if (busyReason() && !opts.force) return false;
     if (HOLDS.some(h => safe(h.live))) return false;
+    /* #1241 clause 3 (8 Nov): any switch ends a hop's watch, so a cog's switch or a quiet apply never scrolls through it (revealPicked) */
+    if (revealWatch) revealWatch();
     COMMITS.forEach(c => { if (safe(c.live)) { try { c.close(); } catch (e) {} } });
     QUIET.forEach(q => { if (safe(q.live)) { try { q.close(); } catch (e) {} } });
     /* PHASE 3, THE MORPH (§6.3, D11 B): the boxes on screen are measured NOW, before the class flips, so they can fly from where
@@ -161,6 +178,8 @@ window.FM = window.FM || {};
       const c = ['m-settings', 'btn-settings'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length);
       if (c) { try { c.focus({ preventScroll: true }); } catch (e) {} }
     }
+    /* #1241 clause 3 (8 Nov): a hop shows the picked row first, so the morph below measures it where he will see it (revealPicked) */
+    if (morph && opts.from !== 'cog' && mode === 'full') revealPicked();
     /* A hop's morph plays now: the new editor is built and in place (Last). False (reduced motion, playing, nothing to fly): the crossfade. */
     if (morph && opts.from !== 'cog' && !playMorph()) crossfade();
     return true;
@@ -174,6 +193,55 @@ window.FM = window.FM || {};
     if (!panel || (FM.reducedMotion && FM.reducedMotion())) return;
     panel.classList.remove('ed-xfade'); void panel.offsetWidth; panel.classList.add('ed-xfade');
     setTimeout(() => panel.classList.remove('ed-xfade'), 180);
+  }
+
+  /* #1241 CLAUSE 3 (8 Nov): OPEN IN FULL BRINGS THE PICKED ROW INTO VIEW. A hop selects the item he picked, but Full's track list
+     (#timeline) keeps the scroll it had under Simple, and with a short band (a short window, or a height he dragged) that item's row
+     could lie below the list's bottom: the morph flew his clip to the list's edge (an `out` flight) and Full opened with the very
+     item he asked to see off screen. So a hop, after the rebuild (the rows exist) and before the morph measures where the boxes land,
+     scrolls the list just enough to show that row: #timeline's scrollTop only (never the page, and never scrollLeft, which is the
+     playhead), by the least distance, nothing at all when the row is in view already, and its top when the row is taller than the view.
+     Full's own code has no reveal to reuse (js/timeline.js only keeps the scroll it had across a rebuild), and scrollIntoView would also
+     scroll the page and the list sideways, so it is measured here: below the sticky ruler row, above the scroller's bottom.
+     …AND IT STAYS IN VIEW WHILE FULL SETTLES. Above 1226 px the transport's far run drops into its band (.t-band, js/app.js
+     pcTransportRoom) a frame or two AFTER the switch, because Simple hides the layer group it is measured against; under an inline
+     --tl-h (exactly the short-band case) the panel does not grow for it, so the list loses 40 px and a row shown at its bottom edge
+     slid back out. So for one second, until his own hand takes over (a press, a wheel, a key) or the editor switches again (apply
+     ends it), a change in the list's size shows the row again the same way (for a row shown at the bottom edge, that puts it back
+     where the morph landed it).
+     The cog's switch and every quiet apply never reach here, so Full reached any other way is exactly today's. */
+  const REVEAL_ENDS = ['pointerdown', 'wheel', 'keydown'];
+  function revealRow(id) {
+    const sc = document.getElementById('timeline');
+    if (mode !== 'full' || !id || !sc || !sc.clientHeight) return;
+    const clip = Array.prototype.find.call(document.querySelectorAll('#tl-tracks .clip[data-id]'), c => c.dataset.id === id);
+    const row = clip && clip.closest('.track-row');
+    if (!row) return;   /* no row of its own (a member of a collapsed group): nothing to show */
+    const v = sc.getBoundingClientRect(), ru = document.getElementById('tl-rulerrow'), r = row.getBoundingClientRect();
+    const top = Math.max(v.top + sc.clientTop, ru ? ru.getBoundingClientRect().bottom : -Infinity), bottom = v.top + sc.clientTop + sc.clientHeight;
+    let d = r.bottom > bottom ? r.bottom - bottom : 0;
+    if (r.top - d < top) d = r.top - top;
+    if (Math.abs(d) >= 1) sc.scrollTop = Math.max(0, sc.scrollTop + d);
+  }
+  function revealPicked() {
+    if (revealWatch) revealWatch();
+    const id = FM.scene && FM.scene.selectedId, sc = document.getElementById('timeline');
+    if (!id || !sc) return;
+    try { revealRow(id); } catch (e) {}
+    if (typeof ResizeObserver === 'undefined') return;
+    let timer = 0;
+    const ro = new ResizeObserver(() => { if (revealWatch === off && FM.scene && FM.scene.selectedId === id) { try { revealRow(id); } catch (e) {} } });
+    const off = () => {
+      if (revealWatch !== off) return;
+      revealWatch = null;
+      clearTimeout(timer);
+      try { ro.disconnect(); } catch (e) {}
+      REVEAL_ENDS.forEach(k => document.removeEventListener(k, off, true));
+    };
+    revealWatch = off;
+    REVEAL_ENDS.forEach(k => document.addEventListener(k, off, { capture: true, passive: true }));
+    timer = setTimeout(off, 1000);
+    ro.observe(sc);
   }
 
   /* THE DELIBERATE SWITCH: apply, then remember it on this device. Reached only through request() (and the suite). */
@@ -229,6 +297,8 @@ window.FM = window.FM || {};
     isSimple: () => mode === 'simple',
     enabled: enabled,
     homeFor: homeFor,
+    /* the editor a NEW project's card is given (Home's two new-project doors; 8 Nov, queue 980) */
+    forNew: forNew,
     plan: plan,
     request: request,
     apply: apply,

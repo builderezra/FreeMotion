@@ -3,7 +3,7 @@
  * THE TRAY ROW (#sm-tray, inside #sm-say): the selected item's tools; with nothing selected, one quiet line ("4 clips ·
  * 0:15"), or once per device the first-run hint in its place (§7.3 step 4). #sm-say's lines take the same 52 px row for a
  * moment (§3.12), so nothing appears, disappears or moves. On PC a tray of more than five tools lies on TWO such rows (his
- * pick B, 6 Oct; one again while More's panel is open), and a line takes the top one.
+ * pick B, 6 Oct; one again while More's panel is open, with More turned into Done and a › cue, 8 Nov), and a line takes the top one.
  * THE PROJECT TOOLS ROW (#sm-tools): Clips · Text · Sound · Overlay — it never goes away (D10 A). Phase 3 adds Captions,
  * Look for all, Effects and Ask to the same row (and Add effect to a title's and an overlay's tray).
  * Phone: both rows sit under the Simple timeline; a tool that needs a panel opens today's panel docked under the tray
@@ -663,10 +663,20 @@ window.FM = window.FM || {};
        no pointer events and sit inside the strip, never over the pins. */
     const pins = el('div', 'sm-pins'), box = el('div', 'sm-runbox'), run = el('div', 'sm-run');
     const withT = withWords(R, one); if (withT) run.appendChild(withTag(withT));   // Phase 3 · Clips › Extras: "Moves with the shape", first in the strip
-    list.forEach(t => (t.id === 'more' || t.pin ? pins : run).appendChild(tool(t)));
+    /* MORE TURNS INTO DONE WHILE ITS OWN PANEL IS OPEN ON A PC (8 Nov, queue 980: the 6 Oct ask, option 3, decided 6 Nov under his
+       21 Oct rule; tools/design/plans/simple-mode/p22-review-shots/sheet-tray-more-pc.jpg). The one row above keeps the panel its
+       room, but More still said More and the tools past the strip's end showed only as a fade. Now the same tool in the same place
+       reads Done (its ✓ and the accent, as drawn) and closes the panel, which gives the two rows back; it keeps More's id, so focus
+       and tool()'s double-click guard follow it, and the second click of a double click on More, which comes down on it, still
+       closes nothing. A › sits at the strip's right end while tools lie past it, and goes with the end fade (edges()). Only More's
+       own panel: Look's and Edit lines' keep today's tray, and a caption track's Style has no More to turn. Only on a PC: the
+       phone's sheet stays exactly as it is. */
+    const doneUp = !phone.matches && panelFor === one && panelKind === 'more' && list.some(t => t.id === 'more');
+    list.forEach(t => (t.id === 'more' || t.pin ? pins : run).appendChild(doneUp && t.id === 'more' ? moreDone() : tool(t)));
     if (!run.firstChild && !pins.firstChild) return false;
     const fade = side => { const f = el('span', 'sm-fade sm-fade-' + side); f.setAttribute('aria-hidden', 'true'); return f; };
     box.append(run, fade('s'), fade('e'));
+    if (doneUp) { const cue = el('span', 'sm-cue'); cue.setAttribute('aria-hidden', 'true'); cue.innerHTML = CUE; box.appendChild(cue); }   // a fixed string, never user data
     tray.appendChild(box);
     if (pins.firstChild) tray.appendChild(pins);
     run.addEventListener('scroll', () => edges(run), { passive: true });
@@ -674,6 +684,18 @@ window.FM = window.FM || {};
     edges(run);
     return false;
   }
+  /* More's Done (8 Nov, queue 980, see fillTray): More's id and place, Done's words from the words file. A press closes the panel; the
+     second click of a double click does not (that click is the one that opened it, landing again on the tool now in More's place). */
+  function moreDone() {
+    const w = W();
+    /* its own key (the 8 Nov review): Done and More shared 'more', so tool()'s guard let a double click on Done close the panel and
+       press More, which reflowed under the pointer, opening it again. Different keys, and the second click is dropped either way. */
+    const b = tool({ id: 'more', key: 'moreDone', label: w.done || 'Done', icon: 'check', title: w.moreDoneTitle || 'Done · close More’s settings', run: (x, e) => { if (!(e && e.detail >= 2)) FM.simpleTools.closePanel(); } });
+    b.classList.add('sm-done');
+    return b;
+  }
+  /* …and the › at the strip's right end while tools lie past it (a fixed drawing; styles.css shows it with .sm-more-e) */
+  const CUE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg>';
   /* Which edges of the tool strip hide tools: a 1 px slack, as the wheel's own bound, so a fractional scroll on a phone's
      display never leaves a fade over a strip that is at its end. A strip that is not laid out (the row hidden while a line is
      said) measures 0 and shows none; the ResizeObserver puts them right when it comes back. */

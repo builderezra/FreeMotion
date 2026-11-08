@@ -12462,6 +12462,13 @@ body.ed-simple #sm-timeline { display: flex; }
   position: absolute; left: 0; right: 0; top: var(--tl-top, 40px); bottom: 0; z-index: 11;
   flex-direction: column; background: var(--panel); min-height: 0;
 }
+/* …AND IT STARTS BELOW THE FAR RUN'S BAND WHEREVER THERE IS ONE (8 Nov, #980 release C: the review's MEDIUM, then measured on v18.28):
+   on a PC the far run (?, notes, the cog, Export, ⋯, fit) hangs in a 40px band under the play bar at 1226px and under (#801) and
+   wherever #970 measures it in (.t-band). Full's timeline sits in the grid's second row, under the band; Simple's is absolute from
+   the play bar's foot (top 40px, z-index 11), so it lay over the whole band — at 900, 1100 and 1226 px wide every far-run button
+   was covered by #sm-inner, and a mouse could not reach the cog that leaves Simple, nor Export. Full is untouched (Simple only). */
+@media (min-width: 701px) and (max-width: 1226px) { body.ed-simple #sm-timeline { top: 80px; } }
+@media not all and (max-width: 1226px) { body.ed-simple #timeline-panel:has(> #transport.t-band) #sm-timeline { top: 80px; } }
 #timeline-panel.ed-xfade #sm-timeline, #timeline-panel.ed-xfade #timeline { animation: ed-xfade .15s ease; }
 @keyframes ed-xfade { from { opacity: .25; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { #timeline-panel.ed-xfade #sm-timeline, #timeline-panel.ed-xfade #timeline { animation: none; } }
@@ -12665,6 +12672,17 @@ body.ed-simple #btn-sm-split.sm-hinted { box-shadow: inset 0 0 0 2px #fff, 0 0 0
   #inspector-panel:has(#sm-say.sm-two) #inspector:has(> .sm-band-hint) { padding-bottom: 0; }
   #inspector-panel:has(#sm-say.sm-two) .sm-band-hint { padding-top: 6px; padding-bottom: 6px; }
 }
+/* MORE TURNS INTO DONE WHILE ITS PANEL IS OPEN ON A PC (8 Nov, queue 980: the 6 Oct ask, option 3 of
+   tools/design/plans/simple-mode/p22-review-shots/sheet-tray-more-pc.jpg, decided 6 Nov under his 21 Oct rule). js/simple-tools.js
+   gives the pinned More the face Done (.sm-done, in the accent as drawn) and puts a › (.sm-cue) at the tool strip's right end. The ›
+   shows with the end fade (.sm-more-e: tools lie past the edge) and goes once the strip is scrolled to its end; it takes no pointer
+   events and sits inside the strip's box, never over Done or 🗑. Simple only: Full has no tray. */
+body.ed-simple #sm-tray .sm-pins .sm-tool.sm-done { color: var(--accent); }
+body.ed-simple #sm-tray > .sm-runbox > .sm-cue { position: absolute; top: 0; bottom: 0; right: 0; width: 16px; z-index: 2; display: flex; align-items: center; justify-content: center;
+  pointer-events: none; color: var(--accent); opacity: 0; transition: opacity .15s ease; }
+body.ed-simple #sm-tray > .sm-runbox > .sm-cue svg { width: 16px; height: 16px; flex: none; }
+body.ed-simple #sm-tray > .sm-runbox.sm-more-e > .sm-cue { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { body.ed-simple #sm-tray > .sm-runbox > .sm-cue { transition: none; } }
 
 /* ═══ Simple mode release 2.3: speed, sound and replacing ═══ */
 .sm-twinband { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; pointer-events: none; opacity: .85;
@@ -12743,6 +12761,19 @@ body.ed-simple #btn-sm-split.sm-hinted { box-shadow: inset 0 0 0 2px #fff, 0 0 0
 body.ed-simple #time-readout { gap: 5px; }
 body.ed-simple #time-readout::before { content: ''; flex: none; width: 8px; height: 10px; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 body.ed-simple.fm-playing #time-readout::before { clip-path: none; background: linear-gradient(90deg, currentColor 0 35%, transparent 35% 65%, currentColor 65%); }
+/* ═══ Simple mode Phase 3 · 900 (queue 980, 8 Nov): SIMPLE'S TIME STAYS ON ONE LINE ON A PC. Pick 1B (6 Nov) made Simple's PC band
+   clamp(372px, 26vw, 420px), so the play bar beside it is narrower, and at a 900 px window the time stood on more than one line.
+   REASONED FROM THE CSS, NOT MEASURED (no browser could be run when this was written; the '900' test in tests/tests.js is the proof):
+   the row is 900 − 372 = 528 px wide and its right padding chases screen centre (v4.97: min(14 + 372, 528 − 90) = 386 px), so its
+   content box is 528 − 14 − 386 = 128 px, and the left track's floor (#979: the ‹ reserved, then ✂ and |◀, about 116 px) takes most
+   of it. With no free space left the grid's `auto` centre track is sized to the pill's MIN-content, and Simple's "0:03 / 0:06" may
+   break at either space; Full's 00:03:12 has no break opportunity at all, which is why Full's pill never did this. nowrap makes the
+   pill's min-content its whole width, so the centre track holds the time on one line. The right group sits in a minmax(0, 1fr) track,
+   so it moves right into the row's empty right padding (by the same arithmetic, well inside the window at 900), and on the narrowest windows
+   app.js's pcTransportRoom steps the row down (.t-snug, .t-small) exactly as it does for Full's row. PC only, because that floor is
+   PC only: on a phone both side tracks have a 0 minimum and the pill already gets its full width. Keyed on body.ed-simple, so Full's
+   pill is exactly today's. ═══ */
+@media (min-width: 701px) { body.ed-simple #time-readout { white-space: nowrap; } }
 
 /* ═══ Simple mode 2.5: drags (DESIGN §3.8). Every rule is keyed on a class only Simple makes, so Full matches none. ═══ */
 #sm-timeline .sm-item.sm-ghost { z-index: 20; opacity: .92; box-shadow: 0 6px 18px rgba(0,0,0,.45), inset 0 0 0 2px #fff; cursor: grabbing; pointer-events: none; }

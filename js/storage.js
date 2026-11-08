@@ -3491,6 +3491,12 @@ window.FM = window.FM || {};
       // #948 fix 2: started from the + card, so going Home saves it as that kind (commitLibDraft). On the INDEX only — the
       // document stays the shape every other workspace has, so nothing that reads, packs, shares or backs up a doc changes.
       if ((opts.libNew === 'element' && opts.elementDraft) || (opts.libNew === 'template' && opts.templateDraft)) rec.libNew = opts.libNew;
+      /* 8 Nov (queue 980, sheet 2's pick 2A): THE EDITOR THIS DEVICE OPENS THE NEW PROJECT IN, on its card — the field
+         FM.editor.homeFor reads when the open() below rebuilds the timeline, so a project made while he works in Simple
+         arrives in Simple with no Full in between. Only Home's two new-project doors pass it (FM.editor.forNew). Only 'simple'
+         is written: with no `editor` (every other caller — imports, drafts, the suite) or 'full' the card is exactly today's,
+         and a card with no editor already opens in Full. */
+      if (opts.editor === 'simple') rec.editor = 'simple';
       idx.unshift(rec);
       if (!this.saveIndex(idx)) return noRoom();
       /* queue 690: asked (or saved) above, and nothing has changed since. Its false (the project vanished in between —
@@ -4311,10 +4317,12 @@ window.FM = window.FM || {};
       return ok;
     },
     // Start a brand-new project from a template.
-    async useAsNew(tid) {
+    /* `opts.editor` (8 Nov, queue 980): the editor the new project's card opens in — Home's New project from template passes
+       FM.editor.forNew(); create() writes it only when it is 'simple', so a call without it makes exactly today's project. */
+    async useAsNew(tid, opts) {
       const pack = await this.getPack(tid); if (!pack) return false;
       const meta = this.list().find(t => t.id === tid) || {};
-      const pid = await FM.projects.create({ name: (meta.name || 'Template') + ' project', width: pack.project.width, height: pack.project.height });
+      const pid = await FM.projects.create({ name: (meta.name || 'Template') + ' project', width: pack.project.width, height: pack.project.height, editor: opts && opts.editor });
       if (!pid) return false;   // queue 690: his project could not be saved and he chose to stay — the pack must not land in it
       /* …and again on the way OUT, for templates saved before v8.22. Stripping only at save would
          leave every existing template still handing its notes to new projects. */

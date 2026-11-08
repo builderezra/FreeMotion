@@ -1364,6 +1364,13 @@ window.FM = window.FM || {};
     const U = FM.collab && FM.collab.ui;
     return !(U && U.confirmSwitch) || !!(await U.confirmSwitch());
   }
+  /* WHICH EDITOR A NEW PROJECT OPENS IN (8 Nov, queue 980: sheet 2's pick 2A, D3 A, decided 6 Nov) — the one this device last
+     switched to in the ⚙ cog (FM.editor.forNew: 'simple' only when fm.editor.last says so, else 'full'). Asked by Home's two
+     new-project doors only: Create in New project, and a template's New project from template. Opening an existing project
+     never asks: its own card decides. */
+  function newEditor() {
+    try { return (FM.editor && FM.editor.forNew) ? FM.editor.forNew() : 'full'; } catch (e) { return 'full'; }
+  }
   /* …and whether there is anything to ask, synchronously: a card tap with nothing to ask must reach the push in the same
      task as the click (openProject), so it does not await a question that is not there. */
   function switchAsked() {
@@ -2097,7 +2104,7 @@ window.FM = window.FM || {};
       holdPress();   // building a project out of a template is the same long async wait as opening one
       if (FM.toast) FM.toast('Creating project…');
       try {
-        const ok = await FM.templates.useAsNew(t.id);
+        const ok = await FM.templates.useAsNew(t.id, { editor: newEditor() });   // 8 Nov, queue 980 (2A): the editor last switched to
         if (ok) {
           FM.home.close({ push: true, lead: card });
           /* AFTER the push, not during it (queue 343 clause 2). The overlay is position:fixed, and
@@ -3510,7 +3517,9 @@ window.FM = window.FM || {};
        file's own for EVERY tile (FM.addMediaLayer), so a 16:9 project turned portrait the moment his phone clip
        landed and a 1080p one became 4K. `sizePicked` rides on the project so addMediaLayer can tell his choice
        from a size nobody chose; Custom leaves it off and keeps adjusting, as its label says. */
-    const pid = await FM.projects.create({ name: name, width: s.w, height: s.h, fps: fps, background: npBg === 'none' ? null : npBg, sizePicked: npAspect !== 'custom' });
+    /* 8 Nov (queue 980, sheet 2's pick 2A): …and it opens in the editor this device last switched to in the ⚙ cog (newEditor);
+       the dialog itself looks and works as today. */
+    const pid = await FM.projects.create({ name: name, width: s.w, height: s.h, fps: fps, background: npBg === 'none' ? null : npBg, sizePicked: npAspect !== 'custom', editor: newEditor() });
     if (!pid) return;   // queue 690: his open project could not be saved and he chose to stay — Home stays as it is
     FM.home.close({ push: true });   // same hand-off as tapping a card — every route from home into a project pushes
   }
