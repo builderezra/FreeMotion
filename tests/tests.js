@@ -192198,13 +192198,84 @@
     }
   });
 
-  /* 1231 (11) THE STAGE. The take was drawn for portrait phones. Proves: in a 380 x 800 window it fills the window; in a
-   * 1280 x 800 one it is the picker's own portrait stage, 369 x 800 (800 x 0.4617), centred; in a 1280 x 1000 one it stops at
-   * the picker's 900 px, 416 x 900, centred both ways; the canvas's backing store is the stage at min(dpr, 2); and the
+  /* 1231, HIS PICK FOR A PC (9 Nov, "28 for the pc intro"): take 28, Side by side, the picker's options/pc.js 'pc-lockup'. Made side by side
+   * with the splash's take in one frame at 1280 x 720, dpr 1, its labels routed through the splash's outlines as in the test above, and seeked
+   * every quarter of a second and to the end frame: each pair of canvases is compared pixel for pixel. The still (reduced motion, a clock that
+   * never starts) is that end frame. CONTROL: a frame that differs is seen. Portrait stays take 13: the test above holds it to the pixel. */
+  test('1231 on a window wider than tall the splash plays take 28 he picked for a PC, frame for frame: every quarter second and the end frame its canvas is the picker’s pc-lockup pixel for pixel at 1280×720, and the still is that end frame', { item: '1231', budgetMs: 180000 }, async function () {
+    const html = await src1180();
+    const m = html.match(/<script id="splash-take">([\s\S]*?)<\/script>/);
+    if (!m) throw new Error('index.html has no splash-take script');
+    const get = async p => { const r = await fetch(p + '?t1231=' + Date.now(), { cache: 'no-store' }); if (!r.ok) throw new Error('setup: could not read ' + p + ' (' + r.status + ')'); return r.text(); };
+    const kit = await get('tools/design/intro-takes/kit.js'), lane = await get('tools/design/intro-takes/options/pc.js');
+    const route = '(function () { var P = CanvasRenderingContext2D.prototype, ft = P.fillText, mt = P.measureText;' +
+      'var fd = Object.getOwnPropertyDescriptor(P, \'font\'), raw = new WeakMap();' +
+      'Object.defineProperty(P, \'font\', { configurable: true, get: fd.get, set: function (v) { raw.set(this, String(v)); fd.set.call(this, v); } });' +
+      /* the size as it was SET: a canvas gives ctx.font back rounded (12.7059px for 12.70588…), and that moved a few label pixels by up to 3 levels */
+      'function px(c) { var m = /([\\d.]+)px/.exec(raw.get(c) || c.font); return m ? +m[1] : 10; }' +
+      'P.fillText = function (s, x, y) { if (/Courier Prime/.test(this.font)) { window.FM_TAKE.mono.fill(this, String(s), px(this), x, y, this.textBaseline); window.__routed = (window.__routed || 0) + 1; return; } return ft.apply(this, arguments); };' +
+      'P.measureText = function (s) { if (/Courier Prime/.test(this.font)) return { width: window.FM_TAKE.mono.width(String(s), px(this)) }; return mt.apply(this, arguments); }; })();';
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;left:0;top:0;width:1700px;height:4400px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    const done = new Promise(res => { f.onload = res; });
+    const box = (id, top, bw, bh) => '<div id="' + id + '" style="position:absolute;left:0;top:' + top + 'px;width:' + (bw || 1280) + 'px;height:' + (bh || 720) + 'px;overflow:hidden"></div>';
+    f.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">' + box('a', 0) + box('b', 730) + box('c', 1460) + box('a2', 2190, 1680, 1050) + box('b2', 3250, 1680, 1050) +
+      '<script>' + m[1] + '<\/script><script>' + route + '<\/script><script>' + kit + '<\/script><script>' + lane + '<\/script></body></html>';
+    document.body.appendChild(f);
+    try {
+      await Promise.race([done, sleep(8000)]);
+      const w = f.contentWindow, d = f.contentDocument;
+      if (!w.FMI || !w.FM_TAKE) throw new Error('setup: the picker’s take or the splash’s did not load in the frame');
+      const pick = w.FMI.options.find(o => o.id === 'pc-lockup');
+      if (!pick) throw new Error('setup: the picker has no pc-lockup');
+      if (pick.dur !== w.FM_TAKE.dur) throw new Error('the picker’s take is ' + pick.dur + ' s, the splash’s ' + w.FM_TAKE.dur + ' s');
+      const A = d.getElementById('a'), B = d.getElementById('b'), C = d.getElementById('c');
+      const seekA = pick.make(A, w.FMI.makeKit(A, 1280, 720, 1)), seekB = w.FM_TAKE.make(B, w.FM_TAKE.makeKit(B, 1280, 720, 1));
+      if (!(w.__routed > 10)) throw new Error('setup: the picker’s labels were not routed through the outlines (' + w.__routed + ' fillText calls), so the frames would differ only by font');
+      const ca = A.querySelector('canvas'), cb = B.querySelector('canvas'), fails = [];
+      const at = []; for (let i = 0; i / 4 < 2.92; i++) at.push(i / 4); at.push(2.92);
+      for (const t of at) {
+        seekA(t); seekB(t);
+        const r = pxDiff1231(ca, cb, 0);
+        if (r.n !== 0) fails.push('at ' + t + ' s ' + (r.n < 0 ? 'the canvases are ' + r.size : r.n + ' pixels differ (worst by ' + r.worst + ')'));
+      }
+      if (fails.length) throw new Error('the splash’s wide take is not the one he picked for a PC: ' + fails.join(' · '));
+      /* the still is the end frame (seekB is on 2.92 now) */
+      w.FM_TAKE.still(C, w.FM_TAKE.makeKit(C, 1280, 720, 1));
+      const rs = pxDiff1231(cb, C.querySelector('canvas'), 0);
+      if (rs.n !== 0) throw new Error('the wide still differs from take 28’s end frame in ' + (rs.n < 0 ? 'size: ' + rs.size : rs.n + ' pixels (worst by ' + rs.worst + ')'));
+      /* CONTROL: a frame that differs is seen */
+      seekA(1.5); seekB(1.52);
+      if (pxDiff1231(ca, cb, 0).n === 0) throw new Error('CONTROL: two different moments compared equal, so these comparisons cannot fail');
+      /* the landed logo read directly: the F and the name one wide block, centred. The tolerance is measured: the ink sits 4.5 px left of the
+         window's middle at 1280 (the layout centres advance widths, and the name's last letter has its side bearing after it), which is
+         the picture he picked (the comparison above is at zero tolerance); a name under the F moves it by far more. */
+      const lit = cv => { const D = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let l = 1e9, r = -1, t = 1e9, b = -1; for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++) { const i = (y * cv.width + x) * 4; if (Math.abs(D[i] - 12) + Math.abs(D[i + 1] - 12) + Math.abs(D[i + 2] - 13) > 30) { if (x < l) l = x; if (x > r) r = x; if (y < t) t = y; if (y > b) b = y; } } return { l: l, r: r, t: t, b: b }; };
+      seekB(2.92);
+      const b0 = lit(cb);
+      if (Math.abs((b0.l + b0.r) / 2 - 640) > 8) throw new Error('the landed lockup is centred at x ' + ((b0.l + b0.r) / 2) + ', want 640 within 8 px');
+      if (!((b0.r - b0.l) > 2 * (b0.b - b0.t))) throw new Error('the landed logo is ' + (b0.r - b0.l) + ' wide and ' + (b0.b - b0.t) + ' tall: not one wide block, the F beside the name');
+      /* and a second window size: the end frame and one moment of the fall */
+      const [A2, B2] = ['a2', 'b2'].map(id => d.getElementById(id));
+      const seekA2 = pick.make(A2, w.FMI.makeKit(A2, 1680, 1050, 1)), seekB2 = w.FM_TAKE.make(B2, w.FM_TAKE.makeKit(B2, 1680, 1050, 1));
+      for (const t of [1.5, 2.92]) {
+        seekA2(t); seekB2(t);
+        const r2 = pxDiff1231(A2.querySelector('canvas'), B2.querySelector('canvas'), 0);
+        if (r2.n !== 0) throw new Error('at 1680×1050, ' + t + ' s: ' + (r2.n < 0 ? 'the canvases are ' + r2.size : r2.n + ' pixels differ (worst by ' + r2.worst + ')'));
+      }
+    } finally {
+      try { if (f.contentWindow && f.contentWindow.FM_TAKE) f.contentWindow.FM_TAKE.free(); } catch (e) {}
+      f.remove();
+    }
+  });
+
+  /* 1231 (11) THE STAGE. Proves: in a 380 x 800 window the take fills the window; in a 1280 x 800 one, wider than tall, take 28 fills the
+   * whole window too (his pick for a PC, 9 Nov); in an 800 x 1000 one, tall but wider than a phone, take 13 keeps the picker's portrait stage,
+   * stopping at its 900 px, 416 x 900, centred both ways; the canvas's backing store is the stage at min(dpr, 2); and the
    * surround (#splash itself, outside the stage) is the frame's ground. Booted with the shipped stylesheets: #splash is a
    * fixed full-screen box only through styles.css. */
-  test('1231 on a phone the take fills the screen, and on a wide window it plays on the picker’s portrait stage centred on its own ground', { item: '1231', budgetMs: 40000 }, async function () {
-    for (const [fw, fh, sw, sh] of [[380, 800, 380, 800], [1280, 800, 369, 800], [1280, 1000, 416, 900]]) {
+  test('1231 on a phone the take fills the screen, on a window wider than tall take 28 fills it too, and on a tall window wider than a phone it plays on the picker’s portrait stage centred on its own ground', { item: '1231', budgetMs: 40000 }, async function () {
+    for (const [fw, fh, sw, sh] of [[380, 800, 380, 800], [1280, 800, 1280, 800], [800, 1000, 416, 900]]) {
       const run = await boot1180({ size: [fw, fh], css: true });
       try {
         const d = run.d, w = run.w, sp = d.getElementById('splash'), st = d.getElementById('splash-stage');

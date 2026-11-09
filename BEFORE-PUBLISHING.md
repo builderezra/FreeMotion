@@ -246,3 +246,8 @@ ideas rather than only borrowed ones, and it is a good seed to design the rest o
 - **The same question applies to the four icons beside it** — Elements, Shape, Media, Audio — and to the
   rest of the UI this file lists. He asked for one icon, so one icon was done; the others are noted here
   rather than quietly widened into that request.
+
+## Other companies' logos in the app (re-check before any store release)
+- **#1243 ST7, the aspect-ratio presets.** His pick, 9 Nov: *"just do logos without names for the aspect ratios"*. They show the platforms' logos
+  (TikTok, Instagram and so on) with no names. Those marks are other companies' trademarks: draw them ourselves as simple glyphs (no downloaded
+  brand assets), and check each platform's brand rules before a store release, or swap them for neutral icons there.

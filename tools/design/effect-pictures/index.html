@@ -1,0 +1,210 @@
+<title>FreeMotion Effect Pictures</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&family=VT323&display=swap">
+<style>
+/* Layout: an editor's dark workspace. Every picture at its real menu size first (a phone's effects menu, by section), then each one up close, by section. */
+:root{
+  color-scheme: dark;
+  --ground:#0b0e14; --panel:#131822; --tile:#151a24; --line:#232a38;
+  --ink:#eef1f7; --dim:#9aa3b5; --accent:#38c9ff; --chip:#1b2230; --new:#ffcf5a;
+  --display:"Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --body:"Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+body{ background:var(--ground); color:var(--ink); font-family:var(--body); font-size:15px; line-height:1.5; }
+.wrap{ max-width:1080px; margin:0 auto; padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px)); padding-block:36px 64px; }
+header{ display:grid; gap:10px; max-width:62ch; }
+.eyebrow{ font-family:var(--mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); }
+h1{ font-family:var(--display); font-weight:700; font-size:clamp(30px,5vw,46px); line-height:1.05; letter-spacing:-0.01em; margin:0; text-wrap:balance; }
+.lede{ color:var(--dim); margin:0; }
+.counts{ display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
+.pill{ font-family:var(--mono); font-size:11px; letter-spacing:.05em; text-transform:uppercase; padding:4px 9px; border-radius:999px; background:var(--chip); color:var(--dim); }
+.pill.new{ color:#1a1406; background:var(--new); }
+section.block{ margin-top:44px; display:grid; gap:14px; }
+h2{ font-family:var(--display); font-weight:500; font-size:22px; margin:0; text-wrap:balance; }
+.note{ color:var(--dim); font-size:13px; margin:0; max-width:62ch; }
+.phone{ width:min(100%,375px); box-sizing:border-box; background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:14px 12px 18px; display:grid; gap:10px; }
+.phone .bar{ display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--dim); padding:0 4px; }
+.phone .bar b{ color:var(--ink); font-weight:600; font-size:15px; }
+.phone h4{ margin:8px 4px 0; font-size:12px; font-weight:600; color:var(--dim); letter-spacing:.04em; text-transform:uppercase; }
+.mgrid{ display:grid; grid-template-columns:repeat(4,77px); justify-content:space-between; row-gap:12px; }
+.mtile{ display:grid; gap:5px; justify-items:center; align-content:start; position:relative; }
+.mtile canvas{ width:77px; height:77px; border-radius:12px; display:block; background:var(--tile); }
+.mtile span{ font-size:11px; text-align:center; line-height:1.2; max-width:77px; }
+.mtile i{ position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--new); box-shadow:0 0 0 2px var(--panel); }
+details.pc{ border:1px solid var(--line); border-radius:14px; padding:12px 14px; background:var(--panel); }
+details.pc summary{ cursor:pointer; font-weight:600; }
+.pcgrid{ display:grid; grid-template-columns:repeat(auto-fill,154px); gap:16px 14px; margin-top:12px; }
+.ptile{ display:grid; gap:6px; align-content:start; }
+.ptile canvas{ width:154px; height:154px; border-radius:14px; display:block; background:var(--tile); }
+.ptile span{ font-size:13px; }
+.sec-head{ display:flex; align-items:baseline; gap:12px; margin-top:26px; }
+.sec-head h3{ font-family:var(--display); font-weight:600; font-size:19px; margin:0; }
+.sec-head span{ font-family:var(--mono); font-size:11px; color:var(--dim); }
+.cards{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 20px; max-width:760px; margin-top:12px; }
+@media (max-width:560px){ .cards{ grid-template-columns:minmax(0,1fr); } }
+.card{ display:grid; gap:9px; align-content:start; min-width:0; }
+.card canvas{ width:100%; height:auto; aspect-ratio:1; max-width:100%; border-radius:16px; display:block; background:var(--tile); }
+.meta{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.meta h4{ font-family:var(--display); font-weight:600; font-size:17px; margin:0; }
+.tag{ font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; padding:3px 8px; border-radius:999px; white-space:nowrap; background:var(--chip); color:var(--dim); }
+.tag.new{ background:var(--new); color:#1a1406; }
+.card p{ margin:0; color:var(--dim); font-size:14px; }
+footer{ margin-top:48px; padding-top:20px; border-top:1px solid var(--line); color:var(--dim); max-width:62ch; display:grid; gap:8px; }
+footer b{ color:var(--ink); font-weight:600; }
+@media (max-width:420px){
+  .mgrid{ grid-template-columns:repeat(4,minmax(0,77px)); }
+  .mtile canvas{ width:100%; height:auto; aspect-ratio:1; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">FreeMotion · effect pictures · round 2</div>
+    <h1>Every effect, drawn to show what it does</h1>
+    <p class="lede">Round 1's ten are polished, with Shake redrawn around a bigger subject. The new ones are marked with a yellow dot and a New tag. Each picture is its own small animation made for that effect.</p>
+    <div class="counts" id="counts"></div>
+  </header>
+
+  <section class="block" aria-labelledby="h-phone">
+    <h2 id="h-phone">In the effects menu, on your phone</h2>
+    <p class="note">Actual size: 77 px tiles, as they show in the menu on an iPhone.</p>
+    <div class="phone"><div class="bar"><b>Effects</b><span id="phone-count"></span></div><div id="phone-body"></div></div>
+    <details class="pc"><summary>On a PC (154 px tiles)</summary><div class="pcgrid" id="pcgrid"></div></details>
+  </section>
+
+  <section class="block" aria-labelledby="h-close">
+    <h2 id="h-close">Up close</h2>
+    <div id="close-body"></div>
+  </section>
+
+  <footer>
+    <p><b>Tell me which ones work and which don't.</b> Short reasons are enough: "too busy", "can't tell what it does", "love this one".</p>
+    <p>Once the set is right, these replace the plain previews in the app's effects menu.</p>
+  </footer>
+</div>
+
+<script src="kit.js"></script>
+<script>
+(function(){
+'use strict';
+const FILES=['tiles-r1.js','tiles-b1.js','tiles-b2.js','tiles-b3.js','tiles-b4.js','tiles-b5.js','tiles-b6.js','tiles-b7.js'];
+const ORDER=['Colouring','Keying','Blur','Stylize','Drawing / Edge','Warping','Shakes / Movement','Repetition','Generative','3D','Text','Opacity / Visibility'];
+const qs=(()=>{ try{ return new URLSearchParams(location.search); }catch(e){ return new URLSearchParams(''); } })();
+function load(i,done){ if(i>=FILES.length) return done(); const s=document.createElement('script'); s.src=FILES[i]; s.onload=s.onerror=()=>load(i+1,done); document.head.append(s); }
+load(0,build);
+
+function build(){
+  let tiles=(window.FX_TILES||[]).slice();
+  const only=qs.get('only'); if(only){ const ids=only.split(','); tiles=tiles.filter(T=>ids.includes(T.id)); }
+  const sec=qs.get('section'); if(sec){ tiles=tiles.filter(T=>T.section===sec); }
+  tiles.sort((a,b)=>(ORDER.indexOf(a.section)-ORDER.indexOf(b.section))||0);
+  const DPR=Math.min(2,window.devicePixelRatio||1), BIG=Math.round(300*DPR);
+  const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const nNew=tiles.filter(T=>T.isNew).length;
+  document.getElementById('counts').innerHTML='';
+  const c1=document.createElement('span'); c1.className='pill'; c1.textContent=tiles.length+' effects';
+  const c2=document.createElement('span'); c2.className='pill new'; c2.textContent=nNew+' new';
+  const c3=document.createElement('span'); c3.className='pill'; c3.textContent=new Set(tiles.map(T=>T.section)).size+' sections';
+  document.getElementById('counts').append(c1,c2,c3);
+  document.getElementById('phone-count').textContent=tiles.length+' shown';
+  const phone=document.getElementById('phone-body'), pcgrid=document.getElementById('pcgrid'), close=document.getElementById('close-body');
+  const visible=new Set();
+  const io=('IntersectionObserver' in window)?new IntersectionObserver(es=>{ for(const e of es){ if(e.isIntersecting) visible.add(e.target); else visible.delete(e.target); } },{rootMargin:'120px'}):null;
+  const watch=cv=>{ if(io) io.observe(cv); else visible.add(cv); };
+  const items=[]; let curSec=null, mg=null, cardsEl=null;
+  for(const T of tiles){
+    if(T.section!==curSec){
+      curSec=T.section;
+      const h=document.createElement('h4'); h.textContent=curSec; phone.append(h);
+      mg=document.createElement('div'); mg.className='mgrid'; phone.append(mg);
+      const sh=document.createElement('div'); sh.className='sec-head'; const h3=document.createElement('h3'); h3.textContent=curSec; const cnt=document.createElement('span'); cnt.textContent=tiles.filter(x=>x.section===curSec).length+' effects'; sh.append(h3,cnt); close.append(sh);
+      cardsEl=document.createElement('div'); cardsEl.className='cards'; close.append(cardsEl);
+    }
+    const M=document.createElement('canvas'); M.width=M.height=BIG; M.setAttribute('role','img'); M.setAttribute('aria-label',T.name+' preview animation');
+    const mctx=M.getContext('2d');
+    let draw=null; try{ draw=T.make(BIG); }catch(e){ console.error('make failed: '+T.id, e); }
+    const views=[];
+    const mini=(parent,cls,size)=>{
+      const w=document.createElement('div'); w.className=cls;
+      const cv=document.createElement('canvas'); cv.width=cv.height=Math.round(size*DPR); cv.setAttribute('aria-hidden','true');
+      const lab=document.createElement('span'); lab.textContent=T.name; w.append(cv,lab);
+      if(T.isNew&&cls==='mtile'){ const dot=document.createElement('i'); dot.title='New'; w.append(dot); }
+      parent.append(w);
+      const ctx=cv.getContext('2d'); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+      views.push({cv,ctx}); watch(cv);
+    };
+    mini(mg,'mtile',77); mini(pcgrid,'ptile',154);
+    const card=document.createElement('article'); card.className='card';
+    const meta=document.createElement('div'); meta.className='meta';
+    const h4=document.createElement('h4'); h4.textContent=T.name;
+    const tag=document.createElement('span'); tag.className='tag'+(T.isNew?' new':''); tag.textContent=T.isNew?'New':(T.polished?'Polished':'Round 1');
+    meta.append(h4,tag);
+    const p=document.createElement('p'); p.textContent=T.line;
+    card.append(M,meta,p); cardsEl.append(card); watch(M);
+    items.push({T,M,mctx,draw,views});
+  }
+  function paint(it,t,force){
+    if(!it.draw) return;
+    const any=force||visible.has(it.M)||it.views.some(v=>visible.has(v.cv));
+    if(!any) return;
+    try{ it.draw(it.mctx,t); }catch(e){ console.error('draw failed: '+it.T.id, e); it.draw=null; return; }
+    for(const v of it.views){ if(!force&&!visible.has(v.cv)) continue; v.ctx.clearRect(0,0,v.cv.width,v.cv.height); v.ctx.drawImage(it.M,0,0,v.cv.width,v.cv.height); }
+  }
+  window.__fxBench=function(n){ n=n||20; const out={}; for(const it of items){ if(!it.draw) continue; const t0=performance.now(); for(let i=0;i<n;i++) it.draw(it.mctx,0.37+i*0.13); out[it.T.id]=+((performance.now()-t0)/n).toFixed(2); } return out; };
+  window.__fxIds=()=>items.map(it=>it.T.id+(it.draw?'':' (BROKEN)'));
+  /* One overview sheet of every tile at one moment (each tile's own best moment when t is omitted). Local server only. */
+  window.__fxGrid=async function(name,cols,cell,t,from,to){
+    cols=cols||10; cell=cell||150; const list=items.slice(from||0,to||items.length);
+    const L=18, G=8, rows=Math.ceil(list.length/cols), W=G+cols*(cell+G), H=G+rows*(cell+L+G);
+    const sh=document.createElement('canvas'); sh.width=W; sh.height=H; const x=sh.getContext('2d');
+    x.fillStyle='#0b0e14'; x.fillRect(0,0,W,H); x.imageSmoothingQuality='high'; x.font='600 12px system-ui, sans-serif';
+    const errs=[];
+    list.forEach((it,i)=>{ const cx=G+(i%cols)*(cell+G), cy=G+Math.floor(i/cols)*(cell+L+G);
+      x.fillStyle='#eef1f7'; x.fillText(it.T.name,cx+2,cy+13);
+      try{ it.draw(it.mctx,(t===undefined||t===null)?(it.T.still||0):t); x.drawImage(it.M,cx,cy+L,cell,cell); }catch(e){ errs.push(it.T.id+': '+e.message); x.fillStyle='#ff3b3b'; x.fillRect(cx,cy+L,cell,cell); } });
+    const blob=await new Promise(res=>sh.toBlob(res,'image/png'));
+    const resp=await fetch('/shot?name='+encodeURIComponent(name||'grid'),{method:'POST',body:blob});
+    return {saved: resp.ok?await resp.text():('HTTP '+resp.status), count:list.length, errors:errs};
+  };
+  /* A contact sheet for checking work without screenshots: one row per tile, one cell per t (180 px), then the tile at
+     its real 77 px size. POSTs the PNG to the local server's /shot, which saves it as shots/<name>.png. Only works on the
+     local server (the published page has no /shot). */
+  window.__fxShot=async function(ids,ts,name){
+    const want=String(ids||'').split(',').filter(Boolean);
+    const rows=items.filter(it=>!want.length||want.includes(it.T.id));
+    ts=(ts&&ts.length)?ts:[0.3,0.9,1.6,2.4,3.3];
+    const C=180, G=10, L=24, W=G+ts.length*(C+G)+77+G, H=rows.length*(C+L+G)+G;
+    const sh=document.createElement('canvas'); sh.width=W; sh.height=H; const x=sh.getContext('2d');
+    x.fillStyle='#0b0e14'; x.fillRect(0,0,W,H); x.imageSmoothingQuality='high';
+    const errs=[];
+    rows.forEach((it,r)=>{
+      const y0=G+r*(C+L+G);
+      x.fillStyle='#eef1f7'; x.font='600 14px system-ui, sans-serif'; x.fillText(it.T.name+'  ('+it.T.id+', '+it.T.section+')',G,y0+16);
+      ts.forEach((t,k)=>{
+        const x0=G+k*(C+G);
+        try{ it.draw&&it.draw(it.mctx,t); x.drawImage(it.M,x0,y0+L,C,C); }catch(e){ errs.push(it.T.id+'@'+t+': '+e.message); x.fillStyle='#ff3b3b'; x.fillRect(x0,y0+L,C,C); }
+        x.fillStyle='#9aa3b5'; x.font='12px ui-monospace, monospace'; x.fillText('t='+t,x0+4,y0+L+C-6);
+      });
+      try{ it.draw&&it.draw(it.mctx,it.T.still||0); x.drawImage(it.M,G+ts.length*(C+G),y0+L,77,77); }catch(e){}
+    });
+    const blob=await new Promise(res=>sh.toBlob(res,'image/png'));
+    const resp=await fetch('/shot?name='+encodeURIComponent(name||'sheet'),{method:'POST',body:blob});
+    return {saved: resp.ok?await resp.text():('HTTP '+resp.status), tiles: rows.map(it=>it.T.id), errors: errs};
+  };
+  const qt=qs.get('t');
+  const go=()=>{
+    if(qt!==null&&qt!==''){ const tq=parseFloat(qt)||0; for(const it of items) paint(it,tq,true); return; }
+    if(reduce){ for(const it of items) paint(it,it.T.still||0,true); return; }
+    let start=0, fr=0;
+    /* Only what's on screen animates. With many on screen (the phone menu), each one updates every 2nd or 3rd frame so a phone keeps up. */
+    const frame=now=>{ if(!start) start=now; const t=(now-start)/1000+0.001; fr++; const vis=items.filter(it=>visible.has(it.M)||it.views.some(v=>visible.has(v.cv))); const stride=vis.length>24?3:vis.length>10?2:1; vis.forEach((it,i)=>{ if((i+fr)%stride===0) paint(it,t,false); }); requestAnimationFrame(frame); };
+    for(const it of items) paint(it,it.T.still||0,true);
+    requestAnimationFrame(frame);
+  };
+  try{ if(document.fonts&&document.fonts.load){ let done=false; const once=()=>{ if(!done){ done=true; go(); } }; document.fonts.load('13px "VT323"').then(once,once); setTimeout(once,1200); } else go(); }catch(e){ go(); }
+}
+})();
+</script>

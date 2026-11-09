@@ -27,7 +27,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.32">
+<meta name="fm-build" content="v18.33">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -324,24 +324,36 @@
       }
 
       // ---- layers.js: where the finished logo sits on any phone ----
+      /* #1231, his pick for a PC (9 Nov, "28 for the pc intro"): take 28, Side by side (tools/design/intro-takes/options/pc.js 'pc-lockup').
+         A window wider than tall lands with the F on the left and FreeMotion beside it; anything portrait is take 13 as he picked it for a
+         phone, untouched. Every difference from the phone take reads this one test. */
+      const wideKit = (kit) => kit.w > kit.h;
       function logoLayout(kit) {
         const F = kit.F, W = kit.w, H = kit.h;
-        const s = Math.min(W * 0.6, H * 0.31) / F.box.w;
-        const fh = F.box.h * s, fw = F.box.w * s;
         const m = ctx(newCanvas());
         m.font = '600 100px ' + kit.SYS;
-        const wordPx = (fw / m.measureText('FreeMotion').width) * 100;
+        const mw = m.measureText('FreeMotion').width;
+        const at = (s, fw, cx, cy, wordPx, left, wordX, wordY) => ({
+          s, fw, fh: F.box.h * s, cx, cy, wordPx, left, wordX, wordY,
+          X: (lx) => cx + (lx - (F.box.x + F.box.w / 2)) * s,
+          Y: (ly) => cy + (ly - (F.box.y + F.box.h / 2)) * s,
+        });
+        if (wideKit(kit)) {   // the F on the left and the name beside it, centred as one block
+          let s = (H * 0.3) / F.box.h, fh = F.box.h * s, fw = F.box.w * s, wordPx = fh * 0.46, gapX = fh * 0.24;
+          let total = fw + gapX + (mw * wordPx) / 100;
+          const fit = Math.min(1, (W * 0.84) / total);
+          s *= fit; fh *= fit; fw *= fit; wordPx *= fit; gapX *= fit; total *= fit;
+          const left = (W - total) / 2, cy = H / 2;
+          return at(s, fw, left + fw / 2, cy, wordPx, left, left + fw + gapX, cy + wordPx * 0.36);
+        }
+        const s = Math.min(W * 0.6, H * 0.31) / F.box.w;
+        const fh = F.box.h * s, fw = F.box.w * s;
+        const wordPx = (fw / mw) * 100;
         const gap = fh * 0.13;
         const block = fh + gap + wordPx;
         const top = 60 + Math.max(0, (H - 110 - 60 - block) / 2);
-        const cx = W / 2, cy = top + fh / 2;
-        return {
-          s, fw, fh, cx, cy, wordPx,
-          left: cx - fw / 2,
-          wordY: top + fh + gap + wordPx * 0.8,
-          X: (lx) => cx + (lx - (F.box.x + F.box.w / 2)) * s,
-          Y: (ly) => cy + (ly - (F.box.y + F.box.h / 2)) * s,
-        };
+        const cx = W / 2, cy = top + fh / 2, left = cx - fw / 2;
+        return at(s, fw, cx, cy, wordPx, left, left, top + fh + gap + wordPx * 0.8);
       }
 
       // ---- The camera for things lying in a plane (z is the plane's normal): spin about z, then tip about x ----
@@ -481,6 +493,20 @@
           x.fillStyle = '#fff4d6'; x.beginPath(); x.arc(58, 42, 8, 0, TAU); x.fill();
           for (let i = 0; i < 26; i++) { const y = 52 + i * 1.5; x.fillRect(58 - (2 + i * 0.8) * hash01(i, 4) - 3, y, (5 + i * 1.3) * hash01(i, 5) + 2, 0.7); }
           x.fillStyle = '#1b1a1c'; x.beginPath(); x.moveTo(104, 52); x.lineTo(118, 42); x.lineTo(129, 46); x.lineTo(160, 33); x.lineTo(160, 58); x.fill();
+        } else if (kind === 2) {    // forest ridges in haze (2 and 6: the short row of take 28's three-across sheet, on a wide window only)
+          x.fillStyle = vgrad(x, ['#f0ead0', '#d8dcb6'], 0, 60); x.fillRect(0, 0, 160, 90);
+          ridge(x, 32, 13, 7, 11, '#9fb68c'); ridge(x, 46, 12, 5, 12, '#6e9270'); ridge(x, 60, 13, 3.5, 13, '#3f6a4e'); ridge(x, 76, 11, 2.5, 14, '#1c3a2a');
+        } else if (kind === 6) {    // beach from a drone
+          x.fillStyle = '#e6cb97'; x.fillRect(0, 0, 160, 90);
+          x.fillStyle = vgrad(x, ['#14737a', '#2aa59b'], 0, 90);
+          x.beginPath(); x.moveTo(164, -2); x.lineTo(70, -2);
+          for (let i = 0; i <= 12; i++) x.lineTo(72 + i * 4 + Math.sin(i * 1.5) * 6, i * 8);
+          x.lineTo(164, 92); x.fill();
+          x.strokeStyle = '#fbf7e8'; x.lineWidth = 2.2; x.beginPath(); x.moveTo(70, -2);
+          for (let i = 0; i <= 12; i++) x.lineTo(72 + i * 4 + Math.sin(i * 1.5) * 6, i * 8);
+          x.stroke();
+          const um = ['#d9412b', '#f2c14e', '#ffffff', '#21806f'];
+          for (let i = 0; i < 12; i++) { x.fillStyle = um[i % 4]; x.beginPath(); x.arc(8 + hash01(i, 7) * 60, 6 + hash01(i, 8) * 78, 2.1, 0, TAU); x.fill(); }
         }
         x.restore();
       }
@@ -511,7 +537,7 @@
           const L = logoLayout(kit), F = kit.F;
           const NU = 5, NV = 10;
           const INK = '#16130f', BONE = '#e7e2d5', COAL = '#0c0c0d';
-          const texS = Math.min(dpr, 1.6), fs = W / 390;
+          const texS = Math.min(dpr, 1.6), fs = wideKit(kit) ? H / 680 : W / 390;
           const tex = (paint) => {
             const c = newCanvas();
             c.width = Math.ceil(W * texS); c.height = Math.ceil(H * texS);
@@ -546,19 +572,23 @@
           });
           // 1 CLIP: the same few seconds, frame after frame, with a burned-in counter. Stops above the short row so the colour shows there.
           const clip = tex((x) => {
-            const fh = (W * 0.94 * 9) / 16, fx = W * 0.03, gapY = 7 * fs;
+            /* a phone's sheet is one column of frames; a wide one (take 28) three across, the same footage further on in each */
+            const cols = wideKit(kit) ? 3 : 1, gx = W * 0.02, fw0 = (W * 0.94 - (cols - 1) * gx) / cols;
+            const fh = (fw0 * 9) / 16, gapY = 7 * fs, fxOf = (c) => W * 0.03 + c * (fw0 + gx);
             const bottom = R[2].y - 5 * fs;
-            let y = bottom - fh, n = 0;
-            const frames = Math.ceil(bottom / (fh + gapY)) + 1;
-            for (let i = frames - 1; i >= 0; i--) {
-              const ph = 1 - i / frames;
-              scene(x, fx, y, W * 0.94, fh, 0, 1 - ph);
-              x.fillStyle = INK; x.fillRect(fx, y + fh - 17 * fs, 90 * fs, 17 * fs);
-              x.fillStyle = BONE;
-              mono.fill(x, '00:04:' + String(11 + i) + ':' + String(3 + i * 7), 12 * fs, fx + 5 * fs, y + fh - 8 * fs, 'middle');
-              y -= fh + gapY; n++;
+            let y = bottom - fh;
+            const rows = Math.ceil(bottom / (fh + gapY)) + 1, total = rows * cols;
+            for (let i = rows - 1; i >= 0; i--) {
+              for (let c = 0; c < cols; c++) {
+                const k = i * cols + (cols - 1 - c), ph = 1 - k / total, fx = fxOf(c);
+                scene(x, fx, y, fw0, fh, 0, 1 - ph);
+                x.fillStyle = INK; x.fillRect(fx, y + fh - 17 * fs, 90 * fs, 17 * fs);
+                x.fillStyle = BONE;
+                mono.fill(x, '00:04:' + String(11 + k) + ':' + String(3 + k * 7), 12 * fs, fx + 5 * fs, y + fh - 8 * fs, 'middle');
+              }
+              y -= fh + gapY;
             }
-            x.save(); x.translate(fx, H * 0.77); scene(x, 0, 0, W * 0.94, fh * 0.9, 1, 0); x.restore();
+            for (let c = 0; c < cols; c++) { x.save(); x.translate(fxOf(c), H * 0.77); scene(x, 0, 0, fw0, fh * 0.9, cols === 1 ? 1 : [1, 2, 6][c], 0); x.restore(); }
             tab(x, 'CLIP 01', '#f6c544', INK);
           });
           // 2 WAVE: a bone band with the audio in it. Sits on the medium row.
@@ -604,7 +634,7 @@
             x.globalCompositeOperation = 'destination-out';
             keyRows(x); keyHead(x);
             x.globalCompositeOperation = 'source-over';
-            kit.wordmark(x, L.left, L.wordY, L.wordPx, F.top);
+            kit.wordmark(x, L.wordX, L.wordY, L.wordPx, F.top);
             x.save(); x.translate(10 * fs, 10 * fs); tab(x, 'MATTE', BONE, INK); x.restore();
           });
           // The whole pile, flat, seen only through the holes.
@@ -778,7 +808,7 @@
               F.clips.forEach((c, i) => { if (q >= cut[i]) { g.beginPath(); g.roundRect(c.x, c.y, c.w, c.h, c.r); g.fill(); } });
               g.restore();
             }
-            kit.wordmark(g, L.left, L.wordY, L.wordPx, F.top);
+            kit.wordmark(g, L.wordX, L.wordY, L.wordPx, F.top);
             g.restore();
           };
         },
@@ -790,7 +820,7 @@
           const L = logoLayout(kit), COAL = '#0c0c0d';
           g.fillStyle = COAL; g.fillRect(0, 0, kit.w, kit.h);
           kit.drawF(g, L.cx, L.cy, L.s, { knock: COAL });
-          kit.wordmark(g, L.left, L.wordY, L.wordPx, kit.F.top);
+          kit.wordmark(g, L.wordX, L.wordY, L.wordPx, kit.F.top);
         },
         makeKit,
         /* empty every canvas the take made (the splash calls this as it removes itself) */
@@ -838,7 +868,9 @@
          wider than 620 px gets the picker's own stage, a portrait one up to 900 px tall, centred on the take's own ground
          (#splash's colour follows the frame: bone, then black from the moment the matte lands), until there is a PC take. */
       var W = sp.clientWidth || window.innerWidth, H = sp.clientHeight || window.innerHeight;
-      if (W > 620) { H = Math.min(H, 900); W = Math.round(H * 0.4617); }
+      /* #1231 (9 Nov, "28 for the pc intro"): a window wider than tall plays take 28 on the whole window; a tall one wider than a phone keeps
+         take 13 in its phone-shaped column, as it always has */
+      if (W <= H && W > 620) { H = Math.min(H, 900); W = Math.round(H * 0.4617); }
       stage.style.width = W + 'px'; stage.style.height = H + 'px';
       var DPR = Math.min(window.devicePixelRatio || 1, 2);   // the picker's own: what he saw
       var seek = null, gone = false, stilled = false, dark = false, shown = -1, startedPerf = 0, endedPerf = 0, makeMs = -1;
@@ -1002,7 +1034,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.32</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.33</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
