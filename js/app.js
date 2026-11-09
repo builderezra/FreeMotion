@@ -144,7 +144,11 @@ window.FM = window.FM || {};
     finally { FM._typingCue = null; }
     if (FM.onionSkin && !FM.playing) drawOnionSkin(_scrubHeld);   // #768 H7: held back while the timeline is scrubbed
     if (FM.showGuides) drawGuides();
-    if (FM.canvasEdit) FM.canvasEdit.update();
+    if (FM.canvasEdit) {
+      const pS = FM.playing ? FM._framePhaseSink : null, e0 = pS ? performance.now() : 0;   // #202 G6: only while What's slow measures
+      FM.canvasEdit.update();
+      if (pS) { pS.editMs += performance.now() - e0; pS.editN++; }
+    }
     /* queue 921 S0: the other people's cursors, selections and playheads are drawn AFTER the frame and
        the selection box, on their own layer — never by re-rendering the scene (the judge's finding: a
        presence repaint must not cost a full render). A stub hook today; the body arrives at S5. */
@@ -815,7 +819,15 @@ window.FM = window.FM || {};
     /* Simple mode 2.7 (SU1 #14, his "2A" 14 Oct): in Simple the pill reads the time over the whole length, "0:03 / 0:12", the way a
        beginner's editor does; frames mean nothing there. Full's pill is exactly today's mm:ss:ff. */
     const smClock = FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.spineWords && FM.spineWords.clock;
-    readoutEl.textContent = smClock ? FM.spineWords.clock(FM.time, FM.scene.project.duration) : p2(m) + ':' + p2(sec) + ':' + p2(ff);
+    const rdTxt = smClock ? FM.spineWords.clock(FM.time, FM.scene.project.duration) : p2(m) + ':' + p2(sec) + ':' + p2(ff);
+    /* #202 (measured 10 Nov: Chrome's own trace of five seconds of playback at a 6x slowdown). textContent throws the text node away and
+       puts in a new one, and a child going in or out makes the browser re-check every :has() rule hung on <body> and <html>. This line runs
+       on every drawn frame, so that re-check was about half of the style work in playback, in BOTH editors: about 12,800 element updates
+       across the trace against 6,100 with the rules taken out, and dropped frames went from 11 to 3. Changing the digits of the node already there is not a child going in or
+       out. Anything else in the pill (empty at boot, the type-a-time field) still goes through textContent. */
+    const rdNode = readoutEl.firstChild;
+    if (rdNode && rdNode.nodeType === 3 && !rdNode.nextSibling) { if (rdNode.data !== rdTxt) rdNode.data = rdTxt; }
+    else readoutEl.textContent = rdTxt;
     const ds = Math.round(FM.scene.project.duration), mm = Math.floor(ds / 60), ss = ds % 60;   // round to whole seconds FIRST, else 119.7s → 1:60 instead of 2:00
     /* …and KEEP the gesture hint on it (queue 536 clause 1). This line runs on every readout update and
        was silently overwriting the title set at init, so the pill's own tooltip advertised the project
@@ -2966,8 +2978,12 @@ window.FM = window.FM || {};
       return;
     }
     FM.time = nt;
+    /* #202 G6 (his "the simple editor isn't lagging, but the complex editor is"): where a playing frame's time goes, by phase. The sink
+       exists only while What's slow is measuring (js/perf-probe.js, the FRAME line), so outside a Measure this is one property read. */
+    const pS = FM._framePhaseSink, s0 = pS ? performance.now() : 0;
     syncMediaToClock();                                   // sound first…
     if (FM.audioFxLive) FM.audioFxLive.applyAt(FM.time);   // keyframed audio-effect params follow the playhead
+    if (pS) pS.syncMs += performance.now() - s0;
     // …picture second, and best-effort. Draw at most one canvas frame per PROJECT frame: whatever
     // the clock has already moved past is simply never drawn. Dropping frames is the correct
     // response to a comp that costs more than its frame budget — the alternative is to slow the
@@ -2990,12 +3006,22 @@ window.FM = window.FM || {};
        * Only CONSECUTIVE renders count — a gap spanning a pause, a seek or a tab switch is not a
        * frame interval, and feeding one would read a still hand as a struggling machine. */
       const _now = performance.now();
+      if (pS) { pS.renderMs += _now - _t0; pS.renders++; }
       const _gap = (_lastPlayPaint && _now - _lastPlayPaint < 2000) ? (_now - _lastPlayPaint) : 0;
       _lastPlayPaint = _now;
       notePlaybackCost(_now - _t0, _gap);
     }
-    FM.timeline.updatePlayhead();
-    updateReadout();
+    if (pS) {
+      const a = performance.now();
+      FM.timeline.updatePlayhead();
+      const b = performance.now();
+      updateReadout();
+      pS.playheadMs += b - a; pS.readoutMs += performance.now() - b; pS.ticks++;
+      if (b - a > pS.playheadWorst) pS.playheadWorst = b - a;
+    } else {
+      FM.timeline.updatePlayhead();
+      updateReadout();
+    }
     rafId = requestAnimationFrame(tick);
   }
 

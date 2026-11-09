@@ -147,6 +147,19 @@ window.FM = window.FM || {};
     return lines;
   }
 
+  /* THE FRAME LINE (#202 G6). He reports one plain video lagging in the Full editor and not in Simple, and both editors draw through the
+   * same renderScene, so the VIDEO line above cannot tell them apart. This names the editor the sample was taken in and splits a playing
+   * frame into its phases (js/app.js tick and render fill FM._framePhaseSink, which exists only while this measures). A sample in each
+   * editor from his phone says which phase is the difference. Main-thread time only: layout and paint land in the frame gaps. */
+  function frameLines(lines, f) {
+    const editor = FM.editor && FM.editor.isSimple && FM.editor.isSimple() ? 'Simple' : 'Full';
+    if (!f.ticks) { lines.push('FRAME    (' + editor + ' editor) nothing played during this sample, so where a playing frame’s time goes was not measured.'); return lines; }
+    const per = (ms, n) => (ms / Math.max(1, n)).toFixed(2) + 'ms';
+    lines.push('FRAME    (' + editor + ' editor) for each picture drawn: the picture ' + per(f.renderMs, f.renders) + ', of which the selection box ' + per(f.editMs, f.editN) + ' · ' + f.renders + ' drawn');
+    lines.push('         on every screen frame: timeline playhead ' + per(f.playheadMs, f.ticks) + ' (worst ' + f.playheadWorst.toFixed(2) + 'ms) · time readout ' + per(f.readoutMs, f.ticks) + ' · sound sync ' + per(f.syncMs, f.ticks) + ' · ' + f.ticks + ' screen frames');
+    return lines;
+  }
+
   /* THE VERDICT, as a pure function — because this judgement has already been wrong once, on the
    * very first real measurement, and a wrong verdict is worse than no verdict in a tool built to
    * stop us drawing wrong conclusions. Pure so the suite can put his actual numbers in and read the
@@ -280,6 +293,8 @@ window.FM = window.FM || {};
       /* THE VIDEO LINE's numbers (#202) — see videoLines above. The sink is taken down by finish() and by stop(). */
       const vSink = { draws: 0, ms: 0, worst: 0, fresh: 0, seen: new Map(), holdDraws: 0, holdMs: 0 };
       FM._videoDrawSink = vSink;
+      const fSink = { ticks: 0, renders: 0, syncMs: 0, renderMs: 0, editMs: 0, editN: 0, playheadMs: 0, readoutMs: 0, playheadWorst: 0 };   // #202 G6: see frameLines
+      FM._framePhaseSink = fSink;
       const vClock = { steps: [], still: 0, last: new Map(), clips: new Set() };
       const pClock = { steps: [], still: 0, last: null, srcs: {} };
       const vSeen = new Set();
@@ -373,6 +388,7 @@ window.FM = window.FM || {};
 
       function finish(elapsed) {
         if (FM._videoDrawSink === vSink) FM._videoDrawSink = null;   // the compositor stops timing the moment the sample ends
+        if (FM._framePhaseSink === fSink) FM._framePhaseSink = null;
         if (deadline) { clearTimeout(deadline); deadline = null; }
         document.removeEventListener('visibilitychange', onHide);
         const sorted = gaps.slice().sort((a, b) => a - b);
@@ -508,6 +524,7 @@ window.FM = window.FM || {};
         }
         // ═══ THE VIDEO ITSELF (#202) — see videoLines.
         try { videoLines(lines, { videos: videoCount(), clock: vClock, head: pClock, draw: vSink }); } catch (e) {}
+        try { frameLines(lines, fSink); } catch (e) {}
         const ps = FM.playbackStats;
         // Everything here is THIS SAMPLE's share, not the whole session's (queue 489).
         const dRate = ps ? Math.max(0, (ps.rateWrites | 0) - ps0.rateWrites) : 0;
@@ -585,7 +602,7 @@ window.FM = window.FM || {};
       return true;
     },
 
-    stop() { this.running = false; FM._videoDrawSink = null; },   // a stopped sample never reaches finish(): take the draw timer down here too
+    stop() { this.running = false; FM._videoDrawSink = null; FM._framePhaseSink = null; },   // a stopped sample never reaches finish(): take the draw timer down here too
     // Exposed so the suite can assert the deadline exists without waiting out a real hidden-tab run.
     _hasDeadline() { return this.running; },
   };

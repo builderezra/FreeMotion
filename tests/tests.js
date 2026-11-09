@@ -192817,6 +192817,107 @@
     }
   });
 
+  /* #202 G6, his words: "the simple editor isn't lagging, but the complex editor is lagging… just like one simple video". Both editors draw through the
+     same renderScene, so the VIDEO line cannot tell them apart. The FRAME line names the editor and splits a playing frame by phase. Driven by a real
+     Play and a real Measure, once in each editor.
+     FAILS ON v18.34: the report has no FRAME line.
+     CONTROLS: nothing is timed outside a Measure or after it (the sink is gone), and a sample with nothing playing says so and quotes no numbers. */
+  test('202 the Measure report says where a playing frame’s time goes and in which editor (CONTROL: nothing is timed outside a Measure, and with nothing playing it says so)', { item: '202', budgetMs: 40000 }, async function () {
+    if (!FM.perfProbe || !FM.perfProbe.run || !FM.editor) throw new Error('need FM.perfProbe and FM.editor');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const sc = FM.scene, L0 = sc.layers.slice(), dur0 = sc.project.duration, t0 = FM.time, mode0 = FM.editor.mode();
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    let last0 = null, hint0 = null; try { last0 = localStorage.getItem('fm.editor.last'); hint0 = localStorage.getItem('fm.editor.hint'); } catch (e) {}
+    const measure = () => new Promise(res => FM.perfProbe.run(1000, res));
+    const sample = async name => {
+      if (FM.editor.mode() !== name) { FM.editor.set(name); await sleep(200); }
+      if (FM.editor.mode() !== name) throw new Error('setup: could not switch to the ' + name + ' editor');
+      if (FM._framePhaseSink) throw new Error('the frame phases are being timed outside a Measure');
+      FM.time = 0; FM.play();
+      const text = await measure();
+      FM.pause();
+      if (FM._framePhaseSink) throw new Error('the frame phases are still being timed after the sample ended');
+      const label = name === 'simple' ? 'Simple' : 'Full';
+      const m = text.match(/FRAME {4}\((Full|Simple) editor\) for each picture drawn: the picture ([\d.]+)ms, of which the selection box ([\d.]+)ms · (\d+) drawn/);
+      if (!m) throw new Error('the Measure report has no FRAME line in the words this asserts, so a sample cannot say where a playing frame’s time goes:\n' + text);
+      if (m[1] !== label) throw new Error('the FRAME line says the ' + m[1] + ' editor; the sample was taken in ' + label);
+      const m2 = text.match(/on every screen frame: timeline playhead ([\d.]+)ms \(worst ([\d.]+)ms\) · time readout ([\d.]+)ms · sound sync ([\d.]+)ms · (\d+) screen frames/);
+      if (!m2) throw new Error('the FRAME line does not give the per-screen-frame phases:\n' + text);
+      if (+m[4] < 5) throw new Error('CONTROL: only ' + m[4] + ' pictures were drawn in a one-second sample of a playing project, so there was nothing to split');
+      if (+m2[5] < +m[4]) throw new Error('the report counts ' + m2[5] + ' screen frames and ' + m[4] + ' pictures drawn: a picture is drawn at most once a screen frame');
+      if (!(+m[3] <= +m[2] + 0.01)) throw new Error('the selection box (' + m[3] + 'ms) costs more than the whole picture it is part of (' + m[2] + 'ms)');
+      if (!(+m2[1] <= +m2[2] + 0.01)) throw new Error('the timeline playhead averages ' + m2[1] + 'ms but its worst is ' + m2[2] + 'ms');
+    };
+    try {
+      if (hadHome) FM.home.close();
+      sc.layers.length = 0;
+      const A = FM.makeLayer('shape', { name: 'x', shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#3a7bd5' });
+      A.start = 0; A.duration = 20; sc.layers.push(A);
+      sc.project.duration = 20; FM.refreshAll();
+      await sample('full');
+      await sample('simple');
+      /* CONTROL: the same project with nothing playing */
+      const idle = await measure();
+      if (!/FRAME {4}\(Simple editor\) nothing played during this sample/.test(idle) || /timeline playhead [\d.]+ms/.test(idle)) throw new Error('CONTROL: with nothing playing the FRAME line should say so and quote no phases:\n' + idle);
+    } finally {
+      if (FM.playing) FM.pause();
+      if (FM.perfProbe.running) FM.perfProbe.stop();
+      if (FM.editor.mode() !== mode0) FM.editor.set(mode0);
+      sc.layers.length = 0; L0.forEach(l => sc.layers.push(l));
+      sc.project.duration = dur0; FM.time = t0; FM.refreshAll();
+      try {
+        if (last0 === null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0);
+        if (hint0 === null) localStorage.removeItem('fm.editor.hint'); else localStorage.setItem('fm.editor.hint', hint0);
+      } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(150);
+    }
+  });
+
+  /* #202 (10 Nov, Chrome's trace of playback at a 6x slowdown): every drawn frame replaced the timecode's text node, and a child going in or
+   * out re-checks every :has() rule on body and html, half of all the style work in playback, in both editors.
+   * FAILS BEFORE THE FIX: the pill's first child is a new object after a frame, and the observer sees childList records.
+   * CONTROLS: the digits did change (the check watched a pill that moved), and a pill holding something else still gets the time. */
+  test('202 the timecode changes its digits in place: one text node through a playthrough (CONTROL: the digits did change, and a pill holding something else still gets the time)', { item: '202', budgetMs: 30000 }, async function () {
+    const saved = FM.scene, t00 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    const pill = document.getElementById('time-readout');
+    const recs = [];
+    const obs = new MutationObserver(l => { recs.push.apply(recs, l); });
+    try {
+      if (hadHome) FM.home.close();
+      if (wasSimple) FM.editor.apply('full', { force: true, quiet: true });
+      const L = FM.makeLayer('shape', { name: 's202t', shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 120, fill: '#f0f' }); L.start = 0; L.duration = 6;
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+      FM.refreshAll(); await sleep(100);
+      FM.setTime(1); await sleep(60);
+      const node = pill.firstChild, first = pill.textContent;
+      if (!node || node.nodeType !== 3) throw new Error('CONTROL A: the pill does not hold one text node before the check: ' + pill.innerHTML);
+      obs.observe(pill, { childList: true, characterData: true, subtree: true });
+      FM.setTime(2); await sleep(30);
+      FM.play(); await sleep(400); FM.pause(); await sleep(60);
+      recs.push.apply(recs, obs.takeRecords());
+      obs.disconnect();
+      if (pill.textContent === first) throw new Error('CONTROL B: the digits never changed (' + first + '), so this watched a pill that did not move');
+      const kids = recs.filter(r => r.type === 'childList').length;
+      if (kids) throw new Error(kids + ' child changes in the timecode pill while it played (want 0): each one re-checks every :has() rule on body and html');
+      if (pill.firstChild !== node) throw new Error('the pill has a different text node after playing');
+      if (!recs.some(r => r.type === 'characterData')) throw new Error('CONTROL C: no digit change was seen on the text node; ' + recs.length + ' records');
+      pill.innerHTML = '<b>x</b>';
+      FM.setTime(4); await sleep(40);
+      if (pill.children.length || !pill.firstChild || pill.firstChild.nodeType !== 3 || pill.textContent.indexOf(':') < 0) throw new Error('CONTROL D: a pill holding something else did not get the time back: ' + pill.innerHTML);
+    } finally {
+      obs.disconnect();
+      if (FM.playing) FM.pause();
+      FM.scene = saved; FM.setTime(t00);
+      if (wasSimple) FM.editor.apply('simple', { force: true, quiet: true });
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
   /* ═══ #860 STRESS HUNT (PC, read-only hunt + refuter, 24 Oct): each fault below has a test that fails on c27f576d ═══ */
 
   /* (#860 hunt #3) HOLDING CTRL+Z / CTRL+SHIFT+Z / CTRL+Y. Each undo or redo restores the whole project synchronously
