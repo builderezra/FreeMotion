@@ -1,0 +1,196 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Effect truth sheet</title>
+<style>body{margin:0;padding:16px;background:#0b0e14;color:#eef1f7;font:14px system-ui}</style></head>
+<body><div id="s">Loading the real renderer...</div>
+<script src="kit.js"></script>
+<script>
+/* OUR PICTURE beside the REAL EFFECT. Loads only the app's render scripts straight from /app/js (no index.html, so no boot,
+   no service worker, no storage), plus the tiles the way view.html does. Usage: HARNESS.md. Nothing here writes to the repo. */
+(function(){
+'use strict';
+const APP=['variant.js','settings.js','screen.js','scene.js','eases.js','masks.js','behaviors.js','media.js','blend-modes.js','gl-warp.js','gl-color.js','compositor.js','fx-registry.js','filters.js','fx-presets.js'];
+const ALIAS={bolts:'lightning',cube:'cube3d'};   /* the only two tile ids that are not the effect's own type */
+/* the app's own kf01 list (fx-thumbs.js OVERRIDES): these default to a STATIC midpoint, so a sheet sweeps them 0 to 1 */
+const PROGRESS={wipe:'progress',radialwipe:'progress',shapewipe:'progress',blinds:'progress',gradientwipe:'progress',dissolve:'amount',blockdissolve:'amount',counter:'progress',textprogress:'progress',odometer:'progress',dispersion:'progress'};
+const NEEDS_MOTION=['timeecho','motionflow','framestutter','temporaldenoise','moshbloom','timewarp'];   /* a still layer gives these nothing to show; the app's tiles put an Orbit under them too */
+const GENERATORS=['lightning','particles','weather','starfield','lensflare','audiospectrum'];   /* the Generative section: shown on a blank layer so you see exactly what they paint */
+const BLANK_FILL={audiospectrum:'#38c9ff'};   /* its default Colour is "From the layer": the bars are cut out of the layer, so a black layer would give black bars */
+const SENSIBLE={matte:'pair',repeat:'dog',threed:'bay',drawing:'towers',opacity:'dusk',proc:'dusk',move:'huracan',other:'ramp'};   /* sections fx-thumbs draws art for instead of naming a photo */
+const TEXTS={counter:'0',textrandomizer:'Scramble',wordhighlight:'Word by word'};
+const load=src=>new Promise(res=>{ const s=document.createElement('script'); s.src=src; s.onload=()=>res(true); s.onerror=()=>res(false); document.head.append(s); });
+const setS=m=>{ document.getElementById('s').textContent=m; };
+let inner=null, tiles=new Map(), seq=0;
+const bootErrors=[];
+
+const ready=(async()=>{
+  for(const f of APP){ if(!await load('/app/js/'+f)) bootErrors.push('failed to load '+f); }
+  /* fx-thumbs.js keeps its tables private, so read its real source and add one line that hands them over: the mapping stays
+     the app's own and cannot drift from it. Runs in this page only. */
+  let src=await (await fetch('/app/js/fx-thumbs.js')).text();
+  const HOOK='FM.fxThumbs = {';
+  if(!src.includes(HOOK)) throw new Error('fx-thumbs.js no longer has "'+HOOK+'"');
+  src=src.replace(HOOK,'FM.__inner={subjectFor,SECTION_PHOTO,PHOTO_SUBJECT,paintKeyshot,paintBackdrop,thumbSong};\n'+HOOK);
+  (0,eval)(src+'\n//# sourceURL=fx-thumbs.harness.js');
+  inner=FM.__inner;
+  FM.scene=FM.newScene(); FM.time=0; FM.playing=false;   /* the render core reads these in a few places; our scenes stay private */
+  let files=[];
+  try{ files=JSON.parse((await (await fetch('view.html')).text()).match(/const FILES=(\[[^\]]*\])/)[1].replace(/'/g,'"')); }catch(e){ bootErrors.push('could not read the tile list from view.html'); }
+  for(const f of files) await load(f);
+  await FXK._preload();
+  tiles=new Map((window.FX_TILES||[]).map(T=>[T.id,T]));
+  try{ if(document.fonts&&document.fonts.load) await Promise.race([document.fonts.load('13px "VT323"'),new Promise(r=>setTimeout(r,800))]); }catch(e){}
+  setS('Ready: '+tiles.size+' tiles, '+FM.fxRegistry.allIncludingHidden().length+' real effects'+(bootErrors.length?' | '+bootErrors.join('; '):''));
+})();
+ready.catch(e=>setS('BOOT FAILED: '+e.message));
+
+/* ---- layers ------------------------------------------------------------------------------- */
+const artCache={};
+const photoEl=k=>{ if(!FXK.photo(k)) throw new Error('no photograph "'+k+'" (keys: '+FXK.PHOTO_KEYS.join(' ')+')'); return artCache[k]||(artCache[k]=FXK.photoCover(k,640)[0]); };
+function painted(name,painter){ if(artCache['#'+name]) return artCache['#'+name]; const c=document.createElement('canvas'); c.width=c.height=640; if(painter) painter(c.getContext('2d'),640); return artCache['#'+name]=c; }
+function imageLayer(id,el,S,x,y,D){ FM.media.set(id,{kind:'image',el,width:S,height:S,duration:0}); FM.media.pin(id); const l=FM.makeLayer('image',{x,y,start:0,duration:D}); l.id=id; return l; }
+const backFor=p=>['shore','city','bay','bush'].find(k=>k!==p);
+
+/* What the effect goes on: the app's own subject (fx-thumbs subjectFor), turned into one of his photographs at real comp scale. */
+function plan(type,reg,o){
+  const sub=inner.subjectFor(type,reg), i=sub.indexOf(':'), a=i<0?sub:sub.slice(0,i), b=i<0?'':sub.slice(i+1);
+  let form=a, photo=null;
+  if(a==='photo'||a==='photocard'){ photo=b; form=a==='photo'?'full':'card'; }
+  else if(a==='full'||a==='card'){ photo=inner.SECTION_PHOTO[b]||SENSIBLE[b]||'city'; }
+  else if(a==='detail'){ form='full'; photo='dusk'; }
+  else if(a==='bars'){ form='full'; photo='dog'; }
+  else if(a==='keyshot'){ if(/chroma|spill/.test(type)){ form='keyshot'; } else { form='over'; photo='figures'; } }
+  else if(a==='backdrop'){ photo='city'; }
+  if(GENERATORS.includes(type)||(reg.category==='proc'&&!inner.PHOTO_SUBJECT[type])) form='blank';
+  if((reg.category==='matte'||reg.category==='opacity'||PROGRESS[type])&&form!=='text'&&form!=='keyshot') form='over';
+  if(form==='over'&&!photo) photo=SENSIBLE[reg.category]||'pair';
+  if(o.photo==='blank') form='blank'; else if(o.photo&&form!=='text'){ photo=o.photo; if(form==='blank'||form==='ball') form='full'; }
+  const back=(form==='over'||form==='keyshot')?(o.back||backFor(photo)):null;
+  return {form,photo,back,subject:sub};
+}
+
+function buildScene(type,o){
+  const reg=FM.fxRegistry.get(type); if(!reg) throw new Error('no effect of type "'+type+'"');
+  const P=o.project||1080, u=P/96, D=Math.max(4,(o.maxT||0)+1.5), tag='_tr'+(++seq)+'_', pl=plan(type,reg,o), C=P/2;
+  const plate=()=>imageLayer(tag+'bg',painted('backdrop',inner.paintBackdrop),P,C,C,D);
+  let hero, layers;
+  switch(pl.form){
+    case 'text':  hero=FM.makeLayer('text',{text:(o.params&&o.params._text)||TEXTS[type]||'Hello World',fontSize:150*P/1080,color:'#e8ecf4',x:C,y:C,start:0,duration:D}); layers=[hero,plate()]; break;
+    /* a blank layer is a near-black rectangle, as in the app: on a transparent layer the pixel generators (Starfield) and anything that draws "in this layer's box" have nothing to write on */
+    case 'blank': hero=FM.makeLayer('shape',{shape:'rect',shapeW:P,shapeH:P,fill:BLANK_FILL[type]||'#0b0e14',x:C,y:C,start:0,duration:D}); layers=[hero]; break;
+    case 'ball':  hero=FM.makeLayer('shape',{shape:'ellipse',shapeW:46*u,shapeH:46*u,fill:'#2fd0b5',x:44*u,y:44*u,start:0,duration:D}); layers=[hero,plate()]; break;
+    case 'backdrop': hero=FM.makeLayer('shape',{shape:'rect',shapeW:54*u,shapeH:54*u,fill:'#2fd0b5',x:46*u,y:44*u,start:0,duration:D}); layers=[hero,imageLayer(tag+'p',photoEl(pl.photo),P,C,C,D)]; break;
+    case 'card':  hero=imageLayer(tag+'h',photoEl(pl.photo),64*u,46*u,44*u,D); layers=[hero,plate()]; break;
+    case 'keyshot': hero=imageLayer(tag+'h',painted('keyshot',inner.paintKeyshot),P,C,C,D); layers=[hero,imageLayer(tag+'b',photoEl(pl.back),P,C,C,D)]; break;
+    case 'over':  hero=imageLayer(tag+'h',photoEl(pl.photo),P,C,C,D); layers=[hero,imageLayer(tag+'b',photoEl(pl.back),P,C,C,D)]; break;
+    default:      hero=imageLayer(tag+'h',photoEl(pl.photo),P,C,C,D); layers=[hero];
+  }
+  const inst=FM.fxRegistry.makeInstance(type), params=o.params||{}, known=new Set(reg.params.map(p=>p.key)), warn=[];
+  for(const k of Object.keys(params)){ if(k==='_text') continue; if(!known.has(k)){ warn.push('"'+k+'" is not a param of '+type+' (it has: '+[...known].join(', ')+')'); continue; } inst.params[k]=params[k]; }
+  const key=PROGRESS[type];
+  if(o.sweep&&key&&!(key in params)) inst.params[key]={kf:[{t:0,v:0,e:'linear'},{t:o.span||Math.max(1,(o.maxT||0)+0.2),v:1,e:'linear'}]};
+  const fx=[inst];
+  if(NEEDS_MOTION.includes(type)){ const mv=FM.fxRegistry.makeInstance('orbit'); mv.params.radius=180*P/1080; mv.params.speed=1.6; fx.unshift(mv); }
+  hero.effects=fx;
+  if(type==='audiospectrum') layers.push(inner.thumbSong());   /* the app's made-up 2 s beat; with nothing to hear it rests flat */
+  const scene={project:{width:P,height:P,fps:30,duration:D,background:'#151a24'},layers};
+  const plain={project:scene.project,layers:layers.map(l=>l===hero?Object.assign({},l,{effects:[]}):l)};
+  const words=pl.form==='text'?'text layer':pl.form==='blank'?'blank layer':pl.form==='ball'?'shape':pl.form==='keyshot'?'green-screen card over '+pl.back:pl.photo+(pl.form==='card'?' (card)':'')+(pl.back?' over '+pl.back:'');
+  return {scene,plain,type,on:words,warn};
+}
+const realT=(type,t)=>type==='audiospectrum'?t%2:t;
+function paintReal(g,scene,t){ g.setTransform(1,0,0,1,0,0); FM.renderScene(g,scene,t); }
+function surface(px){ const c=document.createElement('canvas'); c.width=c.height=px; return [c,c.getContext('2d',{willReadFrequently:true})]; }
+const pixels=g=>g.getImageData(0,0,g.canvas.width,g.canvas.height).data;
+/* mean change per channel (0..255) and the share of pixels that moved by more than 16 */
+function diff(a,b){ let s=0,n=0,hit=0; for(let i=0;i<a.length;i+=4){ const d=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]); s+=d; n+=3; if(d>16) hit++; } return {mean:n?Math.round(100*s/n)/100:0,share:n?hit/(n/3):0}; }
+
+/* ---- sheets ------------------------------------------------------------------------------- */
+function caption(x,s,px,py){ x.font='11px ui-monospace, monospace'; const w=x.measureText(s).width+8; x.fillStyle='rgba(0,0,0,.66)'; x.fillRect(px,py-14,w,16); x.fillStyle='#eef1f7'; x.fillText(s,px+4,py-2); }
+function badCell(x,px,py,C,msg){ x.fillStyle='#5a1218'; x.fillRect(px,py,C,C); x.fillStyle='#ffd7da'; x.font='12px system-ui, sans-serif'; x.fillText(msg.slice(0,28),px+6,py+20); }
+async function save(sh,name){
+  const blob=await new Promise(res=>sh.toBlob(res,'image/png'));
+  const r=await fetch('/shot?name='+encodeURIComponent(name||'truth'),{method:'POST',body:blob});
+  return r.ok?await r.text():('HTTP '+r.status);
+}
+const perId=(v,id)=>(v&&typeof v==='object')?v[id]:v;
+
+async function truth(ids,ts,name,opts){
+  opts=opts||{};
+  let want=(Array.isArray(ids)?ids:String(ids||'').split(',')).map(s=>String(s).trim()).filter(Boolean);
+  if(!want.length) want=[...tiles.keys()];
+  ts=(ts&&ts.length)?ts:[0.6,1.4,2.4];
+  const px=opts.px||360, C=180, P2=4, GG=16, M=10, L=24, maxT=Math.max(...ts);
+  const W=M*2+ts.length*(C*2+P2)+(ts.length-1)*GG, H=M+want.length*(L+C+M);
+  const sh=document.createElement('canvas'); sh.width=W; sh.height=H; const x=sh.getContext('2d');
+  x.fillStyle='#0b0e14'; x.fillRect(0,0,W,H); x.imageSmoothingQuality='high';
+  const [work,wg]=surface(px), errors=[], rows=[];
+  for(let r=0;r<want.length;r++){
+    const id=want[r], T=tiles.get(id), type=ALIAS[id]||id, y0=M+r*(L+C+M);
+    let sc=null, plainPx=null;
+    try{
+      sc=buildScene(type,{project:opts.project,photo:perId(opts.photo,id),back:perId(opts.back,id),params:opts.params&&opts.params[id],sweep:true,maxT,span:opts.span});
+      sc.warn.forEach(w=>errors.push(id+': '+w));
+      paintReal(wg,sc.plain,realT(type,ts[0])); plainPx=pixels(wg).slice();
+      paintReal(wg,sc.scene,0);   /* warm-up: temporal effects need a first frame before the strip */
+    }catch(e){ errors.push(id+': '+e.message); sc=null; }
+    x.fillStyle='#eef1f7'; x.font='600 14px system-ui, sans-serif';
+    x.fillText((T?T.name:type)+'  ('+id+(id!==type?' = '+type:'')+')'+(sc?'   real effect on '+sc.on:''),M,y0+16);
+    let tileCv=null, draw=null;
+    if(T){ try{ tileCv=document.createElement('canvas'); tileCv.width=tileCv.height=px; draw=T.make(px); }catch(e){ errors.push(id+': tile make failed: '+e.message); draw=null; } }
+    else errors.push(id+': no tile with that id');
+    const deltas=[]; let moved=false;
+    for(let k=0;k<ts.length;k++){
+      const t=ts[k], xa=M+k*(C*2+P2+GG), xb=xa+C+P2, y=y0+L;
+      try{ if(!draw) throw new Error('no tile'); draw(tileCv.getContext('2d'),t); x.drawImage(tileCv,xa,y,C,C); }catch(e){ if(T) errors.push(id+'@'+t+' ours: '+e.message); badCell(x,xa,y,C,'no picture'); }
+      caption(x,'ours t='+t,xa+3,y+C-3);
+      if(sc){ try{ paintReal(wg,sc.scene,realT(type,t)); x.drawImage(work,xb,y,C,C); const df=diff(pixels(wg),plainPx); deltas.push(df.mean); if(df.mean>=0.5||df.share>=0.001) moved=true; }catch(e){ errors.push(id+'@'+t+' real: '+e.message); badCell(x,xb,y,C,e.message); deltas.push(0); } }
+      else badCell(x,xb,y,C,'no real effect');
+      caption(x,'REAL t='+t,xb+3,y+C-3);
+    }
+    if(sc&&!moved) errors.push(id+': the real render matches the plain layer at every t asked for (a periodic move can be at rest at that instant, e.g. on a whole second; try other t)');
+    rows.push({id,type,on:sc?sc.on:null,change:deltas});
+    await new Promise(res=>setTimeout(res));
+  }
+  const saved=await save(sh,name||'truth');
+  return {saved,errors,rows};
+}
+
+async function real(type,params,photoKey,t,px){
+  t=t||0; px=px||360;
+  const sc=buildScene(ALIAS[type]||type,{params,photo:photoKey,sweep:false,maxT:t});
+  const [c,g]=surface(px);
+  paintReal(g,sc.scene,0); paintReal(g,sc.scene,realT(sc.type,t));
+  c.toJSON=()=>({width:px,height:px,type:sc.type,on:sc.on,t,warnings:sc.warn});
+  return window.__lastReal=c;
+}
+
+async function realShot(type,paramsList,photoKey,ts,name){
+  const eff=ALIAS[type]||type, list=(paramsList&&paramsList.length)?paramsList:[{}];
+  ts=(ts&&ts.length)?ts:[0.6,1.4,2.4];
+  const px=360, C=180, G=10, L=24, maxT=Math.max(...ts);
+  const W=G+ts.length*(C+G), H=G+list.length*(L+C+G);
+  const sh=document.createElement('canvas'); sh.width=Math.max(W,520); sh.height=H; const x=sh.getContext('2d');
+  x.fillStyle='#0b0e14'; x.fillRect(0,0,sh.width,H); x.imageSmoothingQuality='high';
+  const [work,wg]=surface(px), errors=[];
+  for(let r=0;r<list.length;r++){
+    const y0=G+r*(L+C+G), params=list[r]||{};
+    let sc=null;
+    try{ sc=buildScene(eff,{params,photo:photoKey,sweep:true,maxT}); sc.warn.forEach(w=>errors.push(w)); paintReal(wg,sc.scene,0); }catch(e){ errors.push(e.message); }
+    x.fillStyle='#eef1f7'; x.font='600 13px system-ui, sans-serif';
+    x.fillText(eff+' '+(Object.keys(params).length?JSON.stringify(params):'(defaults)')+(sc?'  on '+sc.on:''),G,y0+16);
+    for(let k=0;k<ts.length;k++){
+      const xa=G+k*(C+G), y=y0+L, t=ts[k];
+      if(sc){ try{ paintReal(wg,sc.scene,realT(eff,t)); x.drawImage(work,xa,y,C,C); }catch(e){ errors.push(t+': '+e.message); badCell(x,xa,y,C,e.message); } }
+      else badCell(x,xa,y,C,'no render');
+      caption(x,'t='+t,xa+3,y+C-3);
+    }
+    await new Promise(res=>setTimeout(res));
+  }
+  return {saved:await save(sh,name||'realshot'),errors};
+}
+
+window.__truthReady=ready;
+window.__truth=(...a)=>ready.then(()=>truth(...a));
+window.__real=(...a)=>ready.then(()=>real(...a));
+window.__realShot=(...a)=>ready.then(()=>realShot(...a));
+})();
+</script></body></html>

@@ -367,8 +367,6 @@ window.FX_TILES.push(
       return {C,W:Wd,H:Ht,ox:W+pad,oy:L+pad};
     }
     const OUTER=petal(45.5,12.6,'#8b0f55','#ff3f87','#ffc2d9');
-    const MIDDLE=petal(33,10.6,'#b3185c','#ff6a90','#ffd6c4');
-    const INNER=petal(21,7.6,'#d63d5e','#ffa45e','#ffe59c');
     const [BG,bg]=canvasOf(px);
     let g=bg.createRadialGradient(50,50,6,50,50,76); g.addColorStop(0,'#14584f'); g.addColorStop(0.65,'#0b3531'); g.addColorStop(1,'#051a1a'); bg.fillStyle=g; bg.fillRect(0,0,100,100);
     bg.strokeStyle='rgba(180,255,230,0.09)'; bg.lineWidth=0.5; for(let i=0;i<N;i++){ const a=i*TAU/N-Math.PI/2; bg.beginPath(); bg.moveTo(50,50); bg.lineTo(50+Math.cos(a)*72,50+Math.sin(a)*72); bg.stroke(); }
@@ -380,8 +378,6 @@ window.FX_TILES.push(
     return (c,t)=>{
       const u=t%P;
       const pO=E.inOut(seg(u,0.5,1.75))*(1-E.inOut(seg(u,3.9,4.75)));
-      const pM=E.inOut(seg(u,0.95,2.0))*(1-E.inOut(seg(u,3.75,4.45)));
-      const pI=E.inOut(seg(u,1.35,2.25))*(1-E.inOut(seg(u,3.6,4.2)));
       const rot=(TAU/24)*E.inOut(seg(u,1.9,3.7))*(1-E.inOut(seg(u,3.7,4.75)));
       c.setTransform(1,0,0,1,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over';
       c.drawImage(BG,0,0);
@@ -394,8 +390,6 @@ window.FX_TILES.push(
         if(m===N&&p>0.9){ c.save(); c.setTransform(sc,0,0,sc,0,0); c.translate(CX,CY); c.rotate(off+rot); c.scale(s,s); c.beginPath(); c.rect(-spr.ox,-spr.oy,spr.ox,spr.H); c.clip(); c.drawImage(spr.C,-spr.ox,-spr.oy,spr.W,spr.H); c.restore(); }
       };
       ring(OUTER,0,pO,1);
-      ring(MIDDLE,TAU/24,pM,pM);
-      ring(INNER,0,pI,pI);
       const ds=lerp(0.62,1,E.inOut(seg(u,0.5,1.75))*(1-E.inOut(seg(u,3.9,4.75))));
       c.setTransform(sc,0,0,sc,0,0); c.translate(CX,CY); c.rotate(rot); c.scale(ds,ds); c.translate(-50,-50); c.drawImage(D,0,0,100,100);
       finish(c);

@@ -21,6 +21,7 @@ window.FM = window.FM || {};
     text: '<path d="M6.4 18.6L12 5.2l5.6 13.4"/><path d="M8.5 14.2h7"/>',
     music: '<path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/>',
     overlay: '<rect x="3" y="3" width="13" height="13" rx="2"/><rect x="8" y="8" width="13" height="13" rx="2" fill="currentColor" fill-opacity=".22"/>',
+    cutend: '<path d="M3.5 12H14M11 9l3 3-3 3"/><path d="M18 5v14"/>',
     lift: '<path d="M12 15V5M8 9l4-4 4 4M5 19.5h14"/>',
     drop: '<path d="M12 5v10M8 11l4 4 4-4M5 19.5h14"/>',
     duplicate: '<rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><path d="M7 13V9a2 2 0 0 1 2-2h4"/>',
@@ -318,7 +319,19 @@ window.FM = window.FM || {};
   }
 
   /* ═══ THE TRAY (§8.5): the selected item's tools, the tools that define its kind first, 🗑 pinned at the right end. ═══ */
+  /* #1243 S37: an item that runs past the end of the video (and starts before it) offers Cut at the end, before More and 🗑. Added here, once, for
+     every kind of item's tray. An end card (starts at or after the end) is meant to be there, and a clip of the row never runs past it. */
   function trayFor(R, id) {
+    const list = trayItems(R, id), l = FM.layerById(FM.scene, id);
+    if (!l || !list.length || l.type === 'camera' || R.isMain(id) || !(R.trackEnd > 0)) return list;
+    const s = +l.start || 0, e = s + (+l.duration || 0);
+    if (!(e > R.trackEnd + FM.spine.PAST && R.trackEnd - s >= FM.spine.minLen(+FM.scene.project.fps || 30))) return list;   // an item can be no shorter than the shortest length
+    const w = W(), cut = { id: 'cutEnd', label: w.cutEnd || 'Cut at the end', icon: 'cutend', title: w.cutEndTitle, run: () => FM.spine.cmd.cutAtEnd(id) };
+    const at = list.findIndex(t => t.id === 'more' || t.id === 'delete');
+    list.splice(at < 0 ? list.length : at, 0, cut);
+    return list;
+  }
+  function trayItems(R, id) {
     const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), u = R.units[id];
     if (!l) return [];
     /* review #4: an item goes through S.cmd.deleteItems, which is Full's own delete unless it would empty an inserted element's group */
@@ -584,13 +597,14 @@ window.FM = window.FM || {};
   }
 
   /* 2.7 (SU1 #20): "1080p · Export" (and 720p when the frame is bigger than that; a smaller frame offers its own size, never an upscale):
-     an MP4 at the project's frame rate and Full's default High quality, of the clips only — 0 to the end of the last clip, so the black a
-     song or a title runs on into is never in the file. app.js runs it through the dialog's own gates and exporter (FM.exportSimple), and
+     an MP4 at the project's frame rate and Full's default High quality, of the clips (and an end card after them: #1243 S37 review, it is
+     content and his timeline says it is kept) — 0 to the end of the last clip, so the black a song or a title runs on into is never in the file. app.js runs it through the dialog's own gates and exporter (FM.exportSimple), and
      never saves it as the dialog's defaults. */
   function exportMenu(anchor) {
     const P = FM.scene.project || {}, w = W(), short = Math.min(+P.width || 0, +P.height || 0);
     if (!(short > 0) || !FM.exportSimple) return;
-    const R = FM.spine.read(FM.scene), end = R.trackEnd > 0 ? R.trackEnd : (+P.duration || 0);
+    const R = FM.spine.read(FM.scene), cards = R.trackEnd > 0 ? FM.spine.overrun(R).ends.map(l => (+l.start || 0) + (+l.duration || 0)) : [];
+    const end = R.trackEnd > 0 ? Math.max.apply(null, [R.trackEnd].concat(cards)) : (+P.duration || 0);
     const top = Math.min(1080, short), rungs = top > 720 ? [top, 720] : [top];
     openMenu(anchor, rungs.map(p => ({ label: w.exportAt ? w.exportAt(p) : p + 'p · Export',
       run: () => FM.exportSimple({ scale: p / short, fps: +P.fps || 30, quality: 0.18, from: 0, to: end }) })));

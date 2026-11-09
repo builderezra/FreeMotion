@@ -1,6 +1,7 @@
 """Local server for the effect-pictures site: static files, plus POST /shot?name=<n> which saves the PNG body to shots/<n>.png.
 Run from the site folder: python3 serve.py 8791. Binds 127.0.0.1 only."""
-import http.server, os, re, sys, urllib.parse
+import http.server, os, posixpath, re, sys, urllib.parse
+REPO = '/home/ezra/FreeMotion'  # served READ-ONLY at /app/ so the real renderer can load (GET only; POST only ever writes under shots/)
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SHOTS = os.path.join(ROOT, 'shots')
 os.makedirs(SHOTS, exist_ok=True)
@@ -13,6 +14,14 @@ class H(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
     def log_message(self, *a):
         pass
+    def translate_path(self, path):
+        p = urllib.parse.urlparse(path).path
+        if p.startswith('/app/'):
+            rel = posixpath.normpath(urllib.parse.unquote(p[5:])).lstrip('/')
+            if rel.startswith('..'):
+                return '/nonexistent'
+            return os.path.join(REPO, rel)
+        return super().translate_path(path)
     def do_POST(self):
         u = urllib.parse.urlparse(self.path)
         if u.path != '/shot':

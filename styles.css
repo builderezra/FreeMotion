@@ -12633,8 +12633,12 @@ body.ed-simple #btn-sm-split.sm-hinted { box-shadow: inset 0 0 0 2px #fff, 0 0 0
   box-shadow: 0 16px 40px rgba(0,0,0,.5); display: flex; flex-direction: column; }
 .sm-menu-i { min-height: 44px; text-align: left; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: 600 14px/1 system-ui, sans-serif; cursor: pointer; }
 .sm-menu-i:hover, .sm-menu-i:focus-visible { background: rgba(255,255,255,.07); }
-.sm-band { position: absolute; top: 2px; height: 52px; border-radius: 6px; border: 1px dashed #5a667a; color: #aeb8c8; cursor: pointer; overflow: hidden; white-space: nowrap;
-  background: repeating-linear-gradient(135deg, #0b0f16 0 6px, #141a24 6px 12px); font: 600 10px/1 system-ui, sans-serif; display: flex; align-items: center; padding: 0 8px; }
+/* #1243 S37: the end of the video is a line across every row (only when something runs past it), and the part of an item past it is hatched in
+   that item's own row. It replaces the black band, whose label was cut to "Black C" and whose tap could do nothing. */
+#sm-timeline .sm-endline { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #aeb8c8; opacity: .75; z-index: 4; pointer-events: none; }
+#sm-timeline .sm-more.sm-more-past { cursor: pointer; background: #2c3648; }
+#sm-timeline .sm-more.sm-more-past::before { content: ''; position: absolute; inset: -10px -6px; }   /* the chip is 24 px tall: the finger's target is 44 */
+#sm-timeline .sm-item .sm-past { position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; background: repeating-linear-gradient(135deg, rgba(8,11,16,.62) 0 5px, rgba(8,11,16,.2) 5px 10px); }
 .sm-band-hint { padding: 16px; color: var(--text-dim); font: 600 13px/1.4 system-ui, sans-serif; }
 /* §3.12 rule 5 at EVERY width (980 review finding 23): from 2.2 the PC line also takes the tray's place in the band, so 🗑's
    56 px stay free of buttons there too — a re-click where 🗑 was pressed Do it anyway and deleted a locked clip */

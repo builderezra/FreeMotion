@@ -139118,20 +139118,26 @@
     });
   });
 
-  test('simple P2.2 · the black band names what runs past the last clip: End with the video fits a title, a song is named and left (D17 B)', { item: '980', budgetMs: 60000 }, async function () {
+  test('simple P2.2 · a second tap on what runs past the last clip names it: End with the video fits a title, a song is named and left (D17 B; the end line and hatching replace the black band, #1243 S37)', { item: '1243', budgetMs: 60000 }, async function () {
     await smP2((W, H) => [smT('Whole', 0, 9, W, H), smSong('Song', 0, 12, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
-      const band = document.querySelector('#sm-main .sm-band');
-      if (!band) throw new Error('no black band while a title and a song run past the last clip');
-      band.click(); await v.sleep(30);
-      if (!/2 things run past the end/.test(v.say())) throw new Error('the band’s line is wrong: “' + v.say() + '”');
+      if (document.querySelector('#sm-main .sm-band')) throw new Error('the black band is still drawn in the clip row');
+      /* the song is named first, while a picture also runs past: its line must not carry a button that would trim the picture */
+      smNode(v.L('Song').id).click(); await v.sleep(80);
+      smNode(v.L('Song').id).click(); await v.sleep(500);
+      if (!/the song runs 6\.0 s past the last clip · it’s cut there when you export/.test(v.say()) || document.querySelector('#sm-say .sm-say-b')) throw new Error('with a title also running past, the song’s line is wrong or carries a button for something else: “' + v.say() + '”');
+      if (!document.getElementById('sm-say').classList.contains('sm-say-wrap')) throw new Error('the line about the song is held to one row, so on a phone its end is cut off');
+      smNode(v.L('Whole').id).click(); await v.sleep(80);
+      smNode(v.L('Whole').id).click(); await v.sleep(60);
+      if (!/runs 3\.0 s past the end · it’s cut there when you export/.test(v.say())) throw new Error('a second tap on the title says “' + v.say() + '”, want how far it runs past the end and that the export stops there');
       await v.sleep(450);
       const b = Array.from(document.querySelectorAll('#sm-say .sm-say-b')).find(x => /End with the video/.test(x.textContent));
       if (!b) throw new Error('no End with the video while a picture runs past');
       b.click(); await v.idle();
       if (Math.abs(v.L('Whole').start + v.L('Whole').duration - 6) > 1e-9) throw new Error('the title was not fitted to the end of the video: ' + (v.L('Whole').start + v.L('Whole').duration));
-      if (v.L('Song').duration !== 12) throw new Error('the song was trimmed — D17 B: music runs on in black');
-      document.querySelector('#sm-main .sm-band').click(); await v.sleep(30);
-      if (!/the song runs 6.0 s past the last clip/.test(v.say()) || document.querySelector('#sm-say .sm-say-b')) throw new Error('the song’s line is wrong or offers to trim it: “' + v.say() + '”');
+      if (v.L('Song').duration !== 12) throw new Error('the song was trimmed — D17 B: music runs on');
+      smNode(v.L('Song').id).click(); await v.sleep(80);
+      smNode(v.L('Song').id).click(); await v.sleep(60);
+      if (!/the song runs 6\.0 s past the last clip · it’s cut there when you export/.test(v.say()) || document.querySelector('#sm-say .sm-say-b')) throw new Error('the song’s line is wrong or offers to end it: “' + v.say() + '”');
     });
   });
 
@@ -140613,17 +140619,6 @@
         if (bar.parentNode !== home || bar.previousElementSibling !== sc) throw new Error('#sm-bar did not go back to its home after #sm-scroll in #sm-timeline (parent #' + (bar.parentNode && bar.parentNode.id) + ')');
       }, 1280);
     } finally { try { if (FM.editor.mode() !== mode0) FM.editor.set(mode0, { quiet: true }); } catch (e) {} }
-  });
-
-  test('980 2.2 merge: a finger can hit the black band — at least 44 px (the PM\u2019s merge-day note; its Length box went with Length, #1243)', { item: '980', budgetMs: 60000 }, async function () {
-    /* The PM's merge-day note (7 Oct): Length's box was 36 px tall and the black band could be 40 px wide. The band is measured
-       at its narrowest — a title only 0.1 s past the last clip. (Length's box left with Length, #1243 S25.) */
-    await smP2((W, H) => [smT('Tail', 0, 3.1, W, H), smV('A', 0, 3, W, H)], async function (v) {
-      const band = document.querySelector('#sm-main .sm-band');
-      if (!band) throw new Error('CONTROL: no black band with a title 0.1 s past the last clip — nothing to measure');
-      const bw = band.getBoundingClientRect().width;
-      if (bw < 44) throw new Error('the black band is ' + bw.toFixed(1) + ' px wide at its narrowest — under the 44 px a finger needs');
-    });
   });
 
   /* #921 clause 19 (11 Oct): "Friends thing worked" between his own phone and computer, so the Labs gate comes off "so it
@@ -148599,10 +148594,9 @@
         if (n.title !== 'the song' || n.getAttribute('aria-label') !== 'the song') fails.push('its title / aria-label say “' + n.title + '” / “' + n.getAttribute('aria-label') + '”');
         const nx = node(fx.id);
         if (nx && label(nx) !== 'the sound') fails.push('CONTROL: the sound effect’s label says “' + label(nx) + '”');
-        const band = document.querySelector('#sm-main .sm-band');
-        if (!band) throw new Error('CONTROL: no black band while the song runs 2 s past the last clip · ' + fails.join(' · '));
-        band.click(); await v.sleep(60);
-        if (!/^the song runs 2\.0 s past the last clip/.test(v.say())) fails.push('the black band says “' + v.say() + '”');
+        n.click(); await v.sleep(80);
+        node(song.id).click(); await v.sleep(60);
+        if (!/^the song runs 2\.0 s past the last clip/.test(v.say())) fails.push('a second tap on the song says “' + v.say() + '”');
         if (fails.length) throw new Error(fails.join(' · '));
       });
     }, 380);
@@ -201263,9 +201257,9 @@
         if (!got) { fails.push('the text ' + c[0] + ' has no bar on the timeline'); return; }
         ['face', 'title', 'aria'].forEach(k => { if (got[k] !== c[1]) fails.push(c[0] + '’s ' + k + ' reads “' + got[k] + '”, want “' + c[1] + '”'); });
       });
-      const band = document.querySelector('#sm-main .sm-band');
-      if (!band) fails.push('CONTROL: no black band while a title runs past the last clip');
-      else { band.click(); await v.sleep(40); if (!/“Past”/.test(v.say())) fails.push('CONTROL: the band’s sentence no longer names the text in quotes: “' + v.say() + '”'); }
+      smNode(v.L('Past').id).click(); await v.sleep(80);
+      smNode(v.L('Past').id).click(); await v.sleep(60);
+      if (!/“Past”/.test(v.say())) fails.push('CONTROL: the sentence that names the text no longer has it in quotes: “' + v.say() + '”');
       if (fails.length) throw new Error(fails.join(' · '));
     });
   });
@@ -201801,5 +201795,159 @@
     const f13 = at('fp_13'), f14 = at('fp_14');
     if (!f13 || 'sm' in f13 || !f14 || j(f14.sm) !== '{"stay":true,"whole":true}') fails.push('the collab fixture does not pin these rules: fp_13 sanitises to ' + j(f13 && f13.sm) + ', fp_14 to ' + j(f14 && f14.sm) + ' (want no sm, and stay with whole)');
     if (fails.length) throw new Error(fails.join(' · '));
+  });
+  /* #1243 S37 (his words, 8 Nov: "at the end of my simple editor timeline, there's like this random thing that says like black and then like the
+     rest of it's cut off… black C… I can't tap on it"; "the rest u decide", 9 Nov: option A). Proves at 380 and 1280: with a song running 0.8 s past
+     the last clip there is no black band and no label starting Black; a line stands at the end of the clips; the song's part past it is hatched
+     from that line; the song's tray has Cut at the end, which in ONE undo step ends it with the video and fades it out for a second, after which
+     the line is gone (nothing runs past) and Undo brings it all back. CONTROL: with nothing past the end there is no line and no Cut at the end. */
+  test('simple · 1243 S37 what runs past the end shows as a line at the end of the clips and hatching on the item, never a cut-off black band, and Cut at the end ends it there in one undo step, a song with a one second fade', { item: '1243', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    for (const width of [380, 1280]) {
+      await (width <= 700 ? atPhoneWidth : atWideWidth)(async function () {
+        await smDragEnv((W, H) => [smSong('Song', 0, 5.8, W, H), smV('A', 0, 5, W, H)], async function (v) {
+          const at = width + ': ', fails = [], song = () => v.L('Song');
+          const line = () => document.querySelector('#sm-inner .sm-endline');
+          if (document.querySelector('.sm-band')) fails.push(at + 'the black band is still drawn');
+          if (Array.from(document.querySelectorAll('#sm-inner *')).some(e => !e.children.length && /^Black/.test(e.textContent))) fails.push(at + 'a label starting Black is still in the timeline');
+          if (!line()) throw new Error(at + 'no line at the end of the clips with a song running past them · ' + fails.join(' · '));
+          const clipR = smNode(v.L('A').id).getBoundingClientRect(), lx = line().getBoundingClientRect();
+          if (Math.abs(lx.left + lx.width / 2 - clipR.right) > 2) fails.push(at + 'the end line is at x ' + (lx.left + lx.width / 2).toFixed(1) + ', the clips end at ' + clipR.right.toFixed(1));
+          const sn = smNode(song().id), h = sn && sn.querySelector('.sm-past');
+          if (!h) throw new Error(at + 'the song’s part past the end is not hatched · ' + fails.join(' · '));
+          if (Math.abs(h.getBoundingClientRect().left - (lx.left + lx.width / 2)) > 2) fails.push(at + 'the hatching starts at x ' + h.getBoundingClientRect().left.toFixed(1) + ', not at the end line');
+          /* the hatching takes no touches of its own: a finger on it lands on the item */
+          FM.time = 5.4; FM.timeline.updatePlayhead(); await v.sleep(80);
+          const hb = h.getBoundingClientRect(), under = document.elementFromPoint(hb.left + hb.width / 2, hb.top + hb.height / 2);
+          if (!under || under.closest('.sm-item') !== sn) fails.push(at + 'a finger on the hatching lands on ' + (under ? under.className || under.tagName : 'nothing') + ', not on the song');
+          FM.time = 0; FM.timeline.updatePlayhead();
+          sn.click(); await v.sleep(120);
+          if (document.getElementById('sm-say').classList.contains('sm-saying')) fails.push(at + 'the first tap raised a line, which hides the tray and Cut at the end for seconds');
+          const cut = smTool('cutEnd');
+          if (!cut) throw new Error(at + 'the song’s tray has no Cut at the end: ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ' · ' + fails.join(' · '));
+          const n0 = v.steps(), doc0 = v.doc();
+          cut.click(); await v.idle(); await v.sleep(120);
+          if (Math.abs(song().duration - 5) > 1e-6) fails.push(at + 'Cut at the end left the song ' + song().duration + ' s long, want 5');
+          if (Math.abs((+song().fadeOut || 0) - 1) > 1e-6) fails.push(at + 'the cut song fades out over ' + song().fadeOut + ' s, want 1');
+          if (v.steps() !== n0 + 1) fails.push(at + 'Cut at the end took ' + (v.steps() - n0) + ' undo steps');
+          if (line()) fails.push(at + 'with nothing past the end the end line is still there');
+          if (smTool('cutEnd')) fails.push(at + 'with nothing past the end the tray still offers Cut at the end');
+          FM.history.undo(); await v.sleep(120);
+          if (v.doc() !== doc0) fails.push(at + 'Undo did not put the song back');
+          if (fails.length) throw new Error(fails.join(' · '));
+        });
+      }, width);
+    }
+  });
+
+  /* #1243 S37: "nothing makes black without a name" — a group Simple draws as one item (a block: a mask group here), whose own window runs past
+     the last clip while its member does not, is named by S.overrun, hatched, and offers Cut at the end, which ends it there in one undo step. An
+     end card (starts at the end of the clips) is hatched but has no Cut at the end: it is meant to be there. */
+  test('simple · 1243 S37 a group item whose window runs past the end is named and hatched and can be cut there, and an end card cannot', { item: '1243', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => {
+        const g = FM.makeLayer('group', { name: 'Blk', x: 0, y: 0 }); g.start = 1; g.duration = 6; g.maskGroup = true;
+        const m = smT('Member', 1, 5, W, H); m.parent = g.id;
+        const far = smT('Far', 4, 2, W, H); far.parent = g.id;
+        return [smT('Card', 3, 2, W, H, { sm: { tail: true } }), far, m, g, smV('A', 0, 3, W, H)];
+      }, async function (v) {
+        const fails = [], R = FM.spine.read(FM.scene), G = v.L('Blk');
+        if (!R.units[G.id]) throw new Error('setup: Simple does not draw the group as one item: ' + JSON.stringify(Object.keys(R.units)));
+        const o = FM.spine.overrun(R);
+        if (o.pictures.indexOf(G) < 0) fails.push('S.overrun does not name the group whose window runs past the end');
+        const gn = smNode(G.id);
+        if (!gn) throw new Error('setup: the group has no item on the timeline · ' + fails.join(' · '));
+        if (!gn.querySelector('.sm-past')) fails.push('the group’s part past the end is not hatched');
+        gn.click(); await v.sleep(150);
+        const cut = smTool('cutEnd');
+        if (!cut) throw new Error('the group’s tray has no Cut at the end: ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ' · ' + fails.join(' · '));
+        const n0 = v.steps();
+        cut.click(); await v.idle(); await v.sleep(120);
+        if (Math.abs(v.L('Blk').start + v.L('Blk').duration - 3) > 1e-6) fails.push('Cut at the end left the group ending at ' + (v.L('Blk').start + v.L('Blk').duration));
+        if (Math.abs(v.L('Member').start + v.L('Member').duration - 3) > 1e-6) fails.push('the member that crossed the end was left ending at ' + (v.L('Member').start + v.L('Member').duration));
+        if (FM.scene.layers.some(l => l.name === 'Far')) fails.push('a member wholly past the end survived the cut, holding the video open with nothing to tap');
+        if (v.steps() !== n0 + 1) fails.push('Cut at the end took ' + (v.steps() - n0) + ' undo steps');
+        /* an end card: hatched, but nothing to cut */
+        const cn = smNode(v.L('Card').id);
+        if (!cn) throw new Error('setup: the end card has no item on the timeline · ' + fails.join(' · '));
+        cn.click(); await v.sleep(150);
+        if (smTool('cutEnd')) fails.push('an end card offers Cut at the end, which would cut it to nothing');
+        smNode(v.L('Card').id).click(); await v.sleep(80);
+        if (!/kept as an end card/.test(v.say())) fails.push('a second tap on the end card says “' + v.say() + '”');
+        const R3 = FM.spine.read(FM.scene);
+        if (FM.spine.overrun(R3).ends.indexOf(v.L('Card')) < 0) fails.push('setup: the card is not an end card to S.overrun');
+        /* the line says it is kept, so it has to be in the file: Simple's export runs to the end of the card */
+        const ex0 = FM.exportSimple; let asked = null;
+        FM.exportSimple = o => { asked = o; };
+        try {
+          document.getElementById('m-export').click(); await v.sleep(60);
+          const row = document.querySelector('.sm-menu[data-kind="export"] .sm-menu-i');
+          if (!row) throw new Error('setup: Export opened no list in Simple · ' + fails.join(' · '));
+          row.click(); await v.sleep(40);
+        } finally { FM.exportSimple = ex0; }
+        if (!asked || Math.abs(asked.to - 5) > 1e-6) fails.push('Simple’s export runs to ' + (asked && asked.to) + ', want 5: the end card it calls kept is left out of the file');
+        if (fails.length) throw new Error(fails.join(' · '));
+      });
+    }, 380);
+  });
+
+  /* #1243 S37 review, HIS BUG ITSELF: project.duration is rounded to the millisecond and the last clip's end is not. A 7.466667 s clip leaves 7.467 - 7.466667 = 0.00033 s
+     of nothing, and the old band drew for that: 44 px wide, saying Black 0.0s, cut off to Black C…, and with nothing to explain it could not be tapped.
+     FAILS with the 1e-9 test the end line had: the line is drawn. CONTROL: a real overrun (0.1 s) does draw it, so the fixture can tell. */
+  test('simple · 1243 S37 a last clip that ends between two milliseconds draws no end line, and a real overrun does (the Black C mark he could not tap)', { item: '1243', budgetMs: 40000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smV('A', 0, 7.466667, W, H)], async function (v) {
+      const line = () => document.querySelector('#sm-inner .sm-endline');
+      FM.timeline.rebuild(); await v.sleep(60);   // a rebuild runs the app's own fit, which is the rounding
+      if (Math.abs(FM.scene.project.duration - 7.467) > 1e-6) throw new Error('setup: the project is ' + FM.scene.project.duration + ' s long, so the rounding this test is about did not happen');
+      if (line()) throw new Error('nothing runs past the clip, yet the end line is drawn for the ' + (FM.scene.project.duration - v.L('A').duration).toFixed(6) + ' s the rounding leaves');
+    });
+    await smP2((W, H) => [smT('Over', 0, 7.57, W, H), smV('A', 0, 7.466667, W, H)], async function (v) {
+      FM.timeline.rebuild(); await v.sleep(60);
+      if (!document.querySelector('#sm-inner .sm-endline')) throw new Error('CONTROL: a title running 0.1 s past the clip draws no end line, so this test cannot tell (the project is ' + FM.scene.project.duration + ' s)');
+    });
+  });
+
+  /* #1243 S37 review: what a cut must leave behind. A cut does not re-time the keys of the part it keeps; a plain group around the item shrinks with it (it would hold the video
+     open with nothing named); a sound the row does not draw has a way in through the count; too little left to cut, or a camera, offers nothing; a split song's tail span goes. */
+  test('simple · 1243 S37 a cut keeps its keys and shrinks a plain group around it, an undrawn sound is reachable from the count, and an item too near the end or a camera has no Cut at the end', { item: '1243', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => {
+      const g = FM.makeLayer('group', { name: 'Wrap', x: 0, y: 0 }); g.start = 0; g.duration = 8;
+      const t = smT('T', 0, 8, W, H); t.parent = g.id; t.transform.opacity = smKf([[4, 1], [7, 0]]);
+      return [smT('Near', 4.95, 3, W, H), t, g, smV('A', 0, 5, W, H)];
+    }, async function (v) {
+      const fails = [], R = FM.spine.read(FM.scene);
+      if (FM.spine.overrun(R).pictures.indexOf(v.L('Wrap')) >= 0) fails.push('CONTROL: S.overrun names a plain group, which is only its members’ business');
+      smNode(v.L('Near').id).click(); await v.sleep(150);
+      if (smTool('cutEnd')) fails.push('an item starting 0.05 s before the end offers Cut at the end, and cannot be cut that short');
+      smNode(v.L('T').id).click(); await v.sleep(150);
+      const cut = smTool('cutEnd');
+      if (!cut) throw new Error('the title has no Cut at the end · ' + fails.join(' · '));
+      cut.click(); await v.idle(); await v.sleep(120);
+      if (Math.abs(v.L('T').duration - 5) > 1e-6) fails.push('the title is ' + v.L('T').duration + ' s long, want 5');
+      if (Math.abs(v.L('T').transform.opacity.kf[0].t - 4) > 1e-6) fails.push('the key at 4 s moved to ' + v.L('T').transform.opacity.kf[0].t + ': a cut must not squeeze what it keeps');
+      if (v.L('Wrap').start + v.L('Wrap').duration > 5 + 1e-6) fails.push('the plain group around the title still ends at ' + (v.L('Wrap').start + v.L('Wrap').duration) + ', holding the video open past the line');
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+    await smP2((W, H) => {
+      const s = smSong('Long', 0, 8, W, H); s.fadeOut = 3; s.fadeOutTail = 2;
+      return [smSong('Fx', 3, 1, W, H), s, smV('A', 0, 5, W, H)];
+    }, async function (v) {
+      smNode(v.L('Long').id).click(); await v.sleep(150);
+      const cut = smTool('cutEnd');
+      if (!cut) throw new Error('the song has no Cut at the end');
+      cut.click(); await v.idle(); await v.sleep(120);
+      if (v.L('Long').fadeOutTail !== undefined) throw new Error('a split song keeps its tail span after the cut, so the fade is measured past where it stops');
+    });
+    await smP2((W, H) => [smSong('Long', 0, 5, W, H), smSong('Fx', 4.5, 2, W, H), smV('A', 0, 5, W, H)], async function (v) {
+      const R = FM.spine.read(FM.scene), lanes = R.lanes.audio || [];
+      if (lanes.length < 2) throw new Error('setup: the two sounds share a lane: ' + JSON.stringify(lanes));
+      const chip = document.querySelector('#sm-inner .sm-more.sm-more-past');
+      if (!chip) throw new Error('a sound the row does not draw runs past the end, and its count cannot be tapped: nothing names it');
+      chip.click(); await v.sleep(80);
+      if (!/runs 1\.5 s past the last clip/.test(v.say())) throw new Error('the count says “' + v.say() + '”, want how far the undrawn sound runs past');
+    });
   });
 })();

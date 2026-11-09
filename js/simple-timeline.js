@@ -244,8 +244,16 @@ window.FM = window.FM || {};
     n.setAttribute('aria-label', name); n.title = name;
     n.appendChild(el('span', 'sm-name', name));
     badge(n, u);
-    n.addEventListener('click', e => { e.stopPropagation(); FM.selectLayer(layer.id); });
-    n.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); FM.selectLayer(layer.id); } });
+    /* #1243 S37: the part of an item that runs past the end of the video is hatched, in the item's own row (the black band it replaces named
+       nothing and could not be tapped). The first tap selects it, so its tray and Cut at the end are there at once (a line takes the tray's
+       row for 4 to 10 s); a tap on it when it is already selected says how far it runs (explainPast, once the tap has settled). */
+    const end0 = (+layer.start || 0) + (+layer.duration || 0), late = (R && R.trackEnd > 0 && !(R.isMain && R.isMain(layer.id)) && end0 > R.trackEnd + FM.spine.PAST);
+    if (late) { const h = el('span', 'sm-past'); h.style.left = Math.max(0, (R.trackEnd - (+layer.start || 0)) * pps()) + 'px'; n.appendChild(h); }
+    /* 'again': it was the one selected item before this tap. A tap that collapses a multi-selection, or releases a hold the gate refused, is not a second tap. */
+    const isAgain = () => FM.scene.selectedId === layer.id && (!FM.selectionIds || FM.selectionIds().length === 1);
+    const sayPast = () => setTimeout(() => { if (FM.simpleTimeline.explainPast) FM.simpleTimeline.explainPast(layer.id); }, 0);
+    n.addEventListener('click', e => { e.stopPropagation(); const again = isAgain(); FM.selectLayer(layer.id); if (late && again && !holdRefused) sayPast(); });
+    n.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); const again = isAgain(); FM.selectLayer(layer.id); if (late && again) sayPast(); } });
     return n;
   }
   function buildRuler(X, p, dur, width) {
@@ -266,7 +274,7 @@ window.FM = window.FM || {};
      is read when the gesture arms and again on release. The edge auto-scroll below is a COPY of Full's clipEdgeScroll / trimEdgeScroll
      with the same four brakes (§0.4 I9: Full's two loops are not touched). */
   const HOLD_MS = 350, SLOP = 8, MOUSE_SLOP = 4, LIFT_PX = 24, LIFT_MS = 150, EDGE_MAX = 22, FRAME_MS = 1000 / 60, DT_MAX_MS = 50, SCROLL_FRAMES_MAX = 1200, GRIP_HIT = 24, GRIP_CAP = 13, SNAP_PX = 7, STALE_MS = 4000;   // EDGE_MAX: px per 60 Hz frame (FRAME_MS), Full's speed
-  let G = null, swallowUntil = 0, labelEl = null, pinch = null;
+  let G = null, swallowUntil = 0, labelEl = null, pinch = null, holdRefused = false;
   const touches = new Map();
   const gateOf = (id, look) => (FM.spine && FM.spine.canArrange) ? FM.spine.canArrange(id, look ? { look: true } : null) : null;
   const hardGate = r => !!r && r !== 'locked';   // 'locked' does not stop a drag: the runner asks at the release, with its own Do it anyway
@@ -312,8 +320,9 @@ window.FM = window.FM || {};
   function onItemDown(e) {
     if (e.button > 0 || G || pinch || !R) return;
     swallowUntil = 0;   // a new press is a new gesture: the click only a drag's release makes is spent
+    holdRefused = false;
     const t = e.target && e.target.closest ? e.target.closest('.sm-item') : null;
-    if (!t || !t.dataset.id || t.closest('.sm-grip, .sm-chip, .sm-add, .sm-mute, .sm-band, .sm-more')) return;
+    if (!t || !t.dataset.id || t.closest('.sm-grip, .sm-chip, .sm-add, .sm-mute, .sm-more')) return;
     if (t.classList.contains('sm-loading')) return;
     const id = t.dataset.id, L = FM.layerById(FM.scene, id); if (!L) return;
     const e0 = R.main.find(x => !x.slot && x.id === id);
@@ -327,7 +336,7 @@ window.FM = window.FM || {};
     if (!G || G.phase !== 'wait') return;
     clearTimeout(G.timer);
     const r = gateOf(G.id), id = G.id;
-    if (hardGate(r)) { clearPreview(); teardown(); FM.spine.explain(r, id); return; }   // no preview: the finger scrubs as in Full, and the line says why
+    if (hardGate(r)) { holdRefused = true; clearPreview(); teardown(); FM.spine.explain(r, id); return; }   // no preview: the finger scrubs as in Full, and the line says why
     G.phase = 'drag'; G.touchAt = nowMs(); G.armedAt = nowMs();
     try { G.capEl.setPointerCapture(G.pid); } catch (e) {}
     G.node.classList.add('sm-held', 'sm-ghost'); document.body.classList.add('sm-dragging');
@@ -489,6 +498,11 @@ window.FM = window.FM || {};
     if (!G || e.pointerId !== G.pid) return;
     const g = G;
     if (g.phase === 'wait') { clearPreview(); teardown(); return; }   // a tap: the click selects, nothing was armed
+    /* #1243 S37 review: a selected item's tail grip sits over the end of its hatching, where a second tap lands. A press that did not move is that tap. */
+    if (g.kind === 'trim' && g.side === 'tail' && !g.main && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) <= SLOP) {
+      const L0 = FM.layerById(FM.scene, g.id);
+      if (L0 && R && (+L0.start || 0) + (+L0.duration || 0) > R.trackEnd + FM.spine.PAST) { clearPreview(); teardown(); swallowUntil = nowMs() + 250; FM.simpleTimeline.explainPast(g.id); return; }
+    }
     G.x = e.clientX; G.y = e.clientY; render();
     const id = g.id;
     swallowUntil = nowMs() + 250;
@@ -726,17 +740,15 @@ window.FM = window.FM || {};
       add.style.left = (xOf(R.trackEnd) + 8) + 'px';
       add.addEventListener('click', ev => { ev.stopPropagation(); FM.simpleTimeline.pickFiles(); });
       mainEl.appendChild(add);
-      /* THE BLACK BAND (DESIGN §5.4, his D17 B): when something runs past the last clip the video runs on in black there.
-         The band says so; a tap names what runs past, with End with the video for pictures (a song is left as it is). */
-      const P0 = scene.project, past = (P0.duration || 0) - R.trackEnd;
-      if (R.trackEnd > 0 && past > 1e-9 && FM.spine.overrun) {
-        const o = FM.spine.overrun(R), n = o.pictures.length + o.sounds.length + o.ends.length;
-        const band = el('button', 'sm-band'); band.type = 'button';
-        band.style.left = (xOf(R.trackEnd) + 52) + 'px'; band.style.width = Math.max(44, past * p - 52) + 'px';   // 44: a finger's target at its narrowest (the PM's merge-day note, 7 Oct)
-        const t = ((W().lines || {}).blackBand || (s => 'Black ' + s.toFixed(1) + 's'))(past, n);
-        band.appendChild(el('span', 'sm-band-t', t)); band.title = t; band.setAttribute('aria-label', t);
-        band.addEventListener('click', ev => { ev.stopPropagation(); FM.simpleTimeline.explainBand(); });
-        mainEl.appendChild(band);
+      /* THE END OF THE VIDEO (#1243 S37, his words 8 Nov: "at the end of my simple editor timeline, there's like this random thing that says
+         like black and then like the rest of it's cut off… black C… I can't tap on it"; his pick 9 Nov, "the rest u decide": option A, which
+         replaces his D17 B black band). When something runs past the last clip, a line stands at the end of the clips across every row,
+         and each item's own part past it is hatched in its own row (itemNode), so he can see WHAT runs on and tap it. */
+      inner.querySelectorAll(':scope > .sm-endline').forEach(x => x.remove());
+      if (R.trackEnd > 0 && (scene.project.duration || 0) - R.trackEnd > FM.spine.PAST) {
+        const line = el('div', 'sm-endline'); line.setAttribute('aria-hidden', 'true');
+        line.style.left = xOf(R.trackEnd) + 'px';
+        inner.appendChild(line);
       }
 
       // ── sound: lane 0 drawn, a count badge where more lanes exist ──
@@ -751,6 +763,14 @@ window.FM = window.FM || {};
       if (sl.length > 1) {
         const more = el('div', 'sm-more', '+' + (sl.length - 1));
         more.title = (sl.length - 1) + ' more';
+        /* #1243 S37 review: only the first sound lane is drawn, so a sound in another that runs past the end has no item to hatch or tap. The count is its way in. */
+        const hidden = R.trackEnd > 0 ? sl.slice(1).reduce((a, x) => a.concat(x), []).find(id => { const x = byId.get(id); return x && (+x.start || 0) + (+x.duration || 0) > R.trackEnd + FM.spine.PAST; }) : null;
+        if (hidden) {
+          const say = () => FM.simpleTimeline.explainPast(hidden);
+          more.classList.add('sm-more-past'); more.setAttribute('role', 'button'); more.tabIndex = 0; more.title = (sl.length - 1) + ' more: tap to hear what runs past the end';
+          more.addEventListener('click', e => { e.stopPropagation(); say(); });
+          more.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); say(); } });
+        }
         soundEl.appendChild(more);
       }
       drawGrips(byId, sel, xOf, p);   // 2.5: the selected clip's two trim grips (2.5b: and an item's: after the sound row is drawn, which an item's grips sit in)
@@ -764,16 +784,18 @@ window.FM = window.FM || {};
       this.updatePlayhead();
       if (FM.simpleTools && FM.simpleTools.sync) FM.simpleTools.sync();   // Phase 2.2: the tray follows what it shows
     },
-    /* the black band's line: what runs past, by name; End with the video when a picture does */
-    explainBand() {
-      const L = W().lines || {}, R0 = R || FM.spine.read(FM.scene), o = FM.spine.overrun(R0), P = FM.scene.project;
-      const past = l => (+l.start || 0) + (+l.duration || 0) - R0.trackEnd;
-      const all = o.pictures.concat(o.ends, o.sounds);
-      if (!all.length) return;
-      let text;
-      if (all.length === 1) { const l = all[0]; text = (o.sounds.length ? L.songRuns : L.runsPast)(FM.spine.itemWord(l, R0), past(l)); if (o.ends.length) text += ' · ' + L.keptEnd; }
-      else text = L.morePast(all.length);
-      sayLine(text, { buttons: o.pictures.length ? [{ label: L.endWith || 'End with the video', fn: () => FM.spine.cmd.endWithVideo() }] : [] });
+    /* #1243 S37: a tap on an item that runs past the end names it and how far (export stops at the last clip, an end card is kept); End with
+       the video when that item is a picture. Its tray has Cut at the end too (js/simple-tools.js). */
+    explainPast(id) {
+      const L = W().lines || {}, R0 = R || FM.spine.read(FM.scene), l = FM.layerById(FM.scene, id);
+      if (!l) return;
+      const late = (+l.start || 0) + (+l.duration || 0) - R0.trackEnd;
+      if (!(late > FM.spine.PAST)) return;
+      const o = FM.spine.overrun(R0), sound = o.sounds.indexOf(l) >= 0, card = o.ends.indexOf(l) >= 0;
+      let text = (sound ? L.songRuns : L.runsPast)(FM.spine.itemWord(l, R0), late);
+      text += ' · ' + (card ? L.keptEnd : L.cutOnExport);
+      /* wrap: on a phone the sentence is longer than one row, and the part cut off would be the part about the export. The button acts on the item the sentence names, or it is not there. */
+      sayLine(text, { wrap: true, buttons: o.pictures.indexOf(l) >= 0 ? [{ label: L.endWith || 'End with the video', fn: () => FM.spine.cmd.cutAtEnd(id) }] : [] });
     },
     updatePlayhead() {
       if (!scroller) return;

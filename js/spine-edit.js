@@ -305,12 +305,12 @@ window.FM = window.FM || {};
   /* Transparent groups follow their members (§2.5): start = min member start, duration = max end − start, exact (Full's
      refitGroupsFor rounds to the millisecond and only walks up from one layer). An emptied group is removed with the
      delete that emptied it; one with no members never holds the video past the new end. */
-  function refitTransparentGroups(R) {
+  function refitTransparentGroups(R, only) {   // only: a Set of group ids (#1243 S37 review); without it, every transparent group
     const L = FM.scene.layers, byParent = new Map();
     L.forEach(l => { if (l.parent) { if (!byParent.has(l.parent)) byParent.set(l.parent, []); byParent.get(l.parent).push(l); } });
     const depth = g => { let n = 0, p = g.parent, m = byIdMap(); while (p && n < 64) { n++; const q = m.get(p); p = q ? q.parent : null; } return n; };
     const emptied = new Set();   // Phase 3 · Clips › Extras: an sm.unit wrapper whose last member this step removed goes with it (§2.5)
-    L.filter(g => g.type === 'group' && !R.units[g.id]).sort((a, b) => depth(b) - depth(a)).forEach(g => {
+    L.filter(g => g.type === 'group' && !R.units[g.id] && (!only || only.has(g.id))).sort((a, b) => depth(b) - depth(a)).forEach(g => {
       const kids = byParent.get(g.id) || [];
       if (!kids.length && g.sm && g.sm.unit === true) { emptied.add(g.id); return; }
       if (!kids.length) {
@@ -1468,6 +1468,7 @@ window.FM = window.FM || {};
         if (!plan.keepsTransitions) { const dropped = S.dropStaleTransitions(trPre); if (dropped) plan.counts.trDropped = dropped; }
         const R2 = S.classify(FM.scene);
         if (gated) { notes = S.fitTails(R2, plan, { anyway: !!opts.anyway }); pinTailsAfter(R2); refitTransparentGroups(R2); }
+        else if (plan.refitGroups && plan.refitGroups.size) refitTransparentGroups(R2, plan.refitGroups);   // #1243 S37 review: a cut that ended a group's member
         S.fitProjectLayers(R2, plan, whole0).notes.forEach(n => notes.push(n));   // #1243 S10 (1243-R decision 10): after EVERY step, gated or not, inside it — one undo step
         markCuts(plan.touched);
         if (relock.size) relockAfter(relock, ids0, plan);
@@ -2009,29 +2010,76 @@ window.FM = window.FM || {};
     FM.scene.layers.forEach(l => {
       if (l.type === 'camera') return;
       const s = +l.start || 0, e = s + (+l.duration || 0);
-      if (e <= R.trackEnd + 1e-9) return;
+      if (e <= R.trackEnd + S.PAST) return;
       const u = R.units[l.id] || {};
       if (u.kind === 'audio' || l.audioOnly === true || (l.sm && l.sm.snd === true)) out.sounds.push(l);
       else if (s >= R.trackEnd - 1e-9) out.ends.push(l);
-      else if (l.type !== 'group') out.pictures.push(l);
+      /* a group Simple draws as one item (a block: a mask or an animated group) holds the video past the end by its own window even when its members
+         do not: named here, so nothing makes black without a name (#1243 S37); a group that is only a wrapper is its members' business */
+      else if (l.type !== 'group' || R.units[l.id]) out.pictures.push(l);
     });
     return out;
   };
+  /* what has to be cut so an item ends at the end of the video: the item and, for a group, every member under it that passes it */
+  function cutListAt(l, end) {
+    const out = [];
+    const walk = x => {
+      const s = +x.start || 0, e = s + (+x.duration || 0);
+      if (e > end + 1e-9 && s < end - 1e-9) out.push(x);
+      if (x.type === 'group') FM.scene.layers.forEach(k => { if (k.parent === x.id) walk(k); });
+    };
+    walk(l);
+    return out;
+  }
+  /* keepKeys (#1243 S37 review): a cut stays a cut. The keys of the part that is kept stay where they are, as they do when the same end is set by
+     dragging the grip; End with the video's tail fit re-times them. */
+  function fitLayerToEnd(l, end, keepKeys) {
+    const s = +l.start || 0, D = +l.duration || 0;
+    let D2 = end - s, tr = l.trimStart;
+    if (l.type === 'video') { const r = FM.trimClipEdge(l, 'tail', D2 - D, srcDurOf(l)); D2 = r.duration; tr = r.trimStart; }
+    D2 = Math.max(MINLEN(), D2);
+    if (!keepKeys) S.mapLayerKeys(l, S.fitMap(s, D, D2));
+    l.duration = D2; if (l.type === 'video') l.trimStart = tr;
+    if (l.sm && l.sm.tail) l.sm.tailEnd = s + D2;
+    if (l.sm && typeof l.sm.wholeEnd === 'number') l.sm.wholeEnd = s + D2;   // the span S.fitProjectLayers compares with: a stale one reads as set by hand
+    return D2;
+  }
+  /* the plain (transparent) groups above what is being cut: their window has to follow their members, or the group alone holds the video open */
+  function wrapperGroupsOf(cut, R) {
+    const out = new Set(), map = byIdMap();
+    cut.forEach(x => { let p = x.parent, n = 0; while (p && n++ < 64) { const q = map.get(p); if (!q) break; if (q.type === 'group' && !R.units[q.id]) out.add(q.id); p = q.parent; } });
+    return out;
+  }
   S.planEndWithVideo = function (R) {
     const o = S.overrun(R);
     if (!o.pictures.length) return refusePlan('nothingToFit');
     const plan = newPlan('End with the video'); plan.arranges = false; plan.adopts = false;
-    o.pictures.forEach(l => plan.touched.add(l.id));
-    plan.writes.push(() => o.pictures.forEach(l => {
-      const s = +l.start || 0, D = +l.duration || 0;
-      let D2 = R.trackEnd - s, tr = l.trimStart;
-      if (l.type === 'video') { const r = FM.trimClipEdge(l, 'tail', D2 - D, srcDurOf(l)); D2 = r.duration; tr = r.trimStart; }
-      D2 = Math.max(MINLEN(), D2);
-      S.mapLayerKeys(l, S.fitMap(s, D, D2));
-      l.duration = D2; if (l.type === 'video') l.trimStart = tr;
-      if (l.sm && l.sm.tail) l.sm.tailEnd = s + D2;
+    const cut = [];
+    o.pictures.forEach(l => cutListAt(l, R.trackEnd).forEach(x => { if (cut.indexOf(x) < 0) cut.push(x); }));
+    cut.forEach(l => plan.touched.add(l.id));
+    plan.refitGroups = wrapperGroupsOf(cut, R); plan.refitGroups.forEach(i => plan.touched.add(i));
+    plan.writes.push(() => cut.forEach(l => fitLayerToEnd(l, R.trackEnd)));
+    plan.live = line('fitted', o.pictures.filter(l => R.units[l.id]).length || o.pictures.length);   // an item on his timeline counts once, not its block and its member
+    return plan;
+  };
+  /* CUT AT THE END (#1243 S37): the one item he tapped, in one step, trimmed to the end of the video. A song gets a one-second fade-out, so the
+     cut is not a click; a group takes its members with it. An end card (starts at or after the end) has nothing to cut. */
+  S.planCutAtEnd = function (R, id) {
+    const l = byIdMap().get(id);
+    if (!l || l.type === 'camera' || R.isMain(id) || !(R.trackEnd > 0) || R.trackEnd - (+l.start || 0) < MINLEN()) return refusePlan('nothingToFit');
+    const cut = cutListAt(l, R.trackEnd);
+    if (cut.indexOf(l) < 0) return refusePlan('nothingToFit');
+    const plan = newPlan('Cut at the end'); plan.arranges = false; plan.adopts = false; plan.keepSel = true;
+    cut.forEach(x => plan.touched.add(x.id));
+    plan.refitGroups = wrapperGroupsOf(cut, R); plan.refitGroups.forEach(i => plan.touched.add(i));
+    /* a block's member that lies wholly past the end has no item of its own and would hold the video open with nothing to tap: it goes in the same step */
+    if (l.type === 'group' && R.units[id]) { const past = x => FM.scene.layers.forEach(k => { if (k.parent === x.id) { if ((+k.start || 0) >= R.trackEnd - 1e-9) { plan.removes.add(k.id); plan.touched.add(k.id); } past(k); } }); past(l); }
+    const u = R.units[id] || {}, sound = u.kind === 'audio' || l.audioOnly === true || (l.sm && l.sm.snd === true);
+    plan.writes.push(() => cut.forEach(x => {
+      const D2 = fitLayerToEnd(x, R.trackEnd, true);
+      if (x === l && sound) { x.fadeOut = Math.max(+x.fadeOut || 0, Math.min(1, D2)); delete x.fadeOutTail; }   // a split's tail span would measure the fade past the cut (js/scene.js fadeMul)
     }));
-    plan.live = line('fitted', o.pictures.length);
+    plan.live = line('cutEnd', S.itemWord(l, R));
     return plan;
   };
   /* ADD TEXT / OVERLAY (the project tools, §3.6 Add row): at the playhead, clamped to the TRACK end, in its band. The text
@@ -2554,6 +2602,7 @@ window.FM = window.FM || {};
     z(id, dir) { return S.edit(dir > 0 ? 'Forward' : 'Back', R => S.planZ(R, id, dir)); },
     closeAll() { return S.edit('Close all gaps', R => S.planCloseAll(R)); },
     endWithVideo() { return S.edit('End with the video', R => S.planEndWithVideo(R)); },
+    cutAtEnd(id) { return S.edit('Cut at the end', R => S.planCutAtEnd(R, id)); },
     addText() { return S.edit('Add text', R => S.planAddText(R)); },
     addOverlay(files) { return afterRead(files, picked => S.edit('Add overlay', R => S.planAddOverlay(R, picked))); },
     addMusic(files) { return afterRead(files, picked => S.edit('Add music', R => S.planAddMusic(R, picked))); },

@@ -25,6 +25,10 @@ window.FM = window.FM || {};
 
   /* MIN_LEN = max(1 frame, 0.1 s), compared with 1e-6 slack everywhere (§3.1). */
   S.minLen = function (fps) { return Math.max(1 / (fps || 30), 0.1); };
+  /* #1243 S37 review: what counts as running past the end of the video. A millisecond, because project.duration is rounded to the millisecond
+     (js/app.js autoFitDuration) and the last clip's end is not: a clip of 7.466667 s leaves 0.00033 s of nothing past it, and judged finer than
+     that the timeline drew the mark for it. That is the cut-off "Black C…" he could not tap: a band 44 px wide saying Black 0.0s. */
+  S.PAST = 1e-3;
 
   /* ═══ THE ONE `sm` WRITER (§2.3). Merges into layer.sm, deletes the sub-key when off, deletes `sm` once empty. No code
      assigns `sm` whole (that would wipe a newer build's sub-keys). Refuses what the sanitiser would strip, so a write can

@@ -123,10 +123,11 @@ window.FM = window.FM || {};
       gapsClosed: n => 'Closed ' + n + (n === 1 ? ' gap' : ' gaps'), noGaps: 'No gaps to close',
       fitted: n => n === 1 ? 'Now ends with the video' : n + ' things now end with the video', nothingToFit: 'Nothing to fit',
       textAdded: 'Text added', overlayAdded: 'Overlay added', musicAdded: 'Music added · it stays where it is',
-      blackBand: (s, n) => 'Black ' + s.toFixed(1) + 's' + (n > 1 ? ' · ' + n + ' things run past' : ''),
-      runsPast: (name, s) => name + ' runs ' + s.toFixed(1) + ' s past the end',
-      songRuns: (name, s) => name + ' runs ' + s.toFixed(1) + ' s past the last clip',
-      morePast: n => n + ' things run past the end', endWith: 'End with the video', keptEnd: 'kept as an end card',
+      runsPast: (name, s) => name + ' runs ' + (s < 0.05 ? 'under 0.1' : s.toFixed(1)) + ' s past the end',
+      songRuns: (name, s) => name + ' runs ' + (s < 0.05 ? 'under 0.1' : s.toFixed(1)) + ' s past the last clip',
+      /* #1243 S37: the line under a tap on something that runs past the end, and Cut at the end's own (Simple's export stops at the last clip) */
+      cutOnExport: 'it’s cut there when you export', cutEnd: name => name + ' now ends with the video',
+      endWith: 'End with the video', keptEnd: 'kept as an end card',
       newer: 'Made with a newer FreeMotion. Update to edit clips here',
       pro: 'Has moves and effects',
       moreInFull: 'More in Full ›',
@@ -183,6 +184,7 @@ window.FM = window.FM || {};
     },
     tools: {   // Phase 2 (D10): the tray row and the project tools; one name each, never "Edit" (§8.4)
       clips: 'Clips', text: 'Text', sound: 'Sound', overlay: 'Overlay',
+      cutEnd: 'Cut at the end', cutEndTitle: 'Cut this where the video ends',   /* #1243 S37: on an item that runs past the end of the video */
       lift: 'Lift off',   /* #1243 S24, S25: Length, Move earlier and Move later left the tray (his "you just grab the end and drag it") */ liftTitle: 'Lift off the clip row (make it an overlay)',
       into: 'Into row', intoTitle: 'Put in the clip row', duplicate: 'Duplicate', crop: 'Crop', more: 'More', moreTitle: 'More settings for this',
       delete: 'Delete', stay: 'Stay put', editWords: 'Edit words', forward: 'Forward', backward: 'Back', openFull: 'Open in Full',
