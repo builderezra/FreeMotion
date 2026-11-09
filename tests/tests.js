@@ -67798,8 +67798,10 @@
     const C = FM.collab, D = C.diff;
     const L = FM.makeLayer('shape', { name: 'T', start: 2, duration: 2 });
     const plain = D.maskLayer(L);
-    const m = Object.assign(JSON.parse(JSON.stringify(L)), { kb: [1, 2], by: 'm9', sm: { main: true, stay: true, tail: true, tailEnd: 4, twin: 'x', muteByMode: true, snd: 1, cut: true } });
-    if (D.maskLayer(m) !== plain) throw new Error('the mask did not drop kb / by / the sm membership keys');
+    /* #1243 S10 review (F3): the whole-video mark and its span go with Stay put (Follow clip takes all three and moves nothing), so they are
+       membership keys too: a friend's Follow clip on a whole-video effect must not break the undo of its add */
+    const m = Object.assign(JSON.parse(JSON.stringify(L)), { kb: [1, 2], by: 'm9', sm: { main: true, stay: true, tail: true, tailEnd: 4, twin: 'x', muteByMode: true, snd: 1, cut: true, whole: true, wholeStart: 0, wholeEnd: 4 } });
+    if (D.maskLayer(m) !== plain) throw new Error('the mask did not drop kb / by / the sm membership keys (whole and its span among them, #1243 S10)');
     const keep = Object.assign(JSON.parse(JSON.stringify(L)), { sm: { cut: true, other: 7 } });
     if (D.maskLayer(keep) === plain) throw new Error('the mask dropped an sm key that is not a membership key');
     if (D.maskLayer(Object.assign(JSON.parse(JSON.stringify(L)), { start: 2.5 })) === plain) throw new Error('start is not compared any more');
@@ -198457,7 +198459,8 @@
      2 and 4, §4.3 "Effect segments stay inside their clip", §3.6.1 the effect band) ═══
      The project row's Effects opens a picker in the tray row (Done, then one tile per whole-frame grade a segment can be, ADJ_OK). A tap
      makes ONE adjustment layer holding that one effect, marked sm 1, over the stretch of the clip at the line — min(3 s, what is left of
-     the clip) — directly above that clip in the stack, in ONE step labelled Add effect, and selects it: its tray is Change effect ·
+     the clip) — directly above that clip in the stack (#1243 S10: over the whole video, above the top clip, pinned and marked whole),
+     in ONE step labelled Add effect, and selects it: its tray is Change effect ·
      Strength · Stay put · More · 🗑. The clips are stacked A over B over C (A on top), so a segment that ran too long or was not clamped
      WOULD grade the clip after it: the pixel checks below can tell. Each test fails on the Look tree (7da21cf2) by what it looks for —
      the project row has no Effects tool — never by a missing function: smSegOpen throws its own sentence first. */
@@ -198484,7 +198487,11 @@
   const smSegRed = (W, H, t) => smLookPx(W, H, t)[0];
   const smSegSpread = p => Math.max(Math.abs(p[0] - p[1]), Math.abs(p[0] - p[2]), Math.abs(p[1] - p[2]));
 
-  test('simple P3 · Effects segments at 380 the project row’s Effects opens a picker in the tray row — Done and one tile per whole-frame grade, none for an effect that needs a clip — and a tap on Invert makes ONE segment over the stretch of the clip at the line, directly above that clip: the picture inverts inside it only (before, inside and after, through FM.renderScene), in ONE undo step labelled Add effect', { item: '980', budgetMs: 90000 }, async function () {
+  /* #1243 S10 (his words, 8 Nov: "I just added an effect and it doesn't add it to the whole thing. It just added it to one section"): from
+     S10 the project row's pick covers the whole video. The first test below said "over the stretch of the clip at the line … the picture
+     inverts inside it only"; it now asks for the whole video, above the top clip, every clip inverted. The second builds its stretch
+     segment the way Full makes one (a segment over part of one clip still rides that clip). */
+  test('simple P3 · Effects segments at 380 the project row’s Effects opens a picker in the tray row — Done and one tile per whole-frame grade, none for an effect that needs a clip — and a tap on Invert makes ONE segment over the whole video (#1243 S10), directly above the top clip: every clip inverts (at 1, 2.2, 3 and 4.5 s, through FM.renderScene), in ONE undo step labelled Add effect', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2(smSegClips, async function (v) {
@@ -198510,18 +198517,15 @@
         if (seg.type !== 'adjustment') fails.push('the segment is a ' + seg.type + ' layer, want an adjustment layer');
         const e = (seg.effects || [])[0] || {};
         if ((seg.effects || []).length !== 1 || e.type !== 'invert' || e.sm !== 1) fails.push('the segment holds ' + JSON.stringify((seg.effects || []).map(f => ({ type: f.type, sm: f.sm }))) + ', want one Invert marked sm 1');
-        if (Math.abs(seg.start - 2.5) > 1e-9 || Math.abs(seg.duration - 1.5) > 1e-9) fails.push('the segment runs from ' + seg.start + ' for ' + seg.duration + ' s, want 2.5 for 1.5 s (the line to the end of Clip 2, under 3 s)');
-        const L = FM.scene.layers, B = v.L('B');
-        if (L.indexOf(seg) !== L.indexOf(B) - 1) fails.push('the segment is not directly above Clip 2 in the stack (at ' + L.indexOf(seg) + ', Clip 2 at ' + L.indexOf(B) + ')');
+        if (Math.abs(seg.start) > 1e-9 || Math.abs(seg.duration - 6) > 1e-9) fails.push('the segment runs from ' + seg.start + ' for ' + seg.duration + ' s, want 0 for 6 s (the whole video, #1243 S10)');
+        const L = FM.scene.layers, A = v.L('A');
+        if (L.indexOf(seg) !== L.indexOf(A) - 1) fails.push('the segment is not directly above the top clip (Clip 1) in the stack (at ' + L.indexOf(seg) + ', Clip 1 at ' + L.indexOf(A) + ')');
         if (v.steps() !== n0 + 1) fails.push('one tap made ' + (v.steps() - n0) + ' undo steps, want 1');
         if (FM.scene.selectedId !== seg.id) fails.push('the new segment is not selected');
         const tray = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool).join(',');
         if (tray !== 'change,strength,stay,more,delete') fails.push('the segment’s tray is ' + tray + ', want change,strength,stay,more,delete');
         const r1 = [2.2, 3, 4.5, 1].map(t => smSegRed(W, H, t));
-        if (r1[0] < 170) fails.push('Clip 2 before the segment (2.2 s) is inverted too: red ' + r1[0]);
-        if (r1[1] > 100) fails.push('inside the segment (3 s) the picture is not inverted: red ' + r1[1]);
-        if (r1[2] < 170) fails.push('after the segment (4.5 s, Clip 3, which lies under it in the stack) the picture is inverted: red ' + r1[2]);
-        if (r1[3] < 170) fails.push('Clip 1 (1 s) changed: red ' + r1[3]);
+        [2.2, 3, 4.5, 1].forEach((t, k) => { if (r1[k] > 100) fails.push('at ' + t + ' s the picture is not inverted: red ' + r1[k]); });
         FM.history.undo(); await v.sleep(80);
         const ls = FM.history.lastStep || {};
         if (ls.label !== 'Add effect' || ls.ed !== 's') fails.push('Undo names ' + JSON.stringify({ label: ls.label, ed: ls.ed }) + ', want Add effect from Simple');
@@ -198532,13 +198536,15 @@
     }, 380);
   });
 
-  test('simple P3 · Effects segments at 380 a segment rides its clip: deleting Clip 1 moves it with Clip 2 by −2 s, and trimming Clip 2 to 1 s clamps it inside the clip — the picture is inverted over what is left of it and nowhere past the new cut, where Clip 3 now lies under it', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P3 · Effects segments at 380 a segment over a stretch of one clip (one made in Full) rides its clip: deleting Clip 1 moves it with Clip 2 by −2 s, and trimming Clip 2 to 1 s clamps it inside the clip — the picture is inverted over what is left of it and nowhere past the new cut, where Clip 3 now lies under it', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
-      await smP2(smSegClips, async function (v) {
+      /* the segment Full makes over 2.5–4 s, directly above Clip 2 (#1243 S10: the project row's own pick now covers the whole video) */
+      const withSeg = (W, H) => { const c = smSegClips(W, H), l = FM.makeLayer('adjustment', { name: 'Seg', x: W / 2, y: H / 2, start: 2.5, duration: 1.5 }), f = FM.fxRegistry.makeInstance('invert'); f.sm = 1; l.effects = [f]; return [c[0], l, c[1], c[2]]; };
+      await smP2(withSeg, async function (v) {
         const W = v.W, H = v.H, S = FM.spine, fails = [];
         FM.time = 2.5;
-        const id = (await smSegAdd(v, 'invert')).id;
+        const id = v.L('Seg').id;
         const at = () => { const l = FM.layerById(FM.scene, id); return l ? [l.start, l.duration] : null; };
         if (!at() || Math.abs(at()[0] - 2.5) > 1e-9 || Math.abs(at()[1] - 1.5) > 1e-9) throw new Error('CONTROL: the segment did not land at 2.5 s for 1.5 s: ' + JSON.stringify(at()));
         FM.selectLayer(null); await v.sleep(60);
@@ -198566,8 +198572,8 @@
       await smP2(smSegClips, async function (v) {
         const W = v.W, H = v.H, fails = [];
         FM.time = 3;
+        const base = smLookPx(W, H, 2.2);   // the clip as it is, read before the segment (#1243 S10: it covers the whole video)
         const id = (await smSegAdd(v, 'invert')).id, n0 = v.steps(), L = () => FM.layerById(FM.scene, id);
-        const base = smLookPx(W, H, 2.2);
         if (smSegSpread(base) < 100 || smSegRed(W, H, 3.5) > 100) throw new Error('CONTROL: the clip is not red before the segment (' + base + ') or not inverted inside it (red ' + smSegRed(W, H, 3.5) + ')');
         /* Change effect: the picker again, Invert pressed; Grayscale swaps it in the same layer, and the picker stays */
         if (!smTool('change')) throw new Error('the segment’s tray has no Change effect (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
@@ -198639,13 +198645,13 @@
         if (!tile) throw new Error('1280×800: ' + fails.concat('no Invert tile').join(' · '));
         tile.click(); await v.idle(); await v.sleep(80);
         const made = FM.scene.layers.filter(l => !ids0.has(l.id));
-        if (made.length !== 1 || made[0].type !== 'adjustment' || Math.abs(made[0].start - 2.5) > 1e-9) fails.push('a pick in the band made ' + JSON.stringify(made.map(l => [l.type, l.start, l.duration])) + ', want one adjustment layer at 2.5 s');
+        if (made.length !== 1 || made[0].type !== 'adjustment' || Math.abs(made[0].start) > 1e-9 || Math.abs(made[0].duration - 6) > 1e-9) fails.push('a pick in the band made ' + JSON.stringify(made.map(l => [l.type, l.start, l.duration])) + ', want one adjustment layer over the whole video, 0 for 6 s (#1243 S10)');
         if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
       }, smSegMedia());
     });
   });
 
-  test('simple P3 · Effects segments switched to Full: the segment is the ordinary adjustment layer Full makes — no field Full’s own adjustment layer lacks, its one effect Invert listed in Full’s Effects with only an effect’s own fields and the sm marker — and the picker is closed and never on screen in Full', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P3 · Effects segments switched to Full: the segment is the ordinary adjustment layer Full makes — no field Full’s own adjustment layer lacks but Simple’s own sm marks (Stay put and whole, #1243 S10), its one effect Invert listed in Full’s Effects with only an effect’s own fields and the sm marker — and the picker is closed and never on screen in Full', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smP2(smSegClips, async function (v) {
       FM.time = 2.5;
@@ -198657,8 +198663,10 @@
       FM.selectLayer(id); FM.inspector.openCategory('effects'); await v.sleep(150);
       const L = FM.layerById(FM.scene, id), fails = [];
       const full = new Set(Object.keys(FM.makeLayer('adjustment', { name: 'Adjustment' })));
-      const extra = Object.keys(L).filter(k => k.charAt(0) !== '_' && !full.has(k));
+      const extra = Object.keys(L).filter(k => k.charAt(0) !== '_' && !full.has(k) && k !== 'sm');
       if (extra.length) fails.push('the segment carries fields Full’s own adjustment layer does not: ' + extra.join(', '));
+      const smWant = JSON.stringify({ stay: true, whole: true, wholeStart: L.start, wholeEnd: L.start + L.duration });   // #1243 S10 review: whole carries the span it was fitted to
+      if (JSON.stringify(L.sm) !== smWant) fails.push('the segment’s Simple marks are ' + JSON.stringify(L.sm) + ', want Stay put and whole with its span only, ' + smWant);
       const e = (L.effects || [])[0] || {}, odd = Object.keys(e).filter(k => k.charAt(0) !== '_' && ['type', 'enabled', 'params', 'sm', 'uid'].indexOf(k) < 0);
       if (L.effects.length !== 1 || e.type !== 'invert' || odd.length) fails.push('its effect in Full is ' + JSON.stringify({ n: L.effects.length, type: e.type, odd: odd }));
       if (!FM.fxRegistry.supportsLayer('invert', L)) fails.push('Full’s registry refuses Invert on it');
@@ -201242,5 +201250,485 @@
         if (fails.length) throw new Error(fails.join(' · '));
       }, { full: true });
     }, 380);
+  });
+
+  /* #1243 S11, A GUARD (his words, 8 Nov: "stuck on one frame and… nothing is like really working cleanly… And I just added like an effect").
+     Not reproduced on the laptop, so the cause is unmeasured and S11 stays open. What it guards: the Effects strip mounted every tile's live
+     picture at once (44 of them, 42 since S10, each a render, the animated ones repainted on fx-thumbs' shared timer while in the page). Proves at 380: the
+     tile canvases in the page (the only ones the timer repaints) are at least one and at most the tiles within 60 px of the strip's view
+     plus two, as it opens, at its end (where the last tile's canvas is in and mounted, fx-thumbs' _fxType on it) and back at its start
+     after the round trip, so the live set stays bounded however he scrolls. CONTROL: the strip holds at least 30 tiles. */
+  test('simple · 1243 S11 a guard: only the Effects tiles in view hold a live picture, so at 380 the canvases in the page are the visible tiles and a margin as it opens, at its end and back at its start, never all of them (S11 stays open: his freeze is not measured)', { item: '1243', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => smClips3(W, H), async function (v) {
+        FM.selectLayer(null); await v.sleep(80);
+        const fx = smTool('effects');
+        if (!fx) throw new Error('CONTROL: the project row has no Effects');
+        try {
+          fx.click(); await v.sleep(500);
+          const run = document.querySelector('#sm-tray .sm-fx-run');
+          if (!run) throw new Error('CONTROL: Effects opened no strip of tiles');
+          const tiles = Array.from(run.querySelectorAll('.sm-fx-tile'));
+          if (tiles.length < 30) throw new Error('CONTROL: only ' + tiles.length + ' tiles, so a live picture on every one would not show');
+          const fails = [];
+          const check = where => {
+            const rr = run.getBoundingClientRect();
+            const near = tiles.filter(b => { const r = b.getBoundingClientRect(); return r.right > rr.left - 60 && r.left < rr.right + 60; }).length;
+            const inPage = run.querySelectorAll('canvas.sm-fx-th').length;
+            if (inPage < 1) fails.push(where + ': no tile in view holds its picture (' + near + ' are within 60 px of the strip’s view)');
+            if (inPage > near + 2) fails.push(where + ': ' + inPage + ' of ' + tiles.length + ' tile canvases are in the page with ' + near + ' tiles in or near view, so fx-thumbs repaints what he cannot see');
+          };
+          check('as it opens');
+          run.scrollLeft = run.scrollWidth; await v.sleep(500);
+          check('at its end');
+          const lastCv = tiles[tiles.length - 1].querySelector('canvas.sm-fx-th');
+          if (!lastCv || lastCv._fxType == null) fails.push('scrolled to its end, the last tile has ' + (lastCv ? 'a canvas with no picture mounted' : 'no canvas'));
+          run.scrollLeft = 0; await v.sleep(500);
+          check('back at its start');
+          if (fails.length) throw new Error(fails.join(' · '));
+        } finally {
+          if (FM.simpleTools.closeEffects) FM.simpleTools.closeEffects();
+        }
+      });
+    }, 380);
+  });
+
+  /* ═══ #1243 S10 (his words, 8 Nov: "effects menu isn't even really effects… random like filters… I just added an effect and it doesn't
+     add it to the whole thing. It just added it to one section, and also it just names it the effect… sometimes it doesn't even work.")
+     Plan B S10 as amended by 1243-R decision 10 (one normaliser, S.fitProjectLayers, case 3 only) and O8 (a tap still adds; S13 makes the
+     first tap a preview). Proves: the project row's pick is ONE pinned segment over the whole video, marked whole, in one step; the
+     normaliser keeps it at the whole video as clips are added, until a drag of one of its ends or a move lets it go; it wears its
+     effect's own name; no tile the picker offers is a no-op on a sample frame; a refusal is said with the picker closed; and the whole
+     mark is true-only, lost on Follow clip, a copy and a split, and pinned in the collab fixture. Each fails on the tree before S10 by
+     what it looks for (the 3 s stretch, 'the effect', a refusal said over the tiles, sm.whole kept as 1). */
+  /* a sample frame with something for every grade to move: a hue sweep lit at the top and darkened to the bottom, a grey ramp, a fine
+     checker, and patches of skin, pure green, red, blue, white and black */
+  function s10Sample(W, H) {
+    const c = offscreen(W, H), g = c.getContext('2d');
+    for (let x = 0; x < W; x += 4) { g.fillStyle = 'hsl(' + Math.round(x / W * 360) + ',85%,55%)'; g.fillRect(x, 0, 4, H); }
+    const sh = g.createLinearGradient(0, 0, 0, H);
+    sh.addColorStop(0, 'rgba(255,255,255,0.35)'); sh.addColorStop(0.5, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,0.7)');
+    g.fillStyle = sh; g.fillRect(0, 0, W, H);
+    const gy = Math.round(H * 0.42), gh = Math.round(H * 0.1);
+    for (let x = 0; x < W; x++) { const k = Math.round(x / (W - 1) * 255); g.fillStyle = 'rgb(' + k + ',' + k + ',' + k + ')'; g.fillRect(x, gy, 1, gh); }
+    const cy = Math.round(H * 0.8), cw = Math.round(W * 0.3);
+    for (let y = cy; y < H; y += 4) for (let x = 0; x < cw; x += 4) { g.fillStyle = (Math.floor(x / 4) + Math.floor((y - cy) / 4)) % 2 ? '#101010' : '#f0f0f0'; g.fillRect(x, y, 4, 4); }
+    ['#e0ac69', '#00ff00', '#ff0000', '#0000ff', '#ffffff', '#000000'].forEach((col, k) => { g.fillStyle = col; g.fillRect(cw + Math.round(k * (W - cw) / 6), cy, Math.ceil((W - cw) / 6), H - cy); });
+    return { kind: 'image', el: c, width: W, height: H };
+  }
+  const s10Frame = (W, H, t) => { const c = offscreen(W, H), g = c.getContext('2d'); FM.renderScene(g, FM.scene, t); return g.getImageData(0, 0, W, H).data; };
+  /* the mean absolute difference over the whole frame, in levels of 255 (red, green and blue of every pixel) */
+  const s10Diff = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); return s / (a.length / 4 * 3); };
+  const s10Mean = a => { let s = 0; for (let i = 0; i < a.length; i += 4) s += a[i] + a[i + 1] + a[i + 2]; return s / (a.length / 4 * 3); };
+  const s10Media = names => ({ media: names.map(n => ({ name: n, rec: s10Sample(320, 240) })) });
+
+  test('simple · 1243 S10 at 380 with the line at the end of a two-clip video, Effects then the first tile makes ONE segment over the whole video — from the first clip’s start to the end of the clips, Stay put and whole, above both clips — in one undo step, and the picture changes on the last frame and on Clip 1', { item: '1243', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smPic('A', 0, 2, W, H), smPic('B', 2, 2, W, H)], async function (v) {
+        const W = v.W, H = v.H, fails = [], A = v.L('A'), B = v.L('B');
+        FM.time = 4;
+        const t1 = 1, tEnd = 4 - 1 / 30, b1 = s10Frame(W, H, t1), bEnd = s10Frame(W, H, tEnd);
+        if (s10Mean(b1) < 20 || s10Mean(bEnd) < 20) throw new Error('CONTROL: the two clips do not draw their picture at 1 s and on the last frame (mean ' + s10Mean(b1).toFixed(1) + ', ' + s10Mean(bEnd).toFixed(1) + ')');
+        await smSegOpen(v);
+        const tile = document.querySelector('#sm-tray .sm-fx-tile');
+        if (!tile) throw new Error('the effects picker has no tile');
+        const type = String(tile.dataset.tool).slice(3), n0 = v.steps(), ids0 = new Set(FM.scene.layers.map(l => l.id));
+        tile.click(); await v.idle(); await v.sleep(80);
+        const made = FM.scene.layers.filter(l => !ids0.has(l.id)), seg = made[0] || {};
+        if (made.length !== 1) throw new Error('380: one tap on the first tile (' + type + ') made ' + made.length + ' layers, want 1 (it said “' + v.say() + '”)');
+        if (seg.type !== 'adjustment' || (seg.effects || []).length !== 1 || seg.effects[0].type !== type) fails.push('the new layer is a ' + seg.type + ' holding ' + JSON.stringify((seg.effects || []).map(f => f.type)) + ', want an adjustment layer holding ' + type);
+        const end = B.start + B.duration;
+        if (Math.abs(seg.start - A.start) > 1e-9 || Math.abs(seg.duration - (end - A.start)) > 1e-9) fails.push('the segment runs from ' + seg.start + ' for ' + seg.duration + ' s, want ' + A.start + ' for ' + (end - A.start) + ' s (the whole video, not the last clip’s last stretch)');
+        if (!(seg.sm && seg.sm.stay === true && seg.sm.whole === true)) fails.push('the segment’s marks are ' + JSON.stringify(seg.sm) + ', want Stay put and whole');
+        const L = FM.scene.layers;
+        if (!(L.indexOf(seg) < L.indexOf(A) && L.indexOf(seg) < L.indexOf(B))) fails.push('the segment is not above both clips in the stack (at ' + L.indexOf(seg) + ', the clips at ' + L.indexOf(A) + ' and ' + L.indexOf(B) + ')');
+        if (v.steps() !== n0 + 1) fails.push('one tap made ' + (v.steps() - n0) + ' undo steps, want 1');
+        if (FM.scene.selectedId !== seg.id) fails.push('the new segment is not selected');
+        const d1 = s10Diff(b1, s10Frame(W, H, t1)), dEnd = s10Diff(bEnd, s10Frame(W, H, tEnd));
+        if (!(dEnd >= 2)) fails.push('the frame on screen (the last one, ' + tEnd.toFixed(3) + ' s) changed by ' + dEnd.toFixed(2) + ' levels on average, under 2');
+        if (!(d1 >= 2)) fails.push('Clip 1 (1 s) changed by ' + d1.toFixed(2) + ' levels on average, under 2: the effect is not over the whole video');
+        FM.history.undo(); await v.sleep(80);
+        const ls = FM.history.lastStep || {};
+        if (ls.label !== 'Add effect' || ls.ed !== 's') fails.push('Undo names ' + JSON.stringify({ label: ls.label, ed: ls.ed }) + ', want Add effect from Simple');
+        if (FM.scene.layers.length !== 2) fails.push('one Undo left ' + FM.scene.layers.length + ' layers, want the 2 clips');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      }, s10Media(['A', 'B']));
+    }, 380);
+  });
+
+  /* #1243 S10 review (S10-N5, S10-L1): the project is ADOPTED from the start, as every project he has worked on in Simple is, so the
+     Append below is a plain clips-only Append that does not arrange (no gate, no tail fit): the fit must run on that step too (R decision
+     10, "after EVERY step, gated or not"). Unadopted, the first Append adopted the project and so was gated, and a fit moved inside the
+     gated branch passed every test. */
+  test('simple · 1243 S10 at 380 the whole-video effect follows the video: in an adopted project a clip added at the end (a plain Append, not an arranging step) stretches it to the new end in that one undo step; a real drag of its head grip lets it go (no longer whole, still Stay put) and the next clip added leaves it where he put it; moved by its command, a second one lets go too', { item: '1243', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smDragEnv((W, H) => [smPic('A', 0, 2, W, H, { sm: { main: true } }), smPic('B', 2, 2, W, H, { sm: { main: true } })], async function (v) {
+        const S = FM.spine, fails = [];
+        const endNow = () => S.read(FM.scene).trackEnd;
+        if (!S.read(FM.scene).adopted) throw new Error('CONTROL: the fixture project is not adopted');
+        FM.time = 0;
+        const id = (await smSegAdd(v, 'invert')).id, L = () => FM.layerById(FM.scene, id);
+        if (!(L().sm && L().sm.whole) || Math.abs(L().start) > 1e-9 || Math.abs(L().duration - 4) > 1e-9) throw new Error('CONTROL: the segment is not whole over 0 to 4 s: ' + JSON.stringify([L().start, L().duration, L().sm]));
+        /* 1. a clip added at the end: the segment ends at the new end, inside the add's own step */
+        const n1 = v.steps();
+        await S.cmd.append([await q921png([40, 120, 200], 's10a.png')]); await v.idle(); await v.sleep(80);
+        const e1 = endNow();
+        if (!(e1 > 4.5)) throw new Error('CONTROL: the added picture did not lengthen the video (it ends at ' + e1 + '; it said “' + v.say() + '”)');
+        const m1 = FM.history._metaHere() || {};
+        if (!/^Add clip/.test(String(m1.label)) || m1.arr !== false) throw new Error('CONTROL: the Append was not a plain step that does not arrange (its step is ' + JSON.stringify({ label: m1.label, arr: m1.arr }) + '), so it cannot prove the fit runs on such a step');
+        if (v.steps() !== n1 + 1) fails.push('adding the clip took ' + (v.steps() - n1) + ' undo steps, want 1');
+        if (Math.abs(L().start) > 1e-9 || Math.abs(L().start + L().duration - e1) > 1e-9) fails.push('after a clip was added the segment runs ' + L().start + ' to ' + (L().start + L().duration) + ', want 0 to the new end ' + e1);
+        FM.history.undo(); await v.sleep(80);
+        if (Math.abs(endNow() - 4) > 1e-9 || !L() || Math.abs(L().duration - 4) > 1e-9) fails.push('one Undo left the video ending at ' + endNow() + ' and the segment ' + (L() && L().duration) + ' s long, want both back at 4');
+        FM.history.redo(); await v.sleep(80);
+        if (!L() || Math.abs(L().start + L().duration - e1) > 1e-9) throw new Error('Redo put the segment’s end at ' + (L() && L().start + L().duration) + ', want ' + e1 + ' · ' + fails.join(' · '));
+        /* 2. a real drag of its head grip, 28 px (a second at this zoom) in */
+        FM.selectLayer(id); await v.sleep(150);
+        const grip = document.querySelector('#sm-timeline .sm-grip-head[data-id="' + id + '"]');
+        if (!grip) throw new Error('CONTROL: the selected segment has no head grip on the timeline · ' + fails.join(' · '));
+        const gc = smCtr(grip), hit = document.elementFromPoint(gc.x, gc.y);
+        if (!hit || !grip.contains(hit)) throw new Error('CONTROL: the segment’s head grip is covered at its centre by ' + (hit ? hit.getAttribute('class') || hit.tagName : 'nothing') + ' · ' + fails.join(' · '));
+        const e2 = L().start + L().duration, k2 = FM.history._steps().index;
+        await realInput924(smMS([['mouseMove', gc.x, gc.y], ['mouseDown', gc.x, gc.y, 60], ['mouseMove', gc.x + 10, gc.y, 30], ['mouseMove', gc.x + 28, gc.y, 60], ['mouseUp', gc.x + 28, gc.y, 40]]), 'dragging the segment’s head grip in');
+        await v.idle(); await v.sleep(80);
+        const m2 = FM.history._metaHere() || {};
+        if (FM.history._steps().index !== k2 + 1 || m2.label !== 'Trim item') throw new Error('CONTROL: dragging the head grip 28 px in made no Trim item step (' + (FM.history._steps().index - k2) + ' steps, the last ' + JSON.stringify(m2.label) + ', it said “' + v.say() + '”) · ' + fails.join(' · '));
+        const s2 = L().start;
+        if (!(s2 > 0.5 && s2 < 1.5)) fails.push('dragged 28 px in, the segment starts at ' + s2 + ', want about 1 s: the start he dragged did not stay');
+        if (Math.abs(L().start + L().duration - e2) > 1e-6) fails.push('the head drag moved the segment’s end (' + e2 + ' to ' + (L().start + L().duration) + ')');
+        if (L().sm && L().sm.whole) fails.push('after he dragged its head in, the segment is still marked whole');
+        if (!(L().sm && L().sm.stay)) fails.push('the head drag took its Stay put');
+        /* 3. the next clip added leaves it where he put it */
+        await S.cmd.append([await q921png([200, 120, 40], 's10b.png')]); await v.idle(); await v.sleep(80);
+        const e3 = endNow();
+        if (!(e3 > e2 + 0.5)) throw new Error('CONTROL: the second picture did not lengthen the video (it ends at ' + e3 + ') · ' + fails.join(' · '));
+        if (Math.abs(L().start - s2) > 1e-9 || Math.abs(L().start + L().duration - e2) > 1e-9) fails.push('after he shortened it by hand, a clip added at the end moved the segment to ' + L().start + ' to ' + (L().start + L().duration) + ' (it was ' + s2 + ' to ' + e2 + ')');
+        /* 4. moved by its command (what dragging its body runs), a second whole segment lets go too */
+        FM.selectLayer(null); await v.sleep(60);
+        const id2 = (await smSegAdd(v, 'grayscale')).id, L2 = () => FM.layerById(FM.scene, id2);
+        if (!(L2().sm && L2().sm.whole)) throw new Error('CONTROL: the second segment is not whole · ' + fails.join(' · '));
+        const k4 = FM.history._steps().index;
+        await S.cmd.moveItem(id2, 0.5); await v.idle(); await v.sleep(60);
+        if (Math.abs(L2().start - 0.5) > 1e-9) fails.push('moved to 0.5 s by Move item, the second segment starts at ' + L2().start + ' (' + (FM.history._steps().index - k4) + ' undo steps, the last ' + JSON.stringify((FM.history._metaHere() || {}).label) + ', it said “' + v.say() + '”): the move did not stay');
+        if (L2().sm && L2().sm.whole) fails.push('moved by hand, the second segment is still marked whole');
+        const d2 = L2().duration;
+        await S.cmd.append([await q921png([120, 200, 40], 's10c.png')]); await v.idle(); await v.sleep(80);
+        if (Math.abs(L2().start - 0.5) > 1e-9 || Math.abs(L2().duration - d2) > 1e-9) fails.push('a clip added after the move refit the moved segment to ' + L2().start + ' for ' + L2().duration + ' s');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      }, { opts: { project: { sm: { adopted: true, v: FM.SM_V } } } });
+    }, 380);
+  });
+
+  test('simple · 1243 S10 an effect segment wears its own name — the registry’s label on its timeline item, in its title and its spoken name, not the effect — one holding two says 2 effects, and the lines that name it say that name', { item: '1243', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smPic('A', 0, 2, W, H), smPic('B', 2, 2, W, H)], async function (v) {
+      const fails = [], want = String((FM.fxRegistry.get('invert') || {}).label || '');
+      if (!want || want === 'invert') throw new Error('CONTROL: the registry has no label for Invert (' + JSON.stringify(want) + ')');
+      const seg = await smSegAdd(v, 'invert'), live = document.getElementById('sm-live');
+      if (!live || live.textContent !== want + ' over the whole video') fails.push('the line that added it reads “' + (live && live.textContent) + '”, want “' + want + ' over the whole video”');
+      const face = () => { const n = smNode(seg.id), nm = n && n.querySelector('.sm-name'); return n ? { face: nm ? nm.textContent : null, title: n.title, aria: n.getAttribute('aria-label') } : null; };
+      const f1 = face();
+      if (!f1) throw new Error('CONTROL: the segment has no item on the timeline · ' + fails.join(' · '));
+      ['face', 'title', 'aria'].forEach(k => { if (f1[k] !== want) fails.push('its ' + k + ' reads “' + f1[k] + '”, want “' + want + '”'); });
+      await FM.spine.cmd.trimItem(seg.id, 'tail', 3); await v.idle(); await v.sleep(60);
+      if (!live || live.textContent !== 'Trimmed ' + want) fails.push('a trim of it says “' + (live && live.textContent) + '”, want “Trimmed ' + want + '”');
+      /* two effects in it, as Full can make: 2 effects */
+      const L = FM.layerById(FM.scene, seg.id);
+      L.effects.push(FM.fxRegistry.makeInstance('grayscale'));
+      FM.refreshAll(); if (FM.simpleTimeline && FM.simpleTimeline.rebuild) FM.simpleTimeline.rebuild();
+      await v.sleep(120);
+      const f2 = face(), said = FM.spine.itemWord(L, FM.spine.classify(FM.scene));
+      if (!f2 || f2.face !== '2 effects') fails.push('holding two effects its item reads “' + (f2 && f2.face) + '”, want “2 effects”');
+      if (said !== '2 effects') fails.push('holding two effects a line names it “' + said + '”, want “2 effects”');
+      if (fails.length) throw new Error(fails.join(' · '));
+    }, s10Media(['A', 'B']));
+  });
+
+  test('simple · 1243 S10 no tile in Effects is a no-op: every effect the picker offers, added from the project row at its default, changes a sample frame through the app’s own renderer by a mean of at least 2 levels in 255', { item: '1243', budgetMs: 240000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smPic('A', 0, 3, W, H)], async function (v) {
+      const W = v.W, H = v.H, S = FM.spine, list = S.segmentEffects(), times = [0.5, 1.5, 2.5];
+      if (list.length < 30) throw new Error('CONTROL: the picker offers only ' + list.length + ' effects');
+      const base = times.map(t => s10Frame(W, H, t));
+      if (s10Mean(base[0]) < 20) throw new Error('CONTROL: the sample picture does not draw (mean ' + s10Mean(base[0]).toFixed(1) + ')');
+      const flat = [], failed = [], at = () => FM.history._steps().index;   // the index, not the stack's length: each Undo below leaves a redo behind
+      for (const e of list) {
+        const n0 = at(), ids0 = new Set(FM.scene.layers.map(l => l.id));
+        await S.cmd.addEffect(e.type, 1); await v.idle();
+        const made = FM.scene.layers.filter(l => !ids0.has(l.id));
+        if (made.length !== 1 || at() !== n0 + 1) { failed.push(e.type + ' (' + made.length + ' layers in ' + (at() - n0) + ' steps, it said “' + v.say() + '”)'); made.forEach(l => { FM.scene.layers = FM.scene.layers.filter(x => x !== l); }); continue; }
+        const d = Math.max.apply(null, times.map((t, k) => s10Diff(base[k], s10Frame(W, H, t))));
+        if (!(d >= 2)) flat.push(String(e.label || e.type) + ' (' + e.type + ', ' + d.toFixed(2) + ')');
+        const undid = FM.history.undo(); await v.idle(); await v.sleep(20);
+        if (FM.scene.layers.length !== 1) throw new Error('setup: Undo after ' + e.type + ' left ' + FM.scene.layers.length + ' layers (undo answered ' + undid + ', step ' + n0 + ' to ' + at() + ', last step ' + JSON.stringify((FM.history.lastStep || {}).label) + ', runner ' + S.running + ', queue ' + S.queue.length + ', layers ' + JSON.stringify(FM.scene.layers.map(l => [l.type, (l.effects || []).map(f => f.type)])) + ')');
+      }
+      const bad = [];
+      if (failed.length) bad.push('these did not add as one segment: ' + failed.join(', '));
+      if (flat.length) bad.push(flat.length + ' of ' + list.length + ' change the frame by under 2 levels in 255 at their default: ' + flat.join(', '));
+      if (bad.length) throw new Error(bad.join(' · '));
+    }, s10Media(['A']));
+  });
+
+  test('simple · 1243 S10 at 380 a refusal from the Effects picker is said with the picker closed: with no clip, a tap on the first tile closes the picker before the line Add a clip first comes up, and the row shows that line, not the tiles', { item: '1243', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smT('T', 0, 2, W, H)], async function (v) {
+        const S = FM.spine, fails = [], said = [], say0 = S.say;
+        await smSegOpen(v);
+        const tile = document.querySelector('#sm-tray .sm-fx-tile');
+        if (!tile) throw new Error('the effects picker has no tile');
+        S.say = function (key, o) { said.push({ text: String(key), refusal: o && o.refusal, picker: !!FM.simpleTools.fxPick(), tiles: !!document.querySelector('#sm-tray .sm-fx-run') }); return say0.apply(this, arguments); };
+        try { tile.click(); await v.idle(); await v.sleep(80); } finally { S.say = say0; }
+        const want = ((FM.spineWords || {}).lines || {}).segmentNoClip;
+        const r = said.filter(s => s.refusal === 'segmentNoClip')[0];
+        if (!r) throw new Error('CONTROL: a tap with no clip raised no segmentNoClip refusal (it said ' + JSON.stringify(said) + ')');
+        if (r.picker || r.tiles) fails.push('the refusal was said while the picker was still up (picker open ' + r.picker + ', tiles in the tray ' + r.tiles + ')');
+        if (FM.simpleTools.fxPick()) fails.push('the picker is still open after the refusal');
+        if (v.say() !== want) fails.push('the row reads “' + v.say() + '”, want “' + want + '”');
+        if (document.querySelector('#sm-tray .sm-fx-tile')) fails.push('the tiles are still in the tray');
+        if (FM.scene.layers.length !== 1) fails.push('the refused tap wrote a layer');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      });
+    }, 380);
+  });
+
+  test('simple · 1243 S10 the whole mark: the sanitiser keeps sm.whole only as true and drops it where main wins, Follow clip, a copy and a split each let it go, and the collab fixture carries both sanitiser rules', { item: '1243' }, function () {
+    const S = FM.spine, fails = [];
+    const mk = sm => ({ id: 'w10', type: 'adjustment', start: 0, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], sm: sm });
+    const san = l => { FM.storage._sanitizeLayers([l]); return l; };
+    const a = san(mk({ stay: true, whole: 1 }));
+    if (JSON.stringify(a.sm) !== '{"stay":true}') fails.push('sm.whole of 1 came out ' + JSON.stringify(a.sm) + ', want it dropped (true-only, like stay)');
+    const b = san(mk({ stay: true, whole: true })), b0 = JSON.stringify(b);
+    san(b);
+    if (JSON.stringify(b.sm) !== '{"stay":true,"whole":true}' || JSON.stringify(b) !== b0) fails.push('a valid whole segment came out ' + JSON.stringify(b.sm) + ' or moved on a second pass');
+    const c = san(mk({ main: true, whole: true }));
+    if (JSON.stringify(c.sm) !== '{"main":true}') fails.push('main and whole came out ' + JSON.stringify(c.sm) + ', want main alone');
+    const w = mk({ stay: true });
+    if (!S.setFlag(w, 'whole', true) || !(w.sm && w.sm.whole === true)) fails.push('setFlag does not write whole: ' + JSON.stringify(w.sm));
+    const f = mk({ stay: true, whole: true });
+    S.setFlag(f, 'stay', false);
+    if (f.sm) fails.push('Follow clip (Stay put off) left ' + JSON.stringify(f.sm));
+    const cp = mk({ stay: true, whole: true });
+    S.onCopy([cp], 'duplicate');
+    if (JSON.stringify(cp.sm) !== '{"stay":true}') fails.push('a duplicate of a whole segment carries ' + JSON.stringify(cp.sm) + ', want Stay put alone');
+    const pk = mk({ stay: true, whole: true });
+    S.onCopy([pk], 'pack', {});
+    if (JSON.stringify(pk.sm) !== '{"stay":true}') fails.push('a template or element copy of a whole segment carries ' + JSON.stringify(pk.sm) + ', want Stay put alone');
+    const hd = mk({ stay: true, whole: true }), tl = mk({ stay: true, whole: true });
+    S.onSplit(hd, tl);
+    if (JSON.stringify(hd.sm) !== '{"stay":true}' || JSON.stringify(tl.sm) !== '{"stay":true}') fails.push('the halves of a split whole segment carry ' + JSON.stringify([hd.sm, tl.sm]) + ', want Stay put alone on each');
+    const C = FM.collab, F = (C && C.SCHEMA_FIXTURE) ? C.SCHEMA_FIXTURE() : [];
+    FM.storage._sanitizeLayers(F);
+    const at = id => (F.filter(l => l.id === id)[0] || {}).sm;
+    if (JSON.stringify(at('fp_11')) !== '{"stay":true}' || JSON.stringify(at('fp_12')) !== '{"main":true}') fails.push('the collab fixture does not pin the whole rules: fp_11 sanitises to ' + JSON.stringify(at('fp_11')) + ', fp_12 to ' + JSON.stringify(at('fp_12')) + ' (want stay alone, main alone)');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* ═══ #1243 S10, THE REVIEW'S FINDINGS (9 Nov). Each test below fails on the S10 build (4cb97860) for the reason it names. */
+  /* S10-N1: a project built clip by clip has Clip 2 ABOVE Clip 1 in the stack (planAppend puts each new clip just above the one before
+     it), and a title over Clip 1 sits between them (planAddText anchors it just above the clip under it). The whole-video segment goes
+     above the top-most clip, so that title ended up under it and was graded, while a title over Clip 2 was not. */
+  test('simple · 1243 S10 at 380 in a project built clip by clip (Clip 2 above Clip 1 in the stack, a title over Clip 1 between them) the whole-video Invert leaves the title as it was: the title goes above the segment in the same undo step, its pixels at 1 s are unchanged and Clip 1 around it is inverted', { item: '1243', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smPic('B', 2, 2, W, H), smT('T', 0, 2, W, H, { text: 'TITLE', fontSize: 64 }), smPic('A', 0, 2, W, H)], async function (v) {
+        const W = v.W, H = v.H, fails = [], T = v.L('T'), A = v.L('A'), B = v.L('B');
+        const order = () => FM.scene.layers.map(l => l.name).join(',');
+        if (order() !== 'B,T,A') throw new Error('CONTROL: the stack is ' + order() + ', want B,T,A');
+        FM.time = 1;
+        const base = s10Frame(W, H, 1);
+        T.visible = false;
+        const bare = s10Frame(W, H, 1);
+        T.visible = true;
+        const ink = [];
+        for (let i = 0; i < base.length; i += 4) if (Math.abs(base[i] - bare[i]) + Math.abs(base[i + 1] - bare[i + 1]) + Math.abs(base[i + 2] - bare[i + 2]) > 150) ink.push(i);
+        if (ink.length < 100) throw new Error('CONTROL: the title draws only ' + ink.length + ' pixels at 1 s');
+        if (smSegRed(W, H, 1) < 170) throw new Error('CONTROL: Clip 1 is not red at the centre before the effect (red ' + smSegRed(W, H, 1) + ')');
+        const n0 = v.steps();
+        const seg = await smSegAdd(v, 'invert');
+        const L = FM.scene.layers, k = L.indexOf(seg);
+        if (!(L.indexOf(T) < k)) fails.push('the title is under the whole-video segment in the stack (' + order() + ')');
+        if (!(L.indexOf(B) > k && L.indexOf(A) > k)) fails.push('a clip is above the segment (' + order() + ')');
+        if (v.steps() !== n0 + 1) fails.push('adding the effect took ' + (v.steps() - n0) + ' undo steps, want 1');
+        const after = s10Frame(W, H, 1);
+        let d = 0;
+        ink.forEach(i => { d += Math.abs(after[i] - base[i]) + Math.abs(after[i + 1] - base[i + 1]) + Math.abs(after[i + 2] - base[i + 2]); });
+        d /= ink.length * 3;
+        if (d > 8) fails.push('the title’s pixels at 1 s changed by ' + d.toFixed(1) + ' levels on average: the effect graded the title');
+        if (smSegRed(W, H, 1) > 100) fails.push('Clip 1 at the centre is not inverted (red ' + smSegRed(W, H, 1) + ')');
+        FM.history.undo(); await v.sleep(80);
+        if (order() !== 'B,T,A') fails.push('one Undo left the stack ' + order() + ', want B,T,A');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      }, { media: ['A', 'B'].map(n => ({ name: n, rec: smLookPic('#c05030', 320, 240) })) });
+    }, 380);
+  });
+
+  /* S10-N2, F1, S10-L2: Simple's own grips and Move let the whole mark go (planTrimItem, planMoveItem), but a segment's ends can be set
+     anywhere else too: D at the line (Simple hands D on an item that is not a clip to Full's clip keys), More's trim row, Full's grips and
+     fields, a friend in Full, an older build. The next Simple step of ANY kind pulled such a segment back over the whole video, inside
+     that step's undo, and said nothing. */
+  test('simple · 1243 S10 at 380 a whole-video effect shortened anywhere but its own grips keeps the length he gave it: D at 2 s cuts its end there, and the next Simple step (Add text) neither pulls it back over the whole video nor keeps it whole, and its line says the effect keeps that length; a head trim made in Full, then Strength back in Simple, keeps that trim too', { item: '1243', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smPic('A', 0, 2, W, H), smPic('B', 2, 2, W, H)], async function (v) {
+        const S = FM.spine, fails = [], said = [], say0 = S.say;
+        const span = id => { const l = FM.layerById(FM.scene, id); return l ? [l.start, l.start + l.duration] : null; };
+        const smOf = id => (FM.layerById(FM.scene, id) || {}).sm;
+        FM.time = 0;
+        const id = (await smSegAdd(v, 'invert')).id, name = String((FM.fxRegistry.get('invert') || {}).label || 'Invert');
+        if (!(smOf(id) && smOf(id).whole) || Math.abs(span(id)[1] - 4) > 1e-9) throw new Error('CONTROL: the segment is not whole over 0 to 4 s: ' + JSON.stringify([span(id), smOf(id)]));
+        if (FM.scene.selectedId !== id) throw new Error('CONTROL: the new segment is not selected');
+        /* 1. D with the line at 2 s, the segment selected: Full's clip key cuts its end at the line, outside Simple's runner */
+        FM.time = 2; v.key('KeyD', 'd'); await v.idle(); await v.sleep(60);
+        if (Math.abs(span(id)[0]) > 1e-9 || Math.abs(span(id)[1] - 2) > 1e-6) throw new Error('CONTROL: D at 2 s did not cut the segment to end at 2 s (it runs ' + JSON.stringify(span(id)) + ')');
+        /* 2. the next Simple step, about something else */
+        const n2 = v.steps();
+        S.say = function (t) { said.push(String(t)); return say0.apply(this, arguments); };
+        try { await S.cmd.addText(); await v.idle(); await v.sleep(80); } finally { S.say = say0; }
+        try { if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {}
+        await v.sleep(40);
+        if (v.steps() < n2 + 1) throw new Error('CONTROL: Add text made no undo step (it said ' + JSON.stringify(said) + ')');
+        if (Math.abs(span(id)[0]) > 1e-9 || Math.abs(span(id)[1] - 2) > 1e-6) fails.push('after Add text the segment runs ' + JSON.stringify(span(id)) + ', want 0 to 2 (the end D gave it)');
+        if (smOf(id) && smOf(id).whole) fails.push('after D cut it, the next step left it marked whole: ' + JSON.stringify(smOf(id)));
+        if (!(smOf(id) && smOf(id).stay)) fails.push('the segment lost its Stay put: ' + JSON.stringify(smOf(id)));
+        const keeps = ((FM.spineWords || {}).lines || {}).keepsLength;
+        const want = typeof keeps === 'function' ? keeps(name) : name + ' keeps the length you gave it';
+        if (!said.some(t => t.indexOf(want) >= 0)) fails.push('no line said “' + want + '” (it said ' + JSON.stringify(said) + ')');
+        /* 3. a second whole-video effect, its head trimmed in Full (Full's A at 1 s), then Strength back in Simple */
+        FM.selectLayer(null); await v.sleep(40);
+        const id2 = (await smSegAdd(v, 'grayscale')).id;
+        if (!(smOf(id2) && smOf(id2).whole) || Math.abs(span(id2)[0]) > 1e-9 || Math.abs(span(id2)[1] - 4) > 1e-9) throw new Error('CONTROL: the second segment is not whole over 0 to 4 s: ' + JSON.stringify([span(id2), smOf(id2)]) + ' · ' + fails.join(' · '));
+        FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(150);
+        FM.selectLayer(id2); FM.time = 1; FM.timeline.clipKey('a'); await v.sleep(60);
+        FM.editor.apply('simple', { force: true, quiet: true }); FM.refreshAll(); await v.sleep(150);
+        if (Math.abs(span(id2)[0] - 1) > 1e-6 || Math.abs(span(id2)[1] - 4) > 1e-6) throw new Error('CONTROL: Full’s A at 1 s did not trim the second segment’s head to 1 s (it runs ' + JSON.stringify(span(id2)) + ') · ' + fails.join(' · '));
+        await S.cmd.effectStrength(id2, 50); await v.idle(); await v.sleep(60);
+        const op = (FM.layerById(FM.scene, id2).transform || {}).opacity;
+        if (!(Math.abs(op - 0.5) < 1e-6)) throw new Error('CONTROL: Strength 50 did not land (opacity ' + JSON.stringify(op) + ') · ' + fails.join(' · '));
+        if (Math.abs(span(id2)[0] - 1) > 1e-6 || Math.abs(span(id2)[1] - 4) > 1e-6) fails.push('after Strength the segment trimmed in Full runs ' + JSON.stringify(span(id2)) + ', want 1 to 4 (the trim he made in Full)');
+        if (smOf(id2) && smOf(id2).whole) fails.push('after its trim in Full, Strength left the second segment marked whole');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      }, s10Media(['A', 'B']));
+    }, 380);
+  });
+
+  /* S10-N3, F2: S.fitProjectLayers writes after the runner has checked locks and presence holds, on steps that work live, so it must leave
+     alone a whole-video effect locked in Full (or held by a friend) until it is free, and it must never fit a whole mark that lost its Stay
+     put (an older build's Follow clip deletes stay and keeps whole, an unknown key there). */
+  test('simple · 1243 S10 the whole-video fit leaves alone what it must not write: a whole-video effect locked in Full keeps its span and its mark through a clip added at the end, and the first step after it is unlocked fits it; a whole mark without Stay put (an older build’s Follow clip) is never fitted', { item: '1243', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smPic('A', 0, 2, W, H), smPic('B', 2, 2, W, H)], async function (v) {
+      const S = FM.spine, fails = [];
+      const endNow = () => S.read(FM.scene).trackEnd;
+      const span = id => { const l = FM.layerById(FM.scene, id); return l ? [l.start, l.start + l.duration] : null; };
+      FM.time = 0;
+      const id = (await smSegAdd(v, 'invert')).id, L = () => FM.layerById(FM.scene, id);
+      if (!(L().sm && L().sm.whole) || Math.abs(span(id)[1] - 4) > 1e-9) throw new Error('CONTROL: the segment is not whole over 0 to 4 s: ' + JSON.stringify([span(id), L().sm]));
+      /* 1. locked in Full; a clip added at the end */
+      L().locked = true; FM.history.commit(); FM.selectLayer(null); await v.sleep(40);
+      await S.cmd.append([await q921png([40, 120, 200], 's10k1.png')]); await v.idle(); await v.sleep(80);
+      const e1 = endNow();
+      if (!(e1 > 4.5)) throw new Error('CONTROL: the added picture did not lengthen the video (it ends at ' + e1 + '; it said “' + v.say() + '”)');
+      if (Math.abs(span(id)[0]) > 1e-9 || Math.abs(span(id)[1] - 4) > 1e-9) fails.push('locked, the segment was moved to ' + JSON.stringify(span(id)) + ' by a clip added at the end, want 0 to 4 as it was');
+      if (!(L().sm && L().sm.whole)) fails.push('locked, the segment lost its whole mark: ' + JSON.stringify(L().sm));
+      if (L().locked !== true) fails.push('the step unlocked the segment');
+      /* 2. unlocked: the first step after it fits it */
+      L().locked = false; FM.history.commit();
+      await S.cmd.effectStrength(id, 60); await v.idle(); await v.sleep(60);
+      if (Math.abs(span(id)[0]) > 1e-9 || Math.abs(span(id)[1] - e1) > 1e-9) fails.push('unlocked, the next step left the segment at ' + JSON.stringify(span(id)) + ', want 0 to ' + e1);
+      /* 3. a whole mark that lost its Stay put, then the video made longer outside the runner (as Full's grip does) and a Simple step */
+      FM.selectLayer(null); await v.sleep(40);
+      const id2 = (await smSegAdd(v, 'grayscale')).id, L2 = () => FM.layerById(FM.scene, id2);
+      if (!(L2().sm && L2().sm.whole) || Math.abs(span(id2)[1] - e1) > 1e-9) throw new Error('CONTROL: the second segment is not whole over 0 to ' + e1 + ': ' + JSON.stringify([span(id2), L2().sm]) + ' · ' + fails.join(' · '));
+      delete L2().sm.stay; FM.history.commit();
+      const R0 = S.read(FM.scene), lastId = R0.main.filter(e => !e.slot).pop().id, last = FM.layerById(FM.scene, lastId);
+      last.duration += 1; if (FM.autoFitDuration) FM.autoFitDuration(); FM.history.commit(); FM.refreshAll(); await v.sleep(40);
+      const e2 = endNow();
+      if (!(e2 > e1 + 0.5)) throw new Error('CONTROL: lengthening the last clip did not move the end (' + e1 + ' to ' + e2 + ') · ' + fails.join(' · '));
+      await S.cmd.effectStrength(id, 70); await v.idle(); await v.sleep(60);
+      if (Math.abs(span(id)[1] - e2) > 1e-9) throw new Error('CONTROL: the step did not fit the first segment (whole, Stay put) to the new end ' + e2 + ' (it runs ' + JSON.stringify(span(id)) + ') · ' + fails.join(' · '));
+      if (Math.abs(span(id2)[0]) > 1e-9 || Math.abs(span(id2)[1] - e1) > 1e-9) fails.push('a whole mark without Stay put was fitted to ' + JSON.stringify(span(id2)) + ', want 0 to ' + e1 + ' as it was');
+      if (fails.length) throw new Error(fails.join(' · '));
+    }, s10Media(['A', 'B']));
+  });
+
+  /* S10-N4: the whole-video segment is Stay put, so it is no clip's follower and Delete clip left it behind. With the only clip gone it kept
+     the project at its own length (FM.autoFitDuration counts every layer) and graded the empty frame: Invert over black is white. */
+  test('simple · 1243 S10 at 380 deleting the only clip takes the whole-video effect with it: the video is 0 s long and nothing is drawn, the line counts it, and one Undo brings back both', { item: '1243', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smPic('A', 0, 3, W, H)], async function (v) {
+        const S = FM.spine, W = v.W, H = v.H, fails = [], said = [], say0 = S.say, A = v.L('A');
+        FM.time = 1;
+        const seg = await smSegAdd(v, 'invert'), n0 = v.steps();
+        if (Math.abs(seg.start) > 1e-9 || Math.abs(seg.duration - 3) > 1e-9) throw new Error('CONTROL: the segment is not over 0 to 3 s: ' + JSON.stringify([seg.start, seg.duration]));
+        S.say = function (t) { said.push(String(t)); return say0.apply(this, arguments); };
+        try { await S.cmd.del(A.id); await v.idle(); await v.sleep(80); } finally { S.say = say0; }
+        if (FM.layerById(FM.scene, A.id)) throw new Error('CONTROL: Delete clip left the clip (it said ' + JSON.stringify(said) + ')');
+        if (FM.layerById(FM.scene, seg.id)) fails.push('the whole-video effect is still there with no clip under it');
+        if (FM.scene.project.duration !== 0) fails.push('the video is ' + FM.scene.project.duration + ' s long, want 0');
+        const m = s10Mean(s10Frame(W, H, 0.5));
+        if (m > 5) fails.push('with no clip left the frame at 0.5 s draws a mean of ' + m.toFixed(1) + ' levels, want black');
+        if (v.steps() !== n0 + 1) fails.push('the delete took ' + (v.steps() - n0) + ' undo steps, want 1');
+        const w = ((FM.spineWords || {}).lines || {}).deletedWith;
+        const want = typeof w === 'function' ? w(1) : 'Deleted clip and 1 thing on it';
+        if (!said.some(t => t.indexOf(want) === 0)) fails.push('the line did not say “' + want + '” (it said ' + JSON.stringify(said) + ')');
+        FM.history.undo(); await v.sleep(80);
+        if (!FM.layerById(FM.scene, A.id) || !FM.layerById(FM.scene, seg.id)) fails.push('one Undo did not bring back both the clip and its effect (' + FM.scene.layers.map(l => l.name).join(',') + ')');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      }, s10Media(['A']));
+    }, 380);
+  });
+
+  /* F2 (and the span the N2 fix records): whole goes with Stay put everywhere, and carries the span it was last fitted to, so the fit can
+     tell a hand edit made outside Simple's runner from a change in the clips. */
+  test('simple · 1243 S10 the whole mark goes with Stay put and carries the span it was fitted to: setFlag refuses whole without Stay put and writes wholeStart and wholeEnd with it, every way the mark is let go takes the span too, the sanitiser drops whole without Stay put, a span that is not a finite time from 0 and a span with no whole, and the collab fixture pins those rules', { item: '1243' }, function () {
+    const S = FM.spine, fails = [], j = x => JSON.stringify(x);
+    const mk = sm => ({ id: 'w11', type: 'adjustment', start: 1, duration: 2, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], sm: sm });
+    const san = l => { FM.storage._sanitizeLayers([l]); return l; };
+    const full = () => ({ stay: true, whole: true, wholeStart: 1, wholeEnd: 3 });
+    const bare = mk({});
+    delete bare.sm;
+    if (S.setFlag(bare, 'whole', true) || (bare.sm && bare.sm.whole)) fails.push('setFlag wrote whole on a layer without Stay put: ' + j(bare.sm));
+    const w = mk({ stay: true });
+    if (!S.setFlag(w, 'whole', true) || j(w.sm) !== j(full())) fails.push('setFlag whole on a Stay put layer from 1 to 3 s wrote ' + j(w.sm) + ', want ' + j(full()));
+    const off = mk(full());
+    S.setFlag(off, 'whole', false);
+    if (j(off.sm) !== '{"stay":true}') fails.push('whole turned off left ' + j(off.sm) + ', want Stay put alone');
+    const f = mk(full());
+    S.setFlag(f, 'stay', false);
+    if (f.sm) fails.push('Follow clip left ' + j(f.sm));
+    const mm = mk(full());
+    S.setFlag(mm, 'main', true);
+    if (j(mm.sm) !== '{"main":true}') fails.push('Make main clip left ' + j(mm.sm) + ', want main alone');
+    const cp = mk(full());
+    S.onCopy([cp], 'duplicate');
+    if (j(cp.sm) !== '{"stay":true}') fails.push('a duplicate carries ' + j(cp.sm) + ', want Stay put alone');
+    const pk = mk(full());
+    S.onCopy([pk], 'pack', {});
+    if (j(pk.sm) !== '{"stay":true}') fails.push('a template or element copy carries ' + j(pk.sm) + ', want Stay put alone');
+    const hd = mk(full()), tl = mk(full());
+    S.onSplit(hd, tl);
+    if (j(hd.sm) !== '{"stay":true}' || j(tl.sm) !== '{"stay":true}') fails.push('the halves of a split carry ' + j([hd.sm, tl.sm]) + ', want Stay put alone on each');
+    const ok = san(mk(full())), ok0 = j(ok);
+    san(ok);
+    if (j(ok.sm) !== j(full()) || j(ok) !== ok0) fails.push('a valid whole segment with its span came out ' + j(ok.sm) + ' or moved on a second pass');
+    const noStay = san(mk({ whole: true, wholeStart: 1, wholeEnd: 3 }));
+    if ('sm' in noStay) fails.push('whole without Stay put came out ' + j(noStay.sm) + ', want no sm at all (whole goes with Stay put, and its span with it)');
+    const badSpan = san(mk({ stay: true, whole: true, wholeStart: 'x', wholeEnd: -1 }));
+    if (j(badSpan.sm) !== '{"stay":true,"whole":true}') fails.push('a span of x and -1 came out ' + j(badSpan.sm) + ', want both dropped');
+    const lone = san(mk({ stay: true, wholeStart: 1, wholeEnd: 3 }));
+    if (j(lone.sm) !== '{"stay":true}') fails.push('a span with no whole came out ' + j(lone.sm) + ', want it dropped');
+    const mw = san(mk({ main: true, whole: true, wholeStart: 1, wholeEnd: 3 }));
+    if (j(mw.sm) !== '{"main":true}') fails.push('main with whole and its span came out ' + j(mw.sm) + ', want main alone');
+    const C = FM.collab, F = (C && C.SCHEMA_FIXTURE) ? C.SCHEMA_FIXTURE() : [];
+    FM.storage._sanitizeLayers(F);
+    const at = id => F.filter(l => l.id === id)[0];
+    const f13 = at('fp_13'), f14 = at('fp_14');
+    if (!f13 || 'sm' in f13 || !f14 || j(f14.sm) !== '{"stay":true,"whole":true}') fails.push('the collab fixture does not pin these rules: fp_13 sanitises to ' + j(f13 && f13.sm) + ', fp_14 to ' + j(f14 && f14.sm) + ' (want no sm, and stay with whole)');
+    if (fails.length) throw new Error(fails.join(' · '));
   });
 })();

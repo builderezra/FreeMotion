@@ -32,7 +32,15 @@ window.FM = window.FM || {};
   /* Phase 2 adds `cut` (the de-click mark, §12.1) and `snd` (Simple's own sound-only fact, §0.4 B8). The sanitiser keeps both
      as plain unknown keys (`true` is plain), so its output does not change and no SCHEMA_REV bump is needed for them. */
   /* 2.4b adds `rideVol` (the opt-in volume rider, §3.10 rule 3): a stay-put sound whose volume and opacity keys ride the clips' time map. Plain, so no SCHEMA_REV bump. */
-  const FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit', 'cut', 'snd', 'rideVol'];
+  /* #1243 S10 (1243-R decision 10) adds `whole`: an effect from the project row's Effects covers the whole video, and S.fitProjectLayers
+     (js/spine-edit.js) keeps it at [first clip start, track end] on every Simple step until he drags or trims one of its ends. True-only,
+     in storage.js SM_FLAGS like `stay`. It goes with Stay put: a segment that follows a clip again is no longer the whole video's. */
+  /* #1243 S10 review (F2, S10-N2 / F1): `whole` is written only on a layer that stays put (as `rideVol` is), and it carries the span it was
+     last fitted to, `wholeStart` / `wholeEnd` (seconds, like `tailEnd`): written here when the mark goes on and by every fit. A span that
+     differs from it when a Simple step begins was set somewhere else — D at the line, More's trim row, Full, a friend, an older build —
+     and the fit lets the mark go instead of pulling the effect back over the whole video. Whatever takes the mark takes the span. */
+  const FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit', 'cut', 'snd', 'rideVol', 'whole'];
+  function dropWhole(sm) { delete sm.whole; delete sm.wholeStart; delete sm.wholeEnd; }
   S.setFlag = function (layer, key, on) {
     if (!layer || FLAGS.indexOf(key) < 0) return false;
     /* D17 B (his pick): a sound never ends with the video — music, a voice-over, a recording run on in black as in Full */
@@ -40,15 +48,18 @@ window.FM = window.FM || {};
     if (on && key === 'main' && (layer.audioOnly === true || layer.type === 'group' || (layer.type === 'text' && Array.isArray(layer.captions)))) return false;
     if (on && key === 'unit' && layer.type !== 'group') return false;
     if (on && key === 'rideVol' && !(layer.sm && layer.sm.stay)) return false;   // only a sound that stays put has a curve that could ride (a following one already moves with its clip)
+    if (on && key === 'whole' && !(layer.sm && layer.sm.stay === true)) return false;   // F2: a whole-video effect stays put; one that follows a clip is that clip's
     if (on) {
       if (!layer.sm || typeof layer.sm !== 'object') layer.sm = {};
       layer.sm[key] = true;
-      if (key === 'main') { delete layer.sm.stay; delete layer.sm.tail; delete layer.sm.tailEnd; }
+      if (key === 'main') { delete layer.sm.stay; delete layer.sm.tail; delete layer.sm.tailEnd; dropWhole(layer.sm); }
       if (key === 'tail') { if (layer.sm.main) { delete layer.sm.tail; return false; } layer.sm.stay = true; }
       if (key === 'stay' && layer.sm.main) { delete layer.sm.stay; return false; }
+      if (key === 'whole') { /* the span it is marked at */ const s = +layer.start || 0; layer.sm.wholeStart = s; layer.sm.wholeEnd = s + (+layer.duration || 0); }
     } else if (layer.sm) {
       delete layer.sm[key];
-      if (key === 'stay') { delete layer.sm.tail; delete layer.sm.tailEnd; delete layer.sm.rideVol; }   // tail implies stay; the rider needs it
+      if (key === 'stay') { delete layer.sm.tail; delete layer.sm.tailEnd; delete layer.sm.rideVol; dropWhole(layer.sm); }   // tail implies stay; the rider needs it; a whole-video effect that follows a clip is that clip's (#1243 S10)
+      if (key === 'whole') dropWhole(layer.sm);
       if (!Object.keys(layer.sm).length) delete layer.sm;
     }
     return !!(layer.sm && layer.sm[key]) === !!on;
@@ -70,6 +81,7 @@ window.FM = window.FM || {};
       delete c.trIn;   // 2.7 (§12.2, §13 #16): a transition belongs to ONE cut, and a copy is never at it
       if (c.sm && typeof c.sm === 'object') {
         delete c.sm.main; delete c.sm.tail; delete c.sm.tailEnd;
+        dropWhole(c.sm);   // #1243 S10: nor a second whole-video effect, which the next Simple step would pull back over the first
         if (!Object.keys(c.sm).length) delete c.sm;
       }
     });
@@ -89,6 +101,7 @@ window.FM = window.FM || {};
       delete c.pick; delete c.by; delete c.trIn;
       if (c.sm && typeof c.sm === 'object') {
         delete c.sm.main; delete c.sm.tail; delete c.sm.tailEnd; delete c.sm.muteByMode;
+        dropWhole(c.sm);   // #1243 S10: the pack's whole video is not this one's
         if (el) delete c.sm.stay;
         if (!c.sm.stay) delete c.sm.rideVol;   // the rider needs Stay put (setFlag's rule)
         if (!Object.keys(c.sm).length) delete c.sm;
@@ -104,8 +117,10 @@ window.FM = window.FM || {};
     /* 2.7 (§12.1, §0.4 N3): a transition sits at the HEAD's cut, so the later half (a copy of the clip, cut at the split, where
        there is no transition) does not carry it. Only a Simple-made field: a Full-made project splits exactly as before. */
     if (tail && typeof tail === 'object' && 'trIn' in tail) delete tail.trIn;
+    /* #1243 S10: neither half of a whole-video effect is the whole video any more (left on, the next Simple step pulled both back over it) */
+    if (tail && tail.sm && typeof tail.sm === 'object' && ('whole' in tail.sm || 'wholeStart' in tail.sm || 'wholeEnd' in tail.sm)) { dropWhole(tail.sm); if (!Object.keys(tail.sm).length) delete tail.sm; }
     if (!head || !head.sm || typeof head.sm !== 'object') return;
-    delete head.sm.tail; delete head.sm.tailEnd;
+    delete head.sm.tail; delete head.sm.tailEnd; dropWhole(head.sm);
     if (!Object.keys(head.sm).length) delete head.sm;
   };
 
@@ -228,11 +243,22 @@ window.FM = window.FM || {};
     const u = R && R.units && R.units[layer.id];
     const k = u ? u.kind : '';
     if (k === 'audio') return S.isSong(layer, u) ? (w.song || 'the song') : (w.sound || 'the sound');
-    if (k === 'effect') return w.effect || 'the effect';
+    if (k === 'effect') return S.effectWord(layer);
     if (k === 'block') return w.block || 'the group';
     if (layer.type === 'shape') return w.shape || 'the shape';
     if (layer.type === 'image') return w.image || 'the image';
     return w.videoTop || 'the video on top';
+  };
+  /* #1243 S10 (his words, 8 Nov: "it just names it the effect"): an effect segment is named by what it holds — its one effect's own
+     registry label (Invert, Gaussian Blur), as the line that added it names it; "2 effects" when it holds several (a filter box or one
+     made in Full); "the effect" only when it holds none, or one this build has no name for. Its timeline label and every sentence that
+     names it ("Trimmed Invert", "Invert now starts at 1.0 s") read it. */
+  S.effectWord = function (layer) {
+    const w = words().items || {}, X = FM.fxRegistry;
+    const fx = (layer && Array.isArray(layer.effects)) ? layer.effects.filter(f => f && typeof f.type === 'string') : [];
+    if (fx.length > 1) return w.effects ? w.effects(fx.length) : fx.length + ' effects';
+    const e = fx.length === 1 && !(FM.isFxContainer && FM.isFxContainer(fx[0])) && X && X.get ? X.get(fx[0].type) : null;
+    return (e && e.label) ? String(e.label) : (w.effect || 'the effect');
   };
   /* #1243 S38 (his words, 8 Nov: "you also don't need like the brackets… for… each text layer… just have it say what is on that text
      layer"): the label an item WEARS on the timeline. A text shows its own words, whitespace collapsed, with no quote marks and no

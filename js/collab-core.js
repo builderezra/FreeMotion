@@ -184,7 +184,13 @@ window.FM = window.FM || {};
      Shadow Bloom, Bump Map, Oil Slick, Colour Wash, Light Leak, Dreamy Bloom, Corner Colours, Palette Map, Colour Cycle and Pop
      Art. Every default draws what the effect drew before, but a rev-39 sanitiser drops the new keys, so the two would normalise
      one project differently. */
-  C.SCHEMA_REV = 41;
+  /* Rev 42 (#1243 S10, Simple's whole-video effect): the sanitiser keeps `layer.sm.whole` only as exactly true (storage.js SM_FLAGS)
+     and drops it where `sm.main` wins. A rev-41 build keeps any plain `whole` as an unknown key, so the two would normalise such a
+     layer differently. No build writes anything but `whole: true` on an adjustment layer, so no saved project changes. fp_11 and
+     fp_12 in the fixture pin the two rules. FM.SM_V does not move: an older build opens a project holding one exactly as before (a
+     pinned adjustment layer that its own steps do not refit). The S10 review added, in this same rev: `whole` only with `stay`, and
+     its span `wholeStart` / `wholeEnd` (finite, >= 0, gone with `whole`); fp_13 and fp_14 pin those. */
+  C.SCHEMA_REV = 42;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -339,6 +345,19 @@ window.FM = window.FM || {};
       id: 'fp_9', type: 'video', name: 'T9', start: 24, duration: 4, audioOnly: true, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, trIn: { type: 'crossfade', d: 1 }
     }, {
       id: 'fp_10', type: 'image', name: 'T10', start: 28, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, trIn: 'crossfade'
+    }, {
+      /* Rev 42 (#1243 S10): `whole` is a true-only flag (a rev-41 build keeps a non-true one as a plain unknown key), and main wins
+         over it as over stay and tail. fp_11 pins the first rule, fp_12 the second. */
+      id: 'fp_11', type: 'adjustment', name: 'W11', start: 0, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], sm: { stay: true, whole: 1 }
+    }, {
+      id: 'fp_12', type: 'adjustment', name: 'W12', start: 0, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], sm: { main: true, whole: true }
+    }, {
+      /* Rev 42, the S10 review (F2, and the span the fit compares): whole goes with Stay put, and its span (`wholeStart` / `wholeEnd`) is a
+         finite time from 0 that goes with whole. A rev-41 build keeps all of these as plain unknown keys. fp_13 (whole and a span, no stay)
+         pins whole-without-stay and span-without-whole, fp_14 (a span of a string and a negative) the time rule. */
+      id: 'fp_13', type: 'adjustment', name: 'W13', start: 0, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], sm: { whole: true, wholeStart: 0, wholeEnd: 4 }
+    }, {
+      id: 'fp_14', type: 'adjustment', name: 'W14', start: 0, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], sm: { stay: true, whole: true, wholeStart: 'x', wholeEnd: -1 }
     }];
   };
   /* …and a project carrying Simple's project keys (SCHEMA_REV 8): `home` any string ≤ 32 is kept, `v` clamped, junk dropped. */
@@ -426,7 +445,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =7533255701768435;   // SCHEMA_REV 41 (v18.15, #482 4.6): the Filter's Apply as. Measured 29 Oct by `921 S1 the schema fingerprint gate` at rev 41; before: 6290761865100751 at rev 40.
+  C.SCHEMA_FP =5912419200648610;   // SCHEMA_REV 42 (#1243 S10): sm.whole true-only, fp_11 / fp_12; the S10 review's whole-only-with-stay and wholeStart / wholeEnd, fp_13 / fp_14. Measured 9 Nov by `921 S1 the schema fingerprint gate` at rev 42 (5720067090430967 before the review's rules, never shipped); before: 7533255701768435 at rev 41 (v18.15, #482 4.6: the Filter's Apply as), 6290761865100751 at rev 40.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════

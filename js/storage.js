@@ -1997,7 +1997,10 @@ window.FM = window.FM || {};
    * "Plain" is defined, not guessed: null, a boolean, a finite number, a string up to 200 characters, or an array /
    * object of those, at most 3 deep, at most 24 keys per object, at most 2 KB serialised. Anything else is dropped
    * WHOLE, never truncated. */
-  const SM_FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit'];
+  /* #1243 S10: `whole` (an effect over the whole video, kept there by FM.spine.fitProjectLayers) is true-only like `stay`. Before it was
+     listed, a non-true `whole` was kept as a plain unknown key; no build ever wrote one, so a valid document sanitises as before. Its span,
+     `wholeStart` / `wholeEnd`, is a finite time from 0 like `tailEnd`, and both go when `whole` does (sanitizeSmLayer below). */
+  const SM_FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit', 'whole'];
   function smPlain(v, depth) {
     if (v === null || typeof v === 'boolean') return true;
     if (typeof v === 'number') return isFinite(v);
@@ -2046,12 +2049,17 @@ window.FM = window.FM || {};
     Object.keys(sm).forEach(k => {
       if (SM_FLAGS.indexOf(k) >= 0) { if (sm[k] !== true) delete sm[k]; }
       else if (k === 'tailEnd') { if (!(typeof sm.tailEnd === 'number' && isFinite(sm.tailEnd) && sm.tailEnd >= 0)) delete sm.tailEnd; }
+      else if (k === 'wholeStart' || k === 'wholeEnd') { /* #1243 S10 review: the span `whole` was fitted to, a time like tailEnd */ if (!(typeof sm[k] === 'number' && isFinite(sm[k]) && sm[k] >= 0)) delete sm[k]; }
       else if (!smKeepUnknown(sm, k)) delete sm[k];
     });
     // sm.main only on a member layer that DRAWS A PICTURE: never on audio-only, a caption track or a group (§2.3)
     if (sm.main && (l.audioOnly === true || l.type === 'group' || (l.type === 'text' && Array.isArray(l.captions)))) delete sm.main;
-    if (sm.main) { delete sm.stay; delete sm.tail; delete sm.tailEnd; }   // main wins; a main clip is never a tail item
+    if (sm.main) { delete sm.stay; delete sm.tail; delete sm.tailEnd; delete sm.whole; }   // main wins; a main clip is never a tail item, nor a whole-video effect
     if (sm.tail && !sm.stay) sm.stay = true;                            // tail implies stay
+    /* #1243 S10 review (F2): whole goes with Stay put (an older build's Follow clip deletes stay and keeps whole as an unknown key), and its
+       span goes with it. No build writes either alone, so a valid document sanitises as before. */
+    if (sm.whole && !sm.stay) delete sm.whole;
+    if (!sm.whole) { delete sm.wholeStart; delete sm.wholeEnd; }
     if (!Object.keys(sm).length) delete l.sm;
   }
   function sanitizeSmProject(p) {

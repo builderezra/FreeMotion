@@ -165,6 +165,7 @@ window.FM = window.FM || {};
       theClips: 'the clips', speechMoved: 'The sound moved while it listened · try again', speechNotHere: 'No speech inside these captions',
       /* Phase 3 · Effect segments (queue 980, DESIGN §8.5c, §4.3): said in #sm-live; the refusals in #sm-say. Strength says lookStrengthSet's words */
       effectAdded: (name, clip) => name + ' over ' + clip, effectChanged: name => 'Changed to ' + name, effectDeleted: 'Deleted the effect',
+      effectAddedWhole: name => name + ' over the whole video',   // #1243 S10: the project row's Effects covers the whole video
       effectGone: 'That effect was just deleted', segmentNoClip: 'Add a clip first, then an effect over it',
       segmentOnClip: 'This one goes on a clip — tap a clip first', effectMany: 'This holds several effects · More opens them',
       /* Phase 3 · Effects on an item (queue 980, DESIGN §8.5c item 3 "Added Shake to Clip 2"; §4.3 / Q5 the hint on a segment's timeline item) */
@@ -221,7 +222,7 @@ window.FM = window.FM || {};
       capAddLine: 'Add a line here', capEmpty: 'Empty · tap to type', capRemove: 'Remove this line', capNone: 'No lines yet',
       /* Phase 3 · Effect segments (queue 980, DESIGN §8.5: the project row's Effects, the Effect segment tray "Change effect · Strength ·
          Stay put · 🗑"; §8.5c): the picker in the tray row and the segment's own tools */
-      effects: 'Effects', effectsTitle: 'An effect over the clip at the line', change: 'Change effect', strength: 'Strength', strengthLabel: 'Strength in percent',
+      effects: 'Effects', effectsTitle: 'An effect over the whole video', change: 'Change effect', strength: 'Strength', strengthLabel: 'Strength in percent',
       /* Phase 3 · Effects on an item (queue 980, DESIGN §8.5c item 3): the tray's own face, not "Effects" — the project row's Effects is on
          screen at the same time (his #310: one face per control on screen) */
       addEffect: 'Add effect', addEffectTitle: 'Add effect to the selected item',
@@ -247,6 +248,7 @@ window.FM = window.FM || {};
     items: {   // FM.spine.itemWord: never layer.name (§8.9 "Naming items in lines")
       clip: 'Clip', sticker: 'the sticker', image: 'the image', videoTop: 'the video on top', song: 'the song',
       sound: 'the sound', effect: 'the effect', captions: 'the captions', block: 'the group', shape: 'the shape', text: 'the text',
+      effects: n => n + ' effects',   // #1243 S10: a segment holding several (FM.spine.effectWord); one is named by its own label
       textLabel: 'Text'   // #1243 S38: an empty text's label on the timeline (FM.spine.itemLabel)
     },
     /* 2.7 (SU1 #14): Simple's time pill, "0:03 / 0:12": the whole seconds already played over the length, rounded as the summary is */

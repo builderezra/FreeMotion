@@ -686,8 +686,11 @@ window.FM = window.FM || {};
   /* Release 2.6 (DESIGN §11, §0.4 B19): THE `li` MASK. An undo of an add keeps the op only while the layer still reads as the person left it, and "as they left it"
      must not include what Simple's own arranging writes: every ripple (`kb`), every pin (`sm.stay`), every adoption or Make overlay (`sm.main`) and the host's `by`
      stamp broke the compare, so an add became un-undoable the moment anyone arranged. `start` stays compared (a Full person's undo of an add after a friend moved
-     it fails exactly as today). Returns the layer's canon string with those fields dropped, `sm` gone when nothing else is in it. */
-  const SM_MEMBERSHIP = ['main', 'stay', 'tail', 'tailEnd', 'twin', 'muteByMode', 'snd', 'cut'];
+     it fails exactly as today). Returns the layer's canon string with those fields dropped, `sm` gone when nothing else is in it.
+     #1243 S10 review (F3): the whole-video mark and its span (`whole`, `wholeStart`, `wholeEnd`) go with Stay put — a friend's Follow clip
+     takes all three and moves nothing — so they are membership too, or that unpin broke the undo of the effect's add. A refit or a hand
+     trim of the effect still fails the compare, through `start` and `duration`. */
+  const SM_MEMBERSHIP = ['main', 'stay', 'tail', 'tailEnd', 'twin', 'muteByMode', 'snd', 'cut', 'whole', 'wholeStart', 'wholeEnd'];
   function maskLayer(L) {
     if (!L || typeof L !== 'object') return canon(L);
     const c = clone(L);

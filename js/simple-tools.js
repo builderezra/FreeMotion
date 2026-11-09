@@ -785,8 +785,48 @@ window.FM = window.FM || {};
     }
     return frag;
   }
+  /* #1243 S11, A GUARD — THE PICTURE TILES MOUNT WHEN THEY COME INTO VIEW. His words, 8 Nov: "stuck on one frame and… nothing is like really
+     working cleanly… And I just added like an effect". Not reproduced on the laptop (v18.29, the s11probe), so the cause is unmeasured: S11
+     stays open, waiting on his screen recording. What this guards: every picker tile was mounted the moment its strip was drawn — the
+     Effects strip held 44 (counted 9 Nov; 42 since #1243 S10 left out Glow and Auto Grade) — and each mount is a live render (js/fx-thumbs.js generates one per animation frame, and its shared timer repaints every
+     animated tile still in the page, on screen or not), all competing with the preview for every frame on his phone. Now ONLY THE TILES IN
+     VIEW HOLD A LIVE PICTURE, at all times: each tile's canvas waits outside the page (a same-size placeholder holds its place) until the
+     tile comes within 60 px of the strip's view (an IntersectionObserver rooted on the strip, watching the tiles), then goes in and is
+     mounted; when the tile leaves that margin the canvas comes out again, and fx-thumbs' timer, which repaints only canvases in the page,
+     drops it. Mounting once was not enough (the logger's review): a scroll end to end would have left all of them live. A return remounts,
+     which is cheap: fx-thumbs keeps the frames. THIS IS THE CONTRACT the tiles' pictures plug into (the FX1 effect pictures too):
+     `mount(item)` is called each time a tile comes into view. js/fx-thumbs.js itself is untouched: Full's effects browser shares it. */
+  const LAZY_AHEAD_PX = 60;
+  function lazyTiles(strip, items, mount) {
+    if (typeof IntersectionObserver !== 'function') { items.forEach(it => { try { mount(it); } catch (e) {} }); return null; }
+    const byTile = new Map();
+    items.forEach(it => {
+      const cv = it[0], tile = cv.parentNode;
+      if (!tile) return;
+      const rest = document.createElement('span');
+      rest.className = cv.className + ' sm-th-rest'; rest.setAttribute('aria-hidden', 'true');
+      cv.replaceWith(rest);
+      byTile.set(tile, { it: it, cv: cv, rest: rest, live: false });
+    });
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        const t = byTile.get(en.target); if (!t) return;
+        if (en.isIntersecting && !t.live) {
+          if (t.rest.parentNode) t.rest.replaceWith(t.cv);
+          t.live = true;
+          try { mount(t.it); } catch (e) {}
+        } else if (!en.isIntersecting && t.live) {
+          if (t.cv.parentNode) t.cv.replaceWith(t.rest);
+          t.live = false;
+        }
+      });
+    }, { root: strip, rootMargin: '0px ' + LAZY_AHEAD_PX + 'px 0px ' + LAZY_AHEAD_PX + 'px' });
+    byTile.forEach((t, tile) => io.observe(tile));
+    return io;
+  }
   function lookFilters(box, L) {
     const w = W(), id = L.id, lk = FM.spine.lookOf(L), cur = lk.filter ? lk.filter.fid : '';
+    const cvs = [];
     const strip = el('div', 'sm-look-strip');
     strip.setAttribute('role', 'group'); strip.setAttribute('aria-label', w.lookFilters || 'Filters');
     const tile = (fid, name) => {
@@ -797,7 +837,7 @@ window.FM = window.FM || {};
       if (fid) {
         const cv = el('canvas', 'sm-look-th'); cv.setAttribute('aria-hidden', 'true');
         b.appendChild(cv);
-        if (FM.fxThumbs && FM.fxThumbs.mountFilter) { try { FM.fxThumbs.mountFilter(cv, fid, null); } catch (e) {} }
+        cvs.push([cv, fid]);   // mounted when it comes into view (lazyTiles, #1243 S11)
       } else {
         const n = el('span', 'sm-look-th sm-look-none');
         n.innerHTML = svg('none');   // a fixed string, never user data
@@ -811,6 +851,7 @@ window.FM = window.FM || {};
     lookList().forEach(f => strip.appendChild(tile(String(f.id), String(f.name || f.id))));
     strip.addEventListener('scroll', () => { lookLeft = strip.scrollLeft; }, { passive: true });
     box.appendChild(strip);
+    if (FM.fxThumbs && FM.fxThumbs.mountFilter) lazyTiles(strip, cvs, q => FM.fxThumbs.mountFilter(q[0], q[1], null));
     if (lk.filter) box.appendChild(lookSlider(L, 'strength', w.lookStrength || 'Strength', 0));
   }
   function lookAdjust(box, L) {
@@ -913,8 +954,18 @@ window.FM = window.FM || {};
     run.setAttribute('role', 'group'); run.setAttribute('aria-label', w.effects || 'Effects');
     (S.segmentEffects ? S.segmentEffects() : []).forEach(reg => {
       const type = String(reg.type), name = String(reg.label || type);
+      /* #1243 S10 change 5: a refusal ('segmentNoClip', 'segmentOnClip', a lock…) is said in the tray row, and the picker was holding that
+         row, so the line came up over the tiles and the picker came back under it. A new segment's pick closes the picker FIRST (as the
+         item picker does): it lands as the segment's own tray, or its refusal is said in a row that shows it. Change effect keeps the
+         picker up when it lands, so only a refusal said during its tap closes it (pickTap, read by the line hook below). */
       const b = tool({ id: 'fx:' + type, label: name, icon: null, pressed: cur == null ? null : cur === type,
-        run: () => { if (seg) { if (cur !== type) S.cmd.changeEffect(seg.id, type); } else S.cmd.addEffect(type, FM.time || 0); } });
+        run: () => {
+          if (seg) { if (cur !== type) { pickTap = true; try { S.cmd.changeEffect(seg.id, type); } finally { pickTap = false; } } return; }
+          const t = FM.time || 0, back = !!(document.activeElement && tray.contains(document.activeElement));
+          FM.simpleTools.closeEffects();
+          if (back) { const a = tools && tools.querySelector('.sm-tool[data-tool="effects"]'); if (a) a.focus({ preventScroll: true }); }   // the tool that opened it keeps focus (§3.12 1a)
+          S.cmd.addEffect(type, t);
+        } });
       b.classList.add('sm-fx-tile');
       const cv = el('canvas', 'sm-fx-th'); cv.setAttribute('aria-hidden', 'true');
       b.insertBefore(cv, b.firstChild);
@@ -926,7 +977,7 @@ window.FM = window.FM || {};
     run.addEventListener('scroll', () => edges(run), { passive: true });
     if (runSeen) runSeen.observe(run);
     edges(run);
-    if (FM.fxThumbs && FM.fxThumbs.mount) cvs.forEach(p => { try { FM.fxThumbs.mount(p[0], p[1]); } catch (e) {} });
+    if (FM.fxThumbs && FM.fxThumbs.mount) lazyTiles(run, cvs, p => FM.fxThumbs.mount(p[0], p[1]));   // #1243 S11: as they come into view
     return false;
   }
   /* the project row's Effects shows pressed while it has the picker open for a new segment */
@@ -1011,7 +1062,7 @@ window.FM = window.FM || {};
     if (runSeen) runSeen.observe(run);
     edges(run);
     const T = FM.fxThumbs;
-    if (T) cvs.forEach(q => { try { if (q[1].preset && T.mountPreset) T.mountPreset(q[0], q[1].preset, null); else if (T.mount) T.mount(q[0], q[1].type); } catch (e) {} });
+    if (T) lazyTiles(run, cvs, q => { if (q[1].preset && T.mountPreset) T.mountPreset(q[0], q[1].preset, null); else if (T.mount) T.mount(q[0], q[1].type); });   // #1243 S11: as they come into view
     return false;
   }
 
@@ -1224,7 +1275,13 @@ window.FM = window.FM || {};
     tfT = setTimeout(tick, opts.ms > 0 ? opts.ms : (btns.length ? 10000 : 4000));
     return true;
   }
-  if (FM.spine) FM.spine.sayOver = tfSay;
+  /* #1243 S10 change 5: a refusal said while Change effect's tap is in flight closes the picker before the line takes the tray row */
+  let pickTap = false;
+  function pickSay(text, opts) {
+    if (pickTap && fxPick && opts && opts.refusal && !opts.live) { fxPick = null; segUndrag(); lastSig = ''; FM.simpleTools.sync(); }
+    return tfSay(text, opts);
+  }
+  if (FM.spine) FM.spine.sayOver = pickSay;
 
   FM.simpleTools = {
     /* Called by the Simple timeline's rebuild and by syncSelectionChrome: re-draws the tray only when what it shows changed */

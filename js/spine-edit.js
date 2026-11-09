@@ -244,6 +244,64 @@ window.FM = window.FM || {};
     return notes;
   };
 
+  /* ═══ THE ONE NORMALISER (#1243, 1243-R decision 10): S.fitProjectLayers keeps the layers that belong to the whole project at the
+     project's length. It runs at the end of EVERY S.edit step that lands, inside that step (so the fit is part of the same undo step and
+     the same collab transaction), after the tail fit; it lives only in Simple's runner, so it never writes in Full. Idempotent: a layer
+     already at its span is not touched. R decision 10 lists four cases; this release builds case 3 only:
+       3. a whole-video effect (an adjustment layer marked `sm.whole`, made by the project row's Effects, S10) spans [first clip start,
+          track end]. Its keys ride the change as the tail fit's do (moved by the start's shift, then S.fitMap over the new length).
+          Dragging or trimming one of its ends clears the flag (planTrimItem, planMoveItem), and so do Follow clip and a split, so a
+          segment he shortened by hand is never pulled back. With no clip at all there is no span, and it is left where it was.
+     Cases 1, 2 and 4 (the backdrop image, the blur fill behind each clip, the Look layer) come with S22 and S12.
+     THE S10 REVIEW'S RULES (9 Nov), each a way the fit wrote what it must not:
+       · A SPAN SET ANYWHERE ELSE STAYS (S10-N2, F1, S10-L2). The mark carries the span it was last fitted to (sm.wholeStart / wholeEnd,
+         written by setFlag and by every fit). `pre` is every whole layer's span as the step began (S.wholeSpans, read by S.edit before
+         the plan runs): one that differs from its recorded span by more than eps was set outside this runner — D or A at the line (Simple
+         hands those to Full's clip keys for an item that is not a clip), More's trim row, Full's grips and fields, a friend, an older build
+         — so the mark goes (Stay put kept) and the line says it keeps that length, exactly as the tail fit treats a tailEnd that moved.
+         Before, the next step of any kind pulled it back over the whole video inside that unrelated step's undo, and said nothing.
+       · NEVER A LOCKED OR HELD ONE (S10-N3). This runs after the runner's lock and presence checks, and on steps that work live, so a
+         whole effect locked in Full or held by a friend is left as it is, mark and all, and the first step after it is free fits it.
+       · ONLY WITH STAY PUT (F2). A whole mark without Stay put (an older build's Follow clip keeps it as an unknown key) is not fitted:
+         that layer follows a clip now.
+     Returns the ids it moved, with `.notes`: the lines to say with the step. */
+  S.wholeSpans = function () {
+    const m = new Map();
+    FM.scene.layers.forEach(l => { if (l && l.sm && l.sm.whole === true) { const s = +l.start || 0; m.set(l.id, [s, s + (+l.duration || 0)]); } });
+    return m;
+  };
+  S.fitProjectLayers = function (R2, plan, pre) {
+    const clips = R2.main.filter(e => !e.slot), out = [];
+    out.notes = [];
+    const s = clips.length ? clips[0].start : 0, end = R2.trackEnd, span = clips.length > 0 && end - s > 1e-9;
+    const C = FM.collab, PZ = C && C.active && C.presence && C.presence.heldByOther ? C.presence : null;
+    FM.scene.layers.forEach(l => {
+      if (!l || l.type !== 'adjustment' || !(l.sm && l.sm.whole === true) || R2.isMain(l.id)) return;
+      if (l.sm.stay !== true) return;                                  // F2: it follows a clip
+      if (l.locked || (PZ && PZ.heldByOther(l.id))) return;            // S10-N3: not ours to write now; fitted once it is free
+      const p = pre && pre.get(l.id), ws = l.sm.wholeStart, we = l.sm.wholeEnd;
+      if (p && typeof ws === 'number' && typeof we === 'number' && (Math.abs(p[0] - ws) > R2.eps || Math.abs(p[1] - we) > R2.eps)) {
+        S.setFlag(l, 'whole', false);                                  // S10-N2 / F1: he set its span somewhere else; Stay put stays
+        if (plan && plan.touched) plan.touched.add(l.id);
+        out.notes.push(line('keepsLength', S.itemWord(l, R2)));
+        return;
+      }
+      if (!span) return;
+      const s0 = +l.start || 0, d0 = +l.duration || 0;
+      if (Math.abs(s0 - s) <= 1e-9 && Math.abs(s0 + d0 - end) <= 1e-9) {
+        if (typeof ws !== 'number' || typeof we !== 'number') { l.sm.wholeStart = s0; l.sm.wholeEnd = s0 + d0; }
+        return;
+      }
+      if (Math.abs(s - s0) > 1e-9) S.shiftKeys(l, s - s0);
+      if (d0 > 0) S.mapLayerKeys(l, S.fitMap(s, d0, end - s));
+      l.start = s; l.duration = end - s;
+      l.sm.wholeStart = s; l.sm.wholeEnd = s + l.duration;
+      if (plan && plan.touched) plan.touched.add(l.id);
+      out.push(l.id);
+    });
+    return out;
+  };
+
   /* Transparent groups follow their members (§2.5): start = min member start, duration = max end − start, exact (Full's
      refitGroupsFor rounds to the millisecond and only walks up from one layer). An emptied group is removed with the
      delete that emptied it; one with no members never holds the video past the new end. */
@@ -813,6 +871,18 @@ window.FM = window.FM || {};
     const removes = [c.id].concat(R.followers[c.id] || []);
     removes.forEach(x => { unitLayers(x, map).forEach(l => plan.removes.add(l.id)); plan.touched.add(x); });
     plan.counts.followers = (R.followers[c.id] || []).filter(x => !S.isTwinOf(map.get(x), L, R.eps)).length;
+    /* #1243 S10 review (S10-N4): a whole-video effect is Stay put, so it is no clip's follower. With the LAST clip gone it covers nothing,
+       yet held the video at its own length (FM.autoFitDuration counts every layer) and graded the empty frame — Invert over black is
+       white. It goes with that clip, counted in the line ("and 1 thing on it"), and one Undo brings back both. One he shortened or moved by
+       hand (the mark gone, or its span no longer the one recorded with it) or locked in Full stays, as any Stay put item does. */
+    if (!R.main.some(e => !e.slot && e.id !== c.id)) {
+      FM.scene.layers.forEach(l => {
+        if (!l || l.type !== 'adjustment' || !(l.sm && l.sm.whole === true) || l.locked || plan.removes.has(l.id)) return;
+        const s0 = +l.start || 0, e0 = s0 + (+l.duration || 0), ws = l.sm.wholeStart, we = l.sm.wholeEnd;
+        if (typeof ws === 'number' && typeof we === 'number' && (Math.abs(s0 - ws) > R.eps || Math.abs(e0 - we) > R.eps)) return;
+        plan.removes.add(l.id); plan.touched.add(l.id); plan.counts.followers++;
+      });
+    }
     /* (i)–(iii) long items cut through the delete map, keys refused until 2.4. The time that goes is [ca, b): when c's own
        fade-in went with it, p still shows over [a, p.end) and n lands at p.end, so what played at b now plays at p.end — the
        cut starts there and len = −dt, never b − a (a voice-over ran ahead of the picture by the fade; review finding 18) */
@@ -1383,6 +1453,7 @@ window.FM = window.FM || {};
       /* D7's Do it anyway: the ids it unlocked are held HERE, never as a mark on the layer — FM.cloneLayer drops every '_' key,
          so a split's second half, a cut item's piece and a copy all came out unlocked (review finding 14) */
       const ids0 = new Set(FM.scene.layers.map(l => l.id)), relock = new Set();
+      const whole0 = S.wholeSpans();   // #1243 S10 review (S10-N2): each whole-video effect's span as the step begins, before the plan writes anything
       let ok = false, notes = [], adoptPaths = null;
       try {
         if (opts.unlock) lk.forEach(id => unitLayers(id, map).forEach(l => { if (l.locked) { l.locked = false; relock.add(l.id); } }));
@@ -1397,6 +1468,7 @@ window.FM = window.FM || {};
         if (!plan.keepsTransitions) { const dropped = S.dropStaleTransitions(trPre); if (dropped) plan.counts.trDropped = dropped; }
         const R2 = S.classify(FM.scene);
         if (gated) { notes = S.fitTails(R2, plan, { anyway: !!opts.anyway }); pinTailsAfter(R2); refitTransparentGroups(R2); }
+        S.fitProjectLayers(R2, plan, whole0).notes.forEach(n => notes.push(n));   // #1243 S10 (1243-R decision 10): after EVERY step, gated or not, inside it — one undo step
         markCuts(plan.touched);
         if (relock.size) relockAfter(relock, ids0, plan);
         ok = true;
@@ -2432,6 +2504,7 @@ window.FM = window.FM || {};
     const plan = newPlan('Move item');
     unitLayers(id, map).forEach(m => addMove(plan, m.id, d));
     plan.touched.add(id);
+    if (l.sm && l.sm.whole) plan.writes.push(() => { S.setFlag(l, 'whole', false); });   // #1243 S10: moved by hand, it is no longer kept over the whole video
     const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
     plan.time = ns;
     plan.live = line('itemMoved', S.itemWord(l, R), ns);
@@ -2455,6 +2528,7 @@ window.FM = window.FM || {};
     plan.writes.push(() => {
       L.duration = r.duration; if (L.type === 'video') L.trimStart = r.trimStart;
       if (side === 'head') { L.start = r.start; if (FM.shiftLayerFxClock) FM.shiftLayerFxClock(L, r.fxShift); }
+      if (L.sm && L.sm.whole) S.setFlag(L, 'whole', false);   // #1243 S10: an end he set by hand: S.fitProjectLayers leaves it there from now on
     });
     plan.after = () => { if (FM.reconcileAudio) FM.reconcileAudio(); };
     plan.live = line('trimmed', S.itemWord(L, R));
@@ -3075,14 +3149,18 @@ window.FM = window.FM || {};
      LAYER holding ONE whole-frame grade (an ADJ_OK effect, js/fx-registry.js) over a stretch of one clip:
        · MADE ON THE PICK (§8.5c item 1): nothing is written until an effect is chosen, and the layer and its effect are ONE step.
          FM.addEffectSegment builds the layer with `effects: [inst]` only; FM.addAdjustmentLayer's seeded grade is never used.
-       · WHERE (§4.3): at the playhead, min(3 s, what is left of the clip under it); with less than MIN_LEN left, or the playhead in
-         a gap, it starts on the next clip; with the playhead at the end, it is the last clip's last stretch. So it starts on its
-         clip and ends inside it, and Phase 2's start rule makes it that clip's follower: it moves with the clip (delete, insert,
-         reorder, speed), and every command that shortens the clip clamps it (planTrimTail / planTrimHead / planSpeed / planReplace).
+       · WHERE: since #1243 S10 (1243-R decision 10) the project row's pick covers THE WHOLE VIDEO, pinned and marked `sm.whole`, and
+         S.fitProjectLayers keeps it there (S.segmentWhole, planAddEffect below). Before S10 it went at the playhead for min(3 s, what
+         is left of the clip under it) (§4.3, S.segmentWhere, kept for one stretch): such a segment — and one made in Full over a stretch
+         of a clip — starts on its clip and ends inside it, and Phase 2's start rule makes it that clip's follower: it moves with the
+         clip (delete, insert, reorder, speed), and every command that shortens the clip clamps it (planTrimTail / planTrimHead /
+         planSpeed / planReplace).
        · IN THE STACK (§3.6.1, the effect band): directly above the top-most main clip it overlaps, so it grades the clip row and
-         never a title or an overlay above it.
+         never a title or an overlay above it; a whole-video one first lifts the titles and overlays that sat between the clips above
+         itself (planAddEffect, the S10 review's N1).
        · MARKED (§8.5c item 4): the effect carries sm 1 (the Phase 1 marker the sanitiser keeps). The layer is Full's own plain
-         "Adjustment" layer with no new key, so Full shows the adjustment layer it is.
+         "Adjustment" layer with no new key but Simple's `sm` (S10: stay and whole), which Full never reads, so Full shows the
+         adjustment layer it is.
      STRENGTH is the layer's own opacity (an adjustment layer blends its grade by it, js/compositor.js applyAdjustment), moved as a
      whole by FM.shiftProp, so a keyed opacity keeps its key count (§8.5: a Simple row never adds a keyframe). CHANGE EFFECT swaps
      the one effect where it stands. DELETE takes the layer away. Each is ONE runner step (one undo step, one collab transaction),
@@ -3094,11 +3172,22 @@ window.FM = window.FM || {};
     return !!(e && !e.hidden && X.gates && X.gates().adjOk.indexOf(type) >= 0);
   };
   S.segmentOk = segOk;
+  /* #1243 S10 change 4, NO NO-OP TILES (his "sometimes it doesn't even work"): every tile the project row's picker offers must visibly
+     change the picture at its default — the suite's self-test adds each one through this list and wants a mean of 2 levels in 255 over a
+     sample frame. Measured 9 Nov, two ADJ_OK effects change nothing there, and they leave SIMPLE's picker only (the project row's and
+     Change effect's, which share this list). Full's browser offers them as before, segOk still takes them, and a segment that already
+     holds one keeps it:
+       · Glow is drawn as drop-shadows, a halo around what is drawn; a segment grades the whole frame, which is opaque, so the halo lies
+         behind the picture and never shows (0.00 levels, at every time). No default can bring it out.
+       · Auto Grade corrects a picture that came out flat or tinted and rightly leaves a good one alone (0.00 levels on the sample frame,
+         which holds its own black, white and greys) — a one-tap tile that does nothing on good footage is exactly what S10 is about;
+         1243-R O3 puts Auto with Adjust, not Effects. */
+  const SEG_NOOP = { glow: 1, autograde: 1 };
   /* the grades a segment can be, in the order Full's effects browser lists them: its categories, then each one's own order */
   S.segmentEffects = function () {
     const X = FM.fxRegistry, out = [];
     if (!X || !X.categories || !X.byCategory) return out;
-    (X.categories() || []).forEach(c => (X.byCategory(c.key) || []).forEach(e => { if (e && segOk(e.type)) out.push(e); }));
+    (X.categories() || []).forEach(c => (X.byCategory(c.key) || []).forEach(e => { if (e && segOk(e.type) && !SEG_NOOP[e.type]) out.push(e); }));
     return out;
   };
   /* the segment's one effect: its only entry, when that is a plain effect. A filter box, or a Full-made layer holding several,
@@ -3158,21 +3247,54 @@ window.FM = window.FM || {};
     return plan;
   }
   const segName = type => { const e = FM.fxRegistry && FM.fxRegistry.get(type); return String((e && e.label) || type); };
-  /* ADD: a pick from the project row's Effects. `t` is the playhead when the tile was tapped (§3.7, a tap-time intent). */
+  /* #1243 S10 (his words, 8 Nov: "I just added an effect and it doesn't add it to the whole thing. It just added it to one section"):
+     WHERE THE PROJECT ROW'S EFFECT GOES — the whole video, [first clip start, track end]; null with no clip at all. It replaced
+     S.segmentWhere's min(3 s, the rest of the clip at the line) for the project row; segmentWhere stays as the rule for one stretch. */
+  S.segmentWhole = function (R) {
+    const clips = R.main.filter(e => !e.slot);
+    if (!clips.length) return null;
+    const s = clips[0].start, d = R.trackEnd - s;
+    return d > 1e-9 ? { start: s, duration: d } : null;
+  };
+  /* ADD: a pick from the project row's Effects. ONE segment over the whole video (S.segmentWhole), directly above the top-most main clip
+     (segmentSlot over that span, so every clip is under it), pinned (Stay put: it rides no clip, so a ripple never carries it off) and
+     marked `sm.whole` with the span it covers, so S.fitProjectLayers keeps it at the whole video as clips come and go. All of it in the one
+     step that makes it. `t` (the playhead when the tile was tapped) no longer decides anything; kept for the queue.
+     NO TITLE OR OVERLAY UNDER IT (the S10 review, S10-N1). A project built in Simple stacks each appended clip just above the one before
+     (planAppend), so Clip 2 is ABOVE Clip 1, and a title over Clip 1 sits between them (planAddText anchors it just above the clip under
+     it). Above the top-most clip, the segment would grade that title and leave a title over Clip 2 alone. So every text, caption track or
+     overlay that sits below the segment's slot and in front of a clip it meets (classify's side 'front' or 'mixed') goes just above the
+     segment, in its own order, in this same step. Left where they are: anything behind every clip it meets (a backdrop, a blur fill:
+     graded with the picture), sounds, other effects, blocks and the members of a group. They are in plan.touched, so the runner's lock and
+     presence refusals cover them. A later restack is his: Forward / Back, Full's layer order. */
+  function liftOverSegment(R, slot, s, e) {
+    const L = FM.scene.layers, map = byIdMap();
+    return L.slice(slot).filter(l => {
+      const u = l && R.units[l.id];
+      if (!u || R.isMain(l.id) || !(u.kind === 'text' || u.kind === 'captions' || u.kind === 'overlay')) return false;
+      if (!(u.side === 'front' || u.side === 'mixed') || !overlaps(l, s, e)) return false;
+      const p = l.parent && map.get(l.parent);
+      return !(p && p.type === 'group');
+    }).map(l => l.id);
+  }
   S.planAddEffect = function (R, type, t) {
     if (!segOk(type)) return refusePlan('segmentOnClip');
-    const w = S.segmentWhere(R, +t || 0);
+    const w = S.segmentWhole(R);
     if (!w) return refusePlan('segmentNoClip');
-    const host = byIdMap().get(w.host.id);
     const plan = newPlan('Add effect'); plan.arranges = false; plan.adopts = false;
+    const slot = segmentSlot(R, w.start, w.start + w.duration), lift = liftOverSegment(R, slot, w.start, w.start + w.duration);
+    lift.forEach(id => plan.touched.add(id));
     plan.pre.push(async () => {
       const inst = FM.fxRegistry.makeInstance(type);
       if (!inst) throw new Error('no such effect: ' + type);
       inst.sm = 1;
-      const seg = FM.addEffectSegment(inst, w.start, w.duration, segmentSlot(R, w.start, w.start + w.duration));
+      const seg = FM.addEffectSegment(inst, w.start, w.duration, slot);
+      S.setFlag(seg, 'stay', true); S.setFlag(seg, 'whole', true);
+      const up = lift.filter(id => FM.layerById(FM.scene, id));
+      if (up.length) FM.moveLayers(up, seg.id);   // S10-N1: just above the segment, in their own order
       plan.selectId = seg.id;
     });
-    plan.live = line('effectAdded', segName(type), S.itemWord(host, R));
+    plan.live = line('effectAddedWhole', segName(type));
     return plan;
   };
   /* CHANGE EFFECT: the one effect swapped for another where it stands (a fresh instance, marked sm 1). A layer with no effect yet
