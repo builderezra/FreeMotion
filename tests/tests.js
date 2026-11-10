@@ -192918,6 +192918,124 @@
     }
   });
 
+  /* #202 (same trace): the add menu stays on the page behind a layer's panel, and its open tab's ring and the Multi card's sweep ran through
+   * playback in both editors. Paused, not removed: on a PC the menu is on screen with nothing selected, and his #589 was a ring that starts
+   * again from the top left each time.
+   * FAILS BEFORE THE FIX: they are still running while it plays.
+   * CONTROLS: they run at rest, the SAME animations are there while it plays (nothing was removed and restarted), and they run again after. */
+  test('202 while the timeline plays or moves the add menu ring and sweep pause where they are (CONTROL: they run at rest, and the same animations run again after)', { item: '202', budgetMs: 40000 }, async function () {
+    const saved = FM.scene, savedSel = FM.scene.selectedId, t00 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    const menu = () => document.getAnimations().filter(a => {
+      const tg = a.effect && a.effect.target;
+      return !!(tg && tg.closest && tg.closest('.am-glint, .addmenu-card--multi')) && a.effect.getTiming().iterations === Infinity;
+    });
+    const running = l => l.filter(a => a.playState === 'running').length;
+    try {
+      if (hadHome) FM.home.close();
+      if (wasSimple) FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        const L = FM.makeLayer('shape', { name: 's202a', shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 120, fill: '#f0f' }); L.start = 0; L.duration = 6;
+        FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 6, background: '#000000' } });
+        FM.selectLayer(L.id);
+        FM.refreshAll(); await sleep(300);
+        FM.setTime(3); await sleep(1100);
+        const rest = menu(), restN = running(rest);
+        if (restN < 1) throw new Error('CONTROL A: nothing in the add menu runs at rest (' + rest.length + ' found), so this check means nothing');
+        FM.play(); await sleep(250);
+        const during = menu(), pRun = running(during), kept = rest.filter(a => during.indexOf(a) >= 0).length;
+        FM.pause(); await sleep(1100);
+        if (pRun) throw new Error(pRun + ' add-menu animations still running during playback (want 0, ' + restN + ' at rest)');
+        if (kept < rest.length) throw new Error('only ' + kept + ' of ' + rest.length + ' add-menu animations were still there while it played: a removed ring starts again from its beginning');
+        if (running(menu()) < restN) throw new Error('CONTROL B: only ' + running(menu()) + ' of ' + restN + ' ran again after pause');
+        let mid = -1;
+        for (let i = 1; i <= 24; i++) { FM.setTime(3 + i * 0.05); await sleep(16); if (i === 12) mid = running(menu()); }
+        if (mid !== 0) throw new Error(mid + ' add-menu animations still running mid-scrub (want 0)');
+        let back = 0; const until = performance.now() + 4000;
+        while (performance.now() < until) { back = running(menu()); if (back >= restN) break; await sleep(100); }
+        if (back < restN) throw new Error('CONTROL C: only ' + back + ' of ' + restN + ' ran again after the scrub');
+      });
+    } finally {
+      if (FM.playing) FM.pause();
+      FM.scene = saved; FM.scene.selectedId = savedSel; FM.setTime(t00);
+      if (wasSimple) FM.editor.apply('simple', { force: true, quiet: true });
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
+  /* #202 (same trace): --tl-clipx is written on the ruler on every scroll, and an inherited custom property restyles every notch below it.
+   * FAILS BEFORE THE FIX: a notch reads the ruler's own value.
+   * CONTROLS: the ruler itself carries the scrolled value, so the check is looking at a clip that moved, and the clip-path still uses it. */
+  test('202 the ruler clip written on every scroll is not inherited by the notches (CONTROL: the ruler itself has the scrolled value and its clip-path follows it)', { item: '202', budgetMs: 20000 }, async function () {
+    const saved = FM.scene, t00 = FM.time;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    try {
+      if (hadHome) FM.home.close();
+      if (wasSimple) FM.editor.apply('full', { force: true, quiet: true });
+      const L = FM.makeLayer('shape', { name: 's202r', shape: 'rect', x: 200, y: 300, shapeW: 120, shapeH: 120, fill: '#f0f' }); L.start = 0; L.duration = 20;
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 20, background: '#000000' } });
+      FM.refreshAll(); FM.timeline.rebuild(); await sleep(120);
+      FM.setTime(9); await sleep(150);
+      const ruler = document.getElementById('tl-ruler'), tl = document.getElementById('timeline');
+      const notch = ruler.querySelector('.notch');
+      if (!notch) throw new Error('CONTROL A: the ruler has no notches');
+      if (!(tl.scrollLeft > 20)) throw new Error('CONTROL B: the timeline did not scroll: ' + tl.scrollLeft);
+      const onRuler = getComputedStyle(ruler).getPropertyValue('--tl-clipx').trim();
+      if (Math.abs(parseFloat(onRuler) - tl.scrollLeft) > 2) throw new Error('CONTROL C: the ruler holds ' + onRuler + ', the scroll is ' + tl.scrollLeft);
+      const clipM = /inset\(([^)]*)\)/.exec(getComputedStyle(ruler).clipPath);
+      const clipLeft = clipM ? parseFloat(clipM[1].trim().split(/\s+/).pop()) : NaN;
+      if (!(Math.abs(clipLeft - tl.scrollLeft) <= 2)) throw new Error('CONTROL D: the clip-path does not follow the scroll: ' + getComputedStyle(ruler).clipPath + ' at ' + tl.scrollLeft);
+      const onNotch = getComputedStyle(notch).getPropertyValue('--tl-clipx').trim();
+      if (parseFloat(onNotch) !== 0) throw new Error('a notch inherits the scroll-written clip (' + onNotch + '): every scroll restyles the whole ruler');
+    } finally {
+      FM.scene = saved; FM.setTime(t00);
+      if (wasSimple) FM.editor.apply('simple', { force: true, quiet: true });
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
+    }
+  });
+
+  /* #1243 G4, his words: "whenever I load in and out of a project on my phone, the bottom row with like all of the different areas kind of
+     like glitches. It like goes up and glitches and stuff." What iOS's compositor does with this can only be confirmed on his phone.
+     During the slide #home-screen animates its opacity, which makes it the backdrop root for the dock's blur. The dock stops being frosted for
+     the slide, and is fully opaque in its own colour, in both themes, both directions; at rest it is frosted (the CONTROL that this test reads the right element).
+     FAILS ON v18.35: blur(16px) during both slides. */
+  test('1243 G4 on a phone the bottom row is plain and opaque during the slide in or out of a project, in both Home themes (CONTROL: frosted at rest)', { item: '1243' }, async function () {
+    const home = document.getElementById('home-screen'), hadHome = FM.home.isOpen();
+    const look0 = document.documentElement.getAttribute('data-home');
+    try {
+      if (!hadHome) FM.home.open();
+      await new Promise(r => setTimeout(r, 300));
+      await atPhoneWidth(async () => {
+        const dock = home.querySelector('.hm-tabs');
+        for (const look of ['dark', 'light']) {
+          document.documentElement.setAttribute('data-home', look);
+          const rest = getComputedStyle(dock).backdropFilter;
+          if (!/blur/.test(rest)) throw new Error('CONTROL: at rest (' + look + ') the bottom row reads backdrop-filter ' + rest + ', not a blur');
+          for (const cls of ['fm-pushing', 'fm-popping']) {
+            document.body.classList.add(cls);
+            try {
+              const cs = getComputedStyle(dock), bg = cs.backgroundColor.match(/[\d.]+/g).map(Number);
+              if (cs.backdropFilter !== 'none') throw new Error(look + ', ' + cls + ': the bottom row is still frosted during the slide (' + cs.backdropFilter + ')');
+              if (bg.length > 3 && bg[3] < 1) throw new Error(look + ', ' + cls + ': the bottom row is see-through during the slide (' + cs.backgroundColor + ')');
+              const want = look === 'dark' ? [7, 17, 24] : [250, 253, 255];
+              if (want.some((v, i) => Math.abs(v - bg[i]) > 1)) throw new Error(look + ', ' + cls + ': the bottom row is ' + cs.backgroundColor + ', not its own colour');
+            } finally { document.body.classList.remove(cls); }
+          }
+        }
+      }, 380);
+    } finally {
+      if (look0 == null) document.documentElement.removeAttribute('data-home'); else document.documentElement.setAttribute('data-home', look0);
+      if (!hadHome) FM.home.close();
+      await new Promise(r => setTimeout(r, 100));
+    }
+  });
+
   /* ═══ #860 STRESS HUNT (PC, read-only hunt + refuter, 24 Oct): each fault below has a test that fails on c27f576d ═══ */
 
   /* (#860 hunt #3) HOLDING CTRL+Z / CTRL+SHIFT+Z / CTRL+Y. Each undo or redo restores the whole project synchronously

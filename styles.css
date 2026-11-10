@@ -1178,6 +1178,10 @@ body.home-open .dh-stick, body.home-open .dh-body, body.home-open .dh-whack path
    cleared 700 ms after the last moving frame) or PLAYS, the cards' shimmer and glow pause where they are. On a phone they repaint every
    frame — the work it sheds under load — and with a layer selected the grid is up through the whole scrub. They are seen at rest. */
 body.fm-moving .cat-card, body.fm-moving .cat-card::before, body.fm-playing .cat-card, body.fm-playing .cat-card::before { animation-play-state: paused; }
+/* #202 (Chrome's trace of playback at a 6x slowdown, 10 Nov): the add menu stays on the page behind a layer's panel, and its open tab's ring and
+   the Multi card's sweep ran through playback in both editors. Paused, not removed: on a PC the menu is on screen when nothing is selected,
+   and a removed ring would jump back to its start each time (his #589: "it starts again at the top left each time"). */
+body.fm-moving .am-glint i, body.fm-playing .am-glint i, body.fm-moving .addmenu-card--multi::before, body.fm-playing .addmenu-card--multi::before { animation-play-state: paused; }
 .cat-num { position: absolute; top: 5px; left: 7px; font-size: 10px; font-weight: 700; line-height: 1; color: var(--text-faint); font-variant-numeric: tabular-nums; opacity: .8; }
 .cat-card:hover .cat-num { color: var(--accent); }
 /* THE NUMBER IS A KEY, AND A PHONE HAS NO KEYS (queue 797, found by using the app at 380px with touch on). Keys 1-9
@@ -3109,6 +3113,10 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
    the divider) and below the last row there is nothing — measured at 380px, scrolled: two lines running down
    the head side. In ruler coordinates the divider is at scrollLeft (the ruler starts where the head ends), so
    timeline.js writes `--tl-clipx` = scrollLeft on every scroll and the left inset follows it. */
+/* #202 (measured 10 Nov): a custom property inherits by default, so this write on every scroll restyled every notch on the ruler too (about
+   3,500 of Full's 7,800 element updates across a trace of playback at a 6x slowdown). Registered as not inherited, only the ruler itself
+   is restyled. A browser without @property (Safari before 16.4) just inherits it as before. */
+@property --tl-clipx { syntax: '<length>'; inherits: false; initial-value: 0px; }
 #tl-ruler { clip-path: inset(0 0 -600px var(--tl-clipx, 0px)); }
 /* the pinned thumbnail-frame marker: smaller + accent-coloured, so it reads as distinct from benchmarks */
 .tl-marker.thumb { margin-left: -3px; border-left-width: 3px; border-right-width: 3px; border-top: 5px solid var(--accent); z-index: 4; }
@@ -7654,6 +7662,13 @@ body.fm-popping #app { position: fixed; inset: 0; z-index: 210; }
 body.fm-pushing #home-screen,
 body.fm-pushing #app,
 body.fm-pushing #add-fab { will-change: transform, opacity; }
+/* #1243 G4: the phone's dock during the slide. #home-screen animates opacity here (.42 to 1 on the way back), which makes it the backdrop
+   root for the dock's frosted blur, so iOS rebuilds that blur at each end of the slide: the dock flickers as it moves. For the 380 ms the
+   dock is plain and opaque in its own colour (it is .90 opaque at rest, over a blur: the difference is not visible at this speed). */
+@media (max-width: 700px) {
+  body.fm-pushing #home-screen .hm-tabs, body.fm-popping #home-screen .hm-tabs { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgb(7, 17, 24); }
+  html[data-home="light"] body.fm-pushing #home-screen .hm-tabs, html[data-home="light"] body.fm-popping #home-screen .hm-tabs { background: rgb(250, 253, 255); }
+}
 /* Every duration below reads --fm-push-ms, which js/home.js publishes from its own PUSH_MS at init —
    ONE source of truth. It used to be the literal 280ms written out in five CSS rules plus a JS const,
    which is six places to keep in step and exactly how a backstop timer ends up firing before or after
