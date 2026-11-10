@@ -104,7 +104,7 @@ window.FM = window.FM || {};
   /* `pn` is FM.inspector.currentView(): the inspector's own view keys (js/inspector.js CATEGORIES plus
      'effects'), labelled as its cards are. 'home' is the card grid, i.e. no panel open. */
   const PN_LABELS = table({
-    color: 'Colouring', border: 'Outline & Shadows', blend: 'Mixing', transform: 'Position / Scale',
+    color: 'Colouring & Media', border: 'Outline & Shadows', blend: 'Mixing', transform: 'Position / Scale',
     speed: 'Speed', volume: 'Volume', element: 'Element Properties', editgroup: 'Edit Group',
     captions: 'Captions', presets: 'Presets', effects: 'Effects', cameraopts: 'Camera Options', tts: 'Text to Voice'
   });

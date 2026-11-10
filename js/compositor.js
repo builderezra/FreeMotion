@@ -2308,8 +2308,11 @@ window.FM = window.FM || {};
        ovals) and Bubbles (rising rings with a glint) — plus Pattern (the layer's own flakes) and Sway (how far each one drifts
        side to side; rain falls straight, so it has none). Snow and Rain at Pattern 0 and Sway 1 are the old frames, call for
        call. Confetti and Embers bring their own colours, so the Colour row says it is off for them. */
-    { type: 'weather', label: 'Snow & Rain', desc: 'Snow, rain, confetti, embers, dust, petals or bubbles across the whole frame, with wind, speed and depth.', colorGate: { by: 'kind', when: [0, 1, 4, 5, 6] }, params: [
+    { type: 'weather', label: 'Snow & Rain', desc: 'Snow, rain, confetti, embers, dust, petals or bubbles inside the layer it is on, or across the whole frame, with wind, speed and depth.', colorGate: { by: 'kind', when: [0, 1, 4, 5, 6] }, params: [
       { key: 'kind', label: 'Type', options: [[0, 'Snow'], [1, 'Rain'], [2, 'Confetti'], [3, 'Embers'], [4, 'Dust / Ash'], [5, 'Petals'], [6, 'Bubbles']], def: 0 },
+      /* #1248, his words (10 Nov): "The snow and rain effect should stay inside of the layer you add it to, not cover the whole
+         screen." Inside the layer is the default; Whole frame is queue 911's weather over everything, for a shot that wants it. */
+      { key: 'area', label: 'Area', options: [[0, 'Inside the layer'], [1, 'Whole frame']], def: 0 },
       { key: 'amount', label: 'Amount', min: 10, max: 1500, step: 10, def: 300 },
       /* 8 px for a NEW one (#911 clause 3, option A — the PM's pick on 11 Oct): 5 read tiny on a phone. `legacy: 5` keeps a saved
          one that has no Size at the 5 the kernel draws an absent key at (`ev('size', 5)`); one that stored its 5 keeps it. */
@@ -17989,7 +17992,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   let _cfDepth = 0;
   const _expPool = [];
   let _expDepth = 0;
-  let _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null, _wxSprite = null, _wxSpriteCol = '', _lwA = null, _lwB = null, _dnA = null, _dnB = null, _dnM = null, _dnC = null;
+  let _cfTex = null, _reC = null, _tileC = null, _halC = null, _slC = null, _wxSprite = null, _wxSpriteCol = '', _wxMask = null, _lwA = null, _lwB = null, _dnA = null, _dnB = null, _dnM = null, _dnC = null;
   // Alpha-bounds scan at 1/4 scale: reading back a full 1080×1920 frame (~8MB) per canvas-effect
   // per FRAME was the priciest single op in the effect pipeline. Scanning a 4×-downsampled copy is
   // 16× less data; the box is re-padded a scan-cell outward, so it's a slightly LOOSER region of
@@ -19901,6 +19904,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const time = tl == null ? t : tl;
       B.drawImage(A, 0, 0);
       if (!n || op <= 0) return;
+      /* INSIDE THE LAYER (#1248). The weather is drawn on its own plate and only what lies over the layer's own pixels (A's
+         alpha) is kept, so a small box gets the weather it would have in that part of the frame, inside its shape, and never
+         the whole frame's flakes crammed into it. Whole frame (Area 1) draws straight onto B, as it always did. */
+      const inside = Math.round(ev('area', 0)) !== 1;
+      let G = B;
+      if (inside) {
+        if (!_wxMask || _wxMask.width !== W || _wxMask.height !== H) { _wxMask = document.createElement('canvas'); _wxMask.width = W; _wxMask.height = H; }
+        G = _wxMask.getContext('2d');
+        G.setTransform(1, 0, 0, 1, 0, 0); G.globalAlpha = 1; G.globalCompositeOperation = 'source-over'; G.clearRect(0, 0, W, H);
+      }
       // murmur3's finaliser: the speed-lines hash on sequential i*4+k inputs left visible diagonal clumps in heavy snow
       const hash = function (k) { k = Math.imul(k + 1, 0x9e3779b1); k ^= k >>> 16; k = Math.imul(k, 0x85ebca6b); k ^= k >>> 13; k = Math.imul(k, 0xc2b2ae35); k ^= k >>> 16; return (k >>> 0) / 4294967296; };
       /* PATTERN and SWAY (#482 polish 11.2). Pattern mixes into every flake's hash, and 0 IS the old hash; Sway scales the
@@ -19930,16 +19943,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       const mY = rain ? (len / H + 0.02) : (size * 2 / H + 0.02), mX = 0.08;
       const wrap = (v, lo, hi) => { const r = hi - lo; return lo + (((v - lo) % r) + r) % r; };
-      B.save();
+      G.save();
       if (rain) {
-        B.lineCap = 'round';
-        B.strokeStyle = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+        G.lineCap = 'round';
+        G.strokeStyle = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
         // three depth bands, one path each: lineWidth and alpha are per-path
         for (let band = 0; band < 3; band++) {
           const nearness = 1 - depth * (band / 2) * 0.8;   // 1 = nearest
-          B.globalAlpha = op * (0.35 + 0.65 * nearness);
-          B.lineWidth = Math.max(0.6 * sc, size * 0.35 * nearness);
-          B.beginPath();
+          G.globalAlpha = op * (0.35 + 0.65 * nearness);
+          G.lineWidth = Math.max(0.6 * sc, size * 0.35 * nearness);
+          G.beginPath();
           for (let i = band; i < n; i += 3) {
             const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3);
             const v = nearness * (0.85 + 0.3 * h3);
@@ -19948,9 +19961,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             const x = wrap(h1 + drift * dy * H / W, -mX, 1 + mX) * W;
             const L = len * nearness * (0.7 + 0.6 * h3);
             const dl = Math.hypot(wind, 1) || 1;
-            B.moveTo(x, y); B.lineTo(x - wind / dl * L, y - 1 / dl * L);
+            G.moveTo(x, y); G.lineTo(x - wind / dl * L, y - 1 / dl * L);
           }
-          B.stroke();
+          G.stroke();
         }
       } else if (!more || kind === 4) {
         const S = 32;
@@ -19972,8 +19985,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const y = wrap(h2 + dy, -mY, 1 + mY) * H;
           const x = wrap(h1 + (drift * dy * 0.6) * H / W + sway, -mX, 1 + mX) * W;
           const d = size * 2 * nearness * (0.7 + 0.6 * h4);  // sprite's soft edge takes up half its width
-          B.globalAlpha = op * (0.4 + 0.6 * nearness);
-          B.drawImage(_wxSprite, x - d / 2, y - d / 2, d, d);
+          G.globalAlpha = op * (0.4 + 0.6 * nearness);
+          G.drawImage(_wxSprite, x - d / 2, y - d / 2, d, d);
         }
         // DUST / ASH (#482 polish 11.2): snow's soft sprite as small faint motes, sinking slowly and drifting on both axes
         else for (let i = 0; i < n; i++) {
@@ -19983,8 +19996,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const y = wrap(h2 + dy + swayK * 0.8 * Math.sin(w1 * 0.77 + h5 * 6.283), -mY, 1 + mY) * H;
           const x = wrap(h1 + (drift * dy * 0.6) * H / W + swayK * 1.5 * Math.sin(w1 + h1 * 6.283), -mX, 1 + mX) * W;
           const d = size * 0.9 * nearness * (0.5 + h4);
-          B.globalAlpha = op * 0.6 * (0.35 + 0.65 * nearness) * (0.6 + 0.4 * h5);
-          B.drawImage(_wxSprite, x - d / 2, y - d / 2, d, d);
+          G.globalAlpha = op * 0.6 * (0.35 + 0.65 * nearness) * (0.6 + 0.4 * h5);
+          G.drawImage(_wxSprite, x - d / 2, y - d / 2, d, d);
         }
       } else {
         /* CONFETTI, EMBERS, PETALS, BUBBLES (#482 polish 11.2). The snowflake's own clock, depth and wrap, so wind, speed,
@@ -19995,7 +20008,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const TAU = 6.283185307179586, rise = kind === 3 || kind === 6, rgbS = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
         const CONF = ['#ff4d6d', '#ffd23f', '#3ec1ff', '#7bdc5a', '#b46cff', '#ff8c42'];
         const amp = swayK * (kind === 5 ? 3 : (kind === 2 ? 1.8 : 1.2));   // petals swing widest, embers and bubbles wobble
-        if (kind === 3) B.globalCompositeOperation = 'lighter';           // an ember is light: it adds, it never darkens
+        if (kind === 3) G.globalCompositeOperation = 'lighter';           // an ember is light: it adds, it never darkens
         for (let i = 0; i < n; i++) {
           const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3), h4 = hs(i * 4 + 4), h5 = hs((i * 4 + 4) ^ 0x5bd1e995);
           const nearness = 1 - depth * h3 * 0.8;
@@ -20004,29 +20017,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const y = wrap(h2 + (rise ? -dy : dy), -mY, 1 + mY) * H;
           const x = wrap(h1 + (drift * dy * 0.6) * H / W + sway, -mX, 1 + mX) * W;
           const s = size * nearness * (0.7 + 0.6 * h4), a = op * (0.4 + 0.6 * nearness);
-          B.save(); B.translate(x, y);
+          G.save(); G.translate(x, y);
           if (kind === 2 || kind === 5) {
             const turn = h5 * TAU + time * (kind === 2 ? 1.5 + 3 * h3 : 0.6 + 1.2 * h3) * (h4 < 0.5 ? -1 : 1);
             const f = Math.cos(time * (kind === 2 ? 2.5 + 4 * h5 : 1.1 + 1.8 * h5) + h2 * TAU), fy = f >= 0 ? Math.max(0.12, f) : Math.min(-0.12, f);
-            B.rotate(turn); B.scale(1, fy); B.globalAlpha = a; B.beginPath();
-            if (kind === 2) { B.fillStyle = CONF[(h5 * 6) | 0]; B.rect(-s * 0.8, -s * 0.45, s * 1.6, s * 0.9); }
-            else { const k = 0.8 + 0.2 * h3; B.fillStyle = 'rgb(' + ((rgb[0] * k) | 0) + ',' + ((rgb[1] * k) | 0) + ',' + ((rgb[2] * k) | 0) + ')'; B.ellipse(0, 0, s * 1.1, s * 0.55, 0, 0, TAU); }
-            B.fill();
+            G.rotate(turn); G.scale(1, fy); G.globalAlpha = a; G.beginPath();
+            if (kind === 2) { G.fillStyle = CONF[(h5 * 6) | 0]; G.rect(-s * 0.8, -s * 0.45, s * 1.6, s * 0.9); }
+            else { const k = 0.8 + 0.2 * h3; G.fillStyle = 'rgb(' + ((rgb[0] * k) | 0) + ',' + ((rgb[1] * k) | 0) + ',' + ((rgb[2] * k) | 0) + ')'; G.ellipse(0, 0, s * 1.1, s * 0.55, 0, 0, TAU); }
+            G.fill();
           } else if (kind === 3) {   // a hot core in a soft halo; hotter is yellower
             const heat = 0.5 + 0.5 * Math.sin(time * (6 + 8 * h5) + h1 * 40), r = s * 0.35;
-            B.fillStyle = 'rgb(255,' + ((90 + 130 * heat) | 0) + ',' + ((30 + 110 * heat * heat) | 0) + ')';
-            B.globalAlpha = a * (0.4 + 0.6 * heat) * 0.3; B.beginPath(); B.arc(0, 0, r * 2.6, 0, TAU); B.fill();
-            B.globalAlpha = a * (0.4 + 0.6 * heat); B.beginPath(); B.arc(0, 0, r, 0, TAU); B.fill();
+            G.fillStyle = 'rgb(255,' + ((90 + 130 * heat) | 0) + ',' + ((30 + 110 * heat * heat) | 0) + ')';
+            G.globalAlpha = a * (0.4 + 0.6 * heat) * 0.3; G.beginPath(); G.arc(0, 0, r * 2.6, 0, TAU); G.fill();
+            G.globalAlpha = a * (0.4 + 0.6 * heat); G.beginPath(); G.arc(0, 0, r, 0, TAU); G.fill();
           } else {                   // a thin ring and a glint up and to the left
             const r = s * 0.9;
-            B.globalAlpha = a; B.strokeStyle = rgbS; B.lineWidth = Math.max(0.6 * sc, r * 0.12);
-            B.beginPath(); B.arc(0, 0, r, 0, TAU); B.stroke();
-            B.globalAlpha = a * 0.75; B.fillStyle = rgbS; B.beginPath(); B.arc(-r * 0.38, -r * 0.38, r * 0.2, 0, TAU); B.fill();
+            G.globalAlpha = a; G.strokeStyle = rgbS; G.lineWidth = Math.max(0.6 * sc, r * 0.12);
+            G.beginPath(); G.arc(0, 0, r, 0, TAU); G.stroke();
+            G.globalAlpha = a * 0.75; G.fillStyle = rgbS; G.beginPath(); G.arc(-r * 0.38, -r * 0.38, r * 0.2, 0, TAU); G.fill();
           }
-          B.restore();
+          G.restore();
         }
       }
-      B.restore();
+      G.restore();
+      if (inside) {
+        G.save(); G.globalCompositeOperation = 'destination-in'; G.globalAlpha = 1; G.drawImage(A, 0, 0); G.restore();
+        B.save(); if (kind === 3) B.globalCompositeOperation = 'lighter';   // an ember still adds light to the picture under it
+        B.drawImage(_wxMask, 0, 0); B.restore();
+      }
     },
     /* ---- Frame Stutter -------------------------------------------------------------------------
      * Hold each frame for 1/rate of a second: stop-motion, the anime step, or a strobe on the beat.

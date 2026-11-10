@@ -27,7 +27,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.37">
+<meta name="fm-build" content="v18.38">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -1092,7 +1092,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.37</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.38</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1278,8 +1278,10 @@
                they change nothing in the project and nothing in the export. Loop already lives here;
                these three belong beside it. They stay in the settings panel too: that panel is where
                you go to READ the state of things, this bar is where you flick it. -->
-          <!-- Onion skin's button was here. Removed in queue 122: it ghosts the SELECTED layer and does
-               nothing without one, so it was a per-layer tool in a global bar. It lives in the layer ⋯ menu. -->
+          <!-- Onion skin, back in View options (#1249, 10 Nov: "we have that in the three dot the view options menu. So you
+               don't need it there either"). Queue 122 had moved it to the layer ⋯ menu; his newer words move it back here, and
+               this is its one door. It ghosts the selected layer either side of the playhead. -->
+          <button id="vb-onion" class="vb-btn" title="Onion skin — ghosts of the selected layer either side of the playhead (never exported)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
           <button id="vb-guides" class="vb-btn" title="Guides — safe margins and rule-of-thirds (never exported)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18" opacity=".55"/></svg></button>
           <!-- The three export-mark buttons share a backing so they read as ONE control rather than
                three unrelated icons in a column. Ezra: "add a dark layer behind these three buttons to
@@ -1987,7 +1989,7 @@
   <script src="js/settings.js?v=60"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
-  <script src="js/collab-core.js?v=66"></script>
+  <script src="js/collab-core.js?v=67"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=133"></script>
   <script src="js/spine-words.js?v=19"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
@@ -2000,7 +2002,7 @@
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=5"></script>
   <script src="js/gl-color.js?v=5"></script>
-  <script src="js/compositor.js?v=266"></script>
+  <script src="js/compositor.js?v=267"></script>
   <script src="js/fx-registry.js?v=43"></script>
   <script src="js/filters.js?v=25"></script>
   <script src="js/fx-presets.js?v=13"></script>
@@ -2010,7 +2012,7 @@
   <script src="js/tilefit.js?v=1"></script>
   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
   <script src="js/addmenu.js?v=85"></script>
-  <script src="js/inspector.js?v=444"></script>
+  <script src="js/inspector.js?v=445"></script>
   <script src="js/simple-tools.js?v=16"></script>   <!-- Simple mode P2.2: FM.simpleTools, the tray row and the project tools (D10) — after inspector.js -->
   <script src="js/fx-browser.js?v=105"></script>
   <script src="js/elements-browser.js?v=5"></script>
@@ -2056,7 +2058,7 @@
   <script src="js/audio-health.js?v=7"></script>
   <script src="js/editor-mode.js?v=10"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
   <script src="js/editor-morph.js?v=1"></script>   <!-- Simple mode P3: FM.editorMorph — the switch morph (D11 B), played as the cog closes -->
-  <script src="js/app.js?v=523"></script>
+  <script src="js/app.js?v=524"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->
@@ -2104,7 +2106,7 @@
   <!-- queue 921 stage S5 — presence: the other people's selections, pointers, taps, playheads, faces,
        locks, and Follow. Built on a session's attach and taken down on its detach — with no session
        there is no presence DOM, no listener and no timer. -->
-  <script src="js/collab-presence.js?v=7"></script>
+  <script src="js/collab-presence.js?v=8"></script>
   <!-- queue 921 stage S7 — comments: the paper card, replies, resolve, and a mark on the ruler at each
        comment's time. A library like the rest: collab-ui.js installs it only while Labs is on, and a
        comment never stops an export (only a note with a reminder does). -->

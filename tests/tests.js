@@ -17614,7 +17614,7 @@
       const menu = document.getElementById('ctx-menu');
       if (!menu || menu.getBoundingClientRect().width < 10) throw new Error('pressing ⋯ opened nothing');
       const text = (menu.textContent || '').toLowerCase();
-      if (!/lock/.test(text) || !/onion/.test(text) || !/reset transform/.test(text)) {
+      if (!/lock/.test(text) || !/flip horizontally/.test(text) || !/reset transform/.test(text)) {   // #1249 moved Onion skin to View options: Flip is the clip menu's own now
         throw new Error('the ⋯ menu is missing the clip options — it reads "' + (menu.textContent || '').trim().slice(0, 90) + '", which looks like the clipboard menu, not the layer menu');
       }
       if (/paste style/.test(text)) throw new Error('⋯ opened the CLIPBOARD menu — that is the ⧉ button next to it, and the clip options are still unreachable');
@@ -21465,7 +21465,8 @@
       // 'Customise Shape' since queue 368 — he asked for the word "edit" to become "customise" on the
       // three element cards (Text / Points / Shape).
       // 'Outline & Shadows' since queue 369 — his words, "change border and shadow to outline add shadows".
-      const want = ['Colouring', 'Outline & Shadows', 'Mixing', 'Position / Scale', 'Speed', 'Volume', 'Customise Shape', 'Presets', 'Effects'];
+      // 'Colouring & Media' since #1249 — his words, "change this section titled coloring to say like coloring and media".
+      const want = ['Colouring & Media', 'Outline & Shadows', 'Mixing', 'Position / Scale', 'Speed', 'Volume', 'Customise Shape', 'Presets', 'Effects'];
       if (vLabels.join(' | ') !== want.join(' | ')) {
         throw new Error('card order is not the target layout:\n  got:  ' + vLabels.join(' | ') + '\n  want: ' + want.join(' | '));
       }
@@ -28588,19 +28589,22 @@
 
   /* #122 — Ezra: "shouldn't onion skin not be in the view options and app settings? Idk why it would
      be there since it only effects one layer, it should just be in the three dots when you have a
-     layer selected."
-     He is right and the code agrees: drawOnionSkin() returns immediately when nothing is selected, so
-     both global entries were controls that could be toggled while unable to do anything. MOVED, not
-     copied — the point is one door, so the test asserts the old ones are gone as firmly as it asserts
-     the new one exists. */
-  test('onion skin has exactly one door, and it is the layer menu', { item: 'onion-scope' }, async function () {
+     layer selected." That moved it into the layer ⋯ menu.
+     #1249 (10 Nov) — his newer words reverse it: "the onion skin thing in the three dot menu is not necessary as well,
+     because we have that in the three dot the view options menu. So you don't need it there either." He knows it as a
+     view option, so View options (#vb-onion) is its door again, and the layer ⋯ menu entry is gone. Still ONE door:
+     the test asserts the others are gone as firmly as it asserts this one works.
+     FAILS ON v18.36: there is no #vb-onion. */
+  test('onion skin has exactly one door, and it is View options again (#1249, after queue 122)', { item: '1249' }, async function () {
     /* isolation (20 Oct): it left its own scene() in FM.scene for every later test — isoKeep puts back what it found, in its own finally */
     const _isoK = isoKeep(); try {
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     if (hadHome) FM.home.close();
     const was = FM.onionSkin;
     try {
-      if (document.getElementById('vb-onion')) throw new Error('the view-options bar still has an onion-skin button — it was meant to move, not be copied');
+      const vb = document.getElementById('vb-onion');
+      if (!vb) throw new Error('View options has no onion-skin button (#vb-onion): he looks for it there');
+      if (!vb.closest('#view-bar')) throw new Error('#vb-onion is not inside the View options rail (#view-bar)');
 
       // The settings panel must not offer it either. Open the real panel and read its rows.
       FM.settings.open();
@@ -28615,22 +28619,24 @@
       for (let i = 0; i < 40 && document.querySelector('.set-scrim'); i++) await sleep(25);
       if (inSettings.length) throw new Error('App settings still offers Onion skin (' + inSettings.length + ' row) — a global switch for a per-layer tool');
 
-      // …and the layer ⋯ menu must carry it, with its state readable.
+      // …and the layer ⋯ menu must NOT carry it any more (his #1249 words).
       const layer = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 40, y: 40, shapeW: 40, shapeH: 40, fill: '#f00', start: 0, duration: 2 });
       FM.scene = scene([layer]);
       FM.selectLayer(layer.id);
-      const items = FM.layerMenuItems(layer);
-      const entry = items.filter(Boolean).find(i => i && /onion/i.test(i.label || ''));
-      if (!entry) throw new Error('the layer ⋯ menu has no Onion skin entry — it was removed from two places and added to none');
+      const items = FM.layerMenuItems(layer).filter(Boolean);
+      // CONTROL: the menu built (Lock is always there), so "no onion entry" is not true of an empty list
+      if (!items.some(i => /^(Lock|Unlock)$/.test(i.label || ''))) throw new Error('CONTROL: the layer ⋯ menu did not build (' + items.map(i => i.label).join(' | ') + ')');
+      if (items.some(i => /onion/i.test(i.label || ''))) throw new Error('the layer ⋯ menu still offers Onion skin: two doors, and he asked for this one to go');
 
-      // Toggling through the menu has to actually flip it, or the move dropped the wiring.
+      // Pressing the rail button has to actually flip it, and the button shows the state.
       const before = !!FM.onionSkin;
-      entry.action();
+      vb.click();
       await sleep(40);
-      if (!!FM.onionSkin === before) throw new Error('the menu entry did not toggle onion skin (' + before + ' → ' + FM.onionSkin + ')');
-      // …and the label reports the state, since this menu has no switch to show it.
-      const after = FM.layerMenuItems(layer).filter(Boolean).find(i => i && /onion/i.test(i.label || ''));
-      if (/^✓/.test(entry.label) === /^✓/.test(after.label)) throw new Error('the menu label does not change with the state — there is no other readout in this menu');
+      if (!!FM.onionSkin === before) throw new Error('the View options button did not toggle onion skin (' + before + ' → ' + FM.onionSkin + ')');
+      if (vb.classList.contains('on') !== !!FM.onionSkin) throw new Error('the View options button does not show the state (on: ' + vb.classList.contains('on') + ', onion skin: ' + FM.onionSkin + ')');
+      vb.click();
+      await sleep(40);
+      if (!!FM.onionSkin !== before || vb.classList.contains('on') !== before) throw new Error('a second press did not put onion skin back (' + FM.onionSkin + ', button on: ' + vb.classList.contains('on') + ')');
     } finally {
       if (FM.onionSkin !== was) { const b = document.getElementById('btn-onion'); if (b) b.click(); }
       try { FM.settings.close(); } catch (e) {}                       // …including on the throwing paths
@@ -46485,30 +46491,72 @@
     } finally { _isoK.put(); }
   });
 
-  test('the clip menu names it for what it does, not improve-quality', { item: 'improve-quality' }, function () {
+  test('1249 the clip menu has no Sharpen for upscaling and no Replace media any more: sharpen is an effect and Replace lives in Colouring and Media', { item: '1249' }, function () {
     /* isolation (20 Oct): it left its clip's media record (iqLayer) and its clip selected behind — isoKeep puts back what it found, in its own finally */
     const _isoK = isoKeep(); try {
-    /* The label is the first place to be honest. "Improve quality" invites exactly the expectation a
-       browser cannot meet — it cannot invent detail — and a button that implies it can reads as
-       broken the first time it fails to rescue a genuinely soft clip. */
+    /* #1249, his words: "in the three dot menu, you have a button for replace media, get rid of that. And then also there's a
+       button sharpen for upscale. Which we don't need that as well, because sharpen is an effect. So if people want that, they
+       can go find the effect." (It replaced queue 203's test, which held the entry's honest name; the name went with it.)
+       FAILS ON v18.36: the clip menu still lists Replace media… and Sharpen for upscaling…
+       CONTROL: the menu built for a clip (Reverse is a clip's), and the Sharpen and Unsharp Mask effects are in the
+       registry, so the feature has somewhere to be found. */
     const layers0 = FM.scene.layers.slice();
     try {
       const L = iqLayer(270, 480);
       FM.scene.layers.push(L); FM.selectLayer(L.id);
-      const labels = FM.layerMenuItems(L).map(function (i) { return i.label; });
-      const hit = labels.filter(function (t) { return /sharpen/i.test(t); });
-      if (!hit.length) throw new Error('no sharpening entry in the clip menu: ' + labels.join(' / '));
-      if (labels.some(function (t) { return /^improve quality$/i.test(t); })) {
-        throw new Error('the menu says "Improve quality", which promises detail the web cannot create');
-      }
-      // and it flips to a remove label once applied, so the toggle is discoverable
-      FM.improveQuality(L);
-      const after = FM.layerMenuItems(L).map(function (i) { return i.label; });
-      if (!after.some(function (t) { return /remove sharpening/i.test(t); })) {
-        throw new Error('after applying, the menu still offers to add it: ' + after.join(' / '));
-      }
+      const labels = FM.layerMenuItems(L).map(function (i) { return i.label; }).filter(Boolean);
+      if (!labels.some(function (t) { return /^(Un-)?[Rr]everse$/.test(t); })) throw new Error('CONTROL: this is not a clip menu (' + labels.join(' / ') + ')');
+      const gone = labels.filter(function (t) { return /sharpen|improve quality|replace media/i.test(t); });
+      if (gone.length) throw new Error('the clip menu still offers ' + gone.join(' and ') + ': he asked for them to go (' + labels.join(' / ') + ')');
+      if (!FM.fxRegistry || !FM.fxRegistry.makeInstance('unsharpmask')) throw new Error('CONTROL: there is no Unsharp Mask effect to find instead');
     } finally {
       FM.scene.layers.length = 0; layers0.forEach(function (l) { FM.scene.layers.push(l); });
+    }
+    } finally { _isoK.put(); }
+  });
+
+  /* #1249, HIS WORDS: "Change this section titled coloring to say like coloring and media… it is where you change like the
+     media, like you can swap the media out… that's the section where you go to replace media."
+     Proves, for a video clip AND a picture (the two kinds the menu offered Replace media on): the card is named Colouring &
+     Media, its section opens with a Replace media… button, and pressing it is FM.replaceMedia on THAT layer.
+     FAILS ON v18.36: the card says Colouring and the section has no Replace media… at all (the menu was its only door).
+     CONTROL: a shape has the same card and NO Replace button, since it has no file to swap. */
+  test('1249 the Colouring and Media card opens with Replace media for a clip and a picture, and pressing it replaces THAT layer (CONTROL: a shape has none)', { item: '1249' }, async function () {
+    const _isoK = isoKeep(); try {
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const d0 = Object.getOwnPropertyDescriptor(FM, 'replaceMedia');
+    const asked = [];
+    try {
+      Object.defineProperty(FM, 'replaceMedia', { configurable: true, writable: true, value: function (id) { asked.push(id); } });
+      const P = FM.scene.project;
+      const V = iqLayer(270, 480);
+      const I = FM.makeLayer('image', { name: 'Pic', x: P.width / 2, y: P.height / 2 }); I.start = 0; I.duration = 3;
+      const S = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: 100, shapeH: 100, fill: '#f00' }); S.start = 0; S.duration = 3;
+      FM.scene = scene([V, I, S]);
+      for (const L of [V, I, S]) {
+        FM.selectLayer(L.id); FM.refreshAll(); await sleep(150);
+        FM.inspector.openCategory('color'); await sleep(200);
+        const btns = [].slice.call(document.querySelectorAll('.insp-replace-media'));
+        if (L === S) {
+          if (btns.length) throw new Error('CONTROL: a shape shows Replace media… (' + btns.length + '): it has no file to swap');
+          continue;
+        }
+        if (btns.length !== 1) throw new Error('the Colouring & Media section of a ' + L.type + ' shows ' + btns.length + ' Replace media… buttons, not one');
+        const before = asked.length;
+        btns[0].click();
+        await sleep(30);
+        if (asked.length !== before + 1 || asked[asked.length - 1] !== L.id) throw new Error('pressing Replace media… on the ' + L.type + ' asked to replace ' + JSON.stringify(asked.slice(before)) + ', not ' + L.id);
+      }
+      /* the card itself: on the card grid, the colour card says Colouring & Media */
+      FM.selectLayer(V.id); FM.inspector.openCategory('home'); await sleep(150);
+      const labels = q45Cards().map(function (c) { return c.label; });
+      if (labels.indexOf('Colouring & Media') < 0) throw new Error('no card reads Colouring & Media (' + labels.join(' | ') + ')');
+      if (labels.indexOf('Colouring') >= 0) throw new Error('a card still reads Colouring');
+    } finally {
+      if (d0) Object.defineProperty(FM, 'replaceMedia', d0); else delete FM.replaceMedia;
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(80);
     }
     } finally { _isoK.put(); }
   });
@@ -46520,12 +46568,15 @@
     const _isoK = isoKeep(); try {
     const layers0 = FM.scene.layers.slice();
     const masks = function (l) { return (l.effects || []).filter(function (e) { return e && e.type === 'unsharpmask'; }).length; };
-    const label = function (l) { return FM.layerMenuItems(l).map(function (i) { return i.label; }).filter(function (t) { return /sharpen/i.test(t); }).join(' / '); };
+    /* #1249: the clip menu no longer carries Sharpen (his words, "sharpen is an effect"), so what a second press of
+       FM.improveQuality would do is read from the mark it toggles on, the same test the menu's label used to make */
+    const label = function (l) { return (l.effects || []).some(function (e) { return e && e.type === 'unsharpmask' && e.iq === 1; }) ? 'Remove sharpening' : 'Sharpen for upscaling'; };
     const reload = function (l) { const back = JSON.parse(JSON.stringify([l], FM.jsonReplacer)); FM.storage._sanitizeLayers(back); return back[0]; };
     try {
       if (!FM.jsonReplacer || !FM.storage || !FM.storage._sanitizeLayers) throw new Error('FM.jsonReplacer / FM.storage._sanitizeLayers is not reachable');
       const L = iqLayer(270, 480);
       FM.scene.layers.push(L);
+      if (FM.layerMenuItems(L).some(function (i) { return /sharpen/i.test(i.label || ''); })) throw new Error('#1249: the clip menu still offers sharpening, which he asked to go ("sharpen is an effect")');
       FM.history.commit();
       FM.improveQuality(L);
       // CONTROL: one press is a real sharpen and the menu flips (the test above, no undo in between)
@@ -61746,7 +61797,7 @@
       if (FM.inspector.back) FM.inspector.back();
       await sleep(120);
       var cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label'))
-        .filter(function (n) { return /^Colouring$/i.test((n.textContent || '').trim()); })[0];
+        .filter(function (n) { return /^Colouring( & Media)?$/i.test((n.textContent || '').trim()); })[0];   // #1249: Colouring & Media
       if (!cat) throw new Error('no Colouring category to open');
       cat.closest('[class*=cat]').click(); await sleep(140);
       var btn = document.querySelector('.insp-filter-shortcut');
@@ -87607,7 +87658,6 @@
       'exp-solo-clip': 'an older name for #exp-solo-btn; the check accepts either so the rename cannot silently break it',
       'group-crumb':   'the floating "Editing group" pill was deleted; a test checks it stays deleted',
       'tc-bar':        'the timecode row Ezra asked to get his height back; a test checks it is gone',
-      'vb-onion':      'onion-skin moved out of the view bar rather than being copied into it',
       'fm-sb-tab':     'queue 920 — his 11 Oct pick removed the sampled-colour tab with js/statusbar.js; a test checks it stays gone',
       'cv-appset':     '#1132 — the Canvas card’s App settings button became the App settings bar (#cv-app-bar); two tests check it stays gone',
       'cv-mini-app':   '#1132 — the Canvas bar’s App settings chip, same reason',
@@ -106810,7 +106860,20 @@
     if (!(r.width > 0) || x > 350 || y > Math.min(750, window.innerHeight - 2) || x < 0 || y < 0) throw new Error('setup: ' + what + ' is at ' + Math.round(x) + ',' + Math.round(y) + ' (' + Math.round(r.width) + ' wide), out of reach of real input');
     await realInput924([{ t: 'touchStart', x: x, y: y, ms: 70 }, { t: 'touchEnd', x: x, y: y, ms: 0 }], what);
   }
-  // ⋯ → an item of the layer menu, by a real finger on the phone top bar (the only door to Replace media on a phone).
+  /* #1249: Replace media's one door is the Colouring & Media section now (his words: "that's the section where you go to
+     replace media"; the layer ⋯ menu's entry is gone). Open that section and press its button with a real finger. */
+  async function h3aReplaceBtn(L, what) {
+    FM.selectLayer(L.id); FM.refreshAll(); await sleep(450);
+    /* a song (a clip that is sound only) has no Colouring & Media card: its Replace media… is first in Volume */
+    const m = FM.media.get(L.id), sound = L.type === 'video' && !!m && (!m.width || !m.height);
+    FM.inspector.openCategory(sound ? 'volume' : 'color'); await sleep(450);
+    const btn = document.querySelector('.insp-replace-media');
+    if (!btn || !btn.getBoundingClientRect().width) throw new Error('setup: the ' + (sound ? 'Volume' : 'Colouring & Media') + ' section shows no Replace media… for ' + L.name);
+    try { btn.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    await sleep(150);
+    await h3aTap(btn, what);
+  }
+  // ⋯ → an item of the layer menu, by a real finger on the phone top bar.
   async function h3aLayerMenu(L, re, what) {
     FM.selectLayer(L.id); FM.refreshAll(); await sleep(450);
     const more = document.getElementById('m-more');
@@ -106971,7 +107034,7 @@
       window.__fmStep = 'the phone ⋯ → Replace media… with a real finger';
       await atPhoneWidth(async function () {
         await onScreen924(async function () {
-          const seen = await h3aPicker(big, async function () { await h3aLayerMenu(L, /^Replace media/, 'a tap on Replace media…'); });
+          const seen = await h3aPicker(big, async function () { await h3aReplaceBtn(L, 'a tap on Replace media…'); });
           if (!seen.n) throw new Error('setup: tapping Replace media… opened no file picker');
         });
       }, 360);
@@ -107216,7 +107279,7 @@
       let seen = null;
       await atPhoneWidth(async function () {
         await onScreen924(async function () {
-          seen = await h3aPicker(songB, async function () { await h3aLayerMenu(L, /^Replace media/, 'a tap on Replace media…'); });
+          seen = await h3aPicker(songB, async function () { await h3aReplaceBtn(L, 'a tap on Replace media…'); });
         });
       }, 360);
       if (!seen || !seen.n) throw new Error('setup: tapping Replace media… on the song opened no file picker');
@@ -107237,7 +107300,7 @@
       let seen2 = null;
       await atPhoneWidth(async function () {
         await onScreen924(async function () {
-          seen2 = await h3aPicker(clipB, async function () { await h3aLayerMenu(FM.layerById(FM.scene, L.id), /^Replace media/, 'a second tap on Replace media…'); });
+          seen2 = await h3aPicker(clipB, async function () { await h3aReplaceBtn(FM.layerById(FM.scene, L.id), 'a second tap on Replace media…'); });
         });
       }, 360);
       if (!seen2 || !seen2.n) throw new Error('setup: the second Replace media… opened no file picker');
@@ -115723,7 +115786,7 @@
       let before = null, after = null;
       await atPhoneWidth(async function () {
         await onScreen924(async function () {
-          const seen = await h3aPicker(blue, async function () { await h3aLayerMenu(L, /^Replace media/, 'a tap on Replace media…'); });
+          const seen = await h3aPicker(blue, async function () { await h3aReplaceBtn(L, 'a tap on Replace media…'); });
           if (!seen.n) throw new Error('setup: tapping Replace media… opened no file picker');
           await hcUntil('the blue photo to replace the red one', () => { const r = FM.media.get(L.id); return r && r.file && r.file.name === blue.name; }, 8000);
           await FM.storage.settled(); await sleep(300);
@@ -144952,8 +145015,11 @@
   const B11WX_NEW = { sway: 1, seed: 0 };
   /* #911 clause 3: a NEW Snow & Rain is 8 px now. These pins are SAVED ones from fc8866f1, which carry the 5 px a new one was
      made with then — and b11Base reads makeInstance, which writes 8 — so every config that does not set a Size says 5. */
-  const B11WX_CFG = { def: { size: 5 }, rain: { kind: 1, size: 5 }, heavy: { amount: 900, size: 9, wind: -60, depth: 1 }, rainkf: { kind: 1, speed: b11Kf(2, 0), length: 120, size: 5 },
-    snowkf: { wind: b11Kf(-50, 80), size: 5 }, tint: { color: '#a0c0ff', opacity: 0.5, size: 5 } };
+  /* #1248: Snow & Rain stays INSIDE its layer by default now (his words, 10 Nov: "should stay inside of the layer you add it to,
+     not cover the whole screen"), drawn on its own plate and kept where the layer has pixels. Area: Whole frame is the weather
+     these pins recorded, call for call, so every pinned config says Whole frame; the inside mode has its own test (#1248). */
+  const B11WX_CFG = { def: { size: 5, area: 1 }, rain: { kind: 1, size: 5, area: 1 }, heavy: { amount: 900, size: 9, wind: -60, depth: 1, area: 1 }, rainkf: { kind: 1, speed: b11Kf(2, 0), length: 120, size: 5, area: 1 },
+    snowkf: { wind: b11Kf(-50, 80), size: 5, area: 1 }, tint: { color: '#a0c0ff', opacity: 0.5, size: 5, area: 1 } };
   const B11WX_PIN = {   // fc8866f1, before the edit — RE-RECORDED IN CHROME 14 Oct from fc8866f1's own kernels (the first pins came from node, whose Math.sin/cos differ in the last bit; this tree draws the same maps)
     def: '4cba4c3c.0e428f3a/3366b4ef.cb7a3d8a c7f8c4e8.d1d6b32d/bd882f68.53c68a6c',
     rain: '2441eccd.5e8be3c4/1a557811.3c84d0e5 36c605a6.6ec7c2f1/42b39be4.3c70e0f9',
@@ -144963,7 +145029,7 @@
     tint: 'ca8013d7.c4c6dfed/377a3868.368fe075 1116a9ef.7cda26c0/5d1dd385.9fa4946f',
   };
   /* One frame of Snow & Rain on a 320 x 180 plate, `tl` seconds into the clip. */
-  const b11Wx = (over, tl, W, H, ps) => b11Draw('weather', Object.assign(b11Base('weather', {}), over), W || 320, H || 180, 0.5 + tl, tl, { start: 0.5, transform: { x: 160, y: 90 } }, ps == null ? 1 : ps);
+  const b11Wx = (over, tl, W, H, ps) => b11Draw('weather', Object.assign(b11Base('weather', {}), { area: 1 }, over), W || 320, H || 180, 0.5 + tl, tl, { start: 0.5, transform: { x: 160, y: 90 } }, ps == null ? 1 : ps);   // Whole frame, so every flake reaches the recording context (#1248)
   /* Where each flake is: one paint per flake (an ember's core, after its halo; a bubble's ring). */
   const b11Flakes = (kind, R) => R.marks.filter(m => m.m !== 'layer').filter((m, j) => kind === 3 ? j % 2 === 1 : (kind === 6 ? m.m === 'stroke' : true));
   const b11Hue = s => { const v = /^#[0-9a-f]{6}$/i.test(s) ? [1, 3, 5].map(i => parseInt(s.slice(i, i + 2), 16)) : (String(s).match(/\d+/g) || []).map(Number), r = v[0] / 255, g = v[1] / 255, b = v[2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), c = mx - mn;
@@ -144979,6 +145045,48 @@
     b11Recipes('weather', B11WX_NEW);
     const moved = b11Pinned('weather', B11WX_NEW, B11WX_CFG, B11WX_PIN, p => b11CanvasShots('weather', p));
     if (moved.length) throw new Error(moved.length + ' Snow & Rain frames differ from fc8866f1 at the new defaults - a new control changed weather he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  /* #1248, HIS WORDS (10 Nov): "The snow and rain effect should stay inside of the layer you add it to, not cover the whole
+     screen." Rendered through the app's own renderScene: a 100 x 60 grey box in the middle of a plain 320 x 180 frame carries
+     heavy snow. Proves a NEW Snow & Rain defaults to Area: Inside the layer; inside, every pixel outside the box (a 2 px
+     margin for its antialiased edge) is exactly the frame without the effect, while the box itself changed; Whole frame snows
+     outside the box too; and Embers (which add light) and Rain keep inside as well.
+     FAILS ON v18.36: there is no Area, and the snow falls across the whole frame.
+     CONTROL: Whole frame changes pixels outside the box, so the probe sees the weather where it is drawn. */
+  test('1248 Snow and Rain stays inside the layer it is on by default, and Whole frame is an option (CONTROL: Whole frame snows outside the box)', { item: '1248', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, area = (R.paramsOf('weather') || []).filter(q => q && q.key === 'area')[0];
+    if (!area) throw new Error('Snow & Rain has no Area control');
+    if (R.makeInstance('weather').params.area !== 0) throw new Error('a new Snow & Rain is not Inside the layer (area ' + R.makeInstance('weather').params.area + ')');
+    const W = 320, H = 180, bx = 110, by = 60, bw = 100, bh = 60;
+    const frame = function (fx) {
+      const L = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: W / 2, y: H / 2, shapeW: bw, shapeH: bh, fill: '#808080' });
+      L.start = 0; L.duration = 4; L.effects = fx ? [{ type: 'weather', enabled: true, params: Object.assign(R.makeInstance('weather').params, { amount: 1500, size: 6, opacity: 1 }, fx) }] : [];
+      const S = scene([L], { project: { width: W, height: H, fps: 30, duration: 4, background: '#203040' } });
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const g = c.getContext('2d'); FM.renderScene(g, S, 1.3);
+      return g.getImageData(0, 0, W, H).data;
+    };
+    const plain = frame(null);
+    const count = function (d) {
+      let out = 0, inn = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, diff = Math.abs(d[i] - plain[i]) + Math.abs(d[i + 1] - plain[i + 1]) + Math.abs(d[i + 2] - plain[i + 2]);
+        if (!diff) continue;
+        const inBox = x >= bx - 2 && x < bx + bw + 2 && y >= by - 2 && y < by + bh + 2;
+        if (inBox) inn++; else out++;
+      }
+      return { out: out, inn: inn };
+    };
+    const whole = count(frame({ area: 1 }));
+    if (!(whole.out > 200)) throw new Error('CONTROL: Whole frame changed only ' + whole.out + ' pixels outside the box, so the probe cannot see the snow');
+    for (const [name, fx] of [['Snow', {}], ['Rain', { kind: 1 }], ['Embers', { kind: 3 }]]) {
+      const c = count(frame(Object.assign({ area: 0 }, fx)));
+      if (c.out) throw new Error(name + ' Inside the layer changed ' + c.out + ' pixels outside the box: it still covers the whole screen');
+      if (!(c.inn > 50)) throw new Error(name + ' Inside the layer changed only ' + c.inn + ' pixels inside the box: the weather vanished');
+    }
+    const absent = count(frame({ area: undefined }));
+    if (absent.out) throw new Error('a Snow & Rain with no Area (a saved one) still covers the whole screen (' + absent.out + ' pixels outside the box)');
   });
 
   test('482 11.2 Snow & Rain - Confetti falls in at least three colours, Embers and Bubbles rise, Petals and Dust drift down, Pattern gives the layer its own flakes, Sway sets how far snow swings and leaves rain straight', { item: '482', budgetMs: 30000 }, function () {

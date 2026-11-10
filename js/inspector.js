@@ -3170,7 +3170,11 @@ window.FM = window.FM || {};
 
   // Order mirrors Alight Motion's property menu (Color & Fill leads, Move & Transform 4th, Effects last).
   const CATEGORIES = [
-    { key: 'color', label: 'Colouring', icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
+    /* "COLOURING & MEDIA" (#1249, his words, 10 Nov): "Change this section titled coloring to say like coloring and media… it
+       is where you change like the media, like you can swap the media out… that's the section where you go to replace media."
+       So the clip's Replace media… is the first thing in it (below), and the layer ⋯ menu no longer carries it. The `color`
+       KEY is untouched, so nothing saved is affected. */
+    { key: 'color', label: 'Colouring & Media', icon: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.5a2 2 0 0 1 0-4H19a2 2 0 0 0 2-2c0-2-4-3-9-3z' },
     /* "OUTLINE & SHADOWS" (queue 369). Ezra: "Change border and shadow to outline add shadows then in
        the actual menu change anything saying border to outline." Read as dictation for "Outline and
        Shadows" — plural, as he said it. The `border` KEY is untouched, so nothing saved is affected; this
@@ -3794,7 +3798,7 @@ window.FM = window.FM || {};
      the same question the cards ask instead, so there is no second table left to go stale. Every key
      below must resolve there — the suite asserts it. */
   const STYLE_CATS = [
-    { key: 'color',     label: 'Colouring' },
+    { key: 'color',     label: 'Colouring & Media' },   // must match the card above (#1249)
     { key: 'border',    label: 'Outline & Shadows' },   // the Paste Style list — must match the card (queue 369)
     { key: 'blend',     label: 'Mixing' },   // must stay in step with the card above (queue 366)
     { key: 'transform', label: 'Position / Scale' },
@@ -6791,6 +6795,14 @@ window.FM = window.FM || {};
       // so a Wiggle on the camera is the one-tap whole-scene shake (with z-depth parallax riding it).
       if (layer.type !== 'group') { const bb = behaviorsBlock(layer); if (bb) body.appendChild(bb); }
     } else if (key === 'volume') {
+      /* #1249: a SONG (a clip that is sound only) has no Colouring & Media card, so the Replace media… that left the layer ⋯
+         menu opens its own main section instead: the same FM.replaceMedia, first in Volume. */
+      if (isAudioOnly(layer) && FM.replaceMedia) {
+        const rep = el('button', 'btn fill-media-pick insp-replace-media', 'Replace media…');
+        rep.type = 'button';
+        rep.addEventListener('click', () => FM.replaceMedia(layer.id));
+        body.appendChild(rep);
+      }
       body.appendChild(volumePanel(layer));
     } else if (key === 'speed') {
       if (layer.speed == null) layer.speed = 1;
@@ -7322,6 +7334,15 @@ window.FM = window.FM || {};
          one filter menu in the app rather than two that drift apart. */
       // The Filters shortcut now sits on the HEADER row beside "‹ Colouring" (queue 714) — see filterShortcut()
       // and the header branch in refresh(). It used to be a full-width row here, first in the body.
+      /* REPLACE MEDIA, FIRST IN THE SECTION (#1249). His words: "that's the section where you go to replace media", and
+         "in the three dot menu, you have a button for replace media, get rid of that". So this is its one door on a clip or a
+         picture: the same FM.replaceMedia the menu called (the picker, the reuse tiles, the undo stash all come with it). */
+      if ((layer.type === 'video' || layer.type === 'image') && FM.replaceMedia) {
+        const rep = el('button', 'btn fill-media-pick insp-replace-media', 'Replace media…');
+        rep.type = 'button';
+        rep.addEventListener('click', () => FM.replaceMedia(layer.id));
+        body.appendChild(rep);
+      }
       // EVERY layer gets AM's fill selector (None / Solid / Gradient / Media). On a video/image/
       // group, picking Solid (etc.) fully overwrites the content with that fill; None shows the
       // content as-is. A solid colour fills flat — gradients are their own tab, never an accident.

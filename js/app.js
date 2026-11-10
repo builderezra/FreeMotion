@@ -6218,31 +6218,18 @@ window.FM = window.FM || {};
     // cross-layer keyframe paste: the keyframe menu needs an existing diamond to long-press, so a
     // layer with NO keyframes had no touch path — this gives every platform the same entry
     if (FM.kfClipboard && FM.kfClipboard.length && FM.pasteKfAtPlayhead) items.push({ label: 'Paste keyframes at playhead', action: () => FM.pasteKfAtPlayhead() });
-    if (layer.type === 'video' || layer.type === 'image') {
-      items.push({ label: 'Replace media…', action: () => FM.replaceMedia(layer.id) });
-      /* Named for what it DOES, not for what he asked it to be called (queue 203). "Improve quality"
-         promises invented pixels; this sharpens what is there when the clip is being stretched. The
-         label is the first place to be honest, and the toast is the second. */
-      {
-        const on = (layer.effects || []).some(e => e && e.type === 'unsharpmask' && e.iq === 1);
-        items.push({ label: on ? 'Remove sharpening' : 'Sharpen for upscaling…', action: () => FM.improveQuality(layer) });
-      }
-    }
+    /* #1249, HIS WORDS (10 Nov): "in the three dot menu, you have a button for replace media, get rid of that. And then also
+       there's a button sharpen for upscale. Which we don't need that as well, because sharpen is an effect… the onion skin
+       thing in the three dot menu is not necessary as well, because we have that in the three dot the view options menu…
+       Just let's clear up the three dot menu when you have a layer selected a little bit, just so it's a bit more consistent."
+       So three entries left this menu, each to the home he named:
+         · Replace media…        → the Colouring & Media section (js/inspector.js), "the section where you go to replace media"
+         · Sharpen for upscaling → the Sharpen and Unsharp Mask effects in Effects (FM.improveQuality stays, with no door)
+         · Onion skin            → the View options rail (#vb-onion). Queue 122 had moved it HERE from there; his newer
+                                    words put it back, and he knows it as a view option.
+       What stays is about the layer itself: Lock, Reset transform, Reverse and Reset speed, then grouping and saves. */
     items.push(...[
       { label: layer.locked ? 'Unlock' : 'Lock', action: () => { layer.locked = !layer.locked; FM.timeline.rebuild(); if (FM.history) FM.history.commit(); } },   // one rebuild — layersPanel.refresh() IS rebuild() (see FM.layersPanel)
-      /* ONION SKIN LIVES HERE NOW (queue 122). Ezra: "shouldn't onion skin not be in the view options
-       * and app settings? Idk why it would be there since it only effects one layer, it should just be
-       * in the three dots when you have a layer selected."
-       * He is right, and the code agrees with him: drawOnionSkin() begins `const sel =
-       * FM.selectedLayer(...); if (!sel) return;` — it ghosts the SELECTED layer and does nothing at
-       * all without one. So it was a per-layer tool sitting in two GLOBAL menus, one of which you can
-       * open with nothing selected and toggle a switch that cannot do anything.
-       * Moved rather than copied: both global entries are gone, so there is exactly one door. The
-       * label carries the state because this menu has no switch furniture. */
-      { label: (FM.onionSkin ? '✓ ' : '') + 'Onion skin', action: () => {
-        const b = document.getElementById('btn-onion');
-        if (b) b.click();   // the one implementation, so the toast and the button state stay in step
-      } },
       { label: 'Reset transform', action: () => { const P = FM.scene.project, tr = layer.transform; tr.x = Math.round(P.width / 2); tr.y = Math.round(P.height / 2); tr.scale = 1; tr.rotation = 0; tr.opacity = 1; FM.requestRender(); if (FM.inspector) FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); if (FM.history) FM.history.commit(); } },
     ]);
     if (layer.type === 'video') {
@@ -8923,6 +8910,7 @@ window.FM = window.FM || {};
       const sb = document.getElementById('vb-snap');
       if (sb) sb.classList.toggle('on', !!(FM.timeline && FM.timeline.isSnapping && FM.timeline.isSnapping()));
       const gb = document.getElementById('vb-guides'); if (gb) gb.classList.toggle('on', !!FM.showGuides);
+      const ob = document.getElementById('vb-onion'); if (ob) ob.classList.toggle('on', !!FM.onionSkin);   // #1249
       const P = FM.scene && FM.scene.project;
       const marked = !!(P && (P.loopIn != null || P.loopOut != null));
       const mc = document.getElementById('vb-markclear'); if (mc) mc.classList.toggle('dim', !marked);
@@ -9334,8 +9322,9 @@ window.FM = window.FM || {};
     // Each one presses the control that OWNS the toggle rather than flipping a flag here — the same
     // contract the settings panel uses. One writer, so the bar and the panel can never disagree.
     const pressHidden = (id) => { const b = document.getElementById(id); if (b) b.click(); };
-    // (no vb-onion binding — the button is gone from the view bar, queue 122. Onion skin is a
-    //  per-layer tool and its one door is the layer ⋯ menu now.)
+    // Onion skin is back in View options (#1249, his words: "we have that in the three dot the view options menu"), and
+    // it is the ONE door again: the layer ⋯ menu's entry is gone. It ghosts the selected layer, as it always has.
+    bindVb('vb-onion', () => pressHidden('btn-onion'));
     bindVb('vb-snap', () => pressHidden('btn-snap'));
     bindVb('vb-guides', () => pressHidden('btn-guides'));
     bindVb('vb-markin', markRegionIn);

@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 10 Nov at v18.37
+> ## 📌 WHAT I NEED FROM YOU — updated 10 Nov at v18.38
 >
-> **State:** v18.37 — **no cream bar and no fade at the top of the screen.** iOS was keeping the intro's colour all session, or losing it and blurring the top. Now each screen hands iOS its own top colour as it changes. Not seen on your phone yet: whenever you like, open the app cold and go Home and into a project. **From you, most useful first:** **open FreeMotion cold from your Home Screen on your iPhone and say if the intro still lags, and if an empty project's clapper lid still gets cut off as it lifts (#1231, #1232)**; play a project on your iPhone where a clip has an effect on its sound, for a minute, then paste Settings → Reports → Your last playback (#663); export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956).
+> **State:** v18.38 — **Colouring is now Colouring & Media, with Replace media at its top; the layer ⋯ menu lost Replace, Sharpen and Onion skin.** Onion skin is in View options now (it was not there before, the ⋯ menu was its only home). And **Snow & Rain now stays inside the layer you add it to**, with an Area option for the whole frame. **From you, most useful first:** **open FreeMotion cold from your Home Screen on your iPhone and say if the intro still lags, and if an empty project's clapper lid still gets cut off as it lifts (#1231, #1232)**; play a project on your iPhone where a clip has an effect on its sound, for a minute, then paste Settings → Reports → Your last playback (#663); export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956).
+>
+> v18.37 — **no cream bar and no fade at the top of the screen.** iOS was keeping the intro's colour all session, or losing it and blurring the top. Now each screen hands iOS its own top colour as it changes. Not seen on your phone yet: whenever you like, open the app cold and go Home and into a project.
 >
 > v18.36 — **one plain video in the complex editor should stop lagging.** On my laptop slowed down 6x, it went from about 175 frames and 15 dropped in 5 seconds to about 240 and 1. That is Chrome, not your phone, so your phone is the real test whenever you like: if it still lags, What's slow → Measure, then Copy, and paste it.
 >
@@ -39597,6 +39599,13 @@ re-opened #480, which I had marked done and had not fixed.
       BUILDER: this is his direct ask for #1246 U7 (Oil Paint: raise Radius well above 8 and add a brush mode whose strokes follow the image's gradients, so the strokes can be seen). Put U7 first in #1246, alongside U1 Blinds. Measure the difference on his photos with tools/design/effect-pictures/truth.html (mean change from the plain photo should clearly rise), and check the cost on a phone. When it ships, the logger redraws the Oil Paint picture from the upgraded effect.
       📍 **Order inside #1246 from 10 Nov:** U7 Oil Paint and U1 Venetian Blinds first (his two named examples), then U2 to U6 and U8 to U11. His clause for it: 3. [ ] "the oil paint effect u cant even tell the difference" — U7, ticked only when the measured change on his photos clearly rises.
       📍 **Added 10 Nov ~14:15 (his round-4 review, verbatim in #1243):** after U1/U7, four effects he says look bad in themselves: 4. [ ] "rock noise" (likely Block Noise: check the label) · 5. [ ] Clouds · 6. [ ] Speed Lines · 7. [ ] Dispersion (U2). His words: "I think rock noise and clouds looks bad, but that's because the actual effect looks bad. So maybe those effects actually make them look good." Each: measure with truth.html, a target look, A/B frames to him before shipping, then the logger redraws its picture. U11 (a layer per Cube face) moves up: his Cube picture needs it.
+      📥 **Moved verbatim from INBOX (10 Nov, the loop):**
+      ### 10 Nov 2026, ~22:00 AWST: "soften skin u cant even tell what it does" (#1243 FX1, and the effect itself)
+      **His words (verbatim):** "soften skin u cant even tell what it does"
+      **Logger:** the new Soft Skin picture (tiles-g2.js) is honest at the effect's DEFAULTS (Amount 0.85, Smoothing size 10, Keep detail 50). At those settings the real effect changes a face by only about 4 levels, which is invisible at menu size. Same class as Oil Paint: the picture is true and the effect is too gentle.
+      - PICTURE (the logger, one agent, in the first gap after v18.38): show it at the strength the controls really reach (max Amount / Smoothing), on a CLOSE crop of skin (cheek and under-eye, with visible pores and marks) and a hard before/after split, so the smoothing is unmistakable at 77 px. Still truth-checked.
+      - EFFECT (BUILDER, #1246 alongside U7 Oil Paint): check whether Soften Skin is too weak to be useful. Measure the before/after on a real face at its defaults and at max. If the default can't be seen at normal viewing sizes, raise the default and/or the range, so one tap visibly smooths skin and keeps eyes, brows and lips sharp. Show A/B frames before shipping.
+      8. [ ] Soften Skin: "soften skin u cant even tell what it does" — one tap visibly smooths skin, eyes, brows and lips stay sharp; measured on a real face at its defaults and at max, A/B frames to him before it ships. (Built code-only 10 Nov in ~/fm-claude-wt/ss: the kernel rebuilt on two scales; tested in a gap.)
 - [ ] **1247 — PC: the Add panel's Shape, Media and Audio previews are too small and cluttered** (10 Nov ~12:35 AWST, via INBOX, with his screenshot)
       **STATUS: 🟢 READY — nothing is stopping this**
       📥 **Moved verbatim from INBOX (10 Nov, the loop):**
@@ -39627,6 +39636,7 @@ re-opened #480, which I had marked done and had not fixed.
       2. Keep the old look as an option: "Area: Inside the layer (default) · Whole frame", for anyone who wants weather over the entire shot. No migration fuss: his rule is that old projects don't matter. Update the desc text.
       3. TEST at 380 and 1280: weather on a small centred rectangle over a plain background. Every pixel outside the rectangle's alpha is byte-identical to the frame without the effect, and inside has changed. The same with "Whole frame" changes pixels outside. Mutation: drop the mask → red.
       4. Then the logger redraws the Snow & Rain picture (#1243 FX1) to show weather inside a layer, because pictures only show what an effect really does.
+      📍 **v18.38 (10 Nov): built and shipped — PLAN steps 1 to 3.** Area: Inside the layer (default, and a saved one with no Area) · Whole frame. Measured through renderScene: nothing outside the layer changes inside mode. Step 4 (redraw its picture) is the logger's. The box stays open until this entry's turn: ship.sh closes items oldest first.
 - [ ] **1249 — Full editor: rename Colouring to Colouring & Media, and tidy the layer ⋯ menu** (10 Nov ~12:55 AWST, via INBOX, with his screenshot)
       **STATUS: 🟢 READY — nothing is stopping this**
       📥 **Moved verbatim from INBOX (10 Nov, the loop):**
@@ -39634,17 +39644,18 @@ re-opened #480, which I had marked done and had not fixed.
       **His words (verbatim):** "Change this section titled coloring to say like coloring and media, I guess. Because it is where you change like the media, like you can swap the media out. So you can like, that's the section where you go to replace media. And also in the three dot menu, you have a button for replace media, get rid of that. And then also there's a button sharpen for upscale. Which we don't need that as well, because sharpen is an effect. So if people want that, they can go find the effect. And also, I'm pretty sure the onion skin thing in the three dot menu is not necessary as well, because we have that in the three dot the view options menu. So you don't need it there either. Just let's clear up the three dot menu when you have a layer selected a little bit, just so it's a bit more consistent."
       **His screenshot (described by the logger):** his Mac, v18.36, the Full editor's PC layout with a video layer selected. The INSPECTOR grid shows 1 Colouring, 2 Outline & Shadows, 3 Mixing, 4 Position / Scale, 5 Speed, 6 Customise Shape, 7 Presets, 8 Effects. The transport row shows ⧉ · ● · |◀ · 00:02:18 · ▶| · ↺ ↻ · link · 🗑 · ⋯ (the ⋯ is the menu he means).
       **His clauses:**
-      1. [ ] Rename the "Colouring" tile/section to "Colouring & Media", since it's where you swap the media.
-      2. [ ] Remove "Replace media" from the layer ⋯ menu (it lives in Colouring & Media).
-      3. [ ] Remove "Sharpen for upscale" from the ⋯ menu (Sharpen is an effect).
-      4. [ ] Remove "Onion skin" from the layer ⋯ menu (it's in the view-options ⋯ menu).
-      5. [ ] Tidy the layer ⋯ menu generally, so it's consistent.
+      1. [x] ✅ v18.38 Rename the "Colouring" tile/section to "Colouring & Media", since it's where you swap the media.
+      2. [x] ✅ v18.38 (now first in the Colouring & Media section; a song's is first in Volume) Remove "Replace media" from the layer ⋯ menu (it lives in Colouring & Media).
+      3. [x] ✅ v18.38 Remove "Sharpen for upscale" from the ⋯ menu (Sharpen is an effect).
+      4. [x] ✅ v18.38 (it was NOT in View options: #122 had moved it into the ⋯ menu; it is in View options now, one door) Remove "Onion skin" from the layer ⋯ menu (it's in the view-options ⋯ menu).
+      5. [x] ✅ v18.38 (the three gone; what is left is listed in the release line, he can name any other) Tidy the layer ⋯ menu generally, so it's consistent.
       **PLAN (no pick needed; these are his calls):**
       - (1) Rename the label everywhere it shows (the tile, the panel header, any tutorial or test text). Before removing the ⋯ entry, check that Replace really is inside that panel for every media layer type (video, image), not just video.
       - (2)-(4) Delete the three entries from the layer ⋯ menu; their homes stay.
       - (5) List what's left in the ⋯ menu and drop anything else that duplicates a home elsewhere. Order what remains by frequency of use. Name each removal in the release line.
       - Tests: the ⋯ menu with a layer selected has none of the three; the tile reads "Colouring & Media"; Replace still works from that panel. Mutation: put Replace back in the ⋯ menu → red.
       - This is the Full PC layout, so it's under the Full-unchanged lock: it ships as its own release, or alongside other Full-only items.
+      📍 **v18.38 (10 Nov): all five clauses shipped.** Measured at 380 before shipping: the card name fits on one line, the header keeps Filters, the button is full width at the top of the section. Not seen on his Mac. The box above stays open until this entry's turn: ship.sh closes items oldest first, and older ones are still open.
 - [ ] **1250 — The Datamosh effect "needs a lot of work"** (10 Nov ~13:00 AWST, via INBOX)
       **STATUS: 🟢 READY — nothing is stopping this**
       📥 **Moved verbatim from INBOX (10 Nov, the loop):**
