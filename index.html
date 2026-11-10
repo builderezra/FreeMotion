@@ -27,7 +27,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.36">
+<meta name="fm-build" content="v18.37">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -92,6 +92,64 @@
      — putting the class in the markup so a refresh could not flash the old layout — is superseded by
      there no longer being an old layout. -->
 <body>
+  <!-- THE TOP OF THE SCREEN (queue 920, #1243 G1 + G12, 10 Nov). His words: "a cream-colored bar at the top of my screen… there
+       should be no bar visible at the top… whatever was below it just continuing up. And it shouldn't have the blur either… you
+       keep swapping between having the blur issue or the bar issue", and "the fade at the top of the screen… goes over the top
+       of all the buttons on the top row".
+       Under his black-translucent pick (11 Oct) iOS 26 colours the strip under the clock from the page, by WebKit's own rule
+       (read from its source and measured in a real WKWebView, tools/design/plans/2026-09-26-topbar/plan.md §3.1-3.4): it
+       hit-tests the top centre 4 px down, walks up to the first fixed box and takes its background-COLOR; a box the size of the
+       viewport (#splash, #home-screen, a sliding #app) never replaces a colour already taken; and it looks again ONLY when a
+       fixed box appears or goes, never when a colour or a class changes. So #splash's bone, the first colour of every cold
+       launch, stayed the strip for the whole session (the cream bar), and a session whose last box was hidden got no colour
+       at all, which is when iOS lays its blur over the top ~45 pt (the fade). Which of the two he saw depended on the order
+       of screens: "you keep swapping".
+       The cure is one tab per strip colour, exactly one shown at a time, and every change of screen hides one tab and shows
+       another, the one event that makes WebKit look again. Each tab is 12 px tall (WebKit skips 10 px and less), the full
+       width, opaque, above #splash, and NOT the size of the viewport, so it may replace any colour; its mask paints nothing,
+       which WebKit still reads (measured 26 Sep), so nobody ever sees one. No script, no timer, no sampling.
+       Not the sampled-colour tab he called "didn't work" on 11 Oct (v17.07): that one sat under the old opaque `default` bar,
+       where a colour could only repaint a band that was already a bar. This is the strip of his own pick. The visible grounds
+       (splash-css below, styles.css, theme-glass.css) are untouched: only what iOS reads changes. A dialog dims the screen
+       under it, so the dimmed screens have rows too. THE ONE TABLE is edge-css: a new screen adds its row there.
+       NO :has() ON <html> (#202, measured 10 Nov: a :has() rule on html or body is re-checked on every change of a child
+       anywhere in the page, about half of playback's style work). The take's two tabs read classes on <html>; the screens'
+       tabs sit after #app and #home-screen (below the canvas dialog) and read them as earlier siblings; the one :has() looks
+       only at body's own children (#fm-ask is one) or inside #home-screen (#hm-dialog), which playback never touches. -->
+  <i class="fm-edge" data-edge="bone" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="coal" aria-hidden="true"></i>
+  <style id="edge-css">
+    .fm-edge { display: none; position: fixed; left: 0; right: 0; top: 0; height: 12px; z-index: 10001; pointer-events: none; opacity: 1; -webkit-mask-image: linear-gradient(transparent, transparent); mask-image: linear-gradient(transparent, transparent); }
+    /* the colours: each must equal that screen's own top (a test reads both) */
+    .fm-edge[data-edge="bone"] { background-color: #e7e2d5; }          /* #splash.splash-kf, the take before the matte lands */
+    .fm-edge[data-edge="coal"] { background-color: #0c0c0d; }          /* #splash.splash-dark, the matte, and the still */
+    .fm-edge[data-edge="home-light"] { background-color: #fafdff; }    /* theme-glass.css, the light Home's #home-screen */
+    .fm-edge[data-edge="home-dark"] { background-color: #091823; }     /* styles.css, the dark Home's #home-screen */
+    .fm-edge[data-edge="editor"] { background-color: #161a21; }        /* #topbar-m, the phone editor's bar (Simple and Full) */
+    @media (min-width: 701px) { .fm-edge[data-edge="editor"] { background-color: #0a1319; } }   /* the glass #topbar's top over the page */
+    .fm-edge[data-edge="home-light-dim"] { background-color: #acb4bb; }  /* rgba(20,38,56,.34) over #fafdff: the light Home's dialog */
+    .fm-edge[data-edge="home-dark-dim"] { background-color: #060b12; }   /* rgba(4,6,10,.7) over #091823 */
+    .fm-edge[data-edge="editor-dim"] { background-color: #090c11; }      /* rgba(4,6,10,.7) over #161a21 */
+    @media (min-width: 701px) { .fm-edge[data-edge="editor-dim"] { background-color: #060a0f; } }   /* the same, over the glass #topbar */
+    /* THE ONE TABLE: which tab shows. Exactly one matches in every state.
+       The take: bone until the matte lands at 2.14 s, then coal (the still is the end frame, so coal), until the cut. */
+    html.splash-kf-on:not(.splash-dark-on):not(.splash-kf-out) .fm-edge[data-edge="bone"] { display: block; }
+    html.splash-kf-on.splash-dark-on:not(.splash-kf-out) .fm-edge[data-edge="coal"] { display: block; }
+    /* The screens, from the cut on (or with no take this load). Home while #home-screen shows and #app has not started its
+       swoop in; the editor once Home is hidden, or from the swoop's first frame (#app.fm-push-in, home.js), not while #app
+       waits parked off the right edge with Home still on screen. A dialog over either (#fm-ask, Home's #hm-dialog) swaps in
+       the dimmed row. Each :has() rule stands alone (a browser with no :has() drops a whole selector list that names it). */
+    html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:not(:has(> #fm-ask:not(.hidden))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden))) ~ .fm-edge[data-edge="home-light"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:not(:has(> #fm-ask:not(.hidden))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden))) ~ .fm-edge[data-edge="home-dark"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:has(> #fm-ask:not(.hidden)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden) ~ .fm-edge[data-edge="home-light-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-dialog:not(.hidden)) ~ .fm-edge[data-edge="home-light-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:has(> #fm-ask:not(.hidden)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden) ~ .fm-edge[data-edge="home-dark-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-dialog:not(.hidden)) ~ .fm-edge[data-edge="home-dark-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:not(:has(> #fm-ask:not(.hidden))) > #app ~ #home-screen.hidden ~ .fm-edge[data-edge="editor"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:not(:has(> #fm-ask:not(.hidden))) > #app.fm-push-in ~ .fm-edge[data-edge="editor"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> #fm-ask:not(.hidden)) > #app ~ #home-screen.hidden ~ .fm-edge[data-edge="editor-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> #fm-ask:not(.hidden)) > #app.fm-push-in ~ .fm-edge[data-edge="editor-dim"] { display: block; }
+  </style>
   <!-- Splash: TAKE 13, "EXPLODED STACK" (#1231, his pick of the 25 takes, 6 Nov: "I want it now so yes"; it replaced #1223's
        H2 "Scrub", of which he said "the new intro is dogshit, make a but tone of diff options for me to pick and actually try").
        Once per build per session (fresh tab / PWA cold launch). FIRST in <body> deliberately: it parses and paints BEFORE the
@@ -1034,7 +1092,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.36</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.37</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1912,6 +1970,15 @@
       <button type="button" class="cv-mini cv-app-bar" id="cv-app-bar"><span class="cv-mini-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="cv-mini-txt"><span class="cv-mini-t">App settings</span></span><span class="cv-mini-exp cv-app-go" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V8a1.5 1.5 0 0 1 1.5-1.5H10"/></svg></span></button>
     </div>
   </div>
+
+  <!-- THE SCREENS' TOP-EDGE TABS (queue 920, #1243 G12): the table and the reason are in edge-css at the top of <body>. They
+       sit HERE, after #app and #home-screen, so the table reads those two as earlier siblings with no :has() on <html>. -->
+  <i class="fm-edge" data-edge="home-light" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="home-dark" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="editor" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="home-light-dim" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="home-dark-dim" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="editor-dim" aria-hidden="true"></i>
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
   <script src="js/perf-probe.js?v=15"></script>

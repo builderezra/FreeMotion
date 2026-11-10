@@ -62,10 +62,11 @@ footer b{ color:var(--ink); font-weight:600; }
 
 <div class="wrap">
   <header>
-    <div class="eyebrow">FreeMotion · effect pictures · round 3</div>
+    <div class="eyebrow">FreeMotion · effect pictures · round 4</div>
     <h1>Every effect, shown as it really looks</h1>
-    <p class="lede">Each picture was checked against the real effect in the app, and most were redrawn: many now use your own photos with the effect's real maths applied. Redrawn ones have a yellow dot and a Redrawn tag.</p>
+    <p class="lede">Every effect now has its picture. The new ones have a yellow dot and a New tag; the ones you've already seen say Reviewed. This is a preview: the checkers are still going over the new ones, and this page will update when they finish.</p>
     <div class="counts" id="counts"></div>
+    <div class="counts"><a class="pill new" href="#changed">Show only the ones just changed</a><a class="pill" href="#all">Show everything</a></div>
   </header>
 
   <section class="block" aria-labelledby="h-phone">
@@ -91,24 +92,28 @@ footer b{ color:var(--ink); font-weight:600; }
 <script>
 (function(){
 'use strict';
-const FILES=['tiles-r1.js','tiles-b1.js','tiles-b2.js','tiles-b3.js','tiles-b4.js','tiles-b5.js','tiles-b6.js','tiles-b7.js','tiles-fix-1.js','tiles-fix-2.js','tiles-fix-3.js','tiles-fix-4.js'];
+const FILES=['tiles-r1.js', 'tiles-b1.js', 'tiles-b2.js', 'tiles-b3.js', 'tiles-b4.js', 'tiles-b5.js', 'tiles-b6.js', 'tiles-b7.js', 'tiles-fix-1.js', 'tiles-fix-2.js', 'tiles-fix-3.js', 'tiles-fix-4.js', 'tiles-c0.js', 'tiles-c1.js', 'tiles-c2.js', 'tiles-c3.js', 'tiles-c4.js', 'tiles-c5.js', 'tiles-c6.js', 'tiles-c7.js', 'tiles-c8.js', 'tiles-c9.js', 'tiles-c10.js', 'tiles-c11.js', 'tiles-c12.js', 'tiles-c13.js', 'tiles-c14.js', 'tiles-c15.js', 'tiles-c16.js', 'tiles-c17.js', 'tiles-c18.js', 'tiles-c19.js', 'tiles-c20.js', 'tiles-c21.js', 'tiles-c22.js', 'tiles-c23.js', 'tiles-c24.js', 'tiles-c25.js', 'tiles-c26.js', 'tiles-g1.js', 'tiles-g2.js', 'tiles-g3.js', 'tiles-g4.js'];
 const ORDER=['Colouring','Keying','Blur','Stylize','Drawing / Edge','Warping','Shakes / Movement','Repetition','Generative','3D','Text','Opacity / Visibility'];
 const qs=(()=>{ try{ return new URLSearchParams(location.search); }catch(e){ return new URLSearchParams(''); } })();
-function load(i,done){ if(i>=FILES.length) return done(); const s=document.createElement('script'); s.src=FILES[i]; s.onload=s.onerror=()=>load(i+1,done); document.head.append(s); }
+function load(i,done){ if(i>=FILES.length) return done(); const before=(window.FX_TILES||[]).length; const s=document.createElement('script'); s.src=FILES[i]; s.onload=s.onerror=()=>{ (window.FX_TILES||[]).slice(before).forEach(T=>{ T._file=FILES[i]; }); load(i+1,done); }; document.head.append(s); }
+const isNew4=T=>String(T._file||'').indexOf('tiles-c')===0;
 load(0,()=>{ const p=(window.FXK&&window.FXK._preload)?window.FXK._preload():Promise.resolve(); p.then(build,build); });
+window.addEventListener('hashchange',()=>{ try{ location.reload(); }catch(e){} });
 
 function build(){
   /* later files replace earlier tiles with the same id (a redraw in tiles-fix-N.js wins) */
   let tiles=[...new Map((window.FX_TILES||[]).map(T=>[T.id,T])).values()];
+  /* #changed: only the pictures redone after his last review (the tiles-g files, plus the new Spherize) */
+  if(location.hash==='#changed') tiles=tiles.filter(T=>String(T._file||'').indexOf('tiles-g')===0||T.id==='sphere3d');
   const only=qs.get('only'); if(only){ const ids=only.split(','); tiles=tiles.filter(T=>ids.includes(T.id)); }
   const sec=qs.get('section'); if(sec){ tiles=tiles.filter(T=>T.section===sec); }
   tiles.sort((a,b)=>(ORDER.indexOf(a.section)-ORDER.indexOf(b.section))||0);
   const DPR=Math.min(2,window.devicePixelRatio||1), BIG=Math.round(300*DPR);
   const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const nNew=tiles.filter(T=>T.redrawn).length;
+  const nNew=tiles.filter(isNew4).length;
   document.getElementById('counts').innerHTML='';
   const c1=document.createElement('span'); c1.className='pill'; c1.textContent=tiles.length+' effects';
-  const c2=document.createElement('span'); c2.className='pill new'; c2.textContent=nNew+' redrawn';
+  const c2=document.createElement('span'); c2.className='pill new'; c2.textContent=nNew+' new';
   const c3=document.createElement('span'); c3.className='pill'; c3.textContent=new Set(tiles.map(T=>T.section)).size+' sections';
   document.getElementById('counts').append(c1,c2,c3);
   document.getElementById('phone-count').textContent=tiles.length+' shown';
@@ -133,7 +138,7 @@ function build(){
       const w=document.createElement('div'); w.className=cls;
       const cv=document.createElement('canvas'); cv.width=cv.height=Math.round(size*DPR); cv.setAttribute('aria-hidden','true');
       const lab=document.createElement('span'); lab.textContent=T.name; w.append(cv,lab);
-      if(T.redrawn&&cls==='mtile'){ const dot=document.createElement('i'); dot.title='Redrawn'; w.append(dot); }
+      if(isNew4(T)&&cls==='mtile'){ const dot=document.createElement('i'); dot.title='New'; w.append(dot); }
       parent.append(w);
       const ctx=cv.getContext('2d'); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
       views.push({cv,ctx}); watch(cv);
@@ -142,7 +147,7 @@ function build(){
     const card=document.createElement('article'); card.className='card';
     const meta=document.createElement('div'); meta.className='meta';
     const h4=document.createElement('h4'); h4.textContent=T.name;
-    const tag=document.createElement('span'); tag.className='tag'+((T.isNew||T.redrawn)?' new':''); tag.textContent=T.redrawn?'Redrawn':T.isNew?'New':(T.polished?'Polished':'Round 1');
+    const tag=document.createElement('span'); tag.className='tag'+(isNew4(T)?' new':''); tag.textContent=isNew4(T)?(T.redrawn?'Redrawn':'New'):'Reviewed';
     meta.append(h4,tag);
     const p=document.createElement('p'); p.textContent=T.line;
     card.append(M,meta,p); cardsEl.append(card); watch(M);

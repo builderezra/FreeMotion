@@ -65223,6 +65223,254 @@
     if (padded < 3) throw new Error('only ' + padded + ' rule(s) pad by env(safe-area-inset-top) — the top buttons would sit under the clock');
   });
 
+  /* QUEUE 920 / #1243 G1 + G12: WebKit's top-edge rule, run against the live page (a port of
+     tools/design/plans/2026-09-26-topbar/edge-emu.js, WebKit's LocalFrameView::fixedContainerEdges, top side only).
+     At the viewport's centre, 4 px down, it hit-tests (ignoring pointer-events), walks up to the first fixed or sticky
+     box and classifies it; only a Candidate may set the strip's colour over one already set (a ViewportSized box, a
+     dimming layer or a sidebar never does), and the colour is the first plain background-color met on the way.
+     Returns the container ELEMENT as well, so a test can ask whether it is the very tab it expects. */
+  function edge1243(w) {
+    const d = w.document, W = w.innerWidth, H = w.innerHeight, gcs = function (e, p) { return w.getComputedStyle(e, p); };
+    const vpW = W - 8, vpH = H - 8;
+    const cmp = function (len, vp) { return len < vp * 0.9 ? 'S' : len < vp * 1.05 ? 'M' : 'L'; };
+    const rgba = function (s) { const m = /rgba?\(([^)]+)\)/.exec(s || ''); if (!m) return null; const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+    const hex = function (c) { return c ? '#' + [c.r, c.g, c.b].map(function (v) { return Math.round(v).toString(16).padStart(2, '0'); }).join('') + (c.a < 1 ? '@' + (+c.a).toFixed(2) : '') : null; };
+    const desc = function (el) { return el ? (el.id ? '#' + el.id : el.tagName.toLowerCase() + (el.classList.length ? '.' + [].slice.call(el.classList, 0, 2).join('.') : '') + (el.dataset && el.dataset.edge ? '[' + el.dataset.edge + ']' : '')) : null; };
+    const hasChildRenderer = function (el) {
+      for (const n of el.childNodes) {
+        if (n.nodeType === 3 && n.textContent.trim()) return true;
+        if (n.nodeType === 1 && gcs(n).display !== 'none') return true;
+      }
+      for (const p of ['::before', '::after']) { const c = gcs(el, p).content; if (c && c !== 'none' && c !== 'normal') return true; }
+      return false;
+    };
+    const hasBg = function (cs) { const c = rgba(cs.backgroundColor); return (c && c.a > 0) || (cs.backgroundImage && cs.backgroundImage !== 'none'); };
+    const replaced = function (el) { return /^(IMG|VIDEO|CANVAS|IFRAME|SVG|svg|EMBED|OBJECT|INPUT)$/.test(el.tagName); };
+    const hidden = function (el, cs) { return cs.visibility !== 'visible' || +cs.opacity < 0.1
+      || (!hasBg(cs) && (cs.backdropFilter || 'none') === 'none' && (cs.webkitBackdropFilter || 'none') === 'none' && !hasChildRenderer(el) && !replaced(el)); };
+    const primaryBg = function (el, cs, r) {
+      if (r.width <= 10 || r.height <= 10) return null;
+      if (hidden(el, cs)) return null;
+      const c = rgba(cs.backgroundColor);
+      if (!c || c.a === 0) return null;
+      if (cmp(r.width, vpW) === 'S') return null;
+      return c;
+    };
+    const classify = function (el, cs, r) {
+      if (cs.position !== 'fixed' && cs.position !== 'sticky') return 'NotFixed';
+      const side = cmp(r.width, vpW), adj = cmp(r.height, vpH);
+      if (hidden(el, cs)) return 'Hidden';
+      let dimming = false;
+      if (side !== 'S' && adj !== 'S' && hasBg(cs) && !hasChildRenderer(el)) {
+        const c = primaryBg(el, cs, r);
+        dimming = +cs.opacity < 1 || !!(c && c.a < 1);
+      }
+      if (side === 'S') return adj !== 'S' ? 'Sidebar' : 'TooSmall';
+      if (!dimming && adj === 'L') return 'TooLarge';
+      if (dimming) return 'Dimming';
+      if (side === 'M' && adj === 'M') return (parseInt(cs.zIndex, 10) < 0) ? 'NegZ' : 'ViewportSized';
+      return 'Candidate';
+    };
+    const pass = function (ignorePE) {
+      let st = null;
+      if (ignorePE) { st = d.createElement('style'); st.textContent = '*,*::before,*::after{pointer-events:auto!important}'; d.head.appendChild(st); }
+      const hit = d.elementFromPoint(W / 2, 4);
+      if (st) st.remove();
+      const walk = [];
+      let primary = null, multiple = false, backdrop = false, invisiblePE = false;
+      for (let el = hit; el && el.nodeType === 1; el = el.parentElement) {
+        const cs = gcs(el), r = el.getBoundingClientRect();
+        const type = classify(el, cs, r);
+        if (type !== 'Hidden') {
+          if ((cs.backdropFilter || 'none') !== 'none' || (cs.webkitBackdropFilter || 'none') !== 'none') backdrop = true;
+          else { const c = primaryBg(el, cs, r); if (c) { if (!primary) primary = c; else if (hex(c) !== hex(primary)) multiple = true; } }
+        }
+        if (type !== 'NotFixed') walk.push(desc(el) + ':' + type);
+        if (['Hidden', 'TooLarge', 'NegZ'].indexOf(type) >= 0) invisiblePE = cs.pointerEvents === 'none';
+        if (['ViewportSized', 'Dimming', 'Sidebar', 'Candidate'].indexOf(type) >= 0) {
+          return { hit: desc(hit), el: el, container: desc(el), type: type, colour: backdrop ? 'Multiple(backdrop)' : multiple ? 'none(multiple)' : hex(primary) || 'none', walk: walk.join(' ') };
+        }
+      }
+      return { hit: desc(hit), el: null, container: null, type: null, colour: null, retry: invisiblePE, walk: walk.join(' ') };
+    };
+    let res = pass(true);
+    if (!res.container && res.retry) res = Object.assign(pass(false), { retried: true });
+    return res;
+  }
+
+  /* QUEUE 920 / #1243 G1 + G12, HIS WORDS (8 Nov): "a cream-colored bar at the top of my screen… there should be no bar
+   * visible at the top… whatever was below it just continuing up. And it shouldn't have the blur either… you keep swapping
+   * between having the blur issue or the bar issue", and G1, "the fade at the top of the screen… goes over the top of all
+   * the buttons". Under black-translucent iOS 26 takes the strip's colour from the first fixed box at the top centre, keeps
+   * it while that box is still rendered, never lets a box the size of the screen replace it, and looks again only when a
+   * fixed box appears or goes: #splash's bone was the first colour of every cold launch and stayed all session (the cream
+   * bar), and a session whose last box went hidden had no colour, so iOS blurred the top (the fade).
+   * Proves, at a phone width and a PC width: in every state the page passes through (the take before and after the matte,
+   * its still, the cut to Home in both looks, Home light and dark, a dialog over each, a project in Full and in Simple, the
+   * editor parked during a load and swooping in, Settings open), exactly ONE edge tab shows; WebKit's own rule (edge1243)
+   * takes THAT tab as a Candidate; its colour is that screen's own top; it is invisible (masked), opaque, 12 px, the full
+   * width, above #splash and lets every touch through; and every change of screen shows a different tab (the one event
+   * that makes WebKit look again). Once the take is over nothing in the page is bone.
+   * FAILS ON v18.36: there are no edge tabs, so the first state reports 0 tabs shown.
+   * CONTROL: with the tabs hidden, the same probe on the light Home finds a box that may NOT set the colour (the bug's
+   * own shape), so the probe can tell the fix from the bug. */
+  test('920 #1243 G12 one invisible top-edge tab per screen, in that screen colour, so iOS never keeps the intro cream or drops to its blur (CONTROL: without the tabs the light Home cannot set the colour)', { item: '920', budgetMs: 120000 }, async function () {
+    const rgb = function (s) { const m = /rgba?\(([^)]+)\)/.exec(s || ''); if (!m) return null; const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+    const fromHex = function (h) { return { r: parseInt(h.slice(1, 3), 16), g: parseInt(h.slice(3, 5), 16), b: parseInt(h.slice(5, 7), 16), a: 1 }; };
+    const hx = function (c) { return '#' + [c.r, c.g, c.b].map(function (v) { return Math.round(v).toString(16).padStart(2, '0'); }).join(''); };
+    const over = function (top, under) { const a = top.a; return { r: top.r * a + under.r * (1 - a), g: top.g * a + under.g * (1 - a), b: top.b * a + under.b * (1 - a), a: 1 }; };
+    const far = function (a, b) { return Math.max(Math.abs(a.r - b.r), Math.abs(a.g - b.g), Math.abs(a.b - b.b)); };
+    const firstStop = function (img) { const m = /rgba?\([^)]+\)/.exec(img || ''); return m ? rgb(m[0]) : null; };
+    /* one state: exactly one tab, WebKit takes it, it is the screen's colour, it is shaped as WebKit needs and he never sees it */
+    const check = function (w, label, want, wantEdge) {
+      const d = w.document;
+      const on = [].slice.call(d.querySelectorAll('.fm-edge')).filter(function (e) { return w.getComputedStyle(e).display !== 'none'; });
+      if (on.length !== 1) throw new Error(label + ': ' + on.length + ' top-edge tabs show (' + on.map(function (e) { return e.dataset.edge; }).join(', ') + '), not exactly one: iOS keeps whatever colour it read first (the cream bar) or finds none (the blur)');
+      const tab = on[0], cs = w.getComputedStyle(tab), box = tab.getBoundingClientRect();
+      if (wantEdge && tab.dataset.edge !== wantEdge) throw new Error(label + ': the ' + tab.dataset.edge + ' tab shows, not the ' + wantEdge + ' one');
+      if (!/linear-gradient/.test((cs.webkitMaskImage || '') + ' ' + (cs.maskImage || ''))) throw new Error(label + ': the ' + tab.dataset.edge + ' tab has no mask, so it would paint a ' + cs.backgroundColor + ' bar across the top');
+      if (cs.opacity !== '1') throw new Error(label + ': the tab is at opacity ' + cs.opacity + ' (WebKit skips a box under 0.1 and blends one under 1)');
+      if (!(box.height >= 11) || box.top !== 0) throw new Error(label + ': the tab is ' + box.height + ' px tall at ' + box.top + ' (WebKit skips 10 px and less; it must sit at the very top)');
+      if (!(box.width >= 0.9 * w.innerWidth)) throw new Error(label + ': the tab is ' + box.width + ' px wide in ' + w.innerWidth + ' (WebKit ignores a box under 90 % of the width)');
+      if (cs.pointerEvents !== 'none') throw new Error(label + ': the tab takes touches (pointer-events ' + cs.pointerEvents + '): it would eat taps on the top buttons');
+      if (!(+cs.zIndex > 10000)) throw new Error(label + ': the tab is at z ' + cs.zIndex + ', not above #splash (10000), so during the take WebKit finds #splash first');
+      const e = edge1243(w);
+      if (e.el !== tab) throw new Error(label + ': WebKit’s rule takes ' + e.container + ' (' + e.type + ', walk ' + e.walk + '), not the ' + tab.dataset.edge + ' tab');
+      if (e.type !== 'Candidate') throw new Error(label + ': WebKit classes the tab as ' + e.type + ', which may not set the colour');
+      const got = rgb(cs.backgroundColor);
+      if (far(got, want) > 2) throw new Error(label + ': the strip would be ' + hx(got) + ' but the screen’s own top is ' + hx(want) + ': a bar of a different colour');
+      return tab;
+    };
+    const differs = function (a, b, how) { if (a === b) throw new Error(how + ': the same tab stays shown, so WebKit never looks again and keeps the old colour'); };
+    /* THE TAKE, booted in a frame with the shipped stylesheets: bone before the matte lands, coal after, the still coal */
+    {
+      const run = await boot1180({ css: true });
+      try {
+        const w = run.w, d = run.d, sp = d.getElementById('splash');
+        if (!sp || sp.classList.contains('hidden')) throw new Error('setup: the splash never came up in the frame');
+        const tSeen = w.FM_SPLASH.shown();
+        const a = check(w, 'the take at ' + tSeen + ' s', rgb(w.getComputedStyle(sp).backgroundColor), tSeen >= 2.14 ? 'coal' : 'bone');
+        if (tSeen < 2.14) {
+          for (let i = 0; i < 120 && !(w.FM_SPLASH.shown() >= 2.14); i++) await sleep(25);
+          if (!(w.FM_SPLASH.shown() >= 2.14) || d.documentElement.classList.contains('splash-kf-out')) throw new Error('setup: the take never reached the matte at 2.14 s while it was up');
+          const b = check(w, 'the take after the matte (' + w.FM_SPLASH.shown() + ' s)', rgb(w.getComputedStyle(sp).backgroundColor), 'coal');
+          differs(a, b, 'bone to coal as the matte lands');
+        }
+      } finally { run.restore(); }
+      const still = await boot1180({ css: true, reduce: true });
+      try {
+        const w = still.w, sp = still.d.getElementById('splash');
+        if (!w.FM_SPLASH || !w.FM_SPLASH.still()) throw new Error('setup: reduced motion did not give the still');
+        check(w, 'the still (reduced motion)', rgb(w.getComputedStyle(sp).backgroundColor), 'coal');
+      } finally { still.restore(); }
+    }
+    /* THE APP: every screen, at a phone width and a PC width */
+    const root = document.documentElement, home = document.getElementById('home-screen'), app = document.getElementById('app');
+    const look0 = root.getAttribute('data-home'), wasHome = FM.home.isOpen(), wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    const realGate = FM.home._pushAllowed;
+    const homeTop = function () { return rgb(getComputedStyle(home).backgroundColor); };
+    const editorTop = function () {
+      if (matchMedia('(max-width: 700px)').matches) return rgb(getComputedStyle(root).backgroundColor);   /* #920: <html>'s colour is #topbar-m's top */
+      return over(firstStop(getComputedStyle(document.getElementById('topbar')).backgroundImage), rgb(getComputedStyle(root).backgroundColor));
+    };
+    const askOpen = function () { const p = FM.ask({ title: 'Edge 920', message: 'test' }); return p; };
+    const askClose = function () { const c = document.querySelector('#fm-ask .fm-ask-cancel'); if (c) c.click(); };
+    const dimmed = function (base) { return over(rgb(getComputedStyle(document.getElementById('fm-ask')).backgroundColor), base); };
+    const states = async function (where) {
+      let prev = null;
+      const step = function (tab, how) { if (prev) differs(prev, tab, where + ': ' + how); prev = tab; };
+      /* the editor's own top, read with a project up (at a phone width <html> carries #topbar-m's colour, #920); the swoop
+         below is held to this, since mid-swoop <html> still wears Home's colour */
+      if (FM.home.isOpen()) FM.home.close();
+      await sleep(250);
+      const ED = editorTop();
+      for (const look of ['light', 'dark']) {
+        root.setAttribute('data-home', look);
+        if (!FM.home.isOpen()) FM.home.open();
+        await sleep(250);
+        if (home.classList.contains('hidden')) throw new Error('setup: Home did not open');
+        const hTop = homeTop();
+        step(check(window, where + ', the ' + look + ' Home', hTop, 'home-' + look), 'to the ' + look + ' Home');
+        /* the cut from the take to this Home: the take's classes on <html>, as splash-boot sets them */
+        root.classList.add('splash-on', 'splash-kf-on');
+        await sleep(30);
+        const tb = check(window, where + ', the take over the ' + look + ' Home', fromHex('#e7e2d5'), 'bone');
+        root.classList.add('splash-dark-on'); await sleep(30);
+        const tc = check(window, where + ', the matte over the ' + look + ' Home', fromHex('#0c0c0d'), 'coal');
+        differs(tb, tc, where + ': bone to coal');
+        root.classList.add('splash-kf-out'); await sleep(30);
+        const tcut = check(window, where + ', the cut to the ' + look + ' Home', hTop, 'home-' + look);
+        differs(tc, tcut, where + ': the cut to the ' + look + ' Home');
+        root.classList.remove('splash-on', 'splash-kf-on', 'splash-dark-on', 'splash-kf-out');
+        await sleep(30);
+        prev = tcut;
+        /* a dialog over this Home */
+        const p = askOpen(); await sleep(60);
+        step(check(window, where + ', a dialog over the ' + look + ' Home', dimmed(hTop), 'home-' + look + '-dim'), 'a dialog over the ' + look + ' Home');
+        askClose(); await p; await sleep(60);
+        step(check(window, where + ', the ' + look + ' Home again', hTop, 'home-' + look), 'the dialog closed');
+        /* Settings over this Home: a panel with a scrim, which WebKit never lets replace the colour, so the strip stays */
+        if (FM.settings && FM.settings.open) {
+          FM.settings.open(); await sleep(320);
+          check(window, where + ', Settings over the ' + look + ' Home (same screen)', hTop, 'home-' + look);
+          if (FM.settings.close) FM.settings.close(); await sleep(320);
+        }
+      }
+      /* the light Home, then a project the way he opens one: the editor parked during the load, then the swoop */
+      root.setAttribute('data-home', 'light');
+      await sleep(60);
+      prev = check(window, where + ', the light Home before a project opens', homeTop(), 'home-light');
+      FM.home._pushAllowed = function () { return true; };
+      FM.home.close({ push: true, wait: true });
+      await sleep(30);
+      if (!app.classList.contains('fm-push-wait')) throw new Error('setup: ' + where + ': the editor was not parked (no two-phase push), so the wait state is not measured');
+      check(window, where + ', the editor parked off the edge while the project loads, Home still up (same screen)', homeTop(), 'home-light');
+      FM.home.armPushIn();
+      for (let i = 0; i < 80 && !app.classList.contains('fm-push-in'); i++) await sleep(10);
+      if (!app.classList.contains('fm-push-in')) throw new Error('setup: ' + where + ': the editor never swooped in');
+      step(check(window, where + ', the editor’s swoop', ED, 'editor'), 'the swoop into the project');
+      for (let i = 0; i < 120 && !home.classList.contains('hidden'); i++) await sleep(20);
+      await sleep(80);
+      if (!home.classList.contains('hidden')) throw new Error('setup: ' + where + ': Home never hid after the push');
+      check(window, where + ', a project in Full (same screen)', editorTop(), 'editor');
+      const p2 = askOpen(); await sleep(60);
+      step(check(window, where + ', a dialog over the project', dimmed(editorTop()), 'editor-dim'), 'a dialog over the project');
+      askClose(); await p2; await sleep(60);
+      step(check(window, where + ', the project again', editorTop(), 'editor'), 'the dialog closed in the project');
+      if (FM.editor && FM.editor.apply) {
+        FM.editor.apply('simple', { force: true, quiet: true }); await sleep(250);
+        check(window, where + ', a project in Simple (same screen)', editorTop(), 'editor');
+        FM.editor.apply('full', { force: true, quiet: true }); await sleep(250);
+      }
+      /* the take is long gone: nothing in the page is bone but the bone tab itself */
+      const bone = [].slice.call(document.querySelectorAll('body *')).filter(function (e) { return !e.classList.contains('fm-edge') && getComputedStyle(e).backgroundColor === 'rgb(231, 226, 213)'; });
+      if (bone.length || getComputedStyle(root).backgroundColor === 'rgb(231, 226, 213)') throw new Error(where + ': after the take, ' + (bone.length ? bone.slice(0, 3).map(function (e) { return e.id || e.className; }).join(', ') : '<html>') + ' is still bone');
+      /* CONTROL: hide the tabs; on the light Home WebKit's rule then finds no box that may set the colour */
+      if (!FM.home.isOpen()) FM.home.open();
+      await sleep(250);
+      const st = document.createElement('style'); st.textContent = '.fm-edge { display: none !important; }'; document.head.appendChild(st);
+      try {
+        await sleep(30);
+        const e = edge1243(window);
+        if (e.type === 'Candidate') throw new Error('CONTROL: ' + where + ': with the tabs hidden WebKit’s rule still finds a Candidate (' + e.container + ', walk ' + e.walk + '), so this probe cannot tell the fix from the bug');
+      } finally { st.remove(); }
+    };
+    try {
+      await atPhoneWidth(function () { return states('at 380'); }, 380);
+      await atWideWidth(function () { return states('at 1280'); }, 1280);
+    } finally {
+      try { FM.home._pushAllowed = realGate; } catch (e) {}
+      app.classList.remove('fm-push-in', 'fm-push-wait');
+      document.body.classList.remove('fm-pushing');
+      root.classList.remove('splash-on', 'splash-kf-on', 'splash-dark-on', 'splash-kf-out');
+      try { askClose(); } catch (e) {}
+      if (look0 == null) root.removeAttribute('data-home'); else root.setAttribute('data-home', look0);
+      try { if (wasSimple) FM.editor.apply('simple', { force: true, quiet: true }); } catch (e) {}
+      try { if (wasHome && !FM.home.isOpen()) FM.home.open(); else if (!wasHome && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(150);
+    }
+  });
+
   test('BX1d the tray on entering Simple belongs to what is selected NOW: a text added in Full gets Edit words, not a picture’s Crop and Into row', { item: 'BX1d', budgetMs: 60000 }, async function () {
     /* Simple's tray refills only when its signature changes. Entering Simple runs the tray BEFORE the timeline is rebuilt, so it
        is drawn from the previous Simple read, which has never heard of an item made in Full; the rebuild then draws the same
