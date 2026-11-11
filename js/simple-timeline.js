@@ -125,7 +125,7 @@ window.FM = window.FM || {};
       const t = ev.detail && ev.detail.text; if (t) sayLine(t);
     });
   }
-  /* Phase 2.2: #sm-say is the TRAY ROW (§8.2): its .sm-line takes the row while Simple speaks, #sm-tray shows otherwise */
+  /* #sm-say holds Simple's line (.sm-line); since #1243 S3 it floats as a strip just above the bar while Simple speaks (styles.css) */
   const lineOf = () => (sayEl && sayEl.querySelector('.sm-line')) || sayEl;
   /* §3.12 1b (review finding 27): a line with buttons raised from a tray tool pressed by KEYBOARD (or a screen reader) takes
      that focus on its first button, and gives it back to the tool when it goes (or to the tray's first tool if that tool is
@@ -799,22 +799,14 @@ window.FM = window.FM || {};
     },
     updatePlayhead() {
       if (!scroller) return;
+      if (FM.simpleTools && FM.simpleTools.timeMoved) FM.simpleTools.timeMoved();   // review L3-6: an open Caption looks row follows the track under the line
       const target = Math.max(0, (FM.time || 0) * pps());
       if (userScrollAt && performance.now() - userScrollAt < 150) return;   // a finger owns the strip mid-swipe
       if (Math.abs(scroller.scrollLeft - target) > 0.5) scroller.scrollLeft = target;
       lastProg = scroller.scrollLeft;
     },
-    /* The phone sheet docks UNDER #sm-say and the project tools in Simple (§14.2 mobile row, T19, D10 A): the sections, the clips,
-       the sound row, any line Simple is saying and Clips · Text · Sound · Overlay all stay in view, and none of them moves when the
-       sheet appears. */
-    dockBottom() {
-      /* From 2.2 the project tools (#sm-tools) sit directly under #sm-say, and a sheet docked under #sm-say lay over Clips · Text ·
-         Sound · Overlay, the row D10 A says never goes away (first-user audit item 4). Docked under their buttons instead (not
-         under the row's safe-area padding, so no strip of nothing opens between them and the sheet). */
-      const tools = document.getElementById('sm-tools'), btn = tools && tools.getClientRects().length && tools.querySelector('.sm-tool');
-      if (btn) return btn.getBoundingClientRect().bottom;
-      const e = sayEl || mainEl; return e ? e.getBoundingClientRect().bottom : 0;
-    },
+    /* (The phone sheet docked under the Simple timeline and the project tools here, D10 A, until #1243 rule 3 put every Simple panel at
+       the stage's bottom edge: js/mobile.js sheetLine.) */
     /* Phase 2.2: the + is Append (§3.6): one step that lays the clips end to end BEFORE an end card, which moves along.
        `given` lets the suite hand it files (a picker cannot be driven). */
     pickFiles(given) {

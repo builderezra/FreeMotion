@@ -84,13 +84,16 @@ function softFill(c,T,pathFn,blurU,color,op){ const OFF=T.S*4;
   c.shadowColor=color; c.shadowBlur=blurU*T.K*2; c.shadowOffsetX=-OFF; c.shadowOffsetY=0; c.fillStyle='#000'; pathFn(c); c.fill(); c.restore(); }
 
 /* ====================================================================================================================== */
-/* SOFTEN SKIN. A head-and-shoulders portrait in a 1080 frame, seen in the viewer at 225 %: the tile is SK_W = 480 frame px across.
-   Painted here in "face units" (the face 41 wide at the cheekbones), shown at SK_Z of them per tile unit. The skin is lit per pixel
-   from a sculpted height map (one soft key up and to the left of the camera, a little fill, warm light under the skin where the
-   shadow begins) with its own pores, mottling, freckles and a few red marks; eyes, brows, lips and hair are drawn over it, then a
-   camera's slight softness over everything. Then PIXEL_FX.softskin at its defaults (Amount 0.85, Smoothing size 10 px, Keep detail
-   50, Soften: Everything) on all of it, the hair and backdrop included, exactly as the app runs it. */
-const SK_W=480, SK_AMOUNT=.85, SK_RADIUS=10, SK_KEEP=50, SK_Z=1.22, SK_CX=50, SK_CY=47.5;
+/* SOFTEN SKIN. A close-up: the same painted portrait, its face 765 frame px wide in a 1080 frame, and the tile a SK_W = 280 px square
+   of it, 15 "face units" across (the face is 41 wide at the cheekbones; 18.7 frame px to the unit). The near eye runs along the top
+   edge, its lashes cut by the frame; the under-eye and the cheek fill the rest. The skin is lit per pixel from a sculpted height map (one soft key up
+   and to the left of the camera, a little fill, warm light under the skin where the shadow begins) with its own mottling and
+   freckles, and, at this distance, what a close lens resolves (closeSkin): pores, the fine bump of the surface, a faint line under
+   the eye, blotchy redness and a few blemishes. The eye is drawn over it, then a camera's slight softness over everything. Then
+   PIXEL_FX.softskin at full strength: Amount 1 and Smoothing size 20 px (both controls at their maximum), Keep detail 30, Soften:
+   Everything, on every pixel, exactly as the app runs it. (At its defaults, 0.85 / 10 px / 50, on the head-and-shoulders view this
+   tile used to show, the face moved about 4 levels: nothing a 77 px picture can show.) */
+const SK_W=280, SK_AMOUNT=1, SK_RADIUS=20, SK_KEEP=30, SK_Z=100/15, SK_CX=59.7, SK_CY=45.7;
 
 /* proportions (face units): hairline 17, brows 35, eyes 41, nose base 55, mouth 62.8, chin 74; the head turned a little to the
    left, so the far (left) half of everything is a touch narrower than the near half */
@@ -168,7 +171,7 @@ function drawEye(c,T,e){
   /* the white of the eye, never paper white: shaded into the corners and under the lid */
   c.save(); eyeOpening(c,e); c.clip();
   const cx=(e.I[0]+e.O[0])/2, cy=(e.I[1]+e.O[1])/2;
-  let g=c.createRadialGradient(e.iris[0],cy+.25,.4,e.iris[0],cy+.25,4.4); g.addColorStop(0,'#e7ddd6'); g.addColorStop(.5,'#d6c7bf'); g.addColorStop(1,'#9c8077');
+  let g=c.createRadialGradient(e.iris[0],cy+.25,.4,e.iris[0],cy+.25,4.4); g.addColorStop(0,'#eee5dc'); g.addColorStop(.5,'#ddd0c5'); g.addColorStop(1,'#a88c7f');
   c.fillStyle=g; c.fillRect(cx-6,cy-4,12,8);
   /* the iris: a warm hazel, darker at its rim, fibres, pupil */
   const [ix,iy]=e.iris, r=e.ir;
@@ -177,13 +180,13 @@ function drawEye(c,T,e){
   const RF=rng(e.seed); c.lineCap='round';
   for(let i=0;i<54;i++){ const a=i/54*TAU+RF()*.1, r0=r*.42, r1=r*(.75+RF()*.2); c.strokeStyle=RF()<.5?'rgba(190,140,82,.26)':'rgba(40,24,14,.3)'; c.lineWidth=.06+RF()*.05;
     c.beginPath(); c.moveTo(ix+Math.cos(a)*r0,iy+Math.sin(a)*r0); c.lineTo(ix+Math.cos(a+.07)*r1,iy+Math.sin(a+.07)*r1); c.stroke(); }
-  c.strokeStyle='rgba(24,14,8,.7)'; c.lineWidth=.24; c.beginPath(); c.arc(ix,iy,r-.12,0,TAU); c.stroke();
+  c.strokeStyle='rgba(24,14,8,.5)'; c.lineWidth=.22; c.beginPath(); c.arc(ix,iy,r-.12,0,TAU); c.stroke();
   c.fillStyle='#0c0705'; c.beginPath(); c.arc(ix,iy,r*.38,0,TAU); c.fill();
   /* the upper lid's shadow across the top of the eye, and a little along the bottom */
   g=c.createLinearGradient(0,cy-2.3,0,cy+.5); g.addColorStop(0,'rgba(46,22,16,.72)'); g.addColorStop(.55,'rgba(46,22,16,.2)'); g.addColorStop(1,'rgba(46,22,16,0)');
   c.fillStyle=g; c.fillRect(cx-6,cy-4,12,6);
   /* the light's reflection, up and to the left like the light */
-  c.fillStyle='rgba(255,252,246,.92)'; c.beginPath(); c.ellipse(ix-r*.4,iy-r*.4,r*.19,r*.16,-.5,0,TAU); c.fill();
+  c.fillStyle='rgba(255,252,246,.88)'; c.beginPath(); c.ellipse(ix-r*.4,iy-r*.4,r*.13,r*.1,-.5,0,TAU); c.fill();
   c.fillStyle='rgba(255,246,236,.22)'; c.beginPath(); c.ellipse(ix+r*.35,iy+r*.45,r*.28,r*.12,-.3,0,TAU); c.fill();
   c.restore();
   /* the inner corner */
@@ -195,17 +198,18 @@ function drawEye(c,T,e){
   c.strokeStyle='rgba(40,24,16,.35)'; c.lineWidth=.07;
   for(let i=0;i<4;i++){ const p=loPt(.06+i*.07); c.beginPath(); c.moveTo(p[0],p[1]+.2); c.lineTo(p[0]+e.dir*(.18+.06*(4-i)),p[1]+.55+.05*(4-i)); c.stroke(); }
   /* the upper lash line: a soft dark under a crisp one, heavier toward the outer corner, lifting at the end */
+  /* (seen this close, a heavy winged line and a comb of thick curls read as drawn: the line is thin, the lashes many and fine) */
   const lash=(x,grow)=>{ x.beginPath();
-    for(let i=0;i<=24;i++){ const p=upPt(i/24); i?x.lineTo(p[0],p[1]+.06):x.moveTo(p[0],p[1]+.06); }
-    x.lineTo(e.O[0]+e.dir*(.6+grow),e.O[1]-.5-grow*.4);
-    for(let i=24;i>=0;i--){ const t=i/24, p=upPt(t), th=.1+(.36+grow)*Math.pow(t,1.5); x.lineTo(p[0]+(i===24?e.dir*.1:0),p[1]-th); } x.closePath(); };
-  softFill(c,T,x=>lash(x,.15),.25,'rgba(30,18,12,.55)');
-  c.fillStyle='#170f0b'; lash(c,0); c.fill();
-  /* the upper lashes: clumped, longer toward the outer corner, curling up and out */
+    for(let i=0;i<=24;i++){ const p=upPt(i/24); i?x.lineTo(p[0],p[1]+.05):x.moveTo(p[0],p[1]+.05); }
+    x.lineTo(e.O[0]+e.dir*(.18+grow),e.O[1]-.12-grow*.4);
+    for(let i=24;i>=0;i--){ const t=i/24, p=upPt(t), th=.08+(.17+grow)*Math.pow(t,1.5); x.lineTo(p[0],p[1]-th); } x.closePath(); };
+  softFill(c,T,x=>lash(x,.12),.3,'rgba(40,24,16,.5)');
+  c.fillStyle='#22160f'; lash(c,0); c.fill();
+  /* the upper lashes: many fine ones, uneven in length and lean, gathered into loose clumps, longer toward the outer corner */
   const RL=rng(e.seed+5);
-  for(let i=0;i<16;i++){ const t=.3+.7*Math.pow(i/15,.85)+(RL()-.5)*.03, p=upPt(clamp(t)), L=.45+.8*Math.pow(i/15,1.2)*(.8+RL()*.35);
-    c.strokeStyle='rgba(20,12,8,'+(.7+RL()*.25).toFixed(2)+')'; c.lineWidth=.08+RL()*.05;
-    c.beginPath(); c.moveTo(p[0],p[1]-.12); c.quadraticCurveTo(p[0]+e.dir*L*.2,p[1]-L*.85,p[0]+e.dir*L*.8,p[1]-L*.98); c.stroke(); }
+  for(let i=0;i<52;i++){ const f=i/51, t=.18+.82*f+(RL()-.5)*.025, p=upPt(clamp(t)), cl=Math.sin(f*31+e.seed)*.5+.5, L=(.32+.62*Math.pow(f,1.1))*(.7+RL()*.45), lean=(RL()-.5)*.35+cl*.12;
+    c.strokeStyle='rgba(22,14,10,'+(.5+RL()*.35).toFixed(2)+')'; c.lineWidth=.035+RL()*.03;
+    c.beginPath(); c.moveTo(p[0],p[1]-.08); c.quadraticCurveTo(p[0]+e.dir*L*(.12+lean*.3),p[1]-L*.8,p[0]+e.dir*L*(.55+lean),p[1]-L*.95); c.stroke(); }
   c.restore();
 }
 /* a brow: a soft tapered body along its spine, then fine hairs that lean outward */
@@ -225,6 +229,43 @@ function drawBrow(c,T,spine,th,dir,seed){
     const x0=p[0], y0=p[1]+off*Math.cos(along); c.beginPath(); c.moveTo(x0-Math.cos(ang)*L*.3,y0-Math.sin(ang)*L*.3); c.quadraticCurveTo(x0+Math.cos(ang)*L*.3,y0+Math.sin(ang)*L*.3-.08,x0+Math.cos(ang)*L*.7,y0+Math.sin(ang)*L*.7+.05); c.stroke(); }
   c.restore();
 }
+
+/* the close-up's own skin, per frame pixel, in face units throughout: BM a height that only tilts the normal the light sees, AL the
+   skin's own brightness, RD redness, BN brown marks. Pores sit in most cells of a jittered grid, fine on the lid and under the eye and
+   more open on the cheek; the surface carries a fine orange-peel bump; one faint line runs under the eye, the lower lid's curve a
+   little lower and flatter; redness is blotchy over the cheek and beside the nose; SK_MARKS are the blemishes, about half each side
+   of where the split holds: raised red spots and flat red-brown marks, each a little off-round. (The painter's own red mark at
+   66.2, 43 falls in this crop; the close-up leaves it out, so the marks stay a few.) */
+const SK_MARKS=[ /* x, y, radius, raised 0..1, brown 0..1 */
+  [55.4,47.2,.36,1,0],[58.4,48.9,.28,0,1],[56.6,45.1,.24,.6,0],
+  [63.5,45.5,.4,1,0],[66.3,48.6,.3,.8,0],[62.7,49.2,.27,0,1] ];
+function closeSkin(W,FX,FY){
+  const N=W*W, BM=new Float32Array(N), AL=new Float32Array(N), RD=new Float32Array(N), BN=new Float32Array(N), CSZ=.46;
+  for(let y=0;y<W;y++){ const uy=FY(y), fineU=sstep(42.6,47.2,uy);
+    for(let x=0;x<W;x++){ const i=y*W+x, ux=FX(x);
+      let bm=0, al=0, rd=0, bn=0;
+      /* pores: a dark pit each, its walls lit on one side and shadowed on the other by the key */
+      const ps=lerp(.55,1.1,fineU)*lerp(1,1.12,sstep(60,66,ux)), gx=Math.floor(ux/CSZ), gy=Math.floor(uy/CSZ);
+      for(let a=-1;a<=1;a++) for(let b=-1;b<=1;b++){
+        const k=(gx+a)*131.7+(gy+b)*977.3, h4=hash(k,54); if(h4>.82) continue;
+        const pr=(.075+.06*hash(k,53))*ps, dx=ux-(gx+a+.15+.7*hash(k,51))*CSZ, dy=uy-(gy+b+.15+.7*hash(k,52))*CSZ, q=(dx*dx+dy*dy)/(pr*pr);
+        if(q>9) continue;
+        const e=Math.exp(-q); bm-=.022*(.7+.6*h4)*ps*e; al-=.07*ps*e; }
+      /* the surface's fine bump, finer and flatter on the lid and under the eye */
+      bm+=((vn2(ux*2.3+11.3,uy*2.3+4.1,44)-.5)*.08+(vn2(ux*4.7+3.3,uy*4.7+8.9,45)-.5)*.03)*lerp(.45,1,fineU);
+      /* one faint line under the eye, broken along its length */
+      if(ux>54.2&&ux<61.6&&uy>42.4&&uy<45.2){ const dd=ux-57.2, gl=(uy-(43.85-.07*dd-.03*dd*dd))/.085;
+        bm-=.022*Math.exp(-gl*gl)*sstep(54.2,55.6,ux)*(1-sstep(60.2,61.6,ux))*(.45+.55*vn2(ux*1.6,3.7,49)); }
+      /* blotchy redness over the cheek and beside the nose */
+      const cheek=G(ux,uy,62,48.6,5.2,3.6)+.6*G(ux,uy,55.2,49.4,2.6,2.2);
+      rd+=cheek*(.15*sstep(.45,.8,vn2(ux*.95+2.1,uy*.95+.7,47))+.05*vn2(ux*2.1+5.5,uy*2.1+1.3,48));
+      /* the blemishes: a core with a smaller lobe beside it, and a faint inflamed halo round the red ones */
+      for(let j=0;j<SK_MARKS.length;j++){ const m=SK_MARKS[j], dx=ux-m[0], dy=uy-m[1], r2=m[2]*m[2], d2=dx*dx+dy*dy; if(d2>r2*30) continue;
+        const an=j*2.4+.5, lx=dx-Math.cos(an)*m[2]*.5, ly=dy-Math.sin(an)*m[2]*.5;
+        const core=Math.max(Math.exp(-d2/r2),.7*Math.exp(-(lx*lx+ly*ly)/(r2*.45))), halo=Math.exp(-d2/(r2*5));
+        bm+=.06*m[3]*core; rd+=(1-m[4])*(.7*core+.2*halo); bn+=.8*m[4]*core; }
+      BM[i]=bm; AL[i]=al; RD[i]=rd; BN[i]=bn; } }
+  return {BM,AL,RD,BN}; }
 
 function paintPortrait(W,textured){
   const N=W*W, Z=SK_Z, K=W/100*Z, X0=SK_CX-50/Z, Y0=SK_CY-50/Z, T={K,X0,Y0,S:W};
@@ -297,6 +338,8 @@ function paintPortrait(W,textured){
     if(pF[j]>.02) SHF[y*W2+x]=march(ux,uy,HF[j]); if(pN[j]>.02) SHN[y*W2+x]=march(ux,uy,HN[j]); }
   const shAt=(A,x,y)=>{ const fx=clamp((x+.5)/2-.5,0,W2-1.001), fy=clamp((y+.5)/2-.5,0,W2-1.001), x0=fx|0, y0=fy|0, ax=fx-x0, ay=fy-y0, o=y0*W2+x0;
     return lerp(lerp(A[o],A[o+1],ax),lerp(A[o+W2],A[o+W2+1],ax),ay); };
+  /* the close-up's pores, surface, redness and blemishes (only on the textured version) */
+  const CS=textured?closeSkin(W,FX,FY):null;
   /* the skin's own marks (only on the textured version): light freckles over the nose and cheeks, a few small red marks */
   const RS=rng(23), frk=[], red=[];
   for(let i=0;i<80;i++){ const a=RS()*TAU, rr=Math.sqrt(RS()); const fx=47+Math.cos(a)*rr*15, fy=47+Math.sin(a)*rr*5.5; if(fy<43.4) continue; frk.push([fx,fy,.16+RS()*.16,.05+RS()*.06]); }
@@ -304,13 +347,17 @@ function paintPortrait(W,textured){
   for(const p of [[40.0,28.5,.5],[54.8,69.6,.45],[63.8,55.5,.5],[42.2,67.6,.4],[52.4,24.6,.4],[66.2,43.0,.42]]) red.push(p);
   const fCell=new Map(); const cellKey=(x,y)=>(Math.floor(x/3))*1000+Math.floor(y/3);
   frk.forEach(f=>{ const kk=cellKey(f[0],f[1]); if(!fCell.has(kk)) fCell.set(kk,[]); fCell.get(kk).push(f); });
-  for(let y=1;y<W-1;y++) for(let x=1;x<W-1;x++){
+  for(let y=0;y<W;y++) for(let x=0;x<W;x++){
     const i=y*W+x, f=mF[i], nmk=mN[i]; if(f<.002&&nmk<.002) continue;
     const ux=FX(x), uy=FY(y);
+    /* the slope's neighbours, held at the sheet's edge: in the close-up the skin runs to all four sides */
+    const il=x>0?i-1:i, ir=x<W-1?i+1:i, iu=y>0?i-W:i, idn=y<W-1?i+W:i, dxp=ir-il, dyp=(idn-iu)/W;
     const hq=PY(uy-1.5)*W+PX(ux-1.1), hs=hq>=0&&hq<N?hsh[hq]:0;
     const shade=(H,HBl,isFace)=>{
       const sh=shAt(isFace?SHF:SHN,x,y);
-      const hx=(H[i+1]-H[i-1])*K/2, hy=(H[i+W]-H[i-W])*K/2; let nx=-hx, ny=-hy, nz=1; const m=Math.hypot(nx,ny,nz); nx/=m; ny/=m; nz/=m;
+      let hx=(H[ir]-H[il])*K/dxp, hy=(H[idn]-H[iu])*K/dyp;
+      if(isFace&&CS){ hx+=(CS.BM[ir]-CS.BM[il])*K/dxp; hy+=(CS.BM[idn]-CS.BM[iu])*K/dyp; }
+      let nx=-hx, ny=-hy, nz=1; const m=Math.hypot(nx,ny,nz); nx/=m; ny/=m; nz/=m;
       const nl=nx*Lx+ny*Ly+nz*Lz, ao=1-clamp((HBl[i]-H[i])*.07)*.8;
       const dl=clamp((nl+.2)/1.2)*(.3+.7*sh)*(isFace?(1-.6*hs):1);
       const fill=Math.max(0,nx*.55+ny*.15+nz*.82);
@@ -326,9 +373,11 @@ function paintPortrait(W,textured){
       if(textured){
         const fine=(vn2(ux*2.4,uy*2.4,11)-.5)*.07+(vn2(ux*1.3,uy*1.3,15)-.5)*.055+(hash(i*.731,9)-.5)*.026, blot=(vn2(ux*.7,uy*.7,12)-.5)*.065, rd=(vn2(ux*.45+5,uy*.45,13)-.5);
         let fr=0; for(let ox=-1;ox<=1;ox++) for(let oy=-1;oy<=1;oy++){ const L=fCell.get(cellKey(ux+ox*3,uy+oy*3)); if(!L) continue; for(const q of L){ const dx=ux-q[0], dy=uy-q[1], d2=dx*dx+dy*dy; if(d2<q[2]*q[2]*6) fr+=q[3]*Math.exp(-d2/(q[2]*q[2])); } }
-        let rm=0; for(const q of red){ const dx=ux-q[0], dy=uy-q[1], d2=dx*dx+dy*dy; if(d2<q[2]*q[2]*8) rm+=Math.exp(-d2/(q[2]*q[2])); }
+        if(CS) fr*=.45;   /* this close the freckles are big enough to read as specks: lighter */
+        let rm=0; if(!CS) for(const q of red){ const dx=ux-q[0], dy=uy-q[1], d2=dx*dx+dy*dy; if(d2<q[2]*q[2]*8) rm+=Math.exp(-d2/(q[2]*q[2])); }
         const sk=1-(isFace?mL[i]*.7:0);
         ar*=1+(fine+blot+rd*.05-fr*.6+rm*.02)*sk; ag*=1+(fine+blot-rd*.045-fr*1.0-rm*.15)*sk; ab*=1+(fine*1.05+blot-rd*.035-fr*1.25-rm*.12)*sk;
+        if(isFace&&CS){ const ca=CS.AL[i], cr=CS.RD[i], cb=CS.BN[i]; ar*=1+ca+.025*cr-.04*cb; ag*=1.025+ca-.19*cr-.13*cb; ab*=1.035+ca*1.05-.15*cr-.17*cb; }   /* (and a touch less pink: this close the blush filled the frame) */
       }
       const sss=4*dl*(1-dl)*.7;
       let r=ar*(.32*ao+.76*dl+.05*fill)+ar*.2*sss, gg=ag*(.26*ao+.75*dl+.05*fill)+ag*.05*sss, b=ab*(.27*ao+.71*dl+.08*fill)+ab*.02*sss;
@@ -380,17 +429,27 @@ function buildSkin(){
   return buildSkin.cache={W,src,out,SRC:toCanvas(W,W,src),OUT:toCanvas(W,W,out)};
 }
 
-window.FX_TILES.push({ id:'softskin', name:'Soften Skin', section:'Blur', isNew:true, still:1.45,
-  line:'Fine texture and blotches on the skin smooth away and small marks fade, while strong edges like the eyes, lashes and lips stay sharp.',
+window.FX_TILES.push({ id:'softskin', name:'Soften Skin', section:'Blur', isNew:true, still:2.4,
+  line:'At full strength (Amount 1, Smoothing size 20 px) with Keep detail 30, Soften Skin smooths pores and blemishes while the lashes and the edges of the eye stay sharp.',
   _proof(){ const b=buildSkin(); return {W:b.W, src:b.src, out:b.out, type:'softskin', params:{amount:SK_AMOUNT,radius:SK_RADIUS,keep:SK_KEEP}}; },
   make(px){
-    const P=5.0, B=buildSkin();
+    const P=4.6, HOLD=49, B=buildSkin();
+    /* both pictures scaled to the tile once, here, so each frame is two 1:1 copies rather than two upscales */
+    const fit=im=>{ const C=document.createElement('canvas'); C.width=C.height=px; const x=C.getContext('2d'); x.imageSmoothingEnabled=true; x.imageSmoothingQuality='high'; x.drawImage(im,0,0,px,px); return C; };
+    const SRCp=fit(B.SRC), OUTp=fit(B.OUT);
     return (c,t)=>{
       const u=mod(t,P); reset(c,px);
-      /* the source, then the result wiped on from the left; a long hold; it wipes back faster */
-      const sp = u<.9?0 : u<1.95? 100*E.inOut(seg(u,.9,1.95)) : u<4.25? 100 : u<4.7? 100*(1-E.inOut(seg(u,4.25,4.7))) : 0;
-      c.drawImage(B.SRC,0,0,100,100);
-      if(sp>0){ const w=Math.min(100,sp); c.drawImage(B.OUT,0,0,w/100*B.W,B.W,0,0,w,100); if(w<100){ c.fillStyle=BONE; c.fillRect(w-.25,0,.5,100); } }
+      /* rough skin; the split sweeps in from the left with the result behind it, overshoots a little and settles; a long hold with
+         rough and smooth side by side, the divider just past the iris; it sweeps back out and the rough skin holds. The loop starts
+         and ends with no split, so there is no jump at the seam. */
+      let s=0;
+      if(u>=.5&&u<1.3){ const p=seg(u,.5,1.3); s=HOLD*(1-(1-p)*Math.exp(-5*p)*Math.cos(2.2*Math.PI*p)); }
+      else if(u>=1.3&&u<3.6) s=HOLD;
+      else if(u>=3.6&&u<4.15) s=HOLD*(1-E.inOut(seg(u,3.6,4.15)));
+      c.drawImage(SRCp,0,0,100,100);
+      if(s>.05){ c.drawImage(OUTp,0,0,s/100*px,px,0,0,s,100);
+        /* a thin Bone hairline with a faint dark edge, so it reads on light skin and on the lashes alike */
+        c.fillStyle='rgba(22,19,15,.45)'; c.fillRect(s-.8,0,1.6,100); c.fillStyle=BONE; c.fillRect(s-.3,0,.6,100); }
     };
   } });
 

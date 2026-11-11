@@ -328,6 +328,15 @@ window.FM = window.FM || {};
     const P = (scene && scene.project) || {};
     const W = P.width || 1080, H = P.height || 1920, fps = P.fps || 30, eps = 0.5 / fps;
     const adopted = !!(P.sm && P.sm.adopted === true);
+    /* #1243 S34 A (his words: "turn linking stuff on and off… just one simple button to like link stuff"): project.sm.unlinked turns
+       the links off for the whole project, so nothing takes a host and moving or trimming a clip moves nothing else. Absent = on.
+       Links off is a READ and nothing else (review L2-1, 11 Nov): `o.linked` reads the same scene as if the links were on. FOUR sites write
+       Stay put (or the end flag) from a read, and those four write from the linked read whatever Link says: adoption, pinStrays (and
+       pinTailsAfter, which pins only what pinStrays did), Find speech's Stay put and a template's sounds — so none of them stamps a pin that
+       only the links-off read asked for, and pressing Link again brings every link back. A plan's OWN writes run on the read in force: Lift
+       off pins the clip's followers, and with the links off it has none (the 11 Nov verifiers' V4), so the titles that sat on a lifted clip
+       are left unpinned, and after Link on they read onto whatever clip is under them then. R.unlinked says which read this is. */
+    const unlinked = !(o && o.linked) && !!(P.sm && P.sm.unlinked === true);
     const byId = new Map(), z = new Map();
     L.forEach((l, i) => { if (l && l.id != null) { byId.set(l.id, l); z.set(l.id, i); } });
     const own = (o && typeof o.media === 'function') ? o.media : null;
@@ -609,7 +618,7 @@ window.FM = window.FM || {};
     const slotOf = new Map();
     main.forEach(e => { if (e.slot) e.members.forEach(id => slotOf.set(id, e.id)); });
     const R = {
-      rev: 0, adopted: adopted, eps: eps, main: main, trackEnd: trackEnd, index: index, clipNo: clipNo, units: {}, followers: {},
+      rev: 0, adopted: adopted, unlinked: unlinked, eps: eps, main: main, trackEnd: trackEnd, index: index, clipNo: clipNo, units: {}, followers: {},
       tail: [], riders: [], fullOnly: [], anomalies: anomalies,
       lanes: { captions: [], text: [], overlay: [], behind: [], audio: [] },
       isMain: id => mainSet.has(id)
@@ -622,10 +631,42 @@ window.FM = window.FM || {};
       else if (k === 'fullOnly') R.fullOnly.push(u.id);
       else {
         const stay = !!(u.l.sm && (u.l.sm.stay || u.l.sm.main));
+        /* #1243 S34 A: LINKS OFF, nothing rides a clip (no host, no caption rider), so moving or trimming a clip moves nothing else — except
+           a clip's OWN sound (a taken-out sound twin, sm.twin, or a karaoke companion: S.isTwinOf, the same start, length, trim and speed as
+           the clip), which is the clip's and must never drift from it on a split, a move or a trim. An end card (it starts at or after the
+           end of the clips) is the VIDEO's end, not a clip's, so it stays in R.tail: S37's end line, Cut at the end and Simple's export keep
+           it, and it still lands on the clips' new end. (Full's parent links and an element's members moving as one are ties of their own,
+           below, and keep working.) */
+        /* review L2-3 (11 Nov): the sm.twin fallback (a taken-out sound whose file this browser cannot match, starting where the clip
+           does) holds only while NO other layer is that sound's own clip by S.isTwinOf. A lifted clip keeps its twin: the clip that ripples
+           into its place starts exactly there, and without this its sound became that clip's and left the lifted picture behind. */
+        /* …and the 11 Nov verifiers' V3: that guard was empty in the one case the fallback exists for, a file that cannot be matched
+           (a missing record, a guest's arriving media), where isTwinOf says no to the lifted clip too. So it also refuses while another
+           picture-bearing video has the sound's whole TIMING (S.twinTimingOf: start, length, trim, direction, speed, without the file
+           check): the lifted clip still does, so its sound stays with it. The clip under it is still matched by its start alone (as
+           before), so a sound whose clip was trimmed in Full without it keeps riding that clip. */
+        const isSnd = x => x.audioOnly === true || !!(x.sm && x.sm.snd === true);
+        const ownSound = unlinked && u.l.type === 'video' && (() => {
+          const h = mainAt(u.start), hl = h && !h.e.slot && byId.get(h.e.id);
+          if (!hl) return false;
+          if (S.isTwinOf && S.isTwinOf(u.l, hl, eps)) return true;
+          if (!(u.l.sm && u.l.sm.twin === true && Math.abs((+u.l.start || 0) - (+hl.start || 0)) <= eps)) return false;
+          return !L.some(x => x && x !== hl && x !== u.l && ((S.isTwinOf && S.isTwinOf(u.l, x, eps)) ||
+            (x.type === 'video' && !isSnd(x) && !!S.twinTimingOf && S.twinTimingOf(u.l, x, eps))));
+        })();
+        const off = unlinked && !ownSound;
         if (slotOf.has(u.id)) rec.host = slotOf.get(u.id);
         else if (!stay && k !== 'undecided' && k !== 'background') {
           const hit = mainAt(u.start);
-          if (k === 'captions') {
+          /* review L2-6 (11 Nov): links off still KNOWS which items are long ("long things stay": a whole-video item, a sound that runs on
+             past its clip), exactly as the linked read does — only the host goes. So the link rule (6b) still leaves a long item out and a
+             long sound is still "the song". Delete leaves a long item as it is while the links are off (planDelete's cut list is empty when
+             R.unlinked, the 11 Nov verifiers' V2): nothing rides a clip, and that includes being cut with it. */
+          if (off) {
+            if (hit && k !== 'captions') rec.long = (k === 'audio' && !(u.l.sm && u.l.sm.twin) && u.end > hit.e.end + 1.0) || (!hit.e.slot && isLong(u, hit.i));
+            else if (!hit && u.start >= trackEnd - eps && clipsOnly.length) R.tail.push(u.id);
+          }
+          else if (k === 'captions') {
             // a track inside one clip follows it; a spanning track RIDES the time map (§3.5)
             if (hit && !hit.e.slot && u.end <= hit.e.end + eps) rec.host = hit.e.id; else R.riders.push(u.id);
           } else if (hit) {

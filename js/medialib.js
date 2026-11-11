@@ -165,7 +165,7 @@ window.FM = window.FM || {};
      *    project while the first is still going is ignored (it used to add a second clip).
      *  · His ORIGINAL import is never touched: it keeps its whole copy under its own layer id.
      * A null from shareMedia is never an error: the clip is simply stored the old way, as a copy of its own. */
-    async use(mid) {
+    async use(mid, opts) {
       const e = readIndex().find(x => x.mid === mid);
       if (!e) return false;
       const st = FM.storage;
@@ -262,7 +262,17 @@ window.FM = window.FM || {};
         if (moved()) { try { if (loaded && loaded.url) URL.revokeObjectURL(loaded.url); } catch (x) {} return gaveUp(); }
         if (ref) loaded.ref = ref;        // → storage.save writes a pointer, not the file again
         loaded.fileKey = fileKey;         // → nothing deletes the record this clip's bytes came out of while it plays
-        FM.addMediaLayer(loaded);
+        /* #1243 S8 (Simple's Overlay › Your media): a caller may PLACE the record itself (Simple's Add overlay plan, one undo step, in
+           its band) instead of Full's FM.addMediaLayer — after every one-copy rule above, with the same pointer and fileKey. With no
+           `place`, Full's path is exactly as it was. A place that refuses (false) is not a landing, and the record it was handed is let
+           go (its decoded element and blob URL), as the moved() branch above lets it go: nothing registered it, so nothing else ever
+           would (review L1-4 / L3-9 / L4-5, 11 Nov). */
+        if (opts && typeof opts.place === 'function') {
+          if ((await opts.place(loaded)) === false) {
+            try { if (FM.letGoMedia && FM._releaseMediaRecord) FM.letGoMedia(loaded); else if (loaded && loaded.url) URL.revokeObjectURL(loaded.url); } catch (x) {}
+            return false;
+          }
+        } else FM.addMediaLayer(loaded);
         landed.set(flight, ++clock);
         return true;
       } catch (err) {

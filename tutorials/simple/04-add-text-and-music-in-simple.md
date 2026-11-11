@@ -5,7 +5,7 @@ You'll be able to put words on your video and a song under it.
 Before you start: a project in Simple with a clip in it (tutorials 01 and 02). <!-- shots/04-03.jpg -->
 
 1. Tap empty space in the timeline, then slide it until the line in the middle is where the words should appear. <!-- walked: playhead at 1.47 s; shots/04-04.jpg -->
-2. Tap **Text** in the bottom row. The text editor opens with the word "Text" selected. <!-- js/simple-tools.js:188 → FM.spine.cmd.addText; js/spine-edit.js:1355 planAddText starts FM.textEdit; shots/04-05.jpg -->
+2. Tap **Text** in the bottom row, then **Add text**. The text editor opens with the word "Text" selected. For a title that is already styled and moves in, tap **Title looks** instead and pick one. <!-- #1243 S8: Text opens its row (js/simple-tools.js textRow → FM.spine.cmd.addText; Title looks → S.TITLE_LOOKS); js/spine-edit.js planAddText starts FM.textEdit; v18.29 walked the one-tap Text; the row is read only, not walked yet -->
 3. Type your words. <!-- shots/04-06.jpg -->
 4. Tap the **tick** at the top right. The words appear in the picture, and a purple bar with your words sits above the clips, starting at the line and lasting until the end of your clips. <!-- js/spine-edit.js:1356-1360 start at the playhead, clamped to the clip row (clampToTrack :953); walked: 1.47 s to 6.0 s; shots/04-07.jpg -->
 5. Tap empty space once and the bar's label shows your words. <!-- walked: it said “Text” until the next redraw, then “Hello”; walk-simple.md finding 2; shots/04-08.jpg -->

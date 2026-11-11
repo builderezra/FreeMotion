@@ -2072,7 +2072,7 @@ window.FM = window.FM || {};
         if (typeof v !== 'number' || !isFinite(v)) delete sm.v;
         else { const n = Math.max(1, Math.min(1000, Math.round(v))); if (n !== v) sm.v = n; }
       }
-      else if (k === 'adopted' || k === 'muteClips') { if (v !== true) delete sm[k]; }
+      else if (k === 'adopted' || k === 'muteClips' || k === 'unlinked') { if (v !== true) delete sm[k]; }   // unlinked: #1243 S34 A, links off
       else if (k === 'home') { if (!(typeof v === 'string' && v.length <= 32)) delete sm.home; }   // any string: an older build must not erase a newer value
       else if (k === 'mrev') { if (!(Number.isInteger(v) && v >= 0)) delete sm.mrev; }
       else if (!smKeepUnknown(sm, k)) delete sm[k];
@@ -3986,7 +3986,7 @@ window.FM = window.FM || {};
   function elementCanvasOf(P) {
     return (P && P.width > 0 && P.height > 0) ? { width: P.width, height: P.height } : null;
   }
-  async function packFromProject(projectId, wantProject) {
+  async function packFromProject(projectId, wantProject, forTemplate) {
     /* bughunt8 #2 (the refuter's N2): "the open project" is THIS tab's (tabId), not the shared fm.currentProject. With a second tab
        on another project, packing this tab's open project skipped the flush and read its clips from IndexedDB alone, so the pack
        missed the last 600 ms of edits and any clip not stored yet (Back up every project, Home's Save as template / element). */
@@ -4019,6 +4019,15 @@ window.FM = window.FM || {};
       delete pack.project.ofTemplate;
       delete pack.project.ofElement;
       delete pack.project.returnTo;
+      /* …NOR SIMPLE'S LINK SWITCH (#1243 S34 A, review L2-10, 11 Nov). Links off is how he was working in THAT project, a session's
+         read and not part of what the template is; carried, it changed how the pack is read when inserted and turned the links off in
+         every project made from it. ONLY ON THE TWO TEMPLATE ROUTES (`forTemplate`: templates.save and templates.updateFrom; the 11 Nov
+         verifiers' V1): this packer also builds Back up every project, and there the switch IS that project's own state — stripped, a
+         project backed up with the links off came back with them on, and the next trim carried titles he had left where they were. */
+      if (forTemplate && pack.project && pack.project.sm && typeof pack.project.sm === 'object') {
+        delete pack.project.sm.unlinked;
+        if (!Object.keys(pack.project.sm).length) delete pack.project.sm;
+      }
     } else {
       /* AN ELEMENT CARRIES THE SIZE OF THE CANVAS IT WAS MADE ON (queue 690, HUNT-e). Its layers keep
          absolute positions, so without this the workspace that opens it for editing has to guess a size —
@@ -4212,7 +4221,7 @@ window.FM = window.FM || {};
     commitNew() { return commitLibDraft('template'); },
     // Save a whole project (by id, default current) as a reusable template.
     async save(name, projectId) {
-      const got = await packFromProject(projectId, true);   // wantProject: a template becomes a project
+      const got = await packFromProject(projectId, true, true);   // wantProject: a template becomes a project; forTemplate: Simple's Link switch stays behind
       if (!got) return false;
       const tid = newId('t');
       const pack = got.pack, id = got.srcId;
@@ -4467,7 +4476,7 @@ window.FM = window.FM || {};
       const idx = this.list();
       const at = idx.findIndex(t => t.id === tid);
       if (at < 0) return false;                      // deleted while it was being edited — refuse BEFORE writing
-      const got = await packFromProject(projectId, true);
+      const got = await packFromProject(projectId, true, true);   // forTemplate, as save()
       if (!got) return false;
       /* queue 915 clause 2: a refused write leaves the OLD pack in place, so reporting success here made
          commitDraft discard the workspace holding the only copy of the edit. False keeps the draft. */

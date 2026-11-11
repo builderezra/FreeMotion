@@ -128,12 +128,17 @@ window.FM = window.FM || {};
 
   /* ═══ isTwinOf (§4.6): the sound taken out of a clip. Audio-only, the clip's exact timing, and either the karaoke link
      or the same source file (name + size + type: an extracted twin's record is re-read from the clip's own File). */
-  S.isTwinOf = function (t, c, eps) {
+  /* the TIMING half of isTwinOf (a sound, and c's exact start, length, trim, direction and speed), without the tie or the file. spine.js's
+     sm.twin fallback reads it when the file cannot be matched (the 11 Nov verifiers' V3). */
+  S.twinTimingOf = function (t, c, eps) {
     if (!t || !c || t === c || t.type !== 'video') return false;
     if (!(t.audioOnly === true || (t.sm && t.sm.snd === true))) return false;
     const e = eps == null ? 0.5 / fps() : eps, near = (a, b) => Math.abs((+a || 0) - (+b || 0)) <= e;
     if (!(near(t.start, c.start) && near(t.duration, c.duration) && near(t.trimStart, c.trimStart) && !!t.reversed === !!c.reversed)) return false;
-    if (JSON.stringify(t.speed == null ? 1 : t.speed) !== JSON.stringify(c.speed == null ? 1 : c.speed)) return false;
+    return JSON.stringify(t.speed == null ? 1 : t.speed) === JSON.stringify(c.speed == null ? 1 : c.speed);
+  };
+  S.isTwinOf = function (t, c, eps) {
+    if (!S.twinTimingOf(t, c, eps)) return false;
     if (t.karaokeOf === c.id) return true;
     const a = FM.media && FM.media.get(t.id), b = FM.media && FM.media.get(c.id), fa = a && a.file, fb = b && b.file;
     return !!(fa && fb && fa.name === fb.name && fa.size === fb.size && fa.type === fb.type);
@@ -780,8 +785,10 @@ window.FM = window.FM || {};
     const cams = (R.fullOnly || []).map(id => map.get(id)).filter(l => l && l.type === 'camera' && !(l.sm && l.sm.stay));
     const capJobs = caps.map(t => ({ t: t, r: captionRider(R, t, m) }));
     /* 2.4b (§3.10 rule 3): the opt-in volume rider: a stay-put sound with sm.rideVol has its VOLUME and OPACITY keys carried through the same map, so a dip under one
-       clip stays under that clip. Its start never moves (it is Stay put); only its keys do. */
-    const volLayers = Object.keys(R.units).map(id => map.get(id)).filter(l => l && R.units[l.id].kind === 'audio' && l.sm && l.sm.stay && l.sm.rideVol && !l.sm.twin);
+       clip stays under that clip. Its start never moves (it is Stay put); only its keys do.
+       Review L3-5 (11 Nov): with the links off nothing rides a clip, and that includes a sound's volume curve ("Links off · text and sounds
+       stay where they are"). Its sm.rideVol is kept, so Link on brings the rider back. */
+    const volLayers = R.unlinked ? [] : Object.keys(R.units).map(id => map.get(id)).filter(l => l && R.units[l.id].kind === 'audio' && l.sm && l.sm.stay && l.sm.rideVol && !l.sm.twin);
     const camJobs = [], asks = [];
     cams.forEach(cm => { const r = cameraRider(R, cm, m, R.anyway); if (r.ask) asks.push('camera'); camJobs.push({ cam: cm, r: r }); });
     const keyed = cams.some(cm => (FM.timedLists ? FM.timedLists(cm) : FM.animatedProps(cm)).some(pp => pp.kf.length));
@@ -889,7 +896,10 @@ window.FM = window.FM || {};
     const ca = ((plan.counts.fade || plan.counts.xfade) && n) ? p.end : a;
     const ml = MINLEN(), len = b - ca;
     const rd = riderPlan(R, map, tmCut(ca, b)), mcut = tmCut(ca, b);   // 2.4: cues, camera, track keys and a cut item's keys all go through this one map
-    const cut = Object.keys(R.units).filter(uid => {
+    /* #1243 S34 A (the 11 Nov verifiers' V2): with the LINKS OFF a long item is left exactly where it is ("Links off · text and sounds
+       stay where they are"). The links-off read still marks it long (review L2-6: the link rule and "the song" need it), and cutting it
+       through the delete map shortened a whole-video title and split a song that nothing ties to the deleted clip. */
+    const cut = R.unlinked ? [] : Object.keys(R.units).filter(uid => {
       const u = R.units[uid], l = map.get(uid);
       if (!l || !u.long || u.kind === 'captions' || u.kind === 'fullOnly' || u.kind === 'block' || u.kind === 'main') return false;
       if (R.tail.indexOf(uid) >= 0 || (l.sm && l.sm.stay) || l.type === 'group') return false;
@@ -1457,8 +1467,12 @@ window.FM = window.FM || {};
       let ok = false, notes = [], adoptPaths = null;
       try {
         if (opts.unlock) lk.forEach(id => unitLayers(id, map).forEach(l => { if (l.locked) { l.locked = false; relock.add(l.id); } }));
-        if (!R.adopted && plan.adopts) adoptPaths = S.adopt(R);
-        if (gated) S.pinStrays(R);
+        /* review L2-1 / L2-2 (11 Nov): adoption and pinStrays write Stay put (and the end flag) from the LINKED read, whatever Link says. Links off
+           reads every item as hostless; pinning from that read stamped a permanent sm.stay (and sm.tail on a title ending with the video) on
+           every title, sound and overlay, so pressing Link again could not bring one link back. The plan itself still runs on R. */
+        const RL = R.unlinked ? S.classify(FM.scene, { linked: true }) : R;
+        if (!R.adopted && plan.adopts) adoptPaths = S.adopt(RL);
+        if (gated) S.pinStrays(RL);
         const trPre = S.trPairs();   // 2.7: every transition's {incoming: outgoing} before the plan (after adoption, so the main flags are on)
         await applyPlan(plan);
         /* 2.7 THE DROP RULE (§12.1 "transitions follow the clips they sit between"): one rule for every plan, so Delete, Reorder, Lift,
@@ -2084,12 +2098,31 @@ window.FM = window.FM || {};
   };
   /* ADD TEXT / OVERLAY (the project tools, §3.6 Add row): at the playhead, clamped to the TRACK end, in its band. The text
      opens for typing. Not arranging: it moves nothing that exists, so it works with a friend in. */
-  S.planAddText = function (R) {
+  /* TITLE LOOKS (#1243 S8, R (a) "Text: Add text · Title looks"; his S17 "they also have text templates"): a new title that arrives
+     already dressed and moving — a type pairing (only the fonts Full's own list offers, text-edit.js FONTS) and one of the entrances every
+     text already has (compositor.js textClocks: fade, fade-up, typewriter, pop, slide…). Grown-up faces, his 9 Nov "less childish".
+     KNOWN DEVIATION from 1243-R (review L3-7, 11 Nov): R's decision 8 builds Title looks AFTER S36, sharing one table with S36's strip looks
+     and opening FM.simpleText.start. They shipped ahead of S36 with this table of their own and Full's FM.textEdit.start (js/simple-text.js
+     does not exist yet); S36 is to fold this table into its own. */
+  S.TITLE_LOOKS = [
+    { key: 'headline',  text: { fontFamily: 'Inter, sans-serif', bold: true, italic: false, color: '#ffffff', letterSpacing: 0, stroke: { enabled: false, width: 6, color: '#000000' } }, anim: { preset: 'fade-up', unit: 'word', durIn: 0.6, durOut: 0, stagger: 0.08 } },
+    { key: 'loud',      text: { fontFamily: 'Impact, sans-serif', bold: false, italic: false, color: '#ffffff', letterSpacing: 1, stroke: { enabled: true, width: 8, color: '#000000' } }, anim: { preset: 'pop', unit: 'word', durIn: 0.5, durOut: 0, stagger: 0.1 } },
+    { key: 'editorial', text: { fontFamily: 'Georgia, serif', bold: false, italic: true, color: '#f5f0e6', letterSpacing: 0, stroke: { enabled: false, width: 6, color: '#000000' } }, anim: { preset: 'fade', unit: 'char', durIn: 0.8, durOut: 0, stagger: 0.03 } },
+    { key: 'typed',     text: { fontFamily: 'Courier New, monospace', bold: false, italic: false, color: '#ffffff', letterSpacing: 0, stroke: { enabled: false, width: 6, color: '#000000' } }, anim: { preset: 'typewriter', unit: 'char', durIn: 0.6, durOut: 0, stagger: 0.05 } },
+    { key: 'cinema',    text: { fontFamily: 'Palatino, serif', bold: false, italic: false, color: '#ffffff', letterSpacing: 12, stroke: { enabled: false, width: 6, color: '#000000' } }, anim: { preset: 'fade', unit: 'line', durIn: 1.2, durOut: 0, stagger: 0 } },
+    { key: 'slidein',   text: { fontFamily: 'Helvetica, Arial, sans-serif', bold: true, italic: false, color: '#ffd23f', letterSpacing: 0, stroke: { enabled: false, width: 6, color: '#000000' } }, anim: { preset: 'slide', unit: 'word', durIn: 0.5, durOut: 0, stagger: 0.08 } }
+  ];
+  S.planAddText = function (R, look) {
     const plan = newPlan('Add text'); plan.arranges = false; plan.adopts = false;
     plan.pre.push(async () => {
       const P = FM.scene.project, c = S.clampToTrack(R, Math.max(0, FM.time || 0), FM.defaultLayerDuration());
       /* today's text defaults (js/app.js addTextLayer), placed by Simple: no commit, no editor opened mid-step */
       const t = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: FM.defaultTextSize(), start: c.start, duration: c.duration });
+      /* #1243 S8: a Title look dresses it (its text fields and its entrance) before it is placed, so it is ONE step with the add */
+      if (look) {
+        Object.keys(look.text).forEach(f => { t[f] = f === 'stroke' ? Object.assign({}, look.text.stroke) : look.text[f]; });
+        t.textAnim = Object.assign({}, t.textAnim || {}, look.anim);
+      }
       t._smFit = 1;   // SU1 #8: its first ✓ fits it to the frame (text-edit.js fitNewTitle); '_' keeps it out of saves and history
       const anchor = S.bandAnchor('text', c.start, c.start + c.duration, null);
       S.insertAt(t, anchor ? FM.scene.layers.findIndex(l => l.id === anchor) : 0);
@@ -2098,6 +2131,36 @@ window.FM = window.FM || {};
     plan.after = () => { if (plan.typeInto && FM.textEdit && FM.textEdit.start) FM.textEdit.start(plan.typeInto, { selectAll: true }); };
     plan.live = line('textAdded');
     return plan;
+  };
+  /* #1243 S17 (Text › Draw): the drawing Full's Sketching made (FM.addPathLayer: at the playhead, the default length, one step per stroke)
+     is PLACED as Simple places a new overlay — clamped to the clips (S.clampToTrack) and moved into the overlay band — in a step of its
+     own. The strokes stay Sketching's: undo takes back the placing, then the strokes one by one, as in Full. Never history muting: a session
+     that ended any other way would leave every later edit without an undo. */
+  S.planPlaceDrawing = function (R, id) {
+    const l = id ? FM.layerById(FM.scene, id) : null;
+    if (!l || l.type !== 'shape' || l.shape !== 'path') return refusePlan('drawingGone');
+    const plan = newPlan('Draw'); plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(id);
+    plan.writes.push(() => {
+      if (R.trackEnd > 0) {
+        const c = S.clampToTrack(R, +l.start || 0, +l.duration || 0);
+        l.start = c.start;
+        if (c.duration > 0 && c.duration < (+l.duration || 0)) l.duration = c.duration;
+      }
+      const s0 = +l.start || 0, e0 = s0 + (+l.duration || 0), anchor = S.bandAnchor('overlay', s0, e0, new Set([id]));
+      if (anchor) FM.moveLayers([id], anchor);
+      else {   // review L4-3 (11 Nov), planAddOverlay's own rule: nothing but words under it, so below every text and caption track it overlaps (§3.6.1)
+        const L = FM.scene.layers, words = L.filter(x => x !== l && x.type === 'text' && overlaps(x, s0, e0));
+        if (words.length) { const k = L.indexOf(words[words.length - 1]), nx = L.slice(k + 1).find(x => x !== l); FM.moveLayers([id], nx ? nx.id : null); }
+      }
+    });
+    plan.selectId = id;
+    plan.live = line('drawingAdded');
+    return plan;
+  };
+  /* #1243 S8, Overlay › Your media: the library's photos and videos (never a song: FM.mediaLib.isAudio), newest first */
+  S.libraryVisuals = function () {
+    const L = FM.mediaLib;
+    return (L && L.list) ? L.list().filter(e => e && e.mid && !(L.isAudio && L.isAudio(e))) : [];
   };
   S.planAddOverlay = function (R, picked) {
     const items = picked.clips;
@@ -2404,6 +2467,75 @@ window.FM = window.FM || {};
     return plan;
   };
 
+  /* LINK (#1243 S34 A, his words: "turn linking stuff on and off… just one simple button to like link stuff"): one switch for the whole
+     project, on the document as project.sm.unlinked (it syncs, like muteClips; absent = linked, so every older project is unchanged).
+     Off: S.classify gives nothing a host (spine.js), so moving or trimming a clip moves nothing else. Nothing moves when it flips: it
+     only decides what the NEXT edit carries along. One undo step. */
+  S.linkMode = function () { const P = FM.scene && FM.scene.project; return !(P && P.sm && P.sm.unlinked === true); };
+  S.planLink = function (R, on) {
+    const P = FM.scene.project;
+    if (!!on === S.linkMode()) return refusePlan('nothingChanged');
+    const plan = newPlan(on ? 'Link on' : 'Link off'); plan.arranges = false; plan.adopts = false; plan.keepSel = true;
+    plan.writes.push(() => {
+      if (!on) {
+        if (!P.sm || typeof P.sm !== 'object' || Array.isArray(P.sm)) P.sm = {};
+        P.sm.unlinked = true;
+      } else if (P.sm) { delete P.sm.unlinked; if (!Object.keys(P.sm).length) delete P.sm; }
+    });
+    plan.live = line(on ? 'linksOn' : 'linksOff');
+    return plan;
+  };
+
+  /* CAPTION LOOKS (#1243 S8, R (a) "Captions › Caption looks"; plan B S8 step 3: "6-8 tiles… One tap is one step… writes only what the
+     caption renderer already draws"). A look is a caption track's text fields (the ones js/scene.js makeLayer gives every text) and, for
+     the word-by-word looks, ONE Word Highlight (compositor.js 'wordhighlight', Timing Spoken: each word lights while it is said, from the
+     cue's timing) — the renderer already draws it, so plan B's "word-by-word needs a renderer change" no longer holds. A look replaces the
+     Word Highlight a look put there (sm === 1); every other effect on the track, a Word Highlight made in Full included, is left alone. Grown-up faces, his 9 Nov "less childish". */
+  S.CAPTION_LOOKS = [
+    { key: 'clean',     text: { fontFamily: 'Inter, sans-serif', bold: true, italic: false, color: '#ffffff', letterSpacing: 0, stroke: { enabled: true, width: 5, color: '#000000' } }, hl: null },
+    { key: 'bold',      text: { fontFamily: 'Impact, sans-serif', bold: false, italic: false, color: '#ffffff', letterSpacing: 1, stroke: { enabled: true, width: 10, color: '#000000' } }, hl: null },
+    { key: 'spoken',    text: { fontFamily: 'Inter, sans-serif', bold: true, italic: false, color: '#ffffff', letterSpacing: 0, stroke: { enabled: true, width: 6, color: '#000000' } }, hl: { unit: 0, style: 0, color: '#ffd23f' } },
+    { key: 'wordbox',   text: { fontFamily: 'Inter, sans-serif', bold: true, italic: false, color: '#ffffff', letterSpacing: 0, stroke: { enabled: false, width: 6, color: '#000000' } }, hl: { unit: 0, style: 1, boxcolor: '#7c3aed', padding: 12, radius: 14 } },
+    { key: 'plate',     text: { fontFamily: 'Helvetica, Arial, sans-serif', bold: true, italic: false, color: '#ffffff', letterSpacing: 0, stroke: { enabled: false, width: 6, color: '#000000' } }, hl: { unit: 2, style: 1, boxcolor: '#111111', padding: 16, radius: 10 } },
+    { key: 'underline', text: { fontFamily: 'Inter, sans-serif', bold: true, italic: false, color: '#ffffff', letterSpacing: 0, stroke: { enabled: true, width: 5, color: '#000000' } }, hl: { unit: 0, style: 2, color: '#ffd23f', padding: 6 } },
+    { key: 'pop',       text: { fontFamily: 'Inter, sans-serif', bold: true, italic: false, color: '#ffffff', letterSpacing: 0, stroke: { enabled: true, width: 7, color: '#000000' } }, hl: { unit: 0, style: 3, color: '#ffffff', grow: 125 } },
+    { key: 'serif',     text: { fontFamily: 'Georgia, serif', bold: false, italic: true, color: '#f5f0e6', letterSpacing: 0, stroke: { enabled: true, width: 3, color: '#000000' } }, hl: null }
+  ];
+  /* which look a track wears now, or '' (its fields and its Word Highlight match one exactly): the tile that shows pressed */
+  /* review L3-4 (11 Nov): A LOOK OWNS ONLY ITS OWN Word Highlight, the one it put there (inst.sm === 1, as Look's container owns only
+     f.sm === 1). One he added in Full is his: a look never deletes it, and it is not what a look is matched by. The match includes the
+     Timing the look writes (follow 1, Spoken), so a Progress-timed highlight never shows Spoken pressed (and Spoken can put Spoken back). */
+  const ownHl = L => (Array.isArray(L.effects) ? L.effects : []).filter(e => e && e.type === 'wordhighlight' && e.sm === 1);
+  S.captionLookOf = function (L) {
+    if (!L) return '';
+    const hl = ownHl(L);
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const hit = S.CAPTION_LOOKS.filter(k => Object.keys(k.text).every(f => same(f === 'stroke' ? { enabled: !!(L.stroke && L.stroke.enabled), width: L.stroke && L.stroke.width, color: L.stroke && L.stroke.color } : L[f], k.text[f]))
+      && (k.hl ? hl.length === 1 && (() => { const want = Object.assign({ follow: 1 }, k.hl); return Object.keys(want).every(p => same(hl[0].params && hl[0].params[p], want[p])); })() : hl.length === 0))[0];
+    return hit ? hit.key : '';
+  };
+  S.planCaptionLook = function (R, id, key) {
+    const L = FM.layerById(FM.scene, id), look = S.CAPTION_LOOKS.filter(x => x.key === key)[0];
+    if (!L || L.type !== 'text' || !Array.isArray(L.captions)) return refusePlan('captionGone');
+    if (!look) return refusePlan('nothingChanged');
+    if (S.captionLookOf(L) === key) return refusePlan('nothingChanged');
+    let inst = null;
+    if (look.hl) {
+      try { inst = FM.fxRegistry.makeInstance('wordhighlight'); } catch (e) { inst = null; }
+      if (!inst || !inst.params) return refusePlan('itemFxUnsuited');
+      Object.assign(inst.params, { follow: 1 }, look.hl);
+      inst.sm = 1;
+    }
+    const plan = newPlan('Caption look'); plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(id);
+    plan.writes.push(() => {
+      Object.keys(look.text).forEach(f => { L[f] = f === 'stroke' ? Object.assign({}, look.text.stroke) : look.text[f]; });
+      L.effects = (Array.isArray(L.effects) ? L.effects : []).filter(e => !(e && e.type === 'wordhighlight' && e.sm === 1));   // only the look's own (L3-4)
+      if (inst) L.effects.push(inst);
+    });
+    plan.live = line('captionLookSet', ((FM.spineWords && FM.spineWords.tools && FM.spineWords.tools.capLooks) || {})[key] || key);
+    return plan;
+  };
+
   /* REPLACE (a clip's footage, the slot kept). The picker has already run (FM.pickReplacement, at the tap, outside the runner) and
      `nrec` is the decoded record. A shorter file is a tail trim in the same step: replaceMediaWith clamps the length to the new
      source, so the plan ripples by the difference, with the tail trim's own refusals. A sound twin gets the same file (its own
@@ -2603,8 +2735,24 @@ window.FM = window.FM || {};
     closeAll() { return S.edit('Close all gaps', R => S.planCloseAll(R)); },
     endWithVideo() { return S.edit('End with the video', R => S.planEndWithVideo(R)); },
     cutAtEnd(id) { return S.edit('Cut at the end', R => S.planCutAtEnd(R, id)); },
-    addText() { return S.edit('Add text', R => S.planAddText(R)); },
+    addText(lookKey) { const look = lookKey ? S.TITLE_LOOKS.filter(x => x.key === lookKey)[0] || null : null; return S.edit('Add text', R => S.planAddText(R, look)); },   // #1243 S8: a Title look's key, or none
     addOverlay(files) { return afterRead(files, picked => S.edit('Add overlay', R => S.planAddOverlay(R, picked))); },
+    /* #1243 S8, Overlay › Your media: a record FM.mediaLib.use has already read, shared and decoded (its `ref` makes the save a pointer at
+       the one stored copy), placed exactly as a picked file is — one step, at the playhead, in its band */
+    addOverlayRec(rec) {
+      if (!rec) return Promise.resolve(false);
+      /* a step already running QUEUES this one (S.edit returns false then, and the overlay still lands when its turn comes): tell the library
+         it is landing, so its own bookkeeping (landed, the repeat-tap guard) is right; a full queue is a real refusal */
+      /* review L4-6 (11 Nov): the picker's own rule (readPickedNow): a video that decoded with no picture is a sound, and Add overlay refuses it
+         with the line it says for a picked file ('nothingAdded'), instead of laying a sound in the overlay band */
+      const picture = rec.kind === 'image' || (rec.width > 0 && rec.height > 0);
+      const len = rec.kind === 'video' ? Math.max(0.1, rec.duration || 5) : FM.defaultLayerDuration();
+      const picked = picture ? { clips: [{ rec: rec, len: len }], sounds: [], failed: [] } : { clips: [], sounds: [{ rec: rec, len: len }], failed: [] };
+      const queued = picture && S.running && S.queue.length < 4;
+      const p = S.edit('Add overlay', R => S.planAddOverlay(R, picked));
+      return queued ? Promise.resolve(true) : p;
+    },
+    placeDrawing(id) { return S.edit('Draw', R => S.planPlaceDrawing(R, id)); },   // #1243 S17: Text › Draw, on every way out of the sketch
     addMusic(files) { return afterRead(files, picked => S.edit('Add music', R => S.planAddMusic(R, picked))); },
     length(id, newDur) { return S.edit('Trim clip', R => S.planTrimTail(R, id, newDur, { typed: true })); },
     trimStartBy(id, h) { return S.edit('Trim clip', R => S.planTrimHead(R, id, h, { typed: true })); },
@@ -2617,6 +2765,8 @@ window.FM = window.FM || {};
     takeSoundOut(id) { return S.edit('Take sound out', R => S.planTakeSound(R, id)); },
     putSoundBack(id) { return S.edit('Put sound back', R => S.planPutSoundBack(R, id)); },
     muteClips(on) { return S.edit(on ? 'Mute clip sound' : 'Clip sound back on', R => S.planMuteClips(R, on)); },
+    link(on) { return S.edit(on ? 'Link on' : 'Link off', R => S.planLink(R, on)); },   // #1243 S34 A
+    captionLook(id, key) { return S.edit('Caption look', R => S.planCaptionLook(R, id, key)); },   // #1243 S8: Captions › Caption looks
     replace(id, nrec) { return S.edit('Replace clip', R => S.planReplace(R, id, nrec)); },
     /* the picker runs HERE, at the tap, never inside the runner (a dismissed picker can leave its promise unsettled): then the swap is one step.
        A project switched away from while the file decoded lets the file go instead of landing it in the wrong project. */
@@ -3082,7 +3232,10 @@ window.FM = window.FM || {};
     const spans = S.speechSpans(job && job.parts, map);
     if (!spans.length) return refusePlan('speechMoved');
     const srcs = Array.from(new Set(spans.map(s => s.src))), mains = srcs.filter(id => R.isMain(id));
-    const stays = !mains.length && srcs.every(id => staysPut(R, map.get(id)));
+    /* review L2-1 (11 Nov): the Stay put this writes is read from the LINKED classify, so a track found with the links off is pinned only
+       when it would be with them on (links off is a read, never written into an item) */
+    const RL = R.unlinked ? S.classify(FM.scene, { linked: true }) : R;
+    const stays = !mains.length && srcs.every(id => staysPut(RL, map.get(id)));
     let T = job.trackId ? map.get(job.trackId) : null;
     if (job.trackId && !isCaptionTrack(T)) return refusePlan('gone');
     let s0, e0;
@@ -3713,7 +3866,9 @@ window.FM = window.FM || {};
       else if (l.type === 'video') S.setFlag(l, 'snd', true);
     });
     if (kind === 'template') {
-      const PR = S.classify({ project: pk.project || {}, layers: pk.layers }, { media: nid => recs.get(nid) || null });
+      /* review L2-10 (11 Nov): read LINKED, whatever Link said where it was saved: Stay put written into the target is never decided by a
+         links-off read (older packs still carry project.sm.unlinked; storage.js drops it at packing now) */
+      const PR = S.classify({ project: pk.project || {}, layers: pk.layers }, { media: nid => recs.get(nid) || null, linked: true });
       const byP = new Map(pk.layers.map(l => [l.id, l]));
       const see = l => !!l && l.type !== 'group' && ((!!l.blendMode && l.blendMode !== 'normal' && !/^mask-/.test(l.blendMode)) || (typeof (l.transform && l.transform.opacity) === 'number' && l.transform.opacity < 1));
       const under = gid => pk.layers.filter(l => { let p = l.parent, h = 0; while (p && h++ < 64) { if (p === gid) return true; const q = byP.get(p); p = q ? q.parent : null; } return false; });

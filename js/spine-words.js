@@ -145,6 +145,12 @@ window.FM = window.FM || {};
       soundTaken: 'Sound taken out · it sits on the clip as its own track', alreadyOut: 'Its sound is already out · Put sound back first',
       noSound: 'This clip has no sound to take out', noTwin: 'No sound was taken out of this clip', soundBack: 'Sound back in the clip',
       clipsMuted: 'Clip sound is off', clipsHeard: 'Clip sound is back on',
+      /* #1243 S34 A: the play row's Link, one switch for the whole project */
+      linksOff: 'Links off · text and sounds stay where they are', linksOn: 'Links on · things on a clip move with it',
+      /* #1243 S8: Captions › Caption looks */
+      captionLookSet: name => name + ' on the captions', captionGone: 'That caption track was just deleted',
+      /* #1243 S17: Text › Draw */
+      drawingAdded: 'Drawing added', drawingGone: 'That drawing was just deleted',
       replaced: name => name + ' replaced',
       /* release 2.7: transitions (#1122, his pick A) */
       trNone: 'No transition', noTransition: 'A transition needs two clips that meet, with nothing between them',
@@ -190,16 +196,38 @@ window.FM = window.FM || {};
       delete: 'Delete', stay: 'Stay put', editWords: 'Edit words', forward: 'Forward', backward: 'Back', openFull: 'Open in Full',
       /* moreDoneTitle (8 Nov, queue 980): the spoken name of More while its panel is open on a PC, where its face is Done */
       closeGap: 'Close gap', fix: 'Fix', done: 'Done', moreDoneTitle: 'Done · close More’s settings', shorter: 'shorter', longer: 'longer',   // Fade's − and + (Length's frame words went with it)
+      /* #1243 S3 · S9: the ‹s' spoken names (a sub-row's and a panel's go back one level; an item's lets the selection go) and the tray's own */
+      back: 'Back', backItem: 'Back · nothing selected', clipTools: 'Clip tools',
       /* #1243 S26: a grip whose footage has run out (its spoken name's tail) and the drag tip when he pulls it past the end */
       footageEnds: 'the footage ends here', footageEndTip: 'End of the footage',
       addWhere: 'Add clips', atEnd: 'At the end', afterClip: 'After ', afterCard: 'After the card', beforeFirst: 'Before Clip 1',
       exportAt: p => p + 'p · Export', exportTitle: 'Export video',   // 2.7 (SU1 #20): Simple's Export list
-      music: 'Music from your files', sfx: 'Sound effects', voice: 'Record voice', closeAll: 'Close all gaps', moreOpts: 'Loop and preview speed…',
+      music: 'Music from your files', sfx: 'Sound effects', voice: 'Record voice', closeAll: 'Close all gaps',   // (moreOpts went with Simple's ⋯, #1243 S5; review L3-10)
       selected: n => n + ' selected', bandHint: 'Tap a clip to see its tools', bandHintSel: 'Its tools are below · More opens the rest',
       bandHintSelPc: 'Its tools are below',   // PC (his pick B): every tool is on show there, More with them
-      /* 2.7 (SU1 #13): the first-run hint in the tray row (§7.3 step 4, §8.9): one verb for ✂ everywhere, split, never "cut" */
-      firstHint: 'Tap a clip to change its speed or look · ✂ splits it at the line',
-      firstHintPc: 'Click a clip to change its speed or look · ✂ or S splits it at the line',
+      /* 2.7 (SU1 #13): the first-run hint, floating just above the bar since #1243 S3 (§7.3 step 4, §8.9): one verb everywhere, split, never
+         "cut". #1243 S5: Split is the first tool on a clip now, not ✂ on the play row. The hint no longer says "or look": R decision 1 takes
+         Look off the clip in a LATER release, and until then a clip's tools still hold Look third (review L3-10: said honestly, 11 Nov) */
+      firstHint: 'Tap a clip to split it or change its speed',
+      firstHintPc: 'Click a clip to split it or change its speed · S splits at the line',
+      /* #1243 S5: Split, first on every item's tools (his "put the split button on the row that pops up when you have a layer selected") */
+      split: 'Split', splitTitle: 'Split at the line (S)',
+      /* #1243 S34 A: the play row's Link, and why Stay put rests while it is off */
+      link: 'Link', linkTitle: 'Link: things on a clip move with it', linkOffTitle: 'Links off: everything stays where it is · tap to link',
+      stayUnlinked: 'Links are off, so everything stays put already · turn Link on to use this',
+      /* #1243 S8: Captions › Caption looks — one face per look, our own names */
+      capLooksRow: 'Caption looks', capLooksTitle: 'A look for the captions, in one tap', capLooksNone: 'Add captions first: Type captions or Find speech',
+      capLooks: { clean: 'Clean', bold: 'Bold', spoken: 'Spoken', wordbox: 'Word box', plate: 'Plate', underline: 'Underline', pop: 'Pop', serif: 'Serif' },
+      capLookSample: 'Every word',
+      /* #1243 S8: Text's row — Add text and Title looks */
+      addText: 'Add text', textTitle: 'Add text, a title that is already styled, or draw', titleLooksRow: 'Title looks', titleLooksTitle: 'A new title, already styled and moving',
+      titleLooks: { headline: 'Headline', loud: 'Loud', editorial: 'Editorial', typed: 'Typed', cinema: 'Cinema', slidein: 'Slide in' },
+      titleLookSample: 'Title',
+      /* #1243 S8: Overlay's row — Photo or video (the picker) and Your media (what this device has imported) */
+      photoVideo: 'Photo or video', yourMedia: 'Your media', yourMediaTitle: 'Photos and videos you have added before, no picker',
+      yourMediaNone: 'Nothing here yet: add a photo or video once and it is kept here', aPhoto: 'Photo', aVideo: 'Video',
+      /* #1243 S17: Text › Draw */
+      draw: 'Draw', drawTitle: 'Draw on the video with your finger',
       /* release 2.3 */
       audio: 'Audio', audioTitle: 'Speed, volume, reverse and the clip’s sound', speed: 'Speed', volume: 'Volume', replace: 'Replace', reverse: 'Reverse', forwards: 'Play forwards', takeSound: 'Take sound out', putSound: 'Put sound back',
       fade: 'Fade', fadeIn: 'In', fadeOut: 'Out', useOneSpeed: 'Use one speed', speedRamped: 'Speed changes over the clip',

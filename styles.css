@@ -12452,10 +12452,12 @@ html[data-pb-cursor="ew"], html[data-pb-cursor="ew"] * { cursor: ew-resize !impo
 /* ═══ SIMPLE MODE, PHASE 1 — the Simple editor (DESIGN.md §6, §8.1–§8.2, §15.1; BUILD-PLAN.md step 1.3) ═════════════════
    Everything below is scoped by `body.ed-simple` (Simple is showing) or by the cog's third block (`.cv-ed-on`, `#cv-editor`),
    so in Full nothing here matches outside that block: Full's play bar, ⋯ strip and stage are HEAD's (DESIGN.md §0.4). */
-#btn-sm-split, #sm-timeline { display: none; }
+#btn-sm-link, #sm-timeline { display: none; }
 /* SIMPLE. No switch on the play bar in either editor (the ⚙ cog is the one door, DESIGN §6.1). The phone's left group is
-   ⋯ · ✂ · (gap) · |◀ (D18 A): ⧉ gives its slot to ✂, and ◐ keeps its slot INVISIBLE so |◀ sits where it sits in Full.
-   PC: ‹ ✂ |◀. Under D18 B, make the #btn-addside rule `display: none !important` at every width. */
+   Link · (⋯'s slot, empty) · (gap) · |◀ (#1243 R's play row, "No ⋯, no ✂": S5 took ⋯ and ✂ off, S34 A put Link first; the empty slot is
+   the Curve's, #1243 S35): ⧉ goes, and ⋯ and ◐ keep their slots INVISIBLE so |◀ and the pill sit where they sit in Full.
+   PC: Link · |◀ (⋯ rides Full's far run there, and goes in Simple). Under D18 B, make the #btn-addside rule `display: none !important`
+   at every width. */
 body.ed-simple #btn-layermenu, body.ed-simple #t-sel, body.ed-simple #key-rail { display: none !important; }
 /* Full's hidden corner pill (#1083, his pick B: "‹ Projects" on PC hover) is not Simple's: Simple has its own top bar and its
    own way out. Its hide lives HERE, in Simple's block, because the Full-unchanged lock lets only a Simple release add a line
@@ -12465,8 +12467,16 @@ body.ed-simple #btn-addside { visibility: hidden !important; pointer-events: non
 @media (min-width: 701px) { body.ed-simple #btn-addside { display: none !important; } }
 /* Full-only doors in the view options (§8.8, T21): the Layers panel and Add camera (a camera is Full-only, §5.2) */
 body.ed-simple #vb-layers, body.ed-simple #vb-camera { display: none !important; }
-body.ed-simple #btn-sm-split { display: inline-flex; }
-#btn-sm-split[aria-disabled="true"] { opacity: .38; }
+/* #1243 S5 (his words: "for the play button row, get rid of the playback options. Get rid of the split button"): Simple has no ⋯ — on a
+   phone it keeps its slot unseen and untouchable, on a PC (where it sits in the far run) it goes. Full's ⋯ is untouched. */
+body.ed-simple #btn-opts { visibility: hidden !important; pointer-events: none; }
+@media (min-width: 701px) { body.ed-simple #btn-opts { display: none !important; } }
+/* #1243 S34 A: Link, on the play row while nothing is selected; with an item selected its slot stays, empty (the Keyframes button's,
+   #1243 S35), so nothing slides. Accent while linked (a pressed .tbtn, as .tbtn.active), struck through when the links are off. */
+body.ed-simple #btn-sm-link { display: inline-flex; }
+body.ed-simple.sm-has-sel #btn-sm-link { visibility: hidden; pointer-events: none; }
+#btn-sm-link[aria-pressed="true"] { color: var(--accent); }
+#btn-sm-link[aria-pressed="true"] .lk-cut { display: none; }
 #cv-editor .ed-sw.ed-shake { animation: ed-shake .36s ease; }
 @keyframes ed-shake { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
 /* AFTER the rule it stops: same specificity, so an earlier "none" loses the cascade and the shake ran under reduced motion (T15) */
@@ -12504,6 +12514,9 @@ body.ed-simple #sm-timeline { display: flex; }
   visibility: visible !important; pointer-events: none !important; }
 #sm-timeline.edm-out { display: flex; pointer-events: none; }
 #sm-timeline.edm-out > #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; background: var(--panel); }
+/* #1243 S3: Simple's bar is ONE row, but the rows that keep it one hang on body.ed-simple and its data-mode, both gone while it fades out:
+   the fading copy showed the tray over the project row and a line as a row of its own. It shows the project row alone (the 9 Nov review, FG-2). */
+#sm-timeline.edm-out > #sm-bar > #sm-tray, #sm-timeline.edm-out > #sm-bar > #sm-say { display: none; }
 #sm-scroll { flex: 1 1 auto; min-height: 0; overflow-x: auto; overflow-y: hidden; touch-action: pan-x; overscroll-behavior: contain; scrollbar-width: none; }
 #sm-scroll::-webkit-scrollbar { display: none; }
 #sm-inner { position: relative; height: 100%; display: flex; flex-direction: column; }
@@ -12560,30 +12573,23 @@ body.ed-simple #sm-sections, body.ed-simple #sm-sections .sm-secstack, body.ed-s
 body.ed-simple #sm-sections .sm-item, body.ed-simple #sm-sections .sm-grip, body.ed-simple #sm-sections .sm-glyph { pointer-events: auto; }
 .sm-add { position: absolute; top: 10px; width: 36px; height: 36px; border-radius: 10px; border: 1.5px dashed #8b97ab; background: transparent; color: #cfd6e2; font: 400 22px/1 system-ui, sans-serif; cursor: pointer; }
 .sm-more { position: sticky; left: calc(100% - 40px); top: 0; float: right; margin-top: 4px; min-width: 32px; height: 24px; border-radius: 12px; background: #1d2533; color: #cfd6e2; font: 700 10px/24px system-ui, sans-serif; text-align: center; }
-#sm-say { flex: 0 0 52px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-top: 1px solid var(--line); font: 600 12.5px/1.25 system-ui, sans-serif; color: #dfe6f0; box-sizing: border-box; }
+#sm-say { display: flex; align-items: center; gap: 10px; font: 600 12.5px/1.25 system-ui, sans-serif; color: #dfe6f0; box-sizing: border-box; }
 #sm-say .sm-say-t { flex: 1 1 auto; min-width: 0; }
 #sm-say .sm-say-b { flex: 0 0 auto; min-width: 44px; min-height: 32px; padding: 0 12px; border-radius: 9px; border: 0; background: var(--accent); color: #06231d; font: 700 12px/1 system-ui, sans-serif; cursor: pointer; }
 .sm-vh { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-@media (min-width: 701px) { #sm-say { flex-basis: 40px; } }
-/* THE PHONE: FIXED ROWS, NOT A GROWING COLUMN (DESIGN §8.2, §15.1). Ruler 18 + sections 64 + clip row 56 + sound 32 = 170, then
-   #sm-say's 52 directly under them; a selection's panel docks under #sm-say (js/mobile.js), so a line is never hidden by it and
-   no row moves by a pixel when something is selected or cleared (T19). The stage is clamped in Simple so that panel keeps
-   ≥ 200 px: 514 = top bar 52 + play bar 40 + 170 + 52 + 200. Below 694 px of height the 180 px floor wins and the panel gets
-   less (measured 168 px at 380×667). Full keeps its 40svh stage. */
+/* THE PHONE: FIXED ROWS, NOT A GROWING COLUMN (DESIGN §8.2, §15.1), and THE STAGE NEVER SHRINKS (#1243 rule 3). 380 = top bar 52 +
+   play bar 40 + timeline rows 222 + the bar 57 (one 56 px row and its 1 px edge), with 9 px to spare, so the bar stays on screen down to
+   560 px of height (the 180 px floor wins below that). Since #1243 S3 the bar is ONE row (2.7's tray row and project row were two), and
+   the 52 px it freed went to the timeline: ruler 18 + sections + clip row 56 + sound 32 = 222, the sections lane taking the rest. No row
+   moves by a pixel when something is selected or cleared (T19). A panel (More, Look, Edit lines) runs from the stage's bottom edge, the
+   sheet line, to the bottom of the screen and covers the play row, the timeline and the bar (js/mobile.js sheetLine), so the stage is
+   the same height with a panel up or not: More's panel no longer takes 134 px of the picture (the old 514 clamp and its .insp-open swap
+   are gone). Phone only, Simple only: Full's stage is its 40svh. */
 @media (max-width: 700px) {
-  body.ed-simple { --stage-h: clamp(180px, calc(100svh - 514px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)), 40svh); }
-  /* 2.7 (SU1 #16, his "2A" 14 Oct): the 200 px kept for the docked panel stood EMPTY under the project tools whenever no panel was up
-     (142 px at 380×800, 115 at 380×667, the preview 286 / 180 px tall). While no sheet is open (More's panel is the only one Simple
-     raises, and it sets body.insp-open) the stage takes that room: 380 = top bar 52 + play bar 40 + rows 170 + tray 52 + tools 56 + their
-     borders, with 8 px to spare, so the tools stay on screen down to 560 px of height (the 180 px floor wins below that, as before).
-     More's panel takes it back: with the sheet up the stage is the clamp above, so the panel docks under the tools with the room it had.
-     js/simple-tools.js re-fits the preview when this flips. Phone only, Simple only: Full's stage is its 40svh. */
-  body.ed-simple:not(.insp-open) { --stage-h: max(180px, calc(100svh - 380px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))); }
-  #sm-scroll { flex: 0 0 170px; }
-  #sm-say { flex: 0 0 52px; border-bottom: 1px solid var(--line); }
-  body.ed-simple #tl-centerline { bottom: auto; height: 170px; }   /* the playhead line spans the clip rows only, not #sm-say or the docked panel */
+  body.ed-simple { --stage-h: max(180px, calc(100svh - 380px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))); }
+  #sm-scroll { flex: 0 0 222px; }
+  body.ed-simple #tl-centerline { bottom: auto; height: 222px; }   /* the playhead line spans the clip rows only, not the bar */
 }
-@media (min-width: 701px) { body.ed-simple #tl-centerline { bottom: 40px; } }   /* …and stops above PC's #sm-say */
 
 /* ═══ SIMPLE MODE, PHASE 2.1 — the lines' buttons, the pulse, the busy state (BUILD-PLAN-PHASE2.md §3) ═════════════════════
    Every rule is keyed on an element or a class only Simple makes (#sm-say, .sm-item, body.sm-running), so Full matches none. */
@@ -12591,10 +12597,10 @@ body.ed-simple #sm-sections .sm-item, body.ed-simple #sm-sections .sm-grip, body
 #sm-say .sm-say-b + .sm-say-b { margin-left: -2px; }
 #sm-say .sm-say-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* SU1 (unconfirmed, r2-06a-mp4-1s.jpg): a line that must be read whole — a file that would not load, by its name and why — wraps instead of
-   trailing off in an ellipsis (js/simple-timeline.js sayLine opts.wrap): up to 3 lines in the phone's 52 px row (3 × 15.6 px), 2 in PC's 40. */
+   trailing off in an ellipsis (js/simple-timeline.js sayLine opts.wrap): up to 3 lines on a phone (3 × 15.6 px), 2 on a PC. Since #1243 S3
+   the line floats with its bottom on the bar's top, so a wrapping line grows upward and never over a tool. */
 #sm-say.sm-say-wrap .sm-say-t { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 @media (min-width: 701px) { #sm-say.sm-say-wrap .sm-say-t { -webkit-line-clamp: 2; } }
-@media (max-width: 700px) { #sm-say.sm-say-has-b { padding-right: 56px; } }   /* §3.12 rule 5: 🗑's 56 px stay free of buttons */
 .sm-item.sm-pulse { animation: sm-pulse .6s ease; }
 @keyframes sm-pulse { 0% { box-shadow: inset 0 0 0 2px #fff, 0 0 0 0 rgba(255,255,255,.7); } 100% { box-shadow: inset 0 0 0 2px #fff, 0 0 0 10px rgba(255,255,255,0); } }
 @media (prefers-reduced-motion: reduce) { .sm-item.sm-pulse { animation: none; outline: 2px solid #fff; } }
@@ -12606,11 +12612,9 @@ body.sm-running #sm-timeline, body.sm-running #stage, body.sm-running #inspector
    .sm-band, .sm-band-hint) or on body.ed-simple, so Full matches none of them. */
 #sm-bar { display: none; }
 body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; background: var(--panel); }
-#sm-say { padding: 0; }
-#sm-say .sm-line { display: none; flex: 1 1 auto; min-width: 0; align-items: center; gap: 10px; padding: 0 12px; height: 100%; }
+#sm-say .sm-line { display: none; flex: 1 1 auto; min-width: 0; align-items: center; gap: 10px; padding: 0 12px; height: auto; min-height: 36px; }
 #sm-say.sm-saying .sm-line { display: flex; }
-#sm-say.sm-saying #sm-tray { display: none; }
-#sm-tray { display: flex; align-items: stretch; flex: 1 1 auto; min-width: 0; height: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+#sm-tray { display: flex; align-items: stretch; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 #sm-tray::-webkit-scrollbar { display: none; }
 .sm-tool { position: relative; flex: 0 0 auto; min-width: 54px; padding: 0 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   border: 0; background: transparent; color: var(--text); font: 600 10px/1.1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -12628,7 +12632,7 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
    fit. The fades are inside the strip's box and take no pointer events, so they never cover or catch a tap meant for a pin. */
 .sm-pins { position: relative; z-index: 1; margin-left: auto; flex: 0 0 auto; display: flex; align-items: stretch; background: var(--panel); }
 .sm-pins .sm-tool.sm-pin { position: relative; margin-left: 0; padding-left: 6px; background: none; }
-#sm-tray > .sm-runbox { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; }
+#sm-tray > .sm-runbox, #sm-tools > .sm-runbox { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; }   /* #1243 S15: the project row is a strip too */
 .sm-run { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; }
 .sm-run::-webkit-scrollbar { display: none; }
 .sm-fade { position: absolute; top: 0; bottom: 0; width: 28px; z-index: 1; pointer-events: none; opacity: 0; transition: opacity .15s ease; }
@@ -12637,17 +12641,69 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
 .sm-runbox.sm-more-s > .sm-fade-s, .sm-runbox.sm-more-e > .sm-fade-e { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .sm-fade { transition: none; } }
 .sm-quiet { display: flex; align-items: center; padding: 0 12px; font: 600 12.5px/1 system-ui, sans-serif; color: var(--text-dim); white-space: nowrap; }
-/* 2.7 (SU1 #13): the first-run hint is longer than the row is wide at 380 and in the PC band, so it may take two lines of the 52 px
-   row; while it shows, ✂ wears the clip's own selection outline (.sm-item.sel), held, not animated, until the first tap */
-#sm-tray .sm-quiet.sm-hint { white-space: normal; line-height: 1.3; }
-body.ed-simple #btn-sm-split.sm-hinted { box-shadow: inset 0 0 0 2px #fff, 0 0 0 1px #000; }
 #sm-tray.sm-tray-len { align-items: center; }   /* a row (Speed, Volume, Fade) in the tray; Length's typed field went with Length (#1243 S25) */
-#sm-tools { display: flex; align-items: stretch; flex: 0 0 56px; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: content-box; }
-#sm-tools .sm-tool { flex: 1 1 0; min-width: 0; }
+/* #1243 S8: Captions › Caption looks. Each tile shows its look on a sample line, on a dark chip so a white caption reads on the panel; a
+   little wider than the 64 px floor so the line fits on one row; the look's name under it as every tool's is. */
+#sm-tray .sm-tool.sm-caplook { flex: 0 0 96px; min-width: 96px; }
+.sm-caplook-s { display: block; max-width: 88px; margin: 0 auto 3px; padding: 3px 6px; border-radius: 6px; background: #22262e;
+  font-size: 13px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: clip; pointer-events: none; }
+.sm-caplook[aria-pressed="true"] .sm-caplook-s { box-shadow: 0 0 0 2px var(--accent); }
+/* #1243 S8: Overlay › Your media. A tile per photo or video he has imported: its picture (filled in when the library has made it; a dark
+   frame until then) over its name, cut to the tile's width. */
+#sm-tray .sm-tool.sm-libtile { flex: 0 0 80px; min-width: 80px; }
+.sm-libtile-img { display: block; width: 64px; height: 40px; margin: 0 auto 3px; border-radius: 5px; object-fit: cover; background: #22262e; pointer-events: none; }
+.sm-libtile .sm-tool-l { display: block; max-width: 74px; margin: 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#sm-tools { display: flex; align-items: stretch; }
+/* #1243 S15 (his words: "don't just keep condensing it, like make it like CapCut where you can scroll it"): the project tools spread
+   when they all fit and never shrink below 64 px; past that the row scrolls in its strip, the cut-off last tool and the end fade the
+   only "more" cue (6 × 64 = 384 at 380, so Effects is just cut; the PC band's 371 px overflows by about 13 and 420 spreads them) */
+#sm-tools .sm-tool { flex: 1 0 64px; min-width: 64px; box-sizing: border-box; }
 .sm-menu { position: fixed; z-index: 120; min-width: 210px; padding: 6px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line);
   box-shadow: 0 16px 40px rgba(0,0,0,.5); display: flex; flex-direction: column; }
 .sm-menu-i { min-height: 44px; text-align: left; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: 600 14px/1 system-ui, sans-serif; cursor: pointer; }
 .sm-menu-i:hover, .sm-menu-i:focus-visible { background: rgba(255,255,255,.07); }
+/* ═══ #1243 S3 · S9 · S15 · rule 3 (release 4): ONE BAR, FOUR MODES, ONE STRIP, ONE SHEET LINE ═════════════════════════════════════
+   His words (8 Nov): "when you actually tap on a layer, that first row goes away", "I don't want two menus at once", "make it like
+   CapCut where you can scroll it". #sm-bar is ONE 56 px row (and its 1 px edge and the safe area) whose contents swap by
+   [data-mode] (js/simple-tools.js sync): the project tools only in project mode, the tray (the selection's tools, or a sub-row) only in
+   item and sub mode, and nothing in panel mode, where the bar is 0 px tall and the panel has the room. The row's height never changes,
+   so nothing above it moves. Simple's spoken lines and the first-run hint FLOAT as a 44 px strip just above the bar (absolute, so they
+   take no layout: no tool moves, and none is ever under a line). Every rule hangs on body.ed-simple or an element only Simple makes
+   (#sm-bar and what is in it, .sm-back, .sm-pback, .sm-hint), so Full matches none of them. */
+body.ed-simple #sm-bar { position: relative; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
+#sm-tray, #sm-tools { flex: 0 0 56px; height: 56px; box-sizing: border-box; }
+body.ed-simple #sm-bar:not([data-mode="project"]) > #sm-tools { display: none; }
+body.ed-simple #sm-bar:not([data-mode="item"]):not([data-mode="sub"]) > #sm-tray { display: none; }
+body.ed-simple #sm-bar[data-mode="panel"] { border-top: 0; padding-bottom: 0; }
+/* …but at the bottom of the PC band the bar keeps the safe area, the band's only one: with it at 0 a panel and the floating line ran under
+   a landscape phone's home indicator (956×440, viewport-fit=cover; the 9 Nov review, FG-1). 0 on a desktop, so the bar is still 0 px there. */
+body.ed-simple #inspector-panel > #sm-bar[data-mode="panel"] { border-top: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+body.ed-simple #sm-tray .sm-run input[type="range"] { touch-action: none; }   /* a slider in a pan-x strip keeps its own drag */
+body.ed-simple #sm-tray.sm-tray-len > .sm-runbox { align-self: stretch; }
+body.ed-simple #sm-tray.sm-tray-len .sm-run { align-items: center; }
+/* THE ‹s: a sub-row's (a .sm-tool, ids rowBack / fxBack) and an item's (not a tool), 44 px wide — the tray's finger floor — and the
+   row's whole height; a panel's sits in that panel's own first row (Look's tabs, Edit lines' top row, the PC band's title row) */
+#sm-tray > .sm-back { position: relative; flex: 0 0 44px; width: 44px; min-width: 44px; padding: 0; box-sizing: border-box; align-self: stretch;
+  display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--text); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#sm-tray > .sm-back .sm-ico { width: 22px; height: 22px; flex: none; }
+body.ed-simple #inspector-panel > .panel-title > .sm-pback,
+.sm-look-tabs > .sm-pback, .sm-cap-top > .sm-pback { flex: 0 0 44px; min-width: 44px; min-height: 32px; padding: 0; border: 0; background: transparent; color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-pback svg { width: 22px; height: 22px; }
+body.ed-simple #inspector-panel > .panel-title > .sm-pback { margin-left: -10px; }   /* into the row's 14 px padding: the ‹ sits at the band's edge */
+/* THE FLOATING LINE: its bottom on the bar's top, over the timeline's bottom 44 px on a phone (the sound lane and 12 px of the clip row)
+   and over the band's bottom on a PC; bottom-anchored, so a line that wraps grows upward. A panel's line floats over the stage, just
+   above the phone's sheet line (--sm-sheet-b, js/simple-tools.js). A tap on it does nothing (rule 2); its buttons arm as ever (rule 5). */
+body.ed-simple #sm-bar > #sm-say { position: absolute; left: 0; right: 0; bottom: 100%; z-index: 25; display: none; min-height: 44px; box-sizing: border-box; padding: 4px 0;
+  align-items: center; background: var(--panel-2); border-top: 1px solid var(--line); box-shadow: 0 -6px 16px rgba(0,0,0,.35); }
+body.ed-simple #sm-bar > #sm-say.sm-saying { display: flex; }
+@media (max-width: 700px) { body.ed-simple #sm-bar[data-mode="panel"] > #sm-say { position: fixed; bottom: var(--sm-sheet-b, 0px); } }
+/* the playhead line stops at the floating strip's top (222 − 44) while a line or the hint is up */
+@media (max-width: 700px) { body.ed-simple:has(#sm-say.sm-saying) #tl-centerline, body.ed-simple:has(#sm-bar > .sm-hint) #tl-centerline { height: 178px; } }
+/* THE FIRST-RUN HINT floats the same way, under a line if one comes, and takes no pointer events: the first tap reaches what is under it */
+body.ed-simple #sm-bar > .sm-hint { position: absolute; left: 0; right: 0; bottom: 100%; z-index: 24; pointer-events: none; min-height: 44px; box-sizing: border-box;
+  display: flex; align-items: center; padding: 4px 12px; background: var(--panel-2); border-top: 1px solid var(--line);
+  font: 600 12.5px/1.3 system-ui, sans-serif; color: var(--text-dim); }
+body.ed-simple #sm-bar:has(> #sm-say.sm-saying) > .sm-hint { display: none; }
 /* #1243 S37: the end of the video is a line across every row (only when something runs past it), and the part of an item past it is hatched in
    that item's own row. It replaces the black band, whose label was cut to "Black C" and whose tap could do nothing. */
 #sm-timeline .sm-endline { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #aeb8c8; opacity: .75; z-index: 4; pointer-events: none; }
@@ -12655,29 +12711,24 @@ body.ed-simple #btn-sm-split.sm-hinted { box-shadow: inset 0 0 0 2px #fff, 0 0 0
 #sm-timeline .sm-more.sm-more-past::before { content: ''; position: absolute; inset: -10px -6px; }   /* the chip is 24 px tall: the finger's target is 44 */
 #sm-timeline .sm-item .sm-past { position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; background: repeating-linear-gradient(135deg, rgba(8,11,16,.62) 0 5px, rgba(8,11,16,.2) 5px 10px); }
 .sm-band-hint { padding: 16px; color: var(--text-dim); font: 600 13px/1.4 system-ui, sans-serif; }
-/* §3.12 rule 5 at EVERY width (980 review finding 23): from 2.2 the PC line also takes the tray's place in the band, so 🗑's
-   56 px stay free of buttons there too — a re-click where 🗑 was pressed Do it anyway and deleted a locked clip */
-#sm-say.sm-say-has-b { padding-right: 0; } #sm-say.sm-say-has-b .sm-line { padding-right: 56px; }
+/* (§3.12 rule 5's 56 px kept free of buttons over 🗑, finding 23, went with #1243 S3: the line floats above the bar now, so it never
+   lies where a tool was pressed, and a second click where 🗑 was meets the bar's own row, which tool()'s double-click guard holds.) */
 @media (min-width: 701px) {
-  body.ed-simple #tl-centerline { bottom: 0; }                                  /* #sm-say left the timeline for the band */
+  body.ed-simple #tl-centerline { bottom: 0; }                                  /* the bar left the timeline for the band */
   #inspector-panel > #sm-bar { border-top: 1px solid var(--line); }
-  body.ed-simple #sm-say { flex-basis: 52px; border-top: 0; }
 }
 /* THE PC TRAY ON TWO ROWS — HIS PICK B (6 Oct, "do reconmended"; tools/design/plans/simple-mode/p22-review-shots/
-   sheet-tray-pc.jpg). js/simple-tools.js sets .sm-tray-2 / .sm-two on PC only, for a tray of more than five tools and never
-   while More's panel is open (that panel keeps the band's room; the tray is then today's one row): ceil(n/2)
-   columns (--sm-cols), every tool on show, More and 🗑 in the last two places of the second row (with an odd count the gap
-   falls before More, so 🗑 keeps the corner the phone and the one-row tray give it). The band is one row taller only while it
-   holds two; a line takes the TOP row, and 🗑 is always in the second, so no button lands where it was (finding 23).
-   Columns are as wide as their words need and share the rest evenly, so a label never runs out of its button. */
+   sheet-tray-pc.jpg). js/simple-tools.js sets .sm-tray-2 on PC only, for a tray of more than five tools and never
+   while More's panel is open: ceil(n/2) columns (--sm-cols), every tool on show, More and 🗑 in the last two places of the second
+   row (with an odd count the gap falls before More, so 🗑 keeps the corner the phone and the one-row tray give it). The bar is one
+   row taller only while it holds two (until #1243 R's release 8 makes it one scrolling row). Columns are as wide as their words
+   need and share the rest evenly, so a label never runs out of its button. */
 /* Simple mode Phase 3, sheet 1 question 1, pick B (6 Nov, under his 21 Oct rule): Simple's band is the design's wider one on a PC
    (DESIGN §8.3 (1)), so a video clip's eleven tools lie on two rows of six (js/simple-tools.js TWO_ROW_MAX). Full keeps its own. */
 @media (min-width: 701px) {
   body.ed-simple { --insp-w: clamp(372px, 26vw, 420px); }
 }
 @media (min-width: 701px) {
-  body.ed-simple #sm-say.sm-two { flex-basis: 104px; align-items: flex-start; }
-  #sm-say.sm-two .sm-line { height: 52px; }
   #sm-tray.sm-tray-2 { display: grid; grid-template-columns: repeat(var(--sm-cols, 4), minmax(min-content, 1fr)); grid-template-rows: 52px 52px; }
   #sm-tray.sm-tray-2 .sm-tool { min-width: 44px; padding: 0 3px; }   /* 2.3: 3, not 4 — Replace joined the picture tray, and ten tools at 960 px wide were 2 px over the band */
   #sm-tray.sm-tray-2 .sm-tool[data-tool="more"] { grid-column-start: -3; }
@@ -12688,21 +12739,15 @@ body.ed-simple #btn-sm-split.sm-hinted { box-shadow: inset 0 0 0 2px #fff, 0 0 0
   @media (max-width: 1100px) {
     #sm-tray.sm-tray-2 .sm-tool, #sm-tray.sm-tray-2 .sm-tool.sm-pin { padding-left: 2px; padding-right: 2px; }
   }
-  /* the band above loses a row: its words keep one whole line, with nothing to scroll (1280×720 leaves it ~37 px) */
-  #inspector-panel:has(#sm-say.sm-two) #inspector:has(> .sm-band-hint) { padding-bottom: 0; }
-  #inspector-panel:has(#sm-say.sm-two) .sm-band-hint { padding-top: 6px; padding-bottom: 6px; }
+  /* the band above loses a row: its words keep one whole line, with nothing to scroll */
+  body.ed-simple #inspector-panel:has(#sm-tray.sm-tray-2) #inspector:has(> .sm-band-hint) { padding-bottom: 0; }
+  body.ed-simple #inspector-panel:has(#sm-tray.sm-tray-2) .sm-band-hint { padding-top: 6px; padding-bottom: 6px; }
+  /* #1243 S3: the two rows are the bar itself now (1 + 104 px), and the item's ‹ is their first column, both rows tall: five columns in
+     the 372 px band are (371 − 44) / 5 ≈ 65 px each, Duplicate's face about 53 */
+  #sm-tray.sm-tray-2 { flex-basis: 104px; height: 104px; grid-template-columns: 44px repeat(var(--sm-cols, 4), minmax(min-content, 1fr)); }
+  #sm-tray.sm-tray-2 > .sm-back { grid-row: 1 / span 2; grid-column: 1; }
 }
-/* MORE TURNS INTO DONE WHILE ITS PANEL IS OPEN ON A PC (8 Nov, queue 980: the 6 Oct ask, option 3 of
-   tools/design/plans/simple-mode/p22-review-shots/sheet-tray-more-pc.jpg, decided 6 Nov under his 21 Oct rule). js/simple-tools.js
-   gives the pinned More the face Done (.sm-done, in the accent as drawn) and puts a › (.sm-cue) at the tool strip's right end. The ›
-   shows with the end fade (.sm-more-e: tools lie past the edge) and goes once the strip is scrolled to its end; it takes no pointer
-   events and sits inside the strip's box, never over Done or 🗑. Simple only: Full has no tray. */
-body.ed-simple #sm-tray .sm-pins .sm-tool.sm-done { color: var(--accent); }
-body.ed-simple #sm-tray > .sm-runbox > .sm-cue { position: absolute; top: 0; bottom: 0; right: 0; width: 16px; z-index: 2; display: flex; align-items: center; justify-content: center;
-  pointer-events: none; color: var(--accent); opacity: 0; transition: opacity .15s ease; }
-body.ed-simple #sm-tray > .sm-runbox > .sm-cue svg { width: 16px; height: 16px; flex: none; }
-body.ed-simple #sm-tray > .sm-runbox.sm-more-e > .sm-cue { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { body.ed-simple #sm-tray > .sm-runbox > .sm-cue { transition: none; } }
+/* (More turned into Done with a › cue while its panel was open on a PC, 8 Nov: the bar hides while a panel is up since #1243 S9.) */
 
 /* ═══ Simple mode release 2.3: speed, sound and replacing ═══ */
 .sm-twinband { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; pointer-events: none; opacity: .85;
@@ -12843,6 +12888,9 @@ body.sm-dragging { user-select: none; -webkit-user-select: none; cursor: grabbin
    scroll then. Full never matches (body.ed-simple), so its sheet is exactly today's (DESIGN §0.4). */
 @media (max-width: 700px) {
   body.ed-simple #inspector-panel.sm-sheet { display: flex; flex-direction: column; overflow: hidden; }
+  /* #1243 rule 3: the sheet starts AT the stage's bottom edge now, so its upward shadow lay over the bottom 40 px of the picture while
+     Look's filters were being judged (the 9 Nov review, FG-3); its own top edge is the line between them */
+  body.ed-simple #inspector-panel.sm-sheet.open { box-shadow: none; }
   body.ed-simple #inspector-panel.sm-sheet > #insp-grab, body.ed-simple #inspector-panel.sm-sheet > .panel-title { flex: none; }
   body.ed-simple #inspector-panel.sm-sheet > #inspector { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 }

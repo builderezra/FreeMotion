@@ -181,7 +181,7 @@ window.FM = window.FM || {};
          animation alone (its effect ends at 150 ms, so the stylesheet hides it again even before the cancel) */
       anim(full, [{ visibility: 'visible', opacity: 1 }, { visibility: 'visible', opacity: 0 }], { duration: OLD_MS, easing: 'ease-in' }, 'old');
       anim(simple, [{ opacity: 0 }, { opacity: 1 }], { duration: NEW_MS, delay: NEW_AT, easing: 'ease-out', fill: 'backwards' }, 'new');
-      anim($('sm-tools'), [{ transform: 'translateY(100%)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: RISE_MS, delay: RISE_AT, easing: EASE, fill: 'backwards' }, 'rise');
+      anim(['sm-tools', 'sm-tray'].map($).filter(e => e && e.getClientRects().length)[0] || null, [{ transform: 'translateY(100%)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: RISE_MS, delay: RISE_AT, easing: EASE, fill: 'backwards' }, 'rise');   // #1243 S3: the bar's one row on show (the project row, or the selection's tray)
     } else {
       ghost(s, L, anim);
       anim(full, [{ opacity: 0 }, { opacity: 1 }], { duration: NEW_MS, delay: NEW_AT, easing: 'ease-out', fill: 'backwards' }, 'new');

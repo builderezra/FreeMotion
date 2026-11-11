@@ -10648,6 +10648,9 @@ window.FM = window.FM || {};
         /* …and the motion path, for the same reason: its overlay is a canvas edit mode, and Escape used to
            deselect the layer underneath it. */
         if (FM.motionPath && FM.motionPath.isActive && FM.motionPath.isActive() && FM.motionPath.stop) { FM.motionPath.stop(); return; }
+        /* #1243 S9: Simple's bar rows (Clips, Sound, Captions, Speed…) and its PC panels go back one level (js/simple-tools.js escape(),
+           which answers false whenever Simple is not on screen, so Full goes on to inspector.back() exactly as before) */
+        if (FM.simpleTools && FM.simpleTools.escape && FM.simpleTools.escape()) return;
         if (FM.inspector && FM.inspector.back) FM.inspector.back();
       }
       else if (e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD') {

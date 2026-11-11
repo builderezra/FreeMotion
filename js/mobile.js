@@ -274,9 +274,13 @@ window.FM = window.FM || {};
        "Close clip options". The 49px the row occupied goes back to the options grid, which is what he
        asked for: the sheet still docks in the same place and covers the same area, with more of the
        cards visible inside it. A stale row from a previous session is removed on sight. */
+    /* #1243 rule 3: THE SHEET LINE. On a phone every Simple panel runs from the stage's bottom edge to the bottom of the screen. Read off the
+       page, as syncAddSheetTop reads the Add sheet's top. Only Simple calls it (dockSheet's smDock branch and js/simple-tools.js). */
+    function sheetLine() { if (!isPhone()) return 0; var st = document.getElementById('stage'); return st ? Math.max(0, Math.round(st.getBoundingClientRect().bottom)) : 0; }
     function dockSheet() {
-      /* SIMPLE MODE P1 (§14.2): in Simple the sheet docks under #sm-say, the row below the Simple timeline, so the sections,
-         the clips, the sound and any line stay in view above it (Full docks under its one solo row, which Simple never shows). */
+      /* SIMPLE MODE (#1243 rule 3, his words 8 Nov: "when you open up any of these sub menus, I want the first menu to go away"): in Simple
+         the sheet docks at the sheet line, the stage's bottom edge, and covers the play row, the timeline and the bar, whose job is done
+         while a panel is up; the stage keeps its size (styles.css). Full docks under its one solo row, which Simple never shows. */
       const smDock = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.simpleTimeline && document.body.classList.contains('sm-has-sel') && (FM.selectionIds ? FM.selectionIds().length === 1 : true));
       /* SU1 #5 (refers to #980): Simple's docked sheet scrolls its BODY (#inspector), not its frame — styles.css, the
          `#inspector-panel.sm-sheet` block, says why. Marked here, where the sheet becomes Simple's, and taken off here for Full's
@@ -284,8 +288,8 @@ window.FM = window.FM || {};
          the sheet is still laid out as Full's; and the CSS also asks for body.ed-simple, so it can never shape Full's sheet. */
       insp.classList.toggle('sm-sheet', isPhone() && smDock);
       if (isPhone() && smDock) {
-        const b = FM.simpleTimeline.dockBottom();
-        if (b > 0) { insp.style.top = Math.min(Math.round(b + 4), window.innerHeight - 120) + 'px'; insp.style.maxHeight = 'none'; return; }   // Simple's stage clamp leaves ≥ 200 px here on a screen ≥ 694 px tall; below that its 180 px floor wins (168 px at 380×667)
+        const b = sheetLine();
+        if (b > 0) { insp.style.top = Math.min(b, window.innerHeight - 120) + 'px'; insp.style.maxHeight = 'none'; return; }   // 328 px of panel at 380×800, 328 at 320×568 (the line at 240); the 120 px floor is a guard
       }
       if (!isPhone() || !document.body.classList.contains('m-editing')) { insp.style.top = ''; insp.style.maxHeight = ''; return; }
       const stale = document.getElementById('insp-done');   // queue 835: a row built before this change
@@ -842,6 +846,7 @@ window.FM = window.FM || {};
     window.addEventListener('resize', function () { if (!isPhone()) { close(); closeAdd(); document.body.classList.remove('m-editing'); insp.style.top = ''; insp.style.maxHeight = ''; } else { syncAddSheetTop(); } });
 
     FM.mobile = { open: open, close: close, toggle: toggle, isPhone: isPhone, openAdd: openAdd, closeAdd: closeAdd, syncAddSheetTop: syncAddSheetTop,
+      sheetLine: sheetLine,   // #1243 rule 3: read only by Simple (js/simple-tools.js); Full never calls it
       /* Simple's More only (js/simple-tools.js openPanel): a deliberate ask for the panel undoes an earlier swipe-away of it, which
          otherwise held for that selection and left More dead (980 review finding 20). Full never calls it. */
       unlatch: function () { userClosed = false; } };

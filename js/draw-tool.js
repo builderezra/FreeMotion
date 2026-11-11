@@ -696,6 +696,11 @@ window.FM = window.FM || {};
   }
 
   function stop() {
+    /* #1243 S17 (Simple's Text › Draw): a ONE-SHOT hook told which drawing the session made, on EVERY way out (Done and Enter come through
+       finish(), Close and Escape straight here), so the caller can place it. Taken before the session forgets it, cleared before it runs
+       (a hook that throws can never fire twice), and null in Full — whose Sketching is exactly as it was. Nothing here touches history. */
+    var endHook = FM.drawTool.onEnd, endId = sessionLayerId;
+    FM.drawTool.onEnd = null;
     strokes = [];
     sessionLayerId = null; sessionSubs = []; histPast = []; histFuture = [];   // a new drawing starts a new layer (queue 167) and a fresh history
     erasedLayer = null; erasedAt = null; eraseDirty = false;   // queue 834: a stash belongs to ONE drawing session
@@ -707,6 +712,7 @@ window.FM = window.FM || {};
     document.body.classList.remove('drawing');
     document.body.classList.remove('draw-vector');
     if (FM.resizeCanvas) FM.resizeCanvas();   // the stage shrinks back to its normal share of the window
+    if (typeof endHook === 'function') { try { endHook(endId && FM.layerById(FM.scene, endId) ? endId : null); } catch (e) {} }
   }
 
 

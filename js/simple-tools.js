@@ -1,16 +1,21 @@
-/* FreeMotion — FM.simpleTools: the Simple editor's two rows (Simple mode Phase 2, DESIGN.md §8.2, §8.3, §8.5; his D10).
+/* FreeMotion — FM.simpleTools: the Simple editor's bar (Simple mode Phase 2, DESIGN.md §8.2, §8.3, §8.5; #1243 S3, S9, S15).
  *
- * THE TRAY ROW (#sm-tray, inside #sm-say): the selected item's tools; with nothing selected, one quiet line ("4 clips ·
- * 0:15"), or once per device the first-run hint in its place (§7.3 step 4). #sm-say's lines take the same 52 px row for a
- * moment (§3.12), so nothing appears, disappears or moves. On PC a tray of more than five tools lies on TWO such rows (his
- * pick B, 6 Oct; one again while More's panel is open, with More turned into Done and a › cue, 8 Nov), and a line takes the top one.
- * THE PROJECT TOOLS ROW (#sm-tools): Clips · Text · Sound · Overlay — it never goes away (D10 A). Phase 3 adds Captions,
- * Look for all, Effects and Ask to the same row (and Add effect to a title's and an overlay's tray).
- * Phone: both rows sit under the Simple timeline; a tool that needs a panel opens today's panel docked under the tray
- * (js/mobile.js dockSheet). PC: both rows sit at the bottom of the left band, the panel above them (D20 A, his pick).
+ * ONE BAR, ONE 56 px ROW, FOUR MODES (#1243 R rule 1; his words, 8 Nov: "when you actually tap on a layer, that first row goes
+ * away", and "I don't want two menus at once"). #sm-bar[data-mode]:
+ *   project — nothing selected: the project tools (#sm-tools), Clips · Text · Captions · Sound · Overlay · Effects;
+ *   item    — the selection's tools (#sm-tray), a ‹ first that clears the selection;
+ *   sub     — a row that replaces the bar (#sm-tray again): a ‹ back one level, then that row's choices (Clips, Sound,
+ *             Captions, the effects pickers, Audio, Speed, Volume, Fade, Strength, Transition — the SUBS table);
+ *   panel   — a panel is up (More, Look, Edit lines, Extras): the bar hides, the panel has the room.
+ * Every row is one strip that scrolls sideways with fades at the edge that hides tools (S15: "make it like CapCut where you
+ * can scroll it"), never squeezed. Simple's spoken lines float as a 44 px strip just above the bar (#sm-say), so nothing moves.
+ * On PC a tray of more than five tools still lies on TWO rows (his pick B, 6 Oct) until #1243 R's release 8.
+ * Phone: the bar sits under the Simple timeline, and a panel runs from the stage's bottom edge to the bottom of the screen
+ * (#1243 R rule 3, js/mobile.js sheetLine); the stage never shrinks. PC: the bar sits at the bottom of the left band, and a
+ * panel takes the whole band while the bar hides (D20 A, his pick).
  *
- * One home per control (§8.5, his #310): Split is the play bar's ✂, Close all gaps is Simple's ⋯, Add clips is the clip
- * row's + and Clips. Every command goes through FM.spine.cmd, so it is one undo step and refuses with a line when it must.
+ * One home per control (§8.5, his #310): Split is the first of every item's own tools (#1243 S5, no ✂ on the play row), Close all
+ * gaps is in the Clips row (no ⋯ in Simple since S5), Add clips is the clip row's + and Clips. Every command goes through FM.spine.cmd, so it is one undo step and refuses with a line when it must.
  * Built with createElement / textContent; the icons are fixed SVG strings (the D16 A set, tools/design/.../vis/kit.js).
  */
 window.FM = window.FM || {};
@@ -22,6 +27,8 @@ window.FM = window.FM || {};
     music: '<path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/>',
     overlay: '<rect x="3" y="3" width="13" height="13" rx="2"/><rect x="8" y="8" width="13" height="13" rx="2" fill="currentColor" fill-opacity=".22"/>',
     cutend: '<path d="M3.5 12H14M11 9l3 3-3 3"/><path d="M18 5v14"/>',
+    /* #1243 S5: Split, the play row's ✂ drawing (index.html had it there until Split moved onto the item's tools) */
+    split: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.5 15.5M8.5 8.5L20 20"/>',
     lift: '<path d="M12 15V5M8 9l4-4 4 4M5 19.5h14"/>',
     drop: '<path d="M12 5v10M8 11l4 4 4-4M5 19.5h14"/>',
     duplicate: '<rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><path d="M7 13V9a2 2 0 0 1 2-2h4"/>',
@@ -64,21 +71,24 @@ window.FM = window.FM || {};
   const svg = n => '<svg viewBox="0 0 24 24" class="sm-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICON[n] || ICON.more) + '</svg>';
   const W = () => (FM.spineWords && FM.spineWords.tools) || {};
   const phone = window.matchMedia ? window.matchMedia('(max-width: 700px)') : { matches: false };
-  let bar = null, sayEl = null, tray = null, tools = null, menu = null;
+  let bar = null, tray = null, tools = null, menu = null;
   let panelFor = null, lastSig = '', lastSel = null;
-  let rowFor = null, rowLast = '';   // 2.3: the inline row open on the tray ({kind: 'speed' | 'volume' | 'fade', id}), and the tool that opened it (focus goes back there)
+  /* #1243 S9: THE SUB-ROW ON THE BAR ({key: a SUBS key, id: the item it acts on or null, from: the sub ‹ returns to, sel: the
+     selection it was opened with — any other selection closes it}); the data-tool focus goes to after a ‹ */
+  let subFor = null, backTo = '';
+  const ROW_KEYS = new Set(['audio', 'speed', 'volume', 'fade', 'transition', 'strength']);   // the item rows rowFor() still names
   let fills = 0, lastPress = null;   // how many times the tray was refilled; the tool a pointer's last single click pressed
+  let rowN = 0;                      // how many times the bar has shown another row (_fill): tool()'s double-tap hold (HW5)
   let roomy = false;                 // PC, and the band is tall enough for the tray's two rows (roomForTwo)
-  let hintUp = false;                // 2.7: the first-run hint is in the tray row now (hintLine)
+  let hintUp = false;                // 2.7: the first-run hint floats above the bar now (hintSync)
   /* Phase 3 · Look: which panel panelFor's band / sheet shows ('more' = today's panel, 'look' = Look's own), Look's open tab, a
      slider's live preview to take back ({id, pre}), and where the panel was (its strip's scroll, its own scroll, the control with
      focus) so the redraw after each step leaves it there. stripKey: the tray whose tool strip keeps its scroll across a refill. */
   let panelKind = null, lookTab = 'filters', lookDrag = null, lookSeen = '', lookLeft = 0, lookTop = 0, lookFocus = '', stripKey = '';
   /* Phase 3 · Captions: Edit lines is a third kind of panelFor's panel ('lines'); the layer it last drew and how far it was scrolled */
   let linesSeen = '', linesTop = 0;
-  /* Phase 3 · Effect segments: the effects picker that owns the tray row ({id: the segment Change effect is for, or null for a new
-     one; sel: the selection it was opened with — any other selection closes it}), and the Strength slider's live preview to take back */
-  let fxPick = null, segDrag = null;
+  /* Phase 3 · Effect segments: the Strength slider's live preview to take back (the effects pickers are sub-rows since #1243 S9) */
+  let segDrag = null;
   /* TWO ROWS NEED A BAND THAT HOLDS THEM: its title (33), the bar's edge and project tools (1 + 57), both rows (104) and one
      whole line of words above them (#inspector's 4 px top + .sm-band-hint's 6 + 13 × 1.4 + 6, styles.css) — 230 px today.
      MEASURED FROM THE BAND'S OWN PARTS, never a fixed number (checker finding 2): it was 232, the band's CSS floor, but a
@@ -94,12 +104,15 @@ window.FM = window.FM || {};
      if i think its bad"): Simple's band is the design's wider one on a PC (styles.css, DESIGN §8.3 (1), 372-420 px), where six tools
      fit to a row, so a video clip's eleven (and a twelfth when a seam joins them) lie on two rows of six, every one on show. */
   const TWO_ROW_MAX = 12;
+  /* #1243 R release 4: the bar is one row now, so the 58 px its edge and the project row took (the sum this read off the page:
+     the bar less #sm-say) is a constant, and the threshold stays where it was. R's release 8 deletes this with the grid. */
+  const BAR_EDGE_AND_ROW = 58;
   function roomForTwo() {
-    if (phone.matches || !bar || !sayEl) return false;
+    if (phone.matches || !bar) return false;
     const band = document.getElementById('inspector-panel'), insp = document.getElementById('inspector');
     if (!band || !insp || bar.parentNode !== band) return false;
     const hgt = n => n.getBoundingClientRect().height;
-    let need = hgt(bar) - hgt(sayEl) + TWO_ROWS + (parseFloat(getComputedStyle(insp).paddingTop) || 0) + WORDS_LINE;
+    let need = BAR_EDGE_AND_ROW + TWO_ROWS + (parseFloat(getComputedStyle(insp).paddingTop) || 0) + WORDS_LINE;
     for (const c of band.children) if (c !== bar && c !== insp && getComputedStyle(c).position !== 'absolute') need += hgt(c);   // the title row
     return hgt(band) >= Math.ceil(need - 0.01);
   }
@@ -127,12 +140,23 @@ window.FM = window.FM || {};
   }
   function mount() {
     if (bar) return true;
-    bar = document.getElementById('sm-bar'); sayEl = document.getElementById('sm-say');
+    bar = document.getElementById('sm-bar');
     tray = document.getElementById('sm-tray'); tools = document.getElementById('sm-tools');
     if (!bar || !tray || !tools) { bar = null; return false; }
-    if (phone.addEventListener) phone.addEventListener('change', () => { lastSig = ''; FM.simpleTools.sync(); });   // sync places it, or sends it home
+    /* sync places it, or sends it home. The PC band's Extras has no home on a phone (a phone's Extras is the Add sheet): crossing to a
+       phone width with it up gives the Clips row back, or the bar sat in panel mode with no panel and no way back (the 9 Nov review, MODE-2) */
+    if (phone.addEventListener) phone.addEventListener('change', () => {
+      if (phone.matches && extrasOpen) { extrasOpen = false; extrasMark(); if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); }
+      lastSig = ''; FM.simpleTools.sync();
+    });
     if (FM.editor && FM.editor.onChange) FM.editor.onChange(m => {
-      if (m !== 'simple') { home(); hintUp = false; splitMark(false); fxPick = null; segUndrag(); extrasOpen = false; extrasSheetOff(); growTo(false); }   // nothing else runs sync() in Full (Phase 3 · Effect segments: the picker closes, a Strength preview is taken back; · Clips › Extras: it closes)
+      /* nothing else runs sync() in Full (Phase 3 · Effect segments: a Strength preview is taken back; · Clips › Extras: it closes; #1243 S9:
+         the sub-row closes, and the bar's mode, the band title's ‹ and the floating hint go, so Full's band and #sm-bar are exactly today's) */
+      if (m !== 'simple') { home(); subFor = null; pbackSync(null); segUndrag(); extrasOpen = false; extrasSheetOff(); hintSync('off'); bar.removeAttribute('data-mode'); bar.removeAttribute('data-sub'); bar.style.removeProperty('--sm-sheet-b'); }
+      /* review L1-3 / L3-1 (11 Nov): Full's ⋯ strip (#opt-bar: Loop, preview speed, snapping, marks) is put away on the way INTO Simple.
+         Simple has no ⋯ (S5), so a strip left open in Full sat over Simple's stage with nothing there to close it. Only on entering Simple;
+         Full's ⋯ and its strip are exactly today's. */
+      if (m === 'simple' && FM.closeOptBar) FM.closeOptBar();
       /* …AND THE LEFT PANEL IS REDRAWN FOR THE EDITOR NOW ON SCREEN (queue 980, verify high-inspector). Nothing on the switch
          path redrew #inspector, so Full kept Simple's band words ("Tap a clip to see its tools") in place of its Add menu or
          layer editor, and a phone's sheet stayed shut, until the selection changed; entering Simple kept Full's Add menu
@@ -142,28 +166,34 @@ window.FM = window.FM || {};
       if (FM.syncTopBar) FM.syncTopBar();
       if (FM.updateReadout) FM.updateReadout();   // 2.7 (SU1 #14): the pill's words follow the editor (Simple's 0:03 / 0:12, Full's 00:03:12)
     });
-    /* 2.7 (SU1 #16): Simple's phone stage is taller while no sheet is up (styles.css), and nothing re-measures the preview when only the
-       stage changes size (js/app.js, stageResized). So when that room flips while Simple is on screen — More's panel up or down, or Simple
-       arriving — the preview and the selection box are re-fitted. Leaving Simple calls nothing, so Full is today's. */
-    const roomyNow = () => document.body.classList.contains('ed-simple') && !document.body.classList.contains('insp-open');
-    let roomyStage = roomyNow();
-    if (window.MutationObserver) new MutationObserver(recs => {
-      /* 7B: a drag of either band handle while it is grown (js/app.js sets these classes for the drag's life) — only then can a
-         different height be his; without one, a changed --tl-h is the window's re-clamp of ours (growTo, below). The old values
-         too: a drag that starts and ends in one task has taken its class off again before this runs. */
-      const drag = /(^|\s)(tl|am)-resizing(\s|$)/;
-      if (grow && (drag.test(document.body.className) || recs.some(r => drag.test(r.oldValue || '')))) grow.touched = true;
-      const now = roomyNow();
-      if (now === roomyStage) return;
-      roomyStage = now;
-      if (!document.body.classList.contains('ed-simple')) return;
-      requestAnimationFrame(() => {
-        if (FM.refreshPreviewScale) FM.refreshPreviewScale();
-        if (FM.canvasEdit && FM.canvasEdit.stageResized) FM.canvasEdit.stageResized();
-      });
-    }).observe(document.body, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
-    /* a held second row goes when the line does (rows() below) */
-    if (sayEl && window.MutationObserver) new MutationObserver(fitRows).observe(sayEl, { attributes: true, attributeFilter: ['class'] });
+    /* THE BODY'S CLASSES WHILE SIMPLE IS ON SCREEN (#1243 S9 and rule 3). Entering Simple still resizes the phone stage (Full's 40svh
+       to Simple's 100svh less 380 px), and nothing re-measures the preview when only the stage changes size (js/app.js stageResized), so
+       the preview and the selection box are re-fitted then. More's panel no longer changes the stage (rule 3: the stage never shrinks),
+       so the sheet's insp-open only re-syncs the bar: a grab-bar or swipe close of the phone sheet puts it back in item mode. Opening
+       Home closes a sub-row and Extras. Leaving Simple calls nothing here, so Full is today's. */
+    let wasSimple = document.body.classList.contains('ed-simple'), wasSheet = document.body.classList.contains('insp-open'), wasHome = document.body.classList.contains('home-open');
+    if (window.MutationObserver) new MutationObserver(() => {
+      const b = document.body.classList, s = b.contains('ed-simple'), sh = b.contains('insp-open'), hm = b.contains('home-open');
+      if (s && !wasSimple) requestAnimationFrame(() => { if (FM.refreshPreviewScale) FM.refreshPreviewScale(); if (FM.canvasEdit && FM.canvasEdit.stageResized) FM.canvasEdit.stageResized(); });
+      /* …and Extras as closeExtras closes it, its band drawn again and Clips no longer pressed: the band kept Extras' menu and title under
+         the project row after Home (the 9 Nov review, HW2) */
+      if (s && hm && !wasHome && (subFor || extrasOpen)) {
+        subFor = null; segUndrag();
+        if (extrasOpen) { extrasOpen = false; extrasMark(); if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); }
+        extrasSheetOff();
+      }
+      /* THE PHONE SHEET GOING AWAY UNCOVERS THE PLAY ROW AND THE TIMELINE under the finger that closed it (the 9 Nov review, MODE-4):
+         armShut holds the next real press there for 450 ms, as armSheet holds one on a panel that has just risen. Only when a real press
+         on the sheet closed it (its grab bar, a swipe, a ‹: sheetPressAt, noted below): a sheet that goes for any other reason (an undo,
+         a selection made elsewhere) has no finger on it, and holding the timeline's next press then would only eat a real tap. */
+      if (s && wasSheet && !sh && performance.now() - sheetPressAt < 1000) armShut();
+      if (s && (sh !== wasSheet || hm !== wasHome)) { lastSig = ''; FM.simpleTools.sync(); }
+      wasSimple = s; wasSheet = sh; wasHome = hm;
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    /* …and the phone's Add sheet, which holds Extras there (a panel: the bar hides while it is up, and the Clips row is back when it goes).
+       In Full the callback runs and does nothing. */
+    const addSh = document.getElementById('add-sheet');
+    if (addSh && window.MutationObserver) new MutationObserver(() => { if (isSimple()) { lastSig = ''; FM.simpleTools.sync(); } }).observe(addSh, { attributes: true, attributeFilter: ['class'] });
     /* …and the rows follow the band's height: a window resize, or the divider's drag (it writes --tl-h on <html>) */
     const reroom = () => {
       if (!bar || !isSimple() || !FM.selectionIds || FM.selectionIds().length !== 1) return;   // only one item's tools ever take two rows
@@ -174,8 +204,11 @@ window.FM = window.FM || {};
     /* 2.7 (#545): More transition controls flipped in Settings while Simple is on screen: the ◇s and an open Transition row are drawn
        again at once (the tray's signature carries the switch too). Any other setting changing does nothing here. */
     if (FM.settings && FM.settings.onChange) {
-      let ex = trExtras();
+      let ex = trExtras(), dm = demoOn();
       FM.settings.onChange(() => {
+        /* review L4-1: Demo mode flipped with Your media open redraws that row (its signature carries the switch); nothing else here */
+        const d = demoOn();
+        if (d !== dm) { dm = d; if (isSimple() && subFor && subFor.key === 'yourmedia') FM.simpleTools.sync(); }
         const now = trExtras();
         if (now === ex) return;
         ex = now; lastSig = '';
@@ -183,22 +216,17 @@ window.FM = window.FM || {};
       });
     }
     buildTools();
-    /* Simple's ⋯ (§8.2): Close all gaps when there is one, then everything else in Full's own ⋯ strip. Capture phase, and
-       only while Simple is on screen, so Full's ⋯ is exactly today's. */
-    const opts = document.getElementById('btn-opts');
-    if (opts) opts.addEventListener('click', e => {
-      if (!isSimple() || FM._smOptsPass) return;
-      /* the lit ⋯ shuts the Loop / preview speed strip it opened, as in Full (review finding 28): the tap goes to Full's toggle */
-      const ob = document.getElementById('opt-bar');
-      if (ob && FM.sideBarOpen && FM.sideBarOpen(ob)) { closeMenu(); return; }
-      e.stopImmediatePropagation(); e.preventDefault(); optsMenu(opts);
-    }, true);
+    /* #1243 S5 (his words: "for the play button row, get rid of the playback options… just so that row is really simple"): Simple has
+       no ⋯ any more (styles.css hides it in Simple; Full's is untouched). Its Close all gaps and Sort by date taken are in the Clips row,
+       and Loop and preview speed stays Full's. #1243 S34 A: LINK takes the play row's first place, one switch for the whole project. */
+    const lk = document.getElementById('btn-sm-link');
+    if (lk) lk.addEventListener('click', () => { if (isSimple() && FM.spine && FM.spine.cmd && FM.spine.linkMode) FM.spine.cmd.link(!FM.spine.linkMode()); });
     document.addEventListener('pointerdown', e => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
-    /* 2.7 (SU1 #13): the first-run hint goes on the first tap anywhere, and only then is it remembered (hintLine) */
+    /* 2.7 (SU1 #13): the first-run hint goes on the first tap anywhere, and only then is it remembered (hintSync) */
     window.addEventListener('pointerdown', () => { if (hintUp && isSimple()) dismissHint(); }, true);
     /* 2.7 (SU1 #20, his "2A" 14 Oct): SIMPLE'S EXPORT IS ONE SHORT LIST, not Full's dialog (120 fps, Custom, "Export just this layer",
-       the loop region). Capture phase on the button both editors share (the phone's ⬆ clicks it), only while Simple is on screen, as
-       Simple's ⋯ does. Pressed again it closes the list, as Full's button closes its dialog (queue 925): the outside-tap close above runs
+       the loop region). Capture phase on the button both editors share (the phone's ⬆ clicks it), only while Simple is on screen (as
+       Simple's ⋯ did until #1243 S5 took it off the play row). Pressed again it closes the list, as Full's button closes its dialog (queue 925): the outside-tap close above runs
        first on a press, so the press remembers whether the list was up. */
     const xb = document.getElementById('btn-export');
     let xUpAt = 0;
@@ -210,18 +238,24 @@ window.FM = window.FM || {};
       exportMenu(['m-export', 'btn-export'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length) || xb);
     }, true);
     /* A PLAIN MOUSE WHEEL SCROLLS THE TRAY SIDEWAYS (review finding 22, his #976: "on pc without trackpad there seems to be no
-       way to slide"). Only a vertical wheel over a tray that overflows, and only while it can still move; a trackpad's own
+       way to slide"). Only a vertical wheel over a row that overflows, and only while it can still move; a trackpad's own
        sideways swipe and a finger are left to the browser. Since SU1 #15 a one-row tray scrolls in its tool strip (.sm-run),
-       not the tray, so the wheel moves whichever of the two is the scroller. */
-    tray.addEventListener('wheel', e => {
-      if (!e.deltaY || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
-      const sc = scroller(), max = sc.scrollWidth - sc.clientWidth; if (max <= 0) return;
-      const to = Math.max(0, Math.min(max, sc.scrollLeft + e.deltaY));
-      if (to === sc.scrollLeft) return;
-      e.preventDefault(); sc.scrollLeft = to;
-    }, { passive: false });
+       not the tray, so the wheel moves whichever of the two is the scroller; since #1243 S15 the project row is a strip too. */
+    function wheelOn(host) {
+      host.addEventListener('wheel', e => {
+        if (!e.deltaY || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+        const sc = host.querySelector(':scope > .sm-runbox > .sm-run') || host, max = sc.scrollWidth - sc.clientWidth; if (max <= 0) return;
+        const to = Math.max(0, Math.min(max, sc.scrollLeft + e.deltaY));
+        if (to === sc.scrollLeft) return;
+        e.preventDefault(); sc.scrollLeft = to;
+      }, { passive: false });
+    }
+    wheelOn(tray); wheelOn(tools);
     /* Phase 3 · Look: the panel is drawn again after every step it takes, so it remembers which of its controls had focus and how
        far it was scrolled. These only note things, and only for Look's own controls (data-look); nothing here acts in Full. */
+    /* when a real press last came down on the phone's sheet (armShut asks): passive, and it notes nothing in Full */
+    const ipanel = document.getElementById('inspector-panel');
+    if (ipanel) ipanel.addEventListener('pointerdown', e => { if (e.isTrusted && isSimple()) sheetPressAt = performance.now(); }, { capture: true, passive: true });
     const insp = document.getElementById('inspector');
     if (insp) {
       insp.addEventListener('focusin', e => { if (!isSimple()) return; const t = e.target; lookFocus = (t && t.dataset && t.dataset.look) || ''; });
@@ -231,10 +265,10 @@ window.FM = window.FM || {};
     return true;
   }
   function tool(t) {
-    const b = el('button', 'sm-tool' + (t.pin ? ' sm-pin' : ''));
+    const b = el('button', t.cls || ('sm-tool' + (t.pin ? ' sm-pin' : '')));   // t.cls: the ‹s (#1243 S9)
     b.type = 'button'; b.dataset.tool = t.id;
     b.innerHTML = t.icon === null ? '' : svg(t.icon);                 // a fixed string, never user data (null: a text-only tool, a speed preset)
-    b.appendChild(el('span', 'sm-tool-l', t.label));
+    if (t.label) b.appendChild(el('span', 'sm-tool-l', t.label));    // a ‹ is its icon alone
     /* the accessible name STARTS with the words on the face (WCAG 2.5.3 Label in Name, review finding 30): "Into row, Put in the
        clip row", so Voice Control's "tap Into row" finds it; a full name that already contains the face word is kept as is */
     const face = String(t.label || ''), full = String(t.title || '');
@@ -253,7 +287,14 @@ window.FM = window.FM || {};
          Fix too — every seam closed, with Fix never on screen when he clicked (checker finding 1). */
       const key = t.key || t.id;
       if (e.detail >= 2 && lastPress && lastPress.fill !== fills && lastPress.key !== key) return;
-      if (e.detail >= 1) lastPress = { key: key, fill: fills };
+      /* …AND A TOUCH'S SECOND TAP, WHICH MAY COUNT 1 (the 9 Nov review, HW5): since #1243 S3 and S9 every press that changes the row puts
+         another tool under the finger (the item ‹ → Clips, Clips → the row's ‹, Text → Edit words, Speed's ‹ → Audio's), and a tap's
+         click is not sure to count to 2 like a mouse's (nor is a real input driver's). So a REAL pointer press on the bar within 450 ms of
+         the row changing under the last press, at the same place, on another tool, is the double tap's second half and does nothing.
+         Keyboard presses (detail 0) and script clicks are never held. */
+      if (e.isTrusted && e.detail >= 1 && lastPress && lastPress.key !== key && lastPress.row !== rowN && performance.now() - lastPress.at < 450 &&
+          Math.abs(e.clientX - lastPress.x) < 24 && Math.abs(e.clientY - lastPress.y) < 24) return;
+      if (e.detail >= 1) lastPress = { key: key, fill: fills, row: rowN, at: performance.now(), x: e.clientX, y: e.clientY };
       if (b.getAttribute('aria-disabled') === 'true') { if (t.why && FM.spine) FM.spine.say(t.why); return; }
       closeMenu(); t.run(b, e);
     });
@@ -280,42 +321,175 @@ window.FM = window.FM || {};
       { label: after, fn: () => pick('video/*,image/*,audio/*', true, f => S.cmd.insert(f, j)) }
     ] });
   }
-  function soundTool(b) {
+  /* ═══ #1243 S9: THE PROJECT TOOLS' OWN ROWS. Clips, Sound and Captions opened a small floating list over the bar; now each opens a
+     sub-row that takes the bar's place (his words: "when you open up any of these sub menus, I want the first menu to go away"), with
+     exactly the choices the lists had, as text-only tools (no new glyphs: #1243 S8 draws these rows with their options later). A
+     choice that acts closes the sub-row first, as the list closed on a pick. ═══ */
+  function closeSub() { subFor = null; lastSig = ''; FM.simpleTools.sync(); }
+  /* Clips: Add clips (the picker, or At the end / After Clip N with the playhead inside the clips) and Extras, a panel that keeps the row
+     under it. #1243 S5 (R's Clips row): then what the play row's ⋯ used to hold, Close all gaps while there is a gap or an overlap, and
+     Sort by date taken while at least two clips of the row carry a capture date (2.4b, §3.6) */
+  function clipsRow(R, s, run) {
+    const w = W(), S = FM.spine;
+    const out = [{ id: 'addClips', label: w.addClips || 'Add clips', icon: null, run: () => { closeSub(); clipsTool(); } },
+                 { id: 'extras', label: w.extras || 'Extras', icon: null, title: w.extrasTitle, run: () => FM.simpleTools.openExtras() }];
+    if (R.main.some(e => e.seam && !e.seam.covered && (e.seam.kind === 'gap' || e.seam.kind === 'overlap'))) out.push({ id: 'closeAll', label: w.closeAll || 'Close all gaps', icon: null, run: () => { closeSub(); S.cmd.closeAll(); } });
+    if (R.main.filter(e => !e.slot && Number.isFinite(+((FM.layerById(FM.scene, e.id) || {}).taken))).length >= 2) out.push({ id: 'sortDate', label: w.sortByDate || 'Sort by date taken', icon: null, run: () => { closeSub(); S.cmd.sortByDate(); } });
+    out.forEach(t => run.appendChild(tool(t)));
+  }
+  function soundRow(R, s, run) {
     const w = W();
-    openMenu(b, [
-      { label: w.music || 'Music from your files', run: () => pick('audio/*,video/*', true, f => FM.spine.cmd.addMusic(f)) },
-      { label: w.sfx || 'Sound effects', run: () => { if (FM.sfx && FM.sfx.open) FM.sfx.open(); } },
-      { label: w.voice || 'Record voice', run: () => { if (FM.voiceRec && FM.voiceRec.open) FM.voiceRec.open(); } }
-    ]);
+    [{ id: 'music', label: w.music || 'Music from your files', icon: null, run: () => { closeSub(); pick('audio/*,video/*', true, f => FM.spine.cmd.addMusic(f)); } },
+     { id: 'sfx', label: w.sfx || 'Sound effects', icon: null, run: () => { closeSub(); if (FM.sfx && FM.sfx.open) FM.sfx.open(); } },
+     { id: 'voice', label: w.voice || 'Record voice', icon: null, run: () => { closeSub(); if (FM.voiceRec && FM.voiceRec.open) FM.voiceRec.open(); } }]
+      .forEach(t => run.appendChild(tool(t)));
   }
-  /* Phase 3 · CAPTIONS (DESIGN §8.5 "Type captions · Find speech · Style"): a small list like Sound's. Type captions adds a line at the
-     playhead and opens the text editor on it; Find speech listens to the selected clip or sound when it has sound (read now, at the tap),
-     else to the clips; Style, once there is a caption track, opens today's panel for the one under the playhead (else the first). */
-  function captionsTool(b) {
-    const w = W(), S = FM.spine, sel = FM.selectionIds ? FM.selectionIds() : [], from = sel.length === 1 ? sel[0] : null;
-    const isTrack = l => !!l && l.type === 'text' && Array.isArray(l.captions);
-    const T = S.captionTrackAt(FM.time || 0) || FM.scene.layers.find(isTrack) || null;
-    const items = [
-      { label: w.typeCaptions || 'Type captions', run: () => S.cmd.captionAdd() },
-      { label: w.findSpeech || 'Find speech', run: () => S.cmd.findSpeech({ from: from }) }
+  /* Phase 3 · CAPTIONS (DESIGN §8.5 "Type captions · Find speech · Style"). Type captions adds a line at the playhead and opens the text
+     editor on it; Find speech listens to the clips, then to the other sounds one at a time if the clips say nothing (S.speechSources);
+     Style, once there is a caption track, opens today's panel for the one under the playhead (else the first).
+     #1243 S3 (the 9 Nov review, HW1): Captions is on the project row, which shows only with nothing selected, and its row closes on a
+     selection, so Find speech can no longer be pointed at ONE selected clip or sound: it listens as it does with nothing selected. A
+     caption track's own Find speech listens again under that track. (One-item Find speech needs a home in a tray: #1243 S8/S33.)
+     MODE-7: the row stays up while the playhead moves, so Style finds its track when it is pressed, not when the row was drawn. */
+  const isCapTrack = l => !!l && l.type === 'text' && Array.isArray(l.captions);
+  const capTrackNow = () => FM.spine.captionTrackAt(FM.time || 0) || FM.scene.layers.find(isCapTrack) || null;
+  function captionsRow(R, s, run) {
+    const w = W(), S = FM.spine;
+    const out = [
+      { id: 'capType', label: w.typeCaptions || 'Type captions', icon: null, run: () => { closeSub(); S.cmd.captionAdd(); } },
+      { id: 'capFind', label: w.findSpeech || 'Find speech', icon: null, title: w.findSpeechTitle, run: () => { closeSub(); S.cmd.findSpeech({ from: null }); } },
+      /* #1243 S8 (R (a) "Captions: Find speech · Type captions · Caption looks"): a row of looks for the track under the playhead; with no
+         track yet it rests and says how to make one */
+      { id: 'capLooks', label: w.capLooksRow || 'Caption looks', icon: null, title: w.capLooksTitle, disabled: !capTrackNow(), why: w.capLooksNone, run: () => FM.simpleTools.openSub('caplooks', null, 'captions') }
     ];
-    if (T) items.push({ label: w.capStyle || 'Style', run: () => { FM.selectLayer(T.id); FM.simpleTools.openPanel(T.id); } });
-    openMenu(b, items);
-    if (menu) menu.setAttribute('aria-label', w.captions || 'Captions');
+    /* KNOWN DEVIATION from 1243-R (review L3-7, 11 Nov): R's decision 3 drops Style from this row once Caption looks is in ("Captions drops
+       Style and gains Caption looks"). It is still here, so the row has two doors to the captions' style; taking it out is left for R's
+       own release, not done quietly in this one. */
+    if (capTrackNow()) out.push({ id: 'capStyleTrack', label: w.capStyle || 'Style', icon: null, title: w.capStyleTitle, run: () => { const T = capTrackNow(); if (!T) return; FM.selectLayer(T.id); FM.simpleTools.openPanel(T.id); } });
+    out.forEach(t => run.appendChild(tool(t)));
   }
+  /* #1243 S8: CAPTION LOOKS (S.CAPTION_LOOKS, js/spine-edit.js). Each tile wears its look on a sample line drawn by the page (font, weight,
+     slant, colour and outline as the track will; the word-by-word looks light their middle word the way the Word Highlight lights a spoken
+     one); the track's own canvas shows the real thing the moment it is tapped. The track is the one under the playhead when the tile is
+     pressed (capTrackNow, as Style finds it: MODE-7), and the look it wears now is pressed. Fixed strings only, never user data. */
+  /* #1243 S8: TEXT'S ROW — Add text (what Text did until now), Title looks and Draw (his S17: "in the text menu… you can draw") */
+  function textRow(R, s, run) {
+    const w = W();
+    [{ id: 'addText', label: w.addText || 'Add text', icon: null, run: () => { closeSub(); FM.spine.cmd.addText(); } },
+     { id: 'titleLooks', label: w.titleLooksRow || 'Title looks', icon: null, title: w.titleLooksTitle, run: () => FM.simpleTools.openSub('titlelooks', null, 'text') },
+     { id: 'draw', label: w.draw || 'Draw', icon: null, title: w.drawTitle, run: () => { closeSub(); startDrawing(); } }]
+      .forEach(t => run.appendChild(tool(t)));
+  }
+  /* #1243 S17: DRAW is Full's own Sketching (js/draw-tool.js, its bar, its brush, its per-stroke undo). Simple adds one thing: on every way out
+     of the sketch (Done, Enter, Close, Escape) draw-tool.js's one-shot onEnd hands back the drawing it made, and Simple places it as a new
+     overlay (FM.spine.cmd.placeDrawing). A sketch that never started leaves no hook behind, and a sketch with no stroke places nothing. */
+  function startDrawing() {
+    if (!FM.startDraw || !FM.drawTool) return;
+    FM.drawTool.onEnd = id => { if (id && isSimple() && FM.spine && FM.spine.cmd) FM.spine.cmd.placeDrawing(id); };
+    FM.startDraw('freehand');
+    if (!FM.drawTool.active) FM.drawTool.onEnd = null;
+  }
+  /* #1243 S8: OVERLAY'S ROW — Photo or video (the ONLY door to the native picker now) and Your media (what this device has imported before,
+     js/medialib.js: no picker, no round trip through the Photos app); Your media rests, saying why, until something has been imported.
+     (Stickers, his S16, is a later release: the research comes first.) */
+  function overlayRow(R, s, run) {
+    const w = W(), has = FM.spine.libraryVisuals ? FM.spine.libraryVisuals().length > 0 : false;
+    [{ id: 'photoVideo', label: w.photoVideo || 'Photo or video', icon: null, run: () => { closeSub(); pick('video/*,image/*', true, f => FM.spine.cmd.addOverlay(f)); } },
+     { id: 'yourMedia', label: w.yourMedia || 'Your media', icon: null, title: w.yourMediaTitle, disabled: !has, why: w.yourMediaNone, run: () => FM.simpleTools.openSub('yourmedia', null, 'overlay') }]
+      .forEach(t => run.appendChild(tool(t)));
+  }
+  /* …and YOUR MEDIA: one tile per photo or video in the library, newest first, its thumbnail filled in when it is ready (FM.mediaLib.getThumb,
+     an image the app made itself) and its name as text. A tap goes through FM.mediaLib.use — every one-stored-copy rule there (queue 915) —
+     and Simple places the record it read (FM.spine.cmd.addOverlayRec): one step, at the playhead, in its band. */
+  /* review L4-1 (11 Nov): DEMO MODE, as Full's Add menu honours it (addmenu.js: "Hides your photo and video previews (and their filenames)
+     in the Add menu — so a screen recording never shows your camera roll"): each tile reads Photo or Video and shows no frame */
+  function demoOn() { return !!(FM.settings && FM.settings.get && FM.settings.get('demoMode')); }
+  function yourMediaFill(R, s, run) {
+    const w = W(), lib = FM.mediaLib, list = FM.spine.libraryVisuals ? FM.spine.libraryVisuals() : [], hide = demoOn();
+    list.slice(0, 60).forEach(e => {
+      const kindWord = e.kind === 'image' ? (w.aPhoto || 'Photo') : (w.aVideo || 'Video');
+      const b = tool({ id: 'media:' + e.mid, cls: 'sm-tool sm-libtile', label: String(hide ? kindWord : (e.name || kindWord)).slice(0, 40), icon: null,
+        run: () => { closeSub(); useTile(lib, e.mid); } });
+      const im = el('img', 'sm-libtile-img'); im.alt = ''; im.decoding = 'async';
+      b.insertBefore(im, b.firstChild);
+      if (!hide && lib && lib.getThumb) lib.getThumb(e.mid).then(u => { if (typeof u === 'string' && /^data:image\//.test(u) && im.isConnected) im.src = u; }).catch(() => {});   // only the app's own picture
+      run.appendChild(b);
+    });
+  }
+  /* review L1-1 / L3-2 / L4-2 (11 Nov): THE SWITCH IS HELD SHUT while the library reads, copies and decodes the file (S.reading, as afterRead
+     holds it for the picker: review finding 10), and the record is placed only while Simple is still the editor. A first reuse writes the
+     whole file ("Preparing…", seconds on a phone); without the hold the cog's switch went through and Simple's Add overlay step ran in Full.
+     If Simple is somehow gone by then, place refuses (false) and the library lets the record go: nothing lands in Full. */
+  function useTile(lib, mid) {
+    if (!lib || !lib.use) return Promise.resolve(false);
+    const S = FM.spine;
+    S.reading = (S.reading || 0) + 1;
+    let p;
+    try { p = Promise.resolve(lib.use(mid, { place: rec => isSimple() ? S.cmd.addOverlayRec(rec) : false })); }
+    catch (x) { p = Promise.resolve(false); }
+    return p.finally(() => { S.reading = Math.max(0, (S.reading || 1) - 1); });
+  }
+  /* …and TITLE LOOKS (S.TITLE_LOOKS, js/spine-edit.js): each tile wears its type on a sample word; a tap adds a new title at the playhead in
+     that look, one step, and opens it for typing, as Add text does. Its entrance plays on the canvas. */
+  function titleLooksFill(R, s, run) {
+    const S = FM.spine, w = W(), names = w.titleLooks || {};
+    (S.TITLE_LOOKS || []).forEach(look => {
+      const b = tool({ id: 'title:' + look.key, cls: 'sm-tool sm-caplook', label: names[look.key] || look.key, icon: null,
+        run: () => { closeSub(); S.cmd.addText(look.key); } });
+      b.insertBefore(capLookSample(look, w.titleLookSample || 'Title'), b.firstChild);
+      run.appendChild(b);
+    });
+  }
+  function capLookSample(look, sample) {
+    const w = W(), t = look.text, h = look.hl, s = el('span', 'sm-caplook-s');
+    s.style.fontFamily = t.fontFamily; s.style.fontWeight = t.bold ? '700' : '400'; s.style.fontStyle = t.italic ? 'italic' : 'normal'; s.style.color = t.color;
+    if (t.stroke && t.stroke.enabled) s.style.webkitTextStroke = Math.max(0.6, t.stroke.width / 7).toFixed(1) + 'px ' + t.stroke.color;
+    if (t.letterSpacing) s.style.letterSpacing = Math.min(3, t.letterSpacing / 4) + 'px';   // the look's spacing, scaled to a 13 px sample
+    const words = String(sample || w.capLookSample || 'Every word').split(' ');
+    words.forEach((wd, i) => {
+      const on = !!h && i === Math.min(1, words.length - 1), p = el('span', on ? 'sm-caplook-on' : '', wd);
+      if (on && h.style === 0) p.style.color = h.color;
+      if (on && h.style === 1 && h.unit !== 2) { p.style.background = h.boxcolor; p.style.borderRadius = '4px'; p.style.padding = '0 3px'; }
+      if (on && h.style === 2) { p.style.textDecoration = 'underline'; p.style.textDecorationColor = h.color; p.style.textDecorationThickness = '2px'; }
+      if (on && h.style === 3) { p.style.display = 'inline-block'; p.style.transform = 'scale(' + ((h.grow || 120) / 100) + ')'; }
+      s.appendChild(p); if (i < words.length - 1) s.appendChild(document.createTextNode(' '));
+    });
+    if (h && h.unit === 2) { s.style.background = h.boxcolor; s.style.borderRadius = '4px'; s.style.padding = '1px 5px'; }
+    return s;
+  }
+  let capKeyDrawn = '';   // the track and look the open Caption looks row was drawn for (timeMoved, review L3-6)
+  let splitDrawn = null;   // whether the line was inside the one selected item when its tray was drawn (timeMoved, the 11 Nov verifiers' V2)
+  function capLooksFill(R, s, run) {
+    const S = FM.spine, w = W(), names = w.capLooks || {}, T = capTrackNow(), cur = T && S.captionLookOf ? S.captionLookOf(T) : '';
+    capKeyDrawn = T ? T.id + '/' + cur : '';
+    (S.CAPTION_LOOKS || []).forEach(look => {
+      const b = tool({ id: 'look:' + look.key, cls: 'sm-tool sm-caplook', label: names[look.key] || look.key, icon: null, pressed: cur === look.key,
+        run: () => { const tr = capTrackNow(); if (!tr) { S.say(w.capLooksNone || ''); return; } S.cmd.captionLook(tr.id, look.key); } });
+      b.insertBefore(capLookSample(look), b.firstChild);
+      run.appendChild(b);
+    });
+  }
+  /* THE PROJECT ROW (§8.5) is one strip that scrolls sideways (#1243 S15, his words: "don't just keep condensing it, like make it like
+     CapCut where you can scroll it"): every tool at least 64 px, spreading when they all fit, a fade on the edge that hides more. Built
+     once, so its scroll is kept across the trips to the other modes. */
   function buildTools() {
     const w = W();
     tools.textContent = '';
-    /* Phase 3 · Clips › Extras: Clips opens a short list, Add clips (what Clips did until now) and Extras (DESIGN §8.5, D21 A) */
-    [{ id: 'clips', label: w.clips || 'Clips', icon: 'clips', title: w.clipsTitle, run: b => clipsMenu(b) },
-     { id: 'text', label: w.text || 'Text', icon: 'text', run: () => FM.spine.cmd.addText() },
+    const run = strip(tools);
+    /* Phase 3 · Clips › Extras: Clips opens its row, Add clips (what Clips did until Phase 3) and Extras (DESIGN §8.5, D21 A) */
+    [{ id: 'clips', label: w.clips || 'Clips', icon: 'clips', title: w.clipsTitle, run: () => FM.simpleTools.openSub('clips') },
+     /* #1243 S8 (R (a) "Text | sub | Add text · Title looks · Draw"): Text opens its own row, as Clips, Captions and Sound do */
+     { id: 'text', label: w.text || 'Text', icon: 'text', title: w.textTitle, run: () => FM.simpleTools.openSub('text') },
      /* Phase 3 · Captions, in the design's order (§8.5) */
-     { id: 'captions', label: w.captions || 'Captions', icon: 'captions', title: w.captionsTitle, run: captionsTool },
-     { id: 'sound', label: w.sound || 'Sound', icon: 'music', run: soundTool },
-     { id: 'overlay', label: w.overlay || 'Overlay', icon: 'overlay', run: () => pick('video/*,image/*', true, f => FM.spine.cmd.addOverlay(f)) },
-     /* Phase 3 · Effect segments (§8.5, §8.5c item 2): a new whole-frame segment at the playhead, picked first in the tray row */
+     { id: 'captions', label: w.captions || 'Captions', icon: 'captions', title: w.captionsTitle, run: () => FM.simpleTools.openSub('captions') },
+     { id: 'sound', label: w.sound || 'Sound', icon: 'music', run: () => FM.simpleTools.openSub('sound') },
+     /* #1243 S8 (his words: "when you click overlay, it… shows up the iOS menu… it should open up to another menu and then you press a
+        button from there"): Overlay opens its own row; the native picker opens only from its Photo or video */
+     { id: 'overlay', label: w.overlay || 'Overlay', icon: 'overlay', run: () => FM.simpleTools.openSub('overlay') },
+     /* Phase 3 · Effect segments (§8.5, §8.5c item 2): a new whole-frame segment at the playhead, picked first in its own row */
      { id: 'effects', label: w.effects || 'Effects', icon: 'effects', title: w.effectsTitle, run: () => FM.simpleTools.openEffects(null) }
-    ].forEach(t => tools.appendChild(tool(t)));
+    ].forEach(t => run.appendChild(tool(t)));
+    edges(run);
   }
 
   /* ═══ THE TRAY (§8.5): the selected item's tools, the tools that define its kind first, 🗑 pinned at the right end. ═══ */
@@ -331,6 +505,12 @@ window.FM = window.FM || {};
     list.splice(at < 0 ? list.length : at, 0, cut);
     return list;
   }
+  /* the line is inside this item, by S.planSplit's own test (the frame-snapped time; start ≤ t < end): Split rests outside it */
+  function splitAt(l) {
+    if (!l) return false;
+    const t = FM.snapFrame ? FM.snapFrame(FM.time || 0) : (FM.time || 0), s = +l.start || 0, e = s + (+l.duration || 0);
+    return t >= s && t < e;
+  }
   function trayItems(R, id) {
     const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), u = R.units[id];
     if (!l) return [];
@@ -338,7 +518,17 @@ window.FM = window.FM || {};
     const del = { id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (R.isMain(id)) S.cmd.del(id); else if (S.cmd.deleteItems) S.cmd.deleteItems([id]); else if (FM.deleteLayer) FM.deleteLayer(id); } };
     const stayOn = !!(l.sm && l.sm.stay);
     const withW = withWords(R, id);   // Phase 3 · Clips › Extras: a layer that moves with the rest of its element says so, in Stay put's name too
-    const stay = { id: 'stay', label: w.stay || 'Stay put', icon: 'pin', title: withW ? (w.stay || 'Stay put') + ' · ' + withW : undefined, pressed: stayOn, run: () => S.cmd.stay(id, !stayOn) };
+    /* #1243 S34 A: with Link off everything stays put already, so Stay put rests (greyed, and a press says why) until Link is back on */
+    const linked = !S.linkMode || S.linkMode();
+    const stay = { id: 'stay', label: w.stay || 'Stay put', icon: 'pin', title: withW ? (w.stay || 'Stay put') + ' · ' + withW : undefined, pressed: stayOn, disabled: !linked, why: w.stayUnlinked, run: () => S.cmd.stay(id, !stayOn) };
+    /* #1243 S5 (his words: "Get rid of the split button… put the split button on the row that pops up when you have a layer selected"):
+       Split is the FIRST tool of a clip, a picture, an overlay, a text and a sound. It splits THIS item at the line (review L3-3, 11 Nov:
+       on an item's own row it is the only tool that acted on a different item, re-selecting the clip under the line and splitting that).
+       With the line outside the item, Split RESTS (the 11 Nov verifiers' V2: a live-looking first tool that only refused was SU1 #11's old
+       complaint back again): greyed, and a press says S.planSplit's own 'splitOff' line ("Move the playhead onto the clip to split") and
+       changes nothing. splitAt() is planSplit's own test; sync's signature carries it and timeMoved redraws the tray when the line crosses
+       the item's edge. The S key keeps its own rule (FM.editor.splitHere: the clip under the line when the selected clip is not under it). */
+    const splitT = { id: 'split', label: w.split || 'Split', icon: 'split', title: w.splitTitle, disabled: !splitAt(l), why: (FM.spineWords.lines || {}).splitOff, run: () => S.cmd.split(id) };
     const more = { id: 'more', label: w.more || 'More', icon: 'more', title: w.moreTitle, run: (b, e) => FM.simpleTools.togglePanel(id, e) };
     const crop = { id: 'crop', label: w.crop || 'Crop', icon: 'crop', run: () => { if (FM.cropTool && FM.cropTool.start) FM.cropTool.start(id); } };
     /* 2.3: the sound and speed tools. A video has all of them; a picture has only Replace; a sound has Volume, Fade and Speed. */
@@ -365,6 +555,7 @@ window.FM = window.FM || {};
          (a clip too short for them gets them outside its edges, simple-timeline.js drawGrips), and the keyboard keeps Alt+←/→ and A/D
          (editor-mode.js) for anyone who cannot drag. */
       const out = [
+        splitT,
         ...(isVid ? [audioT] : []),
         ...(l.type === 'video' || l.type === 'image' ? [lookT] : []),
         { id: 'lift', label: w.lift || 'Lift off', icon: 'lift', title: w.liftTitle, run: () => S.cmd.lift(id) },
@@ -385,7 +576,7 @@ window.FM = window.FM || {};
       return out;
     }
     const k = u ? u.kind : '';
-    if (k === 'text') return [{ id: 'editwords', label: w.editWords || 'Edit words', icon: 'editwords', run: () => { if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(id, { selectAll: true }); } }, addFxT, stay, more, del];   // Phase 3 · Effects on an item: Add effect after Edit words (§8.5's text tray order)
+    if (k === 'text') return [splitT, { id: 'editwords', label: w.editWords || 'Edit words', icon: 'editwords', run: () => { if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(id, { selectAll: true }); } }, addFxT, stay, more, del];   // Phase 3 · Effects on an item: Add effect after Edit words (§8.5's text tray order)
     /* Phase 3 · Captions (DESIGN §8.5 caption track tray, the D16 A kit's VIS.ITEM_TRAYS.captions): Edit lines opens the lines in the
        panel's place; Style is today's panel for the track (its font, colour and plate: the role More had here); Find speech listens
        again for this track; the last two are ONE two-way choice, a pressed pair (§8.9 "Follows the clips / Stays with the sound") */
@@ -397,19 +588,22 @@ window.FM = window.FM || {};
         { id: 'findspeech', label: w.findSpeech || 'Find speech', icon: 'findspeech', title: w.findSpeechTitle, run: () => S.cmd.findSpeech({ trackId: id }) },
         /* short words on a phone (sheet 1 question 3, pick B, 6 Nov under his 21 Oct rule): every tool on show with no swipe; the
            long words stay where they help, on a PC and in the accessible name (tool() keeps the title, which contains the face) */
-        { id: 'capfollow', label: phone.matches ? (w.capFollowShort || 'Follows') : (w.capFollow || 'Follows the clips'), icon: 'link', title: w.capFollowTitle || w.capFollow || 'Follows the clips', pressed: !stays, run: () => { if (stays) S.cmd.captionStay(id, false); } },
-        { id: 'capstay', label: phone.matches ? (w.capStayShort || 'Stays') : (w.capStay || 'Stays with the sound'), icon: 'pin', title: w.capStayTitle || w.capStay || 'Stays with the sound', pressed: stays, run: () => { if (!stays) S.cmd.captionStay(id, true); } },
+        /* #1243 S34 A: with Link off the pair rests, as Stay put does (a track follows nothing then) */
+        { id: 'capfollow', label: phone.matches ? (w.capFollowShort || 'Follows') : (w.capFollow || 'Follows the clips'), icon: 'link', title: w.capFollowTitle || w.capFollow || 'Follows the clips', pressed: !stays, disabled: !linked, why: w.stayUnlinked, run: () => { if (stays) S.cmd.captionStay(id, false); } },
+        { id: 'capstay', label: phone.matches ? (w.capStayShort || 'Stays') : (w.capStay || 'Stays with the sound'), icon: 'pin', title: w.capStayTitle || w.capStay || 'Stays with the sound', pressed: stays, disabled: !linked, why: w.stayUnlinked, run: () => { if (!stays) S.cmd.captionStay(id, true); } },
         del];
     }
     /* 2.4b: the opt-in volume rider (§3.10 rule 3), offered only on a sound that stays put AND has a volume curve to carry */
-    const rideT = { id: 'rideVol', label: w.rideVol || 'Follow clips', icon: 'volume', title: w.rideVolTitle || 'Keep volume changes with the clips', pressed: !!(l.sm && l.sm.rideVol), run: () => S.cmd.rideVol(id, !(l.sm && l.sm.rideVol)) };
+    /* review L3-5 (11 Nov): with Link off it rests like Stay put and the caption pair (the volume rider does not ride then, riderPlan) */
+    const rideT = { id: 'rideVol', label: w.rideVol || 'Follow clips', icon: 'volume', title: w.rideVolTitle || 'Keep volume changes with the clips', pressed: !!(l.sm && l.sm.rideVol), disabled: !linked, why: w.stayUnlinked, run: () => S.cmd.rideVol(id, !(l.sm && l.sm.rideVol)) };
     const hasCurve = !!(FM.isAnimated && (FM.isAnimated(l.volume) || FM.isAnimated(l.transform && l.transform.opacity)));
-    if (k === 'audio') return [volumeT, fadeT, ...(l.type === 'video' ? [speedT] : []), stay, ...(stayOn && hasCurve ? [rideT] : []), more, del];
+    if (k === 'audio') return [splitT, volumeT, fadeT, ...(l.type === 'video' ? [speedT] : []), stay, ...(stayOn && hasCurve ? [rideT] : []), more, del];
     if (k === 'effect') return segmentTray(id, l, stay, more);   // Phase 3 · Effect segments: Change effect · Strength · Stay put · More · 🗑
     if (k === 'block' || k === 'fullOnly') return [{ id: 'openFull', label: w.openFull || 'Open in Full', icon: 'editor', run: () => FM.editor && FM.editor.request('full', { hop: true }) }, del];
     if (k === 'undecided') return [];
     const inCard = !!(u && u.host && String(u.host).indexOf('slot:') === 0);   // a card between clips: no Into row until its slot form exists (§3.6)
     return [   // overlays, stickers, pictures, a background
+      splitT,
       ...(inCard ? [] : [{ id: 'into', label: w.into || 'Into row', icon: 'drop', title: w.intoTitle, run: () => S.cmd.intoRow(id) }]),
       ...(isVid ? [volumeT, speedT] : []),
       addFxT,   /* Phase 3 · Effects on an item: after Speed, before Crop (§8.5's overlay tray order) */
@@ -421,69 +615,67 @@ window.FM = window.FM || {};
   /* (Length's row lived here until #1243 S25 took Length off the tray: "you just grab the end and drag it". S.cmd.length and
      S.cmd.trimStartBy stay, for the grips' commands and the keyboard.) */
 
-  /* ═══ RELEASE 2.3: SPEED, VOLUME and FADE are inline rows like Length (the row itself is the panel, so the timeline above never
-     moves). Each commits ONE command on release / press; while a slider moves only the DOM and the playback rate change, so the
-     scene stays exactly as it was until he lets go (and an undo has one step to go back). ═══ */
+  /* ═══ RELEASE 2.3: SPEED, VOLUME and FADE are rows that take the bar's place (the row itself is the panel, so the timeline above
+     never moves). Each commits ONE command on release / press; while a slider moves only the DOM and the playback rate change, so the
+     scene stays exactly as it was until he lets go (and an undo has one step to go back). Since #1243 S9 they are SUBS sub-rows: the
+     ‹ in front of them is drawn by fillTray, and each fill appends into the row's strip (`run`). ═══ */
   const pct = v => Math.round(v * 100);
   const fmtX = sp => (Math.round(sp * 100) / 100) + '×';
-  function rowBack() { return tool({ id: 'rowBack', label: W().done || 'Done', icon: 'back', run: () => { rowLast = rowFor ? rowFor.kind : ''; rowFor = (rowFor && rowFor.from) ? { kind: rowFor.from, id: rowFor.id } : null; lastSig = ''; FM.simpleTools.sync(); } }); }   // S9: Done from Speed or Volume opened inside Audio goes back to Audio
-  function speedRow(R, id) {
-    const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), out = [rowBack()];
-    if (!l) return out;
+  const put = (run, n) => run.appendChild(n.nodeType ? n : tool(n));
+  function speedRow(R, s, run) {
+    const S = FM.spine, w = W(), id = s.id, l = FM.layerById(FM.scene, id);
+    if (!l) return;
     if (FM.isAnimated(l.speed)) {   // a ramp is not one speed: say so, and offer the one way out
-      out.push(el('div', 'sm-quiet', w.speedRamped || 'Speed changes over the clip'));
-      out.push(tool({ id: 'oneSpeed', label: w.useOneSpeed || 'Use one speed', icon: 'speed', run: () => S.cmd.useOneSpeed(id) }));
-      return out;
+      put(run, el('div', 'sm-quiet', w.speedRamped || 'Speed changes over the clip'));
+      put(run, { id: 'oneSpeed', label: w.useOneSpeed || 'Use one speed', icon: 'speed', run: () => S.cmd.useOneSpeed(id) });
+      return;
     }
     const rg = S.speedRange(R, id) || { lo: 0.25, hi: 4 }, now = FM.speedAt(l, +l.start || 0), why = (FM.spineWords.lines || {}).speedShort;
-    [0.5, 1, 1.5, 2, 3].forEach(sp => out.push(tool({ id: 'sp' + sp, label: sp + '×', icon: null, title: (w.speed || 'Speed') + ' ' + sp + '×', pressed: Math.abs(now - sp) < 1e-6, disabled: sp > rg.hi + 1e-9, why: why,
-      run: () => { if (Math.abs(now - sp) > 1e-9) S.cmd.speed(id, sp); } })));
+    [0.5, 1, 1.5, 2, 3].forEach(sp => put(run, { id: 'sp' + sp, label: sp + '×', icon: null, title: (w.speed || 'Speed') + ' ' + sp + '×', pressed: Math.abs(now - sp) < 1e-6, disabled: sp > rg.hi + 1e-9, why: why,
+      run: () => { if (Math.abs(now - sp) > 1e-9) S.cmd.speed(id, sp); } }));
     const val = el('span', 'sm-speed-v', fmtX(now));
     const rng = el('input', 'sm-speed-r'); rng.type = 'range'; rng.min = String(rg.lo); rng.max = String(rg.hi); rng.step = '0.05';
     rng.value = String(Math.max(rg.lo, Math.min(rg.hi, now))); rng.setAttribute('aria-label', w.speedLabel || 'Speed');
     rng.addEventListener('input', () => { const sp = parseFloat(rng.value); val.textContent = fmtX(sp); if (FM.simpleTimeline && FM.simpleTimeline.previewSpeed) FM.simpleTimeline.previewSpeed(id, sp); });
     rng.addEventListener('change', () => { const sp = parseFloat(rng.value); if (FM.simpleTimeline && FM.simpleTimeline.previewSpeed) FM.simpleTimeline.previewSpeed(id, null); if (Math.abs(sp - now) > 1e-9) S.cmd.speed(id, sp); });
-    out.push(rng, val);
-    return out;
+    run.append(rng, val);
   }
-  function volumeRow(R, id) {
-    const S = FM.spine, w = W(), tid = S.soundTargetId(R, id), t = tid && FM.layerById(FM.scene, tid), out = [rowBack()];
-    if (!t) return out;
+  function volumeRow(R, s, run) {
+    const S = FM.spine, w = W(), id = s.id, tid = S.soundTargetId(R, id), t = tid && FM.layerById(FM.scene, tid);
+    if (!t) return;
     const now = (() => { const v = t.volume == null ? 1 : FM.evalProp(t.volume, FM.time); return isFinite(v) ? v : 1; })();
     const val = el('span', 'sm-vol-v', pct(now) + '%');
     const rng = el('input', 'sm-vol-r'); rng.type = 'range'; rng.min = '0'; rng.max = '200'; rng.step = '1'; rng.value = String(Math.min(200, pct(now)));
     rng.setAttribute('aria-label', w.volumeLabel || 'Volume in percent');
     rng.addEventListener('input', () => { const v = parseFloat(rng.value) / 100; val.textContent = pct(v) + '%'; const m = FM.media && FM.media.get(t.id); if (m && m.el) { try { m.el.volume = Math.min(1, v); } catch (e) {} } });
     rng.addEventListener('change', () => { const v = parseFloat(rng.value) / 100; if (Math.abs(v - now) > 0.004) S.cmd.volume(id, v); });
-    out.push(rng, val);
-    return out;
+    run.append(rng, val);
   }
-  function fadeRow(R, id) {
-    const S = FM.spine, w = W(), tid = S.soundTargetId(R, id), t = tid && FM.layerById(FM.scene, tid), out = [rowBack()];
-    if (!t) return out;
+  function fadeRow(R, s, run) {
+    const S = FM.spine, w = W(), id = s.id, tid = S.soundTargetId(R, id), t = tid && FM.layerById(FM.scene, tid);
+    if (!t) return;
     [['in', 'fadeIn', w.fadeIn || 'In'], ['out', 'fadeOut', w.fadeOut || 'Out']].forEach(f => {
       const cur = () => { const L = FM.layerById(FM.scene, tid); return L ? (+L[f[1]] || 0) : 0; };
-      out.push(el('div', 'sm-quiet sm-fade-l', f[2] + ' ' + cur().toFixed(1) + ' s'));
-      out.push(tool({ id: 'fade' + f[0] + 'Minus', label: '−', icon: null, title: f[2] + ': ' + (w.shorter || 'shorter'), run: () => S.cmd.fade(id, f[0], Math.max(0, cur() - 0.5)) }));
-      out.push(tool({ id: 'fade' + f[0] + 'Plus', label: '+', icon: null, title: f[2] + ': ' + (w.longer || 'longer'), run: () => S.cmd.fade(id, f[0], cur() + 0.5) }));
+      put(run, el('div', 'sm-quiet sm-fade-l', f[2] + ' ' + cur().toFixed(1) + ' s'));
+      put(run, { id: 'fade' + f[0] + 'Minus', label: '−', icon: null, title: f[2] + ': ' + (w.shorter || 'shorter'), run: () => S.cmd.fade(id, f[0], Math.max(0, cur() - 0.5)) });
+      put(run, { id: 'fade' + f[0] + 'Plus', label: '+', icon: null, title: f[2] + ': ' + (w.longer || 'longer'), run: () => S.cmd.fade(id, f[0], cur() + 0.5) });
     });
-    return out;
   }
   /* OPTION E (S9, his A1 sheet): a video clip's four sound-and-time tools live in ONE row, opened by one tool, "Audio": Speed, Volume, Reverse, and Take sound out / Put sound back.
      That takes a clip's tray from 13 tools to 10, so it lays out on two rows on a PC with every tool on show, and loses nothing: each one is one tap further. Speed and Volume open
-     their own rows with Done coming back HERE. */
-  function audioRow(R, id) {
-    const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), out = [rowBack()];
-    if (!l) return out;
-    out.push(tool({ id: 'speed', label: w.speed || 'Speed', icon: 'speed', run: () => FM.simpleTools.openRow('speed', id, 'audio') }));
-    out.push(tool({ id: 'volume', label: w.volume || 'Volume', icon: 'volume', run: () => FM.simpleTools.openRow('volume', id, 'audio') }));
-    out.push(tool({ id: 'reverse', label: w.reverse || 'Reverse', icon: 'reverse', pressed: !!l.reversed, run: () => S.cmd.reverse(id) }));
+     their own rows with their ‹ coming back HERE (`from`). */
+  function audioRow(R, s, run) {
+    const S = FM.spine, w = W(), id = s.id, l = FM.layerById(FM.scene, id);
+    if (!l) return;
+    put(run, { id: 'speed', label: w.speed || 'Speed', icon: 'speed', run: () => FM.simpleTools.openRow('speed', id, 'audio') });
+    put(run, { id: 'volume', label: w.volume || 'Volume', icon: 'volume', run: () => FM.simpleTools.openRow('volume', id, 'audio') });
+    put(run, { id: 'reverse', label: w.reverse || 'Reverse', icon: 'reverse', pressed: !!l.reversed, run: () => S.cmd.reverse(id) });
     const hasTwin = (R.followers[id] || []).some(f => S.isTwinOf(FM.layerById(FM.scene, f), l, R.eps));
     /* the sound commands make or remove a layer: the row is drawn again when they are done (the redraw during the command saw a half-done scene, and the sig only changes there), so the button that was pressed turns into its opposite where it was */
-    const again = async p => { const ok = await p; if (FM.layerById(FM.scene, id)) { FM.simpleTools.openRow('audio', id); FM.refreshAll(); } return ok; };
-    if (hasTwin) out.push(tool({ id: 'putSound', label: w.putSound || 'Put sound back', icon: 'soundback', run: () => again(S.cmd.putSoundBack(id)) }));
-    else if (S.canTakeSound(R, id)) out.push(tool({ id: 'takeSound', label: w.takeSound || 'Take sound out', icon: 'soundout', run: () => again(S.cmd.takeSoundOut(id)) }));
-    return out;
+    /* (…unless a panel was opened while it ran: that is the newer press, and a row opened now would close it, MODE-1) */
+    const again = async p => { const ok = await p; if (FM.layerById(FM.scene, id)) { if (!panelFor) FM.simpleTools.openRow('audio', id); FM.refreshAll(); } return ok; };
+    if (hasTwin) put(run, { id: 'putSound', label: w.putSound || 'Put sound back', icon: 'soundback', run: () => again(S.cmd.putSoundBack(id)) });
+    else if (S.canTakeSound(R, id)) put(run, { id: 'takeSound', label: w.takeSound || 'Take sound out', icon: 'soundout', run: () => again(S.cmd.takeSoundOut(id)) });
   }
   /* 2.7 THE TRANSITION ROW (#1122 clause 2, his pick A: tools/design/plans/simple-mode/transition-options/sheet.jpg on
      plans/simple-transitions): opened by the ◇ above a cut (js/simple-timeline.js), for the clip AFTER the cut. Done · None · Crossfade ·
@@ -491,46 +683,92 @@ window.FM = window.FM || {};
      sheet never showed them), once one is set, its length (− and + by 0.1 s, 0.1 to 3 s) and On every cut follow. A type is pressed with
      no length, so a new transition is FM.TR_DEFAULT long and a changed one keeps its own. Each press is one command, one undo step, like
      Speed, Volume and Fade (2.3). */
-  function transitionRow(R, id) {
-    const S = FM.spine, w = W(), out = [rowBack()];
-    if (!FM.layerById(FM.scene, id)) return out;
+  function transitionRow(R, s, run) {
+    const S = FM.spine, w = W(), id = s.id;
+    if (!FM.layerById(FM.scene, id)) return;
     const cur = () => { const L = FM.layerById(FM.scene, id); return L && L.trIn ? L.trIn : null; };
     const types = [['none', w.trNone || 'None'], ['crossfade', w.trCrossfade || 'Crossfade'], ['dipblack', w.trDipBlack || 'Dip to black'], ['dipwhite', w.trDipWhite || 'Dip to white']];
-    types.forEach(t => out.push(tool({ id: 'tr-' + t[0], label: t[1], icon: null, pressed: (cur() ? cur().type : 'none') === t[0], run: () => S.cmd.transition(id, t[0]) })));
+    types.forEach(t => put(run, { id: 'tr-' + t[0], label: t[1], icon: null, pressed: (cur() ? cur().type : 'none') === t[0], run: () => S.cmd.transition(id, t[0]) }));
     if (cur() && trExtras()) {
-      out.push(el('div', 'sm-quiet sm-fade-l', (w.trLength || 'Length') + ' ' + cur().d.toFixed(1) + ' s'));
-      out.push(tool({ id: 'trMinus', label: '−', icon: null, title: w.trShorter || 'Shorter by 0.1 s', run: () => { const c = cur(); if (c) S.cmd.transition(id, c.type, c.d - 0.1); } }));
-      out.push(tool({ id: 'trPlus', label: '+', icon: null, title: w.trLonger || 'Longer by 0.1 s', run: () => { const c = cur(); if (c) S.cmd.transition(id, c.type, c.d + 0.1); } }));
-      out.push(tool({ id: 'trAll', label: w.trEvery || 'On every cut', icon: null, run: () => S.cmd.transitionAll(id) }));
+      put(run, el('div', 'sm-quiet sm-fade-l', (w.trLength || 'Length') + ' ' + cur().d.toFixed(1) + ' s'));
+      put(run, { id: 'trMinus', label: '−', icon: null, title: w.trShorter || 'Shorter by 0.1 s', run: () => { const c = cur(); if (c) S.cmd.transition(id, c.type, c.d - 0.1); } });
+      put(run, { id: 'trPlus', label: '+', icon: null, title: w.trLonger || 'Longer by 0.1 s', run: () => { const c = cur(); if (c) S.cmd.transition(id, c.type, c.d + 0.1); } });
+      put(run, { id: 'trAll', label: w.trEvery || 'On every cut', icon: null, run: () => S.cmd.transitionAll(id) });
     }
-    return out;
   }
-  const ROWS = { speed: speedRow, volume: volumeRow, fade: fadeRow, audio: audioRow, transition: transitionRow };
+  /* ═══ #1243 S9 (R decision 3): ONE SUB-ROW MECHANISM. Every row that takes the bar's place, by its key in subFor: what fills it
+     (fill(R, subFor, run), into the row's strip), the data-tool of the tool that opened it (focus goes back there after its ‹), the ‹'s
+     own id (rowBack, or fxBack for the effects pickers) and its spoken name (the tray's aria-label, from the words file). ═══ */
+  const SUBS = {
+    clips:      { fill: clipsRow,      opener: () => 'clips',    word: 'clips' },
+    sound:      { fill: soundRow,      opener: () => 'sound',    word: 'sound' },
+    captions:   { fill: captionsRow,   opener: () => 'captions', word: 'captions' },
+    caplooks:   { fill: capLooksFill,  opener: () => 'capLooks', word: 'capLooksRow' },   // #1243 S8: Captions › Caption looks (‹ back to Captions)
+    text:       { fill: textRow,       opener: () => 'text',     word: 'text' },          // #1243 S8: Text › Add text · Title looks
+    titlelooks: { fill: titleLooksFill, opener: () => 'titleLooks', word: 'titleLooksRow' },   // #1243 S8: Text › Title looks (‹ back to Text)
+    overlay:    { fill: overlayRow,    opener: () => 'overlay',  word: 'overlay' },       // #1243 S8: Overlay › Photo or video · Your media
+    yourmedia:  { fill: yourMediaFill, opener: () => 'yourMedia', word: 'yourMedia' },     // #1243 S8: Overlay › Your media (‹ back to Overlay)
+    effects:    { fill: fxFill,        opener: s => s.id ? 'change' : 'effects', back: 'fxBack', word: 'effects' },
+    itemfx:     { fill: itemFxFill,    opener: () => 'addfx',    back: 'fxBack', word: 'addEffect' },
+    audio:      { fill: audioRow,      opener: () => 'audio',    word: 'audio' },
+    speed:      { fill: speedRow,      opener: () => 'speed',    word: 'speed' },
+    volume:     { fill: volumeRow,     opener: () => 'volume',   word: 'volume' },
+    fade:       { fill: fadeRow,       opener: () => 'fade',     word: 'fade' },
+    transition: { fill: transitionRow, opener: () => '',         word: 'transition' },
+    strength:   { fill: strengthRow,   opener: () => 'strength', word: 'strength' }
+  };
+  /* THE ‹s (#1243 R: "item and sub start with a ‹ … in item mode it clears the selection, in a sub-row it goes back one level"; 44 px,
+     the tray's finger floor, not R's 40). A sub-row's keeps the ids rowBack / fxBack and is a .sm-tool; the item's is not one, so the
+     tray's own tool list is unchanged; a panel's sits in that panel's own first row (no header row: queue 835). */
+  /* key: which row this ‹ leaves (MODE-6), so tool()'s double-click guard never takes Audio's ‹ for the Speed row's ‹ that it replaced
+     under the pointer: a double click on Speed's ‹ went back two levels */
+  function backTool(id, key) { return tool({ id: id, key: key, cls: 'sm-tool sm-back', label: '', icon: 'back', title: W().back || 'Back', run: () => FM.simpleTools.back() }); }
+  function itemBack() { return tool({ id: 'itemBack', cls: 'sm-back', label: '', icon: 'back', title: W().backItem || 'Back · nothing selected', run: () => FM.simpleTools.back() }); }
+  function panelBack() {
+    const b = el('button', 'sm-pback'); b.type = 'button'; b.innerHTML = svg('back');   // a fixed string, never user data
+    b.title = W().back || 'Back'; b.setAttribute('aria-label', b.title);
+    b.addEventListener('click', e => { e.stopPropagation(); FM.simpleTools.back(); });
+    return b;
+  }
+  /* the PC band's way back from More's panel (a caption track's Style too) and from Extras: ONE ‹ at the start of the band's own title
+     row (#inspector-panel > .panel-title, which js/inspector.js never rebuilds: it writes only .panel-title-label). On a phone that row
+     is not shown, and the sheet's grab bar is the way back. Taken out on every way out of Simple (sync, the editor switch, _reset). */
+  function pbackSync(mode) {
+    const title = document.querySelector('#inspector-panel > .panel-title');
+    const b = title && title.querySelector(':scope > .sm-pback');
+    const want = !!title && isSimple() && !phone.matches && mode === 'panel' && (panelKind === 'more' || extrasUp());
+    if (want && !b) title.insertBefore(panelBack(), title.firstChild);
+    else if (!want && b) b.remove();
+  }
 
-  function quietLine(R) {
-    const clips = R.main.filter(e => !e.slot), sum = (FM.spineWords && FM.spineWords.summary) ? FM.spineWords.summary(clips.length, R.trackEnd || 0) : '';
-    const p = el('div', 'sm-quiet', sum);
-    return p;
-  }
-  /* 2.7 (SU1 #13, DESIGN §7.3 step 4, §8.9): THE FIRST-RUN HINT takes the quiet line's place while nothing is selected, only with
-     a main clip on the track and at most once per device: the first tap anywhere takes it away and writes fm.sm.hint = '1' (the
-     listener in mount). Phone or PC words by the phone test Full uses (max-width 700 px). While it shows, the play bar's ✂ wears
-     the clip's own selection outline (styles.css .sm-hinted), held, not animated, and it goes with the hint. */
+  /* 2.7 (SU1 #13, DESIGN §7.3 step 4, §8.9): THE FIRST-RUN HINT, while nothing is selected, only with a main clip on the track and at
+     most once per device: the first tap anywhere takes it away and writes fm.sm.hint = '1' (the listener in mount). Phone or PC words
+     by the phone test Full uses (max-width 700 px). (Its outline on the play bar's ✂ went with the ✂: #1243 S5 put Split on the clip's
+     own tools, which the hint's first words send him to.) #1243 S3: it FLOATS just above the bar like a spoken line (the project
+     row is just the tools), and takes no pointer events, so the first tap also reaches the clip under it. (The quiet line, "3 clips ·
+     0:06", is retired: the pill shows the length and the timeline the clips.) */
   const HINT_KEY = 'fm.sm.hint';
   function hintSeen() { try { return localStorage.getItem(HINT_KEY) === '1'; } catch (e) { return true; } }   // unreadable storage could never remember it: no hint
-  function hintLine() { const w = W(); return el('div', 'sm-quiet sm-hint', phone.matches ? (w.firstHint || '') : (w.firstHintPc || '')); }
-  function splitMark(on) { const sp = document.getElementById('btn-sm-split'); if (sp) sp.classList.toggle('sm-hinted', !!on); }
-  /* 2.7 (2A row 16): A PANEL THAT OPENS UNDER THE FINGER IGNORES THAT FINGER. On a phone More's panel takes back the room the preview
-     had under the tools, so the tray and More move up (134 px at 380x800) and the panel's grab bar and quick row land where More was:
-     the second tap of a double tap on More pressed whatever lay there (a real mouse, measured: "Close inspector" at 380x667, so the
-     panel opened and shut; "Trim end to playhead" at 380x800 once the panel had risen). For 450 ms after More opens the panel, a REAL
-     press that lands on it does nothing, as a line's buttons ignore presses for their first 400 ms (section 3.12 rule 5). Phone,
-     Simple only; script clicks (isTrusted false) are never held.
+  function hintSync(mode, R) {
+    hintUp = mode === 'project' && !!R && R.main.some(e => !e.slot) && !hintSeen();
+    let h = bar && bar.querySelector(':scope > .sm-hint');
+    if (hintUp) {
+      if (!h) { h = el('div', 'sm-hint'); bar.insertBefore(h, tray); }
+      const t = phone.matches ? (W().firstHint || '') : (W().firstHintPc || '');
+      if (h.textContent !== t) h.textContent = t;
+    } else if (h) h.remove();
+  }
+  /* 2.7 (2A row 16): A PANEL THAT OPENS UNDER THE FINGER IGNORES THAT FINGER. More's panel rises over the place More was pressed (until
+     #1243 it moved the tray and More up 134 px at 380x800; since #1243 rule 3 the sheet runs from the stage's bottom edge over the whole
+     bar, and on a PC the panel takes the band where the bar was), so the second tap of a double tap on More pressed whatever lay there
+     (a real mouse, measured: "Close inspector" at 380x667, so the panel opened and shut; "Trim end to playhead" at 380x800 once the
+     panel had risen). For 450 ms after More opens the panel, a REAL press that lands on it does nothing, as a line's buttons ignore
+     presses for their first 400 ms (section 3.12 rule 5). Simple only; script clicks (isTrusted false) are never held.
      Phase 3 (the sm3 stack, #1171): Look's panel and Edit lines open in that same place the same way, so they arm it too. */
   /* ON ONLY WHILE ARMED (sm3 review, lens 1): the listeners are non-passive window captures, and a non-passive touchstart on
      window makes Chrome hold every scroll for the main thread. Added at load they sat in Full too, so they go on when a panel
      arms the guard and come off 500 ms later: Full, and Simple between panels, carries none. */
-  let sheetArmAt = -1e9, sheetOn = false, sheetOff = 0;
+  let sheetArmAt = -1e9, shutArmAt = -1e9, sheetPressAt = -1e9, sheetOn = false, sheetOff = 0;
   const SHEET_EV = ['pointerdown', 'mousedown', 'touchstart', 'pointerup', 'mouseup', 'touchend', 'click'];
   const SHEET_OPT = { capture: true, passive: false };
   function sheetListen(on) {
@@ -538,23 +776,49 @@ window.FM = window.FM || {};
     sheetOn = on;
     SHEET_EV.forEach(t => { if (on) window.addEventListener(t, sheetGuard, SHEET_OPT); else window.removeEventListener(t, sheetGuard, SHEET_OPT); });
   }
+  /* #1243 S9: on a PC too, now that a panel takes the band and the bar hides: the second press of a double click on More lands in the
+     panel where More was. And on the phone's Add sheet, where Extras rises (Clips › Extras). */
   function armSheet() {
-    if (!(isSimple() && phone.matches)) return;
+    if (!isSimple()) return;
     sheetArmAt = performance.now(); sheetListen(true);
     clearTimeout(sheetOff); sheetOff = setTimeout(() => sheetListen(false), 500);
   }
+  /* …AND THE SAME WHEN IT GOES (the 9 Nov review, MODE-4). Since #1243 rule 3 a phone's sheet starts at the stage's bottom edge, which
+     is the top of the play row: its grab bar lies over Link (⋯ and ✂ until #1243 S5), and Look's and Edit lines' ‹ over the play row's foot
+     and the ruler. The sheet closes under the first tap and the second lands on Link (a whole-project switch), ▶, or the timeline. For 450 ms after the sheet
+     goes, a REAL press in #timeline-panel (the play row, the timeline, the bar) does nothing. Phone only: on a PC nothing a panel covers
+     comes back under its ‹. Armed by the body's insp-open going away while Simple is on screen within a second of a real press on the
+     sheet (mount, sheetPressAt), so every way a finger closes it counts: the grab bar, a swipe, a ‹, a button in the panel. */
+  function armShut() {
+    if (!isSimple() || !phone.matches) return;
+    shutArmAt = performance.now(); sheetListen(true);
+    clearTimeout(sheetOff); sheetOff = setTimeout(() => sheetListen(false), 500);
+  }
   function sheetGuard(e) {
-    if (!e.isTrusted || performance.now() - sheetArmAt > 450) return;
-    const s = document.getElementById('inspector-panel');
-    if (s && e.target && e.target.nodeType === 1 && s.contains(e.target)) { e.stopImmediatePropagation(); if (e.cancelable) e.preventDefault(); }
+    if (!e.isTrusted) return;
+    const now = performance.now(), t = e.target && e.target.nodeType === 1 ? e.target : null;
+    const under = ids => !!t && ids.some(id => { const s = document.getElementById(id); return s && s.contains(t); });
+    if ((now - sheetArmAt <= 450 && under(['inspector-panel', 'add-sheet'])) || (now - shutArmAt <= 450 && under(['timeline-panel']))) { e.stopImmediatePropagation(); if (e.cancelable) e.preventDefault(); }
+  }
+  /* #1243 S34 A: the play row's Link says its state: pressed while linked (the default). Review L3-8 (11 Nov): ONE accessible name, "Link",
+     and aria-pressed carries the state (the ARIA toggle pattern: a toggle's name never changes with it; "Links off… not pressed" said the
+     state twice). The hover title still explains what the state means. */
+  function linkSync() {
+    const b = document.getElementById('btn-sm-link');
+    if (!b || !FM.spine || !FM.spine.linkMode) return;
+    const w = W(), on = FM.spine.linkMode(), p = on ? 'true' : 'false', t = on ? (w.linkTitle || 'Link') : (w.linkOffTitle || 'Link'), name = w.link || 'Link';
+    if (b.getAttribute('aria-pressed') !== p) b.setAttribute('aria-pressed', p);
+    if (b.title !== t) b.title = t;
+    if (b.getAttribute('aria-label') !== name) b.setAttribute('aria-label', name);
   }
   function dismissHint() {
-    hintUp = false; splitMark(false);
+    hintUp = false;
     try { localStorage.setItem(HINT_KEY, '1'); } catch (e) {}
-    lastSig = ''; FM.simpleTools.sync();   // the quiet line in its place
+    lastSig = ''; FM.simpleTools.sync();   // the hint goes (hintSync)
   }
 
-  /* ═══ Simple's ⋯ and the Sound tool's choices: a small list above the button, one ≥ 44 px row per choice. ═══ */
+  /* ═══ Simple's Export: a small list above the button, one ≥ 44 px row per choice (Clips', Sound's and Captions' lists are sub-rows
+     since #1243 S9, and ⋯'s left Simple with #1243 S5; this one stays a list until #1243 S6). ═══ */
   function closeMenu() { if (menu) { menu.remove(); menu = null; } }
   function openMenu(anchor, items) {
     closeMenu();
@@ -585,16 +849,6 @@ window.FM = window.FM || {};
     menu.style.left = left + 'px'; menu.style.top = top + 'px';
     const first = menu.querySelector('button'); if (first) first.focus({ preventScroll: true });
   }
-  function optsMenu(btn) {
-    const S = FM.spine, R = S.read(FM.scene), w = W();
-    const anyGap = R.main.some(e => e.seam && !e.seam.covered && (e.seam.kind === 'gap' || e.seam.kind === 'overlap'));
-    const items = [];
-    if (anyGap) items.push({ label: w.closeAll || 'Close all gaps', run: () => S.cmd.closeAll() });
-    /* 2.4b (§3.6): Sort by date taken, only when at least two clips of the row carry a capture date */
-    if (R.main.filter(e => !e.slot && Number.isFinite(+((FM.layerById(FM.scene, e.id) || {}).taken))).length >= 2) items.push({ label: w.sortByDate || 'Sort by date taken', run: () => S.cmd.sortByDate() });
-    items.push({ label: w.moreOpts || 'Loop and preview speed…', run: () => { const o = document.getElementById('btn-opts'); if (o && FM.editor) { FM._smOptsPass = true; o.click(); FM._smOptsPass = false; } } });
-    openMenu(btn, items);
-  }
 
   /* 2.7 (SU1 #20): "1080p · Export" (and 720p when the frame is bigger than that; a smaller frame offers its own size, never an upscale):
      an MP4 at the project's frame rate and Full's default High quality, of the clips (and an end card after them: #1243 S37 review, it is
@@ -611,19 +865,33 @@ window.FM = window.FM || {};
     if (menu) { menu.dataset.kind = 'export'; menu.setAttribute('aria-label', w.exportTitle || 'Export video'); }
   }
 
-  /* What the tray holds; true when it lies on two rows */
-  function fillTray(R, ids, one, S) {
-    if (fxPick) return fxPick.on ? itemFxFill() : fxFill();   // Phase 3 · Effect segments: the effects picker owns the row while it is open (· Effects on an item: its item picker too)
-    if (rowFor && rowFor.kind === 'audio' && ROWS.audio) tray.setAttribute('data-row', 'audio'); else tray.removeAttribute('data-row');   // S9: the Audio row's five buttons are 317 px at their usual padding, 10 px over the 307 px band at 1280
-    if (extrasOpen && !ids.length) return extrasFill();   // Phase 3 · Clips › Extras (PC): Done in the tray row while Extras is in the band
-    if (rowFor && ROWS[rowFor.kind]) { ROWS[rowFor.kind](R, rowFor.id).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
-    if (!ids.length) { hintUp = R.main.some(e => !e.slot) && !hintSeen(); tray.appendChild(hintUp ? hintLine() : quietLine(R)); return false; }
+  /* What the tray holds (#1243 S3, S9): in a sub-row its ‹ and that row's controls; with something selected (item mode, or a panel
+     over it, drawn hidden so its ‹ brings the row back at once) the ‹ that clears the selection and the selection's tools; in project
+     mode nothing (the bar is the project row then). True when it lies on two rows. */
+  function fillTray(R, ids, one, S, mode) {
+    tray.removeAttribute('data-row');
+    if (mode === 'project' && !subFor) return false;
+    if (subFor) {
+      const k = subFor.key, d = SUBS[k];
+      /* S9 (option E): the Audio row's five buttons are 317 px at their usual padding, 10 px over the 307 px band at 1280; the pickers' tiles */
+      if (k === 'audio') tray.setAttribute('data-row', 'audio'); else if (k === 'effects' || k === 'itemfx') tray.setAttribute('data-row', 'effects');
+      tray.setAttribute('aria-label', W()[d.word] || k);
+      tray.appendChild(backTool(d.back || 'rowBack', 'back:' + k + '/' + (subFor.from || '')));
+      const run = strip(tray);
+      d.fill(R, subFor, run);
+      edges(run);
+      return false;
+    }
+    tray.setAttribute('aria-label', W().clipTools || 'Clip tools');
+    tray.appendChild(itemBack());
     if (ids.length > 1) {   // §8.5b: the intersection — Stay put on all, Delete (one main clip at a time in 2.2)
-      const w = W();
-      tray.appendChild(el('div', 'sm-quiet', (w.selected || (n => n + ' selected'))(ids.length)));
+      const w = W(), run = strip(tray), pins = el('div', 'sm-pins');
+      run.appendChild(el('div', 'sm-quiet', (w.selected || (n => n + ' selected'))(ids.length)));
       const all = ids.every(id => !R.isMain(id));
-      if (all) tray.appendChild(tool({ id: 'stay', label: w.stay || 'Stay put', icon: 'pin', run: () => S.cmd.stayMany(ids, true) }));   // ONE step for all of them (§3.2 rule 2)
-      tray.appendChild(tool({ id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (all) { if (S.cmd.deleteItems) S.cmd.deleteItems(ids, true); else if (FM.deleteSelected) FM.deleteSelected(); } else S.say((FM.spineWords.lines || {}).deleteOne || 'Delete one clip at a time'); } }));   // review #4: see trayFor's 🗑
+      if (all) run.appendChild(tool({ id: 'stay', label: w.stay || 'Stay put', icon: 'pin', disabled: !!(S.linkMode && !S.linkMode()), why: w.stayUnlinked, run: () => S.cmd.stayMany(ids, true) }));   // ONE step for all of them (§3.2 rule 2); #1243 S34 A: rests while Link is off
+      pins.appendChild(tool({ id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (all) { if (S.cmd.deleteItems) S.cmd.deleteItems(ids, true); else if (FM.deleteSelected) FM.deleteSelected(); } else S.say((FM.spineWords.lines || {}).deleteOne || 'Delete one clip at a time'); } }));   // review #4: see trayFor's 🗑
+      tray.appendChild(pins);
+      edges(run);
       return false;
     }
     const list = trayFor(R, one);
@@ -648,44 +916,18 @@ window.FM = window.FM || {};
        begin, so no tool is ever drawn under More or 🗑, and a fade lies over the edge where tools are hidden — the end while
        there are more to the right, the start once it is scrolled — and on neither when they all fit (edges()). The fades take
        no pointer events and sit inside the strip, never over the pins. */
-    const pins = el('div', 'sm-pins'), box = el('div', 'sm-runbox'), run = el('div', 'sm-run');
+    const pins = el('div', 'sm-pins'), run = strip(tray);
     const withT = withWords(R, one); if (withT) run.appendChild(withTag(withT));   // Phase 3 · Clips › Extras: "Moves with the shape", first in the strip
-    /* MORE TURNS INTO DONE WHILE ITS OWN PANEL IS OPEN ON A PC (8 Nov, queue 980: the 6 Oct ask, option 3, decided 6 Nov under his
-       21 Oct rule; tools/design/plans/simple-mode/p22-review-shots/sheet-tray-more-pc.jpg). The one row above keeps the panel its
-       room, but More still said More and the tools past the strip's end showed only as a fade. Now the same tool in the same place
-       reads Done (its ✓ and the accent, as drawn) and closes the panel, which gives the two rows back; it keeps More's id, so focus
-       and tool()'s double-click guard follow it, and the second click of a double click on More, which comes down on it, still
-       closes nothing. A › sits at the strip's right end while tools lie past it, and goes with the end fade (edges()). Only More's
-       own panel: Look's and Edit lines' keep today's tray, and a caption track's Style has no More to turn. Only on a PC: the
-       phone's sheet stays exactly as it is. */
-    const doneUp = !phone.matches && panelFor === one && panelKind === 'more' && list.some(t => t.id === 'more');
-    list.forEach(t => (t.id === 'more' || t.pin ? pins : run).appendChild(doneUp && t.id === 'more' ? moreDone() : tool(t)));
-    if (!run.firstChild && !pins.firstChild) return false;
-    const fade = side => { const f = el('span', 'sm-fade sm-fade-' + side); f.setAttribute('aria-hidden', 'true'); return f; };
-    box.append(run, fade('s'), fade('e'));
-    if (doneUp) { const cue = el('span', 'sm-cue'); cue.setAttribute('aria-hidden', 'true'); cue.innerHTML = CUE; box.appendChild(cue); }   // a fixed string, never user data
-    tray.appendChild(box);
+    list.forEach(t => (t.id === 'more' || t.pin ? pins : run).appendChild(tool(t)));
     if (pins.firstChild) tray.appendChild(pins);
-    run.addEventListener('scroll', () => edges(run), { passive: true });
-    if (runSeen) runSeen.observe(run);   // a strip that was hidden (a line in its row) or a band that changed width
     edges(run);
     return false;
   }
-  /* More's Done (8 Nov, queue 980, see fillTray): More's id and place, Done's words from the words file. A press closes the panel; the
-     second click of a double click does not (that click is the one that opened it, landing again on the tool now in More's place). */
-  function moreDone() {
-    const w = W();
-    /* its own key (the 8 Nov review): Done and More shared 'more', so tool()'s guard let a double click on Done close the panel and
-       press More, which reflowed under the pointer, opening it again. Different keys, and the second click is dropped either way. */
-    const b = tool({ id: 'more', key: 'moreDone', label: w.done || 'Done', icon: 'check', title: w.moreDoneTitle || 'Done · close More’s settings', run: (x, e) => { if (!(e && e.detail >= 2)) FM.simpleTools.closePanel(); } });
-    b.classList.add('sm-done');
-    return b;
-  }
-  /* …and the › at the strip's right end while tools lie past it (a fixed drawing; styles.css shows it with .sm-more-e) */
-  const CUE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg>';
+  /* (More turned into Done with a › cue while its panel was open on a PC, 8 Nov. #1243 S9 hides the bar while a panel is up, so neither
+     could ever show: the band title's ‹ is the way back now.) */
   /* Which edges of the tool strip hide tools: a 1 px slack, as the wheel's own bound, so a fractional scroll on a phone's
-     display never leaves a fade over a strip that is at its end. A strip that is not laid out (the row hidden while a line is
-     said) measures 0 and shows none; the ResizeObserver puts them right when it comes back. */
+     display never leaves a fade over a strip that is at its end. A strip that is not laid out (its row hidden in another mode)
+     measures 0 and shows none; the ResizeObserver puts them right when it comes back. */
   function edges(run) {
     const box = run && run.parentNode;
     if (!box || !box.classList) return;
@@ -694,20 +936,24 @@ window.FM = window.FM || {};
     box.classList.toggle('sm-more-e', max > 1 && run.scrollLeft < max - 1);
   }
   const runSeen = window.ResizeObserver ? new ResizeObserver(es => es.forEach(e => edges(e.target))) : null;
-  /* The strip that scrolls: the tool strip of a one-row tray, else the tray itself (two rows on PC, a Length or Speed row) */
-  const scroller = () => (tray && tray.querySelector(':scope > .sm-runbox > .sm-run')) || tray;
-  /* THE BAND'S HEIGHT FOLLOWS THE TRAY'S ROWS (his pick B): #sm-say is two rows tall only while the tray holds two — but it
-     never drops to one under a line being said, nor just before one. A command that takes the selection away (Delete) refills
-     the tray to the one-row quiet line and THEN says its line with Undo (js/spine-edit.js speakDone, same task); a band that
-     dropped a row there would put that Undo in the row where 🗑 was pressed (finding 23's hazard). So the drop waits a
-     microtask, and while a line shows it waits for the line to go (the observer in mount). */
+  /* #1243 S15: ONE STRIP for every row on the bar — the project row, the item tray's one row, the several-selected tray, every sub-row and
+     both effects pickers: a scroller (.sm-run: pan-x, its own overscroll) in a box with a fade at each end, shown on the edge that hides
+     tools (edges()); a wheel scrolls it (wheelOn) and a strip that was hidden or changed width puts its fades right (runSeen). */
+  function strip(parent) {
+    const box = el('div', 'sm-runbox'), run = el('div', 'sm-run');
+    const fade = side => { const f = el('span', 'sm-fade sm-fade-' + side); f.setAttribute('aria-hidden', 'true'); return f; };
+    box.append(run, fade('s'), fade('e'));
+    parent.appendChild(box);
+    run.addEventListener('scroll', () => edges(run), { passive: true });
+    if (runSeen) runSeen.observe(run);
+    return run;
+  }
+  /* THE TRAY'S ROWS (his pick B on a PC): two only while it holds two, and the band's words follow them. Since #1243 the bar is one
+     row and a spoken line floats above it, so nothing waits for a line any more: no Undo can land in the row where 🗑 was. */
   function rows(two) {
     tray.classList.toggle('sm-tray-2', two);
     if (!two) tray.style.removeProperty('--sm-cols');
     hintFollows();
-    if (!sayEl) return;
-    if (two) sayEl.classList.add('sm-two');
-    else if (sayEl.classList.contains('sm-two')) Promise.resolve().then(fitRows);
   }
   /* THE BAND'S WORDS FOLLOW THE TRAY'S REAL ROWS (checker finding 3). "Its tools are below" alone is right only while every
      tool is on show on two rows; a one-row tray — a band dragged under what two rows need, a landscape phone, a title's four
@@ -726,9 +972,6 @@ window.FM = window.FM || {};
   function hintFollows() {
     const h = document.querySelector('#inspector > .sm-band-hint[data-sel]');
     if (h) { const t = bandWords(true); if (h.textContent !== t) h.textContent = t; }
-  }
-  function fitRows() {
-    if (sayEl && sayEl.classList.contains('sm-two') && !tray.classList.contains('sm-tray-2') && !sayEl.classList.contains('sm-saying')) sayEl.classList.remove('sm-two');
   }
 
   /* ═══ PHASE 3 · LOOK — THE PANEL (queue 980; DESIGN §8.5 the tray's Look, §8.7 "Filters + strength …; Adjust", D20 A). ═══
@@ -880,6 +1123,7 @@ window.FM = window.FM || {};
     const w = W(), box = el('div', 'sm-look');
     box.setAttribute('role', 'group'); box.setAttribute('aria-label', w.look || 'Look');
     const tabs = el('div', 'sm-look-tabs');
+    tabs.appendChild(panelBack());   // #1243 S9: the way back, in the panel's own first row (no header row: queue 835)
     [['filters', w.lookFilters || 'Filters'], ['adjust', w.lookAdjust || 'Adjust']].forEach(t => {
       const b = el('button', 'sm-look-tab', t[1]); b.type = 'button'; b.dataset.tab = t[0]; b.dataset.look = 'tab-' + t[0];
       b.setAttribute('aria-pressed', lookTab === t[0] ? 'true' : 'false');
@@ -910,7 +1154,7 @@ window.FM = window.FM || {};
     const top = el('div', 'sm-cap-top');
     const add = el('button', 'sm-cap-add', w.capAddLine || 'Add a line here'); add.type = 'button'; add.dataset.cap = 'add';
     add.addEventListener('click', e => { e.stopPropagation(); S.cmd.captionAdd({ id: L.id }); });
-    top.appendChild(add);
+    top.append(panelBack(), add);   // #1243 S9: the way back first, in the panel's own first row
     box.appendChild(top);
     const list = el('div', 'sm-cap-list'), cues = (FM.captions && FM.captions.cues) ? FM.captions.cues(L) : [];
     list.setAttribute('role', 'list');
@@ -959,13 +1203,12 @@ window.FM = window.FM || {};
     list.push(stay, more, { id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => S.cmd.deleteEffect(id) });
     return list;
   }
-  function fxFill() {
-    const S = FM.spine, w = W(), seg = fxPick.id ? FM.layerById(FM.scene, fxPick.id) : null;
+  /* #1243 S9: the picker is the `effects` sub-row (subFor.id: the segment Change effect is for, or null for a new one); its ‹ (fxBack) is drawn by fillTray */
+  function fxFill(R, s, run) {
+    const S = FM.spine, w = W(), seg = s.id ? FM.layerById(FM.scene, s.id) : null;
     const cur = seg ? ((S.segmentEffect(seg) || {}).type || '') : null;   // null: a new segment, so no tile is pressed
-    tray.setAttribute('data-row', 'effects');
-    tray.appendChild(tool({ id: 'fxBack', label: w.done || 'Done', icon: 'back', run: () => FM.simpleTools.closeEffects() }));
-    const box = el('div', 'sm-runbox'), run = el('div', 'sm-run sm-fx-run'), cvs = [];
-    run.setAttribute('role', 'group'); run.setAttribute('aria-label', w.effects || 'Effects');
+    const cvs = [];
+    run.classList.add('sm-fx-run'); run.setAttribute('role', 'group'); run.setAttribute('aria-label', w.effects || 'Effects');
     (S.segmentEffects ? S.segmentEffects() : []).forEach(reg => {
       const type = String(reg.type), name = String(reg.label || type);
       /* #1243 S10 change 5: a refusal ('segmentNoClip', 'segmentOnClip', a lock…) is said in the tray row, and the picker was holding that
@@ -985,24 +1228,17 @@ window.FM = window.FM || {};
       b.insertBefore(cv, b.firstChild);
       run.appendChild(b); cvs.push([cv, type]);
     });
-    const fade = side => { const f = el('span', 'sm-fade sm-fade-' + side); f.setAttribute('aria-hidden', 'true'); return f; };
-    box.append(run, fade('s'), fade('e'));
-    tray.appendChild(box);
-    run.addEventListener('scroll', () => edges(run), { passive: true });
-    if (runSeen) runSeen.observe(run);
-    edges(run);
     if (FM.fxThumbs && FM.fxThumbs.mount) lazyTiles(run, cvs, p => FM.fxThumbs.mount(p[0], p[1]));   // #1243 S11: as they come into view
-    return false;
   }
   /* the project row's Effects shows pressed while it has the picker open for a new segment */
   function fxMark() {
     const b = tools && tools.querySelector('.sm-tool[data-tool="effects"]');
-    if (b) b.setAttribute('aria-pressed', fxPick && !fxPick.id ? 'true' : 'false');
+    if (b) b.setAttribute('aria-pressed', subFor && subFor.key === 'effects' && !subFor.id ? 'true' : 'false');
   }
   /* what sync's signature needs from this block: the picker, and the selected segment's effect and strength (Change effect and Undo
      move the pressed tile; a strength step or its Undo moves the slider) */
   function segSig(l) {
-    const a = fxPick ? 'fx/' + (fxPick.id || '') + (fxPick.on ? '/on' : '') : '';   // '/on': the item picker (Phase 3 · Effects on an item)
+    const a = subFor && (subFor.key === 'effects' || subFor.key === 'itemfx') ? 'fx/' + (subFor.id || '') + (subFor.key === 'itemfx' ? '/on' : '') : '';   // '/on': the item picker (Phase 3 · Effects on an item)
     const b = (l && l.type === 'adjustment') ? JSON.stringify([(l.effects || []).map(f => f && f.type), l.transform ? l.transform.opacity : 1]) : '';
     return a + '|' + b;
   }
@@ -1014,9 +1250,9 @@ window.FM = window.FM || {};
     if (L && L.transform && JSON.stringify(L.transform.opacity) === d.last) { try { L.transform.opacity = JSON.parse(d.pre); } catch (e) {} }
     if (FM.requestRender) FM.requestRender();
   }
-  function strengthRow(R, id) {
-    const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), out = [rowBack()];
-    if (!l || !S.segmentStrength) return out;
+  function strengthRow(R, s, run) {
+    const S = FM.spine, w = W(), id = s.id, l = FM.layerById(FM.scene, id);
+    if (!l || !S.segmentStrength) return;
     const now = S.segmentStrength(l);
     const val = el('span', 'sm-vol-v sm-str-v', now + '%');
     const rng = el('input', 'sm-vol-r sm-str-r'); rng.type = 'range'; rng.min = '0'; rng.max = '100'; rng.step = '1'; rng.value = String(now);
@@ -1035,10 +1271,8 @@ window.FM = window.FM || {};
       segUndrag();
       if (v !== now) S.cmd.effectStrength(id, v);
     });
-    out.push(rng, val);
-    return out;
+    run.append(rng, val);
   }
-  ROWS.strength = strengthRow;
 
   /* ═══ PHASE 3 · EFFECTS ON AN ITEM (queue 980; DESIGN §8.5c item 3, §8.5 the Overlay and Text trays). ═══
      ADD EFFECT in a title's or an overlay's tray opens the effects picker in the tray row, as the project row's Effects does (the
@@ -1047,14 +1281,12 @@ window.FM = window.FM || {};
      browser's own sample picture. Nothing is written until a tile is tapped (§8.5c item 1, pick first). A tap closes the picker,
      back to the item's tray with Add effect where it was, and runs ONE step (FM.spine.cmd.itemEffect) that puts that effect on the
      item; the line "Added Shake to “Hi”" is said in #sm-live (§3.12 1a). Any other selection, Done or leaving Simple closes it, as
-     the segment picker does: the same fxPick state, marked `on`. Built with createElement / textContent: a preset's name can be his
+     the segment picker does: the `itemfx` sub-row (#1243 S9). Built with createElement / textContent: a preset's name can be his
      own words, never markup. */
-  function itemFxFill() {
-    const S = FM.spine, w = W(), id = fxPick.id, L = id ? FM.layerById(FM.scene, id) : null;
-    tray.setAttribute('data-row', 'effects');
-    tray.appendChild(tool({ id: 'fxBack', label: w.done || 'Done', icon: 'back', run: () => FM.simpleTools.closeEffects() }));
-    const box = el('div', 'sm-runbox'), run = el('div', 'sm-run sm-fx-run'), cvs = [];
-    run.setAttribute('role', 'group'); run.setAttribute('aria-label', w.addEffect || 'Add effect');
+  function itemFxFill(R, s, run) {
+    const S = FM.spine, w = W(), id = s.id, L = id ? FM.layerById(FM.scene, id) : null;
+    const cvs = [];
+    run.classList.add('sm-fx-run'); run.setAttribute('role', 'group'); run.setAttribute('aria-label', w.addEffect || 'Add effect');
     ((L && S.itemEffects) ? S.itemEffects(L) : []).forEach(p => {
       const key = String(p.key);
       const b = tool({ id: 'fx:' + key, label: p.name, icon: null,
@@ -1069,101 +1301,27 @@ window.FM = window.FM || {};
       b.insertBefore(cv, b.firstChild);
       run.appendChild(b); cvs.push([cv, p]);
     });
-    const fade = side => { const f = el('span', 'sm-fade sm-fade-' + side); f.setAttribute('aria-hidden', 'true'); return f; };
-    box.append(run, fade('s'), fade('e'));
-    tray.appendChild(box);
-    run.addEventListener('scroll', () => edges(run), { passive: true });
-    if (runSeen) runSeen.observe(run);
-    edges(run);
     const T = FM.fxThumbs;
     if (T) lazyTiles(run, cvs, q => { if (q[1].preset && T.mountPreset) T.mountPreset(q[0], q[1].preset, null); else if (T.mount) T.mount(q[0], q[1].type); });   // #1243 S11: as they come into view
-    return false;
   }
 
   /* ═══ PHASE 3 · CLIPS › EXTRAS (queue 980; DESIGN §8.5 the Clips row "Add clips … · Extras (D21, from Phase 3): saved elements, shapes
      and templates, reusing addmenu's Elements, Shape and Template tab contents through the §14.2 tabs option, each pick running §12.2's
      insert command"; §17 D21, his answer 1 Oct "D21 A"). ═══
-     CLIPS opens a short list like Sound's: Add clips (what Clips did until now: the picker, or At the end / After Clip N with the playhead
-     inside the clips) and Extras. EXTRAS is the Add menu itself (js/addmenu.js render, with its opt-in `tabs`), showing only three tabs:
-     Elements — his saved elements as tiles with their own pictures (Full keeps them behind its Custom elements browser) — Shape, and
-     Template, each tile's tap running Simple's own one-step command (FM.spine.cmd.addShape / addElement / addTemplate), never Full's
-     add. On a phone it is the Add sheet he knows, risen from the bottom (FM.mobile.openAdd, then the three tabs drawn into it); on a PC
-     it is drawn in the left band above the tray, where Look's panel goes (D20 A), with a Done. It needs nothing selected (a selection is
-     let go first), and it closes on a pick, on Done, on any selection, or on leaving Simple. Its open tab and pages are its own: Full's
-     Add menu reopens on the tab Full left it on. Names are his own words: addmenu's cards put them in as text. */
+     CLIPS opens its row (#1243 S9: a sub-row, it was a short list): Add clips (what Clips did until Phase 3: the picker, or At the end /
+     After Clip N with the playhead inside the clips) and Extras. EXTRAS is the Add menu itself (js/addmenu.js render, with its opt-in
+     `tabs`), showing only three tabs: Elements — his saved elements as tiles with their own pictures (Full keeps them behind its Custom
+     elements browser) — Shape, and Template, each tile's tap running Simple's own one-step command (FM.spine.cmd.addShape / addElement /
+     addTemplate), never Full's add. It is a panel: on a phone it is the Add sheet he knows, risen from the bottom (FM.mobile.openAdd, then
+     the three tabs drawn into it); on a PC it takes the left band, where Look's panel goes (D20 A), with the band title's ‹ as its way
+     back. The bar hides while it is up, and the Clips row is under it when it goes. It needs nothing selected (a selection is let go
+     first), and it closes on a pick, on its ‹, on any selection, or on leaving Simple. Its open tab and pages are its own: Full's Add menu
+     reopens on the tab Full left it on. Names are his own words: addmenu's cards put them in as text. */
   let extrasOpen = false;
-  /* ═══ 7B (sheet 1 question 7 and sheet 2 question 1, pick B, decided 6 Nov under his 21 Oct rule): ON A PC THE BAND GROWS WHILE A
-     PANEL IS OPEN. At 1280x800 the band under the picture is about 240 px and a panel above the tools got about 96 of it: Look showed
-     one Adjust slider, and Extras' Done could not be pressed (R6, a real fault). While More's panel, Look, Edit lines or Extras is up,
-     the band's row (--tl-h on <html>, the property both of the band's own drags write: the timeline divider and the band's top edge)
-     grows by the height of the band's tool rows, inside the app's own ceiling (FM.clampTimelineH); the picture shrinks to make room,
-     as a phone's does when More opens, and it all goes back when the panel closes or Simple leaves.
-     WHOSE HEIGHT IT IS is read off the page, never off the pointer (the 7 Nov review: a press that moved nothing, a lost release, a
-     right-button press and the band's top edge (#am-resizer) all slipped past a pointer-motion rule): at close, a --tl-h still equal to
-     the one set here was never his, so his own goes back on screen, and if a drag's end stored the grown height (js/app.js end / amEnd
-     store whatever is inline), the height he had stored goes back too; the window's re-clamp of ours counts as ours. A height that
-     differs is his (a drag of either handle) and stays. Every write goes through FM.tlBandResized, the door every band-height writer
-     uses (the stage, the selection outline, and everything pinned to the band). Never mid-drag, never on a phone (the sheet rises
-     there), never in Full: growTo(true) runs only from sync() while Simple is on screen, and every way out of Simple calls growTo(false). ═══ */
-  let grow = null, growHooked = false;   // grow: { from: the inline --tl-h before ('' for none), to: what was set, kept: fm_tl_h before }
-  const storedTl = () => { try { return localStorage.getItem('fm_tl_h'); } catch (e) { return null; } };
-  function bandMovedNow() {
-    if (FM.tlBandResized) { FM.tlBandResized(); return; }
-    if (FM.refreshPreviewScale) FM.refreshPreviewScale();
-    if (FM.canvasEdit && FM.canvasEdit.stageResized) FM.canvasEdit.stageResized();
-  }
-  /* a grown height stored by a drag's end that changed nothing (or by a lost release) is put back to the one he had */
-  function unstoreGrow(g) {
-    const s = storedTl(), to = parseInt(g.to, 10), clamped = FM.clampTimelineH ? FM.clampTimelineH(to) : to;
-    if (s == null || (parseInt(s, 10) !== to && parseInt(s, 10) !== clamped)) return;
-    try { if (g.kept == null) localStorage.removeItem('fm_tl_h'); else localStorage.setItem('fm_tl_h', g.kept); } catch (e) {}
-  }
-  function growTo(on) {
-    const root = document.documentElement;
-    if (on && !grow) {
-      if (document.body.classList.contains('tl-resizing')) return;   // a divider drag is his: no grow starts under it
-      const band = document.getElementById('inspector-panel');
-      if (!bar || !band) return;
-      const add = Math.round(bar.getBoundingClientRect().height);
-      const now = FM._bandH ? FM._bandH() : Math.round(band.getBoundingClientRect().height);
-      if (!(add > 0) || !(now > 0)) return;
-      const want = FM.clampTimelineH ? FM.clampTimelineH(now + add) : now + add;
-      if (!(want > now)) return;   // at the ceiling already: nothing to give
-      grow = { from: root.style.getPropertyValue('--tl-h').trim(), to: want + 'px', kept: storedTl() };
-      if (!growHooked) { growHooked = true; window.addEventListener('pagehide', () => { if (grow) unstoreGrow(grow); }); }   // a reload with a panel up
-      root.style.setProperty('--tl-h', grow.to);
-      bandMovedNow();
-    } else if (!on && grow) {
-      const g = grow; grow = null;
-      const cur = parseInt(root.style.getPropertyValue('--tl-h'), 10), to = parseInt(g.to, 10);
-      /* his only when a handle was dragged while grown AND the height moved; else ours (as set, or as the window's re-clamps left it,
-         a shrink then a grow of the window included: the review's leftover) */
-      const ours = !g.touched || cur === to || (FM.clampTimelineH && cur === FM.clampTimelineH(to) && cur < to);
-      if (ours) {
-        const back = parseInt(g.from, 10);
-        if (back > 0) root.style.setProperty('--tl-h', (FM.clampTimelineH ? FM.clampTimelineH(back) : back) + 'px');
-        else {
-          root.style.removeProperty('--tl-h');
-          /* the stylesheet's band in a window the resize handler would have clamped: clamp it as it would have (the review's low) */
-          const h = FM._bandH ? FM._bandH() : 0, c = h && FM.clampTimelineH ? FM.clampTimelineH(h) : h;
-          if (h && c !== h) root.style.setProperty('--tl-h', c + 'px');
-        }
-        unstoreGrow(g);
-      }
-      bandMovedNow();
-    }
-  }
-  function growSync() { growTo(isSimple() && !phone.matches && (!!panelFor || extrasOpen)); }
+  /* (7B grew the PC band while a panel was open, 6 Nov. #1243 S9 gives a panel the whole band and hides the bar instead, so the picture
+     keeps its size and nothing is grown, stored or put back: 1280×800 leaves the panel about 207 px, what 7B's growth gave it.) */
   const xIco ='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
     + '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg>';
-  function clipsMenu(b) {
-    const w = W();
-    openMenu(b, [
-      { label: w.addClips || 'Add clips', run: clipsTool },
-      { label: w.extras || 'Extras', run: () => FM.simpleTools.openExtras() }
-    ]);
-    if (menu) { menu.dataset.kind = 'clips'; menu.setAttribute('aria-label', w.clips || 'Clips'); }
-  }
   /* The three tabs, each with Simple's own list. Shapes and templates are the Add menu's own tiles (their words, pictures and order),
      read at draw time; what a tap does is Simple's. A saved element is a tile of its own (Full lists them only behind a button). */
   function extrasTabs() {
@@ -1205,8 +1363,8 @@ window.FM = window.FM || {};
     if (sheet && sheet.classList.contains('open') && FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
   }
   /* PC: the menu is drawn straight into the band's #inspector, exactly where Full's Add menu sits (its own CSS and fit apply), measured
-     against #inspector itself (`host`: the band's tray and tools sit below it), and the band's title row says Extras, as Full's says Add.
-     Its Done is in the tray row (extrasFill), as the effects pickers' is: the ~96 px over the tray at 1280×800 are all the menu's. */
+     against #inspector itself (`host`), and the band's title row says Extras, as Full's says Add, with its ‹ in front (pbackSync): the
+     bar hides while Extras is up, so the whole band is the menu's (#1243 S9). */
   function drawExtras(root, title) {
     const w = W();
     if (title) title.textContent = w.extras || 'Extras';
@@ -1215,13 +1373,6 @@ window.FM = window.FM || {};
     const am = root.querySelector(':scope > .addmenu');
     if (am) { am.dataset.sm = 'extras'; am.setAttribute('aria-label', w.extras || 'Extras'); }
     return true;
-  }
-  /* the tray row while Extras is in the band (PC, nothing selected): Done, and what Extras holds */
-  function extrasFill() {
-    const w = W();
-    tray.appendChild(tool({ id: 'extrasBack', label: w.done || 'Done', icon: 'back', title: (w.done || 'Done') + ' · ' + (w.extras || 'Extras'), run: () => FM.simpleTools.closeExtras() }));
-    tray.appendChild(el('div', 'sm-quiet', w.extrasTitle || ''));
-    return false;
   }
 
   /* ═══ PHASE 3 · TEMPLATE REPLACE — SIMPLE'S LINE ON INSERT YOUR MEDIA (queue 980; DESIGN §0.4 B28, §3.6 Replace row, §3.12; his
@@ -1292,75 +1443,158 @@ window.FM = window.FM || {};
   /* #1243 S10 change 5: a refusal said while Change effect's tap is in flight closes the picker before the line takes the tray row */
   let pickTap = false;
   function pickSay(text, opts) {
-    if (pickTap && fxPick && opts && opts.refusal && !opts.live) { fxPick = null; segUndrag(); lastSig = ''; FM.simpleTools.sync(); }
+    if (pickTap && subFor && subFor.key === 'effects' && opts && opts.refusal && !opts.live) { subFor = null; segUndrag(); lastSig = ''; FM.simpleTools.sync(); }
     return tfSay(text, opts);
   }
   if (FM.spine) FM.spine.sayOver = pickSay;
 
+  /* ═══ #1243 S3 · S9 (R rule 1): WHICH OF THE FOUR MODES THE BAR IS IN. A panel is up when Extras is (the PC band or the phone's Add
+     sheet), or More's / Look's / Edit lines' panel is open for the one selected item: on a phone only while its sheet is really up (a
+     grab-bar close leaves panelFor set, finding 20: the mode is item then, and More raises it again as today). ═══ */
+  const extrasUp = () => extrasOpen || !!document.querySelector('#add-sheet.open > #add-grid > .addmenu[data-sm="extras"]');
+  function panelUp(ids) {
+    if (extrasUp()) return true;
+    if (!panelFor || ids.length !== 1 || ids[0] !== panelFor) return false;
+    if (!phone.matches) return true;
+    const s = document.getElementById('inspector-panel');
+    return !!(s && s.classList.contains('open'));
+  }
+  function modeOf(ids) {
+    if (panelUp(ids)) return 'panel';
+    if (subFor) return 'sub';
+    return ids.length ? 'item' : 'project';
+  }
+  /* a panel goes: Look's slider preview taken back, nothing open, every part drawn again (closePanel, and a sub-row opened over it) */
+  function dropPanel() { lookUndrag(); panelFor = null; panelKind = null; lastSig = ''; FM.refreshAll(); }
+  /* THE PANEL'S WAY BACK, for the focus rule (the 9 Nov review, MODE-3): the band title's ‹ (More, Extras on a PC), Look's or Edit lines'
+     own ‹, the phone sheet's grab bar, the phone's Add sheet (Extras) — the first one on screen */
+  function panelBackEl() {
+    const sel = ['#inspector-panel > .panel-title > .sm-pback', '#inspector .sm-look-tabs > .sm-pback', '#inspector .sm-cap-top > .sm-pback', '#inspector-panel.open > #insp-grab', '#add-sheet.open button'];
+    for (const s of sel) { const n = document.querySelector(s); if (n && n.getClientRects().length) return n; }
+    return null;
+  }
+  /* A tool that opens a panel had the focus (More, Look, Edit lines, Style, Extras, by the keyboard): the bar hides with the panel, so
+     focus goes to the panel's way back, not to <body>. A panel the band draws after this sync (Look's, Edit lines') gets it a frame on. */
+  function panelFocus() {
+    const go = () => { const n = panelBackEl(); if (n) n.focus({ preventScroll: true }); return !!n; };
+    if (go()) return;
+    requestAnimationFrame(() => {
+      const a = document.activeElement;
+      if (isSimple() && bar && bar.dataset.mode === 'panel' && (!a || a === document.body || !a.isConnected || bar.contains(a))) go();
+    });
+  }
+
   FM.simpleTools = {
+    /* review L3-6 (11 Nov): the playhead moved (simple-timeline.js updatePlayhead). An open Caption looks row is drawn for the track under
+       the line and the look it wears, and its tiles act on the track under the line at the tap, so it is drawn again when either changes
+       (sync's row signature carries both); with any other row, or in Full, this does nothing. */
+    timeMoved() {
+      if (!bar || !isSimple()) return;
+      /* the 11 Nov verifiers' V2: one item's tray holds a Split that rests while the line is outside the item, so the tray is drawn
+         again when the line crosses the item's edge (sync's signature carries splitAt; a redraw only on the crossing) */
+      if (!subFor) {
+        const ids = FM.selectionIds ? FM.selectionIds() : [], l = ids.length === 1 ? FM.layerById(FM.scene, ids[0]) : null;
+        if (l && splitAt(l) !== splitDrawn) FM.simpleTools.sync();
+        return;
+      }
+      if (subFor.key !== 'caplooks') return;
+      const T = capTrackNow(), k = T ? T.id + '/' + (FM.spine.captionLookOf ? FM.spine.captionLookOf(T) : '') : '';
+      if (k !== capKeyDrawn) FM.simpleTools.sync();
+    },
     /* Called by the Simple timeline's rebuild and by syncSelectionChrome: re-draws the tray only when what it shows changed */
     sync() {
       if (!mount()) return;
-      if (!isSimple()) { home(); closeMenu(); if (hintUp) { hintUp = false; splitMark(false); } if (lookDrag) lookUndrag(); if (fxPick || segDrag) { fxPick = null; segUndrag(); } extrasOpen = false; growTo(false); return; }
+      const ae = document.activeElement;   // read before anything below takes a ‹ out of the page (pbackSync), for the focus rule
+      if (!isSimple()) {
+        home(); closeMenu(); if (lookDrag) lookUndrag(); if (subFor || segDrag) { subFor = null; segUndrag(); } extrasOpen = false;
+        pbackSync(null); bar.removeAttribute('data-mode'); bar.removeAttribute('data-sub'); bar.style.removeProperty('--sm-sheet-b'); hintSync('off');
+        return;
+      }
       place();
+      linkSync();
       const S = FM.spine, R = (FM.simpleTimeline && FM.simpleTimeline.read && FM.simpleTimeline.read()) || S.read(FM.scene);
       const ids = FM.selectionIds ? FM.selectionIds() : [];
-      /* Phase 3 · Clips › Extras: a selection (a pick's own, or a tap) closes it, and so does the project row's Effects picker (one picker up at a time) */
-      if (extrasOpen && (ids.length || fxPick)) { extrasOpen = false; extrasMark(); if (fxPick && FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); }
+      /* Phase 3 · Clips › Extras: a selection (a pick's own, or a tap) closes it, and so does any sub-row but the Clips row it opened from (one menu at a time) */
+      if (extrasOpen && (ids.length || (subFor && subFor.key !== 'clips'))) { extrasOpen = false; extrasMark(); if (!ids.length && FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); }
       /* §3.12 rule 1b: a line dismisses on a selection change, so the new selection's tools are never hidden behind it */
       const selKey = ids.join(',');
       if (selKey !== lastSel) { if (lastSel !== null && FM.simpleTimeline && FM.simpleTimeline.clearSay) FM.simpleTimeline.clearSay(); lastSel = selKey; }
       if (panelFor && (ids.length !== 1 || ids[0] !== panelFor)) { panelFor = null; panelKind = null; lookUndrag(); }
-      if (rowFor && (ids.length !== 1 || ids[0] !== rowFor.id || !FM.layerById(FM.scene, rowFor.id))) rowFor = null;
-      if (fxPick && (fxPick.sel !== selKey || (fxPick.id && !FM.layerById(FM.scene, fxPick.id)))) fxPick = null;   // Phase 3 · Effect segments: another selection closes the picker
-      growSync();   // 7B: on a PC the band is grown exactly while a panel is up
+      /* #1243 S9: another selection closes a sub-row, and so does its item going (an undo, a friend's delete) */
+      if (subFor && (subFor.sel !== selKey || (subFor.id && (ids.length !== 1 || ids[0] !== subFor.id || !FM.layerById(FM.scene, subFor.id))))) { subFor = null; segUndrag(); }
       const one = ids.length === 1 ? ids[0] : null, l = one && FM.layerById(FM.scene, one);
       roomy = !!one && roomForTwo();   // measured only for one item, the only tray that can take two rows
-      const rowTarget = rowFor && FM.spine.soundTargetId ? FM.layerById(FM.scene, FM.spine.soundTargetId(R, rowFor.id)) : null;   // 2.3: a row redraws when what it shows changes
-      const rowSig = rowFor ? [rowFor.kind, rowFor.from, rowTarget ? [rowTarget.fadeIn, rowTarget.fadeOut, JSON.stringify(rowTarget.volume), JSON.stringify(rowTarget.speed), rowTarget.duration].join('|') : '', (l && rowFor.kind === 'audio') ? [l.reversed, l.muted, R.units[l.id] && (R.followers[l.id] || []).length].join('|') : ''].join('#') : '';
+      /* THE BAR'S MODE (#1243 S3, S9): styles.css shows the project row only in project mode and the tray only in item and sub mode, so
+         the bar is one row and exactly one menu is on screen. On a phone a panel's spoken line floats just above the sheet line. */
+      const mode = modeOf(ids);
+      if (bar.dataset.mode !== mode) bar.dataset.mode = mode;
+      if (mode === 'sub') bar.dataset.sub = subFor.key; else bar.removeAttribute('data-sub');
+      if (phone.matches && mode === 'panel' && FM.mobile && FM.mobile.sheetLine) bar.style.setProperty('--sm-sheet-b', Math.max(0, innerHeight - FM.mobile.sheetLine()) + 'px');
+      else bar.style.removeProperty('--sm-sheet-b');
+      pbackSync(mode);
+      /* (the project row keeps its place across the trips to the other modes by itself: Chrome keeps a hidden strip's offset, measured by
+         the 1243 R4 S15 test with a restore here taken out, so none is kept here; runSeen puts its fades right when it comes back) */
+      const rowTarget = subFor && subFor.id && ROW_KEYS.has(subFor.key) && FM.spine.soundTargetId ? FM.layerById(FM.scene, FM.spine.soundTargetId(R, subFor.id)) : null;   // 2.3: a row redraws when what it shows changes
+      const rowSig = subFor ? [subFor.key, subFor.id || '', subFor.from || '', rowTarget ? [rowTarget.fadeIn, rowTarget.fadeOut, JSON.stringify(rowTarget.volume), JSON.stringify(rowTarget.speed), rowTarget.duration].join('|') : '', (l && subFor.key === 'audio') ? [l.reversed, l.muted, R.units[l.id] && (R.followers[l.id] || []).length].join('|') : '', subFor.key === 'captions' ? FM.scene.layers.some(isCapTrack) : '', subFor.key === 'caplooks' ? (() => { const T = capTrackNow(); return T ? T.id + '/' + (FM.spine.captionLookOf ? FM.spine.captionLookOf(T) : '') : ''; })() : '', subFor.key === 'yourmedia' ? (demoOn() ? 'demo' : 'shown') : ''].join('#') : '';   // #1243 S8: the pressed look follows the track; review L4-1: Your media redraws when Demo mode flips
       /* the selected item's KIND, HOST and ROW from this read (queue 980, verify medium-tray; ported from BX1d 5f10fdb): a layer
          made in the same refresh (Text, Sound effects, Record voice) is synced first from the timeline's previous read, which
          has never heard of it, and drew the overlay tray (Into row, Crop) under a text or a sound; the rebuild's own sync then
-         computed the same signature and kept it. Its kind from the fresh read differs, so the tray is drawn again. */
-      const sig = [ids.join(','), panelFor, panelKind, roomy, rowSig, trExtras(), FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly, JSON.stringify(l.trIn || null)].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd, segSig(l)].join('#');
+         computed the same signature and kept it. Its kind from the fresh read differs, so the tray is drawn again.
+         #1243 S9: every change of mode refills (tool()'s double-click guard counts the fills). */
+      const sig = [ids.join(','), mode, extrasUp(), subFor ? subFor.key + '/' + (subFor.id || '') + '/' + (subFor.from || '') : '', panelFor, panelKind, roomy, rowSig, trExtras(), FM.spine.muteMode && FM.spine.muteMode(), FM.spine.linkMode && FM.spine.linkMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly, JSON.stringify(l.trIn || null)].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd, segSig(l), (l && !subFor) ? splitAt(l) : ''].join('#');
+      splitDrawn = (l && !subFor) ? splitAt(l) : null;   // the 11 Nov verifiers' V2: Split rests while the line is outside the item
       if (sig === lastSig) return;
       lastSig = sig;
       /* THE PRESSED TOOL KEEPS FOCUS (§3.12 1a, §8.10 item 6; review finding 27): a press that changes the clip rebuilds the
          row, and focus fell to <body> with the button it was on, so a second Enter on the same tool did nothing.
-         Restored only when focus was already in the tray, so a tap on the timeline never pulls focus here. */
-      const ae = document.activeElement, hadFocus = !!(ae && ae !== tray && tray.contains(ae));
-      const focusKey = hadFocus ? ((ae.dataset && ae.dataset.tool) || '') : '';
-      const afterRow = rowLast; rowLast = '';
-      FM.simpleTools._fill(R, ids, one, S);
-      if (hadFocus) {
-        const want = focusKey === 'rowBack' ? afterRow : focusKey;   // Done goes back to the Speed / Volume / Fade that opened the row
-        const n = (want && tray.querySelector('[data-tool="' + CSS.escape(want) + '"]')) || tray.querySelector('button, input');
+         Restored only when focus was already in the bar's rows or on a panel's ‹, so a tap on the timeline never pulls focus here,
+         and a spoken line that took focus keeps it. After a ‹ focus goes to the tool that opened the row it left (#1243 S9). */
+      const isP = !!(ae && ae.classList && ae.classList.contains('sm-pback'));
+      const hadFocus = !!(ae && ((ae !== tray && tray.contains(ae)) || (ae !== tools && tools.contains(ae)) || isP));
+      const focusKey = hadFocus ? (isP ? 'pback' : ((ae.dataset && ae.dataset.tool) || '')) : '';
+      FM.simpleTools._fill(R, ids, one, S, mode);
+      if (hadFocus && mode === 'panel') panelFocus();
+      else if (hadFocus) {
+        const row = mode === 'project' ? tools : tray;
+        const want = /^(rowBack|fxBack|itemBack|pback)$/.test(focusKey) ? backTo : focusKey;
+        const n = (want && row.querySelector('[data-tool="' + CSS.escape(want) + '"]')) || row.querySelector('button, input');
         if (n) n.focus({ preventScroll: true });
       }
+      backTo = '';
     },
-    _fill(R, ids, one, S) {
+    _fill(R, ids, one, S, mode) {
       fills++;
       /* Phase 3 · Look: THE TOOL STRIP KEEPS ITS PLACE WHEN THE SAME TRAY IS DRAWN AGAIN. Look joined a clip's tools, so a video clip's
          tray is eleven and keeps one scrolling row on a PC too (his pick B holds ten), and every press redraws the tray: the strip
          went back to its start, so a tool pressed past the first screen (Close gap, Replace, Move later on a phone) left the place
          under the finger and a second press found another tool. §3.12 1(a): the pressed tool stays where it was. A new selection,
-         or another row (Length, Speed…), starts at the beginning as before. */
+         or another row (Speed, Volume…), starts at the beginning as before. */
       segUndrag();   // Phase 3 · Effect segments: a redraw never leaves the Strength slider's preview in the document
-      const old = tray.querySelector(':scope > .sm-runbox > .sm-run'), key = [ids.join(','), rowFor ? rowFor.kind : '', panelFor ? panelKind : '', fxPick ? 'fx/' + (fxPick.id || '') + (fxPick.on ? '/on' : '') : ''].join('#');
+      const old = tray.querySelector(':scope > .sm-runbox > .sm-run'), key = [ids.join(','), mode, subFor ? subFor.key + '/' + (subFor.id || '') : '', panelFor ? panelKind : ''].join('#');
       const keepLeft = (old && key === stripKey) ? old.scrollLeft : 0;
+      if (key !== stripKey) rowN++;   // another row under the last press: tool()'s double-tap hold (HW5)
       stripKey = key;
-      if (runSeen) runSeen.disconnect();   // SU1 #15: the old tool strip goes with the old tools
+      if (runSeen) tray.querySelectorAll('.sm-run').forEach(r => runSeen.unobserve(r));   // SU1 #15: the old tool strip goes with the old tools (the project row's stays watched)
       tray.textContent = '';
-      tray.classList.toggle('sm-tray-len', !!rowFor);
+      tray.classList.toggle('sm-tray-len', !!subFor && ROW_KEYS.has(subFor.key));   // the item rows (a slider, presets): centred as 2.3 drew them; the project tools' rows keep full-height choices
       let two = false;
-      hintUp = false;   // fillTray puts it back when the hint is drawn
-      try { two = fillTray(R, ids, one, S); } finally { rows(two); splitMark(hintUp); fxMark(); }
+      try { two = fillTray(R, ids, one, S, mode); } finally { rows(two); hintSync(mode, R); fxMark(); }
       if (keepLeft > 0) { const run = tray.querySelector(':scope > .sm-runbox > .sm-run'); if (run) { run.scrollLeft = keepLeft; edges(run); } }
     },
-    /* "More": today's panel for the selection, docked under the tray (phone) or in the band above it (PC) */
+    /* "More": today's panel for the selection: on a phone the sheet from the stage's bottom edge (#1243 rule 3), on a PC the whole band */
     /* unlatch: a closed sheet comes back (finding 20); armSheet: 2.7 (#1171), see sheetGuard */
     openPanel(id) { lookUndrag(); panelFor = id; panelKind = 'more'; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); armSheet(); },
-    closePanel() { if (!panelFor) return; lookUndrag(); panelFor = null; panelKind = null; lastSig = ''; FM.refreshAll(); },
+    /* …and closed: a ‹ that had focus hands it to the tool that opened the panel (the panel's own ‹ goes with the redraw) */
+    closePanel() {
+      if (!panelFor) return;
+      const ae = document.activeElement, fromBack = !!(ae && ae.classList && ae.classList.contains('sm-pback')), to = backTo;
+      dropPanel();
+      if (fromBack) {
+        lastSig = ''; this.sync();
+        const n = to && tray.querySelector('[data-tool="' + CSS.escape(to) + '"]');
+        if (n) n.focus({ preventScroll: true });
+      }
+    },
     /* More pressed again closes what it opened (first-user audit item 4: only a tap on empty timeline did). It is up when the
        phone's sheet is open on this item (a grab-bar close leaves panelFor set, and More then raises it again, finding 20) or
        the PC band shows it. The second click of a double click never closes it, so a double tap does not open and shut it.
@@ -1414,30 +1648,80 @@ window.FM = window.FM || {};
       if (same && linesTop) root.scrollTop = linesTop;
       return true;
     },
-    openRow(kind, id, from) { if (!ROWS[kind]) return; if (fxPick) { fxPick = null; segUndrag(); } rowFor = { kind: kind, id: id, from: from || null }; lastSig = ''; this.sync(); },   // (a row closes the Effects picker, as openEffects closes a row: the 2.7 ◇ pressed with the picker up opens its row at once, the 7 Nov review)   // 2.3: Speed, Volume, Fade; S9: Audio (and `from` = the row Done returns to)
-    /* Phase 3 · Effect segments: the effects picker in the tray row, for a new segment (null: the project row's Effects) or for that
-       segment's Change effect. Pressed again for the same target it closes. */
-    openEffects(id) {
-      const want = id || null, sel = (FM.selectionIds ? FM.selectionIds() : []).join(',');
-      if (fxPick && fxPick.id === want) { this.closeEffects(); return; }
-      segUndrag(); fxPick = { id: want, sel: sel }; rowFor = null; lastSig = ''; this.sync();
+    /* #1243 S9: A SUB-ROW TAKES THE BAR'S PLACE (key: a SUBS key; id: the item it acts on; from: the row its ‹ goes back to). One at a
+       time: a new one replaces whatever row was up (the 2.7 ◇ pressed with the Effects picker up opens its row at once, the 7 Nov review).
+       Only while Simple is on screen, so nothing opens or draws in Full. */
+    openSub(key, id, from) {
+      if (!SUBS[key] || !isSimple() || !mount()) return;
+      segUndrag();
+      /* ONE MENU AT A TIME BOTH WAYS (the 9 Nov review, MODE-1): a row opened while a panel is up closes the panel first. On a PC the ◇
+         over the cut before a clip whose More or Look is open set the Transition row under that panel, where the bar is hidden: the press
+         showed nothing until the panel's ‹ was pressed. */
+      if (panelFor) dropPanel();
+      subFor = { key: key, id: id || null, from: from || null, sel: (FM.selectionIds ? FM.selectionIds() : []).join(',') };
+      lastSig = ''; this.sync();
     },
-    closeEffects() { if (!fxPick) return; fxPick = null; lastSig = ''; this.sync(); },
-    /* Phase 3 · Effects on an item: the picker in the tray row for an effect ON this item (Add effect in its tray); pressed again for
-       the same item it closes. Only while Simple is on screen, so nothing opens or draws in Full. */
+    openRow(kind, id, from) { this.openSub(kind, id, from); },   // 2.3: Speed, Volume, Fade; S9: Audio (and `from` = the row its ‹ returns to); 2.7: Transition; Strength
+    /* Phase 3 · Effect segments: the effects picker, for a new segment (null: the project row's Effects) or for that segment's Change
+       effect. Pressed again for the same target it closes. */
+    openEffects(id) {
+      const want = id || null;
+      if (subFor && subFor.key === 'effects' && subFor.id === want) { this.closeEffects(); return; }
+      this.openSub('effects', want);
+    },
+    closeEffects() { if (!subFor || (subFor.key !== 'effects' && subFor.key !== 'itemfx')) return; subFor = null; lastSig = ''; this.sync(); },
+    /* Phase 3 · Effects on an item: the picker for an effect ON this item (Add effect in its tray); pressed again for the same item it
+       closes. Only while Simple is on screen, so nothing opens or draws in Full. */
     openItemEffects(id) {
       if (!id || !isSimple()) return;
-      if (fxPick && fxPick.on && fxPick.id === id) { this.closeEffects(); return; }
-      const sel = (FM.selectionIds ? FM.selectionIds() : []).join(',');
-      segUndrag(); fxPick = { id: id, sel: sel, on: true }; rowFor = null; lastSig = ''; this.sync();
+      if (subFor && subFor.key === 'itemfx' && subFor.id === id) { this.closeEffects(); return; }
+      this.openSub('itemfx', id);
     },
-    fxPick: () => fxPick,
+    /* the effects picker's state as the suite has always read it ({id, sel, on}), now read off the sub-row */
+    fxPick: () => subFor && (subFor.key === 'effects' || subFor.key === 'itemfx') ? { id: subFor.id, sel: subFor.sel, on: subFor.key === 'itemfx' } : null,
+    /* #1243 S9: ‹ GOES BACK ONE LEVEL. From a panel to the row under it (the item's tray, or the Clips row under Extras); from a sub-row to
+       the row that opened it (Speed opened in Audio goes back to Audio; a row of the bar's own goes back to the item or project row); from
+       an item's tray it lets the selection go, as a tap on empty timeline does. Focus follows to the tool that opened what closed. */
+    back() {
+      if (!mount() || !isSimple()) return;
+      const ids = FM.selectionIds ? FM.selectionIds() : [];
+      if (modeOf(ids) === 'panel') {
+        if (extrasUp()) { backTo = 'extras'; this.closeExtras(); return; }
+        backTo = panelKind === 'look' ? 'look' : panelKind === 'lines' ? 'editlines' : panelKind === 'more' ? (tray.querySelector('[data-tool="more"]') ? 'more' : 'capstyle') : '';
+        this.closePanel(); return;
+      }
+      if (subFor) {
+        backTo = SUBS[subFor.key].opener(subFor);
+        subFor = subFor.from ? { key: subFor.from, id: subFor.id, from: null, sel: subFor.sel } : null;
+        segUndrag(); lastSig = ''; this.sync(); return;
+      }
+      if (ids.length && FM.selectLayer) { backTo = ''; FM.selectLayer(null); }
+    },
+    /* ESCAPE GOES BACK ONE LEVEL TOO (the 9 Nov review, MODE-5; queue 690: Escape gets him out of what is open). Clips', Sound's and
+       Captions' lists owned Escape; as rows they had none, so it fell to inspector.back(), which does nothing with nothing selected and
+       lets the selection go (every level at once) with something selected. js/app.js asks this last, after every dialog, menu and tool
+       that answers Escape, just before inspector.back(): a sub-row, or a panel in the PC band, goes back one level (More's panel lets
+       the layer editor step back its own pages first). True when it answered. False whenever Simple is not on screen, so Full is today's. */
+    escape() {
+      if (!isSimple() || !mount()) return false;
+      const ids = FM.selectionIds ? FM.selectionIds() : [], m = modeOf(ids);
+      if (m === 'panel' && !phone.matches && panelKind === 'more' && !extrasUp()) {
+        const I = FM.inspector;
+        if ((I && I.currentView && I.currentView() !== 'home') || FM._mtEasing || FM._volEasing || FM._spdEasing || FM._opaEasing || FM._fxEasing || FM._cropEasing) return false;
+      }
+      if (m !== 'sub' && !(m === 'panel' && !phone.matches)) return false;
+      this.back();
+      return true;
+    },
+    /* the bar's mode and its sub-row, for the suite */
+    mode: () => (bar && bar.dataset.mode) || '',
+    subFor: () => subFor && { key: subFor.key, id: subFor.id, from: subFor.from },
     /* Phase 3 · Clips › Extras: open (nothing selected; a selection is let go first), close, and whether it is up. Only while Simple
-       is on screen: in Full openExtras opens nothing. */
+       is on screen: in Full openExtras opens nothing. A panel: the Clips row it was opened from stays under it. */
     openExtras() {
       if (!isSimple() || !mount()) return false;
       closeMenu();
-      if (fxPick) { fxPick = null; segUndrag(); }   // one picker up at a time
+      if (subFor && subFor.key !== 'clips') { subFor = null; segUndrag(); }   // one menu at a time
       if (FM.selectionIds && FM.selectionIds().length && FM.selectLayer) FM.selectLayer(null);
       if (phone.matches) {
         if (!FM.mobile || !FM.mobile.openAdd || !FM.addMenu || !FM.addMenu.render) return false;
@@ -1446,22 +1730,26 @@ window.FM = window.FM || {};
         if (!sheet || !grid || !sheet.classList.contains('open')) return false;   // a Viewer adds nothing: the sheet stays down
         FM.addMenu.render(grid, { variant: 'sheet', tabs: extrasTabs(), onAfterAdd: () => { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); } });
         const am = grid.querySelector(':scope > .addmenu'); if (am) am.dataset.sm = 'extras';
+        lastSig = ''; this.sync();
+        armSheet();
         return true;
       }
       extrasOpen = true; extrasMark();
       if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
       lastSig = ''; this.sync();
+      armSheet();
       return true;
     },
     closeExtras() {
-      extrasSheetOff();
+      extrasSheetOff();   // the phone's Add sheet (its own observer brings the Clips row back)
       if (!extrasOpen) return;
       extrasOpen = false; extrasMark();
       if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
       lastSig = ''; this.sync();
     },
-    extrasOpen: () => extrasOpen || !!document.querySelector('#add-sheet.open > #add-grid > .addmenu[data-sm="extras"]'),
-    rowFor: () => rowFor,
+    extrasOpen: extrasUp,
+    /* the item row open on the bar, as the suite has always read it ({kind, id, from}) */
+    rowFor: () => subFor && ROW_KEYS.has(subFor.key) ? { kind: subFor.key, id: subFor.id, from: subFor.from } : null,
     panelFor: () => panelFor,
     /* js/mobile.js asks before raising the sheet for a selection; js/inspector.js before drawing the band */
     sheetHeld(id) { return isSimple() && panelFor !== id; },
@@ -1472,7 +1760,7 @@ window.FM = window.FM || {};
     bandWords: bandWords,
     /* suite seam (sm3 review, lens 6: Look's remembered focus and scroll and the #1171 arm time are state too, so one test's
        Look panel can no longer hand focus, or a held press, to the next) */
-    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; lookLeft = 0; lookTop = 0; lookFocus = ''; sheetArmAt = -1e9; clearTimeout(sheetOff); sheetListen(false); linesSeen = ''; linesTop = 0; rowFor = null; fxPick = null; extrasOpen = false; extrasSheetOff(); growTo(false); tfClear(); lastSig = ''; stripKey = ''; closeMenu(); },
+    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; lookLeft = 0; lookTop = 0; lookFocus = ''; sheetArmAt = -1e9; shutArmAt = -1e9; sheetPressAt = -1e9; lastPress = null; clearTimeout(sheetOff); sheetListen(false); linesSeen = ''; linesTop = 0; subFor = null; backTo = ''; extrasOpen = false; extrasSheetOff(); pbackSync(null); hintSync('off'); tfClear(); lastSig = ''; stripKey = ''; closeMenu(); },
     _menu: () => menu,
     ICON: ICON
   };

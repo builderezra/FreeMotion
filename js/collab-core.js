@@ -190,7 +190,12 @@ window.FM = window.FM || {};
      fp_12 in the fixture pin the two rules. FM.SM_V does not move: an older build opens a project holding one exactly as before (a
      pinned adjustment layer that its own steps do not refit). The S10 review added, in this same rev: `whole` only with `stay`, and
      its span `wholeStart` / `wholeEnd` (finite, >= 0, gone with `whole`); fp_13 and fp_14 pin those. */
-  C.SCHEMA_REV = 43;   // #1248 (v18.38): Snow & Rain's Area control (weather 'area', a button row) moved the effect definitions
+  /* Rev 44 (#1243 S34 A, Simple's Link; review L1-2, 11 Nov): the sanitiser keeps `project.sm.unlinked` only as exactly true (storage.js
+     sanitizeSmProject). A rev-43 build keeps any plain `unlinked` as an unknown key (smKeepUnknown), so the two would normalise such a
+     project differently, the resync loop this gate exists to prevent; and a rev-43 peer reads every project as linked, so its Simple
+     moves would carry titles along on a peer whose Link says everything stays. `unlinked: 'yes'` in SCHEMA_PROJECT_FIXTURE pins the
+     rule. FM.SM_V does not move: an older build opens a project holding it as linked, exactly as before. */
+  C.SCHEMA_REV = 44;   // #1243 S34 A: project.sm.unlinked true-only. Before: 43, #1248 (v18.38): Snow & Rain's Area control (weather 'area', a button row) moved the effect definitions
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -363,7 +368,7 @@ window.FM = window.FM || {};
   /* …and a project carrying Simple's project keys (SCHEMA_REV 8): `home` any string ≤ 32 is kept, `v` clamped, junk dropped. */
   const SCHEMA_PROJECT_FIXTURE = function () {   // not on C: the S0 test pins FM.collab's exports
     return { width: 320, height: 240, fps: 30, duration: 4, background: '#000000',
-             sm: { v: 1.4, home: 'nope', adopted: 'yes', mrev: -1, later: { a: [1, 2] } } };
+             sm: { v: 1.4, home: 'nope', adopted: 'yes', unlinked: 'yes', mrev: -1, later: { a: [1, 2] } } };   // unlinked: rev 44
   };
 
   /* ═══ THE DERIVED-WRITER TERM (§14.7, added in S2) ═════════════════════════════════════════════
@@ -445,7 +450,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =4747328505700994;   // SCHEMA_REV 43 (#1248, v18.38): weather gained Area (Inside the layer / Whole frame). Measured 11 Nov by `921 S1 the schema fingerprint gate` at rev 43; before:   // SCHEMA_REV 42 (#1243 S10): sm.whole true-only, fp_11 / fp_12; the S10 review's whole-only-with-stay and wholeStart / wholeEnd, fp_13 / fp_14. Measured 9 Nov by `921 S1 the schema fingerprint gate` at rev 42 (5720067090430967 before the review's rules, never shipped); before: 7533255701768435 at rev 41 (v18.15, #482 4.6: the Filter's Apply as), 6290761865100751 at rev 40.
+  C.SCHEMA_FP =8721185479896693;   // SCHEMA_REV 44 (#1243 S34 A, review L1-2): project.sm.unlinked true-only, `unlinked: 'yes'` in SCHEMA_PROJECT_FIXTURE. Measured 11 Nov by `921 S1 the schema fingerprint gate` at rev 44, 1280; before: 4747328505700994 at rev 43 (#1248, v18.38): weather gained Area (Inside the layer / Whole frame). Measured 11 Nov by `921 S1 the schema fingerprint gate` at rev 43; before:  // SCHEMA_REV 42 (#1243 S10): sm.whole true-only, fp_11 / fp_12; the S10 review's whole-only-with-stay and wholeStart / wholeEnd, fp_13 / fp_14. Measured 9 Nov by `921 S1 the schema fingerprint gate` at rev 42 (5720067090430967 before the review's rules, never shipped); before: 7533255701768435 at rev 41 (v18.15, #482 4.6: the Filter's Apply as), 6290761865100751 at rev 40.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════

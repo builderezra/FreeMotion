@@ -10,7 +10,7 @@ Before you start: a project in Simple with three clips (tutorials 01 to 03). On 
 4. Lift your finger. The clips are in the new order and still end to end. <!-- walked: clipB 0+10, clipA 10+10, clipC 20+10; live "Clip 1 moved to 2 of 3"; shots/11-04.jpg -->
 5. To trim, tap the middle clip, then press the white bar at its right end and drag it left. A label shows the clip's new length as you drag (6.2 s). <!-- walked: tail grip dragged 24 px left at 6.4 px per second; tip "6.2 s"; shots/11-05.jpg -->
 6. Lift your finger. The clip is that long and the clip after it slides up to meet it (the video went from 0:30 to 0:26). The line says "Trimmed Clip 2". <!-- walked: clipB 10+6.2, clipC 16.2+10, project 26.236; shots/11-06.jpg -->
-7. To move a title, tap **Text**, type a word, and tap the **tick** at the top right. <!-- walked: Hello typed, tick at (347,28); shots/11-07.jpg -->
+7. To move a title, tap **Text**, then **Add text**, type a word, and tap the **tick** at the top right. <!-- walked (before #1243 S8 gave Text its row): Hello typed, tick at (347,28); shots/11-07.jpg -->
 8. The title is a small lilac square in the strip above the clips. Press and hold it for half a second, then drag it right. A label shows the time it will start at (7.9 s). <!-- walked: text layer 0+5, hold 550 ms then 10 moves of 5 px; tip "7.9 s"; shots/11-08.jpg -->
 9. Lift your finger. The line says "“Hello” now starts at 7.9 s". <!-- walked: live text; shots/11-09.jpg -->
 

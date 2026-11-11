@@ -382,10 +382,13 @@ window.FM = window.FM || {};
       if (mod && (e.key === 'd' || e.key === 'D') && one && R.isMain(one)) { e.preventDefault(); S.cmd.duplicate(one); return true; }
       return false;
     },
+    /* the S key's rule (splitHere below). #1243 S5's tray Split splits its own item since review L3-3 (11 Nov); this stays a seam */
+    splitHere: () => splitHere(),
     _state: () => ({ mode: mode, lastPid: lastPid, pendingFx: pendingFx })   // suite seam
   };
 
-  /* ✂ AND S ARE ONE RULE (DESIGN §8.3's table; SU1 #11, the PM's call 12 Oct): a selected item that is not a main clip is split
+  /* SPLIT AND S ARE ONE RULE (DESIGN §8.3's table; SU1 #11, the PM's call 12 Oct; the play row's ✂ until #1243 S5 moved Split onto
+     every item's tools, FM.editor.splitHere): a selected item that is not a main clip is split
      itself ("split the item"); a main clip is split when the playhead is inside it; otherwise the main clip under the playhead is
      selected and split. The ✂ used to hand the selection straight to split, so with clip A selected and the playhead over B it
      refused "Move the playhead onto the clip to split" while S split B — a beginner taps the ✂, and CapCut splits what is under
@@ -410,9 +413,6 @@ window.FM = window.FM || {};
 
   function wire() {
     if (GATED) body().classList.toggle('sm-on', enabled());
-    const sp = document.getElementById('btn-sm-split');
-    /* Phase 2: ✂ splits by the same rule as S (splitHere above; §8.5: one home) */
-    if (sp && !sp._edWired) { sp._edWired = true; sp.addEventListener('click', () => splitHere()); }
     if (GATED && FM.settings && FM.settings.onChange) FM.settings.onChange(() => { if (!!enabled() !== body().classList.contains('sm-on')) FM.editor.onPreviewFlip(); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
