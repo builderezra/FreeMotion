@@ -1,4 +1,4 @@
-/* FreeMotion — Free Crop tool (not in Alight Motion).
+/* FreeMotion — Free Crop tool (not in [the reference app]).
  * Tap "Free crop" in Edit Shape, then drag a box right on the playback area — iPhone-photo style.
  * While open, the layer shows its WHOLE frame (compositor honours layer._cropEditing) and this overlay
  * dims everything outside the crop box. Drag a corner/edge handle to resize, drag inside to move, or

@@ -2872,7 +2872,7 @@ window.FM = window.FM || {};
 
   /* ---- THE ADD LAYER (queue 294) --------------------------------------------------------------
    * Ezra: "the plus button inside the creator menu is kind of on the nose… it looks very similar to what
-   * a light motion has", and his idea for replacing it — "the ad button could instead of being a button
+   * [the reference app] has", and his idea for replacing it — "the ad button could instead of being a button
    * like that it could be a layer now… if you just tap anywhere on that line it'll open up the same
    * admin where you can add shapes or elements".
    * It is NOT a scene layer and must never become one: it is a row this function draws, so it cannot
@@ -4156,8 +4156,8 @@ window.FM = window.FM || {};
   // movement AND how far the timeline has auto-scrolled since the grab, so when the view scrolls out from
   // under the finger the edge keeps tracking it (the screen-edge position stays put while the clip grows).
   /* ---- THE TRIM READOUT AND ITS NOTCH STRIP (queue 153) ------------------------------------------
-   * His words, with an Alight Motion screenshot: *"When dragging a clip from the edges to extend, in
-   * alight motions there's some differences, it tells you all of this information and also shows on
+   * His words, with an [the reference app] screenshot: *"When dragging a clip from the edges to extend, in
+   * [the reference app]'s there's some differences, it tells you all of this information and also shows on
    * little notches, by colouring in the exact notch it will land on, because the notches are frames and
    * the whole thing has to actually line up with the notches."*
    * Two things, and he was explicit about both:
@@ -4288,7 +4288,7 @@ window.FM = window.FM || {};
     if (se.snapped) { dt += (se.guide - movingEdge); showSnap(se.guide); }
     else {
       hideSnap();
-      /* LAND THE EDGE ON A WHOLE FRAME (queue 153). His words, about Alight Motion's trim readout:
+      /* LAND THE EDGE ON A WHOLE FRAME (queue 153). His words, about [the reference app]'s trim readout:
          *"the notches are frames and the whole thing has to actually line up with the notches."*
          The DELTA above is already quantised (`Math.round(sec*fps)/fps`) — but that only makes the CHANGE
          a whole number of frames, not the result. An imported clip's duration is whatever the file is

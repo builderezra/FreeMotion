@@ -1,6 +1,6 @@
 /* FreeMotion — parameterised easing families (v5.47).
  *
- * Ezra, with six Alight Motion screenshots: "there's three types of graphs — cubic bezier easing,
+ * Ezra, with six [the reference app] screenshots: "there's three types of graphs — cubic bezier easing,
  * bounce, and steps, and each section has its own presets… For bounce the three different presets
  * actually change the points you can grab and adjust, if you see the circles, those are the touch
  * points you can grab on to make it change."

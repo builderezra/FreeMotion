@@ -2,6 +2,7 @@
 Run from the site folder: python3 serve.py 8791. Binds 127.0.0.1 only."""
 import http.server, os, posixpath, re, sys, urllib.parse
 REPO = '/home/ezra/FreeMotion'  # served READ-ONLY at /app/ so the real renderer can load (GET only; POST only ever writes under shots/)
+SS = '/home/ezra/fx-ss-snap'    # a SNAPSHOT copy of the builder's effects branch (~/fm-claude-wt/ss), served READ-ONLY at /ss/
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SHOTS = os.path.join(ROOT, 'shots')
 os.makedirs(SHOTS, exist_ok=True)
@@ -16,11 +17,12 @@ class H(http.server.SimpleHTTPRequestHandler):
         pass
     def translate_path(self, path):
         p = urllib.parse.urlparse(path).path
-        if p.startswith('/app/'):
-            rel = posixpath.normpath(urllib.parse.unquote(p[5:])).lstrip('/')
-            if rel.startswith('..'):
-                return '/nonexistent'
-            return os.path.join(REPO, rel)
+        for prefix, root in (('/app/', REPO), ('/ss/', SS)):
+            if p.startswith(prefix):
+                rel = posixpath.normpath(urllib.parse.unquote(p[len(prefix):])).lstrip('/')
+                if rel.startswith('..'):
+                    return '/nonexistent'
+                return os.path.join(root, rel)
         return super().translate_path(path)
     def do_POST(self):
         u = urllib.parse.urlparse(self.path)

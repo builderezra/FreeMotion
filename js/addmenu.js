@@ -548,8 +548,8 @@ window.FM = window.FM || {};
       + '<linearGradient id="fm-ic-tpB" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">'
       + '<stop offset="0" stop-color="#FFC98A"/><stop offset="1" stop-color="#F0790E"/></linearGradient>'
       + '</defs>'
-      /* NOT ALIGHT MOTION'S SHAPE ANY MORE (queue 375). Ezra: "Template icon needs to be a little bit
-         different as it's identical to alight motions just with colour, should be a simple task just
+      /* NOT [THE REFERENCE APP]'S SHAPE ANY MORE (queue 375). Ezra: "Template icon needs to be a little bit
+         different as it's identical to [the reference app]'s just with colour, should be a simple task just
          make it look good." He named the SHAPE, not the palette — the colours here are already his, from
          queue 267 and the two amendments after it — so the frame and both accent hues stay and the
          division inside changes. What made it identical was the arrangement: a full-width crossbar with

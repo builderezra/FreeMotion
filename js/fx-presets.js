@@ -1,4 +1,4 @@
-/* FreeMotion — per-EFFECT presets (Alight Motion "hold an effect" presets).
+/* FreeMotion — per-EFFECT presets ([the reference app] "hold an effect" presets).
  * A preset is ONE effect with pre-authored params — often keyframed — that applies as a normal
  * effect instance anchored at the playhead. Two pools:
  *   FM.EFFECT_PRESETS  — shipped with the app (this file IS the shipping mechanism: Ezra authors

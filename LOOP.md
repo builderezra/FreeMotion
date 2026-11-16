@@ -31,6 +31,15 @@ file passes 400 lines.
    session from counting as idle, and the cron fires only when it is idle: 17 minutes of ticks were lost to a waiter whose
    `.done` never came. So the TICK watches a ship (ship.log and `.last-ship`, every minute). A waiter is only for what the tick
    cannot see, always with its own deadline AND its own stop condition, and it is stopped (TaskStop) the moment it is not needed.
+6b. **⛔ A SHIP OR AN FU RUN IS NEVER A REASON TO STOP WORKING (10 Nov).** His words, twice in one evening: *"Why is the builder
+   in a never-ending loop saying there's nothing to do? … I've given you a million things that you can work on"* and *"why does
+   the builder keep running out of tasks"*. Ships and the Full-unchanged lock hold this tree for most of the day, and the
+   builder spent them asleep on one waiter with the cron deleted (the PM's 17 Oct quota rule, now WITHDRAWN). So, during either:
+   the cron stays armed (8b) and there is no waiter (6: the tick watches the run); the next actionable item is built CODE-ONLY
+   in its own worktree — reading, writing code, writing tests — and named in `.claude/building` (`<worktree> · <item>`); its
+   slices, mutations and browser checks are queued for the gap. `tools/tick.sh` prints the run, the declared item and an
+   IDLE line once no worktree has changed for 15 minutes (`tools/_shipidle.sh`, self-tested by `tools/test-shipidle.sh`). A tick
+   during a run ends on what is being built, never on "waiting".
 7. **Mobile-first:** verify at ~380px before calling any UI change done.
 8. **Surface every open question in the reply.** 28 questions once piled up unasked. Never block
    silently, and never re-ask something he has already answered.

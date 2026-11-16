@@ -3631,7 +3631,7 @@ window.FM = window.FM || {};
    *     audio effects have — on its Radio style, so its own band is wide and the Band-Pass does the shaping.
    *   · Walkie-talkie's squelch (a burst of noise as a transmission ends) is a gate on the voice's level, not one of
    *     Telephone's controls (its own note says so); this is the Walkie-talkie style without it.
-   * NAMES, against #954 (no Alight Motion name, no clash): none of the sixteen is in the #954 record's lists. Four are also
+   * NAMES, against #954 (no [the reference app] name, no clash): none of the sixteen is in the #954 record's lists. Four are also
    * Pitch Shift's preset names (Chipmunk, Helium, Deep, Monster) and four are Telephone's Style buttons (Phone, Radio,
    * Megaphone, Walkie-talkie): the same sound reached two ways, on purpose — if that reads as two things with one name, the
    * voices keep the names and the presets move (his call, asked in tools/design/plans/fxnew-voice/NOTES.md).

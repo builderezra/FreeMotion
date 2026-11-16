@@ -1,4 +1,4 @@
-/* FreeMotion — Text edit mode (Alight Motion style).
+/* FreeMotion — Text edit mode ([the reference app] style).
  * A focused, full-screen text-entry mode: a big text field docked under the top toolbar (#439) + a
  * compact top toolbar with exactly four controls — Align · Font · Size · Colour — and a ✓ Done.
  * Everything else (bold/italic, spacing, line-height, curve, outline, animation, captions) stays in

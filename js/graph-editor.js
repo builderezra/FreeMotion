@@ -1,4 +1,4 @@
-/* FreeMotion — Easing Curve editor (Alight Motion's graph editor).
+/* FreeMotion — Easing Curve editor ([the reference app]'s graph editor).
  * Rendered INLINE as a sub-view of the Move & Transform panel (same bottom sheet, NOT a separate
  * full-screen screen — AM doesn't do that). Opened from the panel's left-rail easing button. Edits
  * the easing of the active mode's animated properties at the playhead together: drag the two
@@ -439,7 +439,7 @@ window.FM = window.FM || {};
   };
 
   // Build the editor as an INLINE element (no full-screen overlay) so it sits in the same Move &
-  // Transform bottom-sheet, exactly like Alight Motion. The inspector renders this as a sub-view and
+  // Transform bottom-sheet, exactly like [the reference app]. The inspector renders this as a sub-view and
   // owns the "‹ Position / Scale" back button.
   function buildEditorDom() {
     const wrap = document.createElement('div'); wrap.className = 'es-inline';

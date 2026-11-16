@@ -17,7 +17,7 @@ window.FM = window.FM || {};
     return (prefix || 'id') + '_' + (_idc++).toString(36) + Math.floor(performance.now()).toString(36) + '_' + Math.random().toString(36).slice(2, 7);
   }
 
-  // Per-layer timeline colors, cycled like Alight Motion (each layer gets its own clip color).
+  // Per-layer timeline colors, cycled like [the reference app] (each layer gets its own clip color).
   const CLIP_COLORS = ['#2bbfa8', '#e0913f', '#df5b5b', '#9b6dff', '#46c98a', '#4d8bf0', '#e85f9e', '#d9b13f'];
   let _colorIdx = 0;
 

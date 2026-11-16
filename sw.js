@@ -117,6 +117,9 @@ async function pruneSuperseded(res, c, pageUrl) {
     try { u = new URL(r.url); } catch (_) { return null; }
     if (!isVersionedAsset(u)) return null;     // index-fallback and the stale marker are not assets
     if (label && /\/tutorials\//.test(u.pathname)) return u.searchParams.get('v') === label ? null : c.delete(r);
+    /* THE EFFECT PICTURES (#1253) are named by no HTML either: js/fx-thumbs.js fetches fx-pics/ with the build as its ?v=,
+       the same number as the label, so a copy an older release cached is superseded by the same rule. */
+    if (label && /\/fx-pics\//.test(u.pathname)) return u.searchParams.get('v') === label ? null : c.delete(r);
     const want = live.get(u.pathname);
     if (want == null) return null;             // this page never mentions that path — not ours to judge
     return u.searchParams.get('v') === want ? null : c.delete(r);
@@ -174,7 +177,7 @@ self.addEventListener('fetch', (e) => {
    *
    * QUEUE 306 — THE SILENT DOWNGRADE. Ezra, repeatedly and for weeks: *"an older version of our
    * project shows up when you refresh"*, *"The glitch that shows the old version of FreeMotion that has
-   * a more alight motion look STILL shows up when I press refresh… it's such a big issue, PLEASE"*.
+   * a more [the reference app] look STILL shows up when I press refresh… it's such a big issue, PLEASE"*.
    * Nobody has reproduced it on this machine, and this is the one untested path that fits the whole
    * description rather than part of it: serve a stale index.html and every `?v=` URL it names is an OLD
    * url, which the asset branch below then answers CACHE-FIRST — so a single failed fetch does not give

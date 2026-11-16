@@ -1,4 +1,4 @@
-/* FreeMotion — full-screen Add-Effect browser (Alight Motion style): search · auto-scrolling featured
+/* FreeMotion — full-screen Add-Effect browser ([the reference app] style): search · auto-scrolling featured
  * carousel · Recents grid that PULLS DOWN to the favourites browser + star-to-favourite · category banners that open
  * a per-category effect list. Adds exactly ONE effect per tap (the single add path). Reads FM.fxRegistry. */
 window.FM = window.FM || {};

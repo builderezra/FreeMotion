@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 11 Nov at v18.39
+> ## 📌 WHAT I NEED FROM YOU — updated 17 Nov at v18.40
 >
-> **State:** v18.39 — **Simple's bottom bar now shows one row at a time.** Tap a clip and its own tools replace Clips, Text and the rest; open a menu and it replaces the row, with ‹ to go back; the row scrolls sideways like CapCut instead of squeezing. On your phone, More, Look and the other panels now open over the timeline and the picture stays its full size. **The play row is simpler too:** no ⋯ and no ✂; Split is the first tool when you tap a clip, and a new Link button turns "things on a clip move with it" on and off for the whole project (the pictures I sent). **New presets:** Captions › Caption looks (8, four light each word as it is spoken) and Text › Title looks (6 styled, moving titles). **Overlay opens its own row too:** Photo or video, or Your media (what you have imported before, no picker). **And Text › Draw:** sketch on the video with your finger. One change you might notice: Find speech in Captions now listens to the whole project, because Captions only shows with nothing selected. And a clip's Split greys out until the playhead is on that clip (the S key still splits whatever clip is under the playhead). **From you, most useful first:** **open FreeMotion cold from your Home Screen on your iPhone and say if the intro still lags, and if an empty project's clapper lid still gets cut off as it lifts (#1231, #1232)**; play a project on your iPhone where a clip has an effect on its sound, for a minute, then paste Settings → Reports → Your last playback (#663); export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956).
+> **State:** v18.40 — **every effect now shows its drawn picture in the effect menus** (238 of 238), instead of a live preview. They load the first time you open an effects menu, so the app starts as fast as before; offline before that first time you get the old previews. If you dislike one, name it and I hold it back. Soft Skin, Sharpen, Temporal Denoise and Lens Blur may hitch once the first time they scroll into view: say if you notice. **And the live site now serves only the app:** your notes, the request list, the tests and the tools were all readable there by anyone; they are not any more, search engines are asked not to list the app, and the app's own code no longer names Alight Motion (it did, 68 times, in comments). **Still yours to do:** take down the old v2.83 copy in your other repo (Claude-game-2 → the FreeMotion folder → ••• → Delete directory → Commit changes). Not done yet: your number plates are painted out in every picture, but the three raw car photos the app downloads still show them; blanking the files is next. **From you, most useful first:** **open FreeMotion cold from your Home Screen on your iPhone and say if the intro still lags, and if an empty project's clapper lid still gets cut off as it lifts (#1231, #1232)**; play a project on your iPhone where a clip has an effect on its sound, for a minute, then paste Settings → Reports → Your last playback (#663); export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956).
+>
+> v18.39 — **Simple's bottom bar now shows one row at a time.** Tap a clip and its own tools replace Clips, Text and the rest; open a menu and it replaces the row, with ‹ to go back; the row scrolls sideways like CapCut instead of squeezing. On your phone, More, Look and the other panels now open over the timeline and the picture stays its full size. **The play row is simpler too:** no ⋯ and no ✂; Split is the first tool when you tap a clip, and a new Link button turns "things on a clip move with it" on and off for the whole project (the pictures I sent). **New presets:** Captions › Caption looks (8, four light each word as it is spoken) and Text › Title looks (6 styled, moving titles). **Overlay opens its own row too:** Photo or video, or Your media (what you have imported before, no picker). **And Text › Draw:** sketch on the video with your finger. One change you might notice: Find speech in Captions now listens to the whole project, because Captions only shows with nothing selected. And a clip's Split greys out until the playhead is on that clip (the S key still splits whatever clip is under the playhead).
 >
 > v18.38 — **Colouring is now Colouring & Media, with Replace media at its top; the layer ⋯ menu lost Replace, Sharpen and Onion skin.** Onion skin is in View options now (it was not there before, the ⋯ menu was its only home). And **Snow & Rain now stays inside the layer you add it to**, with an Area option for the whole frame.
 >
@@ -39697,3 +39699,106 @@ re-opened #480, which I had marked done and had not fixed.
       either way SM_FLAGS / the sanitiser / the collab fixture move together (a SCHEMA_REV bump) and it is a Simple release (full-unchanged lock).
       **Test:** three 2 s clips, add a full-frame picture at 1 s through Overlay › Your media and through Photo or video: it is an overlay, the clip row is still
       the three clips (CONTROL: an imported stack of full-frame takes still reads as one main clip).
+- [ ] **1253 — Put ALL the effect pictures in the app NOW (#1243 FX1): he OKs the lot and will name any he dislikes** (16 Nov ~23:50 AWST, via INBOX; JUMPED by his "now")
+      **STATUS: 🟢 READY — nothing is stopping this**
+      📥 **Moved verbatim from INBOX (16 Nov, the loop). The logger's part 3, about the old builds, is #1254:**
+      ### 16 Nov 2026, 23:50 AWST — resume; put ALL the effect pictures in now; old FreeMotion builds are findable online
+      **His words (verbatim):** Yeah resume work and I have a couple questions one why aren't the new icons in yet? I'll start a fork of this chat that has fable. Just add all the effects in mouth. There's any I don't like. I'll tell you about them. I mean yeah I'm looking at the like the new ones that you've done and it looks good. Also I don't know how this is possible but I was like trying to like search up free motion in one of my like my Safari browser on my phone and I found a really old build like a really old version which was cool so just like see how far we come but to be honest that should not be findable. I mean it might just be because it was like cached or something on my phone, but if there is on the GitHub any old versions that's really bad because the old versions are clearly copies of a light motion and if anyone can find that when the actual thing you know if anyone can find that ever then they will basically you know get us some big trouble
+
+      (Voice dictation: "in mouth" = "in now", "There's any I don't like" = "If there's any I don't like", "a light motion" = Alight Motion. "The new icons" = the effect pictures, #1243 FX1. The Fable fork is a reserve for hard jobs only; his words to it: "this fork is for when there are really hard jobs that need fable, shouldnt be used much".)
+
+      **Logger's plan (not his words):**
+
+      **1. Resume.** Pace: glide from 5 % (Mon 16 Nov 23:47) to about 90 % of Weekly · all models at the reset, Mon 23 Nov 16:00 AWST (about 0.53 points an hour). Fable counts about 2x Opus, so workflow agents run on Opus. Add one workflow at a time and read the meter 10 minutes after.
+
+      **2. Effect pictures in the app: ALL of them, now (#1243 FX1).**
+      - Why it jumps the queue: his "now" makes it JUMPED-worthy. It is no longer "10 at a time, each batch approved": he OKs the lot and will name any he dislikes. He also OKs the round-5 pictures ("the new ones… looks good").
+      - **Source:** `tools/design/effect-pictures/`.
+        - It holds 238 drawn pictures (unique `id`s) in 57 `tiles-*.js` files, plus `kit.js`.
+        - Contract (HARNESS.md): `FX_TILES.push({id, name, section, still, make(px){ return (c,t)=>… }})`. It draws in 0..100 units, and `t` is seconds.
+        - When an id is drawn twice, the later file in index.html's FILES order wins. Round 5's `tiles-h1..h14` redraw the 14 upgraded effects.
+        - 36 of those paths are still uncommitted in main's working tree. Copy them into your worktree; the next ship's `git add -A` commits them.
+      - **What changed since plan C §FX1** (`tools/design/plans/2026-11-08-1243/1243-C.md:314-361`): its pick A, baked 12-frame 1-second WebP sheets, assumes 1-second loops. The drawn pictures run on continuous time with their own periods: the page drives `t` as seconds since start, and nothing declares a period. So a bake needs a period per picture, or every loop seams.
+      - **Logger's recommendation: plan C's option B, ship the drawing code and run it live.**
+        - **Loading:** lazy-load `kit.js` + the tiles the first time an effects sheet opens. They are 1.56 MB raw and **525 KB gzipped**, and the SW caches them. Option A would be about 10 MB of WebP.
+        - **Animation:** only on-screen tiles animate (IntersectionObserver). Use the picture page's stride: paint every 2nd frame when more than 10 tiles are visible, every 3rd when more than 24. That page already runs on his phone, and it is what he approved.
+        - **Contract:** keep `FM.fxThumbs.mount`'s contract. The live render stays as the fallback for any type with no picture, and for layer previews, presets and filters.
+        - **Reduced motion:** with `prefers-reduced-motion`, draw `still` only.
+        - **Cost:** measure each picture with the page's `__fxBench` at 380. If one costs more than about 2 ms a frame, bake that one alone.
+        - **If you choose A instead,** detect each period first: render at t and t+P for P in {1, 1.5, 2, 2.5, 3, 4, 5, 6}, and take the smallest P where the two frames match.
+      - **Photos:** 56 of the 57 tile files reference a photo. Check where the picture page loads them from, and point them at the app's own `fx-art/`, never at tools/design.
+      - **Tests:**
+        - Plan C's list still applies:
+          - manifest ids are registry types
+          - a mount shows the picture, not the live render (mutation: `mountKey` ignores the pictures)
+          - draw cost and memory at 380
+          - reduced motion
+          - a missing picture falls back to the live tile
+        - Add a suite count line, "pictures: N / M effects", so any effect without a picture shows.
+      - **Originality:** nothing may be modelled on Alight Motion's tiles (BEFORE-PUBLISHING.md).
+
+      **His clauses:**
+      1. [x] ✅ 16 Nov 23:56 "Yeah resume work" — the loop is running again (his pause of 16 Nov ~12:15, "pause all work now", ends here).
+      2. [x] ✅ v18.40 (238 of 238 effects show their drawn picture; fetched on the first effects menu, only on-screen pictures built and animated, stills with Reduce Motion, the live tile as the fallback; every car picture's plate painted out) — "why aren't the new icons in yet? … Just add all the effects in now. If there's any I don't like I'll tell you about them." — every drawn effect picture (238 in tools/design/effect-pictures/) shows in the app's effect menus in place of the live-rendered tile; an effect with no picture keeps its live tile; nothing modelled on Alight Motion's tiles.
+      3. [ ] "I'm looking at the like the new ones that you've done and it looks good" — his OK for the round-5 pictures and the upgraded effects behind them: that release ships once the 42 bugs in tools/design/pm/r5-ss-bugs.md are fixed (tracked in #1246 and #1250).
+      4. His last part, "that should not be findable", is its own item: #1254.
+      📍 **Order:** his word is "now" (16 Nov), so this is worked ahead of the older open items, which keep their order behind it; its releases claim it as partial until every clause is ticked.
+      📍 **v18.40 (17 Nov):** clause 2 shipped: 238 of 238. Left from the build's review, logged here so they are not lost: four pictures are slow to build the first time they come on screen (Soft Skin ~0.5 s, Sharpen, Temporal Denoise, Lens Blur: the fix belongs in the tile files, the logger's); every release re-downloads the ~1.5 MB of pictures (the cache-buster is the build label; a per-file hash would avoid it); tiles hidden under an open category on a PC still animate within the frame budget. Clause 3 waits for the effects release (#1246, #1250).
+- [ ] **1254 — Old FreeMotion builds and the project's own files must not be findable online: "the old versions are clearly copies of" Alight Motion** (16 Nov ~23:50 AWST, via INBOX; his whole message is in #1253)
+      **STATUS: 📌 NOTE — nothing to build**
+      **His words (verbatim, the part of his 16 Nov message this item is about):** "Also I don't know how this is possible but I was like trying to like search up free motion in one of my like my Safari browser on my phone and I found a really old build like a really old version which was cool so just like see how far we come but to be honest that should not be findable. I mean it might just be because it was like cached or something on my phone, but if there is on the GitHub any old versions that's really bad because the old versions are clearly copies of a light motion and if anyone can find that when the actual thing you know if anyone can find that ever then they will basically you know get us some big trouble"
+      (Voice dictation: "a light motion" = Alight Motion.)
+      📥 **Moved verbatim from INBOX (16 Nov, the loop), the logger's measurements and plan (not his words):**
+      **3. Old builds findable online.** Measured 16 Nov 23:50 with read-only checks of GitHub, the live sites, the Wayback Machine and Software Heritage.
+      - **What he found** is almost certainly a leftover FreeMotion **v2.83** copy in his public repo **Claude-game-2**.
+        - That is the Mac's "Slot game" repo, which also holds Slovo.html and the root app.
+        - Its GitHub Pages site is on, so the copy is a live website under that repo's address, folder `FreeMotion/`.
+        - Its `PARITY.md` names Alight Motion 3 times.
+      - **FreeMotion's own repo is public.** All 2,355 commits back to 26 Jun, 433 branches and 2 tags are browsable on github.com.
+        - There are 0 forks, 0 stars and 0 watchers.
+        - The Wayback Machine has no captures and Software Heritage has no copy, so there is no sign anyone has copied it.
+      - **The live site hands every project file to anyone.** Each of these answers 200:
+        - `CLAUDE.md`, `BEFORE-PUBLISHING.md` (16 Alight mentions), `REQUESTS.md` (69), `POLISH-LOG.md`, `LOOP.md`, `INBOX.md`
+        - `tools/ship.sh`, `tests/run.html`, `tests/tests.js`, `tools/design/…`
+        - Jekyll is on (no `.nojekyll`, no `_config.yml`), so `CLAUDE.html` and `BEFORE-PUBLISHING.html` also come back as rendered pages.
+
+      **Builder's part** (free, no clicks from him; ship as soon as it can, ahead of the pictures since it is small):
+      - **(a) A root `_config.yml`** whose `exclude:` drops everything that is not the app: `*.md`, `tools`, `tests`, `*.py`, `*.sh`, `*.txt`, `*.log`, and any other non-app top-level path.
+        - First list every path the app fetches at runtime, including sw.js's cache list, the manifest, icons and `fx-art`, so nothing the app needs is excluded.
+        - Then curl them on the live site after the deploy.
+      - **(b)** Put `<meta name="robots" content="noindex">` in index.html, so search engines drop the app.
+      - **(c) Make it structural.** After a push lands, ship.sh (or tick.sh) curls `BEFORE-PUBLISHING.md`, `CLAUDE.md`, `REQUESTS.md` and `tests/tests.js` on the live site and shouts if any answers 200. A new top-level doc must never quietly go public again.
+
+      **His part** (it needs his GitHub login):
+      - ✅ ~~❓ASK: **(d)** GitHub Pro (about US$4 a month), THEN make FreeMotion private (logger's RECOMMENDATION).~~ **HE ANSWERED 17 Nov 00:45: "dont need pro, lets just keep going"** — no Pro, the repo stays public; his words are below.
+        - **Order matters:** on the free plan a private repo's site is switched off, which would take the app with it.
+        - With Pro, Pages keeps serving the app at the same address. His phone, the installed app and his projects (stored per origin) are untouched. History, branches and docs disappear from github.com.
+        - The laptop's ssh deploy key works on a private repo. Nothing in tools/ calls the GitHub API: only ship.sh:146 curls github.com, which still answers.
+        - The cloud helper may need its GitHub access re-granted.
+      - **(e) Claude-game-2:** delete its `FreeMotion/` folder (on github.com, or from the Mac's "Slot game" copy), then make that repo private too. With Pro, Slovo's site stays up.
+      - **Free alternative to (d)**, only if he says no to Pro: a private source repo plus a public deploy-only "FreeMotion" repo holding just the current build, with no history. It needs ship.sh / rollback.sh surgery and a new deploy key.
+      - **Later:** Google drops 404 pages on its own. Its "Remove outdated content" tool is faster.
+      **His clauses:**
+      1. [x] ✅ v18.40 (_config.yml leaves all but the app off the site; ship.sh's gate and tick.sh's live check keep it so; noindex; 68 comment lines in served code no longer name the reference app, and a test reads every served file) — "that should not be findable" — the live site stops handing out the project's own files (CLAUDE.md, BEFORE-PUBLISHING.md, REQUESTS.md, POLISH-LOG.md, LOOP.md, INBOX.md, tests/, tools/): (a) a root _config.yml that leaves only the app on the site, (b) a noindex meta in index.html, (c) a check after every push that those files answer 404 on the live site, so a new top-level file cannot quietly go public.
+      2. [ ] "if there is on the GitHub any old versions that's really bad" — (d) the repo's history on github.com: HE ANSWERED 17 Nov, "dont need pro, lets just keep going" — the repo stays public, nothing to build. (e) the old v2.83 copy in Claude-game-2 is his to take down ("keep reminding me to take down the old site till i do or u do it"): the logger's hourly tick reminds him until that folder is gone; this laptop's key cannot do it. The builder touches no repo setting.
+      3. [ ] (found 17 Nov, not his words) The raw car photos the pictures are drawn from, fx-art/mclaren.jpg, revuelto.jpg and tesla.jpg, still show his real number plates to anyone who asks the live site for the file itself. The drawn pictures paint the plates out (#1246 clause 2, checked for all 24 car pictures in v18.40), but the files are served as they are. Blank the plates IN the files, bump their ?v=, and re-pin any picture test that moves.
+      📍 **Order:** a privacy fix he asked for on 16 Nov; small, so it goes in the very next ship, ahead of the older open items, which keep their order behind it.
+      📥 **Moved verbatim from INBOX (17 Nov, the loop): his answer to the ASK above**
+      ### 17 Nov 2026, 00:45 AWST — no GitHub Pro; keep reminding him to take down the old site (answers #1254's ASK)
+      **His words (verbatim):** dont need pro, lets just keep going and keep reminding me to take down the old site till i do or u do it
+
+      **Logger's plan (not his words):**
+      - **HE ANSWERED #1254's ❓ASK (d): no GitHub Pro.** Strike that ask.
+        - FreeMotion stays a public repo, so its history (the old versions) stays browsable on github.com. He was told this on 16 Nov and chose to keep going.
+        - The free split (a private source repo + a deploy-only repo) is NOT requested.
+        - The site fix (a)-(c) and the comment rewording are the whole free part, and they ship in v18.40.
+      - **(e) The old site:** the leftover v2.83 copy in his public repo Claude-game-2, folder `FreeMotion/`. It still answered 200 at 00:41.
+        - **This laptop cannot take it down.** Its ssh key is a FreeMotion deploy key (`ssh -T` says "Hi builderezra/FreeMotion!"), and the built-in browser pane is not signed in to GitHub.
+        - **His way, about 3 taps:** open that folder on github.com, then ••• → Delete directory → Commit changes. Or he signs in to GitHub in the logger's browser pane and the logger does it ("or u do it").
+        - Slovo and Position Roulette live at that repo's root and stay up either way.
+      - **THE REMINDER IS STRUCTURAL, ON THE LOGGER'S SIDE.**
+        - tick3.sh asks the old site every hour and prints `OLD SITE STILL UP` while it answers 200.
+        - While it is up, every PM tick line reminds him, and he gets one phone push a day between 09:00 and 21:00 AWST.
+        - It stops by itself once the folder is gone. The builder has nothing to do for (e).
+      - **Mac note:** `~/Slot game/deploy.sh` force-pushes the local main to GitHub. If that copy still has `FreeMotion/`, a later deploy from the Mac would put the old site back. Delete the folder there too, or pull first.
+      📍 **v18.40 (17 Nov):** clause 1 shipped (the site is the app only; `python3 tools/_public.py live` is the check). Clause 2: no Pro, the repo stays public (his answer); the old copy in Claude-game-2 is his to take down. Clause 3 (plates in the raw photos) is next.

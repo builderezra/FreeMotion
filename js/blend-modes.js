@@ -1,5 +1,5 @@
 /* FreeMotion — Manual (per-pixel) blend modes.
- * The Alight-Motion blend modes Canvas has NO globalCompositeOperation for. Everything canvas can
+ * The [the reference app] blend modes Canvas has NO globalCompositeOperation for. Everything canvas can
  * do natively stays native (see the BLEND map at js/compositor.js:11) — that path runs on the GPU
  * and is an order of magnitude faster than anything here. These nine only exist because there is
  * no gCO that produces them, so the compositor has to read the destination back, blend in JS and
@@ -149,7 +149,7 @@ window.FM = window.FM || {};
     },
 
     // ---- CONTRAST family ------------------------------------------------------------------
-    // Soft Overlay — an Alight Motion name with no cross-vendor definition. CHOSEN: SoftLight with
+    // Soft Overlay — an [the reference app] name with no cross-vendor definition. CHOSEN: SoftLight with
     // the operands swapped, exactly as Overlay is HardLight swapped — so the BACKDROP is the
     // control in both "Overlay"-named modes and Overlay:HardLight / SoftOverlay:SoftLight stay a
     // matched pair. It is also precisely why canvas cannot do it: there is no way to swap a

@@ -1,4 +1,4 @@
-/* FreeMotion — On-canvas direct manipulation (Alight-Motion-style).
+/* FreeMotion — On-canvas direct manipulation ([reference-app]-style).
  * Click a layer to select; drag the body to move, drag a corner handle to scale (uniform,
  * around centre), drag the top knob to rotate. A selection box tracks position/scale/rotation.
  * All edits write to the same scene document the inspector uses, keyframing animated props.

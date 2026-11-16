@@ -201,8 +201,8 @@ window.FM = window.FM || {};
        categories that have effects, so a leftover key would be invisible until something landed in it
        by accident and the menu he asked to delete came back. */
   };
-  /* THE ORDER IS OURS, NOT ALIGHT MOTION'S (#954). His words, 1 Sep: *"i want every effect to be named different to what it is
-     in alight motion and also have different ordering to avoid getting taken down by aligiht motion for copying"*. AM's own
+  /* THE ORDER IS OURS, NOT [THE REFERENCE APP]'S (#954). His words, 1 Sep: *"i want every effect to be named different to what it is
+     in [the reference app] and also have different ordering to avoid getting taken down by [the reference app] for copying"*. AM's own
      order is published nowhere reachable, so ours is changed anyway, as drawn on the 26 Sep sheet (tools/design/954-options.html)
      and decided 11 Oct (#1130): Colouring stays first, Keying moves up beside it, the rest are reshuffled. Was: color, blur,
      distort, proc, stylize, drawing, move, repeat, matte, opacity, text, threed. Every effect keeps its own category. */
@@ -630,7 +630,7 @@ window.FM = window.FM || {};
     return out;
   }
   /* ═══ WHAT HE WOULD ACTUALLY TYPE (queue 484 clause 2) ═══════════════════════════════════════════
-   * His ask was *"look for effects alight motion has that we don't, add them but change the names"*,
+   * His ask was *"look for effects [the reference app] has that we don't, add them but change the names"*,
    * and the entry duly listed about thirty. **Checked one by one against our own 199, most of them are
    * ALREADY HERE under a name he would never search for.** Six, exactly:
    *   Random Displacement → Turbulent Displace · Star → Sunburst · Time Quantization → Frame Stutter
@@ -663,7 +663,7 @@ window.FM = window.FM || {};
     shake:             ['auto shake', 'camera shake'],
     wiggle:            ['random jitter', 'jitter'],
     starfield:         ['simple starfield', 'stars'],
-    // #966 B37: 'energy beam' (Alight Motion's name, #954) and 'laser beam' moved to Laser Beam, the straight beam they name
+    // #966 B37: 'energy beam' ([the reference app]'s name, #954) and 'laser beam' moved to Laser Beam, the straight beam they name
     lightning:         ['bolt', 'lightning'],   // #954: its old name (now Bolts)
     weather:           ['snow', 'rain', 'weather', 'snowfall', 'rainfall', 'storm', 'confetti', 'embers', 'ash', 'dust', 'petals', 'blossom', 'bubbles'],   // #482 polish 11.2: its new Types find it too
     huecycle:          ['rainbow', 'disco', 'strobe', 'colour flash', 'color cycle', 'hue cycle', 'colour change'],
@@ -677,7 +677,7 @@ window.FM = window.FM || {};
     timeecho:          ['echo', 'afterimage', 'ghost', 'onion skin', 'time trail', 'light painting', 'motion echo', 'trails'],
     /* #966 B6: the photographer's names for it, and what someone wants it for */
     starglow:          ['star filter', 'cross screen', 'star glow', 'starlight', 'twinkle', 'sparkle', 'shine', 'bling', 'star'],
-    /* #966 B18–B20: the grading words people type. Not 'colour tune' / 'color curves' (Alight Motion's names, #954). */
+    /* #966 B18–B20: the grading words people type. Not 'colour tune' / 'color curves' ([the reference app]'s names, #954). */
     colorwheels:       ['lift', 'gamma', 'gain', 'colour wheels', 'color wheels', 'lift gamma gain', 'split tone', 'colour grade', 'color grade', 'grading'],
     tonecurve:         ['curves', 'curve', 'tone curve', 'rgb curve', 's curve', 'contrast curve', 'crushed blacks', 'matte blacks'],
     hslmixer:          ['hsl', 'hsl mixer', 'colour mixer', 'color mixer', 'hue saturation', 'bluer sky', 'greener grass', 'selective colour', 'selective color'],
@@ -726,7 +726,7 @@ window.FM = window.FM || {};
     /* #966 B53: what someone types to get rid of flicker. Not bare 'flicker' (the Flicker effect's own name — the label finds this one
        anyway) and not 'exposure' (Exposure's). */
     deflicker:         ['deflicker', 'de-flicker', 'flicker fix', 'fix flicker', 'remove flicker', 'flicker removal', 'anti flicker', 'brightness flicker', 'exposure flicker', 'timelapse', 'time lapse', 'strobing', 'steady brightness'],
-    /* #966 B37: what someone types for a straight beam of light — including Alight Motion's 'energy beam' (#954), which used to find
+    /* #966 B37: what someone types for a straight beam of light — including [the reference app]'s 'energy beam' (#954), which used to find
        Lightning for want of this. Not 'ray' (Light Rays) and not 'bolt' (Lightning). */
     laserbeam:         ['laser', 'laser beam', 'beam', 'energy beam', 'light beam', 'neon line', 'glowing line', 'sci-fi'],
     /* #966 opts6: Depth Push's "Side Darken" row is "Side shade" now that the sides can shade toward any colour; its old words still find it */
@@ -735,21 +735,21 @@ window.FM = window.FM || {};
        first. Not 'curved text' or 'arc text': bending the line itself, letter by letter, is Text Curve. */
     titlewarp:         ['title warp', 'warp text', 'text warp', 'warp title', 'warped text', 'word art', 'wordart', 'wavy text', 'flag text', 'arch text', 'bulge text', 'fish text', 'rise text', 'inflate text', 'squeeze text', 'twist text'],
     /* #966 B54: what someone types for the green rim a key leaves — the trade's word (despill), the #484 design's name (Spill
-       Remover) and Alight Motion's (Key Spill Cleaner, as Chroma Key Pro is found by "advanced chroma key"). Not 'green screen'
+       Remover) and [the reference app]'s (Key Spill Cleaner, as Chroma Key Pro is found by "advanced chroma key"). Not 'green screen'
        (Chroma Key Pro's). */
     spillsuppressor:   ['despill', 'de-spill', 'spill remover', 'key spill cleaner', 'green spill', 'blue spill', 'green fringe', 'green edge', 'green cast', 'green rim', 'colour spill', 'color spill'],
     /* #966 B51: what someone types when the footage came out flat, dull or tinted, and the trade's names for the tool. Not bare 'auto'
        ('auto shake' is Shake's) and not 'white balance' (Colour Temperature's Method). */
     autograde:         ['auto grade', 'auto colour', 'auto color', 'auto levels', 'auto contrast', 'auto tone', 'auto fix', 'colour correction', 'color correction', 'colour correct', 'color correct', 'fix colour', 'fix color', 'dull', 'washed out', 'flat footage'],
-    /* ═══ #954: FORTY NAMES THAT WERE ALIGHT MOTION'S, AND STILL FIND THEIR EFFECT ═══════════════════════════════════════════
-       His words, 1 Sep: *"i want every effect to be named different to what it is in alight motion and also have different
-       ordering to avoid getting taken down by aligiht motion for copying"*. The 26 Sep sheet (tools/design/954-options.html, the
+    /* ═══ #954: FORTY NAMES THAT WERE [THE REFERENCE APP]'S, AND STILL FIND THEIR EFFECT ═══════════════════════════════════════════
+       His words, 1 Sep: *"i want every effect to be named different to what it is in [the reference app] and also have different
+       ordering to avoid getting taken down by [the reference app] for copying"*. The 26 Sep sheet (tools/design/954-options.html, the
        record with ids in tools/design/954-effect-names.md) found 40 labels that were distinctly AM's and drew a new name for each;
        decided 11 Oct (#1130): the 40 renames as drawn, the 70 plain craft names (Gaussian Blur, Vignette, Chroma Key…) kept.
        LABELS ONLY: every type id is unchanged, so a saved project opens exactly as before. The old name stays a search word, so
        typing the name he knows still finds the effect; four of the forty already had an alias line above (Smooth Edges,
        Stretch Segment, Fractal Ridges, Lightning) and carry their old name there. Where the old name was written in British
-       spelling the American one is here too, since that is how Alight Motion spells it. */
+       spelling the American one is here too, since that is how [the reference app] spells it. */
     thermal:           ['hot colour', 'hot color'],                                // now Heat Map
     ripple:            ['circular ripple'],                                        // now Pond Rings
     lightglow:         ['light glow'],                                             // now Highlight Bloom

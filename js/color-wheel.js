@@ -1,4 +1,4 @@
-/* FreeMotion — Color Tune wheel (Alight Motion Color & Fill look).
+/* FreeMotion — Color Tune wheel ([the reference app] Color & Fill look).
  * HSV wheel: angle = hue shift, radius = saturation boost. Writes layer.colorGrade
  * {hue, sat} which the compositor applies as hue-rotate + saturate (so it also exports).
  */

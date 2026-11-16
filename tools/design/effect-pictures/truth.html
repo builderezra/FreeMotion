@@ -17,15 +17,22 @@ const BLANK_FILL={audiospectrum:'#38c9ff'};   /* its default Colour is "From the
 const SENSIBLE={matte:'pair',repeat:'dog',threed:'bay',drawing:'towers',opacity:'dusk',proc:'dusk',move:'huracan',other:'ramp'};   /* sections fx-thumbs draws art for instead of naming a photo */
 const TEXTS={counter:'0',textrandomizer:'Scramble',wordhighlight:'Word by word'};
 const load=src=>new Promise(res=>{ const s=document.createElement('script'); s.src=src; s.onload=()=>res(true); s.onerror=()=>res(false); document.head.append(s); });
+/* ?app=/ss/ runs the renderer from the snapshot of the builder's effects branch (served by serve.py at /ss/); default /app/ = main.
+   ?extra=a.js,b.js loads helper scripts of yours (site folder) after boot; they get window.__h (buildScene, paintReal, surface, pixels, diff, save, ...). */
+const QS=new URLSearchParams(location.search);
+const BASE=['/app/','/ss/'].includes(QS.get('app'))?QS.get('app'):'/app/';
+const EXTRA=(QS.get('extra')||'').split(',').map(s=>s.trim()).filter(s=>/^[\w.-]+\.js$/.test(s));
+/* a yield that background tabs do not throttle (setTimeout is clamped to 1 s, or 1 min, in a hidden tab) */
+const yieldNow=()=>new Promise(r=>{ const c=new MessageChannel(); c.port1.onmessage=()=>r(); c.port2.postMessage(0); });
 const setS=m=>{ document.getElementById('s').textContent=m; };
 let inner=null, tiles=new Map(), seq=0;
 const bootErrors=[];
 
 const ready=(async()=>{
-  for(const f of APP){ if(!await load('/app/js/'+f)) bootErrors.push('failed to load '+f); }
+  for(const f of APP){ if(!await load(BASE+'js/'+f)) bootErrors.push('failed to load '+f); }
   /* fx-thumbs.js keeps its tables private, so read its real source and add one line that hands them over: the mapping stays
      the app's own and cannot drift from it. Runs in this page only. */
-  let src=await (await fetch('/app/js/fx-thumbs.js')).text();
+  let src=await (await fetch(BASE+'js/fx-thumbs.js')).text();
   const HOOK='FM.fxThumbs = {';
   if(!src.includes(HOOK)) throw new Error('fx-thumbs.js no longer has "'+HOOK+'"');
   src=src.replace(HOOK,'FM.__inner={subjectFor,SECTION_PHOTO,PHOTO_SUBJECT,paintKeyshot,paintBackdrop,thumbSong};\n'+HOOK);
@@ -38,7 +45,8 @@ const ready=(async()=>{
   await FXK._preload();
   tiles=new Map((window.FX_TILES||[]).map(T=>[T.id,T]));
   try{ if(document.fonts&&document.fonts.load) await Promise.race([document.fonts.load('13px "VT323"'),new Promise(r=>setTimeout(r,800))]); }catch(e){}
-  setS('Ready: '+tiles.size+' tiles, '+FM.fxRegistry.allIncludingHidden().length+' real effects'+(bootErrors.length?' | '+bootErrors.join('; '):''));
+  for(const f of EXTRA){ if(!await load(f)) bootErrors.push('failed to load extra '+f); }
+  setS('Ready ['+(BASE==='/ss/'?'EFFECTS BRANCH snapshot':'main')+' renderer]: '+tiles.size+' tiles, '+FM.fxRegistry.allIncludingHidden().length+' real effects'+(bootErrors.length?' | '+bootErrors.join('; '):''));
 })();
 ready.catch(e=>setS('BOOT FAILED: '+e.message));
 
@@ -148,7 +156,7 @@ async function truth(ids,ts,name,opts){
     }
     if(sc&&!moved) errors.push(id+': the real render matches the plain layer at every t asked for (a periodic move can be at rest at that instant, e.g. on a whole second; try other t)');
     rows.push({id,type,on:sc?sc.on:null,change:deltas});
-    await new Promise(res=>setTimeout(res));
+    await yieldNow();
   }
   const saved=await save(sh,name||'truth');
   return {saved,errors,rows};
@@ -183,10 +191,23 @@ async function realShot(type,paramsList,photoKey,ts,name){
       else badCell(x,xa,y,C,'no render');
       caption(x,'t='+t,xa+3,y+C-3);
     }
-    await new Promise(res=>setTimeout(res));
+    await yieldNow();
   }
   return {saved:await save(sh,name||'realshot'),errors};
 }
+
+/* Stack saved shots (shots/<name>.png) into one labelled sheet, e.g. a before/after: __stack(['blinds-main','blinds-ss'],['BEFORE (today)','AFTER (effects branch)'],'blinds-ab') */
+async function stack(names,labels,out){
+  const ims=[];
+  for(const n of names){ const im=new Image(); im.src='shots/'+encodeURIComponent(n)+'.png?'+Date.now(); await im.decode(); ims.push(im); }
+  const L=28, G=10, W=Math.max(...ims.map(i=>i.width)), H=ims.reduce((s,i)=>s+i.height+L+G,G);
+  const sh=document.createElement('canvas'); sh.width=W; sh.height=H; const x=sh.getContext('2d');
+  x.fillStyle='#0b0e14'; x.fillRect(0,0,W,H);
+  let y=G; ims.forEach((im,k)=>{ x.fillStyle='#ffd27a'; x.font='700 16px system-ui, sans-serif'; x.fillText((labels&&labels[k])||names[k],G,y+19); x.drawImage(im,0,y+L); y+=im.height+L+G; });
+  return {saved:await save(sh,out||'stack'),width:W,height:H};
+}
+window.__h={buildScene,paintReal,surface,pixels,diff,save,caption,badCell,photoEl,imageLayer,painted,realT,yieldNow,base:BASE};
+window.__stack=(...a)=>ready.then(()=>stack(...a));
 
 window.__truthReady=ready;
 window.__truth=(...a)=>ready.then(()=>truth(...a));

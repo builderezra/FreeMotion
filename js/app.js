@@ -175,7 +175,7 @@ window.FM = window.FM || {};
   // How many canvas pixels to keep per project pixel, so vector edges rasterise at the real screen
   // resolution instead of being a stretched bitmap. Zooming to 4x on a phone spreads a 1080px comp
   // across ~4600 device pixels — without this every shape edge is a 4px smear (the thing Ezra
-  // photographed next to Alight Motion). Capped by a pixel budget: a 4K comp at 3x zoom on a 3x
+  // photographed next to [the reference app]). Capped by a pixel budget: a 4K comp at 3x zoom on a 3x
   // screen would otherwise ask for a 100-megapixel canvas.
   const MAX_PREVIEW_PX = 12e6;   // ~12MP — comfortably above any phone screen, far below a GPU limit
 
@@ -1240,7 +1240,7 @@ window.FM = window.FM || {};
   };
   // Each candidate shows its own THUMBNAIL, the same preview the timeline row carries, so you pick
   // the layer you can see rather than one of three things called "Copy Copy 2" — which is exactly
-  // what Alight Motion's panel does in the screenshot Ezra sent.
+  // what [the reference app]'s panel does in the screenshot Ezra sent.
   FM.openParentPicker = function (layer, x, y) {
     const mkThumb = (L) => { const cv = document.createElement('canvas'); cv.className = 'ctx-thumb'; cv.width = 38; cv.height = 24; if (FM.renderThumb) { try { FM.renderThumb(L, cv); } catch (e) {} } return cv; };
     const mkGlyph = (g) => { const s = document.createElement('span'); s.className = 'ctx-thumb ctx-thumb-glyph'; s.textContent = g; return s; };
@@ -1532,7 +1532,7 @@ window.FM = window.FM || {};
   let toastSeq = 0;
   /* ---------- "you are looking at an old build, and here is why" (queue 306) --------------------
    * His report, for weeks: *"an older version of our project shows up when you refresh"*, *"The glitch
-   * that shows the old version of FreeMotion that has a more alight motion look STILL shows up when I
+   * that shows the old version of FreeMotion that has a more [the reference app] look STILL shows up when I
    * press refresh… it's such a big issue, PLEASE"*. It has never been reproduced on this machine, and
    * the one path that fits the WHOLE description is the service worker answering a failed navigation
    * from cache: the stale index.html names old `?v=` script urls, which the worker then serves
@@ -5711,7 +5711,7 @@ window.FM = window.FM || {};
     return FM.pickReplacement(id).then(nrec => nrec ? FM.swapInMedia(id, nrec) : false);
   };
 
-  // ===== Playhead-is-outside-the-clip actions (Alight Motion parity) =====
+  // ===== Playhead-is-outside-the-clip actions ([the reference app] parity) =====
   // Trim-start / split / trim-end all need the playhead INSIDE the clip. Parked outside, they are three
   // dead buttons, so AM swaps them for the two that do make sense out there: slide the clip to the
   // playhead, or stretch its near edge out to meet it.
@@ -8336,8 +8336,8 @@ window.FM = window.FM || {};
         items.push({ label: 'Stretch to Composition Area', action: () => FM.fitLayer(sel, 'stretch') });
       }
       items.push({ label: (sel.blendMode === 'mask-include' ? '✓ ' : '') + 'Create Clipping Mask', action: () => FM.toggleClippingMask(sel) });
-      /* ⚠️ "COMING SOON", AND REWORDED, ON HIS INSTRUCTION (queue 534). Ezra explained what Alight
-         Motion's button actually does, and it is not what ours does: *"in alight motion every shape has
+      /* ⚠️ "COMING SOON", AND REWORDED, ON HIS INSTRUCTION (queue 534). Ezra explained what [the reference app]
+         's own button actually does, and it is not what ours does: *"in [the reference app] every shape has
          very thought out edit points you can grab and change before even pressing the edit points
          button… the convert to outline button just gets rid of those points and just makes it one
          outline that hugs the shape"*. So it FLATTENS a shape's editable points into a single outline —
@@ -8507,9 +8507,9 @@ window.FM = window.FM || {};
         items.push({ label: 'At the bottom', iconEl: mkGlyph('⤓'), action: () => FM.pasteClipboard(FM.scene.layers.length) });
         FM.contextMenu.show(Math.max(8, r.right - 240), r.bottom + 4, items, { right: r.right, above: r.top });   // queue 918.10: under its button
       };
-      /* ---- OUR OWN MENU, NOT ALIGHT MOTION'S (queue 437) --------------------------------------
+      /* ---- OUR OWN MENU, NOT [THE REFERENCE APP]'S (queue 437) --------------------------------------
        * Ezra, unprompted: "With this drop down menu also re order the buttons in it because it's the
-       * same layout and wording as alight motion, if you can come up with different wording as well,
+       * same layout and wording as [the reference app], if you can come up with different wording as well,
        * like instead of paste layer just paste on timeline. And copy selected instead of copy layer."
        * This is BEFORE-PUBLISHING.md work arriving early — that file records that the UI is modelled
        * on AM and has to be made ours before any public release — and it is worth taking his two

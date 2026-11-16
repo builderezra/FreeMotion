@@ -29474,8 +29474,10 @@
      is still detached and hands it back for the caller to append.
      So this test mounts tiles DETACHED, fires the invalidation while they are still detached, and only
      then attaches them — the real order, with the race lost on purpose. */
-  test('tiles mounted before they are attached survive the art-decode invalidation', { item: 'fx-thumb-race' }, async function () {
+  test('with the drawn pictures switched off (#1253), live tiles mounted before they are attached survive the art-decode invalidation', { item: 'fx-thumb-race' }, async function () {
     if (!FM.fxThumbs || !FM.fxThumbs.queueState) throw new Error('FM.fxThumbs.queueState is missing — this test cannot see what it is testing');
+    /* #1253: a Colouring tile shows its drawn picture now, which never queues; the race this guards is the live engine's */
+    const pics0 = FM.fxThumbs._picsEnabled ? FM.fxThumbs._picsEnabled(false) : null;
     const types = FM.fxRegistry.byCategory('color').filter(Boolean).slice(0, 8).map(r => r.type);
     if (types.length < 4) throw new Error('not enough Colouring effects to test with');
     const host = document.createElement('div');
@@ -29506,6 +29508,7 @@
     } finally {
       host.remove();
       if (FM.fxThumbs.stopAll) FM.fxThumbs.stopAll();
+      if (pics0 !== null) FM.fxThumbs._picsEnabled(pics0);
     }
   });
 
@@ -96803,12 +96806,14 @@
     }
   });
 
-  test('712: a cold stock effect strip is built across animation frames, not inside one, and its still shows before the strip is done', { item: '712', budgetMs: 30000 }, async function () {
+  test('712: with the drawn pictures switched off (#1253), a cold live stock effect strip is built across animation frames, not inside one, and its still shows before the strip is done', { item: '712', budgetMs: 30000 }, async function () {
     const T = FM.fxThumbs;
     if (!T || !T._sliceMs || !T._uncache || !T.queueState || !T.mount) throw new Error('seams missing: fxThumbs._sliceMs / _uncache / queueState / mount');
     const raf = () => new Promise(r => requestAnimationFrame(() => r()));
     const type = 'shake';   // an animated stock effect: still + probe + warm-up + ten frames
     const slice0 = T._sliceMs(); T._sliceMs(0);
+    /* #1253: a stock tile for an effect with a drawn picture shows the picture, so the live engine this measures is reached with the pictures off */
+    const pics0 = T._picsEnabled ? T._picsEnabled(false) : null;
     const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-9999px;top:0;width:100px;height:100px'; document.body.appendChild(host);
     try {
       T._uncache(type);
@@ -96821,14 +96826,15 @@
       for (let i = 0; i < 160 && !done; i++) { await raf(); const s2 = T.queueState(); ready = ready || cv.classList.contains('ready'); done = s2.head !== type && !s2.jobs; }
       if (!done) throw new Error('the sliced strip never finished within 160 frames (' + JSON.stringify(T.queueState()) + ')');
       if (!ready) throw new Error('the tile never painted while the strip was being built');
-    } finally { T._sliceMs(slice0); host.remove(); T._uncache(type); }
+    } finally { T._sliceMs(slice0); host.remove(); T._uncache(type); if (pics0 !== null) T._picsEnabled(pics0); }
   });
 
-  test('712: a queued tile whose canvas has left the page waits behind visible ones, the ticker rests when nothing queued is on the page, and a re-mount wakes it', { item: '712', budgetMs: 30000 }, async function () {
+  test('712: with the drawn pictures switched off (#1253), a queued live tile whose canvas has left the page waits behind visible ones, the ticker rests when nothing queued is on the page, and a re-mount wakes it', { item: '712', budgetMs: 30000 }, async function () {
     const T = FM.fxThumbs;
     if (!T || !T._sliceMs || !T._uncache || !T.queueState || !T.mount) throw new Error('seams missing');
     const raf = () => new Promise(r => requestAnimationFrame(() => r()));
     const slice0 = T._sliceMs(); T._sliceMs(0);
+    const pics0 = T._picsEnabled ? T._picsEnabled(false) : null;   /* #1253: shake and wiggle have drawn pictures; this measures the live queue */
     const host = document.createElement('div'); host.style.cssText = 'position:fixed;left:-9999px;top:0;width:100px;height:100px'; document.body.appendChild(host);
     try {
       T._uncache('shake'); T._uncache('wiggle');
@@ -96842,7 +96848,7 @@
       host.appendChild(ghost); T.mount(ghost, 'shake');
       for (let i = 0; i < 80 && !ghost.classList.contains('ready'); i++) await raf();
       if (!ghost.classList.contains('ready')) throw new Error('putting the deferred tile back on the page and re-mounting it did not wake the ticker');
-    } finally { T._sliceMs(slice0); host.remove(); T._uncache('shake'); T._uncache('wiggle'); }
+    } finally { T._sliceMs(slice0); host.remove(); T._uncache('shake'); T._uncache('wiggle'); if (pics0 !== null) T._picsEnabled(pics0); }
   });
 
   test('712: pressing Back in an effects category writes Your last Back — first yield, tiles queued, drained', { item: '712', budgetMs: 30000 }, async function () {
@@ -164510,6 +164516,65 @@
     if (bad.length) throw new Error(bad.length + ' lesson line(s) still name an effect the way Alight Motion does: ' + bad.slice(0, 6).join('; '));
   });
 
+  /* ═══ #1254 — NOTHING BUT THE APP ON THE LIVE SITE, AND NOTHING IN IT THAT NAMES THE APP IT WAS FIRST MODELLED ON ════════════════════
+   * His words, 16 Nov: "I found a really old build … that should not be findable … if there is on the GitHub any old versions that's
+   * really bad because the old versions are clearly copies of a light motion and if anyone can find that ever then they will
+   * basically you know get us some big trouble". Measured that night: GitHub Pages was publishing every file in the repo (the notes,
+   * the request list, these tests, the tools), and the app's own served code named that app 64 times in comments.
+   * Three things hold it shut. (1) _config.yml leaves everything but the app off the site, and tools/_public.py (run by ship.sh, with
+   * its own self-test) refuses a release whose top-level paths are not all app-or-excluded; this suite pins the file's existence and
+   * its sense. (2) index.html asks search engines not to list the page. (3) No file the site serves may name that app: the comments
+   * say [the reference app], and this test reads every served file so a later session cannot write the name back. The private
+   * record (BEFORE-PUBLISHING.md, REQUESTS.md, tests/) keeps the name; none of it is served. */
+  const NAMED1254 = /a\s*l\s*i\s*g\s*i?\s*h\s*t[\s_-]*motion/i;
+  test('1254 · no file the live site serves names the app FreeMotion was first modelled on: the page, every script and stylesheet it loads, the worker, the manifest and the lessons (CONTROL: the files are really read, and the check finds the name in a planted line)', { item: '1254', budgetMs: 120000 }, async function () {
+    const get = async function (u) { const r = await fetch(u + (u.indexOf('?') < 0 ? '?t=' : '&t=') + Date.now()); if (!r.ok) throw new Error('setup: ' + u + ' answered ' + r.status); return r.text(); };
+    if (!NAMED1254.test('// the [x] look, like Alight-Motion does') || !NAMED1254.test('alight motions') || NAMED1254.test('a light touch of motion blur')) throw new Error('CONTROL: the name check does not tell a planted line from plain words');
+    const html = await get('index.html');
+    const refs = [];
+    html.replace(/<(?:script|link)\b[^>]*?\b(?:src|href)="([^"#:]+)"/g, function (_, u) { if (/\.(js|css|json)(\?|$)/.test(u)) refs.push(u); return _; });
+    if (refs.filter(function (u) { return /^js\//.test(u); }).length < 60 || !refs.some(function (u) { return /^styles\.css(\?|$)/.test(u); })) throw new Error('CONTROL: index.html lists only ' + refs.length + ' scripts and styles, so the served files are not being found');
+    const files = ['index.html', 'sw.js'].concat(refs);
+    const lessons = JSON.parse(await get('tutorials/index.json'));
+    lessons.forEach(function (e) { files.push('tutorials/' + e.file); });
+    files.push('tutorials/index.json');
+    /* the drawn effect pictures (#1253) are fetched by js/fx-thumbs.js, not listed in index.html: read them through their own manifest */
+    const pics = JSON.parse(await get('fx-pics/manifest.json'));
+    if (!pics || !Array.isArray(pics.files) || pics.files.length < 50) throw new Error('CONTROL: fx-pics/manifest.json lists ' + (pics && pics.files && pics.files.length) + ' picture files, so the pictures are not being read');
+    files.push('fx-pics/manifest.json', 'fx-pics/kit.js');
+    pics.files.forEach(function (f) { files.push('fx-pics/' + f); });
+    const bad = [];
+    let bytes = 0;
+    for (const f of files) {
+      const s = f === 'index.html' ? html : await get(f);
+      bytes += s.length;
+      const m = NAMED1254.exec(s);
+      if (m) bad.push(f + ' (“' + s.slice(Math.max(0, m.index - 40), m.index + 30).replace(/\s+/g, ' ') + '”)');
+    }
+    if (bytes < 5e6) throw new Error('CONTROL: ' + files.length + ' served files came to only ' + bytes + ' characters, so they were not really read');
+    if (bad.length) throw new Error(bad.length + ' served file(s) name it — say [the reference app] there; the private notes keep the name: ' + bad.slice(0, 6).join(' · '));
+  });
+  test('1254 · the page asks search engines not to list it, and the site config leaves the notes, the request list, the tests and the tools off the live site while the app and the lessons stay on it (CONTROL: the config is read as a list)', { item: '1254' }, async function () {
+    const html = await (await fetch('index.html?t=' + Date.now())).text();
+    const robots = (/<meta\s+name="robots"\s+content="([^"]*)"/.exec(html) || [])[1] || '';
+    if (!/\bnoindex\b/.test(robots)) throw new Error('index.html has no <meta name="robots" content="noindex…"> (it says “' + robots + '”), so a search engine may list the app');
+    const r = await fetch('_config.yml?t=' + Date.now());
+    if (!r.ok) throw new Error('there is no _config.yml (' + r.status + '): GitHub Pages publishes every file in the repo without it');
+    const cfg = await r.text();
+    const at = cfg.search(/^exclude:\s*$/m);
+    if (at < 0) throw new Error('CONTROL: _config.yml has no exclude: list');
+    const list = [];
+    cfg.slice(at).split('\n').slice(1).some(function (l) { const m = /^\s+-\s+(\S+)\s*$/.exec(l.split('#')[0]); if (m) { list.push(m[1]); return false; } return !!l.trim() && !/^\s*#/.test(l); });
+    if (list.length < 10) throw new Error('CONTROL: only ' + list.length + ' names were read from the exclude: list');
+    const bad = [];
+    ['CLAUDE.md', 'BEFORE-PUBLISHING.md', 'REQUESTS.md', 'POLISH-LOG.md', 'LOOP.md', 'INBOX.md', 'README.md', 'tests', 'tools'].forEach(function (n) { if (list.indexOf(n) < 0) bad.push(n + ' is not left out'); });
+    /* Jekyll drops an entry a pattern equals, glob-matches from the root (a star crosses folders) or starts: none may touch the app */
+    ['index.html', 'styles.css', 'sw.js', 'manifest.json', 'js', 'vendor', 'fx-art', 'launch', 'tutorials'].forEach(function (a) {
+      list.forEach(function (p) { if (a === p || a.indexOf(p) === 0 || /[*?\[]/.test(p)) bad.push('“' + p + '” would take ' + a + ' (or part of the app) off the site'); });
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
   /* ═══ queue 987: WHO LEFT EACH NOTE, IN THEIR COLOUR ═══════════════════════════════════════════════
    * His words: "If you're doing a collab edit - there should be a colour indicator based on who left the note."
    * Three were drawn (tools/design/987/987-options.png) and C was picked: the author's FACE — the comments' .cc-av,
@@ -204040,5 +204105,372 @@
       });
     });
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  /* ═══ #1253 · THE DRAWN EFFECT PICTURES IN THE APP'S EFFECT MENUS ═══
+     His words (16 Nov, REQUESTS.md #1253): "why aren't the new icons in yet? … Just add all the effects in now. If there's any
+     I don't like I'll tell you about them."
+     js/fx-thumbs.js loads fx-pics/ (kit.js and the tiles, copied from tools/design/effect-pictures/) the first time a menu
+     mounts a stock tile, and a stock tile for an effect with a picture shows the picture. These tests compare a menu tile with
+     the same picture drawn here, straight from fx-pics/ in a frame of their own (picOracle1253), never through the app's
+     loader, so the comparison does not lean on the code it checks. */
+  const PIC_ALIAS_1253 = { bolts: 'lightning', cube: 'cube3d' };   /* HARNESS.md: the two picture ids that are not their effect's type */
+  function picType1253(id) { const T = FM.fxThumbs; return (T && T._picTypeOf) ? T._picTypeOf(id) : (PIC_ALIAS_1253[id] || id); }
+  async function picOracle1253() {
+    const abs = p => new URL(p, location.href).href;
+    const r = await fetch(abs('fx-pics/manifest.json'), { cache: 'no-store' });
+    if (!r.ok) throw new Error('fx-pics/manifest.json is not there (HTTP ' + r.status + '): the app has no copy of the drawn pictures');
+    const man = await r.json();
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;left:-4000px;top:0;width:20px;height:20px;border:0';
+    document.body.appendChild(f);
+    const done = () => { try { f.remove(); } catch (e) {} };
+    try {
+      const w = f.contentWindow, d = w.document;
+      d.open(); d.write('<!doctype html><html><head></head><body></body></html>'); d.close();
+      const load = src => new Promise((ok, bad) => { const s = d.createElement('script'); s.src = src; s.onload = () => ok(); s.onerror = () => bad(new Error('the picture file ' + src + ' did not load')); d.head.appendChild(s); });
+      await load(abs('fx-pics/kit.js'));
+      const K = w.FXK, PH = {};
+      K.photo = k => PH[k];
+      K.photoCover = function (k, px) {
+        const C = d.createElement('canvas'); C.width = C.height = px;
+        const x = C.getContext('2d'), im = PH[k];
+        if (im) { const s = Math.max(px / im.naturalWidth, px / im.naturalHeight), iw = im.naturalWidth * s, ih = im.naturalHeight * s; x.drawImage(im, (px - iw) / 2, (px - ih) / 2, iw, ih); }
+        x.setTransform(px / 100, 0, 0, px / 100, 0, 0);
+        return [C, x];
+      };
+      for (const file of man.files) await load(abs('fx-pics/' + file));
+      await Promise.all(K.PHOTO_KEYS.map(k => new Promise(res => { const im = new w.Image(); im.onload = () => { PH[k] = im; res(); }; im.onerror = () => res(); im.src = abs('fx-art/' + k + '.jpg?v=1'); })));
+      const byId = new Map();
+      (w.FX_TILES || []).forEach(T => byId.set(String(T.id), T));   /* a later file wins an id, as on the picture page */
+      const made = new Map();
+      /* one canvas per picture, drawn the way the app draws it: make(192), then draw(ctx, t) into the same canvas each time */
+      const frame = (id, t) => {
+        let m = made.get(id);
+        if (!m) { const c = d.createElement('canvas'); c.width = c.height = 192; m = { c: c, g: c.getContext('2d'), draw: byId.get(id).make(192) }; made.set(id, m); }
+        m.draw(m.g, t);
+        const out = document.createElement('canvas'); out.width = out.height = 192; out.getContext('2d').drawImage(m.c, 0, 0);
+        return out;
+      };
+      return { byId: byId, files: man.files, still: id => Number(byId.get(id).still) || 0, frame: frame, done: done };
+    } catch (e) { done(); throw e; }
+  }
+  /* mean difference per channel (0..255) between two tiles, both read at 64 px */
+  function diff1253(a, b) {
+    const S = 64, rd = c => { const k = document.createElement('canvas'); k.width = k.height = S; const g = k.getContext('2d'); g.drawImage(c, 0, 0, S, S); return g.getImageData(0, 0, S, S).data; };
+    const p = rd(a), q = rd(b);
+    let sum = 0;
+    for (let i = 0; i < p.length; i += 4) sum += Math.abs(p[i] - q[i]) + Math.abs(p[i + 1] - q[i + 1]) + Math.abs(p[i + 2] - q[i + 2]);
+    return sum / (S * S * 3);
+  }
+  /* prefers-reduced-motion answered by a stub (every other query goes to the real matchMedia); returns the undo, which puts back the descriptor */
+  function reduceMotion1253(on) {
+    const own = Object.getOwnPropertyDescriptor(window, 'matchMedia'), real = window.matchMedia;
+    window.matchMedia = function (q) {
+      if (/prefers-reduced-motion/.test(String(q))) return { matches: !!on, media: String(q), onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent() { return false; } };
+      return real.call(window, q);
+    };
+    return () => { if (own) Object.defineProperty(window, 'matchMedia', own); else delete window.matchMedia; };
+  }
+  function countDraws1253(cv) {
+    const g = cv.getContext('2d'), own = Object.getOwnPropertyDescriptor(g, 'drawImage'), real = g.drawImage;
+    let n = 0;
+    g.drawImage = function () { n++; return real.apply(this, arguments); };
+    return { n: () => n, undo: () => { if (own) Object.defineProperty(g, 'drawImage', own); else delete g.drawImage; } };
+  }
+  /* the registry types that have a picture, in the oracle's order */
+  function pictured1253(o) { const m = new Map(); o.byId.forEach((T, id) => { const t = picType1253(id), r = FM.fxRegistry.get(t); if (r && !r.hidden) m.set(t, id); }); return m; }
+  /* a category whose first effect has a picture, and a second pictured effect in it */
+  function pickCat1253(o) {
+    const has = pictured1253(o);
+    for (const c of FM.fxRegistry.categories()) {
+      const list = FM.fxRegistry.byCategory(c.key).map(r => r.type), withPic = list.filter(t => has.has(t));
+      if (list.length && has.has(list[0]) && withPic.length >= 2) return { cat: c.key, type: list[0], id: has.get(list[0]), other: { type: withPic[1], id: has.get(withPic[1]) } };
+    }
+    throw new Error('setup: no effect category opens on two pictured effects');
+  }
+  async function fxMenu1253(fn) {
+    const saved = FM.scene, savedSel = FM.scene.selectedId, hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    try {
+      if (hadHome) FM.home.close();
+      const L = FM.makeLayer('shape', { name: 's1253', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#c04070', start: 0, duration: 4 });
+      FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
+      FM.selectLayer(L.id); FM.refreshAll(); await sleep(100);
+      FM.fxBrowser.open(L); await sleep(300);
+      return await fn(L);
+    } finally {
+      try { if (FM.fxBrowser.close) FM.fxBrowser.close(); } catch (e) {}
+      if (FM.fxThumbs && FM.fxThumbs.stopAll) FM.fxThumbs.stopAll();
+      FM._fxPreview = null;
+      FM.scene = saved; FM.scene.selectedId = savedSel;
+      try { FM.refreshAll(); } catch (e) {}
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+      await sleep(60);
+    }
+  }
+  function host1253(top) {
+    const h = document.createElement('div');
+    h.style.cssText = 'position:fixed;left:0;top:' + (top || 0) + 'px;z-index:2147483000;display:flex;gap:2px;pointer-events:none';
+    document.body.appendChild(h);
+    return h;
+  }
+  function tileCanvas1253(h) { const cv = document.createElement('canvas'); cv.style.cssText = 'width:40px;height:40px;display:block'; h.appendChild(cv); return cv; }
+  async function until1253(fn, ms) { for (let i = 0; i < (ms || 8000) / 100; i++) { if (fn()) return true; await sleep(100); } return !!fn(); }
+
+  test('1253 · the effects menu at 380 and at 1280 shows the drawn picture for an effect that has one, not the live render, and the next effect its own picture (CONTROL: the two pictures read as different)', { item: '1253', budgetMs: 120000 }, async function () {
+    const o = await picOracle1253();
+    const undo = reduceMotion1253(true);   /* every picture on its still, so the tile is one known frame */
+    try {
+      const pick = pickCat1253(o), name = FM.fxRegistry.get(pick.type).label, name2 = FM.fxRegistry.get(pick.other.type).label;
+      const want = o.frame(pick.id, o.still(pick.id)), want2 = o.frame(pick.other.id, o.still(pick.other.id));
+      if (!(diff1253(want, want2) > 6)) throw new Error('control: the pictures for ' + name + ' and ' + name2 + ' differ by only ' + diff1253(want, want2).toFixed(1) + ' levels, so this comparison could not tell one tile from another');
+      const at = [['380', fn => atPhoneWidth(fn, 380)], ['1280', fn => atWideWidth(fn, 1280)]];
+      for (const [w, wrap] of at) {
+        await wrap(() => fxMenu1253(async () => {
+          FM.fxBrowser._openCategory(pick.cat);
+          let cv = null, cv2 = null, d = 999, d2 = 999;
+          const find = (v, t) => [].slice.call(v.querySelectorAll('canvas')).filter(c => c._fxType === t)[0] || null;
+          await until1253(() => {
+            const vs = document.querySelectorAll('#fx-browser .fxb-catview'), v = vs[vs.length - 1];
+            if (!v) return false;
+            cv = find(v, pick.type); cv2 = find(v, pick.other.type);
+            if (!cv || !cv2 || !cv.classList.contains('ready') || !cv2.classList.contains('ready')) return false;
+            d = diff1253(cv, want); d2 = diff1253(cv2, want2);
+            return d < 2 && d2 < 2;
+          }, 10000);
+          if (!cv) throw new Error(w + ': the ' + name + ' tile is not in its category view');
+          if (!cv2) throw new Error(w + ': the ' + name2 + ' tile is not in its category view');
+          if (!(d < 2)) throw new Error(w + ': the ' + name + ' tile in the effects menu shows the live render, not its drawn picture (it differs from the picture by ' + d.toFixed(1) + ' levels)');
+          if (!(d2 < 2)) throw new Error(w + ': the ' + name2 + ' tile in the effects menu shows the live render, not its drawn picture (it differs from the picture by ' + d2.toFixed(1) + ' levels)');
+          if (!(diff1253(cv, want2) > 6)) throw new Error(w + ': the ' + name + ' tile reads as the ' + name2 + ' picture too');
+        }));
+      }
+    } finally { undo(); o.done(); }
+  });
+
+  test('1253 · an effect with no picture keeps its live tile, and while the pictures cannot load every tile is the live one; once they load the same tiles show their pictures (CONTROL: the live tiles do paint)', { item: '1253', budgetMs: 90000 }, async function () {
+    const T = FM.fxThumbs, o = await picOracle1253();
+    const has = pictured1253(o);
+    const keys = [...has.keys()];
+    const types = keys.slice(0, 6);
+    /* every effect has a picture today, so one is held out of the load for this test (the way PIC_HELD holds a picture
+       that must not ship): its effect then has no picture, and must keep its live tile */
+    const bare = FM.fxRegistry.all().map(r => r.type).filter(t => !has.has(t))[0] || keys[6], bareId = has.get(bare) || null;
+    const bareName = FM.fxRegistry.get(bare).label;
+    const undo = reduceMotion1253(true);
+    const ownFetch = Object.getOwnPropertyDescriptor(window, 'fetch'), realFetch = window.fetch;
+    const ownAppend = Object.getOwnPropertyDescriptor(document.head, 'appendChild');
+    const h = host1253(0);
+    const settled = () => until1253(() => T._pics().state !== 'loading', 20000);
+    try {
+      if (bareId && T._picsHold) T._picsHold(bareId, 'held out by test 1253');
+      window.fetch = function (u) { if (/fx-pics\//.test(String((u && u.url) || u))) return Promise.reject(new TypeError('offline (test 1253)')); return realFetch.apply(this, arguments); };
+      if (T._picsReset) T._picsReset();
+      const cvs = types.map(t => { const cv = tileCanvas1253(h); T.mount(cv, t); return cv; });
+      const cvBare = tileCanvas1253(h);
+      T.mount(cvBare, bare);
+      const all = cvs.concat([cvBare]);
+      if (!(await until1253(() => all.every(c => c.classList.contains('ready')), 15000))) throw new Error('control: with the pictures unreachable ' + all.filter(c => !c.classList.contains('ready')).length + ' of ' + all.length + ' tiles never painted at all');
+      await sleep(400);
+      types.forEach((t, i) => { const dd = diff1253(cvs[i], o.frame(has.get(t), o.still(has.get(t)))); if (!(dd > 3)) throw new Error('with the pictures unreachable the ' + FM.fxRegistry.get(t).label + ' tile is not the live tile (it matches its picture to ' + dd.toFixed(1) + ' levels)'); });
+      window.fetch = realFetch; if (ownFetch) Object.defineProperty(window, 'fetch', ownFetch); else delete window.fetch;
+      /* one picture file missing (the last, which redraws pictures earlier files drew too) is a load that failed: every tile
+         stays live rather than showing the older drawings that file replaced */
+      const lost = o.files[o.files.length - 1];
+      document.head.appendChild = function (n) {
+        if (n && n.tagName === 'SCRIPT' && n.src.indexOf('fx-pics/' + lost) >= 0) n.src = n.src.replace(lost, 'tiles-missing-1253.js');
+        return Node.prototype.appendChild.call(this, n);
+      };
+      if (T._picsReset) T._picsReset();
+      cvs.forEach((cv, i) => T.mount(cv, types[i]));
+      await settled();
+      if (ownAppend) Object.defineProperty(document.head, 'appendChild', ownAppend); else delete document.head.appendChild;
+      await sleep(300);
+      if (T._pics().state === 'ready') throw new Error('with ' + lost + ' missing the pictures still counted as loaded, so the pictures it redrew show the older drawings');
+      cvs.forEach((cv, i) => { if (cv._fxPic) throw new Error('with ' + lost + ' missing the ' + FM.fxRegistry.get(types[i]).label + ' tile still shows a picture'); });
+      /* the network is back: a tile mounted a couple of seconds later loads them, with no stopAll and no reset (Simple's
+         strips never call stopAll) */
+      await sleep(2300);
+      cvs.forEach((cv, i) => T.mount(cv, types[i]));
+      T.mount(cvBare, bare);
+      const wants = types.map(t => o.frame(has.get(t), o.still(has.get(t))));
+      await until1253(() => cvs.every((cv, i) => cv.classList.contains('ready') && diff1253(cv, wants[i]) < 2), 15000);
+      cvs.forEach((cv, i) => { const dd = diff1253(cv, wants[i]); if (!(dd < 2)) throw new Error('once the pictures can load again, the ' + FM.fxRegistry.get(types[i]).label + ' tile still shows the live render (it differs from its picture by ' + dd.toFixed(1) + ' levels, pictures ' + T._pics().state + ')'); });
+      if (cvBare._fxPic) throw new Error(bareName + ' has no drawn picture but its tile was handed one');
+      if (!cvBare.classList.contains('ready')) throw new Error('the ' + bareName + ' tile (no picture) never painted its live render');
+      if (bareId) { const dd = diff1253(cvBare, o.frame(bareId, o.still(bareId))); if (!(dd > 3)) throw new Error('the ' + bareName + ' tile, whose picture is held out, matches that picture to ' + dd.toFixed(1) + ' levels'); }
+    } finally {
+      if (window.fetch !== realFetch) { if (ownFetch) Object.defineProperty(window, 'fetch', ownFetch); else delete window.fetch; }
+      if (Object.prototype.hasOwnProperty.call(document.head, 'appendChild')) { if (ownAppend) Object.defineProperty(document.head, 'appendChild', ownAppend); else delete document.head.appendChild; }
+      if (bareId && T._picsHold) { T._picsHold(bareId, null); if (T._picsReset) T._picsReset(); }
+      h.remove(); T.stopAll(); undo(); o.done();
+    }
+  });
+
+  test('1253 · a picture whose only tile is below the screen is never built, and it is built once that tile scrolls into view, even with the pictures held still (CONTROL: the tile on screen gets its picture)', { item: '1253', budgetMs: 60000 }, async function () {
+    const T = FM.fxThumbs, o = await picOracle1253();
+    const keys = [...pictured1253(o).keys()];
+    const was = T._picsStill ? T._picsStill(true) : null;   /* still: the frame loop never runs, so only the observer can build */
+    const hOn = host1253(0), hOff = host1253(4000);
+    try {
+      if (T._picsReset) T._picsReset();
+      await T._picsLoad();
+      const made = t => { const x = T._pics().ids.filter(i => i.type === t)[0]; return !!(x && x.made); };
+      const a = keys[0], b = keys[1], na = FM.fxRegistry.get(a).label, nb = FM.fxRegistry.get(b).label;
+      if (made(a) || made(b)) throw new Error('setup: a picture was already built straight after a fresh load');
+      const on = tileCanvas1253(hOn), off = tileCanvas1253(hOff);
+      T.mount(on, a); T.mount(off, b);
+      if (!(await until1253(() => on.classList.contains('ready') && made(a), 10000))) throw new Error('control: the ' + na + ' tile on screen never got its picture built');
+      await sleep(800);
+      if (made(b)) throw new Error('the ' + nb + ' picture was built while its only tile sat 4000 px below the screen (' + T._pics().made + ' pictures built, ' + T._pics().visible + ' on screen)');
+      if (off.classList.contains('ready')) throw new Error('the ' + nb + ' tile below the screen was painted');
+      hOff.style.top = '60px';
+      if (!(await until1253(() => made(b) && off.classList.contains('ready'), 10000))) throw new Error('the ' + nb + ' tile scrolled into view but its picture was never built (pictures held still)');
+      const dd = diff1253(off, o.frame(has1253id(o, b), o.still(has1253id(o, b))));
+      if (!(dd < 2)) throw new Error('the ' + nb + ' tile that scrolled into view is not its picture at its still (it differs by ' + dd.toFixed(1) + ' levels)');
+    } finally {
+      hOn.remove(); hOff.remove(); T.stopAll();
+      if (was !== null && T._picsStill) T._picsStill(was);
+      o.done();
+    }
+  });
+  function has1253id(o, type) { return pictured1253(o).get(type); }
+
+  test('1253 · on a tight frame budget the pictures on screen take turns, about one a frame, and every one of them still moves (CONTROL: on the normal budget all three are drawn every frame)', { item: '1253', budgetMs: 60000 }, async function () {
+    const T = FM.fxThumbs, o = await picOracle1253();
+    const has = pictured1253(o), moving = [];
+    for (const [t, id] of has) { if (diff1253(o.frame(id, 0.4), o.frame(id, 1.4)) > 3) moving.push(t); if (moving.length === 3) break; }
+    if (moving.length < 3) throw new Error('setup: fewer than three pictures move between 0.4 s and 1.4 s');
+    const was = T._picsStill ? T._picsStill(false) : null;
+    const h = host1253(0);
+    const counters = [];
+    try {
+      await T._picsLoad();
+      const cvs = moving.map(t => { const cv = tileCanvas1253(h); T.mount(cv, t); return cv; });
+      if (!(await until1253(() => cvs.every(c => c.classList.contains('ready')), 10000))) throw new Error('setup: the three tiles never painted');
+      await sleep(300);
+      const run = async () => {
+        const cs = cvs.map(cv => countDraws1253(cv)); counters.push(...cs);
+        const f0 = T._pics().frames;
+        await sleep(700);
+        const r = { frames: T._pics().frames - f0, each: cs.map(c => c.n()) };
+        cs.forEach(c => c.undo());
+        return r;
+      };
+      const normal = await run();
+      const sum = a => a.reduce((x, y) => x + y, 0);
+      if (!(normal.frames >= 5)) throw new Error('control: only ' + normal.frames + ' picture frames ran in 0.7 s');
+      if (!(sum(normal.each) >= 2 * normal.frames)) throw new Error('control: on the normal budget the three pictures were drawn ' + normal.each.join('/') + ' times in ' + normal.frames + ' frames, so this test cannot see a budget');
+      T._sliceMs(0);
+      const tight = await run();
+      if (!(tight.frames >= 5)) throw new Error('on a tight budget only ' + tight.frames + ' picture frames ran in 0.7 s');
+      if (sum(tight.each) > tight.frames + 3) throw new Error('on a tight budget the three pictures were still drawn ' + tight.each.join('/') + ' times in ' + tight.frames + ' frames, every one of them every frame');
+      tight.each.forEach((n, i) => { if (n < 1) throw new Error('on a tight budget the ' + FM.fxRegistry.get(moving[i]).label + ' picture never got a turn in ' + tight.frames + ' frames (' + tight.each.join('/') + ')'); });
+    } finally {
+      T._sliceMs(null);
+      counters.forEach(c => c.undo());
+      h.remove(); T.stopAll();
+      if (was !== null && T._picsStill) T._picsStill(was);
+      o.done();
+    }
+  });
+
+  test('1253 · a picture off screen is never drawn while one on screen moves, and with reduced motion a picture is drawn once at its still and never again (CONTROL: the picture on screen is redrawn)', { item: '1253', budgetMs: 60000 }, async function () {
+    const T = FM.fxThumbs, o = await picOracle1253();
+    const has = pictured1253(o);
+    let type = null;
+    for (const [t, id] of has) { if (diff1253(o.frame(id, 0.4), o.frame(id, 1.4)) > 3) { type = t; break; } }
+    if (!type) throw new Error('setup: no picture moves between 0.4 s and 1.4 s');
+    const name = FM.fxRegistry.get(type).label, id = has.get(type);
+    const was = T._picsStill ? T._picsStill(false) : null;
+    const hOn = host1253(0), hOff = host1253(4000);
+    let undo = null;
+    const counters = [];
+    try {
+      if (T._picsLoad) await T._picsLoad();
+      const on = tileCanvas1253(hOn), off = tileCanvas1253(hOff);
+      T.mount(on, type); T.mount(off, type);
+      if (!(await until1253(() => on.classList.contains('ready'), 10000))) throw new Error('setup: the ' + name + ' tile on screen never painted');
+      await sleep(300);
+      const cOn = countDraws1253(on), cOff = countDraws1253(off); counters.push(cOn, cOff);
+      await sleep(900);
+      if (cOn.n() < 3) throw new Error('control: the ' + name + ' picture on screen was redrawn ' + cOn.n() + ' times in 0.9 s, so it is not moving and this test cannot see a draw');
+      if (cOff.n() > 0) throw new Error('the ' + name + ' tile off screen was drawn ' + cOff.n() + ' times in 0.9 s while nobody could see it');
+      cOn.undo(); cOff.undo();
+      hOn.remove(); hOff.remove(); T.stopAll();
+      undo = reduceMotion1253(true);
+      const h2 = host1253(0);
+      const still = tileCanvas1253(h2);
+      try {
+        T.mount(still, type);
+        if (!(await until1253(() => still.classList.contains('ready'), 10000))) throw new Error('with reduced motion the ' + name + ' tile never painted');
+        await sleep(200);
+        const dd = diff1253(still, o.frame(id, o.still(id)));
+        if (!(dd < 2)) throw new Error('with reduced motion the ' + name + ' tile is not its picture at its still (it differs by ' + dd.toFixed(1) + ' levels)');
+        const c = countDraws1253(still); counters.push(c);
+        await sleep(900);
+        if (c.n() > 0) throw new Error('with reduced motion the ' + name + ' picture was redrawn ' + c.n() + ' times in 0.9 s');
+        if (T._pics && T._pics().animating) throw new Error('with reduced motion a picture frame is still scheduled');
+      } finally { h2.remove(); }
+    } finally {
+      counters.forEach(c => c.undo());
+      if (undo) undo();
+      hOn.remove(); hOff.remove(); T.stopAll();
+      if (was !== null && T._picsStill) T._picsStill(was);
+      o.done();
+    }
+  });
+
+  test('1253 · the app’s copy of the effect pictures (fx-pics/) is byte for byte the drawn source in tools/design/effect-pictures/, file for file and in the same order, unless that source is the older of the two (CONTROL: the source page lists its files)', { item: '1253', budgetMs: 60000 }, async function () {
+    const get = async p => { const r = await fetch(p, { cache: 'no-store' }); if (!r.ok) throw new Error(p + ' is not there (HTTP ' + r.status + ')'); return r.text(); };
+    const man = JSON.parse(await get('fx-pics/manifest.json'));
+    const ours = (man && man.files) || [];
+    if (ours.length < 10) throw new Error('fx-pics/manifest.json lists only ' + ours.length + ' picture files');
+    const page = await get('tools/design/effect-pictures/index.html');
+    const m = page.match(/const FILES=(\[[^\]]*\])/);
+    if (!m) throw new Error('control: the picture page no longer lists its files as const FILES=[…], so this test cannot read the source order');
+    const src = JSON.parse(m[1].replace(/'/g, '"'));
+    if (src.length < 10) throw new Error('control: the picture page lists only ' + src.length + ' files');
+    /* The source folder is the design chat's (not always committed): a checkout whose copy of it predates fx-pics/ lists
+       fewer files than the manifest. That source is the stale one, not the app's copy — said, not failed. A file the
+       source has and fx-pics/ lacks, or a file that differs, is a redrawn picture left behind, and fails. */
+    const older = ours.filter(f => src.indexOf(f) < 0);
+    if (older.length && src.every(f => ours.indexOf(f) >= 0)) {
+      try { console.log('1253 the picture page here is older than fx-pics/ (it lacks ' + older.join(', ') + '), so the copy was not compared'); } catch (e) {}
+      return;
+    }
+    const fix = ' (copy it: cp tools/design/effect-pictures/FILE fx-pics/, and keep fx-pics/manifest.json in the page’s FILES order)';
+    if (ours.join(',') !== src.join(',')) throw new Error('fx-pics/manifest.json lists ' + ours.length + ' files and the picture page ' + src.length + ', or in another order: first difference at ' + src.findIndex((f, i) => ours[i] !== f) + ' (' + src.filter(f => ours.indexOf(f) < 0).slice(0, 5).join(', ') + ' missing)' + fix);
+    const stale = [];
+    for (const f of ['kit.js'].concat(src)) { const a = await get('fx-pics/' + f), b = await get('tools/design/effect-pictures/' + f); if (a !== b) stale.push(f); }
+    if (stale.length) throw new Error(stale.length + ' fx-pics file(s) differ from the drawn source, so the app would show an old picture: ' + stale.join(', ') + fix);
+  });
+
+  test('1253 · every drawn picture belongs to an effect the menus offer (bolts is Lightning, cube is the 3D Cube) or is listed as unmapped, and none is broken (CONTROL: Venetian Blinds has its picture)', { item: '1253', budgetMs: 90000 }, async function () {
+    const T = FM.fxThumbs, o = await picOracle1253();
+    try {
+      if (T._picsLoad) await T._picsLoad();
+      if (T._picsBench) T._picsBench(1);   /* make and draw every picture once, so one that throws is found here and not on his phone */
+      const info = T._pics ? T._pics() : { unmapped: [], broken: {}, ids: [], state: 'none' };
+      if (!info.ids.some(x => x.type === 'blinds')) throw new Error('control: the app has no picture for Venetian Blinds (pictures: ' + info.state + ', ' + info.ids.length + ' loaded)');
+      const bad = [];
+      o.byId.forEach((Tl, id) => { const t = picType1253(id), r = FM.fxRegistry.get(t); if ((!r || r.hidden) && info.unmapped.indexOf(id) < 0) bad.push(id); });
+      if (bad.length) throw new Error(bad.length + ' picture(s) name no effect in the menus and are not listed as unmapped: ' + bad.join(', '));
+      const br = Object.keys(info.broken || {});
+      if (br.length) throw new Error(br.length + ' picture(s) threw and fell back to the live tile: ' + br.map(k => k + ' (' + info.broken[k] + ')').join(', '));
+      if (info.failedFiles && info.failedFiles.length) throw new Error('picture files that did not load: ' + info.failedFiles.join(', '));
+    } finally { o.done(); }
+  });
+
+  test('1253 · the count line, pictures: N of M effects, never drops below today’s 238 (CONTROL: M counts the effects the menus offer)', { item: '1253', budgetMs: 60000 }, async function () {
+    const T = FM.fxThumbs, FLOOR = 238;
+    if (T._picsLoad) await T._picsLoad();
+    const all = FM.fxRegistry.all().map(r => r.type);
+    if (all.length < 100) throw new Error('control: the menus offer only ' + all.length + ' effects');
+    const withPic = new Set(((T._pics && T._pics().ids) || []).map(x => x.type));
+    const n = all.filter(t => withPic.has(t)).length;
+    const line = 'pictures: ' + n + ' of ' + all.length + ' effects';
+    try { console.log('1253 ' + line + (n < all.length ? ' · no picture yet: ' + all.filter(t => !withPic.has(t)).join(', ') : '')); } catch (e) {}
+    if (n < FLOOR) throw new Error(line + ', fewer than the ' + FLOOR + ' that had pictures when they went in (#1253)');
   });
 })();

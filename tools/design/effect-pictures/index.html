@@ -58,16 +58,23 @@ footer b{ color:var(--ink); font-weight:600; }
   .mgrid{ grid-template-columns:repeat(4,minmax(0,77px)); }
   .mtile canvas{ width:100%; height:auto; aspect-ratio:1; }
 }
+#ab[hidden]{display:none!important}
 </style>
 
 <div class="wrap">
   <header>
-    <div class="eyebrow">FreeMotion · effect pictures · round 4</div>
+    <div class="eyebrow">FreeMotion · effect pictures · round 5</div>
     <h1>Every effect, shown as it really looks</h1>
-    <p class="lede">Every effect now has its picture. The new ones have a yellow dot and a New tag; the ones you've already seen say Reviewed. This is a preview: the checkers are still going over the new ones, and this page will update when they finish.</p>
+    <p class="lede">New this round: the builder upgraded 14 effects, so each one has a new picture (tagged Upgraded effect) and a before / after of the real effect. Tap "Only the upgraded effects" to see just those. This is a preview: 3 of the 14 new pictures have passed their checker so far; the rest are checked next.</p>
     <div class="counts" id="counts"></div>
-    <div class="counts"><a class="pill new" href="#changed">Show only the ones just changed</a><a class="pill" href="#all">Show everything</a></div>
+    <div class="counts"><a class="pill new" href="#upgraded">Only the upgraded effects</a><a class="pill" href="#changed">Only the ones changed after your review</a><a class="pill" href="#all">Show everything</a></div>
   </header>
+
+  <section class="block" id="ab" hidden aria-labelledby="h-ab">
+    <h2 id="h-ab">Before and after: what each upgrade really does</h2>
+    <p class="note">Real renders from the app's own renderer, not drawings. In each sheet the top part is the effect today and the bottom part is the upgraded effect. These need your OK before the upgrades ship.</p>
+    <div id="ab-body"></div>
+  </section>
 
   <section class="block" aria-labelledby="h-phone">
     <h2 id="h-phone">In the effects menu, on your phone</h2>
@@ -92,11 +99,12 @@ footer b{ color:var(--ink); font-weight:600; }
 <script>
 (function(){
 'use strict';
-const FILES=['tiles-r1.js', 'tiles-b1.js', 'tiles-b2.js', 'tiles-b3.js', 'tiles-b4.js', 'tiles-b5.js', 'tiles-b6.js', 'tiles-b7.js', 'tiles-fix-1.js', 'tiles-fix-2.js', 'tiles-fix-3.js', 'tiles-fix-4.js', 'tiles-c0.js', 'tiles-c1.js', 'tiles-c2.js', 'tiles-c3.js', 'tiles-c4.js', 'tiles-c5.js', 'tiles-c6.js', 'tiles-c7.js', 'tiles-c8.js', 'tiles-c9.js', 'tiles-c10.js', 'tiles-c11.js', 'tiles-c12.js', 'tiles-c13.js', 'tiles-c14.js', 'tiles-c15.js', 'tiles-c16.js', 'tiles-c17.js', 'tiles-c18.js', 'tiles-c19.js', 'tiles-c20.js', 'tiles-c21.js', 'tiles-c22.js', 'tiles-c23.js', 'tiles-c24.js', 'tiles-c25.js', 'tiles-c26.js', 'tiles-g1.js', 'tiles-g2.js', 'tiles-g3.js', 'tiles-g4.js'];
+const FILES=['tiles-r1.js', 'tiles-b1.js', 'tiles-b2.js', 'tiles-b3.js', 'tiles-b4.js', 'tiles-b5.js', 'tiles-b6.js', 'tiles-b7.js', 'tiles-fix-1.js', 'tiles-fix-2.js', 'tiles-fix-3.js', 'tiles-fix-4.js', 'tiles-c0.js', 'tiles-c1.js', 'tiles-c2.js', 'tiles-c3.js', 'tiles-c4.js', 'tiles-c5.js', 'tiles-c6.js', 'tiles-c7.js', 'tiles-c8.js', 'tiles-c9.js', 'tiles-c10.js', 'tiles-c11.js', 'tiles-c12.js', 'tiles-c13.js', 'tiles-c14.js', 'tiles-c15.js', 'tiles-c16.js', 'tiles-c17.js', 'tiles-c18.js', 'tiles-c19.js', 'tiles-c20.js', 'tiles-c21.js', 'tiles-c22.js', 'tiles-c23.js', 'tiles-c24.js', 'tiles-c25.js', 'tiles-c26.js', 'tiles-g1.js', 'tiles-g2.js', 'tiles-g3.js', 'tiles-g4.js', 'tiles-h1.js', 'tiles-h2.js', 'tiles-h3.js', 'tiles-h4.js', 'tiles-h5.js', 'tiles-h6.js', 'tiles-h7.js', 'tiles-h8.js', 'tiles-h9.js', 'tiles-h10.js', 'tiles-h11.js', 'tiles-h12.js', 'tiles-h13.js', 'tiles-h14.js'];
 const ORDER=['Colouring','Keying','Blur','Stylize','Drawing / Edge','Warping','Shakes / Movement','Repetition','Generative','3D','Text','Opacity / Visibility'];
 const qs=(()=>{ try{ return new URLSearchParams(location.search); }catch(e){ return new URLSearchParams(''); } })();
 function load(i,done){ if(i>=FILES.length) return done(); const before=(window.FX_TILES||[]).length; const s=document.createElement('script'); s.src=FILES[i]; s.onload=s.onerror=()=>{ (window.FX_TILES||[]).slice(before).forEach(T=>{ T._file=FILES[i]; }); load(i+1,done); }; document.head.append(s); }
-const isNew4=T=>String(T._file||'').indexOf('tiles-c')===0;
+const isNew5=T=>String(T._file||'').indexOf('tiles-h')===0;   /* round 5: pictures redrawn for effects the builder upgraded (#1246, #1250, #1248) */
+const isNew4=T=>String(T._file||'').indexOf('tiles-c')===0||isNew5(T);
 load(0,()=>{ const p=(window.FXK&&window.FXK._preload)?window.FXK._preload():Promise.resolve(); p.then(build,build); });
 window.addEventListener('hashchange',()=>{ try{ location.reload(); }catch(e){} });
 
@@ -105,6 +113,30 @@ function build(){
   let tiles=[...new Map((window.FX_TILES||[]).map(T=>[T.id,T])).values()];
   /* #changed: only the pictures redone after his last review (the tiles-g files, plus the new Spherize) */
   if(location.hash==='#changed') tiles=tiles.filter(T=>String(T._file||'').indexOf('tiles-g')===0||T.id==='sphere3d');
+  if(location.hash==='#upgraded'){
+    tiles=tiles.filter(isNew5);
+    /* the before / after sheets for his OK (round 5): plain text only, no HTML from data */
+    const AB=[['blinds','Venetian Blinds','New Solid slats look: real shaded slats instead of black lines. Works; it looks best with Shading around 70% or a coloured slat.'],
+      ['dispersion','Dispersion','New Sweep: a ragged front crosses the layer and the pieces blow away. Looks good with fine grain and Embers off; at the defaults the orange edges are still there.'],
+      ['starfield','Starfield','New Streak: hyperspace lines. Great at bigger star sizes; at the default size the lines break into dots and it gets much slower. Being fixed.'],
+      ['lensblur','Lens Blur','Radius now goes to 120: city lights open into real round (or hexagon) bokeh discs when Highlight bloom is up.'],
+      ['motionblur','Directional Blur','Distance now goes to 400 px: a solid whip-pan streak instead of a row of copies.'],
+      ['counter','Number Roll','New Rolling digits style: each digit rolls like a counter wheel, and a new wheel rolls in on a carry. A few edge cases to fix (curved text, some number formats).'],
+      ['lensflare','Lens Flare','Hexagon ghosts and stronger lens-coating colours. Works.'],
+      ['crt','CRT','New Power control: the TV switches off to a line, then a dot, then black. Works on pictures; text layers need a fix.'],
+      ['fliplayer','Card Flip','The back of the card can now be another layer. Works; one bug when that back layer has its own 3D effect.'],
+      ['cube','Cube','A different layer on each face, like your old cube picture, now for real. Works; small see-through edges on smaller face layers to fix.'],
+      ['fractalridges','Rock Noise','New Stone look: lit rock instead of soft plasma. A big improvement; it renders slower, being looked at.'],
+      ['clouds','Clouds','New Clouds look: white clouds with clear sky between instead of grey haze. A big improvement; slow in small previews, being fixed.'],
+      ['moshbloom','Datamosh','Now holds the old shot at a cut and drags the new shot\'s movement through it, like real datamosh. Best with Heal low and Amount high; some cuts are not detected yet.'],
+      ['weather','Snow & Rain','Already live (v18.38): the weather stays inside its layer. One catch: if the layer moves, the weather does not move with it.']];
+    const abs=document.getElementById('ab'), body=document.getElementById('ab-body');
+    if(abs&&body){ abs.hidden=false;
+      for(const [id,name,cap] of AB){ const f=document.createElement('figure'); f.style.margin='0 0 22px';
+        const im=new Image(); im.loading='lazy'; im.src='ab/'+id+'.jpg'; im.alt=name+': before and after'; im.style.cssText='display:block;width:100%;height:auto;border-radius:10px';
+        const fc=document.createElement('figcaption'); fc.style.cssText='margin-top:8px;font-size:15px;line-height:1.45';
+        const b=document.createElement('b'); b.textContent=name+'. '; fc.append(b,document.createTextNode(cap)); f.append(im,fc); body.append(f); } }
+  }
   const only=qs.get('only'); if(only){ const ids=only.split(','); tiles=tiles.filter(T=>ids.includes(T.id)); }
   const sec=qs.get('section'); if(sec){ tiles=tiles.filter(T=>T.section===sec); }
   tiles.sort((a,b)=>(ORDER.indexOf(a.section)-ORDER.indexOf(b.section))||0);
@@ -147,7 +179,7 @@ function build(){
     const card=document.createElement('article'); card.className='card';
     const meta=document.createElement('div'); meta.className='meta';
     const h4=document.createElement('h4'); h4.textContent=T.name;
-    const tag=document.createElement('span'); tag.className='tag'+(isNew4(T)?' new':''); tag.textContent=isNew4(T)?(T.redrawn?'Redrawn':'New'):'Reviewed';
+    const tag=document.createElement('span'); tag.className='tag'+(isNew4(T)?' new':''); tag.textContent=isNew5(T)?'Upgraded effect':isNew4(T)?(T.redrawn?'Redrawn':'New'):'Reviewed';
     meta.append(h4,tag);
     const p=document.createElement('p'); p.textContent=T.line;
     card.append(M,meta,p); cardsEl.append(card); watch(M);

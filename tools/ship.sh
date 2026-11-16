@@ -628,6 +628,15 @@ if ! python3 tools/_classify.py; then
   echo "   Each failing case above is a bug that already happened once. Fix tools/_classify.py first."
   exit 1
 fi
+# NOTHING BUT THE APP MAY REACH THE LIVE SITE (#1254, 17 Nov). GitHub Pages published every file in the repo: his notes, the
+# request list, the tests and these tools all answered on the live site, findable by anyone, until `_config.yml` listed them as
+# left out. That list is a thing to remember, so it is checked here instead: a top-level path that is neither the app nor in the
+# list refuses the release (a new note would otherwise go public the moment it shipped), and so does a list that takes part of
+# the app off the site. Instant; it self-tests first. tools/tick.sh asks the live site the same question after the deploy.
+if ! python3 tools/_public.py check; then
+  echo "❌ THIS RELEASE WOULD PUBLISH SOMETHING THAT IS NOT THE APP — not committing, not pushing."
+  exit 1
+fi
 # THE FAILSAFE MUST PROVE ITSELF TOO (12 Sep). tools/rollback.sh is the answer to his question "whats the
 # fail safe if an ai fucks up all the code?" — and on the day it was written it broke TWICE, in opposite
 # directions: untracked (so `git clean -fd` and its own `git stash -u` would eat it), then, once that was
@@ -925,6 +934,31 @@ ship_tree_hash() {
       | while IFS= read -r f; do printf '%s\n' "$f"; cat "$f"; done; } | fm_sha1
 }
 _PROVE_HASH="$(ship_tree_hash)"   # checked again just before `git add -A` (B6)
+# ─── THE SYNC-SCHEMA FAST GATE (11 Nov, after v18.38's first ship) ───────────────────────────────────────────────────────
+# Live collaboration hashes every effect's parameter definitions, the sanitisers and the op grammar (FM.collab.schemaFingerprint),
+# and `921 S1 the schema fingerprint gate` refuses a tree whose hash is not the one pinned in js/collab-core.js. v18.38 added one
+# control to Snow & Rain and found that out after a whole 65-minute desktop pass. The test takes seconds, so it runs HERE, before
+# the proof and both passes, on every ship. Its message carries the measured number, but that number is taken at the CURRENT
+# revision and the revision is part of the hash: bump SCHEMA_REV first, then run this one test again for the number to paste.
+echo "→ the sync schema fingerprint (921 S1, seconds)…"
+mkdir -p .claude/ship
+_SQ='921 S1 the schema fingerprint gate'
+printf '%s\n' "$_SQ" > .claude/ship/schema-title.txt
+_SPORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
+( exec tools/serve.sh "$_SPORT" ) >/dev/null 2>&1 & _SSRV=$!
+for _ in $(seq 1 20); do curl -s -o /dev/null "http://127.0.0.1:$_SPORT/tests/run.html" && break; sleep 0.5; done
+python3 tests/_cdp.py --port "$_SPORT" --width 1280 --names --timeout 300 --url "http://localhost:$_SPORT/tests/run.html?only=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$_SQ")" > .claude/ship/schema-slice.out 2>&1
+python3 tools/_spotjudge.py .claude/ship/schema-slice.out .claude/ship/schema-title.txt > .claude/ship/schema-slice.v
+kill "$_SSRV" 2>/dev/null
+if grep -q '^FAIL' .claude/ship/schema-slice.v; then
+  echo "❌ THE SYNC SCHEMA MOVED — not committing, not pushing:"
+  grep '^FAIL' .claude/ship/schema-slice.v | cut -f3 | cut -c1-300 | sed 's/^/   /'
+  echo "   An effect's parameters, a sanitiser or the op grammar changed. Bump FM.collab.SCHEMA_REV in js/collab-core.js FIRST, then run"
+  echo "   only this test again: the number it prints AT THE NEW REVISION is the SCHEMA_FP to paste (and bump collab-core.js's ?v=)."
+  exit 1
+fi
+grep -q '^PASS' .claude/ship/schema-slice.v || { echo "❌ the schema fingerprint gate did not run ($(head -c 200 .claude/ship/schema-slice.v)) — not committing, not pushing"; exit 1; }
+echo "   ✅ the sync schema is the pinned one"
 ship_phase prove
 echo "→ proving the release (its changed tests must fail without the fix)…"
 mkdir -p .claude/ship

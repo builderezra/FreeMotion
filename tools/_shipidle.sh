@@ -75,6 +75,17 @@ for tree in trees:
         if m > best:
             best, where = m, p
 print('   next workable (oldest first): ' + nx)
+# WHAT IS BEING BUILT, IN THE BUILDER'S OWN WORDS (10 Nov, Ezra via the logger: "why does the builder keep running out of
+# tasks"). A worktree's newest mtime says that something changed, not what; one line in .claude/building (gitignored, written
+# when an item is started: "<worktree> · <item>") lets a tick during a ship or the FU lock name the item, and a missing or
+# old one is visible instead of silent.
+try:
+    with open('.claude/building', encoding='utf-8') as f:
+        decl = f.readline().strip()[:160]
+    dage = int((time.time() - os.stat('.claude/building').st_mtime) // 60)
+    print('   building (declared %d min ago in .claude/building): %s' % (dage, decl or '(empty)'))
+except OSError:
+    print('   building: nothing declared — write "<worktree> · <item>" to .claude/building when an item is started')
 if not where:
     print('⚠️ IDLE DURING SHIP: there is no worktree with a file in it — make one and build: ' + nx)
     sys.exit(0)

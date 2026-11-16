@@ -1,6 +1,6 @@
 /* FreeMotion — "Insert your Media": fill a template's clips with your own footage.
  *
- * QUEUE 343 clause 2. Ezra, with a screenshot of Alight Motion's version:
+ * QUEUE 343 clause 2. Ezra, with a screenshot of [the reference app]'s version:
  *   "the long term goal for templates is to make it when you press on them you can quickly swap out
  *    the media for ur own clips so you can use them as templates and not just the exact same thing as
  *    elements"

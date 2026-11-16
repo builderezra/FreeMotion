@@ -1,4 +1,4 @@
-/* FreeMotion — Freehand & Vector drawing tools (Alight-Motion-style).
+/* FreeMotion — Freehand & Vector drawing tools ([reference-app]-style).
  * Freehand: press-drag on the canvas → a brush-stroke path layer (open, stroked).
  * Vector:   tap anchor points → tap Done (or tap near the first point) → a filled polygon layer.
  * Both create a shape:'path' layer (see FM.addPathLayer / traceShapePath).

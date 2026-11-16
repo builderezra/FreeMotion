@@ -46,10 +46,17 @@ hr "INBOX — Ezra writes here from his phone; if anything is listed, log it VER
 
 # WHILE A SHIP RUNS, THE REST IS NOISE (8 Oct — RULES-AUDIT B8): nothing in this tree may be edited or measured, so the
 # queue, the proof debt and the reminders cannot be acted on — a tick during a ship prints what is in flight and the inbox.
-if [ -f .ship-in-progress ] && _SP="$(ship_lock_pid .ship-in-progress)" && [ -n "$_SP" ] && kill -0 "$_SP" 2>/dev/null; then
+# …AND THE SAME WHILE THE FULL-UNCHANGED LOCK RUNS (10 Nov, Ezra via the logger: "why does the builder keep running out of
+# tasks"). A Simple release's FU run is about as long as a ship and holds this tree the same way, so between them they take
+# most of the day — and the tick used to say nothing about the FU at all, so a session waiting on one looked idle for hours.
+_SHIPPING=""; if [ -f .ship-in-progress ] && _SP="$(ship_lock_pid .ship-in-progress)" && [ -n "$_SP" ] && kill -0 "$_SP" 2>/dev/null; then _SHIPPING=1; fi
+_FU=""; if command -v pgrep >/dev/null 2>&1 && pgrep -f 'tools/full-unchanged.sh' >/dev/null 2>&1; then _FU=1; fi
+if [ -n "$_SHIPPING$_FU" ]; then
   echo
-  echo "⛔ A SHIP IS RUNNING (pid $_SP, phase $(ship_lock_field phase .ship-in-progress)) — the queue and the rest wait for its verdict"
-  echo "   (.claude/ship/ship.log). Build in a worktree meanwhile; no browser runs beside it."
+  [ -n "$_SHIPPING" ] && echo "⛔ A SHIP IS RUNNING (pid $_SP, phase $(ship_lock_field phase .ship-in-progress)) — the queue and the rest wait for its verdict (.claude/ship/ship.log)."
+  [ -n "$_FU" ] && echo "⛔ THE FULL-UNCHANGED LOCK IS RUNNING (tools/full-unchanged.sh) — this tree waits for its PASS or FAIL (tools/.full-unchanged-report)."
+  echo "   KEEP BUILDING: the next item, code only, in its own worktree, named in .claude/building. No browser, slices, node test"
+  echo "   runs or agents beside it; queue the item's tests for the gap. The tick watches the run, so no waiter (LOOP.md rule 6b)."
   # …and SAYS WHAT, with an IDLE line past 15 min (11 Oct, "the builder looks like its slacking again"): tools/_shipidle.sh
   tools/_shipidle.sh . 15 2>/dev/null || echo "⚠️ tools/_shipidle.sh could not say what to build — run tools/next.sh"
   exit 0
@@ -72,6 +79,18 @@ echo "app version: $(grep -o '>v[0-9][0-9.]*<' index.html | head -1 | tr -d '><'
 # The first-message check reads THIS line (CLAUDE.md step 3, RULES-AUDIT B5) — not `git status`, which is dirty most of
 # the time for reasons that are not an unshipped release (the logging chat's files, the batch in progress).
 unshipped_release_line
+# WHAT THE LIVE SITE HANDS OUT (#1254, 17 Nov): his notes, the tests and the tools were all public there. _config.yml leaves them out
+# and tools/_public.py asks the site itself. A clean answer is kept for a day per shipped commit (.claude/public-live), so a tick
+# does not ask the network every time; anything else — a private file answering, an app file missing, a deploy not landed — is
+# said on EVERY tick until it is clean.
+if [ "$_B" = main ] && [ -e tools/_public.py ]; then
+  _PL=".claude/public-live"; _PH="$(git rev-parse --short HEAD) $(date +%Y-%m-%d)"
+  if [ "$(cat "$_PL" 2>/dev/null)" != "$_PH" ]; then
+    _PO="$(python3 tools/_public.py live 2>&1)"; _PRC=$?
+    printf '%s\n' "$_PO" | tail -1
+    if [ "$_PRC" = 0 ]; then mkdir -p .claude; printf '%s\n' "$_PH" > "$_PL"; fi
+  fi
+fi
 # PER-OS BASELINES (6 Oct, #1071): off the Mac, the 22 tests that pin the Mac's pictures and tolerances say NOT RUN HERE
 # until this OS's values are recorded — said here every tick, so the one command that records them is never a memory.
 case "$(fm_os)" in

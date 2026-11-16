@@ -1,0 +1,39 @@
+# FreeMotion's site is the APP and nothing else (#1254, 17 Nov 2026).
+#
+# GitHub Pages builds this repo with Jekyll. With no config it published every file in it: the notes, the request list, the tests and
+# the tools all answered on the live site. Everything listed under `exclude:` is left OUT of the site; the app is whatever is not
+# listed (index.html, styles.css, sw.js, js/, vendor/, fx-art/, fx-pics/, launch/, tutorials/, the icons and the intro videos).
+#
+# This list is checked, not remembered:
+#   python3 tools/_public.py check   (run by tools/ship.sh) refuses a release in which a top-level path is neither the app nor listed
+#                                    here, so a new note cannot go public by being forgotten;
+#   python3 tools/_public.py live    (run by tools/tick.sh) asks the live site and shouts if one of these files answers.
+#
+# One name per line. A name matches a file or a whole folder at the top of the repo (Jekyll 3: by name, or as the start of a path).
+# Do NOT write *.md: the star crosses folders and would take the lessons in tutorials/ off the site, and the app fetches those.
+exclude:
+  - BACKLOG.md
+  - BEFORE-PUBLISHING.md
+  - BUG-HUNT.md
+  - CLAUDE.md
+  - COLLAB-DESIGN.md
+  - EFFECTS-PLAN.md
+  - FILTERS-DESIGN.md
+  - HANDOVER.md
+  - INBOX.md
+  - LAUNCH-PLAN.md
+  - LOOP-HISTORY.md
+  - LOOP.md
+  - MISSION.md
+  - NEXT-SESSION.md
+  - PARITY.md
+  - PERF-PLAN.md
+  - POLISH-LOG.md
+  - QUALITY.md
+  - README.md
+  - REQUESTS.md
+  - SWITCHOVER.md
+  - audits
+  - outside
+  - tests
+  - tools

@@ -1680,6 +1680,7 @@ window.FM = window.FM || {};
     if (!live.size) { clearInterval(ticker); ticker = 0; }
   }
   function paint(cv, entry) {
+    if (cv._fxPic) return;   // #1253: this tile shows its drawn picture now; a live frame landing late must not cover it
     /* Entries no longer all have one shape: a sample tile is a 192² square, a layer preview is the
      * .fxp-thumb box at the project's aspect. Sizing the canvas FROM THE ENTRY is what stops a
      * fallback tile being blitted 1:1 into the corner of a canvas that was sized for the other one. */
@@ -1822,6 +1823,19 @@ window.FM = window.FM || {};
       if (!warned._init) { warned._init = 1; console.warn('fx-thumbs: FM.renderScene/fxRegistry missing'); }
       return;
     }
+    /* #1253: a stock tile (no recipe: mount(), a layer-less mountLayerFx, a re-mount of either) for an effect with a drawn
+       picture shows the picture; the first one asks for the pictures, and until they arrive it is the live tile below. */
+    if (cv._fxPic) picUnbind(cv);
+    if (!m && pic.enabled) {
+      const P = pic.byType.get(key);
+      if (P && !P.broken && picMount(cv, key, P)) return;
+      /* a failed load (offline, a file missing) is tried again by the next tile mounted a little later — Simple's strips
+         never call stopAll, so this is their retry as well as Full's */
+      if (FM.fxRegistry.get(key) && (pic.state === 'idle' || (pic.state === 'failed' && now() - pic.failedAt >= PIC_RETRY_MS))) {
+        if (pic.state === 'failed') { pic.state = 'idle'; pic.loadP = null; }
+        picLoad();
+      }
+    }
     preloadArt();          // kick every JPEG off on the first tile, not one at a time as tiles build
     ensureSamples();
     const w = (m && m.layerId) ? TW : PX, h = (m && m.layerId) ? TH : PX;
@@ -1843,6 +1857,358 @@ window.FM = window.FM || {};
     if (!layer || !canPreview(layer, fxType)) return null;
     return { layerId: layer.id, rev: sceneRev(), preset: preset || null, fx: fxType };
   }
+
+  /* ═══ #1253 · THE DRAWN EFFECT PICTURES ════════════════════════════════════════════════════════════════════════════
+   * His words (16 Nov, REQUESTS.md #1253): "why aren't the new icons in yet? … Just add all the effects in now. If there's
+   * any I don't like I'll tell you about them."
+   * The "icons" are the hand-drawn, animated pictures of tools/design/effect-pictures/ (#1243 FX1). They ship as their own
+   * drawing code (plan C's option B, the logger's recommendation for #1253): fx-pics/ holds kit.js and every tiles-*.js
+   * byte for byte, and fx-pics/manifest.json lists them in the picture page's order (a later file wins an id). A tile is
+   * {id, name, section, still, make(px) → draw(ctx, tSeconds)}, drawn in 0..100 units (HARNESS.md).
+   *  · LOADED ON FIRST USE. Nothing is fetched at start-up. The first stock tile an effects menu mounts (Full's browser,
+   *    Simple's strip, anything that calls mount) fetches the manifest, kit.js and the tiles (side by side, run in order),
+   *    each with the build (<meta name="fm-build">) as its ?v=, so a release fetches redrawn pictures and sw.js keeps this
+   *    release's copy for offline (and drops the older ones). Until they arrive, and whenever they cannot (offline before the
+   *    first load, or any one file missing), every tile is the live render exactly as before, nothing is said, and a tile
+   *    mounted a couple of seconds later tries again.
+   *  · BUILT ONLY ON SCREEN. A picture's make() (half a second for the heaviest) runs when a tile showing it comes on screen,
+   *    never for the rows below the fold.
+   *  · ONLY STOCK TILES. mount(cv, type), and mountLayerFx without a layer, show the picture for an effect that has one.
+   *    Layer previews, presets, filters and applied tiles keep the live render, as does an effect with no picture.
+   *  · ONE CLOCK, ONLY WHAT IS ON SCREEN. One requestAnimationFrame loop draws each visible picture once per frame into its
+   *    own 192² canvas (the live tiles' raster: SIZE × R) and copies it to every tile showing it. With more than 10 on screen
+   *    each one draws every 2nd frame, above 24 every 3rd (the picture page's stride, which he has run on his phone). Off
+   *    screen (IntersectionObserver), with the menu closed (stopAll) or the tab hidden, nothing draws.
+   *  · STILL. Under prefers-reduced-motion, and under _picsStill(true) (the suite's and any screenshot comparison's switch:
+   *    the live tiles have none, they run on a wall-clock interval), a picture is drawn once at its `still` and never moves.
+   *  · A PICTURE THAT THROWS is not shown: its effect falls back to the live tile and the id is listed in _pics().broken.
+   * ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+  /* A picture whose id is not its effect's registry type (HARNESS.md: "Tiles bolts and cube are effect types lightning and cube3d"). */
+  const PIC_ALIAS = { bolts: 'lightning', cube: 'cube3d' };
+  /* Pictures that do not ship, and why: the effect keeps its live tile. #1246 clause 2 (a hard gate): "his real number plates
+     are blanked in every tile that uses a car photo" — a picture where a plate still reads stays here until it is redrawn. */
+  const PIC_HELD = {};
+  const PIC_KEEP = 64;   // drawn pictures kept made at once (each holds a 192² canvas plus whatever its make() prepared)
+  const PIC_RETRY_MS = 2000;   // a failed load is tried again by a tile mounted at least this long after it failed
+  const pic = { state: 'idle', error: '', base: 'fx-pics/', enabled: true, still: false, loadP: null, gen: 0, failedAt: 0,
+    byType: new Map(), unmapped: [], held: [], broken: {}, failedFiles: [], made: 0 };
+  const picVis = new Set();          // tiles showing a picture that are on screen now
+  let picIO = null, picRaf = 0, picT0 = 0, picFrameN = 0, picRot = 0, picMakeQ = [], picMakeRaf = 0, picUse = 0;
+
+  function picBuildTag() {
+    const m = document.querySelector('meta[name="fm-build"]');
+    return (m && String(m.getAttribute('content') || '').trim().replace(/^v/, '')) || '0';
+  }
+  function picReduced() { try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } }
+  function picStill() { return pic.still || picReduced(); }
+  function picScript(src) {
+    return new Promise(function (ok, bad) {
+      const s = document.createElement('script');
+      s.async = false; s.src = src;
+      s.onload = function () { ok(); };
+      s.onerror = function () { bad(new Error('could not load ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+  /* Every tile file at once with async=false: the browser fetches them side by side and still RUNS them in the list's order
+     (a later file wins an id), firing each one's load before the next one runs. onEach(i, ok) is called in that order. */
+  function picScripts(srcs, onEach) {
+    return Promise.all(srcs.map(function (src, i) {
+      return new Promise(function (ok) {
+        const s = document.createElement('script');
+        s.async = false; s.src = src;
+        s.onload = function () { onEach(i, true); ok(); };
+        s.onerror = function () { onEach(i, false); ok(); };
+        document.head.appendChild(s);
+      });
+    }));
+  }
+  /* kit.js loads his photographs from photos/<key>.jpg beside the picture page. The app's copies are fx-art/<key>.jpg (the
+     same eighteen, the URL the live tiles already use, so the browser and sw.js hold one copy). kit.js stays byte-identical
+     to its source: its three photo functions are replaced on the loaded kit BEFORE any tile file runs, and every tile reads
+     them from window.FXK as it loads. photoCover is kit.js's own, reading this map. */
+  function picPatchKit(K) {
+    const PH = {};
+    K.photo = function (k) { return PH[k]; };
+    K.photoCover = function (k, px) {
+      const C = document.createElement('canvas'); C.width = C.height = px;
+      const x = C.getContext('2d'), im = PH[k];
+      if (im) { const s = Math.max(px / im.naturalWidth, px / im.naturalHeight), w = im.naturalWidth * s, h = im.naturalHeight * s; x.drawImage(im, (px - w) / 2, (px - h) / 2, w, h); }
+      x.setTransform(px / 100, 0, 0, px / 100, 0, 0);
+      return [C, x];
+    };
+    K._preload = function () {
+      return Promise.all((K.PHOTO_KEYS || []).map(function (k) {
+        return new Promise(function (res) {
+          const im = new Image();
+          im.onload = function () { PH[k] = im; res(); };
+          im.onerror = function () { res(); };
+          im.src = 'fx-art/' + encodeURIComponent(k) + '.jpg?v=1';
+        });
+      }));
+    };
+  }
+  function picLoad() {
+    if (pic.loadP) return pic.loadP;
+    const gen = ++pic.gen, base = pic.base, v = encodeURIComponent(picBuildTag());
+    pic.state = 'loading'; pic.error = ''; pic.failedFiles = [];
+    let tiles = null;
+    const fileOf = new Map();
+    pic.loadP = fetch(base + 'manifest.json?v=' + v)
+      .then(function (r) { if (!r.ok) throw new Error('manifest: HTTP ' + r.status); return r.json(); })
+      .then(async function (man) {
+        /* only plain tile names: the manifest is read, never trusted to name a path */
+        const files = (man && Array.isArray(man.files) ? man.files : []).filter(function (f) { return /^tiles-[a-z0-9-]+\.js$/.test(String(f)); });
+        if (!files.length) throw new Error('the manifest names no tile files');
+        window.FX_TILES = [];
+        await picScript(base + 'kit.js?v=' + v);
+        const K = window.FXK;
+        if (!K || typeof K.photoCover !== 'function') throw new Error('kit.js did not set up FXK');
+        picPatchKit(K);
+        let n0 = window.FX_TILES.length;
+        await picScripts(files.map(function (f) { return base + f + '?v=' + v; }), function (i, ok) {
+          if (!ok) { pic.failedFiles.push(files[i]); return; }
+          window.FX_TILES.slice(n0).forEach(function (T) { fileOf.set(T, files[i]); });
+          n0 = window.FX_TILES.length;
+        });
+        /* one file missing is a failed load, not a partial one: the tiles a later file redrew would otherwise show the
+           older drawing he replaced (the cube of tiles-g4.js when tiles-h10.js is lost) */
+        if (pic.failedFiles.length) throw new Error('tile files did not load: ' + pic.failedFiles.join(', '));
+        tiles = window.FX_TILES.slice();
+        await K._preload();
+      })
+      .then(function () {
+        if (gen !== pic.gen) return;   // reset while loading: this load is not the current one
+        const byId = new Map();   // later files replace earlier tiles with the same id (as the picture page does)
+        tiles.forEach(function (T) { if (T && T.id && typeof T.make === 'function') byId.set(String(T.id), T); });
+        byId.forEach(function (T, id) {
+          if (PIC_HELD[id]) { pic.held.push(id); return; }
+          const type = PIC_ALIAS[id] || id;
+          if (!FM.fxRegistry.get(type)) { pic.unmapped.push(id); return; }
+          pic.byType.set(type, { id: id, type: type, T: T, file: fileOf.get(T) || '', draw: null, M: null, mctx: null,
+            stillT: Number(T.still) || 0, lastT: null, wait: [], queued: false, broken: false, used: 0 });
+        });
+        pic.state = pic.byType.size ? 'ready' : 'failed';
+        if (pic.state === 'ready') picUpgrade();
+      })
+      .catch(function (e) {
+        if (gen !== pic.gen) return;
+        pic.state = 'failed'; pic.failedAt = now(); pic.error = String((e && e.message) || e);   // the live tiles carry on; nothing is said
+      });
+    return pic.loadP;
+  }
+  /* The pictures have arrived: every stock tile mounted live meanwhile, still on the page or waiting to be put there,
+     becomes its picture (the same weak list remountLive walks). */
+  function picUpgrade() {
+    if (!pic.enabled) return;   // switched off while the load was in flight: those tiles stay live
+    mounted.forEach(function (ref) {
+      const cv = ref.deref();
+      if (!cv || cv._fxPic) return;
+      const k = cv._fxType;
+      if (!k || meta.has(k)) return;   // a recipe means a layer, preset, filter or applied tile: those stay live
+      const P = pic.byType.get(k);
+      if (P && !P.broken) picMount(cv, k, P);
+    });
+  }
+  function picObserve(cv) {
+    if (typeof IntersectionObserver !== 'function') { picVis.add(cv); return; }
+    if (!picIO) {
+      /* a picture is BUILT only once a tile showing it comes on screen (make() can take half a second for a few), and
+         this is where that happens — picFrame never runs while the pictures are still */
+      const cb = function (es) {
+        es.forEach(function (e) {
+          const cv = e.target;
+          if (!e.isIntersecting) { picVis.delete(cv); return; }
+          picVis.add(cv);
+          const P = cv._fxPic ? pic.byType.get(cv._fxPic) : null;
+          if (P && !P.broken && !P.draw) picQueueMake(P, cv);
+        });
+        picKick();
+      };
+      /* root: the document, so "on screen" means this page's own viewport (the suite hosts the app in a frame far off the
+         top page); where a document root is refused (older Safari), the default root, which is the same thing for the app */
+      try { picIO = new IntersectionObserver(cb, { root: document, rootMargin: '120px' }); }
+      catch (e) { picIO = new IntersectionObserver(cb, { rootMargin: '120px' }); }
+    }
+    picIO.observe(cv);
+  }
+  function picUnbind(cv) {
+    cv._fxPic = null;
+    picVis.delete(cv);
+    if (picIO) picIO.unobserve(cv);
+  }
+  function picMount(cv, type, P) {
+    if (P.broken) return false;
+    if (cv.width !== PX) cv.width = PX;
+    if (cv.height !== PX) cv.height = PX;
+    cv._fxType = type; cv._fxPic = type;
+    trackMounted(cv);
+    live.delete(cv);   // it may have been a live tile until now
+    const ws = pendingQ.get(type);
+    if (ws) {
+      const i = ws.indexOf(cv); if (i >= 0) ws.splice(i, 1);
+      if (!ws.length) { pendingQ.delete(type); const qi = queue.indexOf(type); if (qi >= 0) queue.splice(qi, 1); }
+    }
+    picObserve(cv);
+    P.used = ++picUse;
+    if (P.draw) picShow(cv, P); else picQueueMake(P, cv);   // picMakePump builds it only once this tile is on screen
+    picKick();
+    return true;
+  }
+  function picCopy(cv, P) {
+    const g = cv.getContext('2d');
+    g.clearRect(0, 0, cv.width, cv.height);
+    g.drawImage(P.M, 0, 0, cv.width, cv.height);
+    cv.classList.add('ready');
+  }
+  function picDraw(P, t) {
+    try { P.draw(P.mctx, t); P.lastT = t; return true; }
+    catch (e) { picBreak(P, e); return false; }
+  }
+  function picShow(cv, P) {
+    if (picStill() && P.lastT !== P.stillT && !picDraw(P, P.stillT)) return;
+    picCopy(cv, P);
+  }
+  function picMake(P) {
+    try {
+      const M = document.createElement('canvas'); M.width = M.height = PX;
+      P.M = M; P.mctx = M.getContext('2d');
+      P.draw = P.T.make(PX);
+      if (typeof P.draw !== 'function') throw new Error('make() returned no draw function');
+      pic.made++;
+      picDraw(P, P.stillT);
+    } catch (e) { picBreak(P, e); }
+  }
+  /* A picture that throws is not shown: its tiles go back to the live render, and it is listed (_pics().broken). */
+  function picBreak(P, e) {
+    if (P.broken) return;
+    P.broken = true;
+    if (P.draw) pic.made--;
+    P.draw = null; P.M = null; P.mctx = null;
+    pic.broken[P.id] = String((e && e.message) || e);
+    if (!warned['pic:' + P.id]) { warned['pic:' + P.id] = 1; console.warn('fx-thumbs: the picture for "' + P.id + '" failed, showing the live tile', e); }
+    mounted.forEach(function (ref) {
+      const cv = ref.deref();
+      if (cv && cv._fxPic === P.type) { picUnbind(cv); mountKey(cv, P.type, null); }
+    });
+  }
+  function picQueueMake(P, cv) {
+    if (P.wait.indexOf(cv) < 0) P.wait.push(cv);
+    if (!P.queued) { P.queued = true; picMakeQ.push(P); }
+    if (!picMakeRaf) picMakeRaf = requestAnimationFrame(picMakePump);
+  }
+  /* make() can prepare a lot (a photograph run through a kernel, a sprite sheet), so a menu's worth of them is spread over
+     frames on the live tiles' budget rather than built inside one: at least one per frame. */
+  function picMakePump() {
+    picMakeRaf = 0;
+    const t0 = now();
+    while (picMakeQ.length) {
+      const P = picMakeQ.shift();
+      P.queued = false;
+      const ws = P.wait; P.wait = [];
+      /* scrolled away before its turn: not built now; the observer queues it again when it comes back */
+      if (!P.draw && !ws.some(function (cv) { return cv._fxPic === P.type && picVis.has(cv); })) continue;
+      if (!P.draw && !P.broken) picMake(P);
+      ws.forEach(function (cv) { if (cv._fxPic === P.type && P.draw) picShow(cv, P); });
+      if (now() - t0 >= sliceMs()) break;
+    }
+    if (picMakeQ.length) picMakeRaf = requestAnimationFrame(picMakePump);
+    picTrim();
+    picKick();
+  }
+  /* At most PIC_KEEP pictures stay made: the least recently used one that is not on screen gives its canvas back, and is
+     made again if it comes back into view. */
+  function picTrim() {
+    if (pic.made <= PIC_KEEP) return;
+    const onScreen = new Set();
+    picVis.forEach(function (cv) { if (cv._fxPic) onScreen.add(cv._fxPic); });
+    const old = [];
+    pic.byType.forEach(function (P) { if (P.draw && !onScreen.has(P.type) && !P.queued) old.push(P); });
+    old.sort(function (a, b) { return a.used - b.used; });
+    for (let i = 0; i < old.length && pic.made > PIC_KEEP; i++) { const P = old[i]; P.draw = null; P.M = null; P.mctx = null; P.lastT = null; pic.made--; }
+  }
+  function picKick() {
+    if (picRaf || !picVis.size || picStill() || document.hidden) return;
+    picRaf = requestAnimationFrame(picFrame);
+  }
+  function picFrame(ts) {
+    picRaf = 0;
+    if (picStill() || document.hidden) return;
+    const groups = new Map();
+    picVis.forEach(function (cv) {
+      if (!cv.isConnected || !cv._fxPic || cv._fxPic !== cv._fxType) { picVis.delete(cv); if (picIO) picIO.unobserve(cv); return; }
+      const P = pic.byType.get(cv._fxPic);
+      if (!P || P.broken) return;
+      if (!P.draw) { picQueueMake(P, cv); return; }
+      let g = groups.get(P); if (!g) groups.set(P, g = []);
+      g.push(cv);
+    });
+    if (!groups.size) return;   // rest: a mount, a finished make() or the observer wakes it
+    if (!picT0) picT0 = ts;
+    const t = (ts - picT0) / 1000 + 0.001, n = groups.size, stride = n > 24 ? 3 : n > 10 ? 2 : 1;
+    picFrameN++;
+    /* on the live tiles' per-frame budget: past it the rest wait for the next frame, which starts where this one stopped */
+    const list = []; groups.forEach(function (cvs, P) { list.push([P, cvs]); });
+    const t0 = now(), start = picRot % n;
+    picRot = 0;
+    for (let k = 0; k < n; k++) {
+      const j = (start + k) % n, P = list[j][0];
+      if ((j + picFrameN) % stride !== 0) continue;
+      P.used = ++picUse;
+      if (picDraw(P, t)) list[j][1].forEach(function (cv) { picCopy(cv, P); });
+      if (now() - t0 >= sliceMs() && k < n - 1) { picRot = j + 1; break; }
+    }
+    picRaf = requestAnimationFrame(picFrame);
+  }
+  /* switched to still while some were moving: put every one on its still now */
+  function picRepaintStill() {
+    if (picRaf) { cancelAnimationFrame(picRaf); picRaf = 0; }
+    mounted.forEach(function (ref) {
+      const cv = ref.deref(); if (!cv || !cv._fxPic) return;
+      const P = pic.byType.get(cv._fxPic); if (P && P.draw) picShow(cv, P);
+    });
+  }
+  function picStop() {
+    if (picRaf) { cancelAnimationFrame(picRaf); picRaf = 0; }
+    if (picMakeRaf) { cancelAnimationFrame(picMakeRaf); picMakeRaf = 0; }
+    picMakeQ.forEach(function (P) { P.queued = false; P.wait = []; });
+    picMakeQ = [];
+    picVis.clear();
+    if (picIO) { picIO.disconnect(); picIO = null; }
+    if (pic.state === 'failed') { pic.state = 'idle'; pic.loadP = null; }   // offline last time: the next menu tries again
+  }
+  function picReset(opts) {
+    picStop();
+    mounted.forEach(function (ref) { const cv = ref.deref(); if (cv && cv._fxPic) cv._fxPic = null; });
+    pic.gen++;
+    pic.state = 'idle'; pic.error = ''; pic.loadP = null; pic.made = 0;
+    pic.byType = new Map(); pic.unmapped = []; pic.held = []; pic.broken = {}; pic.failedFiles = [];
+    if (typeof opts.base === 'string') pic.base = opts.base;
+    if (typeof opts.enabled === 'boolean') pic.enabled = opts.enabled;
+  }
+  function picInfo() {
+    const ids = [];
+    pic.byType.forEach(function (P) { ids.push({ id: P.id, type: P.type, file: P.file, made: !!P.draw }); });
+    return { state: pic.state, error: pic.error, base: pic.base, count: pic.byType.size, ids: ids, unmapped: pic.unmapped.slice(),
+      held: pic.held.slice(), heldWhy: Object.assign({}, PIC_HELD), broken: Object.assign({}, pic.broken), failedFiles: pic.failedFiles.slice(),
+      made: pic.made, visible: picVis.size, animating: !!picRaf, still: picStill(), frames: picFrameN };
+  }
+  function picBench(n) {
+    const out = {};
+    pic.byType.forEach(function (P) {
+      if (P.broken) { out[P.id] = { broken: pic.broken[P.id] }; return; }
+      const m0 = now();
+      if (!P.draw) picMake(P);
+      const mk = now() - m0;
+      if (!P.draw) { out[P.id] = { broken: pic.broken[P.id] }; return; }
+      const t0 = now();
+      for (let i = 0; i < n && P.draw; i++) picDraw(P, 0.37 + i * 0.13);
+      out[P.id] = P.draw ? { draw: +((now() - t0) / n).toFixed(2), make: +mk.toFixed(1) } : { broken: pic.broken[P.id] };
+    });
+    picTrim();
+    return out;
+  }
+  document.addEventListener('visibilitychange', picKick);
 
   FM.fxThumbs = {
     /* Seam for the suite (queue 319). The demo-only tuning in OVERRIDES is the thing he judges a tile
@@ -2000,6 +2366,23 @@ window.FM = window.FM || {};
       queue.length = 0; pendingQ.clear(); jobs.clear();
       if (ticker) { clearInterval(ticker); ticker = 0; }
       live.clear();
+      picStop();
     },
+    /* #1253 seams (read-only except _picsStill / _picsReset, which the suite puts back): what the pictures are doing. */
+    _pics: function () { return picInfo(); },
+    _picsLoad: function () { return picLoad(); },
+    _picTypeOf: function (id) { return PIC_ALIAS[id] || id; },
+    /* The switch that holds every picture on its `still` frame (prefers-reduced-motion does the same): a measurement that
+       compares pictures gets the same one every run. Returns the previous setting. */
+    _picsStill: function (on) { const was = pic.still; if (on !== undefined) { pic.still = !!on; if (!pic.still) picKick(); else picRepaintStill(); } return was; },
+    /* Forget the loaded pictures (and optionally load from another folder) so a test can make the load fail and succeed. */
+    _picsReset: function (opts) { picReset(opts || {}); },
+    /* Mount live tiles even for pictured effects (the suite's tests of the live engine itself); returns the previous setting. */
+    _picsEnabled: function (on) { const was = pic.enabled; if (on !== undefined) pic.enabled = !!on; return was; },
+    /* Hold one picture out (as PIC_HELD does) from the next load, or with no reason let it back: the suite's way to have an
+       effect with no picture while every effect has one. */
+    _picsHold: function (id, why) { if (why) PIC_HELD[String(id)] = String(why); else delete PIC_HELD[String(id)]; },
+    /* The picture page's __fxBench, in the app: ms per draw at the tile's real size, and what make() cost. */
+    _picsBench: function (n) { return picBench(n || 20); },
   };
 })(window.FM);

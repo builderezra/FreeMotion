@@ -48,7 +48,7 @@ window.FM = window.FM || {};
     return true;
   };
 
-  // Alight-Motion-style blend modes -> canvas globalCompositeOperation.
+  // [reference-app]-style blend modes -> canvas globalCompositeOperation.
   const BLEND = {
     normal: 'source-over',
     add: 'lighter',
@@ -74,7 +74,7 @@ window.FM = window.FM || {};
   // Both registries: the native gCO map AND the per-pixel modes in js/blend-modes.js.
   FM.BLEND_MODES = Object.keys(BLEND).concat(FM.BLEND_MANUAL ? Object.keys(FM.BLEND_MANUAL) : []);
 
-  // Effects implemented via canvas ctx.filter — covers a lot of Alight Motion's catalogue
+  // Effects implemented via canvas ctx.filter — covers a lot of [the reference app]'s catalogue
   // cheaply, applies identically in preview and export, and is keyframe-able (evalProp).
   FM.EFFECTS = [
     /* #482 15.7: Radius was the only control (the one-param shorthand, its row labelled with the effect's name). Repeat edges,
@@ -17246,7 +17246,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Tile Rotate: chop into tiles, spin each tile's CONTENT about its own centre by Angle (× a subtle
     // per-tile checker sign so neighbours counter-rotate — reads as a woven/pinwheel tile look).
     tilerotate: function(x,y,W,H,cx,cy,maxR,p,t,ps){ var tr_sz = fparam(p, 'size', 120, t); if(tr_sz<8)tr_sz=8; tr_sz=Math.max(2,tr_sz*(ps||1)); var tr_ang = fparam(p, 'angle', 45, t); var tr_ix=Math.floor(x/tr_sz), tr_iy=Math.floor(y/tr_sz); var tr_ccx=tr_ix*tr_sz+tr_sz/2, tr_ccy=tr_iy*tr_sz+tr_sz/2; var tr_sign=((tr_ix+tr_iy)&1)?-1:1; var tr_a=tr_ang*Math.PI/180*tr_sign; var tr_dx=x-tr_ccx, tr_dy=y-tr_ccy; var tr_cs=Math.cos(tr_a), tr_sn=Math.sin(tr_a); return [tr_ccx+tr_dx*tr_cs-tr_dy*tr_sn, tr_ccy+tr_dx*tr_sn+tr_dy*tr_cs]; },
-    /* WRAP SHIFT (queue 484 clause 2 — Alight Motion calls it Offset, and he asked for their gaps
+    /* WRAP SHIFT (queue 484 clause 2 — [the reference app] calls it Offset, and he asked for their gaps
        filled "but change the names"). Slide the picture and let whatever leaves one edge come back in
        the other, so a keyframed 0→100% is a seamless loop.
        ⚠️ THE SHIFTS ARE A PERCENTAGE OF THE FRAME, WHICH IS WHY `ps` IS UNUSED. W and H are PLATE
@@ -20856,7 +20856,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       if (behind) B.drawImage(A, 0, 0);                               // under Behind the original goes on top
     },
-    /* SCATTER ARRAY (queue 484 clause 2 — Alight Motion calls it Scatter Repeat).
+    /* SCATTER ARRAY (queue 484 clause 2 — [the reference app] calls it Scatter Repeat).
        Every repeat this app has is strictly REGULAR — Trail walks a straight line, Tile Grid and Ring
        Array lay copies on a lattice. Nothing scatters them, which is the whole difference, and it is
        why this is not the Duplicate Array that was rejected for duplicating Trail.
@@ -29902,7 +29902,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     ctx.restore();
   }
 
-  // ===== CAMERA OPTIONS (Alight Motion parity): Camera View · Focus Blur · Fog =====
+  // ===== CAMERA OPTIONS ([the reference app] parity): Camera View · Focus Blur · Fog =====
   // Resolve a camera's optics for one frame. EVERY field is absent-by-default and every fallback is
   // the behaviour that shipped before this existed, so an older project renders byte-for-byte as it
   // did: no fov → the fixed 2× focal length, focus.enabled off → no blur, fog.enabled off → no fog.

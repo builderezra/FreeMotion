@@ -221,7 +221,7 @@ window.FM = window.FM || {};
       });
       clipNameM.addEventListener('change', function () { if (FM.history) FM.history.commit(); });
     }
-    // PARENTING, not duplicate. This slot came from a screenshot Ezra sent of Alight Motion's top
+    // PARENTING, not duplicate. This slot came from a screenshot Ezra sent of [the reference app]'s top
     // bar; the icon there opens a parent picker (a list of every layer you can attach to, each with
     // its thumbnail), and it was read as a duplicate button. Duplicate has two other homes already —
     // the transport row and the layer ⋯ menu — so nothing is lost by giving the slot back.

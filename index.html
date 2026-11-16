@@ -4,7 +4,7 @@
      at the BOTTOM of the body, after ~1.5MB of scripts. So every load painted the bare styles.css
      first and only snapped to the real appearance once settings.js ran. settings.js's own comment
      spelled the consequence out: "with it absent the app falls back to the bare stylesheet, which is
-     exactly the Classic look queue 178 removed" — i.e. the Alight-Motion-shaped app Ezra kept seeing
+     exactly the Classic look queue 178 removed" — i.e. the [reference-app]-shaped app Ezra kept seeing
      flash on refresh, reported as #292 and again as #306.
      Glass is the ONLY theme (queue 178 deleted the option), and settings.js sets it unconditionally,
      so putting it here changes nothing except WHEN it takes effect: parse time instead of script time.
@@ -22,12 +22,15 @@
      written for cover mode — a dozen rules consume env(safe-area-inset-bottom) and two consume
      the top one — so those insets were simply resolving to 0 and doing nothing. -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- NOT FOR SEARCH ENGINES YET (#1254, his "that should not be findable", 16 Nov): the app is live for him, not published. A search
+     engine that reads this drops the page from its results and follows nothing from it. It comes out when he publishes. -->
+<meta name="robots" content="noindex, nofollow">
 <title>FreeMotion</title>
 <!-- THE BUILD THIS PAGE IS (#1180, "i cant see the animation"). The splash plays once per BUILD per session: fm.splashed
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.39">
+<meta name="fm-build" content="v18.40">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -44,7 +47,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=792">
+<link rel="stylesheet" href="styles.css?v=793">
 <link rel="stylesheet" href="theme-glass.css?v=70">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=4">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -1092,7 +1095,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.39</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.40</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1324,7 +1327,7 @@
     <footer id="timeline-panel">
       <!-- Desktop: drag this top edge to resize the timeline vs. the stage (persisted). Hidden on phone. -->
       <div id="tl-resizer" title="Drag to resize the timeline" aria-label="Resize timeline"></div>
-      <!-- Alight Motion transport: PLAY dead-centre, 3 controls each side revolving around it.
+      <!-- [the reference app] transport: PLAY dead-centre, 3 controls each side revolving around it.
            Left: undo · redo · jump-to-start.  Right: jump-to-end · layer-menu · fit. -->
       <!-- ⚙ THE OPTIONS THAT ARE NOT VIEW OPTIONS (queue 851). His words, with a screenshot he had
            circled in red: "Put the red circles buttons in a new pop up menu on the left side. On pc it
@@ -1995,49 +1998,49 @@
        rest of the collab modules are pure libraries and sit at the end of the list. -->
   <script src="js/collab-core.js?v=68"></script>
   <script src="js/screen.js?v=1"></script>
-  <script src="js/scene.js?v=133"></script>
+  <script src="js/scene.js?v=134"></script>
   <script src="js/spine-words.js?v=20"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
   <script src="js/spine.js?v=13"></script>         <!-- Simple mode P1: FM.spine, the read side — after scene.js, before compositor/storage -->
   <script src="js/spine-edit.js?v=18"></script>    <!-- Simple mode P2: FM.spine.edit, the runner and the commands — after spine.js -->
-  <script src="js/eases.js?v=3"></script>
+  <script src="js/eases.js?v=4"></script>
   <script src="js/masks.js?v=8"></script>
   <script src="js/behaviors.js?v=9"></script>
   <script src="js/media.js?v=59"></script>
-  <script src="js/blend-modes.js?v=1"></script>
+  <script src="js/blend-modes.js?v=2"></script>
   <script src="js/gl-warp.js?v=5"></script>
   <script src="js/gl-color.js?v=5"></script>
-  <script src="js/compositor.js?v=267"></script>
-  <script src="js/fx-registry.js?v=43"></script>
+  <script src="js/compositor.js?v=268"></script>
+  <script src="js/fx-registry.js?v=44"></script>
   <script src="js/filters.js?v=25"></script>
-  <script src="js/fx-presets.js?v=13"></script>
-  <script src="js/fx-thumbs.js?v=61"></script>
-  <script src="js/timeline.js?v=273"></script>
+  <script src="js/fx-presets.js?v=14"></script>
+  <script src="js/fx-thumbs.js?v=62"></script>
+  <script src="js/timeline.js?v=274"></script>
   <script src="js/simple-timeline.js?v=17"></script>   <!-- Simple mode P1: FM.simpleTimeline, read-only; after timeline.js -->
   <script src="js/tilefit.js?v=1"></script>
   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
-  <script src="js/addmenu.js?v=85"></script>
-  <script src="js/inspector.js?v=445"></script>
+  <script src="js/addmenu.js?v=86"></script>
+  <script src="js/inspector.js?v=446"></script>
   <script src="js/simple-tools.js?v=17"></script>   <!-- Simple mode P2.2: FM.simpleTools, the tray row and the project tools (D10) — after inspector.js -->
-  <script src="js/fx-browser.js?v=105"></script>
+  <script src="js/fx-browser.js?v=106"></script>
   <script src="js/elements-browser.js?v=5"></script>
-  <script src="js/color-wheel.js?v=53"></script>
-  <script src="js/canvas-edit.js?v=130"></script>
+  <script src="js/color-wheel.js?v=54"></script>
+  <script src="js/canvas-edit.js?v=131"></script>
   <script src="js/panelsize.js?v=2"></script>   <!-- queue 927: Notes and Shortcuts/tips grow BIG from a grab corner; before both panels -->
   <script src="js/notepad.js?v=11"></script>
   <script src="js/popfrom.js?v=11"></script>
   <script src="js/export-card.js?v=4"></script>   <!-- queue 985: the Export card, option A — a view over the export dialog's own controls -->
-  <script src="js/draw-tool.js?v=41"></script>
+  <script src="js/draw-tool.js?v=42"></script>
   <script src="js/point-edit.js?v=23"></script>
-  <script src="js/crop-tool.js?v=14"></script>
+  <script src="js/crop-tool.js?v=15"></script>
   <script src="js/fill-drag.js?v=3"></script>
   <script src="js/mask-tool.js?v=11"></script>
   <script src="js/motion-path.js?v=10"></script>
   <script src="js/touchup-tool.js?v=6"></script>
   <script src="js/eyedropper.js?v=2"></script>
-  <script src="js/text-edit.js?v=27"></script>
+  <script src="js/text-edit.js?v=28"></script>
   <script src="js/tracker.js?v=12"></script>
   <script src="js/frames.js?v=25"></script>
-  <script src="js/audio-fx.js?v=23"></script>
+  <script src="js/audio-fx.js?v=24"></script>
   <script src="js/audio-play.js?v=70"></script>
   <script src="js/audio-fx-live.js?v=17"></script>
   <script src="js/audio-fx-browser.js?v=17"></script>
@@ -2045,11 +2048,11 @@
   <script src="js/storage.js?v=90"></script>
   <script src="js/export-resume.js?v=10"></script>
   <script src="js/medialib.js?v=11"></script>
-  <script src="js/template-fill.js?v=5"></script>
+  <script src="js/template-fill.js?v=6"></script>
   <script src="js/home-arrow.js?v=5"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
   <script src="js/tutorials.js?v=1"></script>   <!-- #1082: the lessons in Home's Tutorials tab -->
   <script src="js/home.js?v=211"></script>
-  <script src="js/graph-editor.js?v=20"></script>
+  <script src="js/graph-editor.js?v=21"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
   <script src="js/exporter.js?v=146"></script>
@@ -2062,7 +2065,7 @@
   <script src="js/audio-health.js?v=7"></script>
   <script src="js/editor-mode.js?v=11"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
   <script src="js/editor-morph.js?v=2"></script>   <!-- Simple mode P3: FM.editorMorph — the switch morph (D11 B), played as the cog closes -->
-  <script src="js/app.js?v=525"></script>
+  <script src="js/app.js?v=526"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->
@@ -2070,7 +2073,7 @@
   <script src="js/sfx.js?v=26"></script>
   <script src="js/voice-rec.js?v=12"></script>
   <script src="js/audio-react.js?v=13"></script>
-  <script src="js/mobile.js?v=54"></script>
+  <script src="js/mobile.js?v=55"></script>
   <script src="js/ai-manifest.js?v=12"></script>
   <script src="js/ai-ops.js?v=23"></script>
   <script src="js/ai-key.js?v=1"></script>

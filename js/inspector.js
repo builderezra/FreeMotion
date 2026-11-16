@@ -3139,7 +3139,7 @@ window.FM = window.FM || {};
     return s;
   }
 
-  // ===== Alight Motion property-category model =====
+  // ===== [the reference app] property-category model =====
   let view = 'home';
   let lastLayerId = null;
   // Which side of the Effects card is showing: the visual stack or the audio one (queue 45). It is a
@@ -3168,7 +3168,7 @@ window.FM = window.FM || {};
   let _fltStrength = 1;
   let _fltQuery = '';
 
-  // Order mirrors Alight Motion's property menu (Color & Fill leads, Move & Transform 4th, Effects last).
+  // Order mirrors [the reference app]'s property menu (Color & Fill leads, Move & Transform 4th, Effects last).
   const CATEGORIES = [
     /* "COLOURING & MEDIA" (#1249, his words, 10 Nov): "Change this section titled coloring to say like coloring and media… it
        is where you change like the media, like you can swap the media out… that's the section where you go to replace media."
@@ -3224,7 +3224,7 @@ window.FM = window.FM || {};
   /* "CUSTOMISE …", not "Edit …" (queue 368). Ezra: "Change edit points and edit shape and edit text to
      replace the work edit with customise" — "the work edit" being the WORD edit. Australian spelling, as
      he wrote it.
-     The category is still named after the layer kind, which is the Alight Motion idea this took: Text for
+     The category is still named after the layer kind, which is the [the reference app] idea this took: Text for
      text, Points for point shapes (library shapes and drawn paths — every bend is a point), Shape for
      parametric shapes and media (where it is the crop editor).
      ⚠️ THREE OTHER "Edit …" LABELS ARE DELIBERATELY UNCHANGED — 'Edit Group' (inspector.js), 'Edit group'
@@ -3788,7 +3788,7 @@ window.FM = window.FM || {};
     return rows;
   }
 
-  // ===== Paste Style (Alight Motion) — copy a layer, then apply chosen style aspects to another. =====
+  // ===== Paste Style ([the reference app]) — copy a layer, then apply chosen style aspects to another. =====
   /* NO `icon:` field here, deliberately (queue 127). This table used to carry its own single-path
      glyphs, and when the inspector's cards were regraded to the coloured gradient set in #77 the two
      drifted — Ezra's screenshot caught both icon sets on screen at once, the old ones in this grid
@@ -4039,7 +4039,7 @@ window.FM = window.FM || {};
     document.body.appendChild(overlay);
   };
 
-  // AM-style clip-action quick-row (matches Alight Motion's selected-layer panel):
+  // AM-style clip-action quick-row (matches [the reference app]'s selected-layer panel):
   // speed/timing · split · trim-start-to-playhead · trim-end-to-playhead · mute.
   // What the clip-action row was last BUILT for. Null until a row exists, so syncPlayhead can't fire
   // before there is anything to keep in sync. Everything that changes which buttons appear (or which
@@ -4122,7 +4122,7 @@ window.FM = window.FM || {};
     // like the second image. I want them both to look like the second image." A video was the odd one
     // out — it hid the two controls a shape showed as cards 5 and 6, in an icon strip a shape didn't
     // have. So the strip is now the same three buttons everywhere: trim-in · split · trim-out.
-    // THE MIDDLE THREE SWAP WITH THE PLAYHEAD (Alight Motion). Parked outside the clip, trim-start,
+    // THE MIDDLE THREE SWAP WITH THE PLAYHEAD ([the reference app]). Parked outside the clip, trim-start,
     // split and trim-end are three buttons that can't do anything — so out there they become the two
     // that can: slide the clip to the playhead, or stretch its near edge out to meet it. The icons
     // point the way the clip will actually travel, which is the only thing that tells you, before you
@@ -4279,7 +4279,7 @@ window.FM = window.FM || {};
     const inside = l => FM.time > l.start + 1e-4 && FM.time < l.start + l.duration - 1e-4;
     const onAny = layers.some(inside);
     quickSideSig = homeRowSig();   // this bar swaps with the playhead too — keep syncPlayhead watching it
-    // Same swap the single-clip row makes (Alight Motion): with the playhead over NONE of the selected
+    // Same swap the single-clip row makes ([the reference app]): with the playhead over NONE of the selected
     // clips, trim and split are three dead buttons, so the whole set gets move / extend instead.
     if (!onAny) {
       // MOVE moves the selection as a BLOCK — the earliest clip lands on the playhead and every other
@@ -4729,7 +4729,7 @@ window.FM = window.FM || {};
     });
   }
 
-  // ===== Color & Fill — Alight Motion's None / Solid / Gradient / Media selector =====
+  // ===== Color & Fill — [the reference app]'s None / Solid / Gradient / Media selector =====
   const FILL_ICO = {
     none: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M6.4 6.4l11.2 11.2"/></svg>',
     solid: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.2c2.9 3.8 5.8 6.3 5.8 9.8a5.8 5.8 0 0 1-11.6 0c0-3.5 2.9-6 5.8-9.8z"/></svg>',
@@ -4932,8 +4932,8 @@ window.FM = window.FM || {};
   }
   FM._fillPanel = fillPanel;
 
-  // ===== Move & Transform — Alight Motion's mode-rail editor (Move / Rotate / Scale / Skew) =====
-  /* Speed bounds (queue 184 part 2). His words: "it seems alight motion lets you speed up and slow
+  // ===== Move & Transform — [the reference app]'s mode-rail editor (Move / Rotate / Scale / Skew) =====
+  /* Speed bounds (queue 184 part 2). His words: "it seems [the reference app] lets you speed up and slow
    * down unlimitedly, you can have something 1000x speed for example." It was 0.25×–4× — which is
    * why he hit it. Now 0.01×–1000×.
    *
@@ -4977,7 +4977,7 @@ window.FM = window.FM || {};
   // and the two silently disagreeing about Rotate is what left 3D tilts un-eased. Exposed so a test can
   // hold them equal rather than restating either list a third time.
   FM._mtProps = MT_PROPS;
-  // The channels a mode keyframes by DEFAULT (matches Alight Motion). The extra channels (z for Move,
+  // The channels a mode keyframes by DEFAULT (matches [the reference app]). The extra channels (z for Move,
   // scaleX/scaleY for Scale) are only keyframed when they're actually in use — otherwise a plain
   // position/scale keyframe would needlessly animate Z / break uniform scale into non-uniform. (#17)
   const MT_PRIMARY = { move: ['x', 'y'], rotate: ['rotation'], scale: ['scale'], skew: ['skewX', 'skewY'], anchor: [] };
@@ -5975,7 +5975,7 @@ window.FM = window.FM || {};
         control.appendChild(mtScrub(() => mtEval(layer, 'scale'), v => mtSet(layer, 'scale', Math.max(0.01, v)), 0.004, () => { refreshAllBoxes(); if (FM.canvasEdit) FM.canvasEdit.update(); }, { min: 0.01 }));
       } else {
         // UNLINKED: a SECOND strip appears below the first, and the two drive width and height
-        // separately (Ezra: "in alight motion it opens up a second slider below the first one and the
+        // separately (Ezra: "in [the reference app] it opens up a second slider below the first one and the
         // two sliders will separately effect the width and height"). Before this, unlinking only
         // changed what the two number boxes wrote — the single slider still moved both axes together,
         // which is the "confusing and janky" part. Both strips work in EFFECTIVE factor units so
@@ -7604,7 +7604,7 @@ window.FM = window.FM || {};
         mediaSizePanel(layer, body);
       }
       // (Motion blur, Wiggle, Mask and the Start/Duration rows were removed from Edit Shape to match
-      // Alight Motion — none of those live in AM's Edit Shape. Any layer that still carries those
+      // [the reference app] — none of those live in AM's Edit Shape. Any layer that still carries those
       // fields from an older save keeps rendering them; there's just no longer UI to add them here.
       // Timing is set on the timeline; masking lives in Blending (mask modes) and masking groups.)
     }

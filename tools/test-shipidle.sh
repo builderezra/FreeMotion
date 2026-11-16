@@ -100,6 +100,19 @@ export FM_WORKTREE_ROOTS="$TMP/does-not-exist"
 run_reader
 [ "$out" = "$baseline" ] && idle30 && ok 'g: missing root gives the same idle output' || bad "g: $out"
 
+echo '── h. the builder says what it is building (10 Nov) ──'
+export FM_WORKTREE_ROOTS=""
+setup h; worktree; touch "$W/js/work.js"; run_reader
+printf '%s\n' "$out" | grep -q '^   building: nothing declared' && ok 'h: no .claude/building says so' || bad "h (none): $out"
+mkdir -p "$S/.claude"; printf '%s\n' 'r5 · R release 5' > "$S/.claude/building"; run_reader
+printf '%s\n' "$out" | grep -q '^   building (declared 0 min ago in .claude/building): r5 · R release 5$' \
+  && ok 'h: the declared item is named with its age' || bad "h (declared): $out"
+
+echo '── i. tick.sh reads the FU lock as well as a ship, in one branch that runs this reader ──'
+grep -q "pgrep -f 'tools/full-unchanged.sh'" "$REPO/tools/tick.sh" \
+  && awk '/_FU=""; if/{f=NR} /if \[ -n "\$_SHIPPING\$_FU" \]; then/{b=NR} /_shipidle.sh \. 15/{i=NR} END{exit !(f && b && i && f < b && b < i)}' "$REPO/tools/tick.sh" \
+  && ok 'i: an FU run reaches the same build-in-a-worktree branch as a ship' || bad 'i: tick.sh does not send an FU run to the reader'
+
 echo
 if [ "$FAILED" = 0 ]; then echo '✅ shipidle: every check passed'; else echo '❌ shipidle: a check FAILED (above)'; fi
 exit "$FAILED"
