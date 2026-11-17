@@ -13,6 +13,15 @@
 const COAL='#0c0c0d', BONE='#e7e2d5', DIM='#8b96a8', YEL='#ffce4a';
 const MONO=s=>'bold '+s+'px "Courier Prime","Courier New",monospace';
 const mod=(t,P)=>((t%P)+P)%P;
+/* A picture that prepares a lot in make() prepares it as a generator instead (#1253, 17 Nov; HARNESS.md "is staged"). stage(gen) runs
+   it to the end at once (finish) or a few milliseconds at a time (step(ms), true once it is done). make() hands back its draw function
+   with draw.step, so the app builds it between frames; a draw before it is done finishes it there and then, which is exactly what
+   make() used to do. Every yield is only a place the work may pause: no number changes. */
+const stage=gen=>{ let done=false, val, last='';
+  const run=ms=>{ if(done) return true; const t0=performance.now();
+    for(;;){ const r=gen.next(); if(r.done){ done=true; val=r.value; return true; } last=r.value; if(performance.now()-t0>=ms) return false; } };
+  return { step:ms=>run(Math.max(0,+ms||0)), finish:()=>{ run(Infinity); return val; }, done:()=>done, last:()=>last }; };
+const drain=g=>{ let r; do r=g.next(); while(!r.done); return r.value; };
 
 /* ---- the clip the effect is on: 100 x 80 units ------------------------------------------------------------------------ */
 /* Every edge lands on an EVEN pixel of the 320 x 256 plate (rectangles, and the floor's slanted shadows two rows at a time), and the
@@ -163,7 +172,7 @@ function mix(o,c,m,n,amt){   // dmbMix, opaque plates
 }
 
 /* run the clip through it at 30 fps from the frame before the cut to `fEnd`; keep every `step`th frame from the cut on */
-function runMosh(fEnd,step,p){
+function* runMoshG(fEnd,step,p){
   p=p||PARAMS; const n=W*H*4, FW=160, FH=Math.max(16,Math.round(H*160/W));
   const ps=W/PROJ[0], bs=Math.max(1,Math.round(p.block*ps));
   const mk=(w,h)=>{ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; };
@@ -172,13 +181,14 @@ function runMosh(fEnd,step,p){
   const frameAt=t=>{ cx.setTransform(1,0,0,1,0,0); cx.clearRect(0,0,W,H); clip(cx,t,W,H); const d=cx.getImageData(0,0,W,H).data; return [d,greyOf(d,FW,FH)]; };
   const fCut=Math.round(p.hold*FPS);
   let [prev,gPrev]=frameAt((fCut-1)/FPS), tPrev=(fCut-1)/FPS, held=null;
+  yield 'mosh';
   let scratch=new Uint16Array(n), spare=new Uint16Array(n);
   const pred=new Uint8ClampedArray(n), im=cx.createImageData(W,H), o=im.data, out=[];
   for(let f=fCut;f<=fEnd;f++){
-    const t=f/FPS, [cur,gCur]=frameAt(t), first=!held;
+    const t=f/FPS, [cur,gCur]=frameAt(t), first=!held; yield 'mosh';
     let hd=held;
     if(!hd){ hd=spare; for(let i=0;i<n;i++) hd[i]=prev[i]*ONE; }   // the first moshed frame starts from the clip's last frame
-    const F=field(gPrev,gCur,FW,FH,THR), sx=W/F.FW, sy=H/F.FH;
+    const F=field(gPrev,gCur,FW,FH,THR), sx=W/F.FW, sy=H/F.FH; yield 'mosh';
     let dfm=0; for(let k=0;k<F.df.length;k++) dfm+=F.df[k]; dfm=F.df.length?dfm/F.df.length:0;
     const isCut=dfm>0.2, next=scratch;
     if(isCut&&p.detail>0) next.set(hd);   // a cut's field is noise: the deleted keyframe's frame HOLDS
@@ -189,8 +199,9 @@ function runMosh(fEnd,step,p){
       const kd=p.detail*ONE;
       for(let i=0;i<n;i++){ const d=cur[i]-pred[i]; if(d===0) continue; const v=next[i]+d*kd; next[i]=v<=0?0:(v>=TOP?TOP:(v+0.5)|0); }   // no change: the stored value already is what the sum rounds to
     }
+    yield 'mosh';
     const kL=p.decay>0?1-Math.pow(1-0.5*p.decay,(t-tPrev)*30):0;
-    if(kL>0) heal(next,cur,n,kL,kL*(1-p.chroma));
+    if(kL>0) heal(next,cur,n,kL,kL*(1-p.chroma)); yield 'mosh';
     scratch=hd; held=next;
     if((f-fCut)%step===0){
       if(p.amount>=0.998){ for(let i=0;i<n;i++) o[i]=held[i]/ONE; } else mix(o,cur,held,n,p.amount);
@@ -200,6 +211,9 @@ function runMosh(fEnd,step,p){
   }
   return out;
 }
+function runMosh(fEnd,step,p){ return drain(runMoshG(fEnd,step,p)); }
+let moshStage=null;
+const moshSt=fEnd=>moshStage||(moshStage=stage(runMoshG(fEnd,STEP)));
 let CACHE=null;   // the frames do not depend on the tile's size: worked out once a page
 
 const STEP=2, SHOWN=1.5, P=3.4;   // 15 frames a second on screen, 1.5 s of mosh, then it holds until the loop
@@ -210,16 +224,17 @@ window.FX_TILES.push({ id:'moshbloom', name:'Datamosh Bloom', section:'Stylize',
     run:(over,fEnd,step)=>runMosh(fEnd,step||1,Object.assign({},PARAMS,over||{}))},   // the port with other settings, for the truth probe
   make(px){
     const fCut=Math.round(CUT*FPS), fEnd=fCut+Math.round(SHOWN*FPS);
-    const FR=CACHE||(CACHE=runMosh(fEnd,STEP));
+    /* the moshed frames are built between frames (stage, above) and kept for the page; a draw that needs them before then finishes them */
+    const stg=moshSt(fEnd), frs=()=>CACHE||(CACHE=stg.finish());
     const S1=(()=>{ const c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d'); clip(g,0,W,H); return c; })();
     const PH=VH, X0=4, X1=96, xc=X0+(X1-X0)*CUT/P;
-    const idx=u=>Math.min(FR.length-1,Math.floor((u-CUT)*FPS/STEP+1e-3));   // the frame on screen at u (15 a second from the cut)
+    const idx=u=>Math.min(frs().length-1,Math.floor((u-CUT)*FPS/STEP+1e-3));   // the frame on screen at u (15 a second from the cut)
     const draw=(c,t)=>{
       const u=mod(t,P);
       c.setTransform(px/100,0,0,px/100,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over';
       c.fillStyle=COAL; c.fillRect(0,0,100,100);
       c.imageSmoothingEnabled=true; c.imageSmoothingQuality='high';
-      c.drawImage(u<CUT?S1:FR[idx(u)],0,0,100,PH);
+      c.drawImage(u<CUT?S1:frs()[idx(u)],0,0,100,PH);
       /* the timeline under the viewer: clip 1, the cut with Start at's key on it, clip 2, the playhead */
       const ty=PH+7.2, th=5.6;
       c.fillStyle='#857d6d'; c.fillRect(X0,ty,xc-X0-0.5,th);
@@ -233,7 +248,8 @@ window.FX_TILES.push({ id:'moshbloom', name:'Datamosh Bloom', section:'Stylize',
       c.fillText('00:00:0'+ss+':'+(ff<10?'0':'')+ff,X0,98.6);
       c.fillText('START AT',xc+3,ty-1.2);
     };
-    draw.frameAt=t=>{ const u=mod(t,P); return u<CUT?S1:FR[idx(u)]; };   // for the truth sheet: the plate shown at t
+    draw.frameAt=t=>{ const u=mod(t,P); return u<CUT?S1:frs()[idx(u)]; };   // for the truth sheet: the plate shown at t
+    draw.step=ms=>CACHE?true:stg.step(ms); draw.stage=stg;
     return draw;
   } });
 })();

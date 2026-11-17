@@ -5096,8 +5096,8 @@ window.FM = window.FM || {};
       ['targetId', 'sourceId'].forEach(k => { if (bh.params[k] && idMap[bh.params[k]]) bh.params[k] = idMap[bh.params[k]]; });
     });
     // eachRefFx, not eachFx: a caption cue's own effects hold the same params.source (queue 834 u3).
-    if (FM.eachRefFx) FM.eachRefFx(layer, fx => {
-      if (fx && fx.params && fx.params.source && idMap[fx.params.source]) fx.params.source = idMap[fx.params.source];
+    if (FM.eachRefFx) FM.eachRefFx(layer, fx => {   // every layer ref, not just `source` (FM.eachFxRef, #1246 U11: Cube's faces)
+      FM.eachFxRef(fx, (k, v) => { if (idMap[v]) fx.params[k] = idMap[v]; });
     });
     if (layer.karaokeOf && idMap[layer.karaokeOf]) layer.karaokeOf = idMap[layer.karaokeOf];
   };
@@ -5154,8 +5154,8 @@ window.FM = window.FM || {};
         // Displacement Map): a source INSIDE the duplicated subtree must follow the copy. A source
         // outside it is deliberately left alone — that layer is still in the scene, and both the
         // original and the copy legitimately matte off it.
-        FM.eachRefFx(l, fx => {   // …including a caption cue's own stack (queue 834 u3)
-          if (fx && fx.params && fx.params.source && idMap[fx.params.source]) fx.params.source = idMap[fx.params.source];
+        FM.eachRefFx(l, fx => {   // …including a caption cue's own stack (queue 834 u3), and every layer ref it holds (#1246 U11)
+          FM.eachFxRef(fx, (k, v) => { if (idMap[v]) fx.params[k] = idMap[v]; });
         });
         if (l.karaokeOf && idMap[l.karaokeOf]) l.karaokeOf = idMap[l.karaokeOf];
       });
@@ -5341,10 +5341,11 @@ window.FM = window.FM || {};
         });
       });
       // …and an effect's layer ref, by the same three-way rule.
-      FM.eachRefFx(copy, fx => {   // …including a caption cue's own stack (queue 834 u3)
-        if (!fx || !fx.params || !fx.params.source) return;
-        if (idMap[fx.params.source]) fx.params.source = idMap[fx.params.source];
-        else if (!FM.layerById(FM.scene, fx.params.source)) fx.params.source = '';
+      FM.eachRefFx(copy, fx => {   // …including a caption cue's own stack (queue 834 u3), and every layer ref it holds (#1246 U11)
+        FM.eachFxRef(fx, (k, v) => {
+          if (idMap[v]) fx.params[k] = idMap[v];
+          else if (!FM.layerById(FM.scene, v)) fx.params[k] = '';
+        });
       });
       if (copy.karaokeOf) {
         if (idMap[copy.karaokeOf]) copy.karaokeOf = idMap[copy.karaokeOf];

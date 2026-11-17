@@ -12,6 +12,17 @@ const sheet=(w,h)=>{ const C=document.createElement('canvas'); C.width=w; C.heig
 const sstep=(a,b,x)=>{ const u=x<=a?0:x>=b?1:(x-a)/(b-a); return u*u*(3-2*u); };
 const G=(x,y,cx,cy,sx,sy)=>{ const a=(x-cx)/sx, b=(y-cy)/sy; return Math.exp(-.5*(a*a+b*b)); };
 const toCanvas=(W,H,data)=>{ const C=document.createElement('canvas'); C.width=W; C.height=H; const x=C.getContext('2d'); const im=x.createImageData(W,H); im.data.set(data); x.putImageData(im,0,0); return C; };
+/* A picture that prepares a lot in make() prepares it as a generator instead (#1253, 17 Nov: on the laptop Soften Skin took 0.6 s,
+   Lens Blur 0.36 s, Sharpen 0.34 s and Temporal Denoise 0.29 s, each inside one frame). stage(gen) runs it to the end at once
+   (finish) or a few milliseconds at a time (step(ms), true once it is done). make() hands back its draw function with draw.step, so
+   the app can build it between frames and opening a menu never freezes; a draw before it is done finishes it there and then, which
+   is exactly what make() used to do, so every other caller (the picture page, truth.html, the suite's oracle) gets the same pixels.
+   Every yield is only a place the work may pause: no number changes. */
+const stage=gen=>{ let done=false, val, last='';
+  const run=ms=>{ if(done) return true; const t0=performance.now();
+    for(;;){ const r=gen.next(); if(r.done){ done=true; val=r.value; return true; } last=r.value; if(performance.now()-t0>=ms) return false; } };
+  return { step:ms=>run(Math.max(0,+ms||0)), finish:()=>{ run(Infinity); return val; }, done:()=>done, last:()=>last }; };
+const drain=g=>{ let r; do r=g.next(); while(!r.done); return r.value; };
 /* a smooth 2-D value noise, 0..1 */
 function vn2(x,y,s){ const xi=Math.floor(x), yi=Math.floor(y), fx=x-xi, fy=y-yi, ux=fx*fx*(3-2*fx), uy=fy*fy*(3-2*fy);
   const h=(a,b)=>hash(((a*73856093)^(b*19349663))%100003,s); return lerp(lerp(h(xi,yi),h(xi+1,yi),ux),lerp(h(xi,yi+1),h(xi+1,yi+1),ux),uy); }
@@ -19,31 +30,35 @@ function vn2(x,y,s){ const xi=Math.floor(x), yi=Math.floor(y), fx=x-xi, fy=y-yi,
 /* ---- the app's own blur, verbatim: boxesForGauss (compositor.js 2906) and e1BoxBlur (25409) ---- */
 function boxesForGauss(sigma){ const n=3, wIdeal=Math.sqrt(12*sigma*sigma/n+1); let wl=Math.floor(wIdeal); if(wl%2===0) wl--;
   const m=Math.round((12*sigma*sigma-n*wl*wl-4*n*wl-3*n)/(-4*wl-4)); const out=[]; for(let i=0;i<n;i++) out.push(Math.max(0,((i<m?wl:wl+2)-1)/2)); return out; }
-function e1BoxBlur(src,W,H,sigma){
+function* e1BoxBlurG(src,W,H,sigma){
   let a=new Uint8ClampedArray(src), b=new Uint8ClampedArray(src.length);
-  const pass=(from,to,r,horiz)=>{ const len=horiz?W:H, lines=horiz?H:W, step=horiz?4:W*4, w=2*r+1;
-    for(let l=0;l<lines;l++){ const base=horiz?l*W*4:l*4;
+  const pass=function*(from,to,r,horiz){ const len=horiz?W:H, lines=horiz?H:W, step=horiz?4:W*4, w=2*r+1;
+    for(let l=0;l<lines;l++){ if((l&63)===63) yield 'box'; const base=horiz?l*W*4:l*4;
       for(let c=0;c<4;c++){ let acc=0; for(let k=-r;k<=r;k++) acc+=from[base+Math.min(len-1,Math.max(0,k))*step+c];
         for(let x=0;x<len;x++){ to[base+x*step+c]=(acc+(w>>1))/w; const add=Math.min(len-1,x+r+1), sub=Math.max(0,x-r); acc+=from[base+add*step+c]-from[base+sub*step+c]; } } } };
-  boxesForGauss(Math.max(0.5,sigma)).forEach(r=>{ r=Math.round(r); if(r<1) return; pass(a,b,r,true); pass(b,a,r,false); });
+  for(let r of boxesForGauss(Math.max(0.5,sigma))){ r=Math.round(r); if(r<1) continue; yield* pass(a,b,r,true); yield* pass(b,a,r,false); }
   return a; }
+function e1BoxBlur(src,W,H,sigma){ return drain(e1BoxBlurG(src,W,H,sigma)); }
 /* the same three boxes on one float channel: for masks and heights while painting (not part of any effect) */
-function blurF(src,W,H,sigma){ let a=Float32Array.from(src), b=new Float32Array(src.length);
-  const pass=(from,to,r,horiz)=>{ const len=horiz?W:H, lines=horiz?H:W, step=horiz?1:W, w=2*r+1;
-    for(let l=0;l<lines;l++){ const base=horiz?l*W:l; let acc=0; for(let k=-r;k<=r;k++) acc+=from[base+Math.min(len-1,Math.max(0,k))*step];
+function* blurFG(src,W,H,sigma){ let a=Float32Array.from(src), b=new Float32Array(src.length);
+  const pass=function*(from,to,r,horiz){ const len=horiz?W:H, lines=horiz?H:W, step=horiz?1:W, w=2*r+1;
+    for(let l=0;l<lines;l++){ if((l&63)===63) yield 'blurF'; const base=horiz?l*W:l; let acc=0; for(let k=-r;k<=r;k++) acc+=from[base+Math.min(len-1,Math.max(0,k))*step];
       for(let x=0;x<len;x++){ to[base+x*step]=acc/w; acc+=from[base+Math.min(len-1,x+r+1)*step]-from[base+Math.max(0,x-r)*step]; } } };
-  boxesForGauss(Math.max(.5,sigma)).forEach(r=>{ r=Math.round(r); if(r<1) return; pass(a,b,r,true); pass(b,a,r,false); });
+  for(let r of boxesForGauss(Math.max(.5,sigma))){ r=Math.round(r); if(r<1) continue; yield* pass(a,b,r,true); yield* pass(b,a,r,false); }
   return a; }
+function blurF(src,W,H,sigma){ return drain(blurFG(src,W,H,sigma)); }
 
 /* ---- PIXEL_FX.softskin, its default path (Soften: Everything, Brighten 0, Show selection Off), compositor.js 25431 ---- */
-function softSkinFx(d,W,H,amount,radius,keep){
+function* softSkinFxG(d,W,H,amount,radius,keep){
   const o=new Uint8ClampedArray(d);
   if(amount<=0) return o;
   const thr=4+(100-keep)*0.9;
   const pm=new Uint8ClampedArray(d.length);
-  for(let i=0;i<d.length;i+=4){ const a=d[i+3]; if(a===0) continue; const f=a/255; pm[i]=d[i]*f; pm[i+1]=d[i+1]*f; pm[i+2]=d[i+2]*f; pm[i+3]=a; }
-  const bl=e1BoxBlur(pm,W,H,radius/2);
+  for(let i=0;i<d.length;i+=4){ if((i&0xFFFF)===0) yield 'skin'; const a=d[i+3]; if(a===0) continue; const f=a/255; pm[i]=d[i]*f; pm[i+1]=d[i+1]*f; pm[i+2]=d[i+2]*f; pm[i+3]=a; }
+  yield 'skin';
+  const bl=yield* e1BoxBlurG(pm,W,H,radius/2);
   for(let i=0;i<d.length;i+=4){
+    if((i&0xFFFF)===0) yield 'skin';
     const a=d[i+3]; if(a===0) continue;
     const ba=bl[i+3]; if(ba<1) continue;
     const k=255/ba, br=Math.min(255,bl[i]*k), bg=Math.min(255,bl[i+1]*k), bb2=Math.min(255,bl[i+2]*k);
@@ -54,6 +69,7 @@ function softSkinFx(d,W,H,amount,radius,keep){
     o[i]=r+(br-r)*w; o[i+1]=g+(bg-g)*w; o[i+2]=b+(bb2-b)*w;
   }
   return o; }
+function softSkinFx(d,W,H,amount,radius,keep){ return drain(softSkinFxG(d,W,H,amount,radius,keep)); }
 
 /* ---- PIXEL_FX.sharpen, its Colour path with Skip flat areas 0 and Halos Both, compositor.js 9235: every tap clamps to the frame ---- */
 function sharpenFx(s,W,H,amt,r){
@@ -239,7 +255,7 @@ function drawBrow(c,T,spine,th,dir,seed){
 const SK_MARKS=[ /* x, y, radius, raised 0..1, brown 0..1 */
   [55.4,47.2,.36,1,0],[58.4,48.9,.28,0,1],[56.6,45.1,.24,.6,0],
   [63.5,45.5,.4,1,0],[66.3,48.6,.3,.8,0],[62.7,49.2,.27,0,1] ];
-function closeSkin(W,FX,FY){
+function* closeSkinG(W,FX,FY){
   const N=W*W, BM=new Float32Array(N), AL=new Float32Array(N), RD=new Float32Array(N), BN=new Float32Array(N), CSZ=.46;
   for(let y=0;y<W;y++){ const uy=FY(y), fineU=sstep(42.6,47.2,uy);
     for(let x=0;x<W;x++){ const i=y*W+x, ux=FX(x);
@@ -264,24 +280,28 @@ function closeSkin(W,FX,FY){
         const an=j*2.4+.5, lx=dx-Math.cos(an)*m[2]*.5, ly=dy-Math.sin(an)*m[2]*.5;
         const core=Math.max(Math.exp(-d2/r2),.7*Math.exp(-(lx*lx+ly*ly)/(r2*.45))), halo=Math.exp(-d2/(r2*5));
         bm+=.06*m[3]*core; rd+=(1-m[4])*(.7*core+.2*halo); bn+=.8*m[4]*core; }
-      BM[i]=bm; AL[i]=al; RD[i]=rd; BN[i]=bn; } }
+      BM[i]=bm; AL[i]=al; RD[i]=rd; BN[i]=bn; }
+    yield 'pores'; }
   return {BM,AL,RD,BN}; }
+function closeSkin(W,FX,FY){ return drain(closeSkinG(W,FX,FY)); }
 
-function paintPortrait(W,textured){
+function* paintPortraitG(W,textured){
   const N=W*W, Z=SK_Z, K=W/100*Z, X0=SK_CX-50/Z, Y0=SK_CY-50/Z, T={K,X0,Y0,S:W};
   const FX=x=>X0+(x+.5)/K, FY=y=>Y0+(y+.5)/K, PX=u=>Math.round((u-X0)*K-.5), PY=u=>Math.round((u-Y0)*K-.5);
   const view=x=>x.setTransform(K,0,0,K,-X0*K,-Y0*K);
   /* masks (each painter fills its own path) */
   const mask=fn=>{ const [C,x]=sheet(W); view(x); x.fillStyle='#fff'; fn(x); const d=x.getImageData(0,0,W,W).data, m=new Float32Array(N); for(let i=0;i<N;i++) m[i]=d[i*4+3]/255; return m; };
   const HS=hairSides();
-  const mF=mask(x=>{ facePath(x); x.fill(); }), mL0=mask(x=>{ lipsPath(x); x.fill(); });
-  const mHair=mask(x=>{ polyPath(x,sidePoly(HS.L)); x.fill(); polyPath(x,sidePoly(HS.R)); x.fill(); });
-  const mN0=mask(x=>{ neckPath(x); x.fill(); });
+  const mF=mask(x=>{ facePath(x); x.fill(); }); yield 'mask';
+  const mL0=mask(x=>{ lipsPath(x); x.fill(); }); yield 'mask';
+  const mHair=mask(x=>{ polyPath(x,sidePoly(HS.L)); x.fill(); polyPath(x,sidePoly(HS.R)); x.fill(); }); yield 'mask';
+  const mN0=mask(x=>{ neckPath(x); x.fill(); }); yield 'mask';
   const mN=new Float32Array(N), mFr=new Float32Array(N);
-  for(let i=0;i<N;i++){ mN[i]=mN0[i]*(1-mHair[i]); mFr[i]=mHair[i]*mF[i]; }
-  const mL=blurF(mL0,W,W,.2*K);
+  for(let i=0;i<N;i++){ if((i&16383)===16383) yield 'mask'; mN[i]=mN0[i]*(1-mHair[i]); mFr[i]=mHair[i]*mF[i]; }
+  yield 'mask';
+  const mL=(yield* blurFG(mL0,W,W,.2*K));
   /* hair: each side's mass, then strands between its guides, a sheen where the light falls on the crown */
-  const strands=(c,s,side,seed,wisps)=>{
+  const strands=function*(c,s,side,seed,wisps){
     const [inn,outr]=s, R=rng(seed);
     c.save(); polyPath(c,sidePoly(s)); c.clip();
     let g=c.createLinearGradient(side<0?14:88,0,side<0?34:68,0); g.addColorStop(0,'#2a1b12'); g.addColorStop(.6,'#24170f'); g.addColorStop(1,'#170e09'); c.fillStyle=g; c.fillRect(0,-10,100,120);
@@ -296,12 +316,12 @@ function paintPortrait(W,textured){
       if(pick<sheen*.85) col='rgba('+Math.round(lerp(120,176,R()))+','+Math.round(lerp(82,122,R()))+','+Math.round(lerp(54,82,R()))+','+(.22+sheen*.38).toFixed(2)+')';
       else if(pick<.5) col='rgba(12,8,5,'+(.3+R()*.35).toFixed(2)+')';
       else col='rgba('+Math.round(lerp(60,92,R()))+','+Math.round(lerp(40,60,R()))+','+Math.round(lerp(27,40,R()))+','+(.2+R()*.3).toFixed(2)+')';
-      c.strokeStyle=col; c.lineWidth=.14+R()*.3; linePath(c,pts); c.stroke(); }
+      c.strokeStyle=col; c.lineWidth=.14+R()*.3; linePath(c,pts); c.stroke(); if((n&63)===63) yield 'hair'; }
     /* depth: the hair darkens where it turns in behind the face; a broad soft sheen where the crown faces the light */
     const strip=(v0,v1,q0,q1)=>x=>{ const a=[], b=[]; for(let q=q0;q<=q1;q++){ a.push([lerp(inn[q][0],outr[q][0],v0),lerp(inn[q][1],outr[q][1],v0)]); b.push([lerp(inn[q][0],outr[q][0],v1),lerp(inn[q][1],outr[q][1],v1)]); } polyPath(x,a.concat(b.reverse())); };
-    softFill(c,T,strip(-.05,.16,6,HK-1),1.3,'rgba(0,0,0,.42)','multiply');
-    softFill(c,T,strip(.88,1.05,0,HK-1),1.0,'rgba(0,0,0,.3)','multiply');
-    softFill(c,T,strip(.28,.6,2,side<0?24:18),1.8,side<0?'rgba(196,146,104,.17)':'rgba(196,146,104,.09)','screen');
+    softFill(c,T,strip(-.05,.16,6,HK-1),1.3,'rgba(0,0,0,.42)','multiply'); yield 'hair';
+    softFill(c,T,strip(.88,1.05,0,HK-1),1.0,'rgba(0,0,0,.3)','multiply'); yield 'hair';
+    softFill(c,T,strip(.28,.6,2,side<0?24:18),1.8,side<0?'rgba(196,146,104,.17)':'rgba(196,146,104,.09)','screen'); yield 'hair';
     c.restore();
     if(wisps){ const RW=rng(seed+1); c.save(); c.lineCap='round';
       for(let n=0;n<26;n++){ const v=-.035+RW()*.05, ph=RW()*TAU, k0=Math.floor(RW()*HK*.3), len=8+Math.floor(RW()*14), pts=[];
@@ -313,19 +333,23 @@ function paintPortrait(W,textured){
   const [C,c]=sheet(W); view(c);
   let g=c.createLinearGradient(6,0,94,100); g.addColorStop(0,'#737e88'); g.addColorStop(.5,'#4a535c'); g.addColorStop(1,'#272c32'); c.fillStyle=g; c.fillRect(-10,-10,120,120);
   c.fillStyle='#1a110b'; polyPath(c,HS.L[1].concat(HS.R[1].slice().reverse())); c.fill();
-  strands(c,HS.L,-1,61,false); strands(c,HS.R,1,67,false);
+  yield* strands(c,HS.L,-1,61,false); yield* strands(c,HS.R,1,67,false);
   c.setTransform(1,0,0,1,0,0);
-  const bgIm=c.getImageData(0,0,W,W), P=bgIm.data;
-  for(let i=0;i<N;i++){ const n=(hash(i*1.37,4)-.5)*5; P[i*4]+=n; P[i*4+1]+=n; P[i*4+2]+=n; }
+  const bgIm=c.getImageData(0,0,W,W), P=bgIm.data; yield 'grain';
+  for(let i=0;i<N;i++){ if((i&16383)===16383) yield 'grain'; const n=(hash(i*1.37,4)-.5)*5; P[i*4]+=n; P[i*4+1]+=n; P[i*4+2]+=n; }
+  yield 'grain';
   /* heights: the face stands in front of the neck; a dome from each one's own outline, plus the forms */
-  const pF=blurF(mF,W,W,4.2*K), pN=blurF(mN0,W,W,3.6*K);
+  const pF=(yield* blurFG(mF,W,W,4.2*K));
+  const pN=(yield* blurFG(mN0,W,W,3.6*K));
   const HF=new Float32Array(N), HN=new Float32Array(N), HC=new Float32Array(N);
-  for(let y=0;y<W;y++) for(let x=0;x<W;x++){ const i=y*W+x, ux=FX(x), uy=FY(y);
+  for(let y=0;y<W;y++){ for(let x=0;x<W;x++){ const i=y*W+x, ux=FX(x), uy=FY(y);
     if(pF[i]>.02){ const e=1-((ux-51.5)/25)**2-((uy-46)/37)**2; HF[i]=11+11*Math.sqrt(clamp((pF[i]-.28)/.72))+10*Math.sqrt(Math.max(0,e))+faceForms(ux,uy); }
     if(pN[i]>.02){ const e=1-((ux-51.2)/14)**2; HN[i]=1+6*Math.sqrt(clamp((pN[i]-.28)/.72))+7*Math.sqrt(Math.max(0,e)); }
     HC[i]=mF[i]>.5?HF[i]:mN0[i]>.5?HN[i]:0; }
-  const HB=blurF(HF,W,W,2.2*K), HNB=blurF(HN,W,W,2.5*K);
-  const hsh=blurF(mFr,W,W,1.2*K);
+    if((y&3)===3) yield 'heights'; }
+  const HB=(yield* blurFG(HF,W,W,2.2*K));
+  const HNB=(yield* blurFG(HN,W,W,2.5*K));
+  const hsh=(yield* blurFG(mFr,W,W,1.2*K));
   /* the light: one big soft key up and to the left of the camera */
   let Lx=-.32, Ly=-.38, Lz=.87; { const m=Math.hypot(Lx,Ly,Lz); Lx/=m; Ly/=m; Lz/=m; }
   const Lxy=Math.hypot(Lx,Ly), dX=Lx/Lxy, dY=Ly/Lxy, slope=Lz/Lxy;
@@ -334,12 +358,13 @@ function paintPortrait(W,textured){
     const over=HC[qy*W+qx]-(h0+slope*t); if(over>0){ sh=Math.min(sh,1-sstep(0,.6+.22*t,over)); if(sh<=0) break; } } return sh; };
   /* the cast shadows are soft, so they are worked out at half the pixels and read back smoothly */
   const W2=W>>1, SHF=new Float32Array(W2*W2).fill(1), SHN=new Float32Array(W2*W2).fill(1);
-  for(let y=0;y<W2;y++) for(let x=0;x<W2;x++){ const j=(2*y+1)*W+2*x+1, ux=X0+(2*x+1)/K, uy=Y0+(2*y+1)/K;
+  for(let y=0;y<W2;y++){ for(let x=0;x<W2;x++){ const j=(2*y+1)*W+2*x+1, ux=X0+(2*x+1)/K, uy=Y0+(2*y+1)/K;
     if(pF[j]>.02) SHF[y*W2+x]=march(ux,uy,HF[j]); if(pN[j]>.02) SHN[y*W2+x]=march(ux,uy,HN[j]); }
+    if((y&3)===3) yield 'shadow'; }
   const shAt=(A,x,y)=>{ const fx=clamp((x+.5)/2-.5,0,W2-1.001), fy=clamp((y+.5)/2-.5,0,W2-1.001), x0=fx|0, y0=fy|0, ax=fx-x0, ay=fy-y0, o=y0*W2+x0;
     return lerp(lerp(A[o],A[o+1],ax),lerp(A[o+W2],A[o+W2+1],ax),ay); };
   /* the close-up's pores, surface, redness and blemishes (only on the textured version) */
-  const CS=textured?closeSkin(W,FX,FY):null;
+  const CS=textured?(yield* closeSkinG(W,FX,FY)):null;
   /* the skin's own marks (only on the textured version): light freckles over the nose and cheeks, a few small red marks */
   const RS=rng(23), frk=[], red=[];
   for(let i=0;i<80;i++){ const a=RS()*TAU, rr=Math.sqrt(RS()); const fx=47+Math.cos(a)*rr*15, fy=47+Math.sin(a)*rr*5.5; if(fy<43.4) continue; frk.push([fx,fy,.16+RS()*.16,.05+RS()*.06]); }
@@ -347,7 +372,7 @@ function paintPortrait(W,textured){
   for(const p of [[40.0,28.5,.5],[54.8,69.6,.45],[63.8,55.5,.5],[42.2,67.6,.4],[52.4,24.6,.4],[66.2,43.0,.42]]) red.push(p);
   const fCell=new Map(); const cellKey=(x,y)=>(Math.floor(x/3))*1000+Math.floor(y/3);
   frk.forEach(f=>{ const kk=cellKey(f[0],f[1]); if(!fCell.has(kk)) fCell.set(kk,[]); fCell.get(kk).push(f); });
-  for(let y=0;y<W;y++) for(let x=0;x<W;x++){
+  for(let y=0;y<W;y++){ for(let x=0;x<W;x++){
     const i=y*W+x, f=mF[i], nmk=mN[i]; if(f<.002&&nmk<.002) continue;
     const ux=FX(x), uy=FY(y);
     /* the slope's neighbours, held at the sheet's edge: in the close-up the skin runs to all four sides */
@@ -392,52 +417,61 @@ function paintPortrait(W,textured){
     if(nmk>.002){ const s=shade(HN,HNB,false); R0=lerp(R0,s[0],nmk); G0=lerp(G0,s[1],nmk); B0=lerp(B0,s[2],nmk); }
     if(f>.002){ const s=shade(HF,HB,true); R0=lerp(R0,s[0],f); G0=lerp(G0,s[1],f); B0=lerp(B0,s[2],f); }
     P[j]=R0; P[j+1]=G0; P[j+2]=B0;
+    if((x&63)===63) yield 'shade';
   }
+  yield 'shade'; }
   c.putImageData(bgIm,0,0);
   view(c);
   /* the nose: the creases round its wings, the nostrils, a soft light on the tip */
   softFill(c,T,x=>{ x.beginPath(); x.moveTo(42.6,52.4); x.quadraticCurveTo(41.6,54.4,43.4,55.5); x.lineTo(43.9,55.2); x.quadraticCurveTo(42.6,54.2,43.3,52.6); x.closePath();
-    x.moveTo(51.0,52.4); x.quadraticCurveTo(52.2,54.4,50.2,55.6); x.lineTo(49.7,55.3); x.quadraticCurveTo(51.1,54.2,50.4,52.6); x.closePath(); },.4,'rgba(160,92,74,.26)','multiply');
-  softFill(c,T,x=>{ x.beginPath(); x.ellipse(45.15,55.0,.52,.3,-.25,0,TAU); x.ellipse(48.25,55.1,.6,.32,.25,0,TAU); },.2,'rgba(100,46,36,.48)','multiply');
-  softFill(c,T,x=>{ x.beginPath(); x.ellipse(45.9,51.7,.75,.6,0,0,TAU); },.45,'rgba(255,236,224,.22)','screen');
+    x.moveTo(51.0,52.4); x.quadraticCurveTo(52.2,54.4,50.2,55.6); x.lineTo(49.7,55.3); x.quadraticCurveTo(51.1,54.2,50.4,52.6); x.closePath(); },.4,'rgba(160,92,74,.26)','multiply'); yield 'nose';
+  softFill(c,T,x=>{ x.beginPath(); x.ellipse(45.15,55.0,.52,.3,-.25,0,TAU); x.ellipse(48.25,55.1,.6,.32,.25,0,TAU); },.2,'rgba(100,46,36,.48)','multiply'); yield 'nose';
+  softFill(c,T,x=>{ x.beginPath(); x.ellipse(45.9,51.7,.75,.6,0,0,TAU); },.45,'rgba(255,236,224,.22)','screen'); yield 'nose';
   /* the line where the lips meet, the corners of the smile, the light along the top of the upper lip */
   /* (each path below is written in the mouth's own drawing and goes through LX, LY like the lips) */
   const lp=x=>({ m:(a,b)=>x.moveTo(LX(a),LY(b)), l:(a,b)=>x.lineTo(LX(a),LY(b)), b:(a,b,c2,d,e,f)=>x.bezierCurveTo(LX(a),LY(b),LX(c2),LY(d),LX(e),LY(f)), q:(a,b,c2,d)=>x.quadraticCurveTo(LX(a),LY(b),LX(c2),LY(d)) });
-  softFill(c,T,x=>{ const p=lp(x); x.beginPath(); mouthLine(x); p.l(54.6,62.05); p.b(52.6,62.85,49.6,63.3,47.4,63.15); p.b(45.2,63.3,43.0,63.0,41.0,62.2); x.closePath(); },.18,'rgba(110,48,44,.7)','multiply');
-  softFill(c,T,x=>{ x.beginPath(); x.ellipse(LX(40.8),LY(62.0),.55,.4,.6,0,TAU); x.ellipse(LX(54.8),LY(61.8),.6,.42,-.6,0,TAU); },.3,'rgba(130,70,58,.45)','multiply');
+  softFill(c,T,x=>{ const p=lp(x); x.beginPath(); mouthLine(x); p.l(54.6,62.05); p.b(52.6,62.85,49.6,63.3,47.4,63.15); p.b(45.2,63.3,43.0,63.0,41.0,62.2); x.closePath(); },.18,'rgba(110,48,44,.7)','multiply'); yield 'lips';
+  softFill(c,T,x=>{ x.beginPath(); x.ellipse(LX(40.8),LY(62.0),.55,.4,.6,0,TAU); x.ellipse(LX(54.8),LY(61.8),.6,.42,-.6,0,TAU); },.3,'rgba(130,70,58,.45)','multiply'); yield 'lips';
   softFill(c,T,x=>{ const p=lp(x); x.beginPath(); p.m(42.4,61.0); p.b(43.6,60.2,44.8,59.75,45.6,59.75); p.q(46.5,59.7,47.3,60.3); p.q(48.1,59.7,49.0,59.7); p.b(50.4,59.8,51.8,60.2,53.2,60.9);
-    p.l(53.1,61.1); p.b(51.8,60.5,50.4,60.1,49.0,60.05); p.q(48.1,60.05,47.3,60.65); p.q(46.5,60.05,45.6,60.1); p.b(44.8,60.1,43.6,60.5,42.5,61.15); x.closePath(); },.12,'rgba(255,226,214,.32)','screen');
+    p.l(53.1,61.1); p.b(51.8,60.5,50.4,60.1,49.0,60.05); p.q(48.1,60.05,47.3,60.65); p.q(46.5,60.05,45.6,60.1); p.b(44.8,60.1,43.6,60.5,42.5,61.15); x.closePath(); },.12,'rgba(255,226,214,.32)','screen'); yield 'lips';
   c.save(); c.strokeStyle='rgba(84,34,32,.5)'; c.lineWidth=.16; c.lineCap='round'; c.beginPath(); mouthLine(c); c.stroke(); c.restore();
   /* brows and eyes */
-  drawBrow(c,T,[[44.2,36.5],[41.6,34.8],[38.7,33.8],[35.8,34.1],[33.1,35.6]],[1.9,1.4,.42],-1,41);
-  drawBrow(c,T,[[51.8,36.5],[54.6,34.7],[57.9,33.7],[61.0,34.0],[63.9,35.4]],[1.95,1.45,.45],1,43);
-  EYES.forEach(e=>drawEye(c,T,e));
+  drawBrow(c,T,[[44.2,36.5],[41.6,34.8],[38.7,33.8],[35.8,34.1],[33.1,35.6]],[1.9,1.4,.42],-1,41); yield 'brow';
+  drawBrow(c,T,[[51.8,36.5],[54.6,34.7],[57.9,33.7],[61.0,34.0],[63.9,35.4]],[1.95,1.45,.45],1,43); yield 'brow';
+  for(const e of EYES){ drawEye(c,T,e); yield 'eye'; }
   /* the hair again, in front, only where it crosses the face: the sweep over the forehead */
-  c.save(); facePath(c); c.clip(); strands(c,HS.L,-1,61,true); strands(c,HS.R,1,67,true); c.restore();
+  c.save(); facePath(c); c.clip(); yield* strands(c,HS.L,-1,61,true); yield* strands(c,HS.R,1,67,true); c.restore();
   /* the part */
   c.save(); c.strokeStyle='rgba(120,84,66,.32)'; c.lineWidth=.22; c.beginPath(); c.moveTo(60.3,-1); c.lineTo(60.4,13.0); c.stroke(); c.restore();
   /* a camera's own softness: one [1 2 1] pass each way, so the drawn edges sit in the picture like the skin does */
-  const d=c.getImageData(0,0,W,W).data, tmp=new Float32Array(d.length);
-  for(let y=0;y<W;y++) for(let x=0;x<W;x++){ const i=(y*W+x)*4, l=(y*W+Math.max(0,x-1))*4, r=(y*W+Math.min(W-1,x+1))*4; for(let ch=0;ch<3;ch++) tmp[i+ch]=(d[l+ch]+2*d[i+ch]+d[r+ch])/4; }
-  for(let y=0;y<W;y++) for(let x=0;x<W;x++){ const i=(y*W+x)*4, u=(Math.max(0,y-1)*W+x)*4, b=(Math.min(W-1,y+1)*W+x)*4; for(let ch=0;ch<3;ch++) d[i+ch]=(tmp[u+ch]+2*tmp[i+ch]+tmp[b+ch])/4; d[i+3]=255; }
+  yield 'face';
+  const d=c.getImageData(0,0,W,W).data, tmp=new Float32Array(d.length); yield 'soft';
+  for(let y=0;y<W;y++){ for(let x=0;x<W;x++){ const i=(y*W+x)*4, l=(y*W+Math.max(0,x-1))*4, r=(y*W+Math.min(W-1,x+1))*4; for(let ch=0;ch<3;ch++) tmp[i+ch]=(d[l+ch]+2*d[i+ch]+d[r+ch])/4; } if((y&7)===7) yield 'soft'; }
+  yield 'soft';
+  for(let y=0;y<W;y++){ for(let x=0;x<W;x++){ const i=(y*W+x)*4, u=(Math.max(0,y-1)*W+x)*4, b=(Math.min(W-1,y+1)*W+x)*4; for(let ch=0;ch<3;ch++) d[i+ch]=(tmp[u+ch]+2*tmp[i+ch]+tmp[b+ch])/4; d[i+3]=255; } if((y&7)===7) yield 'soft'; }
   return d;
 }
 
-function buildSkin(){
-  if(buildSkin.cache) return buildSkin.cache;
-  const W=SK_W, src=paintPortrait(W,true), out=softSkinFx(src,W,W,SK_AMOUNT,SK_RADIUS,SK_KEEP);
-  return buildSkin.cache={W,src,out,SRC:toCanvas(W,W,src),OUT:toCanvas(W,W,out)};
+function paintPortrait(W,textured){ return drain(paintPortraitG(W,textured)); }
+function* buildSkinG(){
+  const W=SK_W, src=(yield* paintPortraitG(W,true));
+  const out=(yield* softSkinFxG(src,W,W,SK_AMOUNT,SK_RADIUS,SK_KEEP));
+  return {W,src,out,SRC:toCanvas(W,W,src),OUT:toCanvas(W,W,out)};
 }
+let skinStage=null;
+const skinSt=()=>skinStage||(skinStage=stage(buildSkinG()));
+function buildSkin(){ return buildSkin.cache=skinSt().finish(); }
 
 window.FX_TILES.push({ id:'softskin', name:'Soften Skin', section:'Blur', isNew:true, still:2.4,
   line:'At full strength (Amount 1, Smoothing size 20 px) with Keep detail 30, Soften Skin smooths pores and blemishes while the lashes and the edges of the eye stay sharp.',
   _proof(){ const b=buildSkin(); return {W:b.W, src:b.src, out:b.out, type:'softskin', params:{amount:SK_AMOUNT,radius:SK_RADIUS,keep:SK_KEEP}}; },
   make(px){
-    const P=4.6, HOLD=49, B=buildSkin();
-    /* both pictures scaled to the tile once, here, so each frame is two 1:1 copies rather than two upscales */
+    const P=4.6, HOLD=49, st=skinSt();
+    /* both pictures scaled to the tile once, the first time it is drawn, so each frame is two 1:1 copies rather than two upscales */
     const fit=im=>{ const C=document.createElement('canvas'); C.width=C.height=px; const x=C.getContext('2d'); x.imageSmoothingEnabled=true; x.imageSmoothingQuality='high'; x.drawImage(im,0,0,px,px); return C; };
-    const SRCp=fit(B.SRC), OUTp=fit(B.OUT);
-    return (c,t)=>{
+    let SRCp=null, OUTp=null;
+    const draw=(c,t)=>{
+      if(!SRCp){ const B=buildSkin(); SRCp=fit(B.SRC); OUTp=fit(B.OUT); }
       const u=mod(t,P); reset(c,px);
       /* rough skin; the split sweeps in from the left with the result behind it, overshoots a little and settles; a long hold with
          rough and smooth side by side, the divider just past the iris; it sweeps back out and the rough skin holds. The loop starts
@@ -451,6 +485,8 @@ window.FX_TILES.push({ id:'softskin', name:'Soften Skin', section:'Blur', isNew:
         /* a thin Bone hairline with a faint dark edge, so it reads on light skin and on the lashes alike */
         c.fillStyle='rgba(22,19,15,.45)'; c.fillRect(s-.8,0,1.6,100); c.fillStyle=BONE; c.fillRect(s-.3,0,.6,100); }
     };
+    draw.step=st.step; draw.stage=st;
+    return draw;
   } });
 
 /* ====================================================================================================================== */
@@ -473,12 +509,12 @@ function dfWings(){
 }
 /* the crop: the insect is drawn in its own units and seen at DF_Z of them per tile unit, thorax a little up and right of centre */
 const DF_Z=1.55, DF_OX=21.5, DF_OY=8.9;
-function paintDragonfly(S){
+function* paintDragonflyG(S){
   const k=S/100*DF_Z, im=new Uint8ClampedArray(S*S*4), pxU=1/k, WG=dfWings();
   let Lx=-.5, Ly=-.6, Lz=.62; { const m=Math.hypot(Lx,Ly,Lz); Lx/=m; Ly/=m; Lz/=m; }
   let Hx=Lx, Hy=Ly, Hz=Lz+1; { const m=Math.hypot(Hx,Hy,Hz); Hx/=m; Hy/=m; Hz/=m; }
   const HC=[67.4,26.2], E1=[HC[0]-1.4,HC[1]-1.12], E2=[HC[0]+1.4,HC[1]+1.12], ER=3.6;
-  for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+  for(let y=0;y<S;y++){ for(let x=0;x<S;x++){
     const ux=DF_OX+(x+.5)/k, uy=DF_OY+(y+.5)/k, tx=(x+.5)/S*100, ty=(y+.5)/S*100, j=(y*S+x)*4;
     /* out of focus behind: reeds and water, lit from the upper left; one soft stem (placed in tile units) */
     const d=clamp((tx*.5+ty*.8)/118);
@@ -545,29 +581,38 @@ function paintDragonfly(S){
         const lit=.3+.8*dl, seam=1-.5*Math.exp(-Math.pow((((ux-HC[0])*DF.Pp[0]+(uy-HC[1])*DF.Pp[1]))/.22,2));
         r=lerp(r,(cr*lit+spc*190)*seam,cov); g=lerp(g,(cg*lit+spc*180)*seam,cov); b=lerp(b,(cb*lit+spc*166)*seam,cov); } }
     im[j]=r; im[j+1]=g; im[j+2]=b; im[j+3]=255;
+    if(x%90===89) yield 'dragonfly';
   }
+  yield 'dragonfly'; }
   return im;
 }
-function buildSharp(){
-  if(buildSharp.cache) return buildSharp.cache;
-  const S2=SH_W*2, big=paintDragonfly(S2), W=SH_W, frame=new Uint8ClampedArray(W*W*4);
+function paintDragonfly(S){ return drain(paintDragonflyG(S)); }
+function* buildSharpG(){
+  const S2=SH_W*2, big=(yield* paintDragonflyG(S2)), W=SH_W, frame=new Uint8ClampedArray(W*W*4);
   /* the camera's pixels: each the mean of four drawn ones, plus a faint sensor noise */
-  for(let y=0;y<W;y++) for(let x=0;x<W;x++){ const o=(y*W+x)*4, nz=(hash(o*.37+1.3,21)-.5)*2.2; for(let c=0;c<3;c++){ let s=0; for(let a=0;a<2;a++) for(let b=0;b<2;b++) s+=big[((2*y+a)*S2+2*x+b)*4+c]; frame[o+c]=s/4+nz; } frame[o+3]=255; }
-  const src=e1BoxBlur(frame,W,W,SH_SOFT), out=sharpenFx(src,W,W,SH_AMT,SH_R);
-  return buildSharp.cache={W,src,out,SRC:toCanvas(W,W,src),OUT:toCanvas(W,W,out)};
+  for(let y=0;y<W;y++){ for(let x=0;x<W;x++){ const o=(y*W+x)*4, nz=(hash(o*.37+1.3,21)-.5)*2.2; for(let c=0;c<3;c++){ let s=0; for(let a=0;a<2;a++) for(let b=0;b<2;b++) s+=big[((2*y+a)*S2+2*x+b)*4+c]; frame[o+c]=s/4+nz; } frame[o+3]=255; } if((y&15)===15) yield 'sample'; }
+  yield 'sample';
+  const src=(yield* e1BoxBlurG(frame,W,W,SH_SOFT)); yield 'sharpen';
+  const out=sharpenFx(src,W,W,SH_AMT,SH_R); yield 'sharpen';
+  return {W,src,out,SRC:toCanvas(W,W,src),OUT:toCanvas(W,W,out)};
 }
+let sharpStage=null;
+const sharpSt=()=>sharpStage||(sharpStage=stage(buildSharpG()));
+function buildSharp(){ return buildSharp.cache=sharpSt().finish(); }
 
 window.FX_TILES.push({ id:'sharpen', name:'Sharpen', section:'Blur', isNew:true, still:2.6,
   line:'Soft edges turn crisp and the fine veins in the wings come back, each edge gaining a thin light rim and a dark one.',
   _proof(){ const b=buildSharp(); return {W:b.W, src:b.src, out:b.out, type:'sharpen', params:{amount:SH_AMT,radius:SH_R}}; },
   make(px){
-    const P=4.4, B=buildSharp();
-    return (c,t)=>{
-      const u=mod(t,P); reset(c,px);
+    const P=4.4, st=sharpSt();
+    const draw=(c,t)=>{
+      const B=buildSharp(), u=mod(t,P); reset(c,px);
       /* soft, then the sharpening switched on (a hard cut), held, and off again */
       const on=u>=1.3&&u<3.75;
       c.drawImage(on?B.OUT:B.SRC,0,0,100,100);
     };
+    draw.step=st.step; draw.stage=st;
+    return draw;
   } });
 
 })();

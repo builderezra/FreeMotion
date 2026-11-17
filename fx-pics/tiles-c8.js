@@ -11,6 +11,15 @@ const reset=(c,px)=>{ c.setTransform(px/100,0,0,px/100,0,0); c.globalAlpha=1; c.
 const sheet=(w,h)=>{ const C=document.createElement('canvas'); C.width=w; C.height=(h===undefined?w:h); return [C,C.getContext('2d')]; };
 function tab(c,x,y,txt,s,bg,fg){ c.font=MONO(s); const w=c.measureText(txt).width; c.fillStyle=bg; c.fillRect(x,y,w+s*.9,s*1.5); c.fillStyle=fg; c.textBaseline='middle'; c.textAlign='left'; c.fillText(txt,x+s*.45,y+s*.8); return w+s*.9; }
 const poly=(c,p)=>{ c.beginPath(); for(let i=0;i<p.length;i++){ i?c.lineTo(p[i][0],p[i][1]):c.moveTo(p[i][0],p[i][1]); } c.closePath(); };
+/* A picture that prepares a lot in make() prepares it as a generator instead (#1253, 17 Nov; HARNESS.md "is staged"). stage(gen) runs
+   it to the end at once (finish) or a few milliseconds at a time (step(ms), true once it is done). make() hands back its draw function
+   with draw.step, so the app builds it between frames; a draw before it is done finishes it there and then, which is exactly what
+   make() used to do. Every yield is only a place the work may pause: no number changes. */
+const stage=gen=>{ let done=false, val, last='';
+  const run=ms=>{ if(done) return true; const t0=performance.now();
+    for(;;){ const r=gen.next(); if(r.done){ done=true; val=r.value; return true; } last=r.value; if(performance.now()-t0>=ms) return false; } };
+  return { step:ms=>run(Math.max(0,+ms||0)), finish:()=>{ run(Infinity); return val; }, done:()=>done, last:()=>last }; };
+const drain=g=>{ let r; do r=g.next(); while(!r.done); return r.value; };
 
 /* ---- pixel kit: interleaved RGBA floats, the same running-sum box the app's kernels use ---- */
 /* one horizontal box pass, window 2r+1; zero = transparent outside (a CSS blur on a layer), else the edge pixel repeats (the box kernels) */
@@ -143,14 +152,20 @@ window.FX_TILES.push(
       x.restore(); x.globalCompositeOperation='source-over';
       const Rr=rng(5); x.fillStyle='rgba(231,226,213,.7)'; for(let i=0;i<150;i++){ const sx=Rr()*100, sy=Rr()*100, r=.08+Rr()*.16; x.beginPath(); x.arc(sx,sy,r,0,TAU); x.fill(); }
     };
+    /* the five blurred plates depend on nothing in px: a generator, one box pass at a time (stage, above) */
+    const build=function*(){
     const [S,sx]=sheet(N); sx.setTransform(N/100,0,0,N/100,0,0); paint(sx); sx.setTransform(1,0,0,1,0,0);
     const a=Float32Array.from(sx.getImageData(0,0,N,N).data);
-    const box=(rh,rv)=>fromStraight(boxV(boxH(a,N,N,rh,false),N,N,rv,false),N,N);
-    const CH=[null,box(4,4),box(R,R),box(R,6),box(R,3),box(R,0)], VAL=[[0,100],[12,100],[27,100],[27,67],[27,33],[27,0]];
+    yield 'plate';
+    const CH=[null];
+    for(const [rh,rv] of [[4,4],[R,R],[R,6],[R,3],[R,0]]){ const h=boxH(a,N,N,rh,false); yield 'box'; const v=boxV(h,N,N,rv,false); yield 'box'; CH.push(fromStraight(v,N,N)); yield 'box'; }
+    return CH; };
+    const stg=stage(build()), VAL=[[0,100],[12,100],[27,100],[27,67],[27,33],[27,0]];
     const [SP,sp]=sheet(px); sp.setTransform(px/100,0,0,px/100,0,0); paint(sp);
+    let CH=null;
     const pic=i=>i?CH[i]:SP;
-    return (c,t)=>{
-      const u=mod(t,P);
+    const draw=(c,t)=>{
+      CH=stg.finish(); const u=mod(t,P);
       c.setTransform(1,0,0,1,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over';
       let s, back=0;
       if(u<.55) s=0; else if(u<1.0) s=2*E.inOut(seg(u,.55,1.0)); else if(u<1.9) s=2; else if(u<2.45) s=2+3*E.inOut(seg(u,1.9,2.45)); else if(u<3.7) s=5; else { s=0; back=1-E.inOut(seg(u,3.7,4.15)); }
@@ -160,6 +175,8 @@ window.FX_TILES.push(
       const v=VAL[back>.5?5:Math.round(s)];
       tab(c,3,92,'R '+v[0]+'  V '+v[1]+'%',4.2,INK,BONE);
     };
+    draw.step=stg.step; draw.stage=stg;
+    return draw;
   } },
 
 /* ---- COMPOUND BLUR. Viewer: a tape measure on a desk, and under it the Blur map, a gradient layer whose dark band is keyed from the

@@ -593,6 +593,30 @@ window.FM = window.FM || {};
       }
     }
   };
+  /* #1246 U11: EVERY PARAM OF AN EFFECT THAT HOLDS ANOTHER LAYER'S ID. `source` (the def-level `layer: true` picker) always — an
+     effect not in the registry, a filter container, a saved one from before, keeps exactly the one ref it always had — plus every
+     param the registry types 'layer' (Cube's faces, `layerPick` in FM.EFFECTS). The remap sites (duplicate, paste, import, the
+     clipboard's clean-up, the Simple editor's coupling list) walk these, so a second picker is never a ref they miss: the whitelist
+     drift that cost four bugs. Cached per type; the registry is read lazily, at the first call. */
+  const _fxRefKeys = Object.create(null);
+  FM.fxRefKeys = function (fx) {
+    const ty = fx && typeof fx.type === 'string' ? fx.type : '';
+    let k = _fxRefKeys[ty];
+    if (k) return k;
+    k = ['source'];
+    try {
+      const ps = ty && FM.fxRegistry && FM.fxRegistry.paramsOf ? FM.fxRegistry.paramsOf(ty) : null;
+      if (Array.isArray(ps)) ps.forEach(p => { if (p && p.type === 'layer' && typeof p.key === 'string' && k.indexOf(p.key) < 0) k.push(p.key); });
+      if (ty && Array.isArray(ps)) _fxRefKeys[ty] = k;   // only a real answer is kept: asked before the registry loads, it asks again
+    } catch (e) {}
+    return k;
+  };
+  /* …and the helper the remap sites share: fn(key, id) for every layer ref the effect holds (a non-empty string). */
+  FM.eachFxRef = function (fx, fn) {
+    if (!fx || !fx.params) return;
+    const ks = FM.fxRefKeys(fx);
+    for (let i = 0; i < ks.length; i++) { const v = fx.params[ks[i]]; if (typeof v === 'string' && v) fn(ks[i], v); }
+  };
   FM.fxAt = function (layer, path) {
     if (!path || !path.length) return null;
     let fx = ((layer && layer.effects) || [])[path[0]];

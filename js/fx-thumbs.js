@@ -53,7 +53,7 @@ window.FM = window.FM || {};
     im = PHOTOS[key] = new Image();
     im.decoding = 'async';
     im.addEventListener('load', photosChanged);
-    im.src = 'fx-art/' + key + '.jpg?v=1';
+    im.src = 'fx-art/' + key + '.jpg?v=2';
     return im;
   }
   /* A PICTURE PAINTED WITHOUT ITS PHOTOGRAPH IS NEVER KEPT (queue 359). The drawn art is the stand-in
@@ -1872,7 +1872,8 @@ window.FM = window.FM || {};
    *    first load, or any one file missing), every tile is the live render exactly as before, nothing is said, and a tile
    *    mounted a couple of seconds later tries again.
    *  · BUILT ONLY ON SCREEN. A picture's make() (half a second for the heaviest) runs when a tile showing it comes on screen,
-   *    never for the rows below the fold.
+   *    never for the rows below the fold. A picture that hands back draw.step (a staged build, HARNESS.md) is built a slice
+   *    per frame; its tiles keep the live frame they show until it is done.
    *  · ONLY STOCK TILES. mount(cv, type), and mountLayerFx without a layer, show the picture for an effect that has one.
    *    Layer previews, presets, filters and applied tiles keep the live render, as does an effect with no picture.
    *  · ONE CLOCK, ONLY WHAT IS ON SCREEN. One requestAnimationFrame loop draws each visible picture once per frame into its
@@ -1894,6 +1895,17 @@ window.FM = window.FM || {};
     byType: new Map(), unmapped: [], held: [], broken: {}, failedFiles: [], made: 0 };
   const picVis = new Set();          // tiles showing a picture that are on screen now
   let picIO = null, picRaf = 0, picT0 = 0, picFrameN = 0, picRot = 0, picMakeQ = [], picMakeRaf = 0, picUse = 0;
+  /* What picture work cost per frame (the _picsWork seam): picMakePump and picFrame add their ms under the frame's rAF
+     timestamp, so two callbacks in one frame count as one frame. max is the largest frame since the last reset; staged is
+     the largest frame of building the pictures that hand back draw.step (make, its steps and its first draw). */
+  const picWorkStat = { ts: -1, acc: 0, sacc: 0, max: 0, smax: 0, frames: 0 };
+  let picStagedMs = 0;
+  function picWork(ts, ms, staged) {
+    if (ts === picWorkStat.ts) { picWorkStat.acc += ms; picWorkStat.sacc += staged; }
+    else { picWorkStat.ts = ts; picWorkStat.acc = ms; picWorkStat.sacc = staged; picWorkStat.frames++; }
+    if (picWorkStat.acc > picWorkStat.max) picWorkStat.max = picWorkStat.acc;
+    if (picWorkStat.sacc > picWorkStat.smax) picWorkStat.smax = picWorkStat.sacc;
+  }
 
   function picBuildTag() {
     const m = document.querySelector('meta[name="fm-build"]');
@@ -1943,7 +1955,7 @@ window.FM = window.FM || {};
           const im = new Image();
           im.onload = function () { PH[k] = im; res(); };
           im.onerror = function () { res(); };
-          im.src = 'fx-art/' + encodeURIComponent(k) + '.jpg?v=1';
+          im.src = 'fx-art/' + encodeURIComponent(k) + '.jpg?v=2';
         });
       }));
     };
@@ -1986,7 +1998,7 @@ window.FM = window.FM || {};
           const type = PIC_ALIAS[id] || id;
           if (!FM.fxRegistry.get(type)) { pic.unmapped.push(id); return; }
           pic.byType.set(type, { id: id, type: type, T: T, file: fileOf.get(T) || '', draw: null, M: null, mctx: null,
-            stillT: Number(T.still) || 0, lastT: null, wait: [], queued: false, broken: false, used: 0 });
+            stillT: Number(T.still) || 0, lastT: null, wait: [], queued: false, broken: false, used: 0, building: false, steps: 0 });
         });
         pic.state = pic.byType.size ? 'ready' : 'failed';
         if (pic.state === 'ready') picUpgrade();
@@ -2021,7 +2033,7 @@ window.FM = window.FM || {};
           if (!e.isIntersecting) { picVis.delete(cv); return; }
           picVis.add(cv);
           const P = cv._fxPic ? pic.byType.get(cv._fxPic) : null;
-          if (P && !P.broken && !P.draw) picQueueMake(P, cv);
+          if (P && !P.broken && !picReady(P)) picQueueMake(P, cv);
         });
         picKick();
       };
@@ -2051,7 +2063,7 @@ window.FM = window.FM || {};
     }
     picObserve(cv);
     P.used = ++picUse;
-    if (P.draw) picShow(cv, P); else picQueueMake(P, cv);   // picMakePump builds it only once this tile is on screen
+    if (picReady(P)) picShow(cv, P); else picQueueMake(P, cv);   // picMakePump builds it only once this tile is on screen
     picKick();
     return true;
   }
@@ -2065,26 +2077,54 @@ window.FM = window.FM || {};
     try { P.draw(P.mctx, t); P.lastT = t; return true; }
     catch (e) { picBreak(P, e); return false; }
   }
+  /* built and drawable: a picture still building (draw.step, below) is treated as one with no draw yet */
+  function picReady(P) { return !!P.draw && !P.building; }
   function picShow(cv, P) {
+    if (!picReady(P)) return;   // still building: the tile keeps the live frame it shows
     if (picStill() && P.lastT !== P.stillT && !picDraw(P, P.stillT)) return;
     picCopy(cv, P);
   }
+  /* STAGED BUILDS (HARNESS.md, 17 Nov). A picture that prepares a lot (Soften Skin, Sharpen, Temporal Denoise, Lens Blur:
+     0.3 to 0.6 s on the laptop) hands back draw.step(ms): one more piece of its build, a few ms at a time, true once done
+     (step(0) runs exactly one piece). make() itself then costs under a millisecond, and picMakePump runs the rest a slice per
+     frame. A draw before the build is done would finish it on the spot, so nothing on the menu's frame path draws a picture
+     while it is building; picFinish (for callers that need it NOW, like _picsBench) runs it to the end at once. */
+  function picStep(P, ms) {
+    P.steps++;
+    try { return !!P.draw.step(ms); }
+    catch (e) { picBreak(P, e); return false; }
+  }
+  function picBuilt(P) {
+    P.building = false;
+    pic.made++;
+    picDraw(P, P.stillT);
+  }
+  function picFinish(P) {
+    if (P.building && !P.broken && picStep(P, Infinity)) picBuilt(P);
+  }
   function picMake(P) {
+    const m0 = now();
+    P.staged = false;
     try {
       const M = document.createElement('canvas'); M.width = M.height = PX;
       P.M = M; P.mctx = M.getContext('2d');
-      P.draw = P.T.make(PX);
+      P.draw = P.T.make(PX); P.building = false; P.steps = 0;
       if (typeof P.draw !== 'function') throw new Error('make() returned no draw function');
-      pic.made++;
-      picDraw(P, P.stillT);
+      P.staged = typeof P.draw.step === 'function';   // its build is counted as staged work (_picsWork) whichever way it runs
+      if (P.staged) {
+        P.building = true;
+        if (!picStep(P, 0)) return;   // more to build (picMakePump carries on with it, a slice per frame), or it threw
+      }
+      picBuilt(P);
     } catch (e) { picBreak(P, e); }
+    finally { if (P.staged) picStagedMs += now() - m0; }
   }
   /* A picture that throws is not shown: its tiles go back to the live render, and it is listed (_pics().broken). */
   function picBreak(P, e) {
     if (P.broken) return;
     P.broken = true;
-    if (P.draw) pic.made--;
-    P.draw = null; P.M = null; P.mctx = null;
+    if (picReady(P)) pic.made--;
+    P.draw = null; P.M = null; P.mctx = null; P.building = false;
     pic.broken[P.id] = String((e && e.message) || e);
     if (!warned['pic:' + P.id]) { warned['pic:' + P.id] = 1; console.warn('fx-thumbs: the picture for "' + P.id + '" failed, showing the live tile', e); }
     mounted.forEach(function (ref) {
@@ -2099,20 +2139,34 @@ window.FM = window.FM || {};
   }
   /* make() can prepare a lot (a photograph run through a kernel, a sprite sheet), so a menu's worth of them is spread over
      frames on the live tiles' budget rather than built inside one: at least one per frame. */
-  function picMakePump() {
+  function picMakePump(ts) {
     picMakeRaf = 0;
-    const t0 = now();
+    const t0 = now(), later = [];
+    picStagedMs = 0;
     while (picMakeQ.length) {
       const P = picMakeQ.shift();
       P.queued = false;
       const ws = P.wait; P.wait = [];
-      /* scrolled away before its turn: not built now; the observer queues it again when it comes back */
-      if (!P.draw && !ws.some(function (cv) { return cv._fxPic === P.type && picVis.has(cv); })) continue;
+      /* scrolled away before its turn: not built now (a half-built one keeps what it has); the observer queues it again
+         when it comes back */
+      if (!picReady(P) && !ws.some(function (cv) { return cv._fxPic === P.type && picVis.has(cv); })) continue;
       if (!P.draw && !P.broken) picMake(P);
-      ws.forEach(function (cv) { if (cv._fxPic === P.type && P.draw) picShow(cv, P); });
+      else if (P.building && !P.broken) {
+        /* what is left of this frame's slice (at least one piece: step(0) runs exactly one) */
+        const s0 = now();
+        if (picStep(P, Math.max(0, sliceMs() - (now() - t0)))) picBuilt(P);
+        picStagedMs += now() - s0;
+      }
+      if (P.building && !P.broken) {
+        /* not built yet: its tiles keep their live frame and wait with it for the next frame */
+        ws.forEach(function (cv) { if (P.wait.indexOf(cv) < 0) P.wait.push(cv); });
+        if (!P.queued) { P.queued = true; later.push(P); }
+      } else ws.forEach(function (cv) { if (cv._fxPic === P.type && picReady(P)) picShow(cv, P); });
       if (now() - t0 >= sliceMs()) break;
     }
+    if (later.length) picMakeQ = picMakeQ.concat(later);
     if (picMakeQ.length) picMakeRaf = requestAnimationFrame(picMakePump);
+    picWork(ts, now() - t0, picStagedMs);
     picTrim();
     picKick();
   }
@@ -2125,7 +2179,12 @@ window.FM = window.FM || {};
     const old = [];
     pic.byType.forEach(function (P) { if (P.draw && !onScreen.has(P.type) && !P.queued) old.push(P); });
     old.sort(function (a, b) { return a.used - b.used; });
-    for (let i = 0; i < old.length && pic.made > PIC_KEEP; i++) { const P = old[i]; P.draw = null; P.M = null; P.mctx = null; P.lastT = null; pic.made--; }
+    /* a half-built one off screen may go too (it does not count as made, so dropping it frees memory but not a place) */
+    for (let i = 0; i < old.length && pic.made > PIC_KEEP; i++) {
+      const P = old[i];
+      if (picReady(P)) pic.made--;
+      P.draw = null; P.M = null; P.mctx = null; P.lastT = null; P.building = false;
+    }
   }
   function picKick() {
     if (picRaf || !picVis.size || picStill() || document.hidden) return;
@@ -2134,12 +2193,13 @@ window.FM = window.FM || {};
   function picFrame(ts) {
     picRaf = 0;
     if (picStill() || document.hidden) return;
+    const w0 = now();
     const groups = new Map();
     picVis.forEach(function (cv) {
       if (!cv.isConnected || !cv._fxPic || cv._fxPic !== cv._fxType) { picVis.delete(cv); if (picIO) picIO.unobserve(cv); return; }
       const P = pic.byType.get(cv._fxPic);
       if (!P || P.broken) return;
-      if (!P.draw) { picQueueMake(P, cv); return; }
+      if (!picReady(P)) { picQueueMake(P, cv); return; }   // not built, or still building: picMakePump's job, never this frame's
       let g = groups.get(P); if (!g) groups.set(P, g = []);
       g.push(cv);
     });
@@ -2158,6 +2218,7 @@ window.FM = window.FM || {};
       if (picDraw(P, t)) list[j][1].forEach(function (cv) { picCopy(cv, P); });
       if (now() - t0 >= sliceMs() && k < n - 1) { picRot = j + 1; break; }
     }
+    picWork(ts, now() - w0, 0);
     picRaf = requestAnimationFrame(picFrame);
   }
   /* switched to still while some were moving: put every one on its still now */
@@ -2165,7 +2226,7 @@ window.FM = window.FM || {};
     if (picRaf) { cancelAnimationFrame(picRaf); picRaf = 0; }
     mounted.forEach(function (ref) {
       const cv = ref.deref(); if (!cv || !cv._fxPic) return;
-      const P = pic.byType.get(cv._fxPic); if (P && P.draw) picShow(cv, P);
+      const P = pic.byType.get(cv._fxPic); if (P && picReady(P)) picShow(cv, P);   // a building one gets its still when built
     });
   }
   function picStop() {
@@ -2188,7 +2249,7 @@ window.FM = window.FM || {};
   }
   function picInfo() {
     const ids = [];
-    pic.byType.forEach(function (P) { ids.push({ id: P.id, type: P.type, file: P.file, made: !!P.draw }); });
+    pic.byType.forEach(function (P) { ids.push({ id: P.id, type: P.type, file: P.file, made: picReady(P), building: !!P.building, steps: P.steps }); });
     return { state: pic.state, error: pic.error, base: pic.base, count: pic.byType.size, ids: ids, unmapped: pic.unmapped.slice(),
       held: pic.held.slice(), heldWhy: Object.assign({}, PIC_HELD), broken: Object.assign({}, pic.broken), failedFiles: pic.failedFiles.slice(),
       made: pic.made, visible: picVis.size, animating: !!picRaf, still: picStill(), frames: picFrameN };
@@ -2199,6 +2260,7 @@ window.FM = window.FM || {};
       if (P.broken) { out[P.id] = { broken: pic.broken[P.id] }; return; }
       const m0 = now();
       if (!P.draw) picMake(P);
+      picFinish(P);   // the bench needs it now: a staged build runs to the end here (never on the menu's frame path)
       const mk = now() - m0;
       if (!P.draw) { out[P.id] = { broken: pic.broken[P.id] }; return; }
       const t0 = now();
@@ -2384,5 +2446,18 @@ window.FM = window.FM || {};
     _picsHold: function (id, why) { if (why) PIC_HELD[String(id)] = String(why); else delete PIC_HELD[String(id)]; },
     /* The picture page's __fxBench, in the app: ms per draw at the tile's real size, and what make() cost. */
     _picsBench: function (n) { return picBench(n || 20); },
+    /* One picture's state, cheap enough to read inside a draw: built, still building, and how many build steps it took. */
+    _picOf: function (type) {
+      const P = pic.byType.get(type);
+      return P ? { made: picReady(P), building: !!P.building, steps: P.steps, broken: !!P.broken } : null;
+    },
+    /* What picture work (building in picMakePump, drawing in picFrame) cost per frame since the last reset: the largest frame
+       in ms (max), the largest frame of staged building alone (staged: the pictures with draw.step: make, steps, first draw)
+       and how many frames did any. _picsWork(true) reads, then resets. */
+    _picsWork: function (reset) {
+      const r = { max: +picWorkStat.max.toFixed(2), staged: +picWorkStat.smax.toFixed(2), frames: picWorkStat.frames };
+      if (reset) { picWorkStat.ts = -1; picWorkStat.acc = 0; picWorkStat.sacc = 0; picWorkStat.max = 0; picWorkStat.smax = 0; picWorkStat.frames = 0; }
+      return r;
+    },
   };
 })(window.FM);

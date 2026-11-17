@@ -12,3 +12,17 @@ Open http://localhost:8791/truth.html, then `await __truthReady`. It runs the re
 `await __realShot(type, paramsList, photoKey, ts, name)`: one row per param set ({} = defaults), one cell per t. Progress sweeps unless the set names it. {_text:'...'} changes the words on a text layer.
 Param keys: `FM.fxRegistry.makeInstance('blinds').params`. Tiles bolts and cube are effect types lightning and cube3d (__real and __realShot take either).
 Many effects do not move at their defaults (duotone, vignette, shockwave, twirl): if a tile animates there, the animation is ours, not the effect's.
+
+## A picture that prepares a lot in make() is staged (17 Nov, #1253)
+Soften Skin, Sharpen, Temporal Denoise and Lens Blur painted or filtered their pixels inside make(), and on the laptop that took 0.62,
+0.34, 0.29 and 0.36 s, all in one frame. Opening the Blur menu froze for about 1.6 s. They now prepare those pixels in a generator:
+`stage(gen)` (defined at the top of tiles-g2.js, tiles-c10.js and tiles-h4.js) runs it all at once with `finish()`, or a few
+milliseconds at a time with `step(ms)`, which returns true once it is done. make() returns its draw function with `draw.step`.
+- **An app that knows draw.step** calls it between frames and shows the picture once it returns true. Measured on the laptop, the
+  longest single step is 23 ms (one 160 x 8000 read-back in Temporal Denoise) and most are under 10 ms.
+- **Every other caller** (this page, truth.html, the suite's oracle) just draws. The first draw finishes the build there and then,
+  exactly as make() used to.
+- **The pixels did not change:** probe-fast.html (logger scratchpad, fx10/site) compared every frame and both _proof() arrays
+  against the old files at 160 and 192 px, in both ways of building, and found no differing bytes.
+- **Rule for a new picture:** if make() prepares more than about 10 ms of work, write it as a generator with a `yield` at least every
+  few milliseconds and hand back `draw.step`. Generator loops run slower than plain ones (no on-stack optimisation), so pause often.

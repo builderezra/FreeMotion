@@ -59,6 +59,7 @@ window.FM = window.FM || {};
           if (pp.toggle) return pp.key + '(0|1, def ' + pp.def + ')';
           if (pp.options) return pp.key + '(modes: ' + pp.options.map(function (o) { return (Array.isArray(o) ? o[0] + '=' + o[1] : o); }).join(', ') + ', def ' + pp.def + ')';
           if (pp.swatch) return pp.key + '(colour hex, def ' + pp.def + ')';   // a colour row inside params (#482 polish 1.5, Faded Film's Fade colour) has no range either
+          if (pp.layerPick) return pp.key + '(layer id)';   // a layer picker inside params (#1246 U11, the Cube's faces): no range and no default; ai-ops stores the id (its type 'layer' branch)
           return pp.key + '(' + pp.min + '..' + pp.max + ', def ' + pp.def + ')';
         }).join(', ');
       } else if (e.options) {

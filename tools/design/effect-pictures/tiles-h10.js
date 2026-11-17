@@ -24,14 +24,24 @@ const ss=(a,b,x)=>{ const t=clamp((x-a)/(b-a)); return t*t*(3-2*t); };
 const set=(o,r,g,b)=>{ o[0]=r; o[1]=g; o[2]=b; };
 const mix=(o,r,g,b,k)=>{ o[0]+=(r-o[0])*k; o[1]+=(g-o[1])*k; o[2]+=(b-o[2])*k; };
 const mul=(o,m)=>{ o[0]*=m; o[1]*=m; o[2]*=m; };
+/* A picture that prepares a lot in make() prepares it as a generator instead (#1253, 17 Nov; HARNESS.md "is staged"). stage(gen) runs
+   it to the end at once (finish) or a few milliseconds at a time (step(ms), true once it is done). make() hands back its draw function
+   with draw.step, so the app builds it between frames; a draw before it is done finishes it there and then, which is exactly what
+   make() used to do. Every yield is only a place the work may pause: no number changes. */
+const stage=gen=>{ let done=false, val, last='';
+  const run=ms=>{ if(done) return true; const t0=performance.now();
+    for(;;){ const r=gen.next(); if(r.done){ done=true; val=r.value; return true; } last=r.value; if(performance.now()-t0>=ms) return false; } };
+  return { step:ms=>run(Math.max(0,+ms||0)), finish:()=>{ run(Infinity); return val; }, done:()=>done, last:()=>last }; };
+const drain=g=>{ let r; do r=g.next(); while(!r.done); return r.value; };
 /* a picture from a per-pixel painter (u, v in 0..1, v down), with a little film grain */
-function plate(S,seed,fn){
+function* plateG(S,seed,fn){
   const C=document.createElement('canvas'); C.width=C.height=S;
   const g=C.getContext('2d'), im=g.createImageData(S,S), d=im.data, o=[0,0,0];
   let i=0;
-  for(let y=0;y<S;y++){ const v=(y+.5)/S; for(let x=0;x<S;x++){ const u=(x+.5)/S; fn(u,v,o); const gr=(h2(x,y,seed)-.5)*6; d[i]=o[0]+gr; d[i+1]=o[1]+gr; d[i+2]=o[2]+gr; d[i+3]=255; i+=4; } }
+  for(let y=0;y<S;y++){ const v=(y+.5)/S; for(let x=0;x<S;x++){ const u=(x+.5)/S; fn(u,v,o); const gr=(h2(x,y,seed)-.5)*6; d[i]=o[0]+gr; d[i+1]=o[1]+gr; d[i+2]=o[2]+gr; d[i+3]=255; i+=4; } if((y&3)===3) yield 'plate'; }
   g.putImageData(im,0,0); return C;
 }
+function plate(S,seed,fn){ return drain(plateG(S,seed,fn)); }
 
 /* ---- the six layers ---- */
 /* FRONT (this layer): a sea cliff under an overcast sky, long swells, white water at the cliff foot */
@@ -154,12 +164,17 @@ function lagoon(u,v,o){
 }
 const TEX=256;   /* painted once per page (about a third of a second), then shared by every make() */
 let ART=null;
-function faceArt(S){
+function* faceArtG(S){
   S=S||TEX;
   if(ART&&ART.S===S) return ART.faces;
-  const faces={front:plate(S,201,coast),back:plate(S,202,peaksOf(S)),right:plate(S,203,dunes),left:plate(S,204,cityOf(S)),top:plate(S,205,forest),bottom:plate(S,206,lagoon)};
+  const faces={};
+  faces.front=(yield* plateG(S,201,coast)); faces.back=(yield* plateG(S,202,peaksOf(S))); faces.right=(yield* plateG(S,203,dunes));
+  faces.left=(yield* plateG(S,204,cityOf(S))); faces.top=(yield* plateG(S,205,forest)); faces.bottom=(yield* plateG(S,206,lagoon));
   ART={S,faces}; return faces;
 }
+function faceArt(S){ return drain(faceArtG(S)); }
+let artStage=null;
+const artSt=()=>artStage||(artStage=stage(faceArtG(TEX)));
 
 /* ---- Rotate Y, keyed: what the real effect is given (cubeParams) and what the tile evaluates, the app's own way ---- */
 const KEYS=[{t:0,v:0},{t:.3,v:45,e:'easeOut'},{t:1.1,v:45,e:'linear'},{t:1.7,v:135,e:'easeInOut'},{t:2.5,v:135,e:'linear'},{t:3.1,v:225,e:'easeInOut'},{t:3.9,v:225,e:'linear'},{t:4.5,v:315,e:'easeInOut'},{t:5.3,v:315,e:'linear'},{t:5.6,v:360,e:'easeIn'}];
@@ -187,11 +202,12 @@ window.FX_TILES.push({ id:'cube', name:'Cube', section:'3D', redrawn:true, still
   cubeParams:{rotx:RX,roty:{kf:KEYS,loopMode:'cycle'},rotz:0,size:SIZE,shading:SHADING,light:53,persp:50},
   cubeBg:NAVY, faceArt, TEX,
   make(px){
-    const art=faceArt(TEX), tex=ORDER.map(k=>art[k]), n=MESH.V.length;
+    const stg=artSt(), n=MESH.V.length; let tex=null;
     const P=new Array(n), X3=new Float64Array(n), Y3=new Float64Array(n), Z3=new Float64Array(n);
     const cX=Math.cos(RX*Math.PI/180), sX=Math.sin(RX*Math.PI/180), R=px/2*SIZE/100, cx=px/2, cy=px/2, Lx=.42, Ly=-.55, Lz=.72;
     const sc=px/100;
-    return (c,t)=>{
+    const draw=(c,t)=>{
+      if(!tex){ const art=stg.finish(); tex=ORDER.map(k=>art[k]); }
       const deg=rotY(t), ry=deg*Math.PI/180, cY=Math.cos(ry), sY=Math.sin(ry);
       c.setTransform(1,0,0,1,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over'; c.filter='none';
       c.fillStyle=NAVY; c.fillRect(0,0,px,px);
@@ -225,6 +241,8 @@ window.FX_TILES.push({ id:'cube', name:'Cube', section:'3D', redrawn:true, still
       c.fillStyle=TEAL; c.fillRect(DX+Math.cos(r)*DR-1,DY+Math.sin(r)*DR-1,2,2);
       c.setTransform(1,0,0,1,0,0);
     };
+    draw.step=stg.step; draw.stage=stg;
+    return draw;
   }
 });
 })();

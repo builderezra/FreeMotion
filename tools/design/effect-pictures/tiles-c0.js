@@ -17,6 +17,15 @@ const n2=(x,y,s)=>{ const xi=Math.floor(x), yi=Math.floor(y), xf=x-xi, yf=y-yi, 
 const fbm=(x,y,s,o)=>{ let f=0,a=1,t=0; for(let i=0;i<o;i++){ f+=a*n2(x,y,s+i*31); t+=a; x*=2.07; y*=2.07; a*=.5; } return f/t; };
 /* an RGBA byte array as a canvas (written, never read back) */
 const toCanvas=(W,H,d)=>{ const [C,x]=canvasN(W,H), im=x.createImageData(W,H); im.data.set(d); x.putImageData(im,0,0); return C; };
+/* A picture that prepares a lot in make() prepares it as a generator instead (#1253, 17 Nov; HARNESS.md "is staged"). stage(gen) runs
+   it to the end at once (finish) or a few milliseconds at a time (step(ms), true once it is done). make() hands back its draw function
+   with draw.step, so the app builds it between frames; a draw before it is done finishes it there and then, which is exactly what
+   make() used to do. Every yield is only a place the work may pause: no number changes. */
+const stage=gen=>{ let done=false, val, last='';
+  const run=ms=>{ if(done) return true; const t0=performance.now();
+    for(;;){ const r=gen.next(); if(r.done){ done=true; val=r.value; return true; } last=r.value; if(performance.now()-t0>=ms) return false; } };
+  return { step:ms=>run(Math.max(0,+ms||0)), finish:()=>{ run(Infinity); return val; }, done:()=>done, last:()=>last }; };
+const drain=g=>{ let r; do r=g.next(); while(!r.done); return r.value; };
 const smooth=(e0,e1,v)=>{ const s=v<=e0?0:v>=e1?1:(v-e0)/(e1-e0); return s*s*(3-2*s); };
 /* a sheet that travels and lands a touch past its mark, then settles back (ease-out-back) */
 const backOut=p=>{ p=clamp(p); const c1=1.5, c3=c1+1; return 1+c3*Math.pow(p-1,3)+c1*Math.pow(p-1,2); };
@@ -125,6 +134,9 @@ window.FX_TILES.push(
     const LINKS=[]; { let q=RING.slice(), h=ANG-.25; for(let k=0;k<46;k++){ h+=.06*Math.sin(k*.21)-.004; const s=[Math.cos(h),Math.sin(h)]; const c=[q[0]+s[0]*.04,q[1]+s[1]*.04]; LINKS.push([c,s,k&1]); q=[q[0]+s[0]*.075,q[1]+s[1]*.075]; } }
     const chainD=p=>{ let d=1e9; for(const [c,s,odd] of LINKS){ if(Math.abs(p[0]-c[0])>.12||Math.abs(p[1]-c[1])>.12) continue; const a=[c[0]-s[0]*.03,c[1]-s[1]*.03], b=[c[0]+s[0]*.03,c[1]+s[1]*.03];
       d=Math.min(d,odd?capD(p,a,b,.011):Math.abs(capD(p,a,b,.022))-.009); } return d; };
+    const PW=80, PH=60;   /* the parade's size: the draw reads it too, so it lives outside the generator */
+    /* the seabed and its twelve graded frames depend on nothing in px: a generator, a row or a step at a time (stage, above) */
+    const build=function*(){
     for(let y=0;y<H;y++){ const v=(y+.5)/H, Z=1/(v-vh), pxu=W/(Z*K), pyu=H/(Z*Z), sc=Math.sqrt(pxu*pyu);
       for(let x=0;x<W;x++){ const u=(x+.5)/W, j=y*W+x, X=(u-.5)*Z*K, p=[X,Z];
         /* sand: current-laid ripples and darker patches */
@@ -139,24 +151,30 @@ window.FX_TILES.push(
           r=lerp(r,ac[0]*k,cv); g=lerp(g,ac[1]*k,cv); bl=lerp(bl,ac[2]*k,cv); }
         J[j*3]=r; J[j*3+1]=g; J[j*3+2]=bl; SA[j]=X; SB[j]=Z; CW[j]=1;
         for(let c=0;c<3;c++) TR[j*3+c]=Math.exp(-BETA[c]*Z*1.15*1.1);
-      } }
+      }
+      yield 'seabed'; }
     /* caustics: the bright net the surface throws on the floor; the phase only ever turns whole multiples, so 12 steps make a seamless cycle */
     const caus=(a,b,ph)=>{ const s=Math.sin(a*27+2*Math.sin(b*21+ph)+ph)+.9*Math.sin(b*25-1.7*Math.sin(a*23-2*ph)-ph), q=clamp(1-Math.abs(s)*.8); return q*q*q*q; };
-    const PW=80, PH=60;
     const parade=px8=>{ const cnt=new Float32Array(3*PW*PH), o=new Uint8ClampedArray(3*PW*PH*4);
       for(let y=0;y<H;y++) for(let x=0;x<W;x++){ const j=(y*W+x)*4, col=(x*PW/W)|0; for(let ch=0;ch<3;ch++){ const row=Math.round((255-px8[j+ch])/255*(PH-1)); cnt[row*3*PW+ch*PW+col]++; } }
       for(let i=0;i<cnt.length;i++){ const a=1-Math.exp(-cnt[i]/14); o[i*4]=238; o[i*4+1]=242; o[i*4+2]=248; o[i*4+3]=255*a; }
       return toCanvas(3*PW,PH,o); };
     const frames=[];
     for(let f=0;f<NF;f++){ const ph=f/NF*TAU, raw=new Uint8ClampedArray(N*3);
-      for(let j=0;j<N;j++){ const L=Math.min(1.34,.74+.62*caus(SA[j],SB[j],ph)*CW[j]+(1-CW[j])*.3);
+      for(let j=0;j<N;j++){ if((j&8191)===8191) yield 'frame'; const L=Math.min(1.34,.74+.62*caus(SA[j],SB[j],ph)*CW[j]+(1-CW[j])*.3);
         for(let k=0;k<3;k++){ const t=TR[j*3+k], val=J[j*3+k]*L*t+VEIL[k]*(1-t); raw[j*3+k]=val*.72+38+(ih(j,k,f)-.5)*3; } }
+      yield 'frame';
       const lut=agLUT(raw,W,H,.01), a8=new Uint8ClampedArray(N*4), g8=new Uint8ClampedArray(N*4);
+      yield 'frame';
       for(let j=0;j<N;j++){ for(let k=0;k<3;k++){ a8[j*4+k]=raw[j*3+k]; g8[j*4+k]=lut[k][raw[j*3+k]]; } a8[j*4+3]=255; g8[j*4+3]=255; }
-      frames.push({raw:toCanvas(W,H,a8),gr:toCanvas(W,H,g8),pr:parade(a8),pg:parade(g8)}); }
+      yield 'frame';
+      const fo={raw:toCanvas(W,H,a8),gr:toCanvas(W,H,g8)}; yield 'frame';
+      fo.pr=parade(a8); fo.pg=parade(g8); frames.push(fo); yield 'frame'; }
+    return frames; };
+    const stg=stage(build());
     const PY=60.5, PHU=28, PWU=29.34, GAP=3;
-    return (c,t)=>{
-      const u=mod(t,P), fr=Math.floor(u*25), on=u>=1.28&&u<3.4, F=frames[Math.floor(u*12)%NF];
+    const draw=(c,t)=>{
+      const frames=stg.finish(), u=mod(t,P), fr=Math.floor(u*25), on=u>=1.28&&u<3.4, F=frames[Math.floor(u*12)%NF];
       reset(c,px); c.fillStyle='#000'; c.fillRect(0,0,100,100);
       c.drawImage(on?F.gr:F.raw,3,3,94,53);
       for(let ch=0;ch<3;ch++){ const x0=3+ch*(PWU+GAP);
@@ -167,6 +185,8 @@ window.FX_TILES.push(
       c.font=MONO(4.6); c.fillStyle=TEXT; c.textAlign='left'; c.textBaseline='middle'; c.fillText('00:00:'+p2(Math.floor(tc/25)%60)+':'+p2(tc%25),3,95.2);
       if(on) tab(c,83.6,91.7,'AUTO',4.6,YEL,INK); else { c.font=MONO(4.6); c.fillStyle=DIM; c.textAlign='right'; c.fillText('BYPASS',97,95.2); }
     };
+    draw.step=stg.step; draw.stage=stg;
+    return draw;
   } },
 
 /* BLEACH BYPASS. Graded still. A terrace of painted stucco houses made here, sun from the left: pink, primrose, mint and powder blue,

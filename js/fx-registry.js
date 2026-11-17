@@ -302,7 +302,12 @@ window.FM = window.FM || {};
       def.params.forEach(function (pp) {
         // `toggle` is a tick box, not a two-button segment: it reads as ON/OFF rather than as a choice
         // between two equal options, which matters when the thing it switches on overrides other controls.
-        if (pp.toggle) out.push({ key: pp.key, label: pp.label, type: 'toggle', default: pp.def, legacy: pp.legacy, note: pp.note || '', keyframable: false });
+        /* #1246 U11: A LAYER PICKER INSIDE `params` (Cube's faces). The def-level `layer: true` can make only the one key, `source`;
+           `layerPick` gives a picker its own key. The same row as `source` (type 'layer': the inspector's picker, the load sanitiser's
+           string check, the AI vocabulary), and FM.fxRefKeys (js/scene.js) hands every remap site its key. Empty = the effect's own
+           choice for "nothing picked", named by selfLabel. */
+        if (pp.layerPick) out.push({ key: pp.key, label: pp.label, type: 'layer', default: '', keyframable: false, selfLabel: pp.selfLabel || 'None' });
+        else if (pp.toggle) out.push({ key: pp.key, label: pp.label, type: 'toggle', default: pp.def, legacy: pp.legacy, note: pp.note || '', keyframable: false });
         /* A COLOUR ROW INSIDE `params` (#482 polish 1.5, Faded Film's Fade colour). The def-level colour flags can only make
            keys named color…color4; `swatch` gives a colour its own key. It is the same row as every effect colour (type
            'color', keyframable), so the inspector, the load sanitiser (safeColor) and the AI vocabulary need nothing new. */
@@ -326,7 +331,7 @@ window.FM = window.FM || {};
         // renderer's fallback, which for a param added to an existing effect is the value that effect
         // used to hardcode — not the new schema default. Without this the panel shows Edge Glow's
         // Radius as 8 on an instance the kernel is drawing at 3.
-        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, q: pp.q, needs: pp.needs || '', note: pp.note || '', follows: pp.follows || '', alsoGate: pp.alsoGate, adjNo: pp.adjNo ? 1 : 0, showWhen: pp.showWhen, retired: pp.retired, followScale: pp.followScale });   // alsoGate: #482 6.3 review (a second control that switches this one off)   // note: queue 904 — Tile Grid's '0 = same as columns' was dropped here, so a new grid read 'Rows 0'   // liveAbove: queue 904   // needs: queue 904   // adjNo: #482 15.2 (see deadRowWhy)   // showWhen: #482 15.5 (see rowShown)
+        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, q: pp.q, needs: pp.needs || '', note: pp.note || '', follows: pp.follows || '', alsoGate: pp.alsoGate, liveAlso: pp.liveAlso, liveAlsoText: pp.liveAlsoText, adjNo: pp.adjNo ? 1 : 0, showWhen: pp.showWhen, retired: pp.retired, followScale: pp.followScale });   // alsoGate: #482 6.3 review (a second control that switches this one off)   // note: queue 904 — Tile Grid's '0 = same as columns' was dropped here, so a new grid read 'Rows 0'   // liveAbove: queue 904   // needs: queue 904   // adjNo: #482 15.2 (see deadRowWhy)   // showWhen: #482 15.5 (see rowShown)
         /* `follows` on a SLIDER (#482 polish 2.1, Wiggle's Vertical amount) is the colour rule of polish 1.2: ABSENT, the value
            is the slider it names. makeInstance and the render-time fill both skip it, and the inspector shows the followed
            value until he moves this one — this copy is a whitelist, so a field not named here would simply not exist. */
@@ -522,7 +527,7 @@ window.FM = window.FM || {};
     grid: 'Draws a grid of lines over the layer.',
     dots: 'Covers the layer in a regular dot pattern.',
     stripes: 'Covers the layer in even stripes.',
-    clouds: 'Generates soft drifting cloud noise — a sky, a fog bank, or a mask to drive something else.',
+    clouds: 'Draws drifting clouds over the picture, with clear sky between them: Cover sets how much is cloud, and the undersides are shaded. Look Fog is a soft grey haze over everything instead.',   // #1246 clause 5
     rays: 'Fires straight rays out of a point you place, like light through a gap.',
     blocknoise: 'Random rectangular blocks of corruption — the look of a dropped signal.',
     starfield: 'Scatters stars across the frame.',
@@ -616,7 +621,7 @@ window.FM = window.FM || {};
     hollowbox3d: 'A box with no front, so you can see inside it.',
     axiscross3d: 'Three bars crossing at right angles — a 3D plus sign, good as a scene axis.',
     /* the back a colour or see-through: #966 opts10 */ pagecurl: 'Peels a corner of the layer up like a page turning, with the back lit — the picture reversed, a plain paper colour, or see-through.',
-    fliplayer: 'Turns the layer over like a card, horizontally, vertically or both. At 180° it is a mirror; keyframe Flip from 0 to 180 to watch it turn.',   // #482 polish 14.7 (C29)
+    fliplayer: 'Turns the layer over like a card, horizontally, vertically or both. At 180° it is a mirror; keyframe Flip from 0 to 180 to watch it turn. Set Back to Another layer and the card turns over to a different picture.',   // #482 polish 14.7 (C29); #1246 U10
     rasterextrude: 'Extrudes the layer back into depth, so flat art becomes a solid slab with shaded sides — in any colour, and tapering away if you like.',   // #966 opts6: Side colour and Taper
   };
 

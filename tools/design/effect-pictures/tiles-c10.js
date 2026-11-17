@@ -15,6 +15,17 @@ const reset=(c,px)=>{ c.setTransform(px/100,0,0,px/100,0,0); c.globalAlpha=1; c.
 const sheet=(w,h)=>{ const C=document.createElement('canvas'); C.width=w; C.height=h===undefined?w:h; return [C,C.getContext('2d')]; };
 /* a canvas that is drawn once and read once: kept in memory, where the one getImageData costs a tenth of a GPU read-back */
 const sheetR=(w,h)=>{ const C=document.createElement('canvas'); C.width=w; C.height=h===undefined?w:h; return [C,C.getContext('2d',{willReadFrequently:true})]; };
+/* A picture that prepares a lot in make() prepares it as a generator instead (#1253, 17 Nov: on the laptop Soften Skin took 0.6 s,
+   Lens Blur 0.36 s, Sharpen 0.34 s and Temporal Denoise 0.29 s, each inside one frame). stage(gen) runs it to the end at once
+   (finish) or a few milliseconds at a time (step(ms), true once it is done). make() hands back its draw function with draw.step, so
+   the app can build it between frames and opening a menu never freezes; a draw before it is done finishes it there and then, which
+   is exactly what make() used to do, so every other caller (the picture page, truth.html, the suite's oracle) gets the same pixels.
+   Every yield is only a place the work may pause: no number changes. */
+const stage=gen=>{ let done=false, val, last='';
+  const run=ms=>{ if(done) return true; const t0=performance.now();
+    for(;;){ const r=gen.next(); if(r.done){ done=true; val=r.value; return true; } last=r.value; if(performance.now()-t0>=ms) return false; } };
+  return { step:ms=>run(Math.max(0,+ms||0)), finish:()=>{ run(Infinity); return val; }, done:()=>done, last:()=>last }; };
+const drain=g=>{ let r; do r=g.next(); while(!r.done); return r.value; };
 const settle=p=>p<=0?0:p>=1?1:1-Math.pow(2,-8.5*p)*Math.cos(p*9.5);
 function tab(c,x,y,txt,s,bg,fg){ c.font=MONO(s); const w=c.measureText(txt).width; c.fillStyle=bg; c.fillRect(x,y,w+s*.9,s*1.5); c.fillStyle=fg; c.textBaseline='middle'; c.textAlign='left'; c.fillText(txt,x+s*.45,y+s*.8); return w+s*.9; }
 function put(W,H,data){ const [C,x]=sheet(W,H), im=x.createImageData(W,H); im.data.set(data); x.putImageData(im,0,0); return C; }
@@ -78,12 +89,16 @@ window.FX_TILES.push(
       if(!rim) leg(0); arm(1);
       x.beginPath(); x.arc(X+1,top+3.6,3.4,0,TAU); x.fill();
     };
+    /* everything below depends on nothing in px: a generator, so it can be built between frames (stage, above) */
+    const build=function*(){
     const [BG,bg]=sheet(N); bg.setTransform(S,0,0,S,0,0); scene(bg);
     const [AT,at]=sheetR(N,N*NF);
     for(let f=0;f<NF;f++){ const X=walkX(f), ph=f/NF*TAU*3.5;
       at.setTransform(1,0,0,1,0,0); at.drawImage(BG,0,f*N);
-      at.setTransform(S,0,0,S,0,f*N); at.save(); at.translate(-.5,-.4); walker(at,X,ph,'#7a4e2c',true); at.restore(); walker(at,X,ph,'#0d0b0a'); }
+      at.setTransform(S,0,0,S,0,f*N); at.save(); at.translate(-.5,-.4); walker(at,X,ph,'#7a4e2c',true); at.restore(); walker(at,X,ph,'#0d0b0a'); if((f&7)===7) yield 'atlas'; }
+    yield 'atlas';
     const src=at.getImageData(0,0,N,N*NF).data;
+    yield 'read';
     const n=N*N, out=new Uint8ClampedArray(n*4*NF), prev=new Float32Array(n*3), prevC=new Float32Array(n*3), cur=new Float32Array(n*3);
     const bc=new Float32Array(GW*GW), bh=new Float32Array(GW*GW), mk=new Float32Array(GW*GW);
     const nl=new Float32Array(GN*GN), nb=new Float32Array(GN*GN), nr=new Float32Array(GN*GN);
@@ -100,26 +115,31 @@ window.FX_TILES.push(
     for(let s=-WARM;s<NF;s++){
       const f=(s+NF)%NF, o=f*n*4, R=rng(500+f);
       for(let i=0;i<GN*GN;i++){ nl[i]=(R()+R()-1)*2.449*32; nb[i]=(R()+R()-1)*2.449*6; nr[i]=(R()+R()-1)*2.449*6; }
-      up(nl,FL); up(nb,FB); up(nr,FC);
+      up(nl,FL); up(nb,FB); up(nr,FC); yield 'denoise';
       for(let y=0;y<N;y++){ for(let x=0;x<N;x++){ const j=y*N+x, i=o+j*4, L=FL[j], cb=FB[j], cr=FC[j];
         let v=src[i]+L+1.402*cr; cur[j*3]=v<0?0:v>255?255:Math.round(v);
         v=src[i+1]+L-.344*cb-.714*cr; cur[j*3+1]=v<0?0:v>255?255:Math.round(v);
         v=src[i+2]+L+1.772*cb; cur[j*3+2]=v<0?0:v>255?255:Math.round(v); } }
+      yield 'denoise';
       if(s>=0) for(let y=0;y<N;y++) for(let x=0;x<SPLIT;x++){ const j=y*N+x, i=o+j*4; out[i]=cur[j*3]; out[i+1]=cur[j*3+1]; out[i+2]=cur[j*3+2]; out[i+3]=255; }
       if(s>-WARM){
         bc.fill(0); bh.fill(0);
         for(let y=0;y<N;y++){ const by=BI[y]*GW; for(let x=0;x<N;x++){ const j=y*N+x, i=o+j*4, b=by+BI[x]; bc[b]+=.299*src[i]+.587*src[i+1]+.114*src[i+2]; bh[b]+=.299*prevC[j*3]+.587*prevC[j*3+1]+.114*prevC[j*3+2]; } }
-        for(let b=0;b<GW*GW;b++){ const dl=Math.abs(bc[b]-bh[b])/(BW*BW); mk[b]=dl>=THR?0:1-dl/THR; }
+        for(let b=0;b<GW*GW;b++){ const dl=Math.abs(bc[b]-bh[b])/(BW*BW); mk[b]=dl>=THR?0:1-dl/THR; } yield 'denoise';
         for(let y=0;y<N;y++){ const y0=I0[y]*GW, y1=I1[y]*GW, fy=FW[y];
           for(let x=0;x<N;x++){ const x0=I0[x], x1=I1[x], fx=FW[x], w=(mk[y0+x0]*(1-fx)+mk[y0+x1]*fx)*(1-fy)+(mk[y1+x0]*(1-fx)+mk[y1+x1]*fx)*fy, a=ALPHA*w, j=y*N+x, i=o+j*4;
-            for(let k=0;k<3;k++){ const q=j*3+k; cur[q]=Math.round(cur[q]+(prev[q]-cur[q])*a); prevC[q]=prevC[q]+(src[i+k]-prevC[q])*(1-a); } } }
+            for(let k=0;k<3;k++){ const q=j*3+k; cur[q]=Math.round(cur[q]+(prev[q]-cur[q])*a); prevC[q]=prevC[q]+(src[i+k]-prevC[q])*(1-a); } } if((y&31)===31) yield 'denoise'; }
       } else { for(let j=0;j<n;j++) for(let k=0;k<3;k++) prevC[j*3+k]=src[o+j*4+k]; }
       prev.set(cur);
       if(s>=0) for(let y=0;y<N;y++) for(let x=SPLIT;x<N;x++){ const j=y*N+x, i=o+j*4; out[i]=cur[j*3]; out[i+1]=cur[j*3+1]; out[i+2]=cur[j*3+2]; out[i+3]=255; }
+      yield 'denoise';
     }
     const [OUT,ox]=sheet(N,N*NF), oim=ox.createImageData(N,N*NF); oim.data.set(out); ox.putImageData(oim,0,0);
-    return (c,t)=>{
-      const f=Math.min(NF-1,Math.floor(mod(t,P)*FPS));
+    return OUT;
+    };
+    const st=stage(build());
+    const draw=(c,t)=>{
+      const OUT=st.finish(), f=Math.min(NF-1,Math.floor(mod(t,P)*FPS));
       c.setTransform(1,0,0,1,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over'; c.imageSmoothingEnabled=true;
       c.drawImage(OUT,0,f*N,N,N,0,0,px,px);
       reset(c,px);
@@ -127,6 +147,8 @@ window.FX_TILES.push(
       tab(c,3,92,'OFF',4.4,COAL,DIM);
       c.font=MONO(4.4); const w=c.measureText('ON').width+4.4*.9; tab(c,97-w,92,'ON',4.4,COAL,TEXT);
     };
+    draw.step=st.step; draw.stage=st;
+    return draw;
   } },
 
 /* UNSHARP MASK. F, viewer overlay: a 400% view of a soft-focus watch dial, 270 px for 270 project px, so Radius 3 is 3 px here as it is
@@ -207,17 +229,22 @@ window.FX_TILES.push(
       const hub=[]; for(let i=0;i<7;i++){ const a=rot+.4+i*TAU/7; hub.push([HX+Math.cos(a)*6.6,HY+Math.sin(a)*6.6]); } poly(x,hub);
     };
     /* the streak plate: the fan at rest on a plate wide enough to cover the frame at any turn, its centre on the hub */
+    const build=function*(){
     const [,rp]=sheetR(NR); rp.setTransform(M,0,0,M,M*(PAD-HX),M*(PAD-HY)); fan(rp,0);
     const s=rp.getImageData(0,0,NR,NR).data, W4=NR*4, cx=NR/2, cy=NR/2;
-    const rays=amt=>{ const o=new Uint8ClampedArray(NR*NR*4), st=.16+.74*amt, norm=st/STEPS;
-      for(let y=0;y<NR;y++) for(let x=0;x<NR;x++){ const i=y*W4+x*4, dx=cx-x, dy=cy-y; let ar=0,ag=0,ab=0,ws=0;
+    yield 'plate';
+    const rays=function*(amt){ const o=new Uint8ClampedArray(NR*NR*4), st=.16+.74*amt, norm=st/STEPS;
+      for(let y=0;y<NR;y++){ for(let x=0;x<NR;x++){ const i=y*W4+x*4, dx=cx-x, dy=cy-y; let ar=0,ag=0,ab=0,ws=0;
         for(let k=1;k<=STEPS;k++){ const f=k/STEPS*st; let ix=(x+dx*f)|0, iy=(y+dy*f)|0; ix=ix<0?0:ix>NR-1?NR-1:ix; iy=iy<0?0:iy>NR-1?NR-1:iy;
           const si=iy*W4+ix*4, r=s[si], g=s[si+1], b=s[si+2], lu=(r*.299+g*.587+b*.114)*(s[si+3]/255), dec=1-k/(STEPS+1); let bw=lu/255; bw*=bw; const wt=bw*dec; ar+=r*wt; ag+=g*wt; ab+=b*wt; ws+=wt; }
         if(ws>0){ o[i]=Math.min(255,ar*norm); o[i+1]=Math.min(255,ag*norm); o[i+2]=Math.min(255,ab*norm); } o[i+3]=255; }
+        if((y&3)===3) yield 'rays'; }
       return put(NR,NR,o); };
-    const RAYS=AM.map(rays);
-    return (c,t)=>{
-      const f=Math.floor(mod(t,P)*FPS), q=f/FPS, rot=(f%36)*2*TAU/360;
+    const RAYS=[]; for(const a of AM){ const r=(yield* rays(a)); RAYS.push(r); }
+    return RAYS; };
+    const stg=stage(build());
+    const draw=(c,t)=>{
+      const RAYS=stg.finish(), f=Math.floor(mod(t,P)*FPS), q=f/FPS, rot=(f%36)*2*TAU/360;
       const k=q<.6?0:q<.725?1:q<.85?2:q<3.6?3:q<3.725?2:q<3.85?1:0;
       reset(c,px); c.save(); c.beginPath(); c.rect(0,0,100,100); c.clip();
       fan(c,rot);
@@ -225,6 +252,8 @@ window.FX_TILES.push(
       c.restore(); reset(c,px);
       tab(c,3,91.6,'AMOUNT '+(k?AM[k-1].toFixed(2):'0.00'),4.4,VERM,INK);
     };
+    draw.step=stg.step; draw.stage=stg;
+    return draw;
   } },
 
 /* CARTOON. A, graded still: an electric guitar hung on a slate wall, drawn and lit here (sunburst carved top, chrome, gold knobs), then

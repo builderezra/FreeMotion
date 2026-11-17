@@ -525,7 +525,8 @@ window.FM = window.FM || {};
          * Cleared only when it does NOT resolve here, so pasting within the same project — the common
          * case — still keeps the matte it was pointing at. */
         usable.forEach(fx => {
-          if (fx && fx.params && fx.params.source && !FM.layerById(FM.scene, fx.params.source)) fx.params.source = '';
+          if (FM.eachFxRef) FM.eachFxRef(fx, (k, v) => { if (!FM.layerById(FM.scene, v)) fx.params[k] = ''; });   // every layer ref (#1246 U11)
+          else if (fx && fx.params && fx.params.source && !FM.layerById(FM.scene, fx.params.source)) fx.params.source = '';
         });
         if (from !== null && Number.isFinite(at) && FM.shiftFxKeyframes) FM.shiftFxKeyframes(usable, at - from);   // queue 690
         return usable;
@@ -1375,6 +1376,22 @@ window.FM = window.FM || {};
       active = vals.every(v => !!v);
       why = 'Overridden by ' + ((ctrl && ctrl.label) || p.overriddenBy);
     }
+    /* A SECOND WAY TO BE LIVE (#1246 r5): Lens Flare's Rotation turns the rays AND the Hexagon ghosts, so at Rays 0 it is still the
+       control while there are Hexagon ghosts — and greyed it was pointer-events:none while it turned them. `liveAlso` lists conditions
+       (each { by, liveAbove | liveWhen }, judged over keyframes like the rest: one value that uses the row is enough); when every one
+       of them can hold, the row is live whatever overriddenBy says. alsoGate is the opposite (a second way to be dead). */
+    if (active && Array.isArray(p.liveAlso) && p.liveAlso.length) {
+      const canLive = c => {
+        const cp = reg.params.find(q => q.key === c.by), rv = fx.params[c.by];
+        const cv = (rv == null) ? (cp && (cp.legacy != null ? cp.legacy : cp.default)) : rv;
+        const vs = FM.isAnimated(rv) ? (rv.kf.length ? rv.kf.map(k => k.v) : [0]) : [cv];
+        if (c.liveAbove !== undefined) return vs.some(v => Number(v) > Number(c.liveAbove));
+        if (c.liveWhen !== undefined) { const lw = Array.isArray(c.liveWhen) ? c.liveWhen : [c.liveWhen]; return vs.some(v => lw.some(w => Number(v) === Number(w))); }
+        return vs.some(v => !!v);
+      };
+      if (p.liveAlso.every(canLive)) active = false;
+      else if (p.liveAlsoText) why = p.liveAlsoText;
+    }
     /* A SECOND CONTROL THAT SWITCHES IT OFF (#482 6.3 review): Drop Shadow's Smoothness does nothing at Softness 0 AND at
        Spread 100% (no blur is left), and a row takes one overriddenBy. `alsoGate` is the second, judged by the same rules. */
     if (!active && p.alsoGate && p.alsoGate.by) {
@@ -2070,7 +2087,7 @@ window.FM = window.FM || {};
          stayed live after Softness went to 0. An option row that greys one rebuilds the panel already. */
       reg.params.forEach(p => {
         const gr = gatedRows[p.key]; if (!gr) return;
-        [p.overriddenBy, p.alsoGate && p.alsoGate.by].forEach(k => { const lead = k && rangeRows[k]; if (lead) lead.addEventListener('fx-range-set', () => regate(gr, fx, p, reg)); });
+        [p.overriddenBy, p.alsoGate && p.alsoGate.by].concat((p.liveAlso || []).map(c => c && c.by)).forEach(k => { const lead = k && rangeRows[k]; if (lead) lead.addEventListener('fx-range-set', () => regate(gr, fx, p, reg)); });   // liveAlso: #1246 r5
       });
       /* #482 15.7: Repeat edges, Direction, Mix or Blend off their defaults take this blur out of the CSS filter that runs before
          everything else, so where its row sits now matters — the row says so, in the note style a slider already uses. */

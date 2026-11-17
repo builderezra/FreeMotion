@@ -204,7 +204,11 @@ window.FM = window.FM || {};
           if (back > 0) {
             let take = Math.ceil(back * fps) + 1;
             const heal = Math.min(1, least(fp.decay, 0.1));
-            if (heal > 0 && heal < Infinity) take = Math.min(take, Math.ceil(Math.log(0.02) / Math.log(1 - 0.5 * heal) * fps / 30));
+            /* r5 review: under Later cuts = Clean reset a later cut turns the mosh OFF until playback jumps, however long ago it came, so
+               Heal's memory is not the whole memory: a pre-roll that starts after that cut would mosh what the export played clean.
+               With Clean reset (anywhere in its keyframes) it goes back to Start at. */
+            const cleanReset = fp.cuts != null && Math.round(maxOf(fp.cuts)) === 1;
+            if (heal > 0 && heal < Infinity && !cleanReset) take = Math.min(take, Math.ceil(Math.log(0.02) / Math.log(1 - 0.5 * heal) * fps / 30));
             need = Math.max(need, take);
           }
         }

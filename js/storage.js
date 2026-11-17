@@ -2875,8 +2875,8 @@ window.FM = window.FM || {};
       // eachRefFx: a caption CUE's own effects carry params.source too, and were never remapped —
       // an imported or templated copy kept mattes pointing at a layer that is not in the new scene
       // and the compositor drew the layer plain (queue 834 u3).
-      FM.eachRefFx(l, fx => {
-        if (fx && fx.params && fx.params.source) fx.params.source = map[fx.params.source] || '';
+      FM.eachRefFx(l, fx => {   // every layer ref the effect holds, not only `source` (#1246 U11: Cube's faces)
+        FM.eachFxRef(fx, (k, v) => { fx.params[k] = map[v] || ''; });
       });
       if (l.karaokeOf) l.karaokeOf = map[l.karaokeOf] || null;
     });

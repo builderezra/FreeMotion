@@ -19648,7 +19648,7 @@
         return new Promise(function (res) {
           var im = new Image(), done = function () { res(); };
           im.onload = done; im.onerror = done; setTimeout(done, 4000);
-          im.src = 'fx-art/' + k + '.jpg?v=1';
+          im.src = 'fx-art/' + k + '.jpg?v=2';
         });
       }));
       // past photosChanged's 80 ms settle, so its remount has run before the first tile of this test exists
@@ -47287,6 +47287,10 @@
          hue 35.8°), so all of it drains and the matte is black on a black ground; on a red layer it is white ('966 opts19 Colour Pop
          Show selection …'). */
       'spotcolor:view=max': 1,
+      /* #1246 U9: CRT's POWER 0 is the set switched off — the picture squashes to a line, then a dot, then nothing (the control's own note:
+         'Keyframe it from 1 to 0 to switch the TV off'). By design, brightness:amount=min's twin; Power 1 (the default, and every CRT saved
+         before it existed) is the old CRT byte for byte and is NOT listed. */
+      'crt:power=min': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -47529,7 +47533,7 @@
     const mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i += 4) s += Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2]); return s / (A.length * 0.75); };
     const bad = [];
     for (const [key, fDef, fMax] of [['city', 7, 12], ['towers', 11, 18]]) {
-      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=2'; });
       const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = RES; c.height = RES;
       c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, RES, RES);
       const mid = '_t799_' + key; FM.media.set(mid, { kind: 'image', el: c, width: RES, height: RES, duration: 0 }); FM.media.pin(mid);
@@ -47637,7 +47641,7 @@
     const T = 150, mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; };
     const R = FM.fxRegistry, bad = [];
     for (const key of ['city', 'pair']) {
-      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=2'; });
       const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = T; c.height = T;
       c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, T, T);
       const mid = '_t482hal_' + key; FM.media.set(mid, { kind: 'image', el: c, width: T, height: T, duration: 0 }); FM.media.pin(mid);
@@ -64407,7 +64411,7 @@
     let nullChecked = false;
     for (const id of Object.keys(WANT)) {
       const key = FM.fxThumbs._filterSubject(id);
-      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=2'; });
       const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = S; c.height = S;
       c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, S, S);
       const mid = '_t778_' + id; FM.media.set(mid, { kind: 'image', el: c, width: S, height: S, duration: 0 }); FM.media.pin(mid);
@@ -68610,6 +68614,1131 @@
     const s0 = src(), o = N.px('oilpaint', N.inst('oilpaint', { radius: 3, punch: 0 }), W, H, src(), 0.5);
     if (!(N.variance(o, W, 8, 8, 64, 44) < N.variance(s0, W, 8, 8, 64, 44) * 0.35)) throw new Error('a noisy patch kept most of its variance: it is not painting');
     for (let i = 3; i < s0.length; i += 4) { if (s0[i] === 0 && (s0[i - 1] !== o[i - 1] || s0[i - 2] !== o[i - 2] || s0[i - 3] !== o[i - 3])) throw new Error('a transparent pixel was recoloured at ' + (i - 3) / 4); if (s0[i] !== o[i]) throw new Error('alpha changed'); }
+  });
+  /* #1246 U1, his words (9 Nov): "the blinds is just like a bunch of black lines. Either fix the blinds effect and make it better so it
+     actually can look like that". Look Solid slats: the closed part of each slat is painted (the slat colour, shaded), the layer shows
+     between the slats, and alpha never changes. Red on v18.38: there is no Look, every closed strip is a hole. CONTROL: Holes at the same
+     settings still cuts the closed strips away (alpha 0, colour untouched), and a new Blinds starts on Holes. */
+  test('1246 U1 Venetian Blinds Look Solid slats paints real slats: at Progress 0.5 the covered half of each slat is the slat colour shaded, the open half is the picture, alpha never changes (CONTROL: Holes cuts the same strips away, and a new Blinds starts on Holes)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 200, H = 100, N = E1, bad = [];
+    const pic = () => N.frame(W, H, (x, y) => [40 + x, 90, 200 - x / 2]);
+    if (N.inst('blinds').look !== 0) bad.push('CONTROL: a new Blinds starts on Look ' + N.inst('blinds').look + ', not Holes');
+    const base = { progress: 0.5, count: 10, angle: 90, opens: 0, stagger: 0, softness: 0, fit: 0, invert: 0 };
+    const holes = N.px('blinds', Object.assign(N.inst('blinds'), base, { look: 0 }), W, H, pic(), 0.5);
+    const solid = N.px('blinds', Object.assign(N.inst('blinds'), base, { look: 1, slatcolor: '#e8e2d6', shade: 45 }), W, H, pic(), 0.5), p0 = pic();
+    const at = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    // slat 0 runs y 0..10: open for its first half (y 0..4), covered for its second (y 6..9)
+    const hc = at(holes, 100, 8);
+    if (hc[3] !== 0) throw new Error('CONTROL: Holes left the covered strip at alpha ' + hc[3] + ', so the probe is not looking at a covered strip');
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x += 7) { if (at(solid, x, y)[3] !== 255) { bad.push('Solid slats changed alpha at ' + x + ',' + y + ' (' + at(solid, x, y)[3] + ')'); y = H; break; } }
+    const open = at(solid, 100, 2), orig = at(p0, 100, 2);
+    if (open[0] !== orig[0] || open[1] !== orig[1] || open[2] !== orig[2]) bad.push('the open half of a slat is not the picture (' + open.slice(0, 3) + ' against ' + orig.slice(0, 3) + ')');
+    const cov = at(solid, 100, 8), lum = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2], slat = 0.299 * 232 + 0.587 * 226 + 0.114 * 214;
+    if (!(lum(cov) > slat * 0.5 && lum(cov) < slat * 0.95)) bad.push('the covered half of a slat has luma ' + Math.round(lum(cov)) + ', want the slat colour shaded (' + Math.round(slat * 0.5) + ' to ' + Math.round(slat * 0.95) + ')');
+    if (Math.abs(cov[0] - cov[2]) > 30) bad.push('the covered half is ' + cov.slice(0, 3) + ', not the warm-grey slat colour (the picture shows through)');
+    const c1 = lum(at(solid, 100, 6)), c2 = lum(at(solid, 100, 9));
+    if (!(c1 > c2)) bad.push('a slat is not shaded across its width (' + Math.round(c1) + ' near its open edge, ' + Math.round(c2) + ' at its far edge)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* #1246 U3: Starfield's Streak, the hyperspace look its picture shows. Fly-through at 2x with the focus in the middle: at Streak 100 the
+     stars far from the focus become lines pointing at it (lit pixels on the line between a star and the focus, beyond the star's own
+     square); at Streak 0 the field is exactly the plain fly-through. Red on v18.38: there is no Streak, both fields are the same.
+     CONTROL: the plain fly-through draws stars at all on this plate. */
+  test('1246 U3 Starfield Streak draws flying stars as lines back toward the focus, and Streak 0 is the plain fly-through (CONTROL: the fly-through draws stars on this plate)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 240, H = 160, N = E1;
+    const black = () => N.frame(W, H, () => [0, 0, 0]);
+    const lit = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 40) n++; return n; };
+    const fly = over => N.px('starfield', Object.assign(N.inst('starfield', { amount: 0.6, size: 2, speed: 2, x: 50, y: 50 }), over || {}), W, H, black(), 1.3);
+    const plain = fly(), zero = fly({ streak: 0 }), long = fly({ streak: 100 });
+    if (lit(plain) < 20) throw new Error('CONTROL: the plain fly-through lit only ' + lit(plain) + ' pixels, so there are no stars to streak');
+    if (N.maxDiff(plain, zero) > 0) throw new Error('Streak 0 is not the plain fly-through (max ' + N.maxDiff(plain, zero) + ')');
+    if (!(lit(long) > lit(plain) * 1.8)) throw new Error('Streak 100 lit ' + lit(long) + ' pixels against the plain field’s ' + lit(plain) + ': the stars are not lines');
+  });
+  /* #1246 U2: Dispersion's Sweep — a front that crosses the layer. At Progress 0.4 From left, the left third is mostly torn away while the
+     right fifth is still nearly whole; Off tears both alike. Red on v18.38: there is no Sweep, both sides tear alike. CONTROL: with Sweep
+     Off the two sides keep about the same amount of the layer, so the probe is not reading the noise as a front. */
+  test('1246 U2 Dispersion Sweep From left sends a front across the layer: at Progress 0.4 the left third is mostly gone while the right fifth is nearly whole (CONTROL: Sweep Off tears both sides alike)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 240, H = 120, N = E1;
+    const pic = () => N.frame(W, H, (x, y) => [180, 120, 60, 255]);
+    const meanA = (d, x0, x1) => { let s = 0, n = 0; for (let y = 0; y < H; y++) for (let x = x0; x < x1; x++) { s += d[(y * W + x) * 4 + 3]; n++; } return s / n; };
+    const run = sweep => N.px('dispersion', N.inst('dispersion', { progress: 0.4, distance: 0, glow: 0, sweep: sweep }), W, H, pic(), 0.5, 1);
+    const off = run(0), offL = meanA(off, 0, 80), offR = meanA(off, 192, 240);
+    if (!(offL > 0.7 * offR && offL < 1.4 * offR)) throw new Error('CONTROL: with Sweep Off the left third keeps ' + Math.round(offL) + ' of alpha and the right fifth ' + Math.round(offR) + ': the noise alone is already a front, so the probe proves nothing');
+    const on = run(1), L = meanA(on, 0, 80), R = meanA(on, 192, 240);
+    if (!(R > 0.9 * 255)) throw new Error('From left: the right fifth keeps only ' + Math.round(R) + ' of 255 alpha at Progress 0.4 — the front did not start at the left');
+    if (!(L < 0.5 * R)) throw new Error('From left: the left third keeps ' + Math.round(L) + ' of alpha against the right fifth’s ' + Math.round(R) + ' — no front crossed it');
+  });
+  /* #1246 U9: CRT Power, the TV switching off (UPGRADES.md: "collapses the picture to a line then a dot, so a TV switch-on can be
+     keyframed"). Power 0.7: the picture squashed toward the middle, black above and below. Power 0.3: a bright line across the middle,
+     black at its ends. Power 0.05: a dim dot at the centre. Power 0: black. Alpha never changes. Both of CRT's drawing paths (the plain
+     one, and the one Tube curvature uses). Red on v18.38: there is no Power, every reading is the plain CRT picture. CONTROL: a new CRT
+     starts at Power 1, and Power 1 is byte-identical to a saved CRT with no Power at all. */
+  test('1246 U9 CRT Power squashes the picture to a line, the line to a dot, the dot to black, on both drawing paths, alpha untouched (CONTROL: Power 1 is exactly a saved CRT without it)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 240, H = 120, N = E1, bad = [];
+    const pic = () => N.frame(W, H, (x, y) => [90 + (x % 60), 140, 60 + y, 255]);
+    if (N.inst('crt').power !== 1) throw new Error('CONTROL: a new CRT starts at Power ' + N.inst('crt').power + ', not 1');
+    const at = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const lum = c => Math.max(c[0], c[1], c[2]);
+    [{ name: 'plain', over: {} }, { name: 'curved', over: { curve: 30 } }].forEach(function (path) {
+      const run = pw => { const p = Object.assign(N.inst('crt'), path.over); if (pw == null) delete p.power; else p.power = pw; return N.px('crt', p, W, H, pic(), 0.5); };
+      const saved = run(null), one = run(1);
+      if (N.maxDiff(saved, one) > 0) throw new Error('CONTROL (' + path.name + '): Power 1 differs from a saved CRT with no Power by ' + N.maxDiff(saved, one));
+      const sq = run(0.7), ln = run(0.3), dot = run(0.05), off = run(0);
+      if (lum(at(one, 120, 5)) < 40) throw new Error('CONTROL (' + path.name + '): at Power 1 the top row is already dark (' + at(one, 120, 5) + '), so black there proves nothing');
+      if (lum(at(sq, 120, 5)) !== 0 || lum(at(sq, 120, 114)) !== 0) bad.push(path.name + ': at Power 0.7 the top and bottom rows are ' + at(sq, 120, 5).slice(0, 3) + ' and ' + at(sq, 120, 114).slice(0, 3) + ', want black (the picture did not squash)');
+      if (!(lum(at(sq, 120, 60)) > 60)) bad.push(path.name + ': at Power 0.7 the middle is ' + at(sq, 120, 60).slice(0, 3) + ', want the picture');
+      if (!(lum(at(ln, 120, 60)) > 200)) bad.push(path.name + ': at Power 0.3 the middle is ' + at(ln, 120, 60).slice(0, 3) + ', want a bright line');
+      if (lum(at(ln, 120, 50)) !== 0 || lum(at(ln, 5, 60)) !== 0) bad.push(path.name + ': at Power 0.3 above the line is ' + at(ln, 120, 50).slice(0, 3) + ' and the line’s far end ' + at(ln, 5, 60).slice(0, 3) + ', want black');
+      const c = lum(at(dot, 120, 60));
+      if (!(c > 30 && c < 200) || lum(at(dot, 135, 60)) !== 0) bad.push(path.name + ': at Power 0.05 the centre is ' + c + ' and 15 px right ' + lum(at(dot, 135, 60)) + ', want a dim dot and black beside it');
+      let lit = 0, alpha = 0; for (let i = 0; i < off.length; i += 4) { if (off[i] || off[i + 1] || off[i + 2]) lit++; if (off[i + 3] !== 255 || ln[i + 3] !== 255) alpha++; }
+      if (lit) bad.push(path.name + ': at Power 0, ' + lit + ' pixels are still lit');
+      if (alpha) bad.push(path.name + ': ' + alpha + ' pixels changed alpha');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* #1246 U8: Lens Flare's Ghost shape and Ghost colour. One ghost (16 px on a 480x320 plate, centred at 290.4, 193.6 with the light at
+     0.2, 0.2) on black, read as the light it adds over the same flare with no ghosts. Hexagon (Rotation 0: flat sides left and right,
+     points up and down): 14.6 px right of the centre is inside the circle and outside the hexagon, 14.4 px below is inside both. Ghost
+     colour 0 is the plain Flare colour, 100 strays further than 50. Red on v18.38: neither control exists, so the hexagon probe is lit
+     and all three colours match. CONTROL: Circle and 50 are byte-identical to a saved flare with neither key. */
+  test('1246 U8 Lens Flare ghosts can be hexagons and their tint is a control: Hexagon is dark where only the circle reaches, Ghost colour 0 is the plain Flare colour and 100 strays further (CONTROL: Circle at 50 is exactly a saved flare)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 480, H = 320, N = E1, bad = [];
+    const run = over => { const p = Object.assign(N.inst('lensflare'), { x: 0.2, y: 0.2, intensity: 1, size: 20, rays: 0, ghosts: 1 }, over); Object.keys(p).forEach(k => { if (p[k] === undefined) delete p[k]; }); return N.px('lensflare', p, W, H, N.frame(W, H, () => [0, 0, 0]), 0.5); };
+    const at = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+    const none = run({ ghosts: 0 }), added = (d, x, y) => { const a = at(d, x, y), b = at(none, x, y); return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; };
+    const saved = run({ ghostshape: undefined, ghostcolor: undefined }), circ = run({ ghostshape: 0, ghostcolor: 50 });
+    if (N.maxDiff(saved, circ) > 0) throw new Error('CONTROL: Circle at Ghost colour 50 differs from a saved flare with neither key by ' + N.maxDiff(saved, circ));
+    if (!(added(circ, 290, 194)[0] > 30)) throw new Error('CONTROL: the ghost adds only ' + added(circ, 290, 194) + ' at its centre, so there is no ghost to shape');
+    if (!(added(circ, 305, 194)[0] > 4)) throw new Error('CONTROL: the circle adds only ' + added(circ, 305, 194) + ' at 14.6 px right, so the probe is outside both shapes');
+    const hex = run({ ghostshape: 1 });
+    if (added(hex, 305, 194)[0] !== 0) bad.push('Hexagon still lights 14.6 px right of the ghost centre (' + added(hex, 305, 194) + '): it is a circle');
+    if (!(added(hex, 290, 208)[0] > 4)) bad.push('Hexagon is dark 14.4 px below the centre (' + added(hex, 290, 208) + '), where its point reaches');
+    const ratio = d => { const a = added(d, 290, 194); return a[2] / Math.max(1, a[0]); };
+    const r0 = ratio(run({ ghostcolor: 0 })), r50 = ratio(circ), r100 = ratio(run({ ghostcolor: 100 }));
+    if (!(r0 > 0.75)) bad.push('Ghost colour 0 gives blue over red ' + r0.toFixed(2) + ', want the plain Flare colour (about 0.82)');
+    if (!(r0 > r50 + 0.15 && r50 > r100 + 0.15)) bad.push('blue over red at Ghost colour 0 / 50 / 100 is ' + [r0, r50, r100].map(v => v.toFixed(2)).join(' / ') + ': want each clearly below the last');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* ═══ #1246 r5: the upgraded effects' bug list (tools/design/pm/r5-ss-bugs.md), Starfield, CRT, Dispersion, Lens Flare, Blinds. His
+     words for the release: "make the effect actually able to do what's in the picture", and of the upgrades' pictures "it looks good". */
+  /* Starfield (U3), bugs 1 and 2: a streak was up to 80 squares 0.6 of their width apart, so at Star size 1 (the default) a long streak
+     ran out of squares and read as a dotted row, and at 3 and up the overlapping squares pulsed into stripes. Each streak is now one
+     rasterised line. MEASURED along the line itself on a full-size 1080 plate (the dots only show there): for every flying star
+     (FM._sfEachStar, the kernel's own list) with a long streak — 100 px at size 1; 60 px and within 14 degrees of level or upright at
+     size 3, where the stripes were — C(m) is the light of one whole pixel column across the line (3 px either side, exact pixels), from
+     35 % to 95 % of the way to the star, and ROUGHNESS is the mean |C(m) - (C(m-1) + C(m+1)) / 2| over the mean C: a dotted row or a
+     ladder rises and falls every column or two, a line ramps. Median over the streaks, measured: 0.027 (size 1) and 0.012 (size 3) on
+     the line, 0.520 and 0.135 on the old squares, so the bar is 0.06. CONTROL: at least 10 such streaks, lit along their length
+     (median column light over 60), so a smooth reading is a line and not darkness. */
+  test('1246 r5 Starfield Streak draws each streak as one unbroken line at Star size 1 and 3, not a dotted row or a ladder of stripes: along the line the light changes smoothly (CONTROL: the field has long lit streaks to walk)', { item: '1246', budgetMs: 60000 }, function () {
+    const W = 1080, H = 1080, N = E1, bad = [], stkE = Math.pow(2, -0.6);
+    [[1, 0.08, 100, 9], [3, 0.3, 60, 0.25]].forEach(function ([sz, amt, minLen, maxSlope]) {
+      const d = N.px('starfield', N.inst('starfield', { amount: amt, size: sz, speed: 2, x: 50, y: 50, streak: 100 }), W, H, N.frame(W, H, () => [0, 0, 0]), 1);
+      const rough = [], lit = [];
+      FM._sfEachStar({ PW: W, PH: H, t: 1, thr: amt * 0.03, sz: sz, vari: 0, tw: 0, twPh: null, tws: 1, seed: 0, ox: 0, oy: 0, fly: 0.5, fx: W / 2, fy: H / 2 }, function (x, y, side, b, w) {
+        if (!(w > 0.6)) return;
+        const cX = x + side / 2, cY = y + side / 2, tX = W / 2 + (cX - W / 2) * stkE, tY = H / 2 + (cY - H / 2) * stkE;
+        const dx = cX - tX, dy = cY - tY, xm = Math.abs(dx) >= Math.abs(dy), da = xm ? dx : dy, db = xm ? dy : dx, A0 = xm ? tX : tY, B0 = xm ? tY : tX;
+        if (Math.hypot(dx, dy) < minLen || Math.abs(db / da) > maxSlope) return;
+        /* C(m): the light of one whole pixel column (row, for a steep streak) across the line, 3 px either side of it — exact pixels, no filter */
+        const s = [], m0 = Math.ceil(A0 + da * (da > 0 ? 0.35 : 0.95)), m1 = Math.floor(A0 + da * (da > 0 ? 0.95 : 0.35));
+        for (let m = Math.min(m0, m1); m <= Math.max(m0, m1); m++) {
+          const cl = B0 + (m + 0.5 - A0) * db / da; let cs = 0;
+          if (cl < 4 || cl > (xm ? H : W) - 5 || m < 0 || m >= (xm ? W : H)) return;
+          for (let n = Math.floor(cl - 3); n <= Math.floor(cl + 3); n++) cs += d[((xm ? n : m) * W + (xm ? m : n)) * 4];
+          s.push(cs);
+        }
+        if (s.length < 10) return;
+        let mm = 0, dd = 0; for (let k = 0; k < s.length; k++) mm += s[k];
+        for (let k = 1; k < s.length - 1; k++) dd += Math.abs(s[k] - (s[k - 1] + s[k + 1]) / 2);
+        mm /= s.length; lit.push(mm); rough.push(dd / (s.length - 2) / Math.max(1, mm));
+      });
+      const med = a => a.slice().sort((p, q) => p - q)[Math.floor(a.length / 2)];
+      if (rough.length < 10) throw new Error('CONTROL (Star size ' + sz + '): only ' + rough.length + ' streaks to walk, too few to judge');
+      if (!(med(lit) > 60)) throw new Error('CONTROL (Star size ' + sz + '): the streaks are lit only ' + med(lit).toFixed(1) + ' a column along their length, so a smooth reading is just darkness');
+      if (!(med(rough) < 0.06)) bad.push('at Star size ' + sz + ' the light along a streak has roughness ' + med(rough).toFixed(3) + ' (median of ' + rough.length + '), want under 0.06: it is a ' + (sz === 1 ? 'dotted row' : 'ladder of stripes') + ', not a line');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* CRT (U9), bug 1: each squashed row took the NEAREST source row of the already-scanlined picture, so at the default 1 px cells the
+     scanlines aliased into wide bands (runs of 6 rows at 249, then 6 at 171, at Power 0.75 on his towers). Each output row now averages
+     the rows it covers. A flat grey 60 x 600 plate at the defaults: across the squashed band the row brightness, smoothed over 3 rows
+     (which removes a plain 1-row alternation), may not range over more than 24 levels at Power 0.75 or 0.725 (measured, Vignette 0:
+     averaged 8 and 1, nearest 72 and 72). CONTROL: at Power 1 the scanlines really alternate (rows 10 and 11 over 20 levels apart), so there is something to alias. */
+  test('1246 r5 CRT Power at the default 1 px cells squashes a flat picture into an even band, with no wide light and dark stripes of rows (CONTROL: at Power 1 its scanlines alternate)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 60, H = 600, N = E1, bad = [];
+    const run = pw => N.px('crt', N.inst('crt', { power: pw, vignette: 0 }), W, H, N.frame(W, H, () => [200, 200, 200]), 0.5);
+    const rowMean = (d, y) => { let s = 0; for (let x = 20; x < 40; x++) { const i = (y * W + x) * 4; s += d[i] + d[i + 1] + d[i + 2]; } return s / 60; };
+    const one = run(1);
+    if (!(Math.abs(rowMean(one, 10) - rowMean(one, 11)) > 20)) throw new Error('CONTROL: at Power 1 rows 10 and 11 are ' + rowMean(one, 10).toFixed(0) + ' and ' + rowMean(one, 11).toFixed(0) + ', so there are no scanlines to alias');
+    [0.75, 0.725].forEach(pw => {
+      const d = run(pw), half = (pw - 0.45) / 0.55 * H / 2, r = [];
+      for (let y = Math.ceil(H / 2 - half) + 3; y < H / 2 + half - 4; y++) r.push((rowMean(d, y - 1) + rowMean(d, y) + rowMean(d, y + 1)) / 3);
+      if (r.length < 100) throw new Error('setup: the band at Power ' + pw + ' is only ' + r.length + ' rows');
+      const lo = Math.min.apply(null, r), hi = Math.max.apply(null, r);
+      if (hi - lo > 24) bad.push('at Power ' + pw + ' the squashed band’s rows (3-row mean) run from ' + lo.toFixed(0) + ' to ' + hi.toFixed(0) + ', want within 24 levels: the scanlines alias into wide stripes');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* CRT (U9), bug 2: Power kept every pixel's own alpha and skipped clear ones, so a text layer never switched off — its letters stayed
+     full size, the line showed only inside them, and at Power 0 a black silhouette stayed on screen — and the squash sat on the FRAME's
+     middle, not the layer's. A cut-out (five 10 px bars, x 40-130, y 50-110, on a clear 240 x 160 plate: half its box is clear): at
+     Power 0.7 the top of a bar (45, 55) is clear and the band's middle (45, 80) is the bar; at 0.3 the line lights the gap between two
+     bars (75, 80); at 0 nothing is left. A card (opaque, y 20-80) switches off on its OWN middle: at 0.3 the line is at y 50, not the
+     frame's 80, and the card keeps its black screen. CONTROL: an opaque full plate at Power 0 is black and opaque, as a TV off is. */
+  test('1246 r5 CRT Power switches a text or cut-out layer off too: the letters squash, the line and dot are light even between them, at Power 0 nothing is left, and a card switches off on its own middle (CONTROL: a full photo keeps its black screen)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 240, H = 160, N = E1, bad = [];
+    const bars = () => N.frame(W, H, (x, y) => (y >= 50 && y < 110 && x >= 40 && x < 130 && ((x - 40) % 20) < 10) ? [230, 236, 244, 255] : [0, 0, 0, 0]);
+    const card = () => N.frame(W, H, (x, y) => (y >= 20 && y < 80 && x >= 60 && x < 180) ? [90 + (x % 50), 140, 60 + y, 255] : [0, 0, 0, 0]);
+    const run = (pic, pw) => N.px('crt', N.inst('crt', { power: pw }), W, H, pic(), 0.5);
+    const at = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const full = run(() => N.frame(W, H, (x, y) => [90 + (x % 60), 140, 60 + y, 255]), 0);
+    for (let i = 0; i < full.length; i += 4) if (full[i + 3] !== 255 || full[i] || full[i + 1] || full[i + 2]) throw new Error('CONTROL: a full photo at Power 0 is not a black opaque screen at pixel ' + i / 4 + ' (' + at(full, (i / 4) % W, Math.floor(i / 4 / W)) + ')');
+    const sq = run(bars, 0.7);
+    if (at(sq, 45, 55)[3] !== 0) bad.push('at Power 0.7 the top of a letter is still there (' + at(sq, 45, 55) + '), want clear: the letters did not squash');
+    if (!(at(sq, 45, 80)[3] > 200 && at(sq, 45, 80)[0] > 200)) bad.push('at Power 0.7 the band’s middle on a letter is ' + at(sq, 45, 80) + ', want the letter');
+    const ln = run(bars, 0.3);
+    if (!(at(ln, 75, 80)[3] === 255 && at(ln, 75, 80)[0] > 200)) bad.push('at Power 0.3 the line between two letters is ' + at(ln, 75, 80) + ', want light: it shows only inside the letters');
+    if (at(ln, 45, 60)[3] !== 0) bad.push('at Power 0.3 a letter away from the line is ' + at(ln, 45, 60) + ', want clear');
+    const off = run(bars, 0); let left = 0; for (let i = 3; i < off.length; i += 4) if (off[i]) left++;
+    if (left) bad.push('at Power 0, ' + left + ' pixels of the text layer are still there (a black silhouette)');
+    const cl = run(card, 0.3);
+    if (!(at(cl, 120, 50)[0] > 200 && at(cl, 120, 50)[3] === 255)) bad.push('at Power 0.3 the card’s middle row is ' + at(cl, 120, 50) + ', want the line');
+    if (at(cl, 120, 70).slice(0, 3).some(v => v) || at(cl, 120, 70)[3] !== 255) bad.push('at Power 0.3 the card 20 px below its middle is ' + at(cl, 120, 70) + ', want its black screen');
+    if (at(cl, 120, 80)[3] !== 0) bad.push('at Power 0.3 the frame’s middle under the card is ' + at(cl, 120, 80) + ', want clear (the line belongs to the card)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Review X2-R1/R4 (CRT): whether a layer keeps its black screen was read from how much of its axis-aligned BOX is solid, so a card
+     turned 30 degrees (0.54 of its box) lost its screen at Power 0.3 and an oval (0.79) kept a 62 % see-through one. Now it is read
+     row by row inside each row's own span. A solid square (half side 40) turned 30 degrees and an oval (90 x 50), both centred at 120, 80
+     on a 240 x 160 plate, at Power 0.3: 25 px below the middle, inside the shape, is black and fully opaque; a box corner outside the
+     square stays clear. CONTROL: at Power 1 that pixel is the picture, and five bars (a cut-out) at Power 0.3 still go clear there. */
+  test('1246 r5 CRT Power keeps a black screen on a tilted card and an oval as on a straight card, and still switches cut-out bars off (CONTROL: at Power 1 the tilted card is its picture)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 240, H = 160, N = E1, bad = [], c30 = Math.cos(Math.PI / 6), s30 = Math.sin(Math.PI / 6);
+    const tilt = () => N.frame(W, H, (x, y) => { const dx = x + 0.5 - 120, dy = y + 0.5 - 80, rx = dx * c30 + dy * s30, ry = -dx * s30 + dy * c30; return (Math.abs(rx) < 40 && Math.abs(ry) < 40) ? [200, 120, 80, 255] : [0, 0, 0, 0]; });
+    const oval = () => N.frame(W, H, (x, y) => { const dx = (x + 0.5 - 120) / 90, dy = (y + 0.5 - 80) / 50; return dx * dx + dy * dy < 1 ? [200, 120, 80, 255] : [0, 0, 0, 0]; });
+    const bars = () => N.frame(W, H, (x, y) => (y >= 50 && y < 110 && x >= 40 && x < 130 && ((x - 40) % 20) < 10) ? [230, 236, 244, 255] : [0, 0, 0, 0]);
+    const run = (pic, pw) => N.px('crt', N.inst('crt', { power: pw }), W, H, pic(), 0.5);
+    const at = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const on = run(tilt, 1);
+    if (!(at(on, 120, 105)[3] === 255 && at(on, 120, 105)[0] > 60)) throw new Error('CONTROL: at Power 1 the tilted card 25 px below its middle is ' + at(on, 120, 105) + ', want its picture');
+    const br = run(bars, 0.3);
+    if (at(br, 45, 100)[3] !== 0) throw new Error('CONTROL: at Power 0.3 a cut-out bar away from the line is ' + at(br, 45, 100) + ', want clear: the probe cannot tell a cut-out from a card');
+    [['a card turned 30°', tilt], ['an oval', oval]].forEach(([nm, pic]) => {
+      const d = run(pic, 0.3), p = at(d, 120, 105);
+      if (p[3] !== 255 || p[0] || p[1] || p[2]) bad.push('at Power 0.3 ' + nm + ' 25 px below its middle is ' + p + ', want a black opaque screen');
+    });
+    if (at(run(tilt, 0.3), 70, 35)[3] !== 0) bad.push('at Power 0.3 the tilted card’s box corner outside it is ' + at(run(tilt, 0.3), 70, 35) + ', want clear');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Dispersion (U2): Sweep measured its front across the whole FRAME's plate, so a layer smaller than the frame sat between 0.33 and
+     0.67 of the way and much of Progress did nothing to it. A 80 px layer (x 80-160) in a 240 px plate at Progress 0.4 From left: its
+     own left fifth is mostly gone while its right fifth is nearly whole — the front crosses the LAYER. CONTROL: the same layer with
+     Sweep Off at Progress 0.4 tears both of its sides alike, so the probe is not reading the noise as a front. */
+  test('1246 r5 Dispersion Sweep crosses the layer, not the frame: on a layer a third of the frame wide, at Progress 0.4 From left its own left fifth is mostly gone and its right fifth nearly whole (CONTROL: Sweep Off tears both alike)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 240, H = 120, N = E1;
+    const pic = () => N.frame(W, H, (x, y) => (x >= 80 && x < 160) ? [180, 120, 60, 255] : [0, 0, 0, 0]);
+    const meanA = (d, x0, x1) => { let s = 0, n = 0; for (let y = 0; y < H; y++) for (let x = x0; x < x1; x++) { s += d[(y * W + x) * 4 + 3]; n++; } return s / n; };
+    const run = sweep => N.px('dispersion', N.inst('dispersion', { progress: 0.4, distance: 0, glow: 0, sweep: sweep }), W, H, pic(), 0.5, 1);
+    const off = run(0), offL = meanA(off, 80, 96), offR = meanA(off, 144, 160);
+    if (!(offL > 0.6 * offR && offL < 1.6 * offR)) throw new Error('CONTROL: with Sweep Off the layer’s left fifth keeps ' + Math.round(offL) + ' of alpha and its right fifth ' + Math.round(offR) + ': the noise alone is already a front');
+    const on = run(1), L = meanA(on, 80, 96), R = meanA(on, 144, 160);
+    if (!(R > 0.9 * 255)) throw new Error('From left: the layer’s right fifth keeps only ' + Math.round(R) + ' of 255 alpha at Progress 0.4 — the front is measured across the frame, not the layer');
+    if (!(L < 0.5 * R)) throw new Error('From left: the layer’s left fifth keeps ' + Math.round(L) + ' of alpha against its right fifth’s ' + Math.round(R) + ' — no front crossed the layer');
+  });
+  /* Review X2-R2 (Dispersion): measured across the layer's box, the Sweep position grew past 1 beyond the far side unclamped, and the
+     front (at most 1 + Edge) never reached more than about 0.8 box-widths out, so debris blown past the far side stopped at a straight
+     wall whatever Travel was. An 80 px layer (x 80-160) on a 480 px plate, Travel 300, Progress 0.8, Direction 0: debris must reach x
+     250-470, more than a layer-width past the far side. CONTROL: Sweep Off throws debris there, so the plate is wide enough to see it. */
+  test('1246 r5 Dispersion Sweep lets the debris fly its whole Travel past the layer’s far side instead of stopping at a straight wall (CONTROL: Sweep Off throws debris as far)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 480, H = 120, N = E1;
+    const pic = () => N.frame(W, H, (x, y) => (x >= 80 && x < 160) ? [180, 120, 60, 255] : [0, 0, 0, 0]);
+    const far = d => { let s = 0; for (let y = 0; y < H; y++) for (let x = 250; x < 470; x++) s += d[(y * W + x) * 4 + 3]; return s / 255; };
+    const run = sweep => N.px('dispersion', N.inst('dispersion', { progress: 0.8, distance: 300, direction: 0, glow: 0, sweep: sweep }), W, H, pic(), 0.5, 1);
+    const off = far(run(0));
+    if (!(off > 100)) throw new Error('CONTROL: with Sweep Off only ' + off.toFixed(0) + ' pixels of debris land at x 250-470, so the plate cannot show how far it flies');
+    const on = far(run(1));
+    if (!(on > 0.25 * off)) throw new Error('From left: only ' + on.toFixed(0) + ' pixels of debris land at x 250-470 against ' + off.toFixed(0) + ' with Sweep Off: the debris stops at a wall past the layer');
+  });
+  /* Lens Flare (U8): Rotation was greyed and locked at Rays 0 ("Only used when Rays is above 0", pointer-events none) while it still
+     turned the Hexagon ghosts. It is live again whenever there are Hexagon ghosts (liveAlso), and stays greyed when nothing it turns
+     is drawn. CONTROL: at Rays 0 with Hexagon ghosts, Rotation 0 and 30 really draw different frames, so the row is a working control. */
+  test('1246 r5 Lens Flare Rotation stays live at Rays 0 while there are Hexagon ghosts for it to turn, and greys only when it turns nothing, at 390 and 1280 px (CONTROL: at Rays 0 Rotation really turns the hexagons)', { item: '1246', budgetMs: 120000 }, async function () {
+    const W = 240, H = 160, N = E1;
+    const run = r => N.px('lensflare', Object.assign(N.inst('lensflare'), { x: 0.78, y: 0.72, size: 40, rays: 0, ghosts: 7, ghostshape: 1, ghostcolor: 80, rotation: r }), W, H, N.frame(W, H, () => [0, 0, 0]), 0.5);
+    if (N.count(run(0), run(30), 2) < 20) throw new Error('CONTROL: at Rays 0 with Hexagon ghosts Rotation 0 and 30 draw the same frame, so greying it there would be right');
+    await panel482b('lensflare', ['Rotation'], [
+      [{ rays: 0, ghosts: 7, ghostshape: 1 }, [], ['Rotation']],
+      [{ rays: 0, ghosts: 7, ghostshape: 0 }, ['Rotation'], []],
+      [{ rays: 0, ghosts: 0, ghostshape: 1 }, ['Rotation'], []],
+      [{ rays: 6, ghosts: 0 }, [], ['Rotation']]]);
+  });
+  /* Venetian Blinds (U1), both bugs. INVERT: the tilt shading always used qk, but Invert shows the covered share 1 - qk, so the slats got
+     darker as the blind CLOSED. A pixel near the opening edge (y 1 of a 10 px slat, covered under Invert from Progress 0.15 on) is
+     lighter at Progress 0.8 (more shut) than at 0.3 (measured 23 levels at Shading 45 %), and a fully shut blind is the same picture
+     either way round ({invert 0, progress 0} and {invert 1, progress 1}; it was 188 against 142 on his dusk photo). MIDDLE: across ran
+     from each band's middle, so a visible slat — which straddles two bands — was darkest along its own middle, a crease; now it is lit
+     at one edge and shaded at the other: at Progress 0.3 rows 7, 10, 12 of the slat round y 10 each darker than the last. CONTROL: Side
+     mode's slat is shaded the same way (row 6 lighter than row 9), and every pixel read here is a slat, not the picture. */
+  test('1246 r5 Venetian Blinds Solid slats shade the right way: under Invert the slats lighten as the blind shuts, and from Middle each slat is lit at one edge and shaded at the other, no crease (CONTROL: Side mode shades its slats the same way)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 200, H = 100, N = E1, bad = [];
+    const pic = () => N.frame(W, H, (x, y) => [30, 160, 60]);
+    const run = over => N.px('blinds', Object.assign(N.inst('blinds'), { count: 10, angle: 90, stagger: 0, softness: 0, fit: 0, look: 1, slatcolor: '#e8e2d6', shade: 45 }, over), W, H, pic(), 0.5);
+    const lum = (d, x, y) => { const i = (y * W + x) * 4; return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; };
+    const slat = (d, x, y) => { const i = (y * W + x) * 4; return Math.abs(d[i] - d[i + 2]) < 40 && d[i + 1] < d[i] + 20; };   // warm grey, not the green picture
+    const side = run({ opens: 0, invert: 0, progress: 0.5 });
+    if (!(slat(side, 100, 6) && slat(side, 100, 9))) throw new Error('CONTROL: rows 6 and 9 of a Side slat at Progress 0.5 are not slat colour');
+    if (!(lum(side, 100, 6) > lum(side, 100, 9) + 3)) throw new Error('CONTROL: a Side slat is not lit at its open edge and shaded at its far edge (' + lum(side, 100, 6).toFixed(0) + ', ' + lum(side, 100, 9).toFixed(0) + ')');
+    const i3 = run({ opens: 0, invert: 1, progress: 0.3 }), i8 = run({ opens: 0, invert: 1, progress: 0.8 });
+    if (!(slat(i3, 100, 1) && slat(i8, 100, 1))) throw new Error('setup: under Invert row 1 is not slat colour at Progress 0.3 and 0.8');
+    if (!(lum(i8, 100, 1) > lum(i3, 100, 1) + 10)) bad.push('under Invert the same slat pixel is ' + lum(i3, 100, 1).toFixed(0) + ' at Progress 0.3 and ' + lum(i8, 100, 1).toFixed(0) + ' at 0.8 (more shut), want it lighter as the blind shuts: the tilt runs backwards');
+    const shutA = run({ opens: 0, invert: 0, progress: 0 }), shutB = run({ opens: 0, invert: 1, progress: 1 });
+    if (N.maxDiff(shutA, shutB) > 1) bad.push('a fully shut blind differs by ' + N.maxDiff(shutA, shutB) + ' levels between Progress 0 and Invert at Progress 1');
+    const mid = run({ opens: 1, invert: 0, progress: 0.3 });
+    if (![7, 10, 12].every(y => slat(mid, 100, y))) throw new Error('setup: rows 7, 10, 12 of the Middle slat are not all slat colour');
+    const m7 = lum(mid, 100, 7), m10 = lum(mid, 100, 10), m12 = lum(mid, 100, 12);
+    if (!(m7 > m10 + 3 && m10 > m12 + 3)) bad.push('from Middle a slat reads ' + [m7, m10, m12].map(v => v.toFixed(0)).join(' / ') + ' across rows 7 / 10 / 12, want each darker than the last: it has a crease down its middle');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Review X2-R1 (Blinds): from Middle WITH Invert the visible slat sits on the band's middle (rows 13-16 of the band at rows 10-19, at
+     Progress 0.5), exactly where frac(u + 0.5) wraps from 1 to 0, so the slat was dark in its top half and lit in its bottom half: a jump
+     of about 33 levels between rows 14 and 15 (measured on the review's worked example). Now each row is a little darker than the one
+     above (about 3.5 levels a row), no jump. CONTROL: all four rows are slat colour, and the Side-mode slat under Invert shades the same
+     way (row 1 lighter than row 2), so the probe reads slats and can see a gradient. */
+  test('1246 r5 Venetian Blinds from Middle with Invert shades each slat evenly from one edge to the other, with no light and dark seam through its middle (CONTROL: the rows read are slat, and a Side slat under Invert shades the same way)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 200, H = 100, N = E1;
+    const pic = () => N.frame(W, H, (x, y) => [30, 160, 60]);
+    const run = over => N.px('blinds', Object.assign(N.inst('blinds'), { count: 10, angle: 90, stagger: 0, softness: 0, fit: 0, look: 1, slatcolor: '#e8e2d6', shade: 45 }, over), W, H, pic(), 0.5);
+    const lum = (d, x, y) => { const i = (y * W + x) * 4; return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; };
+    const slat = (d, x, y) => { const i = (y * W + x) * 4; return Math.abs(d[i] - d[i + 2]) < 40 && d[i + 1] < d[i] + 20; };
+    const sd = run({ opens: 0, invert: 1, progress: 0.3 });
+    if (!(slat(sd, 100, 1) && slat(sd, 100, 2) && lum(sd, 100, 1) > lum(sd, 100, 2) + 1)) throw new Error('CONTROL: a Side slat under Invert is not lit above and shaded below (rows 1, 2: ' + lum(sd, 100, 1).toFixed(1) + ', ' + lum(sd, 100, 2).toFixed(1) + ')');
+    const d = run({ opens: 1, invert: 1, progress: 0.5 }), rows = [13, 14, 15, 16];
+    if (!rows.every(y => slat(d, 100, y))) throw new Error('CONTROL: rows 13-16 of the Middle slat under Invert are not all slat colour');
+    const L = rows.map(y => lum(d, 100, y)), steps = [];
+    for (let k = 1; k < L.length; k++) steps.push(L[k - 1] - L[k]);
+    if (!steps.every(s => s > 1 && s < 8)) throw new Error('from Middle under Invert the slat reads ' + L.map(v => v.toFixed(0)).join(' / ') + ' down rows 13-16, want each 1-8 levels darker than the last: a light and dark seam runs through its middle');
+  });
+  /* #1246 U4: Lens Blur past its old 30 px cap. A 6 px white light on black, Radius 60, Highlight bloom 300: past 30 px the blur uses
+     every point of the aperture (lensBlurDense), so the light opens into a disc about 60 px in radius that is lit all over (30 and 40 px
+     out, and evenly round a ring at 30: not a sparse spray) and dark past it (75 px). Red on v18.38: Radius stops at 30, so 40 px out
+     is black and the ring is a spray. CONTROL: Radius 30 (the old sampler, untouched) leaves 45 px out black, so the reach is new. */
+  test('1246 U4 Lens Blur reaches past 30 px: at Radius 60 with bloom a small light opens into an even disc about 60 px across its radius, dark past it (CONTROL: Radius 30 ends by 45 px)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 200, H = 200, N = E1, bad = [];
+    const light = () => N.frame(W, H, (x, y) => (x >= 97 && x < 103 && y >= 97 && y < 103) ? [255, 255, 255] : [0, 0, 0]);
+    const lum = (d, x, y) => { const i = (y * W + x) * 4; return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; };
+    const run = r => N.px('lensblur', N.inst('lensblur', { radius: r, bloom: 300 }), W, H, light(), 0.5);
+    const r30 = run(30);
+    if (lum(r30, 145, 100) > 4 || lum(r30, 100, 145) > 4) throw new Error('CONTROL: Radius 30 lights 45 px out (' + lum(r30, 145, 100).toFixed(1) + ', ' + lum(r30, 100, 145).toFixed(1) + '), so reaching it proves nothing');
+    const r60 = run(60);
+    [[130, 100], [100, 140], [72, 100], [100, 70]].forEach(([x, y]) => { const v = lum(r60, x, y); if (!(v > 25)) bad.push('at Radius 60 the disc is ' + v.toFixed(1) + ' at ' + x + ',' + y + ', want a visible glow (over 25)'); });
+    [[175, 100], [100, 25]].forEach(([x, y]) => { const v = lum(r60, x, y); if (v > 4) bad.push('at Radius 60, 75 px out is ' + v.toFixed(1) + ', want dark'); });
+    const ring = []; for (let k = 0; k < 72; k++) { const a = k * Math.PI / 36; ring.push(lum(r60, Math.round(100 + 30 * Math.cos(a)), Math.round(100 + 30 * Math.sin(a)))); }
+    const mean = ring.reduce((s, v) => s + v, 0) / ring.length, sd = Math.sqrt(ring.reduce((s, v) => s + (v - mean) * (v - mean), 0) / ring.length);
+    if (!(mean > 0 && sd / mean < 0.25)) bad.push('round a ring 30 px out the disc varies by ' + (mean > 0 ? Math.round(sd / mean * 100) : '∞') + '% (mean ' + mean.toFixed(1) + '), want under 25%: it is a spray of taps, not a disc');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* #1246 U5: Directional Blur past its old 60 px cap. A 40 px white bar (x 180..220) on clear, Distance 200 Both ways at 0°: past 60 px
+     the smear is dense (dirBlurDense: 256 equal taps under a pixel apart), so the bar becomes a trapezoid of alpha — an even plateau
+     from 120 to 280 at about 40/201 of 255 (no ghost train: nine or 32 copies 25 or 6 px apart would step), ramps out to 80 and 320,
+     clear past them. Red on v18.38: Distance stops at 60, so 130 is clear. CONTROL: Distance 60 (the old taps) leaves 130 clear. */
+  test('1246 U5 Directional Blur reaches past 60 px: at Distance 200 a bar smears into an even plateau 160 px wide with soft ramps, not a train of copies (CONTROL: Distance 60 leaves 130 px clear)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 400, H = 40, N = E1, bad = [];
+    const bar = () => N.cv(W, H, g => { g.fillStyle = '#ffffff'; g.fillRect(180, 0, 40, H); });
+    const run = dist => N.cfx('motionblur', N.inst('motionblur', { distance: dist, angle: 0, side: 0, edges: 0 }), bar(), W, H);
+    const al = (d, x) => d[(20 * W + x) * 4 + 3];
+    const d60 = run(60);
+    if (al(d60, 130) !== 0 || !(al(d60, 160) > 0)) throw new Error('CONTROL: Distance 60 has alpha ' + al(d60, 130) + ' at 130 (want 0) and ' + al(d60, 160) + ' at 160 (want some): the fixture is not the smear it should be');
+    const d = run(200);
+    let lo = 255, hi = 0; for (let x = 130; x <= 270; x++) { const a = al(d, x); if (a < lo) lo = a; if (a > hi) hi = a; }
+    if (!(lo >= 40 && hi <= 62)) bad.push('the plateau runs ' + lo + '..' + hi + ' alpha from 130 to 270, want about 51 (40 to 62)');
+    if (hi - lo > 8) bad.push('the plateau varies by ' + (hi - lo) + ' alpha from 130 to 270: copies, not a smear');
+    if (!(al(d, 92) > 4 && al(d, 92) < al(d, 115))) bad.push('the left ramp is ' + al(d, 92) + ' at 92 and ' + al(d, 115) + ' at 115, want rising from clear');
+    if (al(d, 70) !== 0 || al(d, 330) !== 0) bad.push('past the smear (70, 330) alpha is ' + al(d, 70) + ' / ' + al(d, 330) + ', want clear');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* r5 bug list, Lens Blur (U4): "SLOWDOWN in a narrow band, 31-36 px" (his words for #1246: "make the effect actually able to do what's
+     in the picture" — and the picture has to keep up on a phone). From 31 to 36 px lensBlurDense worked on a grid only 3x smaller than
+     the plate, about 450 taps for each small pixel: measured 16 Nov at 1080 x 1920 with bloom 300, R30 347 ms, R34 639, R36 698 (R37
+     322). Now k grows until the work per plate pixel is at most about R37's: R34 196, R36 199. Here the kernel itself on a 400 x 400
+     plate, medians of 5 interleaved runs: Radius 34 and 36 must cost no more than 1.25 x Radius 30 (it was about 1.9 x). And it is still
+     the lens: a 6 px light at Radius 34 with bloom is an even disc 20 px out (under 25 % round a ring) and dark 45 px out. CONTROL: Radius
+     30 takes long enough to time (over 3 ms) and lights the same light. */
+  test('1246 r5 Lens Blur from 31 to 36 px costs no more than at 30 px, and a light still opens into an even disc there (CONTROL: Radius 30 is timeable and lights it too)', { item: '1246', budgetMs: 60000 }, function () {
+    const W = 400, H = 400, N = E1, bad = [];
+    const light = () => N.frame(W, H, (x, y) => (x >= 197 && x < 203 && y >= 197 && y < 203) ? [255, 255, 255] : [0, 0, 0]);
+    const lum = (d, x, y) => { const i = (y * W + x) * 4; return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; };
+    const ringAt = (d, rr) => { const v = []; for (let k = 0; k < 72; k++) { const a = k * Math.PI / 36; v.push(lum(d, Math.round(200 + rr * Math.cos(a)), Math.round(200 + rr * Math.sin(a)))); } return v; };
+    const run = r => N.px('lensblur', N.inst('lensblur', { radius: r, bloom: 300 }), W, H, light(), 0.5);
+    const T = { 30: [], 34: [], 36: [] };
+    for (let k = 0; k < 5; k++) [30, 34, 36].forEach(r => { const f = light(), t0 = performance.now(); N.px('lensblur', N.inst('lensblur', { radius: r, bloom: 300 }), W, H, f, 0.5); T[r].push(performance.now() - t0); });
+    const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1];
+    if (!(med(T[30]) > 3)) throw new Error('CONTROL: Radius 30 took ' + med(T[30]).toFixed(1) + ' ms, too little to compare against');
+    [34, 36].forEach(r => { if (!(med(T[r]) <= med(T[30]) * 1.25)) bad.push('Radius ' + r + ' takes ' + med(T[r]).toFixed(1) + ' ms against ' + med(T[30]).toFixed(1) + ' at Radius 30 (' + (med(T[r]) / med(T[30])).toFixed(2) + ' x), want at most 1.25 x'); });
+    const r30 = ringAt(run(30), 15), m30 = r30.reduce((s, v) => s + v, 0) / r30.length;
+    if (!(m30 > 2)) throw new Error('CONTROL: Radius 30 does not light a ring 15 px out from the light (mean ' + m30.toFixed(1) + ')');
+    const d = run(34), ring = ringAt(d, 20);
+    const mean = ring.reduce((s, v) => s + v, 0) / ring.length, sd = Math.sqrt(ring.reduce((s, v) => s + (v - mean) * (v - mean), 0) / ring.length);
+    if (!(mean > 5 && sd / mean < 0.25)) bad.push('at Radius 34 a ring 20 px out reads ' + mean.toFixed(1) + ' varying by ' + Math.round(sd / mean * 100) + '%: want a lit, even disc (over 5, under 25%)');
+    const far = ringAt(d, 45).reduce((s, v) => Math.max(s, v), 0);
+    if (!(far < 2)) bad.push('at Radius 34, 45 px out is as bright as ' + far.toFixed(1) + ': the disc has no edge');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* r5 review of the Lens Blur cost fix (k grows until the work per plate pixel is under 12): a phone preview's dense radius is the
+     project's times the plate scale — Radius 31-107 on his 0.28 plate is 8.7-30 plate px — and the bound grew k there too, so a hexagon
+     was built from 3-5 small pixels of radius (Radius 60 on the 0.28 plate: k 4, 4.2 small pixels, where the export's is 12) and the
+     preview drifted from the export shrunk. Now a dense radius of 30 plate px or less keeps k = ceil(r / 12) (the plate is small; the
+     cost bound is for the big one). Four 6 px lights with Lens Blur Radius 60 Hexagon, bloom 300, on a 640 x 480 project: the 0.28
+     preview against the export shrunk to it. MEASURED (deterministic): grown k, correlation 0.966 and mean error 3.57 levels; kept k,
+     0.983 and 2.91; the limits sit between. CONTROL: the ruler tells two blurs apart — the same preview against Radius 40 shrunk
+     correlates under 0.9. (The coarser grid at full size does not soften the rim: see lbDenseK's note in js/compositor.js.) */
+  test('1246 r5 Lens Blur on the phone preview is the export shrunk: a 60 px hexagon keeps its shape on the 0.28 plate, not a blob of a few big pixels (CONTROL: a 40 px blur shrunk does not match it)', { item: '1246', budgetMs: 60000 }, function () {
+    const PW = 640, PH = 480, ps = 0.28, id = 'r5lbpv', c = document.createElement('canvas'); c.width = PW; c.height = PH;
+    const g = c.getContext('2d'); g.fillStyle = '#06070c'; g.fillRect(0, 0, PW, PH); g.fillStyle = '#ffffff'; [[160, 160], [320, 240], [480, 320], [200, 360]].forEach(([x, y]) => g.fillRect(x - 3, y - 3, 6, 6));
+    FM.media.set(id, { kind: 'image', el: c, width: PW, height: PH, duration: 0 });
+    try {
+      const L = R => { const l = FM.makeLayer('image', { x: PW / 2, y: PH / 2, start: 0, duration: 4 }); l.id = id; const e = FM.fxRegistry.makeInstance('lensblur'); Object.assign(e.params, { radius: R, bloom: 300, blades: 1 }); l.effects = [e]; return l; };
+      const pv = _986shot([L(60)], 1, PW, PH, ps);
+      const vs = R => _986vsShrunk(pv.d, _986boxDown(_986shot([L(R)], 1, PW, PH).d, PW, PH, pv.w, pv.h, ps), pv.w, pv.h);
+      const ctl = vs(40);
+      if (!(ctl.corr < 0.9)) throw new Error('CONTROL: the Radius 60 preview correlates ' + ctl.corr.toFixed(3) + ' with Radius 40 shrunk: the ruler cannot tell two blurs apart');
+      const m = vs(60);
+      if (!(m.corr >= 0.975 && m.mad <= 3.25)) throw new Error('the 0.28 preview of Radius 60 Hexagon is off the export shrunk to it: correlation ' + m.corr.toFixed(3) + ' (want 0.975 or more), mean error ' + m.mad.toFixed(2) + ' levels (want 3.25 or less): its grid is coarser than ceil(16.8 / 12) = 2');
+    } finally { FM.media.remove(id); }
+  });
+  /* r5 bug list, Directional Blur (U5): "FLICKER in the 60-64 px hand-over at high Quality". Each of the 32 taps was added into 8-bit at
+     (1 − fD) / 32, a weight that changed with every pixel of Distance, so each step rounded every tap a new way: on his photos the mean
+     change per 1 px step was 5.3-7.9 from 60 to 64 against 0.3 either side. Now the taps are summed at 1 / 32 on their own plate and
+     that plate is laid on at 1 − fD. A full-frame colour gradient with Edges Repeat, Quality 32, at Distance 59..65. The hand-over must
+     go STRAIGHT from the taps to the dense smear: the four 1 px steps from 60 to 64 add up to at most 1.2 x the change from 60 to 64
+     itself, and no step is more than 1.6 x a quarter of it. MEASURED on this fixture: before, steps 3.82 / 5.19 / 6.30 / 15.37 (the
+     rounding wandering off and jumping back); after, 2.85 / 3.11 / 3.29 / 3.36. CONTROLS: 59 → 60 and 64 → 65 (the taps alone, the
+     dense smear alone) are small, and 60 → 64 as a whole moves the picture (the hand-over is real). (The taps' own banding at 60 px and
+     under is older than #1246 and every saved Directional Blur draws it: not changed here.) */
+  test('1246 r5 Directional Blur from 60 to 64 px at Quality 32 changes the picture a little each pixel of Distance, with no flicker of colour bands (CONTROLS: the steps either side are small, and the hand-over moves the picture)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 320, H = 40, N = E1, bad = [], MAX_STEP = 2.5;
+    const pic = () => N.cv(W, H, g => { const im = g.createImageData(W, H), d = im.data; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = 30 + x * 0.6; d[i + 1] = 210 - x * 0.45; d[i + 2] = 90 + x * 0.25 + 25 * Math.sin(y / 4); d[i + 3] = 255; } g.putImageData(im, 0, 0); });
+    const run = dist => N.cfx('motionblur', N.inst('motionblur', { distance: dist, angle: 0, side: 0, edges: 1, samples: 32 }), pic(), W, H);
+    const mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+    const f = {}; for (let dd = 59; dd <= 65; dd++) f[dd] = run(dd);
+    const steps = []; for (let dd = 59; dd < 65; dd++) steps.push(mad(f[dd], f[dd + 1]));
+    if (!(steps[0] < MAX_STEP && steps[5] < MAX_STEP)) throw new Error('CONTROL: the steps outside the hand-over (59→60 ' + steps[0].toFixed(2) + ', 64→65 ' + steps[5].toFixed(2) + ') are not small');
+    const whole = mad(f[60], f[64]);
+    if (!(whole > 0.3)) throw new Error('CONTROL: 60 and 64 px are the same picture (' + whole.toFixed(2) + '): there is no hand-over to watch');
+    const path = steps[1] + steps[2] + steps[3] + steps[4];
+    if (!(path <= whole * 1.2)) bad.push('the four steps add up to ' + path.toFixed(2) + ' levels against ' + whole.toFixed(2) + ' from 60 straight to 64 (want at most 1.2 x): the picture wanders');
+    [1, 2, 3, 4].forEach(k => { if (!(steps[k] <= whole / 4 * 1.6)) bad.push((59 + k) + '→' + (60 + k) + ' px changes it by ' + steps[k].toFixed(2) + ' levels (want at most ' + (whole / 4 * 1.6).toFixed(2) + ')'); });
+    if (bad.length) throw new Error('in the 60-64 px hand-over at Quality 32 ' + bad.join(', ') + ' (steps 59..65: ' + steps.map(s => s.toFixed(2)).join(' / ') + '): it flickers');
+  });
+  /* r5 bug list, Directional Blur (U5): "MEMORY". With Edges Repeat past 60 px the one pooled edge plate grows by the smear's reach on every
+     side (about 16 MB for a 1080 x 1920 frame at 400 px and 45°), and FM.releaseTiltPools — which an export's end and a project switch
+     call for exactly this iOS canvas-memory reason — freed the dense smear's two plates but not it. (r5 review: the plate is watched as
+     the smear DRAWS it — every canvas larger than the frame that drawImage reads from — so the test needs no seam the old code lacked.)
+     CONTROL: the smear really draws from a grown plate, and FM._dirBlurPoolPixels counts pooled pixels before the release. */
+  test('1246 r5 Directional Blur gives back its grown edge plate when an export ends or a project closes (CONTROL: a long Repeat smear holds pooled plates before)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 200, H = 150, N = E1, P = CanvasRenderingContext2D.prototype, desc = Object.getOwnPropertyDescriptor(P, 'drawImage'), big = new Set();
+    const A = N.cv(W, H, g => { g.fillStyle = '#c04020'; g.fillRect(0, 0, W, H); g.fillStyle = '#20a0f0'; g.fillRect(60, 40, 80, 70); });
+    Object.defineProperty(P, 'drawImage', Object.assign({}, desc, { value: function (src) { if (src instanceof HTMLCanvasElement && src.width * src.height > W * H) big.add(src); return desc.value.apply(this, arguments); } }));
+    try { N.cfx('motionblur', N.inst('motionblur', { distance: 200, angle: 45, side: 0, edges: 1 }), A, W, H); }
+    finally { Object.defineProperty(P, 'drawImage', desc); }
+    if (!big.size) throw new Error('CONTROL: a 200 px Repeat smear at 45° drew from no plate larger than its ' + W + ' x ' + H + ' frame: there is no grown plate to watch');
+    const held = typeof FM._dirBlurPoolPixels === 'function' ? FM._dirBlurPoolPixels() : null;
+    if (held !== null && !(held > W * H * 4)) throw new Error('CONTROL: a 200 px Repeat smear at 45° holds only ' + held + ' pooled pixels');
+    if (FM.releaseTiltPools() !== true) throw new Error('setup: FM.releaseTiltPools refused (a plate is in use)');
+    const kept = [...big].filter(c => c.width * c.height > 0).map(c => c.width + ' x ' + c.height);
+    if (kept.length) throw new Error('after FM.releaseTiltPools Directional Blur still holds ' + kept.length + ' grown plate' + (kept.length > 1 ? 's' : '') + ' (' + kept.join(', ') + ') of the ' + big.size + ' it drew from');
+    const left = held === null ? 0 : FM._dirBlurPoolPixels();
+    if (left !== 0) throw new Error('after FM.releaseTiltPools Directional Blur still holds ' + left + ' pixels of pooled canvas (of ' + held + ')');
+  });
+  /* #1246 U6: Number Roll's Style Rolling digits — each digit turns like a counter's wheel, through Odometer Roll's machinery, with the
+     leading zeros trimmed. 0 → 200 on "Subscribers: 0": at 99.5 the hundreds wheel rolls a 1 up into a blank place beside the 99 and
+     all three wheels are half turned; at 95.5 only the units turn and there is no blank place; at 42 the text is "Subscribers: 42"
+     with nothing turning. Drawn: the 99.5 frame is not the plain picture of either 99 or 100 (something is rolling). Red on v18.38:
+     there is no Style, so no wheel turns. CONTROL: Plain reads the old string and hands the painter no wheels. */
+  /* (r5 bug list: a count that is not moving now rests on Plain's number, so the wheels here are caught mid-turn on a MOVING Progress —
+     linear keyframes from a hair below the value at 0 s to a hair above it at 2 s, read at 1 s, where it is the value given. Plain's
+     fixtures keep a still Progress: Plain has no wheel to catch.) */
+  test('1246 U6 Number Roll Style Rolling digits turns each digit like a counter wheel while Progress moves, leading zeros trimmed, label kept, at rest the plain count (CONTROL: Plain is the old string, no wheels)', { item: '1246', budgetMs: 30000 }, function () {
+    const bad = [];
+    const L = (over, text) => { const fx = FM.fxRegistry.makeInstance('counter'); Object.assign(fx.params, { from: 0, to: 200 }, over); if (typeof over.progress === 'number' && over.style === 1) fx.params.progress = { kf: [{ t: 0, v: over.progress - 0.0005 }, { t: 2, v: over.progress + 0.0005 }] }; const l = FM.makeLayer('text', { text: text, fontSize: 32, color: '#ffffff', x: 180, y: 100, start: 0, duration: 4 }); l.effects = [fx]; return l; };
+    const st = (over, text) => { const l = L(over, text); return FM.applyTextEffects(l, l.text, 0, 1, FM.scene); };
+    const plain = st({ progress: 0.4975, style: 0 }, 'Subscribers: 0');
+    if (plain.text !== 'Subscribers: 100' || plain.odometer) throw new Error('CONTROL: Plain at 99.5 reads ' + JSON.stringify(plain.text) + (plain.odometer ? ' with wheels' : '') + ', not "Subscribers: 100" with none');
+    const r995 = st({ progress: 0.4975, style: 1 }, 'Subscribers: 0'), o = r995.odometer;
+    if (!o) bad.push('Rolling digits at 99.5 hands the painter no wheels');
+    else {
+      if (r995.text !== 'Subscribers:  99') bad.push('Rolling digits at 99.5 reads ' + JSON.stringify(r995.text) + ', want "Subscribers: " + a blank place + "99"');
+      const w = o.wheels.map(x => (x.blank ? '_' : x.digit) + '@' + x.roll.toFixed(2)).join(' ');
+      if (w !== '_@0.50 9@0.50 9@0.50') bad.push('at 99.5 the wheels are ' + w + ', want a blank hundreds and both nines half turned');
+    }
+    const r955 = st({ progress: 0.4775, style: 1 }, 'Subscribers: 0');
+    if (r955.text !== 'Subscribers: 95' || !r955.odometer || r955.odometer.wheels.filter(x => x.roll > 0).length !== 1) bad.push('at 95.5 it reads ' + JSON.stringify(r955.text) + ' turning ' + (r955.odometer ? r955.odometer.wheels.filter(x => x.roll > 0).length : 0) + ' wheels, want "Subscribers: 95" with the units alone turning');
+    const r42 = st({ progress: 0.21, style: 1 }, 'Subscribers: 0');
+    if (r42.text !== 'Subscribers: 42' || !r42.odometer || r42.odometer.roll !== 0) bad.push('at rest on 42 it reads ' + JSON.stringify(r42.text) + ', want "Subscribers: 42" with nothing turning');
+    if (typeof _986shot === 'function') {
+      const shot = l => _986shot([l], 1, 360, 200).d;
+      const rolling = shot(L({ progress: 0.4975, style: 1 }, '0')), at99 = shot(L({ progress: 0.495, style: 0 }, '0')), at100 = shot(L({ progress: 0.5, style: 0 }, '0'));
+      let ink = 0; for (let i = 0; i < rolling.length; i += 4) if (rolling[i] > 200) ink++;
+      if (ink < 20) bad.push('the 99.5 frame drew only ' + ink + ' bright pixels: the rolling digits are not drawn');
+      else if (E1.maxDiff(rolling, at99) === 0 || E1.maxDiff(rolling, at100) === 0) bad.push('the 99.5 frame is the plain picture of 99 or 100: nothing rolls');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* The r5 bug list's Number Roll section (U6). Shared: a Number Roll text layer and its picture. */
+  const _nr1246 = (function () {
+    const kf =(a, b, t1) => ({ kf: [{ t: 0, v: a }, { t: t1, v: b }] });
+    /* (review R1: FM.makeLayer always writes align 'center', so the alignment is set on the layer after it is made) */
+    const layer = (over, text, lay) => { const fx = FM.fxRegistry.makeInstance('counter'); Object.assign(fx.params, over);
+      const l = FM.makeLayer('text', Object.assign({ text: text, fontSize: 40, color: '#ffffff', x: 180, y: 120, start: 0, duration: 12 }, lay || {})); if (lay && lay.align) l.align = lay.align; l.effects = [fx]; return l; };
+    const text = (over, src, t) => { const l = layer(over, src); return FM.applyTextEffects(l, l.text, 0, t || 0, FM.scene); };
+    return { layer: layer, kf: kf, text: text };
+  })();
+  /* Curved text (and an Animate preset) cannot turn a wheel, so it shows the number Plain shows. 'Score 0' on a curve of 60, Rolling
+     digits to 10 with Ease Out over 3 s: at t = 2 the count is 9.6, mid-carry. Red before the fix: the curve drew the resting string,
+     'Score  9' with a blank place where Plain shows 'Score 10'. CONTROL: on straight text the two styles draw different pictures at the
+     same instant (the wheels are turning), so the comparison can tell them apart. */
+  test('1246 Number Roll Rolling digits on curved text shows the same number as Plain during a carry (CONTROL: straight text shows the wheels turning)', { item: '1246', budgetMs: 30000 }, function () {
+    const N = _nr1246, W = 360, H = 240;
+    const pic = (style, curve) => { const l = N.layer({ style: style, from: 0, to: 10, ease: 1, progress: N.kf(0, 1, 3) }, 'Score 0'); l.textCurve = curve; return _986shot([l], 2, W, H).d; };
+    const straight = E1.maxDiff(pic(1, 0), pic(0, 0));
+    if (!(straight > 60)) throw new Error('CONTROL: on straight text Rolling digits and Plain differ by only ' + straight + ' levels mid-carry: the wheels are not drawn, so this cannot see a wrong number');
+    const curved = E1.maxDiff(pic(1, 60), pic(0, 60));
+    if (curved > 0) throw new Error('on a curve of 60 Rolling digits draws a different picture from Plain mid-carry (up to ' + curved + ' levels): the resting string, not Plain’s number');
+  });
+  /* Review X1-R2: on a curve, Plain's number on EVERY frame — a whole-number frame too. 'Score 0', From -10 To 10, Progress 0 to 1
+     over 4 s (linear): at 1 s the count is exactly -5 and at 3 s exactly 5, frames where no wheel turns. Red before: those frames drew
+     the resting string (a U+2212 minus; a figure space for the sign's place), the frames between drew Plain's, so a count through zero
+     twitched on every whole number. CONTROL: on straight text the resting string really differs from Plain there (the probe can see
+     the sign's place). */
+  test('1246 Number Roll Rolling digits on curved text draws Plain’s number on whole-number frames too, so a count through zero does not twitch (CONTROL: straight text keeps the sign’s place there)', { item: '1246', budgetMs: 30000 }, function () {
+    const N = _nr1246, W = 360, H = 240, bad = [];
+    const pic = (style, curve, t) => { const l = N.layer({ style: style, from: -10, to: 10, ease: 0, progress: N.kf(0, 1, 4) }, 'Score 0'); l.textCurve = curve; return _986shot([l], t, W, H).d; };
+    const straight = E1.maxDiff(pic(1, 0, 3), pic(0, 0, 3));
+    if (!(straight > 60)) throw new Error('CONTROL: on straight text at 5 the resting string and Plain differ by only ' + straight + ' levels: the probe cannot see the sign’s place');
+    [1, 3].forEach(t => { const d = E1.maxDiff(pic(1, 60, t), pic(0, 60, t)); if (d > 0) bad.push('at ' + t + ' s (a whole number) the curve draws a different picture from Plain (up to ' + d + ' levels)'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Review X1-R3: a LIT Word Highlight paints the still lines, so it cannot turn a wheel either: under it a Rolling digits count shows
+     Plain's number. 'Score 0', Rolling digits to 10, Ease Out, Progress 0 to 1 over 3 s, then a Word Highlight lighting every word
+     (Progress 1, past words kept): at 2 s, mid-carry (9.6), the picture is Plain's with the same highlight. Red before: the highlight
+     drew the resting string, 'Score  9' with a blank place. CONTROL: the highlight is lit (Plain with it differs from Plain without). */
+  test('1246 Number Roll Rolling digits under a lit Word Highlight shows the same number as Plain during a carry (CONTROL: the highlight is lit)', { item: '1246', budgetMs: 30000 }, function () {
+    const N = _nr1246, W = 360, H = 240;
+    const pic = (style, hl) => { const l = N.layer({ style: style, from: 0, to: 10, ease: 1, progress: N.kf(0, 1, 3) }, 'Score 0');
+      if (hl) { const h = FM.fxRegistry.makeInstance('wordhighlight'); Object.assign(h.params, { follow: 0, progress: 1, past: 1 }); l.effects.push(h); }
+      return _986shot([l], 2, W, H).d; };
+    const lit = E1.maxDiff(pic(0, true), pic(0, false));
+    if (!(lit > 60)) throw new Error('CONTROL: Plain with the Word Highlight differs from Plain without it by only ' + lit + ' levels: nothing is lit');
+    const d = E1.maxDiff(pic(1, true), pic(0, true));
+    if (d > 0) throw new Error('under a lit Word Highlight Rolling digits draws a different picture from Plain mid-carry (up to ' + d + ' levels): the resting string, not Plain’s number');
+  });
+  /* A count that is not MOVING rests on Plain's number. To 99 with Progress 0.5 is 49.5, which Plain shows as 50: Rolling digits shows
+     50 with no wheel turning — with Progress not keyframed (To 25: 13), with Progress keyframed 0 to 0.5 over 2 s and read at 4 s, held
+     after its last key, and with To keyframed 0 to 99 over 2 s under the default Progress, read at 4 s (review X1-R1: the first fix
+     asked whether keys EXIST, so the last two froze half way round). Red before the r5 fix: '49' with every wheel frozen. CONTROL: a
+     Progress MOVING at the instant read (0 to 1 over 4 s, read at 2 s, 49.5 again) turns the wheels. */
+  test('1246 Number Roll Rolling digits rests on the whole number Plain shows whenever the count is not moving — Progress not keyframed, or held after its last keyframe (CONTROL: a Progress moving at that instant turns the wheels)', { item: '1246', budgetMs: 30000 }, function () {
+    const N = _nr1246, bad = [];
+    const moving = N.text({ style: 1, from: 0, to: 99, progress: N.kf(0, 1, 4) }, '0', 2);
+    if (!(moving.odometer && moving.odometer.roll > 0.4)) throw new Error('CONTROL: a Progress moving through 0.5 of 99 turns no wheel at 2 s (roll ' + (moving.odometer && moving.odometer.roll) + ')');
+    [['To 99, Progress not keyframed', { to: 99 }, 0, '50'], ['To 25, Progress not keyframed', { to: 25 }, 0, '13'],
+     ['To 99, Progress keyframed 0 to 0.5 and held after its last key', { to: 99, progress: N.kf(0, 0.5, 2) }, 4, '50'],
+     ['To keyframed 0 to 99 and held, Progress 0.5', { to: N.kf(0, 99, 2), progress: 0.5 }, 4, '50']].forEach(c => {
+      const r = N.text(Object.assign({ style: 1, from: 0 }, c[1]), '0', c[2]), pl = N.text(Object.assign({ style: 0, from: 0 }, c[1]), '0', c[2]);
+      if (pl.text !== c[3]) bad.push('setup: Plain (' + c[0] + ') reads ' + JSON.stringify(pl.text));
+      if (r.text !== c[3] || !r.odometer || r.odometer.roll !== 0) bad.push(c[0] + ': reads ' + JSON.stringify(r.text) + ' with roll ' + (r.odometer && r.odometer.roll) + ', want ' + JSON.stringify(c[3]) + ' at rest');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* A new wheel opens its place as it rolls in: the digits do not jump sideways the instant a carry starts. '$0' at font size 100,
+     Rolling digits 0 to 1000 over 10 s (linear): the line's left ink edge (centred, right-aligned) and right ink edge (left-aligned)
+     move from 998.9 to 999.1 by no more than a quarter of what they move by 999.9. Red before the fix: the blank wheel took its full width at once — the centred line jumped ~half a digit
+     left, the left-aligned one a digit right. CONTROL: by 999.9 the place has opened and the edge has moved over 18 px — the probe
+     sees the line move. */
+  test('1246 Number Roll Rolling digits do not jump sideways when a new wheel starts to roll in (CONTROL: the line moves as the place opens)', { item: '1246', budgetMs: 30000 }, function () {
+    const N = _nr1246, W = 720, H = 240, bad = [];
+    const edge = (align, t) => { const l = N.layer({ style: 1, from: 0, to: 1000, ease: 0, progress: N.kf(0, 1, 10) }, '$0', { fontSize: 100, x: align === 'left' ? 120 : align === 'right' ? 600 : 360, align: align });
+      if (l.align !== align) throw new Error('setup: the layer is aligned ' + l.align + ', not ' + align);
+      const d = _986shot([l], t, W, H).d; let lo = W, hi = -1;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i] > 100) { if (x < lo) lo = x; if (x > hi) hi = x; } }
+      return align === 'left' ? hi : lo; };
+    /* (review R1: the left case was centred text until the helper set the alignment; right is measured too, on its left edge) */
+    ['center', 'left', 'right'].forEach(al => {
+      const a = edge(al, 9.989), b = edge(al, 9.991), c = edge(al, 9.999);
+      if (!(Math.abs(c - a) > 18)) bad.push('CONTROL (' + al + '): by 999.9 the edge moved only ' + Math.abs(c - a) + ' px from 998.9');
+      /* the place opens WITH the roll: by 999.1 it is a tenth open, by 999.9 nine tenths, so the honest step is about a ninth of the
+         CONTROL's move (measured 4 px centred, 8-9 px left and right); a jump takes the whole place at once (over 100% of it) */
+      if (Math.abs(b - a) > 0.25 * Math.abs(c - a) + 2) bad.push(al + '-aligned: the ' + (al === 'left' ? 'right' : 'left') + ' edge jumps ' + (b - a) + ' px between 998.9 and 999.1 as the thousands wheel starts');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Every Thousands choice and every Decimals value the panel offers, as Plain writes them: '1 234' (a narrow space), '1.234' with a
+     decimal comma, 3 and 4 decimals. Red before the fix: Rolling digits wrote commas and a point for all of them and stopped at 2
+     decimals. CONTROL: Thousands Commas already matched Plain. */
+  test('1246 Number Roll Rolling digits writes the Thousands style and the Decimals Plain writes (CONTROL: Commas already matched)', { item: '1246', budgetMs: 30000 }, function () {
+    const N = _nr1246, bad = [];
+    const both = over => [N.text(Object.assign({ style: 1, from: 0 }, over), '0').text, N.text(Object.assign({ style: 0, from: 0 }, over), '0').text];
+    const c1 = both({ group: 1, decimals: 2, to: 12345, progress: 0.5 });
+    if (c1[0] !== c1[1] || c1[1] !== '6,172.50') throw new Error('CONTROL: Thousands Commas reads ' + JSON.stringify(c1[0]) + ' (Plain ' + JSON.stringify(c1[1]) + '), want "6,172.50"');
+    [{ group: 2, decimals: 2, to: 12345, progress: 0.5 }, { group: 3, decimals: 2, to: 12345, progress: 0.5 }, { decimals: 3, to: 10, progress: 0.37 }, { decimals: 4, to: 10, progress: 0.37 }].forEach(o => {
+      const r = both(o);
+      if (r[0] !== r[1]) bad.push(JSON.stringify(o) + ': Rolling digits reads ' + JSON.stringify(r[0]) + ', Plain ' + JSON.stringify(r[1]));
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* #1250 (his words: "The data mosh effect needs a lot of work. I mean, a lot."): Datamosh Bloom gains the residual a P-frame
+     carries. A 96 px clip: frame 0 the old shot (red | blue halves), from frame 1 a new shot (light grey) with a textured white square
+     sliding right 3 px a frame; Start at on the cut, Heal 0, Amount 1. New detail paints the square's movement into the old picture
+     (its band differs from the same mosh without detail) and leaves the still background alone (the old colours, identically); the
+     cut frame holds the old picture; Later cuts Clean reset brings a second cut in as the clip. Red on v18.38: there is no New detail,
+     so the two moshes are the same picture. CONTROL: the mosh is on (the background is the old shot, not the clip's grey), and a saved
+     Datamosh Bloom (no new keys) is byte-identical to Bloom 1 and Mosh them too with no New detail key. (r5 bug list: a NEW instance
+     with New detail at 0 now holds its cut frame, so it is no longer the old drag: '1250 r5 Datamosh with New detail at 0 still holds
+     the cut frame…' checks that.) */
+  test('1250 Datamosh New detail paints the new shot’s movement into the old picture, the still background stays the old shot, the cut frame holds, and Clean reset brings a later cut in clean (CONTROL: a saved one is byte-identical to Bloom 1, Mosh them too, with no New detail key)', { item: '1250', budgetMs: 60000 }, function () {
+    const W = 96, H = 96, N = E1, bad = [], f = FM._FX_TABLES.CANVAS_FX.moshbloom;
+    if (typeof f !== 'function') throw new Error('CANVAS_FX.moshbloom is not reachable');
+    const r = N.noise(5), tex = []; for (let i = 0; i < W * H; i++) tex.push((r() - 0.5) * 24);
+    /* the second cut is to a NEW dark picture (a smooth texture of its own): the same grain only darker is a fade, which (r5 review) is
+       not a cut */
+    const dark2 = _mb1250.tex(41, 60);
+    const frame = k => N.cv(W, H, g => {
+      const im = g.createImageData(W, H), d = im.data, sx = 20 + 3 * k;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, n = tex[y * W + x];
+        let c;
+        if (k === 0) c = x < W / 2 ? [150, 12, 12] : [12, 12, 150];   // dark, so the cut to the grey is a cut by any measure
+        else if (k >= 6 && second) { const v = dark2(x, y); c = [v, v, v]; }
+        else c = [120, 120, 120];
+        if (k > 0 && x >= sx && x < sx + 24 && y >= 36 && y < 60) c = [250 + n / 4, 250 + n / 4, 250 + n / 4];
+        d[i] = c[0] + n; d[i + 1] = c[1] + n; d[i + 2] = c[2] + n; d[i + 3] = 255;
+      }
+      g.putImageData(im, 0, 0);
+    });
+    let second = false;
+    const play = (over, id, frames) => {
+      if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
+      const base = { amount: 1, hold: 0.03, block: 16, decay: 0, chroma: 0.5 };
+      const p = Object.assign(base, over);
+      let out = null;
+      for (let k = 0; k < frames; k++) {
+        const t = k / 30, B = N.cv(W, H);
+        f(frame(k), B.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, p, t, t, { id: id }, 1);
+        out = B.getContext('2d').getImageData(0, 0, W, H).data;
+      }
+      return out;
+    };
+    const px = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+    const saved = play({}, 'u1250a', 9), zero = play({ bloom: 1, cuts: 0 }, 'u1250b', 9);
+    if (N.maxDiff(saved, zero) > 0) throw new Error('CONTROL: a saved Datamosh Bloom differs from Bloom 1, Mosh them too (no New detail key) by ' + N.maxDiff(saved, zero));
+    const bg = px(zero, 8, 84);
+    if (!(bg[0] > 100 && bg[2] < 60)) throw new Error('CONTROL: the background of the mosh is ' + bg + ', not the old red: the mosh is not on');
+    /* against a mosh with a trace of detail (it holds the cut the same way, so only the amount of residual differs) */
+    const det = play({ detail: 0.85, bloom: 1, cuts: 0 }, 'u1250c', 9), trace = play({ detail: 0.02, bloom: 1, cuts: 0 }, 'u1250g', 9);
+    const f0 = frame(0).getContext('2d').getImageData(0, 0, W, H).data;
+    let band = 0, nb = 0, still = 0;
+    for (let y = 36; y < 60; y++) for (let x = 20; x < 76; x++) { const i = (y * W + x) * 4; band += Math.abs(det[i] - trace[i]) + Math.abs(det[i + 1] - trace[i + 1]) + Math.abs(det[i + 2] - trace[i + 2]); nb += 3; }
+    for (let y = 72; y < 96; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (det[i] !== f0[i] || det[i + 1] !== f0[i + 1] || det[i + 2] !== f0[i + 2]) still++; }
+    if (!(band / nb > 6)) bad.push('New detail 0.85 changes the square’s path by only ' + (band / nb).toFixed(1) + ' levels on average against a trace of it, want over 6: the new movement is not painted in');
+    if (still) bad.push(still + ' pixels of the still background are not the old shot exactly, where the new shot does not move');
+    const cutF = play({ detail: 0.85 }, 'u1250d', 2);
+    if (N.maxDiff(cutF, f0) > 1) bad.push('the cut frame is not the old picture held (it moved by up to ' + N.maxDiff(cutF, f0) + ' levels): a deleted keyframe shows nothing new');
+    second = true;
+    const reset = play({ detail: 0.85, cuts: 1 }, 'u1250e', 7), keep = play({ detail: 0.85, cuts: 0 }, 'u1250f', 7);
+    second = false;
+    const clip6 = (() => { second = true; const d = frame(6).getContext('2d').getImageData(0, 0, W, H).data; second = false; return d; })();
+    if (N.maxDiff(reset, clip6) > 0) bad.push('Clean reset: the second cut is not the clip (off by up to ' + N.maxDiff(reset, clip6) + ')');
+    if (N.maxDiff(keep, clip6) === 0) bad.push('Mosh them too: the second cut came in clean, so it was not moshed');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* The r5 bug list's Datamosh Bloom section (#1250, his words: "The data mosh effect needs a lot of work. I mean, a lot."). Shared: a
+     160 x 120 clip of smooth grey textures (the motion field is measured 160 wide, so a plate pixel is a field pixel), each texture a seed
+     of value noise about ±50 levels round its own brightness, panned `pan` px a frame; play(frames, params, id) runs the kernel over them
+     at 30 fps, Start at on frame 1, Heal 0, Amount 1, and returns every frame shown and every clip frame. */
+  const _mb1250 = (function () {
+    const W = 160, H = 120;
+    const tex = (seed, base) => { const r = E1.noise(seed), G = 14, cw = 22, g = []; for (let i = 0; i < G * G; i++) g.push((r() - 0.5) * 100); return (x, y) => { const fx = x / cw, fy = y / cw, x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0, at = (i, j) => g[((j % G + G) % G) * G + ((i % G + G) % G)]; const a = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * tx, b = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * tx; return base + a + (b - a) * ty; }; };
+    const frameOf = (shot, k) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }), im = g.createImageData(W, H), d = im.data; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const v = shot.f(x + shot.pan * k, y), i = (y * W + x) * 4; d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } g.putImageData(im, 0, 0); return c; };
+    const play = (shots, params, id, before) => {   // before(k, p): a change to the params made just before frame k (an edit mid-play)
+      const f = FM._FX_TABLES.CANVAS_FX.moshbloom; if (typeof f !== 'function') throw new Error('CANVAS_FX.moshbloom is not reachable');
+      if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
+      const p = Object.assign({ amount: 1, hold: 0.03, block: 16, decay: 0, chroma: 0.5 }, params), shown = [], clip = [];
+      shots.forEach((s, k) => { if (before) before(k, p); const A = frameOf(s, k), B = document.createElement('canvas'); B.width = W; B.height = H; f(A, B.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, p, k / 30, k / 30, { id: id }, 1); shown.push(B.getContext('2d').getImageData(0, 0, W, H).data); clip.push(A.getContext('2d').getImageData(0, 0, W, H).data); });
+      return { shown: shown, clip: clip };
+    };
+    const greyDiff = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]); return s / (a.length / 4) / 255; };
+    return { W: W, H: H, tex: tex, play: play, greyDiff: greyDiff };
+  })();
+  /* "Some cuts are not recognised": the cut test was the mean raw grey change over 0.2, so a cut between two shots of about the same
+     brightness (his bay > clouds: 0.128) was taken for movement and the cut frame dragged by a field of noise (42 levels off the last
+     frame of the old shot, where a recognised cut holds). Now a cut is also a change the block search cannot explain by moving the last
+     frame (mean residual over 0.06; on 182 pairs of his photos every cut scored 0.082 or more, every pan or push-in, up to 30 px or 8 %
+     a frame, 0.040 or less; r5 review: and still unexplained against the last frame matched to its brightness and contrast, so a flash
+     is not a cut — see the flash test below). Shot A, then a cut to shot B of the same brightness (raw change under 0.18, so the old
+     test missed it).
+     New detail on: the cut frame must HOLD the old picture; and Later cuts Clean reset on a later cut of that kind must bring the clip
+     in. CONTROL: shot B panning 3 px a frame is not taken for a cut (with Clean reset, the frame after the pan's start is still moshed). */
+  test('1250 r5 Datamosh takes a cut between two shots of the same brightness for a cut: the cut frame holds and Clean reset fires on it (CONTROL: a pan is not a cut)', { item: '1250', budgetMs: 60000 }, function () {
+    const M = _mb1250, bad = [];
+    const A = { f: M.tex(11, 128), pan: 0 }, B = { f: M.tex(23, 128), pan: 3 }, C = { f: M.tex(37, 128), pan: 0 };
+    const raw = M.play([A, B], { detail: 0 }, 'r5mb-raw');
+    const rawCut = M.greyDiff(raw.clip[0], raw.clip[1]);
+    if (!(rawCut < 0.18)) throw new Error('setup: the cut from A to B changes the grey by ' + rawCut.toFixed(3) + ' on average, not under 0.18 (the old test would see it)');
+    const held = M.play([A, B], { detail: 0.85, bloom: 1, cuts: 0 }, 'r5mb-hold');
+    if (E1.maxDiff(held.shown[1], held.clip[0]) > 1) bad.push('the cut from A to B (same brightness) is dragged, up to ' + E1.maxDiff(held.shown[1], held.clip[0]) + ' levels off the old picture, where a cut holds it');
+    const seq = [A, B, B, B, C], reset = M.play(seq, { detail: 0.85, cuts: 1 }, 'r5mb-reset');
+    const panCut = M.greyDiff(reset.clip[1], reset.clip[2]);
+    if (E1.maxDiff(reset.shown[2], reset.clip[2]) === 0) throw new Error('CONTROL: with Clean reset, B panning 3 px a frame (grey change ' + panCut.toFixed(3) + ') came in clean: a pan was taken for a cut');
+    if (!(M.greyDiff(reset.clip[3], reset.clip[4]) < 0.18)) throw new Error('setup: the cut from B to C is not of the same brightness');
+    if (E1.maxDiff(reset.shown[4], reset.clip[4]) > 0) bad.push('Clean reset on a later cut of the same brightness (B to C) did not bring the clip in (off by up to ' + E1.maxDiff(reset.shown[4], reset.clip[4]) + ')');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* "Later cuts > Clean reset is clean for only one frame": from the frame after the reset the new shot was moshed by its own movement
+     (Bloom 1.6, New detail 0.85), so a moving shot tore more every frame (14.9 → 21.0 levels off the clip by 1 s). A kept keyframe means
+     the decoder has the right picture again, so from a Clean reset the clip plays as itself. Shot A, a cut to B panning, then a dark
+     cut (obvious by any measure) to C panning 3 px a frame for five frames: with Clean reset every frame of C is the clip. CONTROL: with
+     Mosh them too the last frame of C is not the clip, so the pan does get moshed when it should. */
+  test('1250 r5 Datamosh Clean reset plays the clip clean from the later cut on, not only for its first frame (CONTROL: Mosh them too keeps moshing it)', { item: '1250', budgetMs: 60000 }, function () {
+    const M = _mb1250;
+    const A = { f: M.tex(11, 128), pan: 0 }, B = { f: M.tex(23, 128), pan: 3 }, C = { f: M.tex(41, 60), pan: 3 };
+    const seq = [A, B, B, B, C, C, C, C, C];
+    const keep = M.play(seq, { cuts: 0 }, 'r5mb-keep');
+    if (E1.maxDiff(keep.shown[8], keep.clip[8]) === 0) throw new Error('CONTROL: with Mosh them too the last frame of C is the clip: nothing moshes it');
+    const reset = M.play(seq, { cuts: 1 }, 'r5mb-clean');
+    const off = []; for (let k = 4; k < 9; k++) { const m = E1.maxDiff(reset.shown[k], reset.clip[k]); if (m > 0) off.push('frame ' + k + ' off by ' + m); }
+    if (off.length) throw new Error('after a Clean reset on frame 4 the clip does not play clean: ' + off.join(', '));
+  });
+  /* "The cut only holds while New detail is above 0": on a new Datamosh Bloom with New detail at 0 the cut frame scrambled by the noise
+     field again — the slider only says it paints the new shot's movement. Now any instance that has the New detail key holds its cut; a
+     saved one (no key) still drags it exactly as it did. Shot A, then a dark cut to B. CONTROL: the saved one's cut frame is NOT the old
+     picture (it is dragged), so holding is something the new one does. */
+  test('1250 r5 Datamosh with New detail at 0 still holds the cut frame on a new instance (CONTROL: a saved one without the key still drags it)', { item: '1250', budgetMs: 30000 }, function () {
+    const M = _mb1250;
+    const A = { f: M.tex(11, 128), pan: 0 }, B = { f: M.tex(23, 60), pan: 3 };
+    const saved = M.play([A, B], {}, 'r5mb-saved');
+    if (E1.maxDiff(saved.shown[1], saved.clip[0]) <= 1) throw new Error('CONTROL: a saved Datamosh Bloom held its cut frame too (it should drag it as it always did)');
+    const zero = M.play([A, B], { detail: 0, bloom: 1, cuts: 0 }, 'r5mb-zero');
+    const m = E1.maxDiff(zero.shown[1], zero.clip[0]);
+    if (m > 1) throw new Error('a new Datamosh Bloom with New detail at 0 drags its cut frame (up to ' + m + ' levels off the old picture), where it should hold it');
+  });
+  /* r5 review: a cut became any frame moving the last one cannot explain, and Clean reset now plays the clip clean until playback jumps —
+     so a camera flash (the whole frame brighter, nothing new in it) was taken for a cut and ended the mosh for the rest of the clip:
+     141 of 144 flashes and fades made from his photos. Now a cut must also be unexplained once the last frame's brightness and contrast
+     are matched to this one's. Shot A, a cut to B panning 3 px a frame, then one frame of B flashed 65 levels brighter (a raw change of
+     about 0.25, past even the old 0.2 test) and B again: with Clean reset the frames after the flash are still moshed. CONTROL: a real
+     cut to C, a new picture of the same brightness, does reset it — from there the clip plays clean. */
+  test('1250 r5 Datamosh under Clean reset takes a camera flash for a flash, not a cut: the mosh goes on after it (CONTROL: a cut to a new picture of the same brightness still plays clean from there)', { item: '1250', budgetMs: 60000 }, function () {
+    const M = _mb1250;
+    const A = { f: M.tex(11, 128), pan: 0 }, B = { f: M.tex(23, 110), pan: 3 }, C = { f: M.tex(37, 110), pan: 3 };
+    const BF = { f: (x, y) => B.f(x, y) + 65, pan: 3 };
+    const ctl = M.play([A, B, B, B, C, C, C], { cuts: 1 }, 'r5mb-flash-ctl');
+    const offC = []; for (let k = 4; k < 7; k++) { const d = E1.maxDiff(ctl.shown[k], ctl.clip[k]); if (d > 0) offC.push('frame ' + k + ' off by ' + d); }
+    if (offC.length) throw new Error('CONTROL: a cut from B to C (a new picture) did not play clean under Clean reset: ' + offC.join(', '));
+    const flashDf = M.greyDiff(ctl.clip[3], M.play([A, B, B, BF], { cuts: 1 }, 'r5mb-flash-df').clip[3]);
+    if (!(flashDf > 0.2)) throw new Error('setup: the flash changes the grey by only ' + flashDf.toFixed(3) + ' (want over 0.2, a flash any raw test would see)');
+    const run = M.play([A, B, B, BF, B, B, B], { cuts: 1 }, 'r5mb-flash');
+    const clean = []; for (let k = 4; k < 7; k++) if (E1.maxDiff(run.shown[k], run.clip[k]) === 0) clean.push(k);
+    if (clean.length) throw new Error('after a one-frame flash on frame 3 Clean reset took it for a cut: frame' + (clean.length > 1 ? 's ' : ' ') + clean.join(', ') + ' play' + (clean.length > 1 ? '' : 's') + ' the clip clean, the mosh is over');
+  });
+  /* r5 review: once a Clean reset had fired, switching Later cuts back to Mosh them too changed nothing until playback jumped — the clean
+     state was checked before the option was read. Shot A, B panning, a dark cut to C panning 3 px a frame, Clean reset; before frame 6 the
+     option goes to Mosh them too: by frame 8 the clip is moshed again. CONTROL: left on Clean reset, frame 8 is the clip. */
+  test('1250 r5 Datamosh switched from Clean reset back to Mosh them too moshes again on the next frames, without a scrub (CONTROL: left on Clean reset it stays the clip)', { item: '1250', budgetMs: 60000 }, function () {
+    const M = _mb1250;
+    const A = { f: M.tex(11, 128), pan: 0 }, B = { f: M.tex(23, 128), pan: 3 }, C = { f: M.tex(41, 60), pan: 3 };
+    const seq = [A, B, B, B, C, C, C, C, C];
+    const stay = M.play(seq, { cuts: 1 }, 'r5mb-stay');
+    if (E1.maxDiff(stay.shown[8], stay.clip[8]) !== 0) throw new Error('CONTROL: left on Clean reset frame 8 is off the clip by ' + E1.maxDiff(stay.shown[8], stay.clip[8]) + ': the reset did not hold');
+    const back = M.play(seq, { cuts: 1 }, 'r5mb-back', (k, p) => { if (k === 6) p.cuts = 0; });
+    if (E1.maxDiff(back.shown[8], back.clip[8]) === 0) throw new Error('Later cuts switched to Mosh them too before frame 6, and frame 8 is still the clip exactly: the switch did nothing until a scrub');
+  });
+  /* r5 review: a resumed export warmed Datamosh Bloom only as far back as Heal remembers (77 frames at Heal 0.1), but under Clean reset a
+     later cut turns the mosh off however long ago it came, so a pre-roll starting after it moshed what the export had played clean — a
+     jump into smear at the seam. With Clean reset the pre-roll goes back to Start at. A seam at 4 s, Start at 0, Heal 0.1, 30 fps.
+     CONTROL: Mosh them too keeps Heal's 77 frames, and Heal 0 goes back to Start at either way (121). */
+  test('1250 r5 a resumed export warms a Clean reset Datamosh Bloom back to Start at, not only as far as Heal remembers (CONTROL: Mosh them too keeps the shorter warm-up)', { item: '1250' }, function () {
+    const XR = FM.exportResume;
+    if (!XR || !XR.prerollFrames) throw new Error('the export-resume pre-roll cannot be observed (FM.exportResume, js/export-resume.js)');
+    const mk = params => {
+      const l = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, start: 0, duration: 30 });
+      const fx = FM.fxRegistry.makeInstance('moshbloom'); Object.keys(params).forEach(k => { fx.params[k] = params[k]; }); l.effects = [fx];
+      return { layers: [l], project: { width: 64, height: 48, fps: 30, duration: 30 } };
+    };
+    const keep = XR.prerollFrames(mk({ decay: 0.1, cuts: 0 }), 30, 4), still = XR.prerollFrames(mk({ decay: 0, cuts: 0 }), 30, 4);
+    if (keep !== 77 || still !== 121) throw new Error('CONTROL: Mosh them too asks for ' + keep + ' frames at Heal 0.1 (want 77) and ' + still + ' at Heal 0 (want 121)');
+    const clean = XR.prerollFrames(mk({ decay: 0.1, cuts: 1 }), 30, 4);
+    if (clean !== 121) throw new Error('with Later cuts on Clean reset a seam at 4 s warms only ' + clean + ' frames, not the 121 back to Start at: a cut before that would play clean in the export and moshed after the seam');
+  });
+  /* #1246 U11: a layer per Cube face. A red square with a Cube (shading 0), a green layer picked for the Back face and a blue one for
+     the Left, both hidden by their eyes. Turned 180° about Y the middle of the picture is the green back face; turned 90° it is the blue
+     left face; the face layers are not drawn by themselves. A copy made by the import remap (reIdLayers) points its faces at the
+     copies of those layers, and FM.fxRefKeys names all five face keys beside `source`. Red on v18.38: there are no face keys, so every
+     face is the red layer. CONTROLS: the front is red at 0°, an unpicked back is red, and a Cube with every face empty is byte-identical
+     to a saved one with no face keys. */
+  test('1246 U11 Cube a layer per face: the back face shows the layer picked for it, the left face its own, hidden face layers show only on the cube, and copies keep their faces (CONTROLS: no faces is the old cube byte for byte)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 320, H = 240, bad = [];
+    const cube = FM.makeLayer('shape', { name: 'U11 cube', shape: 'rect', x: 160, y: 120, shapeW: 120, shapeH: 120, fill: '#ff0000' });
+    const green = FM.makeLayer('shape', { name: 'U11 back', shape: 'rect', x: 60, y: 60, shapeW: 80, shapeH: 80, fill: '#00ff00' });
+    const blue = FM.makeLayer('shape', { name: 'U11 left', shape: 'rect', x: 260, y: 180, shapeW: 80, shapeH: 80, fill: '#0000ff' });
+    green.visible = false; blue.visible = false;
+    const fxOf = over => { const f = FM.fxRegistry.makeInstance('cube3d'); Object.assign(f.params, { rotx: 0, roty: 0, rotz: 0, shading: 0 }, over); Object.keys(f.params).forEach(k => { if (f.params[k] === undefined) delete f.params[k]; }); return f; };
+    const shot = over => { cube.effects = [fxOf(over)]; const c = offscreen(W, H), g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, scene([cube, green, blue]), 0); return g.getImageData(0, 0, W, H).data; };
+    const at = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+    const isC = (c, k) => c[k] > 180 && c[(k + 1) % 3] < 80 && c[(k + 2) % 3] < 80;
+    const front = shot({});
+    if (!isC(at(front, 160, 120), 0)) throw new Error('CONTROL: the cube’s front at 0° is ' + at(front, 160, 120) + ', not the red layer');
+    if (!(at(front, 60, 60).every(v => v < 30) && at(front, 260, 180).every(v => v < 30))) bad.push('the hidden face layers are drawn by themselves (' + at(front, 60, 60) + ' / ' + at(front, 260, 180) + ')');
+    const plainBack = shot({ roty: 180 });
+    if (!isC(at(plainBack, 160, 120), 0)) throw new Error('CONTROL: with no Back face picked the back is ' + at(plainBack, 160, 120) + ', not this layer’s red');
+    const none = shot({ roty: 30, rotx: 20, faceback: '', faceright: '', faceleft: '', facetop: '', facebottom: '' });
+    const saved = shot({ roty: 30, rotx: 20, faceback: undefined, faceright: undefined, faceleft: undefined, facetop: undefined, facebottom: undefined });
+    if (E1.maxDiff(none, saved) > 0) throw new Error('CONTROL: a Cube with every face empty differs from a saved one with no face keys by ' + E1.maxDiff(none, saved));
+    const back = shot({ roty: 180, faceback: green.id, faceleft: blue.id });
+    if (!isC(at(back, 160, 120), 1)) bad.push('turned 180°, the middle is ' + at(back, 160, 120) + ', want the green layer picked for the Back face');
+    const left = shot({ roty: 90, faceback: green.id, faceleft: blue.id });
+    if (!isC(at(left, 160, 120), 2)) bad.push('turned 90°, the middle is ' + at(left, 160, 120) + ', want the blue layer picked for the Left face');
+    const keys = FM.fxRefKeys ? FM.fxRefKeys({ type: 'cube3d' }) : [];
+    ['source', 'faceback', 'faceright', 'faceleft', 'facetop', 'facebottom'].forEach(k => { if (keys.indexOf(k) < 0) bad.push('FM.fxRefKeys(cube3d) lacks ' + k); });
+    cube.effects = [fxOf({ faceback: green.id, faceleft: blue.id })];
+    const re = FM.storage && FM.storage._reIdLayers ? FM.storage._reIdLayers([cube, green, blue]) : null;
+    if (!re) bad.push('FM.storage._reIdLayers is not reachable');
+    else {
+      const c2 = re.layers.find(l => l.name === 'U11 cube'), p2 = c2 && c2.effects && c2.effects[0] && c2.effects[0].params;
+      if (!p2 || p2.faceback !== re.map[green.id] || p2.faceleft !== re.map[blue.id]) bad.push('an imported copy’s faces point at ' + (p2 ? p2.faceback + ' / ' + p2.faceleft : 'nothing') + ', not the copies ' + re.map[green.id] + ' / ' + re.map[blue.id]);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* #1246 U11, found by the old '482 polish 1 review the AI digest…' test on the first full slice (16 Nov): the AI's capability digest
+     printed each face picker as a number range, faceback(undefined..undefined, def undefined), which reads as broken and invites the
+     model to send a number into a layer picker. A picker inside params is now listed as its key with (layer id), the way the def-level
+     picker is listed as source(layer id); js/ai-ops.js already stores a string for a param the registry types layer. Red before the
+     fix: the digest holds the word undefined. CONTROL: the Cube is in the digest with a numeric param and its range. */
+  test('1246 U11 the AI digest offers each Cube face as a layer id, never as a number range, and an AI-added Cube keeps the face it was given (CONTROL: the Cube’s Depth is listed with its range)', { item: '1246' }, function () {
+    const d = String(FM.aiManifest && FM.aiManifest.digest || '');
+    const cube = (/(^|; )cube3d \[([^\]]*)\]/.exec(d) || [])[2] || '';
+    if (!cube) throw new Error('setup: the AI capability digest does not list cube3d');
+    if (!/(^|, )[a-z]+\(-?[0-9.]+\.\.-?[0-9.]+, def -?[0-9.]+\)/.test(cube)) throw new Error('CONTROL: the digest lists no numeric Cube control with a range: ' + cube);
+    const bad = [];
+    ['faceback', 'faceright', 'faceleft', 'facetop', 'facebottom'].forEach(k => {
+      if (cube.indexOf(k + '(layer id)') < 0) bad.push(k + ' is not offered as a layer id');
+    });
+    if (/undefined/.test(cube)) bad.push('the Cube’s entry says undefined: ' + cube.slice(Math.max(0, cube.indexOf('undefined') - 60), cube.indexOf('undefined') + 30));
+    /* …and the door the digest describes really takes it: the registry types a face as layer, which is the branch ai-ops stores a string through */
+    const ps = (FM.fxRegistry.paramsOf('cube3d') || []).filter(p => /^face/.test(p.key));
+    if (ps.length !== 5 || ps.some(p => p.type !== 'layer')) bad.push('the registry types the faces as ' + ps.map(p => p.key + ':' + p.type).join(', ') + ', want five of type layer');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* #1246 clause 5 (his words, 10 Nov: "I think rock noise and clouds looks bad, but that's because the actual effect looks bad"): Clouds'
+     Look Clouds. On a blue sky at Amount 1: at Cover 50 a real share of the frame is untouched sky (clear gaps) and a real share is white
+     cloud; Cover 20 leaves more sky than Cover 80; Shading 100 makes the clouds darker on average than Shading 0. Red on v18.38: there is
+     no Look, so every pixel is fog and none is untouched. CONTROL: a saved Clouds (no Look) is the Fog look, which changes every pixel. */
+  test('1246 clause 5 Clouds Look Clouds draws clouds with clear sky between them, Cover sets how much, Shading darkens them (CONTROL: a saved Clouds is the Fog look over every pixel)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 320, H = 240, N = E1, bad = [];
+    const sky = () => N.frame(W, H, () => [70, 130, 200]);
+    const run = over => N.px('clouds', Object.assign(N.inst('clouds'), { amount: 1 }, over), W, H, sky(), 0.5);
+    const share = (d, test) => { let n = 0; for (let i = 0; i < d.length; i += 4) if (test(d[i], d[i + 1], d[i + 2])) n++; return n / (d.length / 4); };
+    const clear = d => share(d, (r, g, b) => r === 70 && g === 130 && b === 200), white = d => share(d, (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b > 190);
+    const fog = N.px('clouds', { amount: 1 }, W, H, sky(), 0.5);
+    if (clear(fog) > 0) throw new Error('CONTROL: a saved Clouds left ' + Math.round(clear(fog) * 100) + '% of the sky untouched: it is not the Fog look');
+    if (N.inst('clouds').look !== 1) bad.push('a new Clouds starts on Look ' + N.inst('clouds').look + ', not Clouds');
+    const c50 = run({ look: 1, cover: 50 });
+    if (!(clear(c50) > 0.2 && clear(c50) < 0.8)) bad.push('at Cover 50, ' + Math.round(clear(c50) * 100) + '% of the sky is untouched: want clear gaps between clouds (20 to 80%)');
+    if (!(white(c50) > 0.1)) bad.push('at Cover 50 only ' + Math.round(white(c50) * 100) + '% of the frame is white cloud');
+    const c20 = run({ look: 1, cover: 20 }), c80 = run({ look: 1, cover: 80 });
+    if (!(clear(c20) > clear(c80) + 0.25)) bad.push('Cover 20 leaves ' + Math.round(clear(c20) * 100) + '% sky and Cover 80 ' + Math.round(clear(c80) * 100) + '%: Cover does not set how much is cloud');
+    const meanCloud = d => { let s = 0, n = 0; const s0 = sky(); for (let i = 0; i < d.length; i += 4) if (d[i] !== s0[i]) { s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; n++; } return n ? s / n : 0; };
+    const lit = meanCloud(run({ look: 1, cover: 60, shade: 0 })), shaded = meanCloud(run({ look: 1, cover: 60, shade: 100 }));
+    if (!(shaded < lit - 3)) bad.push('Shading 100 leaves the clouds at ' + shaded.toFixed(1) + ' mean luma against ' + lit.toFixed(1) + ' with none: no undersides are darkened');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* #1246 clause 4 (his words, 10 Nov: "I think rock noise and clouds looks bad, but that's because the actual effect looks bad"): Rock
+     Noise's Look Stone. On a flat grey layer at Amount 1, its defaults otherwise: a new Rock Noise opens on Stone in stone colours; Stone
+     is a different picture from Ridges; it is rougher for its spread (five turned octaves and the light on every slope, against three soft
+     folds); its brightness sits in the middle of the range (neither crushed nor blown). Red on v18.38: there is no Look, so Stone is
+     Ridges. CONTROL: a saved Rock Noise (no Look) is Ridges byte for byte. */
+  test('1246 clause 4 Rock Noise Look Stone is lit, rougher relief in stone colours, a different picture from Ridges (CONTROL: a saved one is Ridges byte for byte)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 200, H = 160, N = E1, bad = [];
+    const grey = () => N.frame(W, H, () => [127, 127, 127]);
+    const run = over => N.px('fractalridges', Object.assign(N.inst('fractalridges'), { amount: 1, speed: 0 }, over), W, H, grey(), 0.4);
+    const saved = N.px('fractalridges', { amount: 1, scale: 48 }, W, H, grey(), 0.4), ridges = N.px('fractalridges', { amount: 1, scale: 48, look: 0 }, W, H, grey(), 0.4);
+    if (N.maxDiff(saved, ridges) > 0) throw new Error('CONTROL: a saved Rock Noise differs from Look Ridges by ' + N.maxDiff(saved, ridges));
+    const inst = N.inst('fractalridges');
+    if (inst.look !== 1) bad.push('a new Rock Noise starts on Look ' + inst.look + ', not Stone');
+    if (inst.color !== '#2e2a26' || inst.color2 !== '#d8cfc0') bad.push('a new Rock Noise opens in ' + inst.color + ' / ' + inst.color2 + ', not the stone colours');
+    const lum = (d, i) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const rough = d => { let s = 0, n = 0, m = 0, v = 0; for (let i = 4; i < d.length; i += 4) { if ((i / 4) % W === 0) continue; s += Math.abs(lum(d, i) - lum(d, i - 4)); n++; } for (let i = 0; i < d.length; i += 4) m += lum(d, i); m /= d.length / 4; for (let i = 0; i < d.length; i += 4) v += (lum(d, i) - m) * (lum(d, i) - m); return { r: (s / n) / Math.sqrt(v / (d.length / 4)), mean: m }; };
+    const st = run({ look: 1 }), rd = run({ look: 0 });
+    let mad = 0; for (let i = 0; i < st.length; i += 4) mad += Math.abs(lum(st, i) - lum(rd, i)); mad /= st.length / 4;
+    if (!(mad > 8)) bad.push('Stone differs from Ridges by only ' + mad.toFixed(1) + ' levels of luma on average');
+    const rs = rough(st), rr = rough(rd);
+    if (!(rs.r > rr.r * 1.3)) bad.push('Stone is ' + rs.r.toFixed(3) + ' rough for its spread against Ridges ' + rr.r.toFixed(3) + ': want clearly rougher (x1.3), the crests and the light');
+    if (!(rs.mean > 40 && rs.mean < 200)) bad.push('Stone’s mean brightness is ' + rs.mean.toFixed(0) + ', want 40 to 200 (not crushed, not blown)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* r5 bug list, Rock Noise Look Stone (clause 4, his words: "I think rock noise and clouds looks bad, but that's because the actual effect
+     looks bad"): "BIG SLOWDOWN: Look Stone costs about 4 to 4.8 times Ridges per frame" — 20 hash calls a pixel, three new W·H arrays a
+     frame, and the field worked out again every frame even when it cannot change. Measured 16 Nov at 1080 x 1920, moving: 481 ms
+     against Ridges 100 (4.8 x); now 273-303, and a Stone that is not moving 44-53 ms. The kernel alone, moving, measured the same day:
+     5.8 / 5.6 / 5.5 x Ridges at 360 x 640 / 540 x 960 / 1080 x 1920 before, 2.9 / 3.4 / 3.5 x after. Here: five frames of a still Stone
+     (Speed 0, no drift) work the field out ONCE (FM._frStoneBuilds); a moving one costs at most 4.3 x Ridges on a 360 x 640 plate
+     (medians of 7, interleaved: between the 2.9 it costs and the 5.8 it cost). CONTROL: a moving Stone works it out every frame (5 builds), and the same still frame drawn twice is the
+     same picture. */
+  test('1246 r5 Rock Noise Stone that is not moving works its field out once, and a moving one costs well under the five and a half times Ridges it did (CONTROL: a moving Stone works it out every frame)', { item: '1246', budgetMs: 60000 }, function () {
+    const W = 360, H = 640, N = E1, bad = [];
+    const grey = () => N.frame(W, H, () => [127, 127, 127]);
+    const run = (over, t) => N.px('fractalridges', Object.assign(N.inst('fractalridges'), { amount: 1 }, over), W, H, grey(), t);
+    const T = { st: [], rd: [] };
+    for (let k = 0; k < 7; k++) { let f = grey(), t0 = performance.now(); N.px('fractalridges', Object.assign(N.inst('fractalridges'), { amount: 1 }), W, H, f, 0.5 + k / 30); T.st.push(performance.now() - t0); f = grey(); t0 = performance.now(); N.px('fractalridges', Object.assign(N.inst('fractalridges'), { amount: 1, look: 0 }), W, H, f, 0.5 + k / 30); T.rd.push(performance.now() - t0); }
+    const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1], ratio = med(T.st) / med(T.rd);
+    if (!(med(T.rd) > 1)) throw new Error('CONTROL: Ridges took ' + med(T.rd).toFixed(2) + ' ms, too little to compare against');
+    if (!(ratio <= 4.3)) bad.push('a moving Stone costs ' + med(T.st).toFixed(1) + ' ms against Ridges ' + med(T.rd).toFixed(1) + ' (' + ratio.toFixed(2) + ' x), want at most 4.3 x');
+    if (typeof FM._frStoneBuilds !== 'function') bad.push('nothing counts how often Stone works its field out (FM._frStoneBuilds), so a still one cannot be shown to keep it');
+    else {
+      const builds = FM._frStoneBuilds;
+      let b0 = builds(); for (let k = 0; k < 5; k++) run({ speed: 0.6 }, 0.1 + k / 30);
+      const moving = builds() - b0;
+      if (moving !== 5) throw new Error('CONTROL: five frames of a moving Stone worked the field out ' + moving + ' times, want 5');
+      const s1 = run({ speed: 0 }, 0.1); b0 = builds();
+      for (let k = 1; k < 5; k++) run({ speed: 0 }, 0.1 + k / 30);
+      const s5 = run({ speed: 0 }, 0.3);
+      if (N.maxDiff(s1, s5) !== 0) throw new Error('CONTROL: a Stone with Speed 0 changed between frames (max ' + N.maxDiff(s1, s5) + ')');
+      const still = builds() - b0;
+      if (still !== 0) bad.push('five more frames of a Stone that is not moving worked its unchanging field out ' + still + ' times, want 0');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* r5 review: Stone's kept field (three W·H float planes, 24 MB at 1080 x 1920) outlived the Stone layer — deleted, it stayed until an
+     export ended or the project changed. Now it also goes FM._frStoneIdleMs after the last Stone frame (10 s; 150 ms here, put back
+     after). A still Stone drawn, then nothing for 400 ms, then drawn again: the field is worked out again (it was let go). CONTROL: drawn
+     twice back to back it is kept (no new build). */
+  test('1246 r5 Rock Noise Stone lets go of its kept field soon after the last Stone frame, not only at an export end or project switch (CONTROL: back-to-back frames keep it)', { item: '1246', budgetMs: 30000 }, async function () {
+    const W = 120, H = 90, N = E1;
+    if (typeof FM._frStoneBuilds !== 'function') throw new Error('nothing counts how often Stone works its field out (FM._frStoneBuilds)');
+    const run = () => N.px('fractalridges', Object.assign(N.inst('fractalridges'), { amount: 1, speed: 0 }), W, H, N.frame(W, H, () => [127, 127, 127]), 0.2);
+    const desc = Object.getOwnPropertyDescriptor(FM, '_frStoneIdleMs');
+    try {
+      Object.defineProperty(FM, '_frStoneIdleMs', { value: 150, writable: true, enumerable: true, configurable: true });
+      run(); const b0 = FM._frStoneBuilds(); run();
+      if (FM._frStoneBuilds() !== b0) throw new Error('CONTROL: a still Stone drawn twice back to back worked its field out again (' + (FM._frStoneBuilds() - b0) + ' builds)');
+      await new Promise(r => setTimeout(r, 400));
+      const b1 = FM._frStoneBuilds(); run();
+      if (FM._frStoneBuilds() === b1) throw new Error('400 ms after the last Stone frame (idle limit 150 ms) the next one found its field still kept: the planes are held after the layer stops drawing');
+    } finally {
+      if (desc) Object.defineProperty(FM, '_frStoneIdleMs', desc); else delete FM._frStoneIdleMs;
+    }
+  });
+  /* r5 bug list, Clouds Look Clouds (clause 5): "PERFORMANCE … a cliff at 0.75". Below plate scale 0.75 a preview took four samples a
+     plate pixel — up to 16 times the export's per project pixel: measured 16 Nov on a 1080 square, rs 0.74 643 ms against 67 at rs 0.8
+     (Fog 79), rs 0.28 (his phone's plate) 94 against Fog 12. Now a preview samples a corner grid 2 project px apart and never more than
+     one plate px: rs 0.74 91 ms, rs 0.5 81, rs 0.28 25. Here the 0.74 preview of a 540 square must cost under 2.5 x the 0.8 preview
+     (medians of 5, interleaved; it was about 9.6 x). Accuracy on the reduced plate stays the job of '986 C7 Clouds and Starfield on a
+     reduced preview…'. CONTROL: the 0.8 preview takes long enough to time and draws clouds. */
+  test('1246 r5 Clouds on a reduced preview below plate scale 0.75 costs about what it costs at 0.8, no cliff (CONTROL: the 0.8 preview is timeable and draws clouds)', { item: '1246', budgetMs: 60000 }, function () {
+    const S = 540;
+    const L = () => { const l = FM.makeLayer('shape', { shape: 'rect', x: S / 2, y: S / 2, shapeW: S, shapeH: S, fill: '#3d6ea6' }); l.start = 0; l.duration = 4; l.effects = [_986fx('clouds', { amount: 1 })]; return l; };
+    const T = { 80: [], 74: [] }; let d80 = null;
+    for (let k = 0; k < 5; k++) [80, 74].forEach(r => { const l = L(), t0 = performance.now(); const s = _986shot([l], 0.5 + k / 30, S, S, r / 100); T[r].push(performance.now() - t0); if (r === 80) d80 = s; });
+    const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1];
+    if (!(med(T[80]) > 2)) throw new Error('CONTROL: the 0.8 preview took ' + med(T[80]).toFixed(1) + ' ms, too little to compare against');
+    let white = 0; for (let i = 0; i < d80.d.length; i += 4) if (d80.d[i] > 150 && d80.d[i + 2] > 150) white++;
+    if (!(white > d80.d.length / 4 * 0.05)) throw new Error('CONTROL: the 0.8 preview has only ' + white + ' cloud pixels');
+    const ratio = med(T[74]) / med(T[80]);
+    if (!(ratio < 2.5)) throw new Error('the 0.74 preview takes ' + med(T[74]).toFixed(1) + ' ms against ' + med(T[80]).toFixed(1) + ' at 0.8 (' + ratio.toFixed(2) + ' x), want under 2.5 x: a cliff below 0.75');
+  });
+  /* r5 bug list, Clouds Look Clouds (clause 5): "Cover 0 % is not a clear sky and Cover 100 % is not overcast" — the field peaks at about
+     0.87, above the 0.75 Cover 0 asked for, so 2 % of a frame stayed cloud (5.4 % changed) and Cover 100 left about 3 % blue holes. Over
+     the last 10 % at each end Cover now runs on past the field's reach. Shading 0, Amount 1, a blue sky: Cover 0 changes no pixel, Cover
+     100 turns every pixel the Cloud colour. CONTROLS: Cover 10 still draws some cloud and Cover 90 still leaves some sky (the ends are
+     reached smoothly, not by switching the clouds off), and the default Cover 50 is unchanged in kind (both). */
+  test('1246 r5 Clouds Cover 0 is a clear sky and Cover 100 an overcast one (CONTROLS: Cover 10 still draws cloud, Cover 90 still leaves sky)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 320, H = 240, N = E1, bad = [];
+    const sky = () => N.frame(W, H, () => [70, 130, 200]);
+    const run = cover => N.px('clouds', Object.assign(N.inst('clouds'), { amount: 1, look: 1, shade: 0, cover: cover }), W, H, sky(), 0.5);
+    const share = (d, f) => { let n = 0; for (let i = 0; i < d.length; i += 4) if (f(d[i], d[i + 1], d[i + 2])) n++; return n / (d.length / 4); };
+    const untouched = d => share(d, (r, g, b) => r === 70 && g === 130 && b === 200), cloud = d => share(d, (r, g, b) => r === 255 && g === 255 && b === 255);
+    const c10 = run(10), c90 = run(90), c50 = run(50);
+    if (!(untouched(c10) < 1)) throw new Error('CONTROL: Cover 10 draws no cloud at all');
+    if (!(untouched(c90) > 0)) throw new Error('CONTROL: Cover 90 leaves no sky at all');
+    if (!(untouched(c50) > 0.2 && cloud(c50) > 0.05)) throw new Error('CONTROL: Cover 50 is not part sky, part cloud (' + Math.round(untouched(c50) * 100) + '% sky, ' + Math.round(cloud(c50) * 100) + '% full cloud)');
+    const c0 = run(0), c100 = run(100);
+    if (untouched(c0) < 1) bad.push('Cover 0 still changes ' + ((1 - untouched(c0)) * 100).toFixed(2) + '% of the sky, want none: it is not a clear sky');
+    if (cloud(c100) < 1) bad.push('Cover 100 leaves ' + ((1 - cloud(c100)) * 100).toFixed(2) + '% of the frame short of full cloud, want none: it is not overcast');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* #1246 U10: Card Flip's Back: Another layer. A red card (x 60..260) turned over Horizontally to Flip 180; the back layer, hidden by
+     its eye, is green over the card's LEFT half only (x 60..160). Turned over, the card shows the green on the left (the right way
+     round) and nothing on the right, and no red anywhere; the hidden layer is not drawn on its own. And the back layer carrying a Card
+     Flip that names the card back renders (no endless recursion). Red on v18.38: Back has no Another layer (option 3 reads as the
+     mirror), so the red shows. CONTROLS: Back Mirror at 180 still shows the red card reversed, and Another layer with nothing picked
+     shows nothing. */
+  test('1246 U10 Card Flip Back: Another layer turns the card over to a different layer, the right way round, the hidden layer drawn only on the card (CONTROLS: Mirror still shows the card, nothing picked shows nothing)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 320, H = 240, bad = [];
+    const card = FM.makeLayer('shape', { name: 'U10 card', shape: 'rect', x: 160, y: 120, shapeW: 200, shapeH: 140, fill: '#ff0000' });
+    const back = FM.makeLayer('shape', { name: 'U10 back', shape: 'rect', x: 90, y: 120, shapeW: 140, shapeH: 140, fill: '#00ff00' });   // x 20..160: past the card's left edge, where only a drawn-by-itself layer could show
+    back.visible = false;
+    const flip = over => { const f = FM.fxRegistry.makeInstance('fliplayer'); Object.assign(f.params, { mode: 0, angle: 180 }, over); return f; };
+    const render = (over, backFx) => {
+      card.effects = [flip(over)]; back.effects = backFx ? [backFx] : [];
+      const c = offscreen(W, H), g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, scene([card, back]), 0);
+      return (x, y) => Array.from(g.getImageData(x, y, 1, 1).data.slice(0, 3));
+    };
+    const isRed = c => c[0] > 180 && c[1] < 70 && c[2] < 70, isGreen = c => c[1] > 180 && c[0] < 70 && c[2] < 70, isDark = c => c[0] < 30 && c[1] < 30 && c[2] < 30;
+    if (FM.fxRegistry.makeInstance('fliplayer').params.back !== 0) throw new Error('CONTROL: a new Card Flip starts on Back ' + FM.fxRegistry.makeInstance('fliplayer').params.back + ', not Mirror');
+    const mir = render({ back: 0 });
+    if (!isRed(mir(100, 120)) || !isRed(mir(220, 120))) throw new Error('CONTROL: Back Mirror at Flip 180 shows ' + mir(100, 120) + ' and ' + mir(220, 120) + ', not the red card: the scene is not drawing the card');
+    if (!isDark(mir(300, 120))) throw new Error('CONTROL: off the card is ' + mir(300, 120) + ', not the black ground');
+    const none = render({ back: 3, source: '' });
+    if (!isDark(none(100, 120)) || !isDark(none(220, 120))) bad.push('Another layer with nothing picked shows ' + none(100, 120) + ' and ' + none(220, 120) + ', want nothing (not the card reversed)');
+    const other = render({ back: 3, source: back.id });
+    if (!isGreen(other(100, 120))) bad.push('turned over, the left of the card is ' + other(100, 120) + ', want the back layer’s green (the right way round)');
+    if (!isDark(other(220, 120))) bad.push('turned over, the right of the card is ' + other(220, 120) + ', want nothing (the back layer does not reach there; green here means it is mirrored)');
+    if (isRed(other(100, 120)) || isRed(other(220, 120))) bad.push('the red front still shows on a card turned over to another layer');
+    if (!isDark(other(40, 120))) bad.push('the hidden back layer shows by itself left of the card (' + other(40, 120) + ')');
+    const flat = render({ back: 3, source: back.id, angle: 0 });
+    if (!isRed(flat(100, 120)) || !isDark(flat(40, 120))) bad.push('at Flip 0 the card is ' + flat(100, 120) + ' (want red) and left of it ' + flat(40, 120) + ' (want black)');
+    const loop = render({ back: 3, source: back.id }, flip({ back: 3, source: card.id }));
+    if (!isGreen(loop(100, 120))) bad.push('with the back layer’s own Card Flip naming the card, the back shows ' + loop(100, 120) + ', want the green');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* #1246 U10, the r5 bug list's Card Flip section (his words: "make the effect actually able to do what's in the picture"). Shared
+     fixture: a red card (x 60..260, y 50..190) on black, its Back layer green and hidden by its eye. */
+  const _cf1246 = (function () {
+    const W = 320, H = 240;
+    const mk = (backOver) => {
+      const card = FM.makeLayer('shape', { name: 'cf card', shape: 'rect', x: 160, y: 120, shapeW: 200, shapeH: 140, fill: '#ff0000' });
+      const back = FM.makeLayer('shape', Object.assign({ name: 'cf back', shape: 'rect', x: 90, y: 120, shapeW: 140, shapeH: 140, fill: '#00ff00' }, backOver || {}));
+      back.visible = false; return { card: card, back: back };
+    };
+    const flip = over => { const f = FM.fxRegistry.makeInstance('fliplayer'); Object.assign(f.params, { mode: 0, angle: 180 }, over); return f; };
+    const render = (s, over) => {
+      s.card.effects = [flip(over)];
+      const c = offscreen(W, H), g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, scene([s.card, s.back]), 0);
+      const d = g.getImageData(0, 0, W, H).data;
+      return { d: d, at: (x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2]]; } };
+    };
+    const isRed = c => c[0] > 180 && c[1] < 70 && c[2] < 70, isGreen = c => c[1] > 180 && c[0] < 70 && c[2] < 70, isDark = c => c[0] < 30 && c[1] < 30 && c[2] < 30;
+    return { W: W, H: H, mk: mk, flip: flip, render: render, isRed: isRed, isGreen: isGreen, isDark: isDark };
+  })();
+  /* The FRONT face mid-turn is the card's own picture even when the back layer carries a mesh effect (Page Curl) or a 3D tilt. Red
+     before the fix: drawing the back layer ran its own extractTex into the one canvas the front's texture lived on, so the front face
+     showed the green back layer. CONTROL: the same turn with a back layer that carries nothing shows the red front. */
+  test('1246 Card Flip the front face shows the card while it turns even when the back layer has its own Page Curl or 3D tilt (CONTROL: a plain back layer shows the red front)', { item: '1246', budgetMs: 30000 }, function () {
+    const C = _cf1246, bad = [];
+    const plain = C.mk(); const p0 = C.render(plain, { back: 3, source: plain.back.id, angle: 40 });
+    if (!C.isRed(p0.at(160, 120)) || !C.isRed(p0.at(120, 120))) throw new Error('CONTROL: at Flip 40 with a plain back layer the front shows ' + p0.at(160, 120) + ' / ' + p0.at(120, 120) + ', not the red card');
+    const curl = C.mk(); curl.back.effects = [FM.fxRegistry.makeInstance('pagecurl')];
+    const pc = C.render(curl, { back: 3, source: curl.back.id, angle: 40 });
+    if (!C.isRed(pc.at(160, 120)) || !C.isRed(pc.at(120, 120))) bad.push('with a Page Curl on the back layer the front face at Flip 40 shows ' + pc.at(160, 120) + ' / ' + pc.at(120, 120) + ', want the red card');
+    const tilt = C.mk(); tilt.back.transform.rotationY = 30;
+    const tl = C.render(tilt, { back: 3, source: tilt.back.id, angle: 40 });
+    if (!C.isRed(tl.at(160, 120)) || !C.isRed(tl.at(120, 120))) bad.push('with a 3D tilt on the back layer the front face at Flip 40 shows ' + tl.at(160, 120) + ' / ' + tl.at(120, 120) + ', want the red card');
+    if (E1.maxDiff(p0.d, pc.d) > 0) bad.push('the front at Flip 40 differs by up to ' + E1.maxDiff(p0.d, pc.d) + ' levels when the back layer has a Page Curl (the far side is not in view)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Flips: Both turns the card over. Red before the fix: Both turned about X and Y at once, the two turns cancelled, and the face never
+     showed its back, so Another layer and Solid colour did nothing. At 180 the far side shows the back layer the right way round (green
+     on the card's left, nothing on its right) and Solid colour fills the card; at Flip 120 the far side is already in view.
+     CONTROL: Both with Back Mirror (every Card Flip saved before Back existed) is still the old point mirror at 180: the red card. */
+  test('1246 Card Flip Flips Both turns the card over to its Back layer the right way round, and to a Solid colour (CONTROL: Both with Mirror is still the old red mirror)', { item: '1246', budgetMs: 30000 }, function () {
+    const C = _cf1246, bad = [];
+    const s = C.mk();
+    const mir = C.render(s, { mode: 2, back: 0 });
+    if (!C.isRed(mir.at(100, 120)) || !C.isRed(mir.at(220, 120))) throw new Error('CONTROL: Both with Mirror at 180 shows ' + mir.at(100, 120) + ' / ' + mir.at(220, 120) + ', not the red card');
+    const other = C.render(s, { mode: 2, back: 3, source: s.back.id });
+    if (!C.isGreen(other.at(100, 120))) bad.push('Both at 180, the card’s left shows ' + other.at(100, 120) + ', want the back layer’s green');
+    if (!C.isDark(other.at(220, 120))) bad.push('Both at 180, the card’s right shows ' + other.at(220, 120) + ', want nothing (the back layer does not reach there)');
+    const col = C.render(s, { mode: 2, back: 1, color: '#0000ff' });
+    const blue = c => c[2] > 180 && c[0] < 70 && c[1] < 70;
+    if (!blue(col.at(160, 120))) bad.push('Both at 180 with Solid colour blue shows ' + col.at(160, 120) + ', want the blue back');
+    const mid = C.render(s, { mode: 2, back: 1, color: '#0000ff', angle: 120 });
+    let nb = 0; for (let i = 0; i < mid.d.length; i += 4) if (blue([mid.d[i], mid.d[i + 1], mid.d[i + 2]])) nb++;
+    if (nb < 500) bad.push('Both at Flip 120 shows only ' + nb + ' blue pixels: the far side is not in view past edge-on');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  /* Held turned over (Flip 180) the card is drawn in one piece, not as 128 triangles whose anti-aliased edges let the black plate show
+     through in a grid of hairlines. A flat #e7e2d5 back layer the card's size: every pixel well inside the turned card is that colour
+     (within 2 levels). Red before the fix: 2-3% of them were off by up to ~30 along the triangle grid. CONTROL: at Flip 179 the card
+     still goes through the mesh, and the same probe sees its seams — it can tell a seam from none. */
+  test('1246 Card Flip held turned over at 180 shows its Back layer with no mesh seams (CONTROL: the same probe sees the seams of the mesh at 179)', { item: '1246', budgetMs: 30000 }, function () {
+    const C = _cf1246;
+    const s = C.mk({ x: 160, shapeW: 200, fill: '#e7e2d5' });
+    const off = (r, x0, x1) => { let n = 0, m = 0; for (let y = 56; y < 184; y++) for (let x = x0; x < x1; x++) { const c = r.at(x, y), d = Math.max(Math.abs(c[0] - 0xe7), Math.abs(c[1] - 0xe2), Math.abs(c[2] - 0xd5)); if (d > 2) n++; if (d > m) m = d; } return { n: n, m: m }; };
+    const ctl = off(C.render(s, { back: 3, source: s.back.id, angle: 179 }), 70, 250);
+    if (!(ctl.n > 20)) throw new Error('CONTROL: at Flip 179 the probe sees only ' + ctl.n + ' off pixels on the meshed card: it cannot see a seam');
+    const flat = off(C.render(s, { back: 3, source: s.back.id, angle: 180 }), 66, 254);
+    if (flat.n) throw new Error('at Flip 180 ' + flat.n + ' pixels inside the turned card are off the back layer’s colour by up to ' + flat.m + ' levels: mesh seams');
+  });
+  /* A back layer BIGGER than the card (the whole frame, green) is printed only where the card's front is: turned over at 180 the green
+     stays inside the card's own box (x 60..260, y 50..190). Red before the fix: the back was cropped at the fast box, ~a scan cell
+     wider than the card, so the turned card grew. CONTROL: the green fills the card. */
+  test('1246 Card Flip a Back layer bigger than the card does not grow the turned card past its own edges (CONTROL: the back layer fills the card)', { item: '1246', budgetMs: 30000 }, function () {
+    const C = _cf1246;
+    const s = C.mk({ x: 160, y: 120, shapeW: 320, shapeH: 240 });
+    const r = C.render(s, { back: 3, source: s.back.id });
+    if (!C.isGreen(r.at(70, 60)) || !C.isGreen(r.at(250, 180)) || !C.isGreen(r.at(160, 120))) throw new Error('CONTROL: the turned card shows ' + r.at(70, 60) + ' / ' + r.at(160, 120) + ' / ' + r.at(250, 180) + ', not the green back layer');
+    let out = 0; for (let y = 0; y < C.H; y++) for (let x = 0; x < C.W; x++) { if (x >= 59 && x <= 260 && y >= 49 && y <= 190) continue; if (r.d[(y * C.W + x) * 4 + 1] > 40) out++; }
+    if (out) throw new Error(out + ' green pixels lie outside the card’s own box: the turned card grew');
+  });
+  /* The r5 bug list's Cube section. Face layers smaller than the frame: a Cube on a full-frame magenta layer, its Back face an opaque
+     cyan 140 px layer (eye off); turned 180° about Y with no shading, the back face is cyan edge to edge — no magenta border from the
+     front face behind it showing through. Red before the fix: the face crop kept the fast box's clear slack (~16% of the face). CONTROL:
+     turned 0° the same probe finds the magenta front. */
+  test('1246 Cube a face layer smaller than the frame fills its face with no see-through border (CONTROL: the probe finds the magenta front at 0)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 320, H = 240;
+    const cube = FM.makeLayer('shape', { name: 'cb cube', shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, fill: '#ff00ff' });
+    const face = FM.makeLayer('shape', { name: 'cb face', shape: 'rect', x: 160, y: 120, shapeW: 140, shapeH: 140, fill: '#00ffff' });
+    face.visible = false;
+    const shot = roty => { const f = FM.fxRegistry.makeInstance('cube3d'); Object.assign(f.params, { rotx: 0, roty: roty, rotz: 0, shading: 0, faceback: face.id }); cube.effects = [f];
+      const c = offscreen(W, H), g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, scene([cube, face]), 0); return g.getImageData(0, 0, W, H).data; };
+    /* the face's square: every lit pixel's extent, then 3 px in from it */
+    const census = d => { let x0 = W, x1 = -1, y0 = H, y1 = -1; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i] + d[i + 1] + d[i + 2] > 60) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
+      let mag = 0, n = 0; for (let y = y0 + 3; y <= y1 - 3; y++) for (let x = x0 + 3; x <= x1 - 3; x++) { const i = (y * W + x) * 4; n++; if (d[i] > 150 && d[i + 2] > 150 && d[i + 1] < 90) mag++; } return { mag: mag, n: n }; };
+    const front = census(shot(0));
+    if (!(front.n > 2000 && front.mag > front.n * 0.9)) throw new Error('CONTROL: at Rotate Y 0 the probe finds ' + front.mag + ' magenta of ' + front.n + ' face pixels, not the magenta front');
+    const back = census(shot(180));
+    if (back.mag) throw new Error('turned 180°, ' + back.mag + ' of the back face’s ' + back.n + ' pixels (' + (100 * back.mag / back.n).toFixed(1) + '%) are the magenta front showing through a border round the face layer');
+  });
+  /* Nested cubes keep their own faces. A red 120 px Cube A: Back = blue L1, Right = L2 (eyes off), turned 180°: the middle is blue.
+     Then L2 gets a Cube of its own whose Back is green L3: A's back face must stay blue. Red before the fix: the face textures were
+     one pool indexed by face only, so the inner cube's Back overwrote the outer one's (A turned green). CONTROL: without L2's Cube the
+     middle is blue. */
+  test('1246 Cube a face layer that carries its own Cube does not repaint the outer cube’s faces (CONTROL: the back face is blue without it)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 320, H = 240;
+    const A = FM.makeLayer('shape', { name: 'nc A', shape: 'rect', x: 160, y: 120, shapeW: 120, shapeH: 120, fill: '#ff0000' });
+    const L1 = FM.makeLayer('shape', { name: 'nc L1', shape: 'rect', x: 60, y: 60, shapeW: 80, shapeH: 80, fill: '#0000ff' });
+    const L2 = FM.makeLayer('shape', { name: 'nc L2', shape: 'rect', x: 260, y: 60, shapeW: 80, shapeH: 80, fill: '#ffff00' });
+    const L3 = FM.makeLayer('shape', { name: 'nc L3', shape: 'rect', x: 260, y: 180, shapeW: 80, shapeH: 80, fill: '#00ff00' });
+    [L1, L2, L3].forEach(l => { l.visible = false; });
+    const cubeFx = over => { const f = FM.fxRegistry.makeInstance('cube3d'); Object.assign(f.params, { rotx: 0, roty: 180, rotz: 0, shading: 0 }, over); return f; };
+    A.effects = [cubeFx({ faceback: L1.id, faceright: L2.id })];
+    const mid = () => { const c = offscreen(W, H), g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, scene([A, L1, L2, L3]), 0); return Array.from(g.getImageData(160, 120, 1, 1).data.slice(0, 3)); };
+    const isBlue = c => c[2] > 180 && c[0] < 70 && c[1] < 70;
+    const c0 = mid();
+    if (!isBlue(c0)) throw new Error('CONTROL: Cube A turned 180° shows ' + c0 + ' in the middle, not its blue Back face');
+    L2.effects = [cubeFx({ faceback: L3.id })];
+    const c1 = mid();
+    if (!isBlue(c1)) throw new Error('with the Right face layer carrying its own Cube (Back = green), Cube A’s back face shows ' + c1 + ', want it to stay blue');
+  });
+  /* A face nearly edge-on never shows over the faces in front of it. Rotate X 0, Rotate Y 45: the front and a side face are in view
+     and the top face (a yellow layer) is seen exactly edge-on from below, so no yellow may show. Red before the fix: triangles were
+     sorted one by one by depth and the top face's drew over the near faces in teeth (hundreds of pixels). CONTROL: tipped 30° either
+     way about X the same probe finds the yellow top (it can see the top face when it is really in view). */
+  test('1246 Cube a face seen edge-on does not draw teeth over the faces in front of it (CONTROL: tipped 30 degrees the top face is seen)', { item: '1246', budgetMs: 30000 }, function () {
+    const W = 360, H = 270;
+    const cube = FM.makeLayer('shape', { name: 'ts cube', shape: 'rect', x: 180, y: 135, shapeW: 200, shapeH: 200, fill: '#ff0000' });
+    const mk = (fill, x) => { const l = FM.makeLayer('shape', { name: 'ts ' + fill, shape: 'rect', x: x, y: 40, shapeW: 60, shapeH: 60, fill: fill }); l.visible = false; return l; };
+    const right = mk('#0000ff', 40), left = mk('#00ff00', 110), top = mk('#ffff00', 250), bottom = mk('#ff00ff', 320);
+    const yellow = (rotx, roty) => { const f = FM.fxRegistry.makeInstance('cube3d'); Object.assign(f.params, { rotx: rotx, roty: roty, rotz: 0, shading: 0, faceright: right.id, faceleft: left.id, facetop: top.id, facebottom: bottom.id }); cube.effects = [f];
+      const c = offscreen(W, H), g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 5, background: '#000000' }, layers: [cube, right, left, top, bottom], selectedId: null, selectedIds: [] }, 0);
+      const d = g.getImageData(0, 0, W, H).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 180 && d[i + 1] > 180 && d[i + 2] < 80) n++; return n; };
+    const ctl = Math.max(yellow(30, 45), yellow(330, 45));
+    if (!(ctl > 300)) throw new Error('CONTROL: tipped 30° about X the probe finds only ' + ctl + ' yellow pixels: it cannot see the top face');
+    const bad = [];
+    [45, 225, 315].forEach(ry => { const n = yellow(0, ry); if (n > 4) bad.push('Rotate Y ' + ry + ': ' + n + ' yellow pixels of the edge-on top face over the faces in front'); });
+    if (bad.length) throw new Error(bad.join(' · '));
   });
   test('E1 Glitter: the same instant is the same picture, it twinkles with the clock, stars sit only on bright pixels, none on transparency, and a dark shot shows none until the bar is lowered', { item: '1114', budgetMs: 30000 }, function () {
     const W = 200, H = 160, N = E1;
@@ -74589,7 +75718,7 @@
         var im = new Image();
         im.onload = function () { if (!im.naturalWidth) unloaded.push(k + ' (zero width)'); done(); };
         im.onerror = function () { unloaded.push(k + ' (404)'); done(); };
-        im.src = 'fx-art/' + k + '.jpg?v=1';
+        im.src = 'fx-art/' + k + '.jpg?v=2';
       });
     }));
     if (unloaded.length) throw new Error('filter subject art missing: ' + unloaded.join(', '));
@@ -145110,6 +146239,174 @@
     if (absent.out) throw new Error('a Snow & Rain with no Area (a saved one) still covers the whole screen (' + absent.out + ' pixels outside the box)');
   });
 
+  /* #1248, HIS WORDS (10 Nov): "The snow and rain effect should stay inside of the layer you add it to, not cover the whole
+     screen." The r5 bug list (16 Nov): v18.38 laid the weather out over the FRAME and only masked it by the layer, so a card that
+     slid or turned was a window onto snow standing still. Rendered through renderScene on a 240 x 240 frame: a 120 x 90 card with
+     heavy snow at (90, 90) and at (150, 140), and at (120, 120) turned 0 and 180 degrees, all at 1.3 s.
+       · MOVED: the 100 x 70 crop at the card's middle is the same picture at both places. Measured 0.00 levels mean (new), against
+         180.5 for the frame's weather (Whole frame, and a saved one with no Area).
+       · TURNED HALF ROUND: the turned card's crop, turned back, is the unturned card's crop. Measured 1.67 levels mean (new: the
+         antialiasing of mirrored sub-pixel flakes), tolerance 5, against the frame's weather's control above 20.
+       · A STILL CARD CENTRED ON THE FRAME COVERING IT is the frame's own weather: Area 0 against Whole frame, under 1 level mean.
+     FAILS BEFORE: the moved card's crop differs by ~180 levels mean with Area 0 too.
+     CONTROL: Whole frame and a saved one with no Area (both the frame's weather) DO differ between the two places, so the probe sees
+     the snow and the move. */
+  test('1248 Snow and Rain inside a layer travels with it: a card moved or turned half round carries the same snow (CONTROL: Whole frame and a saved one with no Area stay put in the frame)', { item: '1248', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, W = 240, H = 240;
+    const shot = function (x, y, rot, area, bw, bh) {
+      const L = FM.makeLayer('shape', { name: 'Card', shape: 'rect', x: x, y: y, shapeW: bw || 120, shapeH: bh || 90, fill: '#3a6ea5' });
+      L.start = 0; L.duration = 4; if (rot) L.transform.rotation = rot;
+      const p = Object.assign(R.makeInstance('weather').params, { amount: 1500, size: 5, opacity: 1 });
+      if (area === undefined) delete p.area; else p.area = area;
+      L.effects = [{ type: 'weather', enabled: true, params: p }];
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const g = c.getContext('2d'); FM.renderScene(g, scene([L], { project: { width: W, height: H, fps: 30, duration: 4, background: '#101418' } }), 1.3);
+      return g;
+    };
+    const crop = (g, cx, cy, flip) => { const d = g.getImageData(cx - 50, cy - 35, 100, 70).data; if (!flip) return d; const o = new Uint8ClampedArray(d.length); for (let i = 0; i < 7000; i++) { const j = 6999 - i; o[i * 4] = d[j * 4]; o[i * 4 + 1] = d[j * 4 + 1]; o[i * 4 + 2] = d[j * 4 + 2]; o[i * 4 + 3] = d[j * 4 + 3]; } return o; };
+    const md = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); return s / (a.length / 4); };
+    const moved = area => md(crop(shot(90, 90, 0, area), 90, 90), crop(shot(150, 140, 0, area), 150, 140));
+    const turned = area => md(crop(shot(120, 120, 0, area), 120, 120), crop(shot(120, 120, 180, area), 120, 120, true));
+    const wf = moved(1), sv = moved(undefined);
+    if (!(wf > 20 && sv > 20)) throw new Error('CONTROL: the frame’s weather (Whole frame ' + wf.toFixed(2) + ', a saved one with no Area ' + sv.toFixed(2) + ') looks the same on a moved card, so the probe cannot see the snow stand still');
+    const nw = moved(0);
+    if (!(nw < 0.5)) throw new Error('a card with Snow & Rain inside it, moved from (90, 90) to (150, 140), shows different snow (' + nw.toFixed(2) + ' levels mean): the weather stands still in the frame instead of travelling with the layer');
+    const tw = turned(1), tn = turned(0);
+    if (!(tw > 20)) throw new Error('CONTROL: the frame’s weather on a card turned half round, turned back, matches the unturned card (' + tw.toFixed(2) + ')');
+    if (!(tn < 5)) throw new Error('a card with Snow & Rain inside it, turned half round, does not carry its snow round with it (' + tn.toFixed(2) + ' levels mean against the unturned card)');
+    /* a still layer centred on the frame and covering it gets the frame's own weather */
+    const full = md(shot(120, 120, 0, 0, 240, 240).getImageData(0, 0, W, H).data, shot(120, 120, 0, 1, 240, 240).getImageData(0, 0, W, H).data);
+    if (!(full < 1)) throw new Error('a still full-frame layer with Area Inside the layer is not the frame’s own weather (' + full.toFixed(2) + ' levels mean against Whole frame)');
+  });
+
+  /* THE SAVED-PROJECT RULE (#1248 carry): a Snow & Rain saved before v18.38 has no Area. It must draw as it did on v18.38-v18.40 -
+     the frame's weather kept where the layer is - and rendering it must not write an Area into it (the render-time fill did, which
+     would have moved it onto the carried weather on its next frame and into the file on the next save).
+     Rendered as above: the saved one's pixels inside the card are the Whole frame pixels there (measured 0), and outside it are the
+     plain frame's.
+     FAILS BEFORE: the fill wrote area 0 into the saved instance. That check runs FIRST and needs no control (it reads a key on an
+     object the test owns), so on the code before it fails by its own sentence, not at a control that leans on the carry (review F2).
+     CONTROL: a NEW one (Area 0) on a card moved off the frame's centre does NOT match the Whole frame pixels inside it, so the
+     pixel comparison can tell the frame's weather from the carried one. */
+  test('1248 a Snow and Rain saved before v18.38 (no Area) still shows the frame weather inside its layer, and rendering it leaves it with no Area (CONTROL: a new one carries different snow)', { item: '1248', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, W = 240, H = 240;
+    const shot = function (params) {
+      const L = FM.makeLayer('shape', { name: 'Card', shape: 'rect', x: 90, y: 90, shapeW: 120, shapeH: 90, fill: '#3a6ea5' });
+      L.start = 0; L.duration = 4; L.effects = [{ type: 'weather', enabled: true, params: params }];
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const g = c.getContext('2d'); FM.renderScene(g, scene([L], { project: { width: W, height: H, fps: 30, duration: 4, background: '#101418' } }), 1.3);
+      return g.getImageData(40, 55, 100, 70).data;
+    };
+    const md = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); return s / (a.length / 4); };
+    const mk = area => { const p = Object.assign(R.makeInstance('weather').params, { amount: 1500, size: 5, opacity: 1 }); if (area === undefined) delete p.area; else p.area = area; return p; };
+    const saved = mk(undefined), savedPx = shot(saved);
+    if ('area' in saved) throw new Error('rendering a Snow & Rain saved before v18.38 wrote Area ' + saved.area + ' into it, which moves it onto the new carried weather');
+    const whole = shot(mk(1)), fresh = md(shot(mk(0)), whole);
+    if (!(fresh > 20)) throw new Error('CONTROL: a new Snow & Rain (Area 0) on a card off the frame’s centre shows the frame’s weather (' + fresh.toFixed(2) + '), so the probe cannot tell the two apart');
+    const got = md(savedPx, whole);
+    if (!(got < 0.5)) throw new Error('a Snow & Rain saved before v18.38 (no Area) no longer shows the frame’s weather inside its layer (' + got.toFixed(2) + ' levels mean against Whole frame)');
+  });
+
+  /* #1248 review S1/F1/S4 (the carried field's tiles). HIS WORDS (10 Nov): "The snow and rain effect should stay inside of the layer
+     you add it to, not cover the whole screen." A full-frame photo zooming out (scale 1.25 -> 1 over its 4 s) carries its snow at
+     its first frame's size, so later the field is smaller than the frame and repeats across it: 3 x 3 tiles on a 240 x 240 frame.
+     The first cut clipped each tile to a frame while the field wrapped over (1 + 2 margins) frames, so every flake was cut along
+     straight lines and the thin margins left empty stripes between tiles.
+       · SEAM: for every column (row), the summed jump in red to the next column (row), largest over median. A straight cut is a
+         column whose jump towers over the rest. Measured: 1.64 at 2 s (9.52 before); the CONTROL (Whole frame Pattern 0 with
+         Pattern 5 pasted into its bottom-right quarter: a straight cut half the frame long, both ways) scores 4.74. Limit 3.
+       · STRIPE: the share of snow-bright pixels (red over 128) in each 12 px band of columns (rows), smallest over median.
+         Measured: 0.88 at 2 s; the CONTROL (Whole frame with a 30 px band painted back to the photo's blue) scores 0.00, limit
+         0.35 for the control and 0.45 for the photo.
+     Rendered at 2.0 s and 3.9 s, Snow at size 8.
+     FAILS BEFORE: seam score 9.52 at 2 s (each tile clipped; margins thin). */
+  test('1248 Snow and Rain on a full-frame photo zooming out has no straight seams or empty stripes where its snow repeats (CONTROL: a straight cut and an empty stripe drawn on purpose are both seen)', { item: '1248', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, W = 240, H = 240, BG = [42, 74, 138];
+    const shot = function (fx, t, zoom) {
+      const L = FM.makeLayer('shape', { name: 'Photo', shape: 'rect', x: 120, y: 120, shapeW: 240, shapeH: 240, fill: '#2a4a8a' });
+      L.start = 0; L.duration = 4; if (zoom) L.transform.scale = { kf: [{ t: 0, v: 1.25, e: 'linear' }, { t: 4, v: 1, e: 'linear' }] };
+      L.effects = [{ type: 'weather', enabled: true, params: Object.assign(R.makeInstance('weather').params, { amount: 1500, size: 8, opacity: 1 }, fx) }];
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      FM.renderScene(c.getContext('2d'), scene([L], { project: { width: W, height: H, fps: 30, duration: 4, background: '#000000' } }), t);
+      return c;
+    };
+    const med = v => v.slice().sort((a, b) => a - b)[v.length >> 1];
+    const score = function (c) {
+      const d = c.getContext('2d').getImageData(0, 0, W, H).data, red = (x, y) => d[(y * W + x) * 4];
+      const cj = [], rj = [], cb = [], rb = [];
+      for (let x = 2; x < W - 3; x++) { let s = 0; for (let y = 2; y < H - 2; y++) s += Math.abs(red(x + 1, y) - red(x, y)); cj.push(s); }
+      for (let y = 2; y < H - 3; y++) { let s = 0; for (let x = 2; x < W - 2; x++) s += Math.abs(red(x, y + 1) - red(x, y)); rj.push(s); }
+      for (let b = 0; b + 12 <= W; b += 12) { let n = 0, m = 0; for (let y = 0; y < H; y++) for (let x = b; x < b + 12; x++) { if (red(x, y) > 128) n++; if (red(y, x) > 128) m++; } cb.push(n); rb.push(m); }
+      return { seam: Math.max(Math.max.apply(null, cj) / med(cj), Math.max.apply(null, rj) / med(rj)), stripe: Math.min(Math.min.apply(null, cb) / med(cb), Math.min.apply(null, rb) / med(rb)) };
+    };
+    /* the controls: a straight cut, and an empty stripe */
+    const cut = shot({ area: 1 }, 1.3), other = shot({ area: 1, seed: 5 }, 1.3);
+    cut.getContext('2d').drawImage(other, 120, 120, 120, 120, 120, 120, 120, 120);
+    const cs = score(cut).seam;
+    if (!(cs > 3)) throw new Error('CONTROL: a straight cut between two patterns scored only ' + cs.toFixed(2) + ' for a seam, so the probe cannot see one');
+    const gap = shot({ area: 1 }, 1.3), gg = gap.getContext('2d'); gg.fillStyle = 'rgb(' + BG.join(',') + ')'; gg.fillRect(100, 0, 30, H);
+    const gs = score(gap).stripe;
+    if (!(gs < 0.35)) throw new Error('CONTROL: a 30 px band with no snow scored ' + gs.toFixed(2) + ' for a stripe, so the probe cannot see one');
+    for (const t of [2.0, 3.9]) {
+      const s = score(shot({ area: 0 }, t, true));
+      if (!(s.seam < 3)) throw new Error('a full-frame photo zooming out, at ' + t + ' s, has a straight seam across its snow (score ' + s.seam.toFixed(2) + ', a cut scores ' + cs.toFixed(2) + '): the snow is cut where its field repeats');
+      if (!(s.stripe > 0.45)) throw new Error('a full-frame photo zooming out, at ' + t + ' s, has an empty stripe in its snow (score ' + s.stripe.toFixed(2) + ', a painted gap scores ' + gs.toFixed(2) + '): the field’s margins show where it repeats');
+    }
+  });
+
+  /* #1248 review S3/S4 (the scale the weather is carried at). A full-frame photo that holds still until 2 s and then zooms to 2x
+     at 4 s (a late Ken Burns push-in). The weather is carried relative to its FIRST frame's scale, so:
+       · BEFORE THE ZOOM (1.3 s) it is the frame's own weather: Area 0 against Whole frame, under 1 level mean (measured 0.26; the
+         Whole frame draw goes straight onto the picture, the carried one through the layer's mask). The first cut carried it
+         relative to the LARGEST scale, so for the whole clip the snow was half size and four times as dense: 200.62 levels mean.
+       · DURING THE ZOOM (3.5 s, scale 1.75) it grows with the photo: the middle 100 x 100 is Whole frame's middle blown up 1.75x
+         about the centre, within the resampling blur: measured 8.63 levels mean, tolerance 12.
+     CONTROL: at 3.5 s the carried middle does NOT match Whole frame's middle unscaled (measured 192.02, limit 25), so the probe
+     sees the scale. */
+  test('1248 Snow and Rain on a full-frame photo is the frame weather until the photo zooms, then grows with it (CONTROL: the zoomed snow is not the unscaled frame weather)', { item: '1248', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, W = 240, H = 240;
+    const shot = function (area, t) {
+      const L = FM.makeLayer('shape', { name: 'Photo', shape: 'rect', x: 120, y: 120, shapeW: 240, shapeH: 240, fill: '#2a4a8a' });
+      L.start = 0; L.duration = 4; L.transform.scale = { kf: [{ t: 2, v: 1, e: 'linear' }, { t: 4, v: 2, e: 'linear' }] };
+      L.effects = [{ type: 'weather', enabled: true, params: Object.assign(R.makeInstance('weather').params, { amount: 1500, size: 5, opacity: 1, area: area }) }];
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      FM.renderScene(c.getContext('2d'), scene([L], { project: { width: W, height: H, fps: 30, duration: 4, background: '#000000' } }), t);
+      return c;
+    };
+    const px = (c, x, y, w, h) => c.getContext('2d').getImageData(x, y, w, h).data;
+    const md = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); return s / (a.length / 4); };
+    const early = md(px(shot(0, 1.3), 0, 0, W, H), px(shot(1, 1.3), 0, 0, W, H));
+    if (!(early < 1)) throw new Error('a full-frame photo that has not started zooming does not show the frame’s own weather (' + early.toFixed(2) + ' levels mean against Whole frame): its snow is carried at the scale it zooms to later');
+    const carried = shot(0, 3.5), whole = shot(1, 3.5), big = document.createElement('canvas'); big.width = W; big.height = H;
+    const bg = big.getContext('2d'); bg.setTransform(1.75, 0, 0, 1.75, 120 - 1.75 * 120, 120 - 1.75 * 120); bg.drawImage(whole, 0, 0);
+    const mid = px(carried, 70, 70, 100, 100), unscaled = md(mid, px(whole, 70, 70, 100, 100)), scaled = md(mid, px(big, 70, 70, 100, 100));
+    if (!(unscaled > 25)) throw new Error('CONTROL: the zoomed photo’s snow matches the unscaled frame weather (' + unscaled.toFixed(2) + '), so the probe cannot see the scale');
+    if (!(scaled < 12)) throw new Error('a full-frame photo zoomed to 1.75x does not carry its snow 1.75x bigger (' + scaled.toFixed(2) + ' levels mean against the frame weather blown up 1.75x, ' + unscaled.toFixed(2) + ' unscaled)');
+  });
+
+  /* #1248 review S2. The layer's ⋯ → Flip vertical is a flag the renderer applies innermost, so the first cut read the flipped
+     layer's down as up and its snow fell UPWARD. The layer's own flip is now undone before its down is read: a card flipped either
+     way carries exactly the snow of the same card unflipped (measured 0.00 levels mean; tolerance 0.5).
+     FAILS BEFORE: the vertically flipped card's snow is the half-turned card's, ~160 levels mean from the unflipped one.
+     CONTROL: the same card TURNED half round (its rotation, not a flip) does carry its snow round, so the probe sees a turned field. */
+  test('1248 a card flipped upside down keeps its Snow and Rain falling down (CONTROL: the same card turned half round carries its snow round)', { item: '1248', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, W = 240, H = 240;
+    const shot = function (o) {
+      const L = FM.makeLayer('shape', { name: 'Card', shape: 'rect', x: 120, y: 120, shapeW: 120, shapeH: 90, fill: '#3a6ea5' });
+      L.start = 0; L.duration = 4; if (o.rot) L.transform.rotation = o.rot; if (o.flipV) L.flipV = true; if (o.flipH) L.flipH = true;
+      L.effects = [{ type: 'weather', enabled: true, params: Object.assign(R.makeInstance('weather').params, { amount: 1500, size: 5, opacity: 1, area: 0 }) }];
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      FM.renderScene(c.getContext('2d'), scene([L], { project: { width: W, height: H, fps: 30, duration: 4, background: '#101418' } }), 1.3);
+      return c.getContext('2d').getImageData(70, 85, 100, 70).data;
+    };
+    const md = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); return s / (a.length / 4); };
+    const plain = shot({}), turned = md(shot({ rot: 180 }), plain);
+    if (!(turned > 20)) throw new Error('CONTROL: a card turned half round shows the unturned card’s snow (' + turned.toFixed(2) + '), so the probe cannot see a turned field');
+    const v = md(shot({ flipV: true }), plain), h = md(shot({ flipH: true }), plain);
+    if (!(v < 0.5)) throw new Error('a card flipped upside down (⋯ → Flip vertical) does not keep the snow of the same card unflipped (' + v.toFixed(2) + ' levels mean; turned half round is ' + turned.toFixed(2) + '): its snow falls up');
+    if (!(h < 0.5)) throw new Error('a card flipped side to side does not keep the snow of the same card unflipped (' + h.toFixed(2) + ' levels mean)');
+  });
+
   test('482 11.2 Snow & Rain - Confetti falls in at least three colours, Embers and Bubbles rise, Petals and Dust drift down, Pattern gives the layer its own flakes, Sway sets how far snow swings and leaves rain straight', { item: '482', budgetMs: 30000 }, function () {
     /* CONFETTI'S COLOURS. CONTROL: Rain in one pink draws one hue. Petals in it draw one too (each petal a shade of it). */
     const hues = R => new Set(b11Flakes(0, R).map(m => b11Hue(m.style)).filter(h => h >= 0).map(h => Math.round(h / 20)));
@@ -145239,13 +146536,15 @@
   /* 11.4 CLOUDS: Boil, Octaves, Contrast, Vertical drift. (Hunt C7a — octave cells in PLATE px — was fixed by #986 on this tree;
      its test, "986 C7 Clouds and Starfield on a reduced preview are the export shrunk", stands.) */
   const B11CL_NEW = { evolve: 0, detail: 3, contrast: 100, drifty: 0 };
-  const B11CL_CFG = { def: {}, big: { scale: 250, amount: 1 }, small: { scale: 40 }, drift: { drift: 60 }, kf: { drift: b11Kf(-100, 100) }, tint: { color: '#ff8040', amount: 0.4 } };
+  /* look: 0 in each (#1246 clause 5): a NEW Clouds opens on Look Clouds, a new picture on purpose; these pins are the Fog look, which every
+     saved Clouds keeps (look absent is 0). */
+  const B11CL_CFG = { def: { look: 0 }, big: { scale: 250, amount: 1, look: 0 }, small: { scale: 40, look: 0 }, drift: { drift: 60, look: 0 }, kf: { drift: b11Kf(-100, 100), look: 0 }, tint: { color: '#ff8040', amount: 0.4, look: 0 } };
   const B11CL_PIN = {   // fc8866f1, before the edit
     def: 'af43bea5.af43bea5/71ca7621.71ca7621 7f42885c.7f42885c/c5fbf01b.c5fbf01b', big: '5afc4635.5afc4635/a88dcd6f.a88dcd6f c6e47e66.c6e47e66/31e5760a.31e5760a',
     small: '17fe2370.17fe2370/fe1e9125.fe1e9125 c2e1cf53.c2e1cf53/6c6326bf.6c6326bf', drift: '1a907664.2b78c3fd/69ec1d6c.9e875979 29487d02.fbad62f9/4db234b8.772cc4e1',
     kf: '101f817c.f96655de/a3e61e33.73140615 3413a235.356585bd/7a5db872.80b37dd1', tint: '11a3f154.11a3f154/b7e3f356.b7e3f356 2d540a68.2d540a68/0f8add7a.0f8add7a' };
   /* Clouds at full strength over a flat mid-grey 160 x 120 layer at the export's scale: the picture is the cloud field itself. */
-  const b11Cl = (over, t, W, H) => b11Run('clouds', Object.assign(b11Base('clouds', {}), { amount: 1 }, over), W || 160, H || 120, t, 1, b11Flat(W || 160, H || 120, [128, 128, 128]));
+  const b11Cl = (over, t, W, H) => b11Run('clouds', Object.assign(b11Base('clouds', {}), { amount: 1, look: 0 }, over), W || 160, H || 120, t, 1, b11Flat(W || 160, H || 120, [128, 128, 128]));   // look 0: these measure the Fog look's controls (#1246 clause 5 made Clouds the new default)
   const b11Grain = (d, W) => { let s = 0, n = 0; for (let i = 4; i < d.length; i += 4) { if ((i / 4) % W === 0) continue; s += Math.abs(d[i] - d[i - 4]); n++; } return s / n; };   // mean step between neighbours: how fine the detail is
   const b11Avg = d => { let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i]; return s / (d.length / 4); };
   const b11Sd = d => { let m = 0, n = d.length / 4; for (let i = 0; i < d.length; i += 4) m += d[i]; m /= n; let v = 0; for (let i = 0; i < d.length; i += 4) v += (d[i] - m) * (d[i] - m); return Math.sqrt(v / n); };
@@ -146864,7 +148163,8 @@
   test('482 14.7 Card Flip - Flip, Perspective, Back and Back colour are in the catalogue, Flip carrying the old 180 for a saved flip, and saved and new Card Flips issue the same canvas calls as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
     b14Catalogue('fliplayer', B14CF_NEW, { angle: 75, persp: 20, back: 2, color: '#00ff00' }, { angle: 180 });
     const back = b14Row('fliplayer', 'back'), col = b14Row('fliplayer', 'color');
-    if (back.type !== 'segment' || JSON.stringify(back.options) !== JSON.stringify([[0, 'Mirror'], [1, 'Solid colour'], [2, 'Transparent']])) throw new Error('Back is not Mirror / Solid colour / Transparent (' + JSON.stringify(back.options) + ')');
+    /* #1246 U10 added a fourth, Another layer (3); the first three are the same words and numbers as ever */
+    if (back.type !== 'segment' || JSON.stringify(back.options) !== JSON.stringify([[0, 'Mirror'], [1, 'Solid colour'], [2, 'Transparent'], [3, 'Another layer']])) throw new Error('Back is not Mirror / Solid colour / Transparent / Another layer (' + JSON.stringify(back.options) + ')');
     if (col.type !== 'color' || col.overriddenBy !== 'back' || col.liveWhen !== 1) throw new Error('Back colour does not say it only counts under Solid colour');
     const moved = b14Pinned('fliplayer', B14CF_NEW, B14CF_CFG, B14CF_PIN, b14CShots);
     if (moved.length) throw new Error(moved.length + ' Card Flips draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
@@ -150674,7 +151974,7 @@
     let nullChecked = false;
     for (const id of Object.keys(B966_B8)) {
       const key = FM.fxThumbs._filterSubject(id);
-      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=2'; });
       const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = S; c.height = S;
       c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, S, S);
       const mid = '_t966b8_' + id; FM.media.set(mid, { kind: 'image', el: c, width: S, height: S, duration: 0 }); if (FM.media.pin) FM.media.pin(mid);
@@ -154078,7 +155378,7 @@
     const words = (FM.fxSearchAliases && FM.fxSearchAliases.blinds) || [];
     ['venetian', 'blinds', 'slats', 'stripes wipe', 'transition', 'reveal'].forEach(w => { if (words.indexOf(w) < 0) bad.push('typing “' + w + '” does not find it'); });
     const keys = (r.params || []).map(p => p.key).join();
-    if (keys !== 'progress,count,angle,opens,stagger,softness,fit,invert') bad.push('its controls are ' + keys + ', not progress, count, angle, opens, stagger, softness, fit, invert');
+    if (keys !== 'progress,count,angle,opens,stagger,softness,fit,invert,look,slatcolor,shade') bad.push('its controls are ' + keys + ', not progress, count, angle, opens, stagger, softness, fit, invert, look, slatcolor, shade');   // look, slatcolor, shade: #1246 U1 (Solid slats)
     const OPT = { opens: 'Side / Middle', fit: 'Frame / Layer', invert: 'Off / On' };
     Object.keys(OPT).forEach(k => { if (B966.opts('blinds', k) !== OPT[k]) bad.push(k + ' offers “' + B966.opts('blinds', k) + '”, not “' + OPT[k] + '”'); });
     const RNG = { progress: [0, 1, ''], count: [2, 60, ''], angle: [0, 360, '°'], stagger: [0, 100, '%'], softness: [0, 200, 'px'] };
@@ -155210,7 +156510,9 @@
   // a painter drawn at half size (for the same layer on a half-size plate)
   const _b17Half = paint => g => { g.save(); g.scale(0.5, 0.5); paint(g, 256, 256); g.restore(); };
   // params: a new instance's, with `over` laid on
-  const _b17P = over => JSON.parse(JSON.stringify(Object.assign({}, FM.fxRegistry.makeInstance('moshbloom').params, over || {})));
+  /* #1250's three keys at their LEGACY values: these tests measure the drag itself (the old picture pushed by the footage's movement, healed by
+     Heal), which a new instance now runs with New detail and Bloom on top; '1250 Datamosh New detail…' measures those */
+  const _b17P = over => JSON.parse(JSON.stringify(Object.assign({}, FM.fxRegistry.makeInstance('moshbloom').params, { detail: 0, bloom: 1, cuts: 0 }, over || {})));
   /* one frame through the kernel: `paint` on a W x H plate (256 by default) at project time t, on layer `lay` (a clip that began at
      o.start), plate scale o.ps; returns { out: the plate's bytes, inp: the input's bytes } */
   const _b17Frame = (K, paint, params, t, lay, o) => {
@@ -155259,7 +156561,7 @@
     if (FM.filters && FM.filters.get && FM.filters.get('moshbloom')) bad.push('its type is also a filter id, so the NEW row and the browser would hide it');
     if (FM.fxRegistry.get('datamosh')) bad.push('an EFFECT with the type datamosh exists — the filter’s id');
     const keys = r.params.map(p => p.key).join();
-    if (keys !== 'amount,hold,block,decay,chroma') bad.push('its controls are ' + keys);
+    if (keys !== 'amount,hold,block,decay,chroma,detail,bloom,cuts') bad.push('its controls are ' + keys);   // detail, bloom, cuts: #1250 (11 Nov)
     const row = k => r.params.filter(p => p.key === k)[0] || {};
     [['amount', 0, 1, '', 0.7, 'Amount'], ['hold', 0, 120, 's', 0, 'Start at'], ['block', 4, 64, 'px', 16, 'Block size'], ['decay', 0, 1, '', 0.1, 'Heal'], ['chroma', 0, 1, '', 0.5, 'Colour bleed']].forEach(([k, lo, hi, u, def, label]) => {
       const p = row(k);
@@ -155282,11 +156584,12 @@
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('moshbloom');
     if (_newerThan966('moshbloom').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('moshbloom')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
     else { const why = _rolledOffWhy966('moshbloom', feat); if (why) bad.push(why); }
-    // a bare one (no params saved) draws what a new one draws, frame for frame, across a run with a cut
+    /* a bare one (no params saved) draws what a new one draws, frame for frame, across a run with a cut — a new one with #1250's three keys at
+       their LEGACY values (New detail 0, Bloom 1, Mosh them too): a saved Datamosh Bloom draws as it always did, a new one opens on the real mosh */
     const cut = _b17Cut(12), bareLay = { id: 'b17-bare' };
-    const bare = cut.map((paint, k) => _b17Frame(K, paint, {}, k / 30, bareLay).out), made = _b17Run(cut, {}).map(f => f.out);
+    const bare = cut.map((paint, k) => _b17Frame(K, paint, {}, k / 30, bareLay).out), made = _b17Run(cut, { detail: 0, bloom: 1, cuts: 0 }).map(f => f.out);
     const worst = Math.max.apply(null, bare.map((d, k) => E1.maxDiff(d, made[k])));
-    if (worst !== 0) bad.push('a bare Datamosh Bloom draws differently from a new one across a run (max ' + worst + ' levels) — a missing key is not its default');
+    if (worst !== 0) bad.push('a bare Datamosh Bloom draws differently from a new one with New detail 0, Bloom 1 and Mosh them too across a run (max ' + worst + ' levels) — a missing key is not its legacy value');
     /* through the compositor, at its own defaults: the card jumps 140 px at 0.3 s (frame 9), and five frames later the card it left
        is still showing where it was and the card that arrived is only healing in — CONTROL: at Amount 0 the same run is the card
        as drawn with no effect at all (within two levels: the effect path draws the layer on its own plate first, so a moving card's
@@ -155524,7 +156827,9 @@
   test('966 B17 played in order on a phone’s reduced preview plate (0.5 and 0.28), the bloom is the export’s shrunk — the card that jumped stays where it was and the new one heals in alike — within a measured bound of the export shrunk by area, which the clip itself (Amount 0) and a run healing five times as fast both exceed', { item: '966', budgetMs: 240000 }, function () {
     _b17Need();
     const PW = 480, PH = 270, bad = [], notes = [];
-    const last = (over, rs) => { const fr = _b17Play(_b17JumpLayer(_986fx('moshbloom', over)), rs); return fr[fr.length - 1]; };
+    /* #1250's keys at their legacy values (no New detail, Bloom 1): this measures the drag and its heal on a reduced plate, which the healing
+       control can only tell apart while nothing else brings the new shot in */
+    const last = (over, rs) => { const fr = _b17Play(_b17JumpLayer(_986fx('moshbloom', Object.assign({ detail: 0, bloom: 1, cuts: 0 }, over))), rs); return fr[fr.length - 1]; };
     const big = last({ amount: 1 });
     for (const rs of [0.5, 0.28]) {
       const small = last({ amount: 1 }, rs), ref = _b36shrink(big.d, PW, PH, small.w, small.h);
@@ -163462,7 +164767,7 @@
     };
     try {
       for (const key of PHOTOS) {
-        const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+        const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=2'; });
         const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = S; c.height = S;
         c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, S, S);
         const mid = '_t912_' + key; FM.media.set(mid, { kind: 'image', el: c, width: S, height: S, duration: 0 }); if (FM.media.pin) FM.media.pin(mid); mids.push(mid);
@@ -164573,6 +165878,80 @@
       list.forEach(function (p) { if (a === p || a.indexOf(p) === 0 || /[*?\[]/.test(p)) bad.push('“' + p + '” would take ' + a + ' (or part of the app) off the site'); });
     });
     if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* #1254 clause 3 (17 Nov) — THE NUMBER PLATES ARE BLANKED IN THE CAR PHOTOS THE SITE SERVES. The drawn pictures painted the plates
+   * out, but fx-art/mclaren.jpg, revuelto.jpg and tesla.jpg were served as they were, so anyone who asked the live site for the file
+   * itself could read them. They are blanked IN the files now: each plate's four corners were read off 12x crops, and inside them
+   * every pixel is the plate's own background colour. This test reads each served photo and takes, at least 1.2 px inside each plate,
+   * the biggest step in brightness between two neighbouring pixels: the edge of a character is a big step and a blank plate has none.
+   * Measured in this runner on 17 Nov, in the order of the list below — with the characters: mclaren 90.8, revuelto 166.5, revuelto 139.1, tesla 128.7 levels; blanked: mclaren 8.2, revuelto 17.0, revuelto 11.7, tesla 10.7
+   * levels. The bound is 45: every plate read over 60 with its characters and under 30 blanked. CONTROL: a dark and a pale bar drawn
+   * into the same box read over twice the bound, so a plate that came back would be seen. And the boxes only mean something on the
+   * very files they were read from, so each file's bytes are pinned: a car photo that is changed or swapped fails here until someone
+   * has looked at it, read the boxes again and put its new hash in. */
+  const PLATES1254 = [
+    ['mclaren', [[247.6, 173.2], [297.6, 163.4], [301.2, 186.0], [251.2, 197.0]]],
+    ['revuelto', [[63.6, 202.6], [92.6, 202.6], [92.6, 212.4], [63.6, 212.4]]],
+    ['revuelto', [[251.4, 183.0], [276.8, 183.0], [276.8, 192.0], [251.4, 192.0]]],
+    ['tesla', [[233.0, 190.4], [267.4, 190.4], [267.4, 203.0], [233.0, 203.0]]]
+  ];
+  const SHA1254 = { mclaren: '24a2eb5446c72fe1c7e52598c076a6d4fcb0d94178b87ba1351ffbb7e98500fd', revuelto: 'c2168bc4bb9dc710adb4505da44f0b479a07174d539cf3bc4effcda162198699', tesla: 'c0e6959cf8cf5cc2693e45fa246edfbf6a0b0ac4b5eefd258dd1ca75b870e0c0' };
+  function plateStep1254(px, W, poly) {
+    const deep = function (x, y) {   /* at least 1.2 px inside every edge of the four-corner box */
+      let sign = 0;
+      for (let i = 0; i < 4; i++) {
+        const a = poly[i], b = poly[(i + 1) % 4], d = ((b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0])) / Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (Math.abs(d) < 1.2) return false;
+        if (!sign) sign = d > 0 ? 1 : -1; else if ((d > 0 ? 1 : -1) !== sign) return false;
+      }
+      return true;
+    };
+    const L = function (x, y) { const i = (y * W + x) * 4; return 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]; };
+    const xs = poly.map(function (p) { return p[0]; }), ys = poly.map(function (p) { return p[1]; });
+    let step = 0, n = 0;
+    for (let y = Math.floor(Math.min.apply(null, ys)); y <= Math.ceil(Math.max.apply(null, ys)); y++) {
+      for (let x = Math.floor(Math.min.apply(null, xs)); x <= Math.ceil(Math.max.apply(null, xs)); x++) {
+        if (!deep(x + 0.5, y + 0.5)) continue;
+        n++;
+        if (deep(x + 1.5, y + 0.5)) step = Math.max(step, Math.abs(L(x, y) - L(x + 1, y)));
+        if (deep(x + 0.5, y + 1.5)) step = Math.max(step, Math.abs(L(x, y) - L(x, y + 1)));
+      }
+    }
+    return { step: step, n: n };
+  }
+  test('1254 · the car photos the site serves have blank number plates: inside each plate no two neighbouring pixels differ by the edge of a character (CONTROL: bars drawn into the same box are seen, and each photo is byte for byte the file the boxes were read from)', { item: '1254' }, async function () {
+    const BOUND = 45;
+    const cache = {}, bad = [], seen = [];
+    for (const row of PLATES1254) {
+      const key = row[0], poly = row[1];
+      if (!cache[key]) {
+        const im = await new Promise(function (ok, no) { const i = new Image(); i.onload = function () { ok(i); }; i.onerror = function () { no(new Error('setup: fx-art/' + key + '.jpg did not load')); }; i.src = 'fx-art/' + key + '.jpg?t=' + Date.now(); });
+        if (im.naturalWidth !== 320 || im.naturalHeight !== 320) throw new Error('CONTROL: fx-art/' + key + '.jpg is ' + im.naturalWidth + '×' + im.naturalHeight + ', not the 320×320 file the plate boxes were read from — read the boxes again');
+        const c = document.createElement('canvas'); c.width = 320; c.height = 320;
+        const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0);
+        cache[key] = { c: c, g: g };
+      }
+      const got = plateStep1254(cache[key].g.getImageData(0, 0, 320, 320).data, 320, poly);
+      if (got.n < 60) throw new Error('CONTROL: only ' + got.n + ' pixels of the ' + key + ' plate were measured');
+      seen.push(key + ' ' + got.step.toFixed(1));
+      if (got.step > BOUND) bad.push(key + ' at ' + Math.round(poly[0][0]) + ',' + Math.round(poly[0][1]) + ' has a step of ' + got.step.toFixed(1) + ' levels');
+      /* CONTROL, on a copy: a dark bar beside a pale bar, each 2 px wide, in the middle of the box */
+      const k = document.createElement('canvas'); k.width = 320; k.height = 320;
+      const kg = k.getContext('2d', { willReadFrequently: true }); kg.drawImage(cache[key].c, 0, 0);
+      const mx = Math.round((poly[0][0] + poly[1][0] + poly[2][0] + poly[3][0]) / 4), my = Math.round((poly[0][1] + poly[1][1] + poly[2][1] + poly[3][1]) / 4);
+      kg.fillStyle = '#000'; kg.fillRect(mx - 2, my - 2, 2, 4); kg.fillStyle = '#fff'; kg.fillRect(mx, my - 2, 2, 4);
+      const ctl = plateStep1254(kg.getImageData(0, 0, 320, 320).data, 320, poly);
+      if (!(ctl.step > BOUND * 2)) throw new Error('CONTROL: two bars drawn into the ' + key + ' plate read as a step of only ' + ctl.step.toFixed(1) + ' levels, so a character there would not be seen');
+    }
+    if (bad.length) throw new Error('a number plate can be read in a photo the site serves (bound ' + BOUND + ' levels; measured ' + seen.join(', ') + '): ' + bad.join(' · ') + ' — blank it IN the file');
+    /* the boxes were read from these very files: a changed or swapped photo must be looked at again */
+    for (const key of Object.keys(SHA1254)) {
+      const r = await fetch('fx-art/' + key + '.jpg?t=' + Date.now());
+      if (!r.ok) throw new Error('setup: fx-art/' + key + '.jpg answered ' + r.status);
+      const hex = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await r.arrayBuffer()))).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+      if (hex !== SHA1254[key]) throw new Error('CONTROL: fx-art/' + key + '.jpg is not the file the plate boxes were read from (its bytes are now ' + hex.slice(0, 12) + '…). Look at the photo, read the plate boxes again, and put its new hash here');
+    }
   });
 
   /* ═══ queue 987: WHO LEFT EACH NOTE, IN THEIR COLOUR ═══════════════════════════════════════════════
@@ -174906,7 +176285,9 @@
        the mesh renderer sets white before the Back colour, so a string that is not a colour draws the white back. */
     // the same words and the same stored numbers as Card Flip's Back, so the two read alike
     const opt = (type, k) => JSON.stringify(((FM.fxRegistry.paramsOf(type) || []).filter(p => p.key === k)[0] || {}).options);
-    if (opt('pagecurl', 'back') !== opt('fliplayer', 'back')) bad.push('Page Curl’s Back is ' + opt('pagecurl', 'back') + ', not Card Flip’s ' + opt('fliplayer', 'back'));
+    /* …Card Flip's first three: its fourth, Another layer (#1246 U10), is a card's other face, which a curling page does not have */
+    const cf3 = JSON.stringify((((FM.fxRegistry.paramsOf('fliplayer') || []).filter(p => p.key === 'back')[0] || {}).options || []).slice(0, 3));
+    if (opt('pagecurl', 'back') !== cf3) bad.push('Page Curl’s Back is ' + opt('pagecurl', 'back') + ', not Card Flip’s first three ' + cf3);
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
@@ -204140,7 +205521,7 @@
         return [C, x];
       };
       for (const file of man.files) await load(abs('fx-pics/' + file));
-      await Promise.all(K.PHOTO_KEYS.map(k => new Promise(res => { const im = new w.Image(); im.onload = () => { PH[k] = im; res(); }; im.onerror = () => res(); im.src = abs('fx-art/' + k + '.jpg?v=1'); })));
+      await Promise.all(K.PHOTO_KEYS.map(k => new Promise(res => { const im = new w.Image(); im.onload = () => { PH[k] = im; res(); }; im.onerror = () => res(); im.src = abs('fx-art/' + k + '.jpg?v=2'); })));
       const byId = new Map();
       (w.FX_TILES || []).forEach(T => byId.set(String(T.id), T));   /* a later file wins an id, as on the picture page */
       const made = new Map();
@@ -204472,5 +205853,157 @@
     const line = 'pictures: ' + n + ' of ' + all.length + ' effects';
     try { console.log('1253 ' + line + (n < all.length ? ' · no picture yet: ' + all.filter(t => !withPic.has(t)).join(', ') : '')); } catch (e) {}
     if (n < FLOOR) throw new Error(line + ', fewer than the ' + FLOOR + ' that had pictures when they went in (#1253)');
+  });
+
+  /* #1253 STAGED BUILDS (17 Nov, HARNESS.md). Four pictures prepared 0.3 to 0.6 s of pixels inside make(), all in one frame, so
+     opening the Blur effects froze the menu. They now hand back draw.step(ms), and js/fx-thumbs.js runs it a slice per frame
+     (picMakePump); a picture still building is treated as one with no draw, so its tile keeps the live frame it shows. */
+  const SLOW1253 = ['softskin', 'sharpen', 'temporaldenoise', 'lensblur'];
+  function slowCat1253() {
+    for (const c of FM.fxRegistry.categories()) { const l = FM.fxRegistry.byCategory(c.key).map(r => r.type); if (SLOW1253.every(t => l.indexOf(t) >= 0)) return c.key; }
+    throw new Error('setup: no effect category holds all four staged pictures (' + SLOW1253.join(', ') + ')');
+  }
+  function slowTiles1253() {
+    const vs = document.querySelectorAll('#fx-browser .fxb-catview'), v = vs[vs.length - 1], out = {};
+    if (v) SLOW1253.forEach(t => { out[t] = [].slice.call(v.querySelectorAll('canvas')).filter(c => c._fxType === t)[0] || null; });
+    return out;
+  }
+  /* At 380 x 800 only Sharpen and Lens Blur are on screen when the Blur effects open; Temporal Denoise and Soften Skin are
+     further down. This scrolls the menu (its own scroller, never the page) to each one in turn, in the menu's order, and waits
+     for its picture to be built, as he would scrolling down the list. True once all four are built. */
+  async function buildSlow1253(T, cat) {
+    const order = FM.fxRegistry.byCategory(cat).map(r => r.type).filter(t => SLOW1253.indexOf(t) >= 0);
+    const made = t => { const s = T._picOf(t); return !!(s && s.made); };
+    await until1253(() => order.some(made), 8000);
+    for (const t of order) {
+      if (made(t)) continue;
+      const cv = slowTiles1253()[t];
+      if (!cv) continue;
+      let el = cv.parentElement;
+      while (el && !(el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowY))) el = el.parentElement;
+      if (el) el.scrollTop += cv.getBoundingClientRect().top - el.getBoundingClientRect().top - 8;
+      await until1253(() => made(t), 15000);
+    }
+    return SLOW1253.every(made);
+  }
+  /* every drawImage into a tile showing one of the four, with what the engine said about that picture at that moment */
+  function watchTileDraws1253() {
+    const proto = CanvasRenderingContext2D.prototype, own = Object.getOwnPropertyDescriptor(proto, 'drawImage'), real = proto.drawImage, T = FM.fxThumbs;
+    const early = [], n = {};
+    proto.drawImage = function () {
+      const cv = this.canvas, t = cv && cv._fxPic;
+      if (t && SLOW1253.indexOf(t) >= 0) {
+        const s = T._picOf(t);
+        n[t] = (n[t] || 0) + 1;
+        if (!s || !s.made || s.building) early.push(t + ' at step ' + (s ? s.steps : '?'));
+      }
+      return real.apply(this, arguments);
+    };
+    return { early: early, n: n, undo: () => { if (own) Object.defineProperty(proto, 'drawImage', own); else delete proto.drawImage; } };
+  }
+
+  /* Measured on the laptop (17 Nov), the Blur effects opened at 380 on a fresh load, scrolled down to all four; the number is
+     _picsWork().staged, the largest frame of building these four (make, steps, first draw):
+       staged (this build): 14.5, 17.5 and 13.1 ms in three runs.
+       draw.step ignored, every build on the spot (mut1.py: in picMake, if (P.staged) { -> if (false) {): 558.6 and 642.3 ms.
+     LIMIT 40 sits between them: over twice the staged worst (the logger measured one 23 ms piece in Temporal Denoise, plus
+     the 8 ms slice) and a fourteenth of the frame it replaces. Not asserted, only reported: the largest frame of ALL picture
+     work was 60 to 98 ms in the same runs, from pictures with no step that still build in one go (Box Blur, Burst Streaks). */
+  test('1253 · opening the Blur effects at 380 builds Soften Skin, Sharpen, Temporal Denoise and Lens Blur a slice per frame, no frame spending more than 40 ms building them, and each tile keeps its live frame until its picture is built and then shows it (CONTROL: all four went through their staged build, more than one step each, and ended built)', { item: '1253', budgetMs: 120000 }, async function () {
+    const T = FM.fxThumbs, o = await picOracle1253(), cat = slowCat1253(), LIMIT = 40;
+    const wants = new Map(SLOW1253.map(t => { const id = has1253id(o, t); return [t, o.frame(id, o.still(id))]; }));
+    const was = T._picsStill(false);
+    let w = null;
+    try {
+      T._picsReset();   /* a fresh load: the tile files run again, so every staged build starts from nothing */
+      await atPhoneWidth(() => fxMenu1253(async () => {
+        await T._picsLoad();
+        await sleep(300);
+        T._picsWork(true);
+        w = watchTileDraws1253();
+        FM.fxBrowser._openCategory(cat);
+        const built = await buildSlow1253(T, cat);
+        await sleep(600);
+        const work = T._picsWork(true), st = SLOW1253.map(t => [t, T._picOf(t)]);
+        w.undo();
+        const say = st.map(([t, s]) => t + ' ' + (s ? (s.made ? 'built' : s.building ? 'building' : 'not built') + ' in ' + s.steps + ' steps' : 'no picture')).join(', ');
+        const nums = 'largest frame building them ' + work.staged + ' ms, largest frame of all picture work ' + work.max + ' ms, over ' + work.frames + ' frames';
+        try { console.log('1253 staged builds at 380: ' + nums + '; ' + say); } catch (e) {}
+        if (!(work.staged <= LIMIT)) throw new Error('opening the Blur effects spent ' + work.staged + ' ms building the four pictures in one frame (limit ' + LIMIT + ' ms; ' + nums + '): ' + say);
+        st.forEach(([t, s]) => {
+          if (!s) throw new Error('control: ' + t + ' has no picture');
+          if (!s.made) throw new Error('control: the ' + t + ' picture never finished building (' + say + ')');
+          if (!(s.steps > 1)) throw new Error('control: the ' + t + ' picture was built in ' + s.steps + ' step(s), so it never went through the staged build (' + say + ')');
+        });
+        if (!built) throw new Error('the four pictures were not all built within 30 s: ' + say);
+        if (w.early.length) throw new Error('a tile was handed its picture while the picture was still building: ' + w.early.slice(0, 6).join(', '));
+        const tiles = slowTiles1253();
+        SLOW1253.forEach(t => {
+          if (!tiles[t]) throw new Error('the ' + t + ' tile is not in the Blur view');
+          if (!(w.n[t] > 0)) throw new Error('the ' + t + ' tile was never drawn with its picture once it was built');
+        });
+        /* then shows them: held still, every tile repaints at its picture's still, which the oracle drew on its own */
+        T._picsStill(true);
+        await sleep(150);
+        SLOW1253.forEach(t => { const d = diff1253(tiles[t], wants.get(t)); if (!(d < 2)) throw new Error('the ' + t + ' tile is not its picture once built (it differs from the still by ' + d.toFixed(1) + ' levels)'); });
+      }));
+    } finally { if (w) w.undo(); T._picsStill(was); T.stopAll(); o.done(); }
+  });
+
+  test('1253 · with reduced motion, and with the pictures held still, Soften Skin, Sharpen, Temporal Denoise and Lens Blur are built a slice per frame and their tiles end on their stills (CONTROL: each took more than one build step)', { item: '1253', budgetMs: 150000 }, async function () {
+    const T = FM.fxThumbs, o = await picOracle1253(), cat = slowCat1253();
+    const wants = new Map(SLOW1253.map(t => { const id = has1253id(o, t); return [t, o.frame(id, o.still(id))]; }));
+    const was = T._picsStill(false);
+    try {
+      for (const mode of ['reduced motion', 'held still']) {
+        const undo = mode === 'reduced motion' ? reduceMotion1253(true) : (T._picsStill(true), () => T._picsStill(false));
+        try {
+          T._picsReset();
+          await atPhoneWidth(() => fxMenu1253(async () => {
+            await T._picsLoad();
+            FM.fxBrowser._openCategory(cat);
+            await buildSlow1253(T, cat);
+            let d = {};
+            await until1253(() => {
+              const tiles = slowTiles1253();
+              d = {};
+              SLOW1253.forEach(t => { const s = T._picOf(t), cv = tiles[t]; d[t] = (cv && s && s.made && cv.classList.contains('ready')) ? diff1253(cv, wants.get(t)) : 999; });
+              return SLOW1253.every(t => d[t] < 2);
+            }, 30000);
+            SLOW1253.forEach(t => {
+              const s = T._picOf(t);
+              if (!s || !s.made) throw new Error(mode + ': the ' + t + ' picture never finished building (' + JSON.stringify(s) + ')');
+              if (!(s.steps > 1)) throw new Error(mode + ': control: the ' + t + ' picture was built in ' + s.steps + ' step(s), not staged');
+              if (!(d[t] < 2)) throw new Error(mode + ': the ' + t + ' tile did not end on its still (' + (d[t] === 999 ? 'never shown' : 'it differs by ' + d[t].toFixed(1) + ' levels') + ')');
+            });
+            if (T._pics().animating) throw new Error(mode + ': a picture frame is still scheduled');
+          }));
+        } finally { undo(); T.stopAll(); }
+      }
+    } finally { T._picsStill(was); o.done(); }
+  });
+
+  test('1253 · a picture whose draw has no step is built in one go and shown at its still as before, never marked building (CONTROL: on the same one-step budget Lens Blur, which is staged, is still building at that moment, then ends on its still)', { item: '1253', budgetMs: 60000 }, async function () {
+    const T = FM.fxThumbs, o = await picOracle1253(), plain = 'blinds', staged = 'lensblur';
+    const was = T._picsStill(true);
+    const h = host1253(0);
+    try {
+      if (typeof o.byId.get(plain).make(192).step === 'function') throw new Error('setup: the ' + plain + ' picture is staged now; pick another with no step');
+      T._picsReset(); await T._picsLoad();
+      T._sliceMs(0);   /* one piece of building per frame, so a staged build takes many frames */
+      const a = tileCanvas1253(h), b = tileCanvas1253(h);
+      T.mount(b, staged); T.mount(a, plain);   /* the staged one first, so it has started building before the plain one is made */
+      if (!(await until1253(() => { const s = T._picOf(plain); return s && s.made; }, 10000))) throw new Error('the ' + plain + ' picture (no step) was never built: ' + JSON.stringify(T._picOf(plain)));
+      const sp = T._picOf(plain), ss = T._picOf(staged);
+      if (sp.building || sp.steps !== 0) throw new Error('the ' + plain + ' picture has no step but went through a staged build (' + JSON.stringify(sp) + ')');
+      if (!ss || !ss.building || ss.made) throw new Error('control: when ' + plain + ' was built, ' + staged + ' was not still building (' + JSON.stringify(ss) + '), so this test cannot tell a staged build from a plain one');
+      await sleep(100);
+      const da = diff1253(a, o.frame(plain, o.still(plain)));
+      if (!(a.classList.contains('ready') && da < 2)) throw new Error('the ' + plain + ' tile is not its picture at its still (it differs by ' + da.toFixed(1) + ' levels)');
+      if (!(await until1253(() => { const s = T._picOf(staged); return s && s.made; }, 20000))) throw new Error('control: ' + staged + ' never finished building on a one-step budget (' + JSON.stringify(T._picOf(staged)) + ')');
+      await sleep(100);
+      const db = diff1253(b, o.frame(staged, o.still(staged)));
+      if (!(db < 2)) throw new Error('control: the ' + staged + ' tile did not end on its still (it differs by ' + db.toFixed(1) + ' levels)');
+    } finally { T._sliceMs(null); h.remove(); T.stopAll(); T._picsStill(was); o.done(); }
   });
 })();
