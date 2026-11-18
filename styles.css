@@ -12557,18 +12557,28 @@ body.ed-simple #sm-timeline { display: flex; }
 }
 .sm-chip-gap { background: #2a1f14; color: #ffb454; border: 1.5px solid #ffb454; }
 .sm-chip-overlap { background: #2a1418; color: #ff6b6b; border: 1.5px solid #ff6b6b; }
-/* 2.7 THE ◇ (#1122 clause 2, his pick A: a ◇ above each cut, the Transition row in the tray). It lives in its own lane just above the clip
-   row (#sm-trlane, made by js/simple-timeline.js before #sm-sections), clear of the trim grips. z-index auto, so it paints in document
-   order: UNDER the sections' items, and a title or an overlay at a cut is still what a press lands on.
-   EVERY ◇ IS THE SAME SOLID BLUE, a cut with a transition and one without, exactly as on his sheet (#545: a look he has not seen does
-   not ship, and the dashed grey empty ◇ was one): #14202a inside, a 1.5 px solid #7cc4ff ring and an outline ◇ in the same blue,
-   measured off A-phone-380.png. Which cut holds a transition is said by its name (aria-label, title) and by the row it opens;
-   .sm-chip-tr-on still marks it for the suite and paints nothing. */
-body.ed-simple #sm-trlane { position: absolute; left: 0; top: 0; width: 0; height: 0; }
-body.ed-simple .sm-chip-tr { z-index: auto; background: #14202a; color: #7cc4ff; border: 1.5px solid #7cc4ff; font-size: 14px; }
-/* …and a press reaches it: the sections and their lanes take no pointer events of their own, only what is drawn in them does. A real
-   press at the ◇'s centre hit the empty #sm-sections box, which comes later in the document and covers the lane (found on the old
-   branch by walking the crossfade tutorial; its T8b hit-tests it with real input). */
+/* 2.7 THE TRANSITION MARKER (#1122 clause 2, his pick A: a marker at each cut, the Transition row in the tray). #1243 S1 OPTION A (his
+   words: "that blue thing clips with whatever is on the above layer, like if you have text… a pretty shitty spot to put your… transition
+   thing"): it sits ON ITS CUT INSIDE THE CLIP ROW (#sm-main, js/simple-timeline.js), centred both ways, never in the lanes above, so a
+   title can no longer cover it (until release 8 it had its own lane just above the row, under the lowest section lane). A 44 px press
+   area (the button, transparent) around a 24 px rounded square in the same solid blue every marker wears, set or not, as on his sheet
+   (#14202a inside, a 1.5 px #7cc4ff ring), with our own drawing: two half-tiles meeting at a slanted seam. z-index 4: above the clips (a
+   selected one is 3), below the trim grips (6). Not a .sm-chip (the gap and overlap chips that also sit in the row). Which cut holds a
+   transition is said by its name (aria-label, title) and by the row it opens; .sm-chip-tr-on marks it for the suite and paints nothing. */
+body.ed-simple #sm-main > .sm-chip-tr { position: absolute; top: 6px; transform: translateX(-50%); z-index: 4; width: 44px; min-width: 44px; height: 44px; padding: 0; border: 0;
+  border-radius: 0; background: transparent; color: #7cc4ff; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+body.ed-simple #sm-main > .sm-chip-tr > .sm-trmark { width: 24px; height: 24px; box-sizing: border-box; border-radius: 7px; background: #14202a; border: 1.5px solid #7cc4ff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; pointer-events: none; }
+body.ed-simple #sm-main > .sm-chip-tr .sm-trglyph { width: 16px; height: 16px; }
+body.ed-simple #sm-main > .sm-chip-tr:focus-visible { outline: none; }
+body.ed-simple #sm-main > .sm-chip-tr:focus-visible > .sm-trmark { box-shadow: 0 0 0 2px var(--accent); }
+/* (review R8-1 / R8-3 / R8-4, Simple only) js/simple-timeline.js narrows the press area to half the narrower clip beside it. The clip after
+   a marker starts its name clear of the square (12 px of it lies over the clip), and while a clip is held or a grip dragged the markers
+   go, so they never float over the clips sliding under them (they are drawn again with the row on release). */
+body.ed-simple #sm-main > .sm-clip.sm-trl { padding-left: 20px; }
+body.ed-simple.sm-dragging #sm-main > .sm-chip-tr { visibility: hidden; }
+/* …a press reaches what is drawn in the sections: the sections and their lanes take no pointer events of their own, only their items
+   do (a real press at the old lane's ◇ hit the empty #sm-sections box, found by walking the crossfade tutorial; kept for the items). */
 body.ed-simple #sm-sections, body.ed-simple #sm-sections .sm-secstack, body.ed-simple #sm-sections .sm-sec, body.ed-simple #sm-sections .sm-lane { pointer-events: none; }
 body.ed-simple #sm-sections .sm-item, body.ed-simple #sm-sections .sm-grip, body.ed-simple #sm-sections .sm-glyph { pointer-events: auto; }
 .sm-add { position: absolute; top: 10px; width: 36px; height: 36px; border-radius: 10px; border: 1.5px dashed #8b97ab; background: transparent; color: #cfd6e2; font: 400 22px/1 system-ui, sans-serif; cursor: pointer; }
@@ -12620,18 +12630,12 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
   border: 0; background: transparent; color: var(--text); font: 600 10px/1.1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .sm-tool .sm-ico { width: 22px; height: 22px; flex: none; }
 .sm-tool .sm-tool-l { white-space: nowrap; }
-#sm-tray[data-row="audio"] .sm-tool { min-width: 44px; padding: 0 3px; }   /* S9: Done, Speed, Volume, Reverse and Take sound out are 317 px at 54 px / 6 px padding in a 307 px band; 44 / 3 px makes them 278, nothing cut, no scrolling at 1280 or 1024 */
 .sm-tool[aria-disabled="true"] { opacity: .38; }
 .sm-tool[aria-pressed="true"] { color: var(--accent); }
-.sm-tool.sm-pin { position: sticky; right: 0; margin-left: auto; padding-left: 16px; background: linear-gradient(90deg, rgba(0,0,0,0), var(--panel) 14px); }
-/* More + 🗑 as one pinned end (980 review finding 22), so More is never under 🗑 or past the band — and since SU1 #15 BESIDE the
-   tools, not over them: the pins were sticky inside the scrolling tray and the tools slid under them (at 380 Lift off half under
-   More, Duplicate and Crop wholly hidden, no cue). js/simple-tools.js puts the other tools in their own strip (.sm-run) that ends
-   where the pins begin; the strip scrolls by finger (pan-x) or wheel, and a fade lies over whichever edge hides tools (DESIGN
-   §8.5 "the row may scroll with a fade edge"): .sm-more-e while more lie to the right, .sm-more-s once scrolled, none when all
-   fit. The fades are inside the strip's box and take no pointer events, so they never cover or catch a tap meant for a pin. */
-.sm-pins { position: relative; z-index: 1; margin-left: auto; flex: 0 0 auto; display: flex; align-items: stretch; background: var(--panel); }
-.sm-pins .sm-tool.sm-pin { position: relative; margin-left: 0; padding-left: 6px; background: none; }
+/* THE TOOLS SCROLL IN THEIR OWN STRIP (SU1 #15): js/simple-tools.js puts them in a scroller (.sm-run) that scrolls by finger (pan-x) or
+   wheel, and a fade lies over whichever edge hides tools (DESIGN §8.5 "the row may scroll with a fade edge"): .sm-more-e while more lie
+   to the right, .sm-more-s once scrolled, none when all fit. The fades take no pointer events. (More and 🗑 were a pinned end beside the
+   strip until #1243 S4 and S31: More went, and Delete is the strip's last tool, scrolling with the rest.) */
 #sm-tray > .sm-runbox, #sm-tools > .sm-runbox { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; }   /* #1243 S15: the project row is a strip too */
 .sm-run { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; }
 .sm-run::-webkit-scrollbar { display: none; }
@@ -12717,37 +12721,26 @@ body.ed-simple #sm-bar:has(> #sm-say.sm-saying) > .sm-hint { display: none; }
   body.ed-simple #tl-centerline { bottom: 0; }                                  /* the bar left the timeline for the band */
   #inspector-panel > #sm-bar { border-top: 1px solid var(--line); }
 }
-/* THE PC TRAY ON TWO ROWS — HIS PICK B (6 Oct, "do reconmended"; tools/design/plans/simple-mode/p22-review-shots/
-   sheet-tray-pc.jpg). js/simple-tools.js sets .sm-tray-2 on PC only, for a tray of more than five tools and never
-   while More's panel is open: ceil(n/2) columns (--sm-cols), every tool on show, More and 🗑 in the last two places of the second
-   row (with an odd count the gap falls before More, so 🗑 keeps the corner the phone and the one-row tray give it). The bar is one
-   row taller only while it holds two (until #1243 R's release 8 makes it one scrolling row). Columns are as wide as their words
-   need and share the rest evenly, so a label never runs out of its button. */
 /* Simple mode Phase 3, sheet 1 question 1, pick B (6 Nov, under his 21 Oct rule): Simple's band is the design's wider one on a PC
-   (DESIGN §8.3 (1)), so a video clip's eleven tools lie on two rows of six (js/simple-tools.js TWO_ROW_MAX). Full keeps its own. */
+   (DESIGN §8.3 (1)). Full keeps its own. (Its two-row tray, his pick B of 6 Oct, went in #1243 R release 8, R decision 6: a PC shows
+   the same single scrolling strip as a phone, with its section lines.) */
 @media (min-width: 701px) {
   body.ed-simple { --insp-w: clamp(372px, 26vw, 420px); }
 }
-@media (min-width: 701px) {
-  #sm-tray.sm-tray-2 { display: grid; grid-template-columns: repeat(var(--sm-cols, 4), minmax(min-content, 1fr)); grid-template-rows: 52px 52px; }
-  #sm-tray.sm-tray-2 .sm-tool { min-width: 44px; padding: 0 3px; }   /* 2.3: 3, not 4 — Replace joined the picture tray, and ten tools at 960 px wide were 2 px over the band */
-  #sm-tray.sm-tray-2 .sm-tool[data-tool="more"] { grid-column-start: -3; }
-  #sm-tray.sm-tray-2 .sm-tool.sm-pin { position: relative; margin-left: 0; padding-left: 4px; background: none; }
-  /* a small PC window's band is ~300 px, and five columns of whole words at 4 px a side came to 301 px with a wider
-     fallback face (DejaVu Sans: the laptop's and the cloud's sans-serif) — the last two tools out of the band and the
-     tray scrolling sideways (the v17.39 pre-flight, BX3). 2 px a side keeps every word whole with 20 px to spare. */
-  @media (max-width: 1100px) {
-    #sm-tray.sm-tray-2 .sm-tool, #sm-tray.sm-tray-2 .sm-tool.sm-pin { padding-left: 2px; padding-right: 2px; }
-  }
-  /* the band above loses a row: its words keep one whole line, with nothing to scroll */
-  body.ed-simple #inspector-panel:has(#sm-tray.sm-tray-2) #inspector:has(> .sm-band-hint) { padding-bottom: 0; }
-  body.ed-simple #inspector-panel:has(#sm-tray.sm-tray-2) .sm-band-hint { padding-top: 6px; padding-bottom: 6px; }
-  /* #1243 S3: the two rows are the bar itself now (1 + 104 px), and the item's ‹ is their first column, both rows tall: five columns in
-     the 372 px band are (371 − 44) / 5 ≈ 65 px each, Duplicate's face about 53 */
-  #sm-tray.sm-tray-2 { flex-basis: 104px; height: 104px; grid-template-columns: 44px repeat(var(--sm-cols, 4), minmax(min-content, 1fr)); }
-  #sm-tray.sm-tray-2 > .sm-back { grid-row: 1 / span 2; grid-column: 1; }
-}
-/* (More turned into Done with a › cue while its panel was open on a PC, 8 Nov: the bar hides while a panel is up since #1243 S9.) */
+/* #1243 R RELEASE 8 · THE TRAYS. THE SECTION LINES (R (a) "{divider:true}, a 1 × 24 px rule, no headings"; his S33 words: "they just put a
+   line in between each section to like break them up"): a hairline, centred in the row, taking no presses. Simple only: #sm-bar and its tray
+   exist only there. (The item tools keep their 54 px floor rather than R (a)'s 64, so at 380 a caption track's five tools stay on show
+   with no swipe, his sheet 1 pick B of 6 Nov, Delete after its line at the strip's end; a video clip's first screen is Split, Speed, Volume,
+   Replace and Transition.) */
+#sm-tray .sm-div { flex: 0 0 1px; width: 1px; height: 24px; align-self: center; margin: 0 4px; background: var(--line); pointer-events: none; }
+/* Speed's value and, under it, the length the clip will have at it (#1243 S28's polish) */
+.sm-speed-out { flex: none; align-self: center; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 50px; }
+.sm-speed-out > .sm-speed-v { min-width: 0; }
+.sm-len-v { font: 600 10px/1 system-ui, sans-serif; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sm-size-l { padding: 0 2px 0 8px; }
+/* review R8-5: Transform's Size slider covers 10–400 %, so it keeps a 140 px track (about 2.8 % a pixel) and the strip scrolls on to Centre
+   and Reset, rather than the slider shrinking to Volume's 70 px floor at 380 */
+.sm-vol-r.sm-size-r { flex: 0 0 140px; }
 
 /* ═══ Simple mode release 2.3: speed, sound and replacing ═══ */
 .sm-twinband { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; pointer-events: none; opacity: .85;

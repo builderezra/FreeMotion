@@ -2442,6 +2442,112 @@ window.FM = window.FM || {};
     return plan;
   };
 
+  /* ═══ #1243 R RELEASE 8: OPACITY, TRANSFORM AND MUTE, the tray's own sub-rows (R decision 5; his S33 words: "opacity, motion blur, and
+     then they've got another section which is like transform, which has like mirror, rotate"; his S28 words on Volume: "actually polish
+     those things"). Each control is ONE command and one undo step, a slider commits on release, and nothing moves in time (a look).
+     They write through the shift writers (FM.shiftTransform, FM.shiftProp): a keyed value keeps its keys and its shape, no key lands at
+     the playhead. Flip uses the layer's own flipH / flipV, the fields Full's Flip already writes. Free move and rotate stay finger
+     gestures on the canvas; anchor, axis and tilt are Fine-tune, after F6. ═══ */
+  /* what can take them: a picture (a video with one, a photo, a shape, a sticker) or a text; never a sound, a caption track, a group, a
+     camera or an effect segment (whose opacity is its Strength) */
+  S.canTransform = function (L) {
+    if (!L || !L.transform || L.type === 'audio' || L.type === 'group' || L.type === 'camera' || L.type === 'adjustment' || L.type === 'null') return false;
+    if (L.audioOnly === true || (L.sm && (L.sm.snd === true || L.sm.twin === true))) return false;
+    return !(L.type === 'text' && Array.isArray(L.captions));
+  };
+  /* the size it was added at: a clip or a photo fitted into the frame (js/app.js addMediaLayer), anything else 1 — Size reads as a
+     percent of it, and Reset goes back to it */
+  S.baseScale = function (L) {
+    const P = FM.scene.project || {}, m = FM.media && FM.media.get ? FM.media.get(L.id) : null;
+    const w = +L.srcW || (m && +m.width) || 0, h = +L.srcH || (m && +m.height) || 0;
+    if ((L.type === 'video' || L.type === 'image') && w > 0 && h > 0 && P.width > 0 && P.height > 0) { const f = Math.min(P.width / w, P.height / h); if (isFinite(f) && f > 0) return f; }
+    return 1;
+  };
+  function tfPlan(name, R, id) {
+    const map = byIdMap(), L = map.get(id);
+    if (!L) return { refuse: refusePlan('gone') };
+    if (!S.canTransform(L)) return { refuse: refusePlan('noTransform') };
+    const plan = newPlan(name); plan.arranges = false; plan.adopts = false; plan.touched.add(id); plan.keepSel = true;
+    plan.after = () => { if (FM.requestRender) FM.requestRender(); if (FM.canvasEdit && FM.canvasEdit.update) FM.canvasEdit.update(); };
+    return { L: L, plan: plan };
+  }
+  S.planOpacity = function (R, id, v) {
+    if (!(v >= 0) || !isFinite(v)) return refusePlan('gone');
+    const p = tfPlan('Change opacity', R, id); if (p.refuse) return p.refuse;
+    const L = p.L, t = FM.time || 0, want = Math.max(0, Math.min(1, v)), now = FM.evalProp(L.transform.opacity == null ? 1 : L.transform.opacity, t);
+    if (Math.abs(now - want) < 0.004) return refusePlan('nothingChanged');
+    p.plan.writes.push(() => { if (L.transform.opacity == null) L.transform.opacity = 1; FM.shiftProp(L.transform, 'opacity', want, t, { min: 0, max: 1 }); });
+    p.plan.live = line('opacitySet', Math.round(want * 100));
+    return p.plan;
+  };
+  /* op: 'flipH' (Mirror) · 'flipV' (Flip) · 'turn' (a quarter turn clockwise) · 'size' (val: the scale) · 'centre' · 'reset' (no flip, no
+     turn, the size it was added at, centred) */
+  S.planTransform = function (R, id, op, val) {
+    const p = tfPlan('Transform', R, id); if (p.refuse) return p.refuse;
+    const L = p.L, T = L.transform, t = FM.time || 0, P = FM.scene.project || {}, ev = k => FM.evalProp(T[k] == null ? (k === 'scale' ? 1 : 0) : T[k], t);
+    let cx = (+P.width || 0) / 2, cy = (+P.height || 0) / 2;
+    const base = S.baseScale(L), plan = p.plan;
+    const near = (a, b, e) => Math.abs(a - b) < (e || 1e-6);
+    /* review R8-2: a layer with a parent keeps x and y in its PARENT's space (compositor.js applyParentChain), so the picture's middle is
+       mapped into that space through the renderer's own chain (FM.parentChainMatrix, parent space → picture), as the canvas drag does; a
+       parent squashed onto a line has no inverse, and so no middle to put it in */
+    if (L.parent && (op === 'centre' || op === 'reset')) {
+      const M = FM.parentChainMatrix ? FM.parentChainMatrix(L, t, FM.scene) : null;
+      if (M) {
+        const det = M.a * M.d - M.b * M.c;
+        if (!(Math.abs(det) > 1e-12)) return refusePlan('noCentre');
+        const dx = cx - M.e, dy = cy - M.f;
+        cx = (M.d * dx - M.c * dy) / det; cy = (-M.b * dx + M.a * dy) / det;
+      }
+    }
+    if (op === 'flipH' || op === 'flipV') {
+      const k = op, on = !L[k];
+      plan.writes.push(() => { if (L.type === 'group' && FM.settleGroupPivot) FM.settleGroupPivot(L, FM.scene, t); L[k] = on; });
+      plan.live = line(op === 'flipH' ? (on ? 'mirrored' : 'mirrorOff') : (on ? 'flippedV' : 'flipVOff'));
+    } else if (op === 'turn') {
+      const r0 = ev('rotation'), keyed = FM.isAnimated(T.rotation), r1 = keyed ? r0 + 90 : (((r0 + 90) % 360) + 360) % 360;
+      plan.writes.push(() => { FM.shiftTransform(L, 'rotation', r1, t); });
+      plan.live = line('turned', Math.round((((r1 % 360) + 360) % 360)));
+    } else if (op === 'size') {
+      const s = +val;
+      if (!(s > 0) || !isFinite(s)) return refusePlan('gone');
+      if (near(ev('scale'), s, 1e-4)) return refusePlan('nothingChanged');
+      plan.writes.push(() => { FM.shiftTransform(L, 'scale', s, t); });
+      plan.live = line('sizeSet', Math.round(s / base * 100));
+    } else if (op === 'centre') {
+      if (near(ev('x'), cx, 0.01) && near(ev('y'), cy, 0.01)) return refusePlan('nothingChanged');
+      plan.writes.push(() => { FM.shiftTransform(L, 'x', cx, t); FM.shiftTransform(L, 'y', cy, t); });
+      plan.live = line('centred');
+    } else if (op === 'reset') {
+      if (!L.flipH && !L.flipV && near(ev('rotation'), 0) && near(ev('scale'), base, 1e-4) && near(ev('x'), cx, 0.01) && near(ev('y'), cy, 0.01)) return refusePlan('nothingChanged');
+      plan.writes.push(() => {
+        if (L.flipH) L.flipH = false;
+        if (L.flipV) L.flipV = false;
+        FM.shiftTransform(L, 'rotation', 0, t); FM.shiftTransform(L, 'scale', base, t);
+        FM.shiftTransform(L, 'x', cx, t); FM.shiftTransform(L, 'y', cy, t);
+      });
+      plan.live = line('tfReset');
+    } else return refusePlan('gone');
+    return plan;
+  };
+  /* Volume's Mute (R (a) "Volume: ‹ · 0–200 % · Mute"): the sound the Volume row works on (the twin when there is one), muted or heard
+     again. A mute by hand is never the Mute clip sound switch's, so that mark goes. */
+  S.planMute = function (R, id, on) {
+    const map = byIdMap(), L = soundTarget(R, id, map);
+    if (!L) return refusePlan('gone');
+    if (!!L.muted === !!on) return refusePlan('nothingChanged');
+    const plan = newPlan(on ? 'Mute' : 'Sound on'); plan.arranges = false; plan.adopts = false; plan.touched.add(L.id); plan.keepSel = true;
+    plan.writes.push(() => { L.muted = !!on; S.setFlag(L, 'muteByMode', false); });
+    plan.after = () => { if (FM.reconcileAudio) FM.reconcileAudio(); };
+    plan.live = line(on ? 'mutedOne' : 'unmutedOne');
+    return plan;
+  };
+  Object.assign(S.cmd, {
+    opacity(id, v) { return S.edit('Change opacity', R => S.planOpacity(R, id, v)); },
+    transform(id, op, val) { return S.edit('Transform', R => S.planTransform(R, id, op, val)); },
+    mute(id, on) { return S.edit(on ? 'Mute' : 'Sound on', R => S.planMute(R, id, on)); }
+  });
+
   /* MUTE CLIP SOUND (the clip row's 🔈): the mode lives on the document (project.sm.muteClips, it syncs: the mute is part of the
      video). On: every main video not already muted is muted and marked sm.muteByMode (one he muted himself gets no mark). Off: only
      the marked ones are un-muted, never one with a sound twin or a karaoke companion (that would play the sound twice), and a

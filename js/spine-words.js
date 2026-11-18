@@ -141,6 +141,13 @@ window.FM = window.FM || {};
       nothingChanged: 'Nothing changed', oneSpeed: 'One speed now, the same length',
       volumeSet: pct => 'Volume ' + pct + '%', fadeSet: (which, s) => 'Fade ' + which + ' ' + s.toFixed(1) + ' s',
       noReverse: 'Only a video can play backwards', reversed: 'Playing backwards', forwards: 'Playing forwards',
+      /* #1243 R release 8: the tray's Opacity, Transform and Volume › Mute (his S33 "opacity… transform, which has like mirror, rotate") */
+      opacitySet: pct => 'Opacity ' + pct + '%', sizeSet: pct => 'Size ' + pct + '%', turned: deg => 'Turned to ' + deg + '°',
+      mirrored: 'Mirrored', mirrorOff: 'Not mirrored', flippedV: 'Flipped upside down', flipVOff: 'The right way up',
+      centred: 'Centred', tfReset: 'Back to its first size, centred, no turn or flip',
+      noTransform: 'Only a picture, a video or a text can change here',
+      noCentre: 'It moves with a layer squashed flat, so it can’t be centred',   /* review R8-2: a parent with no inverse */
+      mutedOne: 'Muted', unmutedOne: 'Sound on',
       reverseSlow: 'Couldn’t prepare the reversed clip, it will play slowly',
       soundTaken: 'Sound taken out · it sits on the clip as its own track', alreadyOut: 'Its sound is already out · Put sound back first',
       noSound: 'This clip has no sound to take out', noTwin: 'No sound was taken out of this clip', soundBack: 'Sound back in the clip',
@@ -178,7 +185,7 @@ window.FM = window.FM || {};
       effectAdded: (name, clip) => name + ' over ' + clip, effectChanged: name => 'Changed to ' + name, effectDeleted: 'Deleted the effect',
       effectAddedWhole: name => name + ' over the whole video',   // #1243 S10: the project row's Effects covers the whole video
       effectGone: 'That effect was just deleted', segmentNoClip: 'Add a clip first, then an effect over it',
-      segmentOnClip: 'This one goes on a clip — tap a clip first', effectMany: 'This holds several effects · More opens them',
+      segmentOnClip: 'This one goes on a clip — tap a clip first', effectMany: 'This holds several effects · Open in Full to change them',   /* #1243 S4: More went */
       /* Phase 3 · Effects on an item (queue 980, DESIGN §8.5c item 3 "Added Shake to Clip 2"; §4.3 / Q5 the hint on a segment's timeline item) */
       itemFxAdded: (name, item) => 'Added ' + name + ' to ' + item, itemFxGone: 'That was just deleted',
       itemFxUnsuited: 'That effect doesn’t work on this', segmentOver: 'runs over the next clip',
@@ -196,10 +203,19 @@ window.FM = window.FM || {};
       clips: 'Clips', text: 'Text', sound: 'Sound', overlay: 'Overlay',
       cutEnd: 'Cut at the end', cutEndTitle: 'Cut this where the video ends',   /* #1243 S37: on an item that runs past the end of the video */
       lift: 'Lift off',   /* #1243 S24, S25: Length, Move earlier and Move later left the tray (his "you just grab the end and drag it") */ liftTitle: 'Lift off the clip row (make it an overlay)',
-      into: 'Into row', intoTitle: 'Put in the clip row', duplicate: 'Duplicate', crop: 'Crop', more: 'More', moreTitle: 'More settings for this',
+      /* #1243 S4 (his words: "get rid of more, because that's just a lazy way of having like all the other features"): More, its spoken
+         name and its PC "Done" face went; what it opened is the text's Style, a clip's Opacity and Transform (release 8) */
+      into: 'Into row', intoTitle: 'Put in the clip row', duplicate: 'Duplicate', crop: 'Crop',
       delete: 'Delete', stay: 'Stay put', editWords: 'Edit words', forward: 'Forward', backward: 'Back', openFull: 'Open in Full',
-      /* moreDoneTitle (8 Nov, queue 980): the spoken name of More while its panel is open on a PC, where its face is Done */
-      closeGap: 'Close gap', fix: 'Fix', done: 'Done', moreDoneTitle: 'Done · close More’s settings', shorter: 'shorter', longer: 'longer',   // Fade's − and + (Length's frame words went with it)
+      closeGap: 'Close gap', fix: 'Fix', done: 'Done', shorter: 'shorter', longer: 'longer',   // Fade's − and + (Length's frame words went with it)
+      /* #1243 R release 8: the text's Style (Full's panel for it until S36), Opacity, Transform's row (R decision 5: Mirror · Flip · Turn ·
+         Size · Centre · Reset — Mirror and Flip are his own S33 words, "mirror, rotate") and Volume's Mute; Speed's new length */
+      style: 'Style', styleTitle: 'Font, colour, outline and the rest of how it looks',
+      opacity: 'Opacity', opacityLabel: 'Opacity in percent', transform: 'Transform', transformTitle: 'Mirror, flip, turn, size and place',
+      mirror: 'Mirror', mirrorTitle: 'Mirror side to side', flipV: 'Flip', flipVTitle: 'Flip upside down', turn: 'Turn', turnTitle: 'Turn a quarter clockwise',
+      size: 'Size', sizeLabel: 'Size in percent', centre: 'Centre', centreTitle: 'Put it in the middle of the picture',
+      reset: 'Reset', resetTitle: 'Back to its first size, centred, no turn or flip', mute: 'Mute',
+      newLength: s => s.toFixed(1) + ' s', transitionTitle: 'The transition at this clip’s cut',
       /* #1243 S3 · S9: the ‹s' spoken names (a sub-row's and a panel's go back one level; an item's lets the selection go) and the tray's own */
       back: 'Back', backItem: 'Back · nothing selected', clipTools: 'Clip tools',
       /* #1243 S26: a grip whose footage has run out (its spoken name's tail) and the drag tip when he pulls it past the end */
@@ -207,8 +223,8 @@ window.FM = window.FM || {};
       addWhere: 'Add clips', atEnd: 'At the end', afterClip: 'After ', afterCard: 'After the card', beforeFirst: 'Before Clip 1',
       exportAt: p => p + 'p · Export', exportTitle: 'Export video',   // 2.7 (SU1 #20): Simple's Export list
       music: 'Music from your files', sfx: 'Sound effects', voice: 'Record voice', closeAll: 'Close all gaps',   // (moreOpts went with Simple's ⋯, #1243 S5; review L3-10)
-      selected: n => n + ' selected', bandHint: 'Tap a clip to see its tools', bandHintSel: 'Its tools are below · More opens the rest',
-      bandHintSelPc: 'Its tools are below',   // PC (his pick B): every tool is on show there, More with them
+      /* #1243 S4 step 4: "Its tools are below" everywhere (no More to open the rest; the PC's two rows went in release 8) */
+      selected: n => n + ' selected', bandHint: 'Tap a clip to see its tools', bandHintSel: 'Its tools are below',
       /* 2.7 (SU1 #13): the first-run hint, floating just above the bar since #1243 S3 (§7.3 step 4, §8.9): one verb everywhere, split, never
          "cut". #1243 S5: Split is the first tool on a clip now, not ✂ on the play row. The hint no longer says "or look": R decision 1 takes
          Look off the clip (#1243 S12 did: Look is on the project row, for the whole video) */
@@ -233,7 +249,8 @@ window.FM = window.FM || {};
       /* #1243 S17: Text › Draw */
       draw: 'Draw', drawTitle: 'Draw on the video with your finger',
       /* release 2.3 */
-      audio: 'Audio', audioTitle: 'Speed, volume, reverse and the clip’s sound', speed: 'Speed', volume: 'Volume', replace: 'Replace', reverse: 'Reverse', forwards: 'Play forwards', takeSound: 'Take sound out', putSound: 'Put sound back',
+      /* (#1243 S28: Audio and its row went; Speed, Volume, Reverse and Take sound out are the clip's own tools) */
+      speed: 'Speed', volume: 'Volume', replace: 'Replace', reverse: 'Reverse', forwards: 'Play forwards', takeSound: 'Take sound out', putSound: 'Put sound back',
       fade: 'Fade', fadeIn: 'In', fadeOut: 'Out', useOneSpeed: 'Use one speed', speedRamped: 'Speed changes over the clip',
       speedLabel: 'Speed', volumeLabel: 'Volume in percent', muteClips: 'Clip sound', muteOn: 'Mute clip sound', muteOff: 'Clip sound is off, tap to turn it on',
       /* release 2.7: the ◇'s Transition row, and Turn into a transition on a crossfade (#1122, his pick A) */

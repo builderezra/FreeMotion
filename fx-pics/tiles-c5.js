@@ -6,6 +6,14 @@ const {TAU,clamp,lerp,seg,E,rng}=window.FXK;
 const BONE='#e7e2d5', INK='#16130f';
 const MONO=s=>'bold '+s+'px "Courier Prime","Courier New",monospace';
 const mod=(t,P)=>((t%P)+P)%P;
+/* A picture that prepares a lot in make() prepares it as a generator instead (#1253, 17 Nov; HARNESS.md "is staged"). stage(gen) runs
+   it to the end at once (finish) or a few milliseconds at a time (step(ms), true once it is done). make() hands back its draw function
+   with draw.step, so the app builds it between frames; a draw before it is done finishes it there and then, which is exactly what
+   make() used to do. Every yield is only a place the work may pause: no number changes. */
+const stage=gen=>{ let done=false, val, last='';
+  const run=ms=>{ if(done) return true; const t0=performance.now();
+    for(;;){ const r=gen.next(); if(r.done){ done=true; val=r.value; return true; } last=r.value; if(performance.now()-t0>=ms) return false; } };
+  return { step:ms=>run(Math.max(0,+ms||0)), finish:()=>{ run(Infinity); return val; }, done:()=>done, last:()=>last }; };
 const reset=(c,px)=>{ c.setTransform(px/100,0,0,px/100,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over'; };
 const raw=c=>{ c.setTransform(1,0,0,1,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over'; };
 const sheet=(w,h)=>{ const C=document.createElement('canvas'); C.width=w; C.height=h===undefined?w:h; return [C,C.getContext('2d')]; };
@@ -348,14 +356,20 @@ window.FX_TILES.push(
       for(const hx of [52.4,57]){ const g=c.createRadialGradient(hx,65,0,hx,65,1.3); g.addColorStop(0,'rgb(255,255,252)'); g.addColorStop(.45,'rgb(236,242,255)'); g.addColorStop(1,'rgba(200,215,255,0)'); c.fillStyle=g; c.beginPath(); c.arc(hx,65,1.3,0,TAU); c.fill(); }
       for(const hx of [62.6,65.8]){ const g=c.createRadialGradient(hx,62.3,0,hx,62.3,1); g.addColorStop(0,'rgb(255,52,36)'); g.addColorStop(.5,'rgba(230,30,24,0.8)'); g.addColorStop(1,'rgba(200,20,20,0)'); c.fillStyle=g; c.beginPath(); c.arc(hx,62.3,1,0,TAU); c.fill(); }
     };
+    /* the boulevard, its lamps' weights and the 22 ray layers: a generator, one ray pass at a time (stage, above) */
+    const build=function*(){
     const [S,sx]=unitSheet(px,px,px); paint(sx);
+    yield 'plate';
     const [Mk,mx]=unitSheet(N,N,N); paint(mx);
     const d=mx.getImageData(0,0,N,N).data, ch=[new Float32Array(n),new Float32Array(n),new Float32Array(n)];
-    for(let i=0;i<n;i++){ const j=i*4, L=.299*d[j]+.587*d[j+1]+.114*d[j+2]; if(!(L>THR)) continue; let v=(L-THR)/SPAN; v=v*v*(d[j+3]/255); const m=Math.max(d[j],d[j+1],d[j+2]); if(m>0) for(let k=0;k<3;k++) ch[k][i]=v*d[j+k]/m; }
-    const sums=deg=>{ const out=[]; for(let k=0;k<3;k++){ const s=new Float32Array(n); for(let a=0;a<2;a++) streak(ch[k],s,N,N,(deg+a*90)*Math.PI/180,LEN,1/ps); out.push(s); } return out; };
+    yield 'plate';
+    for(let i=0;i<n;i++){ if((i&8191)===8191) yield 'weights'; const j=i*4, L=.299*d[j]+.587*d[j+1]+.114*d[j+2]; if(!(L>THR)) continue; let v=(L-THR)/SPAN; v=v*v*(d[j+3]/255); const m=Math.max(d[j],d[j+1],d[j+2]); if(m>0) for(let k=0;k<3;k++) ch[k][i]=v*d[j+k]/m; }
+    const sums=function*(deg){ const out=[]; for(let k=0;k<3;k++){ const s=new Float32Array(n); for(let a=0;a<2;a++){ streak(ch[k],s,N,N,(deg+a*90)*Math.PI/180,LEN,1/ps); yield 'rays'; } out.push(s); } return out; };
     const layer=(S3,amt)=>{ const [C,x]=sheet(N), im=x.createImageData(N,N), o=im.data; for(let i=0;i<n;i++){ const j=i*4; o[j]=255*(1-Math.exp(-amt*S3[0][i])); o[j+1]=255*(1-Math.exp(-amt*S3[1][i])); o[j+2]=255*(1-Math.exp(-amt*S3[2][i])); o[j+3]=255; } x.putImageData(im,0,0); return C; };
-    const S45=sums(45), RISE=[.2,.4,.6,.8,1].map(a=>layer(S45,a)), TURN=[RISE[4]];
-    for(let deg=50;deg<135;deg+=5) TURN.push(layer(sums(deg),1));
+    const S45=(yield* sums(45)), RISE=[];
+    for(const a of [.2,.4,.6,.8,1]){ RISE.push(layer(S45,a)); yield 'layer'; }
+    const TURN=[RISE[4]];
+    for(let deg=50;deg<135;deg+=5){ const S3=(yield* sums(deg)); TURN.push(layer(S3,1)); yield 'layer'; }
     const frame=u=>{
       if(u<.7||u>=4.3) return null;
       if(u<1.1) return RISE[Math.min(4,Math.floor((u-.7)/.08))];
@@ -364,11 +378,15 @@ window.FX_TILES.push(
       if(u<4.0) return RISE[4];
       return RISE[Math.max(0,4-Math.floor((u-4.0)/.06)-1)];
     };
-    return (c,t)=>{
-      const L=frame(mod(t,P)); raw(c); c.drawImage(S,0,0);
+    return {S,frame}; };
+    const stg=stage(build());
+    const draw=(c,t)=>{
+      const {S,frame}=stg.finish(), L=frame(mod(t,P)); raw(c); c.drawImage(S,0,0);
       if(L){ c.globalCompositeOperation='screen'; c.drawImage(L,0,0,px,px); }
       reset(c,px);
     };
+    draw.step=stg.step; draw.stage=stg;
+    return draw;
   } }
 
 );

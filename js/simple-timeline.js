@@ -19,7 +19,7 @@ window.FM = window.FM || {};
   const SECTIONS = ['captions', 'text', 'overlay', 'behind'];   // top → bottom inside the sections box (stacking order)
   const GLYPH = { captions: 'Cc', text: 'Aa', overlay: '◧', behind: '▤' };
   const RULER = 18, MAIN_H = 56, SOUND_H = 32, LANE = 32;
-  let root = null, scroller = null, inner = null, rulerEl = null, secEl = null, mainEl = null, soundEl = null, sayEl = null, liveEl = null, trEl = null;
+  let root = null, scroller = null, inner = null, rulerEl = null, secEl = null, mainEl = null, soundEl = null, sayEl = null, liveEl = null;
   let lastProg = -1, userScrollAt = 0, settleT = 0, R = null, strips = new Map();
 
   const pps = () => (FM.timeline && FM.timeline.pxPerSec) ? FM.timeline.pxPerSec() : 100;
@@ -68,12 +68,8 @@ window.FM = window.FM || {};
     scroller = root.querySelector('#sm-scroll'); inner = root.querySelector('#sm-inner');
     rulerEl = root.querySelector('#sm-ruler'); secEl = root.querySelector('#sm-sections');
     mainEl = root.querySelector('#sm-main'); soundEl = root.querySelector('#sm-sound');
-    /* 2.7 (#1122, his pick A): THE ◇s' OWN LANE, made here, the first time Simple draws, rather than in index.html. It comes BEFORE the
-       sections in the document, so it paints UNDER every item there (a title or an overlay at a cut is still what a press lands on);
-       styles.css lets a press through the sections' empty boxes to it. */
+    /* (2.7's ◇ lane, #sm-trlane just above the clip row, went with #1243 S1 A: the markers sit on their cuts INSIDE the clip row now) */
     if (window.ResizeObserver) new ResizeObserver(queueRefit).observe(scroller);   // the scroller's height changed: draw again, a frame later (above)
-    trEl = root.querySelector('#sm-trlane');
-    if (!trEl && secEl && secEl.parentNode) { trEl = el('div'); trEl.id = 'sm-trlane'; secEl.parentNode.insertBefore(trEl, secEl); }
     sayEl = document.getElementById('sm-say'); liveEl = document.getElementById('sm-live');
     // the playhead is FIXED at 50vw and the content scrolls under it, exactly as in Full
     scroller.addEventListener('scroll', () => {
@@ -644,7 +640,6 @@ window.FM = window.FM || {};
 
       // ── the clip row ──
       mainEl.textContent = '';
-      if (trEl) trEl.textContent = '';
       const clips = R.main.filter(e => !e.slot);
       clips.forEach((e, i) => {
         const l = byId.get(e.id); if (!l) return;
@@ -702,17 +697,25 @@ window.FM = window.FM || {};
          join between two pictures, every one the same solid blue as on his sheet, set or not (styles.css; the set one's name says what it
          holds, and .sm-chip-tr-on marks it). A tap selects the clip after the cut and opens its Transition row (js/simple-tools.js). A ◇ on
          a CROSSFADE (a blend seam, DESIGN :522) sits at the middle of the overlap and selects the clip that fades in, whose tray then offers
-         Turn into a transition: that one only with More transition controls on (S.trExtras, #545: his sheet never showed it). They sit in
-         their own lane just above the clip row (#sm-trlane), clear of the trim grips, and paint under the sections' items. */
-      if (trEl) {
-        const trTop = mainEl.offsetTop - 36, aw = W().a11y || {}, extras = !!(FM.spine.trExtras && FM.spine.trExtras());
+         Turn into a transition: that one only with More transition controls on (S.trExtras, #545: his sheet never showed it).
+         #1243 S1 OPTION A (his words, 8 Nov: "When you split a layer… it puts a little blue thing above it, but that blue thing clips with
+         whatever is on the above layer, like if you have text… That's a pretty shitty spot to put your, like, transition thing"): the
+         marker sits ON ITS CUT INSIDE THE CLIP ROW, centred both ways, so nothing in the lanes above can cover it (it lived in its own lane
+         above the row, under the lowest section lane, where a title sat over half of it). A 24 px rounded square with our own drawing (two
+         half-tiles meeting at a slanted seam), a 44 px press area, above the clips and below the trim grips (styles.css). WHILE THE CLIP ON
+         EITHER SIDE IS SELECTED it is not drawn: that clip's grips own both its edges, and its tray offers Transition instead
+         (js/simple-tools.js). */
+      {
+        const aw = W().a11y || {}, extras = !!(FM.spine.trExtras && FM.spine.trExtras());
+        const MARK = '<svg viewBox="0 0 24 24" class="sm-trglyph" aria-hidden="true"><path d="M4.5 6.5h7.5l-3 11H4.5z" fill="currentColor"/><path d="M14.5 6.5h5v11h-8z" fill="currentColor" fill-opacity=".45"/></svg>';   // a fixed string, never user data
         R.main.forEach((e, i) => {
-          const l = byId.get(e.id), s = e.seam;
+          const l = byId.get(e.id), s = e.seam, prev = i > 0 ? R.main[i - 1] : null;
           if (e.slot || i < 1 || !l || !s) return;
+          if (sel.has(e.id) || (prev && sel.has(prev.id))) return;   // S1 A: a selected neighbour's grips own the cut
           let chip = null;
           if (s.kind === 'blend') {
             if (!extras) return;
-            chip = el('button', 'sm-chip sm-chip-tr sm-chip-tr-blend', '◇');
+            chip = el('button', 'sm-chip-tr sm-chip-tr-blend');   // not a .sm-chip: those are the gap and overlap chips the clip row also holds
             chip.dataset.trBlend = e.id;
             chip.style.left = xOf(e.start + s.amt / 2) + 'px';
             const nm = aw.transitionBlend || 'Crossfade: turn into a transition';
@@ -720,7 +723,7 @@ window.FM = window.FM || {};
             chip.addEventListener('click', ev => { ev.stopPropagation(); FM.selectLayer(e.id); });
           } else if (FM.spine.joinInto && FM.spine.joinInto(R, e.id, byId)) {
             const tr = l.trIn || null;
-            chip = el('button', 'sm-chip sm-chip-tr' + (tr ? ' sm-chip-tr-on' : ''), '◇');
+            chip = el('button', 'sm-chip-tr' + (tr ? ' sm-chip-tr-on' : ''));
             chip.dataset.tr = e.id;
             chip.style.left = xOf(e.start) + 'px';
             const nm = aw.transition ? aw.transition(tr && tr.type, tr && tr.d) : 'Transition';
@@ -728,9 +731,18 @@ window.FM = window.FM || {};
             chip.addEventListener('click', ev => { ev.stopPropagation(); FM.selectLayer(e.id); if (FM.simpleTools && FM.simpleTools.openRow) FM.simpleTools.openRow('transition', e.id); });
           }
           if (!chip) return;
+          /* review R8-1 / R8-3: the press area is centred on the cut and lies over both clips, so it takes no more than half of either
+             (min 44, half the narrower neighbour's width); under 24 px there is no room for it, and the cut is reached through either
+             clip's own Transition. So every clip keeps its middle for a tap and a hold, however short or far zoomed out. */
+          const room = Math.floor(Math.min(prev ? (prev.end - prev.start) * p : 0, (e.end - e.start) * p) / 2), pw = Math.min(44, room);
+          if (!(pw >= 24)) return;
+          chip.style.width = chip.style.minWidth = pw + 'px';
           chip.type = 'button';
-          chip.style.top = trTop + 'px';
-          trEl.appendChild(chip);
+          /* …and the clip after the cut starts its name clear of the square (Simple-only class, styles.css) */
+          const after = mainEl.querySelector('.sm-clip[data-id="' + e.id + '"]'); if (after) after.classList.add('sm-trl');
+          const face = el('span', 'sm-trmark'); face.innerHTML = MARK;
+          chip.appendChild(face);
+          mainEl.appendChild(chip);
         });
       }
       // + at the end of the clip row: pick files, laid END TO END from the end of the main track (§15.1)

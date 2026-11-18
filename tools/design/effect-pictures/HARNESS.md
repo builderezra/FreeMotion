@@ -26,3 +26,4 @@ milliseconds at a time with `step(ms)`, which returns true once it is done. make
   against the old files at 160 and 192 px, in both ways of building, and found no differing bytes.
 - **Rule for a new picture:** if make() prepares more than about 10 ms of work, write it as a generator with a `yield` at least every
   few milliseconds and hand back `draw.step`. Generator loops run slower than plain ones (no on-stack optimisation), so pause often.
+- (18 Nov) Fifteen pictures are staged now: the four above, then Auto Grade, Box Blur, Burst Streaks, Mosh Bloom and Cube (v18.41), then Cartoon (tiles-g3.js), Oil Slick (c3), Dither (c10), Star Shine (c5), Bleach Bypass (c0) and Torn Edge (c14). `grep -l "draw.step=" tiles-*.js` lists them.

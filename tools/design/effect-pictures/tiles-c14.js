@@ -9,6 +9,14 @@ const BONE='#e7e2d5', INK='#16130f', COAL='#0c0c0d', NAVY='#161c28', TEXT='#eef2
 const MONO=s=>'bold '+s+'px "Courier Prime","Courier New",monospace';
 const SANS=s=>'800 '+s+'px "Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif';
 const mod=(t,P)=>((t%P)+P)%P;
+/* A picture that prepares a lot in make() prepares it as a generator instead (#1253, 17 Nov; HARNESS.md "is staged"). stage(gen) runs
+   it to the end at once (finish) or a few milliseconds at a time (step(ms), true once it is done). make() hands back its draw function
+   with draw.step, so the app builds it between frames; a draw before it is done finishes it there and then, which is exactly what
+   make() used to do. Every yield is only a place the work may pause: no number changes. */
+const stage=gen=>{ let done=false, val, last='';
+  const run=ms=>{ if(done) return true; const t0=performance.now();
+    for(;;){ const r=gen.next(); if(r.done){ done=true; val=r.value; return true; } last=r.value; if(performance.now()-t0>=ms) return false; } };
+  return { step:ms=>run(Math.max(0,+ms||0)), finish:()=>{ run(Infinity); return val; }, done:()=>done, last:()=>last }; };
 const reset=(c,px)=>{ c.setTransform(px/100,0,0,px/100,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over'; };
 const raw=c=>{ c.setTransform(1,0,0,1,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over'; };
 const sheet=(w,h)=>{ const C=document.createElement('canvas'); C.width=w; C.height=h===undefined?w:h; return [C,C.getContext('2d')]; };
@@ -151,14 +159,21 @@ window.FX_TILES.push(
   line:'The outline of the layer is pushed in and out by noise, so a clean cut edge goes ragged, and Boil makes it crawl.',
   make(px){
     const P=4.6, N=work(px), F=432, ps=N/F, n=N*N, OFF=Math.round((1080-F)/2*ps);
+    /* the slip and its 23 torn frames: a generator, a frame at a time (stage, above) */
+    const build=function*(){
     const [L,lx]=unitSheet(N); drawPage(lx);
     const s=lx.getImageData(0,0,N,N).data, A0=new Uint8Array(n);   /* the one read */
+    yield 'plate';
     for(let i=0;i<n;i++) A0[i]=s[i*4+3];
+    yield 'alpha';
     const AMAX=14, scl=12*ps, inv=1/scl, RB=Math.ceil(AMAX*ps)+2;
     /* only pixels this close to the outline can read a different alpha */
     const b=new Float32Array(n), t1=new Float32Array(n), t2=new Float32Array(n); for(let i=0;i<n;i++) b[i]=A0[i]>0?1:0;
-    boxH(b,t1,N,N,RB); boxV(t1,t2,N,N,RB);
+    yield 'alpha';
+    boxH(b,t1,N,N,RB); yield 'band'; boxV(t1,t2,N,N,RB);
+    yield 'band';
     const band=[]; for(let i=0;i<n;i++) if(t2[i]>1e-5&&t2[i]<1-1e-5) band.push(i);
+    yield 'band';
     const hsh=(ix,iy,sd)=>{ let h=(ix*374761393+iy*668265263+sd*2147483647)|0; h=(h^(h>>>13))*1274126177|0; h=(h^(h>>>16))>>>0; return h/4294967295; };
     const nz=(fx,fy,sd)=>{ const x0=Math.floor(fx), y0=Math.floor(fy), tx=fx-x0, ty=fy-y0, ux=tx*tx*(3-2*tx), uy=ty*ty*(3-2*ty);
       const n00=hsh(x0,y0,sd), n10=hsh(x0+1,y0,sd), n01=hsh(x0,y0+1,sd), n11=hsh(x0+1,y0+1,sd), a=n00+(n10-n00)*ux, bb=n01+(n11-n01)*ux; return a+(bb-a)*uy; };
@@ -174,13 +189,17 @@ window.FX_TILES.push(
           const dx=(field(fx,fy,SX0,C,z,zi,zf)*2-1)*am, dy=(field(fx,fy,SY0,C,z,zi,zf)*2-1)*am;
           let sx=xx+(dx|0), sy=yy+(dy|0); sx=sx<0?0:sx>=N?N-1:sx; sy=sy<0?0:sy>=N?N-1:sy; od[i*4+3]=A0[sy*N+sx]; } }
       lc.putImageData(o,0,0); x.drawImage(LC,0,0); return Cv; };
-    const FR=[frame(0,1,0)];
-    [4,8,11,14].forEach(a=>FR.push(frame(a,1,0)));          /* 1..4 */
-    FR.push(frame(14,2,0)); FR.push(frame(14,3,0));        /* 5, 6 */
-    for(let k=1;k<=14;k++) FR.push(frame(14,3,1.5*k/12));  /* 7..20: Boil 1.5 at 12 fps */
-    [9,4].forEach(a=>FR.push(frame(a,3,1.5*14/12)));        /* 21, 22 */
+    const FR=[frame(0,1,0)]; yield 'frame';
+    for(const a of [4,8,11,14]){ FR.push(frame(a,1,0)); yield 'frame'; }          /* 1..4 */
+    FR.push(frame(14,2,0)); yield 'frame'; FR.push(frame(14,3,0)); yield 'frame';        /* 5, 6 */
+    for(let k=1;k<=14;k++){ FR.push(frame(14,3,1.5*k/12)); yield 'frame'; }  /* 7..20: Boil 1.5 at 12 fps */
+    for(const a of [9,4]){ FR.push(frame(a,3,1.5*14/12)); yield 'frame'; }        /* 21, 22 */
+    return FR; };
+    const stg=stage(build());
     const pick=u=>u<.6?0 : u<1.1?1+steps(u,.6,.125,4) : u<2.0?4 : u<2.35?5 : u<2.7?6 : u<3.9?7+steps(u,2.7,1/12,14) : u<4.1?20 : u<4.36?21+steps(u,4.1,.13,2) : 0;
-    return (c,t)=>{ raw(c); c.drawImage(FR[pick(mod(t,P))],0,0,px,px); reset(c,px); tab(c,2.5,2.5,'250%',3.8,NAVY,DIM); };
+    const draw=(c,t)=>{ const FR=stg.finish(); raw(c); c.drawImage(FR[pick(mod(t,P))],0,0,px,px); reset(c,px); tab(c,2.5,2.5,'250%',3.8,NAVY,DIM); };
+    draw.step=stg.step; draw.stage=stg;
+    return draw;
   } },
 
 /* RAISED EDGE. Viewer overlay at 200 % (100 units = 540 project px): six keys and the spacebar, flat grey cut-outs on one layer, over a

@@ -7,6 +7,14 @@ const {TAU,clamp,lerp,seg,E,rng}=window.FXK;
 const BONE='#e7e2d5', INK='#16130f', NAVY='#161c28', HAIR='#2b3547', TEXT='#eef2f8', DIM='#8b96a8', VERM='#e4471d', TEAL='#29d9bb';
 const MONO=s=>'bold '+s+'px "Courier Prime","Courier New",monospace';
 const mod=(t,P)=>((t%P)+P)%P;
+/* A picture that prepares a lot in make() prepares it as a generator instead (#1253, 17 Nov; HARNESS.md "is staged"). stage(gen) runs
+   it to the end at once (finish) or a few milliseconds at a time (step(ms), true once it is done). make() hands back its draw function
+   with draw.step, so the app builds it between frames; a draw before it is done finishes it there and then, which is exactly what
+   make() used to do. Every yield is only a place the work may pause: no number changes. */
+const stage=gen=>{ let done=false, val, last='';
+  const run=ms=>{ if(done) return true; const t0=performance.now();
+    for(;;){ const r=gen.next(); if(r.done){ done=true; val=r.value; return true; } last=r.value; if(performance.now()-t0>=ms) return false; } };
+  return { step:ms=>run(Math.max(0,+ms||0)), finish:()=>{ run(Infinity); return val; }, done:()=>done, last:()=>last }; };
 const reset=(c,px)=>{ c.setTransform(px/100,0,0,px/100,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over'; };
 const sheet=(w,h)=>{ const C=document.createElement('canvas'); C.width=w; C.height=h===undefined?w:h; return [C,C.getContext('2d')]; };
 const unitSheet=n=>{ const [C,x]=sheet(n); x.setTransform(n/100,0,0,n/100,0,0); return [C,x]; };
@@ -336,23 +344,33 @@ window.FX_TILES.push(
 { id:'iridescence', name:'Oil Slick', section:'Colouring', isNew:true, still:1.9,
   line:'A rainbow sheen, like oil on water, follows the light and dark of the picture and slowly slides across it.',
   make(px){
-    const P=4, N=Math.min(px,320), U=100/N, L=new Float32Array(N*N);
-    for(let y=0;y<N;y++) for(let x=0;x<N;x++){ let s=0; for(const [ox,oy] of [[.25,.25],[.75,.25],[.25,.75],[.75,.75]]) s+=silkL((x+ox)*U,(y+oy)*U); L[y*N+x]=s/4; }
+    const P=4, N=Math.min(px,320), U=100/N, K=13;   /* K, the sheen frames: the draw reads it too, so it lives outside the generator */
+    /* the scarf and its thirteen sheen frames: a generator, a few rows at a time (stage, above) */
+    const build=function*(){
+    const L=new Float32Array(N*N);
+    for(let y=0;y<N;y++){ for(let x=0;x<N;x++){ let s=0; for(const [ox,oy] of [[.25,.25],[.75,.25],[.25,.75],[.75,.75]]) s+=silkL((x+ox)*U,(y+oy)*U); L[y*N+x]=s/4; }
+      if((y&1)===1) yield 'silk'; }
     const src=new Uint8ClampedArray(N*N*4); for(let i=0;i<N*N;i++){ const v=L[i]*255; src[i*4]=v; src[i*4+1]=v*.995; src[i*4+2]=v*.985; src[i*4+3]=255; }
-    const BASE=fromData(N,src), AMT=.7, BANDS=3, SC=120, K=13, FR=[];
+    const BASE=fromData(N,src), AMT=.7, BANDS=3, SC=120, FR=[];
+    yield 'base';
     for(let f=0;f<K;f++){ const ph=-.25+.5*f/(K-1), o=new Uint8ClampedArray(src.length);
-      for(let y=0;y<N;y++) for(let x=0;x<N;x++){ const i=y*N+x, j=i*4, l=(.299*src[j]+.587*src[j+1]+.114*src[j+2])/255;
+      for(let y=0;y<N;y++){ for(let x=0;x<N;x++){ const i=y*N+x, j=i*4, l=(.299*src[j]+.587*src[j+1]+.114*src[j+2])/255;
         let h=l*BANDS+((x+.5)*U*10.8+(y+.5)*U*10.8)/SC+ph; h-=Math.floor(h); const h6=h*6;
         const cr=clamp(Math.abs(h6-3)-1), cg=clamp(2-Math.abs(h6-2)), cb=clamp(2-Math.abs(h6-4));
         o[j]=src[j]+(cr*l*255-src[j])*AMT; o[j+1]=src[j+1]+(cg*l*255-src[j+1])*AMT; o[j+2]=src[j+2]+(cb*l*255-src[j+2])*AMT; o[j+3]=255; }
-      FR.push(fromData(N,o)); }
-    return (c,t)=>{
-      const u=mod(t,P); reset(c,px);
+        if((y&15)===15) yield 'sheen'; }
+      FR.push(fromData(N,o)); yield 'sheen'; }
+    return {BASE,FR}; };
+    const stg=stage(build());
+    const draw=(c,t)=>{
+      const {BASE,FR}=stg.finish(), u=mod(t,P); reset(c,px);
       const on=E.inOut(seg(u,.45,1.0))*(1-E.inOut(seg(u,3.3,3.85)));
       c.drawImage(BASE,0,0,100,100);
       if(on>.004){ const ph=.25*Math.sin(u*Math.PI/2), q=(ph+.25)/.5*(K-1), i=Math.min(K-2,Math.floor(q)), f=q-i;
         c.globalAlpha=on; c.drawImage(FR[i],0,0,100,100); if(f>.004){ c.globalAlpha=on*f; c.drawImage(FR[i+1],0,0,100,100); } c.globalAlpha=1; }
     };
+    draw.step=stg.step; draw.stage=stg;
+    return draw;
   } },
 
 /* LEVELS. Pen plotter: a faded scan of a lens drawing, and under it the scan's own histogram, plotted. Input black slides

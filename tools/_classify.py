@@ -51,12 +51,26 @@ STANDING_HEAD = re.compile(r'Standing reminder|Standing instruction', re.I)
 # taken WHILE PLAYING … nothing to build until that reading arrives", matched this pattern, and was filed as a standing note —
 # hidden from next.sh's waiting list, from asks.sh and from the unblock page, with his ask never shown to him. The completeness
 # sweep of 25 Sep found it; the same trap the BUILT_OUT note below records for the capitalised wording.
-STANDING_BODY = re.compile(r'Nothing to build(?! until)|this is the receipt|no longer holds the queue', re.I)
+# ⚠️ "Nothing to build YET" IS A NOTE ABOUT TIMING, AND A PHRASE IN ONE NOTE MUST NOT OUTVOTE AN UNTICKED CLAUSE (18 Nov).
+# Twice more the same trap: #1254's clause 2 said "so (d) needs nothing to build" while clause 3 was still open, and the logger's
+# line "BUILDER: nothing to build yet." sat in #1243 - his big list, dozens of open clauses - from about 9 Nov. Each filed the
+# WHOLE entry as a standing note: off next.sh's list and stamped "NOTE - nothing to build" for him to read, which was false.
+# The same fix brought #352 back: an open question to him from 17 Aug, hidden because its audit note QUOTES the classifier's
+# own words ("treats 'standing instruction' as 'nothing to build'").
+# So: "yet" is excluded like "until", and "Nothing to build" only counts when the entry has no unticked clause left - a
+# numbered one ("3. [ ] ...") or a listed one ("- S12 ✏️ [ ] ...", "- [ ] ..."). The two phrases that SAY the entry is a note
+# ("this is the receipt", "no longer holds the queue") still count wherever they are, clauses or not: #1121's three unticked
+# clauses are standing rules, and its "📌 Standing note - this is the receipt" line is deliberate. A HEADER one counts as before.
+STANDING_BODY = re.compile(r'Nothing to build(?! (?:until|yet))|this is the receipt|no longer holds the queue', re.I)
+STANDING_SAID = re.compile(r'this is the receipt|no longer holds the queue', re.I)
+OPEN_CLAUSE_ANY = re.compile(r'^\s*(?:\d+[a-z]?\.|[-*])\s[^\[\n]{0,24}\[ \]')
 
 
 def _standing(body):
-    head = body.split('\n', 1)[0]
-    return bool(STANDING_HEAD.search(head) or STANDING_BODY.search(body))
+    head, _, rest = body.partition('\n')
+    if STANDING_HEAD.search(head) or STANDING_SAID.search(body): return True
+    if not STANDING_BODY.search(body): return False
+    return not any(OPEN_CLAUSE_ANY.match(l) for l in rest.split('\n'))
 
 
 # …and entries whose REMAINING clauses are all marked by him as ideas rather than requests. #277 had
@@ -525,6 +539,38 @@ _CASES = [
       Nothing to build here; this is a reminder the loop reads.""",
      'standing note (no build)',
      "control: a plain 'Nothing to build' with no 'until' is still a standing note"),
+    # A PHRASE IN ONE NOTE MUST NOT HIDE AN ENTRY THAT STILL HAS AN UNTICKED CLAUSE (18 Nov, #1254 and #1243).
+    ("""- [ ] **1254 — the site shows only the app**
+      1. [x] ✅ the private notes are off the site
+      2. [x] ✅ the name is out of every served file, so (d) needs nothing to build
+      3. [ ] blank the number plates in the served photos""",
+     'ACTIONABLE',
+     "'nothing to build' inside a ticked clause's note, with a numbered clause still open: the entry is work, not a standing note"),
+    ("""- [ ] **1243 — his big list for Simple**
+      R's order: release 7 next. Nothing to build for the plan itself.
+      - S11 ✏️ [x] the look per clip
+      - S12 ✏️ [ ] a look for the whole project""",
+     'ACTIONABLE',
+     "the same with a LISTED clause still open (the '- S12 ✏️ [ ]' shape of #1243): the phrase does not file the entry"),
+    ("""- [ ] **1243 — his big list for Simple**
+      BUILDER: nothing to build yet. The plan lands first.""",
+     'ACTIONABLE',
+     "'nothing to build yet' is a note about timing, not the standing-note phrase (the logger's line in #1243)"),
+    ("""- [ ] **998 — a receipt**
+      Nothing to build here.
+      1. [x] ✅ logged
+      - S1 ✏️ [x] kept""",
+     'standing note (no build)',
+     "control: the phrase with every clause ticked is still a standing note"),
+    ("""- [ ] **997 — Standing reminder: raise this before any public release**
+      1. [ ] make the look our own""",
+     'standing note (no build)',
+     "control: a standing note named in its HEADER stays one even with an unticked clause"),
+    ("""- [ ] **1121 — tell him anything blocking Simple; while tests run, do meaningful work**
+      📌 **Standing note — this is the receipt** (20 Oct hand-off audit): the rule lives in LOOP.md.
+      1. [ ] Anything blocking the release of Simple mode is SAID to him""",
+     'standing note (no build)',
+     "control: 'this is the receipt' SAYS the entry is a note, so it stays one even with unticked clauses (#1121: they are standing rules)"),
     # ORDINARY PROSE MUST NOT LOOK LIKE A SHOUTED MARKER (10 Sep). #857 is a bug report — "tapping the
     # canvas while editing text should move it" — and one of its clauses said "the edit stays open while
     # you do it". Matched case-insensitively, `STAYS OPEN` filed the whole entry as blocked on Ezra and

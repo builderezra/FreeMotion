@@ -209,6 +209,8 @@ window.FX_TILES.push(
       const sky=Math.pow(1-gy/gh,2), sheen=Math.exp(-Math.pow((gx-gy*.5-gw*.2)/1.6,2))*.5;
       let k=1; if(gx<1.4) k*=.55; if(gy<1.1) k*=.6;
       return [ (34+60*sky+50*sheen)*k, (40+66*sky+50*sheen)*k, (50+80*sky+52*sheen)*k ]; };
+    /* the terrace and its bleached copy depend on nothing in px: a generator, a few rows at a time (stage, above) */
+    const build=function*(){
     for(let y=0;y<N;y++){ const v=(y+.5)/U;
       for(let x=0;x<N;x++){ const u=(x+.5)/U, i=(y*N+x)*4; let r,g,b;
         const H=HOUSES.find(h=>u>=h[0]&&u<h[1]), lx=u-H[0], w=H[1]-H[0], right=H[4];
@@ -243,15 +245,21 @@ window.FX_TILES.push(
         r=src[i]; g=src[i+1]; b=src[i+2];
         const l=r*.299+g*.587+b*.114, dr=r+(l-r)*.6, dg=g+(l-g)*.6, db=b+(l-b)*.6;
         blc[i]=ov(dr,l); blc[i+1]=ov(dg,l); blc[i+2]=ov(db,l); blc[i+3]=255;
-      } }
-    const S=toCanvas(N,N,src), T=toCanvas(N,N,blc);
+      }
+      if((y&3)===3) yield 'terrace'; }
+    const S=toCanvas(N,N,src); yield 'plate';
+    const T=toCanvas(N,N,blc);
+    return {S,T}; };
+    const stg=stage(build());
     const amt=u=>u<1.2?0:u<1.37?.24:u<1.54?.48:u<3.62?.7:0;
-    return (c,t)=>{
-      const u=mod(t,P), a=amt(u); reset(c,px);
+    const draw=(c,t)=>{
+      const {S,T}=stg.finish(), u=mod(t,P), a=amt(u); reset(c,px);
       c.drawImage(S,0,0,100,100);
       if(a>0){ c.globalAlpha=a; c.drawImage(T,0,0,100,100); c.globalAlpha=1; }
       tab(c,3,92,'AMOUNT '+a.toFixed(2),4.2,INK,BONE);
     };
+    draw.step=stg.step; draw.stage=stg;
+    return draw;
   } },
 
 /* BRIGHTNESS. Type and a grey scale card. The effect is the CSS brightness() multiply (d *= v, then held to 255): a card of nine

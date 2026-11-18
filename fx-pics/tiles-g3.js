@@ -8,6 +8,14 @@ const {TAU,clamp,lerp,seg,E,rng,hash,vnoise,canvasOf,photo,photoCover}=window.FX
 const BONE='#e7e2d5', INK='#16130f', COAL='#0c0c0d';
 const MONO=s=>'bold '+s+'px "Courier Prime","Courier New",monospace';
 const mod=(t,P)=>((t%P)+P)%P;
+/* A picture that prepares a lot in make() prepares it as a generator instead (#1253, 17 Nov; HARNESS.md "is staged"). stage(gen) runs
+   it to the end at once (finish) or a few milliseconds at a time (step(ms), true once it is done). make() hands back its draw function
+   with draw.step, so the app builds it between frames; a draw before it is done finishes it there and then, which is exactly what
+   make() used to do. Every yield is only a place the work may pause: no number changes. */
+const stage=gen=>{ let done=false, val, last='';
+  const run=ms=>{ if(done) return true; const t0=performance.now();
+    for(;;){ const r=gen.next(); if(r.done){ done=true; val=r.value; return true; } last=r.value; if(performance.now()-t0>=ms) return false; } };
+  return { step:ms=>run(Math.max(0,+ms||0)), finish:()=>{ run(Infinity); return val; }, done:()=>done, last:()=>last }; };
 const reset=(c,px)=>{ c.setTransform(px/100,0,0,px/100,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over'; c.imageSmoothingEnabled=true; c.imageSmoothingQuality='high'; };
 const sheet=(w,h)=>{ const C=document.createElement('canvas'); C.width=w; C.height=h===undefined?w:h; return [C,C.getContext('2d')]; };
 const sheetR=(w,h)=>{ const C=document.createElement('canvas'); C.width=w; C.height=h===undefined?w:h; return [C,C.getContext('2d',{willReadFrequently:true})]; };
@@ -26,15 +34,16 @@ function photoPixels(key,N,crop){ const [,x]=sheetR(N); x.imageSmoothingEnabled=
    Opaque picture, so the alpha-weighted sums of the app's padded plate are the plain sums over the part of each square inside
    the frame, and the alpha Sobel is zero. */
 const ctLuma=(a,i)=>((299*a[i]+587*a[i+1]+114*a[i+2]+500)/1000)|0;
-function ctKuwahara(s,d,W,H,h){
+function* ctKuwaharaG(s,d,W,H,h){
   const W1=W+1, M=W1*(H+1), I=[0,1,2,3,4,5].map(()=>new Float64Array(M));
   const [I0,I1,I2,I3,I4,I5]=I;
   for(let y=0;y<H;y++){ let a0=0,a1=0,a2=0,a3=0,a4=0,a5=0; const r=(y+1)*W1, rp=y*W1;
     for(let x=0;x<W;x++){ const i=(y*W+x)*4, yy=ctLuma(s,i), q=r+x+1, qp=rp+x+1;
       a0+=1; a1+=s[i]; a2+=s[i+1]; a3+=s[i+2]; a4+=yy; a5+=yy*yy;
-      I0[q]=I0[qp]+a0; I1[q]=I1[qp]+a1; I2[q]=I2[qp]+a2; I3[q]=I3[qp]+a3; I4[q]=I4[qp]+a4; I5[q]=I5[qp]+a5; } }
+      I0[q]=I0[qp]+a0; I1[q]=I1[qp]+a1; I2[q]=I2[qp]+a2; I3[q]=I3[qp]+a3; I4[q]=I4[qp]+a4; I5[q]=I5[qp]+a5; }
+    if((y&7)===7) yield 'kuwahara sums'; }
   const box=(A,x0,y0,x1,y1)=>A[(y1+1)*W1+x1+1]-A[y0*W1+x1+1]-A[(y1+1)*W1+x0]+A[y0*W1+x0];
-  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+  for(let y=0;y<H;y++){ for(let x=0;x<W;x++){
     let best=Infinity, b0=0,b1=0,b2=0,b3=0, bx=0;
     for(let q=0;q<4;q++){ const cx=x+((q&1)?h:-h), cy=y+(q<2?-h:h);
       const x0=Math.max(0,cx-h), y0=Math.max(0,cy-h), x1=Math.min(W-1,cx+h), y1=Math.min(H-1,cy+h); if(x0>x1||y0>y1) continue;
@@ -42,34 +51,37 @@ function ctKuwahara(s,d,W,H,h){
       const m=box(I4,x0,y0,x1,y1)/a, va=box(I5,x0,y0,x1,y1)/a-m*m;
       if(va<best){ best=va; bx=1; b0=a; b1=box(I1,x0,y0,x1,y1); b2=box(I2,x0,y0,x1,y1); b3=box(I3,x0,y0,x1,y1); } }
     if(bx){ const i=(y*W+x)*4; d[i]=b1/b0; d[i+1]=b2/b0; d[i+2]=b3/b0; } }
+    if((y&3)===3) yield 'kuwahara'; }
 }
-function ctGrow(src,dst,W,H,ri,fr,alongRows){ const n=alongRows?W:H, m=alongRows?H:W, step=alongRows?1:W;
+function* ctGrowG(src,dst,W,H,ri,fr,alongRows){ const n=alongRows?W:H, m=alongRows?H:W, step=alongRows?1:W;
   for(let q=0;q<m;q++){ const o=alongRows?q*W:q;
     for(let k=0;k<n;k++){ let best=0; const lo=k-ri<0?0:k-ri, hi=k+ri>n-1?n-1:k+ri;
       for(let c=lo;c<=hi;c++){ const v=src[o+c*step]; if(v>best) best=v; }
       if(fr>0){ if(k-ri-1>=0){ const v=src[o+(k-ri-1)*step]*fr; if(v>best) best=v; } if(k+ri+1<n){ const v=src[o+(k+ri+1)*step]*fr; if(v>best) best=v; } }
-      dst[o+k*step]=best; } } }
-function cartoonPort(src,W,H,o){
+      dst[o+k*step]=best; }
+    if((q&15)===15) yield 'grow'; } }
+function* cartoonPortG(src,W,H,o){
   const N=W*H, S=o.ps, h=Math.min(16,Math.round(o.smooth*S/2)), steps=o.steps, thr=o.threshold*2.55, thr1=thr+24, sat=o.sat/100;
   let sm=src;
-  if(h>=1){ const A=new Uint8ClampedArray(src), B=new Uint8ClampedArray(src.length); ctKuwahara(src,A,W,H,h); B.set(A); ctKuwahara(A,B,W,H,h); sm=B; }
+  if(h>=1){ const A=new Uint8ClampedArray(src), B=new Uint8ClampedArray(src.length); yield* ctKuwaharaG(src,A,W,H,h); B.set(A); yield* ctKuwaharaG(A,B,W,H,h); sm=B; }
   const Y=new Float64Array(N), Eg=new Float32Array(N);
-  for(let j=0;j<N;j++) Y[j]=ctLuma(sm,j*4)*255;
+  for(let j=0;j<N;j++){ Y[j]=ctLuma(sm,j*4)*255; if((j&16383)===16383) yield 'luma'; }
   for(let y=0;y<H;y++){ const ru=(y>0?y-1:0)*W, rc=y*W, rd=(y<H-1?y+1:H-1)*W;
     for(let x=0;x<W;x++){ const xl=x>0?x-1:0, xr=x<W-1?x+1:W-1;
       const gx=(Y[ru+xr]+2*Y[rc+xr]+Y[rd+xr])-(Y[ru+xl]+2*Y[rc+xl]+Y[rd+xl]), gy=(Y[rd+xl]+2*Y[rd+x]+Y[rd+xr])-(Y[ru+xl]+2*Y[ru+x]+Y[ru+xr]);
       const mg=Math.sqrt(gx*gx+gy*gy)/1020;
-      Eg[rc+x]=mg<=thr?0:mg>=thr1?1:(u=>u*u*(3-2*u))((mg-thr)/24); } }
+      Eg[rc+x]=mg<=thr?0:mg>=thr1?1:(u=>u*u*(3-2*u))((mg-thr)/24); }
+    if((y&7)===7) yield 'edges'; }
   const Wp=o.width*S;
   if(Wp<2){ const k=Wp/2; for(let j=0;j<N;j++) if(Eg[j]>0) Eg[j]*=k; }
-  else if(Wp>2){ const F=new Float32Array(N), r=(Wp-2)/2, ri=Math.floor(r), fr=r-ri; ctGrow(Eg,F,W,H,ri,fr,true); ctGrow(F,Eg,W,H,ri,fr,false); }
+  else if(Wp>2){ const F=new Float32Array(N), r=(Wp-2)/2, ri=Math.floor(r), fr=r-ri; yield* ctGrowG(Eg,F,W,H,ri,fr,true); yield* ctGrowG(F,Eg,W,H,ri,fr,false); }
   const LV=[]; for(let k=0;k<steps;k++) LV.push(Math.round((2*k+1)*255/(2*steps)));
   const out=new Uint8ClampedArray(N*4);
   for(let j=0,i=0;j<N;j++,i+=4){ const r=sm[i], g=sm[i+1], b=sm[i+2], Yi=ctLuma(sm,i), Lf=(299*r+587*g+114*b)/1000, q=LV[(Yi*steps)>>8];
     const cr=(r-Lf)*sat, cg=(g-Lf)*sat, cb=(b-Lf)*sat, hi=Math.max(cr,cg,cb), lo=Math.min(cr,cg,cb); let f=1;
     if(q+hi>255) f=(255-q)/hi; if(q+lo<0){ const f2=q/-lo; if(f2<f) f=f2; }
     let R=q+cr*f, G=q+cg*f, B=q+cb*f; const e=Eg[j]; if(e>0){ R-=R*e; G-=G*e; B-=B*e; }   /* Edge colour black */
-    out[i]=R; out[i+1]=G; out[i+2]=B; out[i+3]=255; }
+    out[i]=R; out[i+1]=G; out[i+2]=B; out[i+3]=255; if((j&4095)===4095) yield 'tone'; }
   return out;
 }
 
@@ -98,12 +110,18 @@ window.FX_TILES.push(
   line:'The picture is smoothed into flat patches of colour, its shading cut into a few steps, with dark outlines drawn round the shapes.',
   make(px){
     const P=4.8, N=480;
+    /* the photo and its cartoon depend on nothing in px: a generator, a few rows at a time (stage, above) */
+    const build=function*(){
     const src=photoPixels('clouds',N);
-    const toon=cartoonPort(src,N,N,{ps:N/1080,smooth:8,steps:4,width:10,threshold:15,sat:150});
-    const SRC=put(N,N,src), TOON=put(N,N,toon);
+    yield 'photo';
+    const toon=(yield* cartoonPortG(src,N,N,{ps:N/1080,smooth:8,steps:4,width:10,threshold:15,sat:150}));
+    const SRC=put(N,N,src); yield 'put';
+    const TOON=put(N,N,toon);
+    return {SRC,TOON}; };
+    const stg=stage(build());
     const xAt=u=>u<.7?100:u<1.6?lerp(100,50,settle(seg(u,.7,1.6))):u<2.7?50:u<3.3?lerp(50,0,E.inOut(seg(u,2.7,3.3))):u<4.3?0:100;
-    return (c,t)=>{
-      const u=mod(t,P), X=xAt(u); reset(c,px);
+    const draw=(c,t)=>{
+      const {SRC,TOON}=stg.finish(), u=mod(t,P), X=xAt(u); reset(c,px);
       c.drawImage(SRC,0,0,100,100);
       if(X<100){ c.save(); c.beginPath(); c.rect(X,0,100-X,100); c.clip(); c.drawImage(TOON,0,0,100,100); c.restore(); }
       /* the labels belong to their halves, so each one wipes with its picture */
@@ -117,6 +135,8 @@ window.FX_TILES.push(
         c.beginPath(); c.moveTo(X+.9,48.4); c.lineTo(X+2.4,50); c.lineTo(X+.9,51.6); c.closePath(); c.fill();
       }
     };
+    draw.step=stg.step; draw.stage=stg;
+    return draw;
   } },
 
 /* FILM DAMAGE. A drawn outback frame (windmill, tank, red-dirt track, a big sky) in full colour, then PIXEL_FX.filmdamage on a 540 px

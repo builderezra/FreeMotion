@@ -65561,107 +65561,89 @@
     }
   });
 
-  /* ═══ S9 · OPTION E (his A1 sheet): one "Audio" tool for a main video clip. Three sizes: a PC window of 1280x800 and one of 1024x600 (smTrayBAt), and a phone at 380. ═══ */
+  /* ═══ A MAIN CLIP'S TRAY at three sizes: a PC window of 1280x800 and one of 1024x600 (smTrayBAt), and a phone at 380. (S9 option E, one
+     "Audio" tool for a main video clip, was reversed by #1243 S28 in release 8.) ═══ */
   const SM9_SIZES = [[1280, 800], [1024, 600], [380, 0]];
   const sm9At = (w, h, fn) => w <= 700 ? atPhoneWidth(fn, w) : smTrayBAt(w, h, fn);
   const sm9Tools = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
   const sm9Hit = id => { const b = smTool(id); if (!b) return 'missing'; const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return e && b.contains(e) ? '' : 'its centre hits ' + (e ? (e.dataset && e.dataset.tool) || e.id || e.tagName : 'nothing'); };
 
-  /* PHASE 3 · LOOK (queue 980) made a video clip's tray ELEVEN, and in the 306 px band ceil(11/2) = 6 a row (324 px) did not fit, so
-     it fell back to one scrolling row. Sheet 1 question 1, PICK B (6 Nov, under his 21 Oct rule): Simple's band is the design's wider
-     one on a PC (DESIGN §8.3 (1), 372–420 px), so the eleven lie on two rows of six, and a twelfth beside a gap makes two full rows —
-     every tool on show again, as his pick B for tray B. Question 2, PICK B: Look is third, right after Audio. */
-  /* #1243 S24 and S25 (8 Nov) took Length, Move earlier and Move later off the tray (his "people pick it up and drag it", "you just grab
-     the end and drag it"), so a video clip's tray was eight. #1243 S5 (R5, his words: "put the split button on the row that pops up when
-     you have a layer selected") put Split first: nine, two rows of five and four on a PC, ten beside a gap on two rows of five. */
-  /* #1243 S12 (R9) took Look off the clip's tray (it is the project row's, for the whole video): eight tools, two rows of four on a PC, nine
-     beside a gap on two rows of five and four. */
-  test('simple P2.3 · S9 option E: a main video clip’s tray is Split, Audio, Lift off, Duplicate, Crop, Replace, More and 🗑 with no Look (#1243 S12 put Look on the project row; Speed, Volume, Reverse and Take sound out are inside Audio; no Length, Move earlier or Move later since #1243; Split first since #1243 S5), and on a PC at 1280×800 and 1024×600 the wider Simple band lays the eight on TWO rows of four, every tool on show, More and 🗑 last; on a phone one row with Split and Audio on show with no swipe; next to a gap nine tools on two rows of five and four', { item: '1243', budgetMs: 150000 }, async function () {
+  /* (History: Phase 3 · Look made a video clip's tray eleven on two rows of six, his sheet 1 pick B; #1243 S24 and S25 took Length and Move
+     off it; S5 put Split first; S12 took Look off.) #1243 R RELEASE 8 (R decision 2, one tray order; S28, S32, S4, S31, S33's lines): a main video clip's tray is ONE strip in R (a)'s order,
+     on a PC as on a phone (decision 6: no two-row grid). It replaced 'simple P2.3 · S9 option E: a main video clip’s tray is Split, Audio, …'
+     (his option E is reversed by his own S28 words). The strip reads its children in order, a section line as '|'. */
+  test('1243 R8 · decision 2 a main video clip’s tray reads Split, Speed, Volume, Replace, Transition, Reverse, Take sound out, Lift off, Duplicate | Opacity | Crop, Transform | Delete — no Audio, More, Look, Length or Move — on ONE 56 px row at 1280×800, 1024×600 and 380, with Split, Speed, Volume and Replace pressable at the strip’s start; next to a gap Close gap follows Duplicate', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
-    const WANT = ['split', 'audio', 'lift', 'duplicateClip', 'crop', 'replace', 'more', 'delete'];
+    const WANT = ['split', 'speed', 'volume', 'replace', 'transition', 'reverse', 'takeSound', 'lift', 'duplicateClip', '|', 'opacity', '|', 'crop', 'transform', '|', 'delete'];
+    const read = () => { const r = document.querySelector('#sm-tray > .sm-runbox > .sm-run'); return r ? Array.from(r.children).map(c => c.classList.contains('sm-div') ? '|' : (c.dataset.tool || c.className)) : []; };
     for (const [w, h] of SM9_SIZES) {
       await sm9At(w, h, async function () {
         await smP2((W, H) => [smV('C', 5, 3, W, H, { muted: false }), smV('B', 3, 2, W, H, { muted: false }), smV('A', 0, 3, W, H, { muted: false })], async function (v) {
           FM.selectLayer(v.L('B').id); await v.sleep(150);
-          const t = sm9Tools().slice().sort().join();
-          if (WANT.slice().sort().join() !== t) throw new Error(w + ': the tray holds ' + sm9Tools());
-          ['speed', 'volume', 'reverse', 'takeSound', 'putSound'].forEach(id => { if (smTool(id)) throw new Error(w + ': ' + id + ' is still on the top tray, not inside Audio'); });
-          if (w > 700) {
-            const m = smTrayBMeasure(), bw = document.getElementById('inspector-panel').getBoundingClientRect().width;
-            if (bw < 371.5 || bw > 420.5) throw new Error(w + 'x' + h + ': Simple’s band is ' + Math.round(bw) + ' px wide, want the design’s 372–420');
-            if (m.rows.join() !== '4,4') throw new Error(w + 'x' + h + ': the clip’s eight tools are on rows [' + m.rows + '], want two rows [4,4]');
-            if (m.bad.length) throw new Error(w + 'x' + h + ': ' + m.bad.join('; '));
-            if (m.order.join() !== WANT.join()) throw new Error(w + 'x' + h + ': the tools read ' + m.order + ', want ' + WANT);
-          } else {
-            const run = document.querySelector('#sm-tray .sm-run'); if (run) run.scrollLeft = 0;
-            await v.sleep(30);
-          }
-          ['split', 'audio', 'more', 'delete'].forEach(id => { if (sm9Hit(id)) throw new Error(w + ': ' + id + ' cannot be pressed with the strip at its start — ' + sm9Hit(id)); });
-          ['length', 'earlier', 'later'].forEach(id => { if (smTool(id)) throw new Error(w + ': the tray still offers ' + id + ', which #1243 took off'); });
-          if (document.querySelector('#sm-tray [data-tool="look"]')) throw new Error(w + ': the clip’s tray still holds Look, which #1243 S12 put on the project row');
+          const got = read();
+          /* review R8-1 (safety): drawn = Split and Delete anywhere in the tray, so on v18.42 (Delete pinned outside the strip, no strip at
+             1280) the test fails by the order it reads, not by its control */
+          if (!smTool('split') || !smTool('delete')) throw new Error('CONTROL ' + w + ': Clip 2’s tray is not drawn (' + sm9Tools() + ')');
+          if (got.join() !== WANT.join()) throw new Error(w + ': the tray reads ' + got.join(' ') + ', want ' + WANT.join(' '));
+          ['audio', 'more', 'look', 'length', 'earlier', 'later'].forEach(id => { if (document.querySelector('#sm-tray [data-tool="' + id + '"]')) throw new Error(w + ': the tray still offers ' + id); });
+          const tray = document.getElementById('sm-tray'), tops = new Set(Array.from(tray.querySelectorAll('.sm-tool')).map(b => Math.round(b.getBoundingClientRect().top)));
+          if (Math.abs(tray.getBoundingClientRect().height - 56) > 0.5 || tops.size !== 1 || tray.classList.contains('sm-tray-2')) throw new Error(w + 'x' + h + ': the tray is ' + tray.getBoundingClientRect().height + ' px tall with tools on ' + tops.size + ' row(s), want ONE 56 px row');
+          const run = tray.querySelector('.sm-run'); run.scrollLeft = 0; await v.sleep(30);
+          ['split', 'speed', 'volume', 'replace'].forEach(id => { if (sm9Hit(id)) throw new Error(w + ': ' + id + ' cannot be pressed with the strip at its start — ' + sm9Hit(id)); });
         });
-        /* next to a gap there are nine tools: two rows of five and four on a PC */
+        /* next to a gap: Close gap closes the main section, before the first line */
         await smP2((W, H) => [smV('C', 6, 3, W, H, { muted: false }), smV('B', 3, 2, W, H, { muted: false }), smV('A', 0, 3, W, H, { muted: false })], async function (v) {
           FM.selectLayer(v.L('B').id); await v.sleep(150);
-          if (!smTool('seam')) throw new Error('CONTROL: B has a gap after it and the tray offers no Close gap: ' + sm9Tools());
-          if (w > 700) {
-            const m = smTrayBMeasure();
-            if (m.rows.join() !== '5,4' || m.bad.length) throw new Error(w + 'x' + h + ': nine tools should lie on two rows of five and four, got [' + m.rows + '] ' + m.bad.join('; '));
-          }
-          const run = document.querySelector('#sm-tray .sm-run') || document.getElementById('sm-tray'); run.scrollLeft = 0; await v.sleep(30);
-          if (sm9Hit('audio') || sm9Hit('lift')) throw new Error(w + ': Audio or Lift off is not reachable beside a gap: ' + sm9Hit('audio') + ' ' + sm9Hit('lift'));
+          const got = read();
+          if (!smTool('seam')) throw new Error('CONTROL: B has a gap after it and the tray offers no Close gap: ' + got);
+          if (got[got.indexOf('seam') - 1] !== 'duplicateClip' || got[got.indexOf('seam') + 1] !== '|') throw new Error(w + ': beside a gap the tray reads ' + got.join(' ') + ', want Close gap right after Duplicate, closing the main section');
         });
       });
     }
   });
 
-  test('simple P2.3 · S9 option E: the open Audio row is Done, Speed, Volume, Reverse and Take sound out, every button inside the band with its words inside it and nothing to scroll to, at 1280×800, 1024×600 and 380; Done from Speed or Volume comes back to it, Reverse presses in one step, Take sound out makes the twin and the row offers Put sound back', { item: '980', budgetMs: 240000 }, async function () {
+  /* #1243 S28 (his words, 8 Nov: "if you click audio, it takes you to a menu that has speed. Volume. Reverse. And take out sound. Those
+     should all just be buttons in the main menu… Not in there… actually polish those things"). It replaced 'simple P2.3 · S9 option E: the
+     open Audio row is Done, Speed, Volume, Reverse and Take sound out, …': there is no Audio row; the four are the clip's own tools. */
+  test('1243 R8 · S28 a video clip’s own tray has Speed, Volume, Reverse and Take sound out with no Audio, at 1280×800, 1024×600 and 380: the ‹ of Speed’s and of Volume’s row comes back to the clip’s tray, Reverse presses in one step, and Take sound out makes the twin in one step and turns into Put sound back in its place (CONTROL: a picture clip has none of the four)', { item: '980', budgetMs: 240000 }, async function () {
     smNeedP2();
     for (const [w, h] of SM9_SIZES) {
       await sm9At(w, h, async function () {
-        await smFakeLoad(() => smP2((W, H) => [smV('Z', 6, 3, W, H), smV('A', 0, 6, W, H, { muted: false })], async function (v) {
-          const S = FM.spine, tray = () => document.getElementById('sm-tray');
+        await smFakeLoad(() => smP2((W, H) => [smPic('Z', 6, 3, W, H), smV('A', 0, 6, W, H, { muted: false })], async function (v) {
           const asked = [], real = FM.ensureReverseCache, realClr = FM.maybeClearCache;
           FM.ensureReverseCache = async function (l) { asked.push(l.id); };
           FM.maybeClearCache = function () {};
           try {
+            FM.selectLayer(v.L('Z').id); await v.sleep(120);
+            const zt = sm9Tools();
+            if (zt.indexOf('split') < 0) throw new Error('CONTROL ' + w + ': the picture clip’s tray is not drawn (' + zt + ')');
+            ['speed', 'volume', 'reverse', 'takeSound', 'putSound', 'audio'].forEach(id => { if (zt.indexOf(id) >= 0) throw new Error('CONTROL ' + w + ': a picture clip offers ' + id + ' (' + zt + ')'); });
             FM.selectLayer(v.L('A').id); await v.sleep(120);
-            await smOpenAudio(v);
-            if (sm9Tools().join() !== 'rowBack,speed,volume,reverse,takeSound') throw new Error(w + ': the Audio row holds ' + sm9Tools());
-            const t = tray();
-            if (t.scrollWidth > t.clientWidth + 1) throw new Error(w + 'x' + h + ': the Audio row scrolls sideways (' + t.scrollWidth + ' px in ' + t.clientWidth + '): its last button is cut');
-            if (w > 700) { const m = smTrayBMeasure(); if (m.bad.length) throw new Error(w + 'x' + h + ': ' + m.bad.join('; ')); }
-            const tr = t.getBoundingClientRect();
-            Array.from(t.querySelectorAll('.sm-tool')).forEach(b => {
-              const r = b.getBoundingClientRect(), l = b.querySelector('.sm-tool-l');
-              if (r.right > tr.right + 0.5 || r.left < tr.left - 0.5) throw new Error(w + ': ' + b.dataset.tool + ' lies outside the tray (' + r.left.toFixed(1) + '–' + r.right.toFixed(1) + ' in ' + tr.left.toFixed(1) + '–' + tr.right.toFixed(1) + ')');
-              if (l && l.scrollWidth > l.clientWidth + 0.5) throw new Error(w + ': the words “' + l.textContent + '” are cut (' + l.scrollWidth + ' in ' + l.clientWidth + ')');
-              if (r.width < 44 - 0.5) throw new Error(w + ': ' + b.dataset.tool + ' is ' + r.width.toFixed(1) + ' px wide');
-            });
-            /* Take sound out → the twin, and the row's last button becomes Put sound back */
-            const n1 = v.steps();
-            smTool('takeSound').click(); await v.idle(); await v.sleep(100);
-            if (!FM.scene.layers.some(l => l.sm && l.sm.twin === true && l.audioOnly === true) || v.steps() !== n1 + 1) throw new Error(w + ': Take sound out from the Audio row made no twin or took ' + (v.steps() - n1) + ' steps (' + v.say() + ')');
-            if (!smTool('putSound') || smTool('takeSound')) throw new Error(w + ': the row should now offer Put sound back: ' + sm9Tools());
-            smTool('putSound').click(); await v.idle(); await v.sleep(80);
-            if (FM.scene.layers.some(l => l.sm && l.sm.twin === true)) throw new Error(w + ': Put sound back left the twin');
-            /* Speed and Volume open their own rows and Done comes back HERE, not to the clip's tray */
+            const t0 = sm9Tools();
+            if (t0.indexOf('audio') >= 0) throw new Error(w + ': the clip’s tray still has Audio (' + t0 + ')');
+            ['speed', 'volume', 'reverse', 'takeSound'].forEach(id => { if (t0.indexOf(id) < 0) throw new Error(w + ': the clip’s own tray has no ' + id + ' (' + t0 + ')'); });
+            /* Speed and Volume open their own rows, and their ‹ comes back to the clip's tray */
             for (const id of ['speed', 'volume']) {
               smTool(id).click(); await v.sleep(100);
-              if (!smTool('rowBack') || smTool('audio') || sm9Tools().indexOf('reverse') >= 0) throw new Error(w + ': ' + id + ' did not open its own row (' + sm9Tools() + ')');
+              const bar = document.getElementById('sm-bar');
+              if (bar.getAttribute('data-mode') !== 'sub' || bar.getAttribute('data-sub') !== id || !smTool('rowBack')) throw new Error(w + ': ' + id + ' did not open its own row (mode ' + bar.getAttribute('data-mode') + ', sub ' + bar.getAttribute('data-sub') + ')');
               smTool('rowBack').click(); await v.sleep(100);
-              if (sm9Tools().join() !== 'rowBack,speed,volume,reverse,takeSound') throw new Error(w + ': Done from ' + id + ' did not come back to Audio (' + sm9Tools() + ')');
+              if (bar.getAttribute('data-mode') !== 'item' || sm9Tools().join() !== t0.join()) throw new Error(w + ': the ‹ of ' + id + '’s row did not come back to the clip’s tray (' + bar.getAttribute('data-mode') + ': ' + sm9Tools() + ')');
             }
             /* Reverse: one step, pressed in, goes back with one more */
             const n0 = v.steps();
-            smTool('reverse').click(); await v.idle();
-            if (!v.L('A').reversed || v.steps() !== n0 + 1) throw new Error(w + ': Reverse from the Audio row took ' + (v.steps() - n0) + ' steps (reversed ' + v.L('A').reversed + ')');
+            smTool('reverse').click(); await v.idle(); await v.sleep(60);
+            if (!v.L('A').reversed || v.steps() !== n0 + 1) throw new Error(w + ': Reverse in the clip’s tray took ' + (v.steps() - n0) + ' steps (reversed ' + v.L('A').reversed + ')');
             if (smTool('reverse').getAttribute('aria-pressed') !== 'true') throw new Error(w + ': Reverse does not show as pressed');
-            smTool('reverse').click(); await v.idle();
+            smTool('reverse').click(); await v.idle(); await v.sleep(60);
             if (v.L('A').reversed || v.steps() !== n0 + 2) throw new Error(w + ': Reverse did not go back with one more press');
-            /* Done leaves for the clip's own tray */
-            smTool('rowBack').click(); await v.sleep(100);
-            if (!smTool('audio') || !smTool('lift')) throw new Error(w + ': Done from Audio did not return to the clip’s tray (' + sm9Tools() + ')');   // #1243 S12: Look left the tray, Lift off marks it
+            /* Take sound out → the twin in one step, and the tool turns into Put sound back in the same place */
+            const at = sm9Tools().indexOf('takeSound'), n1 = v.steps();
+            smTool('takeSound').click(); await v.idle(); await v.sleep(100);
+            if (!FM.scene.layers.some(l => l.sm && l.sm.twin === true && l.audioOnly === true) || v.steps() !== n1 + 1) throw new Error(w + ': Take sound out made no twin or took ' + (v.steps() - n1) + ' steps (' + v.say() + ')');
+            if (sm9Tools().indexOf('putSound') !== at || smTool('takeSound')) throw new Error(w + ': Put sound back is not where Take sound out was (' + sm9Tools() + ')');
+            smTool('putSound').click(); await v.idle(); await v.sleep(80);
+            if (FM.scene.layers.some(l => l.sm && l.sm.twin === true)) throw new Error(w + ': Put sound back left the twin');
           } finally { FM.ensureReverseCache = real; FM.maybeClearCache = realClr; }
         }, { media: [{ name: 'A', rec: smRec(10, 'a.mp4', { width: 320, height: 240 }) }] }));
       });
@@ -68342,7 +68324,7 @@
      stage's bottom edge (the sheet line) over the play row, the timeline and the bar. Full keeps its 40% stage. The frame is set to each
      height for the test and put back. Red on c41-dock: the stage is 286 px at 800 (180 at 667), so “at 380×800 the stage is …” is the
      failing assertion. */
-  test('simple P2.7 · 2A row 16 at 380×800 and 380×667 Simple’s preview takes the empty room under the tools (the tools stay on screen), More’s panel no longer takes it back but runs from the stage’s bottom edge (#1243 rule 3), Full keeps its 40% stage', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P2.7 · 2A row 16 at 380×800 and 380×667 Simple’s preview takes the empty room under the tools (the tools stay on screen), a title’s Style panel no longer takes it back but runs from the stage’s bottom edge (#1243 rule 3; S4: no More), Full keeps its 40% stage', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     const fe = window.frameElement;
     if (!fe) throw new Error('this test needs run.html’s iframe to set a phone height');
@@ -68353,7 +68335,7 @@
         for (const H of [800, 667]) {
           fe.style.height = H + 'px'; window.dispatchEvent(new Event('resize')); await settle();
           if (Math.abs(innerHeight - H) > 1) throw new Error('setup: the frame is ' + innerHeight + ' px tall, want ' + H);
-          await smP2(smClips3, async function (v) {
+          await smP2((W, H) => [smT('Hi', 0.5, 1, W, H)].concat(smClips3(W, H)), async function (v) {
             FM.refreshAll(); await settle();
             const toolsB = () => document.getElementById('sm-tools').getBoundingClientRect().bottom;
             const sh = stageH(), want = H - 380, fails = [];
@@ -68361,14 +68343,16 @@
             if (toolsB() > innerHeight + 0.5) fails.push('at 380×' + H + ' the project tools end at ' + Math.round(toolsB()) + ', past the bottom (' + innerHeight + ')');
             else if (innerHeight - toolsB() > 12) fails.push('at 380×' + H + ' ' + Math.round(innerHeight - toolsB()) + ' px still stand empty under the tools');
             if (fails.length) throw new Error(fails.join(' · '));
-            // More's panel no longer takes the room back (#1243 rule 3): the stage keeps its height, the panel starts at its bottom edge
-            FM.selectLayer(v.L('B').id); await settle(120);
-            if (Math.abs(stageH() - sh) > 0.5) throw new Error('at 380×' + H + ' selecting a clip moved the stage (' + Math.round(sh) + ' → ' + Math.round(stageH()) + ')');
-            smTool('more').click(); await settle(300);
+            // a panel no longer takes the room back (#1243 rule 3): the stage keeps its height, the panel starts at its bottom edge.
+            // #1243 S4 (release 8): More went, so the panel for a selection is a title's Style
+            FM.selectLayer(v.L('Hi').id); await settle(120);
+            if (Math.abs(stageH() - sh) > 0.5) throw new Error('at 380×' + H + ' selecting a title moved the stage (' + Math.round(sh) + ' → ' + Math.round(stageH()) + ')');
+            if (!smTool('style')) throw new Error('at 380×' + H + ' the title’s tray has no Style');
+            smTool('style').click(); await settle(300);
             document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
             const insp = document.getElementById('inspector-panel');
-            if (!insp.classList.contains('open')) throw new Error('setup: More did not raise the panel');
-            if (Math.abs(stageH() - sh) > 1) throw new Error('at 380×' + H + ' with More’s panel up the stage is ' + Math.round(stageH()) + ' px, want ' + Math.round(sh) + ' (the picture keeps its size, #1243 rule 3)');
+            if (!insp.classList.contains('open')) throw new Error('setup: Style did not raise the panel');
+            if (Math.abs(stageH() - sh) > 1) throw new Error('at 380×' + H + ' with Style’s panel up the stage is ' + Math.round(stageH()) + ' px, want ' + Math.round(sh) + ' (the picture keeps its size, #1243 rule 3)');
             const pTop = insp.getBoundingClientRect().top, line = document.getElementById('stage').getBoundingClientRect().bottom;
             if (Math.abs(pTop - line) > 1) throw new Error('at 380×' + H + ' the panel starts at ' + Math.round(pTop) + ', not at the stage’s bottom edge ' + Math.round(line));
             FM.simpleTools.closePanel(); FM.selectLayer(null); await settle(300);
@@ -68447,17 +68431,17 @@
     }));
   });
 
-  test('simple P2.7 · the first-run hint never shows once fm.sm.hint is 1 and nothing takes its place (CONTROL: the probe sees the hint once the flag is cleared, and Clip 2’s More on show once it is selected)', { item: '980', budgetMs: 60000 }, async function () {
+  test('simple P2.7 · the first-run hint never shows once fm.sm.hint is 1 and nothing takes its place (CONTROL: the probe sees the hint once the flag is cleared, and Clip 2’s Split on show once it is selected)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await smHintKeep('1', () => smP2(smClips3, async function (v) {
       await smHintFresh(v);
       const row = smHintRow();
       if (row.shown || row.text) throw new Error('with fm.sm.hint = "1" the first-run hint still shows (“' + row.text + '”)');
       if (document.getElementById('sm-tray').getClientRects().length) throw new Error('with nothing selected and no hint a tray row is on screen (nothing takes the hint’s place: the bar is the project row)');
-      // CONTROL: with Clip 2 selected its More is on show in the tray, so the empty probe above is not a broken page
+      // CONTROL: with Clip 2 selected its Split is on show in the tray, so the empty probe above is not a broken page (#1243 S4: More went)
       FM.selectLayer(v.L('B').id); await v.sleep(60);
-      const more = document.querySelector('#sm-tray .sm-tool[data-tool="more"]');
-      if (!more || !more.getClientRects().length) throw new Error('CONTROL: with Clip 2 selected no More is on show in the tray');
+      const more = document.querySelector('#sm-tray .sm-tool[data-tool="split"]');
+      if (!more || !more.getClientRects().length) throw new Error('CONTROL: with Clip 2 selected no Split is on show in the tray');
       // CONTROL: the same probe sees the hint as soon as this device has not dismissed it
       localStorage.removeItem('fm.sm.hint');
       await smHintFresh(v);
@@ -140487,8 +140471,7 @@
     b.click(); await v.sleep(30);
     return b;
   }
-  /* S9 (option E): a main video clip's Speed, Volume, Reverse and Take sound out live in ONE row, opened by the Audio tool. This opens it. */
-  async function smOpenAudio(v) { if (!smTool('audio')) throw new Error('the clip’s tray has no Audio tool (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')'); smTool('audio').click(); await v.sleep(100); }
+  /* (smOpenAudio opened S9 option E's Audio row; #1243 S28 put Speed, Volume, Reverse and Take sound out in the clip's own tray, release 8) */
   const smTops = ids => ids.map(id => { const e = document.getElementById(id); return e ? Math.round(e.getBoundingClientRect().top) : NaN; });
 
   /* #1243 S3: ONE BAR. With nothing selected it is the project row (each tool at least 64 px, scrolling at 380, #1243 S15); with a clip
@@ -140507,9 +140490,9 @@
         const y0 = smTops(rows);
         FM.selectLayer(v.L('B').id); await v.sleep(120);
         document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
-        const want = ['lift', 'duplicateClip', 'crop', 'more', 'delete'];
+        const want = ['split', 'speed', 'volume', 'replace', 'lift', 'duplicateClip', 'crop', 'delete'];   // #1243 R release 8: no Audio, no More
         const got = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
-        if (want.some(t => got.indexOf(t) < 0)) throw new Error(width + ' px: the main clip tray is ' + JSON.stringify(got) + ', want ' + JSON.stringify(want));
+        if (want.some(t => got.indexOf(t) < 0) || got.indexOf('more') >= 0) throw new Error(width + ' px: the main clip tray is ' + JSON.stringify(got) + ', want ' + JSON.stringify(want) + ' and no More');
         if (['length', 'earlier', 'later'].some(t => got.indexOf(t) >= 0)) throw new Error(width + ' px: the tray still offers Length or Move earlier / later, which #1243 took off: ' + JSON.stringify(got));
         /* Phase 3 grows this row toward DESIGN §8.5's eight (Clips · Text · Captions · Sound · Overlay · Look for all · Effects · Ask): the
            ones built so far, in that order, whichever others a branch has added between them (Captions and Effects so far) */
@@ -140519,23 +140502,27 @@
         const tray = document.getElementById('sm-tray').getBoundingClientRect();
         if (tray.height < 44) throw new Error(width + ' px: the tray is under 44 px tall (' + tray.height + ')');
         if (document.getElementById('sm-tools').getClientRects().length) throw new Error(width + ' px: with a clip selected the project row is still on screen under its tray (#1243 S3: one row)');
-        const bin = smTool('delete').getBoundingClientRect();
-        if (bin.right > innerWidth + 0.5 || bin.width < 44) throw new Error(width + ' px: 🗑 is not on screen at the right end: ' + JSON.stringify([bin.left, bin.width]));
+        /* #1243 S31: Delete is the strip's last tool and scrolls with the rest (no pinned end) */
+        const strip = document.querySelector('#sm-tray > .sm-runbox > .sm-run'), last = strip && Array.from(strip.children).filter(c => c.classList.contains('sm-tool')).pop();
+        if (!last || last.dataset.tool !== 'delete' || document.querySelector('#sm-tray .sm-pins')) throw new Error(width + ' px: Delete is not the last tool of the strip (the strip ends with ' + (last && last.dataset.tool) + ')');
         const insp = document.getElementById('inspector-panel');
+        /* today's panel for a selection opens from a title's Style (#1243 S4: More went; R decision 5 "S4 ships with … the text tray's Style") */
+        FM.selectLayer(v.L('On B').id); await v.sleep(120);
+        if (!smTool('style')) throw new Error(width + ' px: the title’s tray has no Style (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
         if (width <= 700) {
-          if (insp.classList.contains('open')) throw new Error('380 px: selecting a clip raised today’s panel — the tray is the selection’s home (D10)');
-          smTool('more').click(); await v.sleep(200);
+          if (insp.classList.contains('open')) throw new Error('380 px: selecting a title raised today’s panel — the tray is the selection’s home (D10)');
+          smTool('style').click(); await v.sleep(200);
           document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
-          if (!insp.classList.contains('open')) throw new Error('380 px: More did not raise today’s panel');
+          if (!insp.classList.contains('open')) throw new Error('380 px: Style did not raise today’s panel');
           const line = document.getElementById('stage').getBoundingClientRect().bottom;
           if (Math.abs(insp.getBoundingClientRect().top - line) > 1) throw new Error('380 px: the panel starts at ' + Math.round(insp.getBoundingClientRect().top) + ', not at the stage’s bottom edge ' + Math.round(line) + ' (#1243 rule 3)');
         } else {
           const bar = document.getElementById('sm-bar');
           if (bar.parentNode !== insp) throw new Error('1280 px: the bar is not in the left band');
           if (!document.querySelector('#inspector .sm-band-hint')) throw new Error('1280 px: the band shows Full’s editor for a selection nobody asked a panel for');
-          smTool('more').click(); await v.sleep(120);
-          if (document.querySelector('#inspector .sm-band-hint')) throw new Error('1280 px: More did not open today’s panel in the band (D20 A)');
-          if (document.getElementById('sm-tray').getClientRects().length || document.getElementById('sm-tools').getClientRects().length) throw new Error('1280 px: with More’s panel in the band the bar is still on screen (#1243 S9: the panel takes the band)');
+          smTool('style').click(); await v.sleep(120);
+          if (document.querySelector('#inspector .sm-band-hint')) throw new Error('1280 px: Style did not open today’s panel in the band (D20 A)');
+          if (document.getElementById('sm-tray').getClientRects().length || document.getElementById('sm-tools').getClientRects().length) throw new Error('1280 px: with Style’s panel in the band the bar is still on screen (#1243 S9: the panel takes the band)');
         }
         /* CONTROL — Full: a selection in Full raises today's panel (phone) and draws today's layer editor in the band (PC), and
            no Simple row shows. A, whose More was never pressed, so a panel Simple left open cannot answer for Full (the
@@ -140547,8 +140534,8 @@
       });
     }, width);
   }
-  test('simple P2.2 · at 380 a selected clip’s tools take the bar under the timeline in place of the project tools, nothing moves, More raises today’s panel from the stage’s bottom edge', { item: '980', budgetMs: 60000 }, async function () { await smTrayCheck(380); });
-  test('simple P2.2 · at 1280 the bar sits at the bottom of the left band, a selected clip’s tools in place of the project tools, and a panel opens in the band only from More, taking the band (D20 A)', { item: '980', budgetMs: 60000 }, async function () { await smTrayCheck(1280); });
+  test('simple P2.2 · at 380 a selected clip’s tools take the bar under the timeline in place of the project tools, nothing moves, Delete ends the strip, and a title’s Style raises today’s panel from the stage’s bottom edge (#1243 S4: no More)', { item: '980', budgetMs: 60000 }, async function () { await smTrayCheck(380); });
+  test('simple P2.2 · at 1280 the bar sits at the bottom of the left band, a selected clip’s tools in place of the project tools, Delete ends the strip, and a panel opens in the band only from a title’s Style, taking the band (D20 A; #1243 S4: no More)', { item: '980', budgetMs: 60000 }, async function () { await smTrayCheck(1280); });
 
   test('simple P2.2 · a reorder by one slot (S.cmd.move, what Alt+→ runs since #1243 took Move later off the tray) moves a clip with what is on it; the other seams keep their amounts; Alt+← moves it back', { item: '980', budgetMs: 60000 }, async function () {
     await smP2((W, H) => [smT('On B', 3.5, 0.5, W, H), smT('On D', 10.5, 1, W, H), smV('D', 10, 2, W, H), smV('C', 5, 4, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
@@ -141106,24 +141093,28 @@
   });
 
 
-  test('simple P2.2 · review at 380 More raises the panel again after he closed it with the grab bar (the only way to every other setting)', { item: '980', budgetMs: 60000 }, async function () {
+  /* #1243 S4 (release 8): More went; a text's Style opens the same panel (Full's for the text), so this asks Style what it asked More */
+  test('simple P2.2 · review at 380 a title’s Style raises the panel again after he closed it with the grab bar (#1243 S4: Style took More’s place on a text)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
-      await smP2((W, H) => [smV('C', 5, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smT('Hi', 0.5, 2, W, H), smV('C', 5, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const insp = document.getElementById('inspector-panel'), fin = () => document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
-        FM.selectLayer(v.L('B').id); await v.sleep(120); fin();
-        smTool('more').click(); await v.sleep(200); fin();
-        if (!insp.classList.contains('open')) throw new Error('CONTROL: More did not raise the panel the first time');
+        FM.selectLayer(v.L('Hi').id); await v.sleep(120); fin();
+        if (!smTool('style')) throw new Error('the title’s tray has no Style (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+        smTool('style').click(); await v.sleep(200); fin();
+        if (!insp.classList.contains('open')) throw new Error('CONTROL: Style did not raise the panel the first time');
         document.getElementById('insp-grab').click(); await v.sleep(200); fin();
         if (insp.classList.contains('open')) throw new Error('CONTROL: the grab bar did not close the panel');
-        smTool('more').click(); await v.sleep(200); fin();
-        if (!insp.classList.contains('open')) throw new Error('More did nothing after the panel was closed with the grab bar — it stays dead until another clip is picked');
+        smTool('style').click(); await v.sleep(200); fin();
+        if (!insp.classList.contains('open')) throw new Error('Style did nothing after the panel was closed with the grab bar — it stays dead until another item is picked');
       });
     }, 380);
   });
 
 
-  test('simple P2.2 · review More is always in reach beside 🗑 at 1280 and 380 (the only way to every other setting), and a plain mouse wheel scrolls the tray to the rest (#976)', { item: '980', budgetMs: 90000 }, async function () {
+  /* #1243 S4 and S31 (release 8): there is no More to keep in reach, and Delete is no longer pinned beside the strip — it is the strip's last
+     tool and scrolls with the rest, so the wheel (his #976) is what brings it, and Close gap, into reach on a PC */
+  test('simple P2.2 · review at 1280 and 380 a plain mouse wheel scrolls a clip’s tray to its end, where Close gap and Delete can be pressed (#976; #1243 S31: Delete scrolls with the rest, out of view at the start)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     const hits = (id) => { const b = smTool(id); if (!b) return 'missing'; const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, e = document.elementFromPoint(x, y); return e && b.contains(e) ? '' : 'its centre (' + Math.round(x) + ',' + Math.round(y) + ') hits ' + (e ? (e.dataset && e.dataset.tool) || e.id || e.className || e.tagName : 'nothing'); };
     for (const width of [1280, 380]) {
@@ -141131,17 +141122,15 @@
         /* B has a 1 s gap after it, so Close gap joins the tray: the longest main-clip tray there is */
         await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
           FM.selectLayer(v.L('B').id); await v.sleep(120);
-          const tray = document.getElementById('sm-tray'), sc = tray.querySelector('.sm-run') || tray;   // SU1 #15: a one-row tray scrolls in its tool strip, beside the pins
+          const tray = document.getElementById('sm-tray'), sc = tray.querySelector('.sm-run') || tray;
           if (!smTool('seam') || !smTool('crop')) throw new Error('CONTROL (' + width + '): the tray is ' + Array.from(tray.querySelectorAll('.sm-tool')).map(b => b.dataset.tool));
           sc.scrollLeft = 0; await v.sleep(30);
-          if (hits('audio')) throw new Error('CONTROL (' + width + '): Audio is not reachable: ' + hits('audio'));
-          if (hits('more')) throw new Error(width + ' px: More cannot be clicked — ' + hits('more'));
-          if (hits('delete')) throw new Error(width + ' px: 🗑 cannot be clicked — ' + hits('delete'));
-          if (width > 700) {
-            tray.dispatchEvent(new WheelEvent('wheel', { deltaY: 600, bubbles: true, cancelable: true })); await v.sleep(30);
-            if (sc.scrollWidth - sc.clientWidth > 1 && Math.abs(sc.scrollLeft - (sc.scrollWidth - sc.clientWidth)) > 1) throw new Error('1280 px: a mouse wheel does not scroll the tray (scrollLeft ' + sc.scrollLeft + ' of ' + (sc.scrollWidth - sc.clientWidth) + ')');
-            ['replace', 'seam'].forEach(id => { if (hits(id)) throw new Error('1280 px: after the wheel, ' + id + ' still cannot be clicked — ' + hits(id)); });
-          }
+          if (hits('speed')) throw new Error('CONTROL (' + width + '): Speed is not reachable at the strip’s start: ' + hits('speed'));
+          const d0 = smTool('delete').getBoundingClientRect(), s0 = sc.getBoundingClientRect();
+          if (d0.left < s0.right - 0.5) throw new Error(width + ' px: Delete is in view with the strip at its start (' + Math.round(d0.left) + ' in a strip ending at ' + Math.round(s0.right) + '): it should be the last tool, scrolling with the rest');
+          tray.dispatchEvent(new WheelEvent('wheel', { deltaY: 3000, bubbles: true, cancelable: true })); await v.sleep(30);
+          if (sc.scrollWidth - sc.clientWidth > 1 && Math.abs(sc.scrollLeft - (sc.scrollWidth - sc.clientWidth)) > 1) throw new Error(width + ' px: a mouse wheel does not scroll the tray to its end (scrollLeft ' + sc.scrollLeft + ' of ' + (sc.scrollWidth - sc.clientWidth) + ')');
+          ['seam', 'delete'].forEach(id => { if (hits(id)) throw new Error(width + ' px: after the wheel, ' + id + ' still cannot be clicked — ' + hits(id)); });
         });
       }, width);
     }
@@ -141271,8 +141260,11 @@
       });
       FM.selectLayer(v.L('A').id); await v.sleep(60); check();
       FM.selectLayer(v.L('Badge').id); await v.sleep(60); check();
-      FM.selectLayer(v.L('A').id); await v.sleep(60); smTool('audio').click(); await v.sleep(60); check();
-      ['lift', 'more', 'into', 'rowBack', 'speed', 'clips'].forEach(t => { if (!seen.has(t)) bad.push('CONTROL: never saw ' + t); });
+      /* #1243 R release 8: Transform's row (Mirror, Flip, Turn, Size, Centre, Reset) in place of S9 option E's Audio row */
+      FM.selectLayer(v.L('A').id); await v.sleep(60);
+      if (!smTool('transform')) throw new Error('Clip 1’s tray has no Transform (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+      smTool('transform').click(); await v.sleep(60); check();
+      ['lift', 'speed', 'opacity', 'into', 'rowBack', 'mirror', 'tfReset', 'clips'].forEach(t => { if (!seen.has(t)) bad.push('CONTROL: never saw ' + t); });
       if (bad.length) throw new Error('names that do not contain their visible label: ' + bad.join(' · '));
     });
   });
@@ -141323,7 +141315,10 @@
      and Delete in the last two places; the band grows by one row only while it holds two. While More's panel is open the tray
      is one row again, so the panel keeps its room, and the second click of a double click never presses a tool that moved
      under it. The phone keeps its one row with More and Delete pinned (finding 22). Each test below but the phone's control
-     fails on option A by what it measures. */
+     fails on option A by what it measures.
+     #1243 R RELEASE 8 (R decision 6, his S15 "make it like CapCut where you can scroll it" and S33's section lines) REVERSES his pick B:
+     a PC shows the same single scrolling strip as a phone, More is gone (S4) and Delete scrolls at the strip's end (S31). The tests below
+     were rewritten to what that strip promises: one 56 px row, every tool in reach by scrolling (smTrayReach), the band whole. */
   /* A PC window w × h as it first opens: the frame's height as well, because the band's height follows it, and no band height
      left behind by a drag (the divider writes --tl-h on <html>; an earlier test left 201 px, under the band's 232 px floor) */
   async function smTrayBAt(w, h, fn) {
@@ -141361,54 +141356,58 @@
     return { bad: bad, rows: Object.keys(rows).map(Number).sort((a, b) => a - b).map(y => rows[y]), order: order };
   }
   const smBoxesMeet = (a, b) => a.right > b.left + 0.5 && a.left < b.right - 0.5 && a.bottom > b.top + 0.5 && a.top < b.bottom - 0.5;
+  /* #1243 R decision 6 (release 8): ONE scrolling strip on a PC too. Every tray tool, scrolled into the strip's view as a finger or the wheel
+     would bring it ("scroll to max, then elementFromPoint", R (b) 6): inside the band and the window, on top at its centre, at least 44 × 32,
+     its words inside it. Returns what is wrong, and leaves the strip at its start. */
+  async function smTrayReach() {
+    const tray = document.getElementById('sm-tray'), run = tray.querySelector(':scope > .sm-runbox > .sm-run'), band = document.getElementById('inspector-panel').getBoundingClientRect(), bad = [];
+    if (!run) return ['the tray has no strip'];
+    for (const b of Array.from(run.querySelectorAll(':scope > .sm-tool'))) {
+      const id = b.dataset.tool;
+      run.scrollLeft = Math.max(0, b.offsetLeft - (run.clientWidth - b.offsetWidth) / 2);
+      await new Promise(r => setTimeout(r, 20));
+      const r = b.getBoundingClientRect(), s = run.getBoundingClientRect();
+      if (r.left < s.left - 0.5 || r.right > s.right + 0.5) bad.push(id + ' cannot be scrolled wholly into the strip’s view (' + Math.round(r.left) + '–' + Math.round(r.right) + ' in ' + Math.round(s.left) + '–' + Math.round(s.right) + ')');
+      if (r.left < band.left - 0.5 || r.right > band.right + 0.5 || r.top < band.top - 0.5 || r.bottom > band.bottom + 0.5) bad.push(id + ' lies outside the band');
+      if (r.width < 44 || r.height < 32) bad.push(id + ' is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' px');
+      const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (!e || !b.contains(e)) bad.push(id + ' is covered at its centre by ' + (e ? (e.dataset && e.dataset.tool) || e.id || e.getAttribute('class') || e.tagName : 'nothing'));
+      const lb = b.querySelector('.sm-tool-l'), q = lb && lb.getBoundingClientRect();
+      if (q && (q.left < r.left - 0.5 || q.right > r.right + 0.5)) bad.push(id + '’s words run out of its button');
+    }
+    run.scrollLeft = 0; await new Promise(r => setTimeout(r, 20));
+    return bad;
+  }
 
   /* #1243 S3: the tray is the bar's one row now (with nothing selected the bar is the project row and the tray is hidden), so the two
      rows are the bar's own height: 104 px and its 1 px edge only while it holds two, the one row 56 */
-  test('simple P2.2 · tray B at 1280 on PC a clip with every tool shows them all on two rows — none outside the band, covered or scrolled to, More and Delete last — and the bar is two rows tall only while it holds two (his pick B); a row of its own keeps one row', { item: '980', budgetMs: 90000 }, async function () {
+  test('1243 R8 · decision 6 at 1280×800 on PC a clip’s tray, a title’s and two selected each lie on ONE 56 px row in the band, every tool on it pressable once the strip is scrolled to it, Delete last after a section line, no › cue, and the band says Its tools are below (CONTROL: nothing selected, the bar is the 57 px project row)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 800, async function () {
-      /* B's ten tools: it had a 1 s gap after it so Close gap made ten; since Phase 3 Look is one of a picture's own ten, so B sits
-         flush (C at 5). Since pick 1B (the wider band) two rows hold twelve (TWO_ROW_MAX), and ten lie on two rows of five */
       await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 5, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
-        const tray = document.getElementById('sm-tray'), bar = document.getElementById('sm-bar'), sayH = () => tray.getBoundingClientRect().height, barH = () => bar.getBoundingClientRect().height;
+        const tray = document.getElementById('sm-tray'), bar = document.getElementById('sm-bar'), trayH = () => tray.getBoundingClientRect().height, barH = () => bar.getBoundingClientRect().height;
+        const kids = () => { const r = tray.querySelector(':scope > .sm-runbox > .sm-run'); return r ? Array.from(r.children).map(c => c.classList.contains('sm-div') ? '|' : (c.dataset.tool || c.className)) : []; };
         if (bar.parentNode !== document.getElementById('inspector-panel')) throw new Error('CONTROL: the tray is not in the PC band');
         FM.selectLayer(null); await v.sleep(150);
-        if (Math.abs(barH() - 57) > 0.5 || tray.getClientRects().length) throw new Error('nothing selected: the bar is ' + barH() + ' px with the tray ' + (tray.getClientRects().length ? 'on screen' : 'hidden') + ', want the project row alone, 57 px');
-        /* CONTROL: a one-row tray is 56 px. Two selected (Stay put / Delete) is one row; a title was the example until #1243 S5 put Split
-           first and gave a title six tools, which lie on two rows on a PC (his pick B) */
-        FM.scene.selectedIds = [v.L('A').id, v.L('C').id]; FM.scene.selectedId = v.L('A').id; FM.refreshAll(); await v.sleep(150);
-        const h1 = sayH();
-        if (Math.abs(h1 - 56) > 0.5) throw new Error('CONTROL: the one-row tray of two selected is ' + h1 + ' px, want 56');
+        if (Math.abs(barH() - 57) > 0.5 || tray.getClientRects().length) throw new Error('CONTROL: nothing selected: the bar is ' + barH() + ' px with the tray ' + (tray.getClientRects().length ? 'on screen' : 'hidden') + ', want the project row alone, 57 px');
+        const fails = [];
+        for (const [who, sel] of [['Clip 2', [v.L('B').id]], ['the title', [v.L('On A').id]], ['two selected', [v.L('A').id, v.L('C').id]]]) {
+          FM.selectLayer(null);
+          if (sel.length > 1) { FM.scene.selectedIds = sel.slice(); FM.scene.selectedId = sel[0]; FM.refreshAll(); } else FM.selectLayer(sel[0]);
+          await v.sleep(150);
+          const k = kids(), tops = new Set(Array.from(tray.querySelectorAll('.sm-tool')).map(b => Math.round(b.getBoundingClientRect().top)));
+          if (k[k.length - 1] !== 'delete' || k[k.length - 2] !== '|') fails.push(who + ': the strip ends ' + k.slice(-2).join(' ') + ', want a line then Delete');
+          if (Math.abs(trayH() - 56) > 0.5 || Math.abs(barH() - 57) > 0.5 || tops.size !== 1 || tray.classList.contains('sm-tray-2')) fails.push(who + ': the tray is ' + trayH() + ' px in a ' + barH() + ' px bar with tools on ' + tops.size + ' row(s), want ONE 56 px row');
+          if (document.querySelector('#sm-tray .sm-cue, #sm-tray .sm-pins')) fails.push(who + ': the tray still has a › cue or a pinned end');
+          const bad = await smTrayReach();
+          if (bad.length) fails.push(who + ': ' + bad.join(' · '));
+        }
         FM.selectLayer(null); FM.selectLayer(v.L('B').id); await v.sleep(150);
-        const want = ['split', 'audio', 'lift', 'duplicateClip', 'crop', 'replace', 'more', 'delete'];   // #1243 S5: Split first; #1243 took Length, Move earlier and Move later off; #1243 S12 took Look off (the project row's now)
-        const got = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
-        if (got.join() !== want.join()) throw new Error('CONTROL: the tray is ' + got + ', want ' + want);
-        const m = smTrayBMeasure();
-        if (m.bad.length) throw new Error('1280×800, eight tools: ' + m.bad.join(' · '));
-        if (m.rows.length !== 2) throw new Error('1280×800: the eight tools sit on ' + m.rows.length + ' row(s) ' + JSON.stringify(m.rows) + ', want two');
-        if (m.rows.some(n => n < 2) || Math.abs(m.rows[0] - m.rows[1]) > 1) throw new Error('1280×800: the rows are uneven ' + JSON.stringify(m.rows) + ' (never a lone tool on a row)');
-        if (m.order.slice(-2).join() !== 'more,delete') throw new Error('1280×800: More and Delete are not in the last places: ' + m.order);
-        if (Math.abs(sayH() - 104) > 1.5 || Math.abs(barH() - 105) > 1.5) throw new Error('1280×800: the two rows are ' + sayH() + ' px in a bar of ' + barH() + ', want 104 and its 1 px edge');
         const hint = document.querySelector('#inspector .sm-band-hint');
-        if (!hint || hint.textContent !== 'Its tools are below' || FM.spineWords.tools.bandHintSelPc !== 'Its tools are below') throw new Error('1280×800: the band’s words are “' + (hint && hint.textContent) + '”, want “Its tools are below” from the words file');
-        /* a title's six tools (Split, Edit words, Add effect, Stay put, More, Delete since #1243 S5) lie on two rows of three too, every one on show */
-        FM.selectLayer(v.L('On A').id); await v.sleep(150);
-        const t = smTrayBMeasure();
-        if (t.bad.length || t.rows.join() !== '3,3') throw new Error('a title’s ' + t.order.length + ' tools: ' + JSON.stringify(t.rows) + ', want two rows [3,3] ' + t.bad.join(' · '));
-        if (t.order.slice(-2).join() !== 'more,delete') throw new Error('a title: More and Delete are not last: ' + t.order);
-        if (Math.abs(sayH() - 104) > 1.5) throw new Error('a title’s two rows left the tray at ' + sayH() + ' px, want 104');
-        /* a choice of several keeps one row */
-        FM.scene.selectedIds = [v.L('A').id, v.L('C').id]; FM.scene.selectedId = v.L('A').id; FM.refreshAll(); await v.sleep(150);
-        if (!smTool('delete') || smTrayBMeasure().rows.length !== 1 || Math.abs(sayH() - h1) > 0.5) throw new Error('two selected: the tray is not one row (' + sayH() + ' px)');
-        /* a row of its own (Audio) keeps one row, and its ‹ gives the two rows back */
-        FM.selectLayer(null); FM.selectLayer(v.L('B').id); await v.sleep(120);
-        smTool('audio').click(); await v.sleep(150);
-        if (!document.querySelector('#sm-tray.sm-tray-len') || Math.abs(sayH() - h1) > 0.5) throw new Error('Audio’s row: the tray is ' + sayH() + ' px, want one row of ' + h1);
-        smTool('rowBack').click(); await v.sleep(150);
-        if (Math.abs(sayH() - 104) > 1.5 || smTrayBMeasure().rows.length !== 2) throw new Error('the ‹ did not give back the two rows (' + sayH() + ' px)');
-        /* nothing selected: the project row alone, the bar one row again */
+        if (!hint || hint.textContent !== 'Its tools are below' || FM.spineWords.tools.bandHintSel !== 'Its tools are below') fails.push('the band’s words are “' + (hint && hint.textContent) + '”, want “Its tools are below” from the words file');
         FM.selectLayer(null); await v.sleep(150);
-        if (Math.abs(barH() - 57) > 0.5 || tray.getClientRects().length) throw new Error('nothing selected: the bar stays at ' + barH() + ' px, want the 57 px project row');
+        if (Math.abs(barH() - 57) > 0.5 || tray.getClientRects().length) fails.push('nothing selected again: the bar stays at ' + barH() + ' px, want the 57 px project row');
+        if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
       });
     }, 1280);
   });
@@ -141416,7 +141415,7 @@
   /* #1243 S3 (A COMBINED point 5): a line FLOATS just above the bar, so it never takes the row where 🗑 was pressed and the bar never
      changes height for it. After a Delete takes the selection away the bar is the project row, and the second click of a double click
      lands on one of its tools, which tool()'s guard drops (the tool under the pointer is not the one the first click pressed). */
-  test('simple P2.2 · tray B at 1280 a line with a button floats above the bar, never lands where Delete was, and a second click there presses nothing — on a locked clip and after a delete takes the selection away (finding 23 with two rows)', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P2.2 · tray B at 1280 a line with a button floats above the bar, never lands where Delete was, and a second click there presses nothing — on a locked clip and after a delete takes the selection away (finding 23 on the one-row strip, Delete scrolled into view)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 800, async function () {
       await smP2((W, H) => [smT('On B', 3.5, 1, W, H), smPic('C', 6, 3, W, H, { locked: true }), smPic('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
@@ -141427,8 +141426,12 @@
         FM.selectLayer(v.L('C').id); await v.sleep(150);
         const bin = smTool('delete');
         if (!bin) throw new Error('CONTROL: no Delete in the tray');
+        /* #1243 S31 / R decision 6: one strip, Delete its last tool: scrolled to its end, as the wheel or a finger brings it */
+        const toEnd = async () => { const run = document.querySelector('#sm-tray > .sm-runbox > .sm-run'); if (run) { run.scrollLeft = run.scrollWidth; await v.sleep(40); } };
+        await toEnd();
         const top0 = bar.getBoundingClientRect().top, h2 = barH(), r = bin.getBoundingClientRect();
-        if (Math.abs(h2 - 105) > 1.5) throw new Error('a picture’s seven tools: the bar is ' + h2 + ' px, want two rows (104) and its edge');
+        if (Math.abs(h2 - 57) > 0.5) throw new Error('a picture’s tools: the bar is ' + h2 + ' px, want one 56 px row and its edge');
+        smMustHit(bin, 'Delete at the strip’s end');
         bin.click(); await v.idle();
         if (!/locked/.test(v.say())) throw new Error('CONTROL: no locked line: “' + v.say() + '”');
         await v.sleep(450);                                                   /* armed */
@@ -141446,6 +141449,7 @@
         /* 2 · Delete on B, which has a title on it: the clip goes, the selection with it, and the line says so with Undo, floating above
            the bar, which is the project row again: a second click where Delete was lands on a project tool and presses nothing */
         FM.selectLayer(v.L('B').id); await v.sleep(150);
+        await toEnd();
         const rb = smTool('delete').getBoundingClientRect(), n0 = v.steps();
         /* the first click of a double click on Delete (a mouse's click count, so tool()'s guard knows the second) */
         smTool('delete').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: 1, clientX: rb.left + rb.width / 2, clientY: rb.top + rb.height / 2 })); await v.idle();
@@ -141467,19 +141471,20 @@
     }, 1280);
   });
 
-  test('simple P2.2 · tray B at 1280×800, 1280×720 and 960×700 every tool is on show and nothing in the band above it is cut off — the title and Its tools are below show whole — and a band dragged under 232 px keeps one row with the bar whole', { item: '980', budgetMs: 120000 }, async function () {
+  test('simple P2.2 · tray B at 1280×800, 1280×720 and 960×700 a picture clip’s one-row tray brings every tool into reach by scrolling and nothing in the band above it is cut off — the title and Its tools are below show whole — and a band dragged to 200 px keeps the bar whole (#1243 R decision 6: one strip on a PC)', { item: '980', budgetMs: 120000 }, async function () {
     smNeedP2();
     const out = [];
     for (const [w, h] of [[1280, 800], [1280, 720], [960, 700]]) {
       await smTrayBAt(w, h, async function () {
-        /* B flush with C (C at 5, no gap): a picture's seven tools (Split first since #1243 S5; Length, Move earlier and Move later off since
-           #1243 S24/S25; Look off since #1243 S12), rows of four and three */
         await smP2((W, H) => [smV('C', 5, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
           FM.selectLayer(v.L('B').id); await v.sleep(150);
-          const at = w + '×' + h + ': ', m = smTrayBMeasure();
+          const at = w + '×' + h + ': ', tray = document.getElementById('sm-tray');
           if (innerHeight !== h) throw new Error('CONTROL: ' + at + 'the window is ' + innerWidth + '×' + innerHeight);
-          if (m.order.length !== 7) throw new Error('CONTROL: ' + at + 'the tray is ' + m.order);
-          if (m.bad.length || m.rows.length !== 2) throw new Error(at + JSON.stringify(m.rows) + ' ' + m.bad.join(' · '));
+          if (!smTool('split') || !smTool('delete')) throw new Error('CONTROL: ' + at + 'the tray is ' + Array.from(tray.querySelectorAll('.sm-tool')).map(b => b.dataset.tool));
+          const tops = new Set(Array.from(tray.querySelectorAll('.sm-tool')).map(b => Math.round(b.getBoundingClientRect().top)));
+          if (tops.size !== 1 || Math.abs(tray.getBoundingClientRect().height - 56) > 0.5) throw new Error(at + 'the tools sit on ' + tops.size + ' row(s) in a ' + tray.getBoundingClientRect().height + ' px tray, want one 56 px row');
+          const bad = await smTrayReach();
+          if (bad.length) throw new Error(at + bad.join(' · '));
           const insp = document.getElementById('inspector'), ib = insp.getBoundingClientRect(), hint = insp.querySelector('.sm-band-hint');
           const title = document.querySelector('#inspector-panel .panel-title'), tb = title.getBoundingClientRect();
           if (!hint || hint.textContent !== 'Its tools are below') throw new Error(at + 'the band says “' + (hint && hint.textContent) + '”');
@@ -141489,17 +141494,16 @@
           if (hint.scrollWidth > hint.clientWidth + 1) throw new Error(at + 'Its tools are below runs out sideways');
           if (tb.height < 20 || tb.bottom > ib.top + 0.5 || tb.top < document.getElementById('inspector-panel').getBoundingClientRect().top - 0.5) throw new Error(at + 'the title row is cut: ' + JSON.stringify([tb.top, tb.bottom, ib.top]));
           out.push(at + Math.round(ib.height) + ' px above the tools');
-          /* THE DIVIDER DRAGS THE BAND DOWN TO 150 (remembered as fm_tl_h): under the 232 px two rows need, the tray keeps one row
-             with More and Delete pinned, so the project tools stay whole in the band — and the rows follow the drag itself */
+          /* THE DIVIDER DRAGS THE BAND DOWN (remembered as fm_tl_h): the bar stays whole in it, its one row the same */
           if (w !== 1280 || h !== 800) return;
           const root = document.documentElement, band = () => document.getElementById('inspector-panel').getBoundingClientRect();
           root.style.setProperty('--tl-h', '200px'); await v.sleep(150);
-          if (Math.abs(band().height - 200) > 1) throw new Error('CONTROL: the band did not follow --tl-h (' + band().height + ')');
-          const s = smTrayBMeasure(), pins = document.querySelector('#sm-tray .sm-pins'), tl = document.getElementById('sm-bar').getBoundingClientRect();
-          if (s.rows.length !== 1 || !pins || !pins.querySelector('[data-tool="more"]') || !pins.querySelector('[data-tool="delete"]')) throw new Error('a band dragged to 200 px: the tray is ' + JSON.stringify(s.rows) + ' row(s), More and Delete ' + (pins ? '' : 'not ') + 'pinned');
-          if (tl.bottom > band().bottom + 0.5 || tl.top < band().top) throw new Error('a band dragged to 200 px: the bar falls out of it (' + Math.round(tl.top) + '–' + Math.round(tl.bottom) + ' in ' + Math.round(band().top) + '–' + Math.round(band().bottom) + ')');
-          root.style.removeProperty('--tl-h'); await v.sleep(150);
-          if (smTrayBMeasure().rows.length !== 2) throw new Error('the band back at its own height did not get the two rows back');
+          try {
+            if (Math.abs(band().height - 200) > 1) throw new Error('CONTROL: the band did not follow --tl-h (' + band().height + ')');
+            const tl = document.getElementById('sm-bar').getBoundingClientRect();
+            if (tl.bottom > band().bottom + 0.5 || tl.top < band().top) throw new Error('a band dragged to 200 px: the bar falls out of it (' + Math.round(tl.top) + '–' + Math.round(tl.bottom) + ' in ' + Math.round(band().top) + '–' + Math.round(band().bottom) + ')');
+            if (Math.abs(tray.getBoundingClientRect().height - 56) > 0.5) throw new Error('a band dragged to 200 px: the tray is ' + tray.getBoundingClientRect().height + ' px, want its one 56 px row');
+          } finally { root.style.removeProperty('--tl-h'); await v.sleep(150); }
         });
       }, w);
     }
@@ -141510,35 +141514,35 @@
      panel takes the whole band and the bar hides (#1243 S9), so there is no tray under it to go to one row; the real-input double click on
      More at 1280×720 is now part of 'simple P2.7 · 2A row 16 … a REAL double click on More …', and 1243 R4's rule 3 PC test measures the room. */
 
-  test('simple P2.2 · tray B at 380 the phone keeps its one row with More and Delete pinned at the right end, and its words (control: the same before and after his pick B)', { item: '980', budgetMs: 60000 }, async function () {
+  test('simple P2.2 · tray B at 380 the phone keeps its one row: a picture’s tools scroll in one strip that ends with Delete after a section line, Split pressable at the start and Delete once scrolled, and the words say Its tools are below (#1243 S4, S31: no More, no pinned end)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2((W, H) => [smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
-        const say = document.getElementById('sm-bar'), tray = document.getElementById('sm-tray');   /* #1243 S3: the bar is the one row now */
-        const h1 = say.getBoundingClientRect().height;
+        const bar = document.getElementById('sm-bar'), tray = document.getElementById('sm-tray');   /* #1243 S3: the bar is the one row now */
+        const h1 = bar.getBoundingClientRect().height;
         if (Math.abs(h1 - 57) > 0.5) throw new Error('CONTROL: with nothing selected the bar is ' + h1 + ' px, want one 56 px row and its edge');
         FM.selectLayer(v.L('B').id); await v.sleep(150);
         const bs = Array.from(tray.querySelectorAll('.sm-tool'));
-        if (bs.length !== 8) throw new Error('CONTROL: the tray is ' + bs.map(b => b.dataset.tool) + ' (a picture beside a gap: eight tools since #1243 took Length, Move earlier and Move later off, S5 put Split first and S12 took Look off)');
+        if (!smTool('split') || !smTool('seam')) throw new Error('CONTROL: the tray is ' + bs.map(b => b.dataset.tool) + ' (a picture beside a gap)');
         const tops = new Set(bs.map(b => Math.round(b.getBoundingClientRect().top)));
         if (tops.size !== 1) throw new Error('380: the tools sit on ' + tops.size + ' rows');
-        if (Math.abs(say.getBoundingClientRect().height - h1) > 0.5) throw new Error('380: the bar grew to ' + say.getBoundingClientRect().height + ' px');
-        /* SU1 #15: the pins sit BESIDE the scrolling tool strip at the tray's right end (they were sticky inside it, and the tools
-           slid under them), so "pinned at the right end" is the pair's own place, and the strip is what scrolls */
-        const pins = tray.querySelector('.sm-pins'), sc = tray.querySelector('.sm-run') || tray;
-        if (!pins || !pins.querySelector('[data-tool="more"]') || !pins.querySelector('[data-tool="delete"]') || Math.abs(pins.getBoundingClientRect().right - tray.getBoundingClientRect().right) > 1) throw new Error('380: More and Delete are not pinned together at the right end');
-        if (sc.scrollWidth <= sc.clientWidth + 1) throw new Error('380: eight tools fit one phone row without scrolling — the control no longer measures the phone');
+        if (Math.abs(bar.getBoundingClientRect().height - h1) > 0.5) throw new Error('380: the bar grew to ' + bar.getBoundingClientRect().height + ' px');
+        const sc = tray.querySelector(':scope > .sm-runbox > .sm-run'), kids = Array.from(sc.children);
+        if (tray.querySelector('.sm-pins') || smTool('more')) throw new Error('380: the tray still has More or a pinned end');
+        if (kids[kids.length - 1].dataset.tool !== 'delete' || !kids[kids.length - 2].classList.contains('sm-div')) throw new Error('380: the strip does not end with a line and Delete');
+        if (sc.scrollWidth <= sc.clientWidth + 1) throw new Error('380: the picture’s tools fit one phone row without scrolling — the strip is not measured');
         sc.scrollLeft = 0; await v.sleep(30);
-        ['split', 'lift', 'more', 'delete'].forEach(id => { const r = smTool(id).getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-          if (!e || !smTool(id).contains(e)) throw new Error('380: ' + id + ' cannot be pressed'); });
-        if (FM.spineWords.tools.bandHintSel !== 'Its tools are below · More opens the rest') throw new Error('380: the phone’s words changed: ' + FM.spineWords.tools.bandHintSel);
+        smMustHit(smTool('split'), '380: Split at the strip’s start');
+        sc.scrollLeft = sc.scrollWidth; await v.sleep(30);
+        smMustHit(smTool('delete'), '380: Delete at the strip’s end');
+        if (FM.spineWords.tools.bandHintSel !== 'Its tools are below') throw new Error('380: the words are “' + FM.spineWords.tools.bandHintSel + '”, want Its tools are below (no More to open the rest)');
       });
     }, 380);
   });
 
   /* ═══ TRAY B, THE CHECKER'S FINDINGS (6 Oct, queue 980) ═══════════════════════════════════════════════════════════════
      Four findings from the measured review of ed0525c7; each test below fails on that commit by what it measures. */
-  test('simple P2.2 · tray B at 1280×720 a double click on Close gap closes that gap only — the second click comes down on the Fix that took its place under the same tool id, and presses nothing (checker finding 1)', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P2.2 · tray B at 1280×720 a double click on Close gap closes that gap only — the second click comes down on whatever tool the redrawn strip put under the pointer (a Transition joins the tray once the cut is a join, #1243 S1 A) and presses nothing, nor does it press the Fix that kept Close gap’s tool id (checker finding 1)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 720, async function () {
       /* C has a 1 s gap before it (B ends at 5) and a 0.5 s overlap after it (D starts at 9.5): its seam tool says Close gap,
@@ -141547,20 +141551,29 @@
         FM.selectLayer(v.L('C').id); await v.sleep(150);
         const seam = smTool('seam'), m = smTrayBMeasure();
         if (!seam || !/Close gap/.test(seam.textContent)) throw new Error('CONTROL: C’s tray has no Close gap (' + m.order + ')');
-        /* a picture beside a seam: eight tools since #1243 (Length, Move earlier and Move later off; Split first since S5; Look off since S12),
-           on two rows of four, all on show (a scrolling row is what the band at 192 px below holds) */
-        if (m.rows.join() !== '4,4' || m.bad.length) throw new Error('CONTROL: C’s eight tools are not all on show on two rows of four: ' + JSON.stringify(m.rows) + ' ' + m.bad.join(' · '));
+        /* #1243 R decision 6: one strip on a PC — Close gap scrolled into the strip's view, as the wheel brings it; a redraw keeps the strip's
+           place (_fill), so the Fix that takes its place lies under the same pointer */
+        const run = document.querySelector('#sm-tray > .sm-runbox > .sm-run');
+        if (run) { run.scrollLeft = Math.max(0, seam.offsetLeft - (run.clientWidth - seam.offsetWidth) / 2); await v.sleep(40); }
         const r = seam.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, s0 = v.steps();
         const seen = document.elementFromPoint(x, y);
         if (!seen || !seam.contains(seen)) throw new Error('CONTROL: Close gap is not on screen after scrolling the strip to it (its centre hits ' + (seen ? (seen.dataset && seen.dataset.tool) || seen.getAttribute('class') : 'nothing') + ')');
         const click = (el, n) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: x, clientY: y }));
         click(seam, 1); await v.idle(); await v.sleep(120);                  // the first click of a double click
         if (v.steps() !== s0 + 1 || Math.abs(v.L('C').start - 5) > 1e-6) throw new Error('CONTROL: the first click did not close C’s gap in one step (steps ' + (v.steps() - s0) + ', C at ' + v.L('C').start + ')');
+        /* since #1243 S1 A a Transition joins C's tray once the gap before it is closed (the cut is a join now), so the redrawn strip puts
+           another tool under the pointer than the Fix (the strip keeps its scroll, the tools after Transition move one place on) */
         const hit = document.elementFromPoint(x, y), under = hit && hit.closest && hit.closest('.sm-tool');
-        if (!under || under.dataset.tool !== 'seam' || !/Fix/.test(under.textContent)) throw new Error('CONTROL: the tool under the pointer is not the Fix that took Close gap’s place (' + (under ? under.dataset.tool + ' “' + under.textContent + '”' : hit && hit.getAttribute('class')) + '), so this measures nothing');
+        if (!under || !smTool('seam') || !/Fix/.test(smTool('seam').textContent)) throw new Error('CONTROL: after the first click there is no tool under the pointer, or no Fix in the tray (' + (under ? under.dataset.tool : hit && hit.getAttribute('class')) + '), so this measures nothing');
         const s1 = v.steps(), d1 = v.L('D').start, doc1 = v.doc();
         click(under, 2); await v.idle(); await v.sleep(60);                  // the second click, 90 ms later on his mouse
-        if (v.steps() !== s1 || v.doc() !== doc1) throw new Error('the second click of a double click on Close gap pressed Fix, which was never on screen when he clicked: ' + (v.steps() - s0) + ' undo steps, D ' + d1 + ' → ' + v.L('D').start);
+        if (v.steps() !== s1 || v.doc() !== doc1) throw new Error('the second click of a double click on Close gap pressed ' + under.dataset.tool + ', which was never under the pointer when he clicked: ' + (v.steps() - s0) + ' undo steps, D ' + d1 + ' → ' + v.L('D').start);
+        /* review R8-4 (safety): the case checker finding 1 was about — the second click landing on the Fix, which keeps Close gap's data-tool
+           ('seam') but closes another seam (its key). A guard that read the data-tool alone let it through. */
+        const fx2 = smTool('seam');
+        fx2.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: 2, clientX: x, clientY: y }));
+        await v.idle(); await v.sleep(60);
+        if (v.steps() !== s1 || v.doc() !== doc1) throw new Error('the second click of a double click on Close gap, landing on the Fix that kept its tool id, pressed it: ' + (v.steps() - s0) + ' undo steps, D ' + d1 + ' → ' + v.L('D').start);
         /* POSITIVE CONTROL: a click of its own on that Fix still presses it */
         const fix = smTool('seam'), q = fix.getBoundingClientRect();
         fix.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: 1, clientX: q.left + 4, clientY: q.top + 4 }));
@@ -141581,11 +141594,9 @@
   });
 
 
-  test('simple P2.2 · tray B at 1280×720 after the window was once 500 px tall the band is left at 230 px, and its tools still lie on two rows there with the words above them whole — two rows need what the band’s parts measure, not a fixed 232 (checker finding 2)', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P2.2 · tray B at 1280×720 after the window was once 500 px tall the band is left at 230 px, and a picture clip’s one-row tray and the words above it still show whole in it, every tool in reach by scrolling (checker finding 2, one row since #1243 R decision 6)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 720, async function () {
-      /* B flush with C (C at 5, no gap): a picture's seven tools (Split first since #1243 S5; Length, Move earlier and Move later off; Look off
-         since #1243 S12), rows of four and three */
       await smP2((W, H) => [smV('C', 5, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const fe = window.frameElement, root = document.documentElement, band = () => document.getElementById('inspector-panel').getBoundingClientRect();
         /* the window made short and tall again: js/app.js's resize re-clamp writes --tl-h 230 at 500 px, and it stays */
@@ -141594,62 +141605,45 @@
         const tl = parseFloat(root.style.getPropertyValue('--tl-h'));
         if (innerHeight !== 720 || !(tl < 232) || Math.abs(band().height - tl) > 1) throw new Error('CONTROL: the round trip did not leave a band under 232 px (window ' + innerHeight + ', --tl-h “' + root.style.getPropertyValue('--tl-h') + '”, band ' + band().height + ')');
         FM.selectLayer(v.L('B').id); await v.sleep(150);
-        const m = smTrayBMeasure();
-        if (m.order.length !== 7) throw new Error('CONTROL: the tray is ' + m.order);
-        if (m.bad.length || m.rows.length !== 2) throw new Error('a band left at ' + tl + ' px: the seven tools sit on ' + m.rows.length + ' row(s) ' + JSON.stringify(m.rows) + ' ' + m.bad.join(' · ') + ' — his pick B silently turned back into A');
+        if (!smTool('split') || !smTool('delete')) throw new Error('CONTROL: the tray is ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool));
+        const tray = document.getElementById('sm-tray');
+        if (Math.abs(tray.getBoundingClientRect().height - 56) > 0.5) throw new Error('a band left at ' + tl + ' px: the tray is ' + tray.getBoundingClientRect().height + ' px, want its one 56 px row');
+        const bad = await smTrayReach();
+        if (bad.length) throw new Error('a band left at ' + tl + ' px: ' + bad.join(' · '));
         const insp = document.getElementById('inspector'), ib = insp.getBoundingClientRect(), hint = insp.querySelector('.sm-band-hint'), tb = document.getElementById('sm-bar').getBoundingClientRect();
         if (!hint) throw new Error('CONTROL: the band shows no words');
         const hb = hint.getBoundingClientRect();
-        if (hb.top < ib.top - 0.5 || hb.bottom > ib.bottom + 0.5 || insp.scrollHeight > insp.clientHeight + 1) throw new Error('a band at ' + tl + ' px with two rows cuts its words: ' + Math.round(hb.top) + '–' + Math.round(hb.bottom) + ' in ' + Math.round(ib.top) + '–' + Math.round(ib.bottom) + ' (scroll ' + insp.scrollHeight + ' in ' + insp.clientHeight + ')');
-        if (tb.top < band().top - 0.5 || tb.bottom > band().bottom + 0.5) throw new Error('a band at ' + tl + ' px with two rows pushes the bar out of it');
+        if (hb.top < ib.top - 0.5 || hb.bottom > ib.bottom + 0.5 || insp.scrollHeight > insp.clientHeight + 1) throw new Error('a band at ' + tl + ' px cuts its words: ' + Math.round(hb.top) + '–' + Math.round(hb.bottom) + ' in ' + Math.round(ib.top) + '–' + Math.round(ib.bottom) + ' (scroll ' + insp.scrollHeight + ' in ' + insp.clientHeight + ')');
+        if (tb.top < band().top - 0.5 || tb.bottom > band().bottom + 0.5) throw new Error('a band at ' + tl + ' px pushes the bar out of it');
       });
     }, 1280);
   });
 
-  test('simple P2.2 · tray B on PC the band says “Its tools are below” only while the tools really lie on two rows — a band dragged to 192 px, a landscape phone at 844×390 and a clip’s Audio row keep one row and today’s “· More opens the rest”, and the words follow the rows when the drag flips them (checker finding 3)', { item: '980', budgetMs: 120000 }, async function () {
+  test('simple P2.2 · tray B on PC the band says Its tools are below for a selected clip or title at the band’s own height, with the band dragged to 192 px and on a landscape phone at 844×390, never · More opens the rest, and Tap a clip to see its tools with nothing selected (#1243 S4 step 4)', { item: '980', budgetMs: 120000 }, async function () {
     smNeedP2();
-    const SHORT = 'Its tools are below', LONG = 'Its tools are below · More opens the rest';
-    if (FM.spineWords.tools.bandHintSelPc !== SHORT || FM.spineWords.tools.bandHintSel !== LONG) throw new Error('CONTROL: the words file changed: “' + FM.spineWords.tools.bandHintSelPc + '” / “' + FM.spineWords.tools.bandHintSel + '”');
+    const WANT = 'Its tools are below';
+    if (FM.spineWords.tools.bandHintSel !== WANT) throw new Error('the words file says “' + FM.spineWords.tools.bandHintSel + '” for a selected item, want “' + WANT + '”');
     const words = () => { const h = document.querySelector('#inspector .sm-band-hint'); return h ? h.textContent : null; };
-    const rowsNow = () => { const m = smTrayBMeasure(); return m.rows.length; };
     await smTrayBAt(1280, 720, async function () {
-      /* B flush with C (C at 5, no gap): a picture's seven tools (Split first since #1243 S5; Length, Move earlier and Move later off since
-         #1243 S24/S25; Look off since #1243 S12), rows of four and three */
       await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 5, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const root = document.documentElement;
         FM.selectLayer(v.L('B').id); await v.sleep(150);
-        if (rowsNow() !== 2 || words() !== SHORT) throw new Error('CONTROL: 1280×720 at its own band: ' + rowsNow() + ' row(s), “' + words() + '”');
-        /* the divider dragged down to 192 (it writes --tl-h on <html>): one row, the rest off the edge — the words say More */
+        if (!smTool('split')) throw new Error('CONTROL: Clip 2’s tray is not drawn');
+        if (words() !== WANT) throw new Error('1280×720 at its own band: the band says “' + words() + '”');
         root.style.setProperty('--tl-h', '192px'); await v.sleep(150);
-        const tray = document.getElementById('sm-tray'), sc = tray.querySelector('.sm-run') || tray;   // SU1 #15: one row scrolls in its tool strip
-        if (rowsNow() !== 1 || sc.scrollWidth <= sc.clientWidth + 1) throw new Error('CONTROL: a band at 192 px did not keep one scrolling row (' + rowsNow() + ' row(s), ' + sc.scrollWidth + ' in ' + sc.clientWidth + ')');
-        if (words() !== LONG) throw new Error('a band dragged to 192 px: one row with ' + Math.round(sc.scrollWidth - sc.clientWidth) + ' px of tools off the edge, and the band says “' + words() + '”, want “' + LONG + '”');
-        /* …and back: the drag flips the rows, and the words with them, with no new selection */
-        root.style.removeProperty('--tl-h'); await v.sleep(150);
-        if (rowsNow() !== 2 || words() !== SHORT) throw new Error('the band back at its own height: ' + rowsNow() + ' row(s), “' + words() + '”, want two rows and “' + SHORT + '”');
-        /* a row that really is one row: a clip's Audio row (a title was the example until #1243 S5 put Split first and gave it six tools,
-           which lie on two rows on a PC, his pick B): the words are today's */
+        try { if (words() !== WANT) throw new Error('a band dragged to 192 px says “' + words() + '”'); }
+        finally { root.style.removeProperty('--tl-h'); await v.sleep(150); }
         FM.selectLayer(v.L('On A').id); await v.sleep(150);
-        if (rowsNow() !== 2 || words() !== SHORT) throw new Error('a title’s six tools: ' + rowsNow() + ' row(s), the band says “' + words() + '”, want two rows and “' + SHORT + '”');
-        FM.selectLayer(v.L('A').id); await v.sleep(150);
-        if (!smTool('audio')) throw new Error('CONTROL: clip A’s tools have no Audio: ' + smTrayBMeasure().order);
-        smTool('audio').click(); await v.sleep(150);
-        /* one row measured as the first tray B test measures a row of its own (its class and the tray's 56 px): smTrayBMeasure's rows read
-           the tools' tops, and a sub-row's tops are not all one (measured: 2 at 1280×720), while the tray is one row */
-        const trayEl = document.getElementById('sm-tray'), th = trayEl.getBoundingClientRect().height;
-        if (!document.querySelector('#sm-tray.sm-tray-len') || trayEl.classList.contains('sm-tray-2') || Math.abs(th - 56) > 0.5 || words() !== LONG) throw new Error('a clip’s Audio row: the tray is ' + th + ' px (' + trayEl.className + '), the band says “' + words() + '”, want one 56 px row and “' + LONG + '”');
-        smTool('rowBack').click(); await v.sleep(150);
+        if (words() !== WANT) throw new Error('a title: the band says “' + words() + '”');
         FM.selectLayer(null); await v.sleep(150);
         if (words() !== (FM.spineWords.tools.bandHint || 'Tap a clip to see its tools')) throw new Error('nothing selected: the band says “' + words() + '”');
       });
     }, 1280);
-    /* a landscape phone is a PC layout (wider than 700) with a short band: one row, so today's words */
     await smTrayBAt(844, 390, async function () {
       await smP2((W, H) => [smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         FM.selectLayer(v.L('B').id); await v.sleep(150);
         if (document.getElementById('sm-bar').parentNode !== document.getElementById('inspector-panel')) throw new Error('CONTROL: 844×390 is not the PC band');
-        if (rowsNow() !== 1) throw new Error('CONTROL: 844×390 holds ' + rowsNow() + ' rows in a ' + document.getElementById('inspector-panel').getBoundingClientRect().height + ' px band');
-        if (words() !== LONG) throw new Error('844×390: one row, and the band says “' + words() + '”, want “' + LONG + '”');
+        if (words() !== WANT) throw new Error('844×390: the band says “' + words() + '”');
       });
     }, 844);
   });
@@ -141721,7 +141715,7 @@
         smTool('text').click(); await v.sleep(60); smTool('addText').click(); await v.idle(); await v.sleep(150);
         const t = FM.layerById(FM.scene, FM.scene.selectedId);
         if (!t || t.type !== 'text') throw new Error('setup: Text did not add and select a text (it said “' + v.say() + '”)');
-        const want = 'split,editwords,addfx,stay,more,delete';   // Phase 3 (Effects on an item): Add effect after Edit words; #1243 S5: Split first
+        const want = 'split,editwords,style,addfx,stay,opacity,transform,delete';   // Phase 3 (Effects on an item): Add effect after Edit words; #1243 S5: Split first; #1243 R release 8: Style for More, then Opacity · Transform | Delete
         if (tools().join(',') !== want) throw new Error('a Text added in Simple shows the tray ' + JSON.stringify(tools()) + ', want ' + want + ' (Into row and Crop belong to a picture)');
         const done = Array.from(document.querySelectorAll('.te-done')).find(b => b.getClientRects().length);
         if (done) done.click(); else if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();
@@ -142075,42 +142069,42 @@
      longer docks under the project tools to leave them in reach; on a phone it runs from the stage's bottom edge (the sheet line) and covers
      the play row, the timeline and the bar, and its way back (the sheet's grab bar) returns to the clip's tray. On a PC the band title's ‹
      does. More pressed again, a double tap and the grab bar's latch are SU1 #4's own test. */
-  test('simple P2.2 · review More’s panel at 380 covers the play row and the timeline from the sheet line, and its way back returns to the clip’s tray; at 1280 the band title’s ‹ does (first-user audit 4, #1243 S3)', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P2.2 · review a title’s Style panel at 380 covers the play row and the timeline from the sheet line, and its way back returns to the title’s tray; at 1280 the band title’s ‹ does (first-user audit 4, #1243 S3; S4: Style took More’s place)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
-    const more = () => smTool('more');
+    const more = () => smTool('style');   /* #1243 S4: More went; a text's Style opens Full's panel for it */
     const tap = (el, n) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); };
     const bar = () => document.getElementById('sm-bar'), inPanel = (el, insp) => { const r = el.getBoundingClientRect(), h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!(h && insp.contains(h)); };
     await atPhoneWidth(async function () {
-      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smT('T', 0.5, 2, W, H), smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const insp = document.getElementById('inspector-panel'), fails = [];
-        FM.selectLayer(v.L('A').id); await smSettle(150);
-        if (insp.classList.contains('open')) throw new Error('CONTROL: selecting a clip raised the panel without More');
+        FM.selectLayer(v.L('T').id); await smSettle(150);
+        if (insp.classList.contains('open')) throw new Error('CONTROL: selecting a title raised the panel without Style');
         tap(more(), 1); await smSettle(250);
-        if (!insp.classList.contains('open')) throw new Error('CONTROL: More did not raise the panel');
+        if (!insp.classList.contains('open')) throw new Error('CONTROL: Style did not raise the panel');
         const ir = insp.getBoundingClientRect(), line = document.getElementById('stage').getBoundingClientRect().bottom;
         if (Math.abs(ir.top - line) > 1) fails.push('the panel starts at ' + Math.round(ir.top) + ', not at the sheet line (the stage’s bottom edge, ' + Math.round(line) + ')');
-        ['transport', 'sm-scroll'].forEach(id => { const e = document.getElementById(id); if (e && e.getClientRects().length && !inPanel(e, insp)) fails.push('with More’s panel up #' + id + ' is not covered by the panel'); });
-        if (bar().getAttribute('data-mode') !== 'panel') fails.push('with More’s panel up the bar is in mode “' + bar().getAttribute('data-mode') + '”, want panel');
+        ['transport', 'sm-scroll'].forEach(id => { const e = document.getElementById(id); if (e && e.getClientRects().length && !inPanel(e, insp)) fails.push('with Style’s panel up #' + id + ' is not covered by the panel'); });
+        if (bar().getAttribute('data-mode') !== 'panel') fails.push('with Style’s panel up the bar is in mode “' + bar().getAttribute('data-mode') + '”, want panel');
         document.getElementById('insp-grab').click(); await smSettle(250);
         if (insp.classList.contains('open')) throw new Error('CONTROL: the grab bar did not close the panel · ' + fails.join(' · '));
-        if (FM.scene.selectedId !== v.L('A').id) fails.push('the grab bar dropped the selection');
-        if (bar().getAttribute('data-mode') !== 'item' || !more() || !more().getClientRects().length) fails.push('after the grab bar the bar is in mode “' + bar().getAttribute('data-mode') + '”, not the clip’s tray with its More');
+        if (FM.scene.selectedId !== v.L('T').id) fails.push('the grab bar dropped the selection');
+        if (bar().getAttribute('data-mode') !== 'item' || !more() || !more().getClientRects().length) fails.push('after the grab bar the bar is in mode “' + bar().getAttribute('data-mode') + '”, not the title’s tray with its Style');
         if (fails.length) throw new Error('380 px: ' + fails.join(' · '));
       });
     }, 380);
     await atWideWidth(async function () {
-      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smT('T', 0.5, 2, W, H), smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const hint = () => !!document.querySelector('#inspector .sm-band-hint');
-        FM.selectLayer(v.L('B').id); await smSettle(150);
-        if (!hint()) throw new Error('CONTROL 1280: the band shows Full’s editor before More');
+        FM.selectLayer(v.L('T').id); await smSettle(150);
+        if (!hint()) throw new Error('CONTROL 1280: the band shows Full’s editor before Style');
         tap(more(), 1); await smSettle(200);
-        if (hint()) throw new Error('CONTROL 1280: More did not open the panel in the band');
+        if (hint()) throw new Error('CONTROL 1280: Style did not open the panel in the band');
         const pb = document.querySelector('#inspector-panel > .panel-title > .sm-pback');
-        if (!pb) throw new Error('1280 px: More’s panel has no ‹ in the band’s title row');
+        if (!pb) throw new Error('1280 px: Style’s panel has no ‹ in the band’s title row');
         tap(pb, 1); await smSettle(200);
         if (!hint()) throw new Error('1280 px: the band title’s ‹ left the panel open');
-        if (FM.scene.selectedId !== v.L('B').id) throw new Error('1280 px: the ‹ dropped the selection');
-        if (bar().getAttribute('data-mode') !== 'item' || !more() || !more().getClientRects().length) throw new Error('1280 px: after the ‹ the bar is in mode “' + bar().getAttribute('data-mode') + '”, not the clip’s tray with its More');
+        if (FM.scene.selectedId !== v.L('T').id) throw new Error('1280 px: the ‹ dropped the selection');
+        if (bar().getAttribute('data-mode') !== 'item' || !more() || !more().getClientRects().length) throw new Error('1280 px: after the ‹ the bar is in mode “' + bar().getAttribute('data-mode') + '”, not the title’s tray with its Style');
       });
     }, 1280);
   });
@@ -142552,9 +142546,8 @@
       const R = S.read(FM.scene);
       if ((R.lanes.audio || []).some(l => l.indexOf(tw().id) >= 0)) throw new Error('the twin still has a place in the Sound row (it belongs to its clip)');
       if (!document.querySelector('#sm-main .sm-item[data-id="' + v.L('A').id + '"] .sm-twinband')) throw new Error('the clip does not draw the twin as a band along its bottom edge');
-      await smOpenAudio(v);
-      if (!document.querySelector('#sm-tray [data-tool="putSound"]') || document.querySelector('#sm-tray [data-tool="takeSound"]')) throw new Error('the Audio row should now offer Put sound back, not Take sound out');
-      smTool('rowBack').click(); await sleep(60);
+      FM.selectLayer(v.L('A').id); await sleep(60);   // #1243 S28: Put sound back is the clip's own tool now (no Audio row)
+      if (!document.querySelector('#sm-tray [data-tool="putSound"]') || document.querySelector('#sm-tray [data-tool="takeSound"]')) throw new Error('the clip’s own tray should now offer Put sound back, not Take sound out');
       /* a tail trim, then a head trim */
       S.cmd.trimTail(v.L('A').id, 4, { key: true }); await v.idle(); inStep('after a tail trim to 4 s');
       FM.selectLayer(v.L('A').id); S.cmd.trimHead(v.L('A').id, 1, { key: true }); await v.idle(); inStep('after a head trim to 1 s');
@@ -142626,8 +142619,7 @@
     await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
       const B = v.L('B'), C = v.L('C');
       FM.selectLayer(B.id); await v.sleep(100);
-      await smOpenAudio(v);
-      if (!smTool('speed')) throw new Error('the Audio row has no Speed (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+      if (!smTool('speed')) throw new Error('the clip’s own tray has no Speed (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');   // #1243 S28: no Audio row
       smTool('speed').click(); await v.sleep(100);
       const tray = document.getElementById('sm-tray');
       ['rowBack', 'sp0.5', 'sp1', 'sp1.5', 'sp2', 'sp3'].forEach(id => { if (!smTool(id)) throw new Error('the Speed row has no ' + id + ': ' + Array.from(tray.querySelectorAll('button')).map(b => b.dataset.tool)); });
@@ -142650,7 +142642,8 @@
       /* a ramped clip: the row says so and offers the one way out, which keeps the length */
       const Bl = v.L('B'); Bl.speed = smKf([[Bl.start, 1], [Bl.start + 1, 2]]); FM.refreshAll(); await v.sleep(100);
       FM.selectLayer(null); FM.selectLayer(Bl.id); await v.sleep(100);
-      await smOpenAudio(v); smTool('speed').click(); await v.sleep(100);
+      if (!smTool('speed')) throw new Error('the ramped clip’s own tray has no Speed');
+      smTool('speed').click(); await v.sleep(100);
       if (!smTool('oneSpeed') || tray.querySelector('.sm-speed-r')) throw new Error('a ramped clip’s Speed row should offer Use one speed and no slider');
       const len0 = v.L('B').duration, n1 = v.steps();
       smTool('oneSpeed').click(); await v.idle();
@@ -142662,7 +142655,8 @@
     await smFakeLoad(() => smP2((W, H) => [smV('B', 3, 3, W, H, { muted: false }), smV('A', 0, 3, W, H, { muted: false, volume: smKf([[0, 1], [1.5, 0.4], [3, 1]]) })], async function (v) {
       const S = FM.spine;
       FM.selectLayer(v.L('A').id); FM.time = 0; await v.sleep(100);
-      await smOpenAudio(v); smTool('volume').click(); await v.sleep(100);
+      if (!smTool('volume')) throw new Error('the clip’s own tray has no Volume (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');   // #1243 S28: no Audio row
+      smTool('volume').click(); await v.sleep(100);
       const rng = document.querySelector('#sm-tray .sm-vol-r');
       if (!rng) throw new Error('the Volume row has no slider');
       const n0 = v.steps();
@@ -142703,7 +142697,8 @@
       try {
         const B = v.L('B'), doc0 = v.doc(), n0 = v.steps();
         FM.selectLayer(B.id); await v.sleep(100);
-        await smOpenAudio(v); smTool('reverse').click(); await v.idle();
+        if (!smTool('reverse')) throw new Error('the clip’s own tray has no Reverse (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');   // #1243 S28: no Audio row
+        smTool('reverse').click(); await v.idle();
         const strip = JSON.stringify(FM.scene.layers.map(l => [l.name, l.start, l.duration, l.trimStart, l.volume && l.volume.kf && l.volume.kf.map(k => k.t)]));
         if (!v.L('B').reversed) throw new Error('Reverse did not flip the clip (it said “' + v.say() + '”)');
         if (v.steps() !== n0 + 1) throw new Error('Reverse took ' + (v.steps() - n0) + ' undo steps, not 1');
@@ -142834,14 +142829,14 @@
     });
   });
 
-  test('simple P2.3 · the tray: a video clip offers Speed, Volume, Replace, Reverse; a picture only Replace; an overlay video Volume and Speed; a song Volume, Fade and Speed — and a song’s Speed changes only itself (nothing ripples, a tail mark goes)', { item: '980', budgetMs: 120000 }, async function () {
+  test('simple P2.3 · the tray: a video clip offers Speed, Volume, Replace and Reverse in its own tray with no Audio (#1243 S28); a picture only Replace; an overlay video Volume, Speed and Replace; a song Volume, Replace (#1243 S32), Fade and Speed — and a song’s Speed changes only itself (nothing ripples, a tail mark goes)', { item: '980', budgetMs: 120000 }, async function () {
     await smP2((W, H) => [smSong('Song', 0, 8, W, H), smV('O', 1, 2, W, H, { muted: false }), smPic('P', 6, 3, W, H), smV('V', 0, 6, W, H, { muted: false })], async function (v) {
       const tools = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
       const has = (want, absent, who) => { const t = tools(); want.forEach(w => { if (t.indexOf(w) < 0) throw new Error(who + ': the tray is missing ' + w + ' (' + t + ')'); }); (absent || []).forEach(w => { if (t.indexOf(w) >= 0) throw new Error(who + ': the tray should not offer ' + w + ' (' + t + ')'); }); };
-      FM.selectLayer(v.L('V').id); await v.sleep(100); has(['audio', 'replace'], ['speed', 'volume', 'reverse', 'takeSound', 'putSound'], 'a video clip'); await smOpenAudio(v); has(['rowBack', 'speed', 'volume', 'reverse'], ['audio', 'replace'], 'the Audio row'); smTool('rowBack').click(); await v.sleep(60);
+      FM.selectLayer(v.L('V').id); await v.sleep(100); has(['speed', 'volume', 'replace', 'reverse'], ['audio'], 'a video clip');
       FM.selectLayer(v.L('P').id); await v.sleep(100); has(['replace'], ['speed', 'volume', 'reverse', 'takeSound', 'putSound'], 'a picture clip');
-      FM.selectLayer(v.L('O').id); await v.sleep(100); has(['volume', 'speed'], ['reverse', 'takeSound'], 'an overlay video');
-      FM.selectLayer(v.L('Song').id); await v.sleep(100); has(['volume', 'fade', 'stay'], ['reverse', 'replace', 'takeSound'], 'a song');
+      FM.selectLayer(v.L('O').id); await v.sleep(100); has(['volume', 'speed', 'replace'], ['reverse', 'takeSound'], 'an overlay video');
+      FM.selectLayer(v.L('Song').id); await v.sleep(100); has(['volume', 'replace', 'fade', 'stay'], ['reverse', 'takeSound'], 'a song');
       /* a picture has no clock: Speed on it refuses and writes nothing */
       const dpic = v.doc(), npic = v.steps(); FM.spine.cmd.speed(v.L('P').id, 2); await v.idle();
       if (v.doc() !== dpic || v.steps() !== npic) throw new Error('Speed on a picture wrote something or took a step');
@@ -150044,7 +150039,8 @@
         const after = label(t.id);
         /* Phase 3 (Effects on an item): Add effect. #1243 S5 (his words: "put the split button on the row that pops up when you have a layer
            selected"): Split first */
-        if (FM.scene.selectedId === t.id && tools() !== 'split,editwords,addfx,stay,more,delete') throw new Error('after the ✓ the tray is ' + tools() + ', want Split, Edit words, Add effect, Stay put, More, Delete');
+        /* #1243 R release 8: Style where More was, then Opacity · Transform | Delete */
+        if (FM.scene.selectedId === t.id && tools() !== 'split,editwords,style,addfx,stay,opacity,transform,delete') throw new Error('after the ✓ the tray is ' + tools() + ', want Split, Edit words, Style, Add effect, Stay put, Opacity, Transform, Delete');
         /* CONTROL: deselect and reselect, which SU1 found puts it right — so the timeline CAN name it by its words */
         FM.selectLayer(null); await v.sleep(80); FM.selectLayer(t.id); await v.idle(); await v.sleep(120);
         const fixed = label(t.id);
@@ -150166,15 +150162,16 @@
      can no longer be pressed again: the panel's own way back closes it — the grab bar on a phone (Look's ‹ in its tab row too), the band
      title's ‹ on a PC — and More raises it again after. A double tap on More still only opens it. */
   /* #1243 S12 (R9): Look is the project row's now, so its ‹ is measured with nothing selected: the panel goes and the project row is back */
-  test('SU1 #4 · More’s panel closes by its own way back — the grab bar at 380 (the project row’s Look’s ‹ too, giving the project row back), the band title’s ‹ at 1280 — and More raises it again; a double tap on More only opens it, and the grab bar still closes it', { item: '980', budgetMs: 90000 }, async function () {
+  /* #1243 S4 (release 8): More went; a title's Style opens the same panel (Full's for the title), so this asks Style what it asked More */
+  test('SU1 #4 · a title’s Style panel closes by its own way back — the grab bar at 380 (the project row’s Look’s ‹ too, giving the project row back), the band title’s ‹ at 1280 — and Style raises it again; a double tap on Style only opens it, and the grab bar still closes it (#1243 S4: Style took More’s place)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
-    const more = () => smTool('more');
+    const more = () => { const b = smTool('style'); if (!b) throw new Error('the title’s tray has no Style (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(x => x.dataset.tool) + ')'); return b; };
     const tap = (el, n) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); };
     await atPhoneWidth(async function () {
-      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smT('A', 0.5, 2, W, H), smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('V', 0, 3, W, H)], async function (v) {
         const insp = document.getElementById('inspector-panel'), fails = [], grab = () => document.getElementById('insp-grab');
         FM.selectLayer(v.L('A').id); await smSettle(150);
-        if (insp.classList.contains('open')) throw new Error('CONTROL: selecting a clip raised the panel without More');
+        if (insp.classList.contains('open')) throw new Error('CONTROL: selecting a title raised the panel without Style');
         const mr = more().getBoundingClientRect(), mx = mr.left + mr.width / 2, my = mr.top + mr.height / 2;
         tap(more(), 1); await smSettle(250);
         if (!insp.classList.contains('open')) throw new Error('CONTROL: More did not raise the panel');
@@ -150209,13 +150206,13 @@
       });
     }, 380);
     await atWideWidth(async function () {
-      await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+      await smP2((W, H) => [smT('B', 3.5, 2, W, H), smV('C', 6, 3, W, H), smV('V2', 3, 3, W, H), smV('V', 0, 3, W, H)], async function (v) {
         const hint = () => !!document.querySelector('#inspector .sm-band-hint'), pb = () => document.querySelector('#inspector-panel > .panel-title > .sm-pback');
         FM.selectLayer(v.L('B').id); await smSettle(150);
-        if (!hint()) throw new Error('CONTROL 1280: the band shows Full’s editor before More');
+        if (!hint()) throw new Error('CONTROL 1280: the band shows Full’s editor before Style');
         tap(more(), 1); await smSettle(200);
-        if (hint()) throw new Error('CONTROL 1280: More did not open the panel in the band');
-        if (more().getClientRects().length) throw new Error('1280 px: with More’s panel in the band More is still on screen (the panel takes the band)');
+        if (hint()) throw new Error('CONTROL 1280: Style did not open the panel in the band');
+        if (smTool('style').getClientRects().length) throw new Error('1280 px: with Style’s panel in the band Style is still on screen (the panel takes the band)');
         if (!pb()) throw new Error('1280 px: More’s panel has no ‹ in the band’s title row');
         tap(pb(), 1); await smSettle(200);
         if (!hint()) throw new Error('1280 px: the band title’s ‹ left the panel open in the band');
@@ -150237,53 +150234,39 @@
      lie under the pair, and no fade exists at the end where tools are hidden. CONTROL: the strip really overflows at 380 (a main
      video clip's nine tools: seven in the strip, Split first, beside the two pins) and really scrolls to its end, so both findings are
      measured on a tray that scrolls; the Text row (‹ · Add text · Title looks · Draw) is the row that fits. */
-  test('SU1 #15 · at 380 the tray’s tools scroll in a strip that ends where More and Delete begin, with a fade on the edge that hides tools — the end, then the start once scrolled — and none on a tray that fits', { item: '980', budgetMs: 60000 }, async function () {
+  test('SU1 #15 · at 380 the tray’s tools scroll in ONE strip that ends with Delete, with a fade on the edge that hides tools — the end, then the start once scrolled — Split pressable at the start and Delete at the end, and no fade on a row that fits (#1243 S31: no pinned end)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
-    const meet = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
-    const inside = (r, s) => ({ left: Math.max(r.left, s.left), right: Math.min(r.right, s.right), top: Math.max(r.top, s.top), bottom: Math.min(r.bottom, s.bottom) });
     const fadeAt = side => document.querySelector('#sm-tray .sm-fade-' + side);
     const shown = f => !!f && parseFloat(getComputedStyle(f).opacity) > 0.9;
-    const pinBoxes = () => ['more', 'delete'].map(id => smTool(id).getBoundingClientRect());
-    const under = run => {   // the strip's own tools whose visible part meets a pin
-      const box = run.getBoundingClientRect(), pins = pinBoxes();
-      return Array.from(run.children).filter(c => c.classList.contains('sm-tool')).filter(b => {
-        const r = inside(b.getBoundingClientRect(), box);
-        return r.right - r.left > 0.5 && pins.some(p => meet(r, p));
-      }).map(b => b.dataset.tool);
-    };
-    const blocked = () => ['more', 'delete'].filter(id => { const b = smTool(id), r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !(e && b.contains(e)); });
+    const pressable = id => { const b = smTool(id), r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!(e && b.contains(e)); };
     await atPhoneWidth(async function () {
       await smP2((W, H) => [smT('Words', 0.5, 1, W, H), smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
         FM.selectLayer(v.L('B').id); await v.idle(); await smSettle(200);
-        if (!smTool('audio') || !smTool('more') || !smTool('delete')) throw new Error('CONTROL: a main clip’s tray has no Audio, More or Delete: ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool));
-        const run = smTool('audio').parentElement, fails = [];
+        if (!smTool('speed') || !smTool('delete')) throw new Error('CONTROL: a main clip’s tray has no Speed or Delete: ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool));
+        const run = smTool('speed').parentElement, fails = [];
         if (!(run.scrollWidth > run.clientWidth + 1)) throw new Error('CONTROL: a main clip’s tools fit 380 px (' + run.scrollWidth + ' in ' + run.clientWidth + '), so nothing here is hidden and this measures nothing');
+        if (document.querySelector('#sm-tray .sm-pins')) fails.push('the tray still has a pinned end');
+        const tl = Array.from(run.children).filter(c => c.classList.contains('sm-tool')).pop();
+        if (!tl || tl.dataset.tool !== 'delete' || smTool('delete').parentElement !== run) fails.push('Delete is not the strip’s last tool (it ends with ' + (tl && tl.dataset.tool) + ')');
         run.scrollLeft = 0; await smSettle(150);
-        const u0 = under(run);
-        if (u0.length) fails.push('at the start ' + u0.join(', ') + ' lie under More / Delete');
         if (!shown(fadeAt('e'))) fails.push('no fade at the end while ' + Math.round(run.scrollWidth - run.clientWidth) + ' px of tools are hidden there');
         if (shown(fadeAt('s'))) fails.push('a fade at the start before anything is scrolled off it');
         const fe = fadeAt('e');
         if (fe) {
           const r = fe.getBoundingClientRect(), b = run.getBoundingClientRect();
           if (Math.abs(r.right - b.right) > 1 || r.width < 8) fails.push('the end fade is not on the strip’s end edge (' + Math.round(r.left) + '–' + Math.round(r.right) + ', strip ends at ' + Math.round(b.right) + ')');
-          if (pinBoxes().some(p => meet(r, p))) fails.push('the end fade lies over More / Delete');
           if (getComputedStyle(fe).pointerEvents !== 'none') fails.push('the end fade takes taps');
         }
-        if (blocked().length) fails.push('with the fade up, ' + blocked().join(' and ') + ' cannot be tapped');
+        if (!pressable('split')) fails.push('with the strip at its start Split cannot be tapped');
         const ta = getComputedStyle(run).touchAction;
         if (!/pan-x|auto|manipulation/.test(ta)) fails.push('the strip does not pan sideways under a finger (touch-action ' + ta + ')');
-        /* at the end: the end fade goes, the start fade shows, and the last tools are clear of the pins */
+        /* at the end: the end fade goes, the start fade shows, and Delete is there to tap */
         run.scrollLeft = run.scrollWidth; await smSettle(150);
         if (Math.abs(run.scrollLeft - (run.scrollWidth - run.clientWidth)) > 1) throw new Error('CONTROL: the strip did not scroll to its end (' + run.scrollLeft + ' of ' + (run.scrollWidth - run.clientWidth) + ') · ' + fails.join(' · '));
-        const u1 = under(run);
-        if (u1.length) fails.push('at the end ' + u1.join(', ') + ' lie under More / Delete');
         if (shown(fadeAt('e'))) fails.push('the end fade stays once the strip is at its end');
         if (!shown(fadeAt('s'))) fails.push('no fade at the start once tools are scrolled off it');
-        if (blocked().length) fails.push('scrolled to the end, ' + blocked().join(' and ') + ' cannot be tapped');
-        /* a row that fits: the Text row (‹ · Add text · Title looks · Draw), as 1243 R4 · S15's control now uses — no fade at all. A title's
-           own tools stopped fitting 380 when #1243 S5 (R5) made Split every tray's first tool (Split, Edit words, Add effect, Stay put
-           beside More and Delete), so they scroll now like a clip's */
+        if (!pressable('delete')) fails.push('scrolled to the end, Delete cannot be tapped');
+        /* a row that fits: the Text row (‹ · Add text · Title looks · Draw) — no fade at all */
         FM.selectLayer(null); await v.idle(); FM.simpleTools.openSub('text'); await smSettle(200);
         if (!smTool('addText')) throw new Error('CONTROL: the Text row is ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ' · ' + fails.join(' · '));
         const run2 = smTool('addText').parentElement;
@@ -150295,50 +150278,12 @@
     }, 380);
   });
 
-  /* SU1 #6, the gap half (hunt/simple-firstuser D8 A, the PM's call 12 Oct): in Simple, More opens Full's panel, and its quick row's
-     Trim end to playhead shortened the clip where it stood and left the next one waiting after a black gap (2.5 s and 1.5 s in his
-     two tries) — though Simple never makes gaps. Driven as he did it: B selected with the playhead inside it, More, the button.
-     Red on the old inspector.js: the button ran Full's D body, so B ends at 4.5 while C still starts at 6 — the gap assertion fails
-     and the CONTROL that B was trimmed to the playhead passes, so it fails on the gap and nothing else. The Full half is the
-     control that the same button with Simple off still trims B alone and leaves C where it was (today's Full, DESIGN §0.4). */
-  test('SU1 #6 · at 380 the panel’s Trim end to playhead on a clip in Simple closes the row up behind the cut, one step and no gap, while in Full the same button still trims the clip alone', { item: '980', budgetMs: 60000 }, async function () {
-    smNeedP2();
-    const qr = title => Array.from(document.querySelectorAll('#inspector .quick-row .qr-btn')).find(b => b.title === title) || null;
-    const build = (W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)];
-    await atPhoneWidth(async function () {
-      await smP2(build, async function (v) {
-        if (!FM.editor.isSimple()) throw new Error('setup: the project is not in Simple');
-        FM.time = 4.5; FM.selectLayer(v.L('B').id); await v.idle(); await smSettle(150);
-        smTool('more').click(); await smSettle(250);
-        const trim = qr('Trim end to playhead');
-        if (!trim) throw new Error('CONTROL: More did not open a panel with Trim end to playhead (panel for ' + FM.simpleTools.panelFor() + '; quick row: ' + Array.from(document.querySelectorAll('#inspector .quick-row .qr-btn')).map(b => b.title).join(', ') + ')');
-        const n0 = v.steps();
-        trim.click(); await v.idle(); await smSettle(150);
-        const A = v.L('A'), B = v.L('B'), C = v.L('C');
-        if (B.start !== 3 || Math.abs(B.duration - 1.5) > 1e-6) throw new Error('CONTROL: the button did not trim B to the playhead (B is ' + B.start + ' + ' + B.duration + ' s; it said “' + v.say() + '”)');
-        if (Math.abs(C.start - (B.start + B.duration)) > 1e-6) throw new Error('Trim end to playhead in Simple left a ' + (C.start - B.start - B.duration).toFixed(2) + ' s gap: B ends at ' + (B.start + B.duration) + ', C still starts at ' + C.start);
-        const gaps = FM.spine.read(FM.scene).main.filter(e => e.seam && e.seam.kind === 'gap');
-        if (gaps.length) throw new Error('the clip row has ' + gaps.length + ' gap(s) after the trim');
-        if (A.start !== 0 || Math.abs(A.duration - 3) > 1e-9) throw new Error('the trim of B moved A (' + A.start + ' + ' + A.duration + ')');
-        if (v.steps() !== n0 + 1) throw new Error('the trim took ' + (v.steps() - n0) + ' undo steps, not one');
-      });
-    }, 380);
-    /* CONTROL — Full: the same button trims B where it stands and leaves C at 6, exactly as before */
-    await atPhoneWidth(async function () {
-      await smP2(build, async function (v) {
-        if (FM.editor.isSimple()) FM.editor.set('full');
-        if (FM.editor.isSimple()) throw new Error('CONTROL: could not leave Simple for the Full half');
-        FM.time = 4.5; FM.selectLayer(v.L('B').id); await smSettle(150);
-        FM.inspector.refresh(); await smSettle(60);
-        const trim = qr('Trim end to playhead');
-        if (!trim) throw new Error('CONTROL (Full): the panel has no Trim end to playhead (' + Array.from(document.querySelectorAll('#inspector .quick-row .qr-btn')).map(b => b.title).join(', ') + ')');
-        trim.click(); await smSettle(150);
-        const B = v.L('B'), C = v.L('C');
-        if (Math.abs(B.duration - 1.5) > 1e-6) throw new Error('CONTROL (Full): the button did not trim B to the playhead (' + B.duration + ' s)');
-        if (C.start !== 6) throw new Error('Full’s Trim end to playhead moved C to ' + C.start + ' — Full must not change (DESIGN §0.4)');
-      }, { full: true });
-    }, 380);
-  });
+  /* RETIRED (#1243 R release 8, DROPS TEST ×3): 'SU1 #6 · at 380 the panel’s Trim end to playhead on a clip in Simple …', '… Move clip
+     to the playhead …' and '… Extend to the playhead …'. They pressed Full's quick-row buttons in the panel a CLIP's More opened in
+     Simple. #1243 S4 took More away (his words: "get rid of more, because that's just a lazy way of having like all the other
+     features"), and a clip of the row has no Full panel in Simple any more — the grips trim and a hold-and-drag reorders — so no finger
+     can reach those buttons there; Full's own halves are Full's tests. (Simple's branch for them in js/inspector.js is now reached only
+     from Full's code paths, never from Simple's tray.) */
 
   /* SU1 #21, its first half (hunt/simple-firstuser, the PM's call 12 Oct): "Music is called “the sound” (DESIGN §8.9 says “the
      song”)." Sound › Music pins the song (Stay put, D17 B) and the classifier never measures `long` for a pinned item, so the one
@@ -150378,92 +150323,6 @@
         if (!/^the song runs 2\.0 s past the last clip/.test(v.say())) fails.push('a second tap on the song says “' + v.say() + '”');
         if (fails.length) throw new Error(fails.join(' · '));
       });
-    }, 380);
-  });
-
-  /* SU1 #6 follow-up (the PM's call 12 Oct: "Gaps close up by themselves" is Simple's promise): with the playhead OFF the selected
-     clip, the panel's quick row swaps its trims for Move to the playhead and Extend to the playhead, and both wrote time straight
-     onto a clip of the row in Simple. These two tests press them as he would at 380: the clip selected, the playhead parked, More,
-     the button. Pictures, so neither side runs out of footage and Full's own Extend has nothing to clamp. One helper for both. */
-  async function su1QuickRowPress(v, name, t, title) {
-    FM.selectLayer(v.L(name).id); FM.time = t; await v.idle(); await smSettle(150);
-    if (FM.editor.isSimple()) { smTool('more').click(); await smSettle(250); }
-    else { FM.inspector.refresh(); await smSettle(60); }
-    const b = Array.from(document.querySelectorAll('#inspector .quick-row .qr-btn')).find(x => x.title === title);
-    if (!b) throw new Error('CONTROL: with ' + name + ' selected and the playhead at ' + t + ' s the panel has no “' + title + '” (quick row: ' + Array.from(document.querySelectorAll('#inspector .quick-row .qr-btn')).map(x => x.title).join(', ') + ')');
-    const n0 = v.steps();
-    b.click(); await v.idle(); await smSettle(150);
-    return v.steps() - n0;
-  }
-  const su1Spans = (v, names) => names.map(n => n + ' ' + v.L(n).start + '–' + (v.L(n).start + v.L(n).duration)).join(', ');
-  const su1Seams = () => FM.spine.read(FM.scene).main.filter(e => e.seam && (e.seam.kind === 'gap' || e.seam.kind === 'overlap')).map(e => e.seam.kind + ' ' + e.seam.amt.toFixed(2));
-  const su1Near = (a, b) => Math.abs(a - b) <= 1e-6;
-
-  /* MOVE. Red on the old inspector.js: the button ran Full's FM.moveClipTo, so A (0–3) with the playhead at 8 slid to 5–8 — a 3 s
-     gap where it was and an overlap over C — and the assertion that A is now third, at 6–9, fails. In Simple it is the reorder to
-     the cut nearest the playhead (9, so A goes last), then C with the playhead at 1 goes to the cut at 0 (first). CONTROL: in Full
-     the same button still slides A to end at 8 and C to start at 1, nothing else moving (today's Full, DESIGN §0.4). */
-  test('SU1 #6 · at 380 the panel’s Move clip to the playhead on a clip in Simple moves it to the cut nearest the playhead, one step, no gap and no overlap; in Full it still slides the clip to the playhead', { item: '980', budgetMs: 60000 }, async function () {
-    smNeedP2();
-    const build = (W, H) => [smPic('C', 6, 3, W, H), smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)];
-    await atPhoneWidth(async function () {
-      await smP2(build, async function (v) {
-        if (!FM.editor.isSimple()) throw new Error('setup: the project is not in Simple');
-        let steps = await su1QuickRowPress(v, 'A', 8, 'Move clip right to the playhead');
-        if (!su1Near(v.L('A').start, 6) || !su1Near(v.L('B').start, 0) || !su1Near(v.L('C').start, 3)) throw new Error('Move clip right to the playhead in Simple left ' + su1Spans(v, ['A', 'B', 'C']) + ' — want B 0–3, C 3–6, A 6–9 (it said “' + v.say() + '”)');
-        if (su1Seams().length) throw new Error('after Move right the clip row has ' + su1Seams().join(', '));
-        if (steps !== 1) throw new Error('Move right took ' + steps + ' undo steps, not one');
-        steps = await su1QuickRowPress(v, 'C', 1, 'Move clip left to the playhead');
-        if (!su1Near(v.L('C').start, 0) || !su1Near(v.L('B').start, 3) || !su1Near(v.L('A').start, 6)) throw new Error('Move clip left to the playhead in Simple left ' + su1Spans(v, ['A', 'B', 'C']) + ' — want C 0–3, B 3–6, A 6–9 (it said “' + v.say() + '”)');
-        if (su1Seams().length) throw new Error('after Move left the clip row has ' + su1Seams().join(', '));
-        if (steps !== 1) throw new Error('Move left took ' + steps + ' undo steps, not one');
-      });
-    }, 380);
-    /* CONTROL — Full: the clip slides until its near edge meets the playhead, and nothing else moves */
-    await atPhoneWidth(async function () {
-      await smP2(build, async function (v) {
-        if (FM.editor.isSimple()) FM.editor.set('full');
-        if (FM.editor.isSimple()) throw new Error('CONTROL: could not leave Simple for the Full half');
-        await su1QuickRowPress(v, 'A', 8, 'Move clip right to the playhead');
-        if (!su1Near(v.L('A').start, 5) || v.L('B').start !== 3 || v.L('C').start !== 6) throw new Error('Full’s Move right changed: ' + su1Spans(v, ['A', 'B', 'C']) + ' — want A 5–8 with B and C where they were (DESIGN §0.4)');
-        await su1QuickRowPress(v, 'C', 1, 'Move clip left to the playhead');
-        if (!su1Near(v.L('C').start, 1) || !su1Near(v.L('A').start, 5) || v.L('B').start !== 3) throw new Error('Full’s Move left changed: ' + su1Spans(v, ['A', 'B', 'C']) + ' — want C 1–4 (DESIGN §0.4)');
-      }, { full: true });
-    }, 380);
-  });
-
-  /* EXTEND. Red on the old inspector.js: the button ran Full's FM.extendClipTo, so B (3–6) with the playhead at 7.5 grew to 3–7.5
-     over C, which stayed at 6 — the assertion that C now starts at 7.5 fails. In Simple it is the grip trim: B grows to end at the
-     playhead and C moves along (trimTail), then C with the playhead 1 s before it grows 1 s at its head and keeps its slot after B
-     (trimHead). CONTROL: in Full the same button still stretches B over C, and C's start back to the playhead over B. */
-  test('SU1 #6 · at 380 the panel’s Extend to the playhead on a clip in Simple lengthens it and moves the row along, one step, no gap and no overlap; in Full it still stretches the edge to the playhead', { item: '980', budgetMs: 60000 }, async function () {
-    smNeedP2();
-    const build = (W, H) => [smPic('C', 6, 3, W, H), smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)];
-    await atPhoneWidth(async function () {
-      await smP2(build, async function (v) {
-        if (!FM.editor.isSimple()) throw new Error('setup: the project is not in Simple');
-        let steps = await su1QuickRowPress(v, 'B', 7.5, 'Extend the end of the clip to the playhead');
-        if (v.L('B').start !== 3 || !su1Near(v.L('B').duration, 4.5)) throw new Error('CONTROL: Extend the end did not grow B to the playhead: ' + su1Spans(v, ['A', 'B', 'C']) + ' (it said “' + v.say() + '”)');
-        if (!su1Near(v.L('C').start, 7.5)) throw new Error('Extend the end of the clip to the playhead in Simple left C at ' + v.L('C').start + ' under B, which now ends at 7.5 — ' + su1Spans(v, ['A', 'B', 'C']));
-        if (su1Seams().length) throw new Error('after Extend the end the clip row has ' + su1Seams().join(', '));
-        if (steps !== 1) throw new Error('Extend the end took ' + steps + ' undo steps, not one');
-        steps = await su1QuickRowPress(v, 'C', 6.5, 'Extend the start of the clip to the playhead');
-        if (!su1Near(v.L('C').start, 7.5) || !su1Near(v.L('C').duration, 4)) throw new Error('Extend the start of the clip to the playhead in Simple left ' + su1Spans(v, ['A', 'B', 'C']) + ' — want C to keep its place after B (7.5) and grow by the 1 s to the playhead (it said “' + v.say() + '”)');
-        if (v.L('B').start !== 3 || !su1Near(v.L('B').duration, 4.5) || v.L('A').start !== 0) throw new Error('Extend the start of C moved A or B: ' + su1Spans(v, ['A', 'B', 'C']));
-        if (su1Seams().length) throw new Error('after Extend the start the clip row has ' + su1Seams().join(', '));
-        if (steps !== 1) throw new Error('Extend the start took ' + steps + ' undo steps, not one');
-      });
-    }, 380);
-    /* CONTROL — Full: the near edge stretches to the playhead and nothing else moves */
-    await atPhoneWidth(async function () {
-      await smP2(build, async function (v) {
-        if (FM.editor.isSimple()) FM.editor.set('full');
-        if (FM.editor.isSimple()) throw new Error('CONTROL: could not leave Simple for the Full half');
-        await su1QuickRowPress(v, 'B', 7.5, 'Extend the end of the clip to the playhead');
-        if (!su1Near(v.L('B').duration, 4.5) || v.L('C').start !== 6) throw new Error('Full’s Extend the end changed: ' + su1Spans(v, ['A', 'B', 'C']) + ' — want B 3–7.5 over C at 6 (DESIGN §0.4)');
-        await su1QuickRowPress(v, 'C', 4.5, 'Extend the start of the clip to the playhead');
-        if (!su1Near(v.L('C').start, 4.5) || !su1Near(v.L('C').duration, 4.5) || v.L('B').start !== 3) throw new Error('Full’s Extend the start changed: ' + su1Spans(v, ['A', 'B', 'C']) + ' — want C 4.5–9 (DESIGN §0.4)');
-      }, { full: true });
     }, 380);
   });
 
@@ -150525,11 +150384,12 @@
   const SU1_SHEET_H = 480;
   async function su1Sheet(v) {
     const insp = document.getElementById('inspector-panel'), body = document.getElementById('inspector');
-    FM.selectLayer(v.L('A').id); await smSettle(150);
-    const more = smTool('more');
-    if (!more) throw new Error('setup: clip A’s tray has no More');
+    /* #1243 S4 (release 8): More went; the title's Style raises the same docked sheet (Full's panel for the title) */
+    FM.selectLayer(v.L('T').id); await smSettle(150);
+    const more = smTool('style');
+    if (!more) throw new Error('setup: the title’s tray has no Style');
     more.click(); await smSettle(350);
-    if (!insp.classList.contains('open')) throw new Error('setup: More did not raise the sheet');
+    if (!insp.classList.contains('open')) throw new Error('setup: Style did not raise the sheet');
     const pr = insp.getBoundingClientRect();
     const cards = Array.from(document.querySelectorAll('#inspector .cat-card'));
     if (!cards.length) throw new Error('setup: More’s sheet shows no category cards');
@@ -150562,11 +150422,11 @@
     try { await smSettle(80); await send(); await smSettle(150); return box.scrollTop; }
     finally { box.remove(); await smSettle(60); }
   }
-  test('SU1 #5 · at 380 a real wheel over a card in More’s docked sheet scrolls the sheet, as it scrolls a plain box at the same spot', { item: '980', budgetMs: 60000 }, async function () {
+  test('SU1 #5 · at 380 a real wheel over a card in the docked sheet a title’s Style raises scrolls the sheet, as it scrolls a plain box at the same spot (#1243 S4: Style took More’s place)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await onScreen924(async function () {
       await r4At(380, SU1_SHEET_H, async function () {   // #1243 rule 3: a sheet short enough for its cards to run past it (su1Sheet)
-        await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        await smP2((W, H) => [smT('T', 0.5, 2, W, H), smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
           const s = await su1Sheet(v);
           const wheel = [{ t: 'mouseMove', x: s.p.x, y: s.p.y, ms: 40 }, { t: 'wheel', x: s.p.x, y: s.p.y, dx: 0, dy: 120, ms: 500 }];
           const ctl = await su1PlainBox(s.pr, () => realInput924(wheel, 'a wheel over a plain box at the card’s spot'));
@@ -150581,13 +150441,13 @@
       });
     });
   });
-  test('SU1 #5 · at 380 a real finger swiping up from a card in More’s docked sheet scrolls it, and a swipe back down scrolls it back without closing it, as on a plain box at the same spot', { item: '980', budgetMs: 60000 }, async function () {
+  test('SU1 #5 · at 380 a real finger swiping up from a card in the docked sheet a title’s Style raises scrolls it, and a swipe back down scrolls it back without closing it, as on a plain box at the same spot (#1243 S4: Style took More’s place)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     needsTouch924();   // NOT RUN HERE before anything changes, where this driver cannot give a real finger (tests/_touch_pass.py runs it)
     const swipe = (p, dy) => { const st = [{ t: 'touchStart', x: p.x, y: p.y, ms: 50 }]; for (let k = 1; k <= 8; k++) st.push({ t: 'touchMove', x: p.x, y: Math.round(p.y + dy * k / 8), ms: 16 }); st.push({ t: 'touchEnd', x: p.x, y: Math.round(p.y + dy), ms: 0 }); return st; };
     await onScreen924(async function () {
       await r4At(380, SU1_SHEET_H, async function () {   // #1243 rule 3: a sheet short enough for its cards to run past it (su1Sheet)
-        await smP2((W, H) => [smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        await smP2((W, H) => [smT('T', 0.5, 2, W, H), smV('C', 6, 3, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
           const s = await su1Sheet(v);
           try {
             const ctl = await su1PlainBox(s.pr, () => realInput924(swipe(s.p, -112), 'a finger swiping up on a plain box at the card’s spot'));
@@ -193229,14 +193089,15 @@
   }));
 
   /* simple 2.7 · T7 — THE ROW, FROM THE ◇ (his pick A). Proves, at 1280 (the PC band) and 380 (his phone): a ◇ over each join (B, C) and none
-   * over the first clip or after a gap (D); the clip tray grew no Transition tool (the ◇ is the way in, DESIGN §8.2); a press on B's ◇
+   * over the first clip or after a gap (D); since #1243 S1 A (release 8) the markers beside a selected clip hide and its tray's own
+   * Transition opens the same row (it had none: the ◇ was the only way in, DESIGN §8.2); a press on B's ◇
    * selects B and opens its row (Done, None, Crossfade, Dip to black, Dip to white, None current, no length before one is set); Crossfade
    * sets it and shows pressed; + lengthens by 0.1 s; Dip to black keeps the length; On every cut reaches C and neither A nor D; None clears
    * it; the tray never runs off the screen. Run with More transition controls on (tr27Extras): + and On every cut are extras; T11 is the
    * same row with them off.
    * FAILS BEFORE THE FIX: on 97ef9e40 there is no ◇.
    * CONTROL: B's own tray is on screen when the no-Transition-tool check runs (its Length tool is found), so an empty tray cannot pass it. */
-  test('simple 2.7 · T7 the Transition row opens from the ◇ above a join, never above the first clip or after a gap, and sets, lengthens, changes, copies and clears a transition at 1280 and 380, with no Transition tool on the clip tray', { item: '1122', budgetMs: 150000 }, () => tr27Extras(true, async function () {
+  test('simple 2.7 · T7 the Transition row opens from the marker on a join, never at the first clip or after a gap, and from the clip’s own Transition tool (#1243 S1 A), and sets, lengthens, changes, copies and clears a transition at 1280 and 380', { item: '1122', budgetMs: 150000 }, () => tr27Extras(true, async function () {
     smNeedP2();
     for (const [w, h] of [[1280, 800], [380, 0]]) {
       await (w <= 700 ? (fn => atPhoneWidth(fn, w)) : (fn => smTrayBAt(w, h, fn)))(async function () {
@@ -193248,8 +193109,12 @@
           if (chipOf(D)) throw new Error(w + ': a clip after a gap has a ◇');
           FM.selectLayer(B.id); await v.sleep(200);
           if (!smTool('lift')) throw new Error(w + ': CONTROL: B is selected and its tray shows no Lift off, so the next check would prove nothing');
-          if (Array.from(document.querySelectorAll('#sm-tray .sm-tool')).some(b => b.dataset.tool === 'transition')) throw new Error(w + ': the clip tray grew a Transition tool (the ◇ is the way in, DESIGN §8.2)');
-          FM.selectLayer(A.id); await v.sleep(200);
+          /* #1243 S1 A: the marker hides while a clip beside the cut is selected, and the clip's own tray has Transition instead */
+          if (chipOf(B) || chipOf(C)) throw new Error(w + ': with B selected the markers at its cuts are still drawn (its grips own both edges)');
+          if (!smTool('transition')) throw new Error(w + ': B’s tray has no Transition tool (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+          smTool('transition').click(); await v.sleep(200);
+          if (!FM.simpleTools.rowFor() || FM.simpleTools.rowFor().kind !== 'transition' || FM.simpleTools.rowFor().id !== B.id) throw new Error(w + ': B’s Transition opened ' + JSON.stringify(FM.simpleTools.rowFor()) + ', want the row for the cut before B');
+          FM.selectLayer(null); await v.sleep(200);
           chipOf(B).click(); await v.sleep(250);
           if (FM.scene.selectedId !== B.id) throw new Error(w + ': the ◇ did not select the incoming clip');
           ['rowBack', 'tr-none', 'tr-crossfade', 'tr-dipblack', 'tr-dipwhite'].forEach(id => { if (!smTool(id)) throw new Error(w + ': the Transition row has no ' + id); });
@@ -193274,61 +193139,106 @@
     }
   }));
 
-  /* simple 2.7 · T8 — WHERE THE ◇ SITS. Proves, at 1280 and 380: a ◇ above the cut of each join (two here), named Transition: none while
-   * empty, and marked (.sm-chip-tr-on) and named for what it holds (Transition: crossfade 0.5 s) where a transition is set, only that one
-   * (every ◇ LOOKS the same, his sheet's solid blue: T11 measures that); at least 32 × 32; centred on the cut within 3 px; clear of the trim
-   * grips of the clip before and the clip after it, each selected in turn; a press on it (from A selected) selects B and opens the row on
-   * Crossfade; None takes the mark and the name back. And a title that straddles a cut is still what a press there lands on: the ◇ paints
-   * under the sections' items. Runs with More transition controls at its default: nothing here is an extra.
-   * FAILS BEFORE THE FIX: on 97ef9e40 there is no ◇.
-   * CONTROL: the title and the ◇ are first shown to overlap by more than 4 px both ways, so the hit test is at a place both cover. */
-  test('simple 2.7 · T8 a ◇ sits above every join, marked and named where a transition is set, at least 32 px, centred on the cut and clear of both neighbours’ trim grips, a press opens that clip’s row, and a title at the cut still takes the press', { item: '1122', budgetMs: 150000 }, async function () {
+  /* #1243 S1 OPTION A (release 8; his words, 8 Nov: "When you split a layer… it puts a little blue thing above it, but that blue thing clips
+   * with whatever is on the above layer, like if you have text… a pretty shitty spot to put your… transition thing"). It REPLACED
+   * 'simple 2.7 · T8 a ◇ sits above every join, … clear of both neighbours’ trim grips, … and a title at the cut still takes the press', whose
+   * CONTROL needed the title and the ◇ to overlap — the very thing he called out. The marker now sits on its cut inside the clip row
+   * (js/simple-timeline.js), hides while either neighbour is selected (so it can never meet their grips), and that clip's tray carries
+   * Transition. FAILS BEFORE THE FIX: on v18.42 the marker is in its own lane above the row and meets the title there. */
+  test('1243 R8 · S1 at 1280 and 380 the transition marker sits on its cut inside the clip row, clear of a title in the lane above — the page hits the marker at its centre, a 24 px square in a press area of at least 44 px, marked and named where a transition is set — it hides while the clip on either side is selected, the first clip’s own Transition opens the cut after it, and a press on a marker opens its cut’s row (CONTROL: the title over the cut is drawn and takes a press where it lies)', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
+    const fails = [];
     for (const [w, h] of [[1280, 800], [380, 0]]) {
       await (w <= 700 ? (fn => atPhoneWidth(fn, w)) : (fn => smTrayBAt(w, h, fn)))(async function () {
-        await smP2((W, H) => [smV('D', 8, 2, W, H), smV('C', 4, 2, W, H), smV('B', 2, 2, W, H), smV('A', 0, 2, W, H)], async function (v) {
-          const chips = () => Array.from(document.querySelectorAll('.sm-chip-tr:not(.sm-chip-tr-blend)'));
-          const chipB = () => document.querySelector('.sm-chip-tr[data-tr="' + v.L('B').id + '"]');
-          if (chips().length !== 2) throw new Error(w + ': expected a ◇ at each of the two joins, found ' + chips().length);
-          if (chips().some(c => c.classList.contains('sm-chip-tr-on'))) throw new Error(w + ': a ◇ is marked as set with no transition set');
-          if (chipB().getAttribute('aria-label') !== 'Transition: none') throw new Error(w + ': the empty ◇ at B is named ' + chipB().getAttribute('aria-label') + ', not Transition: none');
-          await FM.spine.cmd.transition(v.L('B').id, 'crossfade', 0.5); await v.idle(); await v.sleep(250);
-          if (!chipB() || !chipB().classList.contains('sm-chip-tr-on')) throw new Error(w + ': the ◇ at B’s cut is not marked as set after Crossfade');
-          if (chipB().getAttribute('aria-label') !== 'Transition: crossfade 0.5 s') throw new Error(w + ': the ◇ at B is named ' + chipB().getAttribute('aria-label') + ' after Crossfade 0.5 s');
-          if (chips().filter(c => c.classList.contains('sm-chip-tr-on')).length !== 1) throw new Error(w + ': more than one ◇ is marked as set');
-          const r = chipB().getBoundingClientRect();
-          if (r.width < 31.5 || r.height < 31.5) throw new Error(w + ': the ◇ is ' + r.width + 'x' + r.height + ', under 32 px');
-          const bEl = document.querySelector('.sm-clip[data-id="' + v.L('B').id + '"]');
-          const bl = bEl.getBoundingClientRect().left, mid = r.left + r.width / 2;
-          if (Math.abs(bl - mid) > 3) throw new Error(w + ': the ◇ is centred at ' + mid + ' but the cut is at ' + bl);
-          for (const sel of ['A', 'B']) {
-            FM.selectLayer(v.L(sel).id); await v.sleep(200);
-            const c2 = chipB().getBoundingClientRect(), grips = Array.from(document.querySelectorAll('.sm-grip'));
-            if (!grips.length) throw new Error(w + ': CONTROL: with ' + sel + ' selected no trim grip is drawn, so clear of the grips proves nothing');
-            grips.forEach(g => {
-              const gr = g.getBoundingClientRect();
-              if (gr.width && c2.left < gr.right && c2.right > gr.left && c2.top < gr.bottom && c2.bottom > gr.top) throw new Error(w + ': with ' + sel + ' selected the ◇ overlaps a trim grip (' + Math.round(gr.left) + ',' + Math.round(gr.top) + ' ' + Math.round(gr.width) + 'x' + Math.round(gr.height) + ')');
-            });
-          }
-          FM.selectLayer(v.L('A').id); await v.sleep(200);
-          chipB().click(); await v.sleep(250);
-          if (FM.scene.selectedId !== v.L('B').id) throw new Error(w + ': the press did not select the incoming clip');
-          if (!smTool('tr-crossfade') || smTool('tr-crossfade').getAttribute('aria-pressed') !== 'true') throw new Error(w + ': the press did not open the Transition row on Crossfade');
-          await FM.spine.cmd.transition(v.L('B').id, 'none'); await v.idle(); await v.sleep(250);
-          if (chips().some(c => c.classList.contains('sm-chip-tr-on'))) throw new Error(w + ': the ◇ stayed marked as set after None');
-          if (chipB().getAttribute('aria-label') !== 'Transition: none') throw new Error(w + ': after None the ◇ at B is named ' + chipB().getAttribute('aria-label'));
-        });
         await smP2((W, H) => smClips3(W, H).concat([smT('Title', 1.5, 1, W, H)]), async function (v) {
-          const tEl = document.querySelector('.sm-item[data-id="' + v.L('Title').id + '"]'), cEl = document.querySelector('.sm-chip-tr[data-tr="' + v.L('B').id + '"]');
-          if (!tEl || !cEl) throw new Error(w + ': CONTROL: no title or no ◇ drawn');
-          const a = tEl.getBoundingClientRect(), b = cEl.getBoundingClientRect();
-          const x0 = Math.max(a.left, b.left), x1 = Math.min(a.right, b.right), y0 = Math.max(a.top, b.top), y1 = Math.min(a.bottom, b.bottom);
-          if (!(x1 - x0 > 4 && y1 - y0 > 4)) throw new Error(w + ': CONTROL: the title and the ◇ do not overlap (' + [a.left, a.top, a.width, a.height].map(Math.round) + ' vs ' + [b.left, b.top, b.width, b.height].map(Math.round) + ')');
-          const hit = document.elementFromPoint((x0 + x1) / 2, (y0 + y1) / 2);
-          if (!hit || !hit.closest || hit.closest('.sm-chip-tr') || !hit.closest('.sm-item')) throw new Error(w + ': a press on the title lands on ' + (hit && (hit.id ? '#' + hit.id : hit.className)) + ', not the title');
+          const at = w + ' px: ', mark = n => document.querySelector('#sm-timeline .sm-chip-tr[data-tr="' + v.L(n).id + '"]');
+          const meet = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
+          FM.selectLayer(null); await v.sleep(200);
+          const tEl = document.querySelector('#sm-sections .sm-item[data-id="' + v.L('Title').id + '"]'), m = mark('B');
+          if (!tEl || !m) throw new Error('CONTROL ' + at + 'no title or no marker at the cut before Clip 2 is drawn');
+          const tr = tEl.getBoundingClientRect(), th = document.elementFromPoint(tr.left + tr.width / 2, tr.top + tr.height / 2);
+          if (!th || !tEl.contains(th)) throw new Error('CONTROL ' + at + 'a press at the title’s centre lands on ' + (th ? th.getAttribute('class') || th.tagName : 'nothing') + ', so the page cannot see the title');
+          const mainR = document.getElementById('sm-main').getBoundingClientRect(), mr = m.getBoundingClientRect(), sq = m.querySelector('.sm-trmark');
+          if (!sq) { fails.push(at + 'the marker draws no square (.sm-trmark)'); return; }
+          const sr = sq.getBoundingClientRect();
+          if (m.parentNode !== document.getElementById('sm-main') || mr.top < mainR.top - 0.5 || mr.bottom > mainR.bottom + 0.5) fails.push(at + 'the marker is not inside the clip row (' + Math.round(mr.top) + '–' + Math.round(mr.bottom) + ' in ' + Math.round(mainR.top) + '–' + Math.round(mainR.bottom) + ')');
+          if (Math.abs(sr.width - 24) > 0.5 || Math.abs(sr.height - 24) > 0.5 || mr.width < 43.5 || mr.height < 43.5) fails.push(at + 'the marker is ' + Math.round(sr.width) + '×' + Math.round(sr.height) + ' drawn in a ' + Math.round(mr.width) + '×' + Math.round(mr.height) + ' press area, want 24 in at least 44');
+          const cut = document.querySelector('#sm-main .sm-clip[data-id="' + v.L('B').id + '"]').getBoundingClientRect();
+          if (Math.abs(sr.left + sr.width / 2 - cut.left) > 3 || Math.abs(sr.top + sr.height / 2 - (cut.top + cut.height / 2)) > 2) fails.push(at + 'the square is not centred on the cut (' + Math.round(sr.left + sr.width / 2) + ',' + Math.round(sr.top + sr.height / 2) + ' vs the cut at ' + Math.round(cut.left) + ', the row’s middle ' + Math.round(cut.top + cut.height / 2) + ')');
+          const over = Array.from(document.querySelectorAll('#sm-sections .sm-item')).filter(it => meet(it.getBoundingClientRect(), mr)).map(it => it.dataset.id === v.L('Title').id ? 'the title' : it.dataset.id);
+          if (over.length) fails.push(at + 'the marker meets ' + over.join(', ') + ' in the lanes above');
+          const hit = document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2);
+          if (!hit || !m.contains(hit)) fails.push(at + 'at the marker’s centre the page hits ' + (hit ? (hit.closest && hit.closest('.sm-item') ? 'an item' : hit.getAttribute('class') || hit.tagName) : 'nothing') + ', not the marker');
+          /* marked and named once a transition is set */
+          await FM.spine.cmd.transition(v.L('B').id, 'crossfade', 0.5); await v.idle(); await v.sleep(200);
+          if (!mark('B') || !mark('B').classList.contains('sm-chip-tr-on') || mark('B').getAttribute('aria-label') !== 'Transition: crossfade 0.5 s') fails.push(at + 'after Crossfade the marker reads ' + (mark('B') ? mark('B').getAttribute('aria-label') + (mark('B').classList.contains('sm-chip-tr-on') ? ' (set)' : ' (not set)') : 'nothing'));
+          /* the first clip selected: its cut's marker hides, the next cut's stays, and its own Transition opens the cut AFTER it */
+          FM.selectLayer(v.L('A').id); await v.sleep(200);
+          if (mark('B')) fails.push(at + 'with Clip 1 selected the marker on its cut is still drawn (its grips own that edge)');
+          if (!mark('C')) fails.push(at + 'with Clip 1 selected the marker on the next cut (Clip 2 | Clip 3) went too');
+          const t1 = smTool('transition');
+          if (!t1) fails.push(at + 'Clip 1’s tray has no Transition (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+          else {
+            t1.click(); await v.sleep(200);
+            const rf = FM.simpleTools.rowFor();
+            if (!rf || rf.kind !== 'transition' || rf.id !== v.L('B').id || FM.scene.selectedId !== v.L('A').id || FM.simpleTools.mode() !== 'sub') fails.push(at + 'Clip 1’s Transition gave ' + JSON.stringify(rf) + ' in mode ' + FM.simpleTools.mode() + ' with ' + (FM.scene.selectedId === v.L('A').id ? 'Clip 1' : 'another') + ' selected, want the row for the cut after Clip 1 with Clip 1 still selected');
+            else if (!smTool('tr-crossfade') || smTool('tr-crossfade').getAttribute('aria-pressed') !== 'true') fails.push(at + 'that row does not show the cut’s Crossfade as set');
+          }
+          /* the middle clip selected: both its cuts' markers hide */
+          FM.selectLayer(v.L('B').id); await v.sleep(200);
+          if (mark('B') || mark('C')) fails.push(at + 'with Clip 2 selected a marker on its cuts is still drawn');
+          /* nothing selected: a press on the second cut's marker selects Clip 3 and opens that cut's row */
+          FM.selectLayer(null); await v.sleep(200);
+          if (!mark('C')) { fails.push(at + 'with nothing selected there is no marker on the second cut'); return; }
+          mark('C').click(); await v.sleep(250);
+          const rc = FM.simpleTools.rowFor();
+          if (FM.scene.selectedId !== v.L('C').id || !rc || rc.kind !== 'transition' || rc.id !== v.L('C').id) fails.push(at + 'a press on the second cut’s marker selected ' + FM.scene.selectedId + ' and opened ' + JSON.stringify(rc));
         });
       });
     }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* #1243 S1 A, the 18 Nov review of release 8 (R8-1, R8-3, R8-4): the marker sits over the clips now, so it must leave them their own
+   * presses. Its press area takes no more than half the narrower clip beside it, and none at all under 24 px; the clip after it starts its
+   * name clear of the square; and the markers go while a clip is held, so none floats over the clips sliding under it. FAILS BEFORE THE FIX:
+   * on a5baa814 two 44 px markers cover a 0.5 s piece whole (a tap on it opened the next cut's Transition row), Clip 4's name ran under
+   * the square, and a held clip slid under markers left at the old cuts. CONTROL: the long cut between Clip 3 and Clip 4 has its marker,
+   * hit at its centre. */
+  test('1243 R8 · S1 at 380 with nothing selected every clip keeps its middle for a tap — a 0.5 s piece between two cuts too — the clip after a marker starts its name clear of the square, and the markers hide while a clip is held (CONTROL: the long cut between Clip 3 and Clip 4 has a marker the page hits at its centre)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smPic('D', 4.5, 2.5, W, H), smPic('C', 3, 1.5, W, H), smPic('B', 2.5, 0.5, W, H), smPic('A', 0, 2.5, W, H)], async function (v) {
+        FM.selectLayer(null); await v.sleep(200);
+        const sc = document.getElementById('sm-scroll'), node = n => document.querySelector('#sm-main .sm-clip[data-id="' + v.L(n).id + '"]');
+        const bring = async n => { const r = node(n).getBoundingClientRect(); sc.scrollLeft += (r.left + r.width / 2) - innerWidth / 2; await v.sleep(150); return node(n); };
+        /* CONTROL */
+        await bring('D');
+        const m = document.querySelector('#sm-main > .sm-chip-tr[data-tr="' + v.L('D').id + '"]');
+        if (!m) throw new Error('CONTROL: no marker on the cut between Clip 3 and Clip 4');
+        const sq = m.querySelector('.sm-trmark').getBoundingClientRect(), mh = document.elementFromPoint(sq.left + sq.width / 2, sq.top + sq.height / 2);
+        if (!mh || !m.contains(mh)) throw new Error('CONTROL: at the marker’s centre the page hits ' + (mh ? mh.getAttribute('class') || mh.tagName : 'nothing'));
+        /* the name of the clip after it starts clear of the square */
+        const nm = node('D').querySelector('.sm-name').getBoundingClientRect();
+        if (nm.left < sq.right - 0.5) fails.push('Clip 4’s name starts at ' + Math.round(nm.left) + ', under the marker’s square (it ends at ' + Math.round(sq.right) + ')');
+        /* every clip's middle: a tap at 30, 50 and 70 % of it lands on that clip */
+        for (const [n, who] of [['A', 'Clip 1'], ['B', 'the 0.5 s piece'], ['C', 'Clip 3'], ['D', 'Clip 4']]) {
+          const el = await bring(n), r = el.getBoundingClientRect();
+          for (const f of [0.3, 0.5, 0.7]) {
+            const h = document.elementFromPoint(r.left + r.width * f, r.top + r.height / 2), it = h && h.closest && h.closest('.sm-item');
+            if (!it || it.dataset.id !== v.L(n).id) fails.push('a tap ' + Math.round(f * 100) + ' % into ' + who + ' (' + Math.round(r.width) + ' px wide) lands on ' + (h && h.closest && h.closest('.sm-chip-tr') ? 'a transition marker' : it ? 'another item' : (h ? h.getAttribute('class') || h.tagName : 'nothing')));
+          }
+        }
+        /* held: the class the hold-and-drag puts on the page (js/simple-timeline.js arm) hides every marker */
+        try {
+          document.body.classList.add('sm-dragging');
+          const shown = Array.from(document.querySelectorAll('#sm-main > .sm-chip-tr')).filter(c => getComputedStyle(c).visibility !== 'hidden');
+          if (shown.length) fails.push('while a clip is held ' + shown.length + ' marker(s) still show over the clips sliding under them');
+        } finally { document.body.classList.remove('sm-dragging'); }
+      });
+    }, 380);
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
   });
 
   /* simple 2.7 · T8b — A REAL PRESS REACHES THE ◇. Every other test presses it with click(), which never goes through the page's hit test; on
@@ -193418,9 +193328,10 @@
     const seamOf = (name, v) => { const R = FM.spine.classify(FM.scene), e = R.main.find(x => x.id === v.L(name).id); return e && e.seam ? e.seam.kind + ' ' + (+e.seam.amt).toFixed(2) : 'none'; };
     await smP2((W, H) => [(() => { const n = smV('N', 5, 6, W, H); n.transform.opacity = smKf([[5, 0], [6, 1]]); return n; })(), smV('C', 0, 6, W, H)], async function (v) {
       if (seamOf('N', v) !== 'blend 1.00') throw new Error('CONTROL: C|N is not a 1 s crossfade: ' + seamOf('N', v));
+      FM.selectLayer(null); await v.sleep(150);   // #1243 S1 A: the marker hides while a clip beside its cut is selected
       const bc = document.querySelector('.sm-chip-tr-blend[data-tr-blend="' + v.L('N').id + '"]');
       if (!bc) throw new Error('a crossfade seam has no ◇');
-      FM.selectLayer(v.L('C').id); await v.sleep(150); bc.click(); await v.sleep(250);
+      bc.click(); await v.sleep(250);
       if (FM.scene.selectedId !== v.L('N').id) throw new Error('the ◇ on a crossfade did not select the clip that fades in');
       if (!smTool('turnTr')) throw new Error('a clip that fades in over the one before it has no Turn into a transition (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
       FM.selectLayer(v.L('C').id); await v.sleep(200);
@@ -193438,6 +193349,7 @@
       if (op && typeof op === 'object' && Array.isArray(op.kf)) throw new Error('the fade keys are still there: ' + JSON.stringify(op));
       if (op !== 1) throw new Error('the clip should rest at its visible value 1, not ' + JSON.stringify(op));
       if (Math.abs((N.trimStart || 0) - 0.5) > 1e-6) throw new Error('N head trim: trimStart ' + N.trimStart);
+      FM.selectLayer(null); await v.sleep(150);   // #1243 S1 A: N's own marker hides while N is selected
       if (document.querySelector('.sm-chip-tr-blend')) throw new Error('the crossfade ◇ is still drawn after the turn');
       if (!document.querySelector('.sm-chip-tr-on[data-tr="' + v.L('N').id + '"]')) throw new Error('the new transition has no ◇ marked as set');
       FM.history.undo(); await v.sleep(120);
@@ -193462,7 +193374,7 @@
     smNeedP2();
     const LABEL = 'More transition controls', BLUE = 'solid / rgb(124, 196, 255) / rgb(124, 196, 255) / rgb(20, 32, 42)';
     const ROW = 'rowBack,tr-none,tr-crossfade,tr-dipblack,tr-dipwhite';
-    const look = c => { const s = getComputedStyle(c); return [s.borderTopStyle, s.borderTopColor, s.color, s.backgroundColor].join(' / '); };
+    const look = c => { const s = getComputedStyle(c.querySelector('.sm-trmark') || c);   /* #1243 S1 A: the drawn square inside the marker's 44 px press area */ return [s.borderTopStyle, s.borderTopColor, s.color, s.backgroundColor].join(' / '); };
     const rowIds = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool).join();
     const setSwitch = () => [].filter.call(document.querySelectorAll('.set-panel .set-switch'), b => b.getAttribute('aria-label') === LABEL)[0] || null;
     for (const [w, h] of [[1280, 800], [380, 0]]) {
@@ -193480,7 +193392,7 @@
           FM.selectLayer(v.L('N').id); await v.sleep(200);
           if (!smTool('lift')) throw new Error(w + ': CONTROL: N is selected and its tray shows no Lift off, so the next check would prove nothing');
           if (smTool('turnTr')) throw new Error(w + ': with More transition controls off the clip that fades in offers Turn into a transition');
-          FM.selectLayer(v.L('A').id); await v.sleep(200);
+          FM.selectLayer(null); await v.sleep(200);   // #1243 S1 A: the marker hides while a clip beside its cut is selected
           chipOf('B').click(); await v.sleep(250);
           if (FM.scene.selectedId !== v.L('B').id) throw new Error(w + ': the ◇ did not select the incoming clip');
           if (rowIds() !== ROW) throw new Error(w + ': the Transition row holds ' + rowIds() + ', want ' + ROW);
@@ -193491,8 +193403,10 @@
           if (rowIds() !== ROW) throw new Error(w + ': with a transition set the row holds ' + rowIds() + ', want only ' + ROW + ' (no Length, − / + or On every cut)');
           const lenL = document.querySelector('#sm-tray .sm-fade-l');
           if (lenL) throw new Error(w + ': the row shows a length: ' + lenL.textContent);
-          if (!chipOf('B').classList.contains('sm-chip-tr-on')) throw new Error(w + ': CONTROL: the ◇ at B is not marked as set, so comparing it with an empty one proves nothing');
+          FM.selectLayer(null); await v.sleep(200);   // #1243 S1 A: B's markers show with nothing beside them selected
+          if (!chipOf('B') || !chipOf('B').classList.contains('sm-chip-tr-on')) throw new Error(w + ': CONTROL: the ◇ at B is not marked as set, so comparing it with an empty one proves nothing');
           if (look(chipOf('B')) !== BLUE || look(chipOf('C')) !== BLUE) throw new Error(w + ': the set ◇ looks ' + look(chipOf('B')) + ' and the empty one ' + look(chipOf('C')) + ': every ◇ must be his sheet’s solid blue ' + BLUE);
+          chipOf('B').click(); await v.sleep(250);   // the row open again for the switch below
           /* Settings in Simple has the switch, off; a click on it turns the setting on (the CONTROL) */
           FM.settings.open(); await v.sleep(120);
           try {
@@ -200183,7 +200097,7 @@
       await smP2(smClips3, async function (v) {
         FM.selectLayer(v.L('B').id); await v.sleep(150);
         const tray = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
-        if (tray.indexOf('split') < 0 || tray.indexOf('more') < 0) throw new Error('CONTROL: Clip 2’s tray is not drawn (it holds ' + tray + ')');
+        if (tray.indexOf('split') < 0 || tray.indexOf('delete') < 0) throw new Error('CONTROL: Clip 2’s tray is not drawn (it holds ' + tray + ')');   // #1243 S4: no More to look for
         if (tray.indexOf('look') >= 0) throw new Error('380: Clip 2’s tray still holds Look; #1243 S12 put it on the project row (' + tray + ')');
         const p = await smLookOpen(v);
         const insp = document.getElementById('inspector-panel'), fails = [];
@@ -200434,7 +200348,7 @@
   const smCpMeta = () => FM.history._metaHere() || {};
   const smCpStop = () => { try { if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {} };
 
-  test('simple P3 · Captions at 380 the project row is Clips · Text · Captions · Sound · Overlay · Look · Effects, Captions opens a row of Type captions, Find speech, Caption looks and Style, and a selected caption track’s tray is Edit lines · Style · Find speech · Follows the clips · Stays with the sound · Delete — the last two one two-way choice, ONE step each, their faces one word each on a phone (Follows · Stays) with all six on show', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P3 · Captions at 380 the project row is Clips · Text · Captions · Sound · Overlay · Look · Effects, Captions opens a row of Type captions, Find speech, Caption looks and Style, and a selected caption track’s tray is Edit lines · Style · Find speech · Follows the clips · Stays with the sound | Delete — the last two one two-way choice, ONE step each, their faces one word each on a phone (Follows · Stays) with the five on show and Delete at the strip’s end after its line (#1243 S31)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2((W, H) => [smCap('Caps', 0, 6, [[0.5, 1.5], [3, 4]], W, H)].concat(smClips3(W, H)), async function (v) {
@@ -200464,14 +200378,24 @@
         if (face('capfollow') !== FM.spineWords.tools.capFollowShort || face('capstay') !== FM.spineWords.tools.capStayShort || face('capfollow') !== 'Follows' || face('capstay') !== 'Stays') fails.push('380: the pair reads “' + face('capfollow') + '” / “' + face('capstay') + '”, want Follows / Stays from the words file');
         if (!/move with the clips/.test(smTool('capfollow').getAttribute('aria-label') || '') || !/stay with the sound/.test(smTool('capstay').getAttribute('aria-label') || '')) fails.push('380: the short faces lost the whole sentence from the spoken name: ' + smTool('capfollow').getAttribute('aria-label') + ' / ' + smTool('capstay').getAttribute('aria-label'));
         {
-          const run = document.querySelector('#sm-tray .sm-run'), ids = ['editlines', 'capstyle', 'findspeech', 'capfollow', 'capstay', 'delete'];
+          /* #1243 S31 (his words: "not permanently stuck to the right… slides along with it like the rest, so you have to find it"): the five are on
+             show with the strip at its start, and Delete, after its section line, comes into view at the strip's end */
+          const run = document.querySelector('#sm-tray .sm-run'), ids = ['editlines', 'capstyle', 'findspeech', 'capfollow', 'capstay'];
           if (run) run.scrollLeft = 0;
           await v.sleep(30);
           ids.forEach(id => { const b = smTool(id), r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
             if (!e || !b.contains(e)) fails.push('380: ' + id + ' is not on show with the strip at its start (its centre hits ' + (e ? (e.dataset && e.dataset.tool) || e.getAttribute('class') : 'nothing') + ')'); });
         }
-        const bin = smTool('delete').getBoundingClientRect();
-        if (bin.right > innerWidth + 0.5 || bin.width < 44) fails.push('🗑 is not on screen at the right end');
+        {
+          const run = document.querySelector('#sm-tray .sm-run'), del = smTool('delete'), prev = del && del.previousElementSibling;
+          if (!del || del.parentNode !== run || !prev || !prev.classList.contains('sm-div')) fails.push('380: Delete is not the strip’s last tool after a section line');
+          else {
+            run.scrollLeft = run.scrollWidth; await v.sleep(30);
+            const r = del.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            if (!e || !del.contains(e) || r.right > innerWidth + 0.5 || r.width < 44) fails.push('380: scrolled to its end, Delete is not on show to press');
+            run.scrollLeft = 0; await v.sleep(30);
+          }
+        }
         const n0 = v.steps();
         smTool('capstay').click(); await v.idle(); await v.sleep(80);
         const L = v.L('Caps');
@@ -200774,7 +200698,7 @@
         if (v.steps() !== n0 + 1) fails.push('one tap made ' + (v.steps() - n0) + ' undo steps, want 1');
         if (FM.scene.selectedId !== seg.id) fails.push('the new segment is not selected');
         const tray = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool).join(',');
-        if (tray !== 'change,strength,stay,more,delete') fails.push('the segment’s tray is ' + tray + ', want change,strength,stay,more,delete');
+        if (tray !== 'change,strength,stay,openFull,delete') fails.push('the segment’s tray is ' + tray + ', want change,strength,stay,openFull,delete (#1243 S4: no More; review R8-2: Open in Full until S13 / S30 give its settings a row)');
         const r1 = [2.2, 3, 4.5, 1].map(t => smSegRed(W, H, t));
         [2.2, 3, 4.5, 1].forEach((t, k) => { if (r1[k] > 100) fails.push('at ' + t + ' s the picture is not inverted: red ' + r1[k]); });
         FM.history.undo(); await v.sleep(80);
@@ -201377,7 +201301,7 @@
     }
     return null;
   };
-  test('simple P2.7 · 2A row 16 at 380×800, 380×667 and 1280×720 a REAL double click on More opens its panel and presses nothing the panel brought under the pointer', { item: '980', budgetMs: 180000 }, async function () {
+  test('simple P2.7 · 2A row 16 at 380×800, 380×667 and 1280×720 a REAL double click on a title’s Style opens its panel and presses nothing the panel brought under the pointer (#1243 S4: Style took More’s place)', { item: '980', budgetMs: 180000 }, async function () {
     smNeedP2();
     const fe = window.frameElement;
     if (!fe) throw new Error('this test needs run.html’s iframe to set a phone height');
@@ -201388,39 +201312,39 @@
           for (const H of [800, 667]) {
             fe.style.height = H + 'px'; window.dispatchEvent(new Event('resize')); await smSettle(150);
             for (const gap of [120, 300]) {
-              await smP2((W, Hh) => [smV('C', 6, 3, W, Hh), smV('B', 3, 3, W, Hh), smV('A', 0, 3, W, Hh)], async function (v) {
+              await smP2((W, Hh) => [smT('T', 0.5, 2, W, Hh), smV('C', 6, 3, W, Hh), smV('B', 3, 3, W, Hh), smV('A', 0, 3, W, Hh)], async function (v) {
                 const insp = document.getElementById('inspector-panel');
-                FM.time = 1.5; FM.selectLayer(v.L('A').id); await smSettle(500);   // 500: no hold an earlier half left can take the CONTROL's click
-                const r0 = smTool('more').getBoundingClientRect();
+                FM.time = 1.5; FM.selectLayer(v.L('T').id); await smSettle(500);   // 500: no hold an earlier half left can take the CONTROL's click
+                const r0 = smTool('style').getBoundingClientRect();
                 let c = { x: Math.round(r0.left + r0.width / 2), y: Math.round(r0.top + r0.height / 2) };
                 /* real input lands only inside the driver's window (657 px tall at --width 380 --height 800): lift the frame so More is in it */
                 const topH = window.top.innerHeight;
                 if (fe.getBoundingClientRect().top + innerHeight > topH - 2) { fe.style.top = Math.round(topH - 2 - innerHeight) + 'px'; await smSettle(80); }
-                /* CONTROL: one real click on More opens the panel. (A CONTROL or setup that fails is written down and the half skipped, so
+                /* CONTROL: one real click on Style opens the panel. (A CONTROL or setup that fails is written down and the half skipped, so
                    every half is measured and a mutation's red can be read half by half.) */
-                await realInput924([{ t: 'mouseMove', x: c.x, y: c.y, ms: 30 }, { t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: 0 }], 'one click on More');
+                await realInput924([{ t: 'mouseMove', x: c.x, y: c.y, ms: 30 }, { t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: 0 }], 'one click on Style');
                 await smSettle(500);
-                if (!insp.classList.contains('open')) { fails.push('CONTROL at 380×' + H + ', ' + gap + ' ms: a real click on More did not open its panel'); return; }
-                /* CONTROL (HW4): a spot inside More where the open panel has a control, so a second press there would act */
+                if (!insp.classList.contains('open')) { fails.push('CONTROL at 380×' + H + ', ' + gap + ' ms: a real click on Style did not open its panel'); return; }
+                /* CONTROL (HW4): a spot inside Style where the open panel has a control, so a second press there would act */
                 const spot = r4LiveSpot(r0);
-                if (!spot) { fails.push('CONTROL at 380×' + H + ': with the panel up no spot inside More’s box (' + Math.round(r0.left) + ',' + Math.round(r0.top) + ' ' + Math.round(r0.width) + '×' + Math.round(r0.height) + ') lies on a control of the panel, so a double click there proves nothing'); return; }
+                if (!spot) { fails.push('CONTROL at 380×' + H + ': with the panel up no spot inside Style’s box (' + Math.round(r0.left) + ',' + Math.round(r0.top) + ' ' + Math.round(r0.width) + '×' + Math.round(r0.height) + ') lies on a control of the panel, so a double click there proves nothing'); return; }
                 c = { x: spot.x, y: spot.y };
                 const view0 = FM.inspector.currentView ? FM.inspector.currentView() : '';   // the panel's page as a single click leaves it
                 FM.simpleTools.closePanel(); await smSettle(500);
                 if (insp.classList.contains('open')) { fails.push('setup at 380×' + H + ': the panel did not close'); return; }
-                const r1 = smTool('more').getBoundingClientRect();
-                if (Math.abs(r1.top - r0.top) > 0.5) { fails.push('setup at 380×' + H + ': More is not back where it was (' + Math.round(r0.top) + ' → ' + Math.round(r1.top) + ')'); return; }
+                const r1 = smTool('style').getBoundingClientRect();
+                if (Math.abs(r1.top - r0.top) > 0.5) { fails.push('setup at 380×' + H + ': Style is not back where it was (' + Math.round(r0.top) + ' → ' + Math.round(r1.top) + ')'); return; }
                 const doc0 = v.doc(), steps0 = v.steps();
-                await realInput924([{ t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: gap }, { t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: 0 }], 'a double click on More (' + gap + ' ms apart)');
+                await realInput924([{ t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: gap }, { t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: 0 }], 'a double click on Style (' + gap + ' ms apart)');
                 await smSettle(500); await v.idle();
                 const at = 'at 380×' + H + ', ' + gap + ' ms apart: ';
                 const under = document.elementFromPoint(c.x, c.y);
                 const what = under ? (under.closest('#inspector-panel') ? 'the panel’s ' + ((under.closest('button') || under).getAttribute('title') || (under.closest('button') || under).getAttribute('aria-label') || (under.id || under.className)) : (under.id || String(under.className))) : 'nothing';
-                if (!insp.classList.contains('open')) fails.push(at + 'a double click on More opened its panel and shut it again (now under the pointer: ' + what + ')');
-                if (v.doc() !== doc0 || v.steps() !== steps0) fails.push(at + 'a double click on More changed the project (' + steps0 + ' → ' + v.steps() + ' steps; now under the pointer: ' + what + ')');
+                if (!insp.classList.contains('open')) fails.push(at + 'a double click on Style opened its panel and shut it again (now under the pointer: ' + what + ')');
+                if (v.doc() !== doc0 || v.steps() !== steps0) fails.push(at + 'a double click on Style changed the project (' + steps0 + ' → ' + v.steps() + ' steps; now under the pointer: ' + what + ')');
                 /* …or opened a page of the panel (the 9 Nov review, HW4: the spot's control is a category card, whose press changes no project) */
-                if (FM.inspector.currentView && FM.inspector.currentView() !== view0) fails.push(at + 'the second click of a double click on More pressed ' + spot.what + ' in the panel, which opened its ' + FM.inspector.currentView() + ' page');
-                if (FM.scene.selectedId !== v.L('A').id) fails.push(at + 'a double click on More dropped the selection');
+                if (FM.inspector.currentView && FM.inspector.currentView() !== view0) fails.push(at + 'the second click of a double click on Style pressed ' + spot.what + ' in the panel, which opened its ' + FM.inspector.currentView() + ' page');
+                if (FM.scene.selectedId !== v.L('T').id) fails.push(at + 'a double click on Style dropped the selection');
               });
               fe.style.top = '0px';
             }
@@ -201430,34 +201354,34 @@
            panel where More was (the band is x ≤ 420, inside the driver's window at any width) */
         await smTrayBAt(1280, 720, async function () {
           for (const gap of [120, 300]) {
-            await smP2((W, Hh) => [smV('C', 6, 3, W, Hh), smV('B', 3, 3, W, Hh), smV('A', 0, 3, W, Hh)], async function (v) {
+            await smP2((W, Hh) => [smT('T', 0.5, 2, W, Hh), smV('C', 6, 3, W, Hh), smV('B', 3, 3, W, Hh), smV('A', 0, 3, W, Hh)], async function (v) {
               const hint = () => !!document.querySelector('#inspector .sm-band-hint');
-              FM.time = 1.5; FM.selectLayer(v.L('A').id); await smSettle(200);
-              const r0 = smTool('more').getBoundingClientRect();
+              FM.time = 1.5; FM.selectLayer(v.L('T').id); await smSettle(200);
+              const r0 = smTool('style').getBoundingClientRect();
               let c = { x: Math.round(r0.left + r0.width / 2), y: Math.round(r0.top + r0.height / 2) };
               const topH = window.top.innerHeight;
               if (fe.getBoundingClientRect().top + innerHeight > topH - 2) { fe.style.top = Math.round(topH - 2 - innerHeight) + 'px'; await smSettle(80); }
-              /* CONTROL: one real click on More opens the panel in the band */
-              await realInput924([{ t: 'mouseMove', x: c.x, y: c.y, ms: 30 }, { t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: 0 }], 'one click on More at 1280×720');
+              /* CONTROL: one real click on Style opens the panel in the band */
+              await realInput924([{ t: 'mouseMove', x: c.x, y: c.y, ms: 30 }, { t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: 0 }], 'one click on Style at 1280×720');
               await smSettle(500);
-              if (hint() || FM.simpleTools.panelFor() !== v.L('A').id) throw new Error('CONTROL at 1280×720: a real click on More did not open its panel in the band · ' + fails.join(' · '));
-              /* CONTROL (HW4): a spot inside More where the panel in the band has a control */
+              if (hint() || FM.simpleTools.panelFor() !== v.L('T').id) throw new Error('CONTROL at 1280×720: a real click on Style did not open its panel in the band · ' + fails.join(' · '));
+              /* CONTROL (HW4): a spot inside Style where the panel in the band has a control */
               const spot = r4LiveSpot(r0);
-              if (!spot) throw new Error('CONTROL at 1280×720: with the panel up no spot inside More’s box lies on a control of the panel, so a double click there proves nothing · ' + fails.join(' · '));
+              if (!spot) throw new Error('CONTROL at 1280×720: with the panel up no spot inside Style’s box lies on a control of the panel, so a double click there proves nothing · ' + fails.join(' · '));
               c = { x: spot.x, y: spot.y };
               const view0 = FM.inspector.currentView ? FM.inspector.currentView() : '';
               FM.simpleTools.closePanel(); await smSettle(500);
-              const r1 = smTool('more').getBoundingClientRect();
-              if (Math.abs(r1.top - r0.top) > 0.5 || !hint()) throw new Error('setup at 1280×720: the panel did not close, or More is not back where it was (' + Math.round(r0.top) + ' → ' + Math.round(r1.top) + ')');
+              const r1 = smTool('style').getBoundingClientRect();
+              if (Math.abs(r1.top - r0.top) > 0.5 || !hint()) throw new Error('setup at 1280×720: the panel did not close, or Style is not back where it was (' + Math.round(r0.top) + ' → ' + Math.round(r1.top) + ')');
               const doc0 = v.doc(), steps0 = v.steps();
-              await realInput924([{ t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: gap }, { t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: 0 }], 'a double click on More at 1280×720 (' + gap + ' ms apart)');
+              await realInput924([{ t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: gap }, { t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: 0 }], 'a double click on Style at 1280×720 (' + gap + ' ms apart)');
               await smSettle(500); await v.idle();
               const at = 'at 1280×720, ' + gap + ' ms apart: ', under = document.elementFromPoint(c.x, c.y);
               const what = under ? (under.closest('#inspector-panel') ? 'the panel’s ' + ((under.closest('button') || under).getAttribute('title') || (under.closest('button') || under).getAttribute('aria-label') || (under.id || under.className)) : (under.id || String(under.className))) : 'nothing';
-              if (hint() || FM.simpleTools.panelFor() !== v.L('A').id) fails.push(at + 'a double click on More opened its panel and shut it again (now under the pointer: ' + what + ')');
-              if (v.doc() !== doc0 || v.steps() !== steps0) fails.push(at + 'a double click on More changed the project (' + steps0 + ' → ' + v.steps() + ' steps; now under the pointer: ' + what + ')');
-              if (FM.inspector.currentView && FM.inspector.currentView() !== view0) fails.push(at + 'the second click of a double click on More pressed ' + spot.what + ' in the panel, which opened its ' + FM.inspector.currentView() + ' page');
-              if (FM.scene.selectedId !== v.L('A').id) fails.push(at + 'a double click on More dropped the selection');
+              if (hint() || FM.simpleTools.panelFor() !== v.L('T').id) fails.push(at + 'a double click on Style opened its panel and shut it again (now under the pointer: ' + what + ')');
+              if (v.doc() !== doc0 || v.steps() !== steps0) fails.push(at + 'a double click on Style changed the project (' + steps0 + ' → ' + v.steps() + ' steps; now under the pointer: ' + what + ')');
+              if (FM.inspector.currentView && FM.inspector.currentView() !== view0) fails.push(at + 'the second click of a double click on Style pressed ' + spot.what + ' in the panel, which opened its ' + FM.inspector.currentView() + ' page');
+              if (FM.scene.selectedId !== v.L('T').id) fails.push(at + 'a double click on Style dropped the selection');
             });
             fe.style.top = '0px';
           }
@@ -201647,18 +201571,22 @@
     }, 380);
   });
 
-  /* #1243 S5 (R5) put Split first on every item's tools: an overlay picture has nine, on two rows of five and four */
-  test('simple P3 · Tray effects at 1280×800 an overlay’s nine tools — Split first, Add effect among them — lie on two rows of five and four inside the band with More and Delete last, and its picker lies in the tray row there: Done and the first tile on show and pressable, the rest in their own strip with a fade; a pick there lands and the two rows come back', { item: '980', budgetMs: 90000 }, async function () {
+  /* #1243 S5 (R5) put Split first on every item's tools; #1243 R release 8 laid them on one strip on a PC too (R decision 6) */
+  test('simple P3 · Tray effects at 1280×800 an overlay picture’s tray is one strip in the band — Split first, Add effect fourth, Delete last after a line, every tool in reach by scrolling — and its picker lies in the tray row there: Done and the first tile on show and pressable, the rest in their own strip with a fade; a pick there lands and the overlay’s strip comes back (#1243 R decision 6)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 800, async function () {
       await smP2((W, H) => [smPic('O', 1, 1.5, W, H), smPic('C', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
         const band = document.getElementById('inspector-panel'), tray = document.getElementById('sm-tray'), fails = [];
         if (!band.contains(tray)) throw new Error('CONTROL: the tray is not in the PC band');
         FM.selectLayer(v.L('O').id); await v.sleep(150);
-        const m = smTrayBMeasure();
-        if (m.order.indexOf('addfx') < 0) throw new Error('1280×800: the overlay’s tray has no Add effect (it holds ' + m.order + ')');
-        if (m.order.length !== 9 || m.rows.join() !== '5,4' || m.bad.length || m.order[0] !== 'split') fails.push('the overlay’s tools: ' + m.order + ' on ' + JSON.stringify(m.rows) + ', want nine, Split first, on [5,4] ' + m.bad.join(' · '));
-        if (m.order.slice(-2).join() !== 'more,delete') fails.push('More and Delete are not last: ' + m.order);
+        const order = Array.from(tray.querySelectorAll('.sm-tool')).map(b => b.dataset.tool);
+        if (order.indexOf('addfx') < 0) throw new Error('1280×800: the overlay’s tray has no Add effect (it holds ' + order + ')');
+        /* R (a) "Overlay: Split · Into row · Replace · Effects · Stay put · … · Forward · Back | Opacity | Crop · Transform | Delete" */
+        if (order[0] !== 'split' || order.indexOf('addfx') !== 3 || order[order.length - 1] !== 'delete') fails.push('the overlay’s tools read ' + order + ', want Split first, Add effect fourth and Delete last');
+        const tops = new Set(Array.from(tray.querySelectorAll('.sm-tool')).map(b => Math.round(b.getBoundingClientRect().top)));
+        if (tops.size !== 1 || Math.abs(tray.getBoundingClientRect().height - 56) > 0.5) fails.push('the overlay’s tools lie on ' + tops.size + ' row(s), want one 56 px strip');
+        const bad = await smTrayReach();
+        if (bad.length) fails.push(bad.join(' · '));
         smTool('addfx').click(); await v.sleep(150);
         const br = band.getBoundingClientRect();
         [['Done', smTool('fxBack')], ['the first tile', document.querySelector('#sm-tray .sm-fx-tile')]].forEach(p => {
@@ -201672,7 +201600,7 @@
         if (!tile) throw new Error('1280×800: ' + fails.concat('no Shake tile').join(' · '));
         tile.click(); await v.idle(); await v.sleep(120);
         if (!(v.L('O').effects || []).some(f => f.type === 'shake' && f.sm === 1)) fails.push('a pick in the band put no Shake on O');
-        if (smTrayBMeasure().rows.length !== 2) fails.push('after the pick the overlay’s tools are not back on two rows');
+        if (!smTool('split') || !smTool('delete') || smTool('fxBack')) fails.push('after the pick the overlay’s own strip is not back (' + Array.from(tray.querySelectorAll('.sm-tool')).map(b => b.dataset.tool) + ')');
         if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
       });
     });
@@ -203906,7 +203834,7 @@
   test('1243 R4 · S3 one row at 380 and 1280: with nothing selected the bar is the project row alone, and a selected clip or title swaps it for its own tray behind a ‹ that lets the selection go, while the bar, the stage and the timeline keep their place', { item: '1243', budgetMs: 90000 }, async function () {
     smNeedP2();
     const fails = [];
-    const rows = () => ({ tools: r4Shown(document.getElementById('sm-tools')), tray: r4Shown(document.getElementById('sm-tray')), clips: r4Hits(document.querySelector('#sm-tools .sm-tool[data-tool="clips"]')), more: r4Hits(document.querySelector('#sm-tray .sm-tool[data-tool="more"]')) });
+    const rows = () => ({ tools: r4Shown(document.getElementById('sm-tools')), tray: r4Shown(document.getElementById('sm-tray')), clips: r4Hits(document.querySelector('#sm-tools .sm-tool[data-tool="clips"]')), split: r4Hits(document.querySelector('#sm-tray .sm-tool[data-tool="split"]')) });   /* #1243 S4: no More; Split is every tray's first tool */
     const geo = () => ({ bar: r4Box(r4Bar()), stage: r4Box(document.getElementById('stage')), timeline: r4Box(document.getElementById('sm-scroll')) });
     await smHintKeep('1', async function () {
       for (const width of [380, 1280]) {
@@ -203918,15 +203846,12 @@
             if (!r0.clips) throw new Error('CONTROL ' + at + 'with nothing selected Clips is not on screen and pressable, so the probe cannot see the project row (' + JSON.stringify(r0) + ')');
             FM.selectLayer(id); await r4Settle(150);
             const r1 = rows(), g1 = geo(), m1 = r4Mode();
-            if (!r1.more) throw new Error('CONTROL ' + at + 'with ' + who + ' selected its More is not on screen and pressable, so the probe cannot see its tray (' + JSON.stringify(r1) + ')');
+            if (!r1.split) throw new Error('CONTROL ' + at + 'with ' + who + ' selected its Split is not on screen and pressable, so the probe cannot see its tray (' + JSON.stringify(r1) + ')');
             if (r1.tools) fails.push(at + 'with ' + who + ' selected the project row (Clips · Text · Captions…) is still on screen under its tray: two rows at once');
             if (r0.tray) fails.push(at + 'with nothing selected a tray row is on screen as well as the project row');
             if (m0 !== 'project' || m1 !== 'item') fails.push(at + 'the bar’s mode reads “' + m0 + '” with nothing selected and “' + m1 + '” with ' + who + ' selected, want project and item');
-            /* #1243 S5 (R5) made Split every tray's first tool, so on a PC a title's tray (6 tools) lies on two rows like a clip's (his pick B,
-               until R's release 8): there the bar grows upward by its second row and its bottom edge, the stage and the timeline stay put */
-            const two = width > 700 && document.getElementById('sm-tray').classList.contains('sm-tray-2');
+            /* #1243 R release 8 (R decision 6): a PC's tray is one row too, so nothing moves on a PC either (his pick B's two rows grew the bar) */
             Object.keys(g0).forEach(k => {
-              if (k === 'bar' && two) { if (Math.abs((g0.bar.t + g0.bar.h) - (g1.bar.t + g1.bar.h)) > 0.5 || !(g1.bar.h > g0.bar.h + 30)) fails.push(at + 'selecting ' + who + ' (a two-row tray) moved the bar’s bottom edge or did not add a row (' + r4Txt(g0.bar) + ' → ' + r4Txt(g1.bar) + ')'); return; }
               if (r4Moved(g0[k], g1[k])) fails.push(at + 'selecting ' + who + ' moved or resized the ' + k + ' (' + r4Txt(g0[k]) + ' → ' + r4Txt(g1[k]) + ')');
             });
             const b = r4ItemBack();
@@ -203940,18 +203865,18 @@
             if (!r2.clips || r2.tray || r4Mode() !== 'project') fails.push(at + 'after the ‹ the project row is not back alone (' + JSON.stringify(r2) + ', mode “' + r4Mode() + '”)');
             Object.keys(g0).forEach(k => { if (r4Moved(g0[k], g2[k])) fails.push(at + 'the ‹ moved or resized the ' + k + ' (' + r4Txt(g0[k]) + ' → ' + r4Txt(g2[k]) + ')'); });
             if (width <= 700) return;
-            /* …and the usual PC case (the 9 Nov review, HW6): Clip 2's tray lies on two rows in the band (his pick B, until R's release 8),
-               and its ‹ spans both rows in the first column, inside the band, and lets the selection go */
+            /* …and the usual PC case (the 9 Nov review, HW6): Clip 2's tray in the band (one strip since #1243 R release 8, decision 6), and
+               its ‹ the row's whole height in the first place, inside the band, lets the selection go */
             FM.selectLayer(v.L('B').id); await r4Settle(150);
             const cb = r4ItemBack();
-            if (!document.getElementById('sm-tray').classList.contains('sm-tray-2')) fails.push('CONTROL ' + at + 'Clip 2’s tray is not on two rows, so the two-row ‹ is not measured');
-            else if (!cb) fails.push(at + 'Clip 2’s two-row tray has no ‹');
+            if (!r4Hits(document.querySelector('#sm-tray .sm-tool[data-tool="split"]'))) fails.push('CONTROL ' + at + 'Clip 2’s tray is not drawn, so its ‹ is not measured');
+            else if (!cb) fails.push(at + 'Clip 2’s tray has no ‹');
             else {
               const q2 = cb.getBoundingClientRect(), band = document.getElementById('inspector-panel').getBoundingClientRect();
-              if (q2.left < band.left - 0.5 || q2.right > band.right + 0.5 || q2.top < band.top - 0.5 || q2.bottom > band.bottom + 0.5) fails.push(at + 'the ‹ of Clip 2’s two-row tray lies outside the band (' + Math.round(q2.left) + '–' + Math.round(q2.right) + ' × ' + Math.round(q2.top) + '–' + Math.round(q2.bottom) + ' in ' + Math.round(band.left) + '–' + Math.round(band.right) + ' × ' + Math.round(band.top) + '–' + Math.round(band.bottom) + ')');
-              if (q2.width < 43.5 || !(q2.height > 90) || !r4Hits(cb)) fails.push(at + 'the ‹ of Clip 2’s two-row tray is ' + Math.round(q2.width) + '×' + Math.round(q2.height) + ' px' + (r4Hits(cb) ? '' : ' and covered at its centre') + ', want at least 44 wide, both rows tall (over 90) and pressable');
+              if (q2.left < band.left - 0.5 || q2.right > band.right + 0.5 || q2.top < band.top - 0.5 || q2.bottom > band.bottom + 0.5) fails.push(at + 'the ‹ of Clip 2’s tray lies outside the band (' + Math.round(q2.left) + '–' + Math.round(q2.right) + ' × ' + Math.round(q2.top) + '–' + Math.round(q2.bottom) + ' in ' + Math.round(band.left) + '–' + Math.round(band.right) + ' × ' + Math.round(band.top) + '–' + Math.round(band.bottom) + ')');
+              if (q2.width < 43.5 || q2.height < 55.5 || !r4Hits(cb)) fails.push(at + 'the ‹ of Clip 2’s tray is ' + Math.round(q2.width) + '×' + Math.round(q2.height) + ' px' + (r4Hits(cb) ? '' : ' and covered at its centre') + ', want at least 44 wide, the row’s 56 tall and pressable');
               cb.click(); await r4Settle(150);
-              if (r4Mode() !== 'project' || FM.selectionIds().length) fails.push(at + 'the ‹ of Clip 2’s two-row tray gave mode “' + r4Mode() + '” with ' + FM.selectionIds().length + ' selected, want the project row');
+              if (r4Mode() !== 'project' || FM.selectionIds().length) fails.push(at + 'the ‹ of Clip 2’s tray gave mode “' + r4Mode() + '” with ' + FM.selectionIds().length + ' selected, want the project row');
             }
           });
         });
@@ -203964,7 +203889,7 @@
      cut. Red on v18.36: Clips opens a floating list over the project row and the tray's quiet line, and a clip's tray sits on the project
      row. CONTROL: Simple's Export list over the project row counts two (the ⋯ list until #1243 S5), so the probe can count past one. */
   /* #1243 S12 (R9): Look is the project row's, its panel one menu like Extras' */
-  test('1243 R4 · S9 one menu at a time at 380 and 1280: Clips, Clips › Extras, Captions, Sound, Look and Effects; a clip’s tray, its Audio, Audio › Speed and More; a title’s Add effect and More; an overlay video’s Volume, Add effect and More; and the ◇ over a cut (at 1280 with that clip’s More open too) each leave exactly one menu on screen, and the bar says which (CONTROL: Simple’s Export list over the project row counts two)', { item: '1243', budgetMs: 240000 }, async function () {
+  test('1243 R4 · S9 one menu at a time at 380 and 1280: Clips, Clips › Extras, Captions, Sound, Look and Effects; a clip’s tray, its Speed and its Transform; a title’s Add effect and Style; an overlay video’s Volume, Add effect and Opacity; and the ◇ over a cut (at 1280 with a title’s Style open too) each leave exactly one menu on screen, and the bar says which (CONTROL: Simple’s Export list over the project row counts two)', { item: '1243', budgetMs: 240000 }, async function () {
     smNeedP2();
     const fails = [], ctl = [];
     for (const width of [380, 1280]) {
@@ -204005,22 +203930,22 @@
           await step('Look', () => press('look'), panelMenu, 'panel', ''); await clean();
           await step('Effects', () => press('effects'), 'tray', 'sub', 'effects'); await clean();
           await step('Clip 2 selected', () => sel(B), 'tray', 'item', '');
-          await step('Clip 2’s Audio', () => press('audio'), 'tray', 'sub', 'audio');
-          await step('Audio › Speed', () => press('speed'), 'tray', 'sub', 'speed'); await clean();
-          await sel(B); await step('Clip 2’s More', () => press('more'), panelMenu, 'panel', ''); await clean();
-          /* …and the other way round (the 9 Nov review, MODE-1): on a PC the ◇ over the cut before Clip 2 stays on screen beside Clip 2’s
-             More, and its Transition row takes the bar from the panel (a phone’s sheet covers the ◇) */
+          /* #1243 R release 8: Speed is the clip's own tool (S28, no Audio row), Transform its own sub-row; no More (S4) */
+          await step('Clip 2’s Speed', () => press('speed'), 'tray', 'sub', 'speed'); await clean();
+          await sel(B); await step('Clip 2’s Transform', () => press('transform'), 'tray', 'sub', 'transform'); await clean();
+          /* …and the other way round (the 9 Nov review, MODE-1): on a PC the ◇ over the cut before Clip 2 stays on screen beside a title’s
+             Style panel, and its Transition row takes the bar from the panel (a phone’s sheet covers the ◇) */
           if (!ph) {
-            await sel(B); press('more'); await r4Settle(350);
-            if (r4Mode() !== 'panel') fails.push('CONTROL ' + at + 'Clip 2’s More gave mode “' + r4Mode() + '”, so the ◇ is not pressed over its panel');
-            else await step('the ◇ over the cut before Clip 2 with Clip 2’s More open', () => { const c = document.querySelector('.sm-chip-tr[data-tr="' + B + '"]'); if (!c) throw new Error('there is no ◇ over the cut before Clip 2'); c.click(); }, 'tray', 'sub', 'transition');
+            await sel(T); press('style'); await r4Settle(350);
+            if (r4Mode() !== 'panel') fails.push('CONTROL ' + at + 'the title’s Style gave mode “' + r4Mode() + '”, so the ◇ is not pressed over its panel');
+            else await step('the ◇ over the cut before Clip 2 with the title’s Style open', () => { const c = document.querySelector('.sm-chip-tr[data-tr="' + B + '"]'); if (!c) throw new Error('there is no ◇ over the cut before Clip 2'); c.click(); }, 'tray', 'sub', 'transition');
             await clean();
           }
           await sel(T); await step('the title’s Add effect', () => press('addfx'), 'tray', 'sub', 'itemfx'); await clean();
-          await sel(T); await step('the title’s More', () => press('more'), panelMenu, 'panel', ''); await clean();
+          await sel(T); await step('the title’s Style', () => press('style'), panelMenu, 'panel', ''); await clean();
           await sel(OV); await step('the overlay video’s Volume', () => press('volume'), 'tray', 'sub', 'volume'); await clean();
           await sel(OV); await step('the overlay video’s Add effect', () => press('addfx'), 'tray', 'sub', 'itemfx'); await clean();
-          await sel(OV); await step('the overlay video’s More', () => press('more'), panelMenu, 'panel', ''); await clean();
+          await sel(OV); await step('the overlay video’s Opacity', () => press('opacity'), 'tray', 'sub', 'opacity'); await clean();
           await step('the ◇ over the cut before Clip 2', () => { const c = document.querySelector('.sm-chip-tr[data-tr="' + B + '"]'); if (!c) throw new Error('there is no ◇ over the cut before Clip 2'); c.click(); }, 'tray', 'sub', 'transition'); await clean();
           /* CONTROL: Simple's Export list over the project row is two menus, and the probe counts both (it was the ⋯ list until #1243 S5) */
           FM.selectLayer(null); await r4Settle(100);
@@ -204039,35 +203964,39 @@
      its way back (MODE-3: it fell to <body> with the bar). Red on v18.36: a clip's tray has no ‹ at all. CONTROL: Speed opened straight
      from the tray (no row under it) goes back to the tray, so "back to Audio" is the row's own memory. */
   /* #1243 S12 (R9): Look is the project row's, so its ‹ and Escape give the PROJECT row back, with the focus on Look there */
-  test('1243 R4 · S9 the ‹ goes back one level: at 380 Speed opened from Audio goes back to Audio, by a double click on its ‹ too, Audio to the clip’s tray with focus on Audio by the keyboard, the item ‹ to the project row; the project row’s Look’s own ‹ gives the project row back with Look focused; Captions’ ‹ gives the project row back; Escape on Sound’s ‹ gives the project row back with Sound focused; More and Look opened by the keyboard hand the focus to their way back (the grab bar, Look’s ‹), and at 1280 to the band title’s ‹ and Look’s ‹, where Escape closes them with the focus back on More and Look (CONTROL: Speed opened straight from the tray goes back to the tray)', { item: '1243', budgetMs: 120000 }, async function () {
+  test('1243 R4 · S9 the ‹ goes back one level: at 380 Title looks opened from Text goes back to Text, by a double click on its ‹ too, Text to the project row with focus on Text by the keyboard, the item ‹ to the project row; the project row’s Look’s own ‹ gives the project row back with Look focused; Captions’ ‹ gives the project row back; Escape on Sound’s ‹ gives the project row back with Sound focused; a title’s Style and Look opened by the keyboard hand the focus to their way back (the grab bar, Look’s ‹), and at 1280 to the band title’s ‹ and Look’s ‹, where Escape closes them with the focus back on Style and Look (CONTROL: Speed opened straight from the tray goes back to the tray)', { item: '1243', budgetMs: 120000 }, async function () {
     smNeedP2();
     const focus = () => { const a = document.activeElement; return a ? (a.dataset && a.dataset.tool) || a.id || String(a.getAttribute('class') || a.tagName) : 'nothing'; };
     const esc = () => { const a = document.activeElement || document.body; a.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true })); };
     const clickAt = (el, n) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); };
     await atPhoneWidth(async function () {
-      await smP2(smClips3, async function (v) {
+      await smP2((W, H) => [smT('Hi', 0.5, 1.2, W, H)].concat(smClips3(W, H)), async function (v) {
         const B = v.L('B').id, fails = [];
         FM.selectLayer(B); await r4Settle(150);
         if (!r4ItemBack()) throw new Error('380: Clip 2’s tray has no ‹ (#sm-tray > .sm-back): no row on the bar goes back one level');
-        smTool('audio').click(); await r4Settle(120);
-        smTool('speed').click(); await r4Settle(120);
+        /* #1243 S28 (release 8) took Audio's row away, so the row that opens a row of its own is Text › Title looks (its ‹ back to Text) */
+        FM.selectLayer(null); await r4Settle(150);
+        smTool('text').click(); await r4Settle(120);
+        if (!smTool('titleLooks')) throw new Error('CONTROL: the Text row has no Title looks (' + r4TrayTools() + ')');
+        smTool('titleLooks').click(); await r4Settle(120);
         const sf = FM.simpleTools.subFor();
-        if (!sf || sf.key !== 'speed' || sf.from !== 'audio') throw new Error('CONTROL: Speed in the Audio row did not open as a row from Audio: ' + JSON.stringify(sf));
+        if (!sf || sf.key !== 'titlelooks' || sf.from !== 'text') throw new Error('CONTROL: Title looks in the Text row did not open as a row from Text: ' + JSON.stringify(sf));
         smTool('rowBack').click(); await r4Settle(120);
-        if (r4Sub() !== 'audio') fails.push('‹ on Speed opened from Audio gave mode “' + r4Mode() + '” sub “' + r4Sub() + '”, want the Audio row');
-        /* a double click on Speed's ‹ (a mouse's, the second click counting 2) goes back ONE level: Audio's ‹ took its place under the
+        if (r4Sub() !== 'text') fails.push('‹ on Title looks opened from Text gave mode “' + r4Mode() + '” sub “' + r4Sub() + '”, want the Text row');
+        /* a double click on Title looks' ‹ (a mouse's, the second click counting 2) goes back ONE level: Text's ‹ took its place under the
            pointer, and it is another tool (MODE-6) */
-        smTool('speed').click(); await r4Settle(120);
-        if (r4Sub() !== 'speed') fails.push('Speed in the Audio row opened mode “' + r4Mode() + '” sub “' + r4Sub() + '” the second time');
+        if (smTool('titleLooks')) { smTool('titleLooks').click(); await r4Settle(120); }
+        if (r4Sub() !== 'titlelooks') fails.push('Title looks in the Text row opened mode “' + r4Mode() + '” sub “' + r4Sub() + '” the second time');
         else {
           clickAt(smTool('rowBack'), 1); await r4Settle(60);
           const k2 = smTool('rowBack'); if (k2) clickAt(k2, 2); await r4Settle(120);
-          if (r4Sub() !== 'audio') fails.push('a double click on Speed’s ‹ (opened from Audio) gave mode “' + r4Mode() + '” sub “' + r4Sub() + '”, want the Audio row: its second click went back a second level');
+          if (r4Sub() !== 'text') fails.push('a double click on Title looks’ ‹ (opened from Text) gave mode “' + r4Mode() + '” sub “' + r4Sub() + '”, want the Text row: its second click went back a second level');
         }
         const rb = smTool('rowBack');
         if (rb) { rb.focus(); document.activeElement.click(); await r4Settle(120); }
-        if (r4Mode() !== 'item' || !smTool('more')) fails.push('‹ on Audio gave mode “' + r4Mode() + '” sub “' + r4Sub() + '”, want the clip’s tray');
-        if (focus() !== 'audio') fails.push('after the keyboard pressed Audio’s ‹ focus is on ' + focus() + ', want Audio');
+        if (r4Mode() !== 'project') fails.push('‹ on Text gave mode “' + r4Mode() + '” sub “' + r4Sub() + '”, want the project row');
+        if (focus() !== 'text') fails.push('after the keyboard pressed Text’s ‹ focus is on ' + focus() + ', want Text');
+        FM.selectLayer(B); await r4Settle(150);
         const ib = r4ItemBack();
         if (ib) { ib.click(); await r4Settle(150); }
         if (r4Mode() !== 'project' || FM.selectionIds().length) fails.push('the item ‹ gave mode “' + r4Mode() + '” with ' + FM.selectionIds().length + ' selected, want the project row');
@@ -204095,11 +204024,11 @@
           if (r4Mode() !== 'project') fails.push('Escape on Sound’s ‹ left mode “' + r4Mode() + '” sub “' + r4Sub() + '”, want the project row');
           if (focus() !== 'sound') fails.push('after Escape on Sound’s ‹ focus is on ' + focus() + ', want Sound');
         }
-        /* More and Look opened by the keyboard (MODE-3): the focus goes to the panel's way back, not to <body> with the bar */
-        FM.selectLayer(B); await r4Settle(150);
-        { const mo = smTool('more'); mo.focus(); mo.click(); await r4Settle(350); }
-        if (!FM.simpleTools.panelFor()) fails.push('More by the keyboard opened no panel');
-        else if (focus() !== 'insp-grab') fails.push('with More’s panel opened by the keyboard the focus is on ' + focus() + ', want the sheet’s grab bar, its way back');
+        /* a title's Style and Look opened by the keyboard (MODE-3): the focus goes to the panel's way back, not to <body> with the bar (#1243 S4: Style for More) */
+        FM.selectLayer(v.L('Hi').id); await r4Settle(150);
+        { const mo = smTool('style'); if (mo) { mo.focus(); mo.click(); await r4Settle(350); } }
+        if (!FM.simpleTools.panelFor()) fails.push('Style by the keyboard opened no panel');
+        else if (focus() !== 'insp-grab') fails.push('with Style’s panel opened by the keyboard the focus is on ' + focus() + ', want the sheet’s grab bar, its way back');
         FM.simpleTools.closePanel(); await r4Settle(250);
         FM.selectLayer(null); await r4Settle(150);   // #1243 S12: Look is on the project row
         { const lk = smTool('look'); lk.focus(); lk.click(); await r4Settle(350); }
@@ -204118,16 +204047,16 @@
     }, 380);
     /* 1280: the band (MODE-3, MODE-5) */
     await smTrayBAt(1280, 800, async function () {
-      await smP2(smClips3, async function (v) {
+      await smP2((W, H) => [smT('Hi', 0.5, 1.2, W, H)].concat(smClips3(W, H)), async function (v) {
         const B = v.L('B').id, fails = [], pb = () => document.querySelector('#inspector-panel > .panel-title > .sm-pback');
-        FM.selectLayer(B); await r4Settle(150);
-        { const mo = smTool('more'); mo.focus(); mo.click(); await r4Settle(350); }
-        if (!pb()) fails.push('More by the keyboard shows no ‹ in the band’s title row');
-        else if (document.activeElement !== pb()) fails.push('with More’s panel opened by the keyboard the focus is on ' + focus() + ', want the band title’s ‹');
+        FM.selectLayer(v.L('Hi').id); await r4Settle(150);
+        { const mo = smTool('style'); if (mo) { mo.focus(); mo.click(); await r4Settle(350); } }
+        if (!pb()) fails.push('Style by the keyboard shows no ‹ in the band’s title row');
+        else if (document.activeElement !== pb()) fails.push('with Style’s panel opened by the keyboard the focus is on ' + focus() + ', want the band title’s ‹');
         else {
           esc(); await r4Settle(250);
-          if (FM.simpleTools.panelFor() || r4Mode() !== 'item') fails.push('Escape on the band title’s ‹ left mode “' + r4Mode() + '” (panelFor ' + FM.simpleTools.panelFor() + '), want the clip’s tray');
-          if (focus() !== 'more') fails.push('after Escape in More’s panel the focus is on ' + focus() + ', want More');
+          if (FM.simpleTools.panelFor() || r4Mode() !== 'item') fails.push('Escape on the band title’s ‹ left mode “' + r4Mode() + '” (panelFor ' + FM.simpleTools.panelFor() + '), want the title’s tray');
+          if (focus() !== 'style') fails.push('after Escape in Style’s panel the focus is on ' + focus() + ', want Style');
         }
         FM.simpleTools.closePanel(); FM.selectLayer(null); await r4Settle(200);   // #1243 S12: Look is on the project row
         { const lk = smTool('look'); lk.focus(); lk.click(); await r4Settle(350); }
@@ -204219,13 +204148,13 @@
   /* N6 · THE FLOATING LINE (A COMBINED point 5). Red on v18.36: the line is the tray row inside the bar, its bottom 52 px below the bar's
      top, and the tray's tools go while it shows. CONTROL: a live-only line takes no strip (its words go to #sm-live), and a real line's
      words are in .sm-line. */
-  test('1243 R4 · the floating line at 380 and 1280: a spoken line over the project row, a clip’s tray and its Audio row floats as a strip at least 44 px tall with its bottom on the bar’s top, meets no tool and moves nothing — not the bar, a tool, the stage or the timeline — and its button is pressable; with More’s panel up at 380 it floats just above the sheet line (CONTROL: a live-only line takes no strip)', { item: '1243', budgetMs: 120000 }, async function () {
+  test('1243 R4 · the floating line at 380 and 1280: a spoken line over the project row, a clip’s tray and its Speed row floats as a strip at least 44 px tall with its bottom on the bar’s top, meets no tool and moves nothing — not the bar, a tool, the stage or the timeline — and its button is pressable; with a title’s Style panel up at 380 it floats just above the sheet line (CONTROL: a live-only line takes no strip)', { item: '1243', budgetMs: 120000 }, async function () {
     smNeedP2();
     const fails = [];
     await smHintKeep('1', async function () {
       for (const width of [380, 1280]) {
         await r4At(width, width > 700 ? 800 : 0, async function () {
-          await smP2(smClips3, async function (v) {
+          await smP2((W, H) => [smT('Hi', 0.5, 1.2, W, H)].concat(smClips3(W, H)), async function (v) {
             const at = width + ' px, ', say = document.getElementById('sm-say'), B = v.L('B').id;
             const things = () => {
               const o = { bar: r4Box(r4Bar()), stage: r4Box(document.getElementById('stage')), timeline: r4Box(document.getElementById('sm-scroll')) };
@@ -204233,7 +204162,7 @@
               return o;
             };
             const modes = [['the project row', async () => { FM.selectLayer(null); }], ['Clip 2’s tray', async () => { FM.selectLayer(B); }],
-              ['its Audio row', async () => { FM.selectLayer(B); await r4Settle(120); const a = smTool('audio'); if (!a) throw new Error('setup: Clip 2’s tray has no Audio (it holds ' + r4TrayTools() + ')'); a.click(); }]];
+              ['its Speed row', async () => { FM.selectLayer(B); await r4Settle(120); const a = smTool('speed'); if (!a) throw new Error('setup: Clip 2’s tray has no Speed (it holds ' + r4TrayTools() + ')'); a.click(); }]];   /* #1243 S28: no Audio row */
             for (const [where, set] of modes) {
               try { await set(); } catch (e) { fails.push(at + where + ': ' + e.message); continue; }
               await r4Settle(150);
@@ -204253,16 +204182,16 @@
             FM.spine.say('zq live', { live: true }); await v.sleep(60);
             if (r4Shown(say.querySelector('.sm-line')) || document.getElementById('sm-live').textContent !== 'zq live') fails.push('CONTROL ' + at + 'a live-only line drew a strip, or its words did not go to #sm-live');
             if (width > 700) return;
-            /* More's panel at 380: the line floats over the stage, its bottom on the sheet line */
+            /* a title's Style panel at 380 (#1243 S4: More went): the line floats over the stage, its bottom on the sheet line */
             FM.simpleTools._reset(); FM.selectLayer(null); await r4Settle(120);
-            FM.selectLayer(B); await r4Settle(150);
-            const mo = smTool('more');
-            if (!mo) throw new Error('setup: Clip 2’s tray has no More (it holds ' + r4TrayTools() + ') · ' + fails.join(' · '));
+            FM.selectLayer(v.L('Hi').id); await r4Settle(150);
+            const mo = smTool('style');
+            if (!mo) throw new Error('setup: the title’s tray has no Style (it holds ' + r4TrayTools() + ') · ' + fails.join(' · '));
             mo.click(); await r4Settle(400);
             FM.spine.say('zq panel', { buttons: [{ label: 'Zq', fn() {} }] }); await v.sleep(480);
             const line = FM.mobile && FM.mobile.sheetLine ? FM.mobile.sheetLine() : NaN, pr = say.getBoundingClientRect(), pb = say.querySelector('.sm-say-b');
-            if (!(Math.abs(pr.bottom - line) <= 1)) fails.push('380, More’s panel up: the line’s bottom is at ' + Math.round(pr.bottom) + ', want the sheet line ' + Math.round(line));
-            if (!pb || !r4Hits(pb)) fails.push('380, More’s panel up: the line’s button is ' + (pb ? 'covered at its centre' : 'missing'));
+            if (!(Math.abs(pr.bottom - line) <= 1)) fails.push('380, Style’s panel up: the line’s bottom is at ' + Math.round(pr.bottom) + ', want the sheet line ' + Math.round(line));
+            if (!pb || !r4Hits(pb)) fails.push('380, Style’s panel up: the line’s button is ' + (pb ? 'covered at its centre' : 'missing'));
             FM.simpleTimeline.clearSay(); FM.simpleTools.closePanel(); await r4Settle(150);
           });
         });
@@ -204273,18 +204202,18 @@
 
   /* N7 · RULE 3 ON A PHONE. Red on v18.36: More's panel takes 134 px of the picture back at 380×800 (the 514 clamp) and docks under the
      project tools. CONTROL: Full's own sheet, at 380×800, docks well below Full's 40% stage, so the probe tells the two docks apart. */
-  test('1243 R4 · rule 3 on a phone at 380×800, 380×667 and 320×568: More’s panel and Look’s run from the stage’s bottom edge, which FM.mobile.sheetLine() reads, to the bottom of the screen with no shadow over the picture, and the stage keeps its height (CONTROL: Full’s own sheet docks more than 30 px below Full’s 40% stage)', { item: '1243', budgetMs: 180000 }, async function () {
+  test('1243 R4 · rule 3 on a phone at 380×800, 380×667 and 320×568: a title’s Style panel and Look’s run from the stage’s bottom edge, which FM.mobile.sheetLine() reads, to the bottom of the screen with no shadow over the picture, and the stage keeps its height (CONTROL: Full’s own sheet docks more than 30 px below Full’s 40% stage)', { item: '1243', budgetMs: 180000 }, async function () {
     smNeedP2();
     const fails = [], stageR = () => document.getElementById('stage').getBoundingClientRect(), insp = () => document.getElementById('inspector-panel');
     for (const [w, h] of [[380, 800], [380, 667], [320, 568]]) {
       await r4At(w, h, async function () {
         if (Math.abs(innerHeight - h) > 1 || Math.abs(innerWidth - w) > 1) throw new Error('setup: the frame is ' + innerWidth + '×' + innerHeight + ', want ' + w + '×' + h);
-        await smP2(smClips3, async function (v) {
+        await smP2((W, H) => [smT('Hi', 0.5, 1.2, W, H)].concat(smClips3(W, H)), async function (v) {
           const at = w + '×' + h + ': ';
-          FM.selectLayer(v.L('B').id); await r4Settle(200);
+          FM.selectLayer(v.L('Hi').id); await r4Settle(200);
           const s0 = stageR();
-          for (const [what, id] of [['More’s panel', 'more'], ['Look’s panel', 'look']]) {
-            /* More is Clip 2's; Look the project row's, with nothing selected (#1243 S12) */
+          for (const [what, id] of [['the title’s Style panel', 'style'], ['Look’s panel', 'look']]) {
+            /* Style is the title's (#1243 S4: More went); Look the project row's, with nothing selected (#1243 S12) */
             if (id === 'look') { FM.selectLayer(null); await r4Settle(200); if (Math.abs(stageR().height - s0.height) > 0.5) fails.push(at + 'letting the selection go changed the stage to ' + Math.round(stageR().height) + ' px'); }
             smTool(id).click(); await r4Settle(400);
             if (!insp().classList.contains('open')) { fails.push(at + what + ' did not rise'); FM.simpleTools.closePanel(); await r4Settle(250); continue; }
@@ -204316,19 +204245,19 @@
 
   /* N8 · RULE 3 ON A PC. Red on v18.36: the tray and the project row stay on screen under the panel, and 7B grows the band (the picture
      shrinks) to make room. CONTROL: Full's band carries no ‹ and no #sm-bar, so the probe is reading Simple's. */
-  test('1243 R4 · rule 3 on a PC at 1280×800 and 1280×720: Look’s and More’s panels take the whole left band and the bar hides — no tray and no project row on screen, #inspector down to the band’s bottom — while the picture, the band’s height and the stored divider height are untouched; the band title’s ‹ closes More’s panel with the focus back on More (on Style for a caption track’s Style), and the bar keeps the safe area at the band’s foot (CONTROL: in Full the band title has no ‹ and #sm-bar is not in the band)', { item: '1243', budgetMs: 120000 }, async function () {
+  test('1243 R4 · rule 3 on a PC at 1280×800 and 1280×720: Look’s and a title’s Style panels take the whole left band and the bar hides — no tray and no project row on screen, #inspector down to the band’s bottom — while the picture, the band’s height and the stored divider height are untouched; the band title’s ‹ closes the Style panel with the focus back on Style (on Style too for a caption track’s Style), and the bar keeps the safe area at the band’s foot (CONTROL: in Full the band title has no ‹ and #sm-bar is not in the band)', { item: '1243', budgetMs: 120000 }, async function () {
     smNeedP2();
     const fails = [], stored = () => { try { return localStorage.getItem('fm_tl_h'); } catch (e) { return 'unreadable'; } };
     const tlh = () => document.documentElement.style.getPropertyValue('--tl-h').trim();
     for (const h of [800, 720]) {
       await smTrayBAt(1280, h, async function () {
-        await smP2(smClips3, async function (v) {
-          const at = '1280×' + h + ': ', B = v.L('B').id, band = () => document.getElementById('inspector-panel').getBoundingClientRect();
+        await smP2((W, H) => [smT('Hi', 0.5, 1.2, W, H)].concat(smClips3(W, H)), async function (v) {
+          const at = '1280×' + h + ': ', B = v.L('B').id, T = v.L('Hi').id, band = () => document.getElementById('inspector-panel').getBoundingClientRect();
           FM.selectLayer(B); await r4Settle(200);
           const s0 = { stage: r4Box(document.getElementById('stage')), band: band().height, tl: tlh(), kept: stored() };
-          for (const [what, id] of [['Look’s panel', 'look'], ['More’s panel', 'more']]) {
-            /* Look is the project row's, with nothing selected (#1243 S12); More is Clip 2's */
-            FM.selectLayer(id === 'look' ? null : B); await r4Settle(200);
+          for (const [what, id] of [['Look’s panel', 'look'], ['the title’s Style panel', 'style']]) {
+            /* Look is the project row's, with nothing selected (#1243 S12); Style the title's (#1243 S4: More went) */
+            FM.selectLayer(id === 'look' ? null : T); await r4Settle(200);
             smTool(id).click(); await r4Settle(350);
             const bh = r4Bar().getBoundingClientRect().height, ins = document.getElementById('inspector').getBoundingClientRect(), br = band(), title = document.querySelector('#inspector-panel > .panel-title').getBoundingClientRect();
             if (r4Shown(document.getElementById('sm-tray')) || r4Shown(document.getElementById('sm-tools')) || bh > 1) fails.push(at + 'with ' + what + ' up the bar is still on screen (' + Math.round(bh) + ' px: ' + r4Menus().join(' + ') + ')');
@@ -204337,15 +204266,15 @@
             if (r4Moved(s0.stage, r4Box(document.getElementById('stage')))) fails.push(at + what + ' moved or resized the picture (' + r4Txt(s0.stage) + ' → ' + r4Txt(r4Box(document.getElementById('stage'))) + ')');
             if (Math.abs(br.height - s0.band) > 0.5 || tlh() !== s0.tl || stored() !== s0.kept) fails.push(at + what + ' changed the band’s height (' + Math.round(s0.band) + ' → ' + Math.round(br.height) + ' px, --tl-h “' + s0.tl + '” → “' + tlh() + '”, fm_tl_h ' + s0.kept + ' → ' + stored() + ')');
             if (r4Mode() !== 'panel') fails.push(at + 'with ' + what + ' up the bar’s mode is “' + r4Mode() + '”, want panel');
-            if (id === 'more') {
+            if (id === 'style') {
               const pb = document.querySelector('#inspector-panel > .panel-title > .sm-pback');
-              if (!pb || !r4Hits(pb)) { fails.push(at + 'More’s panel has no pressable ‹ at the start of the band’s title row'); FM.simpleTools.closePanel(); }
+              if (!pb || !r4Hits(pb)) { fails.push(at + 'the Style panel has no pressable ‹ at the start of the band’s title row'); FM.simpleTools.closePanel(); }
               else {
                 pb.focus(); pb.click(); await r4Settle(250);
-                if (FM.simpleTools.panelFor() || r4Mode() !== 'item' || !r4Shown(document.getElementById('sm-tray'))) fails.push(at + 'the band title’s ‹ did not give the clip’s tray back (panelFor ' + FM.simpleTools.panelFor() + ', mode “' + r4Mode() + '”)');
+                if (FM.simpleTools.panelFor() || r4Mode() !== 'item' || !r4Shown(document.getElementById('sm-tray'))) fails.push(at + 'the band title’s ‹ did not give the title’s tray back (panelFor ' + FM.simpleTools.panelFor() + ', mode “' + r4Mode() + '”)');
                 /* the 9 Nov review, HW7: the focus goes back to the tool that opened the panel */
                 const a = document.activeElement;
-                if (!a || !a.dataset || a.dataset.tool !== 'more') fails.push(at + 'after the band title’s ‹ the focus is on ' + (a ? (a.dataset && a.dataset.tool) || a.id || a.tagName : 'nothing') + ', want More');
+                if (!a || !a.dataset || a.dataset.tool !== 'style') fails.push(at + 'after the band title’s ‹ the focus is on ' + (a ? (a.dataset && a.dataset.tool) || a.id || a.tagName : 'nothing') + ', want Style');
               }
             } else FM.simpleTools.closePanel();
             await r4Settle(200);
@@ -204357,7 +204286,7 @@
         });
       });
     }
-    /* a caption track's Style is the More of its tray: the band title's ‹ gives the focus back to Style (HW7) */
+    /* a caption track's Style opens the same panel: the band title's ‹ gives the focus back to its Style (HW7) */
     await smTrayBAt(1280, 800, async function () {
       await smP2((W, H) => [smCap('Caps', 0, 6, [[0.5, 1.5]], W, H)].concat(smClips3(W, H)), async function (v) {
         FM.selectLayer(v.L('Caps').id); await r4Settle(150);
@@ -204461,10 +204390,10 @@
 
   /* N11 · AN EDITOR SWITCH WITH A SUB-ROW OR A PANEL OPEN. Red on v18.36: Sound opens a floating list, no row of its own. CONTROL: in
      Simple More's panel shows the band title's ‹ before the switch, so its absence in Full is the switch's doing. */
-  test('1243 R4 · switching to Full at 1280 with Sound’s row or More’s panel open leaves nothing of Simple’s bar behind — no mode on #sm-bar, the bar home after #sm-scroll, no ‹ in Full’s band title, the morph’s fading copy of the bar one row — and back in Simple no sub-row is left open (CONTROL: in Simple More’s panel shows the band title’s ‹ before the switch)', { item: '1243', budgetMs: 90000 }, async function () {
+  test('1243 R4 · switching to Full at 1280 with Sound’s row or a title’s Style panel open leaves nothing of Simple’s bar behind — no mode on #sm-bar, the bar home after #sm-scroll, no ‹ in Full’s band title, the morph’s fading copy of the bar one row — and back in Simple no sub-row is left open (CONTROL: in Simple the Style panel shows the band title’s ‹ before the switch)', { item: '1243', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 800, async function () {
-      await smP2(smClips3, async function (v) {
+      await smP2((W, H) => [smT('Hi', 0.5, 1.2, W, H)].concat(smClips3(W, H)), async function (v) {
         const fails = [], pb = () => document.querySelector('#inspector-panel > .panel-title > .sm-pback');
         const left = what => {
           const bar = r4Bar(), home = document.getElementById('sm-timeline'), sc = document.getElementById('sm-scroll');
@@ -204479,11 +204408,12 @@
         left('Sound’s row');
         FM.editor.apply('simple', { force: true, quiet: true }); await r4Settle(200);
         if (FM.simpleTools.subFor() || r4Mode() !== 'project') fails.push('back in Simple from Sound’s row the bar is mode “' + r4Mode() + '” with the sub-row ' + JSON.stringify(FM.simpleTools.subFor()) + ', want the project row');
-        FM.selectLayer(v.L('B').id); await r4Settle(150);
-        smTool('more').click(); await r4Settle(300);
-        if (!pb()) throw new Error('CONTROL: in Simple More’s panel shows no ‹ in the band title, so the switch has none to leave behind · ' + fails.join(' · '));
+        FM.selectLayer(v.L('Hi').id); await r4Settle(150);   // #1243 S4: More went; a title's Style opens the same panel
+        if (!smTool('style')) throw new Error('the title’s tray has no Style (' + r4TrayTools() + ')');
+        smTool('style').click(); await r4Settle(300);
+        if (!pb()) throw new Error('CONTROL: in Simple the Style panel shows no ‹ in the band title, so the switch has none to leave behind · ' + fails.join(' · '));
         FM.editor.apply('full', { force: true, quiet: true }); await r4Settle(200);
-        left('More’s panel');
+        left('the Style panel');
         /* THE FADING COPY (the 9 Nov review, FG-2): the switch morph shows Simple's timeline as it fades out (#sm-timeline.edm-out, in Full,
            with no mode on the bar); its bar is ONE row, as Simple's was, not the tray over the project row */
         {
@@ -204495,7 +204425,7 @@
           } finally { tl.classList.remove('edm-out'); }
         }
         FM.editor.apply('simple', { force: true, quiet: true }); await r4Settle(200);
-        if (FM.simpleTools.subFor() || !r4Mode() || r4Mode() === 'sub') fails.push('back in Simple from More’s panel the bar is mode “' + r4Mode() + '” with the sub-row ' + JSON.stringify(FM.simpleTools.subFor()));
+        if (FM.simpleTools.subFor() || !r4Mode() || r4Mode() === 'sub') fails.push('back in Simple from the Style panel the bar is mode “' + r4Mode() + '” with the sub-row ' + JSON.stringify(FM.simpleTools.subFor()));
         if (fails.length) throw new Error('1280: ' + fails.join(' · '));
       });
     });
@@ -204646,20 +204576,21 @@
      opens, nothing plays, the clip stays selected and the sheet is down. CONTROL: one real click on that same spot 0.1 s after the sheet is
      closed from script jumps the playhead back, so the spot is |◀, the pointer reaches it, and a sheet that goes with no finger on it holds
      no press (an undo must not eat a tap). */
-  test('1243 R4 · rule 3 at 380×800 a REAL double click on the sheet’s grab bar over |◀ closes the sheet and presses nothing it uncovered — no jump, no change, no list, no playback, the clip still selected (CONTROL: one real click on that spot 0.1 s after the sheet is closed with no finger on it jumps the playhead back)', { item: '1243', budgetMs: 120000 }, async function () {
+  test('1243 R4 · rule 3 at 380×800 a REAL double click on the sheet’s grab bar over |◀ closes the sheet a title’s Style raised and presses nothing it uncovered — no jump, no change, no list, no playback, the title still selected (CONTROL: one real click on that spot 0.1 s after the sheet is closed with no finger on it jumps the playhead back)', { item: '1243', budgetMs: 120000 }, async function () {
     smNeedP2();
     if (!window.frameElement) throw new Error('this test needs run.html’s iframe');
     const fails = [];
     await onScreen924(async function () {
       await r4At(380, 800, async function () {
         for (const gap of [120, 300]) {
-          await smP2(smClips3, async function (v) {
-            const insp = document.getElementById('inspector-panel'), A = v.L('A').id, at = '380×800, ' + gap + ' ms apart: ';
+          await smP2((W, H) => [smT('Hi', 0.5, 2, W, H)].concat(smClips3(W, H)), async function (v) {
+            const insp = document.getElementById('inspector-panel'), A = v.L('Hi').id,   /* #1243 S4: the sheet is a title's Style now */ at = '380×800, ' + gap + ' ms apart: ';
             FM.simpleTools._reset();   // no press the last half made on the sheet carries into this one
             FM.time = 1; if (FM.simpleTimeline.updatePlayhead) FM.simpleTimeline.updatePlayhead();
             FM.selectLayer(A); await r4Settle(200);
-            smTool('more').click(); await r4Settle(500);
-            if (!insp.classList.contains('open')) throw new Error('setup: More’s panel did not rise');
+            if (!smTool('style')) throw new Error('setup: the title’s tray has no Style (' + r4TrayTools() + ')');
+            smTool('style').click(); await r4Settle(500);
+            if (!insp.classList.contains('open')) throw new Error('setup: the Style panel did not rise');
             const g = document.getElementById('insp-grab').getBoundingClientRect(), sp = document.getElementById('btn-tostart').getBoundingClientRect();
             const y0 = Math.max(g.top, sp.top) + 2, y1 = Math.min(g.bottom, sp.bottom) - 2;
             if (!(y1 > y0) || sp.left < g.left || sp.right > g.right) throw new Error('380×800: the sheet’s grab bar (' + Math.round(g.top) + '–' + Math.round(g.bottom) + ') does not lie over |◀ (' + Math.round(sp.top) + '–' + Math.round(sp.bottom) + '): the sheet does not start at the play row');
@@ -204674,8 +204605,8 @@
             if (!(Math.abs((FM.time || 0) - 1) > 1e-3) || v.steps() !== s0) throw new Error('CONTROL at ' + at + 'one real click at (' + p.x + ', ' + p.y + ') 0.1 s after the sheet was closed from script did not jump the playhead (it is at ' + FM.time + ', ' + (v.steps() - s0) + ' steps): the spot is not |◀, or a close with no finger on the sheet held the press · ' + fails.join(' · '));
             FM.time = 1; if (FM.simpleTimeline.updatePlayhead) FM.simpleTimeline.updatePlayhead();
             FM.selectLayer(null); FM.selectLayer(A); await r4Settle(200);
-            smTool('more').click(); await r4Settle(600);
-            if (!insp.classList.contains('open')) throw new Error('setup: More’s panel did not rise again');
+            smTool('style').click(); await r4Settle(600);
+            if (!insp.classList.contains('open')) throw new Error('setup: the Style panel did not rise again');
             const s1 = v.steps(), n1 = FM.scene.layers.length, doc1 = v.doc();
             await realInput924([{ t: 'mouseDown', x: p.x, y: p.y, ms: 40 }, { t: 'mouseUp', x: p.x, y: p.y, ms: gap }, { t: 'mouseDown', x: p.x, y: p.y, ms: 40 }, { t: 'mouseUp', x: p.x, y: p.y, ms: 0 }], 'a double click on the grab bar (' + gap + ' ms apart)');
             await r4Settle(500); await v.idle();
@@ -204685,7 +204616,7 @@
             if (Math.abs((FM.time || 0) - 1) > 1e-3) fails.push(at + 'the second click pressed |◀, which the sheet uncovered: the playhead jumped from 1 to ' + FM.time + ' (now under the pointer: ' + what + ')');
             if (document.querySelector('.sm-menu')) fails.push(at + 'the second click opened a list (' + what + ')');
             if (FM.playing) { fails.push(at + 'the second click started playback'); if (FM.pause) FM.pause(); }
-            if (FM.scene.selectedId !== A) fails.push(at + 'the double click dropped the clip’s selection');
+            if (FM.scene.selectedId !== A) fails.push(at + 'the double click dropped the title’s selection');
           });
           window.frameElement.style.top = '0px';
         }
@@ -205677,7 +205608,7 @@
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
   });
 
-  test('1243 R9 · S12 at 380 and 1280 a video clip’s and a picture clip’s trays hold no Look, and with nothing selected the project row does (CONTROL: each tray is drawn, Split and More in it)', { item: '980', budgetMs: 90000 }, async function () {
+  test('1243 R9 · S12 at 380 and 1280 a video clip’s and a picture clip’s trays hold no Look, and with nothing selected the project row does (CONTROL: each tray is drawn, Split and Delete in it)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     const fails = [];
     for (const width of [380, 1280]) {
@@ -205687,7 +205618,7 @@
           for (const [name, who] of [['V', 'the video clip'], ['P', 'the picture clip']]) {
             FM.selectLayer(v.L(name).id); await r4Settle(150);
             const tools = r4TrayTools();
-            if (tools.indexOf('split') < 0 || tools.indexOf('more') < 0) { fails.push('CONTROL ' + at + who + '’s tray is not drawn (it holds ' + tools.join(', ') + ')'); continue; }
+            if (tools.indexOf('split') < 0 || tools.indexOf('delete') < 0) { fails.push('CONTROL ' + at + who + '’s tray is not drawn (it holds ' + tools.join(', ') + ')'); continue; }
             if (document.querySelector('#sm-tray [data-tool="look"]')) fails.push(at + who + '’s tray holds Look (' + tools.join(', ') + '): #1243 S12 put it on the project row');
           }
           FM.selectLayer(null); await r4Settle(150);
@@ -206023,7 +205954,7 @@
      shows Clip 1 on its back face: the tray's Delete on Clip 1 must refuse with the attached line, as it does for a matte source, and leave
      the clip where it is. Without the count the delete went through and the Cube's back face pointed at a layer that no longer exists.
      CONTROL: with the face picked as None the same tap deletes Clip 1 in one step, so the tap reaches the delete and the refusal is the face. */
-  test('1243 R9 · at 380 and 1280 the Delete in Clip 1’s tray refuses while a Cube on Clip 2 shows Clip 1 on a face — the line says it is attached and Clip 1 stays, no step taken (CONTROL: with no face picked the same tap deletes Clip 1 in one step)', { item: '980', budgetMs: 120000 }, async function () {
+  test('1243 R9 · at 380 and 1280 the Delete at the end of Clip 1’s tray refuses while a Cube on Clip 2 shows Clip 1 on a face — the line says it is attached and Clip 1 stays, no step taken (CONTROL: with no face picked the same tap deletes Clip 1 in one step)', { item: '980', budgetMs: 120000 }, async function () {
     smNeedP2();
     const fails = [];
     for (const width of [380, 1280]) {
@@ -206037,6 +205968,8 @@
             FM.selectLayer(A.id); await r4Settle(200);
             const del = document.querySelector('#sm-tray .sm-tool[data-tool="delete"]');
             if (!del) throw new Error('CONTROL ' + at + 'Clip 1’s tray has no Delete (it holds ' + r4TrayTools().join(', ') + ')');
+            /* #1243 S31 (release 8): Delete is the strip's last tool and scrolls with the rest: brought into view as a finger or the wheel would */
+            { const run = del.closest('.sm-run'); if (run) { run.scrollLeft = run.scrollWidth; await r4Settle(60); } }
             smMustHit(del, at + 'Delete in Clip 1’s tray');
             const n0 = v.steps();
             del.click(); await v.idle(); await r4Settle(200);
@@ -206053,6 +205986,298 @@
       }
     }
     if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* ═══ #1243 R RELEASE 8 · THE TRAYS (S4, S31, S28, S32, S1 A, Opacity, Transform, the text's Style, the section lines) ═══
+     His words, 8 Nov: S4 "when you have a layer selected, where it says more and delete… get rid of more, because that's just a lazy way of
+     having like all the other features"; S31 "put the delete button inside of the menu… But not permanently stuck to the right… slides along
+     with it like the rest"; S32 "you should have a replace button as well, so you can replace the media with whatever you want"; S33 "opacity,
+     motion blur, and then they've got another section which is like transform, which has like mirror, rotate… a line in between each
+     section". Each test reads the trays through the page (#sm-tray's strip, a line as '|') and presses what a finger could. Red on v18.42:
+     every tray ends More · 🗑 in a pinned end, there are no lines, no Opacity, Transform or Style, and Replace is ninth on a video clip. */
+  const r8Run = () => document.querySelector('#sm-tray > .sm-runbox > .sm-run');
+  const r8Kids = () => { const r = r8Run(); return r ? Array.from(r.children).map(c => c.classList.contains('sm-div') ? '|' : (c.dataset.tool || String(c.className))) : []; };
+  const r8Fixture = (W, H) => [smCap('Caps', 0, 4, [[0.5, 1.5], [2, 3]], W, H), smT('Hi', 0.5, 1.5, W, H), smSong('Song', 0, 6, W, H), smPic('OP', 1, 2, W, H), smPic('P', 4, 2, W, H), smV('V', 0, 4, W, H, { muted: false })];
+
+  test('1243 R8 · S4 at 380 and 1280 no tray holds More — a video clip, a picture clip, a title, an overlay photo, a song, a caption track, an effect segment and two selected — every one ends with its Delete, a song and a one-effect segment keep Open in Full, and a title’s own Style opens the panel for that title (CONTROL: each item reads as its kind and its tray is drawn)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 0, async function () {
+        await smP2(r8Fixture, async function (v) {
+          const at = width + ' px: ';
+          FM.time = 1; await FM.spine.cmd.addEffect('invert', 1); await v.idle(); await r4Settle(150);
+          const R = FM.spine.read(FM.scene), seg = FM.scene.layers.find(l => R.units[l.id] && R.units[l.id].kind === 'effect');
+          const kinds = { V: 'main', P: 'main', Hi: 'text', OP: 'overlay', Song: 'audio', Caps: 'captions' };
+          for (const n of Object.keys(kinds)) { const u = R.units[v.L(n).id], k = R.isMain(v.L(n).id) ? 'main' : u && u.kind; if (k !== kinds[n]) throw new Error('CONTROL ' + at + n + ' reads as ' + k + ', want ' + kinds[n]); }
+          if (!seg) throw new Error('CONTROL ' + at + 'Effects › Invert made no effect segment (it said “' + v.say() + '”)');
+          const items = [['the video clip', [v.L('V').id]], ['the picture clip', [v.L('P').id]], ['the title', [v.L('Hi').id]], ['the overlay photo', [v.L('OP').id]], ['the song', [v.L('Song').id]], ['the caption track', [v.L('Caps').id]], ['the effect segment', [seg.id]], ['two selected', [v.L('Hi').id, v.L('OP').id]]];
+          for (const [who, ids] of items) {
+            FM.selectLayer(null);
+            if (ids.length > 1) { FM.scene.selectedIds = ids.slice(); FM.scene.selectedId = ids[0]; FM.refreshAll(); } else FM.selectLayer(ids[0]);
+            await r4Settle(150);
+            const k = r8Kids();
+            /* review R8-5 (safety): drawn = a Delete anywhere in the tray (v18.42 pinned it outside the strip), so the More check runs there too */
+            if (!smTool('delete')) { fails.push('CONTROL ' + at + who + '’s tray is not drawn (' + k.join(' ') + ')'); continue; }
+            if (k.indexOf('more') >= 0 || document.querySelector('#sm-tray [data-tool="more"]')) fails.push(at + who + '’s tray still holds More (' + k.join(' ') + ')');
+            if (k[k.length - 1] !== 'delete') fails.push(at + who + '’s tray does not end with Delete (' + k.join(' ') + ')');
+          }
+          /* review R8-2: what More reached on a song (Remove vocals, Reduce noise, Audio effects) and on a one-effect segment (that effect's own
+             settings) has no Simple tool until release 8b and S13 / S30, so both keep Open in Full */
+          for (const [who, id] of [['the song', v.L('Song').id], ['the one-effect segment', seg.id]]) {
+            FM.selectLayer(null); FM.selectLayer(id); await r4Settle(150);
+            if (!smTool('openFull')) fails.push(at + who + '’s tray has no Open in Full, so its settings More reached are out of reach (' + r8Kids().join(' ') + ')');
+          }
+          /* the title's Style: Full's panel for THAT title (what More used to open on a text) */
+          FM.selectLayer(null); FM.selectLayer(v.L('Hi').id); await r4Settle(150);
+          const st = smTool('style');
+          if (!st) { fails.push(at + 'the title’s tray has no Style (' + r8Kids().join(' ') + ')'); return; }
+          const run = r8Run(); run.scrollLeft = 0; await r4Settle(60);
+          smMustHit(st, at + 'the title’s Style');
+          st.click(); await r4Settle(300);
+          if (FM.simpleTools.panelFor() !== v.L('Hi').id || FM.simpleTools.mode() !== 'panel') fails.push(at + 'the title’s Style opened the panel for ' + FM.simpleTools.panelFor() + ' in mode ' + FM.simpleTools.mode() + ', want the title’s own panel');
+          FM.simpleTools.closePanel(); await r4Settle(150);
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1243 R8 · S31 at 380 and 1280 Delete is the last tool of a video clip’s and a picture clip’s tray, after a section line, out of the strip’s view at its start and pressable once the strip is scrolled to its end, and one press there deletes the clip in one step (CONTROL: Split is pressable at the strip’s start)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 0, async function () {
+        await smP2((W, H) => [smV('C', 4, 2, W, H, { muted: false }), smPic('B', 2, 2, W, H), smV('A', 0, 2, W, H, { muted: false })], async function (v) {
+          for (const [name, who] of [['A', 'the video clip'], ['B', 'the picture clip']]) {
+            const at = width + ' px, ' + who + ': ';
+            FM.selectLayer(null); FM.selectLayer(v.L(name).id); await r4Settle(150);
+            const run = r8Run(), k = r8Kids(), del = smTool('delete');
+            if (!run || !del || !smTool('split')) { fails.push('CONTROL ' + at + 'the tray is not drawn (' + k.join(' ') + ')'); continue; }
+            if (document.querySelector('#sm-tray .sm-pins')) fails.push(at + 'the tray still has a pinned end');
+            if (k[k.length - 1] !== 'delete' || k[k.length - 2] !== '|' || del.parentNode !== run) fails.push(at + 'the strip ends ' + k.slice(-2).join(' ') + ', want a line then Delete, inside the strip');
+            run.scrollLeft = 0; await r4Settle(60);
+            smMustHit(smTool('split'), 'CONTROL ' + at + 'Split at the strip’s start');
+            const d0 = del.getBoundingClientRect(), s0 = run.getBoundingClientRect();
+            if (d0.left < s0.right - 0.5) fails.push(at + 'Delete is in view with the strip at its start (' + Math.round(d0.left) + ' in a strip ending at ' + Math.round(s0.right) + '), not scrolling with the rest');
+            run.scrollLeft = run.scrollWidth; await r4Settle(80);
+            const d1 = del.getBoundingClientRect(), s1 = run.getBoundingClientRect();
+            if (d1.left < s1.left - 0.5 || d1.right > s1.right + 0.5) fails.push(at + 'scrolled to its end the strip does not show Delete whole');
+            try { smMustHit(del, at + 'Delete at the strip’s end'); } catch (e) { fails.push(e.message); continue; }
+            const ix = () => FM.history._steps().index, n0 = ix(), id = v.L(name).id;   /* the position, not the length: the undo below keeps the length */
+            del.click(); await v.idle(); await r4Settle(150);
+            if (FM.layerById(FM.scene, id) || ix() !== n0 + 1) fails.push(at + 'Delete took ' + (ix() - n0) + ' steps and ' + (FM.layerById(FM.scene, id) ? 'left the clip' : 'removed it') + ' (it said “' + v.say() + '”), want the clip gone in one step');
+            FM.history.undo(); await r4Settle(150);
+          }
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1243 R8 · S32 at 380 and 1280 Replace is the 4th tool of a video clip and inside the strip’s view at its start; an overlay photo has Replace right after Into row and a song right after Volume, and each Replace asks for a new file for that item (CONTROL: Split is in view at the start, and a picker stub that hands back nothing changes nothing)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [], d0 = Object.getOwnPropertyDescriptor(FM, 'pickReplacement'), asked = [];
+    try {
+      FM.pickReplacement = async function (id) { asked.push(id); return null; };
+      for (const width of [380, 1280]) {
+        await r4At(width, width > 700 ? 800 : 0, async function () {
+          await smP2(r8Fixture, async function (v) {
+            const at = width + ' px: ', tools = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
+            FM.selectLayer(v.L('V').id); await r4Settle(150);
+            const run = r8Run(), rp = smTool('replace');
+            if (!run || !rp) { fails.push(at + 'the video clip’s tray has no Replace (' + tools().join(' ') + ')'); return; }
+            run.scrollLeft = 0; await r4Settle(60);
+            smMustHit(smTool('split'), 'CONTROL ' + at + 'Split at the strip’s start');
+            if (tools().indexOf('replace') !== 3) fails.push(at + 'Replace is tool ' + (tools().indexOf('replace') + 1) + ' of the video clip (' + tools().join(' ') + '), want the 4th');
+            const r = rp.getBoundingClientRect(), s = run.getBoundingClientRect();
+            if (r.left < s.left - 0.5 || r.right > s.right + 0.5) fails.push(at + 'Replace lies outside the strip’s view at its start (' + Math.round(r.left) + '–' + Math.round(r.right) + ' in ' + Math.round(s.left) + '–' + Math.round(s.right) + ')');
+            for (const [n, after, who] of [['OP', 'into', 'the overlay photo'], ['Song', 'volume', 'the song']]) {
+              FM.selectLayer(null); FM.selectLayer(v.L(n).id); await r4Settle(150);
+              const t = tools(), i = t.indexOf('replace');
+              if (i < 0) { fails.push(at + who + '’s tray has no Replace (' + t.join(' ') + ')'); continue; }
+              if (t[i - 1] !== after) fails.push(at + who + '’s Replace comes after ' + t[i - 1] + ', want right after ' + after);
+              const doc0 = v.doc(), n0 = asked.length;
+              const b = smTool('replace'), rr = r8Run(); if (rr) { rr.scrollLeft = Math.max(0, b.offsetLeft - 60); await r4Settle(40); }
+              smMustHit(b, at + who + '’s Replace');
+              b.click(); await v.idle(); await r4Settle(120);
+              if (asked.length !== n0 + 1 || asked[asked.length - 1] !== v.L(n).id) fails.push(at + who + '’s Replace asked for a file for ' + JSON.stringify(asked.slice(n0)) + ', want ' + v.L(n).id);
+              if (v.doc() !== doc0) fails.push('CONTROL ' + at + 'a picker that hands back nothing changed the project');
+            }
+          });
+        });
+      }
+    } finally { if (d0) Object.defineProperty(FM, 'pickReplacement', d0); else delete FM.pickReplacement; }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1243 R8 · section lines at 380 and 1280 every tray’s sections are split by ONE thin line — never first, never last, never two together — a song’s tray reads Split, Volume, Replace, Fade, Speed, Stay put, Open in Full | Delete, a title’s Split, Edit words, Style, Add effect, Stay put | Opacity, Transform | Delete, an overlay photo’s ends Back | Opacity | Crop, Transform | Delete (CONTROL: the line is about 1 × 24 px, takes no press and is read by no one)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 0, async function () {
+        await smP2(r8Fixture, async function (v) {
+          const at = width + ' px: ';
+          const want = {
+            Song: 'split volume replace fade speed stay openFull | delete',
+            Hi: 'split editwords style addfx stay | opacity transform | delete',
+            OP: 'split into replace addfx stay forward backward | opacity | crop transform | delete'
+          };
+          for (const n of ['V', 'P', 'Hi', 'OP', 'Song', 'Caps']) {
+            FM.selectLayer(null); FM.selectLayer(v.L(n).id); await r4Settle(150);
+            const k = r8Kids();
+            /* review R8-1 (safety): the control asks only that the tray is drawn, wherever its Delete sits (on v18.42 it was pinned outside
+               the strip, and at 1280 there was no strip), so the order and line checks below run on the old trays too */
+            if (!smTool('split') && !smTool('editlines')) { fails.push('CONTROL ' + at + n + '’s tray is not drawn'); continue; }
+            if (k[0] === '|' || k[k.length - 1] === '|' || k.some((x, i) => x === '|' && k[i + 1] === '|')) fails.push(at + n + '’s tray has a line first, last or doubled: ' + k.join(' '));
+            if (k.indexOf('|') < 0) fails.push(at + n + '’s tray has no section line (' + k.join(' ') + ')');
+            if (want[n] && k.join(' ') !== want[n]) fails.push(at + n + '’s tray reads ' + k.join(' ') + ', want ' + want[n]);
+          }
+          FM.selectLayer(null); FM.selectLayer(v.L('Hi').id); await r4Settle(150);
+          const d = document.querySelector('#sm-tray .sm-div');
+          if (!d) { fails.push(at + 'the title’s tray draws no line'); return; }
+          const r = d.getBoundingClientRect();
+          if (Math.abs(r.width - 1) > 0.6 || Math.abs(r.height - 24) > 1) fails.push('CONTROL ' + at + 'the line is ' + r.width.toFixed(1) + '×' + r.height.toFixed(1) + ' px, want 1 × 24');
+          if (d.getAttribute('aria-hidden') !== 'true' || getComputedStyle(d).pointerEvents !== 'none' || d.classList.contains('sm-tool')) fails.push('CONTROL ' + at + 'the line is read out, takes presses or counts as a tool');
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1243 R8 · Opacity at 380 and 1280 a title’s Opacity row is a 0–100 % slider that shows the change while it moves and takes no step until it is let go, then ONE step sets the opacity and Undo takes it back; on a clip whose opacity is keyed the keys keep their count and shape (CONTROL: the slider starts at the title’s 100 %)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 0, async function () {
+        await smP2((W, H) => [smT('Hi', 0, 2, W, H), smPic('OK', 1, 2, W, H, { transform: Object.assign(FM.makeLayer('image', {}).transform, { x: W / 2, y: H / 2, opacity: smKf([[1, 1], [3, 0.5]]) }) }), smV('V', 0, 4, W, H)], async function (v) {
+          const at = width + ' px: ', ix = () => FM.history._steps().index, op = () => v.L('Hi').transform.opacity;
+          FM.time = 0.5; FM.selectLayer(v.L('Hi').id); await r4Settle(150);
+          const ob = smTool('opacity');
+          if (!ob) { fails.push(at + 'the title’s tray has no Opacity (' + r8Kids().join(' ') + ')'); return; }
+          { const run = r8Run(); if (run) { run.scrollLeft = Math.max(0, ob.offsetLeft - 60); await r4Settle(40); } }
+          smMustHit(ob, at + 'Opacity');
+          ob.click(); await r4Settle(150);
+          const rng = document.querySelector('#sm-tray .sm-opa-r');
+          if (FM.simpleTools.mode() !== 'sub' || document.getElementById('sm-bar').getAttribute('data-sub') !== 'opacity' || !rng) { fails.push(at + 'Opacity opened mode ' + FM.simpleTools.mode() + ' with ' + (rng ? 'a' : 'no') + ' slider'); return; }
+          if (rng.value !== '100' || rng.min !== '0' || rng.max !== '100') fails.push('CONTROL ' + at + 'the slider is ' + rng.min + '–' + rng.max + ' at ' + rng.value + ', want 0–100 at 100');
+          const i0 = ix();
+          rng.value = '40'; rng.dispatchEvent(new Event('input', { bubbles: true })); await r4Settle(60);
+          if (Math.abs(+op() - 0.4) > 1e-6) fails.push(at + 'while the slider sits at 40 the title’s opacity is ' + JSON.stringify(op()) + ', want 0.4 on show');
+          if (ix() !== i0) fails.push(at + 'moving the slider took ' + (ix() - i0) + ' steps, want none until it is let go');
+          rng.dispatchEvent(new Event('change', { bubbles: true })); await v.idle(); await r4Settle(150);
+          if (Math.abs(+op() - 0.4) > 1e-6 || ix() !== i0 + 1) fails.push(at + 'letting go left opacity ' + JSON.stringify(op()) + ' after ' + (ix() - i0) + ' steps, want 0.4 in ONE step');
+          FM.history.undo(); await r4Settle(150);
+          if (Math.abs(+op() - 1) > 1e-6) fails.push(at + 'one Undo left opacity ' + JSON.stringify(op()) + ', want 1');
+          /* a keyed opacity: at 1 s (value 1) set 50 %, every key halves, none added */
+          FM.time = 1; FM.selectLayer(null); FM.selectLayer(v.L('OK').id); await r4Settle(150);
+          const n1 = ix();
+          await FM.spine.cmd.opacity(v.L('OK').id, 0.5); await v.idle();
+          const kf = v.L('OK').transform.opacity && v.L('OK').transform.opacity.kf;
+          if (!kf || kf.length !== 2 || kf.map(k => k.t).join() !== '1,3' || kf.map(k => +(+k.v).toFixed(4)).join() !== '0.5,0.25' || ix() !== n1 + 1) fails.push(at + 'a keyed opacity set to 50 % became ' + JSON.stringify(v.L('OK').transform.opacity) + ' in ' + (ix() - n1) + ' steps, want keys 0.5 and 0.25 at 1 and 3 s in one step');
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1243 R8 · Transform at 380 and 1280 an overlay photo’s Transform row is Mirror, Flip, Turn, Size, Centre and Reset: Mirror and Flip flip the picture each way, Turn adds a quarter turn, Size sets the size on release, Centre puts it in the middle and Reset puts all of it back — each press ONE step, a title tied to a Controller drawn in the middle too — and the Size slider is at least 120 px long (CONTROL: before, the photo is off-centre, unflipped, unturned and at its first size)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 0, async function () {
+        await smP2((W, H) => [smPic('OP', 1, 2, W, H, { transform: Object.assign(FM.makeLayer('image', {}).transform, { x: W / 2 + 40, y: H / 2 - 20 }) }), smV('V', 0, 4, W, H)], async function (v) {
+          const at = width + ' px: ', ix = () => FM.history._steps().index, L = () => v.L('OP'), T = () => L().transform, W = v.W, H = v.H;
+          FM.time = 1.5; FM.selectLayer(v.L('OP').id); await r4Settle(150);
+          if (L().flipH || L().flipV || T().rotation || Math.abs(T().scale - 1) > 1e-9 || Math.abs(T().x - W / 2) < 1) throw new Error('CONTROL ' + at + 'the photo does not start off-centre, unflipped, unturned at 100 %: ' + JSON.stringify([L().flipH, L().flipV, T().rotation, T().scale, T().x]));
+          const tb = smTool('transform');
+          if (!tb) { fails.push(at + 'the photo’s tray has no Transform (' + r8Kids().join(' ') + ')'); return; }
+          { const run = r8Run(); if (run) { run.scrollLeft = Math.max(0, tb.offsetLeft - 60); await r4Settle(40); } }
+          smMustHit(tb, at + 'Transform');
+          tb.click(); await r4Settle(150);
+          const ids = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool).join();
+          if (ids !== 'rowBack,mirror,flipv,turn,centre,tfReset' || !document.querySelector('#sm-tray .sm-size-r')) { fails.push(at + 'the Transform row holds ' + ids + (document.querySelector('#sm-tray .sm-size-r') ? ' and a Size slider' : ' and no Size slider') + ', want ‹, Mirror, Flip, Turn, Size, Centre, Reset'); return; }
+          /* review R8-5: 10–400 % on a short track jumps about 6 % a pixel; the slider keeps its length and the strip scrolls on instead */
+          { const sw = document.querySelector('#sm-tray .sm-size-r').getBoundingClientRect().width; if (sw < 120) fails.push(at + 'the Size slider is ' + Math.round(sw) + ' px long, want at least 120 for 10–400 %'); }
+          const press = async id => { const n0 = ix(); smTool(id).click(); await v.idle(); await r4Settle(120); return ix() - n0; };
+          let s = await press('mirror');
+          if (L().flipH !== true || s !== 1) fails.push(at + 'Mirror left flipH ' + L().flipH + ' after ' + s + ' steps');
+          if (smTool('mirror').getAttribute('aria-pressed') !== 'true') fails.push(at + 'Mirror does not show as pressed once on');
+          s = await press('flipv');
+          if (L().flipV !== true || s !== 1) fails.push(at + 'Flip left flipV ' + L().flipV + ' after ' + s + ' steps');
+          s = await press('turn');
+          if (Math.abs(T().rotation - 90) > 1e-9 || s !== 1) fails.push(at + 'Turn left the rotation at ' + T().rotation + ' after ' + s + ' steps, want 90 in one');
+          const rng = document.querySelector('#sm-tray .sm-size-r'), n0 = ix();
+          rng.value = '150'; rng.dispatchEvent(new Event('input', { bubbles: true })); await r4Settle(60);
+          if (ix() !== n0) fails.push(at + 'moving the Size slider took a step before it was let go');
+          rng.dispatchEvent(new Event('change', { bubbles: true })); await v.idle(); await r4Settle(120);
+          if (Math.abs(T().scale - 1.5) > 1e-6 || ix() !== n0 + 1) fails.push(at + 'Size let go at 150 % left the scale ' + T().scale + ' after ' + (ix() - n0) + ' steps, want 1.5 in one');
+          s = await press('centre');
+          if (Math.abs(T().x - W / 2) > 1e-6 || Math.abs(T().y - H / 2) > 1e-6 || s !== 1) fails.push(at + 'Centre left the photo at ' + T().x + ',' + T().y + ' after ' + s + ' steps, want ' + W / 2 + ',' + H / 2);
+          T().x = W / 2 + 40;   // off centre again, so Reset has the place to put back too
+          s = await press('tfReset');
+          if (L().flipH || L().flipV || Math.abs(T().rotation) > 1e-9 || Math.abs(T().scale - 1) > 1e-6 || Math.abs(T().x - W / 2) > 1e-6 || s !== 1) fails.push(at + 'Reset left ' + JSON.stringify([L().flipH, L().flipV, T().rotation, T().scale, T().x]) + ' after ' + s + ' steps, want no flip, 0°, 100 %, centred in one step');
+        });
+        /* review R8-2: a title tied to a Controller (Full's parent) keeps x and y in the Controller's space, so Centre and Reset put its
+           DRAWN middle on the picture's, read through the renderer's own chain (FM.parentChainMatrix) */
+        await smP2((W, H) => { const c = FM.makeLayer('null', { name: 'Ctl', x: W / 4, y: H / 4, start: 0, duration: 4 }); return [smT('Kid', 0, 4, W, H, { parent: c.id }), c, smV('V', 0, 4, W, H)]; }, async function (v) {
+          const at = width + ' px, a title tied to a Controller: ', W = v.W, H = v.H, ix = () => FM.history._steps().index;
+          const drawn = () => { const L = v.L('Kid'), t = FM.time, M = FM.parentChainMatrix(L, t, FM.scene), x = FM.evalProp(L.transform.x, t), y = FM.evalProp(L.transform.y, t); return M ? { x: M.a * x + M.c * y + M.e, y: M.b * x + M.d * y + M.f } : null; };
+          FM.time = 1; FM.selectLayer(v.L('Kid').id); await r4Settle(150);
+          const d0 = drawn();
+          if (!d0 || Math.hypot(d0.x - W / 2, d0.y - H / 2) < 5) throw new Error('CONTROL ' + at + 'it is not drawn off the middle to begin with (' + JSON.stringify(d0) + ')');
+          if (!smTool('transform')) { fails.push(at + 'its tray has no Transform'); return; }
+          smTool('transform').click(); await r4Settle(150);
+          for (const op of ['centre', 'tfReset']) {
+            /* off the middle again and turned (a step of its own, so the history holds the moved place too), so Reset has the place to put back */
+            if (op === 'tfReset') { v.L('Kid').transform.x = +v.L('Kid').transform.x + 30; await FM.spine.cmd.transform(v.L('Kid').id, 'turn'); await v.idle(); await r4Settle(80); }
+            const n0 = ix(), d1 = drawn();
+            if (!smTool(op)) { fails.push(at + 'the Transform row has no ' + op); return; }
+            smTool(op).click(); await v.idle(); await r4Settle(120);
+            const d = drawn();
+            if (!d || Math.abs(d.x - W / 2) > 0.5 || Math.abs(d.y - H / 2) > 0.5 || ix() !== n0 + 1) fails.push(at + op + ' drew it from ' + (d1 ? Math.round(d1.x) + ',' + Math.round(d1.y) : 'nowhere') + ' to ' + (d ? Math.round(d.x) + ',' + Math.round(d.y) : 'nowhere') + ' after ' + (ix() - n0) + ' steps, want the picture’s middle ' + W / 2 + ',' + H / 2 + ' in one step (it said “' + v.say() + '”)');
+          }
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1243 R8 · S28 polish at 380 a video clip’s Speed row shows the length it will have under the speed, live as the slider moves, and its Volume row has a Mute that mutes the clip in ONE step and a slider that rests on 100 % near it (CONTROL: at rest the length is the clip’s own 4.0 s)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await r4At(380, 0, async function () {
+      await smP2((W, H) => [smV('V', 0, 4, W, H, { muted: false })], async function (v) {
+        FM.selectLayer(v.L('V').id); await r4Settle(150);
+        /* review R8-6 (safety): a tray with no Speed or Volume fails by its own sentence (on v18.42 they were inside Audio) */
+        const tray0 = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool).join(' ');
+        if (!smTool('speed') || !smTool('volume')) { fails.push('the clip’s own tray has no ' + (smTool('speed') ? 'Volume' : 'Speed') + ' (' + tray0() + ')'); return; }
+        smTool('speed').click(); await r4Settle(150);
+        const len = document.querySelector('#sm-tray .sm-len-v'), rng = document.querySelector('#sm-tray .sm-speed-r');
+        if (!len || !rng) { fails.push('the Speed row has ' + (len ? 'a' : 'no') + ' new length and ' + (rng ? 'a' : 'no') + ' slider'); return; }
+        if (len.textContent !== '4.0 s') throw new Error('CONTROL: at 1× the Speed row says ' + len.textContent + ', want the clip’s 4.0 s');
+        rng.value = '2'; rng.dispatchEvent(new Event('input', { bubbles: true })); await r4Settle(60);
+        if (len.textContent !== '2.0 s') fails.push('at 2× on the slider the new length reads ' + len.textContent + ', want 2.0 s');
+        if (!r4Shown(len) || len.getBoundingClientRect().right > innerWidth + 0.5) fails.push('the new length is not on screen at 380');
+        rng.value = '1'; rng.dispatchEvent(new Event('input', { bubbles: true }));
+        if (FM.simpleTimeline && FM.simpleTimeline.previewSpeed) FM.simpleTimeline.previewSpeed(v.L('V').id, null);
+        if (!smTool('rowBack')) { fails.push('the Speed row has no ‹ back to the clip’s tray'); return; }
+        smTool('rowBack').click(); await r4Settle(150);
+        if (!smTool('volume')) { fails.push('the ‹ of Speed’s row did not give the clip’s tray back (' + tray0() + ')'); return; }
+        smTool('volume').click(); await r4Settle(150);
+        const mute = smTool('mute'), vr = document.querySelector('#sm-tray .sm-vol-r');
+        if (!mute || !vr) { fails.push('the Volume row has ' + (mute ? 'a' : 'no') + ' Mute and ' + (vr ? 'a' : 'no') + ' slider'); return; }
+        vr.value = '97'; vr.dispatchEvent(new Event('input', { bubbles: true })); await r4Settle(40);
+        if (vr.value !== '100') fails.push('the volume slider at 97 % did not rest on 100 % (it reads ' + vr.value + ')');
+        vr.value = '100';
+        const n0 = v.steps();
+        smMustHit(mute, 'Mute');
+        mute.click(); await v.idle(); await r4Settle(150);
+        if (v.L('V').muted !== true || v.steps() !== n0 + 1) fails.push('Mute left the clip ' + (v.L('V').muted ? 'muted' : 'heard') + ' after ' + (v.steps() - n0) + ' steps, want muted in one');
+        if (!smTool('mute') || smTool('mute').getAttribute('aria-pressed') !== 'true') fails.push('Mute does not show as pressed once the clip is muted');
+      });
+    });
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
   });
 
   /* ═══ #1253 · THE DRAWN EFFECT PICTURES IN THE APP'S EFFECT MENUS ═══

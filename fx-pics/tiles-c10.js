@@ -491,17 +491,22 @@ window.FX_TILES.push(
       let v=255*clamp(alb*(.26+.8*Math.pow(ndl,.75)));
       const edge=clamp((ro-rho)*S*1.2); v=6+(v-6)*edge;
       return [v,warm]; };
-    for(let y=0;y<N;y++) for(let x=0;x<N;x++){ const j=y*N+x, i=j*4; let v=0, w=0;
+    /* the shell and its two prints depend on nothing in px: a generator, a row or two at a time (stage, above) */
+    const build=function*(){
+    for(let y=0;y<N;y++){ for(let x=0;x<N;x++){ const j=y*N+x, i=j*4; let v=0, w=0;
       for(let sy=0;sy<SSN;sy++) for(let sx=0;sx<SSN;sx++){ const o=shade((x+(sx+.5)/SSN)/S,(y+(sy+.5)/SSN)/S); v+=o[0]; w+=o[1]; }
       v/=SSN*SSN; w/=SSN*SSN;
       im[i]=v; im[i+1]=v*(.95-.06*w); im[i+2]=Math.max(8,v*(.88-.16*w)); im[i+3]=255; }
+      yield 'shell'; }
     for(let j=0;j<n;j++) L[j]=im[j*4]*.299+im[j*4+1]*.587+im[j*4+2]*.114;
     const SR=put(N,N,im);
+    yield 'plate';
     const INKc=[0x16,0x13,0x0f], PAP=[0xe7,0xe2,0xd5], step=255;
     const paint=(o,i,v)=>{ const f=clamp(v/255); o[i]=INKc[0]+(PAP[0]-INKc[0])*f; o[i+1]=INKc[1]+(PAP[1]-INKc[1])*f; o[i+2]=INKc[2]+(PAP[2]-INKc[2])*f; o[i+3]=255; };
     const BY=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
     const ord=new Uint8ClampedArray(n*4);
-    for(let y=0;y<N;y++){ const gy=Math.floor(y/SC); for(let x=0;x<N;x++){ const gx=Math.floor(x/SC), thr=(BY[gy&3][gx&3]/16-.5)*step, i=y*N+x; paint(ord,i*4,Math.round(Math.round((L[i]+thr)/step)*step)); } }
+    for(let y=0;y<N;y++){ const gy=Math.floor(y/SC); for(let x=0;x<N;x++){ const gx=Math.floor(x/SC), thr=(BY[gy&3][gx&3]/16-.5)*step, i=y*N+x; paint(ord,i*4,Math.round(Math.round((L[i]+thr)/step)*step)); }
+      if((y&15)===15) yield 'ordered'; }
     /* Atkinson on the cell means, serpentine */
     const atk=new Uint8ClampedArray(n*4), top=Math.round(255/step); let E0=new Float64Array(G), E1=new Float64Array(G), E2=new Float64Array(G); const row=new Float64Array(G);
     for(let gy=0;gy<G;gy++){ row.fill(0);
@@ -511,14 +516,19 @@ window.FX_TILES.push(
       for(let k=0;k<G;k++){ const gx=ltr?k:G-1-k, xa=gx+dir, xb=gx-dir, xc=gx+2*dir, v=row[gx]+E0[gx]; let qi=Math.round(v/step); qi=qi<0?0:qi>top?top:qi; const q=Math.round(qi*step), e=v-q, e8=e/8; row[gx]=q;
         if(xa>=0&&xa<G){ E0[xa]+=e8; E1[xa]+=e8; } if(xc>=0&&xc<G) E0[xc]+=e8; if(xb>=0&&xb<G) E1[xb]+=e8; E1[gx]+=e8; E2[gx]+=e8; }
       for(let y=gy*SC;y<gy*SC+SC;y++) for(let x=0;x<N;x++) paint(atk,(y*N+x)*4,row[Math.floor(x/SC)]);
-      const r0=E0; E0=E1; E1=E2; E2=r0; E2.fill(0); }
-    const ORD=put(N,N,ord), ATK=put(N,N,atk);
-    return (c,t)=>{
-      const u=mod(t,P), k=u<.7?0:u<2.55?1:u<4.4?2:0;
+      const r0=E0; E0=E1; E1=E2; E2=r0; E2.fill(0); if((gy&3)===3) yield 'atkinson'; }
+    const ORD=put(N,N,ord); yield 'put';
+    const ATK=put(N,N,atk);
+    return {SR,ORD,ATK}; };
+    const stg=stage(build());
+    const draw=(c,t)=>{
+      const {SR,ORD,ATK}=stg.finish(), u=mod(t,P), k=u<.7?0:u<2.55?1:u<4.4?2:0;
       reset(c,px); c.imageSmoothingEnabled=k===0;
       c.drawImage(k===0?SR:k===1?ORD:ATK,0,0,100,100); c.imageSmoothingEnabled=true;
       if(k) tab(c,3,91.6,k===1?'ORDERED':'ATKINSON',4.4,BONE,INK);
     };
+    draw.step=stg.step; draw.stage=stg;
+    return draw;
   } }
 
 );
